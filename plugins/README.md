@@ -1,16 +1,24 @@
 # plugins/
 
-Claude Code plugins (and MCP servers) hosted by this marketplace.
+This folder is reserved for future Claude Code plugin bundles and MCP-backed plugins.
 
-Each plugin lives in its own folder with a `.claude-plugin/plugin.json` manifest, e.g.:
+The currently published sanduq plugin bundles live under [`../skills/`](../skills/) because they are
+skill-first packages:
 
+| Plugin | Source | Version |
+| --- | --- | ---: |
+| `devtools` | [`../skills/devtools`](../skills/devtools/) | 1.7.1 |
+| `illustration-tools` | [`../skills/illustration-tools`](../skills/illustration-tools/) | 1.3.1 |
+
+They are registered in [`../.claude-plugin/marketplace.json`](../.claude-plugin/marketplace.json).
+
+Install from Claude Code:
+
+```text
+/plugin marketplace add samykabu/sanduq
+/plugin install devtools@sanduq
+/plugin install illustration-tools@sanduq
 ```
-plugins/
-  <plugin-name>/
-    .claude-plugin/plugin.json
-    commands/  agents/  skills/  hooks/   # whatever the plugin ships
-```
 
-Register every plugin in [`../.claude-plugin/marketplace.json`](../.claude-plugin/marketplace.json)
-so consumers can `/plugin install <plugin>@sanduq` after
-`/plugin marketplace add samykabu/sanduq`.
+For a new plugin, add a folder containing `.claude-plugin/plugin.json`, then register it in the
+marketplace manifest and bump the plugin version before publishing.

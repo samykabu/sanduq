@@ -2,6 +2,12 @@
 
 All notable changes to the How-To-Test extension.
 
+## [1.4.1] - 2026-07-09
+
+### Changed
+
+- Aligned repository metadata and release catalog links with the sanduq marketplace.
+
 ## [1.4.0] - 2026-07-04
 
 ### Added

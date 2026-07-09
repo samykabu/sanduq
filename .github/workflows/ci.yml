@@ -11,15 +11,59 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install validation dependencies
+        run: python3 -m pip install --user pyyaml
+
       - name: Validate JSON (catalog + configs + marketplace)
         run: |
-          for f in catalog.json .claude-plugin/marketplace.json $(find extensions -name '*.json'); do
+          while IFS= read -r f; do
             echo "checking $f"; jq empty "$f"
-          done
+          done < <(
+            {
+              printf '%s\n' catalog.json .claude-plugin/marketplace.json
+              find extensions skills plugins -path '*/node_modules/*' -prune -o -name '*.json' -print
+            } | sort -u
+          )
 
-      - name: Validate extension.yml files
+      - name: Validate extension and marketplace manifests
         run: |
-          python3 -c "import yaml,glob,sys; [yaml.safe_load(open(f)) for f in glob.glob('extensions/*/extension.yml')]; print('yaml ok')"
+          python3 - <<'PY'
+          import glob, json, pathlib, sys, yaml
+
+          root = pathlib.Path(".")
+          root_catalog = json.loads((root / "catalog.json").read_text(encoding="utf-8"))
+          ext_catalog = json.loads((root / "extensions/catalog.json").read_text(encoding="utf-8"))
+          if root_catalog != ext_catalog:
+              sys.exit("catalog.json and extensions/catalog.json must match")
+
+          for yml_path in sorted(glob.glob("extensions/*/extension.yml")):
+              path = pathlib.Path(yml_path)
+              doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+              meta = doc.get("extension") or {}
+              ext_id = meta.get("id") or path.parent.name
+              if ext_id != path.parent.name:
+                  sys.exit(f"{path}: extension.id must match directory name")
+              entry = root_catalog.get("extensions", {}).get(ext_id)
+              if not entry:
+                  sys.exit(f"{path}: missing catalog entry for {ext_id}")
+              if str(entry.get("version")) != str(meta.get("version")):
+                  sys.exit(f"{path}: catalog version {entry.get('version')} != extension.yml {meta.get('version')}")
+              if f"/{ext_id}-v{meta.get('version')}/" not in entry.get("download_url", ""):
+                  sys.exit(f"{path}: download_url does not match extension version")
+
+          marketplace = json.loads((root / ".claude-plugin/marketplace.json").read_text(encoding="utf-8"))
+          for plugin in marketplace.get("plugins", []):
+              source = plugin.get("source")
+              if isinstance(source, str) and source.startswith("./"):
+                  manifest = root / source[2:] / ".claude-plugin/plugin.json"
+                  if not manifest.is_file():
+                      sys.exit(f"marketplace plugin {plugin.get('name')} missing {manifest}")
+                  plugin_meta = json.loads(manifest.read_text(encoding="utf-8"))
+                  if plugin_meta.get("name") != plugin.get("name"):
+                      sys.exit(f"{manifest}: plugin name does not match marketplace entry")
+
+          print("extension/catalog/plugin manifest validation ok")
+          PY
 
       - name: ShellCheck bash scripts
         run: |
@@ -45,6 +89,5 @@ jobs:
       - name: project-sync degrades gracefully without config/gh
         shell: pwsh
         run: |
-          git init -q; git remote add origin https://github.com/example/example.git
           # No config.json + no gh scope -> must exit 0 with a logged skip, never throw.
           pwsh extensions/project/scripts/powershell/project-sync.ps1 -Phase open -DryRun -Json

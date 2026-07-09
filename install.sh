@@ -2,7 +2,7 @@
 # Manual (non-catalog) installer: copy a sanduq extension into a target Spec Kit repo.
 #
 # Full hook-wiring + rendering of the command into every assistant target is done by the
-# Spec Kit CLI (`speckit extension install <id>`) — the supported path. This script is the
+# Spec Kit CLI (`specify extension add <id>`) - the supported path. This script is the
 # fallback: it stages the extension files and prints the exact next steps.
 #
 # Usage (run from the TARGET repo root):
@@ -29,12 +29,15 @@ echo "[sanduq] copied extension '$EXT' -> $DEST"
 echo
 echo "Next steps:"
 echo "  1. Finalise install (wire hooks + render the command into your assistant targets):"
-echo "       speckit extension install $EXT      # if you use the Spec Kit CLI"
-echo "     …or add sanduq to .specify/extension-catalogs.yml and install from the catalog."
-echo "  2. One-time board setup:"
-echo "       gh auth refresh -h github.com -s project,read:project"
-echo "       pwsh $DEST/scripts/powershell/project-init.ps1   # or scripts/bash/project-init.sh"
-echo "  3. Commit .specify/extensions/$EXT and .specify/extensions/$EXT/config.json."
+echo "       specify extension add $EXT      # if you use the Spec Kit CLI"
+echo "     or add sanduq to .specify/extension-catalogs.yml and install from the catalog."
+if [ "$EXT" = "project" ]; then
+  echo "  2. One-time board setup:"
+  echo "       gh auth refresh -h github.com -s project,read:project"
+  echo "       pwsh $DEST/scripts/powershell/project-init.ps1   # or scripts/bash/project-init.sh"
+  echo "  3. Commit .specify/extensions/$EXT and .specify/extensions/$EXT/config.json."
+else
+  echo "  2. Commit .specify/extensions/$EXT if your project vendors extensions."
+fi
 echo
 echo "Declared hooks to merge into .specify/extensions.yml (see $DEST/extension.yml 'hooks:'):"
-echo "  after_specify/plan/analyze/tasks + before/after_implement -> speckit.project.sync"

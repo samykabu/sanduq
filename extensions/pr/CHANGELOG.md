@@ -3,6 +3,12 @@
 All notable changes to the Detailed PR Generator extension.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.1.2] - 2026-07-09
+
+### Changed
+
+- Aligned repository metadata and release catalog links with the sanduq marketplace.
+
 ## [1.1.0] — 2026-07-04
 
 ### Added

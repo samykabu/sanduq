@@ -2,6 +2,12 @@
 
 All notable changes to the PR Review Processor extension.
 
+## [1.0.4] - 2026-07-09
+
+### Changed
+
+- Aligned repository metadata and release catalog links with the sanduq marketplace.
+
 ## [1.0.2] - 2026-07-04
 
 ### Fixed
