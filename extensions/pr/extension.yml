@@ -1,0 +1,39 @@
+schema_version: "1.0"
+
+extension:
+  id: pr
+  name: "Detailed PR Generator"
+  version: "1.1.1"
+  description: "Generate a feature CHANGELOG, plain-English feature-details document, and architecture/process diagram assets from Spec Kit artifacts, then create or update the pull request description with the feature details under a review heading."
+  author: "Samy K. Abushanab"
+  repository: "https://github.com/ResalApps/resal-marketplace"
+  license: MIT
+
+requires:
+  speckit_version: ">=0.2.0"
+  tools:
+    - name: git
+      required: false
+    - name: gh
+      required: false
+
+provides:
+  commands:
+    - name: speckit.pr.generate
+      file: commands/speckit.pr.generate.md
+      description: "Generate the feature CHANGELOG + plain-English feature-details doc with diagram assets when relevant, then create or update the PR description with the feature details"
+
+hooks:
+  after_implement:
+    command: speckit.pr.generate
+    optional: true
+    prompt: "Generate the feature CHANGELOG + feature-details doc, diagram assets if needed, and update the PR description?"
+    description: "Produce reviewer-facing docs, generate diagram assets when relevant, and inject the feature details into the PR description after implementation"
+
+tags:
+  - "pr"
+  - "changelog"
+  - "documentation"
+  - "diagram"
+  - "review"
+  - "workflow"

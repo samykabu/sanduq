@@ -1,0 +1,32 @@
+schema_version: "1.0"
+
+extension:
+  id: pr-review
+  name: "PR Review Processor"
+  version: "1.0.3"
+  description: "Process GitHub pull request review comments, classify feedback, prepare an approval-gated fix/reply plan, then apply approved fixes and resolve addressed threads."
+  author: "Samy K. Abushanab"
+  repository: "https://github.com/ResalApps/resal-marketplace"
+  license: MIT
+
+requires:
+  speckit_version: ">=0.2.0"
+  tools:
+    - name: git
+      required: true
+    - name: gh
+      required: true
+
+provides:
+  commands:
+    - name: speckit.pr-review.process
+      file: commands/speckit.pr-review.process.md
+      description: "Process PR review comments through an approval-gated fix/reply workflow"
+
+tags:
+  - "pr"
+  - "review"
+  - "github"
+  - "code-review"
+  - "workflow"
+  - "feedback"

@@ -1,0 +1,132 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Product milestones · Timeline · Hand-drawn</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f5f5f5;
+      --color-ink:     #2d3142;
+      --color-muted:   #4f5d75;
+      --color-accent:  #eb6c36;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+
+    .frame { max-width: 1200px; width: 100%; }
+
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+
+    svg { width: 100%; min-width: 900px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Timeline · Diagram Design · Hand</p>
+    <h1>Product launch · fourteen months</h1>
+
+    <svg viewBox="0 0 1000 420" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"></circle>
+          </pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#f5f5f5"></rect>
+        <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"></rect>
+
+        <!-- Year markers (background) -->
+        <text x="60" y="340" fill="rgba(45,49,66,0.06)" font-size="72" font-weight="600" font-family="'Geist Mono', monospace">2025</text>
+        <text x="700" y="340" fill="rgba(45,49,66,0.06)" font-size="72" font-weight="600" font-family="'Geist Mono', monospace">2026</text>
+
+        <!-- Baseline -->
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M80 240 C253.74529781516645 234.67290002222174, 428.86078338515017 234.34927321190946, 920 240" stroke="rgba(79,93,117,0.45)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+        <!-- Year boundary tick (between 2025 and 2026) -->
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M680 232 C679.8708480811864 233.89229207217693, 681.8331907439976 240.49293284356594, 680 248" stroke="rgba(45,49,66,0.20)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="680" y="260" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">JAN '26</text>
+
+        <!-- Start / end caps -->
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M80 232 C80.7945032137353 236.66132192902268, 78.10606528219766 237.91311568401753, 80 248" stroke="rgba(45,49,66,0.20)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M920 232 C921.1381583462843 234.7903517858684, 918.4389398203976 239.97329852446913, 920 248" stroke="rgba(45,49,66,0.20)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+        <!-- Event 1: FEB 2025 · First post (below) -->
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M100 240 C102.95554804319981 254.4229004197754, 99.56804914290551 261.6891984389163, 100 296" stroke="rgba(45,49,66,0.30)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M101.66 240 L101.99 240.438 L101.965 240.918 L101.572 241.217 L101.127 241.783 L100.795 241.617 L100.39 242.003 L100 241.733 L99.595 241.716 L99.253 242.069 L98.641 241.824 L98.64 241.06 L98.45 240.723 L98.307 240.454 L98.334 240 L98.337 239.527 L98.103 239.197 L98.352 238.699 L98.787 238.689 L99.127 237.972 L99.585 237.77 L100 238.055 L100.389 237.935 L100.891 237.898 L101.253 238.403 L101.61 238.732 L101.655 239.116 L102.078 239.601 Z" fill="#2d3142" stroke="none"></path></g>
+        <text x="100" y="312" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">FEB 2025</text>
+        <text x="100" y="328" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">First post</text>
+
+        <!-- Event 2: APR 2025 · Design v1 (above) -->
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M240 184 C238.5975756206503 193.75097766062242, 240.98312523448374 205.05066073751078, 240 240" stroke="rgba(45,49,66,0.30)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M241.66 240 L241.778 240.375 L242.037 240.749 L241.353 241.253 L241.169 241.662 L240.807 242.033 L240.429 242.123 L240 241.74 L239.623 241.894 L239.242 241.61 L238.556 241.468 L238.626 241.338 L237.964 241.001 L238.221 240.49 L238.233 240 L238.37 239.54 L238.151 239.01 L238.337 238.63 L238.564 238.296 L239.219 238.337 L239.523 238.175 L240 238.325 L240.413 238.295 L240.732 238.478 L241.372 238.492 L241.643 238.626 L241.708 239.011 L242.225 239.498 Z" fill="#2d3142" stroke="none"></path></g>
+        <text x="240" y="156" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">APR 2025</text>
+        <text x="240" y="172" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Design v1</text>
+
+        <!-- Event 3: SEP 2025 · Design v2 (below) -->
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M500 240 C500.0396031981008 250.87905490146952, 502.39820132606195 260.4121230361052, 500 296" stroke="rgba(45,49,66,0.30)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M501.66 240 L502.25 240.468 L502.109 240.885 L501.681 241.288 L501.211 241.541 L500.819 241.819 L500.469 242.243 L500 241.747 L499.495 242.073 L499.231 241.782 L498.908 241.66 L498.612 241.178 L498.11 240.975 L498.134 240.371 L498.132 240 L497.721 239.553 L498.199 239.128 L498.322 238.56 L498.778 238.45 L499.008 238.071 L499.617 237.898 L500 237.895 L500.437 237.974 L500.876 238.427 L501.054 238.581 L501.676 238.956 L501.761 239.209 L501.689 239.55 Z" fill="#2d3142" stroke="none"></path></g>
+        <text x="500" y="312" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">SEP 2025</text>
+        <text x="500" y="328" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Design v2</text>
+        <text x="500" y="344" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">typography pass</text>
+
+        <!-- Event 4: JAN 2026 · Design v3 (above, coral major) -->
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M740 160 C741.4495977308136 177.00058625070378, 737.9812443729024 195.56049355147405, 740 240" stroke="#eb6c36" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M743.661 240 L743.988 240.85 L743.352 241.887 L743.025 242.571 L742.5 242.984 L741.698 243.407 L740.953 243.63 L740 243.754 L739.079 244.201 L738.353 243.756 L737.576 242.868 L737.035 242.702 L736.453 241.817 L736.098 240.852 L736.032 240 L735.805 239.121 L736.446 238.377 L736.744 237.679 L737.309 237.041 L738.233 236.634 L739.11 236.353 L740 236.165 L740.905 236.385 L741.585 236.575 L742.42 237.106 L743.273 237.603 L743.617 238.236 L743.786 239.158 Z" fill="#eb6c36" stroke="none"></path></g>
+        <text x="740" y="128" fill="#eb6c36" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">JAN 2026</text>
+        <text x="740" y="148" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Design v3</text>
+        <text x="740" y="164" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">complexity budget</text>
+
+        <!-- Event 5: APR 2026 · now · Diagram Design skill (below, coral) -->
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M900 240 C897.1236583530018 253.1352093831636, 899.4283535092184 264.935047633294, 900 296" stroke="#eb6c36" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M903.661 240 L903.777 240.942 L903.424 241.719 L903.353 242.606 L902.542 242.864 L901.71 243.823 L900.837 243.75 L900 243.761 L899.107 243.698 L898.342 243.297 L897.491 243.06 L897.021 242.543 L896.598 241.792 L896.011 240.889 L895.931 240 L895.838 239.135 L896.494 238.191 L896.729 237.61 L897.523 236.648 L898.326 236.368 L899.047 236.075 L900 235.736 L900.929 236.063 L901.729 236.524 L902.539 236.647 L903.306 237.497 L903.67 238.131 L903.933 239.055 Z" fill="#eb6c36" stroke="none"></path></g>
+        <text x="900" y="312" fill="#eb6c36" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">APR 2026 · NOW</text>
+        <text x="900" y="328" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Schematic skill</text>
+        <text x="900" y="344" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">eight diagram types</text>
+
+        <!-- Legend -->
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M40 376 C231.33000495333224 382.74996404158884, 423.9380871782079 382.09584851848894, 960 376" stroke="rgba(45,49,66,0.10)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="40" y="392" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+
+        <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M53.661 408 L53.616 408.434 L53.694 408.986 L53.571 409.395 L53.337 409.727 L52.854 409.807 L52.431 409.919 L52 409.767 L51.58 409.926 L51.198 409.667 L50.653 409.688 L50.571 409.137 L49.915 408.898 L49.874 408.48 L49.83 408 L49.822 407.593 L50.344 407.176 L50.278 406.787 L50.548 406.366 L50.982 405.905 L51.586 405.747 L52 406.006 L52.507 406.374 L53.006 406.276 L53.41 406.299 L53.776 406.638 L53.921 407.197 L54.13 407.553 Z" fill="#2d3142" stroke="none"></path></g>
+        <text x="68" y="412" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Event</text>
+
+        <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M151.661 408 L152.143 408.847 L151.532 409.769 L151.025 410.442 L150.387 411.23 L149.88 411.501 L148.896 411.588 L148 411.771 L147.071 411.966 L146.173 411.555 L145.364 411.073 L145 410.304 L144.501 409.753 L144.223 408.943 L143.78 408 L144.23 407.155 L144.251 406.367 L144.981 405.723 L145.408 404.879 L146.161 404.6 L147.11 404 L148 404.141 L148.964 404.263 L149.794 404.449 L150.498 405.054 L151.356 405.338 L151.75 406.124 L152.153 407.134 Z" fill="#eb6c36" stroke="none"></path></g>
+        <text x="164" y="412" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Major milestone</text>
+
+        <text x="296" y="412" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif" font-style="italic">Spacing is proportional to real elapsed time.</text>
+      </svg>
+  </div>
+
+
+</body></html>

@@ -1,0 +1,47 @@
+schema_version: "1.0"
+
+extension:
+  id: how-to-test
+  name: "How-To-Test"
+  version: "1.4.0"
+  description: "Generate QA-facing How-To-Test manuals from completed Spec Kit features, with diagram assets, screenshots, API samples, and an optional readiness audit that creates reusable project memory plus missing E2E/API/screenshot/diagram tasks before implementation."
+  author: "Samy K. Abushanab"
+  repository: "https://github.com/ResalApps/resal-marketplace"
+  license: MIT
+
+requires:
+  speckit_version: ">=0.2.0"
+  tools:
+    - name: git
+      required: false
+
+provides:
+  commands:
+    - name: speckit.how-to-test.document
+      file: commands/speckit.how-to-test.document.md
+      description: "Generate or update the QA-facing How-To-Test manual, including diagram assets when relevant, for the completed active feature"
+    - name: speckit.how-to-test.analyze
+      file: commands/speckit.how-to-test.analyze.md
+      description: "Create or refresh project memory with a deep frontend inventory, then find missing E2E/API/screenshot/diagram documentation-readiness tasks and add them to the active feature tasks.md"
+
+hooks:
+  after_implement:
+    command: speckit.how-to-test.document
+    optional: true
+    prompt: "Generate or update the How-To-Test manual and diagram assets now that implementation is complete?"
+    description: "Recommended phase for manual and diagram generation: after implementation completion validation, after any implementation review hook if configured, and before PR handoff/human QA review"
+  after_tasks:
+    command: speckit.how-to-test.analyze
+    optional: true
+    prompt: "Analyze tasks.md for missing E2E/API/screenshot/diagram coverage needed before How-To-Test documentation?"
+    description: "Recommended phase: after tasks are generated and before implementation starts, so project memory and missing E2E/API/screenshot/diagram documentation-readiness tasks are prepared with the feature"
+
+tags:
+  - "qa"
+  - "testing"
+  - "e2e"
+  - "playwright"
+  - "documentation"
+  - "diagram"
+  - "how-to-test"
+  - "workflow"

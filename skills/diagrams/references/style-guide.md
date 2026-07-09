@@ -4,7 +4,7 @@
 
 Default skin is a cool editorial palette — white-smoke paper, jet-black ink, atomic-tangerine accent, blue-slate muted. It's designed to look good out of the box; swap these values (or run [`onboarding.md`](onboarding.md)) and every new diagram inherits the new skin without touching any type-specific logic.
 
-To generate your own from a website URL, see [`onboarding.md`](onboarding.md).
+To generate your own from a website URL, see [`onboarding.md`](onboarding.md). To initialize from a local `design.md`, `system-design.md`, or `system design.md` file, see [`theme-initialization.md`](theme-initialization.md).
 
 ---
 
@@ -33,7 +33,7 @@ Every token is referred to by **semantic role**, not by its hex value. Type refe
 
 ### Inversion rule (light → dark)
 
-Any `rgba(28,25,23, X)` in light becomes `rgba(250,247,242, X)` in dark. Same opacities, RGB flipped. The accent gets a slight hue-shift brighter to read on dark paper.
+Any `rgba(45,49,66, X)` in light becomes `rgba(245,245,245, X)` in dark. Same opacities, RGB flipped. The accent gets a slight hue-shift brighter to read on dark paper.
 
 ---
 
@@ -93,8 +93,9 @@ Semantic role combinations — reference these by name in type specs.
 Three options:
 
 1. **Run onboarding** — see [`onboarding.md`](onboarding.md). Drop a URL; the skill extracts the palette + fonts and rewrites this file.
-2. **Edit by hand** — change the hex values in the tables above. Run the pre-output taste gate afterward to verify the accent still reads as "focal" against the new paper color.
-3. **Brand handoff** — paste your existing design-token JSON into a new section here and map its tokens to the semantic roles above.
+2. **Initialize from markdown** — see [`theme-initialization.md`](theme-initialization.md). Point the skill at `design.md`, `system-design.md`, `system design.md`, or another local design-token file and map it into the semantic roles above.
+3. **Edit by hand** — change the hex values in the tables above. Run the pre-output taste gate afterward to verify the accent still reads as "focal" against the new paper color.
+4. **Brand handoff** — paste your existing design-token JSON into a new section here and map its tokens to the semantic roles above.
 
 ### Constraints (don't break these)
 

@@ -39,5 +39,7 @@ Optional flags: `--owner <login>` · `--number <n>` · `--owner-type user|org` �
 4. **Commit `config.json`** so every assistant/checkout shares the same board wiring. Then
    validate with a dry run: `project-sync.ps1 -Phase open -DryRun`.
 
+5. Once the **owner** and the **project number** are retrieved, remember to store them in the Spec Kit memory file so it can be used when creating and tracking specs.
+
 > Only ever configures the Project you select under the owner you pass; it never touches
 > issues. The sync command (not init) creates issues, and only in the repo matching `origin`.
