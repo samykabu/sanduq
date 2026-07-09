@@ -110,12 +110,12 @@ set_status() {
 parse_tasks() {
   [ -f "$TASKS" ] || return
   grep -E '^\s*-\s*\[[ xX]\]\s*' "$TASKS" | while IFS= read -r line; do
-    local done id desc
-    echo "$line" | grep -qE '^\s*-\s*\[[xX]\]' && done=1 || done=0
+    local d id desc
+    echo "$line" | grep -qE '^\s*-\s*\[[xX]\]' && d=1 || d=0
     id="$(echo "$line" | sed -nE 's/^\s*-\s*\[[ xX]\]\s*\**([Tt][0-9]+)\**.*/\1/p')"
     [ -z "$id" ] && continue
     desc="$(echo "$line" | sed -E 's/^\s*-\s*\[[ xX]\]\s*\**[Tt][0-9]+\**\s*//; s/\*\*//g; s/\[[Pp]\]//g' | cut -c1-90)"
-    printf '%s\t%s\t%s\n' "$done" "$id" "$desc"
+    printf '%s\t%s\t%s\n' "$d" "$id" "$desc"
   done
 }
 
@@ -125,7 +125,7 @@ sync_sub_issues() {
   [ -z "$NODE" ] && { warn "no parent node id; skipping sub-issues"; return; }
   gh label create spec-task --repo "$REPO" --color D4C5F9 --force >/dev/null 2>&1 || true
   local created=0
-  while IFS=$'\t' read -r done id desc; do
+  while IFS=$'\t' read -r _ id desc; do
     [ -z "$id" ] && continue
     echo "$ST" | jq -e --arg s "$SLUG" --arg i "$id" '.[$s].subIssues[$i]' >/dev/null 2>&1 && continue
     if [ "$DRYRUN" = 1 ]; then log "DRYRUN create sub-issue '$SLUG $id: $desc'"; created=$((created+1)); continue; fi
@@ -146,8 +146,8 @@ sync_progress() {
   local total closed=0
   total="$(echo "$ST" | jq -r --arg s "$SLUG" '(.[$s].subIssues // {}) | length')"
   [ "$total" = 0 ] && return
-  while IFS=$'\t' read -r done id desc; do
-    [ "$done" = 1 ] || continue
+  while IFS=$'\t' read -r d id _; do
+    [ "$d" = 1 ] || continue
     local isclosed num
     isclosed="$(echo "$ST" | jq -r --arg s "$SLUG" --arg i "$id" '.[$s].subIssues[$i].closed // empty')"
     num="$(echo "$ST" | jq -r --arg s "$SLUG" --arg i "$id" '.[$s].subIssues[$i].number // empty')"
@@ -168,12 +168,12 @@ has_open_pr() {
 }
 
 resolve_auto() {
-  local n done
+  local n d
   if [ -f "$TASKS" ]; then
-    n="$(parse_tasks | wc -l | tr -d ' ')"; done="$(parse_tasks | awk -F'\t' '$1==1' | wc -l | tr -d ' ')"
+    n="$(parse_tasks | wc -l | tr -d ' ')"; d="$(parse_tasks | awk -F'\t' '$1==1' | wc -l | tr -d ' ')"
     if [ "$n" -gt 0 ]; then
-      [ "$done" = 0 ] && { phase_status ready; return; }
-      [ "$done" -lt "$n" ] && { phase_status in-progress; return; }
+      [ "$d" = 0 ] && { phase_status ready; return; }
+      [ "$d" -lt "$n" ] && { phase_status in-progress; return; }
       phase_status in-review; return
     fi
   fi

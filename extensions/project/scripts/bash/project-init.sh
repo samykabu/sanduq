@@ -99,7 +99,7 @@ if [ "${#CREATE_NAMES[@]}" -gt 0 ]; then
   else
     # full option set = existing + new (updateProjectV2Field replaces all options)
     OPTS=""
-    while IFS=$'\t' read -r name id; do
+    while IFS=$'\t' read -r name _; do
       color="$(echo "$FIELDS" | jq -r '.fields[] | select(.id=="'"$STATUS_FIELD_ID"'") | .options[] | select(.name=="'"$name"'") | .color // "GRAY"' | tr '[:lower:]' '[:upper:]')"
       [ -z "$color" ] && color="GRAY"
       OPTS="$OPTS{name:$(printf '%s' "$name" | jq -Rr @json),color:$color,description:\"\"},"
