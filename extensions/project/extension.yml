@@ -1,0 +1,70 @@
+schema_version: "1.0"
+
+extension:
+  id: project
+  name: "GitHub Project Lifecycle Sync"
+  version: "1.0.0"
+  description: "Mirror each Spec Kit feature onto a GitHub Project (v2): create a parent feature issue, advance its Status column through the Spec Kit lifecycle (open -> analysis -> engineer-review -> ready -> in-progress -> in-review -> done), create one native sub-issue per task, and close sub-issues as their tasks are checked off. Board-agnostic (run `project init` once per repo). Idempotent and no-regress."
+  author: "Samy K. Abushanab"
+  repository: "https://github.com/samykabu/sanduq"
+  license: MIT
+
+requires:
+  speckit_version: ">=0.2.0"
+  tools:
+    - name: git
+      required: false
+    - name: gh
+      required: false   # graceful skip if gh/scope/remote preconditions are not met
+
+provides:
+  commands:
+    - name: speckit.project.init
+      file: commands/speckit.project.init.md
+      description: "One-time setup: discover the GitHub Project, map lifecycle phases to your board's Status columns (creating missing ones on request), and write config.json."
+    - name: speckit.project.sync
+      file: commands/speckit.project.sync.md
+      description: "Advance the feature's parent issue on the configured GitHub Project to the phase's Status, create/close task sub-issues, keeping the board in step with the branch."
+
+# Lifecycle wiring. All hooks are OPTIONAL (they prompt) and pass the target phase in
+# their prompt text so the assistant runs `speckit.project.sync <phase>`. Self-contained:
+# the after_implement hook sets In review itself when an open PR exists for the branch.
+hooks:
+  after_specify:
+    command: speckit.project.sync
+    optional: true
+    prompt: "Create/refresh the GitHub Project feature issue (Status: open column)? Run: /speckit-project-sync open"
+    description: "Create the parent feature issue on the configured Project after the spec is written"
+  after_plan:
+    command: speckit.project.sync
+    optional: true
+    prompt: "Advance the GitHub Project card to the 'analysis' column? Run: /speckit-project-sync analysis"
+    description: "Move the parent feature issue to the analysis column after planning"
+  after_analyze:
+    command: speckit.project.sync
+    optional: true
+    prompt: "Advance the GitHub Project card to the 'engineer-review' column? Run: /speckit-project-sync engineer-review"
+    description: "Move the parent feature issue to the engineer-review column after cross-artifact analysis"
+  after_tasks:
+    command: speckit.project.sync
+    optional: true
+    prompt: "Create one sub-issue per task and set the card to the 'ready' column? Run: /speckit-project-sync ready"
+    description: "Create native task sub-issues and move the parent feature issue to the ready column after task generation"
+  before_implement:
+    command: speckit.project.sync
+    optional: true
+    prompt: "Mark the GitHub Project card 'in-progress' before implementation? Run: /speckit-project-sync in-progress"
+    description: "Move the parent feature issue to the in-progress column as implementation begins"
+  after_implement:
+    command: speckit.project.sync
+    optional: true
+    prompt: "Close completed task sub-issues and set 'in-review' if a PR is open? Run: /speckit-project-sync in-progress"
+    description: "Close sub-issues for tasks checked off in tasks.md; advance to in-review when an open PR exists for the branch"
+
+tags:
+  - "project"
+  - "github"
+  - "issues"
+  - "sub-issues"
+  - "lifecycle"
+  - "workflow"

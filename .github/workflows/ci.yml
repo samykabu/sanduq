@@ -1,0 +1,50 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate JSON (catalog + configs + marketplace)
+        run: |
+          for f in catalog.json .claude-plugin/marketplace.json $(find extensions -name '*.json'); do
+            echo "checking $f"; jq empty "$f"
+          done
+
+      - name: Validate extension.yml files
+        run: |
+          python3 -c "import yaml,glob,sys; [yaml.safe_load(open(f)) for f in glob.glob('extensions/*/extension.yml')]; print('yaml ok')"
+
+      - name: ShellCheck bash scripts
+        run: |
+          sudo apt-get update -y && sudo apt-get install -y shellcheck
+          find extensions -name '*.sh' -print -exec shellcheck -S warning {} +
+          shellcheck -S warning install.sh
+
+      - name: PSScriptAnalyzer PowerShell scripts
+        shell: pwsh
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          $issues = Get-ChildItem -Recurse -Filter *.ps1 | ForEach-Object {
+            Invoke-ScriptAnalyzer -Path $_.FullName -Severity Error,Warning
+          }
+          $issues | Format-Table -AutoSize
+          if ($issues | Where-Object Severity -eq 'Error') { throw 'PSScriptAnalyzer found errors' }
+
+  dryrun:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: project-sync degrades gracefully without config/gh
+        shell: pwsh
+        run: |
+          git init -q; git remote add origin https://github.com/example/example.git
+          # No config.json + no gh scope -> must exit 0 with a logged skip, never throw.
+          pwsh extensions/project/scripts/powershell/project-sync.ps1 -Phase open -DryRun -Json

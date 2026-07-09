@@ -1,0 +1,43 @@
+{
+  "schema_version": "1.0",
+  "updated_at": "2026-07-09T00:00:00Z",
+  "catalog_url": "https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json",
+  "extensions": {
+    "project": {
+      "name": "GitHub Project Lifecycle Sync",
+      "id": "project",
+      "description": "Mirror each Spec Kit feature onto a GitHub Project (v2): a parent feature issue whose Status advances through the lifecycle, plus one native sub-issue per task closed as it is checked off. Board-agnostic via `project init`. Idempotent and no-regress.",
+      "author": "samykabu",
+      "version": "1.0.0",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/project-v1.0.0/project.zip",
+      "repository": "https://github.com/samykabu/sanduq",
+      "homepage": "https://github.com/samykabu/sanduq",
+      "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/project/README.md",
+      "changelog": "https://github.com/samykabu/sanduq/blob/main/CHANGELOG.md",
+      "license": "MIT",
+      "category": "project-management",
+      "effect": "read-write",
+      "requires": {
+        "speckit_version": ">=0.2.0",
+        "tools": ["gh"]
+      },
+      "provides": {
+        "commands": 2,
+        "hooks": 6
+      },
+      "tags": [
+        "project",
+        "github",
+        "issues",
+        "sub-issues",
+        "lifecycle",
+        "workflow"
+      ],
+      "verified": false,
+      "downloads": 0,
+      "stars": 0,
+      "created_at": "2026-07-09T00:00:00Z",
+      "updated_at": "2026-07-09T00:00:00Z"
+    }
+  }
+}
