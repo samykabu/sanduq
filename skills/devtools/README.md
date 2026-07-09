@@ -1,6 +1,6 @@
 # Devtools
 
-Developer productivity tools for Resal engineering workflows.
+Developer productivity tools bundled for the sanduq marketplace.
 
 ## Included Skills
 
@@ -13,10 +13,11 @@ Developer productivity tools for Resal engineering workflows.
 
 ## Usage
 
-Install from the Resal marketplace:
+Install from the sanduq marketplace:
 
 ```
-/plugin install devtools@resal
+/plugin marketplace add samykabu/sanduq
+/plugin install devtools@sanduq
 ```
 
 ### pr-review

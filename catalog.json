@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-07-09T00:00:00Z",
+  "updated_at": "2026-07-09T20:26:15Z",
   "catalog_url": "https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json",
   "extensions": {
     "project": {
@@ -8,18 +8,20 @@
       "id": "project",
       "description": "Mirror each Spec Kit feature onto a GitHub Project (v2): a parent feature issue whose Status advances through the lifecycle, plus one native sub-issue per task closed as it is checked off. Board-agnostic via `project init`. Idempotent and no-regress.",
       "author": "samykabu",
-      "version": "1.0.0",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/project-v1.0.0/project.zip",
+      "version": "1.0.1",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/project-v1.0.1/project.zip",
       "repository": "https://github.com/samykabu/sanduq",
-      "homepage": "https://github.com/samykabu/sanduq",
+      "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/project",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/project/README.md",
-      "changelog": "https://github.com/samykabu/sanduq/blob/main/CHANGELOG.md",
+      "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/project/CHANGELOG.md",
       "license": "MIT",
       "category": "project-management",
       "effect": "read-write",
       "requires": {
         "speckit_version": ">=0.2.0",
-        "tools": ["gh"]
+        "tools": [
+          "gh"
+        ]
       },
       "provides": {
         "commands": 2,
@@ -37,7 +39,134 @@
       "downloads": 0,
       "stars": 0,
       "created_at": "2026-07-09T00:00:00Z",
-      "updated_at": "2026-07-09T00:00:00Z"
+      "updated_at": "2026-07-09T20:26:15Z"
+    },
+    "pr": {
+      "name": "Detailed PR Generator",
+      "id": "pr",
+      "version": "1.1.2",
+      "description": "Generate a feature CHANGELOG, plain-English feature-details document, and architecture/process diagram assets from Spec Kit artifacts, then create or update the pull request description with the feature details under a review heading.",
+      "author": "Samy K. Abushanab",
+      "repository": "https://github.com/samykabu/sanduq",
+      "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/pr",
+      "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/pr/README.md",
+      "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/pr/CHANGELOG.md",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/pr-v1.1.2/pr.zip",
+      "license": "MIT",
+      "category": "process",
+      "effect": "read-write",
+      "requires": {
+        "speckit_version": ">=0.2.0",
+        "tools": [
+          {
+            "name": "git",
+            "required": false
+          },
+          {
+            "name": "gh",
+            "required": false
+          }
+        ]
+      },
+      "provides": {
+        "commands": 1,
+        "hooks": 1
+      },
+      "tags": [
+        "pr",
+        "changelog",
+        "documentation",
+        "diagram",
+        "review",
+        "workflow"
+      ],
+      "verified": false,
+      "created_at": "2026-07-09T20:26:15Z",
+      "updated_at": "2026-07-09T20:26:15Z"
+    },
+    "how-to-test": {
+      "name": "How-To-Test",
+      "id": "how-to-test",
+      "version": "1.4.1",
+      "description": "Generate QA-facing How-To-Test manuals from completed Spec Kit features, with diagram assets, screenshots, API samples, and an optional readiness audit that creates reusable project memory plus missing E2E/API/screenshot/diagram tasks before implementation.",
+      "author": "Samy K. Abushanab",
+      "repository": "https://github.com/samykabu/sanduq",
+      "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/how-to-test",
+      "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/how-to-test/README.md",
+      "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/how-to-test/CHANGELOG.md",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/how-to-test-v1.4.1/how-to-test.zip",
+      "license": "MIT",
+      "category": "process",
+      "effect": "read-write",
+      "requires": {
+        "speckit_version": ">=0.2.0",
+        "tools": [
+          {
+            "name": "git",
+            "required": false
+          }
+        ]
+      },
+      "provides": {
+        "commands": 2,
+        "hooks": 2
+      },
+      "tags": [
+        "qa",
+        "testing",
+        "e2e",
+        "playwright",
+        "documentation",
+        "diagram",
+        "how-to-test",
+        "workflow"
+      ],
+      "verified": false,
+      "created_at": "2026-07-09T20:26:15Z",
+      "updated_at": "2026-07-09T20:26:15Z"
+    },
+    "pr-review": {
+      "name": "PR Review Processor",
+      "id": "pr-review",
+      "version": "1.0.4",
+      "description": "Process GitHub pull request review comments, classify feedback, prepare an approval-gated fix/reply plan, then apply approved fixes and resolve addressed threads.",
+      "author": "Samy K. Abushanab",
+      "repository": "https://github.com/samykabu/sanduq",
+      "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/pr-review",
+      "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/pr-review/README.md",
+      "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/pr-review/CHANGELOG.md",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/pr-review-v1.0.4/pr-review.zip",
+      "license": "MIT",
+      "category": "process",
+      "effect": "read-write",
+      "requires": {
+        "speckit_version": ">=0.2.0",
+        "tools": [
+          {
+            "name": "git",
+            "required": true
+          },
+          {
+            "name": "gh",
+            "required": true
+          }
+        ]
+      },
+      "provides": {
+        "commands": 1,
+        "hooks": 0
+      },
+      "tags": [
+        "pr",
+        "review",
+        "github",
+        "code-review",
+        "workflow",
+        "feedback"
+      ],
+      "verified": false,
+      "created_at": "2026-07-09T20:26:15Z",
+      "updated_at": "2026-07-09T20:26:15Z"
     }
   }
 }

@@ -8,7 +8,8 @@ on the command line this script:
   * decides the next version (see version resolution below)
   * rewrites the ``version:`` line in extension.yml (surrounding formatting and
     comments are preserved — only that one line changes)
-  * updates ``extensions/catalog.json``:
+  * updates the public ``catalog.json`` and mirrors it to
+    ``extensions/catalog.json``:
       - existing entry  -> only ``version``, ``download_url`` and ``updated_at``
         change (everything a maintainer curated by hand is left untouched)
       - new extension   -> a full entry is generated from extension.yml using
@@ -19,11 +20,12 @@ Version resolution (first match wins):
   1. ``--set-version X.Y.Z``                      explicit override
   2. extension.yml version already ahead of the   maintainer bumped it by hand
      catalog version                              -> release that version as-is
-  3. otherwise                                     auto ``--bump`` (default patch)
+  3. missing from catalog                          new entry -> release current
+  4. otherwise                                     auto ``--bump`` (default patch)
 
 Usage:
   python extensions/scripts/release.py pr [foo ...] \
-      --bump patch --repo-url https://github.com/ResalApps/resal-marketplace
+      --bump patch --repo-url https://github.com/samykabu/sanduq --branch main
 """
 from __future__ import annotations
 
@@ -41,7 +43,8 @@ except ImportError:  # pragma: no cover - guarded in CI by `pip install pyyaml`
 
 ROOT = Path(__file__).resolve().parents[2]
 EXT_DIR = ROOT / "extensions"
-CATALOG = EXT_DIR / "catalog.json"
+CATALOG = ROOT / "catalog.json"
+COMPAT_CATALOG = EXT_DIR / "catalog.json"
 
 
 def now_iso() -> str:
@@ -77,7 +80,14 @@ def replace_yaml_version(text: str, new_version: str) -> str:
     return new_text
 
 
-def new_catalog_entry(meta, ext_id, version, download_url, repo_url):
+def raw_catalog_url(repo_url: str, branch: str) -> str:
+    prefix = "https://github.com/"
+    if repo_url.startswith(prefix):
+        return f"https://raw.githubusercontent.com/{repo_url[len(prefix):]}/{branch}/catalog.json"
+    return ""
+
+
+def new_catalog_entry(meta, ext_id, version, download_url, repo_url, branch):
     """Build a full catalog entry for a brand-new extension (pr entry = template)."""
     commands = (meta.get("provides", {}) or {}).get("commands", []) or []
     hooks = meta.get("hooks", {}) or {}
@@ -88,9 +98,9 @@ def new_catalog_entry(meta, ext_id, version, download_url, repo_url):
         "description": meta.get("description", ""),
         "author": meta.get("author", ""),
         "repository": meta.get("repository", repo_url),
-        "homepage": f"{repo_url}/tree/master/extensions/{ext_id}",
-        "documentation": f"{repo_url}/blob/master/extensions/{ext_id}/README.md",
-        "changelog": f"{repo_url}/blob/master/extensions/{ext_id}/CHANGELOG.md",
+        "homepage": f"{repo_url}/tree/{branch}/extensions/{ext_id}",
+        "documentation": f"{repo_url}/blob/{branch}/extensions/{ext_id}/README.md",
+        "changelog": f"{repo_url}/blob/{branch}/extensions/{ext_id}/CHANGELOG.md",
         "download_url": download_url,
         "license": meta.get("license", "MIT"),
         "category": meta.get("category", "uncategorized"),
@@ -121,12 +131,15 @@ def main() -> None:
     ap.add_argument("ids", nargs="+", help="extension ids to release (dir names under extensions/)")
     ap.add_argument("--bump", default="patch", choices=["patch", "minor", "major"])
     ap.add_argument("--set-version", default=None, help="force this exact version")
-    ap.add_argument("--repo-url", default="https://github.com/ResalApps/resal-marketplace")
+    ap.add_argument("--repo-url", default="https://github.com/samykabu/sanduq")
+    ap.add_argument("--branch", default="main", help="default branch used for catalog docs links")
     ap.add_argument("--manifest", default=str(ROOT / "dist" / "released.json"))
     args = ap.parse_args()
 
     repo_url = args.repo_url.rstrip("/")
+    branch = args.branch.strip() or "main"
     catalog = json.loads(CATALOG.read_text(encoding="utf-8"))
+    catalog["catalog_url"] = raw_catalog_url(repo_url, branch) or catalog.get("catalog_url", "")
     catalog.setdefault("extensions", {})
 
     released = []
@@ -147,6 +160,9 @@ def main() -> None:
         elif catalog_version and current != catalog_version:
             # Maintainer bumped extension.yml by hand -> honour it verbatim.
             new_version = current
+        elif existing is None:
+            # New catalog entry -> publish the version declared by the extension.
+            new_version = current
         else:
             new_version = bump_version(current, args.bump)
 
@@ -159,12 +175,16 @@ def main() -> None:
         if existing:
             entry = dict(existing)
             entry["version"] = new_version
+            entry["repository"] = repo_url
+            entry["homepage"] = f"{repo_url}/tree/{branch}/extensions/{ext_id}"
+            entry["documentation"] = f"{repo_url}/blob/{branch}/extensions/{ext_id}/README.md"
+            entry["changelog"] = f"{repo_url}/blob/{branch}/extensions/{ext_id}/CHANGELOG.md"
             entry["download_url"] = download_url
             entry["updated_at"] = now_iso()
             catalog["extensions"][ext_id] = entry
         else:
             catalog["extensions"][ext_id] = new_catalog_entry(
-                meta, ext_id, new_version, download_url, repo_url
+                meta, ext_id, new_version, download_url, repo_url, branch
             )
 
         released.append(
@@ -184,7 +204,9 @@ def main() -> None:
         print("no extensions to release", file=sys.stderr)
 
     catalog["updated_at"] = now_iso()
-    CATALOG.write_text(json.dumps(catalog, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    serialized_catalog = json.dumps(catalog, indent=2, ensure_ascii=False) + "\n"
+    CATALOG.write_text(serialized_catalog, encoding="utf-8")
+    COMPAT_CATALOG.write_text(serialized_catalog, encoding="utf-8")
 
     manifest = Path(args.manifest)
     manifest.parent.mkdir(parents=True, exist_ok=True)

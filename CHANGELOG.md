@@ -4,6 +4,21 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## sanduq — 0.2.0 — 2026-07-09
+
+### Added
+- Resal-style automated extension release pipeline on `main`, with catalog/version commits and
+  release ZIP publication.
+- Marketplace registration for the `devtools` and `illustration-tools` Claude Code plugins.
+
+### Changed
+- Root `catalog.json` is now the public Spec Kit catalog, mirrored to `extensions/catalog.json`.
+- Extension and plugin documentation now uses the sanduq install paths and release flow.
+- Release-critical scripts and manifests are pinned to LF line endings with `.gitattributes`.
+- Bumped extension metadata: `project` 1.0.1, `pr` 1.1.2, `pr-review` 1.0.4,
+  `how-to-test` 1.4.1.
+- Bumped plugin metadata: `devtools` 1.7.1 and `illustration-tools` 1.3.1.
+
 ## illustration-tools — 1.3.0 — 2026-07-09
 
 ### Added

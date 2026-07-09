@@ -27,11 +27,11 @@ lifecycle onto whatever Status columns your board has.
 
 ```bash
 # via Spec Kit catalog (the installer wires hooks + renders the commands):
-speckit extension install project
+specify extension add project
 # or copy this folder to .specify/extensions/project and run install.sh from the repo root
 
 gh auth refresh -h github.com -s project,read:project   # one-time scope
-speckit project init                                    # discover board + map columns -> config.json
+/speckit-project-init                                   # discover board + map columns -> config.json
 ```
 
 `project init` discovers the project id, Status field, and columns, then maps each phase to a

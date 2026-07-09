@@ -1,43 +1,42 @@
-# 🧰 sanduq
+# sanduq
 
-> **sanduq** (صندوق) — Arabic for *chest / toolbox*. A chest of shared AI-agent tooling:
-> **Spec Kit extensions**, **Claude Code plugins**, and **skills** — reusable across all
-> your projects and any assistant (Claude Code, Codex, Copilot, OpenCode).
+**sanduq** is a shared toolbox for AI-agent workflows: Spec Kit extensions, Claude Code plugins,
+and portable skills.
 
-One repo, two marketplaces:
-
-- **Spec Kit extension catalog** → [`catalog.json`](catalog.json)
-- **Claude Code plugin marketplace** → [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json)
-
-```
-sanduq/
-├── catalog.json                     # Spec Kit extension catalog (add its raw URL to a repo)
-├── .claude-plugin/marketplace.json  # Claude Code plugin marketplace manifest
-├── extensions/                      # Spec Kit extensions
-│   └── project/                     # GitHub Project lifecycle sync
-├── plugins/                         # Claude Code / MCP plugins
-├── skills/                          # shareable agent skills
-└── install.{ps1,sh}                 # copy an extension into a target Spec Kit repo
-```
-
-## Contents
+## What is included
 
 ### Spec Kit extensions
 
-| id | what it does |
-| --- | --- |
-| [`project`](extensions/project/) | Mirrors each Spec Kit feature onto a GitHub Project (v2) — a parent feature issue whose Status advances through the lifecycle, plus one native sub-issue per task, closed as tasks are checked off. Board-agnostic, idempotent, no-regress. |
+Install these with the `specify` CLI from the public catalog at [`catalog.json`](catalog.json).
 
-### Plugins / skills
+| Extension | Version | Command | Use it for |
+| --- | ---: | --- | --- |
+| [`project`](extensions/project/) | 1.0.1 | `/speckit-project-sync` | Keep a GitHub Project in sync with a Spec Kit feature, parent issue, task sub-issues, and lifecycle status. |
+| [`pr`](extensions/pr/) | 1.1.2 | `/speckit-pr-generate` | Generate feature changelog/details docs and update the pull request body. |
+| [`how-to-test`](extensions/how-to-test/) | 1.4.1 | `/speckit-how-to-test-document` | Generate QA-facing How-To-Test manuals and run readiness analysis after task generation. |
+| [`pr-review`](extensions/pr-review/) | 1.0.4 | `/speckit-pr-review-process` | Process GitHub PR review comments through an approval-gated fix/reply workflow. |
 
-_None yet — add Claude Code plugins under `plugins/` (and register them in
-`.claude-plugin/marketplace.json`), and standalone skills under `skills/`._
+### Claude Code plugins
 
-## Use it in another project
+Install these from the marketplace at [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json).
 
-### As a Spec Kit extension catalog
+| Plugin | Version | Use it for |
+| --- | ---: | --- |
+| [`devtools`](skills/devtools/) | 1.7.1 | PR review handling, standards review, How-To-Test generation, and PR description generation outside Spec Kit. |
+| [`illustration-tools`](skills/illustration-tools/) | 1.3.1 | Architecture and process-flow diagrams as standalone HTML+SVG files with export controls. |
 
-Add this catalog to the target repo's `.specify/extension-catalogs.yml`:
+## Install
+
+### Spec Kit catalog
+
+Add the sanduq catalog to a Spec Kit project:
+
+```bash
+specify extension catalog add --name sanduq --priority 10 --install-allowed \
+  https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
+```
+
+Or add it manually to `.specify/extension-catalogs.yml`:
 
 ```yaml
 catalogs:
@@ -47,46 +46,98 @@ catalogs:
     install_allowed: true
 ```
 
-Then install an extension (the Spec Kit installer wires the hooks and renders the commands
-into every assistant target you have — `.claude/`, `.github/`, `.agents/`, `.opencode/`):
+Install extensions by id:
 
 ```bash
-speckit extension install project
+specify extension add project
+specify extension add pr
+specify extension add how-to-test
+specify extension add pr-review
 ```
 
-No catalog / no Spec Kit CLI? Copy it in manually from a checkout of this repo:
+Local development install from a clone:
 
 ```bash
-# from the target repo root:
-pwsh /path/to/sanduq/install.ps1 -Extension project        # Windows
-/path/to/sanduq/install.sh --extension project             # macOS/Linux
+specify extension add --dev /path/to/sanduq/extensions/project --force
 ```
 
-### As a Claude Code plugin marketplace
+If a target project resolves an old release, clear the project-level Spec Kit cache and retry:
 
+```powershell
+Remove-Item -Recurse -Force .specify\extensions\.cache
+specify extension add project
 ```
+
+### Claude Code marketplace
+
+Inside Claude Code:
+
+```text
 /plugin marketplace add samykabu/sanduq
-/plugin install <plugin>@sanduq
+/plugin install devtools@sanduq
+/plugin install illustration-tools@sanduq
 ```
 
-## The `project` extension in 30 seconds
+## Use
+
+`project` needs one-time setup in each target repo:
 
 ```bash
-gh auth refresh -h github.com -s project,read:project   # one-time scope
-speckit extension install project                       # install + wire hooks
-speckit project init                                    # discover board + map columns
-# thereafter /speckit.specify, /plan, /tasks, /implement move the board automatically
+gh auth refresh -h github.com -s project,read:project
+/speckit-project-init
 ```
 
-See [`extensions/project/README.md`](extensions/project/README.md) for the full lifecycle,
-column mapping, and safety notes.
+After that, Spec Kit lifecycle hooks can prompt to run `/speckit-project-sync` at each phase.
 
-## Publishing (maintainer)
+The `pr`, `how-to-test`, and `pr-review` extensions can be run manually:
 
-Push a tag `<extension>-vX.Y.Z` (e.g. `project-v1.0.0`); the
-[release workflow](.github/workflows/release.yml) packages `extensions/<id>/` into
-`<id>.zip` and attaches it to the release, which `catalog.json`'s `download_url` points at.
-Bump the version in both `extensions/<id>/extension.yml` and `catalog.json`.
+```text
+/speckit-pr-generate
+/speckit-how-to-test-analyze
+/speckit-how-to-test-document
+/speckit-pr-review-process owner/repo#123
+```
+
+Plugin skills are available outside Spec Kit:
+
+```text
+/devtools:pr-review
+/devtools:how-to-test
+/devtools:pr-generate-description
+/illustration-tools:architecture-diagram
+/illustration-tools:process-flow-diagram
+```
+
+## Release pipeline
+
+The Resal-style automated release flow lives in
+[`.github/workflows/release-extensions.yml`](.github/workflows/release-extensions.yml). On pushes to
+`main` that change `extensions/**`, it detects changed extension directories, bumps versions when
+needed, updates [`catalog.json`](catalog.json) and [`extensions/catalog.json`](extensions/catalog.json),
+builds release ZIPs, commits catalog/version changes back to `main` with `[skip ci]`, and creates
+GitHub releases tagged `<extension>-vX.Y.Z`.
+
+When changing a plugin or extension, bump its manifest version and add a changelog entry in the same
+change. CI validates catalog/version alignment and plugin marketplace sources.
+
+## Repository layout
+
+```text
+sanduq/
+  .claude-plugin/marketplace.json
+  catalog.json
+  extensions/
+    catalog.json
+    scripts/
+    project/
+    pr/
+    how-to-test/
+    pr-review/
+  skills/
+    devtools/
+    illustration-tools/
+    diagrams/
+```
 
 ## License
 

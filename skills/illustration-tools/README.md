@@ -13,10 +13,11 @@ They share one design language (JetBrains Mono, semantic color palette, the same
 
 ## Usage
 
-Install from the Resal marketplace:
+Install from the sanduq marketplace:
 
 ```
-/plugin install illustration-tools@resal
+/plugin marketplace add samykabu/sanduq
+/plugin install illustration-tools@sanduq
 ```
 
 Then just describe what you want — the skills trigger automatically:
