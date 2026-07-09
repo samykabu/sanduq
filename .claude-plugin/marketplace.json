@@ -1,0 +1,12 @@
+{
+  "name": "sanduq",
+  "owner": {
+    "name": "Samy K. Abushanab",
+    "url": "https://github.com/samykabu"
+  },
+  "metadata": {
+    "description": "Sanduq — a chest of shared AI-agent tooling: Claude Code plugins, skills, and Spec Kit extensions.",
+    "version": "0.1.0"
+  },
+  "plugins": []
+}
