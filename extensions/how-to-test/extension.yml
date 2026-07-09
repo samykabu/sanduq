@@ -3,7 +3,7 @@ schema_version: "1.0"
 extension:
   id: how-to-test
   name: "How-To-Test"
-  version: "1.4.1"
+  version: "1.4.2"
   description: "Generate QA-facing How-To-Test manuals from completed Spec Kit features, with diagram assets, screenshots, API samples, and an optional readiness audit that creates reusable project memory plus missing E2E/API/screenshot/diagram tasks before implementation."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
