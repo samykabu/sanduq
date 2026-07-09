@@ -2,6 +2,8 @@
 
 **Goal:** point the skill at a site you like (your own, a competitor, a reference), and have it extract the palette + typography, then rewrite `style-guide.md` so every future diagram inherits that skin.
 
+If the user wants to point the skill at a local `design.md`, `system-design.md`, or `system design.md` file instead of a website, use [`theme-initialization.md`](theme-initialization.md).
+
 Takes about 60 seconds.
 
 ---

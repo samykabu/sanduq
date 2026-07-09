@@ -1,6 +1,7 @@
 # build artifacts
 *.zip
 dist/
+node_modules/
 # editor / OS
 .vscode/
 .idea/

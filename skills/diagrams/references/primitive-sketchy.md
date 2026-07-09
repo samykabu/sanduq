@@ -1,43 +1,53 @@
-# Sketchy Filter (hand-drawn variant)
+# Rough Hand Variant
 
-Optional displacement filter that wobbles every stroke and edge slightly — turns any minimal variant into a hand-drawn "editorial" register without changing layout. Use when the diagram accompanies an essay rather than technical docs.
+Optional Rough.js-based conversion that turns every minimal example into a hand-drawn "editorial" register without changing layout. Use when the diagram accompanies an essay, sketch, workshop note, or planning doc rather than precision technical docs.
 
-## Grammar
+Copyable gallery examples live beside each type as `assets/example-<type>-hand.html`, with `assets/template-hand.html` as the starter template. They show rough boxes, rough arrows, solid lines, dashed lines, label masks, and crisp text using the same layouts as the minimal examples.
 
-```svg
-<defs>
-  <filter id="sketchy" x="-2%" y="-2%" width="104%" height="104%">
-    <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="4"/>
-    <feDisplacementMap in="SourceGraphic" scale="1.5"/>
-  </filter>
-</defs>
+## Implementation
 
-<!-- Apply to a group wrapping shapes — NOT text -->
-<g filter="url(#sketchy)">
-  <!-- rects, paths, circles, lines go here -->
-</g>
+The `-hand` files are generated, not manually edited. Run:
 
-<!-- Text sits OUTSIDE the filtered group — legibility stays crisp -->
-<text ...>Labels go here</text>
+```bash
+cd skills/diagrams
+npm install
+npm run generate:hand
 ```
+
+The generator is [`scripts/generate-hand-variants.cjs`](../scripts/generate-hand-variants.cjs). It follows the same design as `svg2roughjs`: parse the canonical SVG and emit Rough.js-generated SVG paths. We use Rough.js directly instead of runtime `svg2roughjs` so arrows and pointers are controlled by the skill:
+
+- Source `marker-end` arrows become explicit rough arrowhead geometry.
+- Filled nodes use inset, jittered `rough-fill-mask` paths plus single-pass rough strokes, so clean source borders, clean fill edges, or double-stroke overlays do not sit underneath the hand-drawn outline.
+- Original text and label masks stay crisp and readable.
+- Original dashed lines keep `stroke-dasharray` on the generated rough strokes.
+- The output remains static HTML. No runtime JavaScript is required.
 
 ## Tuning
 
-| Parameter | Range | Effect |
-|---|---|---|
-| `baseFrequency` | 0.01–0.04 | Lower = lazy wavy lines; higher = jittery. 0.02 default. |
-| `numOctaves` | 1–3 | More = more noise detail. 2 is plenty. |
-| `scale` | 1–6 | 1 barely-there, 1.5 default, 2 visible, 4+ cartoon. |
-| `seed` | integer | Swap for a different random pattern. |
+Tune these constants in `scripts/generate-hand-variants.cjs`:
 
-## Critical rule
-Filter shapes, NOT text. Displacement-mapped text becomes illegible. Structure your SVG so text is in a sibling group outside the filtered group.
+| Constant | Effect |
+|---|---|
+| `ROUGHNESS` | Higher values make borders and connectors more irregular. |
+| `BOWING` | Higher values make long lines bow more. |
+| `FILL_INSET` | Pulls jittered fills inward so only rough strokes define visible borders. |
+| `disableMultiStroke: true` | Keeps borders from reading as a clean base line with a rough duplicate over it. |
+| `TYPES` | Controls which examples get a `-hand` variant. |
+| `seedBase` passed to `convertFile` | Changes the deterministic rough geometry per file. |
+
+## Critical rules
+
+Rough shapes, NOT text. Hand-drawn text becomes illegible fast. The generated files keep text as normal SVG `<text>` nodes.
+
+Keep arrow labels masked with an opaque paper rectangle even in hand examples. The line can wobble; the label should still read cleanly.
+
+Do not use SVG displacement filters for this variant. Filters can make borders, markers, and filled shapes look broken because they distort the final rendering instead of producing real rough geometry.
 
 ## When to use
 - Essay / blog post / newsletter where the diagram is the hero of a narrative page.
 - "Working sketch" register — showing something is mid-thought, not final architecture.
 
 ## When not to use
-- Technical documentation (precision matters).
+- Technical documentation where geometric precision matters.
 - Diagrams with dense labels or tight alignments (filter reads as noise).
-- Dark variants — wobble reads as artifact on dark backgrounds. Test first.
+- Dark variants unless tested carefully. Rough multi-strokes can read as visual noise on dark paper.

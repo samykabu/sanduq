@@ -1,6 +1,6 @@
 ---
 name: diagram-design
-description: Create technical and product diagrams — architecture, flowchart, sequence, state machine, ER / data model, timeline, swimlane, quadrant, nested, tree, org chart, layer stack, venn, pyramid — as standalone HTML files with inline SVG. Ships with a neutral editorial skin and a first-run gate that prompts users to customize the style guide (colors, fonts) from their own website before generating. Includes annotation-callout primitive and optional sketchy variant.
+description: Create technical and product diagrams — architecture, flowchart, sequence, state machine, ER / data model, timeline, swimlane, quadrant, nested, tree, org chart, layer stack, venn, pyramid — as standalone HTML files with inline SVG. Ships with a neutral editorial skin and a first-run gate that prompts users to customize the style guide from their website, pasted tokens, or a local design.md/system-design.md/system design.md file before generating. Includes annotation-callout primitive and a hand-drawn `-hand` variant for every example type.
 license: MIT
 metadata:
   version: "1.0"
@@ -18,16 +18,24 @@ Fourteen diagram types. One shared design system, complexity budget, and taste g
 
 **Before generating your first diagram in a new project, verify the style guide has been customized.**
 
-Open [`references/style-guide.md`](references/style-guide.md) and check the default tokens. If they're still the shipped defaults (paper `#faf7f2`, ink `#1c1917`, accent `#b5523a` rust), **pause and ask the user**:
+Open [`references/style-guide.md`](references/style-guide.md) and check the default tokens. If they're still the shipped defaults (paper `#f5f5f5`, ink `#2d3142`, accent `#eb6c36` atomic-tangerine), **pause and ask the user**:
 
-> *"This is your first Schematic in this project. The style guide is still at the default (neutral stone + rust). Do you want to customize it to match your brand first? Options: (a) run onboarding — I'll pull colors and fonts from your website, (b) paste your tokens manually, (c) proceed with the default for now."*
+> *"This is your first Schematic in this project. The style guide is still at the default skin. Do you want to customize it to match your brand first? Options: (a) run onboarding from a website URL, (b) read a local `design.md`, `system-design.md`, or `system design.md` file, (c) paste tokens manually, (d) proceed with the default for now."*
 
 Then branch:
 - **(a)** → follow [`references/onboarding.md`](references/onboarding.md) to fetch the site, extract palette + fonts, propose a diff, and write `style-guide.md`.
-- **(b)** → accept the user's tokens and write them into `style-guide.md` under a new "Custom tokens" section.
-- **(c)** → proceed; optionally remind the user they can run onboarding later.
+- **(b)** → follow [`references/theme-initialization.md`](references/theme-initialization.md) to parse the markdown design system, map tokens to semantic roles, propose a diff, and write `style-guide.md`.
+- **(c)** → accept the user's tokens and write them into `style-guide.md` under a new "Custom tokens" section.
+- **(d)** → proceed; optionally remind the user they can run theme initialization later.
 
-**Once the style guide has been customized** (or the user explicitly opted for default), skip this gate on subsequent runs. A simple way to detect customization: if the `accent` value in `style-guide.md` differs from `#b5523a`, assume custom.
+The user can also trigger this on demand with phrases like:
+- "Initialize Diagram Design theme from `design.md`."
+- "Use `docs/system-design.md` as the Schematic color theme."
+- "Refresh the diagrams style guide from our design system file."
+
+For on-demand theme initialization, skip the first-run question and go directly to [`references/theme-initialization.md`](references/theme-initialization.md).
+
+**Once the style guide has been customized** (or the user explicitly opted for default), skip this gate on subsequent runs. A simple way to detect customization: if the `accent` value in `style-guide.md` differs from `#eb6c36`, assume custom.
 
 Don't silently ship default-skinned diagrams into a branded project — that's the failure mode this gate exists to prevent.
 
@@ -116,7 +124,7 @@ Type-specific anti-patterns live in each `references/type-*.md`.
 
 ## 5. Design System
 
-**The design system is skinnable.** All colors, typography, and tokens live in a single source of truth — [`references/style-guide.md`](references/style-guide.md). This file describes semantic roles (`paper`, `ink`, `muted`, `accent`, `link`, …). The default skin is a cool editorial palette (white-smoke paper, jet-black ink, atomic-tangerine accent, blue-slate muted, silver hairlines); to apply your own brand, either edit `style-guide.md` directly or run the URL-based flow described in [`references/onboarding.md`](references/onboarding.md).
+**The design system is skinnable.** All colors, typography, and tokens live in a single source of truth — [`references/style-guide.md`](references/style-guide.md). This file describes semantic roles (`paper`, `ink`, `muted`, `accent`, `link`, ...). The default skin is a cool editorial palette (white-smoke paper, jet-black ink, atomic-tangerine accent, blue-slate muted, silver hairlines); to apply your own brand, edit `style-guide.md` directly, run the URL-based flow in [`references/onboarding.md`](references/onboarding.md), or initialize from a local markdown design system with [`references/theme-initialization.md`](references/theme-initialization.md).
 
 > When specs below or in type references mention "ink", "accent", "muted", etc., look up the current hex value in `style-guide.md`.
 
@@ -380,13 +388,14 @@ Every diagram ships in three variants (see `assets/`):
 | **Minimal light** (default) | `template.html`, `example-<type>.html` | Screenshot-ready. Diagram + title. Warm paper. |
 | **Minimal dark** | `template-dark.html`, `example-<type>-dark.html` | Dark mode sites, slides, high-contrast posts. |
 | **Full editorial** | `template-full.html`, `example-<type>-full.html` | Long-form posts where the diagram is the hero. |
+| **Hand drawn** | `template-hand.html`, `example-<type>-hand.html` | Sketch-style version of the minimal layout. Boxes, arrows, pointers, solid lines, and dashed lines are generated as static Rough.js SVG paths while text stays crisp; fills use inset jittered masks so clean borders and rectangular fill edges do not show below the rough outline. |
 | **Consultant special** (quadrant only) | `example-quadrant-consultant.html` | BCG/McKinsey-style 2×2 scenario matrix. Clinical sans-serif, white bg, bold blue double-ended axes, named scenario cells. See [type-quadrant.md](references/type-quadrant.md#consultant-special-2x2-scenario-matrix). |
 
-**Sketchy variant** (optional, applied to any of the above) — see [primitive-sketchy.md](references/primitive-sketchy.md). SVG turbulence filter wobbles strokes for a hand-drawn feel. Good for essays, not for technical docs.
+**Hand drawn variant** — see [primitive-sketchy.md](references/primitive-sketchy.md). The `-hand` examples are generated from the minimal examples with `scripts/generate-hand-variants.cjs`, using Rough.js-style geometry and inset jittered fill masks rather than SVG filters, overlaid clean borders, or clean rectangular fill strips. Good for essays and planning sketches, not precision technical docs.
 
 ### To create a new diagram
 
-1. Copy the variant closest to what you want (`template.html` for minimal, `template-full.html` for cards).
+1. Copy the variant closest to what you want (`template.html` for minimal, `template-full.html` for cards, `template-hand.html` for hand drawn).
 2. Load the matching `references/type-<name>.md` for layout conventions.
 3. Replace the eyebrow, h1, and SVG body.
 4. Run the §9 taste gate.
