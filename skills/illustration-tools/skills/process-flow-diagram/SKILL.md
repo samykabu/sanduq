@@ -1,13 +1,13 @@
 ---
 name: process-flow-diagram
-description: Create polished dark-themed process flow diagrams as self-contained HTML+SVG files with PNG/PDF export. Use when the user asks for workflow diagrams, process maps, approval flows, automation sequences, or when PR/How-To-Test documentation needs process visuals.
+description: Create polished light-or-dark process flow diagrams as self-contained HTML+SVG files with PNG/PDF export. Use when the user asks for workflow diagrams, process maps, approval flows, automation sequences, or when PR/How-To-Test documentation needs process visuals. Default to the light theme unless the prompt explicitly asks for dark mode.
 ---
 
 # Process Flow Diagram Skill
 
-Create professional process flow diagrams as self-contained HTML files with inline SVG graphics and CSS styling. Optimized for linear, sequential workflows with clear step progression — manual steps, automated steps, integrations, and decision branches.
+Create professional process flow diagrams as self-contained HTML files with inline SVG graphics and CSS styling. Optimized for linear, sequential workflows with clear step progression — manual steps, automated steps, integrations, and decision branches. Default to the light theme. Use the dark theme only when the user prompt explicitly asks for dark mode, a dark background, or a dark-themed output.
 
-> **Version 1.2** · MIT License · Part of the Resal `illustration-tools` plugin
+> **Version 1.3** · MIT License · Part of the Resal `illustration-tools` plugin
 
 ## When to Use
 
@@ -23,14 +23,36 @@ Skip when: the relationships are non-sequential (system component graphs, infras
 
 ## Design System
 
+### Theme Selection
+
+- **Default:** use the light theme from `resources/template.html`.
+- **Dark requested:** use `resources/template-dark.html` when the prompt says "dark", "dark mode", "dark theme", "black background", "slate background", or asks to match an existing dark illustration-tools output.
+- **Generated filenames:** include `-dark` only for dark variants when helpful for disambiguation. Light diagrams do not need a suffix unless both themes are generated side by side.
+- **Do not mix themes:** keep the selected theme consistent across CSS, SVG fills/strokes, badge fills, text colors, grid lines, summary cards, and export `backgroundColor`.
+
 ### Color Palette (Step Types)
+
+Use these semantic colors for step types. The hue family stays consistent between themes, while fill opacity and stroke values shift for contrast.
+
+**Light theme (default):**
+
+| Step Type | Fill (rgba) | Stroke | Icon/Indicator |
+|-----------|-------------|--------|----------------|
+| Start/End | `rgba(14, 165, 233, 0.12)` | `#0284c7` (sky-600) | Pill shape |
+| Manual Step | `rgba(16, 185, 129, 0.12)` | `#059669` (emerald-600) | Actor label |
+| Automated Step | `rgba(139, 92, 246, 0.12)` | `#7c3aed` (violet-600) | Automated label |
+| Integration/API | `rgba(245, 158, 11, 0.14)` | `#d97706` (amber-600) | Integration label |
+| Decision | `rgba(244, 63, 94, 0.12)` | `#e11d48` (rose-600) | Diamond shape |
+| Prerequisite | `rgba(100, 116, 139, 0.10)` | `#64748b` (slate-500) | Dashed border |
+
+**Dark theme:**
 
 | Step Type | Fill (rgba) | Stroke | Icon/Indicator |
 |-----------|-------------|--------|----------------|
 | Start/End | `rgba(8, 51, 68, 0.4)` | `#22d3ee` (cyan-400) | Pill shape |
-| Manual Step | `rgba(6, 78, 59, 0.4)` | `#34d399` (emerald-400) | 👤 actor |
-| Automated Step | `rgba(76, 29, 149, 0.4)` | `#a78bfa` (violet-400) | ⚡ or 🤖 |
-| Integration/API | `rgba(120, 53, 15, 0.3)` | `#fbbf24` (amber-400) | 🔗 or ☁️ |
+| Manual Step | `rgba(6, 78, 59, 0.4)` | `#34d399` (emerald-400) | Actor label |
+| Automated Step | `rgba(76, 29, 149, 0.4)` | `#a78bfa` (violet-400) | Automated label |
+| Integration/API | `rgba(120, 53, 15, 0.3)` | `#fbbf24` (amber-400) | Integration label |
 | Decision | `rgba(136, 19, 55, 0.4)` | `#fb7185` (rose-400) | Diamond shape |
 | Prerequisite | `rgba(30, 41, 59, 0.3)` | `#94a3b8` (slate-400) | Dashed border |
 
@@ -45,29 +67,34 @@ Font sizes: 11px for step names, 9px for descriptions, 8px for annotations, 10px
 
 ### Visual Elements
 
-**Background:** `#020617` (slate-950) with subtle grid pattern.
+**Background:**
+
+- Light: `#f8fafc` (slate-50) with `#e2e8f0` grid lines.
+- Dark: `#020617` (slate-950) with `#1e293b` grid lines.
 
 **Step boxes:** Rounded rectangles (`rx="8"`) with 1.5px stroke, semi-transparent fills, minimum 140x70px.
 
 **Step number badges:** Small circles with step number, positioned top-left of each step box:
 ```svg
-<circle cx="X" cy="Y" r="12" fill="#1e293b" stroke="STEP_COLOR" stroke-width="1.5"/>
-<text x="X" y="Y+4" fill="white" font-size="10" font-weight="600" text-anchor="middle">1</text>
+<circle cx="X" cy="Y" r="12" fill="#ffffff" stroke="STEP_COLOR" stroke-width="1.5"/>
+<text x="X" y="Y+4" fill="#0f172a" font-size="10" font-weight="600" text-anchor="middle">1</text>
 ```
+
+For dark diagrams, use `fill="#1e293b"` for the badge circle and `fill="white"` for badge numbers.
 
 **Start/End nodes:** Pill shapes (large rx value):
 ```svg
-<rect x="X" y="Y" width="100" height="40" rx="20" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="2"/>
+<rect x="X" y="Y" width="100" height="40" rx="20" fill="rgba(14, 165, 233, 0.12)" stroke="#0284c7" stroke-width="2"/>
 ```
 
 **Decision diamonds:** Rotated squares:
 ```svg
-<rect x="X" y="Y" width="60" height="60" rx="4" transform="rotate(45, CENTER_X, CENTER_Y)" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.5"/>
+<rect x="X" y="Y" width="60" height="60" rx="4" transform="rotate(45, CENTER_X, CENTER_Y)" fill="rgba(244, 63, 94, 0.12)" stroke="#e11d48" stroke-width="1.5"/>
 ```
 
 **Prerequisites box:** Dashed border container at top:
 ```svg
-<rect x="X" y="Y" width="W" height="H" rx="8" fill="rgba(30, 41, 59, 0.2)" stroke="#64748b" stroke-width="1" stroke-dasharray="6,4"/>
+<rect x="X" y="Y" width="W" height="H" rx="8" fill="rgba(100, 116, 139, 0.08)" stroke="#64748b" stroke-width="1" stroke-dasharray="6,4"/>
 ```
 
 **Flow arrows:** Use arrowhead marker, with optional labels:
@@ -130,14 +157,14 @@ Place row 2 at `y = row1_y + 270` to leave room for the connector to clear both 
 
 ### Cyclical loop pattern
 
-For continuously-running processes (monitoring → trigger → action → loop), there is no Start/End pill. Instead, use a **dashed cyan loop-back arrow that travels over the top of the row** to return from the last step to the first:
+For continuously-running processes (monitoring → trigger → action → loop), there is no Start/End pill. Instead, use a **dashed loop-back arrow** (`#0284c7` light, `#22d3ee` dark) that travels over the top of the row to return from the last step to the first:
 
 ```svg
 <!-- Loop-back: last step (x=1430, y=200) → first step (x=160, y=160) over the top -->
 <path d="M 1430 200 L 1460 200 L 1460 110 L 160 110 L 160 160"
-      fill="none" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="6,3"
+      fill="none" stroke="#0284c7" stroke-width="1.5" stroke-dasharray="6,3"
       marker-end="url(#arrowhead)"/>
-<text x="800" y="103" fill="#22d3ee" font-size="9" text-anchor="middle" font-weight="600">↻ resume monitoring</text>
+<text x="800" y="103" fill="#0284c7" font-size="9" text-anchor="middle" font-weight="600">↻ resume monitoring</text>
 ```
 
 Reserve `y = 100–120` (above the actor labels) for the horizontal segment of the loop arrow. Keep "exception path" loops (e.g. QC fail) below the row at `y = row_y + 180+` with a rose dashed stroke.
@@ -146,8 +173,8 @@ Reserve `y = 100–120` (above the actor labels) for the horizontal segment of t
 
 ```svg
 <!-- Step number badge -->
-<circle cx="X" cy="Y" r="12" fill="#1e293b" stroke="STROKE_COLOR" stroke-width="1.5"/>
-<text x="X" y="Y+4" fill="white" font-size="10" font-weight="600" text-anchor="middle">N</text>
+<circle cx="X" cy="Y" r="12" fill="#ffffff" stroke="STROKE_COLOR" stroke-width="1.5"/>
+<text x="X" y="Y+4" fill="#0f172a" font-size="10" font-weight="600" text-anchor="middle">N</text>
 
 <!-- Step box -->
 <rect x="X+5" y="Y+5" width="160" height="80" rx="8" fill="FILL_COLOR" stroke="STROKE_COLOR" stroke-width="1.5"/>
@@ -156,18 +183,20 @@ Reserve `y = 100–120` (above the actor labels) for the horizontal segment of t
 <text x="CENTER_X" y="Y-8" fill="#64748b" font-size="8" text-anchor="middle">ACTOR</text>
 
 <!-- Step title -->
-<text x="CENTER_X" y="Y+30" fill="white" font-size="11" font-weight="600" text-anchor="middle">Step Name</text>
+<text x="CENTER_X" y="Y+30" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">Step Name</text>
 
 <!-- Step description (multi-line if needed) -->
-<text x="CENTER_X" y="Y+48" fill="#94a3b8" font-size="9" text-anchor="middle">Description line 1</text>
-<text x="CENTER_X" y="Y+62" fill="#94a3b8" font-size="9" text-anchor="middle">Description line 2</text>
+<text x="CENTER_X" y="Y+48" fill="#64748b" font-size="9" text-anchor="middle">Description line 1</text>
+<text x="CENTER_X" y="Y+62" fill="#64748b" font-size="9" text-anchor="middle">Description line 2</text>
 ```
+
+For dark diagrams, use `fill="#1e293b"` for badges, `fill="white"` for step titles/badge numbers, and `fill="#94a3b8"` for descriptions.
 
 ### Arrow with Label Pattern
 
 ```svg
 <line x1="X1" y1="Y1" x2="X2" y2="Y2" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-<text x="MID_X" y="MID_Y-6" fill="#94a3b8" font-size="8" text-anchor="middle">output → input</text>
+<text x="MID_X" y="MID_Y-6" fill="#64748b" font-size="8" text-anchor="middle">output → input</text>
 ```
 
 ### Info Cards (Bottom Section)
@@ -179,7 +208,7 @@ Three cards for process metadata:
 
 ### Export Toolbar (built-in)
 
-Every diagram ships with a single unobtrusive `⋯` toggle in the header. Click it to reveal three buttons — 📋 Copy (high-DPI PNG to clipboard, scale: 2), 🖼️ PNG (high-DPI PNG download), 📄 PDF (PNG embedded in a one-page PDF via jsPDF). The toolbar collapses back to the icon by default so it doesn't clutter the diagram. All three formats use the same html2canvas capture (with the toolbar excluded and 32px padding around the content), so PDF preserves the dark theme without going through the browser's print dialog.
+Every diagram ships with a single unobtrusive `⋯` toggle in the header. Click it to reveal three buttons — 📋 Copy (high-DPI PNG to clipboard, scale: 2), 🖼️ PNG (high-DPI PNG download), 📄 PDF (PNG embedded in a one-page PDF via jsPDF). The toolbar collapses back to the icon by default so it doesn't clutter the diagram. All three formats use the same html2canvas capture (with the toolbar excluded and 32px padding around the content), so PDF preserves the selected light or dark theme without going through the browser's print dialog.
 
 When generating a new diagram, keep these intact in the template:
 - The two CDN scripts in `<head>` (pinned versions, with Subresource Integrity hashes and `crossorigin="anonymous"`):
@@ -195,7 +224,12 @@ Caveats: clipboard API needs a user gesture and a secure context (https/file/loc
 
 ## Template
 
-Copy and customize the template at `resources/template.html`. Key customization points:
+Copy and customize the selected theme template:
+
+- Light/default: `resources/template.html`
+- Dark: `resources/template-dark.html`
+
+Key customization points:
 
 1. Update the `<title>` and header text
 2. Add prerequisites in the prerequisites box

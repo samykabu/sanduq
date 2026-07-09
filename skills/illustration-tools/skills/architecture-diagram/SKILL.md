@@ -1,19 +1,40 @@
 ---
 name: architecture-diagram
-description: Create polished dark-themed architecture diagrams as self-contained HTML+SVG files with PNG/PDF export. Use when the user asks for system, infrastructure, cloud, security, or network topology diagrams, or when PR/How-To-Test documentation needs architecture visuals.
+description: Create polished light-or-dark architecture diagrams as self-contained HTML+SVG files with PNG/PDF export. Use when the user asks for system, infrastructure, cloud, security, or network topology diagrams, or when PR/How-To-Test documentation needs architecture visuals. Default to the light theme unless the prompt explicitly asks for dark mode.
 ---
 
 # Architecture Diagram Skill
 
-Create professional technical architecture diagrams as self-contained HTML files with inline SVG graphics and CSS styling.
+Create professional technical architecture diagrams as self-contained HTML files with inline SVG graphics and CSS styling. Default to the light theme. Use the dark theme only when the user prompt explicitly asks for dark mode, a dark background, or a dark-themed output.
 
-> **Version 1.2** · MIT License · Part of the Resal `illustration-tools` plugin
+> **Version 1.3** · MIT License · Part of the Resal `illustration-tools` plugin
 
 ## Design System
 
+### Theme Selection
+
+- **Default:** use the light theme from `resources/template.html`.
+- **Dark requested:** use `resources/template-dark.html` when the prompt says "dark", "dark mode", "dark theme", "black background", "slate background", or asks to match an existing dark illustration-tools output.
+- **Generated filenames:** include `-dark` only for dark variants when helpful for disambiguation. Light diagrams do not need a suffix unless both themes are generated side by side.
+- **Do not mix themes:** keep the selected theme consistent across CSS, SVG fills/strokes, text colors, arrow masks, grid lines, summary cards, and export `backgroundColor`.
+
 ### Color Palette
 
-Use these semantic colors for component types:
+Use these semantic colors for component types. The hue family stays consistent between themes, while fill opacity and stroke values shift for contrast.
+
+**Light theme (default):**
+
+| Component Type | Fill (rgba) | Stroke |
+|---------------|-------------|--------|
+| Frontend | `rgba(14, 165, 233, 0.12)` | `#0284c7` (sky-600) |
+| Backend | `rgba(16, 185, 129, 0.12)` | `#059669` (emerald-600) |
+| Database | `rgba(139, 92, 246, 0.12)` | `#7c3aed` (violet-600) |
+| AWS/Cloud | `rgba(245, 158, 11, 0.14)` | `#d97706` (amber-600) |
+| Security | `rgba(244, 63, 94, 0.12)` | `#e11d48` (rose-600) |
+| Message Bus | `rgba(249, 115, 22, 0.12)` | `#ea580c` (orange-600) |
+| External/Generic | `rgba(100, 116, 139, 0.10)` | `#64748b` (slate-500) |
+
+**Dark theme:**
 
 | Component Type | Fill (rgba) | Stroke |
 |---------------|-------------|--------|
@@ -36,7 +57,19 @@ Font sizes: 12px for component names, 9px for sublabels, 8px for annotations, 7p
 
 ### Visual Elements
 
-**Background:** `#020617` (slate-950) with subtle grid pattern:
+**Background:**
+
+- Light: `#f8fafc` (slate-50) with `#e2e8f0` grid lines.
+- Dark: `#020617` (slate-950) with `#1e293b` grid lines.
+
+Light grid pattern:
+```svg
+<pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+  <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e2e8f0" stroke-width="0.5"/>
+</pattern>
+```
+
+Dark grid pattern:
 ```svg
 <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
   <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
@@ -58,20 +91,20 @@ Font sizes: 12px for component names, 9px for sublabels, 8px for annotations, 7p
 
 **Arrow z-order:** Draw connection arrows early in the SVG (after the background grid) so they render behind component boxes. SVG elements are painted in document order, so arrows drawn first will appear behind shapes drawn later.
 
-**Masking arrows behind transparent fills:** Since component boxes use semi-transparent fills (`rgba(..., 0.4)`), arrows behind them will show through. To fully mask arrows, draw an opaque background rect (e.g., `fill="#0f172a"`) at the same position before drawing the semi-transparent styled rect on top:
+**Masking arrows behind transparent fills:** Since component boxes use semi-transparent fills, arrows behind them will show through. To fully mask arrows, draw an opaque background rect at the same position before drawing the semi-transparent styled rect on top. Use `fill="#ffffff"` for light theme and `fill="#0f172a"` for dark theme:
 ```svg
 <!-- Opaque background to mask arrows -->
-<rect x="X" y="Y" width="W" height="H" rx="6" fill="#0f172a"/>
+<rect x="X" y="Y" width="W" height="H" rx="6" fill="#ffffff"/>
 <!-- Styled component on top -->
-<rect x="X" y="Y" width="W" height="H" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+<rect x="X" y="Y" width="W" height="H" rx="6" fill="rgba(139, 92, 246, 0.12)" stroke="#7c3aed" stroke-width="1.5"/>
 ```
 
-**Auth/security flows:** Dashed lines in rose color (`#fb7185`).
+**Auth/security flows:** Dashed lines in rose color (`#e11d48` light, `#fb7185` dark).
 
-**Message buses / Event buses:** Small connector elements between services. Use orange color (`#fb923c` stroke, `rgba(251, 146, 60, 0.3)` fill):
+**Message buses / Event buses:** Small connector elements between services. Use orange color (`#ea580c` light, `#fb923c` dark):
 ```svg
-<rect x="X" y="Y" width="120" height="20" rx="4" fill="rgba(251, 146, 60, 0.3)" stroke="#fb923c" stroke-width="1"/>
-<text x="CENTER_X" y="Y+14" fill="#fb923c" font-size="7" text-anchor="middle">Kafka / RabbitMQ</text>
+<rect x="X" y="Y" width="120" height="20" rx="4" fill="rgba(249, 115, 22, 0.12)" stroke="#ea580c" stroke-width="1"/>
+<text x="CENTER_X" y="Y+14" fill="#ea580c" font-size="7" text-anchor="middle">Kafka / RabbitMQ</text>
 ```
 
 ### Spacing Rules
@@ -119,7 +152,7 @@ SVG viewBox height: at least 560 to fit legend
 
 ### Export Toolbar (built-in)
 
-Every diagram ships with a single unobtrusive `⋯` toggle in the header. Click it to reveal three buttons — 📋 Copy (high-DPI PNG to clipboard, scale: 2), 🖼️ PNG (high-DPI PNG download), 📄 PDF (PNG embedded in a one-page PDF via jsPDF). The toolbar collapses back to the icon by default so it doesn't clutter the diagram. All three formats use the same html2canvas capture (with the toolbar excluded and 32px padding around the content), so PDF preserves the dark theme without going through the browser's print dialog.
+Every diagram ships with a single unobtrusive `⋯` toggle in the header. Click it to reveal three buttons — 📋 Copy (high-DPI PNG to clipboard, scale: 2), 🖼️ PNG (high-DPI PNG download), 📄 PDF (PNG embedded in a one-page PDF via jsPDF). The toolbar collapses back to the icon by default so it doesn't clutter the diagram. All three formats use the same html2canvas capture (with the toolbar excluded and 32px padding around the content), so PDF preserves the selected light or dark theme without going through the browser's print dialog.
 
 When generating a new diagram, keep these intact in the template:
 - The two CDN scripts in `<head>` (pinned versions, with Subresource Integrity hashes and `crossorigin="anonymous"`):
@@ -137,9 +170,11 @@ Caveats: clipboard API needs a user gesture and a secure context (https/file/loc
 
 ```svg
 <rect x="X" y="Y" width="W" height="H" rx="6" fill="FILL_COLOR" stroke="STROKE_COLOR" stroke-width="1.5"/>
-<text x="CENTER_X" y="Y+20" fill="white" font-size="11" font-weight="600" text-anchor="middle">LABEL</text>
-<text x="CENTER_X" y="Y+36" fill="#94a3b8" font-size="9" text-anchor="middle">sublabel</text>
+<text x="CENTER_X" y="Y+20" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">LABEL</text>
+<text x="CENTER_X" y="Y+36" fill="#475569" font-size="9" text-anchor="middle">sublabel</text>
 ```
+
+For dark diagrams, use `fill="white"` for labels and `fill="#94a3b8"` for sublabels.
 
 ### Info Card Pattern
 
@@ -158,7 +193,12 @@ Caveats: clipboard API needs a user gesture and a secure context (https/file/loc
 
 ## Template
 
-Copy and customize the template at `resources/template.html`. Key customization points:
+Copy and customize the selected theme template:
+
+- Light/default: `resources/template.html`
+- Dark: `resources/template-dark.html`
+
+Key customization points:
 
 1. Update the `<title>` and header text
 2. Modify SVG viewBox dimensions if needed (default: `1000 x 680`)
@@ -172,7 +212,7 @@ Copy and customize the template at `resources/template.html`. Key customization 
 Always produce a single self-contained `.html` file with:
 - Embedded CSS (no external stylesheets except Google Fonts)
 - Inline SVG (no external images)
-- No JavaScript required (pure CSS animations)
+- The built-in export JavaScript preserved from the selected template
 
 The file should render correctly when opened directly in any modern browser. The export toolbar uses two CDN scripts (html2canvas and jsPDF) — no other JavaScript dependencies.
 
