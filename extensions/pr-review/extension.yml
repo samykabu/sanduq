@@ -3,7 +3,7 @@ schema_version: "1.0"
 extension:
   id: pr-review
   name: "PR Review Processor"
-  version: "1.0.4"
+  version: "1.0.5"
   description: "Process GitHub pull request review comments, classify feedback, prepare an approval-gated fix/reply plan, then apply approved fixes and resolve addressed threads."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
