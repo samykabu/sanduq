@@ -97,6 +97,12 @@
         padding-top: 0.5rem;
         border-top: 1px solid var(--rule);
       }
+      .tabs.families {
+        margin-bottom: 0.625rem;
+      }
+      .control-group[hidden] {
+        display: none;
+      }
       .tab {
         font-family: var(--sans);
         font-size: 0.8125rem;
@@ -190,6 +196,22 @@
         </div>
       </div>
 
+      <div
+        class="tabs families"
+        id="family-tabs"
+        role="tablist"
+        aria-label="Illustration family"
+      >
+        <button class="tab active" data-family="editorial">Editorial</button>
+        <button class="tab new" data-family="technical-architecture">
+          Architecture · technical color
+        </button>
+        <button class="tab new" data-family="technical-process-flow">
+          Process flow · technical color
+        </button>
+      </div>
+
+      <section class="control-group" id="editorial-controls">
       <div class="tabs" id="type-tabs" role="tablist" aria-label="Diagram type">
         <button class="tab active" data-type="architecture">
           <span class="eyebrow">01</span>Architecture
@@ -291,6 +313,70 @@
         <button class="tab" data-variant="-full">Full editorial</button>
         <button class="tab" data-variant="-hand">Hand-drawn</button>
       </div>
+      </section>
+
+      <section
+        class="control-group"
+        id="technical-architecture-controls"
+        hidden
+      >
+        <div
+          class="tabs"
+          id="technical-architecture-example-tabs"
+          role="tablist"
+          aria-label="Technical-color architecture example"
+        >
+          <button class="tab active" data-item="aws-serverless">
+            AWS serverless
+          </button>
+          <button class="tab" data-item="microservices">Microservices</button>
+          <button class="tab" data-item="web-app">Web application</button>
+        </div>
+        <div
+          class="tabs variants"
+          id="technical-architecture-variant-tabs"
+          role="tablist"
+          aria-label="Technical-color architecture variant"
+        >
+          <button class="tab active" data-variant="-light">Light</button>
+          <button class="tab" data-variant="">Dark</button>
+        </div>
+      </section>
+
+      <section
+        class="control-group"
+        id="technical-process-flow-controls"
+        hidden
+      >
+        <div
+          class="tabs"
+          id="technical-process-flow-example-tabs"
+          role="tablist"
+          aria-label="Technical-color process-flow example"
+        >
+          <button class="tab active" data-item="ai-governance-workflow">
+            AI governance
+          </button>
+          <button class="tab" data-item="inventory-control">
+            Inventory control
+          </button>
+          <button class="tab" data-item="it-change-management">
+            IT change management
+          </button>
+          <button class="tab" data-item="sprint-report-flow">
+            Sprint report
+          </button>
+        </div>
+        <div
+          class="tabs variants"
+          id="technical-process-flow-variant-tabs"
+          role="tablist"
+          aria-label="Technical-color process-flow variant"
+        >
+          <button class="tab active" data-variant="-light">Light</button>
+          <button class="tab" data-variant="">Dark</button>
+        </div>
+      </section>
     </header>
 
     <main>
@@ -302,17 +388,53 @@
     </main>
 
     <script>
-      const state = { type: "architecture", variant: "" };
+      const galleries = {
+        editorial: {
+          controls: "editorial-controls",
+          base: "",
+          prefix: "example-",
+          defaultItem: "architecture",
+          defaultVariant: "",
+        },
+        "technical-architecture": {
+          controls: "technical-architecture-controls",
+          base: "technical-color/architecture/examples/",
+          prefix: "",
+          defaultItem: "aws-serverless",
+          defaultVariant: "-light",
+        },
+        "technical-process-flow": {
+          controls: "technical-process-flow-controls",
+          base: "technical-color/process-flow/examples/",
+          prefix: "",
+          defaultItem: "ai-governance-workflow",
+          defaultVariant: "-light",
+        },
+      };
+      const state = {
+        family: "editorial",
+        selections: Object.fromEntries(
+          Object.entries(galleries).map(([name, gallery]) => [
+            name,
+            {
+              item: gallery.defaultItem,
+              variant: gallery.defaultVariant,
+            },
+          ]),
+        ),
+      };
       const iframe = document.getElementById("preview");
       const openRaw = document.getElementById("open-raw");
 
       function update() {
-        const src = `example-${state.type}${state.variant}.html`;
+        const gallery = galleries[state.family];
+        const selection = state.selections[state.family];
+        const src = `${gallery.base}${gallery.prefix}${selection.item}${selection.variant}.html`;
         iframe.src = src;
         openRaw.href = src;
       }
 
-      function bindTabs(containerId, key) {
+      function bindTabs(containerId, key, dataKey = key) {
         const container = document.getElementById(containerId);
         container.addEventListener("click", (e) => {
           const btn = e.target.closest(".tab");
@@ -321,13 +443,34 @@
             .querySelectorAll(".tab")
             .forEach((t) => t.classList.remove("active"));
           btn.classList.add("active");
-          state[key] = btn.dataset[key];
+          state.selections[state.family][key] = btn.dataset[dataKey];
           update();
         });
       }
 
-      bindTabs("type-tabs", "type");
+      document.getElementById("family-tabs").addEventListener("click", (e) => {
+        const btn = e.target.closest(".tab");
+        if (!btn) return;
+
+        document
+          .querySelectorAll("#family-tabs .tab")
+          .forEach((tab) => tab.classList.remove("active"));
+        btn.classList.add("active");
+
+        state.family = btn.dataset.family;
+        const gallery = galleries[state.family];
+        document
+          .querySelectorAll(".control-group")
+          .forEach((group) => (group.hidden = group.id !== gallery.controls));
+        update();
+      });
+
+      bindTabs("type-tabs", "item", "type");
       bindTabs("variant-tabs", "variant");
+      bindTabs("technical-architecture-example-tabs", "item");
+      bindTabs("technical-architecture-variant-tabs", "variant");
+      bindTabs("technical-process-flow-example-tabs", "item");
+      bindTabs("technical-process-flow-variant-tabs", "variant");
       update();
     </script>
   </body>
