@@ -4,6 +4,15 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## illustration-tools — 2.0.2 — 2026-07-18
+
+### Added
+
+- Added two modern, responsive Illustrate gallery alternatives: an Atlas sidebar and a Canvas Deck
+  filmstrip workspace.
+- Kept every editorial and technical-color family selectable in both layouts, with restrained
+  preview transitions, keyboard navigation, and reduced-motion support.
+
 ## illustration-tools — 2.0.1 — 2026-07-18
 
 ### Fixed

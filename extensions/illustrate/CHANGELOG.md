@@ -2,6 +2,15 @@
 
 All notable changes to the Illustrate extension.
 
+## [1.0.2] - 2026-07-18
+
+### Added
+
+- Added two responsive gallery alternatives: a searchable Atlas sidebar and a compact Canvas Deck
+  with scroll-snap navigation.
+- Included the complete editorial, technical architecture, and technical process-flow asset matrix
+  in both galleries, with light/dark theme and reduced-motion support.
+
 ## [1.0.1] - 2026-07-18
 
 ### Fixed
