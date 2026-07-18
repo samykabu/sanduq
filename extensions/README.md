@@ -9,9 +9,9 @@ compatibility with the Resal Marketplace layout.
 | Extension | Version | Command | Description |
 | --- | ---: | --- | --- |
 | [`project`](project/) | 1.1.0 | `/speckit-project-init`<br>`/speckit-project-sync` | Configures and mirrors Spec Kit features onto GitHub Projects with parent issues, sub-issues, and lifecycle status sync. |
-| [`pr`](pr/) | 2.1.0 | `/speckit-pr-generate`<br>`/speckit-pr-review-feedback` | Generates or updates pull requests and processes review feedback through an approval-gated workflow. |
-| [`how-to-test`](how-to-test/) | 1.6.0 | `/speckit-how-to-test-document` | Generates QA How-To-Test manuals, with `/speckit-how-to-test-analyze` for readiness checks after task generation. |
-| [`diagram-design`](diagram-design/) | 1.1.0 | `/speckit-diagram-design-generate`<br>`/speckit-diagram-design-export` | Generates and exports twenty-seven technical, product, process, data, and quantitative diagram types. |
+| [`pr`](pr/) | 3.0.0 | `/speckit-pr-generate`<br>`/speckit-pr-review-feedback` | Generates or updates pull requests and processes review feedback through an approval-gated workflow. |
+| [`how-to-test`](how-to-test/) | 2.0.0 | `/speckit-how-to-test-document` | Generates QA How-To-Test manuals, with `/speckit-how-to-test-analyze` for readiness checks after task generation. |
+| [`illustrate`](illustrate/) | 1.0.0 | `/speckit-illustrate-generate`<br>`/speckit-illustrate-export` | Generates and exports twenty-seven technical, product, architecture, process, data, and quantitative illustration types. |
 
 ## Install
 
@@ -28,7 +28,7 @@ Install by id:
 specify extension add project
 specify extension add pr
 specify extension add how-to-test
-specify extension add diagram-design
+specify extension add illustrate
 ```
 
 For an existing standalone `pr-review` installation, migrate to the consolidated extension:
@@ -73,11 +73,11 @@ The other commands are manual or optional lifecycle-hook prompts:
 /speckit-pr-review-feedback owner/repo#123
 /speckit-how-to-test-analyze
 /speckit-how-to-test-document
-/speckit-diagram-design-generate
-/speckit-diagram-design-export path/to/diagram.html --svg-only
+/speckit-illustrate-generate
+/speckit-illustrate-export path/to/diagram.html --svg-only
 ```
 
-`pr` and `how-to-test` check the Spec Kit registry for their compatible `diagram-design` version
+`pr` and `how-to-test` check the Spec Kit registry for their compatible `illustrate` version
 when invoked. The default dependency policy asks before install/update; projects may opt into
 automatic or manual behavior through `.specify/extension-dependencies.yml`.
 

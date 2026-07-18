@@ -1,0 +1,15 @@
+{
+  "name": "@sanduq/illustrate",
+  "version": "3.0.0",
+  "description": "Unified Illustrate skill with editorial and technical-color diagram families",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "generate:hand": "node scripts/generate-hand-variants.cjs"
+  },
+  "dependencies": {
+    "jsdom": "^26.1.0",
+    "roughjs": "^4.6.6",
+    "svg-pathdata": "^8.0.0"
+  }
+}

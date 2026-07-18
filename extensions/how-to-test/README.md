@@ -59,7 +59,7 @@ hooks:
   workspace from scratch.
 - One development-only HTML manual per impacted project, grouped under the correct parent feature.
 - A workspace-level How-To-Test index for multi-project workspaces.
-- Diagram Design assets selected from all twenty-seven architecture, interaction, lifecycle,
+- Illustrate assets selected from all twenty-seven architecture, interaction, lifecycle,
   hierarchy, quantitative, process, and data-platform types, with PNGs embedded in the manual and
   HTML sources linked.
 - Playwright or mobile E2E screenshots for every relevant screen, form, dialog, menu item, and state.
@@ -85,7 +85,7 @@ guessing.
 
 ## Diagram dependency management
 
-Both commands require `diagram-design >=1.0.0,<2.0.0` for diagram work. On every invocation they
+Both commands require `illustrate >=1.0.0,<2.0.0` for diagram work. On every invocation they
 read `.specify/extensions/.registry`, perform a cached catalog-version check, and follow the
 project's `prompt`, `auto`, or `manual` update policy. If the dependency cannot be installed, the
 commands continue non-diagram work and clearly report the skipped visuals.

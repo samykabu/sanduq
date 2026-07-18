@@ -39,28 +39,28 @@ resolve feature  ->  gather ground truth  ->  generate diagram assets  ->  write
 
 ## Instructions
 
-### 0. Ensure the Diagram Design dependency
+### 0. Ensure the Illustrate dependency
 
 Before resolving the feature, read `.specify/extensions/pr/dependencies.yml` and enforce its
-`diagram-design` requirement.
+`illustrate` requirement.
 
 1. Read `.specify/extensions/.registry` as the installed-version source of truth.
 2. Read the optional project policy at `.specify/extension-dependencies.yml`. Supported
    `update_policy` values are:
-   - `prompt` (default): ask before `specify extension add diagram-design` or
-     `specify extension update diagram-design`.
+   - `prompt` (default): ask before `specify extension add illustrate` or
+     `specify extension update illustrate`.
    - `auto`: the user has pre-authorized dependency installation and updates.
    - `manual`: never mutate dependencies; report the exact command the user must run.
-3. If `diagram-design` is absent, disabled, or outside the declared SemVer range, follow the policy
+3. If `illustrate` is absent, disabled, or outside the declared SemVer range, follow the policy
    and install/update it. Never make this extension-state change under `prompt` without explicit
    approval.
 4. For an installed compatible version, use `.specify/extensions/.dependency-checks.json` to avoid
    catalog checks more often than `check_interval_hours`. When due, run
-   `specify extension info diagram-design` (read-only), compare the catalog version with the
+   `specify extension info illustrate` (read-only), compare the catalog version with the
    registry version, and follow the update policy if a newer compatible release exists.
 5. After any add/update, re-read the registry and verify the version before continuing. Record the
    checked time and installed version in `.specify/extensions/.dependency-checks.json`.
-6. Load `.specify/extensions/diagram-design/skill/SKILL.md` and resolve its references/assets
+6. Load `.specify/extensions/illustrate/skill/SKILL.md` and resolve its references/assets
    relative to that skill directory. This direct resource path works in the current run even if the
    agent only discovers newly registered skills in a new conversation.
 7. If installation/update is declined or unavailable, continue the non-diagram work, explicitly skip
@@ -87,9 +87,9 @@ Read whatever exists for the feature so all generated content traces to real art
 
 If something is unknown, **omit it** — do not fabricate test counts, coverage, issue numbers, or behavior.
 
-### 3. Select and generate useful Diagram Design assets
+### 3. Select and generate useful Illustrate assets
 
-Before writing the feature documents, use the installed `diagram-design` skill's selection guide to
+Before writing the feature documents, use the installed `illustrate` skill's selection guide to
 decide whether a visual teaches the reviewer more than prose or a table. Choose only types supported
 by the evidence:
 
@@ -121,12 +121,12 @@ by the evidence:
 
 For each applicable diagram:
 
-1. Load the matching `.specify/extensions/diagram-design/skill/references/type-*.md` and generate
-   the source HTML using the selected Diagram Design template/variant.
+1. Load the matching `.specify/extensions/illustrate/skill/references/type-*.md` and generate
+   the source HTML using the selected Illustrate template/variant.
 2. Write source files under `docs/<feature-slug>/assets/diagrams/`, using names such as
    `<feature-slug>-architecture.html`, `<feature-slug>-sequence.html`, or
    `<feature-slug>-state-machine.html`.
-3. Export a PNG beside each HTML file with the installed Diagram Design
+3. Export a PNG beside each HTML file with the installed Illustrate
    `scripts/export_diagram.py` utility and its `references/export.md` contract.
 4. Embed the PNG in `<Feature>-Explained.md` and link to the HTML source for inspection/export.
 5. Follow the skill's complexity budget and split an overloaded diagram into overview/detail assets.
@@ -164,13 +164,13 @@ structure (scale each section to the feature — skip what doesn't apply):
 2. **Why we needed this ("so what")** — the business problem, ideally with an analogy.
 3. **The building blocks in human words** — a small table mapping each core concept to "what it
    really is" and a real-world analogy.
-4. **Feature visuals** — embed every useful Diagram Design PNG with descriptive alt text and add a
+4. **Feature visuals** — embed every useful Illustrate PNG with descriptive alt text and add a
    nearby link to its source HTML. Explain what question each visual answers.
 5. **What this feature can do — the scenarios, with examples** — the heart of the doc. One numbered
    scenario per capability, each with: a short _Story_ (concrete, named actors, real numbers reused
    consistently), what the system does, and a visual where it helps. Prefer a generated flowchart,
-   sequence, state-machine, swimlane, or other fitting Diagram Design asset for user/system
-   workflows. Do not substitute Mermaid when the required Diagram Design dependency is available.
+   sequence, state-machine, swimlane, or other fitting Illustrate asset for user/system
+   workflows. Do not substitute Mermaid when the required Illustrate dependency is available.
 6. **Who does what** — the cast of actors and their boundaries.
 7. **What this phase deliberately does NOT do** — scope boundaries, to set expectations.
 8. **Caveats / pending decisions** — anything flagged as baseline-pending-sign-off or an open question.

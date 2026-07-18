@@ -1,0 +1,199 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Content platform · ER model · Hand-drawn</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f5f5f5;
+      --color-ink:     #2d3142;
+      --color-muted:   #4f5d75;
+      --color-accent:  #eb6c36;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+
+    .frame { max-width: 1200px; width: 100%; }
+
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+
+    svg { width: 100%; min-width: 900px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">ER · Illustrate · Hand</p>
+    <h1>Content platform · data model</h1>
+
+    <svg viewBox="0 0 1000 480" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"></circle>
+          </pattern>
+          
+        </defs>
+
+        <rect width="100%" height="100%" fill="#f5f5f5"></rect>
+        <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"></rect>
+
+        <!-- Relationship lines (drawn first) -->
+        <!-- 1. Author — Article (1:N "writes") -->
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M260 240 C287.15262248683723 242.91039112347644, 316.95112569276245 241.91581317323727, 400 240" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <!-- 2. Article — ArticleTag (1:N) -->
+        <g class="rough-shape" data-source-tag="path"><path class="rough-generated" d="M640 320 C651.8552066919394 319.28257003550533, 665.5112743738108 317.4004048151255, 702 320 M702 320 C710.1893348735136 321.850346043054, 708.0538442603313 322.3829571161109, 710 328 M710 328 C727.3800337801688 325.20916511108516, 747.3992621478625 328.3011511265242, 780 328" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <!-- 3. Tag — ArticleTag (1:N, vertical) -->
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M880 248 C879.6379592327773 257.24059287272394, 880.45159123227 261.09468466006217, 880 280" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+        <!-- Cardinality labels -->
+        <rect x="266" y="232" width="12" height="12" rx="2" fill="#f5f5f5"></rect>
+        <text x="272" y="242" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">1</text>
+
+        <rect x="378" y="232" width="16" height="12" rx="2" fill="#f5f5f5"></rect>
+        <text x="386" y="242" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">N</text>
+
+        <rect x="646" y="316" width="12" height="12" rx="2" fill="#f5f5f5"></rect>
+        <text x="652" y="326" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">1</text>
+
+        <rect x="760" y="324" width="16" height="12" rx="2" fill="#f5f5f5"></rect>
+        <text x="768" y="334" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">N</text>
+
+        <rect x="872" y="252" width="16" height="12" rx="2" fill="#f5f5f5"></rect>
+        <text x="880" y="262" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">1</text>
+
+        <rect x="872" y="268" width="16" height="12" rx="2" fill="#f5f5f5"></rect>
+        <text x="880" y="278" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">N</text>
+
+        <!-- Relationship labels -->
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M306 221.221 L332 221.425 L358 222.082 L358.064 227 L358.537 232 L332 231.37 L306 231.462 L306.457 227 Z" fill="#f5f5f5" stroke="none"></path></g>
+        <text x="332" y="230" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.12em">WRITES</text>
+
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M690 301.222 L716 301.802 L742 301.835 L741.739 307 L742.628 312 L716 312.526 L690 312.742 L689.722 307 Z" fill="#f5f5f5" stroke="none"></path></g>
+        <text x="716" y="310" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.12em">TAGGED</text>
+
+        <!-- Entity: Author -->
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M62 160.638 L101.2 162.315 L140.4 161.278 L179.6 160.975 L218.8 163.258 L258 162.143 L258.738 201 L259.027 240 L258.328 279 L257.99 318 L218.8 318.075 L179.6 318.688 L140.4 317.21 L101.2 316.842 L62 319.166 L62.333 279 L61.881 240 L61.662 201 Z" fill="#ffffff" stroke="none"></path><path class="rough-generated" d="M66 160 C107.31061151986941 162.52429494998648, 141.24200511304662 162.89178064904408, 254 160 M254 160 C257.8278066764586 159.45607933150603, 261.00541112823413 159.80057098912076, 260 166 M260 166 C256.53097583376103 209.95744712566955, 258.2877858164185 257.3806698265485, 260 314 M260 314 C262.4141625051387 318.43828554851933, 256.0817125772126 319.34781462950633, 254 320 M254 320 C194.82462164303286 322.8720334309782, 134.15931290565058 323.4003337014164, 66 320 M66 320 C63.79521268410608 318.9114744846709, 57.9848495493643 316.47259736405687, 60 314 M60 314 C61.40661721203244 266.5703800289892, 63.08219159517204 221.04869278548284, 60 166 M60 166 C59.30669936286286 161.68494475288315, 61.56816642330959 160.16141957743093, 66 160 M66 160 C66 160, 66 160, 66 160" stroke="#2d3142" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M62 160.638 L101.2 162.977 L140.4 160.845 L179.6 163.207 L218.8 160.618 L258 161.365 L258.177 180 L257.741 198 L218.8 197.063 L179.6 197.681 L140.4 196.729 L101.2 198.212 L62 197.564 L62.487 180 Z" fill="rgba(45,49,66,0.04)" stroke="none"></path></g>
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M62 193.66 L101.2 193.709 L140.4 194.303 L179.6 194.16 L218.8 193.694 L258 194.347 L257.904 196 L258.314 198 L218.8 198.149 L179.6 197.843 L140.4 198.046 L101.2 197.934 L62 197.979 L61.833 196 Z" fill="rgba(45,49,66,0.04)" stroke="none"></path></g>
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M60 200 C100.63311068250711 203.40593429212245, 142.78332813347487 201.34024546907344, 260 200" stroke="rgba(45,49,66,0.22)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="76" y="176" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">ENTITY</text>
+        <text x="76" y="192" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist', sans-serif">Author</text>
+        <text x="76" y="220" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace"># id</text>
+        <text x="220" y="220" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">uuid</text>
+        <text x="76" y="240" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">handle</text>
+        <text x="220" y="240" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+        <text x="76" y="260" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">name</text>
+        <text x="220" y="260" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+        <text x="76" y="280" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">bio</text>
+        <text x="220" y="280" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+        <text x="76" y="300" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">site_url</text>
+        <text x="220" y="300" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+
+        <!-- Entity: Article (focal coral) -->
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M402 120.64 L441.333 122.16 L480.667 122.345 L520 121.502 L559.333 121.097 L598.667 121.833 L638 123.295 L636.683 161.333 L638.866 200.667 L636.755 240 L638.293 279.333 L636.785 318.667 L638.626 358 L598.667 357.824 L559.333 358.145 L520 358.388 L480.667 356.868 L441.333 359.128 L402 357.856 L402.608 318.667 L403.343 279.333 L401.472 240 L402.537 200.667 L401.631 161.333 Z" fill="rgba(235,108,54,0.04)" stroke="none"></path><path class="rough-generated" d="M406 120 C453.21327253604414 120.0937812121628, 501.14392010221775 122.3269933104164, 634 120 M634 120 C640.5996118127368 122.86181261995807, 638.156977996137 123.6848515287973, 640 126 M640 126 C637.3924913703836 207.1144399546956, 638.8718642576218 294.51740039750763, 640 354 M640 354 C642.0507294313051 360.1603785275482, 637.6319032774306 362.80310485651717, 634 360 M634 360 C564.3185714215058 362.3589380164954, 490.5617641128224 361.10107343762286, 406 360 M406 360 C400.5326579003595 359.52950825253504, 401.6928581177257 357.75420073727145, 400 354 M400 354 C404.0504735344353 269.3210660782006, 401.06586874941434 186.79795156828055, 400 126 M400 126 C399.47586896875873 121.27099095275625, 400.60428049722685 120.02388163795695, 406 120 M406 120 C406 120, 406 120, 406 120" stroke="#eb6c36" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M402 120.64 L441.333 122.821 L480.667 121.912 L520 120.934 L559.333 121.257 L598.667 121.055 L638 122.735 L638.197 140 L637.601 158 L598.667 159.246 L559.333 156.948 L520 159.109 L480.667 158.98 L441.333 156.67 L402 157.89 L402.402 140 Z" fill="rgba(235,108,54,0.10)" stroke="none"></path></g>
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M402 153.66 L441.333 153.671 L480.667 153.87 L520 154.291 L559.333 153.854 L598.667 154.269 L638 154.043 L637.728 156 L638.284 158 L598.667 158.234 L559.333 158.101 L520 158.158 L480.667 158.333 L441.333 158.079 L402 157.909 L402.104 156 Z" fill="rgba(235,108,54,0.10)" stroke="none"></path></g>
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M400 160 C451.83986984790187 159.16634742758663, 497.43467782663896 159.1283278639035, 640 160" stroke="rgba(235,108,54,0.40)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="416" y="136" fill="#eb6c36" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">ENTITY · AGGREGATE ROOT</text>
+        <text x="416" y="152" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist', sans-serif">Article</text>
+        <text x="416" y="180" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace"># id</text>
+        <text x="600" y="180" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">uuid</text>
+        <text x="416" y="200" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">title</text>
+        <text x="600" y="200" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+        <text x="416" y="220" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">slug</text>
+        <text x="600" y="220" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">text · unique</text>
+        <text x="416" y="240" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">body_mdx</text>
+        <text x="600" y="240" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+        <text x="416" y="260" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">published_at</text>
+        <text x="600" y="260" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">timestamp</text>
+        <text x="416" y="280" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">→ author_id</text>
+        <text x="600" y="280" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">uuid</text>
+        <text x="416" y="300" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">status</text>
+        <text x="600" y="300" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">enum</text>
+        <text x="416" y="320" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">og_image</text>
+        <text x="600" y="320" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">text · url</text>
+
+        <!-- Entity: Tag -->
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M782 120.641 L821.2 122.005 L860.4 120.612 L899.6 122.029 L938.8 121.736 L978 121.523 L977.053 163.333 L977.139 204.667 L976.604 246 L938.8 246.321 L899.6 246.512 L860.4 245.682 L821.2 245.241 L782 246.807 L781.124 204.667 L782.443 163.333 Z" fill="#ffffff" stroke="none"></path><path class="rough-generated" d="M786 120 C822.4779065831565 122.69732177836123, 862.2164374063723 121.76410931629363, 974 120 M974 120 C977.5714169490151 120.4675459084101, 981.1085448640399 121.76913206847385, 980 126 M980 126 C978.3970904264995 148.76289785495027, 980.1076814655611 176.99925359888002, 980 242 M980 242 C981.6872963574715 244.08247150657698, 979.1820939776487 248.45839508352802, 974 248 M974 248 C914.1637308797799 244.75133433117298, 857.8653904135339 247.07481122686295, 786 248 M786 248 C783.0701031166129 248.14754202039913, 779.6008666860871 247.03580411048605, 780 242 M780 242 C781.030243490187 219.70855894153937, 778.1592578957952 194.76206296337767, 780 126 M780 126 C779.6450385746546 120.85703715262935, 779.6403945711442 119.88634369848296, 786 120 M786 120 C786 120, 786 120, 786 120" stroke="#2d3142" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M782 120.641 L821.2 122.666 L860.4 122.979 L899.6 121.461 L938.8 121.896 L978 120.745 L979.292 140 L978.653 158 L938.8 158.139 L899.6 158.012 L860.4 157.167 L821.2 157.206 L782 157.595 L781.652 140 Z" fill="rgba(45,49,66,0.04)" stroke="none"></path></g>
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M782 153.66 L821.2 154.332 L860.4 154.136 L899.6 153.723 L938.8 154.014 L978 154.192 L978.183 156 L977.842 158 L938.8 157.718 L899.6 157.926 L860.4 158.155 L821.2 157.683 L782 157.987 L782.325 156 Z" fill="rgba(45,49,66,0.04)" stroke="none"></path></g>
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M780 160 C821.5224851939794 157.1227204238044, 863.6979600705995 159.1062862738949, 980 160" stroke="rgba(45,49,66,0.22)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="796" y="136" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">ENTITY</text>
+        <text x="796" y="152" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist', sans-serif">Tag</text>
+        <text x="796" y="180" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace"># id</text>
+        <text x="940" y="180" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">uuid</text>
+        <text x="796" y="200" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">slug</text>
+        <text x="940" y="200" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">text · unique</text>
+        <text x="796" y="220" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">name</text>
+        <text x="940" y="220" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+        <text x="796" y="240" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">description</text>
+        <text x="940" y="240" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+
+        <!-- Entity: ArticleTag (join) -->
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M782 280.643 L821.2 281.85 L860.4 281.679 L899.6 282.556 L938.8 282.375 L978 281.212 L977.61 312.667 L977.595 343.333 L977.142 374 L938.8 373.086 L899.6 374.731 L860.4 374.578 L821.2 374.657 L782 372.989 L782.903 343.333 L782.498 312.667 Z" fill="rgba(45,49,66,0.04)" stroke="none"></path><path class="rough-generated" d="M786 280 C825.8615541147999 285.6838351925486, 865.6036535530351 281.20027364991836, 974 280 M974 280 C980.3432220852934 278.07327919686213, 978.2601117319427 279.8534126081504, 980 286 M980 286 C978.7487664980558 306.18063000170514, 980.4362480653194 329.9385590492748, 980 370 M980 370 C981.3238632836379 373.8045644856058, 980.7322846778668 374.11368531053887, 974 376 M974 376 C916.7332854981535 372.5909847812704, 859.7184291674756 372.91204998958625, 786 376 M786 376 C779.8075483328663 376.7655757882632, 777.5088752544485 376.31740748370066, 780 370 M780 370 C777.2342842737097 349.2567827652208, 780.7900186905521 326.47701678713787, 780 286 M780 286 C779.8142081805505 280.4430833525024, 784.4765086450614 279.748805759009, 786 280 M786 280 C786 280, 786 280, 786 280" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4,3"></path></g>
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M782 280.643 L821.2 282.511 L860.4 281.246 L899.6 281.988 L938.8 282.535 L978 283.235 L977.049 300 L979.109 318 L938.8 318.677 L899.6 316.777 L860.4 317.386 L821.2 318.103 L782 319.011 L782.635 300 Z" fill="rgba(45,49,66,0.06)" stroke="none"></path></g>
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M782 313.661 L821.2 314.293 L860.4 313.703 L899.6 313.855 L938.8 314.174 L978 314.114 L978.322 316 L977.956 318 L938.8 317.853 L899.6 318.317 L860.4 318.21 L821.2 317.907 L782 318.341 L781.87 316 Z" fill="rgba(45,49,66,0.06)" stroke="none"></path></g>
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M780 320 C819.3572478497155 319.85344383964537, 861.5453514391618 318.64178782630563, 980 320" stroke="rgba(45,49,66,0.22)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="796" y="296" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">JOIN</text>
+        <text x="796" y="312" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist', sans-serif">ArticleTag</text>
+        <text x="796" y="340" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">→ article_id</text>
+        <text x="940" y="340" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">uuid</text>
+        <text x="796" y="360" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">→ tag_id</text>
+        <text x="940" y="360" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">uuid</text>
+
+        <!-- Legend -->
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M40 404 C231.07428227152678 398.22198948637583, 423.06875110577795 399.6484252370987, 960 404" stroke="rgba(45,49,66,0.10)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="40" y="420" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M42 437.535 L47 438.122 L52 438.108 L52.176 441 L52.402 444 L47 444.317 L42 443.865 L41.576 441 Z" fill="rgba(235,108,54,0.04)" stroke="none"></path><path class="rough-generated" d="M42 436 C43.629571564868094 437.24432963584553, 45.986866468563676 435.68358068917877, 52 436 M52 436 C53.341311838974555 438.33044580742717, 55.94957031682134 439.37542994941276, 54 438 M54 438 C53.26174757969566 440.2898191087693, 54.19432599795051 441.20176836512985, 54 444 M54 444 C56.31957194134593 444.39051404272516, 55.10335638647278 446.98279809430244, 52 446 M52 446 C47.859926318004725 446.685213272972, 45.41698766984045 444.8692385725211, 42 446 M42 446 C41.6460215198497 444.6381179980934, 37.793885964900255 447.80274503355224, 40 444 M40 444 C39.491762485830115 441.9613523172587, 39.92350281509571 440.84867982767526, 40 438 M40 438 C41.47567018792033 438.9423077690105, 41.93831790412465 438.47688333466647, 42 436 M42 436 C42 436, 42 436, 42 436" stroke="#eb6c36" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="60" y="444" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Aggregate root</text>
+
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M182 437.535 L187 438.349 L192 437.959 L191.982 441 L192.457 444 L187 444.05 L182 443.673 L182.096 441 Z" fill="#ffffff" stroke="none"></path><path class="rough-generated" d="M182 436 C184.04610780780203 435.99352391528083, 186.39742908985355 436.8889813335438, 192 436 M192 436 C194.03426312304413 433.38187912954015, 196.68746203379706 434.5465000843319, 194 438 M194 438 C193.14219112339546 439.6311255037319, 194.50803633126546 441.4821692418214, 194 444 M194 444 C191.87871367288753 447.7210372874824, 192.5909040615273 446.3966206510551, 192 446 M192 446 C188.9744140539784 447.03253915674867, 185.06020433143712 447.14126299537605, 182 446 M182 446 C182.28038282391304 447.69262644005937, 180.17088810699062 446.67314587685587, 180 444 M180 444 C179.50619086782334 443.4137220374029, 179.1149351979315 441.6248072311934, 180 438 M180 438 C177.1679625893943 437.38881931897873, 181.69734642260397 435.542498849798, 182 436 M182 436 C182 436, 182 436, 182 436" stroke="#2d3142" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="200" y="444" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Entity</text>
+
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M270 437.535 L275 437.615 L280 437.81 L279.787 441 L279.552 444 L275 443.784 L270 444.441 L269.655 441 Z" fill="rgba(45,49,66,0.04)" stroke="none"></path><path class="rough-generated" d="M270 436 C272.462644050736 434.74271819471613, 274.8079917111434 435.19438197790873, 280 436 M280 436 C282.72721440711365 434.2333124516532, 279.6253537507728 435.517570219251, 282 438 M282 438 C281.2401346670953 438.9724318986945, 281.29924666458044 440.02257011851293, 282 444 M282 444 C281.2378554044291 445.2515605322396, 283.8784517365818 445.81044320780785, 280 446 M280 446 C276.08890178995205 447.01736504052536, 271.6034209930338 446.15078741823095, 270 446 M270 446 C270.9147441279764 444.9471348820254, 270.547890249081 445.54354672015955, 268 444 M268 444 C267.52061924981655 443.1260917575471, 268.04636758076725 442.40093463471163, 268 438 M268 438 C266.6602549908683 435.83533086894704, 269.4563749410833 438.4081143649295, 270 436 M270 436 C270 436, 270 436, 270 436" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3,2"></path></g>
+        <text x="288" y="444" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Join table</text>
+
+        <text x="372" y="444" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace" font-weight="600">#</text>
+        <text x="388" y="444" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Primary key</text>
+
+        <text x="476" y="444" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace" font-weight="600">→</text>
+        <text x="492" y="444" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Foreign key</text>
+
+        <text x="584" y="444" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" font-weight="600">1 / N</text>
+        <text x="616" y="444" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Cardinality</text>
+      </svg>
+  </div>
+
+
+</body></html>

@@ -7,7 +7,7 @@ skill-first packages:
 
 | Plugin | Source | Version |
 | --- | --- | ---: |
-| `illustration-tools` | [`../skills/illustration-tools`](../skills/illustration-tools/) | 1.3.1 |
+| `illustration-tools` | [`../skills/illustration-tools`](../skills/illustration-tools/) | 2.0.0 |
 
 They are registered in [`../.claude-plugin/marketplace.json`](../.claude-plugin/marketplace.json).
 
