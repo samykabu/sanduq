@@ -3,7 +3,7 @@ schema_version: "1.0"
 extension:
   id: diagram-design
   name: "Diagram Design"
-  version: "1.1.0"
+  version: "1.1.1"
   description: "Generate and export twenty-seven types of technical and product diagrams as self-contained HTML, SVG, or PNG with versioned references, templates, themes, icons, and visual variants."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
