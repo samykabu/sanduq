@@ -34,8 +34,20 @@ gh auth refresh -h github.com -s project,read:project   # one-time scope
 /speckit-project-init                                   # discover board + map columns -> config.json
 ```
 
-`project init` discovers the project id, Status field, and columns, then maps each phase to a
-column (**exact → fuzzy → prompt → optional auto-create**) and writes `config.json`. Commit it.
+`project init` asks whether lifecycle sync hooks are **required** (automatic) or **optional**
+(manual/user-approved), discovers the project id, Status field, and columns, then maps each phase
+to a column (**exact → fuzzy → prompt → optional auto-create**). It writes `config.json` and updates
+the `project` hooks in `.specify/extensions.yml`; commit both files.
+
+For unattended initialization, select the policy explicitly:
+
+```powershell
+pwsh scripts/powershell/project-init.ps1 -HooksMode required -NonInteractive
+```
+
+```bash
+scripts/bash/project-init.sh --hooks-mode required --non-interactive
+```
 
 ## Usage
 

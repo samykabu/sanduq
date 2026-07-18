@@ -14,10 +14,10 @@ pull-request description:
 …then **create or update the pull request** for the current branch so the feature-details content
 appears in its description under the heading **"What have been developed and how to review it"**.
 
-This command is **idempotent and context-aware**: run it as an `after_implement` hook (when the PR
-may not exist yet) or manually at PR time — it converges on the same result and never duplicates.
+This command is **idempotent and context-aware**: run it as an `after_implement` hook or manually at
+PR time — it converges on the same result and never duplicates.
 
-- You can run it **before the PR exists**; it will generate the docs and ask whether to create the PR.
+- You can run it **before the PR exists**; it will generate the docs and create the PR by default.
 - You can run it **after the PR exists**; it will update the PR body with the latest feature-details content.
 
 ## User Input
@@ -27,7 +27,7 @@ $ARGUMENTS
 Optional flags the user may pass:
 
 - `--no-pr` — generate/refresh the docs only; do not touch any pull request.
-- `--create-pr` — if no PR exists for the branch, create one without asking first.
+- `--create-pr` — accepted for backward compatibility; PR creation is already the default.
 - `--feature <path>` — override feature directory detection (e.g. `specs/006-...`).
 - `--heading "<text>"` — override the PR section heading (default: _What have been developed and how to review it_).
 
@@ -38,6 +38,35 @@ resolve feature  ->  gather ground truth  ->  generate diagram assets  ->  write
 ```
 
 ## Instructions
+
+### 0. Ensure the Diagram Design dependency
+
+Before resolving the feature, read `.specify/extensions/pr/dependencies.yml` and enforce its
+`diagram-design` requirement.
+
+1. Read `.specify/extensions/.registry` as the installed-version source of truth.
+2. Read the optional project policy at `.specify/extension-dependencies.yml`. Supported
+   `update_policy` values are:
+   - `prompt` (default): ask before `specify extension add diagram-design` or
+     `specify extension update diagram-design`.
+   - `auto`: the user has pre-authorized dependency installation and updates.
+   - `manual`: never mutate dependencies; report the exact command the user must run.
+3. If `diagram-design` is absent, disabled, or outside the declared SemVer range, follow the policy
+   and install/update it. Never make this extension-state change under `prompt` without explicit
+   approval.
+4. For an installed compatible version, use `.specify/extensions/.dependency-checks.json` to avoid
+   catalog checks more often than `check_interval_hours`. When due, run
+   `specify extension info diagram-design` (read-only), compare the catalog version with the
+   registry version, and follow the update policy if a newer compatible release exists.
+5. After any add/update, re-read the registry and verify the version before continuing. Record the
+   checked time and installed version in `.specify/extensions/.dependency-checks.json`.
+6. Load `.specify/extensions/diagram-design/skill/SKILL.md` and resolve its references/assets
+   relative to that skill directory. This direct resource path works in the current run even if the
+   agent only discovers newly registered skills in a new conversation.
+7. If installation/update is declined or unavailable, continue the non-diagram work, explicitly skip
+   diagram generation, and report the missing dependency. Do not silently use another diagram
+   system.
+
 
 ### 1. Resolve the active feature
 
@@ -58,34 +87,56 @@ Read whatever exists for the feature so all generated content traces to real art
 
 If something is unknown, **omit it** — do not fabricate test counts, coverage, issue numbers, or behavior.
 
-### 3. Generate diagram assets when the implementation changed architecture or process flow
+### 3. Select and generate useful Diagram Design assets
 
-Before writing the feature documents, decide whether the implementation has architecture or process
-flow impact:
+Before writing the feature documents, use the installed `diagram-design` skill's selection guide to
+decide whether a visual teaches the reviewer more than prose or a table. Choose only types supported
+by the evidence:
 
-- Use the `architecture-diagram` skill when the feature changes or clarifies architecture,
-  infrastructure, service boundaries, data flow, integrations, security zones, deployment topology,
-  or major component responsibilities.
-- Use the `process-flow-diagram` skill when the feature changes or clarifies a user journey,
-  approval flow, automation sequence, background job lifecycle, integration sequence, validation
-  flow, or exception path.
+- **Architecture** for components, boundaries, integrations, infrastructure, security zones, or
+  deployment topology.
+- **Flowchart** for branching validation or decision logic.
+- **Sequence** for time-ordered messages between users, services, jobs, or external systems.
+- **State machine** for lifecycle states, transitions, guards, or status behavior.
+- **ER/data model** for entities, important fields, and relationships.
+- **Timeline** for releases, migrations, events, or phased behavior over time.
+- **Swimlane** for cross-functional processes and ownership handoffs.
+- **Quadrant** for two-axis prioritization or positioning grounded in feature decisions.
+- **Nested** for containment, scope, tenancy, or boundary hierarchy.
+- **Tree** for parent-child relationships or branching hierarchy.
+- **Org chart** for human/agent/team ownership, routing, reporting, or escalation.
+- **Layer stack** for abstraction levels or ordered platform layers.
+- **Venn** for meaningful overlap between no more than three sets.
+- **Pyramid/funnel** for ranked hierarchy, maturity, or conversion/drop-off.
+- **Radar/spider** for comparing entities across three to five quantitative criteria.
+- **Loop/flywheel** for reinforcing cycles around shared accumulated state.
+- **Bar** for categorical quantitative comparison; **line** for continuous trends; **scatter** for
+  distribution/correlation; **Gantt** for scheduled tasks and phases.
+- **High-level** for an end-to-end platform or data stack on a cluster.
+- **IT current-state** for a legacy landscape grouped by phase or department.
+- **Process** for multi-actor sequential work with data handoffs.
+- **Medallion** for tiered data storage, quality levels, and access policy.
+- **Data flow** for role-scoped pipeline steps; **DP integration** for source-to-core-to-consumer
+  topology; **DP security matrix** for per-role or per-component access permissions.
 
 For each applicable diagram:
 
-1. Generate the source HTML using the corresponding illustration skill's design system.
+1. Load the matching `.specify/extensions/diagram-design/skill/references/type-*.md` and generate
+   the source HTML using the selected Diagram Design template/variant.
 2. Write source files under `docs/<feature-slug>/assets/diagrams/`, using names such as
-   `<feature-slug>-architecture.html` and `<feature-slug>-process-flow.html`.
-3. Export a PNG beside each HTML file, using the built-in html2canvas export path or an equivalent
-   Playwright/Puppeteer screenshot of `#report-container`, with names such as
-   `<feature-slug>-architecture.png` and `<feature-slug>-process-flow.png`.
+   `<feature-slug>-architecture.html`, `<feature-slug>-sequence.html`, or
+   `<feature-slug>-state-machine.html`.
+3. Export a PNG beside each HTML file with the installed Diagram Design
+   `scripts/export_diagram.py` utility and its `references/export.md` contract.
 4. Embed the PNG in `<Feature>-Explained.md` and link to the HTML source for inspection/export.
-5. If no architecture or process impact exists, explicitly omit that diagram type. Do not invent one.
-6. If PNG export is unavailable, keep the HTML source, add a clear "PNG export pending" note in the
+5. Follow the skill's complexity budget and split an overloaded diagram into overview/detail assets.
+6. If no supported visual materially improves comprehension, omit diagrams. Do not invent one.
+7. If PNG export is unavailable, keep the HTML source, add a clear "PNG export pending" note in the
    doc, and report the follow-up. Do not embed a broken image.
-7. **Private-repo rule — PR descriptions cannot resolve repo-relative paths.** For any image that
+8. **Private-repo rule — PR descriptions cannot resolve repo-relative paths.** For any image that
    must appear _in the PR description_, reference it by its **raw branch URL**:
    `https://raw.githubusercontent.com/<account>/<repo>/<branch>/docs/<feature-slug>/assets/<name>.png`.
-   This requires the PNG to be **committed and pushed on the feature branch first** (see step 5).
+   This requires the PNG to be **committed and pushed on the feature branch before PR handling**.
    Inside the `.md` docs (which are browsed in-repo) a relative path is fine; only the PR-body copy
    needs the absolute raw URL.
 
@@ -113,13 +164,13 @@ structure (scale each section to the feature — skip what doesn't apply):
 2. **Why we needed this ("so what")** — the business problem, ideally with an analogy.
 3. **The building blocks in human words** — a small table mapping each core concept to "what it
    really is" and a real-world analogy.
-4. **Architecture and process visuals** — if generated, embed the architecture PNG and/or process
-   flow PNG with descriptive alt text, and add a nearby link to each source HTML file.
+4. **Feature visuals** — embed every useful Diagram Design PNG with descriptive alt text and add a
+   nearby link to its source HTML. Explain what question each visual answers.
 5. **What this feature can do — the scenarios, with examples** — the heart of the doc. One numbered
    scenario per capability, each with: a short _Story_ (concrete, named actors, real numbers reused
-   consistently), what the system does, and a visual where it helps. Prefer the generated
-   `process-flow-diagram` PNG for user/system workflows. Mermaid can be used only as a lightweight
-   fallback when no exported diagram asset is available.
+   consistently), what the system does, and a visual where it helps. Prefer a generated flowchart,
+   sequence, state-machine, swimlane, or other fitting Diagram Design asset for user/system
+   workflows. Do not substitute Mermaid when the required Diagram Design dependency is available.
 6. **Who does what** — the cast of actors and their boundaries.
 7. **What this phase deliberately does NOT do** — scope boundaries, to set expectations.
 8. **Caveats / pending decisions** — anything flagged as baseline-pending-sign-off or an open question.
@@ -156,15 +207,18 @@ review it`**), then the full feature-details narrative (the body of `<Feature>-E
   - Otherwise, append the marked section to the end of the existing body (keep the existing body intact).
   - Apply with `gh pr edit <number> --body-file <tmpfile>`.
 - **If no PR exists:**
-  - With `--create-pr`, create it: `gh pr create --base <default-branch> --head <branch>
+  - Resolve the repository's default branch. Never create a PR from the default branch itself.
+  - If the current branch has no upstream or remote head, push it with
+    `git push --set-upstream origin <branch>` so GitHub can use it as the PR head.
+  - Create the PR without asking: `gh pr create --base <default-branch> --head <branch>
 --title "<feature title>" --body-file <tmpfile>` (body = a short summary + the marked section).
-  - Without `--create-pr`, **ask** the user whether to create the PR now. If they decline, write the
-    docs only and tell them to re-run (or run `/speckit-pr-generate`) once the PR exists.
+  - `--create-pr` may still be supplied by existing callers, but does not change this default.
 
 ### 6. Report
 
 Summarize: the doc paths written, diagram HTML/PNG assets generated, whether the PR was created or
-updated (with its URL), and any follow-ups (e.g. "no PR yet — re-run after opening one"). State
+updated (with its URL), and any follow-ups (for example, PR handling skipped because `gh` is not
+authenticated). State
 test/coverage figures only if you sourced them from real artifacts.
 
 ## Idempotency

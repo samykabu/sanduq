@@ -4,14 +4,16 @@
 # prompt -> optional auto-create), and write .specify/extensions/project/config.json.
 #
 # Usage: project-init.sh [--owner <login>] [--number <n>] [--owner-type user|org]
-#                        [--auto-create-columns] [--non-interactive] [--dry-run] [--json]
+#                        [--hooks-mode optional|required] [--auto-create-columns]
+#                        [--non-interactive] [--dry-run] [--json]
 set -euo pipefail
 
-OWNER=""; NUMBER=0; OWNER_TYPE=""; AUTOCREATE=0; NONINT=0; DRYRUN=0; JSON=0
+OWNER=""; NUMBER=0; OWNER_TYPE=""; HOOKS_MODE=""; AUTOCREATE=0; NONINT=0; DRYRUN=0; JSON=0
 while [ $# -gt 0 ]; do case "$1" in
   --owner) OWNER="$2"; shift 2;;
   --number) NUMBER="$2"; shift 2;;
   --owner-type) OWNER_TYPE="$2"; shift 2;;
+  --hooks-mode) HOOKS_MODE="$2"; shift 2;;
   --auto-create-columns) AUTOCREATE=1; shift;;
   --non-interactive) NONINT=1; shift;;
   --dry-run) DRYRUN=1; shift;;
@@ -22,6 +24,36 @@ esac; done
 info(){ echo "[project-init] $*"; }
 warn(){ echo "[project-init][warn] $*"; }
 die(){ echo "[project-init][error] $*"; exit 1; }
+
+set_project_hook_mode(){
+  local mode="$1" optional_value count tmp
+  local extensions_yml=".specify/extensions.yml"
+  [ -f "$extensions_yml" ] || die ".specify/extensions.yml not found - install with 'specify extension add project' before init"
+  [ "$mode" = "optional" ] && optional_value=true || optional_value=false
+  count="$(awk '
+    /^[[:space:]]*-[[:space:]]+extension:[[:space:]]+project[[:space:]]*$/ { in_project=1; next }
+    /^[[:space:]]*-[[:space:]]+extension:[[:space:]]+/ { in_project=0 }
+    in_project && /^[[:space:]]*optional:[[:space:]]*(true|false)[[:space:]]*$/ { count++; in_project=0 }
+    END { print count+0 }
+  ' "$extensions_yml")"
+  [ "$count" -gt 0 ] || die "no project sync hooks found in .specify/extensions.yml - reinstall the project extension and retry"
+  if [ "$DRYRUN" = 1 ]; then
+    info "DRYRUN would set $count project sync hook(s) to $mode"
+    return
+  fi
+  tmp="$(mktemp "${extensions_yml}.tmp.XXXXXX")"
+  awk -v value="$optional_value" '
+    /^[[:space:]]*-[[:space:]]+extension:[[:space:]]+project[[:space:]]*$/ { in_project=1 }
+    /^[[:space:]]*-[[:space:]]+extension:[[:space:]]+/ && $0 !~ /extension:[[:space:]]+project[[:space:]]*$/ { in_project=0 }
+    in_project && /^[[:space:]]*optional:[[:space:]]*(true|false)[[:space:]]*$/ {
+      sub(/optional:[[:space:]]*(true|false)[[:space:]]*$/, "optional: " value)
+      in_project=0
+    }
+    { print }
+  ' "$extensions_yml" > "$tmp"
+  mv "$tmp" "$extensions_yml"
+  info "set $count project sync hook(s) to $mode"
+}
 
 command -v gh >/dev/null 2>&1 || die "gh CLI not installed"
 command -v jq >/dev/null 2>&1 || die "jq not installed"
@@ -120,6 +152,24 @@ if [ "${#CREATE_NAMES[@]}" -gt 0 ]; then
   fi
 fi
 
+if [ -z "$HOOKS_MODE" ]; then
+  if [ "$NONINT" = 1 ]; then
+    [ -f "$EXT_DIR/config.json" ] && HOOKS_MODE="$(jq -r '.hookMode // empty' "$EXT_DIR/config.json")"
+    [ "$HOOKS_MODE" = "optional" ] || [ "$HOOKS_MODE" = "required" ] || HOOKS_MODE="optional"
+    info "hook mode not supplied in non-interactive mode; using $HOOKS_MODE"
+  else
+    while :; do
+      read -r -p "[project-init] Project sync hooks: 'required' runs sync automatically; 'optional' offers manual execution [optional]: " HOOKS_MODE
+      HOOKS_MODE="${HOOKS_MODE:-optional}"
+      HOOKS_MODE="$(printf '%s' "$HOOKS_MODE" | tr '[:upper:]' '[:lower:]')"
+      if [ "$HOOKS_MODE" = "optional" ] || [ "$HOOKS_MODE" = "required" ]; then break; fi
+      warn "enter 'optional' or 'required'"
+    done
+  fi
+fi
+[ "$HOOKS_MODE" = "optional" ] || [ "$HOOKS_MODE" = "required" ] || die "--hooks-mode must be optional or required"
+set_project_hook_mode "$HOOKS_MODE"
+
 # statusOrder in phase order
 ORDER_JSON="[]"
 for phase in $PHASES; do s="${PHASE2STATUS[$phase]:-}"; [ -n "$s" ] && ORDER_JSON="$(echo "$ORDER_JSON" | jq --arg s "$s" 'if index($s) then . else . + [$s] end')"; done
@@ -128,12 +178,12 @@ P2S="{}"; for phase in $PHASES; do s="${PHASE2STATUS[$phase]:-}"; [ -n "$s" ] &&
 SOPT="{}"; for k in "${!STATUSOPT[@]}"; do SOPT="$(echo "$SOPT" | jq --arg k "$k" --arg v "${STATUSOPT[$k]}" '.[$k]=$v')"; done
 
 CONFIG="$(jq -n \
-  --arg owner "$OWNER" --arg ot "$OWNER_TYPE" --argjson num "$NUMBER" \
+  --arg owner "$OWNER" --arg ot "$OWNER_TYPE" --arg hook "$HOOKS_MODE" --argjson num "$NUMBER" \
   --arg pid "$PROJ_ID" --arg purl "$PROJ_URL" --arg sfid "$STATUS_FIELD_ID" \
   --argjson sopt "$SOPT" --argjson p2s "$P2S" --argjson order "$ORDER_JSON" \
   --argjson parent "$(jq '.parentIssue' "$DEF")" --argjson sub "$(jq '.subIssues' "$DEF")" \
   --arg state "$(jq -r '.stateFile' "$DEF")" \
-  '{owner:$owner,ownerType:$ot,projectNumber:$num,projectId:$pid,projectUrl:$purl,statusFieldId:$sfid,statusOptions:$sopt,phaseToStatus:$p2s,statusOrder:$order,parentIssue:$parent,subIssues:$sub,stateFile:$state}')"
+  '{owner:$owner,ownerType:$ot,hookMode:$hook,projectNumber:$num,projectId:$pid,projectUrl:$purl,statusFieldId:$sfid,statusOptions:$sopt,phaseToStatus:$p2s,statusOrder:$order,parentIssue:$parent,subIssues:$sub,stateFile:$state}')"
 
 OUT="$EXT_DIR/config.json"
 if [ "$DRYRUN" = 1 ]; then info "DRYRUN would write $OUT:"; echo "$CONFIG";

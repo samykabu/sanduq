@@ -36,6 +36,35 @@ resolve feature -> scan workspace -> update project memory -> find impacted proj
 
 ## Instructions
 
+### 0. Ensure the Diagram Design dependency
+
+Before resolving the feature, read `.specify/extensions/how-to-test/dependencies.yml` and enforce its
+`diagram-design` requirement.
+
+1. Read `.specify/extensions/.registry` as the installed-version source of truth.
+2. Read the optional project policy at `.specify/extension-dependencies.yml`. Supported
+   `update_policy` values are:
+   - `prompt` (default): ask before `specify extension add diagram-design` or
+     `specify extension update diagram-design`.
+   - `auto`: the user has pre-authorized dependency installation and updates.
+   - `manual`: never mutate dependencies; report the exact command the user must run.
+3. If `diagram-design` is absent, disabled, or outside the declared SemVer range, follow the policy
+   and install/update it. Never make this extension-state change under `prompt` without explicit
+   approval.
+4. For an installed compatible version, use `.specify/extensions/.dependency-checks.json` to avoid
+   catalog checks more often than `check_interval_hours`. When due, run
+   `specify extension info diagram-design` (read-only), compare the catalog version with the
+   registry version, and follow the update policy if a newer compatible release exists.
+5. After any add/update, re-read the registry and verify the version before continuing. Record the
+   checked time and installed version in `.specify/extensions/.dependency-checks.json`.
+6. Load `.specify/extensions/diagram-design/skill/SKILL.md` and resolve its references/assets
+   relative to that skill directory. This direct resource path works in the current run even if the
+   agent only discovers newly registered skills in a new conversation.
+7. If installation/update is declined or unavailable, continue the non-diagram work, explicitly skip
+   diagram generation, and report the missing dependency. Do not silently use another diagram
+   system.
+
+
 ### 1. Resolve the active feature
 
 - If `--feature` is supplied, use it.
@@ -160,16 +189,24 @@ Manual content, in order:
 1. Cover and TOC, marked "Development-only draft".
 2. Prerequisites and dev tooling: start commands, dev URLs, dashboards, environment variable names
    only, and redacted test-account guidance.
-3. Architecture and process visuals where applicable:
-   - Use the `architecture-diagram` skill when the feature changes or clarifies architecture,
-     infrastructure, service boundaries, data flow, integrations, security zones, deployment
-     topology, or major component responsibilities.
-   - Use the `process-flow-diagram` skill when the feature changes or clarifies a user journey,
-     approval flow, automation sequence, background job lifecycle, integration sequence, validation
-     flow, or exception path.
+3. Diagram Design visuals where applicable:
+   - Use the installed `diagram-design` selection guide to choose among all twenty-seven types:
+     architecture, IT current-state, flowchart, sequence, state machine, ER/data model, timeline,
+     swimlane, quadrant, radar, loop, nested, tree, org chart, layers, venn, pyramid, bar, line,
+     Gantt, scatter, high-level, process, medallion, data flow, DP integration, and DP security
+     matrix.
+   - Match the visual grammar to the evidence: components/connections use architecture; branching
+     logic uses flowchart; ordered messages use sequence; lifecycle transitions use state machine;
+     entities/relationships use ER; dated events use timeline; cross-role handoffs use swimlane;
+     containment/hierarchy uses nested or tree; ownership/escalation uses org chart; abstractions use
+     layers; overlap uses venn; rank/drop-off uses pyramid/funnel; two-axis positioning uses
+     quadrant; quantitative comparison/trends/distribution use bar, line, radar, or scatter;
+     schedules use Gantt; reinforcing cycles use loop; legacy landscapes use IT current-state;
+     platform/data topology uses high-level, medallion, data flow, DP integration, or DP security
+     matrix; multi-actor data handoffs use process.
    - Save source HTML under `<assets-dir>/diagrams/`, export PNG beside it, embed the PNG in the
      manual, and link to the HTML source for inspection/export.
-   - If no architecture or process impact exists, say no diagram was needed; do not invent one.
+   - If no supported visual improves the manual, say no diagram was needed; do not invent one.
 4. One plain-English section per user story or use case. Each section must include a real-life user
    scenario, preconditions, numbered tester steps, expected result after meaningful actions, and
    validation/error/empty/loading/permission states when applicable.
@@ -183,10 +220,12 @@ Manual content, in order:
 
 Do not hand-take screenshots or diagram exports.
 
-- Architecture/process diagrams: generate source HTML with `architecture-diagram` and/or
-  `process-flow-diagram`, then export PNGs from `#report-container` using the built-in html2canvas
-  path or Playwright/Puppeteer. Keep HTML sources and PNGs together under `<assets-dir>/diagrams/`,
-  embed PNGs, and link the HTML sources.
+- Diagrams: load the relevant
+  `.specify/extensions/diagram-design/skill/references/type-*.md`, generate source HTML from the
+  selected Diagram Design template/variant, then export PNG with the installed
+  `scripts/export_diagram.py` utility and `references/export.md` contract. Keep HTML sources and
+  PNGs together under
+  `<assets-dir>/diagrams/`, embed PNGs, and link the HTML sources.
 - If diagram PNG export cannot run, keep the HTML source, mark the PNG as pending in the manual, and
   report the follow-up. Do not embed a broken image.
 

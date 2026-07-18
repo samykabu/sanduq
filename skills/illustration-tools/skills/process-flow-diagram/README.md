@@ -14,8 +14,7 @@ For non-sequential system relationships (components, infrastructure, cloud topol
 
 ## Documentation automation
 
-When called by the `pr-generate-description`, `speckit.pr.generate`, `how-to-test`, or
-`speckit.how-to-test.document` workflows, this skill should produce both:
+When called by the legacy standalone `how-to-test` workflow, this skill should produce both:
 
 - A source HTML file under the relevant feature documentation assets folder.
 - A PNG export beside it, embedded in the generated documentation with a link back to the HTML source.

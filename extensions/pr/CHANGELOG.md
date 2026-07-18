@@ -1,7 +1,35 @@
 # Changelog
 
-All notable changes to the Detailed PR Generator extension.
+All notable changes to the Pull Request Workflow extension.
+
+## [2.1.0] - 2026-07-18
+
+### Changed
+
+- Expanded visual selection from fourteen to all twenty-seven Diagram Design v2 types.
+- Routed PNG generation through Diagram Design's bundled deterministic exporter.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
+
+## [2.0.0] - 2026-07-18
+
+### Added
+
+- `speckit.pr.review-feedback` (`/speckit-pr-review-feedback`) for approval-gated processing of
+  unresolved pull-request review feedback.
+
+### Changed
+
+- Consolidated PR generation and PR review processing under the single `pr` extension.
+- `speckit.pr.generate` now creates a pull request by default when the current branch has none;
+  `--no-pr` remains the explicit docs-only opt-out.
+- PR documentation now selects from all fourteen Diagram Design types and manages the versioned
+  `diagram-design` dependency through the Spec Kit registry.
+- Renamed the review command from `speckit.pr-review.process` to
+  `speckit.pr.review-feedback`.
+
+### Removed
+
+- The separately installable `pr-review` extension. Install or update `pr` for both commands.
 
 ## [1.1.2] - 2026-07-09
 

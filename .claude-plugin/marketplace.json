@@ -6,28 +6,9 @@
   },
   "metadata": {
     "description": "Sanduq — a chest of shared AI-agent tooling: Claude Code plugins, skills, and Spec Kit extensions.",
-    "version": "0.2.0"
+    "version": "0.3.0"
   },
   "plugins": [
-    {
-      "name": "devtools",
-      "source": "./skills/devtools",
-      "description": "Developer productivity tools: GitHub PR review feedback handling, multi-stack coding-standards review, QA How-To-Test manual generation, and detailed PR/changelog plus feature-details generation.",
-      "version": "1.7.1",
-      "author": {
-        "name": "Resal Engineering"
-      },
-      "keywords": [
-        "developer-tools",
-        "github",
-        "pull-request",
-        "code-review",
-        "qa",
-        "testing",
-        "spec-kit"
-      ],
-      "category": "development-tools"
-    },
     {
       "name": "illustration-tools",
       "source": "./skills/illustration-tools",

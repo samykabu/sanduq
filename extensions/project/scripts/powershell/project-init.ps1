@@ -8,6 +8,7 @@
 .PARAMETER Owner        Project owner login (user or org). Default: the authenticated user.
 .PARAMETER Number       Project number. If 0/omitted, lists the owner's projects to choose from.
 .PARAMETER OwnerType    'user' or 'org'. Auto-detected if omitted.
+.PARAMETER HooksMode    'optional' offers sync as a manual hook; 'required' marks it automatic.
 .PARAMETER AutoCreateColumns  Create any lifecycle column missing from the board without prompting.
 .PARAMETER NonInteractive     Never prompt; map exact+fuzzy only, warn on unmatched (unless -AutoCreateColumns).
 .PARAMETER DryRun       Show what would be written/created without mutating anything.
@@ -18,6 +19,7 @@ param(
     [string]$Owner,
     [long]$Number = 0,
     [ValidateSet('user', 'org')][string]$OwnerType,
+    [ValidateSet('optional', 'required')][string]$HooksMode,
     [switch]$AutoCreateColumns,
     [switch]$NonInteractive,
     [switch]$DryRun,
@@ -27,6 +29,43 @@ $ErrorActionPreference = 'Stop'
 function Info { param($m) Write-Host "[project-init] $m" }
 function Warn { param($m) Write-Host "[project-init][warn] $m" }
 function Die  { param($m) Write-Host "[project-init][error] $m"; exit 1 }
+
+function Set-ProjectHookMode {
+    param([string]$Mode)
+    $extensionsPath = Join-Path $repoRoot '.specify/extensions.yml'
+    if (-not (Test-Path $extensionsPath)) {
+        Die '.specify/extensions.yml not found - install the extension with `specify extension add project` before running init'
+    }
+
+    $optionalValue = if ($Mode -eq 'optional') { 'true' } else { 'false' }
+    $lines = @(Get-Content -Path $extensionsPath)
+    $inProjectHook = $false
+    $updated = 0
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match '^\s*-\s+extension:\s+project\s*$') {
+            $inProjectHook = $true
+            continue
+        }
+        if ($lines[$i] -match '^\s*-\s+extension:\s+') {
+            $inProjectHook = $false
+        }
+        if ($inProjectHook -and $lines[$i] -match '^(\s*optional:\s*)(?:true|false)\s*$') {
+            $lines[$i] = "$($matches[1])$optionalValue"
+            $updated++
+            $inProjectHook = $false
+        }
+    }
+    if ($updated -eq 0) {
+        Die 'no project sync hooks found in .specify/extensions.yml - reinstall the project extension and retry'
+    }
+    if ($DryRun) {
+        Info "DRYRUN would set $updated project sync hook(s) to $Mode"
+    }
+    else {
+        $lines | Set-Content -Path $extensionsPath -Encoding utf8
+        Info "set $updated project sync hook(s) to $Mode"
+    }
+}
 
 # ---- repo + config paths ----
 $repoRoot = (git rev-parse --show-toplevel 2>$null); if (-not $repoRoot) { Die 'not inside a git repository' }
@@ -149,6 +188,28 @@ if ($toCreate.Count -gt 0) {
     }
 }
 
+# ---- choose whether lifecycle hooks are manual or automatic ----
+if (-not $HooksMode) {
+    if ($NonInteractive) {
+        $existingCfgPath = Join-Path $extDir 'config.json'
+        if (Test-Path $existingCfgPath) {
+            try { $HooksMode = (Get-Content $existingCfgPath -Raw | ConvertFrom-Json).hookMode } catch { $HooksMode = $null }
+        }
+        if ($HooksMode -notin @('optional', 'required')) { $HooksMode = 'optional' }
+        Info "hook mode not supplied in non-interactive mode; using $HooksMode"
+    }
+    else {
+        do {
+            $choice = Read-Host "Project sync hooks: 'required' runs sync automatically; 'optional' offers manual execution [optional]"
+            if (-not $choice) { $choice = 'optional' }
+            $choice = $choice.Trim().ToLowerInvariant()
+            if ($choice -notin @('optional', 'required')) { Warn "enter 'optional' or 'required'" }
+        } while ($choice -notin @('optional', 'required'))
+        $HooksMode = $choice
+    }
+}
+Set-ProjectHookMode -Mode $HooksMode
+
 # statusOrder = the mapped column names in phase order (kept for no-regress ordering)
 $statusOrder = @(); foreach ($p in $phases) { if ($phaseToStatus.$p -and ($statusOrder -notcontains $phaseToStatus.$p)) { $statusOrder += $phaseToStatus.$p } }
 
@@ -156,6 +217,7 @@ $statusOrder = @(); foreach ($p in $phases) { if ($phaseToStatus.$p -and ($statu
 $config = [ordered]@{
     owner         = $Owner
     ownerType     = $OwnerType
+    hookMode      = $HooksMode
     projectNumber = [int]$Number
     projectId     = $projectId
     projectUrl    = $projectUrl

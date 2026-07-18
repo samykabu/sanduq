@@ -36,6 +36,35 @@ resolve feature -> load artifacts -> scan workspace -> update project memory -> 
 
 ## Instructions
 
+### 0. Ensure the Diagram Design dependency
+
+Before resolving the feature, read `.specify/extensions/how-to-test/dependencies.yml` and enforce its
+`diagram-design` requirement.
+
+1. Read `.specify/extensions/.registry` as the installed-version source of truth.
+2. Read the optional project policy at `.specify/extension-dependencies.yml`. Supported
+   `update_policy` values are:
+   - `prompt` (default): ask before `specify extension add diagram-design` or
+     `specify extension update diagram-design`.
+   - `auto`: the user has pre-authorized dependency installation and updates.
+   - `manual`: never mutate dependencies; report the exact command the user must run.
+3. If `diagram-design` is absent, disabled, or outside the declared SemVer range, follow the policy
+   and install/update it. Never make this extension-state change under `prompt` without explicit
+   approval.
+4. For an installed compatible version, use `.specify/extensions/.dependency-checks.json` to avoid
+   catalog checks more often than `check_interval_hours`. When due, run
+   `specify extension info diagram-design` (read-only), compare the catalog version with the
+   registry version, and follow the update policy if a newer compatible release exists.
+5. After any add/update, re-read the registry and verify the version before continuing. Record the
+   checked time and installed version in `.specify/extensions/.dependency-checks.json`.
+6. Load `.specify/extensions/diagram-design/skill/SKILL.md` and resolve its references/assets
+   relative to that skill directory. This direct resource path works in the current run even if the
+   agent only discovers newly registered skills in a new conversation.
+7. If installation/update is declined or unavailable, continue the non-diagram work, explicitly skip
+   diagram generation, and report the missing dependency. Do not silently use another diagram
+   system.
+
+
 ### 1. Resolve the active feature
 
 - If `--feature` is supplied, use it.
@@ -132,12 +161,12 @@ need one or more of the following:
 - Mobile E2E test for the main user journey.
 - Screenshot-capture test for each screen, form, dialog, menu entry, validation state, permission
   state, empty state, error state, loading state, and expected result.
-- Architecture diagram generation/export task when the feature changes or clarifies service
-  boundaries, infrastructure, integrations, data flow, security zones, deployment topology, or major
-  component responsibilities.
-- Process-flow diagram generation/export task when the feature changes or clarifies a user journey,
-  approval flow, automation sequence, job lifecycle, integration sequence, validation flow, or
-  exception path.
+- A Diagram Design generation/export task for every useful visual supported by the feature evidence:
+  architecture, IT current-state, flowchart, sequence, state machine, ER/data model, timeline,
+  swimlane, quadrant, radar, loop, nested, tree, org chart, layers, venn, pyramid, bar, line, Gantt,
+  scatter, high-level, process, medallion, data flow, DP integration, or DP security matrix. Use the
+  installed skill's selection guide and matching type reference; do not add a visual merely to fill
+  a checklist.
 - API contract or integration test that proves request and response bodies for API-only scenarios.
 - Fixture or mock data task for deterministic screenshots and stable examples.
 - Accessibility smoke test for generated manual pages and UI screenshots.
@@ -147,8 +176,10 @@ Treat these as missing coverage when tasks are absent or too vague:
 
 - A UI user story has no named E2E task.
 - A new route, menu item, form, or validation flow has no screenshot-capture task.
-- Architecture-impacting work has no `architecture-diagram` HTML + PNG export task.
-- Workflow/process-impacting work has no `process-flow-diagram` HTML + PNG export task.
+- A materially useful architecture, decision, interaction, lifecycle, data-model, timeline,
+  cross-role, hierarchy, ownership, layering, overlap, prioritization, funnel, quantitative,
+  scheduling, loop, platform, process, or data-platform visual has no named Diagram Design HTML +
+  PNG export task.
 - A backend/API-only scenario has no request/response sample validation task.
 - A mobile-accessible scenario has only a web E2E task.
 - A scenario is intentionally not available on mobile but no task records that limitation in the
@@ -190,7 +221,7 @@ Task wording examples:
 - [ ] T041 [P] [US1] Add Playwright E2E test for admin password reset happy path in frontend/e2e/user-management/password-reset.spec.ts
 - [ ] T042 [P] [US1] Add screenshot capture for User Management password reset states in frontend/e2e/how-to-test/user-management-password-reset.capture.spec.ts
 - [ ] T043 [P] [US1] Add API request/response fixture coverage for POST /api/users/{id}/password-reset in backend/tests/contracts/user-management-password-reset.test.ts
-- [ ] T044 [P] [US1] Generate process-flow-diagram HTML and PNG assets for the password reset workflow in frontend/public/how-to-test/assets/user-management/diagrams/user-management-password-reset-process-flow.html
+- [ ] T044 [P] [US1] Generate Diagram Design sequence HTML and PNG assets for the password reset interaction in frontend/public/how-to-test/assets/user-management/diagrams/user-management-password-reset-sequence.html
 - [ ] T045 [US1] Update User Management How-To-Test documentation index under frontend/public/how-to-test/features/user-management/index.html
 ```
 

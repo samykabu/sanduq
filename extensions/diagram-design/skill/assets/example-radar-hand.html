@@ -1,0 +1,136 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Storage backends · Capability radar · Hand-drawn</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f5f5f5;
+      --color-ink:     #2d3142;
+      --color-muted:   #4f5d75;
+      --color-accent:  #eb6c36;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+
+    .frame { max-width: 1200px; width: 100%; }
+
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+
+    svg { width: 100%; min-width: 900px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Radar · Diagram Design · Hand</p>
+    <h1>Storage backends · Capability radar</h1>
+
+    <svg viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"></circle>
+          </pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#f5f5f5"></rect>
+        <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"></rect>
+
+        <!-- Concentric grid rings (f = 0.2, 0.4, 0.6, 0.8, 1.0) -->
+        <g class="rough-shape" data-source-tag="polygon"><path class="rough-generated" d="M498.0381362660788 209.275699889753 L530.7093782677315 229.1983616680838 L520.7160800739191 267.30124815115704 L479.5495045020245 266.7318172247149 L467.7492542131804 229.85012443074956" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M500 208 C505.27478105737475 211.78602902300776, 511.94891957561134 219.44748381812244, 530 230 M530 230 C529.1744358581514 242.40147246320092, 525.3452222351007 251.93059816371942, 519 266 M519 266 C505.0274898932315 268.7465358473768, 492.14407886741685 265.7572918601742, 481 266 M481 266 C479.58517699977153 250.76959387032602, 471.1648380761943 239.72971860921297, 470 230 M470 230 C484.589582150405 223.13033096723373, 495.68153801092296 215.4554764817294, 500 208" stroke="rgba(45,49,66,0.10)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="polygon"><path class="rough-generated" d="M500.8063899900764 177.45121097899974 L560.0051672961563 222.4305527601391 L540.812284674868 294.79354055263104 L464.79601605199275 292.4908457431942 L439.6148697283119 221.77665534354747" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M500 176 C512.1522272468824 187.36142057678433, 525.5252520953585 193.0989541327092, 561 220 M561 220 C558.0265918690153 243.10108253881566, 546.8405921101012 260.4527229033434, 538 292 M538 292 C505.98732144050297 288.83657405572944, 479.3634989436716 293.5757360120397, 462 292 M462 292 C454.52541944442316 265.4096308016055, 445.99108731618145 244.00371866755418, 439 220 M439 220 C459.10219107794575 205.00461328393547, 481.36223491693846 187.45361067569584, 500 176" stroke="rgba(45,49,66,0.10)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="polygon"><path class="rough-generated" d="M497.77464371407405 145.62672206824647 L588.3009563245811 210.8627438521944 L554.1084892758169 315.485832954105 L445.24252760196106 317.24987426167354 L406.6804852434434 208.90318625634535" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M500 144 C520.3319927255408 160.17637186462235, 540.1921119790309 175.80987715471713, 591 211 M591 211 C576.0063421813992 245.9892843408481, 568.4900793618743 278.04134733825634, 556 317 M556 317 C512.7260885738768 315.75731342605314, 467.54079019213094 316.62488132587634, 444 317 M444 317 C434.1931804588961 282.02511556306564, 420.2299674928153 252.32929692705804, 409 211 M409 211 C436.59697912410195 192.12489924954426, 460.5767565199203 172.60313612215396, 500 144" stroke="rgba(45,49,66,0.10)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="polygon"><path class="rough-generated" d="M500.5428974380717 113.80223315749318 L623.3967453530058 198.2949349442497 L574.2046938767656 342.978125355579 L424.6890391519293 343.0089027801529 L378.5461007585749 200.82971716914327" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M500 112 C526.227550124008 130.08988812722032, 552.7959559805727 149.60627400155877, 622 201 M622 201 C603.162191416144 248.59958373631002, 587.1421886112612 297.6672332024819, 575 343 M575 343 C519.8956387380138 344.30454885264623, 461.3796475021169 341.30052269598235, 425 343 M425 343 C411.4357322907005 299.23153558312566, 398.32875085360604 262.03992824456304, 378 201 M378 201 C404.08021260358043 177.6057502792752, 432.55156600519666 158.83881110694028, 500 112" stroke="rgba(45,49,66,0.10)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="polygon"><path class="rough-generated" d="M497.51115116206927 81.97774424673989 L651.6925343814306 191.527126036305 L594.3008984777146 370.4704177570529 L404.1355507018976 368.76793129863216 L345.6117162737064 192.75624808194115" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M500 80 C535.0505675921106 105.30757087599953, 568.1153152765595 128.7102000338072, 652 191 M652 191 C629.4967598675063 254.3190799570538, 610.5685912989325 322.12274666623097, 594 369 M594 369 C521.4727796680295 373.50016420314785, 449.8336863438599 372.4245439899969, 406 369 M406 369 C390.1179804394522 319.6526326111786, 372.8223135028535 270.620573670537, 348 191 M348 191 C405.04920347307984 153.42874445617664, 459.07233962913216 109.80497498522045, 500 80" stroke="rgba(45,49,66,0.20)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+        <!-- Axis spokes (center to outer vertex) -->
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M500 240 C505.6176755428314 204.39381839483977, 505.7331126213074 168.17550565451384, 500 80" stroke="rgba(45,49,66,0.20)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M500 240 C530.8088986052684 229.2974710241286, 563.8699279984943 216.24813613755165, 652 191" stroke="rgba(45,49,66,0.20)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M500 240 C520.809572108189 269.20989218826173, 541.2878232111282 299.67963223761643, 594 369" stroke="rgba(45,49,66,0.20)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M500 240 C478.26166192044917 265.57129242504834, 457.9397223114357 295.16330402699185, 406 369" stroke="rgba(45,49,66,0.20)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M500 240 C466.7525614250056 231.4600976338424, 433.8201776820771 221.53676646443083, 348 191" stroke="rgba(45,49,66,0.20)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+        <!-- Axis labels (one word per spoke, Geist sans 11px 600) -->
+        <text x="500" y="62" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Small-file handling</text>
+        <text x="669" y="189" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="start">Large-object reads</text>
+        <text x="605" y="400" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="start">Write throughput</text>
+        <text x="395" y="400" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="end">Operational simplicity</text>
+        <text x="331" y="189" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="end">Iceberg integration</text>
+
+        <!-- Scale ticks on first (top) axis only -->
+        <text x="494" y="82" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end">10</text>
+        <text x="494" y="114" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end">8</text>
+        <text x="494" y="146" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end">6</text>
+        <text x="494" y="178" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end">4</text>
+        <text x="494" y="210" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end">2</text>
+
+        <!-- Non-focal series (smallest to largest, back to front) -->
+        <!-- Ceph · series-2 dusty-blue · [7,7,7,4,6] -->
+        <g class="rough-shape" data-source-tag="polygon"><path class="rough-fill-mask" d="M500.153 129.876 L604.266 206.488 L564.978 328.281 L462.829 290.957 L410.773 211.399 Z" fill="rgba(94,122,155,0.18)" stroke="none"></path><path class="rough-generated" d="M502.520673506055 125.23081078222022 L607.0672685519792 208.52027258863671 L567.0781260834076 328.82417216589675 L462.41462000170725 290.3221024095081 L406.4054093644954 212.71543355872853" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M500 128 C523.3310049767874 142.51064689018415, 546.3960807838745 159.27297622364597, 606 206 M606 206 C592.2097877659486 241.5518176661106, 578.4365055323229 283.14713214014193, 566 330 M566 330 C529.3772464370506 313.78259761373977, 491.071020836957 298.85222454092934, 462 292 M462 292 C442.2829324855009 262.43949547095514, 426.5507340346935 232.2675625899091, 409 211 M409 211 C429.7526072464494 192.30007083663423, 457.752958405072 170.88473410099454, 500 128" stroke="#5e7a9b" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <!-- GCS · series-3 mustard · [6,9,8,6,7] -->
+        <g class="rough-shape" data-source-tag="polygon"><path class="rough-fill-mask" d="M500.148 145.442 L635.116 196.671 L574.036 341.49 L444.979 315.875 L395.721 206.522 Z" fill="rgba(184,145,90,0.18)" stroke="none"></path><path class="rough-generated" d="M499.48892723005264 141.40632187146693 L636.363057580404 195.952463680692 L577.1743306843564 343.3164645673707 L442.8611315516755 315.0811309279874 L394.2710248796269 203.84196447152644" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M500 144 C531.9999510212383 159.77996692127434, 561.7934132017708 170.01299955985394, 637 196 M637 196 C616.3751285630314 246.86839844662927, 596.5215717910825 295.41903193690115, 575 343 M575 343 C525.9626774858615 333.5163857631048, 479.10625265966405 324.95128553394574, 444 317 M444 317 C430.7491820033093 280.47461501894287, 414.90469128931056 242.89379344129702, 394 206 M394 206 C435.86094277456175 180.38078647917837, 479.5803588002152 157.30275973333744, 500 144" stroke="#b8915a" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <!-- Amazon S3 · series-1 sage · [6,10,9,5,8] -->
+        <g class="rough-shape" data-source-tag="polygon"><path class="rough-fill-mask" d="M500.186 145.301 L650.112 191.66 L584.026 354.409 L453.827 304.105 L379.85 201.524 Z" fill="rgba(124,143,111,0.18)" stroke="none"></path><path class="rough-generated" d="M502.2571809540503 141.58183296071365 L649.6588466088288 188.3846547727473 L582.4705352853052 357.8087569688447 L450.30764310164375 302.8401594464667 L375.33664039475843 200.76849538432435" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M500 144 C535.1251537346124 155.35534533597993, 568.1750282541691 163.61829218371307, 652 191 M652 191 C629.8549468059239 251.0337039783975, 603.1933131962229 311.6377699840261, 585 356 M585 356 C538.6544048184057 340.11560426299695, 492.71258319518466 318.79098197958666, 453 305 M453 305 C427.8760939939274 272.17581786794176, 408.96657141757663 239.8047483598959, 378 201 M378 201 C421.67289796002973 181.15391570778448, 461.6231135897042 159.4909777148801, 500 144" stroke="#7c8f6f" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+        <!-- Focal series · MinIO · accent · [9,8,9,9,9] -->
+        <g class="rough-shape" data-source-tag="polygon"><path class="rough-fill-mask" d="M499.959 98 L620.276 201.552 L583.786 354.414 L416.131 354.414 L364.848 196.621 Z" fill="rgba(235,108,54,0.18)" stroke="none"></path><path class="rough-generated" d="M499.2254346780479 93.75734404996038 L623.7546356372535 201.6168458648026 L583.566739886254 353.50104937031864 L416.55415465161207 353.59918796494605 L363.2022559098899 197.69502629712224" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M500 96 C524.5437591180903 116.43484374384397, 551.0706460238201 142.22131033415906, 622 201 M622 201 C611.5680216828127 260.4930592746427, 597.1030372785171 317.4558333733072, 585 356 M585 356 C522.0341286577284 355.4341152232606, 463.8541971586645 354.31414850172587, 415 356 M415 356 C403.215719845891 310.51288220113145, 384.47838259339335 264.9212141198479, 363 196 M363 196 C400.58743713917215 163.22698102294933, 440.54560194211086 134.5144840359641, 500 96" stroke="#eb6c36" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+        <!-- Focal vertex dots (only on focal series) -->
+        <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M501.672 96 L501.942 96.383 L501.778 96.857 L501.697 97.293 L501.176 97.831 L500.901 98.053 L500.497 98.089 L500 97.76 L499.531 98.213 L499.204 97.594 L498.555 97.472 L498.177 97.426 L497.995 96.728 L497.734 96.449 L497.657 96 L498.25 95.487 L497.907 95.154 L498.622 94.589 L498.908 94.317 L499.271 94.047 L499.614 93.715 L500 94.025 L500.506 93.971 L500.752 94.233 L501.078 94.227 L501.387 94.683 L502.086 95.003 L501.862 95.629 Z" fill="#eb6c36" stroke="none"></path></g>
+        <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M623.672 201 L623.836 201.508 L623.814 201.773 L623.587 202.092 L623.415 202.77 L622.755 202.946 L622.517 202.807 L622 202.763 L621.623 202.62 L621.047 202.68 L620.949 202.294 L620.17 202.347 L620.383 202.018 L620.032 201.467 L620.307 201 L619.926 200.493 L620.247 200.213 L620.341 199.772 L620.578 199.394 L621.014 198.915 L621.583 198.917 L622 199.161 L622.518 198.81 L622.976 199.208 L623.355 199.545 L623.404 199.63 L624.113 200.102 L623.935 200.499 Z" fill="#eb6c36" stroke="none"></path></g>
+        <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M586.672 356 L586.731 356.476 L586.85 356.992 L586.477 357.328 L586.218 357.71 L585.913 357.839 L585.381 358.208 L585 357.767 L584.56 357.709 L584.193 357.766 L583.907 357.663 L583.163 357.267 L583.141 357.006 L583.33 356.485 L583.257 356 L583.283 355.5 L582.955 355.272 L583.607 354.956 L583.685 354.471 L584.06 354.412 L584.552 354.119 L585 354.296 L585.374 354.332 L585.896 354.182 L586.197 354.316 L586.42 354.577 L586.509 355.201 L587.009 355.526 Z" fill="#eb6c36" stroke="none"></path></g>
+        <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M416.672 356 L416.625 356.444 L416.886 356.908 L416.368 357.128 L416.457 357.65 L415.767 357.732 L415.4 357.927 L415 357.77 L414.496 357.798 L414.036 357.852 L413.864 357.486 L413.703 357.187 L412.898 356.993 L412.945 356.503 L413.206 356 L412.959 355.507 L413.295 355.026 L413.326 354.703 L413.792 354.548 L414.106 354.279 L414.521 354.322 L415 353.731 L415.386 354.171 L415.817 354.157 L416.038 354.634 L416.437 354.961 L416.535 354.997 L417.082 355.552 Z" fill="#eb6c36" stroke="none"></path></g>
+        <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M364.672 196 L365.202 196.413 L364.922 196.823 L364.806 197.364 L364.26 197.589 L363.925 197.625 L363.42 197.646 L363 197.774 L362.588 197.887 L362.182 197.938 L361.822 197.308 L361.696 197.108 L361.286 196.98 L361.243 196.521 L361.156 196 L361.317 195.513 L361.004 195.085 L361.593 194.886 L361.899 194.625 L362.153 194.146 L362.49 193.842 L363 193.866 L363.398 194.01 L363.737 194.132 L364.315 194.404 L364.453 194.908 L364.562 195.096 L365.155 195.578 Z" fill="#eb6c36" stroke="none"></path></g>
+
+        <!-- Legend -->
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M40 456 C241.50910244219006 451.5396063347347, 441.8829520412535 450.59440366702154, 960 456" stroke="rgba(45,49,66,0.10)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="40" y="472" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M42 485.673 L48 485.753 L54 486.042 L54.271 488 L54.213 490 L48 490.209 L42 490.029 L42.245 488 Z" fill="rgba(235,108,54,0.18)" stroke="none"></path><path class="rough-generated" d="M40.17132069440559 483.021239652019 L57.05924260886386 481.89997246740387 L57.97097405167297 489.6884483057074 L39.488164803106336 493.20321074603123" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M40 484 C41.7236569982022 483.2550178814959, 45.14079252682626 485.2945427299571, 56 484 M56 484 C55.28452265011612 486.16814149972055, 56.911759096258315 489.0695859996602, 56 492 M56 492 C52.85453708164393 492.33193189476617, 45.13646513544023 492.95503180121074, 40 492 M40 492 C40.60359185492154 489.62944356586786, 39.98691148435231 486.9987769375369, 40 484" stroke="#eb6c36" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="64" y="492" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">MinIO · recommended</text>
+
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M222 485.673 L228 485.918 L234 485.934 L234.129 488 L234.253 490 L228 490.014 L222 489.889 L221.923 488 Z" fill="rgba(124,143,111,0.18)" stroke="none"></path><path class="rough-generated" d="M218.59718372523784 483.65560095608237 L234.3137510508299 484.27697460949423 L236.8413748949766 494.4075554162264 L220.50749666392804 490.17146447002887" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M220 484 C222.3901149868965 485.8937287285924, 225.79769272089004 482.58318376094104, 236 484 M236 484 C235.71552237018943 485.9298935472965, 235.93254114612938 489.8453386890888, 236 492 M236 492 C230.1905469059944 493.5557463166118, 223.24829036951067 491.0815709778667, 220 492 M220 492 C219.45035461202264 489.8630515348911, 220.28606601491572 487.71738582730296, 220 484" stroke="#7c8f6f" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="244" y="492" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Amazon S3</text>
+
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M346 485.673 L352 486.083 L358 485.826 L357.987 488 L358.293 490 L352 489.82 L346 489.749 L346.302 488 Z" fill="rgba(94,122,155,0.18)" stroke="none"></path><path class="rough-generated" d="M346.8230467560701 484.28996226014567 L361.3682594927959 486.65397675158454 L359.71177573828027 493.32666252674534 L345.5268285247497 492.9397181940265" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M344 484 C347.0565729755908 483.89243957568897, 350.4545929149538 484.51182479192505, 360 484 M360 484 C360.14652209026275 488.01164559487256, 361.27332319600043 490.62109137851746, 360 492 M360 492 C356.1665567303449 489.5595607384574, 350.00011560358104 493.2681101545226, 344 492 M344 492 C344.3271173691237 490.0966595039144, 344.2952205454791 486.11599471706893, 344 484" stroke="#5e7a9b" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="368" y="492" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Ceph</text>
+
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M426 485.673 L432 486.248 L438 485.717 L437.844 488 L438.333 490 L432 490.326 L426 490.309 L425.98 488 Z" fill="rgba(184,145,90,0.18)" stroke="none"></path><path class="rough-generated" d="M425.24890978690235 484.92432356420903 L438.62276793476195 483.2309788936749 L438.5821765815839 492.2457696372643 L426.5461603855714 489.90797191802415" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M424 484 C427.72303096428516 481.8911504227854, 431.11149310901766 481.800465822909, 440 484 M440 484 C440.28752181033605 486.17339764244855, 440.0041052458715 488.1968440679461, 440 492 M440 492 C433.50256655469536 490.78337516030297, 428.1119408376515 491.3946493311785, 424 492 M424 492 C423.1738801262248 490.3302674729377, 424.59437507604247 486.834603606835, 424 484" stroke="#b8915a" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="448" y="492" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Google Cloud Storage</text>
+
+        <text x="608" y="492" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif" font-style="italic">One coral. Position is the signal — color reserved for the recommended option.</text>
+      </svg>
+  </div>
+
+
+</body></html>

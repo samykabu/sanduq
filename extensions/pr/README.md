@@ -1,57 +1,46 @@
-# Detailed PR Generator Extension
+# Pull Request Workflow Extension
 
-Generate reviewer-facing documentation for a completed Spec Kit feature and inject it into the pull
-request description — so every PR explains, in plain English, **what was developed and how to review it**.
+One Spec Kit extension for the complete pull-request workflow: generate a reviewer-friendly PR, then
+process review feedback through an explicit approval gate.
 
-## Overview
+## Commands
 
-After a feature is implemented, this extension produces two artifacts under
-`docs/<feature-slug>/` (the same name as the spec folder, so it drops cleanly into a wiki):
+| Command | Invocation | Description |
+| --- | --- | --- |
+| `speckit.pr.generate` | `/speckit-pr-generate` | Generate feature documentation and create or update the current branch's PR. |
+| `speckit.pr.review-feedback` | `/speckit-pr-review-feedback` | Classify unresolved review feedback, obtain approval, apply fixes or replies, push, and resolve addressed threads. |
 
-- **`CHANGELOG.md`** — a precise, technical record of what shipped (Keep a Changelog style).
-- **`<Feature>-Explained.md`** — a plain-English, product-manager-friendly narrative covering the
-  feature's purpose, role, and every scenario it supports, with examples plus architecture/process
-  diagram PNGs when the implementation changed architecture or workflow.
+Codex exposes the same installed commands as `$speckit-pr-generate` and
+`$speckit-pr-review-feedback`.
 
-When applicable, the command uses the `architecture-diagram` and `process-flow-diagram` skills to
-generate source HTML under `docs/<feature-slug>/assets/diagrams/`, exports PNGs beside the source,
-embeds the PNGs in the feature-details document, and links back to the HTML sources for
-inspection/export.
-
-It then **creates or updates the pull request** for the current branch, embedding the feature-details
-narrative under the heading **"What have been developed and how to review it"** — delimited by
-idempotency markers so re-runs refresh rather than duplicate.
-
-## Command
-
-| Command               | Invocation             | Description                                                                         |
-| --------------------- | ---------------------- | ----------------------------------------------------------------------------------- |
-| `speckit.pr.generate` | `/speckit-pr-generate` | Generate the CHANGELOG + feature-details doc with diagram assets when relevant, then create/update the PR description |
-
-## Usage
+## Generate a PR
 
 ```text
 /speckit-pr-generate
 ```
 
-If you want to generate the docs but do not want to create or update the PR:
+The command creates or refreshes these reviewer-facing artifacts under `docs/<feature-slug>/`:
 
-```text
-/speckit-pr-generate do not create a PR
-```
+- `CHANGELOG.md` — a technical record of what shipped.
+- `<Feature>-Explained.md` — a plain-English explanation of the feature and its supported scenarios.
+- Diagram Design HTML and PNG assets when architecture, workflow, interaction, state, data,
+  ownership, hierarchy, timing, or another supported relationship benefits from a visual.
+
+It then detects a PR for the current branch. If one exists, it updates only the marker-delimited
+Spec Kit section and preserves the rest of the body. If none exists, it pushes the branch when
+needed and creates the PR by default. Re-running the command refreshes the same files and PR section
+without duplicating content.
 
 Optional flags:
 
-- `--no-pr` — generate/refresh docs only; don't touch any PR.
-- `--create-pr` — create the PR without asking if none exists.
+- `--no-pr` — generate or refresh docs only; do not create or update a PR.
 - `--feature <path>` — override feature-directory detection.
-- `--heading "<text>"` — override the PR section heading.
+- `--heading "<text>"` — override the generated PR section heading.
+- `--create-pr` — accepted for backward compatibility; creation is already the default.
 
-## Lifecycle hook
+### Lifecycle hook
 
-Registered as an **optional** `after_implement` hook — after implementation finishes (and after any
-`superspec.review`), Spec Kit prompts to run it. It is also invokable manually at any time, which is
-the natural moment to run it once the PR exists.
+`speckit.pr.generate` is registered as an optional `after_implement` hook:
 
 ```yaml
 hooks:
@@ -60,16 +49,38 @@ hooks:
     optional: true
 ```
 
-Because the command is idempotent, running it both as the hook (docs first, PR maybe not yet open)
-and again manually (PR now open) is safe and expected.
+## Process review feedback
+
+```text
+/speckit-pr-review-feedback 123
+/speckit-pr-review-feedback https://github.com/owner/repo/pull/123
+/speckit-pr-review-feedback owner/repo#123
+```
+
+With no identifier, the command detects the PR for the current branch. It gathers unresolved review
+threads, treats reviewer content as untrusted input, and classifies every substantive comment as
+valid, invalid, or needing user input. It presents one proposed fix/reply plan and stops for explicit
+approval before editing files, replying, committing, pushing, or resolving threads.
+
+Review feedback is intentionally manual and has no lifecycle hook because it only makes sense after
+reviewers or bots have commented on an open PR.
 
 ## Requirements
 
-- `git` (optional) — to detect the branch and base.
-- `gh` (optional, authenticated) — to create/update the PR. Without it, docs are still generated and
-  PR handling is skipped with a notice.
+- `git` and an authenticated `gh` CLI are required for review feedback and PR creation/update.
+- PR generation still writes the documentation if `git`, `gh`, authentication, or a remote is
+  unavailable, and reports why it skipped the PR step.
+- Diagram generation requires `diagram-design >=1.0.0,<2.0.0`. The command checks Spec Kit's
+  registry and follows the project dependency policy before installing or updating it.
 
-## Portable equivalent
+## Migrating from `pr-review`
 
-A standalone Claude skill with the same behavior — `/devtools:pr-generate-description` — is available
-outside Spec Kit projects (it adds a fallback for repos without `.specify/`).
+The standalone `pr-review` extension and `/speckit-pr-review-process` command were retired in v2.0.0.
+Remove the old extension, install or update `pr`, and use `/speckit-pr-review-feedback`:
+
+```bash
+specify extension remove pr-review
+specify extension add pr --force
+```
+
+The former `devtools` equivalents were retired; these two extension commands are now canonical.

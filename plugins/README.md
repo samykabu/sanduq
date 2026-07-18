@@ -7,7 +7,6 @@ skill-first packages:
 
 | Plugin | Source | Version |
 | --- | --- | ---: |
-| `devtools` | [`../skills/devtools`](../skills/devtools/) | 1.7.1 |
 | `illustration-tools` | [`../skills/illustration-tools`](../skills/illustration-tools/) | 1.3.1 |
 
 They are registered in [`../.claude-plugin/marketplace.json`](../.claude-plugin/marketplace.json).
@@ -16,7 +15,6 @@ Install from Claude Code:
 
 ```text
 /plugin marketplace add samykabu/sanduq
-/plugin install devtools@sanduq
 /plugin install illustration-tools@sanduq
 ```
 

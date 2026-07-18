@@ -1,0 +1,127 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Northwind Retail · Current IT Landscape · Hand-drawn</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --paper: #f5f5f5; --paper-2: #ececec; --ink: #2d3142;
+      --muted: #4f5d75; --soft: #7a8399; --rule: rgba(45,49,66,0.12);
+      --accent: #eb6c36; --link: #2e5aa8;
+      --sans: 'Geist', system-ui, sans-serif;
+      --serif: 'Instrument Serif', serif;
+      --mono: 'Geist Mono', ui-monospace, monospace;
+    }
+    body { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; background: var(--paper); color: var(--ink); font-family: var(--sans); }
+    .frame { width: 100%; max-width: 1200px; }
+    .eyebrow { margin-bottom: 0.5rem; color: var(--muted); font: 500 0.66rem/1 var(--mono); letter-spacing: 0.18em; text-transform: uppercase; }
+    h1 { margin-bottom: 0.35rem; color: var(--ink); font: 400 clamp(1.5rem, 2.4vw + 0.75rem, 2rem)/1.15 var(--serif); letter-spacing: -0.02em; }
+    .subtitle { margin-bottom: 1.5rem; color: var(--muted); font-size: 0.9rem; line-height: 1.5; }
+    .diagram { overflow-x: auto; }
+    svg { display: block; width: 100%; min-width: 920px; }
+    svg .zone { fill: rgba(45,49,66,0.02); stroke: rgba(45,49,66,0.10); stroke-width: 0.8; }
+    svg .zone-mask, svg .node-mask, svg .label-mask { fill: #f5f5f5; }
+    svg .zone-label, svg .arrow-label, svg .legend-label { font-family: 'Geist Mono', monospace; }
+    svg .zone-label { fill: rgba(45,49,66,0.40); font-size: 8px; letter-spacing: 0.14em; }
+    svg .node { fill: #fff; stroke: #2d3142; stroke-width: 1; }
+    svg .node.external { stroke: #4f5d75; stroke-dasharray: 4 3; }
+    svg .node.focal { fill: rgba(235,108,54,0.07); stroke: #eb6c36; stroke-width: 1.4; }
+    svg .node.survivor { fill: rgba(124,143,111,0.06); stroke: rgba(124,143,111,0.45); }
+    svg .node-name { fill: #2d3142; font: 600 12px 'Geist', sans-serif; }
+    svg .node-name.survivor { fill: #7c8f6f; }
+    svg .sub { fill: #4f5d75; font: 400 10px 'Geist Mono', monospace; }
+    svg .sub.focal { fill: #eb6c36; }
+    svg .arrow-label { font-size: 8px; font-weight: 600; letter-spacing: 0.08em; }
+    svg .legend-label { fill: #4f5d75; font-size: 8px; }
+  </style>
+</head>
+<body>
+  <main class="frame">
+    <p class="eyebrow">IT current-state · Northwind Retail · Hand</p>
+    <h1>Legacy retail reporting landscape</h1>
+    <p class="subtitle">File exports, desktop spreadsheets, and manual publication before a shared data platform.</p>
+    <div class="diagram">
+      <svg viewBox="0 0 960 500" role="img" aria-labelledby="it-title it-desc" xmlns="http://www.w3.org/2000/svg">
+        <title id="it-title">Northwind Retail current IT landscape</title>
+        <desc id="it-desc">Three zones show collection, processing, and dissemination through manual file handoffs.</desc>
+        <defs>
+          
+          
+          
+          <symbol id="icon-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v4a1 1 0 0 0 1 1h4"></path><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2"></path></symbol>
+          <symbol id="icon-screen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="1"></rect><path d="M7 20h10M9 16v4M15 16v4"></path></symbol>
+          <symbol id="icon-db" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="12" cy="6" rx="8" ry="3"></ellipse><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"></path></symbol>
+          <symbol id="icon-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="9" cy="8" r="4"></circle><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2M16 4.5a4 4 0 0 1 0 7M18 15a4 4 0 0 1 3 4v2"></path></symbol>
+        </defs>
+
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M2 0.672 L45.455 3.392 L88.909 0.807 L132.364 1.516 L175.818 2.325 L219.273 2.777 L262.727 2.809 L306.182 1.185 L349.636 2.336 L393.091 2.031 L436.545 2.471 L480 3.322 L523.455 1.792 L566.909 0.645 L610.364 2.745 L653.818 2.252 L697.273 3.365 L740.727 1.063 L784.182 1.68 L827.636 2.02 L871.091 2.733 L914.545 0.768 L958 1.621 L958.271 43.333 L956.935 84.667 L958.084 126 L958.373 167.333 L958.451 208.667 L959.125 250 L957.138 291.333 L958.949 332.667 L958.351 374 L959.285 415.333 L957.052 456.667 L957.305 498 L914.545 499.394 L871.091 496.867 L827.636 498.576 L784.182 498.563 L740.727 497.418 L697.273 498.196 L653.818 499.279 L610.364 497.655 L566.909 498.617 L523.455 498.88 L480 498.308 L436.545 498.879 L393.091 496.901 L349.636 497.969 L306.182 498.361 L262.727 498.48 L219.273 498.574 L175.818 497.397 L132.364 498.477 L88.909 497.824 L45.455 497.474 L2 497.791 L1.828 456.667 L1.164 415.333 L3.357 374 L1.471 332.667 L1.399 291.333 L2.724 250 L3.172 208.667 L1.533 167.333 L2.867 126 L0.674 84.667 L2.296 43.333 Z" fill="#f5f5f5" stroke="none"></path></g>
+
+        <!-- Phase zones -->
+        <g class="rough-shape" data-source-tag="rect"></g>
+        <g class="rough-shape" data-source-tag="rect"></g>
+        <text class="zone-label" x="40" y="56">COLLECTION</text>
+        <g class="rough-shape" data-source-tag="rect"></g>
+        <g class="rough-shape" data-source-tag="rect"></g>
+        <text class="zone-label" x="316" y="56">PROCESSING</text>
+        <g class="rough-shape" data-source-tag="rect"></g>
+        <g class="rough-shape" data-source-tag="rect"></g>
+        <text class="zone-label" x="696" y="56">DISSEMINATION</text>
+
+        <!-- Connectors first; Shared Drive entries fan to y=108,124,140 -->
+        <g class="rough-shape" data-source-tag="path" data-rough-arrowhead="true"><path class="rough-generated" d="M252 108 C271.0437285807915 107.00732487895992, 287.6916184638627 108.56781082907227, 340 108" stroke="#2e5aa8" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M338.4883033191785 106.68952006641776 L332.0231260513887 110.31762658301741 L328.3527888333425 103.66977427545935" stroke="none" stroke-width="0" fill="#2e5aa8" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M340 108 C338.405306305553 107.42178855773328, 336.913985924281 108.1509013279705, 329.6 112.2 M329.6 112.2 C328.8451163331303 109.16072261149809, 329.303041774753 107.21749204977974, 329.6 103.8 M329.6 103.8 C333.10216785405544 105.63518736576421, 333.52572171074564 106.02592497138804, 340 108" stroke="#2e5aa8" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="path" data-rough-arrowhead="true"><path class="rough-generated" d="M252 196 C265.0110042857006 198.04540650296025, 274.7811501445249 192.91830518293193, 308 196 M308 196 C313.5581865123783 198.08780568223446, 315.66808713991196 191.16766402305416, 316 188 M316 188 C314.2926967330556 168.8166933225468, 315.7388671644311 150.9683270515874, 316 132 M316 132 C315.56058994513006 126.50390803931903, 321.1449659683431 123.1855912240222, 324 124 M324 124 C330.1976600523293 122.14690217183903, 333.46596997871995 126.21871553109959, 340 124" stroke="#2e5aa8" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M337.90212587593123 125.51815707655624 L329.56024244604635 128.86311310203746 L328.53254845021297 120.04624022813513" stroke="none" stroke-width="0" fill="#2e5aa8" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M340 124 C338.7864290794627 125.44626519066807, 334.03409926623385 125.6779373457803, 329.6 128.2 M329.6 128.2 C329.51276554038543 126.94512841412983, 330.92596242829575 123.22916467903367, 329.6 119.8 M329.6 119.8 C331.1374560922438 122.29720032534023, 335.2984734836284 120.50526426463156, 340 124" stroke="#2e5aa8" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="path" data-rough-arrowhead="true"><path class="rough-generated" d="M252 284 C269.28354771053415 282.9800564003503, 282.4812172650359 282.7653678101813, 324 284 M324 284 C330.2511377964479 281.1392390043475, 332.40597885688766 280.13873415797326, 332 276 M332 276 C328.14774628760296 243.86092625400053, 331.038139351029 206.78275320371614, 332 148 M332 148 C332.91973167667163 140.03443128407622, 334.63251364339766 138.5994137807749, 340 140" stroke="#2e5aa8" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 3"></path><path class="rough-generated" d="M337.31594843268397 138.54679408669472 L327.097358840704 141.6085996210575 L328.71230806708337 136.42270618081093" stroke="none" stroke-width="0" fill="#2e5aa8" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M340 140 C339.3198018533725 140.21808444847093, 334.5591199833186 143.20497336359006, 329.6 144.2 M329.6 144.2 C329.8759147476405 142.2935342167616, 329.8083830818385 139.24083730828764, 329.6 135.8 M329.6 135.8 C332.4254017055641 136.08355590978437, 333.8185678813793 138.61426093300702, 340 140" stroke="#2e5aa8" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 3"></path></g>
+        <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M472 148 C474.0023039086442 163.91873787827788, 471.7212593420129 186.66565982438624, 472 232" stroke="#eb6c36" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 3"></path><path class="rough-generated" d="M474.52977098943666 233.3754310968332 L468.4344752353616 221.15408614007754 L475.6920676839538 222.1991721334867" stroke="none" stroke-width="0" fill="#eb6c36" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M472 232 C469.9532205595801 230.95410496206378, 469.78337017003565 226.83363389034676, 467.6 221.2 M467.6 221.2 C471.17449266337235 221.48774613504528, 472.48623080870885 221.91825871031403, 476.4 221.2 M476.4 221.2 C476.7762024828862 223.74480334809053, 474.9334602797889 225.71155402076943, 472 232" stroke="#eb6c36" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 3"></path></g>
+        <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M472 304 C470.0190903018462 313.92721199085935, 473.5245699922787 320.5352619579993, 472 344" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M473.9435935461894 342.4040681069717 L466.3715916300192 336.4995726590976 L475.4718273008242 335.3756380861625" stroke="none" stroke-width="0" fill="#4f5d75" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M472 344 C470.4100413295168 341.79918130847284, 470.2595671873713 340.6327458532017, 468 334 M468 334 C471.82912581376735 333.7952858823072, 474.12255634151404 335.00950261767025, 476 334 M476 334 C474.82268870389083 337.0955666337568, 473.64044098918185 339.92952590421714, 472 344" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="path" data-rough-arrowhead="true"><path class="rough-generated" d="M604 268 C613.2641539121047 266.73730515529166, 627.5073704807088 269.6598547547008, 654 268 M654 268 C656.5299916486566 267.6935389706865, 664.6196540078148 267.0519445627307, 662 260 M662 260 C659.3247937381127 190.62855692636222, 660.7478546976903 126.4958954161033, 662 72 M662 72 C661.1971568712964 68.22600101834784, 662.8951566685612 66.64088145103305, 670 64 M670 64 C710.4670952791348 64.72088277990697, 743.986432418041 67.80823779160856, 800 64 M800 64 C807.7295379321401 61.79218900296837, 809.7553622862324 67.55958539141963, 808 72 M808 72 C807.6740340028424 74.82718079023064, 807.7122591648716 78.622877118811, 808 80" stroke="#eb6c36" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M809.3574161029421 81.23270511711016 L805.3087080246769 68.44505917811766 L812.0515869176946 70.9521040388383" stroke="none" stroke-width="0" fill="#eb6c36" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M808 80 C806.5734196923307 76.13479035102111, 806.3871814811797 74.35952486376111, 803.6 69.2 M803.6 69.2 C805.8975841269158 68.46188280603057, 809.631393142622 68.15064704856044, 812.4 69.2 M812.4 69.2 C812.4301198207601 73.34589744837784, 811.6786420386481 74.12058499928932, 808 80" stroke="#eb6c36" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M808 140 C807.6860914355913 158.79646801883356, 811.1646196401515 171.379081830848, 808 216" stroke="#2e5aa8" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M808.7712386596947 214.26134212724864 L803.0458244193345 207.3905456971377 L812.0313465345652 207.7285699915141" stroke="none" stroke-width="0" fill="#2e5aa8" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M808 216 C807.3097612840962 214.25345457217236, 807.1297417845001 212.0446724702855, 803.8 205.6 M803.8 205.6 C804.9217148651109 204.40581699872666, 807.9617936591432 204.97271207142526, 812.2 205.6 M812.2 205.6 C810.2555210195386 206.95481818760683, 810.0652140720233 212.0087408162238, 808 216" stroke="#2e5aa8" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M808 272 C807.052545896396 287.60132672935725, 804.7175983580202 304.24145316034554, 808 344" stroke="#2e5aa8" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 3"></path><path class="rough-generated" d="M808.1850612164475 345.0899791373871 L806.3829408139921 332.1360322161578 L812.2111061514356 336.1050359441899" stroke="none" stroke-width="0" fill="#2e5aa8" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M808 344 C807.6077996943864 340.97413324384524, 807.4199019728562 338.2667947220904, 803.8 333.6 M803.8 333.6 C805.5302812454383 334.3522004098788, 807.29034840942 333.3470792328611, 812.2 333.6 M812.2 333.6 C811.5269534791366 335.72445330692784, 808.6086745947604 338.57876723304855, 808 344" stroke="#2e5aa8" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 3"></path></g>
+
+        <!-- Collection -->
+        <g class="rough-shape" data-source-tag="rect"></g><g class="rough-shape" data-source-tag="rect"></g>
+        <use href="#icon-file" x="48" y="96" width="24" height="24" color="#2d3142"></use><text class="node-name" x="80" y="106">Point-of-Sale Exports</text><text class="sub" x="80" y="122">nightly · CSV</text>
+        <g class="rough-shape" data-source-tag="rect"></g><g class="rough-shape" data-source-tag="rect"></g>
+        <use href="#icon-file" x="48" y="184" width="24" height="24" color="#2d3142"></use><text class="node-name" x="80" y="194">Online Store Export</text><text class="sub" x="80" y="210">orders · flat file</text>
+        <g class="rough-shape" data-source-tag="rect"></g><g class="rough-shape" data-source-tag="rect"></g>
+        <use href="#icon-file" x="48" y="272" width="24" height="24" color="#4f5d75"></use><text class="node-name" x="80" y="282">Supplier Price Lists</text><text class="sub" x="80" y="298">external · XLSX</text>
+
+        <!-- Processing -->
+        <g class="rough-shape" data-source-tag="rect"></g><g class="rough-shape" data-source-tag="rect"></g>
+        <use href="#icon-file" x="352" y="100" width="24" height="24" color="#eb6c36"></use><text class="node-name" x="384" y="108">Shared Drive</text><text class="sub focal" x="384" y="124">no version control</text><text class="sub" x="384" y="140">department folders</text>
+        <g class="rough-shape" data-source-tag="rect"></g><g class="rough-shape" data-source-tag="rect"></g>
+        <use href="#icon-screen" x="352" y="256" width="24" height="24" color="#2d3142"></use><text class="node-name" x="384" y="262">Spreadsheet Handoffs</text><text class="sub" x="384" y="278">local workbooks · macros</text><text class="sub" x="384" y="292">manual reconciliation</text>
+        <g class="rough-shape" data-source-tag="rect"></g><g class="rough-shape" data-source-tag="rect"></g>
+        <use href="#icon-db" x="352" y="360" width="24" height="24" color="#7c8f6f"></use><text class="node-name survivor" x="384" y="370">On-prem RDBMS</text><text class="sub" x="384" y="386">inventory · finance</text>
+
+        <!-- Dissemination -->
+        <g class="rough-shape" data-source-tag="rect"></g><g class="rough-shape" data-source-tag="rect"></g>
+        <use href="#icon-screen" x="716" y="100" width="24" height="24" color="#eb6c36"></use><text class="node-name" x="748" y="108">Reporting Portal</text><text class="sub focal" x="748" y="124">manual refresh</text>
+        <g class="rough-shape" data-source-tag="rect"></g><g class="rough-shape" data-source-tag="rect"></g>
+        <use href="#icon-file" x="716" y="232" width="24" height="24" color="#2d3142"></use><text class="node-name" x="748" y="242">Email Report Packs</text><text class="sub" x="748" y="258">weekly · PDF</text>
+        <g class="rough-shape" data-source-tag="rect"></g><g class="rough-shape" data-source-tag="rect"></g>
+        <use href="#icon-users" x="716" y="360" width="24" height="24" color="#4f5d75"></use><text class="node-name" x="748" y="370">Regional Managers</text><text class="sub" x="748" y="386">12 store regions</text>
+
+        <!-- Labels are source-bound with a 6px perpendicular gap -->
+        <g class="rough-shape" data-source-tag="rect"></g><text class="arrow-label" x="280" y="98" text-anchor="middle" fill="#2e5aa8">CSV</text>
+        <g class="rough-shape" data-source-tag="rect"></g><text class="arrow-label" x="286" y="186" text-anchor="middle" fill="#2e5aa8">EXPORT</text>
+        <g class="rough-shape" data-source-tag="rect"></g><text class="arrow-label" x="282" y="274" text-anchor="middle" fill="#2e5aa8">XLSX</text>
+        <g class="rough-shape" data-source-tag="rect"></g><text class="arrow-label" x="498" y="168" text-anchor="middle" fill="#eb6c36">COPY</text>
+        <g class="rough-shape" data-source-tag="rect"></g><text class="arrow-label" x="498" y="324" text-anchor="middle" fill="#4f5d75">LOAD</text>
+        <g class="rough-shape" data-source-tag="rect"></g><text class="arrow-label" x="634" y="258" text-anchor="middle" fill="#eb6c36">XLSX</text>
+        <g class="rough-shape" data-source-tag="rect"></g><text class="arrow-label" x="832" y="160" text-anchor="middle" fill="#2e5aa8">PDF</text>
+        <g class="rough-shape" data-source-tag="rect"></g><text class="arrow-label" x="838" y="292" text-anchor="middle" fill="#2e5aa8">EMAIL</text>
+
+        <!-- Legend strip -->
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M16 440 C217.37034213062378 445.7558843045831, 420.2100804656372 445.9088918107152, 944 440" stroke="rgba(45,49,66,0.12)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text class="legend-label" x="16" y="460" letter-spacing="0.14em">LEGEND</text>
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M80 456 C85.47486892305315 454.5416516770609, 87.97820862792432 454.0365831722506, 104 456" stroke="#2e5aa8" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g><text class="legend-label" x="112" y="460">data flow</text>
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M208 456 C214.30824710885062 457.80776618342384, 216.79994527036325 456.41511040847286, 232 456" stroke="#eb6c36" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g><text class="legend-label" x="240" y="460">pain-point</text>
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M374 451.4 L380 451.856 L386 451.701 L385.869 456 L385.521 460 L380 460.076 L374 460.612 L374.639 456 Z" fill="#fff" stroke="none"></path><path class="rough-generated" d="M374 450 C377.76304753232745 449.58707434487064, 378.7291538587585 448.21892851781564, 386 450 M386 450 C389.3044327388828 447.93940527830273, 385.2321889510378 448.6595222134764, 388 452 M388 452 C388.3143028092105 454.09463928036394, 388.8095768832881 456.8570828881115, 388 460 M388 460 C390.0896922806278 459.26941151724503, 386.3633489369725 463.2832032671198, 386 462 M386 462 C384.852894728966 461.6119153663097, 381.1639962563291 460.8127522739349, 374 462 M374 462 C372.1624329955007 464.7364591458812, 374.4194308331236 460.8790790438031, 372 460 M372 460 C371.6978386216145 455.77715548865496, 371.42156781959346 454.50204628013074, 372 452 M372 452 C374.8440160075203 448.1633656770612, 373.024597420233 449.47540540006014, 374 450 M374 450 C374 450, 374 450, 374 450" stroke="#4f5d75" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 3"></path></g><text class="legend-label" x="396" y="460">external</text>
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M494 451.4 L500 452.158 L506 451.503 L505.609 456 L505.594 460 L500 459.72 L494 460.356 L494.052 456 Z" fill="rgba(235,108,54,0.07)" stroke="none"></path><path class="rough-generated" d="M494 450 C498.2628910238482 448.086107480193, 499.22182900430636 449.6654092910536, 506 450 M506 450 C509.99738402295236 448.7908386004157, 505.97008066801357 449.63059234839557, 508 452 M508 452 C508.15489420081025 455.53638114031406, 506.90785732770803 457.23095072370023, 508 460 M508 460 C505.6488340121694 462.59993476200225, 509.650896612027 462.69702582387254, 506 462 M506 462 C503.7902800121345 462.02870642684167, 499.41585625024516 463.5391815813607, 494 462 M494 462 C492.79679429956406 461.99096758784725, 490.99643297521396 459.74947988710676, 492 460 M492 460 C491.7170764642721 457.71364844884727, 492.66347766337447 455.536882818155, 492 452 M492 452 C490.5363084089942 452.4098772270295, 492.7836259387123 452.3410209151916, 494 450 M494 450 C494 450, 494 450, 494 450" stroke="#eb6c36" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g><text class="legend-label" x="516" y="460">bottleneck</text>
+      </svg>
+    </div>
+  </main>
+
+
+</body></html>

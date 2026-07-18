@@ -3,8 +3,8 @@ schema_version: "1.0"
 extension:
   id: how-to-test
   name: "How-To-Test"
-  version: "1.4.2"
-  description: "Generate QA-facing How-To-Test manuals from completed Spec Kit features, with diagram assets, screenshots, API samples, and an optional readiness audit that creates reusable project memory plus missing E2E/API/screenshot/diagram tasks before implementation."
+  version: "1.6.0"
+  description: "Generate QA-facing How-To-Test manuals from completed Spec Kit features, with all supported Diagram Design visuals, screenshots, API samples, and a readiness audit that creates reusable project memory plus missing documentation tasks before implementation."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
   category: "process"
@@ -12,6 +12,10 @@ extension:
 
 requires:
   speckit_version: ">=0.2.0"
+  extensions:
+    - id: diagram-design
+      version: ">=1.0.0,<2.0.0"
+      required: true
   tools:
     - name: git
       required: false
@@ -44,5 +48,9 @@ tags:
   - "playwright"
   - "documentation"
   - "diagram"
+  - "sequence"
+  - "flowchart"
+  - "state-machine"
+  - "data-model"
   - "how-to-test"
   - "workflow"
