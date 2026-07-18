@@ -1,6 +1,6 @@
-# Onboarding — generate your skin from a design source
+# Onboarding — generate a project theme from a design source
 
-**Goal:** point the skill at a design source — a website, an installed skill, or a local folder — and have it extract the palette + typography, then rewrite `style-guide.md` so every future diagram inherits that skin.
+**Goal:** point the skill at a design source — a website, an installed skill, or a local folder — and have it extract complete light/dark palettes plus typography into the target project's `.github/illustration-theme.yml`.
 
 Takes about 60 seconds.
 
@@ -23,9 +23,9 @@ Source you provide (URL / skill name / folder path)
       ↓
 [3] map to semantic roles (paper, ink, muted, accent, …)
       ↓
-[4] propose a style-guide.md diff
+[4] propose a project theme mapping
       ↓
-[5] write the diff (with your approval)
+[5] import the approved custom theme
       ↓
 future diagrams use your tokens
 ```
@@ -75,7 +75,8 @@ Read the rendered `font-family` stack of:
 - `<body>` → `node-name` family
 - `<code>`, `<pre>`, or any mono-styled element → `sublabel` family
 
-If the site has only one family, keep the schematic defaults for the missing roles (Instrument Serif for title, Geist Mono for mono). Don't force-pick a mono font that isn't on the site.
+If the site has only one family, keep the selected base preset's missing roles. Include Arabic-capable
+fallbacks when the project is bilingual. Do not invent a mono family that is absent from the source.
 
 ---
 
@@ -105,9 +106,10 @@ If any check fails, propose an adjusted value and explain why.
 
 ---
 
-## Step 4 — preview the diff
+## Step 4 — preview the mapping
 
-Show the user what will change in `style-guide.md`. Only the tokens table — everything else stays the same.
+Show the user the proposed project custom theme, including light/dark values, sans/serif/mono stacks,
+font source, and which values were derived.
 
 ```diff
 -| `paper`  | `#f5f4ed` | `#1c1a17` |
@@ -124,11 +126,13 @@ Also regenerate the dark variant via the inversion rule (`rgba(11,13,11, X)` →
 
 ## Step 5 — apply
 
-Write the new tokens to `style-guide.md`. Suggest running the `/regenerate-examples` flow (if it exists) or rebuilding one example to verify the new skin reads cleanly.
+Write the proposal to a temporary YAML mapping, then import it with
+`illustration_theme.py create --from-file <path>`. This stores and selects the custom theme in the
+project's `.github/illustration-theme.yml`; never rewrite the installed skill.
 
 After onboarding, the user should:
 
-1. Open `assets/index.html` (gallery) and confirm the new palette feels coherent across all 26 types.
+1. Resolve the project theme and rebuild representative Flowchart, Architecture, and ER examples.
 2. If any type looks off, they usually need to tune `muted` (often too dark or too light against the new `paper`).
 
 ---
@@ -259,7 +263,8 @@ Walk the tree; the leaf `value` fields are the colors, the path segments supply 
 
 ### Step 3 — map, validate, propose diff
 
-Same as the URL method: run contrast checks, show the full diff against current `style-guide.md`, and write only after the user approves.
+Same as the URL method: run contrast checks, show the full light/dark and typography mapping, and
+import it into `.github/illustration-theme.yml` only after the user approves.
 
 ### When folder extraction is ambiguous
 
@@ -269,6 +274,8 @@ Same as the URL method: run contrast checks, show the full diff against current 
 
 ---
 
-## Future: per-project skins
+## Project policy
 
-If the user wants multiple skins (one per project), duplicate `style-guide.md` as `style-guides/<project>.md` and add a header comment pointing the build to the active one. That's a v5.2 feature — for now, one skin per skill install.
+Projects may select different built-in themes or store their own custom themes without changing the
+installed skill. The tracked `.github/illustration-theme.yml` is authoritative for that repository.
+See [`theme-initialization.md`](theme-initialization.md) for schema, commands, and validation.

@@ -3,8 +3,8 @@ schema_version: "1.0"
 extension:
   id: illustrate
   name: "Illustrate"
-  version: "2.0.1"
-  description: "Generate and export twenty-seven technical, product, architecture, and process illustration types as HTML, SVG, PNG, or PDF using editorial and technical-color visual families."
+  version: "2.1.0"
+  description: "Generate and export twenty-seven technical, product, architecture, and process illustration types with tracked project-level light/dark color and font themes."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
   category: "documentation"
@@ -24,6 +24,9 @@ provides:
     - name: speckit.illustrate.export
       file: commands/speckit.illustrate.export.md
       description: "Export an Illustrate HTML source to standalone SVG and/or transparent PNG"
+    - name: speckit.illustrate.theme
+      file: commands/speckit.illustrate.theme.md
+      description: "Initialize, select, validate, or create a tracked project color and font theme"
 
 tags:
   - "diagram"
@@ -45,3 +48,5 @@ tags:
   - "svg"
   - "visualization"
   - "documentation"
+  - "project-theme"
+  - "custom-fonts"

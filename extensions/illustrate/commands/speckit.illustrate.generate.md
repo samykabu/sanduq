@@ -15,9 +15,12 @@ $ARGUMENTS
 1. Read `.specify/extensions/illustrate/skill/SKILL.md` completely before generating anything.
 2. Resolve every relative `references/`, `assets/`, and `scripts/` path against
    `.specify/extensions/illustrate/skill/`.
-3. Follow the skill's first-run style-guide gate, type-selection guide, complexity budget, relevant
+3. Resolve `.github/illustration-theme.yml` with the packaged `scripts/illustration_theme.py`.
+   Initialize Cobalt Light when the file is missing and the run is non-interactive; otherwise offer
+   Cobalt, Emerald, Classic, or a custom light/dark theme and font set.
+4. Follow the skill's project-theme gate, type-selection guide, complexity budget, relevant
    type reference, selected visual variant, and pre-output taste gate.
-4. Never silently substitute another diagram system if the package is missing or unreadable. Report
+5. Never silently substitute another diagram system if the package is missing or unreadable. Report
    the installation problem and stop.
 
 All twenty-seven types are supported: architecture, IT current-state, flowchart, sequence, state

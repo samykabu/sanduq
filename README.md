@@ -1,5 +1,9 @@
 # sanduq
 
+<p align="center">
+  <img src="docs/assets/sanduq-logo.png" alt="Sanduq logo: modular workflows entering an open toolbox" width="420">
+</p>
+
 [![Spec Kit extensions](https://img.shields.io/badge/Spec_Kit-5_extensions-17212b)](#spec-kit-extensions)
 [![Portable agent skills](https://img.shields.io/badge/Agent_skills-6-eb6c36)](#portable-skills)
 [![MkDocs Material](https://img.shields.io/badge/MkDocs-Material-526cfe)](https://squidfunk.github.io/mkdocs-material/)
@@ -112,6 +116,18 @@ payment service, PostgreSQL, and an external payment provider. Keep trust bounda
 
 Real-life scenario: an architecture decision record is difficult to scan. Ask `illustrate` for a
 seven-node architecture diagram, review the editable SVG, then embed it in the ADR and User Manual.
+
+Illustrate initializes a project-level theme at `.github/illustration-theme.yml`. Cobalt Porcelain
+Light is the default; Emerald Mist and the former Sanduq Classic palette remain selectable. Each
+preset provides light/dark colors and sans, serif, and mono font stacks with Arabic fallbacks.
+
+```text
+$illustrate initialize the illustration theme and show the available presets
+$illustrate switch this project to Emerald Mist Dark using local fonts
+$illustrate create a custom light and dark theme from docs/design-system.md
+```
+
+Commit the YAML so diagrams generated locally and in CI use the same palette and typography.
 
 ### `user-manual`
 
@@ -228,7 +244,7 @@ catalog.
 | [`qa`](extensions/qa/) | 1.0.0 | `/speckit-qa-init`, `/speckit-qa-analyze`, `/speckit-qa-document` | Pre-implementation QA analysis and maintained test documentation. |
 | [`user-manual`](extensions/user-manual/) | 1.0.0 | `/speckit-user-manual-init`, `analyze`, `update`, `release` | Incremental application documentation inside the feature lifecycle. |
 | [`pr`](extensions/pr/) | 4.0.0 | `/speckit-pr-generate`, `/speckit-pr-review-feedback` | Documentation-gated PR creation/update and review processing. |
-| [`illustrate`](extensions/illustrate/) | 2.0.0 | `/speckit-illustrate-generate`, `/speckit-illustrate-export` | Managed diagrams and exports for specs, QA, manuals, and PRs. |
+| [`illustrate`](extensions/illustrate/) | 2.1.0 | `/speckit-illustrate-generate`, `/speckit-illustrate-export`, `/speckit-illustrate-theme` | Managed diagrams, project themes, fonts, and exports for specs, QA, manuals, and PRs. |
 
 Codex users can replace the leading slash with `$`, such as `$speckit-qa-analyze`.
 

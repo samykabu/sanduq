@@ -1,7 +1,7 @@
 {
   "name": "@sanduq/illustrate",
-  "version": "3.0.2",
-  "description": "Unified Illustrate skill with editorial and technical-color diagram families",
+  "version": "3.1.0",
+  "description": "Unified Illustrate skill with project color/font themes and editorial or technical-color diagram families",
   "private": true,
   "type": "commonjs",
   "scripts": {

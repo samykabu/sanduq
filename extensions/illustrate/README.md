@@ -10,6 +10,7 @@ process-flow-diagram skills.
 | --- | --- | --- |
 | `speckit.illustrate.generate` | `/speckit-illustrate-generate` | `$speckit-illustrate-generate` |
 | `speckit.illustrate.export` | `/speckit-illustrate-export` | `$speckit-illustrate-export` |
+| `speckit.illustrate.theme` | `/speckit-illustrate-theme` | `$speckit-illustrate-theme` |
 
 ## Supported diagram types
 
@@ -48,6 +49,23 @@ initialization, annotation primitives, maintenance scripts, and source templates
 process-flow requests may instead select the preserved technical-color light/dark templates with
 built-in Copy/PNG/PDF controls and their complete example sets.
 
+## Project themes
+
+Illustrate stores the selected colors, light/dark mode, font-loading policy, and project custom
+themes in `.github/illustration-theme.yml`. Cobalt Porcelain Light is the default. Emerald Mist and
+Sanduq Classic are built in, and every preset includes a dark mode and English/Arabic font fallbacks.
+
+```text
+/speckit-illustrate-theme initialize
+/speckit-illustrate-theme set emerald light
+/speckit-illustrate-theme create product-brand
+/speckit-illustrate-theme validate
+```
+
+Custom themes define both light and dark semantic palettes plus sans, serif, and mono stacks. Font
+loading can be `remote`, `local`, or `system`. Commit the YAML so local runs and CI generate the same
+visual identity.
+
 ## Install and update
 
 ```bash
@@ -66,6 +84,7 @@ projects can choose automatic or manual handling in `.specify/extension-dependen
 ```text
 /speckit-illustrate-generate create a sequence diagram for the checkout flow
 /speckit-illustrate-export docs/checkout-sequence.html --svg-only
+/speckit-illustrate-theme set cobalt dark
 ```
 
 The command loads its version-matched skill package from

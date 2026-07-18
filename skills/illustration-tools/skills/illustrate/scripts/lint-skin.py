@@ -41,6 +41,14 @@ ALLOWED_FONTS = {
     "instrument serif",
     "geist",
     "geist mono",
+    "ibm plex sans",
+    "ibm plex serif",
+    "ibm plex mono",
+    "source sans 3",
+    "source serif 4",
+    "source code pro",
+    "noto sans arabic",
+    "noto naskh arabic",
     "system-ui",
     "sans-serif",
     "serif",
@@ -80,6 +88,15 @@ def allowed_colors():
     colors.update(table_hexes(markdown, "### Series palette"))
     colors.update(table_hexes(markdown, "### Terminal skin"))
     colors.update({"#fff", "#ffffff"})
+
+    # Project themes are allowed output skins even when the semantic table documents
+    # only the current default preset.
+    theme_registry = SKILL_ROOT / "assets/illustration-themes.yml"
+    if theme_registry.is_file():
+        colors.update(
+            normalize_hex(match.group())
+            for match in HEX_RE.finditer(theme_registry.read_text(encoding="utf-8"))
+        )
 
     rgb_triplets = set()
     for color in colors:

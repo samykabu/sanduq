@@ -1,10 +1,13 @@
 # Style Guide
 
-**The single source of truth for colors, typography, and tokens.** Every diagram draws from this — not from hex values inlined in other reference files. If you want to change the visual skin of Illustrate, change this file.
+**The semantic contract for colors, typography, and tokens.** Every diagram uses these roles rather
+than treating literals in templates as policy. Built-in values live in
+[`../assets/illustration-themes.yml`](../assets/illustration-themes.yml), while the active project
+selection and project custom themes live in `.github/illustration-theme.yml`.
 
-Default skin is a cool editorial palette — white-smoke paper, jet-black ink, atomic-tangerine accent, blue-slate muted. It's designed to look good out of the box; swap these values (or run [`onboarding.md`](onboarding.md)) and every new diagram inherits the new skin without touching any type-specific logic.
-
-To generate your own from a website URL, see [`onboarding.md`](onboarding.md).
+The default skin is Cobalt Porcelain. It is designed for high-clarity technical documentation and
+uses IBM Plex with Arabic-capable fallbacks. Emerald Mist and Sanduq Classic are also built in. To
+initialize, select, or create a theme, see [`theme-initialization.md`](theme-initialization.md).
 
 ---
 
@@ -16,24 +19,26 @@ Every token is referred to by **semantic role**, not by its hex value. Type refe
 
 | Role | Purpose | Default (light) | Default (dark) |
 |---|---|---|---|
-| `paper` | Page background, default node fill | `#f5f5f5` (white-smoke) | `#2d3142` (jet-black) |
-| `paper-2` | Diagram container bg, secondary fill | `#ececec` | `#393e53` |
-| `ink` | Primary text, primary stroke | `#2d3142` (jet-black) | `#f5f5f5` (white-smoke) |
-| `muted` | Secondary text, default arrow stroke | `#4f5d75` (blue-slate) | `#bfc0c0` (silver) |
-| `soft` | Sublabels, boundary labels | `#7a8399` | `#8e98ac` |
-| `rule` | Hairline borders | `rgba(45,49,66,0.12)` | `rgba(245,245,245,0.12)` |
-| `rule-solid` | Stronger borders, baselines | `#bfc0c0` (silver) | `rgba(191,192,192,0.25)` |
-| `accent` | Focal / 1–2 max per diagram | `#eb6c36` (atomic-tangerine) | `#f08a59` |
-| `accent-tint` | Fill for accent-bordered boxes | `rgba(235,108,54,0.08)` | `rgba(240,138,89,0.10)` |
-| `link` | HTTP/API calls, external arrows | `#2e5aa8` | `#6a95d8` |
+| `paper` | Page background, default node fill | `#f6f8fc` | `#101827` |
+| `paper-2` | Diagram container bg, secondary fill | `#ffffff` | `#17233a` |
+| `ink` | Primary text, primary stroke | `#15233c` | `#f5f7fb` |
+| `muted` | Secondary text, default arrow stroke | `#4f6078` | `#b6c2d4` |
+| `soft` | Sublabels, boundary labels | `#6b7a90` | `#8796ac` |
+| `rule` | Hairline borders | `rgba(21,35,60,0.12)` | `rgba(245,247,251,0.12)` |
+| `rule-solid` | Stronger borders, baselines | `#c7d2e2` | `#40506a` |
+| `accent` | Focal / 1–2 max per diagram | `#2563eb` | `#6ea0ff` |
+| `accent-tint` | Fill for accent-bordered boxes | `rgba(37,99,235,0.09)` | `rgba(110,160,255,0.14)` |
+| `link` | HTTP/API calls, external arrows | `#1d4ed8` | `#8ab4ff` |
 
-> **Brand palette source:** this skin maps to a five-color brand palette — `jet-black #2d3142`, `silver #bfc0c0`, `white-smoke #f5f5f5`, `atomic-tangerine #eb6c36`, `blue-slate #4f5d75`. The `soft`, `rule`, and `link` tokens are derived (lighter slate, ink-at-opacity, and a saturated variant in the blue-slate hue family) to cover roles the brand palette doesn't name directly.
+> **Preset source:** these values are the `cobalt` preset. Do not copy them into a consumer project
+> unless defining a custom derivative; selecting `cobalt` is enough.
 
 > **Note:** The pre-baked example HTML files in `assets/` were built under an earlier skin. Regenerating them against the current `style-guide.md` is a v5.1 task. New diagrams the skill produces will use the tokens above.
 
 ### Inversion rule (light → dark)
 
-Any `rgba(28,25,23, X)` in light becomes `rgba(250,247,242, X)` in dark. Same opacities, RGB flipped. The accent gets a slight hue-shift brighter to read on dark paper.
+Opacity-based light tokens invert from the active light `ink`/`accent` RGB values to the active dark
+`ink`/`accent` RGB values. Keep the same semantic opacity unless contrast requires an adjustment.
 
 ### Series palette (multi-series chart types only)
 
@@ -73,20 +78,22 @@ A self-contained palette for the terminal-window primitive (see [primitive-termi
 
 | Role | Family | Size | Weight | Usage |
 |---|---|---|---|---|
-| `title` | Instrument Serif | 1.75rem | 400 | Page H1 |
-| `node-name` | Geist (sans) | 12px | 600 | Human-readable labels |
-| `sublabel` | Geist Mono | 9px | 400 | Port, protocol, URL, field type |
-| `eyebrow` | Geist Mono | 7–8px | 500, tracked 0.18em, uppercase | Type tags, axis labels |
-| `arrow-label` | Geist Mono | 8px | 400, tracked 0.06em | Arrow annotations |
-| `callout` | Instrument Serif *italic* | 14px | 400 | Editorial asides only |
+| `title` | Resolved `serif` | 1.75rem | 400 | Page H1 |
+| `node-name` | Resolved `sans` | 12px | 600 | Human-readable labels |
+| `sublabel` | Resolved `mono` | 9px | 400 | Port, protocol, URL, field type |
+| `eyebrow` | Resolved `mono` | 7–8px | 500, tracked 0.18em, uppercase | Type tags, axis labels |
+| `arrow-label` | Resolved `mono` | 8px | 400, tracked 0.06em | Arrow annotations |
+| `callout` | Resolved `serif` *italic* | 14px | 400 | Editorial asides only |
 
 ### Font stack
 
 ```html
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,400;1,400&family=Noto+Naskh+Arabic:wght@400;500;600&family=Noto+Sans+Arabic:wght@400;500;600&display=swap" rel="stylesheet">
 ```
 
-**Load-bearing rule:** Mono is for *technical* content (ports, commands, URLs, field types). Names go in Geist sans. Page title is Instrument Serif. Italic Instrument Serif is reserved for annotation callouts (see [primitive-annotation.md](primitive-annotation.md)). **Never JetBrains Mono** as a blanket "dev" font.
+**Load-bearing rule:** Mono is for *technical* content (ports, commands, URLs, field types). Names use
+the resolved sans stack. Page titles and italic callouts use the resolved serif stack. Built-in
+stacks include Arabic fallbacks. Respect `font_loading`: import `remote_css_url` only for `remote`.
 
 ---
 
@@ -124,16 +131,16 @@ Semantic role combinations — reference these by name in type specs.
 
 Three options:
 
-1. **Run onboarding** — see [`onboarding.md`](onboarding.md). Drop a URL; the skill extracts the palette + fonts and rewrites this file.
-2. **Edit by hand** — change the hex values in the tables above. Run the pre-output taste gate afterward to verify the accent still reads as "focal" against the new paper color.
-3. **Brand handoff** — paste your existing design-token JSON into a new section here and map its tokens to the semantic roles above.
+1. **Select a preset** — initialize or set Cobalt, Emerald, or Classic in the project YAML.
+2. **Create a project theme** — use `illustration_theme.py create` for complete light/dark colors and fonts.
+3. **Run onboarding** — extract tokens from a URL, installed skill, local folder, or design document, then import the approved theme into the project YAML.
 
 ### Constraints (don't break these)
 
 - **Contrast**: `ink` must hit WCAG AA on `paper`. `muted` must hit AA on `paper` for 11px+ text.
 - **One accent**: pick one color for `accent`. Two accents erases the focal signal.
 - **No rainbow palette**: if your brand ships 8 colors, pick 3 (paper, ink, accent). The rest become `muted` variants.
-- **Serif + sans + mono**: three families, not more. If brand typography is all sans, keep Instrument Serif for `title` and `callout` anyway — the contrast is load-bearing.
+- **Serif + sans + mono**: define no more than three role stacks. Each stack may include Arabic and system fallbacks.
 - **Paper is warm-neutral, not pure white**: pure white turns the design sterile. Pick a cream, bone, or light grey with a hint of warmth.
 - **Dot pattern is optional, not default**: the 22×22 dot pattern is an opt-in "dotted paper" variant (good for long-form editorial hero diagrams). The default background is a clean `paper` fill, no pattern. When the pattern is enabled, it should sit at ~10% opacity of `ink` on `paper` — visible but quiet.
 - **Container is clean by default**: the diagram sits directly on the page paper, no secondary container background or border. A framed variant (`paper-2` bg + `rule` border + 8px radius + padding) is available as an opt-in for card-heavy layouts, but don't reach for it by default — the extra chrome fights the figure.
