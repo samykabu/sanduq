@@ -23,7 +23,7 @@ The command creates or refreshes these reviewer-facing artifacts under `docs/<fe
 
 - `CHANGELOG.md` — a technical record of what shipped.
 - `<Feature>-Explained.md` — a plain-English explanation of the feature and its supported scenarios.
-- Diagram Design HTML and PNG assets when architecture, workflow, interaction, state, data,
+- Illustrate HTML and PNG assets when architecture, workflow, interaction, state, data,
   ownership, hierarchy, timing, or another supported relationship benefits from a visual.
 
 It then detects a PR for the current branch. If one exists, it updates only the marker-delimited
@@ -70,7 +70,7 @@ reviewers or bots have commented on an open PR.
 - `git` and an authenticated `gh` CLI are required for review feedback and PR creation/update.
 - PR generation still writes the documentation if `git`, `gh`, authentication, or a remote is
   unavailable, and reports why it skipped the PR step.
-- Diagram generation requires `diagram-design >=1.0.0,<2.0.0`. The command checks Spec Kit's
+- Diagram generation requires `illustrate >=1.0.0,<2.0.0`. The command checks Spec Kit's
   registry and follows the project dependency policy before installing or updating it.
 
 ## Migrating from `pr-review`

@@ -3,8 +3,8 @@ schema_version: "1.0"
 extension:
   id: how-to-test
   name: "How-To-Test"
-  version: "1.6.1"
-  description: "Generate QA-facing How-To-Test manuals from completed Spec Kit features, with all supported Diagram Design visuals, screenshots, API samples, and a readiness audit that creates reusable project memory plus missing documentation tasks before implementation."
+  version: "2.0.0"
+  description: "Generate QA-facing How-To-Test manuals from completed Spec Kit features, with all supported Illustrate visuals, screenshots, API samples, and a readiness audit that creates reusable project memory plus missing documentation tasks before implementation."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
   category: "process"
@@ -13,7 +13,7 @@ extension:
 requires:
   speckit_version: ">=0.2.0"
   extensions:
-    - id: diagram-design
+    - id: illustrate
       version: ">=1.0.0,<2.0.0"
       required: true
   tools:

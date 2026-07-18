@@ -4,6 +4,33 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## illustration-tools — 2.0.2 — 2026-07-18
+
+### Added
+
+- Added two modern, responsive Illustrate gallery alternatives: an Atlas sidebar and a Canvas Deck
+  filmstrip workspace.
+- Kept every editorial and technical-color family selectable in both layouts, with restrained
+  preview transitions, keyboard navigation, and reduced-motion support.
+
+## illustration-tools — 2.0.1 — 2026-07-18
+
+### Fixed
+
+- Added first-class Architecture technical-color and Process Flow technical-color selectors to the
+  Illustrate gallery, covering all imported light and dark examples.
+- Made the former `architecture-diagram` and `process-flow-diagram` capabilities explicit in the
+  unified skill description and generation guidance.
+
+## illustration-tools — 2.0.0 — 2026-07-18
+
+### Changed
+
+- Consolidated `diagram-design`, `architecture-diagram`, and `process-flow-diagram` into one
+  `illustrate` skill under the `illustration-tools` plugin.
+- Renamed the Spec Kit extension and commands to `illustrate` while preserving editorial,
+  hand-drawn, technical-color, and export capabilities.
+
 ## sanduq — 0.2.0 — 2026-07-09
 
 ### Added

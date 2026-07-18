@@ -36,28 +36,28 @@ resolve feature -> scan workspace -> update project memory -> find impacted proj
 
 ## Instructions
 
-### 0. Ensure the Diagram Design dependency
+### 0. Ensure the Illustrate dependency
 
 Before resolving the feature, read `.specify/extensions/how-to-test/dependencies.yml` and enforce its
-`diagram-design` requirement.
+`illustrate` requirement.
 
 1. Read `.specify/extensions/.registry` as the installed-version source of truth.
 2. Read the optional project policy at `.specify/extension-dependencies.yml`. Supported
    `update_policy` values are:
-   - `prompt` (default): ask before `specify extension add diagram-design` or
-     `specify extension update diagram-design`.
+   - `prompt` (default): ask before `specify extension add illustrate` or
+     `specify extension update illustrate`.
    - `auto`: the user has pre-authorized dependency installation and updates.
    - `manual`: never mutate dependencies; report the exact command the user must run.
-3. If `diagram-design` is absent, disabled, or outside the declared SemVer range, follow the policy
+3. If `illustrate` is absent, disabled, or outside the declared SemVer range, follow the policy
    and install/update it. Never make this extension-state change under `prompt` without explicit
    approval.
 4. For an installed compatible version, use `.specify/extensions/.dependency-checks.json` to avoid
    catalog checks more often than `check_interval_hours`. When due, run
-   `specify extension info diagram-design` (read-only), compare the catalog version with the
+   `specify extension info illustrate` (read-only), compare the catalog version with the
    registry version, and follow the update policy if a newer compatible release exists.
 5. After any add/update, re-read the registry and verify the version before continuing. Record the
    checked time and installed version in `.specify/extensions/.dependency-checks.json`.
-6. Load `.specify/extensions/diagram-design/skill/SKILL.md` and resolve its references/assets
+6. Load `.specify/extensions/illustrate/skill/SKILL.md` and resolve its references/assets
    relative to that skill directory. This direct resource path works in the current run even if the
    agent only discovers newly registered skills in a new conversation.
 7. If installation/update is declined or unavailable, continue the non-diagram work, explicitly skip
@@ -189,8 +189,8 @@ Manual content, in order:
 1. Cover and TOC, marked "Development-only draft".
 2. Prerequisites and dev tooling: start commands, dev URLs, dashboards, environment variable names
    only, and redacted test-account guidance.
-3. Diagram Design visuals where applicable:
-   - Use the installed `diagram-design` selection guide to choose among all twenty-seven types:
+3. Illustrate visuals where applicable:
+   - Use the installed `illustrate` selection guide to choose among all twenty-seven types:
      architecture, IT current-state, flowchart, sequence, state machine, ER/data model, timeline,
      swimlane, quadrant, radar, loop, nested, tree, org chart, layers, venn, pyramid, bar, line,
      Gantt, scatter, high-level, process, medallion, data flow, DP integration, and DP security
@@ -221,8 +221,8 @@ Manual content, in order:
 Do not hand-take screenshots or diagram exports.
 
 - Diagrams: load the relevant
-  `.specify/extensions/diagram-design/skill/references/type-*.md`, generate source HTML from the
-  selected Diagram Design template/variant, then export PNG with the installed
+  `.specify/extensions/illustrate/skill/references/type-*.md`, generate source HTML from the
+  selected Illustrate template/variant, then export PNG with the installed
   `scripts/export_diagram.py` utility and `references/export.md` contract. Keep HTML sources and
   PNGs together under
   `<assets-dir>/diagrams/`, embed PNGs, and link the HTML sources.
