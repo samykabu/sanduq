@@ -42,10 +42,9 @@ Iterate in chat — "add a Redis cache", "add a rejection branch from step 3", "
 
 ## Documentation automation
 
-The `devtools` PR and How-To-Test workflows can invoke these skills when a feature changes
-architecture or process flow. In that mode the skills generate source HTML and an exported PNG, place
-the assets under the feature documentation folder, then embed the PNG and link the HTML source from
-the generated documentation.
+The Spec Kit PR and How-To-Test workflows now use the broader `diagram-design` extension. This
+plugin remains available as a focused standalone Claude workflow for architecture and process-flow
+illustrations outside Spec Kit.
 
 ## How it works
 

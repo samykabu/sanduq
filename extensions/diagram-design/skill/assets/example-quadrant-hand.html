@@ -1,0 +1,132 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Content ideas · Impact × Effort · Hand-drawn</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f5f5f5;
+      --color-ink:     #2d3142;
+      --color-muted:   #4f5d75;
+      --color-accent:  #eb6c36;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+
+    .frame { max-width: 1200px; width: 100%; }
+
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+
+    svg { width: 100%; min-width: 900px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Quadrant · Diagram Design · Hand</p>
+    <h1>Content ideas · Impact × Effort</h1>
+
+    <svg viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"></circle>
+          </pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#f5f5f5"></rect>
+        <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"></rect>
+
+        <!-- Quadrant backgrounds (very subtle, only coral on DO FIRST) -->
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M122 80.643 L163.778 81.406 L205.556 83.299 L247.333 80.935 L289.111 80.86 L330.889 81.396 L372.667 80.654 L414.444 83.006 L456.222 82.571 L498 81.326 L496.964 123.5 L499.34 165 L497.631 206.5 L498.345 248 L456.222 248.199 L414.444 246.862 L372.667 248.751 L330.889 246.761 L289.111 249.291 L247.333 248.682 L205.556 248.287 L163.778 247.517 L122 246.707 L123.215 206.5 L120.887 165 L122.484 123.5 Z" fill="rgba(235,108,54,0.03)" stroke="none"></path></g>
+
+        <!-- Axis cross -->
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M120 250 C278.9194394356757 249.24065535029396, 437.17472966887055 248.71040237149225, 880 250" stroke="rgba(45,49,66,0.45)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M500 80 C498.1083469964149 150.70782897731925, 498.03574769939286 220.07392886862212, 500 420" stroke="rgba(45,49,66,0.45)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+        <!-- Axis end labels -->
+        <text x="880" y="266" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end" letter-spacing="0.14em">HIGH EFFORT →</text>
+        <text x="120" y="266" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">← LOW EFFORT</text>
+        <text x="512" y="80" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">↑ HIGH IMPACT</text>
+        <text x="512" y="432" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">↓ LOW IMPACT</text>
+
+        <!-- Quadrant corner labels -->
+        <text x="140" y="104" fill="#eb6c36" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.18em" font-weight="600">DO FIRST</text>
+        <text x="860" y="104" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end" letter-spacing="0.18em">MAJOR PROJECTS</text>
+        <text x="140" y="412" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.18em">QUICK WINS</text>
+        <text x="860" y="412" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end" letter-spacing="0.18em">AVOID</text>
+
+        <!-- Items: TL (Do First) -->
+        <!-- coral focal -->
+        <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M223.661 140 L223.9 140.892 L223.455 141.721 L223.083 142.486 L222.428 143.362 L221.793 143.584 L220.929 143.822 L220 143.726 L219.033 143.866 L218.26 143.385 L217.334 143.047 L217.105 142.444 L216.549 141.75 L216.05 140.877 L215.713 140 L216.432 139.074 L216.243 138.337 L216.973 137.39 L217.416 137.083 L218.413 136.563 L219.062 135.774 L220 135.66 L220.905 135.841 L221.794 136.329 L222.419 136.666 L223.048 137.372 L223.423 138.192 L223.589 139.16 Z" fill="#eb6c36" stroke="none"></path></g>
+        <text x="232" y="144" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif">Schematic skill v4</text>
+
+        <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M321.661 200 L321.844 200.415 L321.689 200.769 L321.409 201.038 L321.42 201.738 L320.779 201.675 L320.503 202.273 L320 201.729 L319.57 202.005 L319.274 201.669 L318.538 201.305 L318.661 201.118 L318.109 200.869 L318.298 200.45 L317.662 200 L318.057 199.526 L318.384 199.263 L318.256 198.82 L318.77 198.176 L319.023 198.232 L319.632 197.926 L320 197.795 L320.472 198.312 L320.846 198.105 L321.45 198.548 L321.501 198.566 L321.648 199.159 L321.713 199.631 Z" fill="#2d3142" stroke="none"></path></g>
+        <text x="332" y="204" fill="#4f5d75" font-size="11" font-family="'Geist', sans-serif">Update changelog</text>
+
+        <!-- Items: TR (Major Projects) -->
+        <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M621.661 140 L621.739 140.384 L621.725 140.988 L621.3 141.274 L621.223 141.678 L620.937 141.568 L620.367 141.992 L620 141.733 L619.506 142.095 L619.117 141.755 L618.932 141.675 L618.655 141.038 L618.497 140.856 L617.913 140.468 L618.312 140 L617.733 139.532 L618.093 139.018 L618.522 138.567 L618.877 138.254 L619.069 138.1 L619.601 138.129 L620 137.931 L620.484 138.151 L620.766 138.08 L621.291 138.318 L621.518 138.949 L621.674 139.258 L621.786 139.502 Z" fill="#2d3142" stroke="none"></path></g>
+        <text x="632" y="144" fill="#4f5d75" font-size="11" font-family="'Geist', sans-serif">Design v4 refresh</text>
+
+        <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M761.661 180 L761.633 180.508 L761.761 180.904 L761.738 181.074 L761.462 181.617 L760.791 182.091 L760.387 181.711 L760 181.736 L759.598 182.184 L759.263 181.841 L758.89 181.497 L758.648 181.395 L758.254 180.843 L758.211 180.486 L758.261 180 L758.091 179.539 L758.433 179.077 L758.241 178.75 L758.548 178.331 L759.116 177.967 L759.57 178.331 L760 178.066 L760.496 177.99 L760.991 178.055 L761.132 178.636 L761.534 178.896 L761.701 179.054 L761.859 179.528 Z" fill="#2d3142" stroke="none"></path></g>
+        <text x="772" y="184" fill="#4f5d75" font-size="11" font-family="'Geist', sans-serif">New publication</text>
+
+        <!-- Items: BL (Quick Wins) -->
+        <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M261.661 320 L262.21 320.476 L261.797 320.819 L261.628 321.31 L261.264 321.557 L260.949 321.984 L260.407 322.112 L260 321.74 L259.534 322.273 L259.106 321.927 L258.848 321.319 L258.641 321.315 L258.011 320.83 L257.827 320.505 L258.211 320 L257.766 319.545 L258.141 319.136 L258.508 318.934 L258.655 318.408 L259.162 318.464 L259.538 317.851 L260 318.201 L260.508 317.83 L260.911 318.029 L261.41 318.407 L261.551 318.843 L261.727 319.153 L261.933 319.555 Z" fill="#2d3142" stroke="none"></path></g>
+        <text x="272" y="324" fill="#4f5d75" font-size="11" font-family="'Geist', sans-serif">Fix footer link</text>
+
+        <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M361.661 380 L362.104 380.444 L361.833 380.735 L361.518 381.109 L361.067 381.497 L360.803 381.877 L360.426 381.83 L360 381.743 L359.626 381.68 L359.252 382.013 L358.805 381.689 L358.634 381.235 L358.399 380.818 L358.125 380.523 L358.161 380 L358.124 379.552 L358.481 379.194 L358.227 378.681 L358.762 378.485 L359.208 378.331 L359.507 378.053 L360 378.336 L360.519 378.351 L360.831 378.004 L361.251 378.178 L361.568 378.79 L361.754 379.252 L362.006 379.581 Z" fill="#2d3142" stroke="none"></path></g>
+        <text x="372" y="384" fill="#4f5d75" font-size="11" font-family="'Geist', sans-serif">Update OG tags</text>
+
+        <!-- Items: BR (Avoid) -->
+        <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M641.662 380 L641.999 380.413 L641.869 380.954 L641.409 381.345 L641.306 381.436 L640.961 381.77 L640.446 382.231 L640 381.746 L639.562 381.769 L639.095 382.099 L638.763 381.511 L638.627 381.156 L638.156 380.805 L637.74 380.385 L638.11 380 L637.8 379.559 L638.19 379.253 L638.493 378.864 L638.869 378.562 L639.254 378.199 L639.632 378.256 L640 377.771 L640.375 378.19 L640.752 377.979 L641.092 378.496 L641.584 378.737 L641.781 379.048 L642.079 379.607 Z" fill="#2d3142" stroke="none"></path></g>
+        <text x="652" y="384" fill="#4f5d75" font-size="11" font-family="'Geist', sans-serif">Rewrite build pipeline</text>
+
+        <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M781.662 320 L781.893 320.381 L781.905 320.87 L781.299 321.145 L781.109 321.376 L780.815 321.663 L780.466 321.95 L780 321.75 L779.498 321.859 L779.241 321.554 L778.72 321.333 L778.62 321.076 L777.914 320.792 L778.038 320.403 L778.06 320 L778.158 319.565 L777.898 319.008 L778.212 318.611 L778.539 318.64 L778.997 318.066 L779.601 317.776 L780 317.906 L780.387 318.03 L780.976 317.954 L781.37 318.266 L781.601 318.684 L781.807 319.147 L782.153 319.478 Z" fill="#2d3142" stroke="none"></path></g>
+        <text x="792" y="324" fill="#4f5d75" font-size="11" font-family="'Geist', sans-serif">Port to Nuxt</text>
+
+        <!-- Legend -->
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M40 456 C231.63366467818616 451.80751082841306, 423.86310123726724 450.04690876904874, 960 456" stroke="rgba(45,49,66,0.10)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="40" y="472" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+
+        <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M55.662 488 L55.632 488.919 L55.779 489.873 L55.191 490.428 L54.398 491.366 L53.694 491.881 L52.95 492.02 L52 491.757 L51.081 491.987 L50.362 491.528 L49.388 491.089 L49.043 490.6 L48.257 489.634 L48.002 488.885 L47.959 488 L48.242 487.134 L48.145 486.257 L48.634 485.294 L49.506 484.683 L50.222 484.629 L51.094 484.231 L52 484.176 L52.856 484.44 L53.684 484.101 L54.299 484.791 L55.198 485.331 L55.662 486.174 L55.567 487.086 Z" fill="#eb6c36" stroke="none"></path></g>
+        <text x="68" y="492" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Start tomorrow</text>
+
+        <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M193.662 488 L194.259 488.442 L194.013 488.921 L193.518 489.417 L193.39 489.742 L192.984 489.972 L192.369 489.788 L192 489.76 L191.618 490.127 L191.073 489.812 L190.593 489.347 L190.599 489.273 L190.447 488.754 L190.25 488.458 L189.909 488 L189.867 487.585 L190.286 487.184 L190.464 486.724 L190.86 486.324 L191.136 486.298 L191.508 486.383 L192 486.311 L192.423 486.23 L192.737 486.509 L193.33 486.673 L193.651 486.962 L193.887 487.141 L193.69 487.557 Z" fill="#2d3142" stroke="none"></path></g>
+        <text x="208" y="492" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Candidate project</text>
+
+        <text x="336" y="492" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif" font-style="italic">Position is the signal. Colour is reserved for the single action item.</text>
+      </svg>
+  </div>
+
+
+</body></html>

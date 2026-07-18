@@ -2,6 +2,19 @@
 
 All notable changes to the GitHub Project Lifecycle Sync extension.
 
+## [1.1.0] - 2026-07-18
+
+### Added
+
+- Ask during project initialization whether lifecycle sync hooks should be required/automatic or
+  optional/manual.
+- Support non-interactive selection through `-HooksMode` (PowerShell) and `--hooks-mode` (Bash).
+
+### Changed
+
+- Persist the selected hook policy in `config.json` and apply it to every `project` hook in
+  `.specify/extensions.yml`.
+
 ## [1.0.1] - 2026-07-09
 
 ### Changed

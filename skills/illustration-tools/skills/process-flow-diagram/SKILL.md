@@ -249,7 +249,7 @@ The file should render correctly when opened directly in any modern browser.
 
 ## Documentation Integration
 
-When this skill is invoked by documentation automation such as `pr-generate-description`,
+When this skill is invoked by legacy standalone documentation automation,
 `speckit.pr.generate`, `how-to-test`, or `speckit.how-to-test.document`, generate both a source HTML
 diagram and an exported PNG image:
 

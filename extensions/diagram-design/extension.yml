@@ -1,0 +1,44 @@
+schema_version: "1.0"
+
+extension:
+  id: diagram-design
+  name: "Diagram Design"
+  version: "1.1.0"
+  description: "Generate and export twenty-seven types of technical and product diagrams as self-contained HTML, SVG, or PNG with versioned references, templates, themes, icons, and visual variants."
+  author: "Samy K. Abushanab"
+  repository: "https://github.com/samykabu/sanduq"
+  category: "documentation"
+  license: MIT
+
+requires:
+  speckit_version: ">=0.2.0"
+  tools:
+    - name: git
+      required: false
+
+provides:
+  commands:
+    - name: speckit.diagram-design.generate
+      file: commands/speckit.diagram-design.generate.md
+      description: "Select and generate the right diagram from twenty-seven technical, product, data, process, and quantitative visual types"
+    - name: speckit.diagram-design.export
+      file: commands/speckit.diagram-design.export.md
+      description: "Export a Diagram Design HTML source to standalone SVG and/or transparent PNG"
+
+tags:
+  - "diagram"
+  - "architecture"
+  - "flowchart"
+  - "sequence"
+  - "state-machine"
+  - "er"
+  - "timeline"
+  - "swimlane"
+  - "radar"
+  - "gantt"
+  - "data-platform"
+  - "export"
+  - "png"
+  - "svg"
+  - "visualization"
+  - "documentation"

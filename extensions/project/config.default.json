@@ -1,7 +1,8 @@
 {
-  "$comment": "DEFAULT config for the 'project' Spec Kit extension. Ships with NO board-specific ids. Run `speckit project init` (scripts/*/project-init.*) in the consuming repo to discover the board, map phases to your Status columns, and write the real .specify/extensions/project/config.json. 'phaseToStatus' holds the DEFAULT column names init tries to match on your board (exact -> fuzzy -> prompt -> optional auto-create).",
+  "$comment": "DEFAULT config for the 'project' Spec Kit extension. Ships with NO board-specific ids. Run the speckit-project-init skill (scripts/*/project-init.*) in the consuming repo to discover the board, choose optional or required lifecycle hooks, map phases to your Status columns, and write the real .specify/extensions/project/config.json. 'phaseToStatus' holds the DEFAULT column names init tries to match on your board (exact -> fuzzy -> prompt -> optional auto-create).",
   "owner": "",
   "ownerType": "user",
+  "hookMode": "optional",
   "projectNumber": 0,
   "projectId": "",
   "projectUrl": "",

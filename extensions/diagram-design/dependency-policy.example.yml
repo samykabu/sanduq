@@ -1,0 +1,5 @@
+schema_version: "1.0"
+
+# Copy to .specify/extension-dependencies.yml in a target project.
+update_policy: prompt # prompt | auto | manual
+check_interval_hours: 24

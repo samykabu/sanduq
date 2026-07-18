@@ -8,10 +8,10 @@ compatibility with the Resal Marketplace layout.
 
 | Extension | Version | Command | Description |
 | --- | ---: | --- | --- |
-| [`project`](project/) | 1.0.1 | `/speckit-project-sync` | Mirrors Spec Kit features onto GitHub Projects with parent issues, sub-issues, and lifecycle status sync. |
-| [`pr`](pr/) | 1.1.2 | `/speckit-pr-generate` | Generates feature changelog/details docs and creates or updates the pull request body. |
-| [`how-to-test`](how-to-test/) | 1.4.1 | `/speckit-how-to-test-document` | Generates QA How-To-Test manuals, with `/speckit-how-to-test-analyze` for readiness checks after task generation. |
-| [`pr-review`](pr-review/) | 1.0.4 | `/speckit-pr-review-process` | Processes GitHub pull request review comments through a classify, fix/reply, push, and resolve workflow. |
+| [`project`](project/) | 1.1.0 | `/speckit-project-init`<br>`/speckit-project-sync` | Configures and mirrors Spec Kit features onto GitHub Projects with parent issues, sub-issues, and lifecycle status sync. |
+| [`pr`](pr/) | 2.1.0 | `/speckit-pr-generate`<br>`/speckit-pr-review-feedback` | Generates or updates pull requests and processes review feedback through an approval-gated workflow. |
+| [`how-to-test`](how-to-test/) | 1.6.0 | `/speckit-how-to-test-document` | Generates QA How-To-Test manuals, with `/speckit-how-to-test-analyze` for readiness checks after task generation. |
+| [`diagram-design`](diagram-design/) | 1.1.0 | `/speckit-diagram-design-generate`<br>`/speckit-diagram-design-export` | Generates and exports twenty-seven technical, product, process, data, and quantitative diagram types. |
 
 ## Install
 
@@ -28,7 +28,14 @@ Install by id:
 specify extension add project
 specify extension add pr
 specify extension add how-to-test
-specify extension add pr-review
+specify extension add diagram-design
+```
+
+For an existing standalone `pr-review` installation, migrate to the consolidated extension:
+
+```bash
+specify extension remove pr-review
+specify extension add pr --force
 ```
 
 Local development install:
@@ -56,14 +63,23 @@ Claude Code: /speckit-project-init
 Codex:       $speckit-project-init
 ```
 
+The initializer asks whether Project sync hooks should be required/automatic or
+optional/manual. Non-interactive runs can pass `--hooks-mode required|optional`.
+
 The other commands are manual or optional lifecycle-hook prompts:
 
 ```text
 /speckit-pr-generate
+/speckit-pr-review-feedback owner/repo#123
 /speckit-how-to-test-analyze
 /speckit-how-to-test-document
-/speckit-pr-review-process owner/repo#123
+/speckit-diagram-design-generate
+/speckit-diagram-design-export path/to/diagram.html --svg-only
 ```
+
+`pr` and `how-to-test` check the Spec Kit registry for their compatible `diagram-design` version
+when invoked. The default dependency policy asks before install/update; projects may opt into
+automatic or manual behavior through `.specify/extension-dependencies.yml`.
 
 ## Publishing
 

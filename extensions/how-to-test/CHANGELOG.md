@@ -2,6 +2,26 @@
 
 All notable changes to the How-To-Test extension.
 
+## [1.6.0] - 2026-07-18
+
+### Changed
+
+- Expanded readiness and documentation coverage to all twenty-seven Diagram Design v2 types.
+- Routed diagram PNG generation through Diagram Design's bundled deterministic exporter.
+
+## [1.5.0] - 2026-07-18
+
+### Added
+
+- Versioned `diagram-design >=1.0.0,<2.0.0` dependency checks with prompt, auto, and manual update
+  policies backed by the Spec Kit extension registry.
+- Readiness and documentation support for all fourteen Diagram Design types.
+
+### Changed
+
+- Replaced the architecture/process-only illustration path with Diagram Design type selection,
+  version tracking, and cached catalog update checks.
+
 ## [1.4.1] - 2026-07-09
 
 ### Changed

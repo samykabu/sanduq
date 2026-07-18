@@ -3,8 +3,8 @@ schema_version: "1.0"
 extension:
   id: project
   name: "GitHub Project Lifecycle Sync"
-  version: "1.0.2"
-  description: "Mirror each Spec Kit feature onto a GitHub Project (v2): create a parent feature issue, advance its Status column through the Spec Kit lifecycle (open -> analysis -> engineer-review -> ready -> in-progress -> in-review -> done), create one native sub-issue per task, and close sub-issues as their tasks are checked off. Board-agnostic (run `project init` once per repo). Idempotent and no-regress."
+  version: "1.1.0"
+  description: "Mirror each Spec Kit feature onto a GitHub Project (v2): create a parent feature issue, advance its Status column through the Spec Kit lifecycle (open -> analysis -> engineer-review -> ready -> in-progress -> in-review -> done), create one native sub-issue per task, and close sub-issues as their tasks are checked off. Board-agnostic initialization lets each repo choose required/automatic or optional/manual sync hooks. Idempotent and no-regress."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
   license: MIT
@@ -21,14 +21,15 @@ provides:
   commands:
     - name: speckit.project.init
       file: commands/speckit.project.init.md
-      description: "One-time setup: discover the GitHub Project, map lifecycle phases to your board's Status columns (creating missing ones on request), and write config.json."
+      description: "One-time setup: choose required or optional lifecycle hooks, discover the GitHub Project, map phases to the board's Status columns, and write the repo configuration."
     - name: speckit.project.sync
       file: commands/speckit.project.sync.md
       description: "Advance the feature's parent issue on the configured GitHub Project to the phase's Status, create/close task sub-issues, keeping the board in step with the branch."
 
-# Lifecycle wiring. All hooks are OPTIONAL (they prompt) and pass the target phase in
-# their prompt text so the assistant runs `speckit.project.sync <phase>`. Self-contained:
-# the after_implement hook sets In review itself when an open PR exists for the branch.
+# Lifecycle wiring. Hooks install as optional, then `speckit.project.init` applies the project's
+# selected optional/manual or required/automatic policy in `.specify/extensions.yml`. Each prompt
+# passes the target phase so the assistant runs `speckit.project.sync <phase>`. Self-contained: the
+# after_implement hook sets In review itself when an open PR exists for the branch.
 hooks:
   after_specify:
     command: speckit.project.sync
