@@ -1,7 +1,7 @@
 {
   "name": "illustration-tools",
   "description": "Generate and export twenty-seven kinds of technical, product, architecture, and process illustrations through one unified skill",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "author": {
     "name": "Resal Engineering"
   },
@@ -21,6 +21,8 @@
     "user-manual",
     "light-theme",
     "dark-theme",
+    "project-theme",
+    "custom-fonts",
     "hand-drawn",
     "technical-color"
   ]

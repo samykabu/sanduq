@@ -2,6 +2,22 @@
 
 All notable changes to the Illustrate extension.
 
+## [2.1.0] - 2026-07-18
+
+### Added
+
+- Added `.github/illustration-theme.yml` as the tracked project-level theme policy.
+- Added Cobalt Porcelain as the default, Emerald Mist, and backward-compatible Sanduq Classic
+  presets, each with complete light/dark palettes and font families.
+- Added `speckit.illustrate.theme` plus a zero-dependency initializer/resolver for listing,
+  selecting, validating, and creating custom themes.
+- Added remote, local, and system font-loading policies with English/Arabic fallback stacks.
+
+### Changed
+
+- Diagram generation now resolves project colors and typography before selecting or adapting a
+  template. Non-interactive first runs initialize Cobalt Light.
+
 ## [2.0.0] - 2026-07-18
 
 ### Changed

@@ -1,6 +1,6 @@
 ---
 name: illustrate
-description: Create and export technical, product, architecture, and process illustrations in 27 formats—including architecture, IT current-state, flowchart, sequence, state machine, ER, timeline, swimlane, quadrant, radar, loop, nested, tree, org chart, layers, venn, pyramid, bar, line, Gantt, scatter, high-level, process, medallion, data flow, DP integration, and DP security matrix—as standalone HTML with inline SVG plus optional SVG/PNG/PDF exports. Use for diagram generation, architecture diagrams, process flows, workflow maps, visual variants, brand/theme onboarding, and diagram export. Incorporates the complete former architecture-diagram and process-flow-diagram skills as first-class technical-color families, alongside editorial light/dark/full/hand/terminal/consultant treatments and built-in Copy/PNG/PDF controls.
+description: Create and export technical, product, architecture, and process illustrations in 27 formats—including architecture, IT current-state, flowchart, sequence, state machine, ER, timeline, swimlane, quadrant, radar, loop, nested, tree, org chart, layers, venn, pyramid, bar, line, Gantt, scatter, high-level, process, medallion, data flow, DP integration, and DP security matrix—as standalone HTML with inline SVG plus optional SVG/PNG/PDF exports. Use for diagram generation, architecture diagrams, process flows, workflow maps, visual variants, project-level light/dark theme and font initialization, brand onboarding, and diagram export. Incorporates the complete former architecture-diagram and process-flow-diagram skills as first-class technical-color families, alongside editorial light/dark/full/hand/terminal/consultant treatments and built-in Copy/PNG/PDF controls.
 ---
 
 # Illustrate
@@ -11,27 +11,31 @@ Twenty-seven diagram types. One shared design system, complexity budget, and tas
 
 ---
 
-## 0. First-time setup — style guide gate
+## 0. Project theme gate
 
-**Before generating your first diagram in a new project, verify the style guide has been customized.**
+Before generating a diagram, resolve the project theme from `.github/illustration-theme.yml`:
 
-Open [`references/style-guide.md`](references/style-guide.md) and check the default tokens. If they're still the shipped defaults (paper `#faf7f2`, ink `#1c1917`, accent `#b5523a` rust), **pause and ask the user**:
+```bash
+python scripts/illustration_theme.py --project-root . resolve --format yaml
+```
 
-> *"This is your first Illustrate visual in this project. The style guide is still at the default (neutral stone + rust). Do you want to customize it to match your brand first? Options: (a) pull from your website URL, (b) extract from an installed skill, (c) extract from a local folder / design-system directory, (d) paste tokens manually, (e) proceed with the default for now."*
+If the file is missing, initialize it before drawing. In an interactive conversation, ask the user
+to choose **Cobalt Porcelain** (recommended and default), **Emerald Mist**, **Sanduq Classic**, or a
+custom theme, then choose light/dark mode and font loading. In non-interactive automation, create
+`cobalt/light` deterministically:
 
-Then branch:
+```bash
+python scripts/illustration_theme.py --project-root . init --non-interactive
+```
 
-- **(a)** → follow [`references/onboarding.md § URL`](references/onboarding.md) to fetch the site, extract palette + fonts, propose a diff, and write `style-guide.md`.
-- **(b)** → follow [`references/onboarding.md § Skill`](references/onboarding.md) — ask which skill, read its SKILL.md / CSS / token files, map to semantic roles, propose diff.
-- **(c)** → follow [`references/onboarding.md § Folder`](references/onboarding.md). For project design
-  documents and the standard automatic lookup order, also load
-  [`references/theme-initialization.md`](references/theme-initialization.md).
-- **(d)** → accept the user's tokens and write them into `style-guide.md` under a new "Custom tokens" section.
-- **(e)** → proceed; optionally remind the user they can run onboarding later.
+The initializer writes the tracked project policy to `.github/illustration-theme.yml`. Never modify
+the skill's bundled style guide to customize one consumer project. On every generation, apply the
+resolved `colors` and `typography` values to the selected template, including SVG text elements and
+arrow markers. Literal colors and fonts in examples are structural samples only; project tokens win.
 
-**Once the style guide has been customized** (or the user explicitly opted for default), skip this gate on subsequent runs. A simple way to detect customization: if the `accent` value in `style-guide.md` differs from `#b5523a`, assume custom.
-
-Don't silently ship default-skinned diagrams into a branded project — that's the failure mode this gate exists to prevent.
+For preset selection, custom light/dark themes, local/remote/system font policies, or design-system
+extraction, load [`references/theme-initialization.md`](references/theme-initialization.md). For URL,
+installed-skill, and folder extraction, also load [`references/onboarding.md`](references/onboarding.md).
 
 ---
 
@@ -45,7 +49,7 @@ Applied to schematics:
 
 - Every node represents a distinct idea. Two nodes that always travel together are one node.
 - Every connection carries information. If the relationship is obvious from layout, remove the line.
-- Coral is **editorial, not a flag.** 1–2 focal nodes per diagram. Using it on 5 nodes erases the signal.
+- The active accent is **editorial, not a flag.** Use it on 1–2 focal nodes per diagram. Using it on 5 nodes erases the signal.
 - The schematic isn't done when everything is added. It's done when nothing can be removed.
 
 **Target density: 4/10.** Enough to be technically complete. Not so dense it needs a guide. Above 9 nodes, it's probably two diagrams.
@@ -144,9 +148,15 @@ Type-specific anti-patterns live in each `references/type-*.md`.
 
 ## 5. Design System
 
-**The design system is skinnable.** All colors, typography, and tokens live in a single source of truth — [`references/style-guide.md`](references/style-guide.md). This file describes semantic roles (`paper`, `ink`, `muted`, `accent`, `link`, …). The default skin is a cool editorial palette (white-smoke paper, jet-black ink, atomic-tangerine accent, blue-slate muted, silver hairlines); to apply your own brand, either edit `style-guide.md` directly or run the URL-based flow described in [`references/onboarding.md`](references/onboarding.md).
+**The design system is skinnable per project.** Built-in theme definitions live in
+[`assets/illustration-themes.yml`](assets/illustration-themes.yml), and the active project selection
+lives in `.github/illustration-theme.yml`. [`references/style-guide.md`](references/style-guide.md)
+defines the semantic roles (`paper`, `ink`, `muted`, `accent`, `link`, typography, and spacing).
+The default is **Cobalt Porcelain light**. Emerald Mist and the former Sanduq Classic palette remain
+selectable, and project files may define custom light and dark palettes plus font families.
 
-> When specs below or in type references mention "ink", "accent", "muted", etc., look up the current hex value in `style-guide.md`.
+> When specs or type references mention a semantic role, use the current resolver output. Resolved
+> project tokens override every literal color or font shown in a historical example.
 
 ### Semantic roles (at a glance)
 
@@ -175,18 +185,17 @@ Type-specific anti-patterns live in each `references/type-*.md`.
 
 ### Typography (summary — full spec in style-guide.md)
 
-- **Title** — Instrument Serif, 1.75rem, 400 — H1 only
-- **Node name** — Geist (sans), 12px, 600 — human-readable labels
-- **Sublabel** — Geist Mono, 9px — ports, URLs, field types
-- **Eyebrow / tag** — Geist Mono, 7–8px, uppercase, tracked — type tags, axis labels
-- **Arrow label** — Geist Mono, 8px — annotation on arrows
-- **Editorial aside** — Instrument Serif *italic*, 14px — callouts only
+- **Title** — resolved `serif`, 1.75rem, 400 — H1 only
+- **Node name** — resolved `sans`, 12px, 600 — human-readable labels
+- **Sublabel** — resolved `mono`, 9px — ports, URLs, field types
+- **Eyebrow / tag** — resolved `mono`, 7–8px, uppercase, tracked — type tags, axis labels
+- **Arrow label** — resolved `mono`, 8px — annotation on arrows
+- **Editorial aside** — resolved `serif` italic, 14px — callouts only
 
-**Mono is for technical content.** Names are Geist sans. Page title is Instrument Serif. Italic Instrument Serif is reserved for annotation callouts. Use all-over JetBrains Mono only in the explicit technical-color family.
-
-```html
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-```
+**Mono is for technical content.** Names use the active sans family. Titles and callouts use the
+active serif family. Load `remote_css_url` only when `font_loading` resolves to `remote`; otherwise
+use the tracked stacks with locally installed or system fallbacks. Built-in stacks include Arabic
+fallbacks so mixed English/Arabic labels remain readable.
 
 ---
 
@@ -206,7 +215,7 @@ Universal building blocks. Type-specialized primitives (lifeline, activation bar
 **Default: clean paper, no dot pattern.** Single `<rect>` filled with `paper`. Don't wrap the diagram in a secondary container background — the diagram sits directly on the page.
 
 ```svg
-<rect width="100%" height="100%" fill="#f5f5f5"/>
+<rect width="100%" height="100%" fill="#f6f8fc"/>
 ```
 
 **Optional: dotted paper variant.** When a long-form editorial diagram benefits from textured ground (essays, hero diagrams on a dedicated page), opt in by adding the `dots` pattern and a second rect:
@@ -217,7 +226,7 @@ Universal building blocks. Type-specialized primitives (lifeline, activation bar
     <circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"/>
   </pattern>
 </defs>
-<rect width="100%" height="100%" fill="#f5f5f5"/>
+<rect width="100%" height="100%" fill="#f6f8fc"/>
 <rect width="100%" height="100%" fill="url(#dots)" opacity="0.6"/>
 ```
 
@@ -227,21 +236,21 @@ Don't use the dot pattern when the diagram sits inside a product page, slide, or
 
 ```svg
 <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-  <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+  <polygon points="0 0, 8 3, 0 6" fill="#4f6078"/>
 </marker>
 <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-  <polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/>
+  <polygon points="0 0, 8 3, 0 6" fill="#2563eb"/>
 </marker>
 <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-  <polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/>
+  <polygon points="0 0, 8 3, 0 6" fill="#1d4ed8"/>
 </marker>
 ```
 
 | Arrow | Stroke | When |
 |---|---|---|
-| Default | muted `#4f5d75` | Internal, generic |
-| Accent | coral `#eb6c36` | Primary / highlighted / headline |
-| Link-blue | `#2e5aa8` | HTTP/API calls, external systems |
+| Default | muted `#4f6078` | Internal, generic |
+| Accent | cobalt `#2563eb` | Primary / highlighted / headline |
+| Link-blue | `#1d4ed8` | HTTP/API calls, external systems |
 | Dashed | `stroke-dasharray="5,4"` + any color | Optional, passive, return, async |
 
 **Draw arrows before boxes** so z-order puts lines behind nodes.
@@ -274,19 +283,19 @@ These five rules are **non-negotiable**. Run the pre-output checklist (§9) to v
 
 ```svg
 <!-- 1. Opaque paper mask — prevents arrows bleeding through transparent fills -->
-<rect x="X" y="Y" width="W" height="H" rx="6" fill="#f5f5f5"/>
+<rect x="X" y="Y" width="W" height="H" rx="6" fill="#f6f8fc"/>
 <!-- 2. Styled box -->
 <rect x="X" y="Y" width="W" height="H" rx="6" fill="FILL" stroke="STROKE" stroke-width="1"/>
 <!-- 3. Rectangular type tag (rx=2, NOT a pill) -->
 <rect x="X+8" y="Y+6" width="28" height="12" rx="2" fill="transparent" stroke="STROKE@0.40" stroke-width="0.8"/>
-<text x="X+22" y="Y+15" fill="STROKE@0.8" font-size="7" font-family="'Geist Mono', monospace"
+<text x="X+22" y="Y+15" fill="STROKE@0.8" font-size="7" font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace"
       text-anchor="middle" letter-spacing="0.08em">API</text>
-<!-- 4. Node name (Geist sans — human-readable) -->
-<text x="CX" y="CY+2" fill="#2d3142" font-size="12" font-weight="600"
-      font-family="'Geist', sans-serif" text-anchor="middle">Node Name</text>
-<!-- 5. Technical sublabel (Geist Mono) -->
-<text x="CX" y="CY+18" fill="#4f5d75" font-size="9"
-      font-family="'Geist Mono', monospace" text-anchor="middle">tech:port</text>
+<!-- 4. Node name (resolved sans — human-readable) -->
+<text x="CX" y="CY+2" fill="#15233c" font-size="12" font-weight="600"
+      font-family="'IBM Plex Sans', 'Noto Sans Arabic', sans-serif" text-anchor="middle">Node Name</text>
+<!-- 5. Technical sublabel (resolved mono) -->
+<text x="CX" y="CY+18" fill="#4f6078" font-size="9"
+      font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace" text-anchor="middle">tech:port</text>
 ```
 
 ### Arrow labels — always mask, always with margin
@@ -295,9 +304,9 @@ Every arrow label needs an opaque rect behind it. Without one it bleeds through 
 
 ```svg
 <!-- Mask sits 14px above the arrow (8px text height + 6px gap). Stroke is at ARROW_Y. -->
-<rect x="MID_X-18" y="ARROW_Y-20" width="36" height="12" rx="2" fill="#f5f5f5"/>
-<text x="MID_X" y="ARROW_Y-11" fill="#7a8399" font-size="8"
-      font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">WRITE</text>
+<rect x="MID_X-18" y="ARROW_Y-20" width="36" height="12" rx="2" fill="#f6f8fc"/>
+<text x="MID_X" y="ARROW_Y-11" fill="#6b7a90" font-size="8"
+      font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace" text-anchor="middle" letter-spacing="0.06em">WRITE</text>
 ```
 
 Rules:
@@ -314,7 +323,7 @@ Rules:
 ```svg
 <line x1="30" y1="LEGEND_Y-8" x2="VIEWBOX_W-30" y2="LEGEND_Y-8"
       stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
-<text x="30" y="LEGEND_Y+8" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace"
+<text x="30" y="LEGEND_Y+8" fill="#4f6078" font-size="8" font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace"
       letter-spacing="0.14em">LEGEND</text>
 <!-- Items — horizontal row, ~160px apart -->
 ```
@@ -348,7 +357,7 @@ Quick check: if a coordinate ends in 1, 2, 3, 5, 6, 7, 9 — fix it.
 |---|---|
 | Max nodes | 9 |
 | Max arrows / transitions | 12 |
-| Max coral elements | 2 |
+| Max accent elements | 2 |
 | Max lifelines (sequence) | 5 |
 | Max lanes (swimlane) | 5 |
 | Max items (quadrant) | 12 |
@@ -373,10 +382,10 @@ If you exceed, split into two diagrams (overview + detail).
 
 ### Page layout
 
-1. **Header** — eyebrow (Geist Mono), title (Instrument Serif), optional subtitle (Geist muted).
+1. **Header** — eyebrow (resolved mono), title (resolved serif), optional subtitle (resolved sans + muted).
 2. **Diagram container** — default: **clean, borderless**, no background — the SVG sits directly on the page paper. Optional *framed* variant (for card-heavy layouts or hero placements): `paper-2` bg + 1px `rule` border + 8px radius + `1.5rem` padding + `overflow-x: auto`.
 3. **Summary cards** — 2–3 col grid with *varied* widths (e.g., `1.1fr 1fr 0.9fr`).
-4. **Footer** — colophon in Geist Mono, muted, hairline top border.
+4. **Footer** — colophon in resolved mono, muted, hairline top border.
 
 ---
 
@@ -388,7 +397,7 @@ Don't use 3 identical generic cards. Vary the treatment:
 <div class="card">
   <p class="eyebrow">SECTION LABEL</p>
   <div class="card-header">
-    <span class="card-dot coral"></span>
+    <span class="card-dot accent"></span>
     <h3>Card Title</h3>
   </div>
   <ul><li>Item</li></ul>
@@ -401,7 +410,7 @@ Rules:
 - `border: 1px solid rgba(45,49,66,0.12)`
 - `border-radius: 6px`, `padding: 1.25rem`
 - **No `box-shadow`**
-- Card dots: 7px, `border-radius: 50%` — ink / muted / coral / link / soft variants
+- Card dots: 7px, `border-radius: 50%` — ink / muted / accent / link / soft variants
 
 ---
 
@@ -424,7 +433,7 @@ Run before producing any diagram.
 
 **Signal:**
 
-- [ ] Coral used on ≤2 elements? If more, which actually deserve focal status?
+- [ ] Active accent used on ≤2 elements? If more, which actually deserve focal status?
 - [ ] Legend covers every type used — and nothing extra?
 - [ ] Within the type's complexity budget (§7)?
 
@@ -436,7 +445,7 @@ Run before producing any diagram.
 - [ ] **No two connectors overlap, share a stroke path, or run on top of each other? Crossings use the bridge/hop primitive?**
 - [ ] **When several connectors enter or exit the same edge of a box, each has its own attach point (≥12px apart)? No connector hides another?**
 - [ ] **No connector passes behind a non-endpoint box, except the unavoidable-intervening-box case (§6 rule 5) — and in that case, the stroke is dashed and the label sits at the visible end?**
-- [ ] Every arrow label has an opaque `fill="#f5f5f5"` rect behind it?
+- [ ] Every arrow label has an opaque rect filled with the resolved `paper` token behind it?
 - [ ] Legend is a horizontal bottom strip, not floating?
 - [ ] No vertical `writing-mode` text?
 - [ ] `viewBox` expanded for the legend strip (~60px)?
@@ -444,10 +453,10 @@ Run before producing any diagram.
 
 **Typography:**
 
-- [ ] Human-readable names in Geist sans, not Geist Mono?
-- [ ] Technical sublabels (ports, commands, URLs) in Geist Mono?
-- [ ] Page title in Instrument Serif?
-- [ ] Annotation callouts (if any) in *italic* Instrument Serif? (see [primitive-annotation.md](references/primitive-annotation.md))
+- [ ] Human-readable names use the resolved sans family, not the mono family?
+- [ ] Technical sublabels (ports, commands, URLs) use the resolved mono family?
+- [ ] Page title uses the resolved serif family?
+- [ ] Annotation callouts use the resolved serif family in italic? (see [primitive-annotation.md](references/primitive-annotation.md))
 - [ ] No blanket JetBrains Mono unless the technical-color family was explicitly selected?
 
 ---
@@ -458,7 +467,7 @@ Every first-class diagram ships in four core variants (see `assets/`):
 
 | Variant | File pattern | When to use |
 |---|---|---|
-| **Minimal light** (default) | `template.html`, `example-<type>.html` | Screenshot-ready. Diagram + title. Warm paper. |
+| **Minimal light** (default) | `template.html`, `example-<type>.html` | Screenshot-ready. Diagram + title. Uses the active project's light palette. |
 | **Minimal dark** | `template-dark.html`, `example-<type>-dark.html` | Dark mode sites, slides, high-contrast posts. |
 | **Full editorial** | `template-full.html`, `example-<type>-full.html` | Long-form posts where the diagram is the hero. |
 | **Hand-drawn** | `template-hand.html`, `example-<type>-hand.html` | Deterministic Rough.js rendering for essays, workshops, and working-sketch presentation. |
@@ -473,10 +482,11 @@ Every first-class diagram ships in four core variants (see `assets/`):
 
 ### To create a new diagram
 
-1. Choose editorial, merged technical-color architecture, or merged technical-color process flow.
-2. Load `references/type-<name>.md` for editorial output; load the matching `technical-color-*.md` reference for either merged family.
-3. Copy the closest template/example, replace its content, and preserve the selected family's visual and export grammar.
-4. Run the §9 taste gate.
+1. Resolve `.github/illustration-theme.yml`; initialize Cobalt when the project has no selection.
+2. Choose editorial, merged technical-color architecture, or merged technical-color process flow.
+3. Load `references/type-<name>.md` for editorial output; load the matching `technical-color-*.md` reference for either merged family.
+4. Copy the closest template/example, replace its content, and apply every resolved color and font token while preserving the selected family's visual and export grammar.
+5. Run `illustration_theme.py validate`, audit the output for stale default literals, then run the §9 taste gate.
 
 ---
 

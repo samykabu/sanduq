@@ -12,7 +12,7 @@ compatibility with the Resal Marketplace layout.
 | [`pr`](pr/) | 4.0.0 | `/speckit-pr-generate`<br>`/speckit-pr-review-feedback` | Generates or updates pull requests, enforces installed documentation gates, and processes review feedback. |
 | [`qa`](qa/) | 1.0.0 | `/speckit-qa-init`<br>`/speckit-qa-analyze`<br>`/speckit-qa-document` | Configures QA lifecycle policy, analyzes test readiness, and maintains the QA test manual. |
 | [`user-manual`](user-manual/) | 1.0.0 | `/speckit-user-manual-init`<br>`/speckit-user-manual-analyze`<br>`/speckit-user-manual-update`<br>`/speckit-user-manual-release` | Maintains bilingual-ready, audience-specific Markdown, Material HTML, and PDF application manuals. |
-| [`illustrate`](illustrate/) | 2.0.0 | `/speckit-illustrate-generate`<br>`/speckit-illustrate-export` | Generates and exports twenty-seven technical, product, architecture, process, data, and quantitative illustration types. |
+| [`illustrate`](illustrate/) | 2.1.0 | `/speckit-illustrate-generate`<br>`/speckit-illustrate-export`<br>`/speckit-illustrate-theme` | Generates and exports twenty-seven illustration types with tracked project light/dark color and font themes. |
 
 ## Install
 

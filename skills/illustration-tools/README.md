@@ -1,6 +1,6 @@
 # Illustration Tools
 
-Generate polished technical and product illustrations as **self-contained HTML files** with inline SVG and embedded CSS. The unified `illustrate` skill supports twenty-seven diagram types, editorial and technical-color design families, light/dark/full/hand variants, and SVG/PNG/PDF export paths.
+Generate polished technical and product illustrations as **self-contained HTML files** with inline SVG and embedded CSS. The unified `illustrate` skill supports twenty-seven diagram types, tracked project-level color and font themes, editorial and technical-color families, light/dark/full/hand variants, and SVG/PNG/PDF export paths.
 
 ## Included Skill
 
@@ -31,6 +31,21 @@ Or in plain language:
 - *"Make a hand-drawn process flow for our expense-approval workflow with a manager decision step."*
 
 Iterate in chat — "add a Redis cache", "add a rejection branch from step 3", "wrap this to a second row" — and Claude edits the same HTML file.
+
+### Project theme
+
+On first use, initialize `.github/illustration-theme.yml`. Interactive runs offer Cobalt Porcelain
+(recommended), Emerald Mist, Sanduq Classic, or a custom theme. Non-interactive runs default to
+Cobalt Light.
+
+```text
+/illustration-tools:illustrate initialize the project illustration theme
+/illustration-tools:illustrate switch the project to Emerald Mist Light
+/illustration-tools:illustrate create a custom light and dark theme from docs/design-system.md
+```
+
+The tracked YAML also controls sans, serif, and mono font families plus `remote`, `local`, or
+`system` font loading. Built-in themes include Arabic-capable fallback stacks.
 
 ## Gallery designs
 
