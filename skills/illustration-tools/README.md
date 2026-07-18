@@ -32,6 +32,16 @@ Or in plain language:
 
 Iterate in chat — "add a Redis cache", "add a rejection branch from step 3", "wrap this to a second row" — and Claude edits the same HTML file.
 
+## Gallery designs
+
+Open any gallery directly from `skills/illustrate/assets/`:
+
+- `index.html` is the original gallery.
+- `index-variation-1.html` is a searchable Atlas layout with persistent family, type, and presentation navigation.
+- `index-variation-2.html` is a Canvas Deck workspace with compact selectors and a horizontal scroll-snap filmstrip.
+
+Both alternatives expose the complete editorial and technical-color asset matrix, adapt to light and dark system themes, and honor reduced-motion preferences.
+
 ## What you get
 
 - **A single `.html` file** — inline SVG, embedded CSS, works offline in any browser.
