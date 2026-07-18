@@ -2,6 +2,15 @@
 
 All notable changes to the Illustrate extension.
 
+## [1.0.1] - 2026-07-18
+
+### Fixed
+
+- Exposed the merged Architecture Diagram and Process Flow Diagram families in the HTML gallery,
+  including every imported light and dark example.
+- Promoted both merged capabilities into the skill description, family-selection guidance,
+  references, templates, and generation workflow.
+
 ## [1.0.0] - 2026-07-18
 
 ### Added

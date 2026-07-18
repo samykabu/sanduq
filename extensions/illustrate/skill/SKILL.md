@@ -1,6 +1,6 @@
 ---
 name: illustrate
-description: Create and export technical, product, architecture, and process illustrations in 27 formats—including architecture, IT current-state, flowchart, sequence, state machine, ER, timeline, swimlane, quadrant, radar, loop, nested, tree, org chart, layers, venn, pyramid, bar, line, Gantt, scatter, high-level, process, medallion, data flow, DP integration, and DP security matrix—as standalone HTML with inline SVG plus optional SVG/PNG/PDF exports. Use for diagram generation, architecture diagrams, process flows, workflow maps, visual variants, brand/theme onboarding, and diagram export. Includes editorial light/dark/full/hand/terminal/consultant treatments plus technical-color architecture and process-flow treatments with built-in Copy/PNG/PDF controls.
+description: Create and export technical, product, architecture, and process illustrations in 27 formats—including architecture, IT current-state, flowchart, sequence, state machine, ER, timeline, swimlane, quadrant, radar, loop, nested, tree, org chart, layers, venn, pyramid, bar, line, Gantt, scatter, high-level, process, medallion, data flow, DP integration, and DP security matrix—as standalone HTML with inline SVG plus optional SVG/PNG/PDF exports. Use for diagram generation, architecture diagrams, process flows, workflow maps, visual variants, brand/theme onboarding, and diagram export. Incorporates the complete former architecture-diagram and process-flow-diagram skills as first-class technical-color families, alongside editorial light/dark/full/hand/terminal/consultant treatments and built-in Copy/PNG/PDF controls.
 ---
 
 # Illustrate
@@ -55,6 +55,11 @@ Applied to schematics:
 ## 2. When to Use
 
 Use for any of the 27 diagram types (§3) when a reader will learn more from a visual than from prose, a table, or a bulleted list.
+
+Choose the visual family before drawing:
+- **Editorial** for restrained documentation, product, data, and quantitative visuals across all types.
+- **Technical-color architecture** for cloud, infrastructure, network, security, and topology maps; this is the merged former `architecture-diagram` skill.
+- **Technical-color process flow** for numbered workflows, approvals, automation, onboarding, and runbooks; this is the merged former `process-flow-diagram` skill.
 
 **Don't use for:**
 
@@ -193,8 +198,8 @@ Universal building blocks. Type-specialized primitives (lifeline, activation bar
 - Hand-drawn variant → [primitive-sketchy.md](references/primitive-sketchy.md)
 - Icon set (laptop, server, DB, K8s, Docker, AWS, …) → [primitive-icons.md](references/primitive-icons.md). Browse the gallery at [`assets/icons.html`](assets/icons.html).
 - Terminal / CLI-window variant → [primitive-terminal.md](references/primitive-terminal.md)
-- Technical-color architecture family → [technical-color-architecture.md](references/technical-color-architecture.md)
-- Technical-color process-flow family → [technical-color-process-flow.md](references/technical-color-process-flow.md)
+- Merged Architecture Diagram family, templates, and examples → [technical-color-architecture.md](references/technical-color-architecture.md)
+- Merged Process Flow Diagram family, templates, and examples → [technical-color-process-flow.md](references/technical-color-process-flow.md)
 
 ### Background
 
@@ -468,9 +473,9 @@ Every first-class diagram ships in four core variants (see `assets/`):
 
 ### To create a new diagram
 
-1. Copy the closest editorial template, or a technical-color template when that family is selected.
-2. Load the matching `references/type-<name>.md` for layout conventions.
-3. Replace the eyebrow, h1, and SVG body.
+1. Choose editorial, merged technical-color architecture, or merged technical-color process flow.
+2. Load `references/type-<name>.md` for editorial output; load the matching `technical-color-*.md` reference for either merged family.
+3. Copy the closest template/example, replace its content, and preserve the selected family's visual and export grammar.
 4. Run the §9 taste gate.
 
 ---

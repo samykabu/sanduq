@@ -4,6 +4,15 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## illustration-tools — 2.0.1 — 2026-07-18
+
+### Fixed
+
+- Added first-class Architecture technical-color and Process Flow technical-color selectors to the
+  Illustrate gallery, covering all imported light and dark examples.
+- Made the former `architecture-diagram` and `process-flow-diagram` capabilities explicit in the
+  unified skill description and generation guidance.
+
 ## illustration-tools — 2.0.0 — 2026-07-18
 
 ### Changed
