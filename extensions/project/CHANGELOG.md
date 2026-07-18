@@ -2,6 +2,12 @@
 
 All notable changes to the GitHub Project Lifecycle Sync extension.
 
+## [2.0.0] - 2026-07-18
+
+### Changed
+
+- Use PolyForm Noncommercial 1.0.0 for Sanduq original contributions.
+
 ## [1.1.0] - 2026-07-18
 
 ### Added

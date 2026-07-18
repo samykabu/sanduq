@@ -1,0 +1,4 @@
+interface:
+  display_name: "User Manual API Docs"
+  short_description: "Create audience-aware API reference documentation"
+  default_prompt: "Use $user-manual-api-docs to document the public API safely and clearly."

@@ -1,0 +1,8 @@
+schema_version: "1.0"
+dependencies:
+  - id: illustrate
+    version: ">=2.0.0,<3.0.0"
+    required_for: "system, module, infrastructure, workflow, and ER diagrams"
+defaults:
+  update_policy: prompt
+  check_interval_hours: 24

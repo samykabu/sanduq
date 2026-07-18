@@ -1,0 +1,22 @@
+{
+  "name": "dev-tools",
+  "description": "Standalone modular tools for complete application manuals, API references, release documentation, screenshots, previews, and bilingual publishing",
+  "version": "1.0.0",
+  "author": {
+    "name": "Samy K. Abushanab"
+  },
+  "keywords": [
+    "user-manual",
+    "documentation",
+    "mkdocs",
+    "material",
+    "pdf",
+    "api-docs",
+    "release-notes",
+    "migration-guides",
+    "screenshots",
+    "bilingual",
+    "arabic",
+    "rtl"
+  ]
+}

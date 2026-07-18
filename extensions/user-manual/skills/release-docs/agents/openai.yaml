@@ -1,0 +1,4 @@
+interface:
+  display_name: "Release Documentation"
+  short_description: "Create release notes and migration guides"
+  default_prompt: "Use $release-docs to create release notes and migration guidance for this release."

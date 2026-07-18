@@ -34,7 +34,7 @@ Optional flags the user may pass:
 ## Behavior Overview
 
 ```
-resolve feature  ->  gather ground truth  ->  generate diagram assets  ->  write docs/<feature>/  ->  handle the PR  ->  report
+resolve feature -> documentation preflights -> gather ground truth -> generate diagrams -> write docs -> handle PR -> report
 ```
 
 ## Instructions
@@ -76,7 +76,37 @@ Before resolving the feature, read `.specify/extensions/pr/dependencies.yml` and
 - If `.specify/feature.json` is missing or unreadable, fall back to the current git branch name and
   the most recently modified directory under `specs/`; if still ambiguous, ask the user which feature.
 
-### 2. Gather ground truth (never invent)
+### 2. Enforce installed documentation preflights
+
+Skip this section only when `--no-pr` was supplied. Run it before writing PR documentation or
+creating/updating the PR.
+
+#### QA
+
+If `.specify/extensions/qa/qa-config.yml` exists and contains
+`require_document_before_pr: true`:
+
+1. Run `python .specify/extensions/qa/scripts/qa_state.py status --kind document --feature <feature-dir>`.
+2. If `current` is false, execute `speckit.qa.document --feature <feature-dir>` with the current
+   integration and wait for it to finish.
+3. Run the status command again. Stop before PR handling if it is still missing/stale or required QA
+   evidence remains incomplete. Do not allow an old file to satisfy the gate.
+
+#### User Manual
+
+If the `user-manual` extension is installed:
+
+1. Require `User-Manual/manual.yml`. If it is missing, stop and run the interactive
+   `speckit.user-manual.init` workflow; do not invent the module map during PR generation.
+2. Run `python .specify/extensions/user-manual/scripts/manual_state.py status --feature <feature-dir>`.
+3. If `current` is false, execute `speckit.user-manual.update --feature <feature-dir>` and wait for it
+   to finish. This update must use plain audience-appropriate English and, when enabled, Arabic.
+4. Recheck freshness. Stop before PR handling if it is still missing/stale or the manual audit fails.
+
+Report every automatically executed preflight. Never install optional QA or User Manual extensions
+from this command; enforce them only when the project has installed/configured them.
+
+### 3. Gather ground truth (never invent)
 
 Read whatever exists for the feature so all generated content traces to real artifacts:
 
@@ -87,7 +117,7 @@ Read whatever exists for the feature so all generated content traces to real art
 
 If something is unknown, **omit it** — do not fabricate test counts, coverage, issue numbers, or behavior.
 
-### 3. Select and generate useful Illustrate assets
+### 4. Select and generate useful Illustrate assets
 
 Before writing the feature documents, use the installed `illustrate` skill's selection guide to
 decide whether a visual teaches the reviewer more than prose or a table. Choose only types supported
@@ -140,7 +170,7 @@ For each applicable diagram:
    Inside the `.md` docs (which are browsed in-repo) a relative path is fine; only the PR-body copy
    needs the absolute raw URL.
 
-### 4. Write the two documents under `docs/<feature-slug>/`
+### 5. Write the two documents under `docs/<feature-slug>/`
 
 Create the folder if needed. The folder name **matches the spec folder name** so it can drop into a
 wiki cleanly.
@@ -182,7 +212,7 @@ Footer: link back to `CHANGELOG.md`, the `specs/<feature-slug>/` spec, and any d
 > Quality bar: a reader who has never seen the code should finish the feature-details doc knowing
 > what the feature is, why it exists, every scenario it supports, and exactly what's out of scope.
 
-### 5. Handle the pull request
+### 6. Handle the pull request
 
 Unless `--no-pr` was passed:
 
@@ -214,7 +244,7 @@ review it`**), then the full feature-details narrative (the body of `<Feature>-E
 --title "<feature title>" --body-file <tmpfile>` (body = a short summary + the marked section).
   - `--create-pr` may still be supplied by existing callers, but does not change this default.
 
-### 6. Report
+### 7. Report
 
 Summarize: the doc paths written, diagram HTML/PNG assets generated, whether the PR was created or
 updated (with its URL), and any follow-ups (for example, PR handling skipped because `gh` is not

@@ -7,7 +7,8 @@ skill-first packages:
 
 | Plugin | Source | Version |
 | --- | --- | ---: |
-| `illustration-tools` | [`../skills/illustration-tools`](../skills/illustration-tools/) | 2.0.0 |
+| `illustration-tools` | [`../skills/illustration-tools`](../skills/illustration-tools/) | 3.0.0 |
+| `dev-tools` | [`../skills/dev-tools`](../skills/dev-tools/) | 1.0.0 |
 
 They are registered in [`../.claude-plugin/marketplace.json`](../.claude-plugin/marketplace.json).
 
@@ -16,6 +17,7 @@ Install from Claude Code:
 ```text
 /plugin marketplace add samykabu/sanduq
 /plugin install illustration-tools@sanduq
+/plugin install dev-tools@sanduq
 ```
 
 For a new plugin, add a folder containing `.claude-plugin/plugin.json`, then register it in the

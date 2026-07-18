@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sanduq workflow</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: #f7f4ef; }
+    body { font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #17212b; }
+    svg { display: block; width: 1200px; height: 650px; }
+    .eyebrow { font: 600 12px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .14em; fill: #6c6258; }
+    .title { font-size: 32px; font-weight: 760; fill: #17212b; }
+    .subtitle { font-size: 15px; fill: #625b52; }
+    .node { fill: #fffdf9; stroke: #cfc7bc; stroke-width: 1.5; }
+    .node-accent { fill: #fff0e7; stroke: #eb6c36; stroke-width: 2; }
+    .node-dark { fill: #17212b; stroke: #17212b; stroke-width: 1.5; }
+    .label { font-size: 17px; font-weight: 700; fill: #17212b; }
+    .label-light { font-size: 17px; font-weight: 700; fill: #fffdf9; }
+    .detail { font-size: 12px; fill: #6c6258; }
+    .detail-light { font-size: 12px; fill: #d9d2c9; }
+    .connector { fill: none; stroke: #8d8378; stroke-width: 2; }
+    .connector-accent { fill: none; stroke: #eb6c36; stroke-width: 2.5; }
+    .flow-label { font: 600 10px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; fill: #6c6258; }
+    .legend { font-size: 12px; fill: #6c6258; }
+  </style>
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 650" role="img" aria-labelledby="title desc">
+  <title id="title">Sanduq documentation and delivery workflow</title>
+  <desc id="desc">Standalone skills and Spec Kit extensions both support QA, User Manual, pull request previews, and versioned releases.</desc>
+  <defs>
+    <style>
+      .eyebrow { font: 600 12px ui-monospace, monospace; letter-spacing: .14em; fill: #6c6258; }
+      .title { font: 760 32px Inter, sans-serif; fill: #17212b; }
+      .subtitle { font: 15px Inter, sans-serif; fill: #625b52; }
+      .node { fill: #fffdf9; stroke: #cfc7bc; stroke-width: 1.5; }
+      .node-accent { fill: #fff0e7; stroke: #eb6c36; stroke-width: 2; }
+      .node-dark { fill: #17212b; stroke: #17212b; stroke-width: 1.5; }
+      .label { font: 700 17px Inter, sans-serif; fill: #17212b; }
+      .label-light { font: 700 17px Inter, sans-serif; fill: #fffdf9; }
+      .detail { font: 12px Inter, sans-serif; fill: #6c6258; }
+      .detail-light { font: 12px Inter, sans-serif; fill: #d9d2c9; }
+      .connector { fill: none; stroke: #8d8378; stroke-width: 2; }
+      .connector-accent { fill: none; stroke: #eb6c36; stroke-width: 2.5; }
+      .flow-label { font: 600 10px ui-monospace, monospace; letter-spacing: .08em; fill: #6c6258; }
+      .legend { font: 12px Inter, sans-serif; fill: #6c6258; }
+    </style>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#8d8378"/></marker>
+    <marker id="arrowAccent" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#eb6c36"/></marker>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#17212b" flood-opacity=".09"/></filter>
+  </defs>
+
+  <rect width="1200" height="650" fill="#f7f4ef"/>
+
+  <text x="70" y="62" class="eyebrow">SANDUQ DELIVERY SYSTEM</text>
+  <text x="70" y="102" class="title">One documentation model, two ways to run it</text>
+  <text x="70" y="132" class="subtitle">Install portable skills anywhere, or enforce the same outcomes inside a Spec Kit lifecycle.</text>
+
+  <!-- connectors are deliberately drawn before nodes -->
+  <path class="connector" marker-end="url(#arrow)" d="M285 245 H360"/>
+  <path class="connector" marker-end="url(#arrow)" d="M285 390 H330 V295 H360"/>
+  <path class="connector" marker-end="url(#arrow)" d="M540 245 H625"/>
+  <path class="connector" marker-end="url(#arrow)" d="M540 390 H585 V295 H625"/>
+  <path class="connector-accent" marker-end="url(#arrowAccent)" d="M805 295 H895 V245 H940"/>
+  <path class="connector-accent" marker-end="url(#arrowAccent)" d="M805 295 H895 V390 H940"/>
+  <path class="connector" marker-end="url(#arrow)" d="M1040 295 V325"/>
+
+  <text x="307" y="233" class="flow-label">DIRECT</text>
+  <text x="552" y="278" class="flow-label">EVIDENCE</text>
+  <text x="842" y="282" class="flow-label">PUBLISH</text>
+
+  <g filter="url(#shadow)">
+    <rect x="70" y="190" width="215" height="110" rx="14" class="node"/>
+    <text x="92" y="225" class="label">Standalone skills</text>
+    <text x="92" y="251" class="detail">npx skills • any repository</text>
+    <text x="92" y="272" class="detail">manual, APIs, releases, screens</text>
+
+    <rect x="70" y="335" width="215" height="110" rx="14" class="node"/>
+    <text x="92" y="370" class="label">Spec Kit extensions</text>
+    <text x="92" y="396" class="detail">managed lifecycle commands</text>
+    <text x="92" y="417" class="detail">project • QA • docs • PR</text>
+
+    <rect x="360" y="190" width="180" height="110" rx="14" class="node-dark"/>
+    <text x="382" y="228" class="label-light">QA evidence</text>
+    <text x="382" y="254" class="detail-light">test readiness</text>
+    <text x="382" y="275" class="detail-light">test manual + coverage</text>
+
+    <rect x="360" y="335" width="180" height="110" rx="14" class="node"/>
+    <text x="382" y="373" class="label">Project context</text>
+    <text x="382" y="399" class="detail">specs • code • APIs</text>
+    <text x="382" y="420" class="detail">schemas • UI • infrastructure</text>
+
+    <rect x="625" y="220" width="180" height="150" rx="18" class="node-accent"/>
+    <text x="650" y="263" class="label">User Manual</text>
+    <text x="650" y="291" class="detail">English + optional Arabic</text>
+    <text x="650" y="313" class="detail">End User • Admin • Technical</text>
+    <text x="650" y="335" class="detail">Markdown • HTML • PDF</text>
+
+    <rect x="940" y="190" width="200" height="110" rx="14" class="node"/>
+    <text x="962" y="228" class="label">Private PR preview</text>
+    <text x="962" y="254" class="detail">CI artifact always</text>
+    <text x="962" y="275" class="detail">hosted only when approved</text>
+
+    <rect x="940" y="335" width="200" height="110" rx="14" class="node"/>
+    <text x="962" y="373" class="label">Versioned release</text>
+    <text x="962" y="399" class="detail">approved HTML site</text>
+    <text x="962" y="420" class="detail">edition + module PDFs</text>
+  </g>
+
+  <line x1="70" y1="538" x2="1130" y2="538" stroke="#d7d0c6"/>
+  <circle cx="86" cy="578" r="7" fill="#eb6c36"/>
+  <text x="103" y="582" class="legend">Canonical documentation</text>
+  <rect x="285" y="570" width="14" height="14" rx="3" fill="#17212b"/>
+  <text x="310" y="582" class="legend">Required quality evidence</text>
+  <path d="M520 578 H557" class="connector" marker-end="url(#arrow)"/>
+  <text x="572" y="582" class="legend">Automated or explicit workflow transition</text>
+  <text x="1130" y="610" text-anchor="end" class="eyebrow">PLAIN LANGUAGE • AUDIENCE AWARE • SAFE DATA</text>
+</svg>
+</body>
+</html>

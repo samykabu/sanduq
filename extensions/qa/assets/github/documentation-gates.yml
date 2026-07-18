@@ -1,0 +1,41 @@
+name: Documentation gates
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  feature-documentation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Resolve active feature
+        id: feature
+        shell: bash
+        run: |
+          set -euo pipefail
+          feature="$(python -c "import json; print(json.load(open('.specify/feature.json', encoding='utf-8'))['feature_directory'])")"
+          test -d "$feature"
+          echo "path=$feature" >> "$GITHUB_OUTPUT"
+      - name: Verify QA analysis and documentation freshness
+        if: ${{ hashFiles('.specify/extensions/qa/qa-config.yml') != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -Eq '^  require_document_before_pr: true$' .specify/extensions/qa/qa-config.yml; then
+            result="$(python .specify/extensions/qa/scripts/qa_state.py status --kind document --feature '${{ steps.feature.outputs.path }}')"
+            echo "$result"
+            RESULT="$result" python -c "import json, os, sys; sys.exit(0 if json.loads(os.environ['RESULT'])['current'] else 1)"
+          fi
+      - name: Verify User Manual freshness
+        if: ${{ hashFiles('User-Manual/manual.yml') != '' && hashFiles('.specify/extensions/user-manual/scripts/manual_state.py') != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          result="$(python .specify/extensions/user-manual/scripts/manual_state.py status --feature '${{ steps.feature.outputs.path }}')"
+          echo "$result"
+          RESULT="$result" python -c "import json, os, sys; sys.exit(0 if json.loads(os.environ['RESULT'])['current'] else 1)"

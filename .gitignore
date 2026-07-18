@@ -2,6 +2,8 @@
 *.zip
 dist/
 node_modules/
+__pycache__/
+*.py[cod]
 # editor / OS
 .vscode/
 .idea/
