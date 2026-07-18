@@ -50,6 +50,10 @@ jobs:
                   sys.exit(f"{path}: catalog version {entry.get('version')} != extension.yml {meta.get('version')}")
               if f"/{ext_id}-v{meta.get('version')}/" not in entry.get("download_url", ""):
                   sys.exit(f"{path}: download_url does not match extension version")
+              manifest_requires = doc.get("requires") or {}
+              catalog_requires = entry.get("requires") or {}
+              if catalog_requires != manifest_requires:
+                  sys.exit(f"{path}: catalog requires metadata must match extension.yml")
 
           marketplace = json.loads((root / ".claude-plugin/marketplace.json").read_text(encoding="utf-8"))
           for plugin in marketplace.get("plugins", []):

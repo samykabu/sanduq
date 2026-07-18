@@ -52,7 +52,8 @@ specify extension add project
 `project` requires one-time configuration in each target repo:
 
 ```text
-/speckit-project-init
+Claude Code: /speckit-project-init
+Codex:       $speckit-project-init
 ```
 
 The other commands are manual or optional lifecycle-hook prompts:

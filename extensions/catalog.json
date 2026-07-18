@@ -20,7 +20,14 @@
       "requires": {
         "speckit_version": ">=0.2.0",
         "tools": [
-          "gh"
+          {
+            "name": "git",
+            "required": false
+          },
+          {
+            "name": "gh",
+            "required": false
+          }
         ]
       },
       "provides": {
