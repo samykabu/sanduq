@@ -4,6 +4,15 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## illustration-tools — 2.0.0 — 2026-07-18
+
+### Changed
+
+- Consolidated `diagram-design`, `architecture-diagram`, and `process-flow-diagram` into one
+  `illustrate` skill under the `illustration-tools` plugin.
+- Renamed the Spec Kit extension and commands to `illustrate` while preserving editorial,
+  hand-drawn, technical-color, and export capabilities.
+
 ## sanduq — 0.2.0 — 2026-07-09
 
 ### Added

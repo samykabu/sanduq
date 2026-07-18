@@ -3,7 +3,7 @@ schema_version: "1.0"
 extension:
   id: pr
   name: "Pull Request Workflow"
-  version: "2.1.0"
+  version: "3.0.0"
   description: "Generate or update pull requests from Spec Kit artifacts, then process review feedback through an approval-gated fix and reply workflow."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
@@ -13,7 +13,7 @@ extension:
 requires:
   speckit_version: ">=0.2.0"
   extensions:
-    - id: diagram-design
+    - id: illustrate
       version: ">=1.0.0,<2.0.0"
       required: true
   tools:

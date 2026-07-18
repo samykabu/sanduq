@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0] - 2026-07-18
+
+### Changed
+
+- Replaced the renamed `diagram-design` dependency with `illustrate >=1.0.0,<2.0.0` and updated
+  diagram generation/export paths to the unified skill package.
+
 All notable changes to the Pull Request Workflow extension.
 
 ## [2.1.0] - 2026-07-18

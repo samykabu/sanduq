@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.0] - 2026-07-18
+
+### Changed
+
+- Replaced the renamed `diagram-design` dependency with `illustrate >=1.0.0,<2.0.0` and updated
+  readiness, generation, and export paths to the unified skill package.
+
 All notable changes to the How-To-Test extension.
 
 ## [1.6.0] - 2026-07-18

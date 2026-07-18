@@ -1,0 +1,213 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Article request · Sequence · Hand-drawn</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f5f5f5;
+      --color-ink:     #2d3142;
+      --color-muted:   #4f5d75;
+      --color-accent:  #eb6c36;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+
+    .frame { max-width: 1200px; width: 100%; }
+
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+
+    svg { width: 100%; min-width: 900px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Sequence · Illustrate · Hand</p>
+    <h1>Article request, cold cache</h1>
+
+    <svg viewBox="0 0 1000 584" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <!-- Dot grid background -->
+          <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"></circle>
+          </pattern>
+
+          <!-- Arrow markers -->
+          
+          
+          
+        </defs>
+
+        <!-- Background: paper + dot grid -->
+        <rect width="100%" height="100%" fill="#f5f5f5"></rect>
+        <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"></rect>
+
+        <!-- =================================================================
+             LIFELINES — dashed vertical lines from each actor, behind everything.
+             Actor lifeline x-coords: 128, 352, 584, 800
+             ================================================================= -->
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M128 128 C127.33264268895091 200.60083200016535, 125.80575361070446 277.54537860316196, 128 488" stroke="rgba(45,49,66,0.22)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3,3"></path></g>
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M352 128 C351.86839803248284 202.81936181880386, 354.0060337548953 275.5562660235057, 352 488" stroke="rgba(45,49,66,0.22)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3,3"></path></g>
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M584 128 C579.8128298760148 201.36483283744235, 581.9419315990863 277.24021224384944, 584 488" stroke="rgba(45,49,66,0.22)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3,3"></path></g>
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M800 128 C800.0216440195468 203.58336265608085, 802.1422117432771 275.2510996641932, 800 488" stroke="rgba(45,49,66,0.22)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3,3"></path></g>
+
+        <!-- =================================================================
+             ACTIVATION BARS — w=8 rects on lifelines showing control duration.
+             Drawn before message arrows so arrows land on their edges.
+             ================================================================= -->
+        <!-- Cloudflare activation: receives at y=176, responds at y=408 -->
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M350 181.658 L352 182.214 L354 182.185 L354.133 220 L353.841 258 L354.069 296 L353.973 334 L353.787 372 L354.246 410 L352 410.209 L350 410.028 L350.345 372 L349.815 334 L350.011 296 L349.796 258 L350.08 220 Z" fill="rgba(45,49,66,0.06)" stroke="none"></path><path class="rough-generated" d="M350.3175227526575 178.74079353176057 L356.84457161463797 180.1164101894945 L355.0362570885569 412.96592172943053 L347.807801342383 414.3785981711" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M348 180 C349.5812849502265 179.88413693441078, 350.2452196870744 180.23775738252328, 356 180 M356 180 C355.17951228157716 254.39974989403038, 357.28836823204813 332.46506796682684, 356 412 M356 412 C353.55945988819 413.19777698593214, 349.8192183791101 411.49018756465983, 348 412 M348 412 C347.2776419445783 343.22983282639814, 350.4350704989227 276.16456936768543, 348 180" stroke="#4f5d75" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <!-- Astro activation: called at y=232, returns at y=352 -->
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M582 237.658 L584 237.679 L586 238.077 L585.991 276.667 L585.881 315.333 L585.875 354 L584 353.832 L582 354.165 L581.929 315.333 L582.132 276.667 Z" fill="rgba(45,49,66,0.06)" stroke="none"></path><path class="rough-generated" d="M580.7433857834898 235.37515483582393 L586.099080056604 238.49341233158484 L585.9066579318605 355.88502883994954 L580.8271332032048 355.34685189509764" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M580 236 C581.9145139445737 234.88349235795903, 582.5736697841064 234.88207789801527, 588 236 M588 236 C588.1015531022334 281.04020965108646, 587.0668727148557 321.9406067960896, 588 356 M588 356 C584.2274648003653 355.19968419685495, 583.1951309961453 356.5834571529878, 580 356 M580 356 C579.4327829288086 322.17509639123455, 575.1931420044741 290.9924129539169, 580 236" stroke="#4f5d75" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+        <!-- =================================================================
+             MESSAGE ARROWS — time flows top→down.
+             Draw before labels so label masks cover the line.
+             ================================================================= -->
+
+        <!-- M1: Reader → Cloudflare  (HTTPS request · link-blue) -->
+        <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M128 176 C175.51461929644415 179.6750950655211, 219.60361801569357 178.9087549451249, 352 176" stroke="#2e5aa8" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M349.27863322263585 177.10428985441104 L338.97556227510796 179.5665817358531 L343.4669713652693 171.97477291310207" stroke="none" stroke-width="0" fill="#2e5aa8" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M352 176 C351.23523154295907 176.63322921713063, 346.4361206923305 179.20548199287427, 341.6 180.2 M341.6 180.2 C342.34189307941756 176.6282139156591, 341.42551828940475 174.6591817744281, 341.6 171.8 M341.6 171.8 C346.1892929589308 175.20927677666083, 350.1605272342997 175.36061812834558, 352 176" stroke="#2e5aa8" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+        <!-- M2: Cloudflare → Astro  (cache miss · muted) -->
+        <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M352 232 C401.05723042164027 232.13079814881328, 445.994340113559 235.56217879355773, 580 232" stroke="#4f5d75" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M582.4924557793886 230.13292686454952 L570.3126786697657 238.11206825487315 L571.6467309821397 228.35123886577787" stroke="none" stroke-width="0" fill="#4f5d75" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M580 232 C576.3636969417367 231.40504847493352, 574.8088914094153 233.47986063555217, 569.6 236.2 M569.6 236.2 C570.7050422866727 231.97661971829086, 570.7439389429475 230.67085440368206, 569.6 227.8 M569.6 227.8 C572.2245811971192 228.61863236110494, 576.6806216320505 229.83995742158908, 580 232" stroke="#4f5d75" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+        <!-- M3: Astro self-message  (render MDX · muted U-loop) -->
+        <g class="rough-shape" data-source-tag="path" data-rough-arrowhead="true"><path class="rough-generated" d="M588 284 C592.7902315184474 286.00924470063296, 603.507008586824 283.3429467403516, 624 284 M624 284 C625.4738529318571 290.79815614074465, 625.4625400179625 297.0483642324805, 624 316 M624 316 C610.5099948808552 318.8329562980309, 599.3697641953826 316.4776065189019, 588 316" stroke="#4f5d75" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M589.9062783361412 316.961563874688 L596.6497950644232 310.4575547738932 L600.6264905990101 321.12770481845365" stroke="none" stroke-width="0" fill="#4f5d75" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M588 316 C589.260685726829 315.61307474229983, 592.086903786032 315.41781381442155, 598.4 311.8 M598.4 311.8 C597.4177752356946 314.4149800787736, 598.4119433382571 316.3904361486379, 598.4 320.2 M598.4 320.2 C594.5029659743652 318.4603737097755, 591.4911957677463 317.5400487709174, 588 316" stroke="#4f5d75" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+        <!-- M4: Astro → Cloudflare  (return HTML · muted dashed) -->
+        <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M580 352 C532.1568009102301 353.54424385898113, 488.683565645771 355.47583697426694, 356 352" stroke="#4f5d75" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4"></path><path class="rough-generated" d="M357.32010089289395 349.9902008848265 L367.98691145908083 349.0030412929133 L368.80625021588054 357.5041707711294" stroke="none" stroke-width="0" fill="#4f5d75" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M356 352 C357.8122276699969 350.2164269572105, 360.63168331200876 349.5230834443551, 366.4 347.8 M366.4 347.8 C365.87032494177157 350.1648197287284, 365.3837644906216 350.768976472538, 366.4 356.2 M366.4 356.2 C363.77187855294716 355.3227822594921, 358.04907144563083 352.2427278968459, 356 352" stroke="#4f5d75" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4"></path></g>
+
+        <!-- M5: Cloudflare → Reader  (primary success · coral) -->
+        <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M348 408 C301.67502962899255 409.0341921038568, 259.02157642421184 410.2115436589142, 128 408" stroke="#eb6c36" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M128.73392344964668 408.818837894965 L137.92402785373852 401.54852781193335 L141.38600983275103 414.0806367238052" stroke="none" stroke-width="0" fill="#eb6c36" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M128 408 C130.2966268176042 408.0683384441644, 133.2182950810045 406.8225734934452, 138.8 403.6 M138.8 403.6 C138.71920201203184 405.8153574443348, 139.21023257836654 407.5636842629351, 138.8 412.4 M138.8 412.4 C134.16812987634137 412.37192405275124, 132.16799267318999 410.29335346863303, 128 408" stroke="#eb6c36" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+        <!-- M6: Reader → Analytics  (async beacon · muted dashed) -->
+        <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M128 464 C266.89238825108856 467.2404947334528, 404.8213710471615 467.4288708251715, 800 464" stroke="#4f5d75" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4"></path><path class="rough-generated" d="M800.1477460063994 461.84747490510347 L792.0611442483962 468.69401433095334 L792.3657694496214 461.857102676481" stroke="none" stroke-width="0" fill="#4f5d75" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M800 464 C798.3449380373756 464.6206402564089, 796.7567242777543 464.7056899565276, 789.6 468.2 M789.6 468.2 C789.721639115693 465.4862429288179, 788.7096215571183 463.6415449206978, 789.6 459.8 M789.6 459.8 C794.2759562752684 460.39102682427716, 797.4185639733179 462.639629344827, 800 464" stroke="#4f5d75" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4"></path></g>
+
+        <!-- =================================================================
+             MESSAGE LABELS — each with an opaque paper-colored mask.
+             ================================================================= -->
+
+        <!-- M1 label -->
+        <rect x="188" y="160" width="104" height="12" rx="2" fill="#f5f5f5"></rect>
+        <text x="240" y="170" fill="#2e5aa8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">GET /ARTICLES/SLUG</text>
+
+        <!-- M2 label -->
+        <rect x="416" y="216" width="100" height="12" rx="2" fill="#f5f5f5"></rect>
+        <text x="466" y="226" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">CACHE MISS · ORIGIN</text>
+
+        <!-- M3 label (to the right of the self-loop) -->
+        <rect x="632" y="292" width="72" height="12" rx="2" fill="#f5f5f5"></rect>
+        <text x="668" y="302" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">RENDER MDX</text>
+
+        <!-- M4 label -->
+        <rect x="420" y="336" width="96" height="12" rx="2" fill="#f5f5f5"></rect>
+        <text x="468" y="346" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">200 · HTML + MAX-AGE</text>
+
+        <!-- M5 label (coral · primary response) -->
+        <rect x="192" y="392" width="96" height="12" rx="2" fill="#f5f5f5"></rect>
+        <text x="240" y="402" fill="#eb6c36" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">200 · EDGE-CACHED</text>
+
+        <!-- M6 label (placed between Astro and Analytics lifelines, a clear gap) -->
+        <rect x="648" y="448" width="96" height="12" rx="2" fill="#f5f5f5"></rect>
+        <text x="696" y="458" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">PAGEVIEW BEACON</text>
+
+        <!-- =================================================================
+             ACTOR BOXES — drawn after arrows/labels.
+             Each actor: 144–160 wide × 56 tall. Centers: 128, 352, 584, 800.
+             ================================================================= -->
+
+        <!-- Actor 1: Reader (external / soft) -->
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M58 72.636 L93 74.546 L128 74.075 L163 72.785 L198 74.643 L197.657 100 L199.005 126 L163 126.059 L128 125.26 L93 127.167 L58 126.549 L58.375 100 Z" fill="#f5f5f5" stroke="none"></path></g>
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M58 72.637 L93 75.207 L128 73.642 L163 75.016 L198 74.803 L196.879 100 L198.444 126 L163 124.773 L128 126.794 L93 126.858 L58 125.203 L57.9 100 Z" fill="rgba(79,93,117,0.10)" stroke="none"></path><path class="rough-generated" d="M62 72 C90.82676713438705 73.24990891864755, 115.55498117292301 71.94567460766294, 194 72 M194 72 C199.23164286771788 74.63286761036143, 201.55241975644603 74.85406340649351, 200 78 M200 78 C201.34759774449515 90.60839847149327, 197.8386022144859 104.42884433651344, 200 122 M200 122 C197.47867107680068 126.1315482453443, 196.96535101523622 128.2588564679958, 194 128 M194 128 C145.10966736720877 126.99895187450339, 98.08941394025459 126.57076937092235, 62 128 M62 128 C56.65004526833072 127.33514759233222, 54.30942946830764 126.46986467828974, 56 122 M56 122 C58.8119252476166 105.4184125144966, 59.538036090440585 88.60914882058277, 56 78 M56 78 C56.67779945125803 74.25731167653575, 60.89193805744871 74.3419711069204, 62 72 M62 72 C62 72, 62 72, 62 72" stroke="#7a8399" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-generated" d="M66 80 C73.31195373367518 79.29067064196802, 75.68033464234323 77.09884906084277, 90 80 M90 80 C93.25792748512079 77.68430093247443, 94.29031147342175 82.49180020807933, 92 82 M92 82 C92.34272871249355 83.25375398837029, 91.51681955331006 87.12271104983985, 92 90 M92 90 C90.83781280834228 88.99540482343484, 93.58623202362408 91.6726790247485, 90 92 M90 92 C83.82232033740729 92.72230316258036, 74.34320225995035 90.34351773715578, 66 92 M66 92 C63.95107323906075 94.38965603429824, 64.68643161039799 90.67359885492672, 64 90 M64 90 C64.98691522709093 86.80329599879681, 64.18003156534397 85.3173721318692, 64 82 M64 82 C66.170091852732 79.3704898931707, 67.31763324259471 79.4075866220519, 66 80 M66 80 C66 80, 66 80, 66 80" stroke="rgba(122,131,153,0.40)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="78" y="89" fill="#7a8399" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">EXT</text>
+        <text x="128" y="104" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Reader</text>
+        <text x="128" y="119" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Browser</text>
+
+        <!-- Actor 2: Cloudflare (cloud / muted) -->
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M282 72.637 L317 73.73 L352 72.776 L387 73.88 L422 75.123 L422.124 100 L421.323 126 L387 125.001 L352 127.063 L317 126.241 L282 125.313 L280.948 100 Z" fill="#f5f5f5" stroke="none"></path></g>
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M282 72.638 L317 74.391 L352 75.142 L387 73.312 L422 75.282 L421.347 100 L420.762 126 L387 126.515 L352 125.798 L317 125.932 L282 126.767 L283.272 100 Z" fill="rgba(45,49,66,0.03)" stroke="none"></path><path class="rough-generated" d="M286 72 C311.5516633860767 73.61905418461188, 342.06971448883417 75.45205806320533, 418 72 M418 72 C419.5104967199266 71.38716757670045, 421.9660949073732 71.96727381125092, 424 78 M424 78 C424.59751986322925 95.95617804452777, 425.4211922293715 113.7022843502462, 424 122 M424 122 C425.5560962714255 124.52311797961593, 419.2279940403998 126.50032413825393, 418 128 M418 128 C383.82342014834285 129.6434288671054, 347.6023666404187 129.16343759799378, 286 128 M286 128 C282.5531291805208 130.6986729182303, 279.6404358945787 128.8810672082007, 280 122 M280 122 C282.4975097301789 111.02570585533977, 280.7936605814286 95.93761513456703, 280 78 M280 78 C279.35467665567995 75.39684632644057, 284.1690236128867 71.3388176523149, 286 72 M286 72 C286 72, 286 72, 286 72" stroke="rgba(45,49,66,0.30)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-generated" d="M290 80 C294.84102189028636 78.35363472076831, 303.8034117680974 79.2990513292211, 318 80 M318 80 C317.5367813373295 80.23860089881346, 318.7039866243489 79.60501061283674, 320 82 M320 82 C320.44450288729274 84.53897956822068, 319.0316608865699 86.80431455660612, 320 90 M320 90 C317.1152380029671 93.18697455770646, 319.84887504878765 89.91414669500664, 318 92 M318 92 C308.69393286416306 93.18597555578918, 297.97187445135785 90.75538136483402, 290 92 M290 92 C289.85415715125083 91.95318136019633, 290.01743803666903 93.08480138483768, 288 90 M288 90 C289.04462875506374 87.97277487937362, 287.2657610966871 86.10188174594194, 288 82 M288 82 C288.8469690571539 80.51002454307552, 290.59471879803266 82.20443316744641, 290 80 M290 80 C290 80, 290 80, 290 80" stroke="rgba(45,49,66,0.22)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="304" y="89" fill="#7a8399" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">EDGE</text>
+        <text x="352" y="104" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Cloudflare</text>
+        <text x="352" y="119" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Pages · cache</text>
+
+        <!-- Actor 3: Astro Origin (focal / coral) -->
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M506 72.639 L545 72.913 L584 74.276 L623 74.975 L662 72.802 L662.592 100 L662.441 126 L623 126.743 L584 126.067 L545 125.315 L506 126.877 L506.321 100 Z" fill="#f5f5f5" stroke="none"></path></g>
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M506 72.639 L545 73.575 L584 73.843 L623 74.407 L662 72.961 L661.814 100 L661.88 126 L623 125.457 L584 124.801 L545 125.007 L506 125.532 L505.845 100 Z" fill="rgba(235,108,54,0.08)" stroke="none"></path><path class="rough-generated" d="M510 72 C541.3947396340781 68.92348926936045, 569.4208077973686 68.09373133753193, 658 72 M658 72 C661.5893505721353 73.94146754303947, 664.1797700583004 74.88048421600834, 664 78 M664 78 C665.4424419819633 92.50395761756226, 664.7987822442572 105.37572436397896, 664 122 M664 122 C663.8335214660503 128.71468771388754, 663.2906370655634 130.54179180851207, 658 128 M658 128 C606.4365446890704 132.5122255700012, 554.7140628597699 131.98042553535896, 510 128 M510 128 C508.4562130927108 128.26219824412837, 504.97144232084975 125.49226973811164, 504 122 M504 122 C501.97809421274115 107.83299919618294, 503.64428507241655 91.46608144855126, 504 78 M504 78 C502.03155386010184 76.53638097634538, 507.4461091683246 74.13566419770942, 510 72 M510 72 C510 72, 510 72, 510 72" stroke="#eb6c36" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-generated" d="M514 80 C521.3420735474676 77.47015608233399, 524.4704558949918 81.55281088036485, 542 80 M542 80 C543.6156351895382 82.79290086515248, 544.9176617752761 82.51822101759414, 544 82 M544 82 C544.2562770620921 84.22420514807105, 544.5765022198298 85.60591806337237, 544 90 M544 90 C545.1926631975919 91.57854429197808, 542.1115180739513 93.95561436526478, 542 92 M542 92 C536.2399183060974 94.63675383630209, 525.1492924731224 92.15435087981633, 514 92 M514 92 C509.9572410634408 89.51670668609441, 509.5484444629401 89.69600391474863, 512 90 M512 90 C511.0723422830366 87.5422537599504, 512.9614906280302 83.68639136001468, 512 82 M512 82 C511.52384626157584 81.64955919298033, 513.8718043534706 79.20127971284091, 514 80 M514 80 C514 80, 514 80, 514 80" stroke="rgba(235,108,54,0.50)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="528" y="89" fill="#eb6c36" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">ORIG</text>
+        <text x="584" y="104" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Astro Origin</text>
+        <text x="584" y="119" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">SSR + MDX</text>
+
+        <!-- Actor 4: Analytics (optional / dashed) -->
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M730 72.64 L765 74.897 L800 72.976 L835 73.27 L870 73.281 L871.059 100 L868.759 126 L835 125.685 L800 125.07 L765 127.189 L730 125.641 L728.893 100 Z" fill="#f5f5f5" stroke="none"></path></g>
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M730 72.64 L765 72.758 L800 75.343 L835 72.702 L870 73.441 L870.281 100 L870.998 126 L835 127.199 L800 126.605 L765 126.881 L730 127.096 L731.218 100 Z" fill="rgba(45,49,66,0.02)" stroke="none"></path><path class="rough-generated" d="M734 72 C758.801455889456 69.57234471654054, 789.2991811206565 71.8798249742901, 866 72 M866 72 C871.668204424344 70.6957675093785, 874.3934452092275 71.99369462076575, 872 78 M872 78 C872.6923641006974 92.05173719059675, 870.5813722591428 108.84916437771172, 872 122 M872 122 C870.1109466606752 127.10625744815916, 869.553280090727 128.7832594787702, 866 128 M866 128 C834.8509257106111 124.34738285230938, 799.6282720407471 123.76377405213657, 734 128 M734 128 C728.5592970049008 125.82572357002645, 730.3024487471208 127.9034722680226, 728 122 M728 122 C725.6636786953034 107.64029253702611, 724.8999095634045 98.79454776253552, 728 78 M728 78 C730.5084310645237 71.8759156262502, 730.7231947237626 71.13251074310392, 734 72 M734 72 C734 72, 734 72, 734 72" stroke="rgba(45,49,66,0.22)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4,3"></path></g>
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-generated" d="M738 80 C741.2123574058525 81.42570119923447, 749.2759644242934 77.04559418684337, 762 80 M762 80 C765.6944890417469 79.5472008314915, 761.3313369262032 79.63143142235155, 764 82 M764 82 C764.0680512368912 85.50943072792143, 763.8013435530895 87.60752157013863, 764 90 M764 90 C763.4700883922167 89.97011402624969, 766.1741610991148 92.19708203552291, 762 92 M762 92 C755.5716881240718 90.26690353733953, 745.6982792469673 93.5326918153232, 738 92 M738 92 C735.8603249756309 92.88023201199249, 734.8794508892112 92.10720644465958, 736 90 M736 90 C735.1300558110094 88.71173264052719, 736.0472201593732 86.79090097408742, 736 82 M736 82 C734.2007234659977 82.78909384288515, 737.1488899089085 81.99812625823543, 738 80 M738 80 C738 80, 738 80, 738 80" stroke="rgba(45,49,66,0.22)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="750" y="89" fill="#7a8399" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">ASY</text>
+        <text x="800" y="104" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Analytics</text>
+        <text x="800" y="119" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Beacon · async</text>
+
+        <!-- =================================================================
+             LEGEND — horizontal strip at the bottom.
+             Separator at y=504, eyebrow at y=520, items at y=540–548.
+             ================================================================= -->
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M56 504 C240.1220345568657 508.9765956846476, 425.84656106710435 509.18951797163487, 944 504" stroke="rgba(45,49,66,0.10)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="56" y="520" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+
+        <!-- Item 1: Actor swatch (coral focal) -->
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M58 541.534 L63 542.254 L68 542.015 L67.931 545 L67.972 548 L63 548.257 L58 547.765 L58.048 545 Z" fill="rgba(235,108,54,0.08)" stroke="none"></path><path class="rough-generated" d="M58 540 C60.023867289396 541.5007510361553, 60.72833965593018 541.3231102598191, 68 540 M68 540 C67.28039160988604 541.2500674757175, 68.80712036015466 541.5735716921898, 70 542 M70 542 C70.029425515068 543.3146858358663, 70.69592833144706 545.0264429309871, 70 548 M70 548 C72.18837185529992 548.8311605157642, 67.1492564492238 549.0247271490283, 68 550 M68 550 C65.7077117220033 549.4552892464853, 62.321357322717084 549.1375804636336, 58 550 M58 550 C57.12904758375759 551.1892488959245, 53.83345517339185 547.848008131267, 56 548 M56 548 C55.59389862224343 545.2585389206838, 56.37577988520148 543.0054305376019, 56 542 M56 542 C57.18530826894566 539.6821169428216, 56.66694694586719 541.9293572884984, 58 540 M58 540 C58 540, 58 540, 58 540" stroke="#eb6c36" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="76" y="548" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Focal actor</text>
+
+        <!-- Item 2: Activation bar swatch -->
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-generated" d="M190.48650943096726 537.0967422211543 L190.44375733789056 536.2104573154822 L189.3850756412372 554.3862781608477 L187.0331022804603 553.4801800990477" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M188 536 C188.976161412932 536.0999781262362, 189.25556091088802 535.8514043616736, 192 536 M192 536 C193.926596484154 538.5209407420642, 194.22259921845747 544.2847963082231, 192 554 M192 554 C191.20778397802263 553.4998678131169, 190.12464797694236 554.1710592539375, 188 554 M188 554 C190.59424708984093 551.752281952519, 187.5440815540333 542.8808790280857, 188 536" stroke="#4f5d75" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="200" y="548" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Activation</text>
+
+        <!-- Item 3: Request arrow (link-blue) -->
+        <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M308 546 C315.3778607475571 543.9220392593205, 318.42689219107854 547.5915831663668, 336 546" stroke="#2e5aa8" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M338.3689069144428 548.5056670673191 L323.45500656291847 550.8217986352743 L325.4419233195484 544.0805579192936" stroke="none" stroke-width="0" fill="#2e5aa8" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M336 546 C335.1555876696672 548.2303500071783, 330.18108362571405 546.861664615561, 325.6 550.2 M325.6 550.2 C325.13752643177475 547.7287357709258, 324.79385201380217 545.2403069887608, 325.6 541.8 M325.6 541.8 C328.72348446247 544.3562620520978, 333.1176759632554 544.2086596626466, 336 546" stroke="#2e5aa8" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="344" y="548" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">HTTP request</text>
+
+        <!-- Item 4: Return / async (muted dashed) -->
+        <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M476 546 C484.21154463328423 547.1558797131758, 487.24924023337667 544.1378363500814, 504 546" stroke="#4f5d75" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4"></path><path class="rough-generated" d="M505.78272947119547 545.5343040774576 L494.7921229575761 547.5672851542943 L493.62168293641884 544.4570238719693" stroke="none" stroke-width="0" fill="#4f5d75" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M504 546 C500.43630306844506 547.0021692649813, 498.70610434279877 548.3887006333708, 493.6 550.2 M493.6 550.2 C493.50067563902985 547.0771415735577, 494.1122726673449 545.2519796180147, 493.6 541.8 M493.6 541.8 C498.0114300757904 542.1426176365419, 499.63777036100635 543.06499895589, 504 546" stroke="#4f5d75" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4"></path></g>
+        <text x="512" y="548" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Return / async</text>
+
+        <!-- Item 5: Primary response (coral) -->
+        <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M652 546 C655.2452285190113 545.604720167031, 664.0715882756747 547.499089533796, 680 546" stroke="#eb6c36" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M681.1965520279482 548.3629410875961 L667.9292393522337 550.3127716733143 L669.4014425532893 538.8334898246452" stroke="none" stroke-width="0" fill="#eb6c36" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M680 546 C676.8525978619125 545.7719186495308, 675.0477891942792 546.7033782657261, 669.2 550.4 M669.2 550.4 C669.4763879342033 548.9978115369603, 668.565869193311 545.2285880685672, 669.2 541.6 M669.2 541.6 C671.8982349631426 542.6552713515015, 677.4708962684059 544.7375736781138, 680 546" stroke="#eb6c36" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="688" y="548" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Primary response</text>
+
+      </svg>
+  </div>
+
+
+</body></html>

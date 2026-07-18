@@ -1,0 +1,116 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Content pyramid · what compounds · Hand-drawn</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f5f5f5;
+      --color-ink:     #2d3142;
+      --color-muted:   #4f5d75;
+      --color-accent:  #eb6c36;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+
+    .frame { max-width: 1200px; width: 100%; }
+
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+
+    svg { width: 100%; min-width: 900px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Pyramid · Illustrate · Hand</p>
+    <h1>Content pyramid · what compounds</h1>
+
+    <svg viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"></circle>
+          </pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#f5f5f5"></rect>
+        <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"></rect>
+
+        <!-- Left axis: direction of rarity -->
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M100 40 C101.67255576696174 98.17499074698712, 100.19523580754235 157.75253790839974, 100 320" stroke="rgba(45,49,66,0.30)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <g class="rough-shape" data-source-tag="polygon"><path class="rough-fill-mask" d="M96.8 39.2 L103.2 39.2 L100 29.6 Z" fill="rgba(45,49,66,0.45)" stroke="none"></path></g>
+        <text x="80" y="216" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em" text-anchor="middle" transform="rotate(-90 80 216)">RARER · FEWER · COMPOUNDS ↑</text>
+
+        <!-- Base layer: Short posts -->
+        <g class="rough-shape" data-source-tag="polygon"><path class="rough-fill-mask" d="M245.592 280.199 L754.408 280.199 L818.01 343.801 L181.99 343.801 Z" fill="#ececec" stroke="none"></path><path class="rough-generated" d="M244.85013947067782 282.08238908918577 L755.2037240850739 279.5653106031008 L821.5081222790293 346.7705310252495 L179.90311981914564 342.2967899796553" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M244 280 C352.743341894038 281.6634458244964, 460.0355394970253 281.22338415633885, 756 280 M756 280 C771.152713148091 295.10668015701697, 787.2932186020352 314.53119532389564, 820 344 M820 344 C689.2114725958183 341.6326253699884, 558.408850130923 339.80017009373756, 180 344 M180 344 C197.5178168307431 326.9091753952019, 213.43305287169292 310.8810466788523, 244 280" stroke="rgba(45,49,66,0.12)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="500" y="308" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Short posts</text>
+        <text x="500" y="324" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">daily · ~200 words</text>
+        <text x="836" y="316" fill="#7a8399" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.08em">~240/yr</text>
+
+        <!-- L3: Essays -->
+        <g class="rough-shape" data-source-tag="polygon"><path class="rough-fill-mask" d="M309.488 216.248 L690.512 216.248 L754.015 279.752 L245.985 279.752 Z" fill="#ececec" stroke="none"></path><path class="rough-generated" d="M307.2760025015101 218.7167503932491 L694.2582325270399 217.94231274519115 L756.378523122333 281.68963813576846 L244.92245167996734 281.0650437036529" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M308 216 C390.57111398548926 214.61864065847027, 470.4885449295131 216.88038809095386, 692 216 M692 216 C709.9936284111812 237.0672779512033, 729.9378614889457 254.27816908475012, 756 280 M756 280 C653.6802818671614 278.2990143431276, 550.746371466294 279.55792144428193, 244 280 M244 280 C258.15821556750683 265.3677214324102, 276.4107980639115 251.44146769043056, 308 216" stroke="rgba(45,49,66,0.12)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="500" y="244" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Essays</text>
+        <text x="500" y="260" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">weekly · 800–1,500 words</text>
+        <text x="776" y="252" fill="#7a8399" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.08em">~48/yr</text>
+
+        <!-- L2: Long-form guides -->
+        <g class="rough-shape" data-source-tag="polygon"><path class="rough-fill-mask" d="M373.315 152.329 L626.685 152.329 L690.027 215.671 L309.973 215.671 Z" fill="#ececec" stroke="none"></path><path class="rough-generated" d="M369.70186553234237 149.55111169731245 L627.512740969006 150.5193148872815 L691.2489239656367 216.60874524628744 L309.94178354078906 214.03329742765055" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M372 152 C424.08925991979237 151.23390879333257, 481.2458701153202 148.91457319438874, 628 152 M628 152 C648.8345436742716 173.2278757453896, 666.7825043758564 194.02514284560456, 692 216 M692 216 C538.0131094382077 216.61077972124204, 385.6662164665587 216.18104938372784, 308 216 M308 216 C322.2786143042706 201.50626746961845, 337.06854325613006 183.88188870200887, 372 152" stroke="rgba(45,49,66,0.12)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="500" y="180" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Long-form guides</text>
+        <text x="500" y="196" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">quarterly · 4,000+ words</text>
+        <text x="716" y="188" fill="#7a8399" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.08em">~4/yr</text>
+
+        <!-- Apex: Flagship book — CORAL FOCAL (true pyramid peak — single triangle, consistent slope with layers below) -->
+        <g class="rough-shape" data-source-tag="polygon"><path class="rough-fill-mask" d="M500 25.265 L626.103 151.368 L373.897 151.368 Z" fill="rgba(235,108,54,0.08)" stroke="none"></path><path class="rough-generated" d="M497.3457383994013 22.138277500495313 L625.993226409331 154.6320048149675 L372.5044232968241 152.61696099601687" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M500 24 C527.4655180174857 47.74218775860966, 558.3189029294997 76.82706664435565, 628 152 M628 152 C543.1765338114715 154.9621147782721, 457.224653966151 152.58368964928343, 372 152 M372 152 C421.73814134843644 100.86047877185045, 474.43414825446905 51.409288264438494, 500 24" stroke="#eb6c36" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="500" y="120" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Flagship book</text>
+        <text x="500" y="136" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">every 3–5 years</text>
+        <text x="656" y="112" fill="#eb6c36" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.08em">the apex</text>
+
+        <!-- Footnote under pyramid -->
+        <text x="500" y="384" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif" text-anchor="middle" font-style="italic">The base funds the apex. The apex defines the base.</text>
+
+        <!-- Legend -->
+        <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M40 436 C234.15635816592726 441.3589139803033, 427.8295404741541 439.4987126799207, 960 436" stroke="rgba(45,49,66,0.10)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="40" y="452" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M42 465.387 L48 466.196 L54 466.356 L54.18 470 L53.807 474 L48 473.398 L42 473.522 L41.406 470 Z" fill="rgba(235,108,54,0.08)" stroke="none"></path><path class="rough-generated" d="M38.779454624839126 463.4541956095025 L58.876266294904056 463.85032131355257 L57.660126495547594 473.3660665778443 L39.19977912325412 476.5380585996434" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M40 464 C43.40869830414653 463.9566270644777, 45.175029109567404 464.1661546475999, 56 464 M56 464 C54.44743701649364 467.6942107046023, 57.30846122098621 473.00435512144117, 56 476 M56 476 C49.60147365257144 474.26216327684, 41.81378511056304 473.67087649839, 40 476 M40 476 C41.30412034774665 472.1017930302396, 40.97226937676314 467.3470001973584, 40 464" stroke="#eb6c36" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="64" y="474" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Apex — rarest, highest leverage</text>
+
+        <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M282 465.387 L288 466.498 L294 466.158 L293.921 470 L293.88 474 L288 474.322 L282 474.546 L282.099 470 Z" fill="#ececec" stroke="none"></path><path class="rough-generated" d="M277.20531765567137 464.08855691356587 L296.1307747368701 466.22732345564293 L296.53052733885124 478.0851736883633 L280.2191109840758 473.50631232364105" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M280 464 C284.07515629284086 461.95533791157413, 285.83192930363117 466.09479567858386, 296 464 M296 464 C295.09393659660356 464.93683877596635, 295.83963429579273 469.3679841555841, 296 476 M296 476 C291.57748347692194 475.4859776986856, 284.56561034463346 476.43741567504594, 280 476 M280 476 C279.1392644833983 472.45220498377455, 280.98600117260827 468.4249135320075, 280 464" stroke="rgba(45,49,66,0.25)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+        <text x="304" y="474" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Supporting layer — the volume work</text>
+
+        <text x="560" y="474" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif" font-style="italic">Layer width is honest: narrower = rarer shipping cadence.</text>
+      </svg>
+  </div>
+
+
+</body></html>
