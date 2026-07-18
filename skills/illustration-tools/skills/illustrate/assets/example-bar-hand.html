@@ -1,0 +1,126 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sprint velocity · Bar chart · Hand-drawn</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:  #f5f5f5;
+      --color-ink:    #2d3142;
+      --color-muted:  #4f5d75;
+      --color-accent: #eb6c36;
+      --font-sans:    'Geist', system-ui, sans-serif;
+      --font-serif:   'Instrument Serif', serif;
+      --font-mono:    'Geist Mono', ui-monospace, monospace;
+    }
+    body { font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1200px; width: 100%; }
+    .eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem; }
+    h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 1.5rem; }
+    svg { width: 100%; min-width: 760px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Bar · Illustrate · Hand</p>
+    <h1>Sprint velocity · 8-sprint view</h1>
+
+    <svg viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"></circle>
+        </pattern>
+      </defs>
+
+      <rect width="100%" height="100%" fill="#f5f5f5"></rect>
+      <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"></rect>
+
+      <!-- Y-axis rotated label -->
+      <text transform="rotate(-90 24 230)" x="24" y="230" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" letter-spacing="0.14em" text-anchor="middle">STORY POINTS</text>
+
+      <!-- Horizontal gridlines (drawn before bars) -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M80 357 C266.359696354419 355.3581441626698, 452.2560996682942 355.7023566804081, 960 357" stroke="rgba(45,49,66,0.08)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M80 293 C266.7595679334179 289.901931070555, 452.71783493462954 289.89110868023704, 960 293" stroke="rgba(45,49,66,0.08)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M80 230 C267.1594395124167 235.88571797844023, 453.1795702009648 235.51986068006605, 960 230" stroke="rgba(45,49,66,0.08)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M80 167 C265.2393110914156 171.42950488632545, 451.3213054673002 170.708612679895, 960 167" stroke="rgba(45,49,66,0.08)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M80 103 C265.63918267041447 103.65329179421067, 451.7830407336354 102.57736467972398, 960 103" stroke="rgba(45,49,66,0.08)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M80 40 C266.0390542494133 36.8770787020959, 452.2447759999707 37.766116679552944, 960 40" stroke="rgba(45,49,66,0.06)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+      <!-- Y-axis line and X-axis baseline -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M80 40 C83.95719890364582 121.25865055887462, 83.72797894006217 202.55931155274243, 80 420" stroke="rgba(45,49,66,0.25)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M80 420 C266.83879740741105 424.40465251786634, 453.1682465326414 424.58362067921087, 960 420" stroke="rgba(45,49,66,0.25)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+      <!-- Y-axis tick labels -->
+      <text x="72" y="361" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end">20</text>
+      <text x="72" y="297" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end">40</text>
+      <text x="72" y="234" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end">60</text>
+      <text x="72" y="171" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end">80</text>
+      <text x="72" y="107" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end">100</text>
+      <text x="72" y="44" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end">120</text>
+
+      <!-- ─── BARS (pitch=110, width=72, pad=19) ─── -->
+      <!-- S1: v=72, h=228, y=192 -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M101 192.661 L135 193.088 L169 195.23 L169.733 231.333 L168.203 268.667 L170.027 306 L169.498 343.333 L167.999 380.667 L168.582 418 L135 417.175 L101 417.782 L101.97 380.667 L102.042 343.333 L101.749 306 L101.39 268.667 L101.366 231.333 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M101 192.662 L135 193.749 L169 194.797 L169.165 231.333 L168.363 268.667 L169.249 306 L168.937 343.333 L169.513 380.667 L170.116 418 L135 416.867 L101 419.237 L101.494 380.667 L102.396 343.333 L100.594 306 L101.134 268.667 L101.38 231.333 Z" fill="rgba(79,93,117,0.15)" stroke="none"></path><path class="rough-generated" d="M97.90248457556591 191.03294714177028 L168.79148039286957 194.35004420662298 L173.58389789825304 418.33544657314195 L96.74153213566169 418.29772052550686" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M99 192 C116.81000474104658 191.8713222227106, 131.65659931832926 190.5435680857906, 171 192 M171 192 C170.12567159297004 261.9124318193846, 166.02549201739293 328.26200433645846, 171 420 M171 420 C149.27347420910374 419.80260729750154, 120.72033052975311 419.0243695523357, 99 420 M99 420 C96.82708864190084 364.90625644245284, 94.17581308777862 312.85304384648305, 99 192" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="135" y="184" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">72</text>
+
+      <!-- S2: v=88, h=280, y=140 -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M211 140.662 L245 142.41 L279 142.364 L278.596 181.429 L278.523 220.857 L278.472 260.286 L278.377 299.714 L278.226 339.143 L278.851 378.571 L280.358 418 L245 417.892 L211 418.018 L209.95 378.571 L212.24 339.143 L210.879 299.714 L211.394 260.286 L210.625 220.857 L211.865 181.429 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M211 140.662 L245 143.072 L279 141.93 L278.028 181.429 L278.683 220.857 L277.694 260.286 L277.816 299.714 L279.74 339.143 L280.385 378.571 L280.049 418 L245 419.347 L211 417.543 L210.303 378.571 L211.085 339.143 L210.624 299.714 L211.408 260.286 L211.772 220.857 L212.232 181.429 Z" fill="rgba(79,93,117,0.15)" stroke="none"></path><path class="rough-generated" d="M210.55421063723043 140.30166974989697 L279.1004972768016 141.3040484908037 L281.32469958486035 421.97366079417986 L208.78019585730507 418.03422797350214" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M209 140 C222.6840979109518 142.43897397525143, 237.51474619982764 139.33604529805015, 281 140 M281 140 C279.0021307335747 237.3491899432067, 278.8057556090226 336.2974717391367, 281 420 M281 420 C258.6975703443401 423.74940009009555, 232.36803676364943 421.02797423195557, 209 420 M209 420 C206.01874692114333 308.7308964245589, 204.7575539920077 201.15711131235685, 209 140" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="245" y="132" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">88</text>
+
+      <!-- S3: v=95, h=300, y=120 -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M321 120.663 L355 120.933 L389 121.497 L390.26 164.286 L388.842 206.571 L389.717 248.857 L390.055 291.143 L388.454 333.429 L389.12 375.714 L389.741 418 L355 418.001 L321 417.067 L320.657 375.714 L319.931 333.429 L320.369 291.143 L321.421 248.857 L320.119 206.571 L319.798 164.286 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M321 120.663 L355 121.594 L389 121.064 L389.692 164.286 L389.002 206.571 L388.939 248.857 L389.495 291.143 L389.968 333.429 L387.854 375.714 L389.432 418 L355 416.656 L321 419.391 L321.011 375.714 L321.577 333.429 L320.113 291.143 L321.435 248.857 L321.266 206.571 L320.164 164.286 Z" fill="rgba(79,93,117,0.15)" stroke="none"></path><path class="rough-generated" d="M317.40593669889495 121.57039235802367 L389.4095141607337 120.25805277498439 L389.06550127146767 419.8118750152178 L320.8188595789485 417.77073542149736" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M319 120 C334.35819108085707 122.39662572779227, 349.17289308132604 117.51852251030971, 391 120 M391 120 C392.81214033212586 241.43126023671348, 391.70688876663843 360.4771992092531, 391 420 M391 420 C368.1216664795764 419.28619288268965, 344.0157429975457 420.42157891157547, 319 420 M319 420 C315.58872580831365 313.39184887525784, 315.45442002961573 211.24005437101374, 319 120" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="355" y="112" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">95</text>
+
+      <!-- S4: v=78, h=248, y=172 -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M431 172.664 L465 174.255 L499 172.631 L499.123 214.667 L499.162 255.333 L498.162 296 L498.934 336.667 L498.682 377.333 L499.389 418 L465 418.123 L431 418.111 L431.915 377.333 L431.365 336.667 L430.422 296 L429.858 255.333 L431.449 214.667 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M431 172.664 L465 174.916 L499 174.998 L498.555 214.667 L499.321 255.333 L500.184 296 L498.373 336.667 L500.196 377.333 L498.123 418 L465 417.815 L431 416.765 L431.44 377.333 L431.719 336.667 L432.068 296 L429.603 255.333 L431.462 214.667 Z" fill="rgba(79,93,117,0.15)" stroke="none"></path><path class="rough-generated" d="M430.0576627605595 174.83911496615036 L499.7185310446657 171.2120570591651 L502.60630295807493 417.6500892362557 L427.05752330059187 417.50724286949264" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M429 172 C446.0322842507623 168.5542774803331, 460.83103996282443 173.50099972256925, 501 172 M501 172 C499.0808756018491 233.38139788968246, 496.8191340276338 292.47373952917906, 501 420 M501 420 C477.5457626148127 423.2329856752837, 455.6634492314421 422.4251835911954, 429 420 M429 420 C425.4335432191028 341.74057986023604, 426.48212172175704 264.7391053499851, 429 172" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="465" y="164" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">78</text>
+
+      <!-- S5 FOCAL: v=110, h=348, y=72 -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M541 72.664 L575 72.778 L609 74.565 L607.987 117 L609.481 160 L609.407 203 L607.813 246 L608.91 289 L609.658 332 L608.506 375 L609.22 418 L575 417.964 L541 419.073 L540.914 375 L542.148 332 L541.476 289 L541.906 246 L541.264 203 L540.51 160 L540.11 117 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M541 72.665 L575 73.439 L609 74.131 L610.219 117 L609.641 160 L608.629 203 L610.052 246 L607.624 289 L608.392 332 L608.198 375 L607.875 418 L575 417.488 L541 416.627 L539.759 375 L541.892 332 L541.49 289 L540.252 246 L541.63 203 L541.96 160 L540.491 117 Z" fill="rgba(235,108,54,0.12)" stroke="none"></path><path class="rough-generated" d="M536.909388822224 70.30783757427707 L610.0275479285978 70.16606134334579 L610.3471046446823 421.28830345729364 L539.0961870222352 417.24375031748787" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M539 72 C551.9063774206676 71.12192923287395, 572.4891868443228 74.29347693482879, 611 72 M611 72 C608.2041019727337 173.24878577325026, 609.3738664866472 276.76421863139353, 611 420 M611 420 C586.969858750049 418.76977846787776, 567.3111554653383 421.8187882708153, 539 420 M539 420 C534.9635504659395 325.35661465292407, 536.7540573842687 232.53662386170495, 539 72" stroke="#eb6c36" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="575" y="64" fill="#eb6c36" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">110</text>
+
+      <!-- S6: v=102, h=324, y=96 -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M651 96.665 L685 98.1 L719 97.698 L719.65 138 L719.801 178 L717.852 218 L719.491 258 L719.138 298 L719.927 338 L717.889 378 L719.329 418 L685 417.012 L651 416.981 L651.405 378 L651.637 338 L651.504 298 L651.399 258 L651.997 218 L650.611 178 L650.873 138 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M651 96.665 L685 98.761 L719 97.265 L719.082 138 L719.96 178 L719.874 218 L718.931 258 L717.852 298 L718.661 338 L720.38 378 L717.984 418 L685 419.336 L651 417.335 L650.251 378 L651.382 338 L651.517 298 L649.746 258 L652.363 218 L652.062 178 L651.255 138 Z" fill="rgba(79,93,117,0.15)" stroke="none"></path><path class="rough-generated" d="M649.5611148838885 95.57656018240377 L720.3365648125298 93.12006562752649 L723.8879063312895 419.1265176783316 L651.1348507438786 422.7802577654831" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M649 96 C663.5804705905728 95.0795809854148, 678.3473337258212 96.47595414708834, 721 96 M721 96 C721.8899838363585 208.11898275404997, 722.2640092855618 318.9420965905413, 721 420 M721 420 C696.3939548852853 422.7165712604718, 678.9588616992347 418.0223929504351, 649 420 M649 420 C644.64838563806 345.1129595131711, 647.5620945062074 273.0324088332703, 649 96" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="685" y="88" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">102</text>
+
+      <!-- S7: v=85, h=268, y=152 -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M761 152.666 L795 152.622 L829 152.832 L828.514 198 L830.12 242 L829.096 286 L828.37 330 L829.366 374 L830.196 418 L795 419.072 L761 418.439 L761.861 374 L760.689 330 L761.896 286 L761.127 242 L761.531 198 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M761 152.666 L795 153.284 L829 155.199 L827.946 198 L830.28 242 L828.319 286 L827.809 330 L828.08 374 L828.93 418 L795 418.763 L761 417.094 L761.385 374 L761.043 330 L760.742 286 L760.872 242 L761.545 198 Z" fill="rgba(79,93,117,0.15)" stroke="none"></path><path class="rough-generated" d="M756.4128409455531 152.84528279053046 L830.6455816964619 153.87406991170718 L831.6287080178969 422.7647318993695 L757.373514465522 422.5167652134784" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M759 152 C775.254563760478 153.64723273795565, 790.0054806073197 153.2684313593479, 831 152 M831 152 C835.6299665893596 256.2278768873465, 835.0702031041219 359.348244602468, 831 420 M831 420 C811.6180510205216 418.25336405306587, 790.606567933131 417.415997630055, 759 420 M759 420 C758.8068779448645 315.3541173472168, 758.700432059491 210.31887952872665, 759 152" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="795" y="144" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">85</text>
+
+      <!-- S8: v=93, h=296, y=124 -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M871 124.667 L905 125.945 L939 126.765 L940.177 167.714 L937.639 209.429 L940.341 251.143 L940.049 292.857 L939.594 334.571 L937.665 376.286 L939.455 418 L905 418.548 L871 417.909 L871.397 376.286 L872.387 334.571 L870.616 292.857 L871.559 251.143 L870.386 209.429 L870.662 167.714 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M871 124.667 L905 126.606 L939 126.332 L939.609 167.714 L937.799 209.429 L939.564 251.143 L939.488 292.857 L938.308 334.571 L939.199 376.286 L939.146 418 L905 417.203 L871 417.433 L871.751 376.286 L871.233 334.571 L870.361 292.857 L871.572 251.143 L871.533 209.429 L871.029 167.714 Z" fill="rgba(79,93,117,0.15)" stroke="none"></path><path class="rough-generated" d="M869.0645670072175 126.11400539865717 L940.954598580394 124.8280741958879 L939.3695097045041 420.6029461204074 L869.4121781871654 422.2532726614736" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M869 124 C886.9286569303832 125.60488449049647, 901.6636274888181 123.45090857160743, 941 124 M941 124 C937.183596370701 192.5281504418854, 940.0230614532919 264.64757645578743, 941 420 M941 420 C921.042147155758 422.20015684565993, 896.4542741670273 419.41960230967493, 869 420 M869 420 C868.2481137124548 316.73931640290425, 864.938001077991 214.04248300907838, 869 124" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="905" y="116" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">93</text>
+
+      <!-- X-axis category labels -->
+      <text x="135" y="440" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">S1</text>
+      <text x="245" y="440" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">S2</text>
+      <text x="355" y="440" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">S3</text>
+      <text x="465" y="440" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">S4</text>
+      <text x="575" y="440" fill="#eb6c36" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">S5</text>
+      <text x="685" y="440" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">S6</text>
+      <text x="795" y="440" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">S7</text>
+      <text x="905" y="440" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">S8</text>
+
+      <!-- Legend -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M40 462 C235.20529530510305 456.49415598187596, 433.4351081697643 457.5975307062641, 960 462" stroke="rgba(45,49,66,0.10)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="40" y="478" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M42 489.543 L48 489.701 L54 489.817 L53.819 493 L53.698 496 L48 495.66 L42 495.783 L41.841 493 Z" fill="rgba(235,108,54,0.12)" stroke="none"></path><path class="rough-generated" d="M42 488 C43.62689437804744 486.60226359695895, 45.803553257938475 487.7247733214567, 54 488 M54 488 C54.919036097669355 487.85813726400954, 57.94387100571767 488.86398366407184, 56 490 M56 490 C56.013841689430414 492.38900058261123, 55.63560033013695 494.1456113162916, 56 496 M56 496 C54.44012353932485 496.1367000831601, 54.849714223699024 498.2219588422216, 54 498 M54 498 C49.77813425464556 497.17403917606225, 46.76764717703685 499.73876247401586, 42 498 M42 498 C38.24939467345054 498.263615464326, 39.78207848006859 499.2436447244448, 40 496 M40 496 C40.110792679641165 494.9980742627289, 39.63790035561076 493.59521954136903, 40 490 M40 490 C40.78874300932512 490.88046979938326, 38.1576860280397 486.79559283787387, 42 488 M42 488 C42 488, 42 488, 42 488" stroke="#eb6c36" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="64" y="497" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Sprint 5 · record high</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M222 489.543 L228 489.928 L234 489.668 L233.624 493 L233.753 496 L228 496.354 L222 495.591 L222.36 493 Z" fill="rgba(79,93,117,0.15)" stroke="none"></path><path class="rough-generated" d="M222 488 C224.12673786956816 488.5812967322814, 226.2962284034863 489.17125409469475, 234 488 M234 488 C235.61198738173894 488.7095705861226, 238.68176272269338 489.83505379899094, 236 490 M236 490 C235.89428523313023 491.73030697757383, 235.9493106634519 494.4260121929832, 236 496 M236 496 C235.79926527086644 499.46722332791734, 238.13726189875356 497.63578139897436, 234 498 M234 498 C231.11551953781395 497.15583023659417, 226.33950717095286 498.5501917814417, 222 498 M222 498 C218.88375597751389 495.51812390629203, 222.15908062215894 498.1140455677484, 220 496 M220 496 C220.34272106163436 494.7104439828731, 220.78683273844655 492.6313469448872, 220 490 M220 490 C222.2810354107991 489.3269813493515, 217.91671454651902 489.66120835300535, 222 488 M222 488 C222 488, 222 488, 222 488" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="244" y="497" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Other sprints</text>
+    </svg>
+  </div>
+
+
+</body></html>

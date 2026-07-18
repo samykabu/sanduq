@@ -1,0 +1,104 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Weekly signups · Line chart · Hand-drawn</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { --color-paper:#f5f5f5; --color-ink:#2d3142; --color-muted:#4f5d75; --color-accent:#eb6c36; --font-sans:'Geist',system-ui,sans-serif; --font-serif:'Instrument Serif',serif; --font-mono:'Geist Mono',ui-monospace,monospace; }
+    body { font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1200px; width: 100%; }
+    .eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem; }
+    h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 1.5rem; }
+    svg { width: 100%; min-width: 760px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Line · Illustrate · Hand</p>
+    <h1>Weekly signups · Organic leads the growth</h1>
+
+    <svg viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"></circle>
+        </pattern>
+      </defs>
+
+      <rect width="100%" height="100%" fill="#f5f5f5"></rect>
+      <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"></rect>
+
+      <!-- Y-axis rotated label -->
+      <text transform="rotate(-90 24 230)" x="24" y="230" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" letter-spacing="0.14em" text-anchor="middle">SIGNUPS / WEEK</text>
+
+      <!-- Gridlines -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M80 357 C269.2061202574894 353.2744585082494, 457.81179574470974 354.1381016144715, 960 357" stroke="rgba(45,49,66,0.08)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M80 293 C269.6059918364883 287.8182454161346, 458.27353101104495 288.3268536143005, 960 293" stroke="rgba(45,49,66,0.08)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M80 230 C270.0058634154871 233.80203232401982, 458.73526627738033 233.95560561412944, 960 230" stroke="rgba(45,49,66,0.08)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M80 167 C268.08573499448596 169.34581923190507, 456.8770015437156 169.14435761395842, 960 167" stroke="rgba(45,49,66,0.08)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M80 103 C268.48560657348486 101.56960613979027, 457.33873681005093 101.01310961378738, 960 103" stroke="rgba(45,49,66,0.08)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M80 40 C268.8854781524837 37.11339304767549, 457.80047207638626 36.201861613616344, 960 40" stroke="rgba(45,49,66,0.06)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+      <!-- Axes -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M80 40 C76.74175820907581 122.00233793173884, 76.38099566984538 201.81015433664103, 80 420" stroke="rgba(45,49,66,0.25)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M80 420 C269.68522131048144 422.3209668634459, 458.7239426090569 423.01936561327426, 960 420" stroke="rgba(45,49,66,0.25)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+      <!-- Y-axis labels -->
+      <text x="72" y="361" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end">40</text>
+      <text x="72" y="297" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end">80</text>
+      <text x="72" y="234" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end">120</text>
+      <text x="72" y="171" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end">160</text>
+      <text x="72" y="107" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end">200</text>
+      <text x="72" y="44" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end">240</text>
+
+      <!-- ─── SERIES (non-focal drawn first) ─── -->
+      <!-- Referral: [45,52,48,60,55,68,62,75] series-2 dusty-blue -->
+      <g class="rough-shape" data-source-tag="polyline"><path class="rough-generated" d="M80 349 C107.46051006129883 348.3191722575808, 132.6529503825953 346.8106831872137, 200 338 M200 338 C245.72503472302924 337.4315763077466, 289.6845354746736 338.00791278041436, 320 344 M320 344 C366.0654884761147 337.47650373021605, 409.2394659249059 329.3661959694, 440 325 M440 325 C484.55960629269947 326.3256717812968, 529.5528061991977 332.8471614514245, 560 333 M560 333 C598.5606551435875 331.1817543814192, 631.8293189813481 323.2040282746079, 680 312 M680 312 C714.8518039456394 311.10730250503406, 742.5069233744231 316.91674635938836, 800 322 M800 322 C824.2056176285918 319.6511438684771, 854.459338796484 312.3152337667765, 920 301" stroke="#5e7a9b" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+      <!-- Direct: [80,82,88,90,86,92,95,98] series-1 sage -->
+      <g class="rough-shape" data-source-tag="polyline"><path class="rough-generated" d="M80 293 C108.50203041065484 290.73186108320954, 133.69016598690303 290.05693632215264, 200 290 M200 290 C225.42136402938516 288.052651758492, 250.52270522926003 286.5841039553285, 320 281 M320 281 C361.9875218831375 280.8260407611728, 411.5488645516708 280.65829201787716, 440 278 M440 278 C484.7963769910485 276.13060149103404, 525.1949944970758 282.58834054619075, 560 284 M560 284 C588.4584436830133 282.6707430705428, 623.3555422719568 280.75141715854403, 680 274 M680 274 C723.5663991655409 271.33840019851925, 766.7364628995955 270.3548858657479, 800 270 M800 270 C827.7124287543818 269.2532360836864, 852.6468945918605 263.66206859201196, 920 265" stroke="#7c8f6f" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+      <!-- Organic FOCAL area fill (subtle) -->
+      <g class="rough-shape" data-source-tag="polygon"><path class="rough-fill-mask" d="M81.795 229.931 L201.282 206.033 L320.769 186.119 L440.256 164.213 L559.744 175.166 L679.231 138.324 L798.718 111.439 L918.205 88.538 L918.205 419.119 L81.795 419.119 Z" fill="rgba(235,108,54,0.06)" stroke="none"></path></g>
+
+      <!-- Organic FOCAL line: [120,135,148,162,155,178,195,210] accent -->
+      <g class="rough-shape" data-source-tag="polyline"><path class="rough-generated" d="M80 230 C104.53143797245808 226.74103750898502, 129.71096405860968 219.76704014106653, 200 206 M200 206 C227.68277546812314 203.40972237722016, 263.06779756445906 197.06632573963142, 320 186 M320 186 C366.3843906337046 179.53681453592145, 405.52046374172204 170.4658835405018, 440 164 M440 164 C479.28787854235736 167.51548101869412, 516.2973312474427 171.1207389520947, 560 175 M560 175 C598.2936839327576 160.9984930302482, 643.0476520240667 147.3957400893327, 680 138 M680 138 C722.7799186948116 127.6074312329758, 767.179871039408 118.99483617343941, 800 111 M800 111 C846.5372079098842 102.60934612597337, 896.4331630865356 91.10958946621976, 920 88" stroke="#eb6c36" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+      <!-- Focal vertex dots -->
+      <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M81.67 230 L81.973 230.401 L81.556 230.886 L81.365 231.143 L81.38 231.614 L80.909 231.735 L80.503 231.991 L80 231.754 L79.526 231.959 L79.185 232.051 L78.93 231.578 L78.709 231.195 L78.387 230.79 L77.926 230.384 L77.803 230 L78.059 229.618 L78.509 229.09 L78.296 228.924 L78.949 228.485 L78.99 228.059 L79.49 227.958 L80 228.004 L80.449 227.86 L80.856 227.918 L81.319 228.308 L81.538 228.791 L81.995 229.127 L81.618 229.618 Z" fill="#eb6c36" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M201.67 206 L201.867 206.369 L201.592 206.802 L201.803 207.379 L201.183 207.554 L200.763 207.628 L200.522 207.71 L200 207.757 L199.618 208.048 L199.027 207.506 L198.887 207.4 L198.702 207.115 L198.144 206.777 L198.224 206.402 L197.752 206 L197.735 205.625 L198.218 205.149 L198.562 204.67 L198.62 204.562 L199.036 203.926 L199.615 204.161 L200 204.139 L200.461 204.381 L200.777 203.893 L201.16 204.626 L201.554 204.738 L202.021 205.226 L201.691 205.488 Z" fill="#eb6c36" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M321.67 186 L321.762 186.493 L321.628 186.717 L321.693 187.179 L321.422 187.494 L320.921 187.521 L320.386 188.111 L320 187.761 L319.554 188.138 L319.174 187.592 L318.845 187.769 L318.695 187.035 L317.902 186.764 L317.839 186.42 L317.702 186 L318.093 185.631 L317.927 185.208 L318.281 184.854 L318.727 184.639 L319.083 184.424 L319.584 184.363 L320 184.275 L320.473 184.22 L321.001 184.499 L321.438 184.397 L321.571 184.685 L322.048 185.022 L321.764 185.515 Z" fill="#eb6c36" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M441.67 164 L441.656 164.462 L441.664 164.937 L441.584 165.415 L441.225 165.433 L440.775 166.044 L440.406 165.83 L440 165.764 L439.49 166.227 L439.016 165.678 L438.802 165.592 L438.688 165.392 L438.29 164.751 L438.137 164.438 L437.652 164 L437.768 163.482 L438.266 163.266 L438.548 162.601 L438.834 162.169 L439.129 162.291 L439.552 161.883 L440 161.71 L440.485 162.059 L440.921 162.473 L441.279 162.167 L441.588 162.632 L442.075 163.121 L441.838 163.541 Z" fill="#eb6c36" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M561.67 175 L562.233 175.43 L561.7 175.852 L561.474 176.214 L561.464 176.373 L560.933 176.937 L560.426 177.231 L560 176.768 L559.582 176.634 L559.163 176.764 L558.76 176.414 L558.681 176.312 L558.047 175.739 L557.753 175.456 L558.301 175 L558.126 174.489 L557.975 174.021 L558.267 173.784 L558.941 173.246 L559.175 173.158 L559.521 173.086 L560 172.845 L560.497 172.899 L560.842 173.448 L561.12 173.485 L561.604 173.579 L562.101 174.22 L561.911 174.568 Z" fill="#eb6c36" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M681.67 138 L682.127 138.398 L681.736 138.768 L681.365 139.45 L681.267 139.313 L680.787 139.83 L680.445 139.949 L680 139.771 L679.518 139.723 L679.005 139.85 L678.718 139.783 L678.674 139.233 L678.435 138.726 L678.05 138.475 L678.251 138 L677.802 137.495 L678.314 137.08 L678.533 136.967 L678.611 136.324 L679.222 136.025 L679.49 136.288 L680 135.98 L680.508 135.738 L680.762 136.423 L681.398 136.256 L681.621 136.962 L681.497 137.016 L681.984 137.594 Z" fill="#eb6c36" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M801.67 111 L802.022 111.523 L801.772 111.987 L801.802 112.25 L801.07 112.8 L800.945 112.723 L800.465 112.668 L800 112.775 L799.61 112.812 L799.152 112.936 L798.675 112.606 L798.667 112.153 L798.192 112.017 L798.348 111.493 L798.2 111 L798.16 110.502 L798.023 110.138 L798.252 109.714 L798.718 109.401 L799.268 108.892 L799.615 108.808 L800 109.115 L800.52 109.259 L800.986 109.398 L801.239 109.574 L801.637 109.909 L801.524 110.115 L802.058 110.62 Z" fill="#eb6c36" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M921.67 88 L921.916 88.491 L921.808 88.903 L921.693 89.049 L921.309 89.739 L920.799 89.616 L920.485 90.069 L920 89.778 L919.546 89.902 L918.994 90.022 L918.633 89.428 L918.66 89.073 L917.949 89.004 L917.964 88.511 L918.15 88 L917.835 87.509 L918.363 87.197 L918.518 86.897 L918.825 86.478 L919.01 86.39 L919.584 86.01 L920 86.25 L920.376 86.099 L920.906 86.372 L921.08 86.345 L921.654 86.856 L921.55 87.214 L922.131 87.491 Z" fill="#eb6c36" stroke="none"></path></g>
+
+      <!-- X-axis labels -->
+      <text x="80" y="440" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">W1</text>
+      <text x="200" y="440" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">W2</text>
+      <text x="320" y="440" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">W3</text>
+      <text x="440" y="440" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">W4</text>
+      <text x="560" y="440" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">W5</text>
+      <text x="680" y="440" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">W6</text>
+      <text x="800" y="440" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">W7</text>
+      <text x="920" y="440" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">W8</text>
+
+      <!-- Legend -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M40 462 C238.88714010100816 467.6310592718143, 437.37367759849883 466.0340042169112, 960 462" stroke="rgba(45,49,66,0.10)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="40" y="478" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M40 492 C46.2310562428087 492.2954567577131, 50.615586247667665 493.2152318503149, 64 492" stroke="#eb6c36" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M53.671 492 L54.282 492.396 L53.916 492.954 L53.364 493.321 L53.153 493.558 L52.969 493.925 L52.388 493.908 L52 493.788 L51.511 494.17 L51.13 493.649 L50.942 493.442 L50.64 493.271 L50.483 492.965 L50.175 492.41 L49.999 492 L50.227 491.529 L50.12 491.069 L50.223 490.575 L50.71 490.71 L51.149 489.991 L51.491 489.935 L52 489.955 L52.412 490.299 L52.971 490.297 L53.04 490.204 L53.704 490.697 L53.63 491.208 L53.669 491.57 Z" fill="#eb6c36" stroke="none"></path></g>
+      <text x="72" y="496" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Organic · focal</text>
+
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M200 492 C207.89781261440368 493.02768577043895, 212.2590595325455 492.1722863227595, 224 492" stroke="#7c8f6f" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="232" y="496" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Direct</text>
+
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M316 492 C318.93119080020114 491.36380027680195, 329.0807961749844 489.62081355898175, 340 492" stroke="#5e7a9b" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="348" y="496" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Referral</text>
+    </svg>
+  </div>
+
+
+</body></html>

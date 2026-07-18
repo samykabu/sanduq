@@ -6,25 +6,28 @@
   },
   "metadata": {
     "description": "Sanduq — a chest of shared AI-agent tooling: Claude Code plugins, skills, and Spec Kit extensions.",
-    "version": "0.3.0"
+    "version": "0.4.2"
   },
   "plugins": [
     {
       "name": "illustration-tools",
       "source": "./skills/illustration-tools",
-      "description": "Generate polished architecture and process-flow diagrams as self-contained HTML+SVG files with built-in Copy, PNG, and PDF export.",
-      "version": "1.3.1",
+      "description": "Generate and export twenty-seven kinds of technical, product, architecture, and process illustrations through one unified skill.",
+      "version": "2.0.2",
       "author": {
         "name": "Resal Engineering"
       },
       "keywords": [
         "diagrams",
-        "architecture-diagram",
+        "illustrate",
+        "architecture",
         "process-flow",
         "workflow",
         "documentation",
         "svg",
-        "html"
+        "html",
+        "hand-drawn",
+        "technical-color"
       ],
       "category": "documentation"
     }

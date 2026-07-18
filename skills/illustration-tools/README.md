@@ -1,15 +1,14 @@
 # Illustration Tools
 
-Generate polished technical diagrams as **self-contained HTML files** (inline SVG + embedded CSS) straight from a plain-English description. Diagrams default to light theme and can switch to dark theme from the prompt. Each diagram opens in any browser and ships with built-in **Copy / PNG / PDF** export — no build step, no server, no external images.
+Generate polished technical and product illustrations as **self-contained HTML files** with inline SVG and embedded CSS. The unified `illustrate` skill supports twenty-seven diagram types, editorial and technical-color design families, light/dark/full/hand variants, and SVG/PNG/PDF export paths.
 
-## Included Skills
+## Included Skill
 
-| Skill                   | Use it for                                                                                                      | Docs |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------- | ---- |
-| `architecture-diagram`  | Non-sequential system relationships — components, infrastructure, cloud topology, security zones, network maps; light by default, dark on request | [README](skills/architecture-diagram/README.md) |
-| `process-flow-diagram`  | Sequential workflows — approval flows, automation pipelines, runbooks, onboarding, decision trees; light by default, dark on request | [README](skills/process-flow-diagram/README.md) |
+| Skill | Use it for |
+| --- | --- |
+| `illustrate` | Architecture, process flows, sequence, state, ER, timelines, swimlanes, charts, data-platform diagrams, and every other supported visual type. |
 
-They share one design language (JetBrains Mono, semantic color palette, the same export toolbar) but differ in shape language: architecture uses component boxes and free-form connections; process-flow uses numbered steps, decision diamonds, and ordered arrows.
+The former `architecture-diagram`, `process-flow-diagram`, and standalone Diagram Design skills are consolidated here. Their complete templates and examples remain available as editorial or technical-color families selected by the unified skill.
 
 ## Usage
 
@@ -23,32 +22,41 @@ Install from the sanduq marketplace:
 Then just describe what you want — the skills trigger automatically:
 
 ```
-/illustration-tools:architecture-diagram   # then describe your system
-/illustration-tools:process-flow-diagram    # then describe your workflow
+/illustration-tools:illustrate   # then describe the visual you need
 ```
 
 Or in plain language:
 
-- *"Draw an architecture diagram for a React frontend, Node API, Postgres, and Redis on AWS."* → `architecture-diagram`
-- *"Make a process flow for our expense-approval workflow with a manager decision step."* → `process-flow-diagram`
+- *"Draw an architecture diagram for a React frontend, Node API, Postgres, and Redis on AWS."*
+- *"Make a hand-drawn process flow for our expense-approval workflow with a manager decision step."*
 
 Iterate in chat — "add a Redis cache", "add a rejection branch from step 3", "wrap this to a second row" — and Claude edits the same HTML file.
+
+## Gallery designs
+
+Open any gallery directly from `skills/illustrate/assets/`:
+
+- `index.html` is the original gallery.
+- `index-variation-1.html` is a searchable Atlas layout with persistent family, type, and presentation navigation.
+- `index-variation-2.html` is a Canvas Deck workspace with compact selectors and a horizontal scroll-snap filmstrip.
+
+Both alternatives expose the complete editorial and technical-color asset matrix, adapt to light and dark system themes, and honor reduced-motion preferences.
 
 ## What you get
 
 - **A single `.html` file** — inline SVG, embedded CSS, works offline in any browser.
-- **Built-in export toolbar** — a collapsible `⋯` menu with 📋 Copy (PNG to clipboard), 🖼️ PNG download, and 📄 PDF (theme-preserving). Powered by `html2canvas@1.4.1` and `jspdf@2.5.2`, both pinned with Subresource Integrity hashes.
-- **Consistent, professional styling** — semantic colors so every diagram reads the same way across the team.
+- **Two visual families** — restrained editorial output for all types, plus technical-color architecture and process-flow templates with a built-in Copy/PNG/PDF toolbar.
+- **Deterministic export** — bundled SVG/transparent-PNG exporter, with browser PDF export in technical-color templates.
 
 ## Documentation automation
 
-The Spec Kit PR and How-To-Test workflows now use the broader `diagram-design` extension. This
-plugin remains available as a focused standalone Claude workflow for architecture and process-flow
-illustrations outside Spec Kit.
+The Spec Kit PR and How-To-Test workflows use the matching `illustrate` extension. This plugin makes
+the same unified skill available directly to Claude Code.
 
 ## How it works
 
-Each skill is **instructions + a template**, not a program. Claude reads the design system in the skill's `SKILL.md`, copies the selected `resources/` template, and customizes it for your description. Reference outputs live under each skill's `examples/`. For the internals and customization guide, see the per-skill READMEs linked above.
+Claude reads `skills/illustrate/SKILL.md`, selects the appropriate type and visual family, loads only
+the matching reference, and customizes the closest asset template or example.
 
 ## Structure
 
@@ -58,18 +66,11 @@ illustration-tools/
 │   └── plugin.json
 ├── README.md
 └── skills/
-    ├── architecture-diagram/
-    │   ├── SKILL.md
-    │   ├── README.md
-    │   ├── resources/template.html
-    │   ├── resources/template-dark.html
-    │   └── examples/
-    └── process-flow-diagram/
+    └── illustrate/
         ├── SKILL.md
-        ├── README.md
-        ├── resources/template.html
-        ├── resources/template-dark.html
-        └── examples/
+        ├── references/
+        ├── scripts/
+        └── assets/
 ```
 
 ## License

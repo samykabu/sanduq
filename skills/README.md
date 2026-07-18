@@ -6,17 +6,16 @@ Portable skills and skill-first Claude Code plugin bundles that remain independe
 
 | Skill | Version | Includes |
 | --- | ---: | --- |
-| [`diagrams`](diagrams/) | 2.1.0 | Twenty-seven diagram types, themes, icons, terminal/export support, and hand-drawn variants. |
+| [`illustrate`](illustration-tools/skills/illustrate/) | 3.0.0 | Twenty-seven diagram types, themes, icons, terminal/export support, hand-drawn variants, and technical-color architecture/process packs. |
 
-The same Diagram Design capability is also packaged—without replacing this standalone copy—as the
-versioned [`diagram-design`](../extensions/diagram-design/) Spec Kit extension so consuming
-extensions can install and update it through the `specify` CLI.
+The same capability is packaged as the versioned [`illustrate`](../extensions/illustrate/) Spec Kit
+extension so consuming extensions can install and update it through the `specify` CLI.
 
 ## Published plugin bundles
 
 | Bundle | Version | Includes |
 | --- | ---: | --- |
-| [`illustration-tools`](illustration-tools/) | 1.3.1 | `architecture-diagram` and `process-flow-diagram`. |
+| [`illustration-tools`](illustration-tools/) | 2.0.0 | One unified `illustrate` skill. |
 
 Install them through the sanduq marketplace:
 

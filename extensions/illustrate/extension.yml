@@ -1,0 +1,47 @@
+schema_version: "1.0"
+
+extension:
+  id: illustrate
+  name: "Illustrate"
+  version: "1.0.2"
+  description: "Generate and export twenty-seven technical, product, architecture, and process illustration types as HTML, SVG, PNG, or PDF using editorial and technical-color visual families."
+  author: "Samy K. Abushanab"
+  repository: "https://github.com/samykabu/sanduq"
+  category: "documentation"
+  license: MIT
+
+requires:
+  speckit_version: ">=0.2.0"
+  tools:
+    - name: git
+      required: false
+
+provides:
+  commands:
+    - name: speckit.illustrate.generate
+      file: commands/speckit.illustrate.generate.md
+      description: "Select and generate the right illustration from twenty-seven technical, product, data, process, and quantitative visual types"
+    - name: speckit.illustrate.export
+      file: commands/speckit.illustrate.export.md
+      description: "Export an Illustrate HTML source to standalone SVG and/or transparent PNG"
+
+tags:
+  - "diagram"
+  - "architecture"
+  - "process-flow"
+  - "technical-color"
+  - "flowchart"
+  - "sequence"
+  - "state-machine"
+  - "er"
+  - "timeline"
+  - "swimlane"
+  - "radar"
+  - "gantt"
+  - "data-platform"
+  - "export"
+  - "png"
+  - "pdf"
+  - "svg"
+  - "visualization"
+  - "documentation"

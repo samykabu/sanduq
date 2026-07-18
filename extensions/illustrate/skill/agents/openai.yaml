@@ -1,0 +1,4 @@
+interface:
+  display_name: "Illustrate"
+  short_description: "Create and export polished technical visuals"
+  default_prompt: "Use $illustrate to create the most suitable polished visual for this request."
