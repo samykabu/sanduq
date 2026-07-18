@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-07-18T19:30:02Z",
+  "updated_at": "2026-07-18T19:59:17Z",
   "catalog_url": "https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json",
   "extensions": {
     "project": {
@@ -8,8 +8,8 @@
       "id": "project",
       "description": "Mirror each Spec Kit feature onto a GitHub Project (v2): a parent feature issue whose Status advances through the lifecycle, plus one native sub-issue per task closed as it is checked off. Board-agnostic via `project init`. Idempotent and no-regress.",
       "author": "samykabu",
-      "version": "2.0.0",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/project-v2.0.0/project.zip",
+      "version": "2.0.1",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/project-v2.0.1/project.zip",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/project",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/project/README.md",
@@ -46,19 +46,19 @@
       "downloads": 0,
       "stars": 0,
       "created_at": "2026-07-09T00:00:00Z",
-      "updated_at": "2026-07-18T19:30:02Z"
+      "updated_at": "2026-07-18T19:59:17Z"
     },
     "pr": {
       "name": "Pull Request Workflow",
       "id": "pr",
-      "version": "4.0.0",
+      "version": "4.0.1",
       "description": "Generate or update pull requests from Spec Kit artifacts, then process review feedback through an approval-gated fix and reply workflow.",
       "author": "Samy K. Abushanab",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/pr",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/pr/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/pr/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/pr-v4.0.0/pr.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/pr-v4.0.1/pr.zip",
       "license": "PolyForm-Noncommercial-1.0.0",
       "category": "process",
       "effect": "read-write",
@@ -112,19 +112,19 @@
       ],
       "verified": false,
       "created_at": "2026-07-09T20:26:15Z",
-      "updated_at": "2026-07-18T19:30:02Z"
+      "updated_at": "2026-07-18T19:59:17Z"
     },
     "illustrate": {
       "name": "Illustrate",
       "id": "illustrate",
-      "version": "2.0.0",
+      "version": "2.0.1",
       "description": "Generate and export twenty-seven technical, product, architecture, and process illustration types as HTML, SVG, PNG, or PDF using editorial and technical-color visual families.",
       "author": "Samy K. Abushanab",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/illustrate",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/illustrate/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/illustrate/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/illustrate-v2.0.0/illustrate.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/illustrate-v2.0.1/illustrate.zip",
       "license": "PolyForm-Noncommercial-1.0.0",
       "category": "documentation",
       "effect": "read-write",
@@ -164,19 +164,19 @@
       ],
       "verified": false,
       "created_at": "2026-07-18T15:47:12Z",
-      "updated_at": "2026-07-18T19:30:02Z"
+      "updated_at": "2026-07-18T19:59:17Z"
     },
     "qa": {
       "name": "QA",
       "id": "qa",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "description": "Make QA part of the Spec Kit lifecycle: initialize project policy, require feature test-readiness analysis before implementation, and generate a current QA test manual before pull-request creation.",
       "author": "Samy K. Abushanab",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/qa",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/qa/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/qa/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/qa-v1.0.0/qa.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/qa-v1.0.1/qa.zip",
       "license": "PolyForm-Noncommercial-1.0.0",
       "category": "process",
       "effect": "read-write",
@@ -218,19 +218,19 @@
       ],
       "verified": false,
       "created_at": "2026-07-18T18:35:58Z",
-      "updated_at": "2026-07-18T19:30:02Z"
+      "updated_at": "2026-07-18T19:59:17Z"
     },
     "user-manual": {
       "name": "User Manual",
       "id": "user-manual",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "description": "Create and incrementally maintain bilingual-ready, audience-aware application manuals in Markdown, Material HTML, and PDF, including modules, interfaces, tutorials, screenshots, APIs, releases, migrations, infrastructure, architecture, and complete data dictionaries.",
       "author": "Samy K. Abushanab",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/user-manual",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/user-manual/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/user-manual/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/user-manual-v1.0.0/user-manual.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/user-manual-v1.0.1/user-manual.zip",
       "license": "PolyForm-Noncommercial-1.0.0",
       "category": "documentation",
       "effect": "read-write",
@@ -282,7 +282,7 @@
       ],
       "verified": false,
       "created_at": "2026-07-18T18:35:58Z",
-      "updated_at": "2026-07-18T19:30:02Z"
+      "updated_at": "2026-07-18T19:59:17Z"
     }
   }
 }

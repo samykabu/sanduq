@@ -3,7 +3,7 @@ schema_version: "1.0"
 extension:
   id: illustrate
   name: "Illustrate"
-  version: "2.0.0"
+  version: "2.0.1"
   description: "Generate and export twenty-seven technical, product, architecture, and process illustration types as HTML, SVG, PNG, or PDF using editorial and technical-color visual families."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
