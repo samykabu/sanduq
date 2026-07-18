@@ -1,0 +1,21 @@
+@media print {
+  .md-header,
+  .md-sidebar,
+  .md-footer,
+  .md-content__button {
+    display: none !important;
+  }
+
+  .md-main__inner,
+  .md-content {
+    margin: 0;
+    max-width: none;
+  }
+
+  pre,
+  table,
+  figure,
+  img {
+    break-inside: avoid;
+  }
+}

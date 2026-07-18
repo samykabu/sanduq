@@ -1,0 +1,35 @@
+schema_version: "1.0"
+lifecycle:
+  update_on_feature_pr: true
+  preview_on_pull_request: true
+  publish_on_release: true
+languages:
+  required:
+    - en
+  optional:
+    - ar
+  rtl:
+    - ar
+audiences:
+  end-user:
+    visibility: approved-public
+  administrator:
+    visibility: authenticated-internal
+  technical:
+    visibility: private
+publishing:
+  preview: private-ci-artifact
+  preview_security:
+    private_repository: repository-read-permission
+    public_repository: age-encrypted
+    age_recipient_variable: USER_MANUAL_PREVIEW_AGE_RECIPIENT
+  ephemeral_provider: null
+  release_outputs:
+    - html-archive
+    - edition-pdf
+    - module-pdf-on-demand
+renderer:
+  primary: mkdocs-material
+  material_version: 9.7.6
+  mkdocs_constraint: ">=1.6,<2"
+  compatibility: zensical

@@ -1,0 +1,4 @@
+interface:
+  display_name: "User Manual"
+  short_description: "Build and update modular application manuals"
+  default_prompt: "Use $user-manual to initialize or update the application user manual."

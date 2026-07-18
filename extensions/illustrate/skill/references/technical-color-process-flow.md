@@ -255,13 +255,14 @@ The file should render correctly when opened directly in any modern browser.
 
 ## Documentation Integration
 
-When Illustrate is invoked by `speckit.pr.generate`, `how-to-test`, or
-`speckit.how-to-test.document`, generate both a source HTML
+When Illustrate is invoked by `speckit.pr.generate`, `speckit.qa.document`, or the
+`user-manual` extension, generate both a source HTML
 diagram and an exported PNG image:
 
 - **Source HTML:** write to the feature documentation assets folder, for example
   `docs/<feature-slug>/assets/diagrams/<feature-slug>-process-flow.html` or
-  `<how-to-test-root>/assets/<parent-feature>/<feature-slug>-process-flow.html`.
+  `<qa-root>/assets/<parent-feature>/<feature-slug>-process-flow.html`, or an owning
+  `User-Manual/docs/<language>/modules/<module>/assets/` folder.
 - **PNG export:** render the HTML and export a PNG beside the source, for example
   `<feature-slug>-process-flow.png`. Use the built-in html2canvas export path when running in a
   browser, or automate an equivalent screenshot of `#report-container` with Playwright/Puppeteer

@@ -1,0 +1,4 @@
+interface:
+  display_name: "API Documentation"
+  short_description: "Generate audience-safe API documentation"
+  default_prompt: "Use $api-docs to generate or update API documentation for the affected interfaces."

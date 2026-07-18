@@ -1,0 +1,4 @@
+interface:
+  display_name: "Preview Publishing"
+  short_description: "Publish secure provider-approved User Manual previews"
+  default_prompt: "Publish the User Manual preview through the approved provider while preserving audience access controls."

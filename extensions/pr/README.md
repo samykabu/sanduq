@@ -31,6 +31,10 @@ Spec Kit section and preserves the rest of the body. If none exists, it pushes t
 needed and creates the PR by default. Re-running the command refreshes the same files and PR section
 without duplicating content.
 
+Before PR creation or update, the command enforces configured QA documentation freshness and an
+installed User Manual's feature freshness. Missing or stale documentation is refreshed through the
+owning extension; a failed audit stops the PR handoff.
+
 Optional flags:
 
 - `--no-pr` — generate or refresh docs only; do not create or update a PR.
@@ -70,8 +74,10 @@ reviewers or bots have commented on an open PR.
 - `git` and an authenticated `gh` CLI are required for review feedback and PR creation/update.
 - PR generation still writes the documentation if `git`, `gh`, authentication, or a remote is
   unavailable, and reports why it skipped the PR step.
-- Diagram generation requires `illustrate >=1.0.0,<2.0.0`. The command checks Spec Kit's
+- Diagram generation requires `illustrate >=2.0.0,<3.0.0`. The command checks Spec Kit's
   registry and follows the project dependency policy before installing or updating it.
+- `qa` and `user-manual` are optional integrations. The PR command never installs them implicitly,
+  but enforces their configured policies when a target project has installed them.
 
 ## Migrating from `pr-review`
 

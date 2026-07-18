@@ -1,0 +1,30 @@
+site_name: Application User Manual
+docs_dir: docs/en
+site_dir: site/local/en/end-user
+use_directory_urls: false
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - content.code.copy
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed
+
+extra_css:
+  - assets/stylesheets/extra.css
+  - assets/stylesheets/rtl.css
+  - assets/stylesheets/print.css

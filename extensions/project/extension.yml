@@ -3,11 +3,11 @@ schema_version: "1.0"
 extension:
   id: project
   name: "GitHub Project Lifecycle Sync"
-  version: "1.1.1"
+  version: "2.0.0"
   description: "Mirror each Spec Kit feature onto a GitHub Project (v2): create a parent feature issue, advance its Status column through the Spec Kit lifecycle (open -> analysis -> engineer-review -> ready -> in-progress -> in-review -> done), create one native sub-issue per task, and close sub-issues as their tasks are checked off. Board-agnostic initialization lets each repo choose required/automatic or optional/manual sync hooks. Idempotent and no-regress."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
-  license: MIT
+  license: PolyForm-Noncommercial-1.0.0
 
 requires:
   speckit_version: ">=0.2.0"

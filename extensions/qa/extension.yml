@@ -1,0 +1,64 @@
+schema_version: "1.0"
+
+extension:
+  id: qa
+  name: "QA"
+  version: "1.0.0"
+  description: "Make QA part of the Spec Kit lifecycle: initialize project policy, require feature test-readiness analysis before implementation, and generate a current QA test manual before pull-request creation."
+  author: "Samy K. Abushanab"
+  repository: "https://github.com/samykabu/sanduq"
+  category: "process"
+  license: PolyForm-Noncommercial-1.0.0
+
+requires:
+  speckit_version: ">=0.2.0"
+  extensions:
+    - id: illustrate
+      version: ">=2.0.0,<3.0.0"
+      required: true
+  tools:
+    - name: git
+      required: false
+    - name: python
+      required: true
+
+provides:
+  commands:
+    - name: speckit.qa.init
+      file: commands/speckit.qa.init.md
+      description: "Choose whether QA is part of the project lifecycle and configure required or manual hooks"
+    - name: speckit.qa.analyze
+      file: commands/speckit.qa.analyze.md
+      description: "Audit the active feature for missing E2E, API, screenshot, diagram, accessibility, and QA-documentation work"
+    - name: speckit.qa.document
+      file: commands/speckit.qa.document.md
+      description: "Generate or update the QA test manual and record feature-scoped freshness evidence"
+
+hooks:
+  after_tasks:
+    command: speckit.qa.analyze
+    optional: true
+    prompt: "Analyze the active feature for missing QA readiness tasks before implementation?"
+    description: "Run early while missing tests and evidence tasks are still inexpensive to add"
+  before_implement:
+    command: speckit.qa.analyze
+    optional: true
+    prompt: "Run the QA readiness gate before implementation? QA.Init can make this mandatory."
+    description: "Mandatory in lifecycle-integrated mode; verifies or refreshes QA analysis before implementation"
+  after_implement:
+    command: speckit.qa.document
+    optional: true
+    prompt: "Generate or refresh the QA test manual now that implementation is complete?"
+    description: "Optional early generation; PR generation performs a mandatory freshness preflight in lifecycle-integrated mode"
+
+tags:
+  - "qa"
+  - "testing"
+  - "e2e"
+  - "playwright"
+  - "documentation"
+  - "diagram"
+  - "api"
+  - "accessibility"
+  - "quality-gate"
+  - "workflow"

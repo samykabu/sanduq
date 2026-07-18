@@ -1,0 +1,4 @@
+interface:
+  display_name: "User Manual Preview Publishing"
+  short_description: "Build private previews and versioned documentation"
+  default_prompt: "Use $user-manual-preview-publishing to configure safe manual preview and release publishing."

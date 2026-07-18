@@ -144,9 +144,6 @@ ICONS: dict[str, list[tuple[str, str, str, str]]] = {
     "Data stack": [
         ("nifi",      "simple", "apachenifi",      "Apache NiFi data flow."),
         ("airflow",   "simple", "apacheairflow",   "Apache Airflow scheduler / DAG runner."),
-        ("hop",     "url", "https://hop.apache.org/img/hop-logo.svg",                                                                                    "Apache Hop data orchestration / ETL."),
-        ("pentaho", "url", "https://cdn.worldvectorlogo.com/logos/pentaho-2.svg",                                                                          "Pentaho PDI (Kettle) ETL & data integration."),
-        ("dagster", "url", "https://cdn.prod.website-files.com/681399f654933b29e12fb8bd/6a04996c4dd28c8ad73bbf3d_Dagster%20Icon.svg", "Dagster data orchestration platform."),
         ("trino",     "simple", "trino",           "Trino distributed SQL query engine."),
         ("superset",  "simple", "apachesuperset",  "Apache Superset BI / dashboards."),
         ("redash",    "simple", "redash",          "Redash open-source BI & dashboards."),
@@ -161,7 +158,6 @@ ICONS: dict[str, list[tuple[str, str, str, str]]] = {
     ],
     "Statistical tools": [
         ("spss",    "devicon:plain", "spss",            "IBM SPSS Statistics."),
-        ("stata",   "url", "https://icon.icepanel.io/Technology/svg/Stata.svg", "Stata statistical software."),
         ("rstudio", "devicon:plain", "rstudio",         "RStudio / Posit IDE for R and Python."),
         ("qgis",    "simple",        "qgis",            "QGIS open-source GIS platform."),
     ],
@@ -429,7 +425,7 @@ def build() -> tuple[list[str], list[str]]:
         "- **Devicon** — MIT — https://github.com/devicons/devicon\n"
         "- **log-z/logos** — MIT — https://github.com/log-z/logos\n\n"
         "All libraries' licenses permit redistribution, including in this "
-        "repository's MIT-licensed source. Brand logos retain their "
+        "repository under their upstream licenses. Brand logos retain their "
         "respective trademarks; this set is for documentation and "
         "illustrative use only.\n"
     )

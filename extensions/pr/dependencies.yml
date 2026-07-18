@@ -1,8 +1,16 @@
 schema_version: "1.0"
 dependencies:
   - id: illustrate
-    version: ">=1.0.0,<2.0.0"
+    version: ">=2.0.0,<3.0.0"
     required_for: "diagram generation"
+  - id: qa
+    version: ">=1.0.0,<2.0.0"
+    optional: true
+    required_for: "QA.Document freshness preflight when QA lifecycle integration is enabled"
+  - id: user-manual
+    version: ">=1.0.0,<2.0.0"
+    optional: true
+    required_for: "UserManual.Update freshness preflight when User-Manual/manual.yml exists"
 defaults:
   update_policy: prompt
   check_interval_hours: 24

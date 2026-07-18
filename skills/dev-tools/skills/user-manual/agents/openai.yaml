@@ -1,0 +1,4 @@
+interface:
+  display_name: "User Manual"
+  short_description: "Build and maintain complete application manuals"
+  default_prompt: "Use $user-manual to create or update the application User-Manual in English and optional Arabic."

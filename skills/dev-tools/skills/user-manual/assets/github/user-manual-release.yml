@@ -1,0 +1,57 @@
+name: User Manual release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release-manual:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: User-Manual/requirements.lock
+      - name: Install PDF system dependencies
+        run: >-
+          sudo apt-get update && sudo apt-get install -y
+          libpango-1.0-0 libharfbuzz0b libpangoft2-1.0-0 libharfbuzz-subset0
+      - name: Install documentation toolchain
+        run: python -m pip install -r User-Manual/requirements.lock
+      - name: Audit and build release editions
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME}"
+          python User-Manual/tools/audit_manual.py --root User-Manual
+          for audience in end-user administrator technical; do
+            python User-Manual/tools/build_manual.py \
+              --root User-Manual --audience "$audience" --language en --version "$version" --archive --pdf
+            if [ -d User-Manual/docs/ar ]; then
+              python User-Manual/tools/build_manual.py \
+                --root User-Manual --audience "$audience" --language ar --version "$version" --archive --pdf
+            fi
+          done
+      - name: Upload release build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: user-manual-${{ github.ref_name }}
+          path: |
+            User-Manual/site/${{ github.ref_name }}/
+            User-Manual/pdf/${{ github.ref_name }}/
+          if-no-files-found: error
+      - name: Attach manual artifacts to GitHub release when present
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            find "User-Manual/site/$GITHUB_REF_NAME" "User-Manual/pdf/$GITHUB_REF_NAME" -type f \
+              \( -name '*.zip' -o -name '*.pdf' \) -print0 | xargs -0 -r gh release upload "$GITHUB_REF_NAME" --clobber
+          fi

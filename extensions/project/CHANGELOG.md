@@ -2,6 +2,13 @@
 
 All notable changes to the GitHub Project Lifecycle Sync extension.
 
+## [2.0.0] - 2026-07-18
+
+### Changed
+
+- Changed new distributions from MIT to PolyForm Noncommercial 1.0.0. Previously published MIT
+  versions retain their original terms.
+
 ## [1.1.0] - 2026-07-18
 
 ### Added

@@ -8,10 +8,11 @@ compatibility with the Resal Marketplace layout.
 
 | Extension | Version | Command | Description |
 | --- | ---: | --- | --- |
-| [`project`](project/) | 1.1.0 | `/speckit-project-init`<br>`/speckit-project-sync` | Configures and mirrors Spec Kit features onto GitHub Projects with parent issues, sub-issues, and lifecycle status sync. |
-| [`pr`](pr/) | 3.0.0 | `/speckit-pr-generate`<br>`/speckit-pr-review-feedback` | Generates or updates pull requests and processes review feedback through an approval-gated workflow. |
-| [`how-to-test`](how-to-test/) | 2.0.0 | `/speckit-how-to-test-document` | Generates QA How-To-Test manuals, with `/speckit-how-to-test-analyze` for readiness checks after task generation. |
-| [`illustrate`](illustrate/) | 1.0.0 | `/speckit-illustrate-generate`<br>`/speckit-illustrate-export` | Generates and exports twenty-seven technical, product, architecture, process, data, and quantitative illustration types. |
+| [`project`](project/) | 2.0.0 | `/speckit-project-init`<br>`/speckit-project-sync` | Configures and mirrors Spec Kit features onto GitHub Projects with parent issues, sub-issues, and lifecycle status sync. |
+| [`pr`](pr/) | 4.0.0 | `/speckit-pr-generate`<br>`/speckit-pr-review-feedback` | Generates or updates pull requests, enforces installed documentation gates, and processes review feedback. |
+| [`qa`](qa/) | 1.0.0 | `/speckit-qa-init`<br>`/speckit-qa-analyze`<br>`/speckit-qa-document` | Configures QA lifecycle policy, analyzes test readiness, and maintains the QA test manual. |
+| [`user-manual`](user-manual/) | 1.0.0 | `/speckit-user-manual-init`<br>`/speckit-user-manual-analyze`<br>`/speckit-user-manual-update`<br>`/speckit-user-manual-release` | Maintains bilingual-ready, audience-specific Markdown, Material HTML, and PDF application manuals. |
+| [`illustrate`](illustrate/) | 2.0.0 | `/speckit-illustrate-generate`<br>`/speckit-illustrate-export` | Generates and exports twenty-seven technical, product, architecture, process, data, and quantitative illustration types. |
 
 ## Install
 
@@ -27,7 +28,8 @@ Install by id:
 ```bash
 specify extension add project
 specify extension add pr
-specify extension add how-to-test
+specify extension add qa
+specify extension add user-manual
 specify extension add illustrate
 ```
 
@@ -71,13 +73,18 @@ The other commands are manual or optional lifecycle-hook prompts:
 ```text
 /speckit-pr-generate
 /speckit-pr-review-feedback owner/repo#123
-/speckit-how-to-test-analyze
-/speckit-how-to-test-document
+/speckit-qa-init
+/speckit-qa-analyze
+/speckit-qa-document
+/speckit-user-manual-init
+/speckit-user-manual-analyze
+/speckit-user-manual-update
+/speckit-user-manual-release
 /speckit-illustrate-generate
 /speckit-illustrate-export path/to/diagram.html --svg-only
 ```
 
-`pr` and `how-to-test` check the Spec Kit registry for their compatible `illustrate` version
+`pr`, `qa`, and `user-manual` check the Spec Kit registry for their compatible `illustrate` version
 when invoked. The default dependency policy asks before install/update; projects may opt into
 automatic or manual behavior through `.specify/extension-dependencies.yml`.
 

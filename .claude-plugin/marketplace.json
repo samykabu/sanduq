@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Sanduq — a chest of shared AI-agent tooling: Claude Code plugins, skills, and Spec Kit extensions.",
-    "version": "0.4.2"
+    "version": "0.5.0"
   },
   "plugins": [
     {
       "name": "illustration-tools",
       "source": "./skills/illustration-tools",
       "description": "Generate and export twenty-seven kinds of technical, product, architecture, and process illustrations through one unified skill.",
-      "version": "2.0.2",
+      "version": "3.0.0",
       "author": {
         "name": "Resal Engineering"
       },
@@ -28,6 +28,28 @@
         "html",
         "hand-drawn",
         "technical-color"
+      ],
+      "category": "documentation"
+    },
+    {
+      "name": "dev-tools",
+      "source": "./skills/dev-tools",
+      "description": "Standalone modular application-manual tooling for MkDocs Material, PDF, APIs, releases, screenshots, previews, English, Arabic, and RTL.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Samy K. Abushanab"
+      },
+      "keywords": [
+        "user-manual",
+        "mkdocs",
+        "pdf",
+        "api-docs",
+        "release-notes",
+        "migration-guides",
+        "screenshots",
+        "bilingual",
+        "arabic",
+        "rtl"
       ],
       "category": "documentation"
     }

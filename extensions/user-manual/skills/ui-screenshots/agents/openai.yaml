@@ -1,0 +1,4 @@
+interface:
+  display_name: "UI Screenshots"
+  short_description: "Capture deterministic documentation screenshots"
+  default_prompt: "Use $ui-screenshots to capture safe, deterministic screenshots for the manual."

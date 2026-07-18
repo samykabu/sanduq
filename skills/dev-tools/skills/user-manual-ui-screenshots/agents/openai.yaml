@@ -1,0 +1,4 @@
+interface:
+  display_name: "User Manual UI Screenshots"
+  short_description: "Plan and capture safe documentation screenshots"
+  default_prompt: "Use $user-manual-ui-screenshots to create a safe screenshot plan for the manual."

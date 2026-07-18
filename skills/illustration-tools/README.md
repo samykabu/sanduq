@@ -50,8 +50,8 @@ Both alternatives expose the complete editorial and technical-color asset matrix
 
 ## Documentation automation
 
-The Spec Kit PR and How-To-Test workflows use the matching `illustrate` extension. This plugin makes
-the same unified skill available directly to Claude Code.
+The Spec Kit PR, QA, and User Manual workflows use the matching `illustrate` extension. This plugin
+makes the same unified skill available directly to Claude Code.
 
 ## How it works
 
@@ -75,4 +75,6 @@ illustration-tools/
 
 ## License
 
-MIT.
+Sanduq original contributions are available under the root
+[PolyForm Noncommercial License 1.0.0](../../LICENSE). Derived Illustrate code and bundled icons
+retain their upstream terms listed in [third-party notices](../../THIRD_PARTY_NOTICES.md).

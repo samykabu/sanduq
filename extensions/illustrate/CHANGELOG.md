@@ -2,6 +2,20 @@
 
 All notable changes to the Illustrate extension.
 
+## [2.0.0] - 2026-07-18
+
+### Changed
+
+- Changed sanduq original contributions to PolyForm Noncommercial 1.0.0 while preserving all
+  upstream MIT/CC0 notices in the repository-level third-party notice file.
+
+## [1.0.4] - 2026-07-18
+
+### Changed
+
+- Updated architecture and process-flow integration guidance for the renamed QA extension and the
+  separate User Manual documentation lifecycle.
+
 ## [1.0.2] - 2026-07-18
 
 ### Added

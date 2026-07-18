@@ -1,156 +1,360 @@
 # sanduq
 
-**sanduq** is a shared toolbox for AI-agent workflows: Spec Kit extensions, Claude Code plugins,
-and portable skills.
+[![Spec Kit extensions](https://img.shields.io/badge/Spec_Kit-5_extensions-17212b)](#spec-kit-extensions)
+[![Portable agent skills](https://img.shields.io/badge/Agent_skills-6-eb6c36)](#portable-skills)
+[![MkDocs Material](https://img.shields.io/badge/MkDocs-Material-526cfe)](https://squidfunk.github.io/mkdocs-material/)
+[![English and Arabic](https://img.shields.io/badge/i18n-English_%2B_Arabic-00843d)](#language-audience-and-security-rules)
+[![skills.sh](https://skills.sh/b/samykabu/sanduq)](https://skills.sh/samykabu/sanduq)
+[![License: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm_Noncommercial_1.0.0-7b2d26)](#license)
 
-## What is included
+**sanduq** is a modular toolbox for AI-assisted software delivery. Use its portable skills in any
+repository, or install its Spec Kit extensions to make project tracking, QA analysis, application
+manuals, illustrations, and pull-request documentation part of a governed lifecycle.
 
-### Spec Kit extensions
+![Standalone skills and Spec Kit extensions converge on QA evidence, audience-aware manuals, private PR previews, and versioned releases.](docs/assets/sanduq-workflow.svg)
 
-Install these with the `specify` CLI from the public catalog at [`catalog.json`](catalog.json).
+## Choose your path
 
-| Extension | Version | Command | Use it for |
-| --- | ---: | --- | --- |
-| [`project`](extensions/project/) | 1.1.0 | `/speckit-project-init`<br>`/speckit-project-sync` | Configure and keep a GitHub Project in sync with a Spec Kit feature, parent issue, task sub-issues, and lifecycle status. |
-| [`pr`](extensions/pr/) | 3.0.0 | `/speckit-pr-generate`<br>`/speckit-pr-review-feedback` | Generate or update a pull request, then process its review feedback through an approval-gated workflow. |
-| [`how-to-test`](extensions/how-to-test/) | 2.0.0 | `/speckit-how-to-test-document` | Generate QA-facing How-To-Test manuals and run readiness analysis after task generation. |
-| [`illustrate`](extensions/illustrate/) | 1.0.0 | `/speckit-illustrate-generate`<br>`/speckit-illustrate-export` | Generate and export twenty-seven technical, product, architecture, and process illustration types. |
+| Need | Recommended path | Why |
+| --- | --- | --- |
+| Create or update a manual without Spec Kit | Install the standalone `user-manual` skill | It is self-contained and works from repository evidence and Git changes. |
+| Add only API, release, screenshot, or publishing expertise | Install the matching focused skill | Each module loads independently, keeping agent context small. |
+| Enforce QA and documentation around implementation and PRs | Install `qa`, `user-manual`, and `pr` extensions | Lifecycle hooks check freshness at the correct gates. |
+| Create a diagram in any workflow | Install the `illustrate` skill or extension | Both package the same visual vocabulary and exporters. |
+| Keep a Spec Kit feature synchronized with GitHub Projects | Install the `project` extension | It maintains the parent issue, task sub-issues, and lifecycle status. |
 
-### Claude Code plugins
+## Quick start
 
-Install these from the marketplace at [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json).
+List the portable skills exposed by this repository:
 
-| Plugin | Version | Use it for |
-| --- | ---: | --- |
-| [`illustration-tools`](skills/illustration-tools/) | 2.0.0 | One unified `illustrate` skill with editorial and technical-color families plus export controls. |
+```bash
+npx skills add samykabu/sanduq --list
+```
 
-### Portable skills
+Install the complete standalone User Manual skill for Codex in the current project:
 
-| Skill | Version | Use it for |
-| --- | ---: | --- |
-| [`illustrate`](skills/illustration-tools/skills/illustrate/) | 3.0.0 | Twenty-seven visual types, hand variants, technical-color architecture/process packs, icons, terminal styling, and SVG/PNG/PDF export. |
+```bash
+npx skills add samykabu/sanduq --skill user-manual -a codex
+```
 
-The `illustrate` Spec Kit extension packages the same capability for managed, versioned installation.
+Then ask your agent:
 
-## Install
+```text
+$user-manual create a complete manual for this application. Start by interviewing me and proposing
+the module map. Require English, offer Arabic, and do not use production data.
+```
 
-### Spec Kit catalog
-
-Add the sanduq catalog to a Spec Kit project:
+For a governed Spec Kit project, add the catalog and extensions:
 
 ```bash
 specify extension catalog add --name sanduq --priority 10 --install-allowed \
   https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
-```
 
-Or add it manually to `.specify/extension-catalogs.yml`:
-
-```yaml
-catalogs:
-  - name: sanduq
-    url: https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
-    priority: 10
-    install_allowed: true
-```
-
-Install extensions by id:
-
-```bash
-specify extension add project
-specify extension add pr
-specify extension add how-to-test
 specify extension add illustrate
+specify extension add qa
+specify extension add user-manual
+specify extension add pr
 ```
 
-If upgrading from the former standalone `pr-review` extension, remove it and force-refresh `pr`:
+## Portable skills
+
+Portable skills live under [`skills/`](skills/) and do not require Spec Kit. The core User Manual
+skill includes its own scripts, MkDocs Material scaffold, RTL styles, CI workflows, and references.
+
+| Skill | Purpose | Install only this skill |
+| --- | --- | --- |
+| [`illustrate`](skills/illustration-tools/skills/illustrate/) | Generate 27 diagram and chart types as HTML/SVG/PNG/PDF. | `npx skills add samykabu/sanduq --skill illustrate` |
+| [`user-manual`](skills/dev-tools/skills/user-manual/) | Create, audit, incrementally update, and build complete audience editions. | `npx skills add samykabu/sanduq --skill user-manual` |
+| [`user-manual-api-docs`](skills/dev-tools/skills/user-manual-api-docs/) | Produce filtered, safe API documentation from real contracts and code. | `npx skills add samykabu/sanduq --skill user-manual-api-docs` |
+| [`user-manual-release-docs`](skills/dev-tools/skills/user-manual-release-docs/) | Create release notes and actionable migration guides. | `npx skills add samykabu/sanduq --skill user-manual-release-docs` |
+| [`user-manual-ui-screenshots`](skills/dev-tools/skills/user-manual-ui-screenshots/) | Plan and capture deterministic, redacted web/mobile screenshots. | `npx skills add samykabu/sanduq --skill user-manual-ui-screenshots` |
+| [`user-manual-preview-publishing`](skills/dev-tools/skills/user-manual-preview-publishing/) | Publish private PR artifacts and approved hosted previews/releases. | `npx skills add samykabu/sanduq --skill user-manual-preview-publishing` |
+
+### Install with `npx skills`
+
+The official CLI runs through `npx`, so no global CLI installation is required.
 
 ```bash
-specify extension remove pr-review
-specify extension add pr --force
+# Inspect before installing
+npx skills add samykabu/sanduq --list
+
+# Install one skill into the current project
+npx skills add samykabu/sanduq --skill user-manual
+
+# Install several modules in one operation
+npx skills add samykabu/sanduq \
+  --skill user-manual \
+  --skill user-manual-api-docs \
+  --skill user-manual-ui-screenshots
+
+# Target Codex and skip interactive confirmation
+npx skills add samykabu/sanduq --skill user-manual -a codex -y
+
+# Install globally instead of in only the current project
+npx skills add samykabu/sanduq --skill illustrate -g
+
+# Run a skill without keeping an installation
+npx skills use samykabu/sanduq@user-manual
 ```
 
-Local development install from a clone:
+Set `DISABLE_TELEMETRY=1` if you want to disable the CLI's anonymous telemetry.
 
-```bash
-specify extension add --dev /path/to/sanduq/extensions/project --force
+### `illustrate`
+
+Use this skill for architecture, process flow, ER, sequence, state, data-flow, timeline, Gantt,
+quantitative charts, and other documentation visuals. It generates editable HTML/SVG first and can
+export PNG or PDF when the required local renderer is available.
+
+```text
+$illustrate create a light architecture diagram showing a mobile app, API gateway, booking service,
+payment service, PostgreSQL, and an external payment provider. Keep trust boundaries visible.
 ```
 
-If a target project resolves an old release, clear the project-level Spec Kit cache and retry:
+Real-life scenario: an architecture decision record is difficult to scan. Ask `illustrate` for a
+seven-node architecture diagram, review the editable SVG, then embed it in the ADR and User Manual.
 
-```powershell
-Remove-Item -Recurse -Force .specify\extensions\.cache
-specify extension add project
+### `user-manual`
+
+Use the complete workflow when a manual does not exist or when a feature changes multiple
+documentation surfaces. It will:
+
+1. Interview stakeholders and inspect routes, navigation, code, tests, contracts, schemas, and
+   approved infrastructure sources.
+2. Propose modules and save the approved, later-extensible map in `User-Manual/manual.yml`.
+3. Keep English required and Arabic optional while making HTML, diagrams, and PDFs RTL-ready.
+4. Maintain separate End User, Administrator/Operator, and Technical Reference navigation.
+5. Generate canonical Markdown, MkDocs Material HTML, edition PDFs, and module PDFs on demand.
+6. Audit freshness, links, metadata, audience separation, assets, and accidental secret patterns.
+
+```text
+$user-manual analyze this repository, interview me about audiences and modules, then create the
+manual from the ground up. Include web, mobile, API, infrastructure, architecture, system ER, and
+module ER documentation. Use synthetic examples only.
 ```
 
-### Claude Code marketplace
+Real-life scenario: a logistics platform has no documentation. The skill discovers Shipment,
+Driver, Customer, Billing, and Operations modules, asks the owner to approve them, then builds
+plain-English task guides for customers, operational procedures for dispatchers, and private API,
+schema, deployment, and architecture references for technical readers.
 
-Inside Claude Code:
+For an incremental change:
+
+```text
+$user-manual update the existing manual for the new partial-refund feature. Use the Git diff as the
+scope, preserve authored text, update affected screenshots and entities, and report untouched gaps.
+```
+
+### `user-manual-api-docs`
+
+Use this focused module when the main work is an API inventory or contract change.
+
+```text
+$user-manual-api-docs document every public partner endpoint in openapi.yaml. Exclude internal,
+admin, debug, webhook-receiver, and secret-bearing operations. Add safe request and response examples.
+```
+
+Real-life scenario: a marketplace exposes seller order APIs and also has internal reconciliation
+routes. The skill builds a partner reference for seller operations, puts administrator operations
+behind authenticated navigation, and prevents internal endpoints from leaking into public output.
+
+### `user-manual-release-docs`
+
+Use this module when users or operators need to understand a release or take migration action.
+
+```text
+$user-manual-release-docs create release notes and a migration guide from v2.4.0 to v3.0.0 using
+the Git diff, schemas, deployment files, and tests. Separate user impact, operator steps, and API changes.
+```
+
+Real-life scenario: an authentication release retires legacy tokens. The result explains the visible
+sign-in change to end users, gives administrators a rollout checklist, and provides technical readers
+with compatibility, verification, and rollback steps grounded in the code.
+
+### `user-manual-ui-screenshots`
+
+Use this module when documentation needs repeatable UI evidence.
+
+```text
+$user-manual-ui-screenshots create and execute a Playwright capture matrix for account recovery in
+English and Arabic, desktop and mobile, success and validation-error states. Use synthetic users and
+mask email addresses, tokens, IDs, and timestamps.
+```
+
+Real-life scenario: every release made screenshots stale. The module ties each image to a stable
+test scenario, fixed viewport, locale, fixture, role, and application state so CI can recapture only
+the affected module.
+
+### `user-manual-preview-publishing`
+
+Use this only for preview and release delivery. A private CI artifact is always the baseline; an
+ephemeral hosted preview is allowed only when the project has an approved provider configured.
+
+```text
+$user-manual-preview-publishing add a private GitHub Actions preview artifact to documentation PRs.
+Use the approved provider from User-Manual/manual.yml for an optional hosted preview, keep Admin and
+Technical editions authenticated, and publish versioned HTML/PDF only after merge or a release tag.
+```
+
+Real-life scenario: customer reviewers need a convenient preview, while operations documentation
+must remain private. CI uploads all editions as a repository-reader artifact, deploys only approved
+End User pages to the configured preview provider, and publishes release PDFs after merge.
+
+### Claude Code plugin installation
+
+The same skills are grouped into two optional Claude Code plugins:
 
 ```text
 /plugin marketplace add samykabu/sanduq
+/plugin install dev-tools@sanduq
 /plugin install illustration-tools@sanduq
 ```
 
-## Use
+Invoke them through Claude Code's plugin namespace, for example:
 
-`project` needs one-time setup in each target repo:
+```text
+/dev-tools:user-manual
+/illustration-tools:illustrate
+```
+
+## Spec Kit extensions
+
+The root [`catalog.json`](catalog.json) is authoritative and is mirrored to
+[`extensions/catalog.json`](extensions/catalog.json). Install an extension by id after adding the
+catalog.
+
+| Extension | Version | Commands | Primary outcome |
+| --- | ---: | --- | --- |
+| [`project`](extensions/project/) | 2.0.0 | `/speckit-project-init`, `/speckit-project-sync` | GitHub Project lifecycle and task synchronization. |
+| [`qa`](extensions/qa/) | 1.0.0 | `/speckit-qa-init`, `/speckit-qa-analyze`, `/speckit-qa-document` | Pre-implementation QA analysis and maintained test documentation. |
+| [`user-manual`](extensions/user-manual/) | 1.0.0 | `/speckit-user-manual-init`, `analyze`, `update`, `release` | Incremental application documentation inside the feature lifecycle. |
+| [`pr`](extensions/pr/) | 4.0.0 | `/speckit-pr-generate`, `/speckit-pr-review-feedback` | Documentation-gated PR creation/update and review processing. |
+| [`illustrate`](extensions/illustrate/) | 2.0.0 | `/speckit-illustrate-generate`, `/speckit-illustrate-export` | Managed diagrams and exports for specs, QA, manuals, and PRs. |
+
+Codex users can replace the leading slash with `$`, such as `$speckit-qa-analyze`.
+
+### `project` extension
+
+Initialize once after authenticating GitHub CLI for Projects:
 
 ```bash
 gh auth refresh -h github.com -s project,read:project
 ```
 
-Then invoke the rendered skill using your assistant's syntax:
-
 ```text
-Claude Code: /speckit-project-init
-Codex:       $speckit-project-init
+/speckit-project-init
+/speckit-project-sync
 ```
 
-Initialization asks whether lifecycle sync hooks should be `required` (automatic) or
-`optional` (manual/user-approved). For automation, pass `--hooks-mode required|optional`.
+The initializer discovers the target board and asks whether lifecycle hooks are
+`required` (automatic) or `optional` (manual approval). It creates one parent feature issue, one
+native sub-issue per task, advances status without regression, and closes sub-issues when tasks are
+completed.
 
-After that, `optional` lifecycle hooks offer `/speckit-project-sync` in Claude Code or
-`$speckit-project-sync` in Codex for manual approval; `required` hooks invoke sync as part of each
-configured lifecycle phase.
+Real-life scenario: a ten-task billing specification moves from analysis to implementation. The
+extension keeps the GitHub Project parent and tasks aligned without developers manually copying
+status between `tasks.md` and the board.
 
-The `pr` and `how-to-test` extensions can be run manually:
+### `qa` extension
+
+```text
+/speckit-qa-init
+/speckit-qa-analyze
+/speckit-qa-document
+```
+
+`init` asks whether QA analysis and documentation are part of the project lifecycle. When enabled,
+fresh `qa analyze` evidence is required before Spec Kit implementation. `qa document` is run before
+PR creation if it has not run for the feature's current implementation state.
+
+Real-life scenario: a payment specification describes retries but omits duplicate-charge and
+timeout tests. `qa analyze` identifies the risk before implementation; after implementation,
+`qa document` produces executable scenarios, test layers, environments, data rules, and coverage
+evidence in plain language.
+
+### `user-manual` extension
+
+```text
+/speckit-user-manual-init
+/speckit-user-manual-analyze
+/speckit-user-manual-update
+/speckit-user-manual-release
+```
+
+- `init` interviews the team, proposes the application module map, and scaffolds `User-Manual/`.
+- `analyze` compares the current specification with manual coverage before implementation.
+- `update` changes canonical sources and affected assets on every feature PR.
+- `release` builds approved, versioned HTML/PDF editions after merge or release tagging.
+
+Real-life scenario: a specification adds partial refunds. Analysis identifies End User instructions,
+operator permissions, API changes, Refund entities/enumerations, migration notes, and three UI states.
+The update command changes only those pages and assets and the PR receives a private preview.
+
+### `pr` extension
 
 ```text
 /speckit-pr-generate
-/speckit-pr-review-feedback owner/repo#123
-/speckit-how-to-test-analyze
-/speckit-how-to-test-document
-/speckit-illustrate-generate
-/speckit-illustrate-export path/to/diagram.html --svg-only
+/speckit-pr-review-feedback owner/repository#123
 ```
 
-The PR and How-To-Test commands declare `illustrate` as a versioned dependency. On use they
-inspect `.specify/extensions/.registry`, ask before installing/updating by default, and cache catalog
-checks for 24 hours. Set project-wide behavior in `.specify/extension-dependencies.yml`:
+Before creating or updating a PR, `pr generate` checks installed QA and User Manual policies. It
+refreshes required documentation when stale, builds the PR body from real feature artifacts, and
+updates an existing feature PR instead of creating a duplicate. Review feedback is inspected,
+validated, fixed only when appropriate, replied to, and resolved through an approval-aware workflow.
+
+Real-life scenario: implementation is complete but the manual has never recorded the new module.
+The PR gate runs the required manual update, publishes the private preview artifact, and includes
+the resulting evidence in the existing PR.
+
+### `illustrate` extension
+
+```text
+/speckit-illustrate-generate architecture --theme light
+/speckit-illustrate-export docs/architecture.html --svg-only
+```
+
+Use it for specification flows, QA matrices, system/module ER diagrams, infrastructure views, and
+PR visuals. Keep diagrams small enough to explain one important relationship and store editable
+sources beside the documentation that owns them.
+
+Real-life scenario: a feature spans browser, API, queue, worker, and database. Generate a concise
+data-flow diagram for the technical manual and export an SVG that remains readable in Markdown,
+HTML, and PDF.
+
+## Recommended integrated lifecycle
+
+```text
+specify/specification
+  → user-manual analyze
+  → qa analyze
+  → speckit implement
+  → qa document
+  → user-manual update
+  → pr generate + private documentation preview
+  → merge/release tag
+  → user-manual release (versioned HTML and PDFs)
+```
+
+`pr`, `qa`, and `user-manual` depend on a compatible `illustrate` extension. The default policy
+prompts before install/update and caches catalog checks for 24 hours. Projects may configure:
 
 ```yaml
+# .specify/extension-dependencies.yml
 schema_version: "1.0"
-update_policy: auto # prompt | auto | manual
+update_policy: prompt # prompt | auto | manual
 check_interval_hours: 24
 ```
 
-The remaining Claude plugin skills are available outside Spec Kit:
+## Language, audience, and security rules
 
-```text
-/illustration-tools:illustrate
-```
-
-## Release pipeline
-
-The Resal-style automated release flow lives in
-[`.github/workflows/release-extensions.yml`](.github/workflows/release-extensions.yml). On pushes to
-`main` that change `extensions/**`, it detects changed extension directories, bumps versions when
-needed, updates [`catalog.json`](catalog.json) and [`extensions/catalog.json`](extensions/catalog.json),
-builds release ZIPs, commits catalog/version changes back to `main` with `[skip ci]`, and creates
-GitHub releases tagged `<extension>-vX.Y.Z`.
-
-When changing a plugin or extension, bump its manifest version and add a changelog entry in the same
-change. CI validates catalog/version alignment and plugin marketplace sources.
+- English is required; Arabic is optional per project and RTL support is present from day one.
+- End User documentation may be published only after approval.
+- Administrator/Operator documentation requires authenticated internal access.
+- Technical Reference is a private CI artifact or secured internal site.
+- PRs always receive a private preview artifact and a link in the PR.
+- Hosted PR previews require an approved provider in `User-Manual/manual.yml`.
+- Releases publish one PDF per audience edition; module PDFs are generated on demand.
+- Examples and screenshots use synthetic data. Secrets and real production data are prohibited.
+- Feature and scenario explanations use plain English or plain Arabic appropriate to the audience.
 
 ## Repository layout
 
@@ -158,17 +362,45 @@ change. CI validates catalog/version alignment and plugin marketplace sources.
 sanduq/
   .claude-plugin/marketplace.json
   catalog.json
+  docs/assets/
   extensions/
-    catalog.json
-    scripts/
     project/
+    qa/
+    user-manual/
     pr/
-    how-to-test/
     illustrate/
   skills/
-    illustration-tools/
+    dev-tools/                  # five standalone User Manual skills
+    illustration-tools/        # standalone illustrate skill
 ```
+
+## Development and release
+
+For local extension development:
+
+```bash
+specify extension add --dev /absolute/path/to/sanduq/extensions/user-manual --force
+```
+
+When a target project resolves an old release, clear only its extension cache and retry:
+
+```powershell
+Remove-Item -Recurse -Force .specify\extensions\.cache
+specify extension add user-manual --force
+```
+
+Changes to a publishable skill, plugin, or extension must update its manifest version and changelog.
+The release workflow refreshes both catalogs, packages extension ZIPs, and publishes tags named
+`<extension>-vX.Y.Z`.
 
 ## License
 
-MIT © Samy K. Abushanab
+Current and future sanduq original contributions are **source-available** under the
+[PolyForm Noncommercial License 1.0.0](LICENSE). Noncommercial use, modification, and redistribution
+are permitted by that license. Commercial use requires a separate written license from the owner;
+open a private licensing request with [Samy K. Abushanab](https://github.com/samykabu).
+
+This is intentionally **not an OSI-approved open-source license**, because it restricts commercial
+use. Copies already published under MIT remain available under the MIT terms that accompanied those
+copies. Bundled upstream material keeps its original license; see
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

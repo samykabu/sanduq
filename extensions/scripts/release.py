@@ -102,7 +102,7 @@ def new_catalog_entry(meta, ext_id, version, download_url, repo_url, branch):
         "documentation": f"{repo_url}/blob/{branch}/extensions/{ext_id}/README.md",
         "changelog": f"{repo_url}/blob/{branch}/extensions/{ext_id}/CHANGELOG.md",
         "download_url": download_url,
-        "license": meta.get("license", "MIT"),
+        "license": meta.get("license", "PolyForm-Noncommercial-1.0.0"),
         "category": meta.get("category", "uncategorized"),
         "effect": meta.get("effect", "read-write"),
         "requires": meta.get("requires", {}) or {},
@@ -180,6 +180,7 @@ def main() -> None:
             entry["documentation"] = f"{repo_url}/blob/{branch}/extensions/{ext_id}/README.md"
             entry["changelog"] = f"{repo_url}/blob/{branch}/extensions/{ext_id}/CHANGELOG.md"
             entry["download_url"] = download_url
+            entry["license"] = meta.get("license", "PolyForm-Noncommercial-1.0.0")
             entry["requires"] = meta.get("requires", {}) or {}
             entry["updated_at"] = now_iso()
             catalog["extensions"][ext_id] = entry

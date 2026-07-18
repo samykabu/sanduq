@@ -4,6 +4,64 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## sanduq — licensing and standalone manuals — 2026-07-18
+
+### Added
+
+- Added a standalone `dev-tools` plugin with five independently installable `npx skills` modules
+  for complete manuals, API docs, release docs, UI screenshots, and preview publishing.
+- Added a comprehensive README with real-life usage examples for every skill and Spec Kit extension.
+- Added a repository workflow illustration in editable HTML and exported SVG/PNG formats.
+- Consolidated required upstream notices in `THIRD_PARTY_NOTICES.md`.
+
+### Changed
+
+- Changed current and future sanduq original contributions to PolyForm Noncommercial 1.0.0;
+  previously released MIT copies retain their original terms.
+- Bumped the license-breaking extension releases to `project` 2.0.0, `pr` 4.0.0, and `illustrate`
+  2.0.0, and bumped `illustration-tools` to 3.0.0.
+
+## user-manual — 1.0.0 — 2026-07-18
+
+### Added
+
+- Added the modular User Manual extension for three navigable editions: End User,
+  Administrator/Operator, and Technical Reference.
+- Added bilingual-ready English/Arabic and RTL-aware MkDocs Material scaffolding, audience-specific
+  HTML and PDF builds, API/reference, release, migration, tutorial, and screenshot workflows.
+- Added approved module-map governance in `User-Manual/manual.yml`, full system and module ER
+  documentation rules, synthetic-data screenshot policy, incremental freshness checks, and private
+  PR preview artifacts.
+
+## qa — 1.0.0 — 2026-07-18
+
+### Changed
+
+- Replaced the former `how-to-test` extension and command namespace with `qa` as an immediate
+  breaking rename.
+- Added `speckit.qa.init` to choose integrated or manual QA lifecycle policy.
+- Added feature-scoped freshness gates so integrated projects require QA analysis before
+  implementation and current QA documentation before PR creation.
+
+## pr — 3.1.0 — 2026-07-18
+
+### Changed
+
+- Added pre-PR freshness checks for installed QA and User Manual extensions, with automatic
+  documentation refresh before creating or updating a pull request.
+
+## illustrate — 1.0.4 — 2026-07-18
+
+### Changed
+
+- Updated integration references for the QA and User Manual documentation lifecycles.
+
+## illustration-tools — 2.0.3 — 2026-07-18
+
+### Changed
+
+- Updated bundled Illustrate references for QA and User Manual consumers.
+
 ## illustration-tools — 2.0.2 — 2026-07-18
 
 ### Added

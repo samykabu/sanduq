@@ -1,0 +1,70 @@
+schema_version: "1.0"
+
+extension:
+  id: user-manual
+  name: "User Manual"
+  version: "1.0.0"
+  description: "Create and incrementally maintain bilingual-ready, audience-aware application manuals in Markdown, Material HTML, and PDF, including modules, interfaces, tutorials, screenshots, APIs, releases, migrations, infrastructure, architecture, and complete data dictionaries."
+  author: "Samy K. Abushanab"
+  repository: "https://github.com/samykabu/sanduq"
+  category: "documentation"
+  license: PolyForm-Noncommercial-1.0.0
+
+requires:
+  speckit_version: ">=0.2.0"
+  extensions:
+    - id: illustrate
+      version: ">=2.0.0,<3.0.0"
+      required: true
+  tools:
+    - name: git
+      required: false
+    - name: python
+      required: true
+    - name: node
+      required: false
+
+provides:
+  commands:
+    - name: speckit.user-manual.init
+      file: commands/speckit.user-manual.init.md
+      description: "Interview the project, discover and approve its module map, and scaffold User-Manual"
+    - name: speckit.user-manual.analyze
+      file: commands/speckit.user-manual.analyze.md
+      description: "Add missing manual, API, screenshot, diagram, tutorial, release, and migration tasks for the active feature"
+    - name: speckit.user-manual.update
+      file: commands/speckit.user-manual.update.md
+      description: "Create a missing manual or incrementally update affected modules and build preview artifacts"
+    - name: speckit.user-manual.release
+      file: commands/speckit.user-manual.release.md
+      description: "Finalize versioned audience/language HTML archives and PDFs for an application release"
+
+hooks:
+  after_tasks:
+    command: speckit.user-manual.analyze
+    optional: true
+    prompt: "Analyze which User Manual modules and assets this feature must update?"
+    description: "Add documentation and evidence work to tasks.md before implementation"
+  after_implement:
+    command: speckit.user-manual.update
+    optional: true
+    prompt: "Update the audience-aware User Manual and generate a private preview?"
+    description: "Update affected manual modules after implemented behavior can be observed"
+
+tags:
+  - "user-manual"
+  - "documentation"
+  - "mkdocs"
+  - "material"
+  - "pdf"
+  - "bilingual"
+  - "arabic"
+  - "rtl"
+  - "api"
+  - "tutorial"
+  - "release-notes"
+  - "migration-guide"
+  - "screenshots"
+  - "architecture"
+  - "infrastructure"
+  - "data-dictionary"

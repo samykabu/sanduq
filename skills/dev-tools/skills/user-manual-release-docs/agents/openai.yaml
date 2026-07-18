@@ -1,0 +1,4 @@
+interface:
+  display_name: "User Manual Release Docs"
+  short_description: "Create release notes and migration guides"
+  default_prompt: "Use $user-manual-release-docs to prepare release notes and migration guidance."

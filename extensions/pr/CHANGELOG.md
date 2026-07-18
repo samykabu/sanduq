@@ -1,13 +1,30 @@
 # Changelog
 
+All notable changes to the Pull Request Workflow extension.
+
+## [4.0.0] - 2026-07-18
+
+### Changed
+
+- Updated the Illustrate dependency to `>=2.0.0,<3.0.0`.
+- Changed new distributions from MIT to PolyForm Noncommercial 1.0.0. Previously published MIT
+  versions retain their original terms.
+
+## [3.1.0] - 2026-07-18
+
+### Added
+
+- Enforced `QA.Document` before PR creation when the installed QA lifecycle policy requires it and
+  feature evidence is missing or stale.
+- Enforced incremental `UserManual.Update` before PR creation when the User Manual is initialized.
+- Rechecked both feature-scoped freshness records before allowing PR creation or update.
+
 ## [3.0.0] - 2026-07-18
 
 ### Changed
 
 - Replaced the renamed `diagram-design` dependency with `illustrate >=1.0.0,<2.0.0` and updated
   diagram generation/export paths to the unified skill package.
-
-All notable changes to the Pull Request Workflow extension.
 
 ## [2.1.0] - 2026-07-18
 

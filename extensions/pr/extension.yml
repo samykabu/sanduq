@@ -3,19 +3,25 @@ schema_version: "1.0"
 extension:
   id: pr
   name: "Pull Request Workflow"
-  version: "3.0.1"
-  description: "Generate or update pull requests from Spec Kit artifacts, then process review feedback through an approval-gated fix and reply workflow."
+  version: "4.0.0"
+  description: "Generate or update pull requests from Spec Kit artifacts, enforce installed QA and User Manual freshness policies, then process review feedback through an approval-gated fix and reply workflow."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
   category: "process"
-  license: MIT
+  license: PolyForm-Noncommercial-1.0.0
 
 requires:
   speckit_version: ">=0.2.0"
   extensions:
     - id: illustrate
-      version: ">=1.0.0,<2.0.0"
+      version: ">=2.0.0,<3.0.0"
       required: true
+    - id: qa
+      version: ">=1.0.0,<2.0.0"
+      required: false
+    - id: user-manual
+      version: ">=1.0.0,<2.0.0"
+      required: false
   tools:
     - name: git
       required: false
