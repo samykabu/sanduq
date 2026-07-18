@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-07-18T17:03:07Z",
+  "updated_at": "2026-07-18T17:42:45Z",
   "catalog_url": "https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json",
   "extensions": {
     "project": {
@@ -51,14 +51,14 @@
     "pr": {
       "name": "Pull Request Workflow",
       "id": "pr",
-      "version": "3.0.0",
+      "version": "3.0.1",
       "description": "Generate or update pull requests from Spec Kit artifacts, then process review feedback through an approval-gated fix and reply workflow.",
       "author": "Samy K. Abushanab",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/pr",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/pr/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/pr/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/pr-v3.0.0/pr.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/pr-v3.0.1/pr.zip",
       "license": "MIT",
       "category": "process",
       "effect": "read-write",
@@ -102,19 +102,19 @@
       ],
       "verified": false,
       "created_at": "2026-07-09T20:26:15Z",
-      "updated_at": "2026-07-18T15:47:12Z"
+      "updated_at": "2026-07-18T17:42:45Z"
     },
     "how-to-test": {
       "name": "How-To-Test",
       "id": "how-to-test",
-      "version": "2.0.0",
+      "version": "2.0.1",
       "description": "Generate QA-facing How-To-Test manuals from completed Spec Kit features, with all supported Illustrate visuals, screenshots, API samples, and a readiness audit that creates reusable project memory plus missing documentation tasks before implementation.",
       "author": "Samy K. Abushanab",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/how-to-test",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/how-to-test/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/how-to-test/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/how-to-test-v2.0.0/how-to-test.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/how-to-test-v2.0.1/how-to-test.zip",
       "license": "MIT",
       "category": "process",
       "effect": "read-write",
@@ -154,19 +154,19 @@
       ],
       "verified": false,
       "created_at": "2026-07-09T20:26:15Z",
-      "updated_at": "2026-07-18T15:47:12Z"
+      "updated_at": "2026-07-18T17:42:45Z"
     },
     "illustrate": {
       "name": "Illustrate",
       "id": "illustrate",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "description": "Generate and export twenty-seven technical, product, architecture, and process illustration types as HTML, SVG, PNG, or PDF using editorial and technical-color visual families.",
       "author": "Samy K. Abushanab",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/illustrate",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/illustrate/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/illustrate/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/illustrate-v1.0.2/illustrate.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/illustrate-v1.0.3/illustrate.zip",
       "license": "MIT",
       "category": "documentation",
       "effect": "read-write",
@@ -206,7 +206,7 @@
       ],
       "verified": false,
       "created_at": "2026-07-18T15:47:12Z",
-      "updated_at": "2026-07-18T17:03:07Z"
+      "updated_at": "2026-07-18T17:42:45Z"
     }
   }
 }
