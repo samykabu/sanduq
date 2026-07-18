@@ -10,8 +10,8 @@ on the command line this script:
     comments are preserved — only that one line changes)
   * updates the public ``catalog.json`` and mirrors it to
     ``extensions/catalog.json``:
-      - existing entry  -> only ``version``, ``download_url`` and ``updated_at``
-        change (everything a maintainer curated by hand is left untouched)
+      - existing entry  -> release URLs/version and manifest-derived requirements
+        are refreshed (maintainer-curated catalog fields stay untouched)
       - new extension   -> a full entry is generated from extension.yml using
         the existing ``pr`` entry as the template
   * appends to a release manifest (JSON) the workflow reads back to cut releases
@@ -180,6 +180,7 @@ def main() -> None:
             entry["documentation"] = f"{repo_url}/blob/{branch}/extensions/{ext_id}/README.md"
             entry["changelog"] = f"{repo_url}/blob/{branch}/extensions/{ext_id}/CHANGELOG.md"
             entry["download_url"] = download_url
+            entry["requires"] = meta.get("requires", {}) or {}
             entry["updated_at"] = now_iso()
             catalog["extensions"][ext_id] = entry
         else:

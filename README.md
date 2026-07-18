@@ -84,10 +84,17 @@ Inside Claude Code:
 
 ```bash
 gh auth refresh -h github.com -s project,read:project
-/speckit-project-init
 ```
 
-After that, Spec Kit lifecycle hooks can prompt to run `/speckit-project-sync` at each phase.
+Then invoke the rendered skill using your assistant's syntax:
+
+```text
+Claude Code: /speckit-project-init
+Codex:       $speckit-project-init
+```
+
+After that, lifecycle hooks prompt for `/speckit-project-sync` in Claude Code or
+`$speckit-project-sync` in Codex at each phase.
 
 The `pr`, `how-to-test`, and `pr-review` extensions can be run manually:
 
