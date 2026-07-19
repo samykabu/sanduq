@@ -10,5 +10,5 @@ In lifecycle-integrated mode, analysis is a gate: finish with no unexplained cri
 freshness with:
 
 ```text
-python .specify/extensions/qa/scripts/qa_state.py record --kind analyze --feature <feature-path>
+python .specify/extensions/assure/scripts/assure_state.py record --kind analyze --feature <feature-path>
 ```

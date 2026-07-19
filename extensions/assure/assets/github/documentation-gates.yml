@@ -22,12 +22,12 @@ jobs:
           test -d "$feature"
           echo "path=$feature" >> "$GITHUB_OUTPUT"
       - name: Verify QA analysis and documentation freshness
-        if: ${{ hashFiles('.specify/extensions/qa/qa-config.yml') != '' }}
+        if: ${{ hashFiles('.specify/extensions/assure/assure-config.yml') != '' }}
         shell: bash
         run: |
           set -euo pipefail
-          if grep -Eq '^  require_document_before_pr: true$' .specify/extensions/qa/qa-config.yml; then
-            result="$(python .specify/extensions/qa/scripts/qa_state.py status --kind document --feature '${{ steps.feature.outputs.path }}')"
+          if grep -Eq '^  require_document_before_pr: true$' .specify/extensions/assure/assure-config.yml; then
+            result="$(python .specify/extensions/assure/scripts/assure_state.py status --kind document --feature '${{ steps.feature.outputs.path }}')"
             echo "$result"
             RESULT="$result" python -c "import json, os, sys; sys.exit(0 if json.loads(os.environ['RESULT'])['current'] else 1)"
           fi

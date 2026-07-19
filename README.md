@@ -55,7 +55,8 @@ specify extension catalog add --name sanduq --priority 10 --install-allowed \
   https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
 
 specify extension add illustrate
-specify extension add qa
+specify extension add project
+specify extension add assure
 specify extension add user-manual
 specify extension add pr
 ```
@@ -241,12 +242,12 @@ catalog.
 | Extension | Version | Commands | Primary outcome |
 | --- | ---: | --- | --- |
 | [`project`](extensions/project/) | 2.0.0 | `/speckit-project-init`, `/speckit-project-sync` | GitHub Project lifecycle and task synchronization. |
-| [`qa`](extensions/qa/) | 1.0.0 | `/speckit-qa-init`, `/speckit-qa-analyze`, `/speckit-qa-document` | Pre-implementation QA analysis and maintained test documentation. |
+| [`assure`](extensions/assure/) | 2.0.0 | `/speckit-assure-init`, `/speckit-assure-analyze`, `/speckit-assure-document` | Pre-implementation QA analysis and maintained test documentation. |
 | [`user-manual`](extensions/user-manual/) | 1.0.0 | `/speckit-user-manual-init`, `analyze`, `update`, `release` | Incremental application documentation inside the feature lifecycle. |
 | [`pr`](extensions/pr/) | 4.0.0 | `/speckit-pr-generate`, `/speckit-pr-review-feedback` | Documentation-gated PR creation/update and review processing. |
 | [`illustrate`](extensions/illustrate/) | 2.1.0 | `/speckit-illustrate-generate`, `/speckit-illustrate-export`, `/speckit-illustrate-theme` | Managed diagrams, project themes, fonts, and exports for specs, QA, manuals, and PRs. |
 
-Codex users can replace the leading slash with `$`, such as `$speckit-qa-analyze`.
+Codex users can replace the leading slash with `$`, such as `$speckit-assure-analyze`.
 
 ### `project` extension
 
@@ -270,21 +271,21 @@ Real-life scenario: a ten-task billing specification moves from analysis to impl
 extension keeps the GitHub Project parent and tasks aligned without developers manually copying
 status between `tasks.md` and the board.
 
-### `qa` extension
+### `assure` extension
 
 ```text
-/speckit-qa-init
-/speckit-qa-analyze
-/speckit-qa-document
+/speckit-assure-init
+/speckit-assure-analyze
+/speckit-assure-document
 ```
 
 `init` asks whether QA analysis and documentation are part of the project lifecycle. When enabled,
-fresh `qa analyze` evidence is required before Spec Kit implementation. `qa document` is run before
+fresh `assure analyze` evidence is required before Spec Kit implementation. `assure document` is run before
 PR creation if it has not run for the feature's current implementation state.
 
 Real-life scenario: a payment specification describes retries but omits duplicate-charge and
-timeout tests. `qa analyze` identifies the risk before implementation; after implementation,
-`qa document` produces executable scenarios, test layers, environments, data rules, and coverage
+timeout tests. `assure analyze` identifies the risk before implementation; after implementation,
+`assure document` produces executable scenarios, test layers, environments, data rules, and coverage
 evidence in plain language.
 
 ### `user-manual` extension
@@ -341,16 +342,16 @@ HTML, and PDF.
 ```text
 specify/specification
   → user-manual analyze
-  → qa analyze
+  → assure analyze
   → speckit implement
-  → qa document
+  → assure document
   → user-manual update
   → pr generate + private documentation preview
   → merge/release tag
   → user-manual release (versioned HTML and PDFs)
 ```
 
-`pr`, `qa`, and `user-manual` depend on a compatible `illustrate` extension. The default policy
+`pr`, `assure`, and `user-manual` depend on a compatible `illustrate` extension. The default policy
 prompts before install/update and caches catalog checks for 24 hours. Projects may configure:
 
 ```yaml
@@ -381,7 +382,7 @@ sanduq/
   docs/assets/
   extensions/
     project/
-    qa/
+    assure/
     user-manual/
     pr/
     illustrate/
@@ -403,6 +404,16 @@ When a target project resolves an old release, clear only its extension cache an
 ```powershell
 Remove-Item -Recurse -Force .specify\extensions\.cache
 specify extension add user-manual --force
+```
+
+If an extension installs without errors but its commands never appear in an agent (for example
+Claude Code's `/` skill list), the installer probably skipped that agent silently: commands are
+registered only for agents whose directory exists at install time. For Claude Code, ensure
+`.claude/skills/` exists and reinstall:
+
+```powershell
+New-Item -ItemType Directory -Force .claude\skills
+specify extension add project --force
 ```
 
 Changes to a publishable skill, plugin, or extension must update its manifest version and changelog.

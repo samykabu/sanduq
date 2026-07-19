@@ -3,10 +3,10 @@ dependencies:
   - id: illustrate
     version: ">=2.0.0,<3.0.0"
     required_for: "diagram generation"
-  - id: qa
-    version: ">=1.0.0,<2.0.0"
+  - id: assure
+    version: ">=2.0.0,<3.0.0"
     optional: true
-    required_for: "QA.Document freshness preflight when QA lifecycle integration is enabled"
+    required_for: "Assure.Document freshness preflight when QA lifecycle integration is enabled"
   - id: user-manual
     version: ">=1.0.0,<2.0.0"
     optional: true

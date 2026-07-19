@@ -220,7 +220,7 @@ The file should render correctly when opened directly in any modern browser. The
 
 ## Documentation Integration
 
-When Illustrate is invoked by `speckit.pr.generate`, `speckit.qa.document`, or the
+When Illustrate is invoked by `speckit.pr.generate`, `speckit.assure.document`, or the
 `user-manual` extension, generate both a source HTML
 diagram and an exported PNG image:
 

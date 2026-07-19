@@ -1,0 +1,4 @@
+interface:
+  display_name: "Assure"
+  short_description: "Analyze and document feature QA readiness"
+  default_prompt: "Use $assure to analyze or document QA coverage for the active Spec Kit feature."
