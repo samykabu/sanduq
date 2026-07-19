@@ -76,7 +76,7 @@ reviewers or bots have commented on an open PR.
   unavailable, and reports why it skipped the PR step.
 - Diagram generation requires `illustrate >=2.0.0,<3.0.0`. The command checks Spec Kit's
   registry and follows the project dependency policy before installing or updating it.
-- `qa` and `user-manual` are optional integrations. The PR command never installs them implicitly,
+- `assure` and `user-manual` are optional integrations. The PR command never installs them implicitly,
   but enforces their configured policies when a target project has installed them.
 
 ## Migrating from `pr-review`

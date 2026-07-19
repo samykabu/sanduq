@@ -83,11 +83,11 @@ creating/updating the PR.
 
 #### QA
 
-If `.specify/extensions/qa/qa-config.yml` exists and contains
+If `.specify/extensions/assure/assure-config.yml` exists and contains
 `require_document_before_pr: true`:
 
-1. Run `python .specify/extensions/qa/scripts/qa_state.py status --kind document --feature <feature-dir>`.
-2. If `current` is false, execute `speckit.qa.document --feature <feature-dir>` with the current
+1. Run `python .specify/extensions/assure/scripts/assure_state.py status --kind document --feature <feature-dir>`.
+2. If `current` is false, execute `speckit.assure.document --feature <feature-dir>` with the current
    integration and wait for it to finish.
 3. Run the status command again. Stop before PR handling if it is still missing/stale or required QA
    evidence remains incomplete. Do not allow an old file to satisfy the gate.

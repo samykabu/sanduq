@@ -9,5 +9,5 @@ follow-up; never substitute an invented example. Record every generated output r
 repository root:
 
 ```text
-python .specify/extensions/qa/scripts/qa_state.py record --kind document --feature <feature-path> --output <path>
+python .specify/extensions/assure/scripts/assure_state.py record --kind document --feature <feature-path> --output <path>
 ```

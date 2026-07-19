@@ -38,13 +38,13 @@ resolve feature -> load artifacts -> scan workspace -> update project memory -> 
 
 ### 0. Load the QA contract
 
-Read `.specify/extensions/qa/skills/qa/SKILL.md` and its `references/analysis.md`. If the project
+Read `.specify/extensions/assure/skills/assure/SKILL.md` and its `references/analysis.md`. If the project
 uses lifecycle-integrated mode, this command is a gate: do not report success while critical
 acceptance scenarios lack concrete test or evidence tasks.
 
 ### 0a. Ensure the Illustrate dependency
 
-Before resolving the feature, read `.specify/extensions/qa/dependencies.yml` and enforce its
+Before resolving the feature, read `.specify/extensions/assure/dependencies.yml` and enforce its
 `illustrate` requirement.
 
 1. Read `.specify/extensions/.registry` as the installed-version source of truth.
@@ -237,7 +237,7 @@ After all edits and validation succeed, record the analysis against the final fe
 tree state:
 
 ```text
-python .specify/extensions/qa/scripts/qa_state.py record --kind analyze --feature <feature-path>
+python .specify/extensions/assure/scripts/assure_state.py record --kind analyze --feature <feature-path>
 ```
 
 Do not record successful evidence in `--report-only` mode or while critical gaps remain unresolved.
@@ -261,5 +261,5 @@ project structure.
 ## Quality Bar
 
 After this command runs, a developer should be able to implement the feature and its E2E/API
-coverage in one pass. The later `qa` documentation step should not discover that a screen,
+coverage in one pass. The later `assure` documentation step should not discover that a screen,
 mobile state, validation path, or API sample was never tested or captured.

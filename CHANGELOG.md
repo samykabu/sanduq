@@ -4,6 +4,14 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## assure — 2.0.0 — 2026-07-19
+
+### Changed
+
+- Renamed the `qa` extension and command namespace to `assure` as an immediate breaking rename;
+  the `qa` id conflicted with an existing Spec Kit community extension and broke installation.
+- Updated the `pr` extension's optional dependency to `assure >=2.0.0,<3.0.0`.
+
 ## sanduq — licensing and standalone manuals — 2026-07-18
 
 ### Added

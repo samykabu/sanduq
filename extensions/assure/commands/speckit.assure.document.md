@@ -38,13 +38,13 @@ resolve feature -> scan workspace -> update project memory -> find impacted proj
 
 ### 0. Load the QA contract
 
-Read `.specify/extensions/qa/skills/qa/SKILL.md` and its `references/documentation.md`. Keep this
+Read `.specify/extensions/assure/skills/assure/SKILL.md` and its `references/documentation.md`. Keep this
 tester-facing artifact separate from the audience-aware application documentation under
 `User-Manual/`.
 
 ### 0a. Ensure the Illustrate dependency
 
-Before resolving the feature, read `.specify/extensions/qa/dependencies.yml` and enforce its
+Before resolving the feature, read `.specify/extensions/assure/dependencies.yml` and enforce its
 `illustrate` requirement.
 
 1. Read `.specify/extensions/.registry` as the installed-version source of truth.
@@ -99,7 +99,7 @@ Never invent behavior, screens, endpoints, examples, test counts, or coverage.
   draft when completion evidence is missing.
 - Check for E2E, screenshot-capture, API contract/integration, and manual smoke-test tasks in
   `tasks.md` or the workspace.
-- If important coverage is missing, report it and suggest running `/speckit-qa-analyze`.
+- If important coverage is missing, report it and suggest running `/speckit-assure-analyze`.
   Continue only if enough evidence exists to generate an honest draft.
 
 ### 3. Scan workspace and update project memory
@@ -110,7 +110,7 @@ Scan deeply from the workspace root while excluding generated/vendor folders suc
 `node_modules/`, `bin/`, `obj/`, `dist/`, `build/`, `.next/`, `.nuxt/`, `.turbo/`, `.expo/`,
 `coverage/`, `.cache/`, package-manager caches, and generated QA assets.
 
-If `/speckit-qa-analyze` already created `.github/memory/project-memory.md`, reuse it as
+If `/speckit-assure-analyze` already created `.github/memory/project-memory.md`, reuse it as
 the starting point, then verify it against the current marker scan before writing manuals. Never
 trust stale memory blindly.
 
@@ -262,7 +262,7 @@ After validation succeeds, record the document state and every generated manual 
 repository root:
 
 ```text
-python .specify/extensions/qa/scripts/qa_state.py record --kind document --feature <feature-path> --output <manual-path>
+python .specify/extensions/assure/scripts/assure_state.py record --kind document --feature <feature-path> --output <manual-path>
 ```
 
 Repeat `--output` for every generated index, manual, or required evidence artifact. Do not record a

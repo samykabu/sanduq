@@ -16,8 +16,8 @@ requires:
     - id: illustrate
       version: ">=2.0.0,<3.0.0"
       required: true
-    - id: qa
-      version: ">=1.0.0,<2.0.0"
+    - id: assure
+      version: ">=2.0.0,<3.0.0"
       required: false
     - id: user-manual
       version: ">=1.0.0,<2.0.0"

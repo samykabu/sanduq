@@ -71,7 +71,7 @@ def fingerprint(root: Path, feature: Path) -> str:
         if any(part in EXCLUDED_PARTS for part in relative.parts):
             continue
         posix = relative.as_posix()
-        if posix.startswith((".specify/extensions/qa/state/", "User-Manual/")):
+        if posix.startswith((".specify/extensions/assure/state/", "User-Manual/")):
             continue
         if posix.startswith(f"docs/{feature.name}/"):
             continue
@@ -83,7 +83,7 @@ def fingerprint(root: Path, feature: Path) -> str:
 
 
 def state_path(root: Path, feature: Path, kind: str) -> Path:
-    return root / ".specify" / "extensions" / "qa" / "state" / f"{feature.name}-{kind}.json"
+    return root / ".specify" / "extensions" / "assure" / "state" / f"{feature.name}-{kind}.json"
 
 
 def main() -> None:

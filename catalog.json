@@ -71,8 +71,8 @@
             "required": true
           },
           {
-            "id": "qa",
-            "version": ">=1.0.0,<2.0.0",
+            "id": "assure",
+            "version": ">=2.0.0,<3.0.0",
             "required": false
           },
           {
@@ -168,17 +168,17 @@
       "created_at": "2026-07-18T15:47:12Z",
       "updated_at": "2026-07-18T21:16:48Z"
     },
-    "qa": {
-      "name": "QA",
-      "id": "qa",
-      "version": "1.0.1",
+    "assure": {
+      "name": "Assure",
+      "id": "assure",
+      "version": "2.0.0",
       "description": "Make QA part of the Spec Kit lifecycle: initialize project policy, require feature test-readiness analysis before implementation, and generate a current QA test manual before pull-request creation.",
       "author": "Samy K. Abushanab",
       "repository": "https://github.com/samykabu/sanduq",
-      "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/qa",
-      "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/qa/README.md",
-      "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/qa/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/qa-v1.0.1/qa.zip",
+      "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/assure",
+      "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/assure/README.md",
+      "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/assure/CHANGELOG.md",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/assure-v2.0.0/assure.zip",
       "license": "PolyForm-Noncommercial-1.0.0",
       "category": "process",
       "effect": "read-write",

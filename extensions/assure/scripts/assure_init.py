@@ -30,7 +30,7 @@ def update_hooks(text: str, integrated: bool) -> tuple[str, int]:
             continue
         item_match = re.match(r"^    - extension:\s*([^\s#]+)", line)
         if item_match:
-            in_qa = item_match.group(1).strip("\"'") == "qa"
+            in_qa = item_match.group(1).strip("\"'") == "assure"
             continue
         if in_qa and re.match(r"^      optional:\s*(true|false)\s*$", line):
             mandatory = integrated and event == "before_implement"
@@ -40,8 +40,8 @@ def update_hooks(text: str, integrated: bool) -> tuple[str, int]:
                 lines[index] = replacement
                 changed += 1
             in_qa = False
-    if not any("extension: qa" in line for line in lines):
-        raise SystemExit("no QA hooks found; reinstall the qa extension and retry")
+    if not any("extension: assure" in line for line in lines):
+        raise SystemExit("no assure hooks found; reinstall the assure extension and retry")
     return "\n".join(lines) + ("\n" if text.endswith("\n") else ""), changed
 
 
@@ -55,7 +55,7 @@ lifecycle:
   require_document_before_pr: {enabled}
 freshness:
   policy: feature-inputs-and-working-tree
-  state_directory: .specify/extensions/qa/state
+  state_directory: .specify/extensions/assure/state
 output:
   directory_name: qa
 '''
@@ -72,7 +72,7 @@ def main() -> None:
     extensions_yml = root / ".specify" / "extensions.yml"
     original = extensions_yml.read_text(encoding="utf-8")
     updated, changed = update_hooks(original, args.mode == "integrated")
-    config = root / ".specify" / "extensions" / "qa" / "qa-config.yml"
+    config = root / ".specify" / "extensions" / "assure" / "assure-config.yml"
 
     if not args.dry_run:
         extensions_yml.write_text(updated, encoding="utf-8")
@@ -84,7 +84,7 @@ def main() -> None:
         if not workflow_target.exists():
             shutil.copy2(workflow_source, workflow_target)
 
-    print(f"qa mode={args.mode} hooks_changed={changed} dry_run={str(args.dry_run).lower()}")
+    print(f"assure mode={args.mode} hooks_changed={changed} dry_run={str(args.dry_run).lower()}")
     print(config)
 
 

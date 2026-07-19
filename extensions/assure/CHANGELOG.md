@@ -1,6 +1,21 @@
 # Changelog
 
-All notable changes to the QA extension.
+All notable changes to the Assure extension.
+
+## [2.0.0] - 2026-07-19
+
+### Breaking
+
+- Renamed the extension from `qa` to `assure` because the `qa` id conflicts with an existing
+  extension in the Spec Kit community catalog. Commands are now `/speckit-assure-*`, the install
+  directory is `.specify/extensions/assure/`, and the config file is `assure-config.yml`.
+  No compatibility alias is retained.
+
+### Migration
+
+- Remove `qa`, install `assure`, and rerun `/speckit-assure-init` to regenerate hooks and config.
+  QA output directories (for example `docs/<feature>/qa/`) and task markers are unchanged, so
+  generated documentation is preserved. Prior `qa-v*` release tags remain available in Git history.
 
 ## [1.0.0] - 2026-07-18
 

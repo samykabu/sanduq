@@ -5,6 +5,6 @@ lifecycle:
   require_document_before_pr: false
 freshness:
   policy: feature-inputs-and-working-tree
-  state_directory: .specify/extensions/qa/state
+  state_directory: .specify/extensions/assure/state
 output:
   directory_name: qa

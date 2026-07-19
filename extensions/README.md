@@ -10,7 +10,7 @@ compatibility with the Resal Marketplace layout.
 | --- | ---: | --- | --- |
 | [`project`](project/) | 2.0.0 | `/speckit-project-init`<br>`/speckit-project-sync` | Configures and mirrors Spec Kit features onto GitHub Projects with parent issues, sub-issues, and lifecycle status sync. |
 | [`pr`](pr/) | 4.0.0 | `/speckit-pr-generate`<br>`/speckit-pr-review-feedback` | Generates or updates pull requests, enforces installed documentation gates, and processes review feedback. |
-| [`qa`](qa/) | 1.0.0 | `/speckit-qa-init`<br>`/speckit-qa-analyze`<br>`/speckit-qa-document` | Configures QA lifecycle policy, analyzes test readiness, and maintains the QA test manual. |
+| [`assure`](assure/) | 2.0.0 | `/speckit-assure-init`<br>`/speckit-assure-analyze`<br>`/speckit-assure-document` | Configures QA lifecycle policy, analyzes test readiness, and maintains the QA test manual. |
 | [`user-manual`](user-manual/) | 1.0.0 | `/speckit-user-manual-init`<br>`/speckit-user-manual-analyze`<br>`/speckit-user-manual-update`<br>`/speckit-user-manual-release` | Maintains bilingual-ready, audience-specific Markdown, Material HTML, and PDF application manuals. |
 | [`illustrate`](illustrate/) | 2.1.0 | `/speckit-illustrate-generate`<br>`/speckit-illustrate-export`<br>`/speckit-illustrate-theme` | Generates and exports twenty-seven illustration types with tracked project light/dark color and font themes. |
 
@@ -28,7 +28,7 @@ Install by id:
 ```bash
 specify extension add project
 specify extension add pr
-specify extension add qa
+specify extension add assure
 specify extension add user-manual
 specify extension add illustrate
 ```
@@ -73,9 +73,9 @@ The other commands are manual or optional lifecycle-hook prompts:
 ```text
 /speckit-pr-generate
 /speckit-pr-review-feedback owner/repo#123
-/speckit-qa-init
-/speckit-qa-analyze
-/speckit-qa-document
+/speckit-assure-init
+/speckit-assure-analyze
+/speckit-assure-document
 /speckit-user-manual-init
 /speckit-user-manual-analyze
 /speckit-user-manual-update
@@ -84,7 +84,7 @@ The other commands are manual or optional lifecycle-hook prompts:
 /speckit-illustrate-export path/to/diagram.html --svg-only
 ```
 
-`pr`, `qa`, and `user-manual` check the Spec Kit registry for their compatible `illustrate` version
+`pr`, `assure`, and `user-manual` check the Spec Kit registry for their compatible `illustrate` version
 when invoked. The default dependency policy asks before install/update; projects may opt into
 automatic or manual behavior through `.specify/extension-dependencies.yml`.
 
