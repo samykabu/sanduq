@@ -3,7 +3,7 @@ schema_version: "1.0"
 extension:
   id: assure
   name: "Assure"
-  version: "2.0.0"
+  version: "2.0.1"
   description: "Make QA part of the Spec Kit lifecycle: initialize project policy, require feature test-readiness analysis before implementation, and generate a current QA test manual before pull-request creation."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
