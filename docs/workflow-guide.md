@@ -119,14 +119,18 @@ future owned-alias upgrades without silently overwriting customization.
 
 Target a 60% maximum occupancy, checkpoint at 50%, and reserve 10% for handoff.
 Reliable usage and enforced per-call bounds are required to claim strict protection.
-Otherwise, use the user-approved labelled estimate with smaller work batches. A
-prompt cannot guarantee host context occupancy or create a fresh host session.
+The default `measured-only` policy continues automatically when telemetry is unavailable,
+estimated, stale or unreliable. Do not invent utilization percentages or require a new
+session on that basis. Keep progress notes and bounded batches without pausing. The
+legacy `measured-with-estimated-fallback` value now has the same nonblocking fallback.
+Only explicit `strict` mode rejects unavailable enforcement. A prompt cannot guarantee
+host occupancy or create a fresh host session.
 
 The runtime saves `checkpoint.json`, `handoff.md` and `resume-prompt.md` under the
 feature's workflow directory. The handoff identifies the issue, feature, branch,
 completed stages, pending task IDs, evidence and active claim. Add actual test results,
-background process handles and unresolved approvals. Start a fresh session with the
-saved prompt. Inspect possible remote writes before clearing an interrupted claim;
+background process handles and unresolved approvals. Use the saved prompt after an actual interruption or reliable measured limit,
+not merely because an estimate is unavailable. Inspect possible remote writes before clearing an interrupted claim;
 missing HTTP responses are not proof that an issue or PR was not created.
 
 ## Updates and releases

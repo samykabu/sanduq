@@ -23,8 +23,8 @@ is a blocker, not an instruction to pretend a stage ran.
 ## Context
 
 Target a maximum 60% context occupancy with a checkpoint at 50% and a 10% reserve.
-Without host telemetry, use explicitly labelled conservative estimates and smaller
-batches. A strict guarantee requires a host that enforces per-call bounds; prompt
+The default `measured-only` policy continues automatically without reliable host telemetry.
+Estimated, missing, stale or invalid readings never force a context pause or a new session. A strict guarantee requires a host that enforces per-call bounds; prompt
 instructions alone cannot provide that guarantee. Each handoff includes completed
 stages, pending task IDs, identity, evidence and a fresh-session resume prompt.
 

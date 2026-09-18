@@ -2,6 +2,9 @@
 
 ## 1.0.0 (unreleased)
 
+- Live-pilot correction: only reliable measured context can pause the default workflow.
+  Unknown/estimated/stale telemetry continues automatically; explicit strict mode remains opt-in.
+
 - Initial managed workflow runtime, presets, issue adapters and local verification. Release and live acceptance pending.
 - Exact-source dependency and preset installer, host registration checks, local backups,
   symlink-preserving rollback and an outer transaction for workflow package updates.
