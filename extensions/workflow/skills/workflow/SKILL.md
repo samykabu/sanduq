@@ -59,16 +59,19 @@ the package's pinned `requirements.txt` when missing. Never install a floating t
 
 1. Read `next --feature ...` and run doctor. Stop for missing dependencies, malformed policy,
    ambiguous binding, active foreign executor, or a changed package lock. Never skip a gate.
-2. Assess context before every small work batch, semantic invocation and potentially large tool
-   result. Write a gitignored usage JSON with `session_id`, `observed_at` (UTC), `method`
-   (`measured` or `estimated`), `fraction`, and a conservative `next_fraction`. Measured mode
-   may set `pre_call_bound: true` only when the host actually enforces the operation's bound.
-   Estimated fallback is explicitly permitted for this project policy; label it and use small
-   batches. Do not invent precise telemetry. If no defensible estimate is possible, pause.
+2. Use reliable host context measurements only when actually available. Supply a usage JSON
+   with `session_id`. Add `method: measured`, `observed_at` (UTC), `fraction` and
+   `next_fraction` only when supported by fresh host telemetry. Set `pre_call_bound: true`
+   only when the host enforces that bound. Without reliable telemetry, omit those fields:
+   monitoring is unavailable and execution continues automatically. Never invent percentages,
+   use an estimate to stop, or ask the user to start a new session because usage is unknown.
+   Default `measured-only` and legacy estimated-fallback policies both follow this rule.
+   Explicit `strict` policy remains an opt-in for hosts that can enforce the limit.
 3. `claim --feature ... --usage <file>` returns the stage, command and claim token. If it
-   checkpoints, return its summary and fresh-session prompt immediately. Do not continue work
-   after a context pause. Keep monitoring inside long delegated commands; the stage claim is
-   not permission to consume an unbounded context window.
+   checkpoints based on a fresh reliable measurement, save the handoff and use a supported
+   host continuation mechanism when available; otherwise return the fresh-session prompt.
+   Unknown, estimated, stale or unreliable measurements do not justify a context pause.
+   Continue ordinary stage transitions automatically and keep durable progress notes.
 4. Invoke the selected command in this host using its installed skill/command registration.
    Read its current instruction source rather than guessing from a name. Native semantic
    commands may pause for real decisions. The managed preset prevents duplicate chaining.
@@ -131,7 +134,10 @@ after source edits; an old mapping does not make stale test evidence current.
 
 ## Interruption and GitHub behavior
 
-Pause before starting a batch that might exceed the context budget, reserving space for handoff.
+Only pause for context when reliable measured usage reaches the configured threshold.
+Without reliable telemetry, continue in bounded work batches and save progress without
+stopping or requiring a new session. A historical estimate-only pause is not a permanent
+stop instruction: on resume, inspect/recover its inactive claim and continue automatically.
 The checkpoint must be supplemented with concrete pending task IDs, test results, decisions,
 GitHub URLs, background process handles and unresolved approvals in handoff.md. Preserve local
 changes; do not commit merely to make a handoff. Never include credentials or full transcripts.

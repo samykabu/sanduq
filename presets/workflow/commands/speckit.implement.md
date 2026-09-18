@@ -12,7 +12,8 @@ matching claim, execute the domain work below once, then return control to the
 dispatcher. Never recursively enter the dispatcher from the claimed command.
 The dispatcher alone chooses and calls the next stage. Keep mandatory safety and
 binding guards. Disabled hooks stay disabled. Do not independently invoke another
-task generator, executor, or PR hook. Check context before each bounded batch.
+task generator, executor, or PR hook. Use bounded batches. Only reliable measured context can trigger a context pause;
+missing, estimated or stale usage must not stop automatic continuation.
 
 
 Continue the applicable upstream domain instructions below.
