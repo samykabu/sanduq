@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "repository": "https://github.com/samykabu/sanduq",
+  "required": {
+    "scope": "1.4.0",
+    "project": "2.1.0",
+    "pr": "4.1.0",
+    "illustrate": "2.1.2"
+  },
+  "selected": {
+    "qa": {
+      "assure": "2.1.0"
+    },
+    "user_manual": {
+      "user-manual": "1.1.0"
+    }
+  },
+  "upstream_optional": {
+    "superspec": {
+      "repository": "https://github.com/WangX0111/superspec",
+      "tested_version": "1.0.2"
+    }
+  },
+  "tested_spec_kit": {
+    "version": "1.0.6.dev0",
+    "commit": "f21acc4a25ce3aa53ff8653357b49b9aafcf8026"
+  }
+}

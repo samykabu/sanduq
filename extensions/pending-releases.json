@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "versions": {
+    "workflow": "1.0.0",
+    "scope": "1.4.0",
+    "assure": "2.1.0",
+    "user-manual": "1.1.0",
+    "pr": "4.1.0",
+    "project": "2.1.0"
+  },
+  "status": "implementation-in-progress",
+  "note": "Not published. Public catalogs remain at released versions until coordinated assets are verified."
+}

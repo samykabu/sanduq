@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.1.0 (unreleased)
+
+- Managed mode preserves the bound parent and delegates task issue creation and state changes to the workflow adapter.
+
 All notable changes to the GitHub Project Lifecycle Sync extension.
 
 ## [2.0.0] - 2026-07-18
