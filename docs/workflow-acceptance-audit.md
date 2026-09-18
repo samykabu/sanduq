@@ -15,7 +15,7 @@ performed a complete live feature lifecycle. No release or Bunyan adoption is cl
 | 7 | Interruptions and remote recovery | Claims/resume tests, lost task-creation response recovery, transactional rollback | Live interruption across phases and fresh-session resume |
 | 8 | Documentation evidence quality | Required outcome schemas, freshness gates and selected-process checks | No-change, missing screenshot, failed test and human-review live examples |
 | 9 | PR feature resolution | Source-only and multi-feature tests, binding, new/deleted source and normalization | Shallow/merge checkout acceptance |
-| 10 | Init/reconcile/rollback | Repeated public-CLI install, unrelated-hook preservation, malformed input tests, real staged upgrade rollback; PowerShell Project Init fixture | Bash Project Init CI and live board initialization |
+| 10 | Init/reconcile/rollback | Repeated public-CLI install, unrelated-hook preservation, malformed input tests, real staged upgrade rollback; both PowerShell and Bash Project Init fixtures passed CI | Live board initialization |
 | 11 | Explicit Finalize and PR update | Runtime refuses automatic PR stage; existing draft PR updated during delivery | Workflow-driven repeat Finalize on the authorized pilot |
 | 12 | Release consistency | Deterministic archives, readiness/receipt/catalog tests and guarded main release workflow | Reviewed release, actual coordinated asset download and catalog promotion |
 | 13 | Inclusive effort preference | 17/20/23 and 16/24, unit/policy and Scope tests | Pilot confirms no redundant decomposition prompt |
@@ -27,6 +27,9 @@ performed a complete live feature lifecycle. No release or Bunyan adoption is cl
 The next live pilot needs an explicit issue URL and project QA/manual selections.
 Neither editor tabs nor elapsed time select a feature or enable an optional process.
 Private assets must stay private; public Sanduq rendering is not private-repo evidence.
+
+Implementation commit `6e8223d1c0fc26644ca893d38b31aeae5894e197` passed all 13 jobs
+in [CI run 35372199271](https://github.com/samykabu/sanduq/actions/runs/35372199271).
 
 See [progress and receipts](workflow-implementation-progress.md),
 [compatibility boundaries](workflow-compatibility.md) and
