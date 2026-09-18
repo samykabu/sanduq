@@ -2,6 +2,10 @@
 
 Portable skills and skill-first Claude Code plugin bundles that remain independent from Spec Kit.
 
+A skill is loaded by the agent when your request matches it — you describe the task rather than
+running a command. See [Using a skill once it is installed](../README.md#using-a-skill-once-it-is-installed)
+for invocation syntax and the two things worth knowing about installed skills.
+
 ## Portable skills
 
 | Skill | Version | Includes |

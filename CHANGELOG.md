@@ -4,6 +4,38 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## Documentation — README, workflow, and diagrams — 2026-09-18
+
+### Added
+
+- Added a **Skills, plugins, and extensions** section explaining the three package kinds sanduq
+  ships, how each is installed and invoked, and that `presets/` is bundled at build time rather
+  than installed.
+- Added **Using a skill once it is installed** and **Using an extension**, covering invocation
+  syntax for Claude Code and Codex, why `init` is not optional for a stateful extension, and the
+  `illustrate` dependency policy.
+- Added **The managed Spec Kit workflow**: the four daily entry points and what each one does
+  automatically, the feature lifetime with its claim and its three recoverable detours, where
+  state lives on disk, what the CI gate actually checks, and fresh-session continuation.
+- Added a `scope` extension section — decomposition, the `keep_together` band, and GitHub
+  clarification.
+- Added three diagrams generated with the `illustrate` skill under the project's Cobalt Porcelain
+  light theme, each with its editable HTML source committed beside the SVG and PNG exports:
+  `sanduq-packaging`, `sanduq-managed-workflow`, `sanduq-feature-lifetime`.
+
+### Fixed
+
+- Corrected every version in the Spec Kit extension table. It advertised `project` 2.0.0,
+  `assure` 2.0.0, `user-manual` 1.0.0, `pr` 4.0.0 and `illustrate` 2.1.0; the catalog publishes
+  2.0.1, 2.0.1, 1.0.1, 4.0.2 and 2.1.2. The table now separates the **published** version from
+  the **source** version, so a staged release is no longer mistakable for an installable one.
+- Added the `scope` and `workflow` extensions to that table. The badge claimed seven extensions
+  while the table listed five, and neither missing extension is installable by id — `scope`
+  collides with an unrelated community extension in the public catalog, which the README now warns
+  about.
+- Recorded hook counts per extension, since lifecycle hooks are what distinguish an extension from
+  a skill and were previously undocumented.
+
 ## Coordinated workflow release (unreleased)
 
 - Add Workflow 1.0.0 and migrate Scope 1.4.0 with canonical GitHub presets into Sanduq.
