@@ -1,3 +1,5 @@
+<img src="../docs/assets/sanduq-icon-128.png" alt="" width="56" align="left">
+
 # skills/
 
 Portable skills and skill-first Claude Code plugin bundles that remain independent from Spec Kit.
