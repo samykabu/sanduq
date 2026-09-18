@@ -104,6 +104,12 @@ Maintainers set source manifest versions and `extensions/pending-releases.json` 
 the reviewed change. Keep its status `implementation-in-progress` until validation
 is complete; set `ready` only for release-ready packages.
 
+While the status is anything other than `ready` or `released`, the Release extensions
+workflow **skips and succeeds** rather than failing: staged-but-unvalidated work is the
+expected state, not a broken pipeline. The run summary records the status it saw. Flipping
+the status to `ready` is what authorizes publication, so do it only when every staged
+package is genuinely release-ready — assets and tags are immutable once published.
+
 After successful push CI on the current main commit, Release extensions:
 
 1. Builds deterministic ZIPs including canonical presets and shared helpers.

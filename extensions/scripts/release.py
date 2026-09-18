@@ -49,8 +49,11 @@ def prepare(root=ROOT, development=False):
     pending = read(root / 'extensions/pending-releases.json')
     versions = pending['versions']
     clean = not command(['git','status','--porcelain','--untracked-files=all'],root)
-    publishable = clean and pending.get('status') in ('ready', 'released')
-    require(development or publishable, 'Release requires a clean checkout and pending status ready (use --development for a non-publishable preview)')
+    status = pending.get('status')
+    publishable = clean and status in ('ready', 'released')
+    if not development:
+        require(clean, 'Release requires a clean checkout; commit or stash local changes (use --development for a non-publishable preview)')
+        require(status in ('ready', 'released'), f'Release requires pending status ready or released; it is {status!r}. Reviewed work stays unpublished until a maintainer marks it ready (use --development for a non-publishable preview)')
     catalog = read(root / 'catalog.json')
     require(catalog == read(root / 'extensions/catalog.json'), 'Public catalogs differ')
     releases = []
