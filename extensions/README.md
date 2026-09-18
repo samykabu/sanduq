@@ -1,3 +1,5 @@
+<img src="../docs/assets/sanduq-icon-128.png" alt="" width="56" align="left">
+
 # Spec Kit Extensions
 
 This folder hosts sanduq extensions for the `specify` CLI. The public catalog is the root
