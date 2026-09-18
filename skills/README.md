@@ -12,6 +12,7 @@ Portable skills and skill-first Claude Code plugin bundles that remain independe
 | [`user-manual-release-docs`](dev-tools/skills/user-manual-release-docs/) | 1.0.0 | Release notes and migration guides. |
 | [`user-manual-ui-screenshots`](dev-tools/skills/user-manual-ui-screenshots/) | 1.0.0 | Deterministic, synthetic-data UI screenshot workflows. |
 | [`user-manual-preview-publishing`](dev-tools/skills/user-manual-preview-publishing/) | 1.0.0 | Private PR artifacts, approved hosted previews, and versioned releases. |
+| [`delegate-task`](agent-tools/skills/delegate-task/) | 1.0.0 | One task handed to Claude Code, Codex, OpenCode, Copilot, or Pi, run in the background, returned as a measured result. |
 
 The same capability is packaged as the versioned [`illustrate`](../extensions/illustrate/) Spec Kit
 extension so consuming extensions can install and update it through the `specify` CLI.
@@ -22,6 +23,7 @@ extension so consuming extensions can install and update it through the `specify
 | --- | ---: | --- |
 | [`illustration-tools`](illustration-tools/) | 3.1.0 | One unified `illustrate` skill with project-level theme initialization. |
 | [`dev-tools`](dev-tools/) | 1.0.0 | Five modular standalone User Manual skills. |
+| [`agent-tools`](agent-tools/) | 1.0.0 | One `delegate-task` skill for running a task on another agent CLI and measuring the outcome. |
 
 Install them through the sanduq marketplace:
 
@@ -29,6 +31,7 @@ Install them through the sanduq marketplace:
 /plugin marketplace add samykabu/sanduq
 /plugin install illustration-tools@sanduq
 /plugin install dev-tools@sanduq
+/plugin install agent-tools@sanduq
 ```
 
 Install a portable skill directly with `npx skills`, for example:

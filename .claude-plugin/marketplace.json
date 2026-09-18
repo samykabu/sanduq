@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Sanduq — a chest of shared AI-agent tooling: Claude Code plugins, skills, and Spec Kit extensions.",
-    "version": "0.5.0"
+    "version": "0.6.0"
   },
   "plugins": [
     {
@@ -54,6 +54,30 @@
         "rtl"
       ],
       "category": "documentation"
+    },
+    {
+      "name": "agent-tools",
+      "source": "./skills/agent-tools",
+      "description": "Delegate one task to an external agent CLI and get back a measured result: status with provenance, git-measured file changes, and normalised token usage.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Samy K. Abushanab"
+      },
+      "keywords": [
+        "delegate",
+        "agent",
+        "cli",
+        "harness",
+        "claude-code",
+        "codex",
+        "opencode",
+        "copilot",
+        "orchestration",
+        "background",
+        "tokens",
+        "second-opinion"
+      ],
+      "category": "development"
     }
   ]
 }
