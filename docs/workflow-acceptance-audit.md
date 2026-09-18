@@ -14,7 +14,7 @@ performed a complete live feature lifecycle. No release or Bunyan adoption is cl
 | 6 | Context boundaries and output | Estimated/measured contracts, reserve, stale telemetry and checkpoint tests | Host enforcement and huge-output/independent-agent experiments; no hard-cap claim |
 | 7 | Interruptions and remote recovery | Claims/resume tests, lost task-creation response recovery, transactional rollback | Live interruption across phases and fresh-session resume |
 | 8 | Documentation evidence quality | Required outcome schemas, freshness gates and selected-process checks | No-change, missing screenshot, failed test and human-review live examples |
-| 9 | PR feature resolution | Source-only and multi-feature tests, binding, new/deleted source and normalization | Shallow/merge checkout acceptance |
+| 9 | PR feature resolution | Source-only and multi-feature tests, binding, new/deleted source and normalization; real diverged branches, detached merge checkout and depth-1 clone tested | Local Git checkout scenarios covered; live feature evidence remains separate |
 | 10 | Init/reconcile/rollback | Repeated public-CLI install, unrelated-hook preservation, malformed input tests, real staged upgrade rollback; both PowerShell and Bash Project Init fixtures passed CI | Live board initialization |
 | 11 | Explicit Finalize and PR update | Runtime refuses automatic PR stage; existing draft PR updated during delivery | Workflow-driven repeat Finalize on the authorized pilot |
 | 12 | Release consistency | Deterministic archives, readiness/receipt/catalog tests and guarded main release workflow | Reviewed release, actual coordinated asset download and catalog promotion |

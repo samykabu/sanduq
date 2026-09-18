@@ -175,6 +175,11 @@ source additions/deletions; omitting a changed code file from an agent receipt c
 keep old test evidence current. A shallow or unavailable Git base is an error, not permission
 to guess freshness.
 
+CI compares the PR head with its common ancestor with the target branch, so unrelated
+target-branch features are not included. The shipped workflow fetches full history.
+Custom shallow checkouts must fetch sufficient target/head history; missing ancestry
+blocks the gate with `BASE_HISTORY_UNAVAILABLE`, even with an explicit feature mapping.
+
 Finalize inventories every relevant diagram and screenshot, embeds each inline, and
 verifies actual image loading in an authenticated private-repository view. A Markdown
 link or successful asset upload alone is insufficient. Never publish private assets

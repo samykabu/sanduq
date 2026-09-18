@@ -14,7 +14,7 @@ commits do not change that tested implementation; inspect PR checks for latest h
 
 The runtime, reusable presets, selected dependency installer, workflow self-updater,
 rollback, task issue adapter, freshness gates and release sequencing are implemented
-locally. Current evidence: 110 Scope tests; 70 workflow tests including schema
+locally. Current evidence: 110 Scope tests; 72 workflow tests including schema
 validation; real Codex+SuperSpec and Claude+core public-CLI installs; published PR
 4.0.2 to staged 4.1.0 upgrade; synthetic staged workflow 1.0.0 to 1.0.1 self-upgrade.
 Both upgrade paths recovered injected failures and succeeded on retry. See committed
@@ -38,3 +38,8 @@ Bunyan adoption and a second project with different board names remain pending.
 Use labelled estimated context monitoring and bounded work. Produce a handoff before
 the context target; never claim reliable host telemetry or a measured hard guarantee.
 Keep canonical source in Sanduq and consumer policy/evidence in the consumer repo.
+
+Follow-up acceptance closed a Git comparison gap: CI feature detection now uses the
+common ancestor, matching QA/manual freshness. Nine targeted CI-gate tests passed,
+including diverged target/head, detached merge and depth-1 clone failure/recovery.
+Consult PR checks for the follow-up commit's full cross-platform result.

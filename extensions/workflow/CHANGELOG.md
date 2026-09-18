@@ -9,3 +9,5 @@
   versioned state contracts and policy-aware CI gates.
 - Explicit clarification refresh, existing-feature revalidation, owned legacy alias
   upgrades and project readiness checks before dispatch.
+- Resolve PR features from the target/head common ancestor, excluding unrelated
+  target-branch changes; missing shallow history blocks with a fetch instruction.

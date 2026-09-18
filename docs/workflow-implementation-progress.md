@@ -45,7 +45,7 @@ this does not prove private-repository attachment behavior.
 | Check | Result | Limits |
 | --- | --- | --- |
 | Scope suite | 110 passed | Local Python; includes progressed-feature revalidation and clarification freshness |
-| Workflow suite | 70 passed | Local Python, including runtime/schema consistency, alias upgrades and setup ownership; GitHub effects use fakes |
+| Workflow suite | 72 passed | Local Python, including runtime/schema consistency, alias upgrades, setup ownership and real Git checkout cases; GitHub effects use fakes |
 | Codex + SuperSpec | Passed | Clean public-CLI install, four selections, composition, doctor, reinstall |
 | Claude + core | Passed | Same checks, including real CLI command symlinks |
 | PR 4.0.2 to staged 4.1.0 | Passed | Published old archive, real upgrade, injected failure, exact rollback, retry |

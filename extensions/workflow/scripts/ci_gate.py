@@ -9,7 +9,11 @@ from workflow import load_policy, stages, read, require, inside, git, digest, re
 
 
 def resolve_features(root, base, explicit):
-    changed = git(root, 'diff', '--name-only', base, 'HEAD').splitlines()
+    try:
+        comparison = git(root, 'merge-base', 'HEAD', base)
+    except WorkflowError as exc:
+        raise WorkflowError('BASE_HISTORY_UNAVAILABLE: fetch the target and PR history (checkout fetch-depth: 0); ' + str(exc)) from exc
+    changed = git(root, 'diff', '--name-only', '-z', comparison, 'HEAD').split('\0')
     features = set(explicit)
     for path in changed:
         parts = Path(path).parts
