@@ -1,6 +1,7 @@
 import copy
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
@@ -67,3 +68,45 @@ class CIGateTests(unittest.TestCase):
         subprocess.run(['git', 'add', '.'], cwd=self.root, check=True)
         subprocess.run(['git', 'commit', '-qm', 'Feature mapping'], cwd=self.root, check=True)
         self.assertEqual(c.resolve_features(self.root, base, []), [self.feature])
+
+    def divergent_branches(self):
+        """A target-only feature must not be attributed to the PR branch."""
+        subprocess.run(['git', 'add', '.'], cwd=self.root, check=True)
+        subprocess.run(['git', 'commit', '-qm', 'Shared setup'], cwd=self.root, check=True)
+        branch = w.git(self.root, 'branch', '--show-current')
+        subprocess.run(['git', 'checkout', '-qb', 'target'], cwd=self.root, check=True)
+        target_feature = self.root / 'specs/002-target-only/spec.md'
+        target_feature.parent.mkdir(parents=True)
+        target_feature.write_text('Unrelated target feature', encoding='utf-8')
+        subprocess.run(['git', 'add', '.'], cwd=self.root, check=True)
+        subprocess.run(['git', 'commit', '-qm', 'Target progress'], cwd=self.root, check=True)
+        target = w.git(self.root, 'rev-parse', 'HEAD')
+        subprocess.run(['git', 'checkout', '-q', branch], cwd=self.root, check=True)
+        feature = self.root / self.feature / 'spec.md'
+        feature.parent.mkdir(parents=True)
+        feature.write_text('PR feature', encoding='utf-8')
+        subprocess.run(['git', 'add', '.'], cwd=self.root, check=True)
+        subprocess.run(['git', 'commit', '-qm', 'PR progress'], cwd=self.root, check=True)
+        return target, branch
+
+    def test_diverged_target_and_detached_merge_resolve_only_pr_features(self):
+        target, branch = self.divergent_branches()
+        self.assertEqual(c.resolve_features(self.root, target, []), [self.feature])
+        subprocess.run(['git', 'merge', '--no-ff', '-qm', 'Synthetic PR merge', target], cwd=self.root, check=True)
+        subprocess.run(['git', 'checkout', '--detach', '-q'], cwd=self.root, check=True)
+        self.assertEqual(c.resolve_features(self.root, target, []), [self.feature])
+
+    def test_shallow_history_blocks_until_common_ancestor_is_fetched(self):
+        target, branch = self.divergent_branches()
+        with tempfile.TemporaryDirectory() as folder:
+            clone = Path(folder).resolve() / 'shallow'
+            subprocess.run(['git', 'clone', '-q', '--depth', '1', '--branch', branch,
+                            self.root.as_uri(), str(clone)], check=True, capture_output=True)
+            self.assertEqual(w.git(clone, 'rev-parse', '--is-shallow-repository'), 'true')
+            with self.assertRaisesRegex(w.WorkflowError, 'BASE_HISTORY_UNAVAILABLE'):
+                c.resolve_features(clone, target, [self.feature])
+            subprocess.run(['git', 'fetch', '-q', '--depth', '1', 'origin', 'target'], cwd=clone, check=True)
+            with self.assertRaisesRegex(w.WorkflowError, 'BASE_HISTORY_UNAVAILABLE'):
+                c.resolve_features(clone, target, [])
+            subprocess.run(['git', 'fetch', '-q', '--unshallow', 'origin', branch, 'target'], cwd=clone, check=True)
+            self.assertEqual(c.resolve_features(clone, target, []), [self.feature])
