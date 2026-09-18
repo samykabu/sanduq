@@ -1,220 +1,158 @@
 #!/usr/bin/env python3
-"""Bump extension versions, refresh catalog.json, and emit a release manifest.
+"""Prepare immutable pending releases, publish/verify assets, then promote catalogs.
 
-Driven by .github/workflows/release-extensions.yml. For each extension id passed
-on the command line this script:
-
-  * reads ``extensions/<id>/extension.yml``
-  * decides the next version (see version resolution below)
-  * rewrites the ``version:`` line in extension.yml (surrounding formatting and
-    comments are preserved — only that one line changes)
-  * updates the public ``catalog.json`` and mirrors it to
-    ``extensions/catalog.json``:
-      - existing entry  -> release URLs/version and manifest-derived requirements
-        are refreshed (maintainer-curated catalog fields stay untouched)
-      - new extension   -> a full entry is generated from extension.yml using
-        the existing ``pr`` entry as the template
-  * appends to a release manifest (JSON) the workflow reads back to cut releases
-
-Version resolution (first match wins):
-  1. ``--set-version X.Y.Z``                      explicit override
-  2. extension.yml version already ahead of the   maintainer bumped it by hand
-     catalog version                              -> release that version as-is
-  3. missing from catalog                          new entry -> release current
-  4. otherwise                                     auto ``--bump`` (default patch)
-
-Usage:
-  python extensions/scripts/release.py pr [foo ...] \
-      --bump patch --repo-url https://github.com/samykabu/sanduq --branch main
+No command changes source manifest versions. Maintainers review versions in
+extensions/pending-releases.json before CI. Public catalogs change only in promote,
+following successful remote asset verification.
 """
 from __future__ import annotations
-
 import argparse
+import hashlib
 import json
 import re
-import sys
+import subprocess
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+import yaml
+from packaging.version import Version
+from package import package, ROOT
 
-try:
-    import yaml
-except ImportError:  # pragma: no cover - guarded in CI by `pip install pyyaml`
-    sys.exit("PyYAML is required: pip install pyyaml")
-
-ROOT = Path(__file__).resolve().parents[2]
-EXT_DIR = ROOT / "extensions"
-CATALOG = ROOT / "catalog.json"
-COMPAT_CATALOG = EXT_DIR / "catalog.json"
+REPO = 'samykabu/sanduq'
+URL = 'https://github.com/' + REPO
 
 
-def now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+def sha(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def bump_version(version: str, level: str) -> str:
-    m = re.match(r"^(\d+)\.(\d+)\.(\d+)$", version.strip())
-    if not m:
-        sys.exit(f"cannot parse semantic version {version!r}")
-    major, minor, patch = (int(x) for x in m.groups())
-    if level == "major":
-        return f"{major + 1}.0.0"
-    if level == "minor":
-        return f"{major}.{minor + 1}.0"
-    return f"{major}.{minor}.{patch + 1}"
+def require(condition, message):
+    if not condition: raise ValueError(message)
 
 
-def replace_yaml_version(text: str, new_version: str) -> str:
-    """Replace the indented ``version: "..."`` line under the extension block.
-
-    Anchored on leading whitespace so it never matches ``schema_version`` (column
-    0) or ``speckit_version`` (a different key).
-    """
-    new_text, n = re.subn(
-        r'(?m)^(\s+version:\s*)"[^"]*"',
-        lambda m: f'{m.group(1)}"{new_version}"',
-        text,
-        count=1,
-    )
-    if n == 0:
-        sys.exit("could not find an indented `version:` line in extension.yml")
-    return new_text
+def read(path):
+    return json.loads(path.read_text(encoding='utf-8'))
 
 
-def raw_catalog_url(repo_url: str, branch: str) -> str:
-    prefix = "https://github.com/"
-    if repo_url.startswith(prefix):
-        return f"https://raw.githubusercontent.com/{repo_url[len(prefix):]}/{branch}/catalog.json"
-    return ""
+def write(path, value):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
 
 
-def new_catalog_entry(meta, ext_id, version, download_url, repo_url, branch):
-    """Build a full catalog entry for a brand-new extension (pr entry = template)."""
-    commands = (meta.get("provides", {}) or {}).get("commands", []) or []
-    hooks = meta.get("hooks", {}) or {}
-    return {
-        "name": meta.get("name", ext_id),
-        "id": ext_id,
-        "version": version,
-        "description": meta.get("description", ""),
-        "author": meta.get("author", ""),
-        "repository": meta.get("repository", repo_url),
-        "homepage": f"{repo_url}/tree/{branch}/extensions/{ext_id}",
-        "documentation": f"{repo_url}/blob/{branch}/extensions/{ext_id}/README.md",
-        "changelog": f"{repo_url}/blob/{branch}/extensions/{ext_id}/CHANGELOG.md",
-        "download_url": download_url,
-        "license": meta.get("license", "PolyForm-Noncommercial-1.0.0"),
-        "category": meta.get("category", "uncategorized"),
-        "effect": meta.get("effect", "read-write"),
-        "requires": meta.get("requires", {}) or {},
-        "provides": {"commands": len(commands), "hooks": len(hooks)},
-        "tags": meta.get("tags", []) or [],
-        "verified": False,
-        "created_at": now_iso(),
-        "updated_at": now_iso(),
-    }
+def command(args, root=ROOT):
+    result = subprocess.run(args, cwd=root, capture_output=True, text=True, encoding='utf-8')
+    require(result.returncode == 0, 'Command failed: ' + ' '.join(args) + ': ' + result.stderr.strip())
+    return result.stdout.strip()
 
 
-def load_meta(yml_text: str) -> dict:
-    """Flatten the parts of extension.yml the catalog cares about."""
-    doc = yaml.safe_load(yml_text) or {}
-    meta = dict(doc.get("extension", {}) or {})
-    meta["requires"] = doc.get("requires", {}) or {}
-    meta["provides"] = doc.get("provides", {}) or {}
-    meta["hooks"] = doc.get("hooks", {}) or {}
-    if "tags" in doc:
-        meta["tags"] = doc.get("tags") or []
-    return meta
+def prepare(root=ROOT, development=False):
+    pending = read(root / 'extensions/pending-releases.json')
+    versions = pending['versions']
+    clean = not command(['git','status','--porcelain','--untracked-files=all'],root)
+    publishable = clean and pending.get('status') in ('ready', 'released')
+    require(development or publishable, 'Release requires a clean checkout and pending status ready (use --development for a non-publishable preview)')
+    catalog = read(root / 'catalog.json')
+    require(catalog == read(root / 'extensions/catalog.json'), 'Public catalogs differ')
+    releases = []
+    for name, version in versions.items():
+        require(re.fullmatch(r'[a-z][a-z0-9-]*', name), 'Invalid extension ID')
+        require(re.fullmatch(r'\d+\.\d+\.\d+', version), 'Release requires X.Y.Z version')
+        doc = yaml.safe_load((root / 'extensions' / name / 'extension.yml').read_text(encoding='utf-8'))
+        meta = doc['extension']
+        require((meta['id'], str(meta['version']), meta['repository']) == (name, version, URL), 'Pending manifest mismatch: ' + name)
+        old = catalog['extensions'].get(name)
+        require(not old or Version(version) > Version(old['version']), 'Pending version must exceed published version: ' + name)
+        built = package(name, root=root)
+        entry = dict(old or {})
+        entry.update({key: meta.get(key, '') for key in ('name','id','version','description','author','license')})
+        entry.update({'repository':URL,'homepage':URL+'/tree/main/extensions/'+name,
+                      'documentation':URL+'/blob/main/extensions/'+name+'/README.md',
+                      'changelog':URL+'/blob/main/extensions/'+name+'/CHANGELOG.md',
+                      'download_url':f'{URL}/releases/download/{name}-v{version}/{name}.zip',
+                      'requires':doc.get('requires',{}),'provides':{'commands':len(doc.get('provides',{}).get('commands',[])), 'hooks':len(doc.get('hooks',{}))},
+                      'tags':doc.get('tags',[]),'category':meta.get('category','process'),
+                      'effect':meta.get('effect','read-write'),'verified':False,
+                      'sha256':built['sha256'],'updated_at':datetime.now(timezone.utc).isoformat()})
+        catalog['extensions'][name] = entry
+        releases.append({'id':name,'version':version,'tag':name+'-v'+version,'asset':name+'.zip',
+                         'archive':(Path('dist')/(name+'.zip')).as_posix(),'sha256':built['sha256']})
+    catalog['updated_at'] = datetime.now(timezone.utc).isoformat()
+    result = {'schema_version':1,'publishable':publishable and not development,'source_commit':command(['git','rev-parse','HEAD'],root),
+              'catalog_before_sha256':sha(root/'catalog.json'),'pending_sha256':sha(root/'extensions/pending-releases.json'),
+              'releases':releases,'catalog':catalog}
+    write(root/'dist/release-plan.json', result)
+    return result
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("ids", nargs="+", help="extension ids to release (dir names under extensions/)")
-    ap.add_argument("--bump", default="patch", choices=["patch", "minor", "major"])
-    ap.add_argument("--set-version", default=None, help="force this exact version")
-    ap.add_argument("--repo-url", default="https://github.com/samykabu/sanduq")
-    ap.add_argument("--branch", default="main", help="default branch used for catalog docs links")
-    ap.add_argument("--manifest", default=str(ROOT / "dist" / "released.json"))
-    args = ap.parse_args()
-
-    repo_url = args.repo_url.rstrip("/")
-    branch = args.branch.strip() or "main"
-    catalog = json.loads(CATALOG.read_text(encoding="utf-8"))
-    catalog["catalog_url"] = raw_catalog_url(repo_url, branch) or catalog.get("catalog_url", "")
-    catalog.setdefault("extensions", {})
-
-    released = []
-    for ext_id in args.ids:
-        yml_path = EXT_DIR / ext_id / "extension.yml"
-        if not yml_path.is_file():
-            print(f"skip {ext_id}: no extension.yml", file=sys.stderr)
-            continue
-
-        text = yml_path.read_text(encoding="utf-8")
-        meta = load_meta(text)
-        current = str(meta.get("version", "0.0.0"))
-        existing = catalog["extensions"].get(ext_id)
-        catalog_version = existing.get("version") if existing else None
-
-        if args.set_version:
-            new_version = args.set_version
-        elif catalog_version and current != catalog_version:
-            # Maintainer bumped extension.yml by hand -> honour it verbatim.
-            new_version = current
-        elif existing is None:
-            # New catalog entry -> publish the version declared by the extension.
-            new_version = current
-        else:
-            new_version = bump_version(current, args.bump)
-
-        yml_path.write_text(replace_yaml_version(text, new_version), encoding="utf-8")
-
-        tag = f"{ext_id}-v{new_version}"
-        asset = f"{ext_id}.zip"
-        download_url = f"{repo_url}/releases/download/{tag}/{asset}"
-
-        if existing:
-            entry = dict(existing)
-            entry["version"] = new_version
-            entry["repository"] = repo_url
-            entry["homepage"] = f"{repo_url}/tree/{branch}/extensions/{ext_id}"
-            entry["documentation"] = f"{repo_url}/blob/{branch}/extensions/{ext_id}/README.md"
-            entry["changelog"] = f"{repo_url}/blob/{branch}/extensions/{ext_id}/CHANGELOG.md"
-            entry["download_url"] = download_url
-            entry["license"] = meta.get("license", "PolyForm-Noncommercial-1.0.0")
-            entry["requires"] = meta.get("requires", {}) or {}
-            entry["updated_at"] = now_iso()
-            catalog["extensions"][ext_id] = entry
-        else:
-            catalog["extensions"][ext_id] = new_catalog_entry(
-                meta, ext_id, new_version, download_url, repo_url, branch
-            )
-
-        released.append(
-            {
-                "id": ext_id,
-                "version": new_version,
-                "previous": current,
-                "tag": tag,
-                "asset": asset,
-                "zip": f"dist/{asset}",
-                "new_entry": existing is None,
-            }
-        )
-        print(f"{ext_id}: {current} -> {new_version}  ({tag})")
-
-    if not released:
-        print("no extensions to release", file=sys.stderr)
-
-    catalog["updated_at"] = now_iso()
-    serialized_catalog = json.dumps(catalog, indent=2, ensure_ascii=False) + "\n"
-    CATALOG.write_text(serialized_catalog, encoding="utf-8")
-    COMPAT_CATALOG.write_text(serialized_catalog, encoding="utf-8")
-
-    manifest = Path(args.manifest)
-    manifest.parent.mkdir(parents=True, exist_ok=True)
-    manifest.write_text(json.dumps(released, indent=2) + "\n", encoding="utf-8")
-    print(f"wrote {manifest} ({len(released)} release(s))")
+def gh_json(args, root=ROOT):
+    return json.loads(command(['gh',*args],root))
 
 
-if __name__ == "__main__":
-    main()
+def verify_asset(release, root=ROOT):
+    local = root / release['archive']
+    require(sha(local) == release['sha256'], 'Local archive changed after prepare')
+    info = gh_json(['release','view',release['tag'],'--repo',REPO,'--json','isDraft,assets'],root)
+    require(not info['isDraft'], 'Release is still draft: ' + release['tag'])
+    require(len([a for a in info['assets'] if a['name']==release['asset']]) == 1, 'Missing or duplicate release asset')
+    folder = Path(tempfile.mkdtemp(prefix='verify-release-',dir=root/'dist'))
+    require(folder.resolve().is_relative_to((root/'dist').resolve()), 'Invalid verification directory')
+    command(['gh','release','download',release['tag'],'--repo',REPO,'--pattern',release['asset'],'--dir',str(folder)],root)
+    require(sha(folder/release['asset']) == release['sha256'], 'IMMUTABLE_ASSET_MISMATCH: bump the version; never clobber')
+    return {'tag':release['tag'],'sha256':release['sha256'],'verified':True}
+
+
+def publish(root=ROOT, apply=False):
+    plan = read(root/'dist/release-plan.json')
+    require(plan['source_commit']==command(['git','rev-parse','HEAD'],root), 'Source commit changed since prepare')
+    if not apply: return {'applied':False,'releases':plan['releases']}
+    require(plan.get('publishable'), 'Development preview cannot be published')
+    # List all published/draft releases once. A failure is not interpreted as absence.
+    pages = gh_json(['api',f'repos/{REPO}/releases?per_page=100','--paginate','--slurp'],root)
+    existing = {r['tag_name'] for page in pages for r in page}
+    verified = []
+    for release in plan['releases']:
+        require(sha(root/release['archive']) == release['sha256'], 'Local archive changed after prepare')
+        if release['tag'] not in existing:
+            notes=root/'dist'/(release['id']+'-release-notes.md')
+            notes.write_text(f"{release['id']} {release['version']}\n\nInstall this immutable package:\n\n"
+                             f"`specify extension add {release['id']} --from {URL}/releases/download/{release['tag']}/{release['asset']}`\n\n"
+                             f"SHA-256: `{release['sha256']}`\n",encoding='utf-8')
+            command(['gh','release','create',release['tag'],str(root/release['archive']),'--repo',REPO,
+                     '--target',plan['source_commit'],'--title',release['id']+' '+release['version'],
+                     '--notes-file',str(notes)],root)
+        verified.append(verify_asset(release,root))
+    receipt={'plan_sha256':sha(root/'dist/release-plan.json'),'assets':verified}
+    write(root/'dist/release-verification.json',receipt)
+    return receipt
+
+
+def promote(root=ROOT, verifier=verify_asset):
+    plan=read(root/'dist/release-plan.json');receipt=read(root/'dist/release-verification.json')
+    require(plan.get('publishable'), 'Development preview cannot be promoted')
+    require(command(['git','rev-parse','HEAD'],root) == plan['source_commit'], 'Source commit changed since prepare')
+    require(receipt['plan_sha256']==sha(root/'dist/release-plan.json'),'Release verification belongs to another plan')
+    require(sha(root/'catalog.json')==plan['catalog_before_sha256'],'Public catalog changed since prepare')
+    require(sha(root/'extensions/pending-releases.json')==plan['pending_sha256'],'Pending releases changed since prepare')
+    expected={r['tag']:r['sha256'] for r in plan['releases']}
+    require({r['tag']:r['sha256'] for r in receipt['assets'] if r.get('verified')}==expected,'Not every asset is verified')
+    for release in plan['releases']: verifier(release,root)
+    if not plan['releases']: return {'promoted':[]}
+    write(root/'catalog.json',plan['catalog']);write(root/'extensions/catalog.json',plan['catalog'])
+    pending=read(root/'extensions/pending-releases.json')
+    for release in plan['releases']: pending['versions'].pop(release['id'])
+    pending['status']='released' if not pending['versions'] else 'pending'
+    write(root/'extensions/pending-releases.json',pending)
+    return {'promoted':[r['tag'] for r in plan['releases']]}
+
+
+if __name__=='__main__':
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('action',choices=('prepare','publish','promote'))
+    parser.add_argument('--apply',action='store_true')
+    parser.add_argument('--development',action='store_true',help='Prepare a preview which cannot be published')
+    args=parser.parse_args()
+    try:
+        result=prepare(development=args.development) if args.action=='prepare' else publish(apply=args.apply) if args.action=='publish' else promote()
+        print(json.dumps({k:v for k,v in result.items() if k!='catalog'},indent=2))
+    except (ValueError,OSError,KeyError) as exc:
+        print(json.dumps({'ok':False,'error':str(exc)}));raise SystemExit(1)

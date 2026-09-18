@@ -1,0 +1,21 @@
+schema_version: "1.0"
+preset:
+  id: scope-brainstorm
+  name: GitHub Brainstorm clarification
+  version: "1.4.0"
+  description: "Use unattended GitHub clarification rounds for the optional Superspec Brainstorm command."
+  author: "Samy K. Abushanab"
+  repository: "https://github.com/samykabu/sanduq"
+  license: MIT
+requires:
+  speckit_version: ">=1.0.0"
+provides:
+  templates:
+    - type: command
+      name: speckit.superspec.brainstorm
+      file: commands/brainstorm-github.md
+      replaces: speckit.superspec.brainstorm
+      strategy: prepend
+tags:
+  - github
+  - clarification

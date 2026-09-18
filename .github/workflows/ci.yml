@@ -35,6 +35,8 @@ jobs:
           root = pathlib.Path(".")
           root_catalog = json.loads((root / "catalog.json").read_text(encoding="utf-8"))
           ext_catalog = json.loads((root / "extensions/catalog.json").read_text(encoding="utf-8"))
+          pending_path = root / "extensions/pending-releases.json"
+          pending = json.loads(pending_path.read_text(encoding="utf-8")).get("versions", {}) if pending_path.exists() else {}
           if root_catalog != ext_catalog:
               sys.exit("catalog.json and extensions/catalog.json must match")
 
@@ -46,6 +48,14 @@ jobs:
               if ext_id != path.parent.name:
                   sys.exit(f"{path}: extension.id must match directory name")
               entry = root_catalog.get("extensions", {}).get(ext_id)
+              if ext_id in pending:
+                  if pending[ext_id] != str(meta.get("version")):
+                      sys.exit(f"{path}: pending release version does not match manifest")
+                  if entry and Version(pending[ext_id]) <= Version(entry["version"]):
+                      sys.exit(f"{path}: pending version must be newer than published catalog")
+                  # Pending releases are validated without publishing broken download URLs.
+                  entry = {"version": pending[ext_id], "requires": doc.get("requires") or {},
+                           "download_url": f"https://github.com/samykabu/sanduq/releases/download/{ext_id}-v{pending[ext_id]}/{ext_id}.zip"}
               if not entry:
                   sys.exit(f"{path}: missing catalog entry for {ext_id}")
               if str(entry.get("version")) != str(meta.get("version")):
@@ -60,6 +70,8 @@ jobs:
                   dep_id = dependency.get("id")
                   constraint = dependency.get("version", "")
                   dep_entry = root_catalog.get("extensions", {}).get(dep_id)
+                  if dep_id in pending:
+                      dep_entry = {"version": pending[dep_id]}
                   if not dep_entry:
                       sys.exit(f"{path}: required extension {dep_id!r} is missing from catalog")
                   try:
@@ -102,6 +114,116 @@ jobs:
           }
           $issues | Format-Table -AutoSize
           if ($issues | Where-Object Severity -eq 'Error') { throw 'PSScriptAnalyzer found errors' }
+
+  regression:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        suite: [workflow, scope]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r extensions/workflow/test-requirements.txt
+      - run: python -m unittest discover -s extensions/${{ matrix.suite }}/tests -q
+
+  installation:
+    strategy:
+      fail-fast: false
+      matrix:
+        host: [codex, claude]
+        provider: [core, superspec]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install the tested Spec Kit build
+        run: python -m pip install 'git+https://github.com/github/spec-kit.git@f21acc4a25ce3aa53ff8653357b49b9aafcf8026' -r extensions/workflow/requirements.txt
+      - name: Fetch the tested optional SuperSpec source
+        if: matrix.provider == 'superspec'
+        uses: actions/checkout@v4
+        with:
+          repository: WangX0111/superspec
+          ref: c20ac6c1ba069cc9a72dacb8044b7b193d3dde81
+          path: dist/upstream-superspec
+      - name: Exercise clean installation and reinstallation
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HOST: ${{ matrix.host }}
+          PROVIDER: ${{ matrix.provider }}
+        run: |
+          git config --global user.name 'Sanduq CI'
+          git config --global user.email 'sanduq-ci@example.invalid'
+          args=(--host "$HOST")
+          if [[ "$PROVIDER" == superspec ]]; then
+            args+=(--superspec-source "$GITHUB_WORKSPACE/dist/upstream-superspec")
+          fi
+          python extensions/scripts/smoke_install.py "${args[@]}"
+      - name: Preserve installation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installation-${{ matrix.host }}-${{ matrix.provider }}
+          path: |
+            dist/install-tests/*/result.json
+            dist/install-tests/*/*.log
+          if-no-files-found: ignore
+
+  upgrade:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install 'git+https://github.com/github/spec-kit.git@f21acc4a25ce3aa53ff8653357b49b9aafcf8026' -r extensions/workflow/requirements.txt
+      - name: Verify actual version upgrade and failure rollback
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config --global user.name 'Sanduq CI'
+          git config --global user.email 'sanduq-ci@example.invalid'
+          python extensions/scripts/smoke_upgrade.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: upgrade-rollback
+          path: |
+            dist/install-tests/*/upgrade-result.json
+            dist/install-tests/*/*.log
+          if-no-files-found: ignore
+
+  project-init:
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [pwsh, bash]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r extensions/workflow/requirements.txt
+      - run: python extensions/scripts/smoke_project_init.py --shell ${{ matrix.shell }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: project-init-${{ matrix.shell }}
+          path: |
+            dist/project-init-tests/*/result.json
+            dist/project-init-tests/*/execution.log
+          if-no-files-found: ignore
 
   dryrun:
     runs-on: ubuntu-latest

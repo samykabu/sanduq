@@ -1,39 +1,15 @@
 name: Release extensions
 
-# Publishes a versioned release ZIP for every Spec Kit extension under
-# extensions/<id>/ whose files changed, and updates the public sanduq catalog
-# (`catalog.json`, mirrored to `extensions/catalog.json`) so its `version` and
-# `download_url` point at the new release.
-#
-# Triggers ONLY when files under extensions/ change. The version-bump commit this
-# workflow pushes back carries "[skip ci]", which GitHub honours to avoid an
-# infinite loop. Adding a new extensions/<id>/ folder with an extension.yml is
-# enough for it to be released and added to the catalog automatically.
-
 on:
-  push:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
     branches: [main]
-    paths:
-      - "extensions/**"
   workflow_dispatch:
-    inputs:
-      extension:
-        description: "Extension id(s) to release (space-separated). Blank = autodetect from the last push."
-        required: false
-        default: ""
-      bump:
-        description: "Version bump level (ignored if extension.yml was bumped by hand or set-version is given)"
-        required: false
-        default: "patch"
-        type: choice
-        options: [patch, minor, major]
-      set_version:
-        description: "Force this exact version (X.Y.Z), applied to all selected extensions"
-        required: false
-        default: ""
 
 permissions:
   contents: write
+  actions: read
 
 concurrency:
   group: release-extensions
@@ -41,129 +17,58 @@ concurrency:
 
 jobs:
   release:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
-
-      - name: Determine changed extensions
-        id: detect
-        run: |
-          set -euo pipefail
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.extension }}" ]; then
-            ids="${{ github.event.inputs.extension }}"
-          else
-            base="${{ github.event.before }}"
-            head="${{ github.sha }}"
-            if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
-              base="$(git rev-parse "${head}^" 2>/dev/null || true)"
-            fi
-            if [ -n "$base" ]; then
-              changed="$(git diff --name-only "$base" "$head" -- extensions/ || true)"
-            else
-              changed="$(git ls-files extensions/)"
-            fi
-            # extensions/<id>/... -> <id>, excluding shared dirs and loose files
-            ids="$(printf '%s\n' "$changed" \
-              | awk -F/ '$1=="extensions" && NF>=3 && $2!="scripts" {print $2}' \
-              | sort -u | tr '\n' ' ')"
-          fi
-          # keep only ids that are real extensions (have an extension.yml)
-          valid=""
-          for id in $ids; do
-            if [ -f "extensions/$id/extension.yml" ]; then valid="$valid $id"; fi
-          done
-          ids="$(echo $valid | xargs || true)"
-          echo "ids=$ids" >> "$GITHUB_OUTPUT"
-          if [ -z "$ids" ]; then
-            echo "No extension directories changed — nothing to release."
-          else
-            echo "Releasing: $ids"
-          fi
-
-      - name: Set up Python
-        if: steps.detect.outputs.ids != ''
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
-
-      - name: Install dependencies
-        if: steps.detect.outputs.ids != ''
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y zip unzip
-          pip install pyyaml
-
-      - name: Bump versions & update catalog
-        if: steps.detect.outputs.ids != ''
-        id: bump
-        run: |
-          set -euo pipefail
-          extra=""
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.set_version }}" ]; then
-            extra="--set-version ${{ github.event.inputs.set_version }}"
-          fi
-          bump="${{ github.event.inputs.bump }}"
-          python extensions/scripts/release.py ${{ steps.detect.outputs.ids }} \
-            --bump "${bump:-patch}" \
-            --repo-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
-            --branch "${GITHUB_REF_NAME}" \
-            $extra
-
-      - name: Package release ZIPs
-        if: steps.detect.outputs.ids != ''
-        run: |
-          set -euo pipefail
-          chmod +x extensions/scripts/package.sh
-          for id in ${{ steps.detect.outputs.ids }}; do
-            extensions/scripts/package.sh "$id"
-          done
-
-      - name: Commit version & catalog updates
-        if: steps.detect.outputs.ids != ''
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add catalog.json extensions/catalog.json
-          for id in ${{ steps.detect.outputs.ids }}; do
-            git add "extensions/$id/extension.yml"
-          done
-          if git diff --cached --quiet; then
-            echo "No catalog/version changes to commit."
-          else
-            git commit -m "chore(extensions): release ${{ steps.detect.outputs.ids }} [skip ci]"
-            git push origin HEAD:main
-          fi
-
-      - name: Create GitHub releases
-        if: steps.detect.outputs.ids != ''
+          python-version: '3.13'
+      - name: Require successful CI for the current main commit
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          set -euo pipefail
-          count="$(jq length dist/released.json)"
-          for i in $(seq 0 $((count - 1))); do
-            id="$(jq -r ".[$i].id" dist/released.json)"
-            version="$(jq -r ".[$i].version" dist/released.json)"
-            tag="$(jq -r ".[$i].tag" dist/released.json)"
-            zip="$(jq -r ".[$i].zip" dist/released.json)"
-            from_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${tag}/${id}.zip"
-            notes="$(printf 'Automated release of the `%s` Spec Kit extension v%s.\n\nInstall via the catalog (`specify extension add %s`) or directly:\n`specify extension add --from %s`' "$id" "$version" "$id" "$from_url")"
-            if gh release view "$tag" >/dev/null 2>&1; then
-              echo "Release $tag already exists — clobbering asset."
-              gh release upload "$tag" "$zip" --clobber
-            else
-              gh release create "$tag" "$zip" --title "$id extension v$version" --notes "$notes"
-            fi
-          done
-
-      - name: Upload build artifacts
-        if: steps.detect.outputs.ids != ''
-        uses: actions/upload-artifact@v4
+          python - <<'PY'
+          import json, subprocess
+          head=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          runs=json.loads(subprocess.check_output(['gh','run','list','--workflow','ci.yml','--commit',head,'--branch','main','--event','push','--json','conclusion,status,headSha'],text=True))
+          if not any(r['headSha']==head and r['status']=='completed' and r['conclusion']=='success' for r in runs):
+              raise SystemExit('Current main has no successful completed push CI; nothing released.')
+          PY
+      - run: python -m pip install -r extensions/workflow/requirements.txt
+      - name: Prepare reviewed versions and deterministic assets
+        run: python extensions/scripts/release.py prepare
+      - name: Publish immutable assets and verify downloaded bytes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python extensions/scripts/release.py publish --apply
+      - name: Promote catalogs only after verifying every asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python extensions/scripts/release.py promote
+      - name: Commit released catalog metadata
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add catalog.json extensions/catalog.json extensions/pending-releases.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'chore(extensions): publish verified release catalog [skip ci]'
+            git push origin HEAD:main
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: extension-zips
-          path: dist/*.zip
-          if-no-files-found: warn
+          name: extension-release-evidence
+          path: |
+            dist/release-plan.json
+            dist/release-verification.json
+            dist/*.zip
+          if-no-files-found: ignore

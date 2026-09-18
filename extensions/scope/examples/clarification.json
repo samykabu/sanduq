@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "issue": 123,
+  "snapshot_digest": "REPLACE_WITH_INSPECT_DIGEST",
+  "engine": "clarify",
+  "coverage": {"functional": "Missing: failure behavior", "data": "Clear", "verification": "Partial"},
+  "summary": "One decision is needed before the failure path can be specified.",
+  "answers": [],
+  "questions": [
+    {
+      "key": "failed-delivery",
+      "question": "What should the user see when delivery fails?",
+      "why": "The user needs to know whether to retry without creating a duplicate.",
+      "details": "The issue describes successful delivery but does not define the failure screen.",
+      "recommendation": "Keep the submitted information and show a retry action.",
+      "justification": "This lets the user recover without re-entering information or accidentally submitting twice.",
+      "options": ["Keep the information and offer retry", "Clear the form and ask the user to start again"],
+      "recommended_option": 1,
+      "follows_up": []
+    }
+  ],
+  "spec_edits": []
+}

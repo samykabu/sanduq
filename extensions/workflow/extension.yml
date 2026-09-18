@@ -1,0 +1,55 @@
+schema_version: '1.0'
+extension:
+  id: workflow
+  name: Sanduq Workflow
+  version: "1.0.0"
+  description: Resumable, policy-driven Scope-to-PR orchestration with optional QA
+    and User Manual processes.
+  author: Samy K. Abushanab
+  repository: https://github.com/samykabu/sanduq
+  license: PolyForm-Noncommercial-1.0.0
+  category: process
+requires:
+  speckit_version: '>=1.0.0,<1.1.0'
+  tools:
+  - name: python
+    version: '>=3.10'
+    required: true
+  - name: git
+    required: true
+  - name: gh
+    required: true
+provides:
+  commands:
+  - name: speckit.workflow.init
+    file: commands/init.md
+    description: Select QA, User Manual, providers and context policy once.
+  - name: speckit.workflow.scope
+    file: commands/scope.md
+    description: Scope the explicit issue and automatically continue when decisions
+      are resolved.
+  - name: speckit.workflow.clarify
+    file: commands/clarify.md
+    description: Read GitHub answers and automatically prepare tasks and implementation.
+  - name: speckit.workflow.continue
+    file: commands/continue.md
+    description: Resume the earliest unfinished or stale stage from its checkpoint.
+  - name: speckit.workflow.finalize
+    file: commands/finalize.md
+    description: Verify completion and create or update one PR with inline visuals.
+  - name: speckit.workflow.status
+    file: commands/status.md
+    description: Show current stage, active claim and evidence freshness.
+  - name: speckit.workflow.doctor
+    file: commands/doctor.md
+    description: Check selected dependencies and available host commands.
+  - name: speckit.workflow.reconcile
+    file: commands/reconcile.md
+    description: Install managed hooks and presets without changing unrelated integrations.
+tags:
+- workflow
+- qa
+- documentation
+- github
+- context
+- resumable

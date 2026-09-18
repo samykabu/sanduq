@@ -63,3 +63,11 @@ Simple Icons is made available under the
 [CC0 1.0 Universal dedication](https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md).
 Brand names and marks remain the property of their respective owners. Inclusion is for documentation
 and illustration and does not imply endorsement, sponsorship, or affiliation.
+
+## Scope migration
+
+`extensions/scope/` and the Scope presets were migrated from Bunyan's
+`tools/speckit-scope` package (observed source commit
+`41fa4322368ac0c3e71d497a39939a751dd61247`). Their existing MIT terms remain in
+[extensions/scope/LICENSE](extensions/scope/LICENSE). The migration does not
+relicense upstream Spec Kit, SuperSpec, or other separately installed skills.

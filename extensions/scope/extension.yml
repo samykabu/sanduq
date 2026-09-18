@@ -1,0 +1,70 @@
+schema_version: "1.0"
+extension:
+  id: scope
+  name: Speckit Scope
+  version: "1.4.0"
+  description: "Analyze GitHub issue scope, enforce prerequisites, review user-selected decomposition before publishing, and maintain parent progress."
+  author: "Samy K. Abushanab"
+  repository: "https://github.com/samykabu/sanduq"
+  license: MIT
+requires:
+  speckit_version: ">=1.0.0"
+  tools:
+    - name: gh
+      required: true
+    - name: python
+      version: ">=3.10"
+      required: true
+provides:
+  commands:
+    - name: speckit.scope.run
+      file: commands/run.md
+      description: "Scope an issue by number or exact title; reject unready prerequisites and obtain approval of the user-selected decomposition."
+    - name: speckit.scope.guard
+      file: commands/guard.md
+      description: "Require an existing GitHub issue and current approved effort scope before Specify."
+    - name: speckit.scope.bind
+      file: commands/bind.md
+      description: "Bind the newly created specification to its original GitHub issue before Project sync."
+    - name: speckit.scope.reconcile
+      file: commands/reconcile.md
+      description: "Refresh parent progress and close only all-Done scope parents."
+    - name: speckit.scope.plan
+      file: commands/plan.md
+      description: "Refresh the implementation dependency plan using Archify after scope decomposition."
+    - name: speckit.scope.after-specify
+      file: commands/after-specify.md
+      description: "Automatically dispatch Brainstorm when available, otherwise Clarify, after specification creation."
+    - name: speckit.scope.plan-guard
+      file: commands/plan-guard.md
+      description: "Require Ready before planning so unresolved GitHub questions cannot be skipped."
+hooks:
+  before_specify:
+    command: speckit.scope.guard
+    priority: 1
+    optional: false
+    description: "Block Specify before side effects unless the explicit GitHub issue has a fresh scope and eligible prerequisites."
+  after_specify:
+    - command: speckit.scope.bind
+      priority: 1
+      optional: false
+      description: "Bind the source issue and set Feature Specification before Project sync."
+    - command: speckit.scope.after-specify
+      priority: 30
+      optional: false
+      description: "Run unattended Brainstorm when available, otherwise Clarify, after the spec is created."
+  before_plan:
+    command: speckit.scope.plan-guard
+    priority: 1
+    optional: false
+    description: "Require Ready before technical planning; unresolved clarification must not be bypassed."
+  after_implement:
+    command: speckit.scope.reconcile
+    priority: 30
+    optional: false
+    description: "Reconcile scope parents after Project sync updates child progress."
+tags:
+  - github
+  - scope
+  - workflow
+  - dependencies
