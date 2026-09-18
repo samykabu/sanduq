@@ -51,6 +51,14 @@ independently via `<extension>-vX.Y.Z` tags.
 - Split the `prepare` guard so its error names the actual cause. It previously reported
   "requires a clean checkout and pending status ready" whichever of the two conditions failed.
 
+### Added
+
+- Recorded the CI runner exception in the README. All 14 jobs run on GitHub-hosted runners because
+  the home-office `homek8-general` scale set is registered at organisation scope on `abushanab-net`
+  while this repository is owned by a personal account, and GitHub does not share self-hosted
+  runners across that boundary. The entry names the workflows, the jobs, the reason, and what would
+  remove it.
+
 ## Coordinated workflow release (unreleased)
 
 - Add Workflow 1.0.0 and migrate Scope 1.4.0 with canonical GitHub presets into Sanduq.

@@ -693,6 +693,27 @@ Every diagram in this README keeps its editable source next to the export: `docs
 the original, `*.svg` and `*.png` are generated from it with the `illustrate` skill's exporter. Edit
 the HTML and re-export; never hand-edit an SVG.
 
+## Continuous integration
+
+$${\color{red}\textsf{Exception: these workflows run on GitHub-hosted runners, not the home-office self-hosted runners.}}$$
+
+| | |
+| --- | --- |
+| **Workflows** | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) and [`.github/workflows/release-extensions.yml`](.github/workflows/release-extensions.yml) |
+| **Jobs** | All 14: `lint`, `regression` (4 matrix legs), `installation` (4), `upgrade`, `project-init` (2), `dryrun`, and `release` |
+| **Runners used** | `ubuntu-latest`, plus `windows-latest` for the two Windows `regression` legs |
+| **Why the self-hosted runners cannot run them** | `homek8-general` and `homek8-mobile` are ARC runner scale sets registered at **organisation** scope on `abushanab-net`. This repository is owned by the personal account `samykabu` and has zero repo-level runners. GitHub shares self-hosted runners only downward inside one account boundary — an enterprise to its orgs, an org to its repos — so an organisation runner cannot accept a job from a repository outside that organisation. Runner groups do not bridge it either: the `Default` group's `visibility=all` means all repositories *in that organisation*. Pointing a job at `homek8-general` today would leave it queued indefinitely, with no error. |
+| **What would remove the exception** | Transfer this repository into the `abushanab-net` organisation. The `homegate-arc` GitHub App is already installed there org-wide (`repository_selection=all`), so `homek8-general` would serve it with no cluster change, and every `runs-on` could switch to it. Deploying an `AutoscalingRunnerSet` scoped to `github.com/samykabu/sanduq` would also work, at the cost of a second scale set for one repository. Either way the two Windows `regression` legs still need a self-hosted Windows label, and the runner image needs `pwsh`, `jq`, `shellcheck`, Python 3.13, and outbound network access for `pip` and PSGallery. |
+| **Decided** | 2026-09-18 |
+
+### The release pipeline is allowed to do nothing
+
+`Release extensions` runs after a successful push CI on `main`, and **skips without failing** while
+[`extensions/pending-releases.json`](extensions/pending-releases.json) has any status other than
+`ready` or `released`. Reviewed work staged for release is the normal state, not a broken pipeline;
+the run summary records the status it saw. Marking that status `ready` is the only thing that
+authorizes publication, and release assets and tags are immutable once published.
+
 ## Development and release
 
 For local extension development:
