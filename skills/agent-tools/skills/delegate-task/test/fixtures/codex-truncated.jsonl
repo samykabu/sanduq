@@ -1,0 +1,3 @@
+{"type":"thread.started","thread_id":"th_0198f00d"}
+{"type":"item.completed","item":{"type":"command_execution","command":"npm test"}}
+{"type":"item.completed","item":{"type":"agent_m

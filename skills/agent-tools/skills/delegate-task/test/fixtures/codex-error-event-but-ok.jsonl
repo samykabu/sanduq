@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"th_0198beef"}
+{"type":"item.completed","item":{"type":"error","message":"a tool call failed and was retried"}}
+{"type":"item.completed","item":{"type":"agent_message","text":"Recovered and finished.\n\n<<<DELEGATION_RESULT>>>\nstatus: successful\nsummary: A tool call failed once; I retried and completed the task.\nfiles_changed: a.txt\n<<<END_DELEGATION_RESULT>>>"}}
+{"type":"turn.completed","usage":{"input_tokens":1000,"cached_input_tokens":0,"output_tokens":50,"reasoning_output_tokens":0}}

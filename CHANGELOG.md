@@ -4,6 +4,29 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## agent-tools — 1.0.0 — 2026-09-18
+
+### Added
+
+- Added the `agent-tools` plugin bundle with the `delegate-task` skill, moved here from the
+  DoorCamera repository so it is hosted, versioned, and served from sanduq.
+- Added `delegate-task`: hand one task to Claude Code, OpenAI Codex, OpenCode, GitHub Copilot, or
+  Pi; run it detached; return a normalised result carrying the status *and the rule that produced
+  it*, the file changes git measured against a pre-run baseline, and token counts normalised across
+  harnesses that each count differently. Dependency-free Node driver (Node >= 18), 169-case test
+  suite driven by a fake harness, and three normative contracts in `contracts/`.
+- Registered `agent-tools` in `.claude-plugin/marketplace.json` and bumped the marketplace to 0.6.0.
+
+### Changed
+
+- Documented the driver as install-location relative. The skill's own docs now resolve
+  `$DELEGATE` from `CLAUDE_PLUGIN_ROOT` or `.claude/skills/` instead of assuming a single
+  repository path, and require `DELEGATE_RUNS_DIR` on a plugin install so run artifacts — which
+  hold the task text and the harness's raw output — stay in the consuming project rather than
+  accumulating in the shared plugin directory.
+- Moved the run-lifecycle and parallel-fan-out diagrams into the skill's own `assets/`, so its
+  README renders wherever the skill is installed.
+
 ## assure — 2.0.0 — 2026-07-19
 
 ### Changed
