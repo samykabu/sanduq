@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The lifetime of one managed feature</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,400;1,400&family=Noto+Naskh+Arabic:wght@400;500;600&family=Noto+Sans+Arabic:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f6f8fc;
+      --color-ink:     #15233c;
+      --color-muted:   #4f6078;
+      --color-accent:  #2563eb;
+      --font-sans:     'IBM Plex Sans', 'Noto Sans Arabic', system-ui, sans-serif;
+      --font-serif:    'IBM Plex Serif', 'Noto Naskh Arabic', serif;
+      --font-mono:     'IBM Plex Mono', 'Noto Sans Arabic', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+    .frame { max-width: 1280px; width: 100%; }
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+    svg { width: 100%; min-width: 900px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">State machine · Illustrate</p>
+    <h1>The lifetime of one managed feature</h1>
+
+    <svg viewBox="0 0 1200 640" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f6078"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2563eb"/></marker>
+        <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#1d4ed8"/></marker>
+      </defs>
+
+      <rect width="100%" height="100%" fill="#f6f8fc"/>
+
+      <!-- ============ TRANSITIONS (before states) ============ -->
+      <!-- start -> Scoped -->
+      <line x1="24" y1="324" x2="44" y2="324" stroke="#4f6078" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+      <!-- Scoped -> Bound -->
+      <line x1="208" y1="324" x2="272" y2="324" stroke="#4f6078" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="210" y="304" width="60" height="12" rx="2" fill="#f6f8fc"/>
+      <text x="240" y="313" fill="#6b7a90" font-size="8" font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace" text-anchor="middle" letter-spacing="0.06em">SPECIFY</text>
+
+      <!-- Bound -> Stage running -->
+      <line x1="432" y1="324" x2="496" y2="324" stroke="#4f6078" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="434" y="304" width="60" height="12" rx="2" fill="#f6f8fc"/>
+      <text x="464" y="313" fill="#6b7a90" font-size="8" font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace" text-anchor="middle" letter-spacing="0.06em">CLAIM</text>
+
+      <!-- Stage running -> Ready to finalize -->
+      <line x1="656" y1="324" x2="720" y2="324" stroke="#2563eb" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+      <rect x="658" y="304" width="60" height="12" rx="2" fill="#f6f8fc"/>
+      <text x="688" y="313" fill="#6b7a90" font-size="8" font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace" text-anchor="middle" letter-spacing="0.06em">TASKS DONE</text>
+
+      <!-- Ready to finalize -> Pull request open -->
+      <line x1="880" y1="324" x2="944" y2="324" stroke="#2563eb" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+      <rect x="882" y="304" width="60" height="12" rx="2" fill="#f6f8fc"/>
+      <text x="912" y="313" fill="#6b7a90" font-size="8" font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace" text-anchor="middle" letter-spacing="0.06em">FINALIZE</text>
+
+      <!-- Pull request open -> end -->
+      <line x1="1104" y1="324" x2="1116" y2="324" stroke="#4f6078" stroke-width="1.2"/>
+
+      <!-- Stage running <-> Checkpointed -->
+      <line x1="552" y1="280" x2="552" y2="204" stroke="#4f6078" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="444" y="234" width="100" height="12" rx="2" fill="#f6f8fc"/>
+      <text x="494" y="243" fill="#6b7a90" font-size="8" font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace" text-anchor="middle" letter-spacing="0.06em">CONTEXT CEILING</text>
+      <line x1="600" y1="200" x2="600" y2="276" stroke="#4f6078" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="608" y="234" width="72" height="12" rx="2" fill="#f6f8fc"/>
+      <text x="644" y="243" fill="#6b7a90" font-size="8" font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace" text-anchor="middle" letter-spacing="0.06em">CONTINUE</text>
+
+      <!-- Stage running <-> Blocked -->
+      <line x1="508" y1="368" x2="508" y2="444" stroke="#4f6078" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="436" y="402" width="64" height="12" rx="2" fill="#f6f8fc"/>
+      <text x="468" y="411" fill="#6b7a90" font-size="8" font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace" text-anchor="middle" letter-spacing="0.06em">GUARD</text>
+      <line x1="532" y1="448" x2="532" y2="372" stroke="#4f6078" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="540" y="402" width="60" height="12" rx="2" fill="#f6f8fc"/>
+      <text x="570" y="411" fill="#6b7a90" font-size="8" font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace" text-anchor="middle" letter-spacing="0.06em">SETTLED</text>
+
+      <!-- Stage running <-> Migration required -->
+      <line x1="620" y1="368" x2="620" y2="444" stroke="#4f6078" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="556" y="424" width="56" height="12" rx="2" fill="#f6f8fc"/>
+      <text x="584" y="433" fill="#6b7a90" font-size="8" font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace" text-anchor="middle" letter-spacing="0.06em">DRIFT</text>
+      <line x1="644" y1="448" x2="644" y2="372" stroke="#4f6078" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="652" y="424" width="76" height="12" rx="2" fill="#f6f8fc"/>
+      <text x="690" y="433" fill="#6b7a90" font-size="8" font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace" text-anchor="middle" letter-spacing="0.06em">MIGRATED</text>
+
+      <!-- ============ START / END MARKERS ============ -->
+      <circle cx="24" cy="324" r="6" fill="#15233c"/>
+      <circle cx="1128" cy="324" r="8" fill="none" stroke="#15233c" stroke-width="1.2"/>
+      <circle cx="1128" cy="324" r="5" fill="#15233c"/>
+
+      <!-- ============ STATES ============ -->
+      <!-- Scoped -->
+      <rect x="48" y="280" width="160" height="88" rx="8" fill="#f6f8fc"/>
+      <rect x="48" y="280" width="160" height="88" rx="8" fill="#ffffff" stroke="#15233c" stroke-width="1"/>
+      <text x="128" y="324" fill="#15233c" font-size="12" font-weight="600" font-family="'IBM Plex Sans', 'Noto Sans Arabic', sans-serif" text-anchor="middle">Scoped</text>
+      <text x="128" y="344" fill="#4f6078" font-size="9" font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace" text-anchor="middle">issue · effort policy</text>
+
+      <!-- Bound -->
+      <rect x="272" y="280" width="160" height="88" rx="8" fill="#f6f8fc"/>
+      <rect x="272" y="280" width="160" height="88" rx="8" fill="#ffffff" stroke="#15233c" stroke-width="1"/>
+      <text x="352" y="324" fill="#15233c" font-size="12" font-weight="600" font-family="'IBM Plex Sans', 'Noto Sans Arabic', sans-serif" text-anchor="middle">Bound</text>
+      <text x="352" y="344" fill="#4f6078" font-size="9" font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace" text-anchor="middle">branch + spec.md</text>
+
+      <!-- Stage running (FOCAL) -->
+      <rect x="496" y="280" width="160" height="88" rx="8" fill="#f6f8fc"/>
+      <rect x="496" y="280" width="160" height="88" rx="8" fill="rgba(37,99,235,0.09)" stroke="#2563eb" stroke-width="1"/>
+      <text x="576" y="324" fill="#15233c" font-size="12" font-weight="600" font-family="'IBM Plex Sans', 'Noto Sans Arabic', sans-serif" text-anchor="middle">Stage running</text>
+      <text x="576" y="344" fill="#4f6078" font-size="9" font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace" text-anchor="middle">one claim held</text>
+
+      <!-- Ready to finalize -->
+      <rect x="720" y="280" width="160" height="88" rx="8" fill="#f6f8fc"/>
+      <rect x="720" y="280" width="160" height="88" rx="8" fill="#ffffff" stroke="#15233c" stroke-width="1"/>
+      <text x="800" y="324" fill="#15233c" font-size="12" font-weight="600" font-family="'IBM Plex Sans', 'Noto Sans Arabic', sans-serif" text-anchor="middle">Ready to finalize</text>
+      <text x="800" y="344" fill="#4f6078" font-size="9" font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace" text-anchor="middle">evidence current</text>
+
+      <!-- Pull request open (FOCAL) -->
+      <rect x="944" y="280" width="160" height="88" rx="8" fill="#f6f8fc"/>
+      <rect x="944" y="280" width="160" height="88" rx="8" fill="rgba(37,99,235,0.09)" stroke="#2563eb" stroke-width="1"/>
+      <text x="1024" y="324" fill="#15233c" font-size="12" font-weight="600" font-family="'IBM Plex Sans', 'Noto Sans Arabic', sans-serif" text-anchor="middle">Pull request open</text>
+      <text x="1024" y="344" fill="#4f6078" font-size="9" font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace" text-anchor="middle">one PR per feature</text>
+
+      <!-- Checkpointed -->
+      <rect x="496" y="112" width="160" height="88" rx="8" fill="#f6f8fc"/>
+      <rect x="496" y="112" width="160" height="88" rx="8" fill="rgba(21,35,60,0.05)" stroke="#4f6078" stroke-width="1"/>
+      <text x="576" y="156" fill="#15233c" font-size="12" font-weight="600" font-family="'IBM Plex Sans', 'Noto Sans Arabic', sans-serif" text-anchor="middle">Checkpointed</text>
+      <text x="576" y="176" fill="#4f6078" font-size="9" font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace" text-anchor="middle">handoff.md written</text>
+
+      <!-- Blocked -->
+      <rect x="384" y="448" width="160" height="88" rx="8" fill="#f6f8fc"/>
+      <rect x="384" y="448" width="160" height="88" rx="8" fill="rgba(21,35,60,0.05)" stroke="#4f6078" stroke-width="1"/>
+      <text x="464" y="492" fill="#15233c" font-size="12" font-weight="600" font-family="'IBM Plex Sans', 'Noto Sans Arabic', sans-serif" text-anchor="middle">Blocked</text>
+      <text x="464" y="512" fill="#4f6078" font-size="9" font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace" text-anchor="middle">stale scope or answers</text>
+
+      <!-- Migration required -->
+      <rect x="608" y="448" width="160" height="88" rx="8" fill="#f6f8fc"/>
+      <rect x="608" y="448" width="160" height="88" rx="8" fill="rgba(21,35,60,0.05)" stroke="#4f6078" stroke-width="1"/>
+      <text x="688" y="492" fill="#15233c" font-size="12" font-weight="600" font-family="'IBM Plex Sans', 'Noto Sans Arabic', sans-serif" text-anchor="middle">Migration required</text>
+      <text x="688" y="512" fill="#4f6078" font-size="9" font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace" text-anchor="middle">package drift</text>
+
+      <!-- ============ LEGEND ============ -->
+      <line x1="32" y1="576" x2="1168" y2="576" stroke="rgba(21,35,60,0.10)" stroke-width="0.8"/>
+      <text x="32" y="596" fill="#4f6078" font-size="8" font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace" letter-spacing="0.14em">LEGEND</text>
+
+      <circle cx="119" cy="592" r="5" fill="#15233c"/>
+      <text x="134" y="596" fill="#4f6078" font-size="8" font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace" letter-spacing="0.06em">START AND END</text>
+
+      <rect x="284" y="586" width="14" height="12" rx="3" fill="rgba(21,35,60,0.05)" stroke="#4f6078" stroke-width="1"/>
+      <text x="306" y="596" fill="#4f6078" font-size="8" font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace" letter-spacing="0.06em">RECOVERABLE DETOUR</text>
+
+      <rect x="508" y="586" width="14" height="12" rx="3" fill="rgba(37,99,235,0.09)" stroke="#2563eb" stroke-width="1"/>
+      <text x="530" y="596" fill="#4f6078" font-size="8" font-family="'IBM Plex Mono', 'Noto Sans Arabic', monospace" letter-spacing="0.06em">WHERE WORK HAPPENS, AND WHERE IT ENDS · EVERY DETOUR RETURNS; NOTHING RESETS TO SCOPED</text>
+    </svg>
+  </div>
+</body>
+</html>
