@@ -3,6 +3,10 @@
 Updated 2026-09-18. Branch: `feat/reusable-workflow`. **Local implementation and
 validation remain in progress. No release or Bunyan adoption has occurred.**
 
+Review: [draft PR #3](https://github.com/samykabu/sanduq/pull/3). Both diagrams in
+its description loaded at 1440x900 in the authenticated browser. Sanduq is public;
+this does not prove private-repository attachment behavior.
+
 ## Implemented locally
 
 - Canonical Scope runtime, analyst/GitHub clarification skills and reusable presets
@@ -47,7 +51,7 @@ validation remain in progress. No release or Bunyan adoption has occurred.**
 | PR 4.0.2 to staged 4.1.0 | Passed | Published old archive, real upgrade, injected failure, exact rollback, retry |
 | Workflow 1.0.0 to synthetic staged 1.0.1 | Passed | Outer transaction failure after integration install, rollback and retry; no 1.0.1 release |
 | Archify diagrams | 9/9 showcase checks and four desktop sizes | Existing delivery/browser/review receipts; no private PR claim |
-| New CI jobs | Defined, remote results pending | Windows/Linux suites; Codex/Claude x core/SuperSpec installs; actual upgrade smoke |
+| Remote CI at 590eae6 | 10 of 11 passed; Windows Scope path comparison failed | Corrected fixture canonicalization; latest rerun status is on PR #3 |
 | Manifest/catalog validation and CI YAML | Passed locally | Remote lint/execution still pending |
 
 Receipts: [Codex](workflow-evidence/codex-superspec-install.json),
@@ -59,6 +63,12 @@ directories. See [compatibility](workflow-compatibility.md) for pinned upstream 
 The first Claude attempt in this batch rejected Spec Kit's internal command symlinks.
 Backup/restore was corrected, a regression test added, and a fresh installation passed.
 The failed attempt is retained under `dist/install-tests/claude-065x6h8p`.
+
+The first remote run passed all four installation combinations, the actual upgrade
+job, both workflow regression platforms, Linux Scope, lint and dry-run checks.
+Windows Scope exposed `RUNNER~1` versus `runneradmin` aliases in two test expectations.
+The fixture now canonicalizes its temporary path, matching runtime behavior. The
+failed run remains [available](https://github.com/samykabu/sanduq/actions/runs/35369374493).
 
 ## Required remaining work
 

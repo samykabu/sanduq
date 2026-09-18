@@ -62,7 +62,9 @@ class ClarificationTests(unittest.TestCase):
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp.name)
+        # Windows hosted runners may expose TEMP through an 8.3 path alias.
+        # Match the runtime's canonical path instead of comparing two aliases.
+        self.root = Path(self.temp.name).resolve()
         sm.write_json(self.root / '.specify/extensions/project/config.json', {'projectId': 'P', 'projectNumber': 2,
                       'owner': 'acme', 'statusFieldId': 'F', 'statusOptions': {x: x for x in ['Backlog', m.FEATURE, m.WAITING, 'Ready', 'In progress', 'In review', 'Done']}, 'stateFile': '.specify/project-sync-state.json'})
         self.gh = ReviewGitHub()

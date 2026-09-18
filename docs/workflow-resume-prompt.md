@@ -4,6 +4,12 @@ and workflow-extension-implementation-plan.md under docs. Preserve existing chan
 the canonical PR image contract and Archify artifacts. Do not mark the goal complete
 based only on local tests or installation smoke checks.
 
+Draft PR: https://github.com/samykabu/sanduq/pull/3. The branch is pushed. Both inline
+public diagrams loaded in the authenticated browser; private rendering is still pending.
+First CI run 35369374493 passed 10/11 jobs and exposed Windows TEMP path aliases in
+two Scope test expectations. Fixture canonicalization was corrected; inspect current
+PR checks instead of reusing the initial status as the latest result.
+
 The runtime, reusable presets, selected dependency installer, workflow self-updater,
 rollback, task issue adapter, freshness gates and release sequencing are implemented
 locally. Current evidence: 103 Scope tests; 62 workflow tests including schema
