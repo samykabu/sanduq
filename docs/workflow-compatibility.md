@@ -16,6 +16,11 @@ certification of every version allowed by a manifest range.
 
 CI definitions are not CI passes. Check the actual run before release.
 
+Implementation commit `6e8223d1c0fc26644ca893d38b31aeae5894e197` passed all 13 jobs
+in [run 35372199271](https://github.com/samykabu/sanduq/actions/runs/35372199271),
+including all four host/provider installation combinations, Windows/Linux regressions,
+upgrade rollback and both real Project Init scripts against a fake custom-column board.
+
 The source boundary is deliberate: upstream commands stay upstream; Sanduq owns
 the dispatcher and prepend presets; consumer policy and run state live outside
 replaceable packages. This uses public installation/composition APIs and avoids

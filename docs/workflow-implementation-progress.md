@@ -51,9 +51,9 @@ this does not prove private-repository attachment behavior.
 | PR 4.0.2 to staged 4.1.0 | Passed | Published old archive, real upgrade, injected failure, exact rollback, retry |
 | Workflow 1.0.0 to synthetic staged 1.0.1 | Passed | Outer transaction failure after integration install, rollback and retry; no 1.0.1 release |
 | Archify diagrams | 9/9 showcase checks and four desktop sizes | Existing delivery/browser/review receipts; no private PR claim |
-| Project Init, PowerShell | Passed against a fake board with custom columns | Real script; preserves all Scope statuses and managed hooks; no live board mutation |
-| Remote CI at 5aa6a76 | All 11 jobs passed | Latest follow-up changes require a new run; see PR #3 |
-| Manifest/catalog validation and CI YAML | Passed in that remote run | New Project Init jobs must also pass |
+| Project Init, PowerShell and Bash | Both passed in CI against a fake board with custom columns | Real scripts; preserve all Scope statuses and managed hooks; no live board mutation |
+| Remote CI at 6e8223d | All 13 jobs passed | [Verified implementation run](https://github.com/samykabu/sanduq/actions/runs/35372199271); live semantic acceptance remains separate |
+| Manifest/catalog validation and CI YAML | Passed in that remote run | Release metadata remains unpublished |
 
 Receipts: [Codex](workflow-evidence/codex-superspec-install.json),
 [Claude](workflow-evidence/claude-core-install.json),
@@ -73,10 +73,10 @@ failed run remains [available](https://github.com/samykabu/sanduq/actions/runs/3
 
 ## Required remaining work
 
-1. Run remote CI for the follow-up fixes. Existing-feature revalidation, explicit
+1. Complete live semantic acceptance of the follow-up fixes. Existing-feature revalidation, explicit
    clarification refresh, legacy alias migration and setup hook ownership now have
    regression coverage. Real PowerShell Project Init passed locally against a fake
-   board; both shells are added to CI. Installation does not prove semantic agent
+   board; both shells passed CI. Installation does not prove semantic agent
    dispatch. See the [17-scenario acceptance audit](workflow-acceptance-audit.md).
 2. Pilot live GitHub answers, task links, interrupted resume and Finalize on an explicit
    authorized issue. A pilot issue URL has been requested; none is selected implicitly.
