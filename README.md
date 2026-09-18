@@ -27,15 +27,31 @@ manuals, illustrations, and pull-request documentation part of a governed lifecy
 | Create a diagram in any workflow | Install the `illustrate` skill or extension | Both package the same visual vocabulary and exporters. |
 | Keep a Spec Kit feature synchronized with GitHub Projects | Install the `project` extension | It maintains the parent issue, task sub-issues, and lifecycle status. |
 | Run a task on a different agent CLI, or get a second opinion | Install the `delegate-task` skill | It dispatches in the background and measures the outcome instead of relaying the harness's own claim. |
+| Drive a whole feature from GitHub issue to pull request | Install the `workflow` extension | One resumable dispatcher sequences every stage, and resumes the earliest unfinished one after a break. |
 
-## Managed workflow (in development)
+## Skills, plugins, and extensions
 
-The reusable [workflow extension](extensions/workflow/README.md) adds automatic
-Scope-to-PR sequencing, optional QA/manual processes and context handoffs. Canonical
-Scope and customization presets now live in Sanduq. See the
-[Archify process diagrams and implementation plan](docs/workflow-extension-implementation-plan.md)
-and [current implementation evidence](docs/workflow-implementation-progress.md).
-The new coordinated versions are not released or installed into Bunyan yet.
+sanduq ships three kinds of thing. They are not interchangeable, and the difference decides how you
+install it and how you invoke it.
+
+![How sanduq packages tooling and the three paths by which it reaches a working copy](docs/assets/sanduq-packaging.png)
+
+| | **Portable skill** | **Plugin bundle** | **Spec Kit extension** |
+| --- | --- | --- | --- |
+| What it is | Instructions the agent loads on its own when the task matches | One or more skills packaged for Claude Code's plugin system | A versioned package that adds `/speckit-*` commands and lifecycle hooks to a Spec Kit project |
+| Needs Spec Kit | No | No | **Yes** |
+| Install with | `npx skills add samykabu/sanduq --skill <name>` | `/plugin install <bundle>@sanduq` | `specify extension add <id>` |
+| Invoke with | Ask in plain English, or `$<name>` | `/<bundle>:<skill>` | `/speckit-<id>-<command>` |
+| Lands in | `.claude/skills/<name>/` | Claude Code's plugin directory | `.specify/extensions/<id>/` |
+| Source | [`skills/`](skills/) | [`skills/<bundle>/`](skills/) | [`extensions/`](extensions/) |
+
+A fourth directory, [`presets/`](presets/), holds canonical command overlays. They are **bundled into
+extension archives at build time** — you never install a preset by itself.
+
+The same capability is sometimes published both ways. `illustrate` exists as a portable skill *and*
+as a Spec Kit extension: identical visual vocabulary and exporters, different delivery. Use the skill
+in any repository; use the extension when a Spec Kit project should resolve and update it through the
+catalog like its other dependencies.
 
 ## Quick start
 
@@ -71,6 +87,13 @@ specify extension add user-manual
 specify extension add pr
 ```
 
+Then initialize the ones that keep project state — `/speckit-project-init`, `/speckit-assure-init`,
+`/speckit-user-manual-init`. To sequence all of them from a GitHub issue through to one pull request,
+see [the managed Spec Kit workflow](#the-managed-spec-kit-workflow).
+
+Not sure which of the three package kinds you want? Start with
+[Skills, plugins, and extensions](#skills-plugins-and-extensions).
+
 ## Portable skills
 
 Portable skills live under [`skills/`](skills/) and do not require Spec Kit. The core User Manual
@@ -85,6 +108,40 @@ skill includes its own scripts, MkDocs Material scaffold, RTL styles, CI workflo
 | [`user-manual-ui-screenshots`](skills/dev-tools/skills/user-manual-ui-screenshots/) | Plan and capture deterministic, redacted web/mobile screenshots. | `npx skills add samykabu/sanduq --skill user-manual-ui-screenshots` |
 | [`user-manual-preview-publishing`](skills/dev-tools/skills/user-manual-preview-publishing/) | Publish private PR artifacts and approved hosted previews/releases. | `npx skills add samykabu/sanduq --skill user-manual-preview-publishing` |
 | [`delegate-task`](skills/agent-tools/skills/delegate-task/) | Run one task on Claude Code, Codex, OpenCode, Copilot, or Pi and measure the result. | `npx skills add samykabu/sanduq --skill delegate-task` |
+
+### Using a skill once it is installed
+
+A skill is not a command you run. It is a body of instructions the agent loads **by itself** when
+your request matches what the skill is for — each one carries a `description` that says when it
+applies. So the normal way to use one is to describe the task:
+
+```text
+create a light architecture diagram of the booking service and its payment provider
+```
+
+Name it explicitly when you want to be certain which one is used, or when two could apply:
+
+```text
+$illustrate create a light architecture diagram of the booking service
+```
+
+Codex uses `$name`. Claude Code accepts the same phrasing, and additionally exposes plugin-installed
+skills under their bundle namespace:
+
+```text
+/illustration-tools:illustrate
+/dev-tools:user-manual
+/agent-tools:delegate-task
+```
+
+Two consequences worth knowing:
+
+- **A skill that is installed is a skill that is discoverable.** Every installed skill's description
+  is read at session start, which costs context. Install the modules you use, not all of them —
+  that is why the User Manual capability ships as five separately installable skills rather than one.
+- **A skill can carry executable files.** `illustrate` ships Python exporters; `delegate-task` ships
+  a Node driver. Those run from the skill's own directory, so where you installed it decides their
+  path. Each skill's README says how to resolve it.
 
 ### Install with `npx skills`
 
@@ -285,19 +342,66 @@ Invoke them through Claude Code's plugin namespace, for example:
 
 ## Spec Kit extensions
 
-The root [`catalog.json`](catalog.json) is authoritative and is mirrored to
-[`extensions/catalog.json`](extensions/catalog.json). Install an extension by id after adding the
-catalog.
+An extension adds `/speckit-*` commands and **lifecycle hooks** to a Spec Kit project. Hooks are what
+separate an extension from a skill: they fire at named points in the feature lifecycle — `after_specify`,
+`before_implement`, `after_implement` — so a check runs at the right gate whether or not anyone
+remembered to ask for it.
 
-| Extension | Version | Commands | Primary outcome |
-| --- | ---: | --- | --- |
-| [`project`](extensions/project/) | 2.0.0 | `/speckit-project-init`, `/speckit-project-sync` | GitHub Project lifecycle and task synchronization. |
-| [`assure`](extensions/assure/) | 2.0.0 | `/speckit-assure-init`, `/speckit-assure-analyze`, `/speckit-assure-document` | Pre-implementation QA analysis and maintained test documentation. |
-| [`user-manual`](extensions/user-manual/) | 1.0.0 | `/speckit-user-manual-init`, `analyze`, `update`, `release` | Incremental application documentation inside the feature lifecycle. |
-| [`pr`](extensions/pr/) | 4.0.0 | `/speckit-pr-generate`, `/speckit-pr-review-feedback` | Documentation-gated PR creation/update and review processing. |
-| [`illustrate`](extensions/illustrate/) | 2.1.0 | `/speckit-illustrate-generate`, `/speckit-illustrate-export`, `/speckit-illustrate-theme` | Managed diagrams, project themes, fonts, and exports for specs, QA, manuals, and PRs. |
+| Extension | Published | Source | Commands | Hooks | Primary outcome |
+| --- | ---: | ---: | ---: | ---: | --- |
+| [`illustrate`](extensions/illustrate/) | 2.1.2 | 2.1.2 | 3 | 0 | Managed diagrams, project themes, fonts, and exports for specs, QA, manuals, and PRs. |
+| [`project`](extensions/project/) | 2.0.1 | 2.1.0 | 2 | 6 | GitHub Project lifecycle and task synchronization. |
+| [`assure`](extensions/assure/) | 2.0.1 | 2.1.0 | 3 | 3 | Pre-implementation QA analysis and maintained test documentation. |
+| [`pr`](extensions/pr/) | 4.0.2 | 4.1.0 | 2 | 1 | Documentation-gated PR creation/update and review processing. |
+| [`user-manual`](extensions/user-manual/) | 1.0.1 | 1.1.0 | 4 | 2 | Incremental application documentation inside the feature lifecycle. |
+| [`scope`](extensions/scope/) | — | 1.4.0 | 7 | 4 | Issue analysis, decomposition, and GitHub clarification before a spec exists. |
+| [`workflow`](extensions/workflow/) | — | 1.0.0 | 8 | 0 | Resumable Scope-to-PR orchestration over all of the above. |
 
-Codex users can replace the leading slash with `$`, such as `$speckit-assure-analyze`.
+**Published** is the version the catalog installs today. **Source** is the version in this repository.
+Where they differ, that version is staged in
+[`extensions/pending-releases.json`](extensions/pending-releases.json) and is **not installable from a
+public URL yet** — build it locally instead (see [Development and release](#development-and-release)).
+`scope` and `workflow` have never been published; do not `specify extension add scope`, because an
+unrelated community extension owns that id in the public catalog.
+
+### Using an extension
+
+Add the catalog once per machine:
+
+```bash
+specify extension catalog add --name sanduq --priority 10 --install-allowed   https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
+```
+
+Install by id, then initialize the ones that keep project state:
+
+```bash
+specify extension add illustrate
+specify extension add project
+specify extension add assure
+specify extension add user-manual
+specify extension add pr
+```
+
+```text
+/speckit-project-init
+/speckit-assure-init
+/speckit-user-manual-init
+```
+
+Command names follow the manifest: `speckit.assure.analyze` in `extension.yml` renders as
+`/speckit-assure-analyze`. **Codex users replace the leading slash with `$`** — `$speckit-assure-analyze`.
+
+Four things that are easy to get wrong:
+
+- **`init` is not optional for a stateful extension.** It is where the extension asks whether its
+  process is part of your lifecycle, and whether its hooks are `required` (automatic) or `optional`
+  (manual approval). An installed extension whose `init` never ran enforces nothing.
+- **Installing does not enable.** `assure` and `user-manual` run only for projects that selected them.
+- **Commands register only for agents whose directory already exists.** If `/speckit-…` never appears,
+  create `.claude/skills/` and reinstall — see [Development and release](#development-and-release).
+- **`pr`, `assure`, and `user-manual` depend on `illustrate`** and check the registry for a compatible
+  version when invoked. The default policy asks before installing or updating it; set a project-wide
+  choice in `.specify/extension-dependencies.yml`.
 
 ### `project` extension
 
@@ -387,21 +491,169 @@ Real-life scenario: a feature spans browser, API, queue, worker, and database. G
 data-flow diagram for the technical manual and export an SVG that remains readable in Markdown,
 HTML, and PDF.
 
-## Recommended integrated lifecycle
+### `scope` extension
 
-Use the [managed workflow](docs/workflow-guide.md) for automatic transitions with
-project-selected QA and User Manual processes. Init asks once; Scope, Clarify,
-Continue and Finalize are the daily entry points. The new packages are pending
-release; use staged builds for development until the catalog is promoted.
+```text
+/speckit-scope-run 412
+/speckit-scope-plan
+```
+
+`scope` is the stage *before* a specification exists. It reads a GitHub issue, judges whether it is
+one feature or several, asks for the preferred decomposition, and publishes labels, sub-issues, and
+the spec-prompt only after the proposal is approved. Mutations require `--apply`; nothing is written
+on a dry run.
+
+It also owns **GitHub clarification**: one question per comment, each mentioning the issue creator,
+each with a stable ID and an unchecked recommendation. You answer by replying `C1Q1: A` or ticking
+the box. Re-running Clarify rereads the thread — including edited comments — without anyone moving
+the card.
+
+A project can settle decomposition once instead of being asked per issue:
+
+```yaml
+scope:
+  keep_together:
+    target: 20
+    tolerance: 3
+    unit: points
+    inclusive: true
+```
+
+Estimates of 17, 20, and 23 keep the feature whole; 16 and 24 get ordinary assessment. The unit must
+match the project's real estimation system. This never suppresses implementation task sub-issues, and
+the approval is recorded as *project policy*, not as a human decision that nobody made.
+
+Real-life scenario: an issue reads "add refunds". Scope finds three separable features inside it,
+proposes the split with effort estimates, and — once approved — creates the sub-issues, labels, and
+spec-prompt that Specify then binds to a branch.
+
+## The managed Spec Kit workflow
+
+The [`workflow`](extensions/workflow/README.md) extension is the one that sequences the others. You
+choose QA and User Manual **once**, at init; after that a single resumable dispatcher runs each
+stage, calls whichever provider your project actually has installed, and records what it did.
+
+```bash
+python .specify/extensions/workflow/scripts/workflow.py init --qa on --manual off
+python .specify/extensions/workflow/scripts/install.py            # preview
+python .specify/extensions/workflow/scripts/install.py --apply    # backup, install, reconcile hooks
+python .specify/extensions/workflow/scripts/workflow.py doctor --project
+```
+
+`doctor --project` is stricter than the plain doctor: it requires real board IDs, every Scope column,
+and every phase mapping. Claims enforce that check before any stage does semantic work.
+
+![The managed workflow, from scoping an issue through optional QA and manual analysis to one pull request](docs/assets/sanduq-managed-workflow.png)
+
+### The four daily entry points
+
+These are entry points into one pipeline, **not four obligatory pauses.** A question-free issue can
+run from Scope through implementation in a single bounded session.
+
+| Entry | Command | What happens automatically |
+| --- | --- | --- |
+| **Scope** | `/speckit-workflow-scope 412` | Check prerequisites and project preferences, publish the managed issue, labels, and spec-prompt, run Specify, then Clarify or Brainstorm |
+| **Clarify** | `/speckit-workflow-clarify` | Reread paginated comments and edits, apply resolved answers, Plan, generate tasks, run selected QA/manual analysis, final Analyze, create native task sub-issues, then implement |
+| **Continue** | `/speckit-workflow-continue` | Validate checkpoint identity, current inputs, and package versions, then resume the earliest unfinished or stale stage |
+| **Finalize** | `/speckit-workflow-finalize` | Finish required verification and documentation, then create or update exactly one PR with inline visuals |
+
+`/speckit-workflow-status` shows the current stage, the active claim, and evidence freshness without
+changing anything. Implementation completion stops at *ready to finalize*; PR creation needs the
+Finalize entry, and merge and deploy remain separate human actions.
+
+The pipeline picks **exactly one** task generator and **exactly one** executor. It prefers a
+compatible, enabled SuperSpec provider where that command exists, and falls back to the core command
+otherwise. An explicitly required provider that is unavailable blocks execution rather than silently
+substituting another.
+
+<details>
+<summary>Stage-level detail, as produced by the extension's own Archify plan</summary>
 
 ![Archify workflow from issue scope through optional analysis to execution](docs/assets/workflow-plan/issue-to-execution.visual-check.1440x900.light.png)
 
 ![Archify workflow from verification through optional documentation to a PR](docs/assets/workflow-plan/evidence-to-pr.visual-check.1440x900.light.png)
 
-The two processes are independent. QA Assure prepares tester evidence; User Manual
-maintains audience-facing application documentation. Neither process is enabled
-merely because its extension is installed. Managed PRs embed reviewer-facing
-visuals and verify their loading in the authenticated repository view.
+</details>
+
+### The lifetime of one feature
+
+A feature does not march through the stages once and stop. It holds a claim while a stage runs, and
+it has three ways to leave that state and come back — none of which resets it to the beginning.
+
+![The state a managed feature occupies, the claim it holds, and the three detours that return to it](docs/assets/sanduq-feature-lifetime.png)
+
+| State | Reached when | Leaves when |
+| --- | --- | --- |
+| **Scoped** | The issue is analysed and its effort settled | Specify claims it |
+| **Bound** | Specify verified `scope-source.json` and bound a branch | The first stage takes a claim |
+| **Stage running** | A stage holds the claim | The stage finishes, or one of the three detours below |
+| **Checkpointed** | Context reaches the ceiling; `checkpoint.json`, `handoff.md`, and `resume-prompt.md` are written | `continue` validates identity, inputs, and package versions |
+| **Blocked** | Stale scope, unresolved answers, a wrong binding, or a closed issue | The real state is settled — never by marking it done to get past the guard |
+| **Migration required** | An upgrade changed the packages under an in-flight feature | `workflow.py migrate --feature ... --reason ...`, after review |
+| **Ready to finalize** | Required tasks are complete and evidence is current | Finalize |
+| **Pull request open** | One PR per feature, visuals verified as loading | Merge, which is outside the workflow |
+
+**Claims** are what make this safe to share. One stage owns a feature at a time, so a second agent
+cannot start a competing executor. If a claim is interrupted, `recover` takes the recorded token —
+but inspect possible remote writes first. A missing HTTP response is not proof that an issue or PR
+was never created.
+
+**Migration never rewrites history.** It preserves still-current evidence with its original package
+digest and invalidates only the stages whose command selection actually changed. Use
+`--invalidate-from <stage>` when an upgrade changed a stage's contract. Historical receipts are never
+edited to claim that a new package executed old work.
+
+### Where the state lives
+
+| Path | Holds |
+| --- | --- |
+| `.specify/workflow.yml` | Project policy — which processes are on, provider preferences, context budget |
+| `.specify/scope/github/` | Managed Scope artifacts |
+| `specs/<feature>/workflow/` | Per-feature checkpoint, handoff, resume prompt, receipts, evidence |
+| `.specify/workflow/backups/installs/` | Backup ZIP and operation log for every install and upgrade |
+| `docs/workflow/implementation-plan.html` | The Archify dependency plan, regenerated after every decomposition |
+
+Reusable source lives in this repository. Policy, issue bindings, feature progress, manual content,
+and evidence stay in **your** project. Never edit an installed upstream command — an upgrade replaces it.
+
+### What the CI gate actually checks
+
+The policy-aware workflow validates every changed feature: current inputs and outputs, completed
+required tasks, parent issue mapping, and selected-documentation freshness. It compares the PR head
+against its common ancestor with the target branch, so unrelated target-branch features are not
+dragged in, and it fetches full history — a shallow checkout fails with `BASE_HISTORY_UNAVAILABLE`
+rather than guessing.
+
+For a source-only change, name the feature explicitly: commit a `.specify/workflow/pr-features.json`
+containing `{"features": ["specs/001-example"]}`, or pass `--feature` to the gate CLI.
+
+Three distinctions the gate refuses to blur:
+
+- **A generated document is not proof that a test ran.** QA Assure supplies tester readiness and
+  walkthrough evidence; User Manual supplies audience-facing documentation. Neither is a test result.
+- **An omitted file cannot keep old evidence current.** Verification inventories source additions and
+  deletions, so leaving a changed code file out of an agent receipt is caught, not tolerated.
+- **A successful upload is not a rendered image.** Finalize inventories every relevant diagram and
+  screenshot, embeds each inline, and then verifies that it actually loads in an authenticated
+  private-repository view. Never publish private assets to a public host, and never put credentials
+  in an image URL.
+
+The two processes stay independent. Neither QA nor User Manual is enabled merely because its
+extension is installed.
+
+### Continuing in a fresh session
+
+The workflow targets 60% maximum context occupancy, checkpoints at 50%, and reserves 10% for handoff.
+Those numbers are a policy, not a guarantee: without a host that enforces per-call bounds they are an
+explicitly labelled estimate, and the honest response is smaller work batches. A prompt cannot create
+a fresh host session or police its own context.
+
+What it *can* do is leave enough behind. The handoff names the issue, feature, branch, completed
+stages, pending task IDs, evidence, and the active claim. Add your real test results, background
+process handles, and unresolved approvals, then start the next session with the saved resume prompt.
+
+Full operating detail: the [managed workflow guide](docs/workflow-guide.md) and the
+[compatibility contract](docs/workflow-compatibility.md).
 
 ## Language, audience, and security rules
 
@@ -419,23 +671,27 @@ visuals and verify their loading in the authenticated repository view.
 
 ```text
 sanduq/
-  .claude-plugin/marketplace.json
-  catalog.json
-  docs/assets/
+  .claude-plugin/marketplace.json   # plugin bundles, for /plugin install
+  catalog.json                      # extension catalog, authoritative
   extensions/
-    project/
-    assure/
-    user-manual/
-    pr/
-    illustrate/
-    scope/
-    workflow/
-  presets/                     # canonical command overlays, bundled at build time
+    catalog.json                    # mirror of the root catalog; CI checks they match
+    pending-releases.json           # versions staged but not yet published
+    illustrate/  project/  assure/  pr/  user-manual/  scope/  workflow/
+    scripts/                        # package, release, and smoke-install tooling
+  presets/                          # canonical command overlays, bundled at build time
   skills/
-    dev-tools/                  # five standalone User Manual skills
-    illustration-tools/        # standalone illustrate skill
-    agent-tools/                # standalone delegate-task skill
+    illustration-tools/             # bundle: illustrate
+    dev-tools/                      # bundle: five User Manual skills
+    agent-tools/                    # bundle: delegate-task
+  docs/
+    assets/                         # README diagrams, editable HTML beside every export
+    workflow-guide.md               # operating guide for the managed workflow
+    workflow-compatibility.md       # tested hosts and versions
 ```
+
+Every diagram in this README keeps its editable source next to the export: `docs/assets/*.html` is
+the original, `*.svg` and `*.png` are generated from it with the `illustrate` skill's exporter. Edit
+the HTML and re-export; never hand-edit an SVG.
 
 ## Development and release
 
@@ -461,6 +717,19 @@ registered only for agents whose directory exists at install time. For Claude Co
 New-Item -ItemType Directory -Force .claude\skills
 specify extension add project --force
 ```
+
+Unreleased extensions — anything with a `pending-releases.json` entry, currently `scope` and
+`workflow` — cannot be installed from a public URL. Build and install them locally instead:
+
+```bash
+python extensions/scripts/package.py workflow          # produces a ZIP
+# extract it OUTSIDE the consumer's .specify/extensions/ directory, then:
+specify extension add --dev <extracted>/workflow
+```
+
+Point `--dev` at an external clone path, never at a path inside the target project's
+`.specify/extensions/`. Install the raw source folder and you bypass the bundled presets and shared
+helpers, which is not the package that gets tested.
 
 Changes to a publishable skill, plugin, or extension must update its manifest version and changelog.
 The release workflow waits for successful main-branch CI, packages reviewed versions in
