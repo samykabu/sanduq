@@ -365,15 +365,46 @@ Where they differ, that version is staged in
 [`extensions/pending-releases.json`](extensions/pending-releases.json) and is **not installable from a
 public URL yet** — build it locally instead (see [Development and release](#development-and-release)).
 `scope` and `workflow` have never been published; do not `specify extension add scope`, because an
-unrelated community extension owns that id in the public catalog.
+unrelated community extension owns that id in the public catalog. See
+[why they are not published](#why-scope-and-workflow-are-not-published) and how to install them from
+source.
+
+### Why `scope` and `workflow` are not published
+
+Nothing is broken and nothing fails to build — both package cleanly today. Publication is gated on
+one deliberate flag: [`extensions/pending-releases.json`](extensions/pending-releases.json) carries
+`"status": "implementation-in-progress"`, and the release pipeline skips while it reads anything
+other than `ready`. A maintainer flips it, and that is the only thing that authorizes publication.
+
+What has to happen first is listed in
+[`docs/workflow-implementation-progress.md`](docs/workflow-implementation-progress.md) under
+*Required remaining work*:
+
+1. **Live semantic acceptance** of the follow-up fixes, against the
+   [17-scenario acceptance audit](docs/workflow-acceptance-audit.md). A clean install does not prove
+   semantic agent dispatch.
+2. **A live pilot** on an explicitly authorized issue — real GitHub answers, task links, an
+   interrupted resume, and Finalize — plus verifying that inline PR visuals actually load in an
+   authenticated private-repository view. *A pilot issue URL has been requested and none is chosen
+   implicitly, so this is the step currently waiting.*
+3. **Publish and verify**, only after 1 and 2: check clean release downloads before promoting either
+   catalog.
+4. **Adopt into the consuming project** and confirm feature and manual continuity against a second
+   board.
+
+Release assets and tags are immutable once published, which is why the flag exists rather than
+publishing on every green build.
 
 ### Using an extension
 
 Add the catalog once per machine:
 
 ```bash
-specify extension catalog add --name sanduq --priority 10 --install-allowed   https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
+specify extension catalog add --name sanduq --priority 10 --install-allowed \
+  https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
 ```
+
+#### The five published extensions
 
 Install by id, then initialize the ones that keep project state:
 
@@ -391,10 +422,52 @@ specify extension add pr
 /speckit-user-manual-init
 ```
 
+#### `scope` and `workflow`, which are not published yet
+
+Neither is in the catalog, so `specify extension add` cannot reach them. 🚨 **Never run
+`specify extension add scope`** — an unrelated community extension owns that id in the public
+catalog, and you will install someone else's package. Build from source instead:
+
+```bash
+# from a sanduq clone
+python extensions/scripts/package.py workflow
+python extensions/scripts/package.py scope
+```
+
+Extract each ZIP **outside** the target project's `.specify/extensions/` directory, then install the
+extracted folders and their bundled presets:
+
+```bash
+specify extension add --dev <extracted>/scope
+specify extension add --dev <extracted>/workflow
+specify preset add --dev <extracted>/workflow/presets/workflow --priority 1
+specify preset add --dev <extracted>/workflow/presets/scope-gate --priority 2
+specify preset add --dev <extracted>/workflow/presets/scope-brainstorm --priority 2
+```
+
+Installing the raw source folder instead of a built package skips the bundled presets and shared
+helpers, and is not the combination that gets tested.
+
+`workflow` then has its own initializer, which is what selects QA and User Manual and installs the
+dependencies you chose:
+
+```bash
+python .specify/extensions/workflow/scripts/workflow.py init --qa on --manual off
+python .specify/extensions/workflow/scripts/install.py --apply
+python .specify/extensions/workflow/scripts/workflow.py doctor --project
+```
+
+Its commands are `/speckit-workflow-scope`, `-clarify`, `-continue`, `-finalize`, plus
+`-status`, `-doctor`, `-init` and `-reconcile`. Scope's are `/speckit-scope-run`, `-guard`, `-bind`,
+`-plan`, `-plan-guard`, `-after-specify` and `-reconcile`. Full detail:
+[the managed Spec Kit workflow](#the-managed-spec-kit-workflow).
+
+#### Command naming
+
 Command names follow the manifest: `speckit.assure.analyze` in `extension.yml` renders as
 `/speckit-assure-analyze`. **Codex users replace the leading slash with `$`** — `$speckit-assure-analyze`.
 
-Four things that are easy to get wrong:
+Five things that are easy to get wrong:
 
 - **`init` is not optional for a stateful extension.** It is where the extension asks whether its
   process is part of your lifecycle, and whether its hooks are `required` (automatic) or `optional`
@@ -405,6 +478,8 @@ Four things that are easy to get wrong:
 - **`pr`, `assure`, and `user-manual` depend on `illustrate`** and check the registry for a compatible
   version when invoked. The default policy asks before installing or updating it; set a project-wide
   choice in `.specify/extension-dependencies.yml`.
+- **`scope` is an ambiguous id in the public catalog.** Always install it from a Sanduq archive or a
+  verified staged package, never by bare name.
 
 ### `project` extension
 

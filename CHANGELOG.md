@@ -79,6 +79,25 @@ independently via `<extension>-vX.Y.Z` tags.
   untouched, and glyph antialiasing is preserved.
 - Added `docs/assets/README.md` recording which asset to use where and the sampled brand colours.
 
+## Documentation — extension usage covers scope and workflow — 2026-09-18
+
+### Fixed
+
+- "Using an extension" documented only the five published extensions. It now covers `scope` and
+  `workflow` too: how to build them with `package.py`, install the extracted packages and their
+  bundled presets with `--dev`, run the workflow initializer, and which commands each provides.
+- Repaired the catalog command in that section. Its line continuation had been lost, leaving
+  `--install-allowed   https://...` on one line — the command as printed would not have run.
+
+### Added
+
+- Added "Why `scope` and `workflow` are not published", because the extension table shows no
+  published version for either and gave no reason. Both package cleanly; publication is gated only
+  by the `implementation-in-progress` status flag, and the four remaining items are named with a
+  link to the progress document.
+- Added the ambiguous-`scope`-id warning to the easy-to-get-wrong list, where someone about to run
+  an install command will actually see it.
+
 ## Coordinated workflow release (unreleased)
 
 - Add Workflow 1.0.0 and migrate Scope 1.4.0 with canonical GitHub presets into Sanduq.
