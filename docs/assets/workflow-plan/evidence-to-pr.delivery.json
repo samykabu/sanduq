@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "deliver",
+  "type": "workflow",
+  "input": "D:\\Projects\\Personal\\sanduq\\docs\\assets\\workflow-plan\\evidence-to-pr.json",
+  "output": "D:\\Projects\\Personal\\sanduq\\docs\\assets\\workflow-plan\\evidence-to-pr.html",
+  "specification": {
+    "sha256": "4759d26c9d04a7d9709fe80ccacff71e33b6ed9f5847ff0eb1d9dc018da62ab4",
+    "bytes": 2975
+  },
+  "artifact": {
+    "sha256": "4356037afd7890e62d2f301117cb8574b57c808b1d8d05d6a9090d3b41669831",
+    "bytes": 711042
+  },
+  "validation": {
+    "checksPassed": 9,
+    "checkCount": 9,
+    "compositionProfile": "showcase",
+    "compositionStatus": "pass",
+    "errors": 0,
+    "warnings": 0
+  }
+}

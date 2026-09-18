@@ -6,13 +6,18 @@ compatibility with the Resal Marketplace layout.
 
 ## Extensions
 
-| Extension | Version | Command | Description |
-| --- | ---: | --- | --- |
-| [`project`](project/) | 2.0.0 | `/speckit-project-init`<br>`/speckit-project-sync` | Configures and mirrors Spec Kit features onto GitHub Projects with parent issues, sub-issues, and lifecycle status sync. |
-| [`pr`](pr/) | 4.0.0 | `/speckit-pr-generate`<br>`/speckit-pr-review-feedback` | Generates or updates pull requests, enforces installed documentation gates, and processes review feedback. |
-| [`assure`](assure/) | 2.0.0 | `/speckit-assure-init`<br>`/speckit-assure-analyze`<br>`/speckit-assure-document` | Configures QA lifecycle policy, analyzes test readiness, and maintains the QA test manual. |
-| [`user-manual`](user-manual/) | 1.0.0 | `/speckit-user-manual-init`<br>`/speckit-user-manual-analyze`<br>`/speckit-user-manual-update`<br>`/speckit-user-manual-release` | Maintains bilingual-ready, audience-specific Markdown, Material HTML, and PDF application manuals. |
-| [`illustrate`](illustrate/) | 2.1.0 | `/speckit-illustrate-generate`<br>`/speckit-illustrate-export`<br>`/speckit-illustrate-theme` | Generates and exports twenty-seven illustration types with tracked project light/dark color and font themes. |
+| Extension | Source version | Main purpose |
+| --- | --- | --- |
+| [workflow](workflow/) | 1.0.0 (unreleased) | Sanduq Workflow |
+| [scope](scope/) | 1.4.0 (unreleased) | Speckit Scope |
+| [project](project/) | 2.1.0 (unreleased) | GitHub Project Lifecycle Sync |
+| [pr](pr/) | 4.1.0 (unreleased) | Pull Request Workflow |
+| [assure](assure/) | 2.1.0 (unreleased) | Assure |
+| [user-manual](user-manual/) | 1.1.0 (unreleased) | User Manual |
+| [illustrate](illustrate/) | 2.1.2 | Illustrate |
+
+Published install versions remain authoritative in the two catalogs. Source versions
+marked unreleased are exercised with staged archives, not assumed live URLs.
 
 ## Install
 
@@ -90,22 +95,26 @@ automatic or manual behavior through `.specify/extension-dependencies.yml`.
 
 ## Publishing
 
-The default path is the GitHub Actions workflow
-[`Release extensions`](../.github/workflows/release-extensions.yml). On pushes to `main` that touch
-`extensions/**`, it:
+Maintainers set source manifest versions and `extensions/pending-releases.json` in
+the reviewed change. Keep its status `implementation-in-progress` until validation
+is complete; set `ready` only for release-ready packages.
 
-1. Detects changed extension folders that contain `extension.yml`.
-2. Bumps versions by patch by default, unless `extension.yml` is already ahead of the catalog.
-3. Updates the root catalog and this compatibility catalog.
-4. Packages each extension into `dist/<id>.zip`.
-5. Commits version/catalog updates back to `main` with `[skip ci]`.
-6. Creates or updates the GitHub release `<id>-vX.Y.Z` and uploads the ZIP.
+After successful push CI on the current main commit, Release extensions:
 
-Manual fallback:
+1. Builds deterministic ZIPs including canonical presets and shared helpers.
+2. Creates immutable versioned release assets, or verifies identical assets on retry.
+3. Downloads every asset and checks SHA-256. A mismatch blocks publication; bump the
+   version instead of overwriting an existing asset.
+4. Promotes both catalogs only after every asset verifies, then clears released entries
+   from the pending map. A failed push cannot create a catalog URL for a missing asset.
+
+Local preparation without publication:
 
 ```bash
-extensions/scripts/package.sh project
-gh release create project-v1.0.1 dist/project.zip \
-  --title "project extension v1.0.1" \
-  --notes "GitHub Project Lifecycle Sync extension v1.0.1"
+python extensions/scripts/release.py prepare --development
+python extensions/scripts/release.py publish
 ```
+
+Development plans cannot be published or promoted. The second command is a dry run.
+See [the workflow guide](../docs/workflow-guide.md) for installation, resumption,
+version updates, rollback and the difference between local and live acceptance.

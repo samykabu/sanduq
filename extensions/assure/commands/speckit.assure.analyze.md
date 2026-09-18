@@ -237,7 +237,7 @@ After all edits and validation succeed, record the analysis against the final fe
 tree state:
 
 ```text
-python .specify/extensions/assure/scripts/assure_state.py record --kind analyze --feature <feature-path>
+python .specify/extensions/assure/scripts/assure_state.py record --kind analyze --feature <feature-path> --output <feature-path>/tasks.md
 ```
 
 Do not record successful evidence in `--report-only` mode or while critical gaps remain unresolved.

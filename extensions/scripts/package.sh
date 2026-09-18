@@ -21,12 +21,7 @@ OUT="$ROOT/dist"
 
 [ -f "$SRC/extension.yml" ] || { echo "error: $SRC/extension.yml not found" >&2; exit 1; }
 
-mkdir -p "$OUT"
-rm -f "$OUT/$ID.zip"
-
-# Zip from the extensions/ dir so the archive root is `<id>/...`
-( cd "$ROOT/extensions" && zip -r -q "$OUT/$ID.zip" "$ID" \
-    -x "$ID/.specify-dev*" -x "$ID/.specify*" )
+python3 "$ROOT/extensions/scripts/package.py" "$ID"
 
 echo "Built $OUT/$ID.zip"
 unzip -l "$OUT/$ID.zip"
