@@ -1,0 +1,22 @@
+{
+  "name": "agent-tools",
+  "description": "Delegate one task to an external agent CLI and get back a measured, normalised result: status with provenance, summary, git-measured file changes, and token usage",
+  "version": "1.0.0",
+  "author": {
+    "name": "Samy K. Abushanab"
+  },
+  "keywords": [
+    "delegate",
+    "agent",
+    "cli",
+    "harness",
+    "claude-code",
+    "codex",
+    "opencode",
+    "copilot",
+    "orchestration",
+    "background",
+    "tokens",
+    "second-opinion"
+  ]
+}

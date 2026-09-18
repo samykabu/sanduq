@@ -1,0 +1,3 @@
+{"type":"session.start","data":{"sessionId":"cp_0198cafe"}}
+{"type":"assistant.message","data":{"content":"Created the file.\n\n<<<DELEGATION_RESULT>>>\nstatus: successful\nsummary: I created the file.\nfiles_changed: out.txt\n<<<END_DELEGATION_RESULT>>>"}}
+{"type":"result","exitCode":0,"sessionId":"cp_0198cafe","usage":{"premiumRequests":1,"durationMs":41233}}

@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","session_id":"cs_0198abcd","model":"claude-sonnet-5"}
+{"type":"result","subtype":"success","is_error":false,"session_id":"cs_0198abcd","result":"Done.\n\n<<<DELEGATION_RESULT>>>\nstatus: successful\nsummary: I created the file and read it back.\nfiles_changed: report.txt\n<<<END_DELEGATION_RESULT>>>","total_cost_usd":0.1183,"modelUsage":{"claude-sonnet-5":{"inputTokens":2}},"usage":{"input_tokens":2,"cache_creation_input_tokens":58063,"cache_read_input_tokens":0,"output_tokens":5,"output_tokens_details":{"thinking_tokens":0}}}

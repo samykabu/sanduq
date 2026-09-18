@@ -5,7 +5,7 @@
 </p>
 
 [![Spec Kit extensions](https://img.shields.io/badge/Spec_Kit-7_extensions-17212b)](#spec-kit-extensions)
-[![Portable agent skills](https://img.shields.io/badge/Agent_skills-6-eb6c36)](#portable-skills)
+[![Portable agent skills](https://img.shields.io/badge/Agent_skills-7-eb6c36)](#portable-skills)
 [![MkDocs Material](https://img.shields.io/badge/MkDocs-Material-526cfe)](https://squidfunk.github.io/mkdocs-material/)
 [![English and Arabic](https://img.shields.io/badge/i18n-English_%2B_Arabic-00843d)](#language-audience-and-security-rules)
 [![skills.sh](https://skills.sh/b/samykabu/sanduq)](https://skills.sh/samykabu/sanduq)
@@ -26,6 +26,7 @@ manuals, illustrations, and pull-request documentation part of a governed lifecy
 | Enforce QA and documentation around implementation and PRs | Install `assure`, `user-manual`, and `pr` extensions | Lifecycle hooks check freshness at the correct gates. |
 | Create a diagram in any workflow | Install the `illustrate` skill or extension | Both package the same visual vocabulary and exporters. |
 | Keep a Spec Kit feature synchronized with GitHub Projects | Install the `project` extension | It maintains the parent issue, task sub-issues, and lifecycle status. |
+| Run a task on a different agent CLI, or get a second opinion | Install the `delegate-task` skill | It dispatches in the background and measures the outcome instead of relaying the harness's own claim. |
 
 ## Managed workflow (in development)
 
@@ -83,6 +84,7 @@ skill includes its own scripts, MkDocs Material scaffold, RTL styles, CI workflo
 | [`user-manual-release-docs`](skills/dev-tools/skills/user-manual-release-docs/) | Create release notes and actionable migration guides. | `npx skills add samykabu/sanduq --skill user-manual-release-docs` |
 | [`user-manual-ui-screenshots`](skills/dev-tools/skills/user-manual-ui-screenshots/) | Plan and capture deterministic, redacted web/mobile screenshots. | `npx skills add samykabu/sanduq --skill user-manual-ui-screenshots` |
 | [`user-manual-preview-publishing`](skills/dev-tools/skills/user-manual-preview-publishing/) | Publish private PR artifacts and approved hosted previews/releases. | `npx skills add samykabu/sanduq --skill user-manual-preview-publishing` |
+| [`delegate-task`](skills/agent-tools/skills/delegate-task/) | Run one task on Claude Code, Codex, OpenCode, Copilot, or Pi and measure the result. | `npx skills add samykabu/sanduq --skill delegate-task` |
 
 ### Install with `npx skills`
 
@@ -225,14 +227,52 @@ Real-life scenario: customer reviewers need a convenient preview, while operatio
 must remain private. CI uploads all editions as a repository-reader artifact, deploys only approved
 End User pages to the configured preview provider, and publishes release PDFs after merge.
 
+### `delegate-task`
+
+Use this skill to hand a single bounded task to another agent CLI — Claude Code, OpenAI Codex,
+OpenCode, GitHub Copilot, or Pi — run it in the background, and read back a result that was
+*measured* rather than relayed. Every result carries the status **and the rule that produced it**,
+what git saw change on disk next to what the delegate claimed it changed, and token counts
+normalised across harnesses that each count differently.
+
+```text
+$delegate-task use codex to add input validation to parse_config() in src/config.py, plus a test
+for the bad-input path. Run pytest -q and make it green. Don't touch anything else.
+```
+
+```text
+$delegate-task ask codex to review src/middleware/auth.py for session-handling flaws, read-only
+```
+
+Real-life scenario: a security review must not be graded by the agent that wrote the code. Dispatch
+it read-only to a second harness with `--sandbox`, then compare its findings against your own pass —
+the tripwire tells you afterwards whether anything moved despite the sandbox.
+
+The driver is a dependency-free Node script (Node ≥ 18) inside the skill, so its path depends on how
+you installed it. Resolve it once, and send run artifacts to the project rather than beside the
+driver:
+
+```bash
+DELEGATE="$CLAUDE_PLUGIN_ROOT/skills/delegate-task/delegate.mjs"   # plugin install
+DELEGATE=".claude/skills/delegate-task/delegate.mjs"               # npx skills install
+
+export DELEGATE_RUNS_DIR="$PWD/.delegate/runs"
+node "$DELEGATE" doctor
+```
+
+⚠️ Run artifacts hold your task text, the full prompt, and the harness's raw output. Set
+`DELEGATE_RUNS_DIR`, add `.delegate/` to the project's `.gitignore`, and clear old runs with
+`node "$DELEGATE" prune --keep 20 --yes`.
+
 ### Claude Code plugin installation
 
-The same skills are grouped into two optional Claude Code plugins:
+The same skills are grouped into three optional Claude Code plugins:
 
 ```text
 /plugin marketplace add samykabu/sanduq
 /plugin install dev-tools@sanduq
 /plugin install illustration-tools@sanduq
+/plugin install agent-tools@sanduq
 ```
 
 Invoke them through Claude Code's plugin namespace, for example:
@@ -240,6 +280,7 @@ Invoke them through Claude Code's plugin namespace, for example:
 ```text
 /dev-tools:user-manual
 /illustration-tools:illustrate
+/agent-tools:delegate-task
 ```
 
 ## Spec Kit extensions
@@ -393,6 +434,7 @@ sanduq/
   skills/
     dev-tools/                  # five standalone User Manual skills
     illustration-tools/        # standalone illustrate skill
+    agent-tools/                # standalone delegate-task skill
 ```
 
 ## Development and release
