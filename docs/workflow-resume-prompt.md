@@ -1,26 +1,30 @@
-Continue implementing the reusable Sanduq workflow plan in D:\Projects\Personal\sanduq,
-branch feat/reusable-workflow. Read docs/workflow-implementation-progress.md and
-workflow-extension-implementation-plan.md first. Preserve all existing changes,
-including the PR inline-image contract and Archify diagram artifacts. The active
-goal is implement the plan and remains unfinished. Do not mark it complete merely
-because local unit tests or installation fixtures pass.
+Continue the active goal "implement the plan" in D:\Projects\Personal\sanduq on
+feat/reusable-workflow. Read workflow-implementation-progress.md, workflow-guide.md
+and workflow-extension-implementation-plan.md under docs. Preserve existing changes,
+the canonical PR image contract and Archify artifacts. Do not mark the goal complete
+based only on local tests or installation smoke checks.
 
-Completed verification: 98 Scope tests, 34 workflow/adapter/freshness tests; actual
-Spec Kit public-CLI clean install, composition, four QA/manual choices and
-same-version reinstall for Codex+SuperSpec and Claude+core. No live GitHub issues,
-PR, release or Bunyan installation has been changed. Public catalogs retain old
-published versions; extensions/pending-releases.json declares intended versions.
+The runtime, reusable presets, selected dependency installer, workflow self-updater,
+rollback, task issue adapter, freshness gates and release sequencing are implemented
+locally. Current evidence: 103 Scope tests; 62 workflow tests including schema
+validation; real Codex+SuperSpec and Claude+core public-CLI installs; published PR
+4.0.2 to staged 4.1.0 upgrade; synthetic staged workflow 1.0.0 to 1.0.1 self-upgrade.
+Both upgrade paths recovered injected failures and succeeded on retry. See committed
+receipts for exact scope; do not imply synthetic 1.0.1 was released.
 
-Next priorities are automated Init/dependency/preset installation with rollback,
-version-upgrade and CI gate tests, runtime revalidation of existing features,
-coordinated immutable releases before catalog publication, then live GitHub and
-Bunyan/second-project pilots. The older release workflow is not yet safe for the
-new coordinated release. Scope's community ID collides with an unrelated package;
-use explicit Sanduq source URLs and validate provenance. See the progress file for
-remaining correctness audits. User input for Bunyan's QA/manual selection was
-requested asynchronously; use an answer if provided, otherwise preserve the
-pending selection rather than assuming it. All reusable source stays in Sanduq.
+Next review semantic dispatch, board initialization, revalidation of progressed
+features, legacy aliases and all 17 acceptance scenarios. Run remote CI before
+release. New CI jobs cover Windows/Linux regressions, Codex/Claude x core/SuperSpec
+registration and actual upgrade rollback. Main release tooling refuses publication
+while pending status is implementation-in-progress. Public catalogs remain unchanged.
 
-Use labelled estimated context monitoring with small work batches because this
-host has no reliable occupancy telemetry. Make another durable handoff before
-running out of context. Never claim the 60% target is a measured hard guarantee.
+No Bunyan feature was selected from its editor tabs. Two unanswered setup items
+remain: Bunyan's independent QA/manual selections, and an explicit issue URL for
+the live pilot. Do not re-ask if answers have arrived; do not treat preselected
+options or elapsed time as answers. The live pilot must cover real GitHub answers,
+native task links, resume and private PR inline image loading. Released-package
+Bunyan adoption and a second project with different board names remain pending.
+
+Use labelled estimated context monitoring and bounded work. Produce a handoff before
+the context target; never claim reliable host telemetry or a measured hard guarantee.
+Keep canonical source in Sanduq and consumer policy/evidence in the consumer repo.

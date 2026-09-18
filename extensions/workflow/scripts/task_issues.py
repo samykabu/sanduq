@@ -9,7 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from workflow import WorkflowError, require, inside, git, read, write, locked, digest
+from workflow import WorkflowError, require, inside, git, read, write, locked, digest, github_repository
 
 MARKER = re.compile(r'<!-- sanduq-task (\{[^\n]+\}) -->')
 
@@ -47,10 +47,7 @@ def dependency_order(tasks, dependencies):
 
 
 def remote_repository(root):
-    remote = git(root, 'config', '--get', 'remote.origin.url')
-    match = re.fullmatch(r'(?:https://github\.com/|git@github\.com:)([\w.-]+/[\w.-]+?)(?:\.git)?/?', remote)
-    require(match, 'GITHUB_REMOTE_REQUIRED')
-    return match[1]
+    return github_repository(root)
 
 
 class GitHub:

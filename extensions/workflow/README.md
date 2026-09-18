@@ -40,7 +40,7 @@ through `specify preset add --dev <preset-path> --priority 1` (workflow) and pri
 compatibility testing. No claim of general host support is made yet.
 
 For a managed project run `workflow.py init --qa on|off --manual on|off`, configure
-GitHub Project status mappings, reconcile hooks and run doctor. Only explicit
+GitHub Project status mappings, run `install.py` preview/apply and run doctor. Only explicit
 selections enable processes. The dependency lock records exact intended versions;
 those pending releases cannot yet be installed from public release URLs.
 
@@ -54,7 +54,12 @@ Policy lives in `.specify/workflow.yml`. Feature state lives under
 explicit Specify claim can bind a new branch after verifying scope-source.json.
 Use `recover` with the recorded token after inspecting possible remote writes;
 use `migrate` after reviewing a dependency upgrade. Both preserve an audit trail.
-A migration backs up the checkpoint and invalidates receipts for revalidation.
+A migration backs up the checkpoint, preserves still-current historical evidence and invalidates changed command selections. Use `--invalidate-from <stage>` when an upgrade changes a stage contract.
+
+Use `upgrade.py --version X.Y.Z` preview, then `--apply`, to update the workflow
+package and its integrations with outer rollback. Local staged testing supports
+`--packages <extracted-packages>`. See the [operating guide](../../docs/workflow-guide.md)
+and [compatibility contract](../../docs/workflow-compatibility.md) for tested limits.
 
 `task_issues.py` is dry-run by default. The core Tasks-to-Issues preset invokes it
 with `--apply` within authorized issue work. Native sub-issues are identified by

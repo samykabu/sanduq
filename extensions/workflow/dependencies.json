@@ -18,7 +18,8 @@
   "upstream_optional": {
     "superspec": {
       "repository": "https://github.com/WangX0111/superspec",
-      "tested_version": "1.0.2"
+      "tested_version": "1.0.2",
+      "tested_commit": "c20ac6c1ba069cc9a72dacb8044b7b193d3dde81"
     }
   },
   "tested_spec_kit": {

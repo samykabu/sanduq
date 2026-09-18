@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sanduq.local/schemas/checkpoint-v1.schema.json",
+  "title": "Sanduq feature checkpoint v1",
+  "type": "object",
+  "required": ["schema_version", "run_id", "repo_path", "branch", "feature", "issue", "policy_digest", "dependency_digest", "policy", "commands", "receipts", "generation", "active", "status"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "repo_path": {"type": "string", "minLength": 1},
+    "branch": {"type": "string", "minLength": 1},
+    "feature": {"type": "string", "pattern": "^specs/[^/]+$"},
+    "issue": {"type": "string", "pattern": "^[^/]+/[^#]+#[1-9][0-9]*$"},
+    "policy_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "dependency_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "policy": {"$ref": "policy-v1.schema.json"},
+    "commands": {"type": "object", "additionalProperties": {"type": "string"}},
+    "receipts": {"type": "object", "additionalProperties": {"$ref": "receipt-v1.schema.json"}},
+    "generation": {"type": "integer", "minimum": 0},
+    "active": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "object", "required": ["stage", "token", "claimed_at", "session_id", "context", "baseline"], "properties": {
+          "stage": {"type": "string"}, "token": {"type": "string", "minLength": 1},
+          "claimed_at": {"type": "string", "format": "date-time"}, "session_id": {"type": "string"},
+          "context": {"type": "object"}, "baseline": {"type": "object"}
+        }}
+      ]
+    },
+    "status": {"enum": ["in-progress", "paused", "ready_to_finalize", "pr_open", "blocked", "failed"]},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "head": {"type": "string"}
+  }
+}

@@ -28,17 +28,15 @@ def smoke(host, superspec_source=None):
     for name in ('illustrate','project','scope','pr','assure','user-manual','workflow'):
         result = package(name, output=workspace / 'archives' / (name + '.zip'))
         with zipfile.ZipFile(result['archive']) as archive: archive.extractall(workspace / 'packages')
-        run(['specify','extension','add','--dev',str(workspace / 'packages' / name)])
+        if name == 'workflow': run(['specify','extension','add','--dev',str(workspace / 'packages' / name)])
     if superspec_source:
         run(['specify','extension','add','--dev',str(superspec_source.resolve())])
-    for name, priority in (('scope-gate','2'),('scope-brainstorm','2'),('workflow','1')):
-        run(['specify','preset','add','--dev',str(workspace / 'packages/workflow/presets' / name),'--priority',priority])
     runtime = str(project / '.specify/extensions/workflow/scripts/workflow.py')
-    reconcile = str(project / '.specify/extensions/workflow/scripts/reconcile.py')
+    installer = str(project / '.specify/extensions/workflow/scripts/install.py')
     # Initialization selections are independent of installed optional packages.
     for qa, manual in (('off','off'),('on','off'),('off','on'),('on','on')):
         run([sys.executable,runtime,'init','--qa',qa,'--manual',manual,'--replace'])
-        run([sys.executable,reconcile,'--apply'])
+        run([sys.executable,installer,'--packages',str(workspace / 'packages'),'--apply'])
         result = json.loads(run([sys.executable,runtime,'doctor']))
         assert result['ok'], result
     agent = '.agents' if host == 'codex' else '.claude'

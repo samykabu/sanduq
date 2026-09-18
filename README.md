@@ -4,7 +4,7 @@
   <img src="docs/assets/sanduq-logo.png" alt="Sanduq logo: modular workflows entering an open toolbox" width="420">
 </p>
 
-[![Spec Kit extensions](https://img.shields.io/badge/Spec_Kit-5_extensions-17212b)](#spec-kit-extensions)
+[![Spec Kit extensions](https://img.shields.io/badge/Spec_Kit-7_extensions-17212b)](#spec-kit-extensions)
 [![Portable agent skills](https://img.shields.io/badge/Agent_skills-6-eb6c36)](#portable-skills)
 [![MkDocs Material](https://img.shields.io/badge/MkDocs-Material-526cfe)](https://squidfunk.github.io/mkdocs-material/)
 [![English and Arabic](https://img.shields.io/badge/i18n-English_%2B_Arabic-00843d)](#language-audience-and-security-rules)
@@ -23,7 +23,7 @@ manuals, illustrations, and pull-request documentation part of a governed lifecy
 | --- | --- | --- |
 | Create or update a manual without Spec Kit | Install the standalone `user-manual` skill | It is self-contained and works from repository evidence and Git changes. |
 | Add only API, release, screenshot, or publishing expertise | Install the matching focused skill | Each module loads independently, keeping agent context small. |
-| Enforce QA and documentation around implementation and PRs | Install `qa`, `user-manual`, and `pr` extensions | Lifecycle hooks check freshness at the correct gates. |
+| Enforce QA and documentation around implementation and PRs | Install `assure`, `user-manual`, and `pr` extensions | Lifecycle hooks check freshness at the correct gates. |
 | Create a diagram in any workflow | Install the `illustrate` skill or extension | Both package the same visual vocabulary and exporters. |
 | Keep a Spec Kit feature synchronized with GitHub Projects | Install the `project` extension | It maintains the parent issue, task sub-issues, and lifecycle status. |
 
@@ -348,27 +348,19 @@ HTML, and PDF.
 
 ## Recommended integrated lifecycle
 
-```text
-specify/specification
-  → user-manual analyze
-  → assure analyze
-  → speckit implement
-  → assure document
-  → user-manual update
-  → pr generate + private documentation preview
-  → merge/release tag
-  → user-manual release (versioned HTML and PDFs)
-```
+Use the [managed workflow](docs/workflow-guide.md) for automatic transitions with
+project-selected QA and User Manual processes. Init asks once; Scope, Clarify,
+Continue and Finalize are the daily entry points. The new packages are pending
+release; use staged builds for development until the catalog is promoted.
 
-`pr`, `assure`, and `user-manual` depend on a compatible `illustrate` extension. The default policy
-prompts before install/update and caches catalog checks for 24 hours. Projects may configure:
+![Archify workflow from issue scope through optional analysis to execution](docs/assets/workflow-plan/issue-to-execution.visual-check.1440x900.light.png)
 
-```yaml
-# .specify/extension-dependencies.yml
-schema_version: "1.0"
-update_policy: prompt # prompt | auto | manual
-check_interval_hours: 24
-```
+![Archify workflow from verification through optional documentation to a PR](docs/assets/workflow-plan/evidence-to-pr.visual-check.1440x900.light.png)
+
+The two processes are independent. QA Assure prepares tester evidence; User Manual
+maintains audience-facing application documentation. Neither process is enabled
+merely because its extension is installed. Managed PRs embed reviewer-facing
+visuals and verify their loading in the authenticated repository view.
 
 ## Language, audience, and security rules
 
@@ -395,6 +387,9 @@ sanduq/
     user-manual/
     pr/
     illustrate/
+    scope/
+    workflow/
+  presets/                     # canonical command overlays, bundled at build time
   skills/
     dev-tools/                  # five standalone User Manual skills
     illustration-tools/        # standalone illustrate skill
@@ -426,8 +421,10 @@ specify extension add project --force
 ```
 
 Changes to a publishable skill, plugin, or extension must update its manifest version and changelog.
-The release workflow refreshes both catalogs, packages extension ZIPs, and publishes tags named
-`<extension>-vX.Y.Z`.
+The release workflow waits for successful main-branch CI, packages reviewed versions in
+`extensions/pending-releases.json`, publishes immutable assets, verifies their downloaded bytes,
+and only then updates both catalogs. Tags use `<extension>-vX.Y.Z`; existing assets are never
+clobbered. See the [upgrade and release guide](docs/workflow-guide.md#updates-and-releases).
 
 ## License
 

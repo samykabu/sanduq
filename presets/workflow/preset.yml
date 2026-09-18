@@ -72,6 +72,21 @@ provides:
     file: commands/speckit.superspec.review.md
     replaces: speckit.superspec.review
     strategy: prepend
+  - type: command
+    name: speckit.speckit-superpowers-bridge.execute
+    file: commands/speckit.speckit-superpowers-bridge.execute.md
+    replaces: speckit.speckit-superpowers-bridge.execute
+    strategy: prepend
+  - type: command
+    name: speckit.speckit-superpowers-bridge.handoff
+    file: commands/speckit.speckit-superpowers-bridge.handoff.md
+    replaces: speckit.speckit-superpowers-bridge.handoff
+    strategy: prepend
+  - type: command
+    name: speckit.speckit-superpowers-bridge.guard
+    file: commands/speckit.speckit-superpowers-bridge.guard.md
+    replaces: speckit.speckit-superpowers-bridge.guard
+    strategy: prepend
 tags:
 - workflow
 - github

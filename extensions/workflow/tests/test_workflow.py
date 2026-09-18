@@ -21,6 +21,7 @@ class WorkflowTests(unittest.TestCase):
         self.root = Path(self.tmp.name).resolve()
         for args in [('init', '-q'), ('config', 'user.name', 'Test'), ('config', 'user.email', 'test@example.invalid'), ('commit', '--allow-empty', '-qm', 'init')]:
             subprocess.run(['git', *args], cwd=self.root, check=True, capture_output=True)
+        subprocess.run(['git','remote','add','origin','https://github.com/acme/app.git'],cwd=self.root,check=True)
         self.feature = 'specs/001-example'
         self.policy = w.default_policy(True, True)
         self.configure()
@@ -29,6 +30,7 @@ class WorkflowTests(unittest.TestCase):
         path = self.root / '.specify/workflow.yml'
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(yaml.safe_dump(self.policy), encoding='utf-8')
+        w.write(self.root/'.specify/init-options.json',{'integration':'codex','ai_skills':True})
         (self.root / '.specify/extensions.yml').write_text('hooks: {}\n', encoding='utf-8')
         for preset in ('workflow', 'scope-gate', 'scope-brainstorm'):
             p = self.root / '.specify/presets' / preset / 'preset.yml'
@@ -60,6 +62,18 @@ class WorkflowTests(unittest.TestCase):
         return run
 
     def receipt(self, stage, inputs=None):
+        # Semantic commands create these artifacts; fixtures provide the minimal outputs.
+        directory = self.root / self.feature
+        directory.mkdir(parents=True, exist_ok=True)
+        for name, first in (('spec.md', 'specify'), ('plan.md', 'plan'), ('tasks.md', 'tasks')):
+            path = directory / name
+            if w.BASE_STAGES.index(stage) >= w.BASE_STAGES.index(first) and not path.exists():
+                path.write_text('- [x] T001 Done behavior' if name == 'tasks.md' else '# Fixture ' + name, encoding='utf-8')
+        if w.BASE_STAGES.index(stage) >= w.BASE_STAGES.index('specify') and not (directory / 'scope-source.json').exists():
+            w.write(directory / 'scope-source.json', {'repo': 'acme/app', 'issue': 10})
+        if w.BASE_STAGES.index(stage) >= w.BASE_STAGES.index('taskstoissues') and not (directory / 'workflow/task-issues.json').exists():
+            w.write(directory / 'workflow/task-issues.json', {'repo': 'acme/app', 'parent': 10, 'feature': self.feature,
+                                                           'tasks': {'T001': {'number': 11, 'linked': True}}})
         path = self.feature + '/evidence/' + stage + '.txt'
         p = self.root / path
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -148,7 +162,7 @@ class WorkflowTests(unittest.TestCase):
         run = self.run_object(); c = run.claim(self.usage()); run.complete(c['token'], self.receipt('scope'))
         self.policy['processes']['qa'] = False; self.configure()
         run = w.Run(self.root, self.feature)
-        self.assertEqual(run.next(run.load())['reason'], 'policy-changed')
+        self.assertEqual(run.next(run.load())['stage'], 'specify')  # Scope does not repeat for a QA toggle.
 
     def test_checkbox_changes_do_not_invalidate_semantic_tasks(self):
         p = self.root / self.feature / 'tasks.md';p.parent.mkdir(parents=True, exist_ok=True)
@@ -184,12 +198,65 @@ class WorkflowTests(unittest.TestCase):
         run = self.run_object(); c = run.claim(self.usage()); run.complete(c['token'], self.receipt('scope'))
         (self.root / '.specify/presets/workflow/preset.yml').write_text('schema_version: "1.0"\n# updated', encoding='utf-8')
         with self.assertRaisesRegex(w.WorkflowError, 'DEPENDENCY_CHANGED'): run.claim(self.usage())
-        self.assertEqual(run.migrate('Reviewed compatible package update')['next']['stage'], 'scope')
+        self.assertEqual(run.migrate('Reviewed compatible package update')['next']['stage'], 'specify')
         self.assertEqual(len(list((run.path.parent / 'backups').glob('*.json'))), 1)
+
+    def test_explicit_upgrade_revalidation_invalidates_from_selected_stage(self):
+        run=self.run_object();c=run.claim(self.usage());run.complete(c['token'],self.receipt('scope'))
+        self.assertEqual(run.migrate('Scope contract changed',invalidate_from='scope')['next']['stage'],'scope')
+
+    def test_claim_activates_explicit_feature_and_prevents_concurrent_other_feature(self):
+        run=self.run_object();run.claim(self.usage())
+        self.assertEqual(w.read(self.root/'.specify/feature.json')['feature_directory'],self.feature)
+        other=w.Run(self.root,'specs/002-other');other.start('acme/app#20')
+        with self.assertRaisesRegex(w.WorkflowError,'OTHER_FEATURE'):other.claim(self.usage())
+
+    def test_existing_wrong_feature_and_wrong_repository_rejected(self):
+        w.write(self.root/self.feature/'scope-source.json',{'repo':'acme/app','issue':20})
+        with self.assertRaisesRegex(w.WorkflowError,'FEATURE_BINDING'):self.run_object()
+        with self.assertRaisesRegex(w.WorkflowError,'REPOSITORY_MISMATCH'):w.Run(self.root,'specs/002-other').start('other/app#1')
 
     def test_doctor_blocks_duplicate_hook_ownership(self):
         (self.root / '.specify/extensions.yml').write_text('hooks:\n  after_tasks:\n    - extension: project\n      command: speckit.project.sync\n', encoding='utf-8')
         self.assertIn('DUPLICATE_STAGE_OWNER', str(w.doctor(self.root, self.policy)))
+
+    def test_active_legacy_bridge_blocks_competing_executor(self):
+        w.write(self.root/'.specify/superpowers-handoff.json',{'status':'executing','feature_directory':self.feature})
+        self.assertIn('LEGACY_EXECUTOR_OWNS_FEATURE',str(w.doctor(self.root,self.policy)))
+
+    def test_inactive_host_commands_cannot_satisfy_active_host(self):
+        w.write(self.root/'.specify/integration.json',{'default_integration':'claude'})
+        self.assertFalse(w.command_exists(self.root,'speckit.plan'))
+        w.write(self.root/'.specify/integration.json',{'default_integration':'unsupported'})
+        self.assertIn('HOST_UNSUPPORTED',str(w.doctor(self.root,self.policy)))
+
+    def test_core_command_drift_requires_reviewed_upgrade(self):
+        run=self.run_object()
+        path=self.root/'.agents/skills/speckit-specify/SKILL.md';path.write_text('Changed upstream contract')
+        with self.assertRaisesRegex(w.WorkflowError,'DEPENDENCY_CHANGED'):run.claim(self.usage())
+
+    def test_required_spec_cannot_be_omitted_from_receipt_inputs(self):
+        run = self.run_object()
+        for stage in ('scope', 'specify'):
+            claim = run.claim(self.usage()); run.complete(claim['token'], self.receipt(stage))
+        self.assertIn(self.feature + '/spec.md', run.load()['receipts']['specify']['fingerprints'])
+        (run.feature / 'spec.md').write_text('Changed requirement', encoding='utf-8')
+        self.assertEqual(run.next(run.load())['stage'], 'specify')
+
+    def test_missing_required_plan_cannot_pass(self):
+        run = self.run_object()
+        for stage in ('scope', 'specify', 'clarify'):
+            claim = run.claim(self.usage()); run.complete(claim['token'], self.receipt(stage))
+        claim = run.claim(self.usage()); receipt = self.receipt('plan')
+        (run.feature / 'plan.md').unlink()
+        with self.assertRaisesRegex(w.WorkflowError, 'INPUT_MISSING'):
+            run.complete(claim['token'], receipt)
+
+    def test_malformed_policy_and_hooks_fail_before_dispatch(self):
+        policy=w.default_policy(False,False);policy['processes']='invalid'
+        with self.assertRaisesRegex(w.WorkflowError,'SECTION_INVALID'):w.validate_policy(policy)
+        (self.root/'.specify/extensions.yml').write_text('hooks: wrong')
+        with self.assertRaisesRegex(w.WorkflowError,'HOOK_CONFIG_INVALID'):w.doctor(self.root,self.policy)
 
 
 if __name__ == '__main__':
