@@ -120,17 +120,34 @@ class WorkflowTests(unittest.TestCase):
 
     def test_context_reserves_space_and_labels_estimation(self):
         gate = w.context_gate(self.policy, self.usage(.46))
-        self.assertTrue(gate['pause'])  # .46 + .05 + .10 crosses the .60 ceiling
+        self.assertFalse(gate['pause'])  # Estimates must never force a fresh session
         self.assertFalse(gate['guaranteed'])
-        self.assertEqual(gate['method'], 'estimated')
+        self.assertEqual(gate['method'], 'unavailable')
         self.policy['context']['mode'] = 'strict'
         with self.assertRaisesRegex(w.WorkflowError, 'UNENFORCEABLE'): w.context_gate(self.policy, self.usage())
         usage = self.usage(method='measured'); usage['pre_call_bound'] = True
         self.assertTrue(w.context_gate(self.policy, usage)['guaranteed'])
 
     def test_stale_context_rejected(self):
-        usage = self.usage(); usage['observed_at'] = (datetime.now(timezone.utc) - timedelta(minutes=3)).isoformat()
+        self.policy['context']['mode'] = 'strict'
+        usage = self.usage(method='measured'); usage['pre_call_bound'] = True; usage['observed_at'] = (datetime.now(timezone.utc) - timedelta(minutes=3)).isoformat()
         with self.assertRaisesRegex(w.WorkflowError, 'STALE'): w.context_gate(self.policy, usage)
+
+    def test_unreliable_context_never_pauses_or_blocks_default_claims(self):
+        cases = [self.usage(.99), {'session_id': 'host-without-telemetry'},
+                 dict(self.usage(.99, 'measured'), reliable=False),
+                 dict(self.usage(.99, 'measured'), observed_at='invalid'),
+                 dict(self.usage(.99, 'measured'), fraction=None),
+                 dict(self.usage(.99, 'measured'), observed_at=(datetime.now(timezone.utc)-timedelta(minutes=5)).isoformat())]
+        for usage in cases:
+            with self.subTest(usage=usage):
+                self.assertFalse(w.context_gate(self.policy, usage)['pause'])
+        run = self.run_object()
+        self.assertEqual(run.claim({'session_id': 'host-without-telemetry'})['stage'], 'scope')
+
+    def test_legacy_estimated_mode_also_continues_without_reliable_measurements(self):
+        self.policy['context']['mode'] = 'measured-with-estimated-fallback'
+        self.assertFalse(w.context_gate(self.policy, self.usage(.99))['pause'])
 
     def test_claim_resume_and_explicit_finalize(self):
         run = self.run_object()
@@ -160,7 +177,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(run.next(run.load())['reason'], 'inputs-or-evidence-changed')
 
     def test_checkpoint_generated_before_context_ceiling(self):
-        run = self.run_object(); result = run.claim(self.usage(.51))
+        run = self.run_object(); result = run.claim(self.usage(.51, method='measured'))
         self.assertEqual(result['status'], 'paused')
         self.assertTrue((run.path.parent / 'resume-prompt.md').is_file())
         self.assertIsNone(run.load()['active'])

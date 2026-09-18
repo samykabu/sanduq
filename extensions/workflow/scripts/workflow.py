@@ -89,7 +89,7 @@ def default_policy(qa, manual):
             'providers': {'clarification': 'prefer-superspec', 'tasks': 'prefer-superspec'},
             'issue_sync': {'taskstoissues': 'required', 'parent_link': 'native-subissue'},
             'clarification': {'transport': 'github-comments', 'resume_on_reinvoke': 'reread-answers'},
-            'context': {'mode': 'measured-with-estimated-fallback', 'max_fraction': .60,
+            'context': {'mode': 'measured-only', 'max_fraction': .60,
                         'checkpoint_fraction': .50, 'reserve_fraction': .10},
             'finalize': {'create_pr': True, 'merge': False}, 'updates': {'policy': 'reviewed'}}
 
@@ -105,7 +105,7 @@ def validate_policy(policy):
     for key in ('clarification', 'tasks'):
         require(policy.get('providers', {}).get(key) in ('prefer-superspec', 'core', 'superspec'), 'PROVIDER_POLICY_INVALID: ' + key)
     context = policy.get('context', {})
-    require(context.get('mode') in ('strict', 'measured-with-estimated-fallback'), 'CONTEXT_MODE_INVALID')
+    require(context.get('mode') in ('strict', 'measured-only', 'measured-with-estimated-fallback'), 'CONTEXT_MODE_INVALID')
     cap, checkpoint, reserve = (context.get(k) for k in ('max_fraction', 'checkpoint_fraction', 'reserve_fraction'))
     require(all(type(v) in (int, float) for v in (cap, checkpoint, reserve)), 'CONTEXT_LIMIT_INVALID')
     require(0 < checkpoint < cap <= .60 and 0 < reserve < cap, 'CONTEXT_LIMIT_INVALID')
@@ -294,12 +294,24 @@ def doctor(root, policy, project=False):
             errors.append('PRESET_NOT_ENABLED: ' + preset)
     if project: errors += project_errors(root, policy)
     return {'ok': not errors, 'errors': errors, 'project_checked': project,
-            'context': 'strict enforcement requires host pre-call bounds; estimated fallback is labelled'}
+            'context': 'Only fresh reliable measurements can trigger context pauses; unavailable or estimated usage is nonblocking outside explicit strict mode'}
 
 
 def context_gate(policy, usage):
     require(isinstance(usage, dict) and usage.get('session_id'), 'CONTEXT_USAGE_REQUIRED')
+    try:
+        return measured_context_gate(policy, usage)
+    except WorkflowError as exc:
+        if policy['context']['mode'] == 'strict':
+            raise
+        return {'pause': False, 'method': 'unavailable', 'guaranteed': False,
+                'session_id': usage['session_id'], 'reason': 'context-monitoring-unavailable: ' + str(exc)}
+
+
+def measured_context_gate(policy, usage):
     require(usage.get('method') in ('measured', 'estimated'), 'CONTEXT_METHOD_REQUIRED')
+    require(usage.get('method') == 'measured' and usage.get('reliable', True) is True,
+            'CONTEXT_LIMIT_UNENFORCEABLE: reliable host measurement unavailable')
     try:
         age = (datetime.now(timezone.utc) - datetime.fromisoformat(usage['observed_at'])).total_seconds()
     except (KeyError, ValueError, TypeError):

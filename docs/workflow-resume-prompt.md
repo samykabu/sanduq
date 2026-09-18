@@ -35,8 +35,9 @@ options or elapsed time as answers. The live pilot must cover real GitHub answer
 native task links, resume and private PR inline image loading. Released-package
 Bunyan adoption and a second project with different board names remain pending.
 
-Use labelled estimated context monitoring and bounded work. Produce a handoff before
-the context target; never claim reliable host telemetry or a measured hard guarantee.
+Owner correction 2026-09-19: continue automatically without reliable context telemetry.
+Do not stop on estimates, stale readings or inability to estimate. Only reliable measured
+usage can trigger the default limit; explicit strict mode remains opt-in.
 Keep canonical source in Sanduq and consumer policy/evidence in the consumer repo.
 
 Follow-up acceptance closed a Git comparison gap: CI feature detection now uses the
