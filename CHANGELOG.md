@@ -36,6 +36,29 @@ independently via `<extension>-vX.Y.Z` tags.
 - Recorded hook counts per extension, since lifecycle hooks are what distinguish an extension from
   a skill and were previously undocumented.
 
+## CI — release pipeline no longer fails while work is staged — 2026-09-18
+
+### Fixed
+
+- The Release extensions workflow failed on every push to `main`. `release.py prepare`
+  refuses unless `extensions/pending-releases.json` has status `ready` or `released`, but
+  `implementation-in-progress` is a normal, long-lived state — reviewed packages sit staged
+  there until a maintainer marks them ready. The workflow could not tell "nothing to release"
+  from "the release is broken" and reported the former as a failure.
+- Added a gate step that reads the pending status and skips the publish, promote, and commit
+  steps when nothing is marked ready, recording the status it saw in the run summary. Marking
+  the status `ready` remains the only thing that authorizes publication.
+- Split the `prepare` guard so its error names the actual cause. It previously reported
+  "requires a clean checkout and pending status ready" whichever of the two conditions failed.
+
+### Added
+
+- Recorded the CI runner exception in the README. All 14 jobs run on GitHub-hosted runners because
+  the home-office `homek8-general` scale set is registered at organisation scope on `abushanab-net`
+  while this repository is owned by a personal account, and GitHub does not share self-hosted
+  runners across that boundary. The entry names the workflows, the jobs, the reason, and what would
+  remove it.
+
 ## Coordinated workflow release (unreleased)
 
 - Add Workflow 1.0.0 and migrate Scope 1.4.0 with canonical GitHub presets into Sanduq.
