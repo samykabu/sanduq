@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "deliver",
+  "type": "workflow",
+  "input": "D:\\Projects\\Personal\\sanduq\\docs\\assets\\workflow-plan\\issue-to-execution.json",
+  "output": "D:\\Projects\\Personal\\sanduq\\docs\\assets\\workflow-plan\\issue-to-execution.html",
+  "specification": {
+    "sha256": "45298db6fb2911f080ede6b5babac06be8d6de50489b2f0460e8086eef490a0a",
+    "bytes": 3281
+  },
+  "artifact": {
+    "sha256": "1ad9e8dba3ad4a4c6eec700007e24b91b394973bc452d6a795c5b10e6b5ca93e",
+    "bytes": 712157
+  },
+  "validation": {
+    "checksPassed": 9,
+    "checkCount": 9,
+    "compositionProfile": "showcase",
+    "compositionStatus": "pass",
+    "errors": 0,
+    "warnings": 0
+  }
+}

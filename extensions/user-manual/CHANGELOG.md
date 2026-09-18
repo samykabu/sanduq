@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.0 (unreleased)
+
+- Track source and output freshness without hashing workflow state or manual state into itself.
+
 ## [1.0.0] - 2026-07-18
 
 ### Added

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Configure QA lifecycle hooks without requiring a YAML dependency."""
+"""Configure QA lifecycle hooks using parsed YAML and verified postconditions."""
 
 from __future__ import annotations
 
 import argparse
-import re
+import yaml
 import shutil
 import sys
 from pathlib import Path
@@ -18,31 +18,29 @@ def find_root(start: Path) -> Path:
 
 
 def update_hooks(text: str, integrated: bool) -> tuple[str, int]:
-    lines = text.splitlines()
-    event = ""
-    in_qa = False
+    doc = yaml.safe_load(text)
+    if not isinstance(doc, dict) or not isinstance(doc.get('hooks'), dict):
+        raise SystemExit('invalid extensions.yml: expected a hooks mapping')
     changed = 0
-    for index, line in enumerate(lines):
-        event_match = re.match(r"^  ([a-z0-9_-]+):\s*$", line)
-        if event_match:
-            event = event_match.group(1)
-            in_qa = False
-            continue
-        item_match = re.match(r"^    - extension:\s*([^\s#]+)", line)
-        if item_match:
-            in_qa = item_match.group(1).strip("\"'") == "assure"
-            continue
-        if in_qa and re.match(r"^      optional:\s*(true|false)\s*$", line):
-            mandatory = integrated and event == "before_implement"
-            value = "false" if mandatory else "true"
-            replacement = re.sub(r"(optional:\s*)(true|false)", rf"\g<1>{value}", line)
-            if replacement != line:
-                lines[index] = replacement
+    found_gate = False
+    for event, hooks in doc['hooks'].items():
+        if not isinstance(hooks, list) or any(not isinstance(h, dict) for h in hooks):
+            raise SystemExit('invalid hook list: ' + event)
+        for hook in hooks:
+            if hook.get('extension') != 'assure':
+                continue
+            optional = not (integrated and event == 'before_implement')
+            if event == 'before_implement':
+                found_gate = True
+            if hook.get('optional') is not optional:
                 changed += 1
-            in_qa = False
-    if not any("extension: assure" in line for line in lines):
+                hook['optional'] = optional
+    if not found_gate:
         raise SystemExit("no assure hooks found; reinstall the assure extension and retry")
-    return "\n".join(lines) + ("\n" if text.endswith("\n") else ""), changed
+    output = yaml.safe_dump(doc, sort_keys=False, allow_unicode=True)
+    parsed = yaml.safe_load(output)
+    assert all(h['optional'] is (not integrated) for h in parsed['hooks']['before_implement'] if h.get('extension') == 'assure')
+    return output, changed
 
 
 def config_text(mode: str) -> str:

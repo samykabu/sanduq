@@ -27,6 +27,15 @@ manuals, illustrations, and pull-request documentation part of a governed lifecy
 | Create a diagram in any workflow | Install the `illustrate` skill or extension | Both package the same visual vocabulary and exporters. |
 | Keep a Spec Kit feature synchronized with GitHub Projects | Install the `project` extension | It maintains the parent issue, task sub-issues, and lifecycle status. |
 
+## Managed workflow (in development)
+
+The reusable [workflow extension](extensions/workflow/README.md) adds automatic
+Scope-to-PR sequencing, optional QA/manual processes and context handoffs. Canonical
+Scope and customization presets now live in Sanduq. See the
+[Archify process diagrams and implementation plan](docs/workflow-extension-implementation-plan.md)
+and [current implementation evidence](docs/workflow-implementation-progress.md).
+The new coordinated versions are not released or installed into Bunyan yet.
+
 ## Quick start
 
 List the portable skills exposed by this repository:

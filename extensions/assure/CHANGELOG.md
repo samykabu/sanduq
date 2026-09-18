@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.1.0 (unreleased)
+
+- Use YAML parsing for hook initialization and shared source/output freshness with deletion detection.
+
 All notable changes to the Assure extension.
 
 ## [2.0.0] - 2026-07-19

@@ -1,0 +1,77 @@
+schema_version: '1.0'
+preset:
+  id: workflow
+  name: Sanduq managed workflow
+  version: 1.0.0
+  description: One dispatcher owns automatic transitions, GitHub clarification, and
+    native task sub-issues.
+  author: Samy K. Abushanab
+  repository: https://github.com/samykabu/sanduq
+  license: PolyForm-Noncommercial-1.0.0
+requires:
+  speckit_version: '>=1.0.0,<1.1.0'
+provides:
+  templates:
+  - type: command
+    name: speckit.scope.run
+    file: commands/speckit.scope.run.md
+    replaces: speckit.scope.run
+    strategy: prepend
+  - type: command
+    name: speckit.specify
+    file: commands/speckit.specify.md
+    replaces: speckit.specify
+    strategy: prepend
+  - type: command
+    name: speckit.clarify
+    file: commands/speckit.clarify.md
+    replaces: speckit.clarify
+    strategy: prepend
+  - type: command
+    name: speckit.plan
+    file: commands/speckit.plan.md
+    replaces: speckit.plan
+    strategy: prepend
+  - type: command
+    name: speckit.tasks
+    file: commands/speckit.tasks.md
+    replaces: speckit.tasks
+    strategy: prepend
+  - type: command
+    name: speckit.analyze
+    file: commands/speckit.analyze.md
+    replaces: speckit.analyze
+    strategy: prepend
+  - type: command
+    name: speckit.taskstoissues
+    file: commands/speckit.taskstoissues.md
+    replaces: speckit.taskstoissues
+    strategy: prepend
+  - type: command
+    name: speckit.implement
+    file: commands/speckit.implement.md
+    replaces: speckit.implement
+    strategy: prepend
+  - type: command
+    name: speckit.superspec.brainstorm
+    file: commands/speckit.superspec.brainstorm.md
+    replaces: speckit.superspec.brainstorm
+    strategy: prepend
+  - type: command
+    name: speckit.superspec.tasks
+    file: commands/speckit.superspec.tasks.md
+    replaces: speckit.superspec.tasks
+    strategy: prepend
+  - type: command
+    name: speckit.superspec.execute
+    file: commands/speckit.superspec.execute.md
+    replaces: speckit.superspec.execute
+    strategy: prepend
+  - type: command
+    name: speckit.superspec.review
+    file: commands/speckit.superspec.review.md
+    replaces: speckit.superspec.review
+    strategy: prepend
+tags:
+- workflow
+- github

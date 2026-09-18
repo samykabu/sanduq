@@ -1,0 +1,40 @@
+{
+  "artifacts": [
+    {
+      "diagram_type": "workflow",
+      "output": "issue-to-execution.html",
+      "specification_sha256": "45298db6fb2911f080ede6b5babac06be8d6de50489b2f0460e8086eef490a0a",
+      "artifact_sha256": "1ad9e8dba3ad4a4c6eec700007e24b91b394973bc452d6a795c5b10e6b5ca93e",
+      "validation": {
+        "checksPassed": 9,
+        "checkCount": 9,
+        "compositionProfile": "showcase",
+        "compositionStatus": "pass",
+        "errors": 0,
+        "warnings": 0
+      },
+      "browser_evidence": "passed",
+      "visual_review": "passed",
+      "review_scope": "Image-capable review of final 1440x900 light and 2048x1320 dark screenshots; four desktop viewport measurements in automated receipt. Readability, visible optional stages, containment and connector directions reviewed. Interactive exports and private PR loading were not exercised.",
+      "correction_rounds": 2
+    },
+    {
+      "diagram_type": "workflow",
+      "output": "evidence-to-pr.html",
+      "specification_sha256": "4759d26c9d04a7d9709fe80ccacff71e33b6ed9f5847ff0eb1d9dc018da62ab4",
+      "artifact_sha256": "4356037afd7890e62d2f301117cb8574b57c808b1d8d05d6a9090d3b41669831",
+      "validation": {
+        "checksPassed": 9,
+        "checkCount": 9,
+        "compositionProfile": "showcase",
+        "compositionStatus": "pass",
+        "errors": 0,
+        "warnings": 0
+      },
+      "browser_evidence": "passed",
+      "visual_review": "passed",
+      "review_scope": "Image-capable review of final 1440x900 light and 2048x1320 dark screenshots; four desktop viewport measurements in automated receipt. Readability, visible optional stages, containment and connector directions reviewed. Interactive exports and private PR loading were not exercised.",
+      "correction_rounds": 2
+    }
+  ]
+}

@@ -1,0 +1,147 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Sanduq: evidence to pull request",
+    "quality_profile": "showcase",
+    "locale": "en"
+  },
+  "lanes": [
+    {
+      "id": "first",
+      "label": "Read left to right: first stages"
+    },
+    {
+      "id": "next",
+      "label": "Continue left to right: next stages"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "execute",
+      "lane": "first",
+      "col": 0,
+      "type": "backend",
+      "label": "Execute",
+      "sublabel": "Resume in small batches",
+      "tag": "CORE"
+    },
+    {
+      "id": "tests",
+      "lane": "first",
+      "col": 1,
+      "type": "security",
+      "label": "Tests",
+      "sublabel": "Record real outcomes",
+      "tag": "CORE"
+    },
+    {
+      "id": "review",
+      "lane": "first",
+      "col": 2,
+      "type": "security",
+      "label": "Review + Fix",
+      "sublabel": "Retest changed behavior",
+      "tag": "CORE"
+    },
+    {
+      "id": "qa",
+      "lane": "first",
+      "col": 3,
+      "type": "security",
+      "label": "Assure Document",
+      "sublabel": "Only if QA enabled",
+      "tag": "IF QA ENABLED",
+      "width": 125
+    },
+    {
+      "id": "manual",
+      "lane": "first",
+      "col": 4,
+      "type": "external",
+      "label": "Manual Update",
+      "sublabel": "Only if manual enabled",
+      "tag": "IF MANUAL ENABLED"
+    },
+    {
+      "id": "ready",
+      "lane": "next",
+      "col": 0,
+      "type": "security",
+      "label": "Ready",
+      "sublabel": "Freshness + audits",
+      "tag": "CORE"
+    },
+    {
+      "id": "finalize",
+      "lane": "next",
+      "col": 1,
+      "type": "frontend",
+      "label": "Finalize",
+      "sublabel": "Explicit user entry",
+      "tag": "USER ENTRY"
+    },
+    {
+      "id": "pr",
+      "lane": "next",
+      "col": 2,
+      "type": "messagebus",
+      "label": "PR Generate",
+      "sublabel": "Embed every visual",
+      "tag": "CORE"
+    },
+    {
+      "id": "verify",
+      "lane": "next",
+      "col": 3,
+      "type": "security",
+      "label": "Verify PR",
+      "sublabel": "Images load for reviewer",
+      "tag": "CORE",
+      "width": 125
+    }
+  ],
+  "edges": [
+    {
+      "to": "tests",
+      "role": "main",
+      "from": "execute"
+    },
+    {
+      "to": "review",
+      "role": "main",
+      "from": "tests"
+    },
+    {
+      "to": "qa",
+      "role": "main",
+      "from": "review"
+    },
+    {
+      "to": "manual",
+      "role": "main",
+      "from": "qa"
+    },
+    {
+      "to": "ready",
+      "role": "return",
+      "from": "manual",
+      "label": "continue"
+    },
+    {
+      "to": "finalize",
+      "role": "main",
+      "from": "ready"
+    },
+    {
+      "to": "pr",
+      "role": "main",
+      "from": "finalize"
+    },
+    {
+      "to": "verify",
+      "role": "main",
+      "from": "pr"
+    }
+  ]
+}

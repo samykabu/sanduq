@@ -35,6 +35,8 @@ jobs:
           root = pathlib.Path(".")
           root_catalog = json.loads((root / "catalog.json").read_text(encoding="utf-8"))
           ext_catalog = json.loads((root / "extensions/catalog.json").read_text(encoding="utf-8"))
+          pending_path = root / "extensions/pending-releases.json"
+          pending = json.loads(pending_path.read_text(encoding="utf-8")).get("versions", {}) if pending_path.exists() else {}
           if root_catalog != ext_catalog:
               sys.exit("catalog.json and extensions/catalog.json must match")
 
@@ -46,6 +48,14 @@ jobs:
               if ext_id != path.parent.name:
                   sys.exit(f"{path}: extension.id must match directory name")
               entry = root_catalog.get("extensions", {}).get(ext_id)
+              if ext_id in pending:
+                  if pending[ext_id] != str(meta.get("version")):
+                      sys.exit(f"{path}: pending release version does not match manifest")
+                  if entry and Version(pending[ext_id]) <= Version(entry["version"]):
+                      sys.exit(f"{path}: pending version must be newer than published catalog")
+                  # Pending releases are validated without publishing broken download URLs.
+                  entry = {"version": pending[ext_id], "requires": doc.get("requires") or {},
+                           "download_url": f"https://github.com/samykabu/sanduq/releases/download/{ext_id}-v{pending[ext_id]}/{ext_id}.zip"}
               if not entry:
                   sys.exit(f"{path}: missing catalog entry for {ext_id}")
               if str(entry.get("version")) != str(meta.get("version")):
@@ -60,6 +70,8 @@ jobs:
                   dep_id = dependency.get("id")
                   constraint = dependency.get("version", "")
                   dep_entry = root_catalog.get("extensions", {}).get(dep_id)
+                  if dep_id in pending:
+                      dep_entry = {"version": pending[dep_id]}
                   if not dep_entry:
                       sys.exit(f"{path}: required extension {dep_id!r} is missing from catalog")
                   try:
@@ -85,6 +97,11 @@ jobs:
 
           print("extension/catalog/plugin manifest validation ok")
           PY
+
+      - name: Workflow and Scope regression suites
+        run: |
+          python3 -m unittest discover -s extensions/workflow/tests -q
+          python3 -m unittest discover -s extensions/scope/tests -q
 
       - name: ShellCheck bash scripts
         run: |
