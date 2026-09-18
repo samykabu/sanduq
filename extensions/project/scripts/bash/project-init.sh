@@ -63,6 +63,12 @@ EXT_DIR=".specify/extensions/project"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEF="$SCRIPT_DIR/../../config.default.json"; [ -f "$DEF" ] || DEF="$EXT_DIR/config.default.json"
 [ -f "$DEF" ] || die "config.default.json not found"
+MANAGED_WORKFLOW=0
+MANAGED_DEFAULTS='{}'
+if [ -f "$ROOT/.specify/workflow.yml" ]; then
+  MANAGED_WORKFLOW=1; HOOKS_MODE=required
+  MANAGED_DEFAULTS="$(python "$ROOT/.specify/extensions/workflow/scripts/workflow.py" project-defaults)" || die 'cannot read managed workflow phase defaults; run workflow doctor'
+fi
 
 gh auth status >/dev/null 2>&1 || die "gh not authenticated - run: gh auth login"
 gh auth status 2>&1 | grep -q "project" || die "gh token lacks 'project' scope - run: gh auth refresh -h github.com -s project,read:project"
@@ -105,10 +111,14 @@ board_fuzzy(){ local nw; nw="$(norm "$1")"; echo "$BOARD" | cut -f1 | while read
 PHASES="open analysis engineer-review ready in-progress in-review done"
 PALETTE=(GRAY BLUE PURPLE GREEN YELLOW ORANGE PINK)
 declare -A PHASE2STATUS; declare -A STATUSOPT
+while IFS=$'\t' read -r name option_id; do
+  [ -n "$name" ] && STATUSOPT["$name"]="$option_id"
+done <<< "$BOARD"
 CREATE_NAMES=(); CREATE_COLORS=()
 i=0
 for phase in $PHASES; do
   wanted="$(jq -r --arg p "$phase" '.phaseToStatus[$p]' "$DEF")"
+  if [ "$MANAGED_WORKFLOW" = 1 ]; then wanted="$(printf '%s' "$MANAGED_DEFAULTS" | jq -r --arg p "$phase" '.phaseToStatus[$p]')"; fi
   match="$(echo "$BOARD" | awk -F'\t' -v n="$wanted" 'tolower($1)==tolower(n){print $1; exit}')"
   [ -z "$match" ] && match="$(board_fuzzy "$wanted")"
   if [ -n "$match" ]; then
@@ -168,7 +178,11 @@ if [ -z "$HOOKS_MODE" ]; then
   fi
 fi
 [ "$HOOKS_MODE" = "optional" ] || [ "$HOOKS_MODE" = "required" ] || die "--hooks-mode must be optional or required"
-set_project_hook_mode "$HOOKS_MODE"
+if [ "$MANAGED_WORKFLOW" = 1 ]; then
+  info 'Sanduq workflow owns lifecycle dispatch; preserving reconciled hook entries'
+else
+  set_project_hook_mode "$HOOKS_MODE"
+fi
 
 # statusOrder in phase order
 ORDER_JSON="[]"

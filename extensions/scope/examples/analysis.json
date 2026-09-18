@@ -1,0 +1,22 @@
+{
+  "issue": 123,
+  "fingerprint": "REPLACE_WITH_INSPECT_FINGERPRINT",
+  "requirements": ["AC-1"],
+  "alignment": "Replace with evidence of implemented prerequisites and the remaining delta.",
+  "evidence": ["Replace with actual source path:line or PR/commit evidence"],
+  "images": [],
+  "tree": {
+    "key": "outcome",
+    "title": "Replace with the issue outcome",
+    "scope": "Replace with precise in-scope behavior",
+    "out_of_scope": "Replace with explicit exclusions",
+    "acceptance": ["Given ..., when ..., then ..."],
+    "covers": ["AC-1"],
+    "evidence": ["Replace with inspected source evidence"],
+    "dimensions": {"breadth": 1, "integration": 1, "data_security": 0, "verification": 1, "uncertainty": 1},
+    "score": 3,
+    "rationale": "Replace with the reason for each dimension score",
+    "depends_on": [],
+    "specify_prompt": "Replace with complete stakeholder-facing requirements and useful source constraints."
+  }
+}
