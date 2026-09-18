@@ -6,6 +6,8 @@
 | Scope gate and brainstorm presets | Sanduq `presets/scope-gate/`, `presets/scope-brainstorm/` | Bundled in archives; no consumer edits yet |
 | Managed dispatcher and task adapter | Sanduq `extensions/workflow/` | Clean-install fixtures only |
 | Managed core/SuperSpec command overlays | Sanduq `presets/workflow/` | Installed by the public preset CLI |
+| Short Scope entry skill | Sanduq `extensions/workflow/skills/speckit-scope/` | Installer replaces only a recognized legacy alias or identical owned source |
+| Installation and self-upgrade adapters | Sanduq `extensions/workflow/scripts/` | Consumer package invokes public CLI; local backups and project lock retained |
 | PR visuals contract | Sanduq `extensions/pr/commands/speckit.pr.generate.md` | Generated skills inherit after installation |
 | QA/manual freshness helper | Sanduq `extensions/scripts/shared/` | Copied deterministically into release archives |
 | Core Spec Kit and SuperSpec | Their upstream repositories | No vendored upstream fork; tested via installed distributions |
@@ -15,7 +17,8 @@
 
 Scope migration source: Bunyan `tools/speckit-scope`, observed clean at commit
 `41fa4322368ac0c3e71d497a39939a751dd61247`. Scope's MIT license is preserved. The
-legacy `speckit-scope` alias still needs an upgrade-safe canonical distribution path;
-do not retain the old installer as a second authority. No custom `.codex/agents`
+legacy `speckit-scope` alias now has a canonical distribution path in the workflow
+package; Bunyan replacement awaits adoption. Do not retain its old installer as a
+second authority. No custom `.codex/agents`
 files were found in the inspected Bunyan checkout. This is a scoped workflow inventory,
 not a completed audit of every third-party skill installed on the workstation.

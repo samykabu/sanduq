@@ -12,6 +12,9 @@ guidance, but this contract controls question limits, transport, lifecycle and s
 ## Managed Sanduq workflow override
 
 When `.specify/workflow.yml` exists, read its validated policy first. The project has
+mapped logical lifecycle names through `scope.statuses`; use the actual board names
+in user-facing instructions and never require a differently named column to exist.
+The project has
 explicitly selected automation. `resume_on_reinvoke: reread-answers` permits inspecting
 Need Clarifications on invocation; do not require a manual status move. Read every page
 of current comments and edited choices. If no new answer or material requirement has

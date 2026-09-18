@@ -1,7 +1,7 @@
 # Reusable Spec Kit workflow extension implementation plan
 
 Date: 2026-09-18
-Status: Implementation in progress on `feat/reusable-workflow`. Canonical Scope sources and presets have been migrated into Sanduq; the managed runtime, task issue adapter and freshness gates are implemented locally. Releases, complete upgrade validation and consumer adoption remain pending. See [implementation progress](workflow-implementation-progress.md).
+Status: Implementation in progress on `feat/reusable-workflow`. Canonical sources, orchestration, installers, rollback and release tooling are implemented locally. Actual native installation and upgrade tests pass within the scope recorded in [implementation progress](workflow-implementation-progress.md). Remote CI, semantic live acceptance, release and consumer adoption remain pending. See the [operating guide](workflow-guide.md) and [compatibility decisions](workflow-compatibility.md).
 Canonical repository: `samykabu/sanduq`.
 Extension ID: `workflow`; no matching entry in the official community catalog checked on 2026-09-18. The existing `scope` ID collides with an unrelated community extension, so Sanduq Scope must be installed from an explicit Sanduq package and provenance must be checked.
 
@@ -39,7 +39,7 @@ Read each diagram's first row left to right, then follow `continue` into its nex
 
 Diagram evidence: both final artifacts pass 9/9 Archify showcase checks with zero errors/warnings and automated browser checks at 1440x900, 1600x1000, 1920x1080 and 2048x1320. Final light/small and dark/large screenshots were visually inspected. Source/artifact hashes and separate browser/visual-review results are in [delivery-summary.json](assets/workflow-plan/delivery-summary.json). This does not establish live PR image rendering or end-to-end workflow execution.
 
-## 3. Verified starting point
+## 3. Historical starting point before implementation
 
 - Sanduq currently contains `assure` 2.0.1, `user-manual` 1.0.1, `pr` 4.0.2, `project`, and `illustrate`; catalogs are at `catalog.json` and `extensions/catalog.json`.
 - Bunyan's custom Scope source and two presets remain under `tools/speckit-scope/`. Installed Scope is 1.3.0. Move their canonical source to Sanduq with provenance and tests.

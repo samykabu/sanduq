@@ -17,11 +17,17 @@ the package's pinned `requirements.txt` when missing. Never install a floating t
   Discover existing effort units/preferences; preserve exact meaning. Run `init --qa on|off
   --manual on|off`. Configure provider choices, context policy and scope preferences in
   `.specify/workflow.yml`. No future feature asks these setup questions again. Show changed
-  policy when `--replace` is needed. Invoke User Manual Init only when selected and no
-  approved module map exists. Invoke Assure Init only when QA is selected and not
-  configured. Copy `assets/github/workflow-gates.yml` to `.github/workflows/` and
-  replace the legacy documentation-gates job with this policy-aware gate after
-  reviewing any local edits; preserve unrelated CI jobs. Reconcile and run doctor.
+  policy when `--replace` is needed. After saving the selections, run `scripts/install.py` for the exact
+  dependency/preset/CI change preview, then `scripts/install.py --apply` within this
+  setup authorization. It uses immutable Sanduq URLs, backs up consumer state and
+  rolls back failures. For offline development, pass `--packages <extracted-packages>`.
+  Read its result; never treat rollback as successful adoption. Once the selected
+  packages are installed, invoke User Manual Init only when selected and no approved
+  module map exists; invoke Assure Init only when QA is selected and not configured.
+  Invoke Project Init
+  only if no valid board configuration exists, discovering actual status options
+  and saving `scope.statuses` where logical names differ. Preserve existing board
+  identity, audience map, languages and publication settings. Finally run doctor.
 - **scope**: require an explicit issue. Inspect its scope prerequisites and project policy;
   never choose a feature from an editor tab. Resolve or reserve the matching feature identity,
   then `start --feature specs/<feature> --issue owner/repo#number`. Pass this exact
@@ -61,7 +67,10 @@ the package's pinned `requirements.txt` when missing. Never install a floating t
 5. Record an honest receipt JSON: `stage`, `outcome: passed`, `summary`, `inputs` (project-relative
    consulted input paths), and `evidence` (existing project-relative proof files). Do not include
    checkpoint files in input manifests. Pin test/review outputs; do not call a generated report
-   actual test execution. Add the stage-specific fields below. Failed/skipped/pending work
+   actual test execution. The runtime additionally fingerprints required spec/plan/task
+   artifacts and inventories source files for Verify, Review and Ready, including new
+   and deleted files. This cannot establish that a claimed test actually ran; preserve
+   command output and reviewer evidence. Add the stage-specific fields below. Failed/skipped/pending work
    cannot receive a passed receipt. Include all relevant inputs, not just the evidence file.
 6. Run `complete --feature ... --token ... --receipt <file>`. Re-read the next stage. Continue
    automatically without asking about routine transitions. If blocked, use `pause --reason`
@@ -101,6 +110,12 @@ freshness and task mapping. Preserve their distinct evidence and run necessary r
 | Ready | Verify task completion by category, issue mapping, review/tests and selected documentation. Receipt needs `blocking_findings: 0`. Document-generation tasks become complete only after their outputs exist. |
 | PR | Run the PR extension, include every relevant visual inline, verify authenticated loading, and reuse an existing PR. Receipt needs `pr_url`, `images_verified: true` and actual evidence; if no visuals apply record that explicit inventory result. |
 
+For source-only PRs, write the explicit affected feature list to
+`.specify/workflow/pr-features.json` as `{"features": ["specs/001-example"]}` and
+include that mapping change in the PR. CI consumes it in addition to all changed
+feature directories, never instead of them. Refresh the relevant readiness evidence
+after source edits; an old mapping does not make stale test evidence current.
+
 ## Interruption and GitHub behavior
 
 Pause before starting a batch that might exceed the context budget, reserving space for handoff.
@@ -118,6 +133,13 @@ deduplication. Keep-together feature scope does not disable implementation task 
 Reusable source belongs in Sanduq. Consumer installed files and generated skills are distributions.
 Use immutable package versions, review policy/schema migrations, and rerun doctor/reconcile after
 updates. A failing update must retain backups; never rewrite receipts to disguise stale work.
+For dependency/preset updates use `scripts/install.py` preview and apply; it restores
+the old hook ownership before installing and then reconciles the new packages. Do
+not directly overwrite generated upstream skills. The optional short Scope alias is
+a Sanduq-owned skill distributed by this installer, backed up before replacement.
+For the workflow package itself, use `scripts/upgrade.py --version X.Y.Z` preview,
+then `--apply` for a reviewed exact version. This wraps the public CLI upgrade and
+the new package's installer in an outer backup/rollback transaction. Active claims
+must be resolved first. Never use an unreviewed floating version or downgrade state.
 After reviewing an upgrade and resolving active claims, use `workflow.py migrate
---feature ... --reason <review evidence>`. It backs up the old checkpoint and
-invalidates receipts for deliberate revalidation; it never blesses stale evidence.
+--feature ... --reason <review evidence>`. It backs up the checkpoint, preserves current historical evidence with its original dependency digest, and invalidates changed command selections. Use `--invalidate-from <stage>` for changed stage contracts. It never rewrites old receipts as new executions.

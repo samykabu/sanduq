@@ -4,6 +4,16 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## Coordinated workflow release (unreleased)
+
+- Add Workflow 1.0.0 and migrate Scope 1.4.0 with canonical GitHub presets into Sanduq.
+- Add independent QA/manual selections, automatic stage dispatch, native task sub-issues,
+  context handoffs, upgrade-aware evidence, exact-source installation and rollback.
+- Prepare Assure 2.1.0, User Manual 1.1.0, PR 4.1.0 and Project 2.1.0 integration updates.
+- Require inline PR visuals and authenticated loading evidence, and publish immutable
+  package assets before advertising their URLs in either catalog.
+- Preserve legacy behavior outside managed projects; publish only after full acceptance.
+
 ## assure — 2.0.0 — 2026-07-19
 
 ### Changed

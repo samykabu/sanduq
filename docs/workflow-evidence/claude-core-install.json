@@ -2,7 +2,7 @@
   "host": "claude",
   "superspec": false,
   "ok": true,
-  "workspace": "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-smskug9x",
+  "workspace": "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-gnmgv3cz",
   "commands": [
     {
       "args": [
@@ -22,110 +22,14 @@
         "extension",
         "add",
         "--dev",
-        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-smskug9x\\packages\\illustrate"
-      ],
-      "exit_code": 0
-    },
-    {
-      "args": [
-        "specify",
-        "extension",
-        "add",
-        "--dev",
-        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-smskug9x\\packages\\project"
-      ],
-      "exit_code": 0
-    },
-    {
-      "args": [
-        "specify",
-        "extension",
-        "add",
-        "--dev",
-        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-smskug9x\\packages\\scope"
-      ],
-      "exit_code": 0
-    },
-    {
-      "args": [
-        "specify",
-        "extension",
-        "add",
-        "--dev",
-        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-smskug9x\\packages\\pr"
-      ],
-      "exit_code": 0
-    },
-    {
-      "args": [
-        "specify",
-        "extension",
-        "add",
-        "--dev",
-        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-smskug9x\\packages\\assure"
-      ],
-      "exit_code": 0
-    },
-    {
-      "args": [
-        "specify",
-        "extension",
-        "add",
-        "--dev",
-        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-smskug9x\\packages\\user-manual"
-      ],
-      "exit_code": 0
-    },
-    {
-      "args": [
-        "specify",
-        "extension",
-        "add",
-        "--dev",
-        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-smskug9x\\packages\\workflow"
-      ],
-      "exit_code": 0
-    },
-    {
-      "args": [
-        "specify",
-        "preset",
-        "add",
-        "--dev",
-        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-smskug9x\\packages\\workflow\\presets\\scope-gate",
-        "--priority",
-        "2"
-      ],
-      "exit_code": 0
-    },
-    {
-      "args": [
-        "specify",
-        "preset",
-        "add",
-        "--dev",
-        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-smskug9x\\packages\\workflow\\presets\\scope-brainstorm",
-        "--priority",
-        "2"
-      ],
-      "exit_code": 0
-    },
-    {
-      "args": [
-        "specify",
-        "preset",
-        "add",
-        "--dev",
-        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-smskug9x\\packages\\workflow\\presets\\workflow",
-        "--priority",
-        "1"
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-gnmgv3cz\\packages\\workflow"
       ],
       "exit_code": 0
     },
     {
       "args": [
         "C:\\Python314\\python.exe",
-        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-smskug9x\\project\\.specify\\extensions\\workflow\\scripts\\workflow.py",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-gnmgv3cz\\project\\.specify\\extensions\\workflow\\scripts\\workflow.py",
         "init",
         "--qa",
         "off",
@@ -138,7 +42,9 @@
     {
       "args": [
         "C:\\Python314\\python.exe",
-        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-smskug9x\\project\\.specify\\extensions\\workflow\\scripts\\reconcile.py",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-gnmgv3cz\\project\\.specify\\extensions\\workflow\\scripts\\install.py",
+        "--packages",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-gnmgv3cz\\packages",
         "--apply"
       ],
       "exit_code": 0
@@ -146,7 +52,7 @@
     {
       "args": [
         "C:\\Python314\\python.exe",
-        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-smskug9x\\project\\.specify\\extensions\\workflow\\scripts\\workflow.py",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-gnmgv3cz\\project\\.specify\\extensions\\workflow\\scripts\\workflow.py",
         "doctor"
       ],
       "exit_code": 0
@@ -154,7 +60,7 @@
     {
       "args": [
         "C:\\Python314\\python.exe",
-        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-smskug9x\\project\\.specify\\extensions\\workflow\\scripts\\workflow.py",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-gnmgv3cz\\project\\.specify\\extensions\\workflow\\scripts\\workflow.py",
         "init",
         "--qa",
         "on",
@@ -167,7 +73,9 @@
     {
       "args": [
         "C:\\Python314\\python.exe",
-        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-smskug9x\\project\\.specify\\extensions\\workflow\\scripts\\reconcile.py",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-gnmgv3cz\\project\\.specify\\extensions\\workflow\\scripts\\install.py",
+        "--packages",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-gnmgv3cz\\packages",
         "--apply"
       ],
       "exit_code": 0
@@ -175,7 +83,7 @@
     {
       "args": [
         "C:\\Python314\\python.exe",
-        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-smskug9x\\project\\.specify\\extensions\\workflow\\scripts\\workflow.py",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-gnmgv3cz\\project\\.specify\\extensions\\workflow\\scripts\\workflow.py",
         "doctor"
       ],
       "exit_code": 0
@@ -183,7 +91,7 @@
     {
       "args": [
         "C:\\Python314\\python.exe",
-        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-smskug9x\\project\\.specify\\extensions\\workflow\\scripts\\workflow.py",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-gnmgv3cz\\project\\.specify\\extensions\\workflow\\scripts\\workflow.py",
         "init",
         "--qa",
         "off",
@@ -196,7 +104,9 @@
     {
       "args": [
         "C:\\Python314\\python.exe",
-        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-smskug9x\\project\\.specify\\extensions\\workflow\\scripts\\reconcile.py",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-gnmgv3cz\\project\\.specify\\extensions\\workflow\\scripts\\install.py",
+        "--packages",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-gnmgv3cz\\packages",
         "--apply"
       ],
       "exit_code": 0
@@ -204,7 +114,7 @@
     {
       "args": [
         "C:\\Python314\\python.exe",
-        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-smskug9x\\project\\.specify\\extensions\\workflow\\scripts\\workflow.py",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-gnmgv3cz\\project\\.specify\\extensions\\workflow\\scripts\\workflow.py",
         "doctor"
       ],
       "exit_code": 0
@@ -212,7 +122,7 @@
     {
       "args": [
         "C:\\Python314\\python.exe",
-        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-smskug9x\\project\\.specify\\extensions\\workflow\\scripts\\workflow.py",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-gnmgv3cz\\project\\.specify\\extensions\\workflow\\scripts\\workflow.py",
         "init",
         "--qa",
         "on",
@@ -225,7 +135,9 @@
     {
       "args": [
         "C:\\Python314\\python.exe",
-        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-smskug9x\\project\\.specify\\extensions\\workflow\\scripts\\reconcile.py",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-gnmgv3cz\\project\\.specify\\extensions\\workflow\\scripts\\install.py",
+        "--packages",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-gnmgv3cz\\packages",
         "--apply"
       ],
       "exit_code": 0
@@ -233,7 +145,7 @@
     {
       "args": [
         "C:\\Python314\\python.exe",
-        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-smskug9x\\project\\.specify\\extensions\\workflow\\scripts\\workflow.py",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-gnmgv3cz\\project\\.specify\\extensions\\workflow\\scripts\\workflow.py",
         "doctor"
       ],
       "exit_code": 0
@@ -244,7 +156,7 @@
         "extension",
         "add",
         "--dev",
-        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-smskug9x\\packages\\workflow",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\claude-gnmgv3cz\\packages\\workflow",
         "--force"
       ],
       "exit_code": 0

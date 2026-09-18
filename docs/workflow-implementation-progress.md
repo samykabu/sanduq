@@ -1,76 +1,84 @@
 # Workflow implementation progress
 
-Updated 2026-09-18. Branch: `feat/reusable-workflow`. **Implementation remains in
-progress. Nothing has been released, pushed, or installed into Bunyan.**
+Updated 2026-09-18. Branch: `feat/reusable-workflow`. **Local implementation and
+validation remain in progress. No release or Bunyan adoption has occurred.**
 
 ## Implemented locally
 
-- Migrated the canonical Scope runtime, analyst and clarification skills, 95 baseline
-  tests and two presets from Bunyan into Sanduq. Managed policy adds effort-band
-  decisions, configurable board/artifact paths and answer rereading without a board move.
-- Added workflow commands, a stage dispatcher, explicit QA/manual selections, provider
-  resolution, context checkpoints, receipt invalidation, claim recovery and branch binding.
-- Added a managed preset over actual core/SuperSpec commands. Tasks-to-Issues runs the
-  core command with parent/feature-scoped native issue creation. Lost-response retry,
-  legacy mapping adoption and close/reopen synchronization have local fake-API tests.
-- Added reversible hook reconciliation. Managed Project 2.1 delegates task issue writes
-  and preserves the Scope-bound parent; duplicate automatic chaining is disabled.
-- Replaced Assure's indentation-sensitive hook rewrite with YAML parsing. QA/manual
-  freshness now checks input and output contents, including deleted sources, and excludes
-  workflow state. Legacy freshness state must be regenerated deliberately.
-- Strengthened PR instructions to inventory and embed all relevant visuals, and verify
-  authenticated image loading. This is an instruction contract, not a verified live PR.
-- Added deterministic archives that bundle canonical presets and shared runtime helpers,
-  pending version metadata, policy schema, CI gate scaffolding and documentation.
+- Canonical Scope runtime, analyst/GitHub clarification skills and reusable presets
+  live in Sanduq, with MIT migration provenance. Managed policy supports inclusive
+  effort bands, configurable board names/artifact paths and rereading waiting answers.
+- Workflow commands dispatch Scope, Specify, Clarify/Brainstorm, Plan, one task
+  generator, selected QA/manual analysis, Analyze, core Tasks-to-Issues and one executor.
+  Verification/review and selected documentation precede explicit Finalize.
+- Parent/feature/task-scoped native sub-issue creation, lost-response recovery,
+  existing mapping adoption and close/reopen synchronization have fake-API coverage.
+  Project sync owns board updates and cannot create a duplicate set of task issues.
+- Context checks, checkpoint/resume prompts, claims, explicit feature/branch binding,
+  source/artifact freshness and reviewed package migration are implemented. Estimated
+  context is labelled; no measured hard-cap guarantee is claimed for this host.
+- Managed presets compose with upstream commands through the public CLI. Legacy
+  native Bridge commands respect the managed owner. Hooks reconcile reversibly.
+- Init installs exact-source selected dependencies, presets, the owned Scope alias
+  and policy-aware CI. Consumer configuration is preserved; backups and runtime
+  files are locally excluded from Git. Internal command symlinks survive rollback.
+- Workflow self-upgrade wraps package replacement and the new integration installer
+  in an outer rollback transaction. An installation lock records provenance and the
+  tested baseline outside replaceable packages. Newer compatible dependencies remain.
+- QA/manual freshness checks inputs, outputs, new sources and deleted files. CI
+  resolves every changed feature plus explicit source-only mappings. Required feature
+  artifacts and source inventories cannot be omitted from an agent receipt.
+- Deterministic packaging bundles canonical presets/shared helpers. Release tooling
+  requires successful main CI, reviewed versions, downloaded asset verification and
+  matching source before catalog promotion. Public catalogs still name released versions.
+- Root/extension documentation, operational guide, compatibility decisions and v1
+  policy/checkpoint/receipt schemas are present. Archify diagrams remain included.
+- PR instructions require every relevant visual inline and actual authenticated
+  loading evidence. This contract is implemented; private PR rendering is unverified.
 
 ## Verified evidence
 
-| Check | Result | Scope |
+| Check | Result | Limits |
 | --- | --- | --- |
-| Scope regression suite | 98 passed | Local Python; includes managed policy and clarification reread |
-| Workflow/adapters/freshness/reconcile suite | 34 passed | Local Python; GitHub API effects use fakes |
-| Codex + installed SuperSpec 1.0.2 | Passed | Clean install, actual preset composition, all four selections, doctor, same-version reinstall |
-| Claude + core Spec Kit | Passed | Same install checks; no SuperSpec selected |
-| Manifest/catalog validation | Passed | Existing CI validator with explicit pending-release support |
-| Project PowerShell parser | Passed | Syntax only |
-| Project Bash + package Bash parser | Passed | Syntax only |
-| Archify diagrams | Previously verified | Two showcase workflows, 9/9 quality, four browser sizes; evidence in assets/workflow-plan |
+| Scope suite | 103 passed | Local Python; includes policy, clarification and perceptual receipt freshness |
+| Workflow suite | 62 passed | Local Python, including live runtime/schema consistency; GitHub effects use fakes |
+| Codex + SuperSpec | Passed | Clean public-CLI install, four selections, composition, doctor, reinstall |
+| Claude + core | Passed | Same checks, including real CLI command symlinks |
+| PR 4.0.2 to staged 4.1.0 | Passed | Published old archive, real upgrade, injected failure, exact rollback, retry |
+| Workflow 1.0.0 to synthetic staged 1.0.1 | Passed | Outer transaction failure after integration install, rollback and retry; no 1.0.1 release |
+| Archify diagrams | 9/9 showcase checks and four desktop sizes | Existing delivery/browser/review receipts; no private PR claim |
+| New CI jobs | Defined, remote results pending | Windows/Linux suites; Codex/Claude x core/SuperSpec installs; actual upgrade smoke |
+| Manifest/catalog validation and CI YAML | Passed locally | Remote lint/execution still pending |
 
-Install receipts: [Codex](workflow-evidence/codex-superspec-install.json),
-[Claude](workflow-evidence/claude-core-install.json). Detailed logs remain under
-`dist/install-tests/`. The tested Spec Kit build is 1.0.6.dev0 at
-`f21acc4a25ce3aa53ff8653357b49b9aafcf8026`; this does not certify other builds.
-An initial Claude smoke command rejected Codex's `--skills` option; the host-specific
-fixture was corrected and a clean rerun passed. No failure is counted as a pass.
+Receipts: [Codex](workflow-evidence/codex-superspec-install.json),
+[Claude](workflow-evidence/claude-core-install.json),
+[upgrade/rollback](workflow-evidence/upgrade-rollback.json). These record progressive
+local candidate checks; logs and package snapshots remain in their `dist/install-tests`
+directories. See [compatibility](workflow-compatibility.md) for pinned upstream commits.
+
+The first Claude attempt in this batch rejected Spec Kit's internal command symlinks.
+Backup/restore was corrected, a regression test added, and a fresh installation passed.
+The failed attempt is retained under `dist/install-tests/claude-065x6h8p`.
 
 ## Required remaining work
 
-1. Finish project Init automation: exact-source dependency installation, preset installation,
-   backups and failure rollback, Scope alias migration, board mapping discovery/configuration,
-   selected process initialization and policy-aware CI adoption. Never select the unrelated
-   community `scope` package by bare catalog name. Test real version upgrades and rollback;
-   current install evidence covers only same-version reinstall.
-2. Review runtime correctness under edits, failed stages, active claims and upgrades. Add
-   meaningful CI gate tests. Ensure existing features are revalidated without destructive
-   regeneration when migration invalidates receipts. Tighten required input manifests and
-   configuration diagnostics; complete all policy/schema and host compatibility claims.
-3. Complete Scope portability audit, including remaining legacy paths in agent references,
-   actual configured board names in user-facing text and Archify acceptance evidence. Verify
-   no new agent execution skips an explicit human-review marker.
-4. Finish coordinated release pipeline: run required checks first, publish immutable assets,
-   verify them, then update both public catalogs. The old release workflow still needs this
-   change and must not publish these pending packages yet. Add release/package tests and
-   update pending versions/changelogs coherently. Do not claim pending URLs are downloadable.
-5. Pilot actual semantic command execution and live GitHub transitions, including a real
-   private PR with authenticated inline-image loading. Installation tests do not prove these.
-6. Obtain the pending Bunyan selection (QA/manual/neither/both), back up its installed state,
-   adopt versioned Sanduq packages, preserve current issue/feature artifacts, remove obsolete
-   canonical tooling only after comparison, and verify a second project with different board
-   names. Complete the source ownership inventory and report remaining third-party provenance.
+1. Finish integration review and remote CI. In particular, exercise semantic agent
+   dispatch, Scope revalidation of an already-progressed feature after contract changes,
+   project-board setup and any legacy short alias bypass. Installation does not prove
+   these agent actions occurred. Audit all 17 plan scenarios against actual evidence.
+2. Pilot live GitHub answers, task links, interrupted resume and Finalize on an explicit
+   authorized issue. A pilot issue URL has been requested; none is selected implicitly.
+   Verify authenticated inline loading on a private PR, including an update to the PR.
+3. Publish the reviewed coordinated versions only after the required acceptance and
+   CI results, then verify clean release downloads before promoting catalogs. Pending
+   metadata remains `implementation-in-progress`; no pending URL is claimed live.
+4. Obtain the pending Bunyan QA/manual selection, back up its existing installation,
+   adopt released Sanduq packages and verify existing feature/manual continuity.
+   Remove obsolete canonical tooling only after parity and rollback checks. Complete
+   a second project with different board names and the scoped ownership audit.
 
 ## Context checkpoint
 
-Reliable host context occupancy is unavailable. This checkpoint uses the user-approved
-estimated fallback and a bounded implementation batch; it does not claim a measured 60%
-guarantee. Preserve all local work and continue the remaining integration/upgrade/release work
-in a fresh session using [the resume prompt](workflow-resume-prompt.md).
+Reliable host occupancy is unavailable. Use the approved estimated fallback and small
+batches. This file is a durable progress checkpoint, not proof of a measured 60% cap.
+Continue from [the resume prompt](workflow-resume-prompt.md), preserving all changes.

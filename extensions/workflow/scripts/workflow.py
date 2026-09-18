@@ -75,6 +75,13 @@ def git(root, *args):
     return result.stdout.strip()
 
 
+def github_repository(root):
+    remote = git(root, 'config', '--get', 'remote.origin.url')
+    match = re.fullmatch(r'(?:https://github\.com/|git@github\.com:)([\w.-]+/[\w.-]+?)(?:\.git)?/?', remote)
+    require(match, 'GITHUB_REMOTE_REQUIRED')
+    return match[1]
+
+
 def default_policy(qa, manual):
     require(type(qa) is bool and type(manual) is bool, 'Select QA and User Manual explicitly.')
     return {'schema_version': SCHEMA, 'processes': {'qa': qa, 'user_manual': manual},
@@ -89,6 +96,8 @@ def default_policy(qa, manual):
 
 def validate_policy(policy):
     require(isinstance(policy, dict) and policy.get('schema_version') == SCHEMA, 'POLICY_SCHEMA_UNSUPPORTED')
+    for section in ('processes','execution','providers','issue_sync','clarification','context','finalize','updates'):
+        require(isinstance(policy.get(section), dict), 'POLICY_SECTION_INVALID: ' + section)
     for key in ('qa', 'user_manual'):
         require(type(policy.get('processes', {}).get(key)) is bool, 'POLICY_SELECTION_REQUIRED: ' + key)
     require(policy.get('execution', {}).get('engine') in ('auto', 'speckit', 'superspec'), 'EXECUTOR_UNSUPPORTED')
@@ -103,8 +112,14 @@ def validate_policy(policy):
     require(policy.get('issue_sync') == {'taskstoissues': 'required', 'parent_link': 'native-subissue'}, 'TASK_ISSUES_REQUIRED')
     require(policy.get('finalize') == {'create_pr': True, 'merge': False}, 'FINALIZE_POLICY_INVALID')
     require(policy.get('clarification', {}).get('resume_on_reinvoke') in ('reread-answers', 'manual-status'), 'CLARIFICATION_POLICY_INVALID')
-    band = policy.get('scope', {}).get('keep_together')
+    scope = policy.get('scope', {})
+    require(isinstance(scope, dict), 'POLICY_SECTION_INVALID: scope')
+    status_names = scope.get('statuses', {})
+    require(isinstance(status_names, dict) and all(isinstance(k, str) and isinstance(v, str) and v for k, v in status_names.items())
+            and len(set(status_names.values())) == len(status_names), 'SCOPE_STATUS_MAPPING_INVALID')
+    band = scope.get('keep_together')
     if band:
+        require(isinstance(band, dict), 'SCOPE_BAND_INVALID')
         require(type(band.get('target')) in (int, float) and type(band.get('tolerance')) in (int, float), 'SCOPE_BAND_INVALID')
         require(band['target'] >= 0 and band['tolerance'] >= 0 and bool(band.get('unit')), 'SCOPE_UNIT_REQUIRED')
         require(band.get('inclusive') is True, 'SCOPE_BAND_MUST_BE_INCLUSIVE')
@@ -133,6 +148,17 @@ def stages(policy):
             and not (s.startswith('manual_') and not policy['processes']['user_manual'])]
 
 
+def policy_cutoff(previous, current):
+    if not previous: return 0
+    affected = []
+    for key, stage in {'scope':'scope','clarification':'clarify','providers':'clarify',
+                       'processes':'tasks','issue_sync':'taskstoissues','execution':'execute',
+                       'finalize':'ready'}.items():
+        if previous.get(key) != current.get(key): affected.append(BASE_STAGES.index(stage))
+    # Context and update scheduling do not retroactively invalidate semantic work.
+    return min(affected, default=len(BASE_STAGES))
+
+
 def registry(root):
     return read(root / '.specify/extensions/.registry', {}).get('extensions', {})
 
@@ -145,10 +171,18 @@ def compatible(root, name):
         return False
 
 
+def active_host(root):
+    integration = read(root / '.specify/integration.json', {})
+    options = read(root / '.specify/init-options.json', {})
+    return integration.get('default_integration') or integration.get('integration') or options.get('integration') or options.get('ai')
+
+
 def command_exists(root, command):
     name = command.replace('.', '-')
-    return any((root / p / 'skills' / name / 'SKILL.md').is_file() for p in ('.agents', '.claude')) or any(
-        (root / '.claude/commands' / (n + '.md')).is_file() for n in (name, command))
+    host = active_host(root)
+    if host == 'codex': return (root / '.agents/skills' / name / 'SKILL.md').is_file()
+    if host == 'claude': return (root / '.claude/skills' / name / 'SKILL.md').is_file()
+    return False
 
 
 def package_digest(root):
@@ -160,6 +194,9 @@ def package_digest(root):
             paths += [p.relative_to(root).as_posix() for p in folder.rglob('*') if p.is_file()
                       and p.suffix in ('.py', '.md', '.yml')
                       and not any(part in ('state', '__pycache__', 'tests') for part in p.relative_to(folder).parts)]
+    paths += [p.relative_to(root).as_posix() for p in (root / '.agents/skills').glob('speckit-*/SKILL.md')]
+    paths += [p.relative_to(root).as_posix() for p in (root / '.claude/skills').glob('speckit-*/SKILL.md')]
+    paths += ['.specify/integration.json', '.specify/init-options.json']
     return digest({'registrations': entries, 'sources': fingerprint_files(root, paths)})
 
 
@@ -182,6 +219,11 @@ def resolve_commands(root, policy):
 def doctor(root, policy):
     needed = ['scope', 'project', 'pr'] + (['assure'] if policy['processes']['qa'] else []) + (['user-manual'] if policy['processes']['user_manual'] else [])
     errors = ['DEPENDENCY_UNAVAILABLE: ' + name + ' ' + RANGES[name] for name in needed if not compatible(root, name)]
+    if active_host(root) not in ('codex','claude'):
+        errors.append('HOST_UNSUPPORTED: this release supports Codex and Claude skills mode')
+    bridge = read(root / '.specify/superpowers-handoff.json', {})
+    if bridge.get('status') in ('executing', 'blocked'):
+        errors.append('LEGACY_EXECUTOR_OWNS_FEATURE: reconcile the recorded bridge handoff before managed execution')
     for name in needed:
         manifest = root / '.specify/extensions' / name / 'extension.yml'
         doc = yaml.safe_load(manifest.read_text(encoding='utf-8-sig')) if manifest.exists() else {}
@@ -198,7 +240,9 @@ def doctor(root, policy):
         errors.append('HOOK_RECONCILIATION_REQUIRED')
     else:
         hooks = yaml.safe_load(hooks_path.read_text(encoding='utf-8-sig')) or {}
+        require(isinstance(hooks, dict) and isinstance(hooks.get('hooks'), dict), 'HOOK_CONFIG_INVALID')
         for event, items in hooks.get('hooks', {}).items():
+            require(isinstance(items, list) and all(isinstance(item, dict) for item in items), 'HOOK_LIST_INVALID: ' + event)
             for hook in items:
                 owned = hook.get('extension') in ('assure', 'user-manual', 'superspec', 'speckit-superpowers-bridge', 'project') or hook.get('command') == 'speckit.scope.after-specify' or (hook.get('extension') == 'pr' and event == 'after_implement')
                 if owned and hook.get('enabled', True): errors.append('DUPLICATE_STAGE_OWNER: ' + event + ':' + hook.get('command', ''))
@@ -244,6 +288,66 @@ def fingerprint_files(root, paths):
         else:
             result[relative] = None
     return result
+
+
+def required_inputs(root, feature, stage):
+    """Minimum artifact coverage is enforced even if an agent omits a path."""
+    index = BASE_STAGES.index(stage)
+    paths = []
+    if index >= BASE_STAGES.index('specify'):
+        paths += [feature + '/spec.md', feature + '/scope-source.json']
+    if index >= BASE_STAGES.index('plan'):
+        paths += [feature + '/plan.md']
+    if index >= BASE_STAGES.index('tasks'):
+        paths += [feature + '/tasks.md']
+    if index >= BASE_STAGES.index('taskstoissues'):
+        paths += [feature + '/workflow/task-issues.json']
+    constitution = '.specify/memory/constitution.md'
+    if (root / constitution).is_file(): paths.append(constitution)
+    if index >= BASE_STAGES.index('plan'):
+        for name in ('research.md', 'data-model.md', 'quickstart.md'):
+            if (root / feature / name).is_file(): paths.append(feature + '/' + name)
+        contracts = root / feature / 'contracts'
+        if contracts.is_dir():
+            paths += [p.relative_to(root).as_posix() for p in contracts.rglob('*') if p.is_file()]
+    return sorted(set(paths))
+
+
+def source_fingerprints(root):
+    """Inventory code and build inputs, including additions and deletion tombstones."""
+    paths = git(root, 'ls-files', '--cached', '--others', '--exclude-standard', '-z').split('\0')
+    excluded = {'.git', 'node_modules', '__pycache__', 'dist', 'build', 'coverage', 'obj'}
+    operational = {'.specify', '.agents', '.claude', '.codex', 'specs', 'User-Manual', 'docs', 'graphify-out', 'keys_cert'}
+    selected = []
+    for path in filter(None, paths):
+        parts = Path(path).parts
+        if parts[0] in operational or any(p in excluded for p in parts): continue
+        if Path(path).name.startswith('.env') or Path(path).suffix.lower() in ('.pem', '.key', '.p12', '.pfx'): continue
+        selected.append(path)
+    return fingerprint_files(root, selected)
+
+
+def receipt_current(root, feature, stage, receipt):
+    saved = receipt.get('fingerprints', {})
+    if not saved or not set(required_inputs(root, feature, stage)) <= set(saved): return False
+    if fingerprint_files(root, saved) != saved: return False
+    if stage in ('verify', 'review', 'ready'):
+        return receipt.get('source_fingerprints') == source_fingerprints(root)
+    return True
+
+
+def ensure_local_excludes(root):
+    """Keep runtime/backup files local, including preserved consumer credentials."""
+    value = git(root, 'rev-parse', '--git-path', 'info/exclude')
+    path = Path(value)
+    if not path.is_absolute(): path = root / path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    current = path.read_text(encoding='utf-8') if path.exists() else ''
+    patterns = ('/.specify/workflow/backups/', '/.specify/workflow/runtime/',
+                '/.specify/workflow/install-receipt.json', '/specs/*/workflow/backups/')
+    missing = [pattern for pattern in patterns if pattern not in current.splitlines()]
+    if missing:
+        path.write_text(current.rstrip('\n') + '\n# Sanduq local backups and runtime\n' + '\n'.join(missing) + '\n', encoding='utf-8')
 
 
 @contextmanager
@@ -292,23 +396,36 @@ class Run:
             self.save(state)
             return {'bound': True, 'branch': branch, 'feature': self.relative}
 
-    def migrate(self, reason):
-        """Reviewed upgrade invalidates receipts; it never rewrites old evidence as fresh."""
+    def migrate(self, reason, invalidate_from=None):
+        """Preserve immutable historical evidence; invalidate changed command contracts."""
         with locked(self.lock):
             state = self.load()
             require(not state['active'], 'ACTIVE_CLAIM_MUST_BE_RESOLVED_BEFORE_UPGRADE')
             health = doctor(self.root, self.policy)
             require(health['ok'], '; '.join(health['errors']))
+            ensure_local_excludes(self.root)
             write(self.path.parent / 'backups' / (uuid.uuid4().hex + '.json'), state)
-            state.setdefault('migrations', []).append({'reason': reason, 'from': state['dependency_digest'], 'at': now()})
+            old_digest = state['dependency_digest']
+            commands = resolve_commands(self.root, self.policy)
+            changed = [stage for stage in stages(self.policy) if state['commands'].get(stage) != commands[stage]]
+            if invalidate_from:
+                require(invalidate_from in BASE_STAGES, 'INVALID_MIGRATION_STAGE')
+                changed.append(invalidate_from)
+            cutoff = min((BASE_STAGES.index(stage) for stage in changed), default=len(BASE_STAGES))
+            invalidated = [stage for stage in state['receipts'] if BASE_STAGES.index(stage) >= cutoff]
+            state.setdefault('migrations', []).append({'reason': reason, 'from': old_digest, 'at': now(),
+                                                      'invalidated': invalidated, 'preserved_as_historical': [s for s in state['receipts'] if s not in invalidated]})
             state['dependency_digest'] = package_digest(self.root)
-            state['commands'] = resolve_commands(self.root, self.policy)
-            state['receipts'] = {}
+            state['commands'] = commands
+            for stage in invalidated: state['receipts'].pop(stage)
             self.save(state)
             return {'migrated': True, 'next': self.next(state)}
 
     def start(self, issue):
         require(re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[1-9]\d*', issue), 'EXPLICIT_ISSUE_REQUIRED')
+        require(github_repository(self.root) == issue.split('#')[0], 'ISSUE_REPOSITORY_MISMATCH')
+        source = read(self.feature / 'scope-source.json', {})
+        require(not source or f"{source.get('repo')}#{source.get('issue')}" == issue, 'FEATURE_BINDING_MISMATCH')
         with locked(self.lock):
             if self.path.exists():
                 state = self.load()
@@ -318,6 +435,7 @@ class Run:
             state = {'schema_version': SCHEMA, 'run_id': uuid.uuid4().hex, 'repo_path': str(self.root),
                      'branch': git(self.root, 'branch', '--show-current'), 'feature': self.relative,
                      'issue': issue, 'policy_digest': digest(self.policy), 'commands': commands,
+                     'policy': copy.deepcopy(self.policy),
                      'receipts': {}, 'generation': 0, 'active': None, 'status': 'in-progress'}
             state['dependency_digest'] = package_digest(self.root)
             self.save(state)
@@ -330,12 +448,14 @@ class Run:
         write(self.path, state)
 
     def next(self, state, finalize=False):
-        if state['policy_digest'] != digest(self.policy):
-            return {'stage': 'scope', 'reason': 'policy-changed', 'invalidates': list(state['receipts'])}
+        policy_changed = state['policy_digest'] != digest(self.policy)
+        cutoff = policy_cutoff(state.get('policy'), self.policy) if policy_changed else len(BASE_STAGES)
         for stage in stages(self.policy):
             receipt = state['receipts'].get(stage)
+            if receipt and BASE_STAGES.index(stage) >= cutoff:
+                return {'stage':stage,'command':state['commands'][stage],'reason':'policy-changed'}
             if receipt:
-                if fingerprint_files(self.root, receipt['fingerprints']) == receipt['fingerprints']:
+                if receipt_current(self.root, self.relative, stage, receipt):
                     continue
                 return {'stage': stage, 'reason': 'inputs-or-evidence-changed'}
             if stage == 'pr' and not finalize:
@@ -344,9 +464,12 @@ class Run:
         return {'stage': None, 'status': 'pr_open'}
 
     def claim(self, usage, finalize=False):
-        with locked(self.lock):
+        with locked(self.root / '.specify/workflow/runtime/dispatch.lock'), locked(self.lock):
+            require(not (self.root / '.specify/workflow/runtime/upgrade.lock').exists(), 'WORKFLOW_UPGRADE_IN_PROGRESS')
             state = self.load()
             require(not state['active'], 'STAGE_ALREADY_ACTIVE: recover or finish the recorded claim')
+            for path in (self.root / 'specs').glob('*/workflow/checkpoint.json'):
+                require(path == self.path or not read(path, {}).get('active'), 'OTHER_FEATURE_STAGE_ACTIVE: ' + str(path))
             require(state['dependency_digest'] == package_digest(self.root), 'DEPENDENCY_CHANGED: review upgrade and migrate the checkpoint before execution')
             health = doctor(self.root, self.policy)
             require(health['ok'], '; '.join(health['errors']))
@@ -358,7 +481,9 @@ class Run:
                 return nxt
             stage = nxt['stage']
             if state['policy_digest'] != digest(self.policy):
+                state.setdefault('policy_changes', []).append({'from':state['policy_digest'],'to':digest(self.policy),'at':now()})
                 state['policy_digest'] = digest(self.policy)
+                state['policy'] = copy.deepcopy(self.policy)
                 state['commands'] = resolve_commands(self.root, self.policy)
             for downstream in BASE_STAGES[BASE_STAGES.index(stage):]:
                 state['receipts'].pop(downstream, None)
@@ -366,6 +491,7 @@ class Run:
                                'session_id': usage['session_id'], 'context': gate}
             state['active']['baseline'] = fingerprint_files(self.root, [p for r in state['receipts'].values() for p in r['fingerprints']])
             state['status'] = 'in-progress'
+            write(self.root / '.specify/feature.json', {'feature_directory': self.relative})
             self.save(state)
             return {**state['active'], 'command': state['commands'][stage], 'feature': self.relative, 'issue': state['issue']}
 
@@ -382,6 +508,9 @@ class Run:
                 require(inside(self.root, path).is_file(), 'EVIDENCE_MISSING: ' + path)
             if stage == 'clarify':
                 require(receipt.get('unresolved') == 0 and receipt.get('answers_applied') is True, 'CLARIFICATION_UNRESOLVED')
+            if BASE_STAGES.index(stage) >= BASE_STAGES.index('specify'):
+                source = read(self.feature / 'scope-source.json', {})
+                require(f"{source.get('repo')}#{source.get('issue')}" == state['issue'], 'FEATURE_BINDING_MISMATCH')
             if stage == 'taskstoissues':
                 require(receipt.get('parent_issue') == state['issue'] and receipt.get('native_links_verified') is True, 'TASK_PARENT_NOT_VERIFIED')
             if stage in ('verify', 'review', 'ready'):
@@ -402,8 +531,12 @@ class Run:
                         if path in prior['fingerprints']:
                             prior['fingerprints'][path] = after[path]
             stored = copy.deepcopy(receipt)
-            stored['fingerprints'] = fingerprint_files(self.root, receipt['inputs'] + receipt['evidence'])
+            stored['command'] = state['commands'][stage]
+            stored['dependency_digest'] = state['dependency_digest']
+            stored['fingerprints'] = fingerprint_files(self.root, receipt['inputs'] + receipt['evidence'] + required_inputs(self.root, self.relative, stage))
             require(all(v is not None for v in stored['fingerprints'].values()), 'INPUT_MISSING')
+            if stage in ('verify', 'review', 'ready'):
+                stored['source_fingerprints'] = source_fingerprints(self.root)
             stored['completed_at'] = now()
             state['receipts'][stage] = stored
             state['active'] = None
@@ -452,10 +585,12 @@ def main():
             cmd.add_argument('--receipt', type=Path, required=True)
         if name in ('pause', 'recover', 'migrate'): cmd.add_argument('--reason', required=True)
         if name in ('recover', 'bind'): cmd.add_argument('--token', required=True)
+        if name == 'migrate': cmd.add_argument('--invalidate-from', choices=BASE_STAGES)
     args = parser.parse_args()
     root = args.root.resolve()
     try:
         if args.action == 'init':
+            ensure_local_excludes(root)
             path = root / '.specify/workflow.yml'
             policy = default_policy(args.qa == 'on', args.manual == 'on')
             if path.exists():
@@ -476,7 +611,7 @@ def main():
             elif args.action == 'claim': result = run.claim(read(args.usage), args.finalize)
             elif args.action == 'complete': result = run.complete(args.token, read(args.receipt, {}))
             elif args.action == 'bind': result = run.bind(args.token)
-            elif args.action == 'migrate': result = run.migrate(args.reason)
+            elif args.action == 'migrate': result = run.migrate(args.reason, args.invalidate_from)
             else:
                 with locked(run.lock):
                     state = run.load()

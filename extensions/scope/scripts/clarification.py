@@ -192,8 +192,8 @@ class Clarification:
             require(issue.get('state') == 'open', 'CLARIFICATION_CLOSED: do not reopen a closed issue implicitly.')
             return
         if status == WAITING:
-            raise ScopeError('CLARIFICATION_WAITING: tick one option per question, or add a normal comment such as C1Q1: A with optional feedback. Then move the issue back to Feature Specification and rerun. No new questions were posted and no state was changed.')
-        require(status == FEATURE, f'CLARIFICATION_STATE: only Feature Specification issues can be processed; #{issue["number"]} is {status}.')
+            raise ScopeError(f'CLARIFICATION_WAITING: tick one option per question, or add a normal comment such as C1Q1: A with optional feedback. Then move the issue back to {self.app.actual_status(FEATURE)} and rerun. No new questions were posted and no state was changed.')
+        require(status == FEATURE, f'CLARIFICATION_STATE: only {self.app.actual_status(FEATURE)} issues can be processed; #{issue["number"]} is {self.app.actual_status(status)}.')
 
     def spec_path(self, issue):
         matches = []

@@ -5,16 +5,20 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from workflow import load_policy, stages, read, require, inside, git, digest, fingerprint_files, WorkflowError
+from workflow import load_policy, stages, read, require, inside, git, digest, receipt_current, WorkflowError
 
 
 def resolve_features(root, base, explicit):
-    if explicit: return sorted(set(explicit))
     changed = git(root, 'diff', '--name-only', base, 'HEAD').splitlines()
-    features = set()
+    features = set(explicit)
     for path in changed:
         parts = Path(path).parts
         if len(parts) >= 3 and parts[0] == 'specs': features.add('/'.join(parts[:2]))
+    mapping = '.specify/workflow/pr-features.json'
+    if mapping in changed:
+        values = read(root / mapping, {}).get('features')
+        require(isinstance(values, list) and values and all(isinstance(v, str) for v in values), 'PR_FEATURE_MAPPING_INVALID')
+        features.update(values)
     require(features, 'FEATURE_MAPPING_REQUIRED: no changed spec evidence; pass --feature explicitly for source-only PRs')
     return sorted(features)
 
@@ -26,11 +30,15 @@ def check(root, feature, policy, base=None):
     require(state.get('feature') == feature and state.get('schema_version') == 1, 'CHECKPOINT_MISSING_OR_WRONG_FEATURE')
     require(not state.get('active'), 'ACTIVE_STAGE_REMAINS')
     require(state.get('policy_digest') == digest(policy), 'POLICY_CHANGED')
+    source = read(directory / 'scope-source.json', {})
+    require(f"{source.get('repo')}#{source.get('issue')}" == state.get('issue'), 'FEATURE_BINDING_MISMATCH')
     for stage in stages(policy):
         if stage == 'pr': continue  # PR publication follows readiness; never requires a recursive PR commit.
         receipt = state.get('receipts', {}).get(stage, {})
         require(receipt.get('outcome') == 'passed' and receipt.get('evidence'), 'RECEIPT_MISSING: ' + stage)
-        require(receipt.get('fingerprints') and fingerprint_files(root, receipt['fingerprints']) == receipt['fingerprints'], 'STALE_RECEIPT: ' + stage)
+        require(receipt_current(root, feature, stage, receipt), 'STALE_RECEIPT: ' + stage)
+        if stage == 'clarify': require(receipt.get('unresolved') == 0 and receipt.get('answers_applied') is True, 'CLARIFICATION_UNRESOLVED')
+        if stage in ('verify','review','ready'): require(receipt.get('blocking_findings') == 0, 'BLOCKING_FINDINGS_REMAIN')
     from task_issues import parse_tasks
     tasks = parse_tasks((directory / 'tasks.md').read_text(encoding='utf-8-sig'))
     require(all(t['done'] for t in tasks.values()), 'INCOMPLETE_TASKS')

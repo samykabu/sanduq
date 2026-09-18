@@ -6,7 +6,7 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
-from workflow_policy import paths
+from workflow_policy import paths, load
 
 
 def sha(path):
@@ -63,6 +63,7 @@ def main():
     p.add_argument('--archify', required=True, type=Path)
     p.add_argument('--spec', required=True, type=Path)
     p.add_argument('--mapping', required=True, type=Path)
+    p.add_argument('--review', type=Path, help='Perceptual review of the already-delivered HTML, with screenshot hashes')
     args = p.parse_args()
     root = Path(subprocess.check_output(['git', 'rev-parse', '--show-toplevel'], text=True).strip())
     pending = root / '.specify/scope/plan-pending.json'
@@ -77,6 +78,20 @@ def main():
         raise SystemExit('Expected a showcase Archify workflow candidate.')
     mapping = json.loads(args.mapping.read_text(encoding='utf-8-sig'))
     check_graph_mapping(json.loads(graph.read_text(encoding='utf-8-sig')), data, mapping, graph_hash)
+    receipt_path = artifact_directory / 'scope-plan-receipt.json'
+    if args.review:
+        receipt = json.loads(receipt_path.read_text(encoding='utf-8'))
+        if receipt.get('graph_sha256') != graph_hash or receipt.get('spec_sha256') != sha(spec) or receipt.get('html_sha256') != sha(output):
+            raise SystemExit('Delivered plan changed after browser checks; regenerate before review acceptance.')
+        review = json.loads(args.review.read_text(encoding='utf-8-sig'))
+        validate_review(root, output, review)
+        receipt['perceptual_review'] = review
+        receipt_path.write_text(json.dumps(receipt, indent=2), encoding='utf-8')
+        if output.resolve() != (artifact_directory / 'implementation-plan.html').resolve():
+            shutil.copy2(output, artifact_directory / 'implementation-plan.html')
+        pending.unlink()
+        print('Archify delivery, browser checks and recorded perceptual review accepted.')
+        return
     receipt = {'graph_sha256': graph_hash, 'spec_sha256': sha(spec), 'commands': []}
     for tail in [('validate', 'workflow', str(spec), '--quality', 'showcase', '--json'),
                  ('deliver', 'workflow', str(spec), str(output), '--quality', 'showcase', '--json'),
@@ -90,11 +105,25 @@ def main():
         raise SystemExit('Graph or candidate changed during acceptance; pending marker retained.')
     receipt['html_sha256'] = sha(output)
     receipt['perceptual_review'] = 'Requires actual image-capable reviewer; not asserted by this script.'
-    (artifact_directory / 'scope-plan-receipt.json').write_text(json.dumps(receipt, indent=2), encoding='utf-8')
+    receipt_path.write_text(json.dumps(receipt, indent=2), encoding='utf-8')
+    if load(root):
+        print('Archify delivery and browser checks passed. Pending marker retained until image review; rerun with --review <review.json>.')
+        return
     if output.resolve() != (artifact_directory / 'implementation-plan.html').resolve():
         shutil.copy2(output, artifact_directory / 'implementation-plan.html')
     pending.unlink()
     print('Archify delivery and browser checks passed. Plan copies synchronized.')
+
+
+def validate_review(root, output, review):
+    if review.get('html_sha256') != sha(output) or review.get('passed') is not True or not review.get('reviewer') or review.get('findings') != []:
+        raise ValueError('Perceptual review must identify the current HTML, reviewer, and zero unresolved findings.')
+    if not review.get('screenshots'):
+        raise ValueError('Perceptual review requires actual screenshot evidence.')
+    for item in review['screenshots']:
+        image = (root / item['path']).resolve()
+        if not image.is_relative_to(root.resolve()) or not image.is_file() or sha(image) != item['sha256']:
+            raise ValueError('Perceptual screenshot evidence is missing, changed or outside the project.')
 
 
 if __name__ == '__main__':

@@ -9,6 +9,10 @@ Work from the repository root. The Python runtime enforces deterministic gates a
 GitHub mutations; this skill owns reasoning, visual interpretation, scope boundaries,
 effort justification and specification quality. Never invent implementation evidence.
 
+In managed projects, resolve logical status names below through `scope.statuses`
+before displaying instructions. Read the managed preference override before asking
+for a decomposition decision; it takes precedence over the legacy confirmation flow.
+
 ## Required identity and prerequisite gate
 
 1. Require a GitHub issue number or exact title in the current invocation. If absent,
