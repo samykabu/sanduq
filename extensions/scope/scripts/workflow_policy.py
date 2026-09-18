@@ -51,3 +51,25 @@ def statuses(root):
     if not isinstance(mapping, dict) or not all(isinstance(k, str) and isinstance(v, str) and v for k, v in mapping.items()) or len(set(mapping.values())) != len(mapping):
         raise ValueError('Scope status mappings must be unique nonempty names.')
     return mapping
+
+
+def bound_claim(root, repo, issue, stages):
+    """Recognize the managed owner's existing-feature claim, never policy alone."""
+    root = Path(root).resolve()
+    if not load(root): return None
+    def read(path):
+        value = json.loads(path.read_text(encoding='utf-8-sig')) if path.is_file() else {}
+        return value if isinstance(value, dict) else {}
+    selected = read(root / '.specify/feature.json').get('feature_directory')
+    if not isinstance(selected, str): return None
+    feature = (root / selected).resolve()
+    if not feature.is_relative_to(root / 'specs') or not (feature / 'spec.md').is_file(): return None
+    source = read(feature / 'scope-source.json')
+    state = read(feature / 'workflow/checkpoint.json')
+    active = state.get('active') or {}
+    if not isinstance(active, dict): return None
+    if (source.get('repo'), source.get('issue')) != (repo, issue): return None
+    if state.get('schema_version') != 1 or state.get('issue') != f'{repo}#{issue}': return None
+    if state.get('feature') != feature.relative_to(root).as_posix() or state.get('repo_path') != str(root): return None
+    if active.get('stage') not in stages or not active.get('token') or active.get('mode') != 'revalidate': return None
+    return {'feature': feature.relative_to(root).as_posix(), 'stage': active['stage'], 'state': state}

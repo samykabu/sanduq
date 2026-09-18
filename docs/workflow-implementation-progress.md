@@ -44,15 +44,16 @@ this does not prove private-repository attachment behavior.
 
 | Check | Result | Limits |
 | --- | --- | --- |
-| Scope suite | 103 passed | Local Python; includes policy, clarification and perceptual receipt freshness |
-| Workflow suite | 62 passed | Local Python, including live runtime/schema consistency; GitHub effects use fakes |
+| Scope suite | 110 passed | Local Python; includes progressed-feature revalidation and clarification freshness |
+| Workflow suite | 70 passed | Local Python, including runtime/schema consistency, alias upgrades and setup ownership; GitHub effects use fakes |
 | Codex + SuperSpec | Passed | Clean public-CLI install, four selections, composition, doctor, reinstall |
 | Claude + core | Passed | Same checks, including real CLI command symlinks |
 | PR 4.0.2 to staged 4.1.0 | Passed | Published old archive, real upgrade, injected failure, exact rollback, retry |
 | Workflow 1.0.0 to synthetic staged 1.0.1 | Passed | Outer transaction failure after integration install, rollback and retry; no 1.0.1 release |
 | Archify diagrams | 9/9 showcase checks and four desktop sizes | Existing delivery/browser/review receipts; no private PR claim |
-| Remote CI at 590eae6 | 10 of 11 passed; Windows Scope path comparison failed | Corrected fixture canonicalization; latest rerun status is on PR #3 |
-| Manifest/catalog validation and CI YAML | Passed locally | Remote lint/execution still pending |
+| Project Init, PowerShell | Passed against a fake board with custom columns | Real script; preserves all Scope statuses and managed hooks; no live board mutation |
+| Remote CI at 5aa6a76 | All 11 jobs passed | Latest follow-up changes require a new run; see PR #3 |
+| Manifest/catalog validation and CI YAML | Passed in that remote run | New Project Init jobs must also pass |
 
 Receipts: [Codex](workflow-evidence/codex-superspec-install.json),
 [Claude](workflow-evidence/claude-core-install.json),
@@ -72,10 +73,11 @@ failed run remains [available](https://github.com/samykabu/sanduq/actions/runs/3
 
 ## Required remaining work
 
-1. Finish integration review and remote CI. In particular, exercise semantic agent
-   dispatch, Scope revalidation of an already-progressed feature after contract changes,
-   project-board setup and any legacy short alias bypass. Installation does not prove
-   these agent actions occurred. Audit all 17 plan scenarios against actual evidence.
+1. Run remote CI for the follow-up fixes. Existing-feature revalidation, explicit
+   clarification refresh, legacy alias migration and setup hook ownership now have
+   regression coverage. Real PowerShell Project Init passed locally against a fake
+   board; both shells are added to CI. Installation does not prove semantic agent
+   dispatch. See the [17-scenario acceptance audit](workflow-acceptance-audit.md).
 2. Pilot live GitHub answers, task links, interrupted resume and Finalize on an explicit
    authorized issue. A pilot issue URL has been requested; none is selected implicitly.
    Verify authenticated inline loading on a private PR, including an update to the PR.

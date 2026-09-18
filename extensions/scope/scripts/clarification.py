@@ -188,6 +188,11 @@ class Clarification:
         status = self.app.status(issue)
         from workflow_policy import load
         policy = load(self.root)
+        from workflow_policy import bound_claim
+        revalidation = bound_claim(self.root, self.app.repo, issue['number'], {'clarify'})
+        if revalidation and status in {'Ready', 'In progress', 'In review'}:
+            require(issue.get('state') == 'open', 'CLARIFICATION_CLOSED: do not reopen a closed issue implicitly.')
+            return
         if status == WAITING and policy and policy.get('clarification', {}).get('resume_on_reinvoke') == 'reread-answers':
             require(issue.get('state') == 'open', 'CLARIFICATION_CLOSED: do not reopen a closed issue implicitly.')
             return
@@ -458,8 +463,13 @@ class Clarification:
 
     def plan_gate(self, value=None):
         issue = self.source(value)
-        require(self.app.status(issue) == 'Ready', 'CLARIFICATION_REQUIRED: planning requires Ready. Finish GitHub clarification first.')
-        return {'issue': issue['number'], 'status': 'Ready'}
+        status = self.app.status(issue)
+        from workflow_policy import bound_claim
+        revalidation = bound_claim(self.root, self.app.repo, issue['number'], {'plan'})
+        previous = (revalidation or {}).get('state', {}).get('receipts', {}).get('clarify', {})
+        continued = revalidation and issue.get('state') == 'open' and status in {'In progress', 'In review'} and previous.get('outcome') == 'passed' and previous.get('unresolved') == 0 and previous.get('answers_applied') is True
+        require(status == 'Ready' or continued, 'CLARIFICATION_REQUIRED: planning requires Ready or a matching managed revalidation with resolved clarification. Finish GitHub clarification first.')
+        return {'issue': issue['number'], 'status': self.app.actual_status(status), 'revalidation': bool(continued)}
 
 
 def main(argv=None):

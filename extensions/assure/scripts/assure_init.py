@@ -69,7 +69,10 @@ def main() -> None:
     root = args.repo_root.resolve() if args.repo_root else find_root(Path.cwd().resolve())
     extensions_yml = root / ".specify" / "extensions.yml"
     original = extensions_yml.read_text(encoding="utf-8")
-    updated, changed = update_hooks(original, args.mode == "integrated")
+    managed = (root / '.specify/workflow.yml').is_file()
+    # Managed sequencing is already reconciled. Init must not invalidate that
+    # journal or introduce a second, unconditional documentation CI gate.
+    updated, changed = (original, 0) if managed else update_hooks(original, args.mode == "integrated")
     config = root / ".specify" / "extensions" / "assure" / "assure-config.yml"
 
     if not args.dry_run:
@@ -79,7 +82,7 @@ def main() -> None:
         workflow_source = Path(__file__).resolve().parents[1] / "assets" / "github" / "documentation-gates.yml"
         workflow_target = root / ".github" / "workflows" / "documentation-gates.yml"
         workflow_target.parent.mkdir(parents=True, exist_ok=True)
-        if not workflow_target.exists():
+        if not managed and not workflow_target.exists():
             shutil.copy2(workflow_source, workflow_target)
 
     print(f"assure mode={args.mode} hooks_changed={changed} dry_run={str(args.dry_run).lower()}")

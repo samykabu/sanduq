@@ -7,6 +7,7 @@
 | Managed dispatcher and task adapter | Sanduq `extensions/workflow/` | Clean-install fixtures only |
 | Managed core/SuperSpec command overlays | Sanduq `presets/workflow/` | Installed by the public preset CLI |
 | Short Scope entry skill | Sanduq `extensions/workflow/skills/speckit-scope/` | Installer replaces only a recognized legacy alias or identical owned source |
+| Legacy short Bridge router | Sanduq `extensions/workflow/skills/speckit-superpowers-bridge/` | Recognized Bunyan mirror can migrate; upstream native executor remains separately owned |
 | Installation and self-upgrade adapters | Sanduq `extensions/workflow/scripts/` | Consumer package invokes public CLI; local backups and project lock retained |
 | PR visuals contract | Sanduq `extensions/pr/commands/speckit.pr.generate.md` | Generated skills inherit after installation |
 | QA/manual freshness helper | Sanduq `extensions/scripts/shared/` | Copied deterministically into release archives |

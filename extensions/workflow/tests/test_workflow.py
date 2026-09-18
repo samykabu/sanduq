@@ -31,6 +31,13 @@ class WorkflowTests(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(yaml.safe_dump(self.policy), encoding='utf-8')
         w.write(self.root/'.specify/init-options.json',{'integration':'codex','ai_skills':True})
+        w.write(self.root / '.specify/extensions/project/config.json', {
+            'owner': 'acme', 'projectNumber': 1, 'projectId': 'P', 'statusFieldId': 'F',
+            'stateFile': '.specify/project-sync-state.json', 'hookMode': 'required',
+            'statusOptions': {name: name for name in ('Backlog', 'Feature Specification', 'Need Clarifications', 'Ready', 'In progress', 'In review', 'Done')},
+            'phaseToStatus': {'open': 'Feature Specification', 'analysis': 'Ready', 'engineer-review': 'Ready',
+                              'ready': 'Ready', 'in-progress': 'In progress', 'in-review': 'In review', 'done': 'Done'},
+        })
         (self.root / '.specify/extensions.yml').write_text('hooks: {}\n', encoding='utf-8')
         for preset in ('workflow', 'scope-gate', 'scope-brainstorm'):
             p = self.root / '.specify/presets' / preset / 'preset.yml'
@@ -251,6 +258,58 @@ class WorkflowTests(unittest.TestCase):
         (run.feature / 'plan.md').unlink()
         with self.assertRaisesRegex(w.WorkflowError, 'INPUT_MISSING'):
             run.complete(claim['token'], receipt)
+
+    def test_explicit_clarify_refresh_preserves_artifacts_and_rechecks_remote_stage(self):
+        run = self.run_object()
+        for stage in ('scope', 'specify', 'clarify', 'plan', 'tasks'):
+            claim = run.claim(self.usage()); run.complete(claim['token'], self.receipt(stage))
+        before = {name: (run.feature / name).read_bytes() for name in ('spec.md', 'plan.md', 'tasks.md')}
+        result = run.refresh('clarify', 'Explicit invocation must reread current GitHub answers')
+        self.assertEqual(result['next']['stage'], 'clarify')
+        self.assertEqual(set(run.load()['receipts']), {'scope', 'specify'})
+        self.assertEqual(before, {name: (run.feature / name).read_bytes() for name in before})
+        self.assertEqual(len(list((run.path.parent / 'backups').glob('*.json'))), 1)
+        claim = run.claim(self.usage())
+        self.assertEqual(claim['mode'], 'revalidate')
+        with self.assertRaisesRegex(w.WorkflowError, 'ACTIVE_CLAIM'):
+            run.refresh('clarify', 'Cannot take over a running claim')
+
+    def test_refresh_cannot_skip_stale_scope_evidence(self):
+        run = self.run_object()
+        for stage in ('scope', 'specify', 'clarify'):
+            claim = run.claim(self.usage()); run.complete(claim['token'], self.receipt(stage))
+        (run.feature / 'evidence/scope.txt').unlink()
+        self.assertEqual(run.refresh('clarify', 'New issue comments')['next']['stage'], 'scope')
+
+    def test_claim_requires_project_setup_but_installation_doctor_does_not(self):
+        (self.root / '.specify/extensions/project/config.json').unlink()
+        self.assertTrue(w.doctor(self.root, self.policy)['ok'])
+        run = self.run_object()
+        with self.assertRaisesRegex(w.WorkflowError, 'PROJECT_CONFIG_REQUIRED'):
+            run.claim(self.usage())
+
+    def test_project_doctor_uses_real_column_names_and_detects_missing_mapping(self):
+        path = self.root / '.specify/extensions/project/config.json'; config = w.read(path)
+        names = {name: 'Custom ' + name for name in config['statusOptions']}
+        config['statusOptions'] = {names[name]: value for name, value in config['statusOptions'].items()}
+        config['phaseToStatus'] = {phase: names[name] for phase, name in config['phaseToStatus'].items()}
+        w.write(path, config); self.policy['scope'] = {'statuses': names}
+        self.assertEqual(w.project_errors(self.root, self.policy), [])
+        config['phaseToStatus'].pop('ready'); w.write(path, config)
+        self.assertIn('PROJECT_PHASE_UNMAPPED: ready', w.project_errors(self.root, self.policy))
+
+    def test_managed_project_defaults_do_not_regress_new_spec_to_backlog(self):
+        path = self.root / '.specify/extensions/project/config.json'; path.unlink()
+        self.policy['scope'] = {'statuses': {'Feature Specification': 'Discovery', 'Ready': 'Planned'}}
+        phases = w.project_defaults(self.root, self.policy)['phaseToStatus']
+        self.assertEqual(phases['open'], 'Discovery')
+        self.assertEqual(phases['analysis'], 'Planned')
+        w.write(path, {'projectId': 'P', 'phaseToStatus': {'analysis': 'Technical planning'}})
+        self.assertEqual(w.project_defaults(self.root, self.policy)['phaseToStatus']['analysis'], 'Technical planning')
+        w.write(path, [])
+        with self.assertRaisesRegex(w.WorkflowError, 'PROJECT_CONFIG_INVALID'):
+            w.project_defaults(self.root, self.policy)
+        self.assertEqual(w.project_errors(self.root, self.policy), ['PROJECT_CONFIG_INVALID: expected a JSON object'])
 
     def test_malformed_policy_and_hooks_fail_before_dispatch(self):
         policy=w.default_policy(False,False);policy['processes']='invalid'

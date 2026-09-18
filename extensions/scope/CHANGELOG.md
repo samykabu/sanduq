@@ -3,6 +3,8 @@
 ## 1.4.0 (unreleased)
 
 - Move canonical source from Bunyan; add managed effort policy, automatic clarification reread and configurable board/artifact mappings.
+- Revalidate open progressed features under matching workflow claims without resetting
+  their board status; retain current approval and unresolved-question guards.
 
 ## 1.3.0
 

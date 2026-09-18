@@ -355,7 +355,9 @@ class Scope:
         require(re.fullmatch(r'#?[1-9]\d*', (value or '').strip()),
                 'SCOPE_REQUIRED: Specify requires a GitHub issue number and current effort score. Run /speckit-scope <issue> first.')
         initial = self.resolve(value)
-        require(self.status(initial) == required_status,
+        revalidation = workflow_policy.bound_claim(self.root, self.repo, initial['number'], {'scope', 'specify'})
+        continued = revalidation and initial.get('state') == 'open' and self.status(initial) in {'Feature Specification', 'Need Clarifications', 'Ready', 'In progress', 'In review'}
+        require(self.status(initial) == required_status or continued,
                 f'SPECIFY_STATE: Specify requires {required_status}; #{initial["number"]} is {self.status(initial)}.')
         snapshot = self.inspect(value)
         issue = snapshot['issue']
@@ -812,8 +814,10 @@ class Scope:
             state[slug] = current
             write_json(state_path, state)
             write_json(path / 'scope-source.json', dict(checked, repo=self.repo))
-            self.set_status(issue, 'Feature Specification')
-            current['status'] = self.actual_status('Feature Specification')
+            revalidation = workflow_policy.bound_claim(self.root, self.repo, issue['number'], {'specify'})
+            if not revalidation:
+                self.set_status(issue, 'Feature Specification')
+            current['status'] = self.actual_status(self.status(issue)) if revalidation else self.actual_status('Feature Specification')
             write_json(state_path, state)
         return {'feature': slug, 'issue': checked['issue'], 'dry_run': not apply}
 

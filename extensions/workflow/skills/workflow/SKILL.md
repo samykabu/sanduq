@@ -27,12 +27,20 @@ the package's pinned `requirements.txt` when missing. Never install a floating t
   Invoke Project Init
   only if no valid board configuration exists, discovering actual status options
   and saving `scope.statuses` where logical names differ. Preserve existing board
-  identity, audience map, languages and publication settings. Finally run doctor.
+  identity, audience map, languages and publication settings. Managed Project sync is
+  required and directly dispatched; Project/Assure Init preserve the reconciled hooks.
+  Ensure each Scope lifecycle state has a distinct real column and every Project phase
+  maps to an existing option. Finally run `doctor --project`. Package installation
+  checks alone do not establish project readiness; claims enforce the board checks.
 - **scope**: require an explicit issue. Inspect its scope prerequisites and project policy;
   never choose a feature from an editor tab. Resolve or reserve the matching feature identity,
   then `start --feature specs/<feature> --issue owner/repo#number`. Pass this exact
   path into Specify as SPECIFY_FEATURE_DIRECTORY. Run the stage loop below.
 - **clarify**: resolve the explicit issue through `scope-source.json`, then run the stage loop.
+  For an external invocation, run `refresh --feature ... --from-stage clarify --reason
+  "Explicit clarification invocation: reread GitHub answers"` once before the loop.
+  This archives existing receipts and invalidates Clarify onward even when local files
+  have not changed. Do not refresh recursively from an active claimed command.
   Reread GitHub comments rather than asking questions in chat. Existing answered clarification
   is reused only after current discussion and spec evidence have been checked.
 - **continue**: read checkpoint.json, handoff.md and the resume prompt. Verify repository,
@@ -64,6 +72,11 @@ the package's pinned `requirements.txt` when missing. Never install a floating t
 4. Invoke the selected command in this host using its installed skill/command registration.
    Read its current instruction source rather than guessing from a name. Native semantic
    commands may pause for real decisions. The managed preset prevents duplicate chaining.
+   With `mode: revalidate`, retain the bound issue, feature path and existing branch.
+   Review and update existing artifacts in place; do not create another spec directory,
+   overwrite completed task history or require moving an advanced issue back to Backlog.
+   Scope still checks current approval, labels, prerequisites and requirement fingerprints;
+   a claim is not permission to bypass stale scope or unresolved human questions.
 5. Record an honest receipt JSON: `stage`, `outcome: passed`, `summary`, `inputs` (project-relative
    consulted input paths), and `evidence` (existing project-relative proof files). Do not include
    checkpoint files in input manifests. Pin test/review outputs; do not call a generated report

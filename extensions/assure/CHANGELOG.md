@@ -3,6 +3,8 @@
 ## 2.1.0 (unreleased)
 
 - Use YAML parsing for hook initialization and shared source/output freshness with deletion detection.
+- Managed initialization preserves dispatcher-owned hooks and uses the workflow's
+  selected-process CI instead of creating an unconditional documentation gate.
 
 All notable changes to the Assure extension.
 

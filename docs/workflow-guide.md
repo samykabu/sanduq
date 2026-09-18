@@ -14,6 +14,14 @@ the policy-aware CI gate. Existing project board IDs, audience maps, languages a
 publication settings remain project data. A newly selected manual requires its
 module-map interview; recommendations are never treated as answers.
 
+Finish setup with `workflow.py doctor --project`. The ordinary doctor checks package
+installation; the project check additionally requires real board IDs, all Scope
+columns and phase mappings. Claims enforce this check before any semantic stage.
+Managed Project Init uses configured phase choices or workflow defaults (Specify
+maps to Feature Specification), preserves every discovered status option and leaves
+the dispatcher-owned hooks unchanged. Assure Init also preserves those hooks and
+does not install a second, unconditional documentation CI gate.
+
 For local development, build with `python extensions/scripts/package.py workflow`,
 extract the ZIP outside the consumer's `.specify/extensions` directory, and install
 with `specify extension add --dev <extracted/workflow>`. Build/extract its selected
@@ -94,6 +102,18 @@ block a competing executor; settle their actual state first, never mark them com
 merely to bypass the guard. Managed overlays prevent direct legacy native commands
 from starting another pipeline. Routine phase checkpoints follow project policy;
 explicit human-review tasks remain real gates.
+
+An explicit Clarify invocation refreshes Clarify and downstream receipts even if
+local files have not changed, ensuring current GitHub answers are reread. Existing
+specifications, plans, task IDs, checked work and native issue mappings are preserved
+and reconciled in place. An upgrade can revalidate an already-progressed open feature
+under its matching claim without resetting it to Backlog. Stale scope, unresolved
+answers, wrong bindings and closed issues still block; installing a policy alone
+does not grant a lifecycle exception.
+
+The optional legacy short Bridge alias now forwards to its current execution owner.
+Installer records distinguish an unchanged Sanduq alias from a user's edits, allowing
+future owned-alias upgrades without silently overwriting customization.
 
 ## Fresh-session continuation
 
