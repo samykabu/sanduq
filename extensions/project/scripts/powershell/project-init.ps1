@@ -75,6 +75,12 @@ $defaultCfgPath = Join-Path $PSScriptRoot '../../config.default.json' | Resolve-
 if (-not $defaultCfgPath) { $defaultCfgPath = Join-Path $extDir 'config.default.json' }
 if (-not (Test-Path $defaultCfgPath)) { Die "config.default.json not found (looked near the script and in $extDir)" }
 $def = Get-Content $defaultCfgPath -Raw | ConvertFrom-Json
+$managedWorkflow = Test-Path (Join-Path $repoRoot '.specify/workflow.yml')
+if ($managedWorkflow) {
+    $managedJson = & python (Join-Path $repoRoot '.specify/extensions/workflow/scripts/workflow.py') project-defaults
+    if ($LASTEXITCODE -ne 0) { Die 'cannot read managed workflow phase defaults; run workflow doctor' }
+    $def.phaseToStatus = ($managedJson | ConvertFrom-Json).phaseToStatus
+}
 
 # ---- gh preconditions ----
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { Die 'gh CLI not installed' }
@@ -131,6 +137,7 @@ $phases = @('open', 'analysis', 'engineer-review', 'ready', 'in-progress', 'in-r
 $palette = @('GRAY', 'BLUE', 'PURPLE', 'GREEN', 'YELLOW', 'ORANGE', 'PINK')
 $phaseToStatus = [ordered]@{}
 $statusOptions = [ordered]@{}
+foreach ($name in $boardOptions.Keys) { $statusOptions[$name] = $boardOptions[$name] }
 $toCreate = @()   # @{ phase; name; color }
 
 foreach ($i in 0..($phases.Count - 1)) {
@@ -189,6 +196,7 @@ if ($toCreate.Count -gt 0) {
 }
 
 # ---- choose whether lifecycle hooks are manual or automatic ----
+if ($managedWorkflow) { $HooksMode = 'required' }
 if (-not $HooksMode) {
     if ($NonInteractive) {
         $existingCfgPath = Join-Path $extDir 'config.json'
@@ -208,7 +216,11 @@ if (-not $HooksMode) {
         $HooksMode = $choice
     }
 }
-Set-ProjectHookMode -Mode $HooksMode
+if ($managedWorkflow) {
+    Info 'Sanduq workflow owns lifecycle dispatch; preserving reconciled hook entries'
+} else {
+    Set-ProjectHookMode -Mode $HooksMode
+}
 
 # statusOrder = the mapped column names in phase order (kept for no-regress ordering)
 $statusOrder = @(); foreach ($p in $phases) { if ($phaseToStatus.$p -and ($statusOrder -notcontains $phaseToStatus.$p)) { $statusOrder += $phaseToStatus.$p } }

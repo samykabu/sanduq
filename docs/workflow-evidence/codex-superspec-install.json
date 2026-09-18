@@ -1,0 +1,177 @@
+{
+  "host": "codex",
+  "superspec": true,
+  "ok": true,
+  "workspace": "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\codex-k9szi4n5",
+  "commands": [
+    {
+      "args": [
+        "specify",
+        "init",
+        "--here",
+        "--non-interactive",
+        "--ignore-agent-tools",
+        "--integration",
+        "codex",
+        "--integration-options=--skills"
+      ],
+      "exit_code": 0
+    },
+    {
+      "args": [
+        "specify",
+        "extension",
+        "add",
+        "--dev",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\codex-k9szi4n5\\packages\\workflow"
+      ],
+      "exit_code": 0
+    },
+    {
+      "args": [
+        "specify",
+        "extension",
+        "add",
+        "--dev",
+        "D:\\Projects\\Personal\\sanduq\\dist\\upstream-superspec"
+      ],
+      "exit_code": 0
+    },
+    {
+      "args": [
+        "C:\\Python314\\python.exe",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\codex-k9szi4n5\\project\\.specify\\extensions\\workflow\\scripts\\workflow.py",
+        "init",
+        "--qa",
+        "off",
+        "--manual",
+        "off",
+        "--replace"
+      ],
+      "exit_code": 0
+    },
+    {
+      "args": [
+        "C:\\Python314\\python.exe",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\codex-k9szi4n5\\project\\.specify\\extensions\\workflow\\scripts\\install.py",
+        "--packages",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\codex-k9szi4n5\\packages",
+        "--apply"
+      ],
+      "exit_code": 0
+    },
+    {
+      "args": [
+        "C:\\Python314\\python.exe",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\codex-k9szi4n5\\project\\.specify\\extensions\\workflow\\scripts\\workflow.py",
+        "doctor"
+      ],
+      "exit_code": 0
+    },
+    {
+      "args": [
+        "C:\\Python314\\python.exe",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\codex-k9szi4n5\\project\\.specify\\extensions\\workflow\\scripts\\workflow.py",
+        "init",
+        "--qa",
+        "on",
+        "--manual",
+        "off",
+        "--replace"
+      ],
+      "exit_code": 0
+    },
+    {
+      "args": [
+        "C:\\Python314\\python.exe",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\codex-k9szi4n5\\project\\.specify\\extensions\\workflow\\scripts\\install.py",
+        "--packages",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\codex-k9szi4n5\\packages",
+        "--apply"
+      ],
+      "exit_code": 0
+    },
+    {
+      "args": [
+        "C:\\Python314\\python.exe",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\codex-k9szi4n5\\project\\.specify\\extensions\\workflow\\scripts\\workflow.py",
+        "doctor"
+      ],
+      "exit_code": 0
+    },
+    {
+      "args": [
+        "C:\\Python314\\python.exe",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\codex-k9szi4n5\\project\\.specify\\extensions\\workflow\\scripts\\workflow.py",
+        "init",
+        "--qa",
+        "off",
+        "--manual",
+        "on",
+        "--replace"
+      ],
+      "exit_code": 0
+    },
+    {
+      "args": [
+        "C:\\Python314\\python.exe",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\codex-k9szi4n5\\project\\.specify\\extensions\\workflow\\scripts\\install.py",
+        "--packages",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\codex-k9szi4n5\\packages",
+        "--apply"
+      ],
+      "exit_code": 0
+    },
+    {
+      "args": [
+        "C:\\Python314\\python.exe",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\codex-k9szi4n5\\project\\.specify\\extensions\\workflow\\scripts\\workflow.py",
+        "doctor"
+      ],
+      "exit_code": 0
+    },
+    {
+      "args": [
+        "C:\\Python314\\python.exe",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\codex-k9szi4n5\\project\\.specify\\extensions\\workflow\\scripts\\workflow.py",
+        "init",
+        "--qa",
+        "on",
+        "--manual",
+        "on",
+        "--replace"
+      ],
+      "exit_code": 0
+    },
+    {
+      "args": [
+        "C:\\Python314\\python.exe",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\codex-k9szi4n5\\project\\.specify\\extensions\\workflow\\scripts\\install.py",
+        "--packages",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\codex-k9szi4n5\\packages",
+        "--apply"
+      ],
+      "exit_code": 0
+    },
+    {
+      "args": [
+        "C:\\Python314\\python.exe",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\codex-k9szi4n5\\project\\.specify\\extensions\\workflow\\scripts\\workflow.py",
+        "doctor"
+      ],
+      "exit_code": 0
+    },
+    {
+      "args": [
+        "specify",
+        "extension",
+        "add",
+        "--dev",
+        "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\codex-k9szi4n5\\packages\\workflow",
+        "--force"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "verified": "installation, composition, four policy choices, reconciliation, doctor and same-version reinstall; no semantic agent execution or live GitHub acceptance"
+}

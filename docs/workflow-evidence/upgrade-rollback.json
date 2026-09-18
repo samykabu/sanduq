@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "from": "pr 4.0.2 (downloaded published asset)",
+  "to": "pr 4.1.0 (staged)",
+  "published_archive_sha256": "5f3bcdec367cc2e82ecb28e90c91a403d1cb15fa7ca6c7f539f30fac8866e0df",
+  "verified": [
+    "real native CLI upgrade",
+    "injected post-upgrade failure",
+    "byte-exact managed rollback",
+    "retry succeeds",
+    "custom config retained",
+    "policy and preset registration retained",
+    "workflow 1.0.0 to synthetic staged 1.0.1 self-upgrade",
+    "outer rollback after successful integration install",
+    "self-upgrade retry succeeds"
+  ],
+  "workflow_upgrade_backup": "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\codex-f1ume3gt\\project\\.specify\\workflow\\backups\\upgrades\\e92b0c88ccec4d999a5c555310813084",
+  "workspace": "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\codex-f1ume3gt",
+  "upgrade_backup": "D:\\Projects\\Personal\\sanduq\\dist\\install-tests\\codex-f1ume3gt\\project\\.specify\\workflow\\backups\\installs\\78710f83280144feabfb1dfbb858e2e1"
+}

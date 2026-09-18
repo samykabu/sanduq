@@ -45,6 +45,8 @@ BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 [ -z "$FEATURE" ] && skip "could not resolve feature slug"
 SLUG="$FEATURE"
 FDIR="specs/$SLUG"; SPEC="$FDIR/spec.md"; PLAN="$FDIR/plan.md"; TASKS="$FDIR/tasks.md"
+MANAGED=0
+if [ -f .specify/workflow.yml ]; then MANAGED=1; NOSUB=1; fi
 TITLE="$SLUG"
 [ -f "$SPEC" ] && TITLE="$(grep -m1 -E '^# ' "$SPEC" | sed -E 's/^# +//; s/^(Feature Specification|Spec): *//' || echo "$SLUG")"
 
@@ -66,6 +68,17 @@ st_set() { ST="$(echo "$ST" | jq --arg s "$SLUG" ".[\$s].$1 = $2")"; }
 [ "$(echo "$ST" | jq -r --arg s "$SLUG" 'has($s)')" = "true" ] || ST="$(echo "$ST" | jq --arg s "$SLUG" '.[$s]={issue:0,issueNodeId:"",itemId:"",status:"",subIssues:{}}')"
 
 ensure_parent() {
+  if [ "$MANAGED" = 1 ]; then
+    [ -f "$FDIR/scope-source.json" ] || { warn 'Managed workflow requires scope-source.json'; exit 1; }
+    local bound_repo bound_issue
+    bound_repo="$(jq -r '.repo' "$FDIR/scope-source.json")"
+    bound_issue="$(jq -r '.issue' "$FDIR/scope-source.json")"
+    [ "$bound_repo" = "$REPO" ] && [[ "$bound_issue" =~ ^[1-9][0-9]*$ ]] || { warn 'Managed parent binding mismatch'; exit 1; }
+    [ "$ISSUE" = 0 ] || [ "$ISSUE" = "$bound_issue" ] || { warn 'Project state conflicts with Scope parent binding'; exit 1; }
+    ISSUE="$bound_issue"
+    NODE="$(gh issue view "$ISSUE" --repo "$REPO" --json id -q .id)"
+    st_set issue "$ISSUE"; st_set issueNodeId "\"$NODE\""; return
+  fi
   if [ "${ISSUE:-0}" -gt 0 ] 2>/dev/null; then return; fi
   local found n
   found="$(gh issue list --repo "$REPO" --state all --label spec-feature --search "in:title $SLUG" --json number,title,id --limit 20 2>/dev/null || echo '[]')"
@@ -143,6 +156,7 @@ sync_sub_issues() {
 }
 
 sync_progress() {
+  if [ "$MANAGED" = 1 ]; then log 'Task issue states are owned by the workflow adapter'; return; fi
   local total closed=0
   total="$(echo "$ST" | jq -r --arg s "$SLUG" '(.[$s].subIssues // {}) | length')"
   [ "$total" = 0 ] && return

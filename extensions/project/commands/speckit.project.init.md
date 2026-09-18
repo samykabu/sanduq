@@ -17,6 +17,13 @@ Optional flags: `--owner <login>` · `--number <n>` · `--owner-type user|org` �
 
 ## Outline
 
+In a managed Sanduq workflow, preserve reconciled hook entries and use required
+board synchronization without a second hook-mode question. The scripts obtain
+phase defaults from the workflow policy, retain existing configured choices, and
+preserve every discovered board status, including Scope-only columns. Finish with
+`workflow.py doctor --project`; missing logical Scope columns require explicit
+mapping or creation before a feature may start.
+
 1. Ensure `gh` is authenticated with the **`project`** scope:
    `gh auth refresh -h github.com -s project,read:project`.
 2. Ask whether Project sync lifecycle hooks should be:

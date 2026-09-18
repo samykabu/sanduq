@@ -2,6 +2,18 @@
 
 All notable changes to the Pull Request Workflow extension.
 
+## [Unreleased]
+
+### Fixed
+
+- PR generation instructions require every reviewer-facing diagram and screenshot to be embedded
+  inline, with an asset inventory and no link-only substitutions. Private-repository images use
+  supported attachments or verified repository URLs; rendered HTML and authenticated image loading
+  are checked separately. Generated skills inherit this canonical command contract.
+- Removed the assumption that a commit-pinned `?raw=true` URL or a literal `<img>` match alone proves
+  private image visibility. Missing exports, inaccessible images and body limits remain explicit
+  incomplete outcomes. This is an instruction update; live private-PR acceptance is still required.
+
 ## [4.0.0] - 2026-07-18
 
 ### Changed

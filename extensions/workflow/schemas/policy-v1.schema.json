@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sanduq workflow project policy v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "processes",
+    "execution",
+    "providers",
+    "issue_sync",
+    "clarification",
+    "context",
+    "finalize",
+    "updates"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "processes": {
+      "type": "object",
+      "required": [
+        "qa",
+        "user_manual"
+      ],
+      "properties": {
+        "qa": {
+          "type": "boolean"
+        },
+        "user_manual": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": {
+      "type": "object",
+      "required": [
+        "engine",
+        "checkpoints"
+      ],
+      "properties": {
+        "engine": {
+          "enum": [
+            "auto",
+            "speckit",
+            "superspec"
+          ]
+        },
+        "checkpoints": {
+          "enum": [
+            "required-only",
+            "every-phase"
+          ]
+        }
+      }
+    },
+    "providers": {
+      "type": "object",
+      "required": [
+        "clarification",
+        "tasks"
+      ],
+      "properties": {
+        "clarification": {
+          "enum": [
+            "prefer-superspec",
+            "core",
+            "superspec"
+          ]
+        },
+        "tasks": {
+          "enum": [
+            "prefer-superspec",
+            "core",
+            "superspec"
+          ]
+        }
+      }
+    },
+    "issue_sync": {
+      "const": {
+        "taskstoissues": "required",
+        "parent_link": "native-subissue"
+      }
+    },
+    "context": {
+      "type": "object",
+      "required": [
+        "mode",
+        "max_fraction",
+        "checkpoint_fraction",
+        "reserve_fraction"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "strict",
+            "measured-with-estimated-fallback"
+          ]
+        },
+        "max_fraction": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.6
+        },
+        "checkpoint_fraction": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.6
+        },
+        "reserve_fraction": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.6
+        }
+      }
+    },
+    "finalize": {
+      "const": {
+        "create_pr": true,
+        "merge": false
+      }
+    }
+  }
+}

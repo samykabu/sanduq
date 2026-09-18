@@ -93,6 +93,8 @@ $featureDir = Join-Path $repoRoot "specs/$slug"
 $specFile = Join-Path $featureDir 'spec.md'
 $planFile = Join-Path $featureDir 'plan.md'
 $tasksFile = Join-Path $featureDir 'tasks.md'
+$managedWorkflow = Test-Path (Join-Path $repoRoot '.specify/workflow.yml')
+if ($managedWorkflow) { $NoSubIssues = $true }
 
 $title = $slug
 if (Test-Path $specFile) {
@@ -127,6 +129,17 @@ function Set-CardStatus {
 }
 
 function Ensure-ParentIssue {
+    if ($managedWorkflow) {
+        $bindingPath = Join-Path $featureDir 'scope-source.json'
+        if (-not (Test-Path $bindingPath)) { throw 'Managed workflow requires scope-source.json; no parent was created.' }
+        $binding = Get-Content $bindingPath -Raw | ConvertFrom-Json
+        if ($binding.repo -ne $repoSlug -or -not $binding.issue) { throw 'Managed workflow parent binding mismatch.' }
+        if ($fs.issue -and $fs.issue -ne $binding.issue) { throw 'Project state conflicts with Scope parent binding.' }
+        $fs.issue = $binding.issue
+        $node = Invoke-Gh @('issue', 'view', $fs.issue, '--repo', $repoSlug, '--json', 'id')
+        if ($node) { $fs.issueNodeId = ($node | ConvertFrom-Json).id }
+        return
+    }
     if ($fs.issue -and $fs.issue -gt 0) { return }
     $found = Invoke-Gh @('issue', 'list', '--repo', $repoSlug, '--state', 'all', '--label', ($cfg.parentIssue.labels -join ','), '--search', "in:title $slug", '--json', 'number,title,id', '--limit', '20') -AllowFail
     if ($found) {
@@ -204,6 +217,7 @@ function Sync-SubIssues {
 }
 
 function Sync-Progress {
+    if ($managedWorkflow) { Write-Log 'Task issue states are owned by the workflow adapter'; return $null }
     if ($fs.subIssues.Count -eq 0) { return $null }
     $doneIds = @((Get-Tasks) | Where-Object { $_.done } | ForEach-Object { $_.id })
     $closed = 0

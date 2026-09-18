@@ -1,0 +1,162 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Sanduq: issue to execution",
+    "quality_profile": "showcase",
+    "locale": "en"
+  },
+  "lanes": [
+    {
+      "id": "first",
+      "label": "Read left to right: first stages"
+    },
+    {
+      "id": "next",
+      "label": "Continue left to right: next stages"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "scope",
+      "lane": "first",
+      "col": 0,
+      "type": "backend",
+      "label": "Scope",
+      "sublabel": "Project effort policy",
+      "tag": "CORE"
+    },
+    {
+      "id": "specify",
+      "lane": "first",
+      "col": 1,
+      "type": "backend",
+      "label": "Specify",
+      "sublabel": "Bind issue + spec-prompt",
+      "tag": "CORE",
+      "width": 125
+    },
+    {
+      "id": "clarify",
+      "lane": "first",
+      "col": 2,
+      "type": "backend",
+      "label": "Clarify",
+      "sublabel": "Brainstorm if available",
+      "tag": "CORE"
+    },
+    {
+      "id": "plan",
+      "lane": "first",
+      "col": 3,
+      "type": "backend",
+      "label": "Plan",
+      "sublabel": "Resolved answers only",
+      "tag": "CORE"
+    },
+    {
+      "id": "tasks",
+      "lane": "first",
+      "col": 4,
+      "type": "backend",
+      "label": "Tasks",
+      "sublabel": "SuperSpec or core",
+      "tag": "CORE"
+    },
+    {
+      "id": "qa",
+      "lane": "next",
+      "col": 0,
+      "type": "security",
+      "label": "Assure Analyze",
+      "sublabel": "Only if QA enabled",
+      "tag": "IF QA ENABLED"
+    },
+    {
+      "id": "manual",
+      "lane": "next",
+      "col": 1,
+      "type": "external",
+      "label": "Manual Analyze",
+      "sublabel": "Only if manual enabled",
+      "tag": "IF MANUAL ENABLED"
+    },
+    {
+      "id": "analyze",
+      "lane": "next",
+      "col": 2,
+      "type": "security",
+      "label": "Analyze",
+      "sublabel": "Validate final task set",
+      "tag": "CORE"
+    },
+    {
+      "id": "issues",
+      "lane": "next",
+      "col": 3,
+      "type": "messagebus",
+      "label": "Tasks to Issues",
+      "sublabel": "Always: native subtasks",
+      "tag": "ALWAYS",
+      "width": 125
+    },
+    {
+      "id": "execute",
+      "lane": "next",
+      "col": 4,
+      "type": "backend",
+      "label": "Execute",
+      "sublabel": "SuperSpec or Implement",
+      "tag": "CORE"
+    }
+  ],
+  "edges": [
+    {
+      "to": "specify",
+      "role": "main",
+      "from": "scope"
+    },
+    {
+      "to": "clarify",
+      "role": "main",
+      "from": "specify"
+    },
+    {
+      "to": "plan",
+      "role": "main",
+      "from": "clarify",
+      "label": "resolved"
+    },
+    {
+      "to": "tasks",
+      "role": "main",
+      "from": "plan"
+    },
+    {
+      "to": "qa",
+      "role": "return",
+      "from": "tasks",
+      "label": "continue"
+    },
+    {
+      "to": "manual",
+      "role": "main",
+      "from": "qa"
+    },
+    {
+      "to": "analyze",
+      "role": "main",
+      "from": "manual"
+    },
+    {
+      "to": "issues",
+      "role": "main",
+      "from": "analyze"
+    },
+    {
+      "to": "execute",
+      "role": "main",
+      "from": "issues"
+    }
+  ]
+}
