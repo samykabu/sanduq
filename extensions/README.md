@@ -19,6 +19,11 @@ compatibility with the Resal Marketplace layout.
 Published install versions remain authoritative in the two catalogs. Source versions
 marked unreleased are exercised with staged archives, not assumed live URLs.
 
+For what an extension *is* — and how it differs from a portable skill or a plugin bundle — see
+[Skills, plugins, and extensions](../README.md#skills-plugins-and-extensions). For the sequenced
+Scope-to-PR pipeline these extensions compose into, see
+[The managed Spec Kit workflow](../README.md#the-managed-spec-kit-workflow).
+
 ## Install
 
 Add the catalog once:
