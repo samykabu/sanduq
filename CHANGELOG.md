@@ -59,6 +59,26 @@ independently via `<extension>-vX.Y.Z` tags.
   runners across that boundary. The entry names the workflows, the jobs, the reason, and what would
   remove it.
 
+## Branding — new logo and a standalone icon — 2026-09-18
+
+### Changed
+
+- Replaced the README logo with the new sanduq lockup: the orange toolbox mark, the wordmark, and
+  the tagline "Tools for thoughtful delivery".
+- Aligned the two identity badges with the brand palette — extensions green `#233C32`, skills
+  orange `#C65B36`. Third-party badges keep their own colours.
+
+### Added
+
+- Added `sanduq-icon.png` (1080×1080) plus 512 and 128 variants: the toolbox mark alone, centred
+  on a transparent square, with no part of the wordmark. Used as the header mark in the `skills/`,
+  `extensions/`, and `plugins/` READMEs.
+- Added `sanduq-logo-dark.png`. The supplied artwork is transparent with a dark wordmark, which is
+  nearly invisible on a dark page, so the README pairs the two through `<picture>` and
+  `prefers-color-scheme`. Only the wordmark and tagline are recoloured; the orange mark is
+  untouched, and glyph antialiasing is preserved.
+- Added `docs/assets/README.md` recording which asset to use where and the sampled brand colours.
+
 ## Coordinated workflow release (unreleased)
 
 - Add Workflow 1.0.0 and migrate Scope 1.4.0 with canonical GitHub presets into Sanduq.

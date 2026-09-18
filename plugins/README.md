@@ -1,3 +1,5 @@
+<img src="../docs/assets/sanduq-icon-128.png" alt="" width="56" align="left">
+
 # plugins/
 
 This folder is reserved for future Claude Code plugin bundles and MCP-backed plugins.
