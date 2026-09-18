@@ -1,4 +1,5 @@
 import json
+import hashlib
 import shutil
 import subprocess
 import sys
@@ -21,6 +22,8 @@ class InstallTests(unittest.TestCase):
         self.package = Path(temporary.name).resolve()
         source = Path(__file__).resolve().parents[1]
         shutil.copyfile(source / 'dependencies.json', self.package / 'dependencies.json')
+        shutil.copytree(source / 'skills', self.package / 'skills')
+        shutil.copytree(source / 'assets', self.package / 'assets')
         for name in ('scope-gate', 'scope-brainstorm', 'workflow'):
             p = self.package / 'presets' / name / 'preset.yml'
             p.parent.mkdir(parents=True); p.write_text('schema_version: "1.0"', encoding='utf-8')
@@ -75,3 +78,28 @@ class InstallTests(unittest.TestCase):
         self.assertTrue(alias.is_symlink())
         self.assertEqual(target.read_text(encoding='utf-8'), 'Original command')
         self.assertEqual(installer.managed_files(self.root), before)
+
+    def test_owned_alias_upgrade_uses_previous_hash_and_preserves_local_edits(self):
+        inventory = installer.install_aliases(self.root, self.package)
+        w.write(self.root / '.specify/workflow/install-lock.json', {'aliases': inventory})
+        source = self.package / 'skills/speckit-scope/SKILL.md'
+        source.write_text(source.read_text(encoding='utf-8') + '\nUpdated owned routing.\n', encoding='utf-8')
+        updated = installer.install_aliases(self.root, self.package)
+        self.assertNotEqual(inventory, updated)
+        w.write(self.root / '.specify/workflow/install-lock.json', {'aliases': updated})
+        destination = self.root / '.agents/skills/speckit-scope/SKILL.md'
+        destination.write_text(destination.read_text(encoding='utf-8') + '\nUser customization\n', encoding='utf-8')
+        with self.assertRaisesRegex(w.WorkflowError, 'ALIAS_HAS_LOCAL_EDITS'):
+            installer.install_aliases(self.root, self.package)
+        self.assertIn('User customization', destination.read_text(encoding='utf-8'))
+
+    def test_recognized_legacy_short_alias_routes_through_owned_dispatcher(self):
+        destination = self.root / '.agents/skills/speckit-superpowers-bridge/SKILL.md'
+        destination.parent.mkdir(parents=True)
+        old = b'Legacy executor fixture'
+        destination.write_bytes(old)
+        w.write(self.package / 'assets/legacy-bridge-alias-hashes.json', [hashlib.sha256(old).hexdigest()])
+        self.assertIn('LEGACY_ALIAS_RECONCILIATION_REQUIRED', str(w.doctor(self.root, self.policy)))
+        installer.install_aliases(self.root, self.package)
+        self.assertIn('<!-- sanduq-workflow-alias:v1 -->', destination.read_text(encoding='utf-8'))
+        self.assertNotIn('LEGACY_ALIAS_RECONCILIATION_REQUIRED', str(w.doctor(self.root, self.policy)))

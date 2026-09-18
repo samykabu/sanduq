@@ -89,6 +89,32 @@ def preservation(root, name):
             and (p.name in ('config.json', '.env') or p.name.endswith('-config.yml') or 'state' in p.relative_to(folder).parts)}
 
 
+def install_aliases(root, package_root):
+    previous = read(root / '.specify/workflow/install-lock.json', {}).get('aliases', {})
+    registered = registry(root)
+    inventory = {}
+    aliases = {'speckit-scope': 'legacy-alias-hashes.json',
+               'speckit-superpowers-bridge': 'legacy-bridge-alias-hashes.json'}
+    for name, accepted_file in aliases.items():
+        source = (package_root / 'skills' / name / 'SKILL.md').read_bytes()
+        accepted = read(package_root / 'assets' / accepted_file, [])
+        for agent in ('.agents', '.claude'):
+            skills = root / agent / 'skills'
+            if not skills.is_dir(): continue
+            destination = skills / name / 'SKILL.md'
+            if name == 'speckit-superpowers-bridge' and name not in registered and not destination.exists(): continue
+            key = destination.relative_to(root).as_posix()
+            if destination.exists() and destination.read_bytes() != source:
+                value = hashlib.sha256(destination.read_bytes().replace(b'\r\n', b'\n')).hexdigest()
+                require(value in accepted or previous.get(key) == value,
+                        'ALIAS_HAS_LOCAL_EDITS: ' + name + '; migrate this customization into Sanduq before replacement')
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            if destination.is_symlink(): destination.unlink()  # Never patch its upstream command target.
+            destination.write_bytes(source)
+            inventory[key] = hashlib.sha256(source.replace(b'\r\n', b'\n')).hexdigest()
+    return inventory
+
+
 def install(root, apply=False, packages=None, package_root=PACKAGE, runner=command, upgrade_owner=None):
     root = root.resolve(); policy = load_policy(root)
     lock = read(package_root / 'dependencies.json')
@@ -155,16 +181,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                 if (root / '.specify/presets' / operation['name'] / 'preset.yml').exists():
                     runner(root, ['specify','preset','remove',operation['name']], log)
                 runner(root, ['specify','preset','add','--dev',operation['source'],'--priority',operation['priority']], log)
-            alias = package_root / 'skills/speckit-scope/SKILL.md'
-            accepted = read(package_root / 'assets/legacy-alias-hashes.json', [])
-            for agent in ('.agents', '.claude'):
-                skills = root / agent / 'skills'
-                if not skills.is_dir(): continue
-                destination = skills / 'speckit-scope/SKILL.md'
-                if destination.exists() and destination.read_bytes() != alias.read_bytes():
-                    value = hashlib.sha256(destination.read_bytes().replace(b'\r\n',b'\n')).hexdigest()
-                    require(value in accepted, 'SCOPE_ALIAS_HAS_LOCAL_EDITS: migrate this customization into Sanduq before replacement')
-                destination.parent.mkdir(parents=True, exist_ok=True); destination.write_bytes(alias.read_bytes())
+            alias_hashes = install_aliases(root, package_root)
             reconcile(root, apply=True)
             target = root / '.github/workflows/sanduq-workflow-gates.yml'
             asset = package_root / 'assets/github/workflow-gates.yml'
@@ -189,6 +206,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
             write(root / '.specify/workflow/install-lock.json', {
                 'schema_version': 1, 'host': active_host(root), 'processes': policy['processes'],
                 'extensions': inventory, 'dependency_digest': package_digest(root),
+                'aliases': alias_hashes,
                 'presets': {name: {key: entry.get(key) for key in ('version', 'enabled', 'priority', 'manifest_hash')}
                             for name, entry in read(root / '.specify/presets/.registry', {}).get('presets', {}).items()},
                 'tested_compatibility': {'spec_kit': lock.get('tested_spec_kit', {}), 'upstream_optional': lock.get('upstream_optional', {})},

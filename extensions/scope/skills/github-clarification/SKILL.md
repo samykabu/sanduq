@@ -19,6 +19,10 @@ explicitly selected automation. `resume_on_reinvoke: reread-answers` permits ins
 Need Clarifications on invocation; do not require a manual status move. Read every page
 of current comments and edited choices. If no new answer or material requirement has
 arrived, report still waiting without posting another round. Never infer an answer.
+An explicit managed revalidation claim also permits rereading an existing open
+Ready/In progress/In review feature. A package installation or policy file alone
+does not grant this exception. The runtime still rejects closed features and keeps
+all answer-evidence checks. New unresolved questions return the issue to waiting.
 Keep the existing identity, execution guard, answer evidence, creator-control and
 idempotent-publication rules below. Return the resolved outcome to the workflow dispatcher
 when it owns an active clarification claim; do not independently dispatch Plan twice.

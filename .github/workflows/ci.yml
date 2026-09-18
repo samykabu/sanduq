@@ -203,6 +203,28 @@ jobs:
             dist/install-tests/*/*.log
           if-no-files-found: ignore
 
+  project-init:
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [pwsh, bash]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r extensions/workflow/requirements.txt
+      - run: python extensions/scripts/smoke_project_init.py --shell ${{ matrix.shell }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: project-init-${{ matrix.shell }}
+          path: |
+            dist/project-init-tests/*/result.json
+            dist/project-init-tests/*/execution.log
+          if-no-files-found: ignore
+
   dryrun:
     runs-on: ubuntu-latest
     steps:

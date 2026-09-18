@@ -1,5 +1,8 @@
 import importlib.util
 import unittest
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -28,3 +31,15 @@ class AssureInitTests(unittest.TestCase):
     def test_missing_gate_is_not_success(self):
         with self.assertRaises(SystemExit):
             m.update_hooks('hooks:\n  after_tasks:\n  - extension: assure\n', True)
+
+    def test_managed_init_preserves_reconciled_hooks_and_does_not_create_legacy_ci(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); (root / '.specify').mkdir()
+            (root / '.specify/workflow.yml').write_text('schema_version: 1\nprocesses: {qa: true, user_manual: false}\n', encoding='utf-8')
+            hooks = 'hooks:\n  before_implement:\n  - extension: assure\n    optional: true\n    enabled: false\n'
+            (root / '.specify/extensions.yml').write_text(hooks, encoding='utf-8')
+            result = subprocess.run([sys.executable, str(Path(m.__file__)), '--repo-root', str(root), '--mode', 'integrated'], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((root / '.specify/extensions.yml').read_text(encoding='utf-8'), hooks)
+            self.assertFalse((root / '.github/workflows/documentation-gates.yml').exists())
+            self.assertTrue((root / '.specify/extensions/assure/assure-config.yml').exists())

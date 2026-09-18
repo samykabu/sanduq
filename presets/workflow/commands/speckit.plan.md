@@ -15,4 +15,9 @@ binding guards. Disabled hooks stay disabled. Do not independently invoke anothe
 task generator, executor, or PR hook. Check context before each bounded batch.
 
 
+For a `mode: revalidate` claim with an existing plan, update only what changed.
+Preserve established decisions and task history, and do not blindly copy a new plan
+template over reviewed content. Keep the clarification gate: a managed claim can
+recheck an open feature already in progress only with resolved clarification evidence.
+
 Continue the applicable upstream domain instructions below.

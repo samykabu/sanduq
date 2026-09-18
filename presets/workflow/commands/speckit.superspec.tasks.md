@@ -20,4 +20,9 @@ and continue automatically. Explicit HUMAN-REVIEW tasks, unresolved requirements
 security decisions and deployment approvals still pause. Execute small batches
 and hand off at the context checkpoint; do not reset the budget per task.
 
+When revalidating an existing tasks.md, reconcile only changed requirements. Keep
+stable task IDs, completed checkboxes, execution markers and native issue mappings
+for unchanged work. Add or reopen genuinely changed work with a recorded reason;
+do not renumber the feature or reset all progress.
+
 Continue the applicable upstream domain instructions below.

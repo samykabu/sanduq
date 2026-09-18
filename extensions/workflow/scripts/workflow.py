@@ -216,7 +216,43 @@ def resolve_commands(root, policy):
     return commands
 
 
-def doctor(root, policy):
+def project_errors(root, policy):
+    config = read(root / '.specify/extensions/project/config.json', {})
+    if not isinstance(config, dict): return ['PROJECT_CONFIG_INVALID: expected a JSON object']
+    errors = []
+    for key in ('owner', 'projectId', 'statusFieldId', 'stateFile'):
+        if not isinstance(config.get(key), str) or not config[key]: errors.append('PROJECT_CONFIG_REQUIRED: ' + key)
+    if type(config.get('projectNumber')) is not int or config['projectNumber'] < 1: errors.append('PROJECT_CONFIG_REQUIRED: projectNumber')
+    if config.get('hookMode') != 'required': errors.append('PROJECT_SYNC_MUST_BE_REQUIRED: managed workflow updates the board automatically')
+    options, phases = config.get('statusOptions', {}), config.get('phaseToStatus', {})
+    if not isinstance(options, dict) or not options or not all(isinstance(v, str) and v for v in options.values()):
+        errors.append('PROJECT_STATUS_OPTIONS_REQUIRED'); options = {}
+    if not isinstance(phases, dict): phases = {}
+    logical = ('Backlog', 'Feature Specification', 'Need Clarifications', 'Ready', 'In progress', 'In review', 'Done')
+    mapping = policy.get('scope', {}).get('statuses', {})
+    for status in logical:
+        if mapping.get(status, status) not in options: errors.append('PROJECT_SCOPE_STATUS_MISSING: ' + mapping.get(status, status))
+    for phase in ('open', 'analysis', 'engineer-review', 'ready', 'in-progress', 'in-review', 'done'):
+        if phases.get(phase) not in options: errors.append('PROJECT_PHASE_UNMAPPED: ' + phase)
+    if config.get('stateFile'):
+        try: inside(root, config['stateFile'])
+        except (WorkflowError, TypeError): errors.append('PROJECT_STATE_PATH_INVALID')
+    return errors
+
+
+def project_defaults(root, policy):
+    mapping = policy.get('scope', {}).get('statuses', {})
+    phases = {'open': 'Feature Specification', 'analysis': 'Ready', 'engineer-review': 'Ready',
+              'ready': 'Ready', 'in-progress': 'In progress', 'in-review': 'In review', 'done': 'Done'}
+    phases = {phase: mapping.get(status, status) for phase, status in phases.items()}
+    existing = read(root / '.specify/extensions/project/config.json', {})
+    require(isinstance(existing, dict), 'PROJECT_CONFIG_INVALID: expected a JSON object')
+    if existing.get('projectId') and isinstance(existing.get('phaseToStatus'), dict):
+        phases.update({phase: status for phase, status in existing['phaseToStatus'].items() if phase in phases and isinstance(status, str) and status})
+    return {'phaseToStatus': phases, 'source': 'managed policy with preserved configured phase choices'}
+
+
+def doctor(root, policy, project=False):
     needed = ['scope', 'project', 'pr'] + (['assure'] if policy['processes']['qa'] else []) + (['user-manual'] if policy['processes']['user_manual'] else [])
     errors = ['DEPENDENCY_UNAVAILABLE: ' + name + ' ' + RANGES[name] for name in needed if not compatible(root, name)]
     if active_host(root) not in ('codex','claude'):
@@ -224,6 +260,10 @@ def doctor(root, policy):
     bridge = read(root / '.specify/superpowers-handoff.json', {})
     if bridge.get('status') in ('executing', 'blocked'):
         errors.append('LEGACY_EXECUTOR_OWNS_FEATURE: reconcile the recorded bridge handoff before managed execution')
+    agent = '.agents' if active_host(root) == 'codex' else '.claude'
+    alias = root / agent / 'skills/speckit-superpowers-bridge/SKILL.md'
+    if alias.is_file() and '<!-- sanduq-workflow-alias:v1 -->' not in alias.read_text(encoding='utf-8-sig'):
+        errors.append('LEGACY_ALIAS_RECONCILIATION_REQUIRED: run the workflow installer; do not patch the upstream command')
     for name in needed:
         manifest = root / '.specify/extensions' / name / 'extension.yml'
         doc = yaml.safe_load(manifest.read_text(encoding='utf-8-sig')) if manifest.exists() else {}
@@ -252,7 +292,9 @@ def doctor(root, policy):
             errors.append('PRESET_REQUIRED: ' + preset)
         if preset_registry.get(preset, {}).get('enabled') is not True:
             errors.append('PRESET_NOT_ENABLED: ' + preset)
-    return {'ok': not errors, 'errors': errors, 'context': 'strict enforcement requires host pre-call bounds; estimated fallback is labelled'}
+    if project: errors += project_errors(root, policy)
+    return {'ok': not errors, 'errors': errors, 'project_checked': project,
+            'context': 'strict enforcement requires host pre-call bounds; estimated fallback is labelled'}
 
 
 def context_gate(policy, usage):
@@ -421,6 +463,25 @@ class Run:
             self.save(state)
             return {'migrated': True, 'next': self.next(state)}
 
+    def refresh(self, stage, reason):
+        """Explicit invocation rereads remote requirements even when local files are unchanged."""
+        require(stage in ('scope', 'clarify'), 'REFRESH_STAGE_UNSUPPORTED')
+        with locked(self.lock):
+            state = self.load()
+            require(not state['active'], 'ACTIVE_CLAIM_MUST_BE_RESOLVED_BEFORE_REFRESH')
+            require(reason.strip(), 'REFRESH_REASON_REQUIRED')
+            cutoff = BASE_STAGES.index(stage)
+            affected = {name: receipt for name, receipt in state['receipts'].items() if BASE_STAGES.index(name) >= cutoff}
+            if affected:
+                ensure_local_excludes(self.root)
+                backup = self.path.parent / 'backups' / (uuid.uuid4().hex + '.json')
+                write(backup, state)
+                state.setdefault('refreshes', []).append({'stage': stage, 'reason': reason, 'at': now(),
+                                                         'invalidated': list(affected), 'backup': str(backup.relative_to(self.root))})
+                for name in affected: state['receipts'].pop(name)
+                self.save(state)
+            return {'refreshed': list(affected), 'next': self.next(state)}
+
     def start(self, issue):
         require(re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[1-9]\d*', issue), 'EXPLICIT_ISSUE_REQUIRED')
         require(github_repository(self.root) == issue.split('#')[0], 'ISSUE_REPOSITORY_MISMATCH')
@@ -471,7 +532,7 @@ class Run:
             for path in (self.root / 'specs').glob('*/workflow/checkpoint.json'):
                 require(path == self.path or not read(path, {}).get('active'), 'OTHER_FEATURE_STAGE_ACTIVE: ' + str(path))
             require(state['dependency_digest'] == package_digest(self.root), 'DEPENDENCY_CHANGED: review upgrade and migrate the checkpoint before execution')
-            health = doctor(self.root, self.policy)
+            health = doctor(self.root, self.policy, project=True)
             require(health['ok'], '; '.join(health['errors']))
             gate = context_gate(self.policy, usage)
             if gate['pause']:
@@ -489,6 +550,9 @@ class Run:
                 state['receipts'].pop(downstream, None)
             state['active'] = {'stage': stage, 'token': uuid.uuid4().hex, 'claimed_at': now(),
                                'session_id': usage['session_id'], 'context': gate}
+            source = read(self.feature / 'scope-source.json', {})
+            existing = (self.feature / 'spec.md').is_file() and f"{source.get('repo')}#{source.get('issue')}" == state['issue']
+            state['active']['mode'] = 'revalidate' if existing and stage in ('scope', 'specify', 'clarify', 'plan', 'tasks') else 'initial'
             state['active']['baseline'] = fingerprint_files(self.root, [p for r in state['receipts'].values() for p in r['fingerprints']])
             state['status'] = 'in-progress'
             write(self.root / '.specify/feature.json', {'feature_directory': self.relative})
@@ -573,8 +637,10 @@ def main():
     init.add_argument('--qa', choices=['on', 'off'], required=True)
     init.add_argument('--manual', choices=['on', 'off'], required=True)
     init.add_argument('--replace', action='store_true')
-    sub.add_parser('doctor')
-    for name in ('start', 'next', 'claim', 'complete', 'pause', 'recover', 'bind', 'migrate'):
+    doctor_parser = sub.add_parser('doctor')
+    doctor_parser.add_argument('--project', action='store_true', help='Also validate configured board identities, phase/status mapping and required sync')
+    sub.add_parser('project-defaults')
+    for name in ('start', 'next', 'claim', 'complete', 'pause', 'recover', 'bind', 'migrate', 'refresh'):
         cmd = sub.add_parser(name)
         cmd.add_argument('--feature', required=True)
         if name == 'start': cmd.add_argument('--issue', required=True)
@@ -583,9 +649,10 @@ def main():
         if name == 'complete':
             cmd.add_argument('--token', required=True)
             cmd.add_argument('--receipt', type=Path, required=True)
-        if name in ('pause', 'recover', 'migrate'): cmd.add_argument('--reason', required=True)
+        if name in ('pause', 'recover', 'migrate', 'refresh'): cmd.add_argument('--reason', required=True)
         if name in ('recover', 'bind'): cmd.add_argument('--token', required=True)
         if name == 'migrate': cmd.add_argument('--invalidate-from', choices=BASE_STAGES)
+        if name == 'refresh': cmd.add_argument('--from-stage', choices=('scope', 'clarify'), required=True)
     args = parser.parse_args()
     root = args.root.resolve()
     try:
@@ -603,7 +670,9 @@ def main():
             path.write_text(yaml.safe_dump(validate_policy(policy), sort_keys=False), encoding='utf-8')
             result = {'configured': True, 'processes': policy['processes'], 'doctor': doctor(root, policy)}
         elif args.action == 'doctor':
-            result = doctor(root, load_policy(root))
+            result = doctor(root, load_policy(root), project=args.project)
+        elif args.action == 'project-defaults':
+            result = project_defaults(root, load_policy(root))
         else:
             run = Run(root, args.feature)
             if args.action == 'start': result = run.start(args.issue)
@@ -612,6 +681,7 @@ def main():
             elif args.action == 'complete': result = run.complete(args.token, read(args.receipt, {}))
             elif args.action == 'bind': result = run.bind(args.token)
             elif args.action == 'migrate': result = run.migrate(args.reason, args.invalidate_from)
+            elif args.action == 'refresh': result = run.refresh(args.from_stage, args.reason)
             else:
                 with locked(run.lock):
                     state = run.load()

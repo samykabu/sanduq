@@ -15,4 +15,9 @@ binding guards. Disabled hooks stay disabled. Do not independently invoke anothe
 task generator, executor, or PR hook. Check context before each bounded batch.
 
 
+When revalidating an existing tasks.md, reconcile only changed requirements. Keep
+stable task IDs, completed checkboxes and native issue mappings for unchanged work.
+Add new work and reopen genuinely invalidated tasks with a recorded reason. Do not
+replace the existing task list with a fresh numbered template.
+
 Continue the applicable upstream domain instructions below.

@@ -7,3 +7,5 @@
   symlink-preserving rollback and an outer transaction for workflow package updates.
 - Required artifact/source freshness, parent-scoped task mappings, reviewed migrations,
   versioned state contracts and policy-aware CI gates.
+- Explicit clarification refresh, existing-feature revalidation, owned legacy alias
+  upgrades and project readiness checks before dispatch.
