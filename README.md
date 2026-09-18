@@ -1,11 +1,14 @@
 # sanduq
 
 <p align="center">
-  <img src="docs/assets/sanduq-logo.png" alt="Sanduq logo: modular workflows entering an open toolbox" width="420">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/sanduq-logo-dark.png">
+    <img src="docs/assets/sanduq-logo.png" alt="sanduq — tools for thoughtful delivery" width="460">
+  </picture>
 </p>
 
-[![Spec Kit extensions](https://img.shields.io/badge/Spec_Kit-7_extensions-17212b)](#spec-kit-extensions)
-[![Portable agent skills](https://img.shields.io/badge/Agent_skills-7-eb6c36)](#portable-skills)
+[![Spec Kit extensions](https://img.shields.io/badge/Spec_Kit-7_extensions-233C32)](#spec-kit-extensions)
+[![Portable agent skills](https://img.shields.io/badge/Agent_skills-7-C65B36)](#portable-skills)
 [![MkDocs Material](https://img.shields.io/badge/MkDocs-Material-526cfe)](https://squidfunk.github.io/mkdocs-material/)
 [![English and Arabic](https://img.shields.io/badge/i18n-English_%2B_Arabic-00843d)](#language-audience-and-security-rules)
 [![skills.sh](https://skills.sh/b/samykabu/sanduq)](https://skills.sh/samykabu/sanduq)
