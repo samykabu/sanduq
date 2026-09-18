@@ -1,5 +1,9 @@
 # Reusable Spec Kit workflow extension implementation plan
 
+> Policy amendment, 2026-09-19: the owner superseded estimate-based context pauses.
+> Default execution continues without reliable telemetry. Only fresh reliable measurements
+> may trigger context pauses; historical estimated-fallback references below are superseded.
+
 Date: 2026-09-18
 Status: Implementation in progress on `feat/reusable-workflow`. Canonical sources, orchestration, installers, rollback and release tooling are implemented locally. Actual native installation and upgrade tests pass within the scope recorded in [implementation progress](workflow-implementation-progress.md). Remote CI, semantic live acceptance, release and consumer adoption remain pending. See the [operating guide](workflow-guide.md) and [compatibility decisions](workflow-compatibility.md).
 Canonical repository: `samykabu/sanduq`.
