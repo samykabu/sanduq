@@ -21,11 +21,15 @@ CI configuration, verification adapters and tooling tests. The final-head
 failed with `STALE_RECEIPT: verify`. This is correct rejection of changed build/test
 inputs, not evidence that the freshness gate should be relaxed.
 
-The merge's [workflow run](https://github.com/abushanab-net/Bunyan/actions/runs/35471000822)
-failed with `CHECKPOINT_MISSING_OR_WRONG_FEATURE`; its comparison covers legacy
-feature directories outside the managed pilot. The canonical supplied workflow is
-PR-only. A consumer push adaptation needs explicit feature selection and the right
-comparison base; silently skipping unbound features would hide missing evidence.
+The merge SHA also became the head of the separate promotion
+[PR #319](https://github.com/abushanab-net/Bunyan/pull/319). Its
+[workflow run](https://github.com/abushanab-net/Bunyan/actions/runs/35471000822)
+failed with `CHECKPOINT_MISSING_OR_WRONG_FEATURE`; the comparison against
+`8f13e043b1b998049959aa63bd2c87a1cf43b89a` includes legacy feature directories
+outside the managed pilot. This was a `pull_request` event, not a push invocation
+of the workflow gate. Promotion needs an explicit legacy-adoption/migration policy
+before enforcing managed checkpoints across that older history. Silently skipping
+unbound features would hide missing evidence; this change does not do that.
 
 API and web build runs succeeded. Manual previews and publication succeeded.
 Bootstrap verification failed, including a quick-run image-policy rejection
@@ -83,7 +87,7 @@ through the public CLI, migrate and revalidate affected receipts. Run
 rewrite historical fingerprints or count a migration as new test execution.
 
 Before claiming general release acceptance, finish consumer merge-time evidence
-refresh, configure required-check enforcement through the authorized governance
+refresh and promotion's legacy-feature adoption, configure required-check enforcement through the authorized governance
 process, and separately resolve consumer bootstrap/rollout failures. Cross-host
 installation, migration and rollback evidence supports the reusable build, but
 does not substitute for those delivery controls.

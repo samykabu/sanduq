@@ -159,6 +159,9 @@ branch protection for this check; report missing enforcement without changing it
 without authorization. The supplied CI template is PR-only: push workflows need
 an explicit affected-feature mapping and correct comparison base, not a blanket
 scan of legacy feature directories with no managed checkpoint.
+Promotion PRs can also include pre-adoption feature history. Report each missing
+checkpoint and require an explicit legacy-adoption decision; do not synthesize
+receipts or silently skip those features to make promotion pass.
 
 When the user reports a merge, read the actual bound PR through GitHub, verify
 its repository, target, merged flag, final head and merge SHA, and inspect checks
