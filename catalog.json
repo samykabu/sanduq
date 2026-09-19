@@ -1,21 +1,21 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-07-19T16:58:17Z",
+  "updated_at": "2026-09-19T22:24:12.265619+00:00",
   "catalog_url": "https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json",
   "extensions": {
     "project": {
       "name": "GitHub Project Lifecycle Sync",
       "id": "project",
-      "description": "Mirror each Spec Kit feature onto a GitHub Project (v2): a parent feature issue whose Status advances through the lifecycle, plus one native sub-issue per task closed as it is checked off. Board-agnostic via `project init`. Idempotent and no-regress.",
-      "author": "samykabu",
-      "version": "2.0.1",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/project-v2.0.1/project.zip",
+      "description": "Mirror each Spec Kit feature onto a GitHub Project (v2): create a parent feature issue, advance its Status column through the Spec Kit lifecycle (open -> analysis -> engineer-review -> ready -> in-progress -> in-review -> done), create one native sub-issue per task, and close sub-issues as their tasks are checked off. Board-agnostic initialization lets each repo choose required/automatic or optional/manual sync hooks. Idempotent and no-regress.",
+      "author": "Samy K. Abushanab",
+      "version": "2.1.0",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/project-v2.1.0/project.zip",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/project",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/project/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/project/CHANGELOG.md",
       "license": "PolyForm-Noncommercial-1.0.0",
-      "category": "project-management",
+      "category": "process",
       "effect": "read-write",
       "requires": {
         "speckit_version": ">=0.2.0",
@@ -46,19 +46,20 @@
       "downloads": 0,
       "stars": 0,
       "created_at": "2026-07-09T00:00:00Z",
-      "updated_at": "2026-07-18T19:59:17Z"
+      "updated_at": "2026-09-19T22:24:12.265584+00:00",
+      "sha256": "7ec7eb280b9cfb4408303d5c8ce23df875b73ae1b9b8caf864dd9e2968ef283e"
     },
     "pr": {
       "name": "Pull Request Workflow",
       "id": "pr",
-      "version": "4.0.2",
-      "description": "Generate or update pull requests from Spec Kit artifacts, then process review feedback through an approval-gated fix and reply workflow.",
+      "version": "4.1.0",
+      "description": "Generate or update pull requests from Spec Kit artifacts, enforce installed QA and User Manual freshness policies, then process review feedback through an approval-gated fix and reply workflow.",
       "author": "Samy K. Abushanab",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/pr",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/pr/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/pr/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/pr-v4.0.2/pr.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/pr-v4.1.0/pr.zip",
       "license": "PolyForm-Noncommercial-1.0.0",
       "category": "process",
       "effect": "read-write",
@@ -112,7 +113,8 @@
       ],
       "verified": false,
       "created_at": "2026-07-09T20:26:15Z",
-      "updated_at": "2026-07-19T16:58:17Z"
+      "updated_at": "2026-09-19T22:24:12.258379+00:00",
+      "sha256": "c567ed63fa745f92b523f07e2270f5ecaba2f486fd9c1bccf69e5cba42215660"
     },
     "illustrate": {
       "name": "Illustrate",
@@ -171,14 +173,14 @@
     "assure": {
       "name": "Assure",
       "id": "assure",
-      "version": "2.0.1",
+      "version": "2.1.0",
       "description": "Make QA part of the Spec Kit lifecycle: initialize project policy, require feature test-readiness analysis before implementation, and generate a current QA test manual before pull-request creation.",
       "author": "Samy K. Abushanab",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/assure",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/assure/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/assure/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/assure-v2.0.1/assure.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/assure-v2.1.0/assure.zip",
       "license": "PolyForm-Noncommercial-1.0.0",
       "category": "process",
       "effect": "read-write",
@@ -220,19 +222,20 @@
       ],
       "verified": false,
       "created_at": "2026-07-18T18:35:58Z",
-      "updated_at": "2026-07-19T16:58:17Z"
+      "updated_at": "2026-09-19T22:24:12.243798+00:00",
+      "sha256": "49100091c2ae4dff036a2837ad30b8530a12e72372e75580f8e7688aa032b6d7"
     },
     "user-manual": {
       "name": "User Manual",
       "id": "user-manual",
-      "version": "1.0.1",
+      "version": "1.1.0",
       "description": "Create and incrementally maintain bilingual-ready, audience-aware application manuals in Markdown, Material HTML, and PDF, including modules, interfaces, tutorials, screenshots, APIs, releases, migrations, infrastructure, architecture, and complete data dictionaries.",
       "author": "Samy K. Abushanab",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/user-manual",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/user-manual/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/user-manual/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/user-manual-v1.0.1/user-manual.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/user-manual-v1.1.0/user-manual.zip",
       "license": "PolyForm-Noncommercial-1.0.0",
       "category": "documentation",
       "effect": "read-write",
@@ -284,7 +287,98 @@
       ],
       "verified": false,
       "created_at": "2026-07-18T18:35:58Z",
-      "updated_at": "2026-07-18T19:59:17Z"
+      "updated_at": "2026-09-19T22:24:12.253511+00:00",
+      "sha256": "6493af4343eed59d5ed54dd067208b5fdbd88ec8a935005ea3f39f59592c13bd"
+    },
+    "workflow": {
+      "name": "Sanduq Workflow",
+      "id": "workflow",
+      "version": "1.0.0",
+      "description": "Resumable, policy-driven Scope-to-PR orchestration with optional QA and User Manual processes.",
+      "author": "Samy K. Abushanab",
+      "license": "PolyForm-Noncommercial-1.0.0",
+      "repository": "https://github.com/samykabu/sanduq",
+      "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/workflow",
+      "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/README.md",
+      "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/CHANGELOG.md",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v1.0.0/workflow.zip",
+      "requires": {
+        "speckit_version": ">=1.0.0,<1.1.0",
+        "tools": [
+          {
+            "name": "python",
+            "version": ">=3.10",
+            "required": true
+          },
+          {
+            "name": "git",
+            "required": true
+          },
+          {
+            "name": "gh",
+            "required": true
+          }
+        ]
+      },
+      "provides": {
+        "commands": 8,
+        "hooks": 0
+      },
+      "tags": [
+        "workflow",
+        "qa",
+        "documentation",
+        "github",
+        "context",
+        "resumable"
+      ],
+      "category": "process",
+      "effect": "read-write",
+      "verified": false,
+      "sha256": "66edc3357e7211d4c32bb4584ef1d561b3c6b2063e1dff2a8b3b234a76bc4e7b",
+      "updated_at": "2026-09-19T22:24:12.224833+00:00"
+    },
+    "scope": {
+      "name": "Speckit Scope",
+      "id": "scope",
+      "version": "1.4.0",
+      "description": "Analyze GitHub issue scope, enforce prerequisites, review user-selected decomposition before publishing, and maintain parent progress.",
+      "author": "Samy K. Abushanab",
+      "license": "MIT",
+      "repository": "https://github.com/samykabu/sanduq",
+      "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/scope",
+      "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/scope/README.md",
+      "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/scope/CHANGELOG.md",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/scope-v1.4.0/scope.zip",
+      "requires": {
+        "speckit_version": ">=1.0.0",
+        "tools": [
+          {
+            "name": "gh",
+            "required": true
+          },
+          {
+            "name": "python",
+            "version": ">=3.10",
+            "required": true
+          }
+        ]
+      },
+      "provides": {
+        "commands": 7,
+        "hooks": 4
+      },
+      "tags": [
+        "github",
+        "scope",
+        "workflow",
+        "dependencies"
+      ],
+      "category": "process",
+      "effect": "read-write",
+      "verified": false,
+      "sha256": "bc60c9c146841e82a5414213df4cadc280153c1b3c3158852ccd7e7b558bc422",
+      "updated_at": "2026-09-19T22:24:12.236786+00:00"
     }
   }
 }

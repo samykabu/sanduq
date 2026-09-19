@@ -1,13 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "workflow": "1.0.0",
-    "scope": "1.4.0",
-    "assure": "2.1.0",
-    "user-manual": "1.1.0",
-    "pr": "4.1.0",
-    "project": "2.1.0"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Publication authorized after Review Home pilot hardening PR #10 and successful merge CI; verify immutable assets before catalog promotion."
 }
