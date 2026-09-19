@@ -2,6 +2,16 @@
 
 ## 1.0.0 (unreleased)
 
+- Review Home pilot hardening: shared portable UTF-8 hashes across Workflow,
+  QA and manuals, respecting `-text`, binary data, SQL bytes and lone CR.
+- Publication index preflight and path-level stale-receipt diagnostics; no
+  automatic staging and no relaxation of source freshness after target merges.
+- Exclude derived graph output from implicit documentation inputs, retain
+  explicit graph output integrity, and document exact-head/post-merge verification.
+- Upgrading existing pilot state can invalidate receipts where hash semantics
+  or implicit inputs changed. Review drift and migrate/revalidate affected stages;
+  never rewrite historical receipts as new test execution.
+
 - Live-pilot correction: only reliable measured context can pause the default workflow.
   Unknown/estimated/stale telemetry continues automatically; explicit strict mode remains opt-in.
 

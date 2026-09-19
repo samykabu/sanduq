@@ -28,6 +28,7 @@ def package(extension, output=None, root=ROOT):
     shared = root / 'extensions/scripts/shared/sanduq_freshness.py'
     if extension in ('assure', 'user-manual') and shared.exists():
         files[extension + '/scripts/sanduq_freshness.py'] = shared.read_bytes()
+        files[extension + '/scripts/sanduq_hash.py'] = (root / 'extensions/workflow/scripts/sanduq_hash.py').read_bytes()
     inventory = {name: hashlib.sha256(value).hexdigest() for name, value in sorted(files.items())}
     files[extension + '/package-inventory.json'] = (json.dumps(inventory, indent=2) + '\n').encode()
     output = output or root / 'dist' / (extension + '.zip')

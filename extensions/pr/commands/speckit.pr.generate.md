@@ -168,7 +168,9 @@ For each applicable diagram:
    `<feature-slug>-architecture.html`, `<feature-slug>-sequence.html`, or
    `<feature-slug>-state-machine.html`.
 3. Export a PNG beside each HTML file with the installed Illustrate
-   `scripts/export_diagram.py` utility and its `references/export.md` contract.
+   `.specify/extensions/illustrate/skill/scripts/export_diagram.py` utility and
+   `.specify/extensions/illustrate/skill/references/export.md` contract. Resolve
+   these from the project root, not from the PR extension directory.
 4. Embed the PNG in `<Feature>-Explained.md` and link to the HTML source for inspection/export.
 5. Follow the skill's complexity budget and split an overloaded diagram into overview/detail assets.
 6. If no supported visual materially improves comprehension, omit diagrams. Do not invent one.

@@ -5,6 +5,13 @@ import json
 import re
 import subprocess
 from pathlib import Path
+import sys
+
+# Installed packages carry this module beside the state script; canonical tests
+# load the same implementation from Workflow without copying consumer files.
+if not (Path(__file__).parent / 'sanduq_hash.py').exists():
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'workflow/scripts'))
+from sanduq_hash import portable_content, text_attributes
 
 EXCLUDED = {'.git', 'node_modules', 'bin', 'obj', 'dist', 'build', 'coverage', '__pycache__'}
 
@@ -23,12 +30,14 @@ def relative(root, value):
 
 def fingerprints(root, paths):
     result = {}
-    for value in sorted(set(paths)):
+    paths = [relative(root, value) for value in sorted(set(paths))]
+    attributes = text_attributes(root, paths)
+    for value in paths:
         key = relative(root, value)
         path = root / key
         content = path.read_bytes() if path.is_file() else None
-        if content is not None and path.suffix.lower() in ('.md', '.txt', '.json', '.yml', '.yaml', '.py', '.ts', '.js', '.tsx', '.cs', '.html', '.css'):
-            content = content.replace(b'\r\n', b'\n')
+        if content is not None:
+            content = portable_content(path, content, attributes.get(key))
         if content is not None and path.name == 'tasks.md':
             content = re.sub(rb'(?m)^(\s*- )\[[ xX]\]', rb'\1[ ]', content)
         result[key] = hashlib.sha256(content).hexdigest() if content is not None else None
@@ -59,7 +68,7 @@ def inputs(root, feature, kind, base=None):
         parts = Path(value).parts
         return not (any(p in EXCLUDED for p in parts) or value.startswith((feature + '/workflow/',
             feature + '/evidence/', '.specify/workflow/', '.specify/scope/', '.specify/extensions/',
-            'User-Manual/', 'docs/' + Path(feature).name + '/')) or Path(value).name in
+            'graphify-out/', 'User-Manual/', 'docs/' + Path(feature).name + '/')) or Path(value).name in
             {'.env', 'workflow.yml', 'feature.json', 'project-sync-state.json'})
     result = fingerprints(root, [p for p in paths if included(p)])
     # Task completion bookkeeping is not a requirements change.
