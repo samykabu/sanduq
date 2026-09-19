@@ -95,5 +95,13 @@
     "non_fast_forward",
     "pull_request"
   ],
-  "scope": "GitHub metadata and check results only; not live application acceptance"
+  "scope": "GitHub metadata and check results only; not live application acceptance",
+  "promotion_gate_context": {
+    "event": "pull_request",
+    "head_branch": "develop",
+    "run_url": "https://github.com/abushanab-net/Bunyan/actions/runs/35471000822",
+    "pr": 319,
+    "base": "staging",
+    "comparison_base": "8f13e043b1b998049959aa63bd2c87a1cf43b89a"
+  }
 }
