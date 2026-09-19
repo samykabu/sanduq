@@ -98,6 +98,22 @@ independently via `<extension>-vX.Y.Z` tags.
 - Added the ambiguous-`scope`-id warning to the easy-to-get-wrong list, where someone about to run
   an install command will actually see it.
 
+## Documentation — context policy corrected to measured-only — 2026-09-19
+
+### Fixed
+
+- The README described the old context behaviour: that without an enforcing host the 60/50/10
+  numbers are "an explicitly labelled estimate" and the answer is smaller batches. The workflow now
+  defaults to `measured-only`, where only a fresh, reliable measurement can pause a run and missing,
+  estimated, stale or malformed telemetry is nonblocking. Rewritten against
+  `workflow.py context_gate` rather than the prose: the 120-second staleness bound, the early pause
+  when the projected next call plus the reserve would cross the ceiling, the legacy
+  `measured-with-estimated-fallback` now behaving the same way, and `strict` as the only mode that
+  refuses to proceed.
+- Corrected the feature-lifetime table and diagram, which said the checkpoint fires when "context
+  reaches the ceiling". It fires on a fresh, reliable measurement crossing the checkpoint fraction;
+  the diagram transition now reads MEASURED LIMIT.
+
 ## Coordinated workflow release (unreleased)
 
 - Add Workflow 1.0.0 and migrate Scope 1.4.0 with canonical GitHub presets into Sanduq.
