@@ -665,7 +665,7 @@ it has three ways to leave that state and come back — none of which resets it 
 | **Scoped** | The issue is analysed and its effort settled | Specify claims it |
 | **Bound** | Specify verified `scope-source.json` and bound a branch | The first stage takes a claim |
 | **Stage running** | A stage holds the claim | The stage finishes, or one of the three detours below |
-| **Checkpointed** | Context reaches the ceiling; `checkpoint.json`, `handoff.md`, and `resume-prompt.md` are written | `continue` validates identity, inputs, and package versions |
+| **Checkpointed** | A fresh, reliable measurement crosses the checkpoint fraction; `checkpoint.json`, `handoff.md`, and `resume-prompt.md` are written | `continue` validates identity, inputs, and package versions |
 | **Blocked** | Stale scope, unresolved answers, a wrong binding, or a closed issue | The real state is settled — never by marking it done to get past the guard |
 | **Migration required** | An upgrade changed the packages under an in-flight feature | `workflow.py migrate --feature ... --reason ...`, after review |
 | **Ready to finalize** | Required tasks are complete and evidence is current | Finalize |
@@ -721,14 +721,25 @@ extension is installed.
 
 ### Continuing in a fresh session
 
-The workflow targets 60% maximum context occupancy, checkpoints at 50%, and reserves 10% for handoff.
-Those numbers are a policy, not a guarantee: without a host that enforces per-call bounds they are an
-explicitly labelled estimate, and the honest response is smaller work batches. A prompt cannot create
-a fresh host session or police its own context.
+Context policy lives in `.specify/workflow.yml` under `context.mode` and defaults to
+**`measured-only`** — checkpoint at 50% occupancy, a 60% ceiling, 10% reserved for the handoff. A
+pause also fires early if the projected next call plus that reserve would cross the ceiling.
 
-What it *can* do is leave enough behind. The handoff names the issue, feature, branch, completed
-stages, pending task IDs, evidence, and the active claim. Add your real test results, background
-process handles, and unresolved approvals, then start the next session with the saved resume prompt.
+Only a **fresh, reliable measurement** can pause a run: the host's own reading, no more than 120
+seconds old. Telemetry that is missing, estimated, stale, or malformed is **non-blocking** — the
+stage continues, the gate records `unavailable`, and nothing claims a guarantee it did not have.
+An estimate never forces a pause or a new session, and the legacy `measured-with-estimated-fallback`
+mode now behaves the same way. Only explicit `strict` mode refuses to proceed without a host that
+enforces per-call bounds.
+
+That distinction is the point. The failure mode it prevents is an agent inventing a utilization
+percentage and stopping real work on it. Reach for the saved resume prompt after an actual
+interruption or a measured limit, not because a number was unavailable.
+
+What the workflow can always do is leave enough behind. The handoff names the issue, feature,
+branch, completed stages, pending task IDs, evidence, and the active claim. Add your real test
+results, background process handles, and unresolved approvals, then start the next session with the
+saved prompt.
 
 Full operating detail: the [managed workflow guide](docs/workflow-guide.md) and the
 [compatibility contract](docs/workflow-compatibility.md).
