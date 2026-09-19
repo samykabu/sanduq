@@ -72,3 +72,22 @@ The policy-aware CI workflow validates every changed feature, selected documenta
 freshness, task mapping and receipts. It distinguishes committed evidence from live
 GitHub checks and human acceptance. Finalize also verifies that each inline PR visual
 loads in an authenticated private-repository view.
+
+Before publication, run `ci_gate.py --feature specs/<feature> --base-ref <target-sha>
+--check-index` after staging reviewed evidence, then repeat the gate in a clean
+checkout of the candidate commit. Missing/unstaged dependencies are reported by
+path; the command never stages files. Target-branch source changes invalidate old
+verification even when Git merges cleanly. Configure `workflow-evidence` as a
+required check through the repository's authorized governance process.
+
+UTF-8 text fingerprints normalize CRLF across checkout platforms. Explicit Git
+`-text`, SQL, NUL-bearing and non-UTF-8 files remain byte exact; lone CR is not
+normalized. Shared QA/manual hashing follows the same contract. Generated graph
+files are excluded from implicit documentation input discovery but remain checked
+when explicitly declared as outputs. Revalidate affected historical receipts after
+adopting this changed contract; do not relabel old evidence.
+
+The dispatcher ends at PR publication. Its `pr_open` state is not post-merge
+certification. Follow the skill's post-merge protocol and retain an external-state
+report of exact SHAs, checks and rollout observations. See the
+[Review Home pilot findings](../../docs/workflow-pilot-review.md).
