@@ -8,6 +8,6 @@
     "pr": "4.1.0",
     "project": "2.1.0"
   },
-  "status": "implementation-in-progress",
-  "note": "Not published. Public catalogs remain at released versions until coordinated assets are verified."
+  "status": "ready",
+  "note": "Publication authorized after Review Home pilot hardening PR #10 and successful merge CI; verify immutable assets before catalog promotion."
 }
