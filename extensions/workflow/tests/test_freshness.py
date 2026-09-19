@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts/shared'))
 import sanduq_freshness as f
+import workflow as w
 
 class FreshnessTests(unittest.TestCase):
     def setUp(self):
@@ -32,6 +33,54 @@ class FreshnessTests(unittest.TestCase):
         (self.root/self.feature/'tasks.md').write_text('- [x] T001 Behavior')
         self.assertTrue(self.call()['current'])
 
+    def test_generated_graph_is_not_an_implicit_doc_input(self):
+        graph = self.root / 'graphify-out/graph.json'
+        graph.parent.mkdir(); graph.write_text('old graph')
+        self.call('record'); graph.write_text('post-commit graph')
+        self.assertTrue(self.call()['current'])
+        # Explicitly selected graph outputs still carry integrity checks.
+        recorded = f.fingerprints(self.root, ['graphify-out/graph.json'])
+        graph.write_text('changed again')
+        self.assertNotEqual(recorded, f.fingerprints(self.root, recorded))
+
+    def test_portable_hashes_cover_build_scripts_and_extensionless_text(self):
+        names = ['script.mjs', 'project.csproj', 'source.rs', 'build.props', 'script.ps1',
+                 'script.sh', 'config.toml', 'requirements.lock', 'LICENSE', '.gitignore']
+        for name in names:
+            (self.root / name).write_bytes(b'one\r\ntwo\r\n')
+        for fingerprint in (f.fingerprints, w.fingerprint_files):
+            before = fingerprint(self.root, names)
+            for name in names:
+                (self.root / name).write_bytes(b'one\ntwo\n')
+            self.assertEqual(before, fingerprint(self.root, names))
+            for name in names:
+                (self.root / name).write_bytes(b'one\r\ntwo\r\n')
+
+    def test_sql_binary_attributes_and_lone_cr_stay_byte_sensitive(self):
+        (self.root / '.gitattributes').write_text('literal.mjs -text\n')
+        for name, value in [('policy.sql', b'a\r\nb'), ('literal.mjs', b'a\r\nb'),
+                            ('image.bin', b'\0a\r\nb'), ('invalid.bin', b'\xff\r\n'),
+                            ('script.mjs', b'a\rb')]:
+            path = self.root / name
+            for fingerprint in (f.fingerprints, w.fingerprint_files):
+                path.write_bytes(value); before = fingerprint(self.root, [name])
+                path.write_bytes(value.replace(b'\r', b''))
+                self.assertNotEqual(before, fingerprint(self.root, [name]), name)
+
+    def test_actual_crlf_checkout_matches_lf_receipts(self):
+        names = ['build.mjs', 'project.props', 'LICENSE', 'policy.sql']
+        (self.root / '.gitattributes').write_text('* text=auto\n*.sql -text\n')
+        for name in names:
+            (self.root / name).write_bytes(b'first\nsecond\n')
+        subprocess.run(['git', 'add', '.'], cwd=self.root, check=True, capture_output=True)
+        subprocess.run(['git', 'commit', '-qm', 'portable source'], cwd=self.root, check=True)
+        with tempfile.TemporaryDirectory() as folder:
+            clone = Path(folder) / 'checkout'
+            subprocess.run(['git', '-c', 'core.autocrlf=true', 'clone', '-q', str(self.root), str(clone)],
+                           check=True, capture_output=True)
+            self.assertIn(b'\r\n', (clone / 'build.mjs').read_bytes())
+            for fingerprint in (f.fingerprints, w.fingerprint_files):
+                self.assertEqual(fingerprint(self.root, names), fingerprint(clone, names))
     def test_deletion_and_new_source_are_detected(self):
         (self.root/'src.txt').unlink();self.call('record');self.assertTrue(self.call()['current'])
         (self.root/'src.txt').write_text('restored');self.assertFalse(self.call()['current'])

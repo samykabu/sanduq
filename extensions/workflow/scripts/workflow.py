@@ -15,6 +15,10 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Also supports importlib loading directly from the canonical source tree.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from sanduq_hash import portable_content, text_attributes
+
 import yaml
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
@@ -329,12 +333,15 @@ def measured_context_gate(policy, usage):
 
 def fingerprint_files(root, paths):
     result = {}
-    for relative in sorted(set(paths)):
+    paths = sorted(set(paths))
+    for relative in paths:
+        inside(root, relative)
+    attributes = text_attributes(root, paths)
+    for relative in paths:
         path = inside(root, relative)
         if path.is_file():
             content = path.read_bytes()
-            if path.suffix.lower() in ('.md', '.txt', '.json', '.yml', '.yaml', '.py', '.ts', '.js', '.tsx', '.cs', '.html', '.css'):
-                content = content.replace(b'\r\n', b'\n')
+            content = portable_content(path, content, attributes.get(relative))
             # Checkbox bookkeeping must not invalidate task publication or planning.
             if path.name == 'tasks.md':
                 content = re.sub(rb'(?m)^(\s*- )\[[ xX]\]', rb'\1[ ]', content)
@@ -388,6 +395,19 @@ def receipt_current(root, feature, stage, receipt):
     if stage in ('verify', 'review', 'ready'):
         return receipt.get('source_fingerprints') == source_fingerprints(root)
     return True
+
+
+def receipt_drift(root, feature, stage, receipt):
+    """Explain staleness without printing source content or weakening the gate."""
+    saved = receipt.get('fingerprints', {})
+    current = fingerprint_files(root, set(saved) | set(required_inputs(root, feature, stage)))
+    changed = {p for p in set(saved) | set(current) if saved.get(p) != current.get(p)}
+    changed.update(set(required_inputs(root, feature, stage)) - set(saved))
+    if stage in ('verify', 'review', 'ready'):
+        old = receipt.get('source_fingerprints', {})
+        new = source_fingerprints(root)
+        changed.update(p for p in set(old) | set(new) if p not in old or p not in new or old[p] != new[p])
+    return sorted(changed)
 
 
 def ensure_local_excludes(root):

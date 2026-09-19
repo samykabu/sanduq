@@ -17,7 +17,9 @@ missing, estimated or stale usage must not stop automatic continuation.
 
 When execution.checkpoints is required-only, project policy pre-authorizes
 routine phase checkpoints and backend choice. Record the selected execution mode
-and continue automatically. Explicit HUMAN-REVIEW tasks, unresolved requirements,
+and continue automatically. This overrides upstream instructions to pause for
+approval at every routine phase; do not ask again for approvals already recorded.
+Explicit HUMAN-REVIEW tasks, unresolved requirements,
 security decisions and deployment approvals still pause. Execute small batches
 and hand off only at a reliably measured context limit. Without reliable telemetry,
 continue automatically; never stop on estimates or reset a measured budget per task.

@@ -1,0 +1,107 @@
+{
+  "observed_at": "2026-09-19T21:49:23.9965403Z",
+  "pr": {
+    "html_url": "https://github.com/abushanab-net/Bunyan/pull/368",
+    "merged": true,
+    "merged_at": "2026-09-19T21:37:59Z",
+    "merge_commit_sha": "ad6c3d9b4f81b0b73973251888e54c18fa59aa66"
+  },
+  "final_head": "6fd8d851f598eeec44d43a88b65d2469002d274a",
+  "target": "develop",
+  "head_checks": [
+    {
+      "name": "preview",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/abushanab-net/Bunyan/actions/runs/35470990684/job/105971804443"
+    },
+    {
+      "name": "workflow-evidence",
+      "status": "completed",
+      "conclusion": "failure",
+      "html_url": "https://github.com/abushanab-net/Bunyan/actions/runs/35470990632/job/105971804265"
+    }
+  ],
+  "merge_runs": [
+    {
+      "name": "User Manual preview (Cloudflare Pages)",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/abushanab-net/Bunyan/actions/runs/35471193824"
+    },
+    {
+      "name": "User Manual preview (Cloudflare Pages)",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/abushanab-net/Bunyan/actions/runs/35471143081"
+    },
+    {
+      "name": "Sanduq workflow gates",
+      "status": "completed",
+      "conclusion": "failure",
+      "html_url": "https://github.com/abushanab-net/Bunyan/actions/runs/35471000822"
+    },
+    {
+      "name": "User Manual preview",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/abushanab-net/Bunyan/actions/runs/35471000712"
+    },
+    {
+      "name": "Bootstrap verification",
+      "status": "completed",
+      "conclusion": "failure",
+      "html_url": "https://github.com/abushanab-net/Bunyan/actions/runs/35471000710"
+    },
+    {
+      "name": "Graph Update: pip in /.specify/extensions/assure, /.specify/extensions/scope, /.specify/extensions/workflow #1583336897",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/abushanab-net/Bunyan/actions/runs/35470994742"
+    },
+    {
+      "name": "Reconcile scoped issue parents",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/abushanab-net/Bunyan/actions/runs/35470992095"
+    },
+    {
+      "name": "dev-ci-api",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/abushanab-net/Bunyan/actions/runs/35470990991"
+    },
+    {
+      "name": "dev-ci-web",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/abushanab-net/Bunyan/actions/runs/35470991036"
+    },
+    {
+      "name": "User Manual publish (Cloudflare Pages)",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/abushanab-net/Bunyan/actions/runs/35470990637"
+    },
+    {
+      "name": "Bootstrap verification",
+      "status": "completed",
+      "conclusion": "failure",
+      "html_url": "https://github.com/abushanab-net/Bunyan/actions/runs/35470990645"
+    }
+  ],
+  "active_rule_types": [
+    "deletion",
+    "non_fast_forward",
+    "pull_request"
+  ],
+  "scope": "GitHub metadata and check results only; not live application acceptance",
+  "promotion_gate_context": {
+    "event": "pull_request",
+    "head_branch": "develop",
+    "run_url": "https://github.com/abushanab-net/Bunyan/actions/runs/35471000822",
+    "pr": 319,
+    "base": "staging",
+    "comparison_base": "8f13e043b1b998049959aa63bd2c87a1cf43b89a"
+  }
+}

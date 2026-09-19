@@ -29,6 +29,23 @@ class CIGateTests(unittest.TestCase):
     def test_core_only_does_not_require_unselected_docs(self):
         self.ready();self.assertTrue(c.check(self.root,self.feature,self.policy)['passed'])
 
+    def test_index_preflight_rejects_local_only_and_unstaged_evidence(self):
+        run = self.ready()
+        with self.assertRaisesRegex(w.WorkflowError, 'EVIDENCE_NOT_PORTABLE'):
+            c.check_index(self.root, self.feature)
+        subprocess.run(['git', 'add', '.'], cwd=self.root, check=True)
+        self.assertGreater(c.check_index(self.root, self.feature)['indexed_paths'], 0)
+        (run.feature / 'evidence/verify.txt').write_text('changed after staging')
+        with self.assertRaisesRegex(w.WorkflowError, 'unstaged.*verify.txt'):
+            c.check_index(self.root, self.feature)
+
+    def test_source_drift_reports_paths_without_contents(self):
+        self.ready()
+        (self.root / 'new-build.props').write_text('private contents')
+        with self.assertRaisesRegex(w.WorkflowError, 'STALE_RECEIPT: verify.*new-build.props') as failure:
+            c.check(self.root, self.feature, self.policy)
+        self.assertNotIn('private contents', str(failure.exception))
+
     def test_missing_or_deleted_evidence_and_incomplete_tasks_fail(self):
         run=self.ready();evidence=run.feature/'evidence/verify.txt';before=evidence.read_bytes();evidence.unlink()
         with self.assertRaisesRegex(w.WorkflowError,'STALE_RECEIPT'):c.check(self.root,self.feature,self.policy)
