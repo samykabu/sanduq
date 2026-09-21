@@ -49,14 +49,42 @@ def smoke(host, superspec_source=None):
         assert text.count('<!-- sanduq-workflow-managed:v1 -->') == 1, name
         assert len(text) > 2500, 'Lost upstream command body: ' + name
         snapshots[name] = text
+    protocol = '.specify/extensions/workflow/skills/workflow/references/execution.md'
+    execution_names = ['speckit-implement']
+    if superspec_source:
+        execution_names.append('speckit-superspec-execute')
+    for name in execution_names:
+        assert protocol in snapshots[name], 'Missing execution protocol: ' + name
+    installed_workflow = project / '.specify/extensions/workflow'
+    execution_files = ('skills/workflow/references/execution.md', 'scripts/progress.py')
+    execution_snapshots = {}
+    for relative in execution_files:
+        installed = (installed_workflow / relative).read_bytes()
+        assert installed == (workspace / 'packages/workflow' / relative).read_bytes(), relative
+        execution_snapshots[relative] = installed
+    tasks = project / 'specs/001-smoke/tasks.md'
+    tasks.parent.mkdir(parents=True)
+    tasks.write_text('- [ ] T001 Verify installed report\n', encoding='utf-8')
+    report = tasks.parent / 'workflow/progress'
+    progress = str(installed_workflow / 'scripts/progress.py')
+    run([sys.executable,progress,'init','--tasks',str(tasks),'--output',str(report)])
+    run([sys.executable,progress,'task','--output',str(report),'--id','T001',
+         '--status','running','--agent','smoke-worker','--note','Reinstall must retain this work'])
+    report_before = (report / 'state.json').read_bytes()
+    assert 'smoke-worker' in (report / 'index.html').read_text(encoding='utf-8')
     # Public reinstall must preserve composition and selected policy.
     before_policy = (project / '.specify/workflow.yml').read_bytes()
     run(['specify','extension','add','--dev',str(workspace / 'packages/workflow'),'--force'])
     for name, previous in snapshots.items():
         assert (project / agent / 'skills' / name / 'SKILL.md').read_text(encoding='utf-8') == previous
     assert (project / '.specify/workflow.yml').read_bytes() == before_policy
+    for relative, previous in execution_snapshots.items():
+        assert (installed_workflow / relative).read_bytes() == previous, relative
+    assert (report / 'state.json').read_bytes() == report_before
+    run([sys.executable,progress,'task','--output',str(report),'--id','T001','--status','done'])
+    assert json.loads((report / 'state.json').read_text(encoding='utf-8'))['tasks'][0]['status'] == 'done'
     result = {'host':host,'superspec':bool(superspec_source),'ok':True,'workspace':str(workspace),'commands':commands,
-              'verified':'installation, composition, four policy choices, reconciliation, doctor and same-version reinstall; no semantic agent execution or live GitHub acceptance'}
+              'verified':'installation, executor composition, bundled execution protocol, installed report CLI and state preservation, four policy choices, reconciliation, doctor and same-version reinstall; no semantic agent execution or live GitHub acceptance'}
     (workspace / 'result.json').write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8')
     return result
 

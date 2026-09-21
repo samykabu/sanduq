@@ -3,7 +3,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/sanduq-logo-dark.png">
-    <img src="docs/assets/sanduq-logo.png" alt="sanduq — tools for thoughtful delivery" width="460">
+    <img src="docs/assets/sanduq-logo.png" alt="sanduq tools for software delivery" width="460">
   </picture>
 </p>
 
@@ -14,9 +14,17 @@
 [![skills.sh](https://skills.sh/b/samykabu/sanduq)](https://skills.sh/samykabu/sanduq)
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm_Noncommercial_1.0.0-7b2d26)](#license)
 
-**sanduq** is a modular toolbox for AI-assisted software delivery. Use its portable skills in any
-repository, or install its Spec Kit extensions to make project tracking, QA analysis, application
-manuals, illustrations, and pull-request documentation part of a governed lifecycle.
+Sanduq supplies agent skills and Spec Kit extensions for software delivery. Use a portable skill
+for a bounded task, or install the managed workflow to take a GitHub issue through specification,
+implementation, verification, documentation, and a pull request. Implementation uses a dedicated
+orchestrator and workers, with an HTML report that follows progress through an authorized PR merge.
+
+The orchestration and live-report additions described here require workflow 1.1.0, currently staged
+in this checkout. The published catalog still installs workflow 1.0.0. Use the
+[local package procedure](#try-the-staged-workflow) to try 1.1.0 before its release.
+
+Start with the [complete how-to and prompt guide](docs/skill-guide.md). It covers every portable
+skill, extension command, Sanduq overlay, and stage in the managed lifecycle.
 
 ![Standalone skills and Spec Kit extensions converge on QA evidence, audience-aware manuals, private PR previews, and versioned releases.](docs/assets/sanduq-workflow.svg)
 
@@ -34,8 +42,7 @@ manuals, illustrations, and pull-request documentation part of a governed lifecy
 
 ## Skills, plugins, and extensions
 
-sanduq ships three kinds of thing. They are not interchangeable, and the difference decides how you
-install it and how you invoke it.
+Sanduq has three installation formats. Choose the one your agent and project use.
 
 ![How sanduq packages tooling and the three paths by which it reaches a working copy](docs/assets/sanduq-packaging.png)
 
@@ -48,8 +55,8 @@ install it and how you invoke it.
 | Lands in | `.claude/skills/<name>/` | Claude Code's plugin directory | `.specify/extensions/<id>/` |
 | Source | [`skills/`](skills/) | [`skills/<bundle>/`](skills/) | [`extensions/`](extensions/) |
 
-A fourth directory, [`presets/`](presets/), holds canonical command overlays. They are **bundled into
-extension archives at build time** — you never install a preset by itself.
+A fourth directory, [`presets/`](presets/), holds canonical command overlays. They are bundled into
+extension archives at build time and installed with their owning extension.
 
 The same capability is sometimes published both ways. `illustrate` exists as a portable skill *and*
 as a Spec Kit extension: identical visual vocabulary and exporters, different delivery. Use the skill
@@ -90,7 +97,7 @@ specify extension add user-manual
 specify extension add pr
 ```
 
-Then initialize the ones that keep project state — `/speckit-project-init`, `/speckit-assure-init`,
+Then initialize the ones that keep project state; `/speckit-project-init`, `/speckit-assure-init`,
 `/speckit-user-manual-init`. To sequence all of them from a GitHub issue through to one pull request,
 see [the managed Spec Kit workflow](#the-managed-spec-kit-workflow).
 
@@ -114,9 +121,8 @@ skill includes its own scripts, MkDocs Material scaffold, RTL styles, CI workflo
 
 ### Using a skill once it is installed
 
-A skill is not a command you run. It is a body of instructions the agent loads **by itself** when
-your request matches what the skill is for — each one carries a `description` that says when it
-applies. So the normal way to use one is to describe the task:
+A skill contains instructions that the agent loads when your request matches its description.
+Describe the task in plain English:
 
 ```text
 create a light architecture diagram of the booking service and its payment provider
@@ -137,12 +143,12 @@ skills under their bundle namespace:
 /agent-tools:delegate-task
 ```
 
-Two consequences worth knowing:
+Installation affects context and executable paths:
 
-- **A skill that is installed is a skill that is discoverable.** Every installed skill's description
-  is read at session start, which costs context. Install the modules you use, not all of them —
+- Every installed skill's description
+  is read at session start, which costs context. Install the modules you use, not all of them,
   that is why the User Manual capability ships as five separately installable skills rather than one.
-- **A skill can carry executable files.** `illustrate` ships Python exporters; `delegate-task` ships
+- `illustrate` ships Python exporters; `delegate-task` ships
   a Node driver. Those run from the skill's own directory, so where you installed it decides their
   path. Each skill's README says how to resolve it.
 
@@ -186,7 +192,7 @@ $illustrate create a light architecture diagram showing a mobile app, API gatewa
 payment service, PostgreSQL, and an external payment provider. Keep trust boundaries visible.
 ```
 
-Real-life scenario: an architecture decision record is difficult to scan. Ask `illustrate` for a
+For example, an architecture decision record is difficult to scan. Ask `illustrate` for a
 seven-node architecture diagram, review the editable SVG, then embed it in the ADR and User Manual.
 
 Illustrate initializes a project-level theme at `.github/illustration-theme.yml`. Cobalt Porcelain
@@ -220,7 +226,7 @@ manual from the ground up. Include web, mobile, API, infrastructure, architectur
 module ER documentation. Use synthetic examples only.
 ```
 
-Real-life scenario: a logistics platform has no documentation. The skill discovers Shipment,
+For example, a logistics platform has no documentation. The skill discovers Shipment,
 Driver, Customer, Billing, and Operations modules, asks the owner to approve them, then builds
 plain-English task guides for customers, operational procedures for dispatchers, and private API,
 schema, deployment, and architecture references for technical readers.
@@ -241,7 +247,7 @@ $user-manual-api-docs document every public partner endpoint in openapi.yaml. Ex
 admin, debug, webhook-receiver, and secret-bearing operations. Add safe request and response examples.
 ```
 
-Real-life scenario: a marketplace exposes seller order APIs and also has internal reconciliation
+For example, a marketplace exposes seller order APIs and also has internal reconciliation
 routes. The skill builds a partner reference for seller operations, puts administrator operations
 behind authenticated navigation, and prevents internal endpoints from leaking into public output.
 
@@ -254,7 +260,7 @@ $user-manual-release-docs create release notes and a migration guide from v2.4.0
 the Git diff, schemas, deployment files, and tests. Separate user impact, operator steps, and API changes.
 ```
 
-Real-life scenario: an authentication release retires legacy tokens. The result explains the visible
+For example, an authentication release retires legacy tokens. The result explains the visible
 sign-in change to end users, gives administrators a rollout checklist, and provides technical readers
 with compatibility, verification, and rollback steps grounded in the code.
 
@@ -268,7 +274,7 @@ English and Arabic, desktop and mobile, success and validation-error states. Use
 mask email addresses, tokens, IDs, and timestamps.
 ```
 
-Real-life scenario: every release made screenshots stale. The module ties each image to a stable
+For example, every release made screenshots stale. The module ties each image to a stable
 test scenario, fixed viewport, locale, fixture, role, and application state so CI can recapture only
 the affected module.
 
@@ -283,14 +289,14 @@ Use the approved provider from User-Manual/manual.yml for an optional hosted pre
 Technical editions authenticated, and publish versioned HTML/PDF only after merge or a release tag.
 ```
 
-Real-life scenario: customer reviewers need a convenient preview, while operations documentation
+For example, customer reviewers need a convenient preview, while operations documentation
 must remain private. CI uploads all editions as a repository-reader artifact, deploys only approved
 End User pages to the configured preview provider, and publishes release PDFs after merge.
 
 ### `delegate-task`
 
-Use this skill to hand a single bounded task to another agent CLI — Claude Code, OpenAI Codex,
-OpenCode, GitHub Copilot, or Pi — run it in the background, and read back a result that was
+Use this skill to hand a single bounded task to another agent CLI; Claude Code, OpenAI Codex,
+OpenCode, GitHub Copilot, or Pi; run it in the background, and read back a result that was
 *measured* rather than relayed. Every result carries the status **and the rule that produced it**,
 what git saw change on disk next to what the delegate claimed it changed, and token counts
 normalised across harnesses that each count differently.
@@ -304,8 +310,8 @@ for the bad-input path. Run pytest -q and make it green. Don't touch anything el
 $delegate-task ask codex to review src/middleware/auth.py for session-handling flaws, read-only
 ```
 
-Real-life scenario: a security review must not be graded by the agent that wrote the code. Dispatch
-it read-only to a second harness with `--sandbox`, then compare its findings against your own pass —
+For example, a security review must not be graded by the agent that wrote the code. Dispatch
+it read-only to a second harness with `--sandbox`, then compare its findings against your own pass,
 the tripwire tells you afterwards whether anything moved despite the sandbox.
 
 The driver is a dependency-free Node script (Node ≥ 18) inside the skill, so its path depends on how
@@ -320,7 +326,7 @@ export DELEGATE_RUNS_DIR="$PWD/.delegate/runs"
 node "$DELEGATE" doctor
 ```
 
-⚠️ Run artifacts hold your task text, the full prompt, and the harness's raw output. Set
+Run artifacts hold your task text, the full prompt, and the harness's raw output. Set
 `DELEGATE_RUNS_DIR`, add `.delegate/` to the project's `.gitignore`, and clear old runs with
 `node "$DELEGATE" prune --keep 20 --yes`.
 
@@ -345,55 +351,25 @@ Invoke them through Claude Code's plugin namespace, for example:
 
 ## Spec Kit extensions
 
-An extension adds `/speckit-*` commands and **lifecycle hooks** to a Spec Kit project. Hooks are what
-separate an extension from a skill: they fire at named points in the feature lifecycle — `after_specify`,
-`before_implement`, `after_implement` — so a check runs at the right gate whether or not anyone
-remembered to ask for it.
+An extension adds `/speckit-*` commands and lifecycle hooks to a Spec Kit project. Hooks run at
+named points such as `after_specify`, `before_implement`, and `after_implement`, so configured
+checks run when the feature reaches that stage.
 
-| Extension | Published | Source | Commands | Hooks | Primary outcome |
-| --- | ---: | ---: | ---: | ---: | --- |
-| [`illustrate`](extensions/illustrate/) | 2.1.2 | 2.1.2 | 3 | 0 | Managed diagrams, project themes, fonts, and exports for specs, QA, manuals, and PRs. |
-| [`project`](extensions/project/) | 2.0.1 | 2.1.0 | 2 | 6 | GitHub Project lifecycle and task synchronization. |
-| [`assure`](extensions/assure/) | 2.0.1 | 2.1.0 | 3 | 3 | Pre-implementation QA analysis and maintained test documentation. |
-| [`pr`](extensions/pr/) | 4.0.2 | 4.1.0 | 2 | 1 | Documentation-gated PR creation/update and review processing. |
-| [`user-manual`](extensions/user-manual/) | 1.0.1 | 1.1.0 | 4 | 2 | Incremental application documentation inside the feature lifecycle. |
-| [`scope`](extensions/scope/) | — | 1.4.0 | 7 | 4 | Issue analysis, decomposition, and GitHub clarification before a spec exists. |
-| [`workflow`](extensions/workflow/) | — | 1.0.0 | 8 | 0 | Resumable Scope-to-PR orchestration over all of the above. |
+| Extension | Commands | Main use |
+| --- | ---: | --- |
+| [`illustrate`](extensions/illustrate/) | 3 | Diagrams, tracked project themes, and image exports. |
+| [`project`](extensions/project/) | 2 | GitHub Project lifecycle and native task synchronization. |
+| [`assure`](extensions/assure/) | 3 | QA task analysis and tester documentation. |
+| [`pr`](extensions/pr/) | 2 | Feature documentation, PR creation/update, and review feedback. |
+| [`user-manual`](extensions/user-manual/) | 4 | Audience-specific application documentation and release editions. |
+| [`scope`](extensions/scope/) | 7 | Issue scope, decomposition, and GitHub clarification. |
+| [`workflow`](extensions/workflow/) | 8 | Resumable dispatch from an issue through verification and a PR. |
 
-**Published** is the version the catalog installs today. **Source** is the version in this repository.
-Where they differ, that version is staged in
-[`extensions/pending-releases.json`](extensions/pending-releases.json) and is **not installable from a
-public URL yet** — build it locally instead (see [Development and release](#development-and-release)).
-`scope` and `workflow` have never been published; do not `specify extension add scope`, because an
-unrelated community extension owns that id in the public catalog. See
-[why they are not published](#why-scope-and-workflow-are-not-published) and how to install them from
-source.
-
-### Why `scope` and `workflow` are not published
-
-Nothing is broken and nothing fails to build — both package cleanly today. Publication is gated on
-one deliberate flag: [`extensions/pending-releases.json`](extensions/pending-releases.json) carries
-`"status": "implementation-in-progress"`, and the release pipeline skips while it reads anything
-other than `ready`. A maintainer flips it, and that is the only thing that authorizes publication.
-
-What has to happen first is listed in
-[`docs/workflow-implementation-progress.md`](docs/workflow-implementation-progress.md) under
-*Required remaining work*:
-
-1. **Live semantic acceptance** of the follow-up fixes, against the
-   [17-scenario acceptance audit](docs/workflow-acceptance-audit.md). A clean install does not prove
-   semantic agent dispatch.
-2. **A live pilot** on an explicitly authorized issue — real GitHub answers, task links, an
-   interrupted resume, and Finalize — plus verifying that inline PR visuals actually load in an
-   authenticated private-repository view. *A pilot issue URL has been requested and none is chosen
-   implicitly, so this is the step currently waiting.*
-3. **Publish and verify**, only after 1 and 2: check clean release downloads before promoting either
-   catalog.
-4. **Adopt into the consuming project** and confirm feature and manual continuity against a second
-   board.
-
-Release assets and tags are immutable once published, which is why the flag exists rather than
-publishing on every green build.
+The [catalog](catalog.json) records published versions and immutable download URLs. Source manifests
+record the version in this checkout; [pending releases](extensions/pending-releases.json) identify
+changes waiting for publication. A merged source change is available through the catalog only after
+its release assets are published, downloaded, verified, and promoted. Build unreleased changes
+locally using [the development procedure](#development-and-release).
 
 ### Using an extension
 
@@ -404,7 +380,7 @@ specify extension catalog add --name sanduq --priority 10 --install-allowed \
   https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
 ```
 
-#### The five published extensions
+#### Install the packages you need
 
 Install by id, then initialize the ones that keep project state:
 
@@ -422,31 +398,18 @@ specify extension add pr
 /speckit-user-manual-init
 ```
 
-#### `scope` and `workflow`, which are not published yet
+#### Install the managed workflow
 
-Neither is in the catalog, so `specify extension add` cannot reach them. 🚨 **Never run
-`specify extension add scope`** — an unrelated community extension owns that id in the public
-catalog, and you will install someone else's package. Build from source instead:
+After adding Sanduq's catalog, install its workflow package:
 
 ```bash
-# from a sanduq clone
-python extensions/scripts/package.py workflow
-python extensions/scripts/package.py scope
+specify extension add workflow
 ```
 
-Extract each ZIP **outside** the target project's `.specify/extensions/` directory, then install the
-extracted folders and their bundled presets:
-
-```bash
-specify extension add --dev <extracted>/scope
-specify extension add --dev <extracted>/workflow
-specify preset add --dev <extracted>/workflow/presets/workflow --priority 1
-specify preset add --dev <extracted>/workflow/presets/scope-gate --priority 2
-specify preset add --dev <extracted>/workflow/presets/scope-brainstorm --priority 2
-```
-
-Installing the raw source folder instead of a built package skips the bundled presets and shared
-helpers, and is not the combination that gets tested.
+Scope's id also exists in other catalogs. Verify the selected package's repository is
+`samykabu/sanduq`; the managed installer uses Sanduq's immutable dependency URLs. For unreleased
+source, build and extract the packages outside the consumer's `.specify/extensions/` directory,
+then use the documented local installation procedure below.
 
 `workflow` then has its own initializer, which is what selects QA and User Manual and installs the
 dependencies you chose:
@@ -465,20 +428,20 @@ Its commands are `/speckit-workflow-scope`, `-clarify`, `-continue`, `-finalize`
 #### Command naming
 
 Command names follow the manifest: `speckit.assure.analyze` in `extension.yml` renders as
-`/speckit-assure-analyze`. **Codex users replace the leading slash with `$`** — `$speckit-assure-analyze`.
+`/speckit-assure-analyze`. Codex users invoke the generated skill as `$speckit-assure-analyze`.
 
-Five things that are easy to get wrong:
+Check these settings during installation:
 
-- **`init` is not optional for a stateful extension.** It is where the extension asks whether its
+- Run `init` for stateful extensions. It asks whether the extension's
   process is part of your lifecycle, and whether its hooks are `required` (automatic) or `optional`
   (manual approval). An installed extension whose `init` never ran enforces nothing.
-- **Installing does not enable.** `assure` and `user-manual` run only for projects that selected them.
-- **Commands register only for agents whose directory already exists.** If `/speckit-…` never appears,
-  create `.claude/skills/` and reinstall — see [Development and release](#development-and-release).
-- **`pr`, `assure`, and `user-manual` depend on `illustrate`** and check the registry for a compatible
+- Enable `assure` and `user-manual` only when the project selects their processes.
+- Commands register only for agents whose directory already exists. If a command never appears,
+  create `.claude/skills/` and reinstall; see [Development and release](#development-and-release).
+- `pr`, `assure`, and `user-manual` depend on `illustrate` and check the registry for a compatible
   version when invoked. The default policy asks before installing or updating it; set a project-wide
   choice in `.specify/extension-dependencies.yml`.
-- **`scope` is an ambiguous id in the public catalog.** Always install it from a Sanduq archive or a
+- `scope` is an ambiguous id in the public catalog. Install it from a Sanduq archive or a
   verified staged package, never by bare name.
 
 ### `project` extension
@@ -499,7 +462,7 @@ The initializer discovers the target board and asks whether lifecycle hooks are
 native sub-issue per task, advances status without regression, and closes sub-issues when tasks are
 completed.
 
-Real-life scenario: a ten-task billing specification moves from analysis to implementation. The
+For example, a ten-task billing specification moves from analysis to implementation. The
 extension keeps the GitHub Project parent and tasks aligned without developers manually copying
 status between `tasks.md` and the board.
 
@@ -515,7 +478,7 @@ status between `tasks.md` and the board.
 fresh `assure analyze` evidence is required before Spec Kit implementation. `assure document` is run before
 PR creation if it has not run for the feature's current implementation state.
 
-Real-life scenario: a payment specification describes retries but omits duplicate-charge and
+For example, a payment specification describes retries but omits duplicate-charge and
 timeout tests. `assure analyze` identifies the risk before implementation; after implementation,
 `assure document` produces executable scenarios, test layers, environments, data rules, and coverage
 evidence in plain language.
@@ -534,7 +497,7 @@ evidence in plain language.
 - `update` changes canonical sources and affected assets on every feature PR.
 - `release` builds approved, versioned HTML/PDF editions after merge or release tagging.
 
-Real-life scenario: a specification adds partial refunds. Analysis identifies End User instructions,
+For example, a specification adds partial refunds. Analysis identifies End User instructions,
 operator permissions, API changes, Refund entities/enumerations, migration notes, and three UI states.
 The update command changes only those pages and assets and the PR receives a private preview.
 
@@ -550,7 +513,7 @@ refreshes required documentation when stale, builds the PR body from real featur
 updates an existing feature PR instead of creating a duplicate. Review feedback is inspected,
 validated, fixed only when appropriate, replied to, and resolved through an approval-aware workflow.
 
-Real-life scenario: implementation is complete but the manual has never recorded the new module.
+For example, implementation is complete but the manual has never recorded the new module.
 The PR gate runs the required manual update, publishes the private preview artifact, and includes
 the resulting evidence in the existing PR.
 
@@ -565,7 +528,7 @@ Use it for specification flows, QA matrices, system/module ER diagrams, infrastr
 PR visuals. Keep diagrams small enough to explain one important relationship and store editable
 sources beside the documentation that owns them.
 
-Real-life scenario: a feature spans browser, API, queue, worker, and database. Generate a concise
+For example, a feature spans browser, API, queue, worker, and database. Generate a concise
 data-flow diagram for the technical manual and export an SVG that remains readable in Markdown,
 HTML, and PDF.
 
@@ -583,7 +546,7 @@ on a dry run.
 
 It also owns **GitHub clarification**: one question per comment, each mentioning the issue creator,
 each with a stable ID and an unchecked recommendation. You answer by replying `C1Q1: A` or ticking
-the box. Re-running Clarify rereads the thread — including edited comments — without anyone moving
+the box. Re-running Clarify rereads the thread; including edited comments; without anyone moving
 the card.
 
 A project can settle decomposition once instead of being asked per issue:
@@ -601,8 +564,8 @@ Estimates of 17, 20, and 23 keep the feature whole; 16 and 24 get ordinary asses
 match the project's real estimation system. This never suppresses implementation task sub-issues, and
 the approval is recorded as *project policy*, not as a human decision that nobody made.
 
-Real-life scenario: an issue reads "add refunds". Scope finds three separable features inside it,
-proposes the split with effort estimates, and — once approved — creates the sub-issues, labels, and
+For example, an issue reads "add refunds". Scope finds three separable features inside it,
+proposes the split with effort estimates, and; once approved; creates the sub-issues, labels, and
 spec-prompt that Specify then binds to a branch.
 
 ## The managed Spec Kit workflow
@@ -625,8 +588,8 @@ and every phase mapping. Claims enforce that check before any stage does semanti
 
 ### The four daily entry points
 
-These are entry points into one pipeline, **not four obligatory pauses.** A question-free issue can
-run from Scope through implementation in a single bounded session.
+These entry points resume one pipeline. An issue with resolved requirements can continue from
+Scope through implementation without another routine approval at each stage.
 
 | Entry | Command | What happens automatically |
 | --- | --- | --- |
@@ -636,8 +599,10 @@ run from Scope through implementation in a single bounded session.
 | **Finalize** | `/speckit-workflow-finalize` | Finish required verification and documentation, then create or update exactly one PR with inline visuals |
 
 `/speckit-workflow-status` shows the current stage, the active claim, and evidence freshness without
-changing anything. Implementation completion stops at *ready to finalize*; PR creation needs the
-Finalize entry, and merge and deploy remain separate human actions.
+changing anything. The default implementation boundary is *ready to finalize*. An instruction to
+continue through PR creation includes Finalize; an instruction to merge when green lets the
+coordinator follow CI and verify the merge. Preserve that authorization across phase boundaries.
+Deployment needs separate authorization.
 
 The pipeline picks **exactly one** task generator and **exactly one** executor. It prefers a
 compatible, enabled SuperSpec provider where that command exists, and falls back to the core command
@@ -653,10 +618,40 @@ substituting another.
 
 </details>
 
+### Orchestrated implementation and live progress
+
+Both `/speckit-implement` and `/speckit-superspec-execute` create a dedicated orchestration agent.
+It delegates every implementation task to workers, fills available slots with ready work, and
+keeps conflicting file writes or shared resources out of the same batch. Tasks with dependencies
+run when their prerequisites pass. The coordinator alone integrates results and commits and pushes
+each verified phase before continuing.
+
+![Orchestrator assigns independent tasks to workers, verifies results, and records each phase](docs/diagrams/implementation-orchestration.svg)
+
+At implementation start, the workflow creates and opens
+`specs/<feature>/workflow/progress/index.html`. The report records the task queue, worker ownership,
+checks, phase commits and pushes, and PR status. Keep it updated after material events and through
+CI repairs and the verified merge when that work is authorized. Pending checks and failed checks
+remain visible; they never count as completion.
+
+```text
+/speckit-implement Keep implementing all approved phases. Delegate implementation to workers and
+run the maximum conflict-free ready tasks in parallel. Open and maintain the HTML progress report.
+Verify, commit, and push each completed phase. Continue through Finalize, fix CI and review findings,
+and merge this feature's PR when required checks and approvals pass.
+```
+
+Use `/speckit-superspec-execute` with the same prompt when SuperSpec is the selected provider. For
+an interrupted run, use `/speckit-workflow-continue`; inspect recorded worker handles and remote
+state before starting replacements. The [stage-by-stage guide](docs/skill-guide.md#every-stage-of-the-managed-lifecycle)
+includes prompts for setup, specification, analysis, review, and publication.
+
+![Managed feature lifecycle from Scope to an authorized and verified PR merge](docs/diagrams/workflow-lifecycle.svg)
+
 ### The lifetime of one feature
 
 A feature does not march through the stages once and stop. It holds a claim while a stage runs, and
-it has three ways to leave that state and come back — none of which resets it to the beginning.
+it has three ways to leave that state and come back; none of which resets it to the beginning.
 
 ![The state a managed feature occupies, the claim it holds, and the three detours that return to it](docs/assets/sanduq-feature-lifetime.png)
 
@@ -666,17 +661,17 @@ it has three ways to leave that state and come back — none of which resets it 
 | **Bound** | Specify verified `scope-source.json` and bound a branch | The first stage takes a claim |
 | **Stage running** | A stage holds the claim | The stage finishes, or one of the three detours below |
 | **Checkpointed** | A fresh, reliable measurement crosses the checkpoint fraction; `checkpoint.json`, `handoff.md`, and `resume-prompt.md` are written | `continue` validates identity, inputs, and package versions |
-| **Blocked** | Stale scope, unresolved answers, a wrong binding, or a closed issue | The real state is settled — never by marking it done to get past the guard |
+| **Blocked** | Stale scope, unresolved answers, a wrong binding, or a closed issue | The real state is settled; never by marking it done to get past the guard |
 | **Migration required** | An upgrade changed the packages under an in-flight feature | `workflow.py migrate --feature ... --reason ...`, after review |
 | **Ready to finalize** | Required tasks are complete and evidence is current | Finalize |
-| **Pull request open** | One PR per feature, visuals verified as loading | Merge, which is outside the workflow |
+| **Pull request open** | One PR per feature, visuals verified as loading | Required CI/review passes and an authorized merge is verified |
 
-**Claims** are what make this safe to share. One stage owns a feature at a time, so a second agent
-cannot start a competing executor. If a claim is interrupted, `recover` takes the recorded token —
+A claim gives one stage ownership of a feature at a time, so a second agent
+cannot start a competing executor. If a claim is interrupted, `recover` takes the recorded token,
 but inspect possible remote writes first. A missing HTTP response is not proof that an issue or PR
 was never created.
 
-**Migration never rewrites history.** It preserves still-current evidence with its original package
+Migration preserves still-current evidence with its original package
 digest and invalidates only the stages whose command selection actually changed. Use
 `--invalidate-from <stage>` when an upgrade changed a stage's contract. Historical receipts are never
 edited to claim that a new package executed old work.
@@ -685,33 +680,34 @@ edited to claim that a new package executed old work.
 
 | Path | Holds |
 | --- | --- |
-| `.specify/workflow.yml` | Project policy — which processes are on, provider preferences, context budget |
+| `.specify/workflow.yml` | Project policy; which processes are on, provider preferences, context budget |
 | `.specify/scope/github/` | Managed Scope artifacts |
 | `specs/<feature>/workflow/` | Per-feature checkpoint, handoff, resume prompt, receipts, evidence |
+| `specs/<feature>/workflow/progress/index.html` | Live implementation report through authorized PR merge |
 | `.specify/workflow/backups/installs/` | Backup ZIP and operation log for every install and upgrade |
 | `docs/workflow/implementation-plan.html` | The Archify dependency plan, regenerated after every decomposition |
 
 Reusable source lives in this repository. Policy, issue bindings, feature progress, manual content,
-and evidence stay in **your** project. Never edit an installed upstream command — an upgrade replaces it.
+and evidence stay in **your** project. Never edit an installed upstream command; an upgrade replaces it.
 
 ### What the CI gate actually checks
 
 The policy-aware workflow validates every changed feature: current inputs and outputs, completed
 required tasks, parent issue mapping, and selected-documentation freshness. It compares the PR head
 against its common ancestor with the target branch, so unrelated target-branch features are not
-dragged in, and it fetches full history — a shallow checkout fails with `BASE_HISTORY_UNAVAILABLE`
+dragged in, and it fetches full history; a shallow checkout fails with `BASE_HISTORY_UNAVAILABLE`
 rather than guessing.
 
 For a source-only change, name the feature explicitly: commit a `.specify/workflow/pr-features.json`
 containing `{"features": ["specs/001-example"]}`, or pass `--feature` to the gate CLI.
 
-Three distinctions the gate refuses to blur:
+The evidence checks have separate responsibilities:
 
-- **A generated document is not proof that a test ran.** QA Assure supplies tester readiness and
+- QA Assure supplies tester readiness and
   walkthrough evidence; User Manual supplies audience-facing documentation. Neither is a test result.
-- **An omitted file cannot keep old evidence current.** Verification inventories source additions and
+- Verification inventories source additions and
   deletions, so leaving a changed code file out of an agent receipt is caught, not tolerated.
-- **A successful upload is not a rendered image.** Finalize inventories every relevant diagram and
+- Finalize inventories every relevant diagram and
   screenshot, embeds each inline, and then verifies that it actually loads in an authenticated
   private-repository view. Never publish private assets to a public host, and never put credentials
   in an image URL.
@@ -722,21 +718,20 @@ extension is installed.
 ### Continuing in a fresh session
 
 Context policy lives in `.specify/workflow.yml` under `context.mode` and defaults to
-**`measured-only`** — checkpoint at 50% occupancy, a 60% ceiling, 10% reserved for the handoff. A
+**`measured-only`**; checkpoint at 50% occupancy, a 60% ceiling, 10% reserved for the handoff. A
 pause also fires early if the projected next call plus that reserve would cross the ceiling.
 
 Only a **fresh, reliable measurement** can pause a run: the host's own reading, no more than 120
-seconds old. Telemetry that is missing, estimated, stale, or malformed is **non-blocking** — the
+seconds old. Telemetry that is missing, estimated, stale, or malformed is **non-blocking**; the
 stage continues, the gate records `unavailable`, and nothing claims a guarantee it did not have.
 An estimate never forces a pause or a new session, and the legacy `measured-with-estimated-fallback`
 mode now behaves the same way. Only explicit `strict` mode refuses to proceed without a host that
 enforces per-call bounds.
 
-That distinction is the point. The failure mode it prevents is an agent inventing a utilization
-percentage and stopping real work on it. Reach for the saved resume prompt after an actual
-interruption or a measured limit, not because a number was unavailable.
+Use the saved resume prompt after an actual interruption or a measured limit. Missing context
+telemetry does not require a new session.
 
-What the workflow can always do is leave enough behind. The handoff names the issue, feature,
+The handoff names the issue, feature,
 branch, completed stages, pending task IDs, evidence, and the active claim. Add your real test
 results, background process handles, and unresolved approvals, then start the next session with the
 saved prompt.
@@ -778,24 +773,24 @@ sanduq/
     workflow-compatibility.md       # tested hosts and versions
 ```
 
-Every diagram in this README keeps its editable source next to the export: `docs/assets/*.html` is
-the original, `*.svg` and `*.png` are generated from it with the `illustrate` skill's exporter. Edit
-the HTML and re-export; never hand-edit an SVG.
+README diagrams keep editable HTML beside their exports in `docs/assets/` or `docs/diagrams/`.
+Use Illustrate to edit the source, export it again, and inspect the rendered image before committing.
 
 ## Continuous integration
 
-$${\color{red}\textsf{Exception: these workflows run on GitHub-hosted runners, not the home-office self-hosted runners.}}$$
+This repository uses GitHub-hosted runners. The home-office ARC runner sets belong to a different
+GitHub account and cannot serve this personal repository under their current registration.
 
 | | |
 | --- | --- |
 | **Workflows** | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) and [`.github/workflows/release-extensions.yml`](.github/workflows/release-extensions.yml) |
 | **Jobs** | All 14: `lint`, `regression` (4 matrix legs), `installation` (4), `upgrade`, `project-init` (2), `dryrun`, and `release` |
 | **Runners used** | `ubuntu-latest`, plus `windows-latest` for the two Windows `regression` legs |
-| **Why the self-hosted runners cannot run them** | `homek8-general` and `homek8-mobile` are ARC runner scale sets registered at **organisation** scope on `abushanab-net`. This repository is owned by the personal account `samykabu` and has zero repo-level runners. GitHub shares self-hosted runners only downward inside one account boundary — an enterprise to its orgs, an org to its repos — so an organisation runner cannot accept a job from a repository outside that organisation. Runner groups do not bridge it either: the `Default` group's `visibility=all` means all repositories *in that organisation*. Pointing a job at `homek8-general` today would leave it queued indefinitely, with no error. |
+| **Why the self-hosted runners cannot run them** | `homek8-general` and `homek8-mobile` are ARC runner scale sets registered at **organisation** scope on `abushanab-net`. This repository is owned by the personal account `samykabu` and has zero repo-level runners. GitHub shares self-hosted runners only downward inside one account boundary; an enterprise to its orgs, an org to its repos; so an organisation runner cannot accept a job from a repository outside that organisation. Runner groups do not bridge it either: the `Default` group's `visibility=all` means all repositories *in that organisation*. Pointing a job at `homek8-general` today would leave it queued indefinitely, with no error. |
 | **What would remove the exception** | Transfer this repository into the `abushanab-net` organisation. The `homegate-arc` GitHub App is already installed there org-wide (`repository_selection=all`), so `homek8-general` would serve it with no cluster change, and every `runs-on` could switch to it. Deploying an `AutoscalingRunnerSet` scoped to `github.com/samykabu/sanduq` would also work, at the cost of a second scale set for one repository. Either way the two Windows `regression` legs still need a self-hosted Windows label, and the runner image needs `pwsh`, `jq`, `shellcheck`, Python 3.13, and outbound network access for `pip` and PSGallery. |
 | **Decided** | 2026-09-18 |
 
-### The release pipeline is allowed to do nothing
+### Release eligibility
 
 `Release extensions` runs after a successful push CI on `main`, and **skips without failing** while
 [`extensions/pending-releases.json`](extensions/pending-releases.json) has any status other than
@@ -804,6 +799,38 @@ the run summary records the status it saw. Marking that status `ready` is the on
 authorizes publication, and release assets and tags are immutable once published.
 
 ## Development and release
+
+### Try the staged workflow
+
+Build from the Sanduq checkout, then extract into a directory outside the consumer repository:
+
+```bash
+python extensions/scripts/package.py workflow
+python -m zipfile -e dist/workflow.zip /absolute/path/to/sanduq-packages
+```
+
+For a project that already has workflow installed, run its upgrade adapter from the consumer root.
+The first command previews the operation; the second applies the same version with backup and
+rollback protection:
+
+```bash
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.1.0 --packages /absolute/path/to/sanduq-packages
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.1.0 --packages /absolute/path/to/sanduq-packages --apply
+python .specify/extensions/workflow/scripts/workflow.py doctor --project
+```
+
+This example assumes the selected dependencies already match
+[`dependencies.json`](extensions/workflow/dependencies.json). If a dependency needs installation or
+an update, build it with `python extensions/scripts/package.py <id>` and extract its ZIP into the
+same `sanduq-packages` directory before applying; `--packages` resolves required changes locally.
+
+Resolve active claims before upgrading. Review any checkpoint migration required by the new package
+identity. For a new consumer, install the extracted package with
+`specify extension add --dev /absolute/path/to/sanduq-packages/workflow`, then use Workflow Init.
+Keep the extracted package available while testing the development installation. These commands
+test staged source; they do not publish or promote it.
+
+### Package development
 
 For local extension development:
 
@@ -828,8 +855,8 @@ New-Item -ItemType Directory -Force .claude\skills
 specify extension add project --force
 ```
 
-Unreleased extensions — anything with a `pending-releases.json` entry, currently `scope` and
-`workflow` — cannot be installed from a public URL. Build and install them locally instead:
+Versions awaiting publication in `pending-releases.json` require a local package until their
+release assets and catalog entry exist. Build and install the version under review:
 
 ```bash
 python extensions/scripts/package.py workflow          # produces a ZIP
