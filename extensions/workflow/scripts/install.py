@@ -89,6 +89,17 @@ def preservation(root, name):
             and (p.name in ('config.json', '.env') or p.name.endswith('-config.yml') or 'state' in p.relative_to(folder).parts)}
 
 
+def ci_matches_managed(content, asset, receipt):
+    # Git may convert this managed YAML between LF and CRLF after installation.
+    normalized = content.replace(b'\r\n', b'\n')
+    if normalized == asset.replace(b'\r\n', b'\n'):
+        return True
+    # Older receipts hash raw bytes. Check both checkout forms of the existing
+    # file so an updated asset can replace its unedited predecessor as well.
+    variants = (content, normalized, normalized.replace(b'\n', b'\r\n'))
+    return receipt.get('ci_sha256') in {hashlib.sha256(value).hexdigest() for value in variants}
+
+
 def install_aliases(root, package_root):
     previous = read(root / '.specify/workflow/install-lock.json', {}).get('aliases', {})
     registered = registry(root)
@@ -187,7 +198,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
             asset = package_root / 'assets/github/workflow-gates.yml'
             if target.exists():
                 old_inventory = read(root / '.specify/workflow/install-receipt.json', {})
-                require(target.read_bytes() == asset.read_bytes() or old_inventory.get('ci_sha256') == hashlib.sha256(target.read_bytes()).hexdigest(), 'CI_WORKFLOW_HAS_LOCAL_EDITS')
+                require(ci_matches_managed(target.read_bytes(), asset.read_bytes(), old_inventory), 'CI_WORKFLOW_HAS_LOCAL_EDITS')
             target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(asset.read_bytes())
             legacy = root / '.github/workflows/documentation-gates.yml'
             reference = root / '.specify/extensions/assure/assets/github/documentation-gates.yml'
@@ -211,7 +222,8 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                             for name, entry in read(root / '.specify/presets/.registry', {}).get('presets', {}).items()},
                 'tested_compatibility': {'spec_kit': lock.get('tested_spec_kit', {}), 'upstream_optional': lock.get('upstream_optional', {})},
             })
-            receipt = {**result,'applied':True,'backup':str(backup),'commands':log,'ci_sha256':hashlib.sha256(asset.read_bytes()).hexdigest()}
+            receipt = {**result,'applied':True,'backup':str(backup),'commands':log,
+                       'ci_sha256':hashlib.sha256(asset.read_bytes().replace(b'\r\n', b'\n')).hexdigest()}
             write(root / '.specify/workflow/install-receipt.json', receipt)
             write(backup / 'result.json', {'ok':True,'commands':log})
             return receipt
