@@ -51,7 +51,10 @@ def main():
     from upgrade import upgrade
     manifest = source / 'extension.yml'
     metadata = yaml.safe_load(manifest.read_text(encoding='utf-8'))
-    metadata['extension']['version'] = '1.0.1'
+    current_version = str(metadata['extension']['version'])
+    major, minor, patch = map(int, current_version.split('.'))
+    future_version = f'{major}.{minor}.{patch + 1}'
+    metadata['extension']['version'] = future_version
     manifest.write_text(yaml.safe_dump(metadata, sort_keys=False), encoding='utf-8')
     workflow_before = installer.managed_files(root)
     def fail_after_integration(repo, args, log):
@@ -59,20 +62,22 @@ def main():
         if args[0] == sys.executable:
             raise WorkflowError('Injected interruption after new workflow integration install')
     try:
-        upgrade(root, '1.0.1', apply=True, packages=workspace / 'packages', runner=fail_after_integration)
+        upgrade(root, future_version, apply=True, packages=workspace / 'packages', runner=fail_after_integration)
         raise AssertionError('Expected outer upgrade failure')
     except WorkflowError as error:
         assert 'WORKFLOW_UPGRADE_ROLLED_BACK' in str(error), error
     assert installer.managed_files(root) == workflow_before, 'Outer workflow rollback changed managed state'
-    assert registry(root)['workflow']['version'] == '1.0.0'
-    workflow_result = upgrade(root, '1.0.1', apply=True, packages=workspace / 'packages')
-    assert registry(root)['workflow']['version'] == '1.0.1'
+    assert registry(root)['workflow']['version'] == current_version
+    workflow_result = upgrade(root, future_version, apply=True, packages=workspace / 'packages')
+    assert registry(root)['workflow']['version'] == future_version
+    for relative in ('scripts/progress.py', 'skills/workflow/references/execution.md'):
+        assert (root / '.specify/extensions/workflow' / relative).read_bytes() == (source / relative).read_bytes()
     assert json.loads(config.read_text()) == {'custom_project_setting':'preserve-me'}
     receipt = {'ok':True,'from':'pr 4.0.2 (downloaded published asset)','to':'pr 4.1.0 (staged)',
                'published_archive_sha256':hashlib.sha256((downloads/'pr.zip').read_bytes()).hexdigest(),
                'verified':['real native CLI upgrade','injected post-upgrade failure','byte-exact managed rollback',
                            'retry succeeds','custom config retained','policy and preset registration retained',
-                           'workflow 1.0.0 to synthetic staged 1.0.1 self-upgrade',
+                           f'workflow {current_version} to synthetic staged {future_version} self-upgrade',
                            'outer rollback after successful integration install', 'self-upgrade retry succeeds'],
                'workflow_upgrade_backup': workflow_result['backup'],
                'workspace':str(workspace),'upgrade_backup':result['backup']}
