@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Publication authorized after Review Home pilot hardening PR #10 and successful merge CI; verify immutable assets before catalog promotion."
+  "versions": {"workflow": "1.1.0"},
+  "status": "pending",
+  "note": "Orchestrated implementation and live progress reporting. Publish immutable assets and verify them before promoting the catalog."
 }

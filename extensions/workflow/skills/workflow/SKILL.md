@@ -5,8 +5,8 @@ description: Run the project-selected Scope-to-PR lifecycle with GitHub clarific
 
 # Sanduq workflow dispatcher
 
-This skill is an agent dispatcher, not a shell command runner pretending that semantic work
-has completed. Use the installed runtime at `.specify/extensions/workflow/scripts/workflow.py`.
+This skill dispatches semantic work to the installed commands and verifies their evidence.
+Use the installed runtime at `.specify/extensions/workflow/scripts/workflow.py`.
 Run Python with argument arrays or properly quoted paths. Install runtime dependencies from
 the package's pinned `requirements.txt` when missing. Never install a floating tool version.
 
@@ -101,8 +101,11 @@ the package's pinned `requirements.txt` when missing. Never install a floating t
    After completed execution batches and documentation tasks, run `task_issues.py
    --sync-states --feature ... --parent ... --apply` to close/reopen the correct
    native task issues. Never infer human-review completion from generated evidence.
-7. When `ready_to_finalize` is reached without Finalize entry, stop and report that status.
-   Do not create a PR from an implementation hook. With Finalize, continue to the PR stage.
+7. When `ready_to_finalize` is reached, honor the existing publication authorization.
+   If the user already requested a PR, continue with Finalize automatically. Otherwise
+   report readiness and obtain the missing PR authorization. Executor hooks never
+   create the PR. Finalize authorizes PR creation only; merging requires the user's
+   separate authorization, which may already be present in the original request.
 
 Runtime `workflow:*` stages are this skill's built-in operations, not missing slash commands:
 **verification** runs the relevant real tests/checks; **review** reviews against spec/constitution
@@ -121,7 +124,7 @@ freshness and task mapping. Preserve their distinct evidence and run necessary r
 | QA/manual analysis | Run only selected processes. Add evidence/documentation work before final Analyze. The runtime records lineage when these stages modify tasks.md; never regenerate already settled tasks unnecessarily. |
 | Analyze | Resolve blocking cross-artifact findings, rerunning affected stages when inputs change. |
 | Tasks-to-Issues | Invoke the actual core skill with the Sanduq managed preset. Derive an explicit task dependency mapping and run `task_issues.py`. Dry-run, inspect, then apply authorized issue writes. Receipt needs exact `parent_issue` and `native_links_verified: true`, with the generated mapping/result files. |
-| Execute | Run the selected executor in bounded batches. Routine phase transitions are automatic under `required-only`; explicit human review markers remain gates. Keep task checkboxes and issue state current. |
+| Execute | Read [the execution protocol](references/execution.md). Create a dedicated orchestration agent and delegate implementation to workers. Fill available capacity with tasks whose dependencies, files and resources permit concurrent work. Open the HTML TODO report before implementation and keep it current. Verify, commit and push each completed phase within existing authorization. Routine phase transitions are automatic under `required-only`; explicit human review markers remain gates. Keep task checkboxes and issue state current. |
 | Verify/review | Actual tests/review evidence and `blocking_findings: 0`. A command instruction or checklist alone is not an executed test. |
 | QA Document | Generate and verify tester evidence only when QA selected. Do not claim human QA happened because a walkthrough exists. |
 | Manual Update | Update selected audience docs only when enabled; preserve approved module map and publication settings. Audit/build and record freshness. |
@@ -133,6 +136,24 @@ For source-only PRs, write the explicit affected feature list to
 include that mapping change in the PR. CI consumes it in addition to all changed
 feature directories, never instead of them. Refresh the relevant readiness evidence
 after source edits; an old mapping does not make stale test evidence current.
+
+## Execution ownership and live progress
+
+Both managed executors use [the same execution protocol](references/execution.md).
+The dispatcher owns the stage claim and lifecycle transitions. A dedicated
+orchestration agent owns task assignments, integration, report writes and phase
+commits/pushes. Worker agents implement the assigned tasks and return evidence.
+Record the real agent handles and ownership in the feature handoff. Recover live
+work before scheduling replacements; never let two agents own the same writes.
+
+Keep the orchestration agent available after Execute so it can update the report
+and schedule fixes during verification, review, documentation and PR checks. The
+dispatcher sends it each stage outcome and remains responsible for honest receipts.
+Continue all authorized phases automatically. Existing PR and merge authorization
+carries forward, while required human decisions and branch protections still apply.
+If merge is authorized, watch the exact final PR head, repair failed checks, rerun
+affected evidence and merge when required checks and approvals pass. Update the
+report from the actual merge result and complete post-merge verification below.
 
 ## Publication preflight and post-merge verification
 
