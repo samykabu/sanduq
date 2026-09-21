@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
@@ -31,6 +32,85 @@ class InstallTests(unittest.TestCase):
     def version(self, name, value, enabled=True):
         registry = w.registry(self.root); registry[name].update(version=value, enabled=enabled)
         w.write(self.root / '.specify/extensions/.registry', {'extensions': registry})
+
+    def test_ci_checkout_conversion_survives_installer_rerun_and_asset_upgrade(self):
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        asset = self.package / 'assets/github/workflow-gates.yml'
+        for original, converted in ((b'name: CI\non: pull_request\n', b'name: CI\r\non: pull_request\r\n'),
+                                    (b'name: CI\r\non: pull_request\r\n', b'name: CI\non: pull_request\n')):
+            with self.subTest(original=original):
+                asset.write_bytes(original)
+                # Exercise the real transaction; external CLI and fixture-only
+                # command registrations are outside this regression's scope.
+                with patch.object(installer, 'install_aliases', return_value={}), \
+                     patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}):
+                    installer.install(self.root, apply=True, package_root=self.package, runner=lambda *args: None)
+                    receipt_path = self.root / '.specify/workflow/install-receipt.json'
+                    receipt = w.read(receipt_path)
+                    receipt['ci_sha256'] = hashlib.sha256(original).hexdigest()
+                    w.write(receipt_path, receipt)
+                    target.write_bytes(converted)
+                    installer.install(self.root, apply=True, package_root=self.package, runner=lambda *args: None)
+                    self.assertEqual(target.read_bytes(), original)
+                    # A new release changes the asset; the historical raw hash
+                    # must still recognize an unedited, converted predecessor.
+                    w.write(receipt_path, receipt)
+                    target.write_bytes(converted)
+                    asset.write_bytes(b'name: Updated CI\non: pull_request\n')
+                    installer.install(self.root, apply=True, package_root=self.package, runner=lambda *args: None)
+                    self.assertEqual(target.read_bytes(), asset.read_bytes())
+                target.unlink()
+
+    def test_ci_semantic_edits_still_roll_back_without_overwrite(self):
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        original = b'name: CI\non: pull_request\n'
+        edited = b'name: CI\r\non: push\r\n'
+        target.write_bytes(edited)
+        w.write(self.root / '.specify/workflow/install-receipt.json',
+                {'ci_sha256': hashlib.sha256(original).hexdigest()})
+        with patch.object(installer, 'install_aliases', return_value={}), \
+             patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}):
+            with self.assertRaisesRegex(w.WorkflowError, 'CI_WORKFLOW_HAS_LOCAL_EDITS'):
+                installer.install(self.root, apply=True, package_root=self.package, runner=lambda *args: None)
+        self.assertEqual(target.read_bytes(), edited)
+
+    def test_ci_guard_preserves_whitespace_and_lone_carriage_return_edits(self):
+        original = b'name: CI\non: pull_request\n'
+        receipt = {'ci_sha256': hashlib.sha256(original).hexdigest()}
+        for edited in (b'name: CI \non: pull_request\n', b'name: CI\ron: pull_request\n',
+                       b'name: CI\non: pull_request', b'name: CI\n on: pull_request\n'):
+            with self.subTest(edited=edited):
+                self.assertFalse(installer.ci_matches_managed(edited, original, receipt))
+
+    def test_explicit_preserve_ci_keeps_custom_policy_without_blessing_it_as_managed(self):
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        custom = b'name: Local policy\r\njobs:\r\n  check:\r\n    runs-on: homek8\r\n'
+        target.write_bytes(custom)
+        with patch.object(installer, 'install_aliases', return_value={}), \
+             patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}):
+            result = installer.install(self.root, apply=True, package_root=self.package,
+                                       runner=lambda *args: None, preserve_ci=True)
+            self.assertEqual(target.read_bytes(), custom)
+            self.assertEqual(result['preserved_ci'], {
+                'path': '.github/workflows/sanduq-workflow-gates.yml',
+                'sha256': hashlib.sha256(custom).hexdigest()})
+            self.assertEqual(w.read(self.root / '.specify/workflow/install-receipt.json')['preserved_ci'], result['preserved_ci'])
+            # A later invocation without the explicit choice must still protect
+            # this consumer policy from replacement by the bundled template.
+            with self.assertRaisesRegex(w.WorkflowError, 'CI_WORKFLOW_HAS_LOCAL_EDITS'):
+                installer.install(self.root, apply=True, package_root=self.package, runner=lambda *args: None)
+            self.assertEqual(target.read_bytes(), custom)
+
+    def test_preserve_ci_still_installs_template_when_project_has_no_ci_file(self):
+        with patch.object(installer, 'install_aliases', return_value={}), \
+             patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}):
+            result = installer.install(self.root, apply=True, package_root=self.package,
+                                       runner=lambda *args: None, preserve_ci=True)
+        self.assertIsNone(result['preserved_ci'])
+        self.assertEqual((self.root / '.github/workflows/sanduq-workflow-gates.yml').read_bytes(),
+                         (self.package / 'assets/github/workflow-gates.yml').read_bytes())
 
     def test_newer_compatible_package_is_retained_without_downgrade(self):
         self.version('pr', '4.2.0')
