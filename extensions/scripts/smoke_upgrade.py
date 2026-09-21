@@ -13,6 +13,11 @@ from smoke_install import smoke
 def main():
     initial = smoke('codex')
     workspace = Path(initial['workspace']); root = workspace / 'project'
+    report = root / 'specs/001-smoke/workflow/progress'
+    progress_before = {name: (report / name).read_bytes() for name in ('state.json', 'index.html')}
+    def verify_progress():
+        for name, previous in progress_before.items():
+            assert (report / name).read_bytes() == previous, 'Upgrade changed progress: ' + name
     source = workspace / 'packages/workflow'
     sys.path.insert(0, str(root / '.specify/extensions/workflow/scripts'))
     import install as installer
@@ -43,7 +48,9 @@ def main():
         assert 'INSTALL_ROLLED_BACK' in str(error), error
     assert installer.managed_files(root) == before, 'Rollback did not restore all managed file bytes'
     assert registry(root)['pr']['version'] == '4.0.2'
+    verify_progress()
     result = installer.install(root,apply=True,packages=workspace/'packages',package_root=source)
+    verify_progress()
     assert registry(root)['pr']['version'] == '4.1.0'
     assert json.loads(config.read_text()) == {'custom_project_setting':'preserve-me'}
     assert json.loads((root/'.specify/workflow/install-receipt.json').read_text())['applied']
@@ -68,8 +75,10 @@ def main():
         assert 'WORKFLOW_UPGRADE_ROLLED_BACK' in str(error), error
     assert installer.managed_files(root) == workflow_before, 'Outer workflow rollback changed managed state'
     assert registry(root)['workflow']['version'] == current_version
+    verify_progress()
     workflow_result = upgrade(root, future_version, apply=True, packages=workspace / 'packages')
     assert registry(root)['workflow']['version'] == future_version
+    verify_progress()
     for relative in ('scripts/progress.py', 'skills/workflow/references/execution.md'):
         assert (root / '.specify/extensions/workflow' / relative).read_bytes() == (source / relative).read_bytes()
     assert json.loads(config.read_text()) == {'custom_project_setting':'preserve-me'}
@@ -78,7 +87,8 @@ def main():
                'verified':['real native CLI upgrade','injected post-upgrade failure','byte-exact managed rollback',
                            'retry succeeds','custom config retained','policy and preset registration retained',
                            f'workflow {current_version} to synthetic staged {future_version} self-upgrade',
-                           'outer rollback after successful integration install', 'self-upgrade retry succeeds'],
+                           'outer rollback after successful integration install', 'self-upgrade retry succeeds',
+                           'execution protocol and report helper retained', 'local progress state and HTML retained'],
                'workflow_upgrade_backup': workflow_result['backup'],
                'workspace':str(workspace),'upgrade_backup':result['backup']}
     (workspace/'upgrade-result.json').write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')

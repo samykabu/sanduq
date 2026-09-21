@@ -34,6 +34,8 @@ def render(state):
     events = ''.join('<li>' + escape(event) + '</li>' for event in state['events'])
     phases = ''.join('<li>' + escape(name) + ': ' + escape(value) + '</li>'
                      for name, value in state['phases'].items())
+    archived = ''.join('<li>' + escape(json.dumps(task, ensure_ascii=False)) + '</li>'
+                       for task in state.get('archived_tasks', []))
     done = sum(task['status'] == 'done' for task in state['tasks'])
     return f'''<!doctype html><html lang="en"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -44,7 +46,65 @@ def render(state):
 <p><small>Updated {escape(state['updated'])}. This page refreshes every five seconds.</small></p>
 <table><thead><tr><th>Task</th><th>Work</th><th>Status</th><th>Agent</th><th>Evidence or next step</th></tr></thead><tbody>{rows}</tbody></table>
 <h2>Phases</h2><ul>{phases}</ul><h2>Pull request</h2><p>{escape(state['pr'])}</p>
+<h2>Removed tasks</h2><ul>{archived}</ul>
 <h2>Activity</h2><ul>{events}</ul></html>'''
+
+
+def read_plan(path, parser):
+    tasks, phases, identities = [], {}, set()
+    phase = None
+    for line in path.read_text(encoding='utf-8').splitlines():
+        heading = re.match(r'^\s*#{2,3}\s+(Phase\b.*?)\s*#*\s*$', line, re.IGNORECASE)
+        if heading:
+            phase = heading.group(1).strip()
+            phases.setdefault(phase, 'pending')
+        match = re.match(r'\s*- \[([ xX])\]\s+(\S+)\s+(.+)', line)
+        if match:
+            check, identity, title = match.groups()
+            if identity in identities:
+                parser.error('Duplicate task ID: ' + identity)
+            identities.add(identity)
+            task = dict(id=identity, title=title, status='done' if check.lower() == 'x' else 'pending')
+            if phase:
+                task['phase'] = phase
+            tasks.append(task)
+    if not tasks:
+        parser.error('No checkbox tasks found. Use: - [ ] T001 Description')
+    return tasks, phases
+
+
+def reconcile(state, tasks, phases):
+    """Keep accepted evidence while requiring review of changed task definitions."""
+    previous = {task['id']: task for task in state['tasks']}
+    current = []
+    changed_phases = set()
+    for task in tasks:
+        old = previous.pop(task['id'], None)
+        if old is None:
+            task['status'] = 'pending'
+            state['events'].append('Added task ' + task['id'] + ': ' + task['title'])
+        elif old['title'] != task['title'] or old.get('phase') != task.get('phase'):
+            state['events'].append('Revised task; previous evidence: ' + json.dumps(old, ensure_ascii=False))
+            has_phase = 'phase' in task
+            task = {**old, **task, 'status': 'pending'}
+            if not has_phase:
+                task.pop('phase', None)
+        else:
+            current.append(old)
+            continue
+        if task.get('phase'):
+            changed_phases.add(task['phase'])
+        current.append(task)
+    for task in previous.values():
+        state.setdefault('archived_tasks', []).append(dict(task, removed_at=datetime.now(timezone.utc).isoformat()))
+        state['events'].append('Removed task; previous evidence: ' + json.dumps(task, ensure_ascii=False))
+    state['tasks'] = current
+    for name, value in phases.items():
+        state['phases'].setdefault(name, value)
+    for name in changed_phases:
+        if state['phases'][name] != 'pending':
+            state['events'].append('Reopened phase ' + name + '; previous state: ' + state['phases'][name])
+            state['phases'][name] = 'pending'
 
 
 def main(argv=None):
@@ -73,18 +133,13 @@ def main(argv=None):
             sub.add_argument('--status', required=True, choices=('open', 'merged'))
     args = parser.parse_args(argv)
     target = args.output / 'state.json'
-    if args.command == 'init' and not target.exists():
-        tasks = []
-        for line in args.tasks.read_text(encoding='utf-8').splitlines():
-            match = re.match(r'\s*- \[([ xX])\]\s+(\S+)\s+(.+)', line)
-            if match:
-                check, identity, title = match.groups()
-                if any(t['id'] == identity for t in tasks):
-                    parser.error('Duplicate task ID: ' + identity)
-                tasks.append(dict(id=identity, title=title, status='done' if check.lower() == 'x' else 'pending'))
-        if not tasks:
-            parser.error('No checkbox tasks found. Use: - [ ] T001 Description')
-        state = dict(title=args.title, tasks=tasks, phases={}, events=[], pr='Not created')
+    if args.command == 'init':
+        tasks, phases = read_plan(args.tasks, parser)
+        if target.exists():
+            state = json.loads(target.read_text(encoding='utf-8'))
+            reconcile(state, tasks, phases)
+        else:
+            state = dict(title=args.title, tasks=tasks, phases=phases, events=[], pr='Not created')
     else:
         if not target.exists():
             parser.error('Initialize the report before updating it.')

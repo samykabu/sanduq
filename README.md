@@ -121,9 +121,8 @@ skill includes its own scripts, MkDocs Material scaffold, RTL styles, CI workflo
 
 ### Using a skill once it is installed
 
-A skill is not a command you run. It is a body of instructions the agent loads **by itself** when
-your request matches what the skill is for; each one carries a `description` that says when it
-applies. So the normal way to use one is to describe the task:
+A skill contains instructions that the agent loads when your request matches its description.
+Describe the task in plain English:
 
 ```text
 create a light architecture diagram of the booking service and its payment provider
@@ -144,12 +143,12 @@ skills under their bundle namespace:
 /agent-tools:delegate-task
 ```
 
-Two consequences worth knowing:
+Installation affects context and executable paths:
 
-- **A skill that is installed is a skill that is discoverable.** Every installed skill's description
+- Every installed skill's description
   is read at session start, which costs context. Install the modules you use, not all of them,
   that is why the User Manual capability ships as five separately installable skills rather than one.
-- **A skill can carry executable files.** `illustrate` ships Python exporters; `delegate-task` ships
+- `illustrate` ships Python exporters; `delegate-task` ships
   a Node driver. Those run from the skill's own directory, so where you installed it decides their
   path. Each skill's README says how to resolve it.
 
@@ -193,7 +192,7 @@ $illustrate create a light architecture diagram showing a mobile app, API gatewa
 payment service, PostgreSQL, and an external payment provider. Keep trust boundaries visible.
 ```
 
-Real-life scenario: an architecture decision record is difficult to scan. Ask `illustrate` for a
+For example, an architecture decision record is difficult to scan. Ask `illustrate` for a
 seven-node architecture diagram, review the editable SVG, then embed it in the ADR and User Manual.
 
 Illustrate initializes a project-level theme at `.github/illustration-theme.yml`. Cobalt Porcelain
@@ -227,7 +226,7 @@ manual from the ground up. Include web, mobile, API, infrastructure, architectur
 module ER documentation. Use synthetic examples only.
 ```
 
-Real-life scenario: a logistics platform has no documentation. The skill discovers Shipment,
+For example, a logistics platform has no documentation. The skill discovers Shipment,
 Driver, Customer, Billing, and Operations modules, asks the owner to approve them, then builds
 plain-English task guides for customers, operational procedures for dispatchers, and private API,
 schema, deployment, and architecture references for technical readers.
@@ -248,7 +247,7 @@ $user-manual-api-docs document every public partner endpoint in openapi.yaml. Ex
 admin, debug, webhook-receiver, and secret-bearing operations. Add safe request and response examples.
 ```
 
-Real-life scenario: a marketplace exposes seller order APIs and also has internal reconciliation
+For example, a marketplace exposes seller order APIs and also has internal reconciliation
 routes. The skill builds a partner reference for seller operations, puts administrator operations
 behind authenticated navigation, and prevents internal endpoints from leaking into public output.
 
@@ -261,7 +260,7 @@ $user-manual-release-docs create release notes and a migration guide from v2.4.0
 the Git diff, schemas, deployment files, and tests. Separate user impact, operator steps, and API changes.
 ```
 
-Real-life scenario: an authentication release retires legacy tokens. The result explains the visible
+For example, an authentication release retires legacy tokens. The result explains the visible
 sign-in change to end users, gives administrators a rollout checklist, and provides technical readers
 with compatibility, verification, and rollback steps grounded in the code.
 
@@ -275,7 +274,7 @@ English and Arabic, desktop and mobile, success and validation-error states. Use
 mask email addresses, tokens, IDs, and timestamps.
 ```
 
-Real-life scenario: every release made screenshots stale. The module ties each image to a stable
+For example, every release made screenshots stale. The module ties each image to a stable
 test scenario, fixed viewport, locale, fixture, role, and application state so CI can recapture only
 the affected module.
 
@@ -290,7 +289,7 @@ Use the approved provider from User-Manual/manual.yml for an optional hosted pre
 Technical editions authenticated, and publish versioned HTML/PDF only after merge or a release tag.
 ```
 
-Real-life scenario: customer reviewers need a convenient preview, while operations documentation
+For example, customer reviewers need a convenient preview, while operations documentation
 must remain private. CI uploads all editions as a repository-reader artifact, deploys only approved
 End User pages to the configured preview provider, and publishes release PDFs after merge.
 
@@ -311,7 +310,7 @@ for the bad-input path. Run pytest -q and make it green. Don't touch anything el
 $delegate-task ask codex to review src/middleware/auth.py for session-handling flaws, read-only
 ```
 
-Real-life scenario: a security review must not be graded by the agent that wrote the code. Dispatch
+For example, a security review must not be graded by the agent that wrote the code. Dispatch
 it read-only to a second harness with `--sandbox`, then compare its findings against your own pass,
 the tripwire tells you afterwards whether anything moved despite the sandbox.
 
@@ -463,7 +462,7 @@ The initializer discovers the target board and asks whether lifecycle hooks are
 native sub-issue per task, advances status without regression, and closes sub-issues when tasks are
 completed.
 
-Real-life scenario: a ten-task billing specification moves from analysis to implementation. The
+For example, a ten-task billing specification moves from analysis to implementation. The
 extension keeps the GitHub Project parent and tasks aligned without developers manually copying
 status between `tasks.md` and the board.
 
@@ -479,7 +478,7 @@ status between `tasks.md` and the board.
 fresh `assure analyze` evidence is required before Spec Kit implementation. `assure document` is run before
 PR creation if it has not run for the feature's current implementation state.
 
-Real-life scenario: a payment specification describes retries but omits duplicate-charge and
+For example, a payment specification describes retries but omits duplicate-charge and
 timeout tests. `assure analyze` identifies the risk before implementation; after implementation,
 `assure document` produces executable scenarios, test layers, environments, data rules, and coverage
 evidence in plain language.
@@ -498,7 +497,7 @@ evidence in plain language.
 - `update` changes canonical sources and affected assets on every feature PR.
 - `release` builds approved, versioned HTML/PDF editions after merge or release tagging.
 
-Real-life scenario: a specification adds partial refunds. Analysis identifies End User instructions,
+For example, a specification adds partial refunds. Analysis identifies End User instructions,
 operator permissions, API changes, Refund entities/enumerations, migration notes, and three UI states.
 The update command changes only those pages and assets and the PR receives a private preview.
 
@@ -514,7 +513,7 @@ refreshes required documentation when stale, builds the PR body from real featur
 updates an existing feature PR instead of creating a duplicate. Review feedback is inspected,
 validated, fixed only when appropriate, replied to, and resolved through an approval-aware workflow.
 
-Real-life scenario: implementation is complete but the manual has never recorded the new module.
+For example, implementation is complete but the manual has never recorded the new module.
 The PR gate runs the required manual update, publishes the private preview artifact, and includes
 the resulting evidence in the existing PR.
 
@@ -529,7 +528,7 @@ Use it for specification flows, QA matrices, system/module ER diagrams, infrastr
 PR visuals. Keep diagrams small enough to explain one important relationship and store editable
 sources beside the documentation that owns them.
 
-Real-life scenario: a feature spans browser, API, queue, worker, and database. Generate a concise
+For example, a feature spans browser, API, queue, worker, and database. Generate a concise
 data-flow diagram for the technical manual and export an SVG that remains readable in Markdown,
 HTML, and PDF.
 
@@ -565,7 +564,7 @@ Estimates of 17, 20, and 23 keep the feature whole; 16 and 24 get ordinary asses
 match the project's real estimation system. This never suppresses implementation task sub-issues, and
 the approval is recorded as *project policy*, not as a human decision that nobody made.
 
-Real-life scenario: an issue reads "add refunds". Scope finds three separable features inside it,
+For example, an issue reads "add refunds". Scope finds three separable features inside it,
 proposes the split with effort estimates, and; once approved; creates the sub-issues, labels, and
 spec-prompt that Specify then binds to a branch.
 
@@ -667,12 +666,12 @@ it has three ways to leave that state and come back; none of which resets it to 
 | **Ready to finalize** | Required tasks are complete and evidence is current | Finalize |
 | **Pull request open** | One PR per feature, visuals verified as loading | Required CI/review passes and an authorized merge is verified |
 
-**Claims** are what make this safe to share. One stage owns a feature at a time, so a second agent
+A claim gives one stage ownership of a feature at a time, so a second agent
 cannot start a competing executor. If a claim is interrupted, `recover` takes the recorded token,
 but inspect possible remote writes first. A missing HTTP response is not proof that an issue or PR
 was never created.
 
-**Migration never rewrites history.** It preserves still-current evidence with its original package
+Migration preserves still-current evidence with its original package
 digest and invalidates only the stages whose command selection actually changed. Use
 `--invalidate-from <stage>` when an upgrade changed a stage's contract. Historical receipts are never
 edited to claim that a new package executed old work.
@@ -732,7 +731,7 @@ enforces per-call bounds.
 Use the saved resume prompt after an actual interruption or a measured limit. Missing context
 telemetry does not require a new session.
 
-What the workflow can always do is leave enough behind. The handoff names the issue, feature,
+The handoff names the issue, feature,
 branch, completed stages, pending task IDs, evidence, and the active claim. Add your real test
 results, background process handles, and unresolved approvals, then start the next session with the
 saved prompt.
@@ -819,6 +818,11 @@ python .specify/extensions/workflow/scripts/upgrade.py --version 1.1.0 --package
 python .specify/extensions/workflow/scripts/upgrade.py --version 1.1.0 --packages /absolute/path/to/sanduq-packages --apply
 python .specify/extensions/workflow/scripts/workflow.py doctor --project
 ```
+
+This example assumes the selected dependencies already match
+[`dependencies.json`](extensions/workflow/dependencies.json). If a dependency needs installation or
+an update, build it with `python extensions/scripts/package.py <id>` and extract its ZIP into the
+same `sanduq-packages` directory before applying; `--packages` resolves required changes locally.
 
 Resolve active claims before upgrading. Review any checkpoint migration required by the new package
 identity. For a new consumer, install the extracted package with
