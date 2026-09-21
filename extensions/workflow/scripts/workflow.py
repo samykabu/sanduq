@@ -418,7 +418,8 @@ def ensure_local_excludes(root):
     path.parent.mkdir(parents=True, exist_ok=True)
     current = path.read_text(encoding='utf-8') if path.exists() else ''
     patterns = ('/.specify/workflow/backups/', '/.specify/workflow/runtime/',
-                '/.specify/workflow/install-receipt.json', '/specs/*/workflow/backups/')
+                '/.specify/workflow/install-receipt.json', '/specs/*/workflow/backups/',
+                '/specs/*/workflow/progress/')
     missing = [pattern for pattern in patterns if pattern not in current.splitlines()]
     if missing:
         path.write_text(current.rstrip('\n') + '\n# Sanduq local backups and runtime\n' + '\n'.join(missing) + '\n', encoding='utf-8')
