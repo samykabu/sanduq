@@ -95,11 +95,15 @@ specify extension add project
 specify extension add assure
 specify extension add user-manual
 specify extension add pr
+specify extension add scope
+specify extension add workflow
 ```
 
-Then initialize the ones that keep project state; `/speckit-project-init`, `/speckit-assure-init`,
-`/speckit-user-manual-init`. To sequence all of them from a GitHub issue through to one pull request,
-see [the managed Spec Kit workflow](#the-managed-spec-kit-workflow).
+For the managed lifecycle, run `/speckit-workflow-init` in your project's agent session.
+It selects QA and User Manual, installs the selected dependencies, and initializes their project
+state. Then run `/speckit-workflow-scope <issue-number>` to start from a GitHub issue.
+Verify that the selected `scope` package comes from `samykabu/sanduq`, because other catalogs use
+the same id. See [the managed Spec Kit workflow](#the-managed-spec-kit-workflow) for the full sequence.
 
 Not sure which of the three package kinds you want? Start with
 [Skills, plugins, and extensions](#skills-plugins-and-extensions).
@@ -390,7 +394,18 @@ specify extension add project
 specify extension add assure
 specify extension add user-manual
 specify extension add pr
+specify extension add scope
+specify extension add workflow
 ```
+
+For a managed project, initialize through Workflow so it coordinates the selected packages:
+
+```text
+/speckit-workflow-init
+/speckit-workflow-scope <issue-number>
+```
+
+For standalone use without Workflow, initialize only the packages you installed:
 
 ```text
 /speckit-project-init
@@ -549,7 +564,13 @@ each with a stable ID and an unchecked recommendation. You answer by replying `C
 the box. Re-running Clarify rereads the thread; including edited comments; without anyone moving
 the card.
 
-A project can settle decomposition once instead of being asked per issue:
+A project can settle decomposition once instead of being asked per issue. After running
+`/speckit-workflow-init`, edit **`.specify/workflow.yml` in the project using Sanduq**.
+For Bunyan, that is `D:\Projects\abushanab-net\Bunyan\.specify\workflow.yml`.
+Merge the following `keep_together` block into the existing top-level `scope` section.
+If there is no `scope` section, add the whole snippet at the top level. Keep other settings,
+such as `scope.statuses`, `scope.artifact_directory`, and `scope.plan_file`; do not create a
+second `scope` key or replace the entire file.
 
 ```yaml
 scope:
@@ -559,6 +580,15 @@ scope:
     unit: points
     inclusive: true
 ```
+
+This is consumer project policy. Do not put it in Sanduq's `extension.yml`, `preset.yml`, a
+`SKILL.md`, or a file under `.specify/extensions/`. Save it, then validate from the project root:
+
+```bash
+python .specify/extensions/workflow/scripts/workflow.py doctor --project
+```
+
+Scope reads the saved policy on the next invocation. No package rebuild or reinstall is needed.
 
 Estimates of 17, 20, and 23 keep the feature whole; 16 and 24 get ordinary assessment. The unit must
 match the project's real estimation system. This never suppresses implementation task sub-issues, and
@@ -608,15 +638,6 @@ The pipeline picks **exactly one** task generator and **exactly one** executor. 
 compatible, enabled SuperSpec provider where that command exists, and falls back to the core command
 otherwise. An explicitly required provider that is unavailable blocks execution rather than silently
 substituting another.
-
-<details>
-<summary>Stage-level detail, as produced by the extension's own Archify plan</summary>
-
-![Archify workflow from issue scope through optional analysis to execution](docs/assets/workflow-plan/issue-to-execution.visual-check.1440x900.light.png)
-
-![Archify workflow from verification through optional documentation to a PR](docs/assets/workflow-plan/evidence-to-pr.visual-check.1440x900.light.png)
-
-</details>
 
 ### Orchestrated implementation and live progress
 
