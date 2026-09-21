@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Upgrade the workflow package and its integrations inside an outer rollback boundary."""
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -15,7 +16,7 @@ from install import command, managed_files, restore, snapshot
 REPOSITORY = 'https://github.com/samykabu/sanduq'
 
 
-def upgrade(root, version, apply=False, packages=None, runner=command):
+def upgrade(root, version, apply=False, packages=None, runner=command, preserve_ci=False):
     root = root.resolve()
     require(re.fullmatch(r'\d+\.\d+\.\d+', version), 'EXPLICIT_RELEASE_VERSION_REQUIRED')
     current = registry(root).get('workflow', {})
@@ -29,7 +30,8 @@ def upgrade(root, version, apply=False, packages=None, runner=command):
     else:
         args = ['specify', 'extension', 'add', 'workflow', '--from', url, '--force']
     result = {'applied': False, 'from': current['version'], 'to': version, 'source': url,
-              'distribution': 'local-development' if packages else 'release', 'command': args}
+              'distribution': 'local-development' if packages else 'release', 'command': args,
+              'preserve_ci_requested': preserve_ci, 'preserved_ci': None}
     if not apply: return result
     ensure_local_excludes(root)
     with locked(root / '.specify/workflow/runtime/upgrade.lock'):
@@ -39,6 +41,8 @@ def upgrade(root, version, apply=False, packages=None, runner=command):
             require(read(root / '.specify/superpowers-handoff.json', {}).get('status') not in ('executing', 'blocked'), 'LEGACY_EXECUTOR_OWNS_FEATURE')
             backup = root / '.specify/workflow/backups/upgrades' / uuid.uuid4().hex
             before = snapshot(root, backup)
+            ci_path = '.github/workflows/sanduq-workflow-gates.yml'
+            ci_before = before.get(ci_path) if preserve_ci else None
         log = []
         try:
             with locked(root / '.specify/workflow/runtime/dispatch.lock'):
@@ -47,8 +51,13 @@ def upgrade(root, version, apply=False, packages=None, runner=command):
                 require((meta['id'], str(meta['version']), meta['repository']) == ('workflow', version, REPOSITORY), 'INSTALLED_WORKFLOW_IDENTITY_MISMATCH')
             # Run the new package's installer; do not assume the old adapter knows its contract.
             tail = ['--packages', str(packages.resolve())] if packages else []
+            if preserve_ci:
+                tail.append('--preserve-ci')
             runner(root, [sys.executable, str(root / '.specify/extensions/workflow/scripts/install.py'),
                           '--root', str(root), '--apply', '--upgrade-owner', str(os.getpid()), *tail], log)
+            if ci_before is not None:
+                require((root / ci_path).read_bytes() == ci_before, 'PROJECT_CI_PRESERVATION_FAILED')
+                result['preserved_ci'] = {'path': ci_path, 'sha256': hashlib.sha256(ci_before).hexdigest()}
             result.update(applied=True, backup=str(backup), commands=log)
             write(backup / 'result.json', {'ok': True, **result})
             return result
@@ -65,8 +74,9 @@ if __name__ == '__main__':
     parser.add_argument('--version', required=True)
     parser.add_argument('--packages', type=Path, help='Verified extracted packages for development')
     parser.add_argument('--apply', action='store_true')
+    parser.add_argument('--preserve-ci', action='store_true', help='Retain the project workflow-gates CI file during the upgrade')
     args = parser.parse_args()
     try:
-        print(json.dumps(upgrade(args.root, args.version, args.apply, args.packages), indent=2))
+        print(json.dumps(upgrade(args.root, args.version, args.apply, args.packages, preserve_ci=args.preserve_ci), indent=2))
     except (WorkflowError, ValueError, OSError, KeyError) as error:
         print(json.dumps({'ok': False, 'error': str(error)})); sys.exit(1)

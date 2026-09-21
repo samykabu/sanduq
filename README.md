@@ -827,6 +827,11 @@ same `sanduq-packages` directory before applying; `--packages` resolves required
 Resolve active claims before upgrading. Review any checkpoint migration required by the new package
 identity. For a new consumer, install the extracted package with
 `specify extension add --dev /absolute/path/to/sanduq-packages/workflow`, then use Workflow Init.
+
+If your project intentionally customizes `.github/workflows/sanduq-workflow-gates.yml`, add
+`--preserve-ci` to the upgrade command. This keeps that file while updating the package, presets,
+and generated skills. The upgrade receipt records the choice. Without this option, substantive
+local CI edits still stop the upgrade; LF/CRLF checkout conversion alone is accepted.
 Keep the extracted package available while testing the development installation. These commands
 test staged source; they do not publish or promote it.
 

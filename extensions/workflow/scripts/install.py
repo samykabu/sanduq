@@ -89,6 +89,17 @@ def preservation(root, name):
             and (p.name in ('config.json', '.env') or p.name.endswith('-config.yml') or 'state' in p.relative_to(folder).parts)}
 
 
+def ci_matches_managed(content, asset, receipt):
+    # Git may convert this managed YAML between LF and CRLF after installation.
+    normalized = content.replace(b'\r\n', b'\n')
+    if normalized == asset.replace(b'\r\n', b'\n'):
+        return True
+    # Older receipts hash raw bytes. Check both checkout forms of the existing
+    # file so an updated asset can replace its unedited predecessor as well.
+    variants = (content, normalized, normalized.replace(b'\n', b'\r\n'))
+    return receipt.get('ci_sha256') in {hashlib.sha256(value).hexdigest() for value in variants}
+
+
 def install_aliases(root, package_root):
     previous = read(root / '.specify/workflow/install-lock.json', {}).get('aliases', {})
     registered = registry(root)
@@ -115,7 +126,7 @@ def install_aliases(root, package_root):
     return inventory
 
 
-def install(root, apply=False, packages=None, package_root=PACKAGE, runner=command, upgrade_owner=None):
+def install(root, apply=False, packages=None, package_root=PACKAGE, runner=command, upgrade_owner=None, preserve_ci=False):
     root = root.resolve(); policy = load_policy(root)
     lock = read(package_root / 'dependencies.json')
     require(lock and lock.get('repository') == 'https://github.com/samykabu/sanduq', 'INVALID_DEPENDENCY_LOCK')
@@ -151,7 +162,8 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
         source = package_root / 'presets' / name
         require((source / 'preset.yml').is_file(), 'BUNDLED_PRESET_MISSING: build/install the workflow archive first')
         preset_ops.append({'name':name,'source':str(source),'priority':priority})
-    result = {'applied':False,'extensions':operations,'retained_newer':retained,'presets':preset_ops,'processes':policy['processes']}
+    result = {'applied':False,'extensions':operations,'retained_newer':retained,'presets':preset_ops,'processes':policy['processes'],
+              'preserve_ci_requested': preserve_ci, 'preserved_ci': None}
     if not apply: return result
     upgrade = read(root / '.specify/workflow/runtime/upgrade.lock', {})
     require(not upgrade or upgrade.get('pid') == upgrade_owner, 'WORKFLOW_UPGRADE_IN_PROGRESS')
@@ -185,10 +197,14 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
             reconcile(root, apply=True)
             target = root / '.github/workflows/sanduq-workflow-gates.yml'
             asset = package_root / 'assets/github/workflow-gates.yml'
-            if target.exists():
+            if target.exists() and preserve_ci:
+                result['preserved_ci'] = {'path': target.relative_to(root).as_posix(),
+                                          'sha256': hashlib.sha256(target.read_bytes()).hexdigest()}
+            elif target.exists():
                 old_inventory = read(root / '.specify/workflow/install-receipt.json', {})
-                require(target.read_bytes() == asset.read_bytes() or old_inventory.get('ci_sha256') == hashlib.sha256(target.read_bytes()).hexdigest(), 'CI_WORKFLOW_HAS_LOCAL_EDITS')
-            target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(asset.read_bytes())
+                require(ci_matches_managed(target.read_bytes(), asset.read_bytes(), old_inventory), 'CI_WORKFLOW_HAS_LOCAL_EDITS')
+            if not result['preserved_ci']:
+                target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(asset.read_bytes())
             legacy = root / '.github/workflows/documentation-gates.yml'
             reference = root / '.specify/extensions/assure/assets/github/documentation-gates.yml'
             if legacy.exists():
@@ -211,7 +227,8 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                             for name, entry in read(root / '.specify/presets/.registry', {}).get('presets', {}).items()},
                 'tested_compatibility': {'spec_kit': lock.get('tested_spec_kit', {}), 'upstream_optional': lock.get('upstream_optional', {})},
             })
-            receipt = {**result,'applied':True,'backup':str(backup),'commands':log,'ci_sha256':hashlib.sha256(asset.read_bytes()).hexdigest()}
+            receipt = {**result,'applied':True,'backup':str(backup),'commands':log,
+                       'ci_sha256':hashlib.sha256(asset.read_bytes().replace(b'\r\n', b'\n')).hexdigest()}
             write(root / '.specify/workflow/install-receipt.json', receipt)
             write(backup / 'result.json', {'ok':True,'commands':log})
             return receipt
@@ -227,9 +244,10 @@ if __name__ == '__main__':
     parser.add_argument('--root', type=Path, default=Path.cwd())
     parser.add_argument('--packages', type=Path, help='Extracted, verified local package directory for offline development')
     parser.add_argument('--apply', action='store_true')
+    parser.add_argument('--preserve-ci', action='store_true', help='Keep the existing project workflow-gates CI file byte-for-byte')
     parser.add_argument('--upgrade-owner', type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
     try:
-        print(json.dumps(install(args.root,args.apply,args.packages,upgrade_owner=args.upgrade_owner),indent=2))
+        print(json.dumps(install(args.root,args.apply,args.packages,upgrade_owner=args.upgrade_owner,preserve_ci=args.preserve_ci),indent=2))
     except (WorkflowError, ValueError, OSError, KeyError) as exc:
         print(json.dumps({'ok':False,'error':str(exc)})); sys.exit(1)
