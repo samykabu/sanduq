@@ -83,6 +83,35 @@ class InstallTests(unittest.TestCase):
             with self.subTest(edited=edited):
                 self.assertFalse(installer.ci_matches_managed(edited, original, receipt))
 
+    def test_explicit_preserve_ci_keeps_custom_policy_without_blessing_it_as_managed(self):
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        custom = b'name: Local policy\r\njobs:\r\n  check:\r\n    runs-on: homek8\r\n'
+        target.write_bytes(custom)
+        with patch.object(installer, 'install_aliases', return_value={}), \
+             patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}):
+            result = installer.install(self.root, apply=True, package_root=self.package,
+                                       runner=lambda *args: None, preserve_ci=True)
+            self.assertEqual(target.read_bytes(), custom)
+            self.assertEqual(result['preserved_ci'], {
+                'path': '.github/workflows/sanduq-workflow-gates.yml',
+                'sha256': hashlib.sha256(custom).hexdigest()})
+            self.assertEqual(w.read(self.root / '.specify/workflow/install-receipt.json')['preserved_ci'], result['preserved_ci'])
+            # A later invocation without the explicit choice must still protect
+            # this consumer policy from replacement by the bundled template.
+            with self.assertRaisesRegex(w.WorkflowError, 'CI_WORKFLOW_HAS_LOCAL_EDITS'):
+                installer.install(self.root, apply=True, package_root=self.package, runner=lambda *args: None)
+            self.assertEqual(target.read_bytes(), custom)
+
+    def test_preserve_ci_still_installs_template_when_project_has_no_ci_file(self):
+        with patch.object(installer, 'install_aliases', return_value={}), \
+             patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}):
+            result = installer.install(self.root, apply=True, package_root=self.package,
+                                       runner=lambda *args: None, preserve_ci=True)
+        self.assertIsNone(result['preserved_ci'])
+        self.assertEqual((self.root / '.github/workflows/sanduq-workflow-gates.yml').read_bytes(),
+                         (self.package / 'assets/github/workflow-gates.yml').read_bytes())
+
     def test_newer_compatible_package_is_retained_without_downgrade(self):
         self.version('pr', '4.2.0')
         result = installer.install(self.root, package_root=self.package)
