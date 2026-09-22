@@ -17,7 +17,7 @@ from pathlib import Path
 import yaml
 from packaging.version import Version
 from packaging.specifiers import SpecifierSet
-from workflow import load_policy, read, write, require, inside, registry, doctor, locked, WorkflowError, RANGES, ensure_local_excludes, package_digest, active_host
+from workflow import load_policy, read, write, require, inside, registry, doctor, locked, WorkflowError, RANGES, ensure_local_excludes, package_digest, active_host, sanduq_ci
 from reconcile import reconcile
 
 PACKAGE = Path(__file__).resolve().parents[1]
@@ -87,6 +87,14 @@ def preservation(root, name):
     # These are consumer configuration/evidence, never package implementation.
     return {p.relative_to(folder).as_posix(): p.read_bytes() for p in folder.rglob('*') if p.is_file()
             and (p.name in ('config.json', '.env') or p.name.endswith('-config.yml') or 'state' in p.relative_to(folder).parts)}
+
+
+def rendered(asset, policy):
+    """The shipped CI template rendered for this project's recorded selection."""
+    try:
+        return sanduq_ci.render(asset.read_bytes(), policy.get('ci') or sanduq_ci.default_ci())
+    except sanduq_ci.CIPolicyError as exc:
+        raise WorkflowError('CI_RENDER_FAILED: ' + asset.name + ': ' + str(exc)) from exc
 
 
 def ci_matches_managed(content, asset, receipt):
@@ -196,19 +204,21 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
             alias_hashes = install_aliases(root, package_root)
             reconcile(root, apply=True)
             target = root / '.github/workflows/sanduq-workflow-gates.yml'
-            asset = package_root / 'assets/github/workflow-gates.yml'
+            # The shipped asset is a template. What lands in the project is the
+            # project's own CI selection rendered from it, never a copy.
+            asset = rendered(package_root / 'assets/github/workflow-gates.yml', policy)
             if target.exists() and preserve_ci:
                 result['preserved_ci'] = {'path': target.relative_to(root).as_posix(),
                                           'sha256': hashlib.sha256(target.read_bytes()).hexdigest()}
             elif target.exists():
                 old_inventory = read(root / '.specify/workflow/install-receipt.json', {})
-                require(ci_matches_managed(target.read_bytes(), asset.read_bytes(), old_inventory), 'CI_WORKFLOW_HAS_LOCAL_EDITS')
+                require(ci_matches_managed(target.read_bytes(), asset, old_inventory), 'CI_WORKFLOW_HAS_LOCAL_EDITS')
             if not result['preserved_ci']:
-                target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(asset.read_bytes())
+                target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(asset)
             legacy = root / '.github/workflows/documentation-gates.yml'
             reference = root / '.specify/extensions/assure/assets/github/documentation-gates.yml'
             if legacy.exists():
-                require(reference.exists() and legacy.read_bytes().replace(b'\r\n',b'\n') == reference.read_bytes().replace(b'\r\n',b'\n'), 'LEGACY_CI_HAS_LOCAL_EDITS: reconcile selected processes explicitly')
+                require(reference.exists() and legacy.read_bytes().replace(b'\r\n',b'\n') == rendered(reference, policy).replace(b'\r\n',b'\n'), 'LEGACY_CI_HAS_LOCAL_EDITS: reconcile selected processes explicitly')
                 legacy.unlink()  # exact backed-up legacy gate; policy-aware gate replaces it
             health = doctor(root, policy); require(health['ok'], '; '.join(health['errors']))
             installed = registry(root)
@@ -228,7 +238,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                 'tested_compatibility': {'spec_kit': lock.get('tested_spec_kit', {}), 'upstream_optional': lock.get('upstream_optional', {})},
             })
             receipt = {**result,'applied':True,'backup':str(backup),'commands':log,
-                       'ci_sha256':hashlib.sha256(asset.read_bytes().replace(b'\r\n', b'\n')).hexdigest()}
+                       'ci_sha256':hashlib.sha256(asset.replace(b'\r\n', b'\n')).hexdigest()}
             write(root / '.specify/workflow/install-receipt.json', receipt)
             write(backup / 'result.json', {'ok':True,'commands':log})
             return receipt

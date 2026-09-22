@@ -4,10 +4,17 @@
 from __future__ import annotations
 
 import argparse
-import yaml
 import shutil
 import sys
 from pathlib import Path
+
+import yaml
+
+try:  # vendored beside this script in a built package
+    import sanduq_ci
+except ImportError:  # canonical source tree
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "workflow" / "scripts"))
+    import sanduq_ci
 
 
 def find_root(start: Path) -> Path:
@@ -83,7 +90,10 @@ def main() -> None:
         workflow_target = root / ".github" / "workflows" / "documentation-gates.yml"
         workflow_target.parent.mkdir(parents=True, exist_ok=True)
         if not managed and not workflow_target.exists():
-            shutil.copy2(workflow_source, workflow_target)
+            # Render the project's own runner selection rather than copying the
+            # shipped template, which targets no particular runner.
+            workflow_target.write_bytes(
+                sanduq_ci.render(workflow_source.read_bytes(), sanduq_ci.load_ci(root)))
 
     print(f"assure mode={args.mode} hooks_changed={changed} dry_run={str(args.dry_run).lower()}")
     print(config)

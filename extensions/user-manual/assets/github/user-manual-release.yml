@@ -10,18 +10,22 @@ permissions:
 
 jobs:
   release-manual:
-    runs-on: ubuntu-latest
+    runs-on: __sanduq_runs_on_linux__
     steps:
       - uses: actions/checkout@v4
+      # sanduq:if python_setup_action
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "__sanduq_python_version__"
           cache: pip
           cache-dependency-path: User-Manual/requirements.lock
+      # sanduq:endif
+      # sanduq:if system_packages_apt
       - name: Install PDF system dependencies
         run: >-
           sudo apt-get update && sudo apt-get install -y
           libpango-1.0-0 libharfbuzz0b libpangoft2-1.0-0 libharfbuzz-subset0
+      # sanduq:endif
       - name: Install documentation toolchain
         run: python -m pip install -r User-Manual/requirements.lock
       - name: Audit and build release editions

@@ -109,8 +109,10 @@ class InstallTests(unittest.TestCase):
             result = installer.install(self.root, apply=True, package_root=self.package,
                                        runner=lambda *args: None, preserve_ci=True)
         self.assertIsNone(result['preserved_ci'])
+        # What lands in the project is the template rendered for its CI selection.
         self.assertEqual((self.root / '.github/workflows/sanduq-workflow-gates.yml').read_bytes(),
-                         (self.package / 'assets/github/workflow-gates.yml').read_bytes())
+                         installer.rendered(self.package / 'assets/github/workflow-gates.yml',
+                                            w.load_policy(self.root)))
 
     def test_newer_compatible_package_is_retained_without_downgrade(self):
         self.version('pr', '4.2.0')

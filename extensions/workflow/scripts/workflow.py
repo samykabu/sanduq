@@ -18,13 +18,14 @@ from pathlib import Path
 # Also supports importlib loading directly from the canonical source tree.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sanduq_hash import portable_content, text_attributes
+import sanduq_ci
 
 import yaml
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 
 SCHEMA = 1
-RANGES = {'scope': '>=1.4,<2', 'assure': '>=2.1,<3', 'user-manual': '>=1.1,<2',
+RANGES = {'scope': '>=1.4,<2', 'assure': '>=2.2,<3', 'user-manual': '>=1.2,<2',
           'pr': '>=4.1,<5', 'superspec': '>=1.0.2,<2', 'project': '>=2.1,<3'}
 BASE_STAGES = ['scope', 'specify', 'clarify', 'plan', 'tasks', 'qa_analyze',
                'manual_analyze', 'analyze', 'taskstoissues', 'execute', 'verify',
@@ -95,7 +96,8 @@ def default_policy(qa, manual):
             'clarification': {'transport': 'github-comments', 'resume_on_reinvoke': 'reread-answers'},
             'context': {'mode': 'measured-only', 'max_fraction': .60,
                         'checkpoint_fraction': .50, 'reserve_fraction': .10},
-            'finalize': {'create_pr': True, 'merge': False}, 'updates': {'policy': 'reviewed'}}
+            'finalize': {'create_pr': True, 'merge': False}, 'updates': {'policy': 'reviewed'},
+            'ci': sanduq_ci.default_ci()}
 
 
 def validate_policy(policy):
@@ -121,6 +123,13 @@ def validate_policy(policy):
     status_names = scope.get('statuses', {})
     require(isinstance(status_names, dict) and all(isinstance(k, str) and isinstance(v, str) and v for k, v in status_names.items())
             and len(set(status_names.values())) == len(status_names), 'SCOPE_STATUS_MAPPING_INVALID')
+    # A project written before CI selection existed keeps its current behaviour:
+    # the shipped GitHub-hosted default is filled in rather than rejected.
+    policy.setdefault('ci', sanduq_ci.default_ci())
+    try:
+        sanduq_ci.validate_ci(policy['ci'])
+    except sanduq_ci.CIPolicyError as exc:
+        raise WorkflowError(str(exc)) from exc
     band = scope.get('keep_together')
     if band:
         require(isinstance(band, dict), 'SCOPE_BAND_INVALID')
@@ -256,6 +265,46 @@ def project_defaults(root, policy):
     return {'phaseToStatus': phases, 'source': 'managed policy with preserved configured phase choices'}
 
 
+# Workflow files Sanduq renders into a consumer project, and the installed asset
+# each one is rendered from.
+MANAGED_CI = {
+    '.github/workflows/sanduq-workflow-gates.yml': '.specify/extensions/workflow/assets/github/workflow-gates.yml',
+    '.github/workflows/documentation-gates.yml': '.specify/extensions/assure/assets/github/documentation-gates.yml',
+    '.github/workflows/user-manual-preview.yml': '.specify/extensions/user-manual/assets/github/user-manual-preview.yml',
+    '.github/workflows/user-manual-release.yml': '.specify/extensions/user-manual/assets/github/user-manual-release.yml',
+}
+
+
+def ci_errors(root, policy):
+    """Check the project's CI selection against the workflow files on disk.
+
+    Two failures matter: a runner the project's own policy forbids without a
+    recorded reason, and a workflow file that no longer matches what the current
+    selection renders, which means the selection was changed but never applied.
+    """
+    ci = policy.get('ci') or sanduq_ci.default_ci()
+    if ci.get('provider') == 'none':
+        return []
+    present = {name: root / name for name in MANAGED_CI if (root / name).is_file()}
+    errors = list(sanduq_ci.exception_errors(ci, [Path(name).name for name in present]))
+    preserved = (read(root / '.specify/workflow/install-receipt.json', {}).get('preserved_ci') or {}).get('path')
+    for name, target in sorted(present.items()):
+        if preserved and Path(preserved).as_posix() == name:
+            continue  # explicitly kept by --preserve-ci; the project owns it
+        asset = root / MANAGED_CI[name]
+        if not asset.is_file():
+            continue  # that extension is not installed; nothing to render from
+        try:
+            expected = sanduq_ci.render(asset.read_bytes(), ci)
+        except sanduq_ci.CIPolicyError as exc:
+            errors.append('CI_TEMPLATE_UNRENDERABLE: ' + name + ': ' + str(exc))
+            continue
+        if target.read_bytes().replace(b'\r\n', b'\n') != expected.replace(b'\r\n', b'\n'):
+            errors.append('CI_WORKFLOW_STALE: ' + name + ' does not match the current ci selection; '
+                          'run the workflow installer to re-render it')
+    return errors
+
+
 def doctor(root, policy, project=False):
     needed = ['scope', 'project', 'pr'] + (['assure'] if policy['processes']['qa'] else []) + (['user-manual'] if policy['processes']['user_manual'] else [])
     errors = ['DEPENDENCY_UNAVAILABLE: ' + name + ' ' + RANGES[name] for name in needed if not compatible(root, name)]
@@ -296,6 +345,7 @@ def doctor(root, policy, project=False):
             errors.append('PRESET_REQUIRED: ' + preset)
         if preset_registry.get(preset, {}).get('enabled') is not True:
             errors.append('PRESET_NOT_ENABLED: ' + preset)
+    errors += ci_errors(root, policy)
     if project: errors += project_errors(root, policy)
     return {'ok': not errors, 'errors': errors, 'project_checked': project,
             'context': 'Only fresh reliable measurements can trigger context pauses; unavailable or estimated usage is nonblocking outside explicit strict mode'}
@@ -670,6 +720,19 @@ def main():
     init.add_argument('--qa', choices=['on', 'off'], required=True)
     init.add_argument('--manual', choices=['on', 'off'], required=True)
     init.add_argument('--replace', action='store_true')
+    ci_parser = sub.add_parser('ci', help='Record where this project runs its CI, once')
+    ci_parser.add_argument('--show', action='store_true', help='Print the recorded selection without changing it')
+    ci_parser.add_argument('--provider', choices=list(sanduq_ci.PROVIDERS))
+    ci_parser.add_argument('--policy', choices=list(sanduq_ci.RUNNER_POLICIES),
+                           help='self-hosted-required makes every GitHub-hosted runner need a recorded exception')
+    for platform in sanduq_ci.PLATFORMS:
+        ci_parser.add_argument('--' + platform, metavar='LABELS',
+                               help='Comma-separated ' + platform + ' runner labels, or "none" to remove')
+    ci_parser.add_argument('--system-packages', choices=list(sanduq_ci.SYSTEM_PACKAGES),
+                           help='sudo-apt keeps the apt install steps; preinstalled drops them and expects the runner image to carry them')
+    ci_parser.add_argument('--python', choices=list(sanduq_ci.PYTHON_PROVISIONING),
+                           help='setup-action keeps actions/setup-python; preinstalled expects Python on the runner')
+    ci_parser.add_argument('--python-version')
     doctor_parser = sub.add_parser('doctor')
     doctor_parser.add_argument('--project', action='store_true', help='Also validate configured board identities, phase/status mapping and required sync')
     sub.add_parser('project-defaults')
@@ -702,6 +765,26 @@ def main():
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(yaml.safe_dump(validate_policy(policy), sort_keys=False), encoding='utf-8')
             result = {'configured': True, 'processes': policy['processes'], 'doctor': doctor(root, policy)}
+        elif args.action == 'ci':
+            policy = load_policy(root)
+            ci = policy['ci']
+            if not args.show:
+                for key, value in (('provider', args.provider), ('policy', args.policy)):
+                    if value: ci[key] = value
+                for platform in sanduq_ci.PLATFORMS:
+                    labels = getattr(args, platform)
+                    if labels is None: continue
+                    if labels.strip().lower() == 'none': ci['runners'].pop(platform, None)
+                    else: ci['runners'][platform] = [l.strip() for l in labels.split(',') if l.strip()]
+                for key, value in (('system_packages', args.system_packages), ('python', args.python),
+                                   ('python_version', args.python_version)):
+                    if value: ci['capabilities'][key] = value
+                write(root / '.specify/workflow/backups' / (uuid.uuid4().hex + '.json'), load_policy(root))
+                (root / '.specify/workflow.yml').write_text(
+                    yaml.safe_dump(validate_policy(policy), sort_keys=False), encoding='utf-8')
+            # The recorded selection is not live until the installer re-renders
+            # each managed workflow file from it.
+            result = {'ci': ci, 'saved': not args.show, 'doctor': doctor(root, policy)}
         elif args.action == 'doctor':
             result = doctor(root, load_policy(root), project=args.project)
         elif args.action == 'project-defaults':

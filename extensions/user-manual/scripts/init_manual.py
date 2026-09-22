@@ -7,8 +7,15 @@ import argparse
 import json
 import re
 import shutil
+import sys
 from datetime import date
 from pathlib import Path
+
+try:  # vendored beside this script in a built package
+    import sanduq_ci
+except ImportError:  # canonical source tree
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "workflow" / "scripts"))
+    import sanduq_ci
 
 
 def q(value: str) -> str:
@@ -117,6 +124,12 @@ def copy_if_missing(source: Path, target: Path) -> None:
         shutil.copy2(source, target)
 
 
+def render_if_missing(source: Path, target: Path, ci: dict) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if not target.exists():
+        target.write_bytes(sanduq_ci.render(source.read_bytes(), ci))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
@@ -175,8 +188,10 @@ def main() -> None:
                 extension_root / "assets" / "scaffold" / "theme" / name,
                 manual_root / "docs" / language / "assets" / "stylesheets" / name,
             )
-    copy_if_missing(extension_root / "assets" / "github" / "user-manual-preview.yml", root / ".github" / "workflows" / "user-manual-preview.yml")
-    copy_if_missing(extension_root / "assets" / "github" / "user-manual-release.yml", root / ".github" / "workflows" / "user-manual-release.yml")
+    # CI assets are templates: render the project's recorded runner selection.
+    ci = sanduq_ci.load_ci(root)
+    for name in ("user-manual-preview.yml", "user-manual-release.yml"):
+        render_if_missing(extension_root / "assets" / "github" / name, root / ".github" / "workflows" / name, ci)
     (manual_root / ".state").mkdir(exist_ok=True)
     print(f"initialized {manual_root} with {len(modules)} approved module(s)")
 
