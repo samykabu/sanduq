@@ -1,10 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "workflow": "1.2.0",
-    "assure": "2.2.0",
-    "user-manual": "1.2.0"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Reviewed for release: project-selected CI runners and capabilities (PR #14), which also carries the unreleased workflow 1.1.0 orchestrated implementation and live progress work (PR #11). Publish immutable assets and verify them before promoting the catalog."
 }
