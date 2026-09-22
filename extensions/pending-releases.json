@@ -5,6 +5,6 @@
     "assure": "2.2.0",
     "user-manual": "1.2.0"
   },
-  "status": "pending",
-  "note": "Project-selected CI runners and capabilities. Publish immutable assets and verify them before promoting the catalog."
+  "status": "ready",
+  "note": "Reviewed for release: project-selected CI runners and capabilities (PR #14), which also carries the unreleased workflow 1.1.0 orchestrated implementation and live progress work (PR #11). Publish immutable assets and verify them before promoting the catalog."
 }
