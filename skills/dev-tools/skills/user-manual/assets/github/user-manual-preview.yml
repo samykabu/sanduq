@@ -13,14 +13,16 @@ permissions:
 
 jobs:
   preview:
-    runs-on: ubuntu-latest
+    runs-on: __sanduq_runs_on_linux__
     steps:
       - uses: actions/checkout@v4
+      # sanduq:if python_setup_action
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "__sanduq_python_version__"
           cache: pip
           cache-dependency-path: User-Manual/requirements.lock
+      # sanduq:endif
       - name: Install documentation toolchain
         run: python -m pip install -r User-Manual/requirements.lock
       - name: Audit manual
@@ -53,8 +55,10 @@ jobs:
               echo "::error::Public repositories must configure USER_MANUAL_PREVIEW_AGE_RECIPIENT as a GitHub Actions variable."
               exit 1
             fi
+            # sanduq:if system_packages_apt
             sudo apt-get update -y
             sudo apt-get install -y age
+            # sanduq:endif
             tar -C "$preview" -czf - . | age -r "$AGE_RECIPIENT" -o User-Manual/preview-artifact/user-manual-preview.tar.gz.age
           fi
       - name: Upload private preview artifact

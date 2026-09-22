@@ -5,15 +5,17 @@ permissions:
   contents: read
 jobs:
   workflow-evidence:
-    runs-on: ubuntu-latest
+    runs-on: __sanduq_runs_on_linux__
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
+      # sanduq:if python_setup_action
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '__sanduq_python_version__'
+      # sanduq:endif
       - run: python -m pip install -r .specify/extensions/workflow/requirements.txt
       - name: Verify selected processes and all changed feature evidence
         env:

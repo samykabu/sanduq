@@ -10,6 +10,8 @@ import shutil
 from datetime import date
 from pathlib import Path
 
+import sanduq_ci
+
 
 def q(value: str) -> str:
     return json.dumps(value, ensure_ascii=False)
@@ -111,6 +113,12 @@ status: draft
 '''
 
 
+def render_if_missing(source: Path, target: Path, ci: dict) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if not target.exists():
+        target.write_bytes(sanduq_ci.render(source.read_bytes(), ci))
+
+
 def copy_if_missing(source: Path, target: Path) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     if not target.exists():
@@ -177,8 +185,10 @@ def main() -> None:
             )
     for name in ("audit_manual.py", "build_manual.py", "manual_state.py"):
         copy_if_missing(skill_root / "scripts" / name, manual_root / "tools" / name)
-    copy_if_missing(skill_root / "assets" / "github" / "user-manual-preview.yml", root / ".github" / "workflows" / "user-manual-preview.yml")
-    copy_if_missing(skill_root / "assets" / "github" / "user-manual-release.yml", root / ".github" / "workflows" / "user-manual-release.yml")
+    # CI assets are templates: render the project's recorded runner selection.
+    ci = sanduq_ci.load_ci(root)
+    for name in ("user-manual-preview.yml", "user-manual-release.yml"):
+        render_if_missing(skill_root / "assets" / "github" / name, root / ".github" / "workflows" / name, ci)
     (manual_root / ".state").mkdir(exist_ok=True)
     print(f"initialized {manual_root} with {len(modules)} approved module(s)")
 

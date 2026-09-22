@@ -4,6 +4,68 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## CI runners are a project decision — workflow 1.2.0, assure 2.2.0, user-manual 1.2.0 — 2026-09-22
+
+### Changed
+
+- **The four shipped CI workflow files are now templates rendered from a project-level selection,
+  not copies.** `workflow-gates.yml`, `documentation-gates.yml`, `user-manual-preview.yml`, and
+  `user-manual-release.yml` each hard-coded `runs-on: ubuntu-latest`, and the installer wrote them
+  into the consumer repository byte for byte. Adopting Sanduq therefore committed a project to
+  GitHub-hosted runners without ever asking, and a project that had to run elsewhere could only
+  fork the file and lose managed updates to it.
+- Added a `ci` section to `.specify/workflow.yml`, validated by the policy schema, recording
+  `provider`, `policy`, per-platform `runners`, `capabilities`, and `exceptions`. `init` asks for
+  it once, and `workflow.py ci` records or shows it without hand-editing YAML.
+- The shipped default is GitHub-hosted and renders the previous files unchanged, so an existing
+  project that never records a selection sees no change to its CI.
+- Unified the Python version across the shipped assets. The workflow gate asked for 3.13 while
+  both User Manual workflows asked for 3.12; the version is now one `ci.capabilities` value.
+  Nothing in the User Manual toolchain constrained it to 3.12.
+
+### Added
+
+- `ci.capabilities` carries what the runner can actually do, not just its label. `system_packages:
+  preinstalled` removes the `sudo apt-get` steps that install `age` and the Pango/HarfBuzz
+  libraries, and `python: preinstalled` removes `actions/setup-python`. Swapping only the runner
+  label would have produced jobs that fail on a self-hosted container; these two knobs are what
+  make a self-hosted selection actually run.
+- `ci.policy: self-hosted-required` for projects that forbid GitHub-hosted runners. Each workflow
+  still on a hosted runner then needs a dated `ci.exceptions` entry naming the reason and what
+  would remove it, and `doctor` reports `CI_HOSTED_RUNNER_UNDOCUMENTED` until it exists. The
+  default `hosted-allowed` requires nothing.
+- `doctor` reports `CI_WORKFLOW_STALE` when a workflow file no longer matches what the current
+  selection renders, which is what a changed selection that was never re-installed looks like.
+  A file explicitly kept with `--preserve-ci` is excluded; that file belongs to the project.
+- `provider: none` for projects that want Sanduq to manage no workflow files at all.
+- `sanduq_ci.py` lives in `extensions/workflow/scripts/` beside `sanduq_hash.py`, the existing
+  convention for a module this repository shares outward, and `package.py` vendors it into the
+  `assure` and `user-manual` archives from there. It was first placed in `extensions/scripts/shared/`
+  with an import fallback onto the source tree; `project-init.sh` runs `workflow.py` from
+  `.specify/extensions/workflow/scripts/`, a plain copy with no package layout, where that fallback
+  resolves to nothing and the runtime dies on import. Every test imported from the source tree, so
+  none of them noticed. `test_the_runtime_works_from_a_copied_scripts_directory` now runs the
+  runtime from exactly that layout.
+- A template stays valid YAML before rendering, so the lint job and editor tooling still parse it.
+  Substitution tokens are plain scalars (`__sanduq_runs_on_linux__`) rather than anything starting
+  with `@`, which is a YAML reserved indicator, and optional steps are delimited by comments.
+- `extensions/scripts/shared/sanduq_ci.py`, a dependency-free policy and rendering module vendored
+  into the `workflow`, `assure`, and `user-manual` packages and into the standalone `user-manual`
+  skill, so all four rendering sites share one implementation.
+
+### Fixed
+
+- The standalone `user-manual` skill copied the same two hard-coded workflow files and now renders
+  them from the same selection.
+
+### Compatibility
+
+- `workflow` 1.2.0 requires `assure` >= 2.2 and `user-manual` >= 1.2. An older package still ships
+  a non-template asset, which would render to itself and let a stale `ubuntu-latest` gate survive a
+  self-hosted selection without any error.
+- Changing `ci` never invalidates completed semantic work; like `context` and `updates` it is
+  outside the policy-cutoff map.
+
 ## Documentation — README, workflow, and diagrams — 2026-09-18
 
 ### Added
