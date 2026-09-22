@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
-  "versions": {"workflow": "1.1.0"},
+  "versions": {
+    "workflow": "1.2.0",
+    "assure": "2.2.0",
+    "user-manual": "1.2.0"
+  },
   "status": "pending",
-  "note": "Orchestrated implementation and live progress reporting. Publish immutable assets and verify them before promoting the catalog."
+  "note": "Project-selected CI runners and capabilities. Publish immutable assets and verify them before promoting the catalog."
 }

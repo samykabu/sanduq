@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   feature-documentation:
-    runs-on: ubuntu-latest
+    runs-on: __sanduq_runs_on_linux__
     steps:
       - uses: actions/checkout@v4
         with:

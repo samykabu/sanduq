@@ -29,6 +29,11 @@ def package(extension, output=None, root=ROOT):
     if extension in ('assure', 'user-manual') and shared.exists():
         files[extension + '/scripts/sanduq_freshness.py'] = shared.read_bytes()
         files[extension + '/scripts/sanduq_hash.py'] = (root / 'extensions/workflow/scripts/sanduq_hash.py').read_bytes()
+    # assure and user-manual render shipped CI assets too; workflow already
+    # carries the module in its own scripts directory.
+    ci = root / 'extensions/workflow/scripts/sanduq_ci.py'
+    if extension in ('assure', 'user-manual') and ci.exists():
+        files[extension + '/scripts/sanduq_ci.py'] = ci.read_bytes()
     inventory = {name: hashlib.sha256(value).hexdigest() for name, value in sorted(files.items())}
     files[extension + '/package-inventory.json'] = (json.dumps(inventory, indent=2) + '\n').encode()
     output = output or root / 'dist' / (extension + '.zip')

@@ -16,7 +16,15 @@ the package's pinned `requirements.txt` when missing. Never install a floating t
   Ask once for neither / QA only / manual only / both if not already explicitly selected.
   Discover existing effort units/preferences; preserve exact meaning. Run `init --qa on|off
   --manual on|off`. Configure provider choices, context policy and scope preferences in
-  `.specify/workflow.yml`. No future feature asks these setup questions again. Show changed
+  `.specify/workflow.yml`. Ask once where this project runs CI: GitHub-hosted runners,
+  or self-hosted labels the user names. Do not assume either. Capture the runner labels
+  per platform and whether that runner can `sudo apt-get` and provides Python, then record
+  it with `ci --policy ... --linux ... --system-packages ... --python ...`. A project that
+  forbids GitHub-hosted runners uses `--policy self-hosted-required`; every hosted runner
+  that remains then needs a dated `ci.exceptions` entry naming why the self-hosted runner
+  cannot serve that workflow and what would remove the exception. Never edit a rendered
+  file under `.github/workflows/` to change a runner; change the selection and re-install.
+  No future feature asks these setup questions again. Show changed
   policy when `--replace` is needed. After saving the selections, run `scripts/install.py` for the exact
   dependency/preset/CI change preview, then `scripts/install.py --apply` within this
   setup authorization. It uses immutable Sanduq URLs, backs up consumer state and

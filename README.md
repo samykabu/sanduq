@@ -19,9 +19,9 @@ for a bounded task, or install the managed workflow to take a GitHub issue throu
 implementation, verification, documentation, and a pull request. Implementation uses a dedicated
 orchestrator and workers, with an HTML report that follows progress through an authorized PR merge.
 
-The orchestration and live-report additions described here require workflow 1.1.0, currently staged
+The orchestration and live-report additions described here require workflow 1.2.0, currently staged
 in this checkout. The published catalog still installs workflow 1.0.0. Use the
-[local package procedure](#try-the-staged-workflow) to try 1.1.0 before its release.
+[local package procedure](#try-the-staged-workflow) to try 1.2.0 before its release.
 
 Start with the [complete how-to and prompt guide](docs/skill-guide.md). It covers every portable
 skill, extension command, Sanduq overlay, and stage in the managed lifecycle.
@@ -734,7 +734,63 @@ The evidence checks have separate responsibilities:
   in an image URL.
 
 The two processes stay independent. Neither QA nor User Manual is enabled merely because its
-extension is installed.
+extension is installed. Where this gate runs is a separate, project-level decision; see
+[Where your CI actually runs](#where-your-ci-actually-runs).
+
+### Where your CI actually runs
+
+Sanduq ships the workflow files a project needs, but it does not decide where they run. The
+runner is a project decision, captured once during `init` and kept in `.specify/workflow.yml`:
+
+```yaml
+ci:
+  provider: github-actions        # or `none`, to manage no workflow files at all
+  policy: hosted-allowed          # or `self-hosted-required`
+  runners:
+    linux: [ubuntu-latest]
+    windows: [windows-latest]
+  capabilities:
+    system_packages: sudo-apt     # or `preinstalled`
+    python: setup-action          # or `preinstalled`
+    python_version: "3.13"
+  exceptions: []
+```
+
+Record it once, without editing any YAML by hand:
+
+```bash
+python .specify/extensions/workflow/scripts/workflow.py ci --show
+python .specify/extensions/workflow/scripts/workflow.py ci   --policy self-hosted-required   --linux self-hosted,homek8-general --windows self-hosted,windows   --system-packages preinstalled --python preinstalled
+```
+
+Every shipped workflow file is then **rendered** from that selection rather than copied, so
+changing a runner stays a supported upgrade instead of a fork. The files rendered this way are
+`sanduq-workflow-gates.yml`, `documentation-gates.yml`, `user-manual-preview.yml` and
+`user-manual-release.yml`.
+
+`capabilities` matters as much as the labels. A runner without `sudo` cannot `apt-get install`
+the `age` and Pango packages the User Manual jobs use, and a container image that already carries
+Python does not want `actions/setup-python`. Setting either to `preinstalled` removes those steps
+and makes the runner image responsible for providing them — so a self-hosted selection produces
+jobs that actually run, not jobs that merely carry the right label.
+
+#### Requiring self-hosted runners
+
+`policy: self-hosted-required` refuses to let a GitHub-hosted runner pass unnoticed. Every
+workflow still on a hosted runner needs its own dated entry:
+
+```yaml
+  exceptions:
+    - workflow: user-manual-release.yml
+      platform: linux
+      reason: "The self-hosted image has no WeasyPrint system libraries and the job cannot install them."
+      removed_by: "Add libpango/libharfbuzz to the runner image."
+      decided: 2026-09-22
+```
+
+`doctor` reports `CI_HOSTED_RUNNER_UNDOCUMENTED` until each one is recorded, and
+`CI_WORKFLOW_STALE` when a selection was changed but never re-installed. Under the default
+`hosted-allowed` nothing is required and nothing changes.
 
 ### Continuing in a fresh session
 
@@ -802,6 +858,10 @@ Use Illustrate to edit the source, export it again, and inspect the rendered ima
 This repository uses GitHub-hosted runners. The home-office ARC runner sets belong to a different
 GitHub account and cannot serve this personal repository under their current registration.
 
+This is Sanduq's own pipeline, not a rendered one. A project that *adopts* Sanduq records the same
+kind of decision as data instead of prose, under `ci.policy` and `ci.exceptions` in
+`.specify/workflow.yml`; see [Where your CI actually runs](#where-your-ci-actually-runs).
+
 | | |
 | --- | --- |
 | **Workflows** | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) and [`.github/workflows/release-extensions.yml`](.github/workflows/release-extensions.yml) |
@@ -835,8 +895,8 @@ The first command previews the operation; the second applies the same version wi
 rollback protection:
 
 ```bash
-python .specify/extensions/workflow/scripts/upgrade.py --version 1.1.0 --packages /absolute/path/to/sanduq-packages
-python .specify/extensions/workflow/scripts/upgrade.py --version 1.1.0 --packages /absolute/path/to/sanduq-packages --apply
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.2.0 --packages /absolute/path/to/sanduq-packages
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.2.0 --packages /absolute/path/to/sanduq-packages --apply
 python .specify/extensions/workflow/scripts/workflow.py doctor --project
 ```
 

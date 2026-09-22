@@ -44,7 +44,7 @@ class WorkflowTests(unittest.TestCase):
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text('schema_version: "1.0"\n', encoding='utf-8')
         w.write(self.root / '.specify/presets/.registry', {'presets': {p: {'enabled':True} for p in ('workflow','scope-gate','scope-brainstorm')}})
-        versions = {'scope': '1.4.0', 'project': '2.1.0', 'pr': '4.1.0', 'assure': '2.1.0', 'user-manual': '1.1.0'}
+        versions = {'scope': '1.4.0', 'project': '2.1.0', 'pr': '4.1.0', 'assure': '2.2.0', 'user-manual': '1.2.0'}
         if superspec: versions['superspec'] = '1.0.2'
         w.write(self.root / '.specify/extensions/.registry', {'extensions': {n: {'version': v, 'enabled': True} for n, v in versions.items()}})
         for n, v in versions.items():
