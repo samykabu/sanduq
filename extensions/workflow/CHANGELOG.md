@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- The implementation progress report is titled with the feature: `init` takes
+  the plan's `# Tasks: <feature>` heading by default, `--title` renames an
+  existing report without losing its evidence, and the browser tab shows the
+  same title instead of a fixed "Implementation progress".
+- The report shows the Sanduq logo (light and dark variants shipped under
+  `assets/report/` and copied beside the page), adds a Phase column, filters
+  tasks by Status and Phase, and moves the activity log to its own tab. Filters
+  and the selected tab are kept in the URL fragment, so the five-second refresh
+  no longer resets them; without JavaScript the page still refreshes.
+
 ## 1.2.2
 
 - Depend on user-manual 1.3.0, which stages an edition's reachable assets so a
