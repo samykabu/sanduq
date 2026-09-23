@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.2
+
+- Depend on user-manual 1.3.0, which stages an edition's reachable assets so a
+  strict manual build resolves every link.
+
+
 ## 1.2.1
 
 - A reviewed migration now rebinds a checkpoint to the current policy. A release

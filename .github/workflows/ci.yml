@@ -120,7 +120,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        suite: [workflow, scope]
+        suite: [workflow, scope, user-manual]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
