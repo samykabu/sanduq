@@ -2,7 +2,7 @@ schema_version: '1.0'
 extension:
   id: workflow
   name: Sanduq Workflow
-  version: "1.2.0"
+  version: "1.2.1"
   description: Resumable, policy-driven Scope-to-PR orchestration with optional QA
     and User Manual processes.
   author: Samy K. Abushanab

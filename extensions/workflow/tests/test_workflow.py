@@ -225,6 +225,35 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(run.migrate('Reviewed compatible package update')['next']['stage'], 'specify')
         self.assertEqual(len(list((run.path.parent / 'backups').glob('*.json'))), 1)
 
+    def test_migration_rebinds_a_policy_section_an_upgrade_added(self):
+        """A release that only adds a policy section must not orphan finished evidence."""
+        run = self.run_object(); claim = run.claim(self.usage()); run.complete(claim['token'], self.receipt('scope'))
+        self.policy['ci'] = {'provider': 'github-actions', 'policy': 'self-hosted-required',
+                             'runners': {'linux': ['private-runner']},
+                             'capabilities': {'system_packages': 'sudo-apt', 'python': 'setup-action', 'python_version': '3.13'},
+                             'exceptions': []}
+        self.configure()
+        run = self.run_object()
+        state = w.read(run.path)
+        self.assertNotEqual(state['policy_digest'], w.digest(run.policy))
+        result = run.migrate('Upgrade added the ci selection')
+        state = w.read(run.path)
+        self.assertEqual(state['policy_digest'], w.digest(run.policy))
+        self.assertIn('scope', state['receipts'])
+        self.assertEqual(state['policy_changes'][-1]['via'], 'migrate')
+        self.assertEqual(state['migrations'][-1]['invalidated'], [])
+        self.assertEqual(result['next']['stage'], 'specify')
+
+    def test_migration_still_invalidates_a_semantic_policy_change(self):
+        run = self.run_object(); claim = run.claim(self.usage()); run.complete(claim['token'], self.receipt('scope'))
+        self.policy['scope'] = dict(self.policy.get('scope', {}), artifact_directory='design/scope')
+        self.configure()
+        run = self.run_object()
+        run.migrate('Scope artifact location changed')
+        state = w.read(run.path)
+        self.assertEqual(state['policy_digest'], w.digest(run.policy))
+        self.assertNotIn('scope', state['receipts'])
+
     def test_explicit_upgrade_revalidation_invalidates_from_selected_stage(self):
         run=self.run_object();c=run.claim(self.usage());run.complete(c['token'],self.receipt('scope'))
         self.assertEqual(run.migrate('Scope contract changed',invalidate_from='scope')['next']['stage'],'scope')

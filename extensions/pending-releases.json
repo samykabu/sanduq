@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Reviewed for release: project-selected CI runners and capabilities (PR #14), which also carries the unreleased workflow 1.1.0 orchestrated implementation and live progress work (PR #11). Publish immutable assets and verify them before promoting the catalog."
+  "versions": {
+    "workflow": "1.2.1"
+  },
+  "status": "ready",
+  "note": "Reviewed for release: migrate rebinds a checkpoint to the current policy so a release that only adds a policy section does not orphan finished feature evidence."
 }

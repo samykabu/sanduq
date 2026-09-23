@@ -522,7 +522,15 @@ class Run:
             return {'bound': True, 'branch': branch, 'feature': self.relative}
 
     def migrate(self, reason, invalidate_from=None):
-        """Preserve immutable historical evidence; invalidate changed command contracts."""
+        """Preserve immutable historical evidence; invalidate changed command contracts.
+
+        An upgrade can change the policy as well as the packages: a release that
+        adds a policy section leaves every checkpoint bound to the previous
+        policy hash, which the CI gate reads as `POLICY_CHANGED` on a feature
+        whose work never changed. A reviewed migration therefore rebinds the
+        checkpoint to the current policy, invalidating exactly the stages the
+        policy cutoff says a semantic change reached and preserving the rest.
+        """
         with locked(self.lock):
             state = self.load()
             require(not state['active'], 'ACTIVE_CLAIM_MUST_BE_RESOLVED_BEFORE_UPGRADE')
@@ -531,17 +539,28 @@ class Run:
             ensure_local_excludes(self.root)
             write(self.path.parent / 'backups' / (uuid.uuid4().hex + '.json'), state)
             old_digest = state['dependency_digest']
+            old_policy_digest = state['policy_digest']
+            policy_digest = digest(self.policy)
             commands = resolve_commands(self.root, self.policy)
             changed = [stage for stage in stages(self.policy) if state['commands'].get(stage) != commands[stage]]
+            if policy_digest != old_policy_digest:
+                reached = policy_cutoff(state.get('policy'), self.policy)
+                if reached < len(BASE_STAGES): changed.append(BASE_STAGES[reached])
             if invalidate_from:
                 require(invalidate_from in BASE_STAGES, 'INVALID_MIGRATION_STAGE')
                 changed.append(invalidate_from)
             cutoff = min((BASE_STAGES.index(stage) for stage in changed), default=len(BASE_STAGES))
             invalidated = [stage for stage in state['receipts'] if BASE_STAGES.index(stage) >= cutoff]
             state.setdefault('migrations', []).append({'reason': reason, 'from': old_digest, 'at': now(),
+                                                      'policy_from': old_policy_digest, 'policy_to': policy_digest,
                                                       'invalidated': invalidated, 'preserved_as_historical': [s for s in state['receipts'] if s not in invalidated]})
             state['dependency_digest'] = package_digest(self.root)
             state['commands'] = commands
+            if policy_digest != old_policy_digest:
+                state.setdefault('policy_changes', []).append({'from': old_policy_digest, 'to': policy_digest,
+                                                               'at': now(), 'via': 'migrate', 'reason': reason})
+                state['policy_digest'] = policy_digest
+                state['policy'] = copy.deepcopy(self.policy)
             for stage in invalidated: state['receipts'].pop(stage)
             self.save(state)
             return {'migrated': True, 'next': self.next(state)}
