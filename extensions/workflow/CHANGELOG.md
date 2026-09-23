@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.3
 
 - The implementation progress report is titled with the feature: `init` takes
   the plan's `# Tasks: <feature>` heading by default, `--title` renames an

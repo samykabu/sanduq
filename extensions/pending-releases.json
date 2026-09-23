@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Reviewed for release: an edition stages the assets its pages reach and rebases shared documentation assets, so a strict site build resolves every link."
+  "versions": {
+    "workflow": "1.2.3"
+  },
+  "status": "ready",
+  "note": "Reviewed for release: the implementation progress report is titled with its feature, shows the Sanduq logo, adds a Phase column, Status and Phase filters and a separate Activity tab, and keeps filters across its automatic refresh."
 }
