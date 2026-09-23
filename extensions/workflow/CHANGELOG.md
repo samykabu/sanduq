@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.2.1
+
+- A reviewed migration now rebinds a checkpoint to the current policy. A release
+  that only adds a policy section (1.2.0 added `ci:`) left every finished feature
+  reading `POLICY_CHANGED` in the CI gate even though no work had changed.
+  `migrate` records the policy change, invalidates exactly the stages the policy
+  cutoff says a semantic change reached, and preserves the rest as historical.
+
+## 1.2.0
+
+- Where CI runs is a project decision recorded under `ci:` in `.specify/workflow.yml`;
+  shipped workflow assets are rendered from it instead of carrying a fixed runner.
+
 ## 1.0.0 (unreleased)
 
 - Review Home pilot hardening: shared portable UTF-8 hashes across Workflow,
