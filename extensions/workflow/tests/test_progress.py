@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import re
 from pathlib import Path
 import tempfile
 import unittest
@@ -30,7 +31,8 @@ class ProgressTests(unittest.TestCase):
             self.assertIn('2 of 2 tasks complete', page)
             self.assertIn('merged:', page)
             self.assertIn('abc123', page)
-            self.assertNotIn('<script>', page)
+            self.assertNotIn('<script>alert(1)', page)
+            self.assertIn('&lt;script&gt;alert(1)&lt;/script&gt;', page)
             self.assertIn('http-equiv="refresh"', page)
             with self.assertRaises(SystemExit):
                 run('task', '--id', 'unknown', '--status', 'done')
@@ -100,3 +102,117 @@ class ProgressTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 p.main(args)
             self.assertEqual((out / 'state.json').read_bytes(), previous)
+
+
+
+class ReportTitleTests(unittest.TestCase):
+    def run_report(self, out, *args):
+        p.main([args[0], '--output', str(out), *args[1:]])
+
+    def page_title(self, out):
+        return re.search(r'<title>(.*?)</title>', (out / 'index.html').read_text(encoding='utf-8')).group(1)
+
+    def test_new_report_takes_the_feature_title_from_the_tasks_heading(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            tasks, out = root / 'tasks.md', root / 'report'
+            tasks.write_text('# Tasks: Create & switch <projects>\n\n- [ ] T001 One\n', encoding='utf-8')
+            self.run_report(out, 'init', '--tasks', str(tasks))
+            self.assertEqual(json.loads((out / 'state.json').read_text(encoding='utf-8'))['title'],
+                             'Create & switch <projects>')
+            self.assertEqual(self.page_title(out), 'Create &amp; switch &lt;projects&gt;')
+            self.assertIn('<h1>Create &amp; switch &lt;projects&gt;</h1>', (out / 'index.html').read_text(encoding='utf-8'))
+
+    def test_plan_without_a_heading_keeps_the_generic_title(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            tasks, out = root / 'tasks.md', root / 'report'
+            tasks.write_text('- [ ] T001 One\n', encoding='utf-8')
+            self.run_report(out, 'init', '--tasks', str(tasks))
+            self.assertEqual(self.page_title(out), 'Implementation progress')
+
+    def test_explicit_title_renames_an_existing_report_and_survives_updates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            tasks, out = root / 'tasks.md', root / 'report'
+            tasks.write_text('- [ ] T001 One\n', encoding='utf-8')
+            self.run_report(out, 'init', '--tasks', str(tasks))
+            self.run_report(out, 'task', '--id', 'T001', '--status', 'running')
+            self.run_report(out, 'init', '--tasks', str(tasks), '--title', 'UC-1A-05 · Create a project')
+            state = json.loads((out / 'state.json').read_text(encoding='utf-8'))
+            self.assertEqual(state['title'], 'UC-1A-05 · Create a project')
+            self.assertEqual(state['tasks'][0]['status'], 'running')
+            self.assertIn('Renamed report', '\n'.join(state['events']))
+            self.run_report(out, 'event', '--message', 'later update')
+            self.assertEqual(self.page_title(out), 'UC-1A-05 · Create a project')
+
+    def test_resume_without_title_adopts_the_heading_only_for_the_generic_title(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            tasks, out = root / 'tasks.md', root / 'report'
+            tasks.write_text('- [ ] T001 One\n', encoding='utf-8')
+            self.run_report(out, 'init', '--tasks', str(tasks))
+            tasks.write_text('# Tasks: Review Home\n- [ ] T001 One\n', encoding='utf-8')
+            self.run_report(out, 'init', '--tasks', str(tasks))
+            self.assertEqual(self.page_title(out), 'Review Home')
+            self.run_report(out, 'init', '--tasks', str(tasks), '--title', 'Chosen name')
+            self.run_report(out, 'init', '--tasks', str(tasks))
+            self.assertEqual(self.page_title(out), 'Chosen name')
+
+
+
+class ReportLayoutTests(unittest.TestCase):
+    def build(self, root):
+        tasks, out = root / 'tasks.md', root / 'report'
+        tasks.write_text('# Tasks: Layout\n## Phase 1: Setup <b>\n- [x] T001 First\n'
+                         '## Phase 2: Build\n- [ ] T002 Second\n- [ ] T003 Third\n', encoding='utf-8')
+        run = lambda *args: p.main([args[0], '--output', str(out), *args[1:]])
+        run('init', '--tasks', str(tasks))
+        run('task', '--id', 'T002', '--status', 'running', '--agent', 'worker-2')
+        run('task', '--id', 'T003', '--status', 'blocked', '--note', 'Waiting on T002')
+        run('event', '--message', 'Assigned <T002>')
+        return out, (out / 'index.html').read_text(encoding='utf-8')
+
+    def test_rows_carry_phase_and_status_for_filtering(self):
+        with tempfile.TemporaryDirectory() as directory:
+            out, page = self.build(Path(directory))
+            self.assertIn('<th scope="col">Phase</th>', page)
+            self.assertIn('data-status="blocked" data-phase="Phase 2: Build"', page)
+            self.assertIn('data-phase="Phase 1: Setup &lt;b&gt;"', page)
+            self.assertNotIn('<b>', page)
+            self.assertRegex(page, r'<select id="status-filter"[^>]*>')
+            self.assertRegex(page, r'<select id="phase-filter"[^>]*>')
+            for status in ('pending', 'running', 'done', 'blocked'):
+                self.assertIn(f'<option value="{status}">', page)
+            self.assertIn('<option value="Phase 2: Build">', page)
+            run = lambda *args: p.main([args[0], '--output', str(out), *args[1:]])
+            run('phase', '--name', 'Build (short name)', '--status', 'complete', '--commit', 'abc123')
+            page = (out / 'index.html').read_text(encoding='utf-8')
+            self.assertIn('Build (short name): complete (abc123)', page)
+            self.assertNotIn('<option value="Build (short name)">', page)
+
+    def test_activity_is_a_separate_tab_with_escaped_events(self):
+        with tempfile.TemporaryDirectory() as directory:
+            out, page = self.build(Path(directory))
+            self.assertIn('role="tablist"', page)
+            self.assertRegex(page, r'<button[^>]*role="tab"[^>]*aria-controls="tasks-panel"')
+            self.assertRegex(page, r'<button[^>]*role="tab"[^>]*aria-controls="activity-panel"')
+            self.assertRegex(page, r'<section id="activity-panel" role="tabpanel"[^>]*hidden')
+            self.assertIn('Assigned &lt;T002&gt;', page)
+            self.assertNotIn('<T002>', page)
+
+    def test_logo_is_copied_beside_the_report(self):
+        with tempfile.TemporaryDirectory() as directory:
+            out, page = self.build(Path(directory))
+            for name in ('sanduq-logo.png', 'sanduq-logo-dark.png'):
+                self.assertTrue((out / name).is_file(), name)
+                self.assertEqual((out / name).read_bytes()[:8], b'\x89PNG\r\n\x1a\n')
+            self.assertIn('src="sanduq-logo.png"', page)
+            self.assertIn('srcset="sanduq-logo-dark.png"', page)
+            self.assertIn('alt="Sanduq"', page)
+
+    def test_refresh_keeps_the_selected_filters_and_tab(self):
+        with tempfile.TemporaryDirectory() as directory:
+            out, page = self.build(Path(directory))
+            self.assertIn('location.hash', page)
+            self.assertIn('http-equiv="refresh"', page)

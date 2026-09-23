@@ -30,6 +30,14 @@ The orchestration agent creates the report before assigning the first task:
 python .specify/extensions/workflow/scripts/progress.py init --tasks specs/<feature>/tasks.md --output specs/<feature>/workflow/progress
 ```
 
+The report is titled from the plan's `# Tasks: <feature>` heading. Pass
+`--title "<feature title>"` to name it explicitly; rerunning `init` with a new
+title renames an existing report without losing its evidence. The report shows
+the Sanduq logo, a Phase column, Status and Phase filters and a separate
+Activity tab; filters and the chosen tab survive the automatic refresh. Record
+phase results under the exact phase heading from `tasks.md` so each phase
+appears once.
+
 Open `specs/<feature>/workflow/progress/index.html` in the host browser or a
 platform-supported browser command. Verify that it loads. The page reloads while
 the report changes. If browser control is unavailable, record that limitation and
