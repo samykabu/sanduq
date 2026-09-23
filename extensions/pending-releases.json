@@ -1,8 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "workflow": "1.2.3"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Reviewed for release: the implementation progress report is titled with its feature, shows the Sanduq logo, adds a Phase column, Status and Phase filters and a separate Activity tab, and keeps filters across its automatic refresh."
 }
