@@ -4,12 +4,15 @@
 from __future__ import annotations
 
 import argparse
+import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import zipfile
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 try:
     import yaml
@@ -25,28 +28,70 @@ def split_page(path: Path) -> tuple[dict, str]:
     return (yaml.safe_load(parts[1]) or {}, parts[2]) if len(parts) == 3 else ({}, text)
 
 
+LINK = re.compile(r'(!?\[[^\]]*\]\()([^\s)]+)(\))|((?:src|href)=["\'])([^"\']+)(["\'])')
+
+
 def copy_pages(source: Path, target: Path, audience: str, module: str | None) -> int:
-    count = 0
-    for path in source.rglob("*"):
-        relative = path.relative_to(source)
-        destination = target / relative
-        if path.is_dir():
-            destination.mkdir(parents=True, exist_ok=True)
-            continue
-        if path.suffix.lower() != ".md":
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(path, destination)
-            continue
-        meta, _ = split_page(path)
-        audiences = set(meta.get("audiences", []))
-        if audience not in audiences:
-            continue
-        if module and str(meta.get("module", "")) not in {"system", module}:
-            continue
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(path, destination)
-        count += 1
-    return count
+    """Stage the pages this edition selects, and only the assets they reach.
+
+    A manual keeps shared assets beside its language directories, so a page
+    reaches them through a relative path that leaves its own language root.
+    Copying the language directory alone leaves those links pointing outside
+    the staged documentation, which the strict site build then rejects. Every
+    reachable asset is therefore copied into the edition, shared paths rebased
+    under `assets/`, and each link rewritten to where its target actually
+    landed. Unreachable files stay out, so one audience never ships another's
+    screenshots, and a missing asset or a link into a page this audience does
+    not receive fails the build where it can still be fixed.
+    """
+    source = source.resolve()
+    common = source.parent / "assets"
+    selected = {
+        page.resolve() for page in source.rglob("*.md")
+        if audience in split_page(page)[0].get("audiences", [])
+        and (not module or str(split_page(page)[0].get("module", "")) in {"system", module})
+    }
+    copied: set[Path] = set()
+
+    def destination(path: Path) -> Path:
+        if path.is_relative_to(source):
+            return target / path.relative_to(source)
+        if path.is_relative_to(common):
+            return target / "assets" / path.relative_to(common)
+        raise ValueError(f"Manual asset escapes documentation roots: {path}")
+
+    def copy(path: Path) -> None:
+        if path in copied:
+            return
+        copied.add(path)
+        output = destination(path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        if path.suffix.lower() not in {".md", ".html", ".svg"}:
+            shutil.copy2(path, output)
+            return
+
+        def link(match: re.Match) -> str:
+            before, value, after = (match.group(1), match.group(2), match.group(3)) if match.group(1) else (match.group(4), match.group(5), match.group(6))
+            parts = urlsplit(value)
+            if parts.scheme or parts.netloc or not parts.path:
+                return match.group(0)
+            linked = (path.parent / unquote(parts.path)).resolve()
+            if not linked.is_file():
+                raise ValueError(f"Missing manual asset: {path}: {value}")
+            if linked.suffix == ".md" and linked not in selected:
+                raise ValueError(f"Cross-audience page link: {path}: {value}")
+            copy(linked)
+            relative = Path(os.path.relpath(destination(linked), output.parent)).as_posix()
+            if path.suffix != ".md" and linked.suffix == ".md":
+                relative = str(Path(relative).with_suffix(".html")).replace("\\", "/")
+            suffix = ("?" + parts.query if parts.query else "") + ("#" + parts.fragment if parts.fragment else "")
+            return before + relative + suffix + after
+
+        output.write_text(LINK.sub(link, path.read_text(encoding="utf-8")), encoding="utf-8")
+
+    for page in sorted(selected):
+        copy(page)
+    return len(selected)
 
 
 def main() -> None:
