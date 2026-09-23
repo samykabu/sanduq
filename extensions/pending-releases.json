@@ -1,8 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "workflow": "1.2.1"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Reviewed for release: migrate rebinds a checkpoint to the current policy so a release that only adds a policy section does not orphan finished feature evidence."
 }
