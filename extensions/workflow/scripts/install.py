@@ -14,10 +14,11 @@ import sys
 import uuid
 import zipfile
 from pathlib import Path
+from urllib.parse import quote
 import yaml
 from packaging.version import Version
 from packaging.specifiers import SpecifierSet
-from workflow import load_policy, read, write, require, inside, registry, doctor, locked, WorkflowError, RANGES, ensure_local_excludes, package_digest, active_host, sanduq_ci
+from workflow import load_policy, read, write, require, inside, registry, doctor, locked, WorkflowError, RANGES, ensure_local_excludes, package_digest, active_host, github_repository, sanduq_ci
 from reconcile import reconcile
 
 PACKAGE = Path(__file__).resolve().parents[1]
@@ -97,6 +98,40 @@ def rendered(asset, policy):
         raise WorkflowError('CI_RENDER_FAILED: ' + asset.name + ': ' + str(exc)) from exc
 
 
+def required_gate_checks(root):
+    """Read active branch rules before removing a previously installed gate job."""
+    repo = github_repository(root)
+
+    def api(endpoint, missing_ok=False):
+        result = subprocess.run(['gh', 'api', endpoint, '-H', 'Accept: application/vnd.github+json'],
+                                cwd=root, capture_output=True, text=True, encoding='utf-8')
+        if result.returncode:
+            if missing_ok and ('HTTP 404' in result.stderr or 'Not Found' in result.stderr):
+                return None
+            raise WorkflowError('CI_BRANCH_RULE_INSPECTION_FAILED: ' + result.stderr.strip()[:400])
+        try:
+            return json.loads(result.stdout)
+        except ValueError as exc:
+            raise WorkflowError('CI_BRANCH_RULE_RESPONSE_INVALID') from exc
+
+    branch = api('repos/' + repo)['default_branch']
+    endpoint = 'repos/' + repo + '/rules/branches/' + quote(branch, safe='')
+    rules = api(endpoint)
+    require(isinstance(rules, list), 'CI_BRANCH_RULE_RESPONSE_INVALID')
+    names = []
+    for rule in rules:
+        if rule.get('type') == 'required_status_checks':
+            for check in rule.get('parameters', {}).get('required_status_checks', []):
+                names.append(check.get('context') if isinstance(check, dict) else check)
+    protection = api('repos/' + repo + '/branches/' + quote(branch, safe='') +
+                     '/protection/required_status_checks', missing_ok=True)
+    if protection:
+        names.extend(protection.get('contexts', []))
+        names.extend(check.get('context') for check in protection.get('checks', []))
+    return sorted({name for name in names if isinstance(name, str)
+                   and ('workflow-evidence' in name or 'Sanduq workflow gates' in name)})
+
+
 def ci_matches_managed(content, asset, receipt):
     # Git may convert this managed YAML between LF and CRLF after installation.
     normalized = content.replace(b'\r\n', b'\n')
@@ -171,6 +206,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
         require((source / 'preset.yml').is_file(), 'BUNDLED_PRESET_MISSING: build/install the workflow archive first')
         preset_ops.append({'name':name,'source':str(source),'priority':priority})
     result = {'applied':False,'extensions':operations,'retained_newer':retained,'presets':preset_ops,'processes':policy['processes'],
+              'gate': sanduq_ci.gate_config(policy['ci']),
               'preserve_ci_requested': preserve_ci, 'preserved_ci': None}
     if not apply: return result
     upgrade = read(root / '.specify/workflow/runtime/upgrade.lock', {})
@@ -207,13 +243,23 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
             # The shipped asset is a template. What lands in the project is the
             # project's own CI selection rendered from it, never a copy.
             asset = rendered(package_root / 'assets/github/workflow-gates.yml', policy)
+            gate_disabled = (sanduq_ci.gate_config(policy['ci'])['mode'] == 'disabled'
+                             or policy['ci']['provider'] == 'none')
+            require(not (gate_disabled and target.exists() and preserve_ci),
+                    'CI_GATE_DISABLED_PRESERVED_FILE_CONFLICT: a preserved workflow would still run')
+            if gate_disabled and target.exists():
+                stale = required_gate_checks(root)
+                require(not stale, 'CI_GATE_REQUIRED_BY_BRANCH_RULE: remove or update ' +
+                        ', '.join(stale) + ' in GitHub branch rules before disabling the job')
             if target.exists() and preserve_ci:
                 result['preserved_ci'] = {'path': target.relative_to(root).as_posix(),
                                           'sha256': hashlib.sha256(target.read_bytes()).hexdigest()}
             elif target.exists():
                 old_inventory = read(root / '.specify/workflow/install-receipt.json', {})
                 require(ci_matches_managed(target.read_bytes(), asset, old_inventory), 'CI_WORKFLOW_HAS_LOCAL_EDITS')
-            if not result['preserved_ci']:
+            if gate_disabled:
+                if target.exists(): target.unlink()
+            elif not result['preserved_ci']:
                 target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(asset)
             legacy = root / '.github/workflows/documentation-gates.yml'
             reference = root / '.specify/extensions/assure/assets/github/documentation-gates.yml'

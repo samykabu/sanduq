@@ -33,6 +33,71 @@ class InstallTests(unittest.TestCase):
         registry = w.registry(self.root); registry[name].update(version=value, enabled=enabled)
         w.write(self.root / '.specify/extensions/.registry', {'extensions': registry})
 
+    def test_disabled_gate_installs_no_job_and_removes_only_managed_job(self):
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        with patch.object(installer, 'install_aliases', return_value={}), \
+             patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}), \
+             patch.object(installer, 'required_gate_checks', return_value=[]):
+            installer.install(self.root, apply=True, package_root=self.package, runner=lambda *args: None)
+            self.assertTrue(target.is_file())
+            self.policy['ci']['gate']['mode'] = 'disabled'
+            self.configure()
+            result = installer.install(self.root, apply=True, package_root=self.package, runner=lambda *args: None)
+            self.assertEqual(result['gate']['mode'], 'disabled')
+            self.assertFalse(target.exists())
+
+    def test_disabled_gate_refuses_stale_required_branch_check(self):
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((self.package / 'assets/github/workflow-gates.yml').read_bytes())
+        self.policy['ci']['gate']['mode'] = 'disabled'
+        self.configure()
+        with patch.object(installer, 'required_gate_checks', return_value=['workflow-evidence']):
+            with self.assertRaisesRegex(w.WorkflowError, 'CI_GATE_REQUIRED_BY_BRANCH_RULE'):
+                installer.install(self.root, apply=True, package_root=self.package,
+                                  runner=lambda *args: None)
+        self.assertTrue(target.is_file())
+
+    def test_provider_none_installs_no_managed_gate_job(self):
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        self.policy['ci']['provider'] = 'none'
+        self.configure()
+        with patch.object(installer, 'install_aliases', return_value={}), \
+             patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}):
+            result = installer.install(self.root, apply=True, package_root=self.package,
+                                       runner=lambda *args: None)
+        self.assertTrue(result['applied'])
+        self.assertFalse(target.exists())
+
+    def test_branch_rule_inspection_covers_ruleset_and_legacy_protection(self):
+        def api(args, **kwargs):
+            endpoint = args[2]
+            if endpoint == 'repos/acme/app':
+                value = {'default_branch': 'main'}
+            elif '/rules/branches/' in endpoint:
+                value = [{'type': 'required_status_checks', 'parameters': {
+                    'required_status_checks': [{'context': 'workflow-evidence'}]}}]
+            else:
+                value = {'contexts': ['Sanduq workflow gates / workflow-evidence']}
+            return subprocess.CompletedProcess(args, 0, json.dumps(value), '')
+        with patch.object(installer.subprocess, 'run', side_effect=api), \
+             patch.object(installer, 'github_repository', return_value='acme/app'):
+            self.assertEqual(installer.required_gate_checks(self.root),
+                             ['Sanduq workflow gates / workflow-evidence', 'workflow-evidence'])
+
+    def test_disabled_gate_refuses_to_claim_custom_preserved_workflow_is_off(self):
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text('name: Custom gate\n', encoding='utf-8')
+        self.policy['ci']['gate']['mode'] = 'disabled'
+        self.configure()
+        with patch.object(installer, 'install_aliases', return_value={}), \
+             patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}):
+            with self.assertRaisesRegex(w.WorkflowError, 'CI_GATE_DISABLED_PRESERVED_FILE_CONFLICT'):
+                installer.install(self.root, apply=True, package_root=self.package,
+                                  runner=lambda *args: None, preserve_ci=True)
+        self.assertEqual(target.read_text(encoding='utf-8'), 'name: Custom gate\n')
+
     def test_ci_checkout_conversion_survives_installer_rerun_and_asset_upgrade(self):
         target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
         asset = self.package / 'assets/github/workflow-gates.yml'

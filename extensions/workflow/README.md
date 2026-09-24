@@ -1,8 +1,10 @@
 # Sanduq Workflow
 
-**Local implementation in progress; 1.0.0 is not published yet.** See the
-[implementation plan](../../docs/workflow-extension-implementation-plan.md) and
-[verification status](../../docs/workflow-implementation-progress.md).
+Workflow 1.3.0 adds issue decisions and an optional evidence CI gate. Check
+the repository catalog for the currently published version. See the
+[Delivery implementation plan](../../docs/sanduq-delivery-implementation-plan.md),
+[usage guide](../../docs/sanduq-delivery-usage.md), and
+[native prototype result](../../docs/native-workflow-prototype-results.md).
 
 Choose QA Assure and User Manual independently during project initialization.
 Daily entry points are `speckit.workflow.scope`, `.clarify`, `.continue`, and
@@ -35,9 +37,10 @@ The archive bundles canonical presets from `presets/`, so consumer command edits
 are unnecessary. Install a staged extracted package using
 `specify extension add --dev <extracted/workflow>`; install its bundled presets
 through `specify preset add --dev <preset-path> --priority 1` (workflow) and priority
-2 (scope-gate/scope-brainstorm). Core command composition was checked on Spec Kit
-1.0.6.dev0, commit f21acc4a25ce3aa53ff8653357b49b9aafcf8026. Other versions require
-compatibility testing. No claim of general host support is made yet.
+2 (scope-gate/scope-brainstorm). The isolated native prototype was checked on
+Spec Kit 1.0.11, commit 92b7cf7658a177cc417b7ddbeaa4c0a941a5f41b;
+its command completion is insufficient for production receipt semantics.
+Other versions require compatibility testing.
 
 For a managed project run `workflow.py init --qa on|off --manual on|off`, configure
 GitHub Project status mappings, run `install.py` preview/apply and run doctor. Only explicit
@@ -68,9 +71,12 @@ Project mappings are adopted only after verifying native parent links. Unmapped
 children block duplicate creation. `--sync-states` updates task issue completion
 without changing the publication evidence.
 
-The policy-aware CI workflow validates every changed feature, selected documentation
-freshness, task mapping and receipts. It distinguishes committed evidence from live
-GitHub checks and human acceptance. Finalize also verifies that each inline PR visual
+The project selects Disabled, Advisory, or Required CI evidence gating and
+individual rules at initialization or later. Managed-only scope lets ordinary
+source-only bug-fix PRs pass with an explicit `not_applicable` result. Enabled
+rules distinguish committed receipts and decision evidence from live GitHub
+checks and human acceptance. Disabling the job checks active branch rules so a
+required check is not stranded. Finalize also verifies that each inline PR visual
 loads in an authenticated private-repository view.
 
 Before publication, run `ci_gate.py --feature specs/<feature> --base-ref <target-sha>
@@ -78,7 +84,8 @@ Before publication, run `ci_gate.py --feature specs/<feature> --base-ref <target
 checkout of the candidate commit. Missing/unstaged dependencies are reported by
 path; the command never stages files. Target-branch source changes invalidate old
 verification even when Git merges cleanly. Configure `workflow-evidence` as a
-required check through the repository's authorized governance process.
+required branch check only when this project has deliberately selected Required
+mode; otherwise leave its branch rule optional.
 
 UTF-8 text fingerprints normalize CRLF across checkout platforms. Explicit Git
 `-text`, SQL, NUL-bearing and non-UTF-8 files remain byte exact; lone CR is not

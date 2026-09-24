@@ -3,6 +3,7 @@ on:
   pull_request:
 permissions:
   contents: read
+  issues: read
 jobs:
   workflow-evidence:
     runs-on: __sanduq_runs_on_linux__
@@ -10,7 +11,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      # sanduq:if not candidate_merge
           ref: ${{ github.event.pull_request.head.sha }}
+      # sanduq:endif
       # sanduq:if python_setup_action
       - uses: actions/setup-python@v5
         with:
@@ -20,4 +23,7 @@ jobs:
       - name: Verify selected processes and all changed feature evidence
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
         run: python .specify/extensions/workflow/scripts/ci_gate.py --base-ref "$BASE_SHA" --check-index

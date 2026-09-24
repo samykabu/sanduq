@@ -1,12 +1,16 @@
 import copy
+import contextlib
+import io
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 import ci_gate as c
 import workflow as w
+import waivers
 import test_workflow as fixture
 
 class CIGateTests(unittest.TestCase):
@@ -25,6 +29,98 @@ class CIGateTests(unittest.TestCase):
             if stage=='pr':break
             claim=run.claim(self.usage());run.complete(claim['token'],self.receipt(stage))
         return run
+
+    def invoke(self, base):
+        output = io.StringIO()
+        with patch.object(sys, 'argv', ['ci_gate.py', '--root', str(self.root), '--base-ref', base]), \
+             contextlib.redirect_stdout(output):
+            code = c.main()
+        return code, __import__('json').loads(output.getvalue())
+
+    def source_only_commit(self):
+        base = w.git(self.root, 'rev-parse', 'HEAD')
+        (self.root / 'bugfix.py').write_text('print("fixed")', encoding='utf-8')
+        subprocess.run(['git', 'add', 'bugfix.py'], cwd=self.root, check=True)
+        subprocess.run(['git', 'commit', '-qm', 'Small bug fix'], cwd=self.root, check=True)
+        return base
+
+    def test_required_managed_gate_does_not_block_ordinary_bug_fix(self):
+        self.policy['ci']['gate']['mode'] = 'required'
+        self.configure()
+        code, result = self.invoke(self.source_only_commit())
+        self.assertEqual(code, 0)
+        self.assertEqual(result['status'], 'not_applicable')
+        self.assertEqual(result['features'], [])
+
+    def test_exact_waiver_skips_one_rule_and_reports_it(self):
+        self.policy = w.default_policy(False, False)
+        self.policy['ci']['gate']['mode'] = 'required'
+        self.policy['ci']['gate']['rules']['tasks'] = True
+        self.configure()
+        def fake_check(root, feature, policy, base, rules):
+            if rules['tasks']:
+                raise w.WorkflowError('INCOMPLETE_TASKS')
+            return {'feature': feature, 'passed': True, 'rules': ['receipts']}
+        output = io.StringIO()
+        with patch.object(c, 'resolve_features', return_value=[self.feature]), \
+             patch.object(c, 'check', side_effect=fake_check), \
+             patch.object(waivers, 'verify', return_value={'rule': 'tasks', 'reviewer': 'owner'}), \
+             patch.object(sys, 'argv', ['ci_gate.py', '--root', str(self.root),
+                                       '--base-ref', 'HEAD', '--pr-number', '7']), \
+             contextlib.redirect_stdout(output):
+            code = c.main()
+        result = __import__('json').loads(output.getvalue())
+        self.assertEqual(code, 0)
+        self.assertEqual(result['features'][0]['waivers'][0]['rule'], 'tasks')
+
+    def test_candidate_merge_requires_exact_base_and_head_parents(self):
+        base_branch = w.git(self.root, 'branch', '--show-current')
+        subprocess.run(['git', 'switch', '-qc', 'work'], cwd=self.root, check=True)
+        (self.root / 'feature.py').write_text('feature', encoding='utf-8')
+        subprocess.run(['git', 'add', 'feature.py'], cwd=self.root, check=True)
+        subprocess.run(['git', 'commit', '-qm', 'feature'], cwd=self.root, check=True)
+        head = w.git(self.root, 'rev-parse', 'HEAD')
+        subprocess.run(['git', 'switch', '-q', base_branch], cwd=self.root, check=True)
+        (self.root / 'base.py').write_text('base', encoding='utf-8')
+        subprocess.run(['git', 'add', 'base.py'], cwd=self.root, check=True)
+        subprocess.run(['git', 'commit', '-qm', 'base'], cwd=self.root, check=True)
+        base = w.git(self.root, 'rev-parse', 'HEAD')
+        subprocess.run(['git', 'merge', '-q', '--no-ff', 'work', '-m', 'candidate'],
+                       cwd=self.root, check=True)
+        merged = w.git(self.root, 'rev-parse', 'HEAD')
+        env = {'GITHUB_REF': 'refs/pull/7/merge', 'GITHUB_SHA': merged,
+               'BASE_SHA': base, 'PR_HEAD_SHA': head}
+        self.assertEqual(c.check_candidate_merge(self.root, env)['merge_sha'], merged)
+        with self.assertRaisesRegex(w.WorkflowError, 'PARENTS_MISMATCH'):
+            c.check_candidate_merge(self.root, dict(env, BASE_SHA=head))
+
+    def test_all_prs_scope_keeps_explicit_mapping_requirement(self):
+        self.policy['ci']['gate'].update(mode='required', scope='all-prs')
+        self.configure()
+        code, result = self.invoke(self.source_only_commit())
+        self.assertEqual(code, 1)
+        self.assertIn('FEATURE_MAPPING_REQUIRED', result['error'])
+
+    def test_disabled_gate_reports_no_check(self):
+        self.policy['ci']['gate']['mode'] = 'disabled'
+        self.configure()
+        code, result = self.invoke(self.source_only_commit())
+        self.assertEqual(code, 0)
+        self.assertEqual(result['status'], 'disabled')
+
+    def test_advisory_reports_findings_without_failing_job(self):
+        self.policy['ci']['gate']['mode'] = 'advisory'
+        self.configure()
+        base = w.git(self.root, 'rev-parse', 'HEAD')
+        path = self.root / self.feature / 'spec.md'
+        path.parent.mkdir(parents=True)
+        path.write_text('Feature without evidence', encoding='utf-8')
+        subprocess.run(['git', 'add', '.'], cwd=self.root, check=True)
+        subprocess.run(['git', 'commit', '-qm', 'Feature'], cwd=self.root, check=True)
+        code, result = self.invoke(base)
+        self.assertEqual(code, 0)
+        self.assertEqual(result['status'], 'advisory_findings')
+        self.assertFalse(result['feature_verified'])
 
     def test_core_only_does_not_require_unselected_docs(self):
         self.ready();self.assertTrue(c.check(self.root,self.feature,self.policy)['passed'])

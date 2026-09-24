@@ -21,4 +21,10 @@ stable task IDs, completed checkboxes and native issue mappings for unchanged wo
 Add new work and reopen genuinely invalidated tasks with a recorded reason. Do not
 replace the existing task list with a fresh numbered template.
 
+For material task breakdown or acceptance choices, use the workflow decision
+adapter on the bound GitHub issue. Post options there, pause the claimed stage,
+and resume from authorized issue answers. Do not ask in the VS Code conversation.
+Record the applied decision and tasks.md as evidence before returning a passed
+Tasks receipt.
+
 Continue the applicable upstream domain instructions below.
