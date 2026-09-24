@@ -17,7 +17,7 @@ from pathlib import Path
 
 # Also supports importlib loading directly from the canonical source tree.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from sanduq_hash import portable_content, text_attributes
+from sanduq_hash import eol_drift, portable_files
 import sanduq_ci
 
 import yaml
@@ -347,7 +347,17 @@ def doctor(root, policy, project=False):
             errors.append('PRESET_NOT_ENABLED: ' + preset)
     errors += ci_errors(root, policy)
     if project: errors += project_errors(root, policy)
-    return {'ok': not errors, 'errors': errors, 'project_checked': project,
+    warnings = []
+    drift = eol_drift(root)
+    if drift:
+        warnings.append(
+            f'BYTE_SENSITIVE_EOL_DRIFT: {len(drift)} tracked byte-sensitive file(s) (.sql or -text, e.g. {drift[0]}) '
+            'have working-tree line endings that differ from the index (i/lf w/crlf or i/crlf w/lf). Evidence '
+            'fingerprints use the committed blob while such a file is otherwise unchanged, but tools reading the '
+            'working tree see different bytes than CI. Remedy: commit or stash edits, add "*.sql -text" to '
+            '.gitattributes (or set core.autocrlf=false), then re-checkout the files listed by "git ls-files --eol" '
+            'with "git -c core.autocrlf=false checkout -- <path>".')
+    return {'ok': not errors, 'errors': errors, 'warnings': warnings, 'project_checked': project,
             'context': 'Only fresh reliable measurements can trigger context pauses; unavailable or estimated usage is nonblocking outside explicit strict mode'}
 
 
@@ -386,14 +396,13 @@ def fingerprint_files(root, paths):
     paths = sorted(set(paths))
     for relative in paths:
         inside(root, relative)
-    attributes = text_attributes(root, paths)
-    for relative in paths:
-        path = inside(root, relative)
-        if path.is_file():
-            content = path.read_bytes()
-            content = portable_content(path, content, attributes.get(relative))
+    # Byte-sensitive files read as their committed blob when the working tree
+    # differs only by checkout conversion, so a Windows autocrlf checkout and a
+    # clean CI checkout of the same commit fingerprint identically.
+    for relative, content in portable_files(root, paths).items():
+        if content is not None:
             # Checkbox bookkeeping must not invalidate task publication or planning.
-            if path.name == 'tasks.md':
+            if Path(relative).name == 'tasks.md':
                 content = re.sub(rb'(?m)^(\s*- )\[[ xX]\]', rb'\1[ ]', content)
             result[relative] = hashlib.sha256(content).hexdigest()
         else:
