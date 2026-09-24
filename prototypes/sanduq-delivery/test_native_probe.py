@@ -7,7 +7,10 @@ from unittest.mock import patch
 
 from specify_cli.workflows.base import StepContext, StepStatus
 from specify_cli.workflows.engine import WorkflowEngine
-from specify_cli.workflows.steps.command import CommandStep
+try:
+    from specify_cli.workflows.step.command import CommandStep  # Spec Kit 1.0.11
+except ModuleNotFoundError:
+    from specify_cli.workflows.steps.command import CommandStep  # Earlier prototype API
 
 
 PROTOTYPE = Path(__file__).with_name('workflow.yml')
@@ -22,7 +25,8 @@ class NativeProbe(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             for integration in ('claude', 'codex'):
                 with self.subTest(integration=integration):
-                    with patch('subprocess.run', return_value=subprocess.CompletedProcess([], 0, '', '')) as run:
+                    with patch('shutil.which', return_value='/mock/agent'), patch(
+                            'subprocess.run', return_value=subprocess.CompletedProcess([], 0, '', '')) as run:
                         result = CommandStep().execute(
                             {'id': 'specify', 'command': 'speckit.specify',
                              'integration': integration, 'input': {'args': '42'}},
