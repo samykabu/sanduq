@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Reviewed for release: fingerprints of byte-sensitive files (SQL, -text) are independent of a Windows core.autocrlf checkout, so receipts and QA/manual freshness recorded on Windows stay current in Linux CI; doctor warns about working-tree EOL drift."
+  "versions": {"workflow": "1.3.0"},
+  "status": "ready",
+  "note": "Delivery 1.3.0 passed local workflow, installation, upgrade, migration, and package checks. Publish after PR review and remote CI pass."
 }

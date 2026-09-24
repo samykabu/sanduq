@@ -14,6 +14,13 @@ the package's pinned `requirements.txt` when missing. Never install a floating t
 
 - **init**: read existing project instructions, constitution, Scope and manual configuration.
   Ask once for neither / QA only / manual only / both if not already explicitly selected.
+  Also select the workflow evidence gate: `disabled`, `advisory`, or `required`,
+  its `managed-only` or `all-prs` scope, and individual `--gate-rule NAME=on|off`
+  choices. Record the authorized GitHub decision reviewers with repeated
+  `--decision-owner LOGIN` when the issue creator and repository collaborators
+  are not sufficient. This selection is made during initialization and can be
+  revised with `workflow.py ci` and `workflow.py decisions` later. Keep Status
+  for the lifecycle; the Decision single-select field is separate.
   Discover existing effort units/preferences; preserve exact meaning. Run `init --qa on|off
   --manual on|off`. Configure provider choices, context policy and scope preferences in
   `.specify/workflow.yml`. Ask once where this project runs CI: GitHub-hosted runners,
@@ -41,7 +48,13 @@ the package's pinned `requirements.txt` when missing. Never install a floating t
   maps to an existing option. Finally run `doctor --project`. Package installation
   checks alone do not establish project readiness; claims enforce the board checks.
 - **scope**: require an explicit issue. Inspect its scope prerequisites and project policy;
-  never choose a feature from an editor tab. Resolve or reserve the matching feature identity,
+  never choose a feature from an editor tab. For a new issue-bound feature, run
+  `workflow.py prepare --issue <number>` and use its exact `feature` and `branch`
+  derived from the issue number and current title. If the Git extension owns
+  `before_specify`, pass its branch as `GIT_BRANCH_NAME` to that hook; otherwise
+  `prepare` creates the branch with Git argument arrays. For an existing bound feature,
+  reuse its saved feature path and branch even if the issue title has changed.
+  Resolve or reserve the matching feature identity,
   then `start --feature specs/<feature> --issue owner/repo#number`. Pass this exact
   path into Specify as SPECIFY_FEATURE_DIRECTORY. Run the stage loop below.
 - **clarify**: resolve the explicit issue through `scope-source.json`, then run the stage loop.
@@ -90,6 +103,16 @@ the package's pinned `requirements.txt` when missing. Never install a floating t
    overwrite completed task history or require moving an advanced issue back to Backlog.
    Scope still checks current approval, labels, prerequisites and requirement fingerprints;
    a claim is not permission to bypass stale scope or unresolved human questions.
+   For a material choice during any stage, use `scripts/decisions.py --feature
+   specs/<bound-feature> ask --question ... --option ... --option ...` to post a
+   stable question on the bound GitHub issue. Do not request its answer in the IDE.
+   Pause the active claim with the question URL and token. On return, run
+   `decisions.py ... sync --project-field`, inspect all authorized answers and
+   conflicts, then apply the selected result to the actual artifacts. Record
+   that application with `decisions.py ... apply --id SDn --evidence <path>`.
+   Edited answers reopen the decision; an applied artifact that changed must be
+   reviewed again. Reuse existing question IDs on retries. Never infer an
+   answer from the Project field or an agent recommendation.
 5. Record an honest receipt JSON: `stage`, `outcome: passed`, `summary`, `inputs` (project-relative
    consulted input paths), and `evidence` (existing project-relative proof files). Do not include
    checkpoint files in input manifests. Pin test/review outputs; do not call a generated report
@@ -98,6 +121,8 @@ the package's pinned `requirements.txt` when missing. Never install a floating t
    and deleted files. This cannot establish that a claimed test actually ran; preserve
    command output and reviewer evidence. Add the stage-specific fields below. Failed/skipped/pending work
    cannot receive a passed receipt. Include all relevant inputs, not just the evidence file.
+   A pending or conflicted issue decision blocks a passed receipt. Reread the
+   issue decision ledger before completion and include it in the stage inputs.
 6. Run `complete --feature ... --token ... --receipt <file>`. Re-read the next stage. Continue
    automatically without asking about routine transitions. If blocked, use `pause --reason`
    and report the actual question or failure. Preserve required human review/deployment gates.

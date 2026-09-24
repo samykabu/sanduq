@@ -166,13 +166,45 @@ class ValidationTests(unittest.TestCase):
         schema = json.loads((EXTENSIONS / 'workflow/schemas/policy-v1.schema.json').read_text(encoding='utf-8'))
         section = schema['properties']['ci']
         selection = ci.default_ci()
-        self.assertEqual(sorted(section['required']), sorted(k for k in selection if k != 'exceptions'))
+        # Gate is optional in the schema so pre-selection consumer policies stay valid.
+        self.assertEqual(sorted(section['required']), sorted(k for k in selection if k not in ('exceptions', 'gate')))
+        gate = section['properties']['gate']
+        self.assertEqual(sorted(gate['properties']['mode']['enum']), sorted(ci.GATE_MODES))
+        self.assertEqual(sorted(gate['properties']['scope']['enum']), sorted(ci.GATE_SCOPES))
+        self.assertEqual(sorted(gate['properties']['rules']['properties']), sorted(ci.GATE_RULES))
         self.assertEqual(sorted(section['properties']['provider']['enum']), sorted(ci.PROVIDERS))
         self.assertEqual(sorted(section['properties']['policy']['enum']), sorted(ci.RUNNER_POLICIES))
         capabilities = section['properties']['capabilities']['properties']
         self.assertEqual(sorted(capabilities['system_packages']['enum']), sorted(ci.SYSTEM_PACKAGES))
         self.assertEqual(sorted(capabilities['python']['enum']), sorted(ci.PYTHON_PROVISIONING))
         self.assertEqual(sorted(section['properties']['runners']['properties']), sorted(ci.PLATFORMS))
+
+    def test_gate_modes_rules_and_legacy_selection(self):
+        selection = ci.default_ci()
+        self.assertEqual(ci.gate_config(selection)['mode'], 'advisory')
+        self.assertEqual(ci.gate_config(selection)['scope'], 'managed-only')
+        legacy = dict(selection); legacy.pop('gate')
+        self.assertEqual(ci.gate_config(legacy)['mode'], 'required')
+        self.assertEqual(ci.gate_config(legacy)['scope'], 'all-prs')
+        for rule, dependency in (('live_answers', 'decisions'), ('candidate_merge', 'receipts'),
+                                 ('portability', 'receipts'), ('task_links', 'tasks')):
+            with self.subTest(rule=rule):
+                gate = ci.gate_config(selection).copy()
+                gate['rules'] = dict(gate['rules'], **{rule: True, dependency: False})
+                with self.assertRaisesRegex(ci.CIPolicyError, 'CI_GATE_RULE_DEPENDENCY'):
+                    ci.validate_gate(gate)
+
+
+class MergeCandidateTemplateTests(unittest.TestCase):
+    def test_selected_candidate_uses_pr_merge_ref(self):
+        source = ASSETS['workflow-gates.yml'].read_bytes()
+        selection = ci.default_ci()
+        head = ci.render(source, selection).decode()
+        self.assertIn('ref: ${{ github.event.pull_request.head.sha }}', head)
+        selection['gate']['rules']['candidate_merge'] = True
+        merged = ci.render(source, selection).decode()
+        self.assertNotIn('ref: ${{ github.event.pull_request.head.sha }}', merged)
+        self.assertIn('fetch-depth: 0', merged)
 
 
 class ExceptionTests(unittest.TestCase):
@@ -211,7 +243,7 @@ class PolicyIntegrationTests(unittest.TestCase):
     def test_a_policy_written_before_ci_selection_existed_keeps_its_behaviour(self):
         legacy = {k: v for k, v in w.default_policy(True, True).items() if k != 'ci'}
         (self.root / '.specify/workflow.yml').write_text(yaml.safe_dump(legacy), encoding='utf-8')
-        self.assertEqual(w.load_policy(self.root)['ci'], ci.default_ci())
+        self.assertEqual(ci.gate_config(w.load_policy(self.root)['ci'])['mode'], 'required')
 
     def test_a_malformed_ci_selection_stops_the_workflow(self):
         policy = w.default_policy(True, True)
@@ -260,6 +292,9 @@ class PolicyIntegrationTests(unittest.TestCase):
         target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(b'anything\n')
+        self.assertTrue(any('CI_PROVIDER_NONE_FILE_PRESENT' in error
+                            for error in w.ci_errors(self.root, policy)))
+        target.unlink()
         self.assertEqual(w.ci_errors(self.root, policy), [])
 
     def test_the_cli_records_a_selection_once_and_persists_it(self):

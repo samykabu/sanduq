@@ -21,4 +21,8 @@ Preserve established decisions and task history, and do not blindly copy a new p
 template over reviewed content. Keep the clarification gate: a managed claim can
 recheck an open feature already in progress only with resolved clarification evidence.
 
+For a new material choice during planning, use the bound issue decision adapter
+and pause for an authorized GitHub answer. Apply the answer to the plan and
+record its evidence before returning a passed Plan receipt.
+
 Continue the applicable upstream domain instructions below.

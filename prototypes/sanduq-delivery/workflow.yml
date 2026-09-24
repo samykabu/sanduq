@@ -1,0 +1,47 @@
+schema_version: "1.0"
+workflow:
+  id: sanduq-delivery
+  name: Sanduq Delivery Prototype
+  version: "0.1.0"
+  author: Sanduq
+  description: Isolated native-engine dispatch and receipt-validation experiment
+requires:
+  speckit_version: ">=1.0.11"
+  integrations:
+    any: [claude, codex]
+inputs:
+  issue:
+    type: string
+    required: true
+    prompt: GitHub issue number already bound through Sanduq Scope
+  integration:
+    type: string
+    default: auto
+steps:
+  - id: specify
+    command: speckit.specify
+    integration: "{{ inputs.integration }}"
+    input:
+      args: "{{ inputs.issue }}"
+  - id: verify-specify
+    type: shell
+    run: python prototypes/sanduq-delivery/receipt_guard.py --stage specify
+    output_format: json
+  - id: plan
+    command: speckit.plan
+    integration: "{{ inputs.integration }}"
+    input:
+      args: "{{ inputs.issue }}"
+  - id: verify-plan
+    type: shell
+    run: python prototypes/sanduq-delivery/receipt_guard.py --stage plan
+    output_format: json
+  - id: tasks
+    command: speckit.tasks
+    integration: "{{ inputs.integration }}"
+    input:
+      args: "{{ inputs.issue }}"
+  - id: verify-tasks
+    type: shell
+    run: python prototypes/sanduq-delivery/receipt_guard.py --stage tasks
+    output_format: json

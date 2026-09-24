@@ -24,7 +24,7 @@ def smoke(host, superspec_source=None):
         if result.returncode != expected:
             raise RuntimeError(f'{args} failed ({result.returncode}); inspect {workspace}')
         return result.stdout
-    run(['specify','init','--here','--non-interactive','--ignore-agent-tools','--integration',host] + (['--integration-options=--skills'] if host == 'codex' else []))
+    run(['specify','init','--here','--force','--ignore-agent-tools','--integration',host] + (['--integration-options=--skills'] if host == 'codex' else []))
     for name in ('illustrate','project','scope','pr','assure','user-manual','workflow'):
         result = package(name, output=workspace / 'archives' / (name + '.zip'))
         with zipfile.ZipFile(result['archive']) as archive: archive.extractall(workspace / 'packages')

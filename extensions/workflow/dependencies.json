@@ -23,7 +23,7 @@
     }
   },
   "tested_spec_kit": {
-    "version": "1.0.6.dev0",
-    "commit": "f21acc4a25ce3aa53ff8653357b49b9aafcf8026"
+    "version": "1.0.11",
+    "commit": "8147943512404afb9d99c6252cb9bf84369fd0b0"
   }
 }
