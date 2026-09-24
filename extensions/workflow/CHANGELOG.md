@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.4
 
 - Evidence fingerprints no longer depend on how Git checked a byte-sensitive file
   out. A tracked `.sql` (or `-text`) file whose working tree differs from the
