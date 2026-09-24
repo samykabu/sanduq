@@ -1,6 +1,7 @@
 # Sanduq Delivery implementation plan
 
-Status: in progress. Source: [design report](sanduq-native-workflow-prototype.html).
+Status: implementation and PR checks complete; merge and release verification pending.
+Source: [design report](sanduq-native-workflow-prototype.html).
 The [isolated native prototype result](native-workflow-prototype-results.md) is
 currently no-go for production scheduling; the existing dispatcher is retained.
 Target: a reusable Sanduq workflow for a new project, with tested installation paths
