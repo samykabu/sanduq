@@ -19,9 +19,11 @@ for a bounded task, or install the managed workflow to take a GitHub issue throu
 implementation, verification, documentation, and a pull request. Implementation uses a dedicated
 orchestrator and workers, with an HTML report that follows progress through an authorized PR merge.
 
-The orchestration and live-report additions described here require workflow 1.2.0, currently staged
-in this checkout. The published catalog still installs workflow 1.0.0. Use the
-[local package procedure](#try-the-staged-workflow) to try 1.2.0 before its release.
+Workflow 1.3.0 adds issue decisions and an optional evidence CI gate. Check
+[`catalog.json`](catalog.json) for the currently published version. If 1.3.0 is
+not yet listed, use the [local package procedure](#try-the-staged-workflow) in
+a disposable project until its release assets are published. See the
+[Delivery usage guide](docs/sanduq-delivery-usage.md) for setup and operation.
 
 Start with the [complete how-to and prompt guide](docs/skill-guide.md). It covers every portable
 skill, extension command, Sanduq overlay, and stage in the managed lifecycle.
@@ -100,8 +102,13 @@ specify extension add workflow
 ```
 
 For the managed lifecycle, run `/speckit-workflow-init` in your project's agent session.
-It selects QA and User Manual, installs the selected dependencies, and initializes their project
+It selects QA, User Manual, and Disabled/Advisory/Required evidence CI with its
+individual rules. It installs selected dependencies and initializes their project
 state. Then run `/speckit-workflow-scope <issue-number>` to start from a GitHub issue.
+The issue number and title drive the initial branch and spec directory. Team
+decisions are answered on that GitHub issue and tracked in a separate Project
+Decision field. An ordinary bug-fix PR needs no feature when the gate uses its
+default managed-only scope.
 Verify that the selected `scope` package comes from `samykabu/sanduq`, because other catalogs use
 the same id. See [the managed Spec Kit workflow](#the-managed-spec-kit-workflow) for the full sequence.
 
@@ -713,14 +720,19 @@ and evidence stay in **your** project. Never edit an installed upstream command;
 
 ### What the CI gate actually checks
 
-The policy-aware workflow validates every changed feature: current inputs and outputs, completed
-required tasks, parent issue mapping, and selected-documentation freshness. It compares the PR head
-against its common ancestor with the target branch, so unrelated target-branch features are not
-dragged in, and it fetches full history; a shallow checkout fails with `BASE_HISTORY_UNAVAILABLE`
-rather than guessing.
+The project selects Disabled, Advisory, or Required evidence gating and the
+individual checks it needs. Enabled managed-only gating checks changed feature
+evidence; an ordinary PR without a Spec Kit feature succeeds as
+`not_applicable`. Selected rules can cover receipts, issue decisions, task
+completion and mapping, documentation, portability, the PR merge candidate,
+and live GitHub answers. Full history is fetched; a shallow checkout fails
+with `BASE_HISTORY_UNAVAILABLE` rather than guessing. Application tests and
+normal PR review remain project-owned.
 
-For a source-only change, name the feature explicitly: commit a `.specify/workflow/pr-features.json`
+For source changes that belong to a managed feature but do not touch `specs/`,
+name the feature explicitly: commit a `.specify/workflow/pr-features.json`
 containing `{"features": ["specs/001-example"]}`, or pass `--feature` to the gate CLI.
+An unrelated bug fix needs no mapping under the default managed-only scope.
 
 The evidence checks have separate responsibilities:
 
@@ -744,7 +756,19 @@ runner is a project decision, captured once during `init` and kept in `.specify/
 
 ```yaml
 ci:
-  provider: github-actions        # or `none`, to manage no workflow files at all
+  provider: github-actions        # or `none`, to install no managed evidence gate job
+  gate:
+    mode: advisory                # disabled, advisory, or required
+    scope: managed-only           # or all-prs
+    rules:
+      receipts: true
+      decisions: true
+      tasks: false
+      task_links: false
+      documentation: true
+      portability: true
+      candidate_merge: false
+      live_answers: true
   policy: hosted-allowed          # or `self-hosted-required`
   runners:
     linux: [ubuntu-latest]
@@ -813,7 +837,8 @@ branch, completed stages, pending task IDs, evidence, and the active claim. Add 
 results, background process handles, and unresolved approvals, then start the next session with the
 saved prompt.
 
-Full operating detail: the [managed workflow guide](docs/workflow-guide.md) and the
+Full operating detail: the [Delivery usage guide](docs/sanduq-delivery-usage.md),
+the [managed workflow guide](docs/workflow-guide.md), and the
 [compatibility contract](docs/workflow-compatibility.md).
 
 ## Language, audience, and security rules
@@ -897,8 +922,8 @@ The first command previews the operation; the second applies the same version wi
 rollback protection:
 
 ```bash
-python .specify/extensions/workflow/scripts/upgrade.py --version 1.2.0 --packages /absolute/path/to/sanduq-packages
-python .specify/extensions/workflow/scripts/upgrade.py --version 1.2.0 --packages /absolute/path/to/sanduq-packages --apply
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.3.0 --packages /absolute/path/to/sanduq-packages
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.3.0 --packages /absolute/path/to/sanduq-packages --apply
 python .specify/extensions/workflow/scripts/workflow.py doctor --project
 ```
 

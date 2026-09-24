@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.3.0
+
+- Issue-bound feature identity uses the GitHub issue number and title for the
+  initial branch and spec directory. Standalone non-issue Specify stays upstream.
+- Material workflow decisions use stable questions and authorized answers in the
+  bound GitHub issue, with a separate Project Decision field, a committed
+  application ledger, conflict/edit detection, and artifact freshness checks.
+- Select Disabled, Advisory, or Required evidence CI, managed-only or all-PR
+  applicability, and individual rule groups during init or later. Ordinary
+  non-feature bug-fix PRs return `not_applicable` under managed-only scope.
+  Disabling an installed gate checks active GitHub branch rules before removing
+  its managed job. Optional live-answer and candidate-merge rules are available.
+  Exact, dated PR-rule waivers require an authorized GitHub reviewer and the
+  current head SHA; identity checks remain mandatory.
+- CI runner policy changes have a separate digest from delivery policy so they
+  do not invalidate feature receipts. Reviewed migrations preserve older
+  checkpoint hashes and audit invalidation.
+- QA Assure and User Manual can be independently selected or deselected after
+  initialization through reviewed policy and installer changes. The native
+  Spec Kit workflow prototype remains isolated; Sanduq's receipt-based
+  dispatcher remains the production scheduler.
+
 ## 1.2.4
 
 - Evidence fingerprints no longer depend on how Git checked a byte-sensitive file

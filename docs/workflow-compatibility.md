@@ -1,7 +1,11 @@
 # Workflow compatibility and upgrade contract
 
-The local baseline is Spec Kit `1.0.6.dev0` at commit
-`f21acc4a25ce3aa53ff8653357b49b9aafcf8026`. SuperSpec `1.0.2` was checked at
+The original installation baseline was Spec Kit `1.0.6.dev0` at commit
+`f21acc4a25ce3aa53ff8653357b49b9aafcf8026`. The isolated native scheduling
+prototype now validates on Spec Kit `1.0.11` at commit
+`92b7cf7658a177cc417b7ddbeaa4c0a941a5f41b`; its mocked Claude/Codex
+dispatch probes do not certify live agent execution or native production
+scheduling. See [the result](native-workflow-prototype-results.md). SuperSpec `1.0.2` was checked at
 `c20ac6c1ba069cc9a72dacb8044b7b193d3dde81`. These are tested snapshots, not
 certification of every version allowed by a manifest range.
 

@@ -84,6 +84,17 @@
         "parent_link": "native-subissue"
       }
     },
+    "decisions": {
+      "type": "object",
+      "description": "Stage-neutral GitHub issue decisions; omitted in older policies.",
+      "required": ["transport", "authorized_users", "project_field"],
+      "additionalProperties": false,
+      "properties": {
+        "transport": {"const": "github-issue"},
+        "authorized_users": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "project_field": {"type": "string", "minLength": 1}
+      }
+    },
     "context": {
       "type": "object",
       "required": [
@@ -133,6 +144,31 @@
         "capabilities"
       ],
       "properties": {
+        "gate": {
+          "type": "object",
+          "description": "Project-selected Sanduq workflow evidence gate; absent on legacy installs.",
+          "required": ["mode", "scope", "rules"],
+          "additionalProperties": false,
+          "properties": {
+            "mode": {"enum": ["disabled", "advisory", "required"]},
+            "scope": {"enum": ["managed-only", "all-prs"]},
+            "rules": {
+              "type": "object",
+              "required": ["receipts", "decisions", "tasks", "task_links", "documentation", "portability", "candidate_merge", "live_answers"],
+              "additionalProperties": false,
+              "properties": {
+                "receipts": {"type": "boolean"},
+                "decisions": {"type": "boolean"},
+                "tasks": {"type": "boolean"},
+                "task_links": {"type": "boolean"},
+                "documentation": {"type": "boolean"},
+                "portability": {"type": "boolean"},
+                "candidate_merge": {"type": "boolean"},
+                "live_answers": {"type": "boolean"}
+              }
+            }
+          }
+        },
         "provider": {
           "enum": [
             "github-actions",

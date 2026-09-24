@@ -15,5 +15,11 @@ binding guards. Disabled hooks stay disabled. Do not independently invoke anothe
 task generator, executor, or PR hook. Use bounded batches. Only reliable measured context can trigger a context pause;
 missing, estimated or stale usage must not stop automatic continuation.
 
+When analysis finds a material ambiguity, post a stable decision question on the
+bound GitHub issue through `decisions.py` and pause for team input. An accepted
+answer must be applied by the owning Specify, Plan, or Tasks stage; Analysis
+records the finding and revalidates the resulting artifacts. Do not resolve a
+team decision through a local VS Code question or silently edit upstream work.
+
 
 Continue the applicable upstream domain instructions below.

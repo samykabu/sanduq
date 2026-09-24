@@ -68,6 +68,34 @@ class WorkflowTests(unittest.TestCase):
         run.start('acme/app#10')
         return run
 
+    def test_issue_identity_uses_issue_number_and_title(self):
+        class GitHub:
+            def api(self, endpoint):
+                self_endpoint = 'repos/acme/app/issues/42'
+                assert endpoint == self_endpoint
+                return {'number': 42, 'title': 'Fix checkout timeout!'}
+        identity = w.issue_identity(self.root, '42', GitHub())
+        self.assertEqual(identity['feature'], 'specs/42-fix-checkout-timeout')
+        self.assertEqual(identity['branch'], '42-fix-checkout-timeout')
+
+    def test_prepare_issue_creates_branch_when_no_git_hook(self):
+        class GitHub:
+            def api(self, endpoint):
+                return {'number': 42, 'title': 'Fix checkout timeout!'}
+        result = w.prepare_issue(self.root, '42', GitHub())
+        self.assertEqual(result['branch_owner'], 'sanduq')
+        self.assertEqual(w.git(self.root, 'branch', '--show-current'),
+                         '42-fix-checkout-timeout')
+        self.assertEqual(w.prepare_issue(self.root, '42', GitHub())['branch'],
+                         result['branch'])
+        w.Run(self.root, result['feature']).start('acme/app#42')
+        class EditedGitHub:
+            def api(self, endpoint):
+                return {'number': 42, 'title': 'Newly edited issue title'}
+        resumed = w.prepare_issue(self.root, '42', EditedGitHub())
+        self.assertEqual((resumed['feature'], resumed['branch_owner']),
+                         (result['feature'], 'existing-run'))
+
     def receipt(self, stage, inputs=None):
         # Semantic commands create these artifacts; fixtures provide the minimal outputs.
         directory = self.root / self.feature
@@ -188,6 +216,29 @@ class WorkflowTests(unittest.TestCase):
         run = w.Run(self.root, self.feature)
         self.assertEqual(run.next(run.load())['stage'], 'specify')  # Scope does not repeat for a QA toggle.
 
+    def test_qa_and_manual_can_be_selected_independently(self):
+        for qa, manual in ((False, False), (True, False), (False, True), (True, True)):
+            with self.subTest(qa=qa, manual=manual):
+                selected = w.stages(w.default_policy(qa, manual))
+                self.assertEqual('qa_analyze' in selected, qa)
+                self.assertEqual('qa_document' in selected, qa)
+                self.assertEqual('manual_analyze' in selected, manual)
+                self.assertEqual('manual_update' in selected, manual)
+
+    def test_later_process_opt_in_invalidates_from_tasks_and_keeps_prior_evidence(self):
+        self.policy = w.default_policy(False, False)
+        self.configure()
+        run = self.run_object()
+        for stage in ('scope', 'specify', 'clarify', 'plan', 'tasks'):
+            claim = run.claim(self.usage())
+            run.complete(claim['token'], self.receipt(stage))
+        self.policy['processes']['qa'] = True
+        self.configure()
+        run = w.Run(self.root, self.feature)
+        result = run.migrate('Enable QA after review')
+        self.assertEqual(result['next']['stage'], 'tasks')
+        self.assertEqual(set(run.load()['receipts']), {'scope', 'specify', 'clarify', 'plan'})
+
     def test_checkbox_changes_do_not_invalidate_semantic_tasks(self):
         p = self.root / self.feature / 'tasks.md';p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text('- [ ] T001 Implement behavior\n')
@@ -228,6 +279,12 @@ class WorkflowTests(unittest.TestCase):
     def test_migration_rebinds_a_policy_section_an_upgrade_added(self):
         """A release that only adds a policy section must not orphan finished evidence."""
         run = self.run_object(); claim = run.claim(self.usage()); run.complete(claim['token'], self.receipt('scope'))
+        # Model a checkpoint written before delivery/CI digests were split.
+        state = w.read(run.path)
+        state.pop('policy_digest_version')
+        state.pop('ci_policy_digest')
+        state['policy_digest'] = w.digest(state['policy'])
+        w.write(run.path, state)
         self.policy['ci'] = {'provider': 'github-actions', 'policy': 'self-hosted-required',
                              'runners': {'linux': ['private-runner']},
                              'capabilities': {'system_packages': 'sudo-apt', 'python': 'setup-action', 'python_version': '3.13'},
@@ -238,7 +295,9 @@ class WorkflowTests(unittest.TestCase):
         self.assertNotEqual(state['policy_digest'], w.digest(run.policy))
         result = run.migrate('Upgrade added the ci selection')
         state = w.read(run.path)
-        self.assertEqual(state['policy_digest'], w.digest(run.policy))
+        self.assertEqual(state['policy_digest'], w.delivery_digest(run.policy))
+        self.assertEqual(state['policy_digest_version'], 2)
+        self.assertEqual(state['ci_policy_digest'], w.digest(run.policy['ci']))
         self.assertIn('scope', state['receipts'])
         self.assertEqual(state['policy_changes'][-1]['via'], 'migrate')
         self.assertEqual(state['migrations'][-1]['invalidated'], [])
@@ -251,8 +310,19 @@ class WorkflowTests(unittest.TestCase):
         run = self.run_object()
         run.migrate('Scope artifact location changed')
         state = w.read(run.path)
-        self.assertEqual(state['policy_digest'], w.digest(run.policy))
+        self.assertEqual(state['policy_digest'], w.delivery_digest(run.policy))
         self.assertNotIn('scope', state['receipts'])
+
+    def test_runner_only_change_keeps_new_delivery_receipts_current(self):
+        run = self.run_object(); claim = run.claim(self.usage()); run.complete(claim['token'], self.receipt('scope'))
+        before = run.load()['policy_digest']
+        self.policy['ci']['runners']['linux'] = ['self-hosted', 'project-runner']
+        self.configure()
+        run = self.run_object()
+        state = run.load()
+        self.assertEqual(before, w.delivery_digest(run.policy))
+        self.assertEqual(run.next(state)['stage'], 'specify')
+        self.assertIn('scope', state['receipts'])
 
     def test_explicit_upgrade_revalidation_invalidates_from_selected_stage(self):
         run=self.run_object();c=run.claim(self.usage());run.complete(c['token'],self.receipt('scope'))

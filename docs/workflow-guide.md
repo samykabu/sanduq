@@ -1,14 +1,18 @@
 # Managed workflow guide
 
-The coordinated workflow packages are still unreleased. The following development
-setup has been exercised through Spec Kit's public CLI; published installation
-becomes available only after release asset verification and catalog promotion.
+For installation in new or existing repositories, non-Spec Kit bug fixes,
+GitHub issue decisions, CI mode/rule choices, and later QA/User Manual
+opt-in or opt-out, see the [Sanduq Delivery usage guide](sanduq-delivery-usage.md).
+
+Workflow 1.3.0 adds issue decisions and an optional evidence CI gate. Check
+the repository catalog for the currently published version; the 1.3.0 package
+can be installed locally before its release asset and catalog promotion.
 
 ## One-time setup
 
 Install the workflow archive from an explicit Sanduq release URL when published,
 then invoke `speckit.workflow.init`. The setup asks for neither, QA only, User Manual
-only, or both. It saves that choice in `.specify/workflow.yml`, installs only required
+only, or both, plus the evidence CI mode and selected rules. It saves those choices in `.specify/workflow.yml`, installs only required
 and selected dependencies from versioned Sanduq sources, composes presets, and adds
 the policy-aware CI gate. Existing project board IDs, audience maps, languages and
 publication settings remain project data. A newly selected manual requires its
@@ -170,8 +174,10 @@ fails; it is never overwritten. Development previews cannot be published.
 
 QA Assure supplies tester readiness and walkthrough evidence. User Manual supplies
 audience-facing documentation. Generated documents do not prove tests or human QA
-ran. CI requires current inputs, outputs, completed required tasks and parent mapping.
-Source-only changes need explicit feature identity: include a changed
+ran. The project-selected evidence gate checks only its enabled rules. A
+managed-only gate reports `not_applicable` successfully for an ordinary PR with
+no managed feature. Source-only changes that belong to a managed feature need
+explicit feature identity: include a changed
 `.specify/workflow/pr-features.json` with `{"features": ["specs/001-example"]}`,
 or supply `--feature` to the gate CLI. Multi-feature changes validate all changed
 specifications even when an explicit feature is supplied. Verification also inventories
@@ -179,8 +185,10 @@ source additions/deletions; omitting a changed code file from an agent receipt c
 keep old test evidence current. A shallow or unavailable Git base is an error, not permission
 to guess freshness.
 
-CI compares the PR head with its common ancestor with the target branch, so unrelated
-target-branch features are not included. The shipped workflow fetches full history.
+CI compares the PR candidate with its common ancestor with the target branch,
+so unrelated target-branch features are not included. The shipped workflow
+fetches full history. With the optional `candidate_merge` rule selected, the
+job checks out GitHub's PR merge ref and verifies its base/head parents.
 Custom shallow checkouts must fetch sufficient target/head history; missing ancestry
 blocks the gate with `BASE_HISTORY_UNAVAILABLE`, even with an explicit feature mapping.
 
