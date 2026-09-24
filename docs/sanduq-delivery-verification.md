@@ -14,9 +14,9 @@ merge, or deployment is certified by these checks.
 | Exact PR waiver authority, expiry and head SHA | 3 tests passed |
 | CI policy, modes, rendering and branch-rule unit tests | 30 policy tests, 17 gate tests passed in focused runs; installer cases included in the 174-test suite |
 | Isolated native Spec Kit 1.0.11 definition and mocked Claude/Codex dispatch | 3 tests passed; native scheduling no-go |
-| Workflow package archive | `workflow.zip`, 65 files; SHA-256 `0848904e26bc94431c4596dd3da7ea2ad717cb8a7dbf3be44013d725850ed922` |
+| Workflow package archive | `workflow.zip`, 65 files; SHA-256 `b514d4d9702870be0991c04a316a41bd5fc8db43b9d30d14aa227c1a420c7d61` |
 | Adjacent packages | Scope 110 tests; User Manual 7 tests passed |
-| Installation and upgrade smoke | Codex and Claude core installs passed; published 1.2.4 upgrade and injected rollback passed |
+| Installation and upgrade smoke | Codex and Claude core installs passed with Spec Kit 1.0.11 CLI options; published 1.2.4 upgrade and injected rollback passed |
 
 The mock CLI tests
 demonstrate generated argv and native step behavior, not live model work.
