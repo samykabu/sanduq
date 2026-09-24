@@ -18,6 +18,12 @@ RUNNER_POLICIES = ('hosted-allowed', 'self-hosted-required')
 PYTHON_PROVISIONING = ('setup-action', 'preinstalled')
 SYSTEM_PACKAGES = ('sudo-apt', 'preinstalled')
 PLATFORMS = ('linux', 'windows', 'macos')
+GATE_MODES = ('disabled', 'advisory', 'required')
+GATE_SCOPES = ('managed-only', 'all-prs')
+GATE_RULES = ('receipts', 'decisions', 'tasks', 'task_links', 'documentation',
+              'portability', 'candidate_merge', 'live_answers')
+GATE_DEPENDENCIES = {'task_links': ('tasks',), 'portability': ('receipts',),
+                     'candidate_merge': ('receipts',), 'live_answers': ('decisions',)}
 
 # GitHub-hosted label families. A runner set is hosted when every label is one.
 HOSTED = re.compile(r'^(ubuntu|windows|macos)-([0-9.]+|latest)(-\w+)*$')
@@ -28,6 +34,18 @@ DEFAULT = {
     'runners': {'linux': ['ubuntu-latest'], 'windows': ['windows-latest']},
     'capabilities': {'system_packages': 'sudo-apt', 'python': 'setup-action', 'python_version': '3.13'},
     'exceptions': [],
+}
+
+DEFAULT_GATE_RULES = {
+    'receipts': True, 'decisions': True, 'tasks': False, 'task_links': False,
+    'documentation': True, 'portability': True, 'candidate_merge': False,
+    'live_answers': True,
+}
+# Projects written before gate selection keep their installed gate behavior.
+LEGACY_GATE_RULES = {
+    'receipts': True, 'decisions': False, 'tasks': True, 'task_links': True,
+    'documentation': True, 'portability': True, 'candidate_merge': False,
+    'live_answers': False,
 }
 
 DATE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
@@ -47,7 +65,32 @@ def default_ci():
     """A fresh copy of the shipped default: GitHub-hosted, no exception needed."""
     return {'provider': DEFAULT['provider'], 'policy': DEFAULT['policy'],
             'runners': {name: list(labels) for name, labels in DEFAULT['runners'].items()},
-            'capabilities': dict(DEFAULT['capabilities']), 'exceptions': []}
+            'capabilities': dict(DEFAULT['capabilities']), 'exceptions': [],
+            'gate': {'mode': 'advisory', 'scope': 'managed-only',
+                     'rules': dict(DEFAULT_GATE_RULES)}}
+
+
+def gate_config(ci):
+    """Return an explicit gate selection or the behavior of a pre-selection install."""
+    if 'gate' not in ci:
+        return {'mode': 'required', 'scope': 'all-prs', 'rules': dict(LEGACY_GATE_RULES)}
+    validate_gate(ci['gate'])
+    return ci['gate']
+
+
+def validate_gate(gate):
+    _require(isinstance(gate, dict), 'CI_GATE_INVALID: gate must be a mapping')
+    _require(gate.get('mode') in GATE_MODES, 'CI_GATE_MODE_INVALID: ' + repr(gate.get('mode')))
+    _require(gate.get('scope') in GATE_SCOPES, 'CI_GATE_SCOPE_INVALID: ' + repr(gate.get('scope')))
+    rules = gate.get('rules')
+    _require(isinstance(rules, dict) and set(rules) == set(GATE_RULES),
+             'CI_GATE_RULES_INVALID: expected ' + ', '.join(GATE_RULES))
+    _require(all(type(value) is bool for value in rules.values()), 'CI_GATE_RULE_VALUE_INVALID')
+    for rule, dependencies in GATE_DEPENDENCIES.items():
+        if rules[rule]:
+            _require(all(rules[dependency] for dependency in dependencies),
+                     'CI_GATE_RULE_DEPENDENCY: ' + rule + ' requires ' + ', '.join(dependencies))
+    return gate
 
 
 def hosted(labels):
@@ -60,6 +103,8 @@ def validate_ci(ci):
     _require(isinstance(ci, dict), 'CI_POLICY_INVALID: ci must be a mapping')
     _require(ci.get('provider') in PROVIDERS, 'CI_PROVIDER_UNSUPPORTED: ' + repr(ci.get('provider')))
     _require(ci.get('policy') in RUNNER_POLICIES, 'CI_RUNNER_POLICY_INVALID: ' + repr(ci.get('policy')))
+    if 'gate' in ci:
+        validate_gate(ci['gate'])
 
     runners = ci.get('runners')
     _require(isinstance(runners, dict) and runners, 'CI_RUNNERS_REQUIRED')
@@ -135,7 +180,8 @@ def flags(ci):
     """The named booleans a template may branch on."""
     capabilities = ci['capabilities']
     return {'system_packages_apt': capabilities['system_packages'] == 'sudo-apt',
-            'python_setup_action': capabilities['python'] == 'setup-action'}
+            'python_setup_action': capabilities['python'] == 'setup-action',
+            'candidate_merge': gate_config(ci)['rules']['candidate_merge']}
 
 
 def runs_on(labels):

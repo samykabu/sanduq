@@ -27,4 +27,10 @@ stable task IDs, completed checkboxes, execution markers and native issue mappin
 for unchanged work. Add or reopen genuinely changed work with a recorded reason;
 do not renumber the feature or reset all progress.
 
+For material task or acceptance choices, post a stable question through the
+workflow decision adapter on the bound GitHub issue, then pause. Resume from an
+authorized issue answer, apply it to tasks.md, and record the application
+evidence. Do not solicit a local VS Code answer or treat an agent recommendation
+as approval.
+
 Continue the applicable upstream domain instructions below.

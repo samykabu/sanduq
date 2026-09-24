@@ -1,5 +1,5 @@
 ---
-description: "Select QA, User Manual, providers and context policy once."
+description: "Select QA, User Manual, decision authority and CI evidence policy."
 ---
 
 # Sanduq Workflow: init

@@ -10,6 +10,7 @@ import os
 import re
 import subprocess
 import sys
+import unicodedata
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -61,6 +62,16 @@ def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
+def delivery_digest(policy):
+    """CI placement does not change the meaning of feature-stage evidence."""
+    return digest({key: value for key, value in policy.items() if key != 'ci'})
+
+
+def checkpoint_policy_digest(state, policy):
+    """Preserve the full-policy hash contract of pre-split checkpoints."""
+    return delivery_digest(policy) if state.get('policy_digest_version') == 2 else digest(policy)
+
+
 def write(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_name(path.name + '.' + uuid.uuid4().hex + '.tmp')
@@ -87,6 +98,57 @@ def github_repository(root):
     return match[1]
 
 
+def issue_identity(root, issue, gh=None):
+    """Derive a stable safe initial path and branch from the bound GitHub issue."""
+    require(re.fullmatch(r'[1-9]\d*', str(issue)), 'ISSUE_NUMBER_REQUIRED')
+    repo = github_repository(root)
+    if gh is None:
+        from decisions import GitHub
+        gh = GitHub()
+    item = gh.api(f'repos/{repo}/issues/{issue}')
+    require(item.get('number') == int(issue) and 'pull_request' not in item,
+            'GITHUB_ISSUE_REQUIRED')
+    title = unicodedata.normalize('NFKC', item.get('title', '')).casefold()
+    slug = re.sub(r'[^\w]+', '-', title, flags=re.UNICODE).strip('-_')[:56].strip('-_') or 'issue'
+    name = str(issue) + '-' + slug
+    require(subprocess.run(['git', 'check-ref-format', '--branch', name], cwd=root,
+                           capture_output=True).returncode == 0, 'ISSUE_TITLE_UNSAFE_FOR_BRANCH')
+    return {'issue': repo + '#' + str(issue), 'title': item['title'],
+            'feature': 'specs/' + name, 'branch': name}
+
+
+def prepare_issue(root, issue, gh=None):
+    """Reserve issue-derived identity and create a branch only without a Git hook."""
+    identity = issue_identity(root, issue, gh)
+    matches = [read(path, {}) for path in (root / 'specs').glob('*/workflow/checkpoint.json')
+               if read(path, {}).get('issue') == identity['issue']]
+    require(len(matches) <= 1, 'ISSUE_HAS_MULTIPLE_WORKFLOW_FEATURES')
+    if matches:
+        saved = matches[0]
+        return {**identity, 'feature': saved['feature'], 'branch': saved['branch'],
+                'branch_owner': 'existing-run'}
+    checkpoint = root / identity['feature'] / 'workflow/checkpoint.json'
+    if checkpoint.is_file():
+        saved = read(checkpoint, {})
+        require(saved.get('issue') == identity['issue'], 'ISSUE_IDENTITY_CONFLICT')
+        return {**identity, 'branch': saved['branch'], 'branch_owner': 'existing-run'}
+    require(not (root / identity['feature']).exists(), 'ISSUE_FEATURE_PATH_OCCUPIED')
+    hooks = yaml.safe_load((root / '.specify/extensions.yml').read_text(encoding='utf-8-sig')) if (
+        root / '.specify/extensions.yml').is_file() else {}
+    git_hook = any(hook.get('extension') == 'git' and hook.get('command') == 'speckit.git.feature'
+                   and hook.get('enabled') is True for hook in (hooks or {}).get('hooks', {}).get('before_specify', []))
+    if git_hook:
+        return {**identity, 'branch_owner': 'git-hook'}
+    current = git(root, 'branch', '--show-current')
+    require(current, 'DETACHED_HEAD_UNSUPPORTED')
+    if current != identity['branch']:
+        exists = subprocess.run(['git', 'show-ref', '--verify', '--quiet',
+                                 'refs/heads/' + identity['branch']], cwd=root).returncode == 0
+        require(not exists, 'ISSUE_BRANCH_EXISTS: inspect its owner before switching')
+        git(root, 'switch', '-c', identity['branch'])
+    return {**identity, 'branch_owner': 'sanduq'}
+
+
 def default_policy(qa, manual):
     require(type(qa) is bool and type(manual) is bool, 'Select QA and User Manual explicitly.')
     return {'schema_version': SCHEMA, 'processes': {'qa': qa, 'user_manual': manual},
@@ -94,10 +156,31 @@ def default_policy(qa, manual):
             'providers': {'clarification': 'prefer-superspec', 'tasks': 'prefer-superspec'},
             'issue_sync': {'taskstoissues': 'required', 'parent_link': 'native-subissue'},
             'clarification': {'transport': 'github-comments', 'resume_on_reinvoke': 'reread-answers'},
+            'decisions': {'transport': 'github-issue', 'authorized_users': [],
+                          'project_field': 'Decision'},
             'context': {'mode': 'measured-only', 'max_fraction': .60,
                         'checkpoint_fraction': .50, 'reserve_fraction': .10},
             'finalize': {'create_pr': True, 'merge': False}, 'updates': {'policy': 'reviewed'},
             'ci': sanduq_ci.default_ci()}
+
+
+def select_gate(ci, mode=None, scope=None, rules=()):
+    """Apply explicit gate choices while preserving unmentioned project settings."""
+    if mode is None and scope is None and not rules:
+        return ci
+    gate = copy.deepcopy(sanduq_ci.gate_config(ci))
+    if mode is not None:
+        gate['mode'] = mode
+    if scope is not None:
+        gate['scope'] = scope
+    for selection in rules:
+        name, separator, value = selection.partition('=')
+        require(separator and name in sanduq_ci.GATE_RULES and value in ('on', 'off'),
+                'CI_GATE_RULE_SELECTION_INVALID: expected name=on|off')
+        gate['rules'][name] = value == 'on'
+    sanduq_ci.validate_gate(gate)
+    ci['gate'] = gate
+    return ci
 
 
 def validate_policy(policy):
@@ -118,6 +201,15 @@ def validate_policy(policy):
     require(policy.get('issue_sync') == {'taskstoissues': 'required', 'parent_link': 'native-subissue'}, 'TASK_ISSUES_REQUIRED')
     require(policy.get('finalize') == {'create_pr': True, 'merge': False}, 'FINALIZE_POLICY_INVALID')
     require(policy.get('clarification', {}).get('resume_on_reinvoke') in ('reread-answers', 'manual-status'), 'CLARIFICATION_POLICY_INVALID')
+    decisions = policy.get('decisions')
+    if decisions is not None:
+        require(isinstance(decisions, dict) and decisions.get('transport') == 'github-issue',
+                'DECISION_POLICY_INVALID')
+        users = decisions.get('authorized_users')
+        require(isinstance(users, list) and all(isinstance(user, str) and user.strip() for user in users)
+                and len({user.casefold() for user in users}) == len(users), 'DECISION_AUTHORITY_INVALID')
+        require(isinstance(decisions.get('project_field'), str) and decisions['project_field'].strip(),
+                'DECISION_FIELD_INVALID')
     scope = policy.get('scope', {})
     require(isinstance(scope, dict), 'POLICY_SECTION_INVALID: scope')
     status_names = scope.get('statuses', {})
@@ -125,7 +217,10 @@ def validate_policy(policy):
             and len(set(status_names.values())) == len(status_names), 'SCOPE_STATUS_MAPPING_INVALID')
     # A project written before CI selection existed keeps its current behaviour:
     # the shipped GitHub-hosted default is filled in rather than rejected.
-    policy.setdefault('ci', sanduq_ci.default_ci())
+    if 'ci' not in policy:
+        legacy_ci = sanduq_ci.default_ci()
+        legacy_ci.pop('gate')
+        policy['ci'] = legacy_ci
     try:
         sanduq_ci.validate_ci(policy['ci'])
     except sanduq_ci.CIPolicyError as exc:
@@ -164,7 +259,7 @@ def stages(policy):
 def policy_cutoff(previous, current):
     if not previous: return 0
     affected = []
-    for key, stage in {'scope':'scope','clarification':'clarify','providers':'clarify',
+    for key, stage in {'scope':'scope','clarification':'clarify','decisions':'clarify','providers':'clarify',
                        'processes':'tasks','issue_sync':'taskstoissues','execution':'execute',
                        'finalize':'ready'}.items():
         if previous.get(key) != current.get(key): affected.append(BASE_STAGES.index(stage))
@@ -283,8 +378,13 @@ def ci_errors(root, policy):
     selection renders, which means the selection was changed but never applied.
     """
     ci = policy.get('ci') or sanduq_ci.default_ci()
+    evidence_file = root / '.github/workflows/sanduq-workflow-gates.yml'
     if ci.get('provider') == 'none':
-        return []
+        return (['CI_PROVIDER_NONE_FILE_PRESENT: remove a managed gate through the installer']
+                if evidence_file.is_file() else [])
+    gate = sanduq_ci.gate_config(ci)
+    if gate['mode'] == 'disabled' and evidence_file.is_file():
+        return ['CI_GATE_DISABLED_FILE_PRESENT: remove a managed gate through the installer or review custom CI']
     present = {name: root / name for name in MANAGED_CI if (root / name).is_file()}
     errors = list(sanduq_ci.exception_errors(ci, [Path(name).name for name in present]))
     preserved = (read(root / '.specify/workflow/install-receipt.json', {}).get('preserved_ci') or {}).get('path')
@@ -549,7 +649,7 @@ class Run:
             write(self.path.parent / 'backups' / (uuid.uuid4().hex + '.json'), state)
             old_digest = state['dependency_digest']
             old_policy_digest = state['policy_digest']
-            policy_digest = digest(self.policy)
+            policy_digest = delivery_digest(self.policy)
             commands = resolve_commands(self.root, self.policy)
             changed = [stage for stage in stages(self.policy) if state['commands'].get(stage) != commands[stage]]
             if policy_digest != old_policy_digest:
@@ -565,6 +665,8 @@ class Run:
                                                       'invalidated': invalidated, 'preserved_as_historical': [s for s in state['receipts'] if s not in invalidated]})
             state['dependency_digest'] = package_digest(self.root)
             state['commands'] = commands
+            state['policy_digest_version'] = 2
+            state['ci_policy_digest'] = digest(self.policy['ci'])
             if policy_digest != old_policy_digest:
                 state.setdefault('policy_changes', []).append({'from': old_policy_digest, 'to': policy_digest,
                                                                'at': now(), 'via': 'migrate', 'reason': reason})
@@ -606,7 +708,9 @@ class Run:
             commands = resolve_commands(self.root, self.policy)
             state = {'schema_version': SCHEMA, 'run_id': uuid.uuid4().hex, 'repo_path': str(self.root),
                      'branch': git(self.root, 'branch', '--show-current'), 'feature': self.relative,
-                     'issue': issue, 'policy_digest': digest(self.policy), 'commands': commands,
+                     'issue': issue, 'policy_digest_version': 2,
+                     'policy_digest': delivery_digest(self.policy),
+                     'ci_policy_digest': digest(self.policy['ci']), 'commands': commands,
                      'policy': copy.deepcopy(self.policy),
                      'receipts': {}, 'generation': 0, 'active': None, 'status': 'in-progress'}
             state['dependency_digest'] = package_digest(self.root)
@@ -620,7 +724,7 @@ class Run:
         write(self.path, state)
 
     def next(self, state, finalize=False):
-        policy_changed = state['policy_digest'] != digest(self.policy)
+        policy_changed = state['policy_digest'] != checkpoint_policy_digest(state, self.policy)
         cutoff = policy_cutoff(state.get('policy'), self.policy) if policy_changed else len(BASE_STAGES)
         for stage in stages(self.policy):
             receipt = state['receipts'].get(stage)
@@ -652,9 +756,10 @@ class Run:
             if not nxt.get('stage'):
                 return nxt
             stage = nxt['stage']
-            if state['policy_digest'] != digest(self.policy):
-                state.setdefault('policy_changes', []).append({'from':state['policy_digest'],'to':digest(self.policy),'at':now()})
-                state['policy_digest'] = digest(self.policy)
+            current_policy_digest = checkpoint_policy_digest(state, self.policy)
+            if state['policy_digest'] != current_policy_digest:
+                state.setdefault('policy_changes', []).append({'from':state['policy_digest'],'to':current_policy_digest,'at':now()})
+                state['policy_digest'] = current_policy_digest
                 state['policy'] = copy.deepcopy(self.policy)
                 state['commands'] = resolve_commands(self.root, self.policy)
             for downstream in BASE_STAGES[BASE_STAGES.index(stage):]:
@@ -686,6 +791,10 @@ class Run:
             if BASE_STAGES.index(stage) >= BASE_STAGES.index('specify'):
                 source = read(self.feature / 'scope-source.json', {})
                 require(f"{source.get('repo')}#{source.get('issue')}" == state['issue'], 'FEATURE_BINDING_MISMATCH')
+            ledger_path = self.feature / 'workflow/decisions.json'
+            if ledger_path.is_file():
+                from decisions import reconcile, verify_ledger
+                verify_ledger(self.root, self.relative, reconcile(self.root, self.relative))
             if stage == 'taskstoissues':
                 require(receipt.get('parent_issue') == state['issue'] and receipt.get('native_links_verified') is True, 'TASK_PARENT_NOT_VERIFIED')
             if stage in ('verify', 'review', 'ready'):
@@ -708,7 +817,8 @@ class Run:
             stored = copy.deepcopy(receipt)
             stored['command'] = state['commands'][stage]
             stored['dependency_digest'] = state['dependency_digest']
-            stored['fingerprints'] = fingerprint_files(self.root, receipt['inputs'] + receipt['evidence'] + required_inputs(self.root, self.relative, stage))
+            decision_input = [self.relative + '/workflow/decisions.json'] if (self.feature / 'workflow/decisions.json').is_file() else []
+            stored['fingerprints'] = fingerprint_files(self.root, receipt['inputs'] + receipt['evidence'] + required_inputs(self.root, self.relative, stage) + decision_input)
             require(all(v is not None for v in stored['fingerprints'].values()), 'INPUT_MISSING')
             if stage in ('verify', 'review', 'ready'):
                 stored['source_fingerprints'] = source_fingerprints(self.root)
@@ -747,6 +857,13 @@ def main():
     init = sub.add_parser('init')
     init.add_argument('--qa', choices=['on', 'off'], required=True)
     init.add_argument('--manual', choices=['on', 'off'], required=True)
+    init.add_argument('--gate-mode', choices=sanduq_ci.GATE_MODES,
+                      help='Disabled, advisory or required workflow evidence gate; fresh policies default to advisory')
+    init.add_argument('--gate-scope', choices=sanduq_ci.GATE_SCOPES,
+                      help='Managed-only keeps unrelated bug-fix PRs out of the evidence gate')
+    init.add_argument('--gate-rule', action='append', default=[], metavar='NAME=on|off')
+    init.add_argument('--decision-owner', action='append', default=[], metavar='GITHUB_LOGIN',
+                      help='GitHub login allowed to settle issue decisions; repeat for a team of reviewers')
     init.add_argument('--replace', action='store_true')
     ci_parser = sub.add_parser('ci', help='Record where this project runs its CI, once')
     ci_parser.add_argument('--show', action='store_true', help='Print the recorded selection without changing it')
@@ -761,9 +878,20 @@ def main():
     ci_parser.add_argument('--python', choices=list(sanduq_ci.PYTHON_PROVISIONING),
                            help='setup-action keeps actions/setup-python; preinstalled expects Python on the runner')
     ci_parser.add_argument('--python-version')
+    ci_parser.add_argument('--gate-mode', choices=sanduq_ci.GATE_MODES)
+    ci_parser.add_argument('--gate-scope', choices=sanduq_ci.GATE_SCOPES)
+    ci_parser.add_argument('--gate-rule', action='append', default=[], metavar='NAME=on|off')
+    decisions_parser = sub.add_parser('decisions', help='Show or update decision authority and field policy')
+    decisions_parser.add_argument('--show', action='store_true')
+    decisions_parser.add_argument('--owner', action='append', default=[], metavar='GITHUB_LOGIN')
+    decisions_parser.add_argument('--field-name')
     doctor_parser = sub.add_parser('doctor')
     doctor_parser.add_argument('--project', action='store_true', help='Also validate configured board identities, phase/status mapping and required sync')
     sub.add_parser('project-defaults')
+    identity_parser = sub.add_parser('identity', help='Resolve initial issue-derived branch and spec directory')
+    identity_parser.add_argument('--issue', required=True)
+    prepare_parser = sub.add_parser('prepare', help='Prepare an issue-bound feature and its branch')
+    prepare_parser.add_argument('--issue', required=True)
     for name in ('start', 'next', 'claim', 'complete', 'pause', 'recover', 'bind', 'migrate', 'refresh'):
         cmd = sub.add_parser(name)
         cmd.add_argument('--feature', required=True)
@@ -790,9 +918,13 @@ def main():
                 policy = old
                 policy['processes'] = {'qa': args.qa == 'on', 'user_manual': args.manual == 'on'}
                 write(root / '.specify/workflow/backups' / (uuid.uuid4().hex + '.json'), load_policy(root))
+            select_gate(policy['ci'], args.gate_mode, args.gate_scope, args.gate_rule)
+            if args.decision_owner:
+                policy.setdefault('decisions', default_policy(False, False)['decisions'])['authorized_users'] = args.decision_owner
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(yaml.safe_dump(validate_policy(policy), sort_keys=False), encoding='utf-8')
-            result = {'configured': True, 'processes': policy['processes'], 'doctor': doctor(root, policy)}
+            result = {'configured': True, 'processes': policy['processes'],
+                      'gate': sanduq_ci.gate_config(policy['ci']), 'doctor': doctor(root, policy)}
         elif args.action == 'ci':
             policy = load_policy(root)
             ci = policy['ci']
@@ -807,16 +939,31 @@ def main():
                 for key, value in (('system_packages', args.system_packages), ('python', args.python),
                                    ('python_version', args.python_version)):
                     if value: ci['capabilities'][key] = value
+                select_gate(ci, args.gate_mode, args.gate_scope, args.gate_rule)
                 write(root / '.specify/workflow/backups' / (uuid.uuid4().hex + '.json'), load_policy(root))
                 (root / '.specify/workflow.yml').write_text(
                     yaml.safe_dump(validate_policy(policy), sort_keys=False), encoding='utf-8')
             # The recorded selection is not live until the installer re-renders
             # each managed workflow file from it.
             result = {'ci': ci, 'saved': not args.show, 'doctor': doctor(root, policy)}
+        elif args.action == 'decisions':
+            policy = load_policy(root)
+            config = policy.setdefault('decisions', default_policy(False, False)['decisions'])
+            if not args.show and (args.owner or args.field_name):
+                if args.owner: config['authorized_users'] = args.owner
+                if args.field_name: config['project_field'] = args.field_name
+                validate_policy(policy)
+                write(root / '.specify/workflow/backups' / (uuid.uuid4().hex + '.json'), load_policy(root))
+                (root / '.specify/workflow.yml').write_text(yaml.safe_dump(policy, sort_keys=False), encoding='utf-8')
+            result = {'decisions': config, 'saved': bool(not args.show and (args.owner or args.field_name))}
         elif args.action == 'doctor':
             result = doctor(root, load_policy(root), project=args.project)
         elif args.action == 'project-defaults':
             result = project_defaults(root, load_policy(root))
+        elif args.action == 'identity':
+            result = issue_identity(root, args.issue)
+        elif args.action == 'prepare':
+            result = prepare_issue(root, args.issue)
         else:
             run = Run(root, args.feature)
             if args.action == 'start': result = run.start(args.issue)
