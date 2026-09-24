@@ -1,6 +1,6 @@
 # Sanduq Delivery verification record
 
-Status: local implementation checks passed on 2026-09-24; remote PR and release
+Status: local implementation and PR CI checks passed on 2026-09-24; release
 checks remain pending. This records local
 evidence only; no live GitHub issue, Project automation, agent completion, PR
 merge, or deployment is certified by these checks.
@@ -17,6 +17,7 @@ merge, or deployment is certified by these checks.
 | Workflow package archive | `workflow.zip`, 65 files; SHA-256 `b514d4d9702870be0991c04a316a41bd5fc8db43b9d30d14aa227c1a420c7d61` |
 | Adjacent packages | Scope 110 tests; User Manual 7 tests passed |
 | Installation and upgrade smoke | Codex and Claude core installs passed with Spec Kit 1.0.11 CLI options; published 1.2.4 upgrade and injected rollback passed |
+| PR #21 CI at head `883f977` | All 15 jobs passed in run `36042915720`, including Linux/Windows regressions, four installation variants, upgrade, lint, project init, and dryrun |
 
 The mock CLI tests
 demonstrate generated argv and native step behavior, not live model work.
@@ -39,7 +40,5 @@ was not executed, so the production scheduler remains Sanduq's dispatcher.
 
 ## Still required before merge and release
 
-- Check actual remote CI and branch rules on the PR. A local pass is not a
-  remote check pass.
 - Verify the release asset and promoted catalog after merge.
 - Keep live issue/Project/agent acceptance separate from the local test result.
