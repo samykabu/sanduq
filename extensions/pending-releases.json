@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {"workflow": "1.3.0"},
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Delivery 1.3.0 passed local workflow, installation, upgrade, migration, and package checks. Publish after PR review and remote CI pass."
 }
