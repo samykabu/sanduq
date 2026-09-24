@@ -11,7 +11,7 @@ import sys
 # load the same implementation from Workflow without copying consumer files.
 if not (Path(__file__).parent / 'sanduq_hash.py').exists():
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'workflow/scripts'))
-from sanduq_hash import portable_content, text_attributes
+from sanduq_hash import portable_files
 
 EXCLUDED = {'.git', 'node_modules', 'bin', 'obj', 'dist', 'build', 'coverage', '__pycache__'}
 
@@ -31,14 +31,9 @@ def relative(root, value):
 def fingerprints(root, paths):
     result = {}
     paths = [relative(root, value) for value in sorted(set(paths))]
-    attributes = text_attributes(root, paths)
-    for value in paths:
-        key = relative(root, value)
-        path = root / key
-        content = path.read_bytes() if path.is_file() else None
-        if content is not None:
-            content = portable_content(path, content, attributes.get(key))
-        if content is not None and path.name == 'tasks.md':
+    # Checkout-independent bytes: see sanduq_hash.portable_files.
+    for key, content in portable_files(root, paths).items():
+        if content is not None and Path(key).name == 'tasks.md':
             content = re.sub(rb'(?m)^(\s*- )\[[ xX]\]', rb'\1[ ]', content)
         result[key] = hashlib.sha256(content).hexdigest() if content is not None else None
     return result

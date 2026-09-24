@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- The bundled freshness helper shares Workflow's checkout-independent
+  fingerprints: an unchanged tracked `.sql` or `-text` file that a Windows
+  `core.autocrlf` checkout wrote with different line endings hashes as its
+  committed blob, so QA state recorded on Windows stays current in Linux CI.
+
 ## 2.1.0 (unreleased)
 
 - Use YAML parsing for hook initialization and shared source/output freshness with deletion detection.

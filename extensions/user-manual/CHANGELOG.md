@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- The bundled freshness helper shares Workflow's checkout-independent
+  fingerprints: an unchanged tracked `.sql` or `-text` file that a Windows
+  `core.autocrlf` checkout wrote with different line endings hashes as its
+  committed blob, so manual state recorded on Windows stays current in Linux CI.
+
 ## 1.3.0
 
 - An edition now stages the assets its pages actually reach, with shared

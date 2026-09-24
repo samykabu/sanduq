@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+- Evidence fingerprints no longer depend on how Git checked a byte-sensitive file
+  out. A tracked `.sql` (or `-text`) file whose working tree differs from the
+  index only by Git's checkout conversion (`core.autocrlf`, `eol` attributes) is
+  fingerprinted as its committed blob, which is what a clean CI checkout holds.
+  A Windows `core.autocrlf=true` checkout wrote LF-committed SQL as CRLF, so
+  local receipts hashed CRLF bytes and the CI evidence gate reported
+  `STALE_RECEIPT` for unchanged files. Real edits still hash the working-tree
+  bytes, untracked files are unchanged, SQL committed as CRLF keeps its CRLF
+  hash, and SQL content is still never normalized. Git is queried in batches
+  (`ls-files --stage`, `hash-object --stdin-paths`, `cat-file --batch`), and not
+  at all for files already identical to the index.
+- `doctor` reports a `BYTE_SENSITIVE_EOL_DRIFT` warning (not an error) naming how
+  many tracked byte-sensitive files have working-tree line endings different
+  from the index (`i/lf w/crlf` or `i/crlf w/lf`) and how to re-checkout them.
+  The report now always carries a `warnings` list.
+
 ## 1.2.3
 
 - The implementation progress report is titled with the feature: `init` takes
