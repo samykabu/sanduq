@@ -855,6 +855,8 @@ Use Illustrate to edit the source, export it again, and inspect the rendered ima
 
 ## Continuous integration
 
+$${\color{red}\text{Runner-policy exception: every Sanduq CI job runs on GitHub-hosted runners, because the home-office self-hosted runners cannot serve this personal-account repository. Details below.}}$$
+
 This repository uses GitHub-hosted runners. The home-office ARC runner sets belong to a different
 GitHub account and cannot serve this personal repository under their current registration.
 
