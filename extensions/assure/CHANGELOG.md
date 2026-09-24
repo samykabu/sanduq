@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.2.1
 
 - The bundled freshness helper shares Workflow's checkout-independent
   fingerprints: an unchanged tracked `.sql` or `-text` file that a Windows

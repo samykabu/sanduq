@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Reviewed for release: the implementation progress report is titled with its feature, shows the Sanduq logo, adds a Phase column, Status and Phase filters and a separate Activity tab, and keeps filters across its automatic refresh."
+  "versions": {
+    "assure": "2.2.1",
+    "user-manual": "1.3.1",
+    "workflow": "1.2.4"
+  },
+  "status": "ready",
+  "note": "Reviewed for release: fingerprints of byte-sensitive files (SQL, -text) are independent of a Windows core.autocrlf checkout, so receipts and QA/manual freshness recorded on Windows stay current in Linux CI; doctor warns about working-tree EOL drift."
 }
