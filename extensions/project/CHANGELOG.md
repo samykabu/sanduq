@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- `project-sync` (Bash and PowerShell) falls back to the GitHub REST API when the GraphQL budget
+  is exhausted: Project item add/lookup and Status edits, parent issue lookup/creation, sub-issue
+  creation and linking, sub-issue closing and the open-PR check. The real budget is checked, since
+  `gh project` can misreport exhaustion (for example "unknown owner type").
+- The run log and the `-Json`/`--json` summary report the `transport` used (`graphql` or `rest`).
+
 ## 2.1.0 (unreleased)
 
 - Managed mode preserves the bound parent and delegates task issue creation and state changes to the workflow adapter.

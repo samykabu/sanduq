@@ -185,12 +185,69 @@ def dependency_text(body):
 
 
 class GitHub:
+    """`gh` CLI client. `gh project` is GraphQL-only; while GraphQL is rate-limited, Project
+    operations are served from the REST Projects API (a separate budget) and GraphQL is
+    tried again once the reported reset time has passed."""
+
+    def __init__(self):
+        # Project board settings (owner, ownerType, projectNumber) for the REST fallback; set by Scope.
+        self.project_cfg = None
+        self.transports = set()
+        self._rest_until = 0.0
+        self._rest = None
+
+    @property
+    def project_transport(self):
+        """Transport that served this process's Project operations, or None if there were none."""
+        if not self.transports:
+            return None
+        return '+'.join(sorted(self.transports, key=('graphql', 'rest').index))
+
     def command(self, args, payload=None):
+        is_project = bool(args) and args[0] == 'project' and self.project_cfg is not None
+        if is_project and time.time() < self._rest_until:
+            return self._project_rest(args)
         p = subprocess.run(['gh', *args], input=json.dumps(payload) if payload is not None else None,
                            capture_output=True, text=True, encoding='utf-8')
         if p.returncode:
+            if is_project and self.graphql_exhausted(p.stderr):
+                return self._project_rest(args)
             raise ScopeError(f'GitHub request failed ({" ".join(args[:3])}): {p.stderr.strip()[:700]}')
+        if is_project:
+            if self._rest_until:
+                self._rest_until = 0.0
+                print('[scope] GraphQL budget recovered; Project operations use GraphQL again.', file=sys.stderr)
+            self.transports.add('graphql')
         return json.loads(p.stdout) if p.stdout.strip() else None
+
+    def _project_rest(self, args):
+        if self._rest is None:
+            self._rest = ProjectRest(self, self.project_cfg)
+        self.transports.add('rest')
+        return self._rest.run(args)
+
+    def graphql_exhausted(self, stderr=''):
+        """True when GraphQL is rate-limited. `gh project` can report this as an unrelated error
+        (for example "unknown owner type"), so the real budget is always checked."""
+        p = subprocess.run(['gh', 'api', 'graphql', '-f', 'query={rateLimit{remaining resetAt}}'],
+                           capture_output=True, text=True, encoding='utf-8')
+        reset = None
+        if p.returncode:
+            exhausted = 'rate limit' in ((p.stderr or '') + (p.stdout or '') + (stderr or '')).lower()
+        else:
+            try:
+                limit = json.loads(p.stdout)['data']['rateLimit']
+                exhausted = limit['remaining'] <= 0
+                reset = datetime.fromisoformat(limit['resetAt'].replace('Z', '+00:00')).timestamp()
+            except (ValueError, KeyError, TypeError, AttributeError):
+                exhausted = False
+        if exhausted:
+            # Unknown reset: re-check GraphQL after a minute rather than before every operation.
+            self._rest_until = max(reset or 0, time.time() + 60)
+            when = datetime.fromtimestamp(reset, timezone.utc).strftime('%H:%M UTC') if reset else 'unknown'
+            print(f'[scope] GraphQL rate-limited (resets {when}); using the REST Projects API for Project operations.',
+                  file=sys.stderr)
+        return exhausted
 
     def api(self, endpoint, method='GET', payload=None, pages=False):
         args = ['api', endpoint, '-H', 'Accept: application/vnd.github+json']
@@ -209,12 +266,108 @@ class GitHub:
         return data['data']
 
 
+class ProjectRest:
+    """REST equivalents of the `gh project` subcommands Scope uses, returning `gh`'s JSON shapes.
+
+    `gh project` addresses fields and items by node ID; REST addresses them by database ID.
+    Both appear in the REST listings, which are fetched once per instance and cached.
+    """
+    FIELD_TYPES = {'single_select': 'ProjectV2SingleSelectField', 'iteration': 'ProjectV2IterationField'}
+    CONTENT_FIELDS = {'title', 'type', 'repository', 'assignees', 'labels', 'linked pull requests', 'milestone',
+                      'reviewers', 'parent issue', 'sub-issues progress'}
+
+    def __init__(self, gh, cfg):
+        self.gh = gh
+        owner_path = 'orgs' if cfg.get('ownerType', 'user') == 'org' else 'users'
+        self.base = f'{owner_path}/{cfg["owner"]}/projectsV2/{cfg["projectNumber"]}'
+        self._fields = None
+        self._item_ids = None
+
+    def run(self, args):
+        options = {args[i]: args[i + 1] for i in range(2, len(args) - 1) if args[i].startswith('--')}
+        action = args[1] if len(args) > 1 else ''
+        if action == 'field-list':
+            fields = [self.field_row(f) for f in self.fields()]
+            return {'fields': fields, 'totalCount': len(fields)}
+        if action == 'item-list':
+            items = [self.item_row(raw) for raw in self.raw_items()]
+            return {'items': items, 'totalCount': len(items)}
+        if action == 'item-add':
+            match = re.search(r'github\.com/([^/]+/[^/]+)/issues/(\d+)', options.get('--url', ''))
+            require(match, f'REST fallback: item-add needs an issue URL, got {options.get("--url")!r}.')
+            issue = self.gh.api(f'repos/{match[1]}/issues/{match[2]}')
+            item = self.gh.api(f'{self.base}/items', 'POST', {'type': 'Issue', 'id': issue['id']})
+            if self._item_ids is not None:
+                self._item_ids[item['node_id']] = item['id']
+            return {'id': item['node_id']}
+        if action == 'item-edit':
+            field = next((f for f in self.fields() if f['node_id'] == options.get('--field-id')), None)
+            require(field, f'REST fallback: unknown Project field {options.get("--field-id")}.')
+            if '--single-select-option-id' in options:
+                value = options['--single-select-option-id']
+            elif '--text' in options:
+                value = options['--text'] or None  # an empty text value clears the field
+            else:
+                raise ScopeError('REST fallback supports single-select and text field edits only.')
+            item_id = self.item_database_id(options.get('--id'))
+            self.gh.api(f'{self.base}/items/{item_id}', 'PATCH', {'fields': [{'id': field['id'], 'value': value}]})
+            return None
+        raise ScopeError(f'REST fallback does not support `gh project {action}`; retry after the GraphQL rate limit resets.')
+
+    def fields(self):
+        if self._fields is None:
+            self._fields = self.gh.api(f'{self.base}/fields?per_page=100', pages=True)
+        return self._fields
+
+    def raw_items(self):
+        ids = ','.join(str(f['id']) for f in self.fields())
+        rows = self.gh.api(f'{self.base}/items?per_page=100&fields={ids}', pages=True)
+        self._item_ids = {raw['node_id']: raw['id'] for raw in rows}
+        return rows
+
+    def item_database_id(self, node_id):
+        if self._item_ids is None or node_id not in self._item_ids:
+            self.raw_items()
+        require(node_id in self._item_ids, f'REST fallback: Project item {node_id} not found.')
+        return self._item_ids[node_id]
+
+    @classmethod
+    def field_row(cls, field):
+        row = {'id': field['node_id'], 'name': field['name'],
+               'type': cls.FIELD_TYPES.get(field.get('data_type'), 'ProjectV2Field')}
+        if field.get('options') is not None:
+            row['options'] = [{'id': o['id'], 'name': cls.text(o.get('name'))} for o in field['options']]
+        return row
+
+    @staticmethod
+    def text(value):
+        return value.get('raw') if isinstance(value, dict) else value
+
+    @classmethod
+    def item_row(cls, raw):
+        content = raw.get('content') or {}
+        kind = raw.get('content_type') if raw.get('content_type') in ('Issue', 'PullRequest') else 'DraftIssue'
+        repo = re.sub(r'^https://api\.github\.com/repos/', '', content.get('repository_url') or '')
+        row = {'id': raw['node_id'], 'title': content.get('title'),
+               'content': {'type': kind, 'number': content.get('number'), 'title': content.get('title'),
+                           'repository': repo, 'url': content.get('html_url'), 'body': content.get('body')}}
+        for field in raw.get('fields') or []:
+            key, value = field['name'].lower(), field.get('value')
+            if key in cls.CONTENT_FIELDS or value is None:
+                continue
+            if isinstance(value, dict):
+                value = cls.text(value.get('name', value.get('title', value)))
+            row[key] = value
+        return row
+
+
 class Scope:
     def __init__(self, root, gh=None):
         self.root = Path(root).resolve()
         self.gh = gh or GitHub()
         self.cfg = read_json(self.root / '.specify/extensions/project/config.json')
         require(self.cfg and self.cfg.get('projectId'), 'Run /speckit-project-init first.')
+        self.gh.project_cfg = self.cfg
         self.repo = subprocess.check_output(['git', '-C', str(self.root), 'remote', 'get-url', 'origin'], text=True).strip()
         match = re.search(r'github\.com[:/]([^/]+/[^/]+?)(?:\.git)?$', self.repo)
         require(match, 'A GitHub origin remote is required.')
@@ -869,6 +1022,12 @@ class Scope:
         return result
 
 
+def with_transport(result, gh):
+    """Name the transport that served Project operations (stdout only; saved files are unchanged)."""
+    transport = getattr(gh, 'project_transport', None)
+    return {**result, 'transport': transport} if transport and isinstance(result, dict) else result
+
+
 def rejection(blocked):
     text = 'SCOPE_PREREQUISITES_NOT_READY: prerequisites must be In review or Done.\n\n'
     text += '| GitHub Issue Number | Title | Current status |\n| --- | --- | --- |\n'
@@ -926,7 +1085,7 @@ def main(argv=None):
             result = app.export_plan()
         if args.output:
             write_json(args.output, result)
-        print(json.dumps(result, indent=2, ensure_ascii=True))
+        print(json.dumps(with_transport(result, app.gh), indent=2, ensure_ascii=True))
         return 0
     except (ScopeError, OSError, ValueError, KeyError, TypeError) as exc:
         print(str(exc), file=sys.stderr)
