@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Serve Project board reads and writes (`item-list`, `field-list`, `item-add`, and
+  single-select/text `item-edit`) from the REST Projects API when the GraphQL budget is
+  exhausted. The real budget is checked, because `gh project` can report exhaustion as an
+  unrelated error such as "unknown owner type". GraphQL is used again after the reported reset.
+- Name the transport on stderr when falling back, and add `transport` (`graphql`, `rest` or
+  `graphql+rest`) to printed JSON results of Scope and clarification commands that touched the
+  Project. Saved `--output` files are unchanged.
+
 ## 1.4.0 (unreleased)
 
 - Move canonical source from Bunyan; add managed effort policy, automatic clarification reread and configurable board/artifact mappings.
