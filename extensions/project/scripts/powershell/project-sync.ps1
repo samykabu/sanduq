@@ -13,7 +13,9 @@
   `project-init.ps1`. If that config is missing, this script tells you to run init and exits 0.
 
   Requires the 'gh' CLI authenticated with the 'project' scope
-  (gh auth refresh -h github.com -s project,read:project). If gh is missing, unauthenticated,
+  (gh auth refresh -h github.com -s project,read:project). GraphQL (`gh project`, `gh issue`,
+  `gh pr`) is preferred; when the GraphQL budget is exhausted the same operations use the REST
+  API, which has a separate budget, and the summary reports the transport. If gh is missing, unauthenticated,
   lacks scope, or the remote is not GitHub, the script logs the skip and exits 0 (graceful
   degradation) so it never blocks a Spec Kit hook.
 
@@ -63,6 +65,54 @@ function Invoke-Gh { param([string[]]$GhArgs, [switch]$AllowFail)
     return ($out -join "`n")
 }
 
+# GraphQL is preferred. When its budget is exhausted, operations fall back to the REST API
+# (a separate budget). `gh project` can report exhaustion as an unrelated error such as
+# "unknown owner type", so the real budget is checked rather than the error text.
+$script:Transport = 'graphql'
+function Test-GraphQLExhausted {
+    $probe = & gh api graphql -f 'query={rateLimit{remaining}}' --jq '.data.rateLimit.remaining' 2>&1
+    $text = ($probe | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) { return ($text -match '(?i)rate limit') }
+    $remaining = 0
+    if ([int]::TryParse($text, [ref]$remaining)) { return ($remaining -le 0) }
+    return $false
+}
+function Use-Rest {
+    if ($script:Transport -eq 'rest') { return $true }
+    if (-not (Test-GraphQLExhausted)) { return $false }
+    $script:Transport = 'rest'
+    Write-Log 'GraphQL rate-limited; using the GitHub REST API for Project and issue operations' 'warn'
+    return $true
+}
+function Invoke-Rest { param([string]$Path, [string]$Method = 'GET', $Body, [switch]$Paginate)
+    $restArgs = @('api', $Path, '-H', 'Accept: application/vnd.github+json')
+    if ($Method -ne 'GET') { $restArgs += @('--method', $Method) }
+    if ($Paginate) { $restArgs += @('--paginate', '--slurp') }
+    if ($null -ne $Body) {
+        $restArgs += @('--input', '-')
+        $restOut = ($Body | ConvertTo-Json -Depth 10 -Compress) | & gh @restArgs 2>&1
+    } else { $restOut = & gh @restArgs 2>&1 }
+    if ($LASTEXITCODE -ne 0) { throw "gh api $Path failed: $restOut" }
+    $text = ($restOut -join "`n").Trim()
+    if (-not $text) { return $null }
+    if ($Paginate) { return @(foreach ($page in ($text | ConvertFrom-Json -NoEnumerate)) { foreach ($row in $page) { $row } }) }
+    return ($text | ConvertFrom-Json)
+}
+# Run a GraphQL-backed gh command; when GraphQL is exhausted run the REST equivalent instead.
+function Invoke-GhOrRest { param([string[]]$GhArgs, [scriptblock]$Rest, [switch]$AllowFail)
+    if ($script:Transport -ne 'rest') {
+        if ($DryRun) { return (Invoke-Gh $GhArgs) }
+        $ghOut = & gh @GhArgs 2>&1
+        if ($LASTEXITCODE -eq 0) { return ($ghOut -join "`n") }
+        if (-not (Use-Rest)) {
+            if ($AllowFail) { return $null }
+            throw "gh $($GhArgs -join ' ') failed: $ghOut"
+        }
+    }
+    if ($DryRun) { Write-Log "DRYRUN REST equivalent of gh $($GhArgs[0]) $($GhArgs[1])"; return $null }
+    try { return (& $Rest) } catch { if ($AllowFail) { return $null }; throw }
+}
+
 $repoRoot = Get-RepoRoot
 Set-Location $repoRoot
 $configPath = Join-Path $repoRoot '.specify/extensions/project/config.json'
@@ -77,6 +127,14 @@ if ($authStatus -notmatch 'project') { Skip "gh token lacks 'project' scope - ru
 $remote = (git config --get remote.origin.url 2>$null)
 if ($remote -notmatch 'github\.com') { Skip "remote is not GitHub ($remote)" }
 if ($remote -match 'github\.com[:/]+([^/]+)/([^/.]+)') { $repoSlug = "$($matches[1])/$($matches[2])" } else { Skip "cannot parse repo from remote $remote" }
+$ownerPath = if ($cfg.ownerType -eq 'org') { 'orgs' } else { 'users' }
+$restBase = "$ownerPath/$($cfg.owner)/projectsV2/$($cfg.projectNumber)"
+Use-Rest | Out-Null
+
+# REST addresses Project fields and items by database id; `gh project` uses node ids.
+function Get-IssueNodeJson { param($Number) @{ id = (Invoke-Rest "repos/$repoSlug/issues/$Number").node_id } | ConvertTo-Json -Compress }
+function Get-RestItemId { param([string]$NodeId) (Invoke-Rest "$restBase/items?per_page=100" -Paginate | Where-Object { $_.node_id -eq $NodeId } | Select-Object -First 1).id }
+function Get-RestFieldId { param([string]$NodeId) (Invoke-Rest "$restBase/fields?per_page=100" -Paginate | Where-Object { $_.node_id -eq $NodeId } | Select-Object -First 1).id }
 
 if (-not $Feature) {
     $featureJson = Join-Path $repoRoot '.specify/feature.json'
@@ -123,7 +181,12 @@ function Set-CardStatus {
     if ($current -and -not $Force -and (Status-Index $Status) -lt (Status-Index $current)) { Write-Log "no-regress: card is '$current'; not moving back to '$Status'"; return }
     if ($current -eq $Status) { Write-Log "status already '$Status'"; return }
     if (-not $fs.itemId) { Write-Log 'no project item id yet; cannot set status' 'warn'; return }
-    Invoke-Gh @('project', 'item-edit', '--id', $fs.itemId, '--project-id', $cfg.projectId, '--field-id', $cfg.statusFieldId, '--single-select-option-id', $cfg.statusOptions.$Status) | Out-Null
+    Invoke-GhOrRest @('project', 'item-edit', '--id', $fs.itemId, '--project-id', $cfg.projectId, '--field-id', $cfg.statusFieldId, '--single-select-option-id', $cfg.statusOptions.$Status) {
+        $itemDbId = Get-RestItemId $fs.itemId
+        $fieldDbId = Get-RestFieldId $cfg.statusFieldId
+        if (-not $itemDbId -or -not $fieldDbId) { throw 'REST: Project item or Status field not found' }
+        Invoke-Rest "$restBase/items/$itemDbId" 'PATCH' @{ fields = @(@{ id = $fieldDbId; value = $cfg.statusOptions.$Status }) } | Out-Null
+    } | Out-Null
     $fs.status = $Status
     Write-Log "status -> $Status"
 }
@@ -136,12 +199,16 @@ function Ensure-ParentIssue {
         if ($binding.repo -ne $repoSlug -or -not $binding.issue) { throw 'Managed workflow parent binding mismatch.' }
         if ($fs.issue -and $fs.issue -ne $binding.issue) { throw 'Project state conflicts with Scope parent binding.' }
         $fs.issue = $binding.issue
-        $node = Invoke-Gh @('issue', 'view', $fs.issue, '--repo', $repoSlug, '--json', 'id')
+        $node = Invoke-GhOrRest @('issue', 'view', $fs.issue, '--repo', $repoSlug, '--json', 'id') { Get-IssueNodeJson $fs.issue }
         if ($node) { $fs.issueNodeId = ($node | ConvertFrom-Json).id }
         return
     }
     if ($fs.issue -and $fs.issue -gt 0) { return }
-    $found = Invoke-Gh @('issue', 'list', '--repo', $repoSlug, '--state', 'all', '--label', ($cfg.parentIssue.labels -join ','), '--search', "in:title $slug", '--json', 'number,title,id', '--limit', '20') -AllowFail
+    $found = Invoke-GhOrRest @('issue', 'list', '--repo', $repoSlug, '--state', 'all', '--label', ($cfg.parentIssue.labels -join ','), '--search', "in:title $slug", '--json', 'number,title,id', '--limit', '20') {
+        $labels = [uri]::EscapeDataString(($cfg.parentIssue.labels -join ','))
+        ConvertTo-Json -Compress -AsArray -InputObject @(Invoke-Rest "repos/$repoSlug/issues?state=all&labels=$labels&per_page=100" -Paginate |
+            Where-Object { -not $_.pull_request } | ForEach-Object { [pscustomobject]@{ number = $_.number; title = $_.title; id = $_.node_id } })
+    } -AllowFail
     if ($found) {
         $match = ($found | ConvertFrom-Json) | Where-Object { $_.title -match [regex]::Escape($slug) } | Select-Object -First 1
         if ($match) { $fs.issue = $match.number; $fs.issueNodeId = $match.id; Write-Log "found existing parent issue #$($match.number)"; return }
@@ -151,9 +218,11 @@ function Ensure-ParentIssue {
     $issueTitle = ($cfg.parentIssue.titleTemplate -replace '\{slug\}', $slug) -replace '\{title\}', $title
     $labelArgs = @(); foreach ($l in $cfg.parentIssue.labels) { $labelArgs += @('--label', $l) }
     foreach ($l in $cfg.parentIssue.labels) { Invoke-Gh @('label', 'create', $l, '--repo', $repoSlug, '--color', 'BFD4F2', '--force') -AllowFail | Out-Null }
-    $url = Invoke-Gh (@('issue', 'create', '--repo', $repoSlug, '--title', $issueTitle, '--body', $body) + $labelArgs)
+    $url = Invoke-GhOrRest (@('issue', 'create', '--repo', $repoSlug, '--title', $issueTitle, '--body', $body) + $labelArgs) {
+        (Invoke-Rest "repos/$repoSlug/issues" 'POST' @{ title = $issueTitle; body = $body; labels = @($cfg.parentIssue.labels) }).html_url
+    }
     if ($url -match '/issues/(\d+)') { $fs.issue = [int]$matches[1] }
-    $node = Invoke-Gh @('issue', 'view', $fs.issue, '--repo', $repoSlug, '--json', 'id') -AllowFail
+    $node = Invoke-GhOrRest @('issue', 'view', $fs.issue, '--repo', $repoSlug, '--json', 'id') { Get-IssueNodeJson $fs.issue } -AllowFail
     if ($node) { $fs.issueNodeId = ($node | ConvertFrom-Json).id }
     Write-Log "created parent issue #$($fs.issue)"
 }
@@ -162,10 +231,18 @@ function Ensure-InProject {
     if (-not $fs.issue -or $fs.issue -le 0) { return }
     if ($fs.itemId) { return }
     $issueUrl = "https://github.com/$repoSlug/issues/$($fs.issue)"
-    $res = Invoke-Gh @('project', 'item-add', "$($cfg.projectNumber)", '--owner', $cfg.owner, '--url', $issueUrl, '--format', 'json') -AllowFail
-    if ($res) { try { $fs.itemId = ($res | ConvertFrom-Json).id } catch {} }
+    $res = Invoke-GhOrRest @('project', 'item-add', "$($cfg.projectNumber)", '--owner', $cfg.owner, '--url', $issueUrl, '--format', 'json') {
+        $issueDbId = (Invoke-Rest "repos/$repoSlug/issues/$($fs.issue)").id
+        @{ id = (Invoke-Rest "$restBase/items" 'POST' @{ type = 'Issue'; id = $issueDbId }).node_id } | ConvertTo-Json -Compress
+    } -AllowFail
+    if ($res) { try { $fs.itemId = ($res | ConvertFrom-Json).id } catch { Write-Verbose 'item-add returned no JSON' } }
     if (-not $fs.itemId) {
-        $items = Invoke-Gh @('project', 'item-list', "$($cfg.projectNumber)", '--owner', $cfg.owner, '--format', 'json', '--limit', '200') -AllowFail
+        $items = Invoke-GhOrRest @('project', 'item-list', "$($cfg.projectNumber)", '--owner', $cfg.owner, '--format', 'json', '--limit', '200') {
+            $repoUrl = "https://api.github.com/repos/$repoSlug"
+            $rows = @(Invoke-Rest "$restBase/items?per_page=100" -Paginate | Where-Object { $_.content_type -eq 'Issue' -and $_.content.repository_url -eq $repoUrl } |
+                ForEach-Object { [pscustomobject]@{ id = $_.node_id; content = [pscustomobject]@{ number = $_.content.number; type = 'Issue'; repository = $repoSlug } } })
+            @{ items = $rows; totalCount = $rows.Count } | ConvertTo-Json -Depth 5 -Compress
+        } -AllowFail
         if ($items) {
             $it = ($items | ConvertFrom-Json).items | Where-Object { $_.content.number -eq $fs.issue } | Select-Object -First 1
             if ($it) { $fs.itemId = $it.id }
@@ -204,12 +281,17 @@ function Sync-SubIssues {
         $stitle = (($cfg.subIssues.titleTemplate -replace '\{slug\}', $slug) -replace '\{taskId\}', $t.id) -replace '\{desc\}', $t.desc
         $labelArgs = @(); foreach ($l in $cfg.subIssues.labels) { $labelArgs += @('--label', $l) }
         if ($DryRun) { Write-Log "DRYRUN create sub-issue '$stitle' (parent #$($fs.issue))"; $created++; continue }
-        $surl = Invoke-Gh (@('issue', 'create', '--repo', $repoSlug, '--title', $stitle, '--body', "Task ``$($t.id)`` of feature ``$slug`` (parent #$($fs.issue)).") + $labelArgs) -AllowFail
+        $sbody = "Task ``$($t.id)`` of feature ``$slug`` (parent #$($fs.issue))."
+        $surl = Invoke-GhOrRest (@('issue', 'create', '--repo', $repoSlug, '--title', $stitle, '--body', $sbody) + $labelArgs) {
+            (Invoke-Rest "repos/$repoSlug/issues" 'POST' @{ title = $stitle; body = $sbody; labels = @($cfg.subIssues.labels) }).html_url
+        } -AllowFail
         if (-not $surl -or $surl -notmatch '/issues/(\d+)') { Write-Log "failed to create sub-issue for $($t.id)" 'warn'; continue }
         $snum = [int]$matches[1]
-        $snode = (Invoke-Gh @('issue', 'view', $snum, '--repo', $repoSlug, '--json', 'id') -AllowFail | ConvertFrom-Json).id
+        $snode = (Invoke-GhOrRest @('issue', 'view', $snum, '--repo', $repoSlug, '--json', 'id') { Get-IssueNodeJson $snum } -AllowFail | ConvertFrom-Json).id
         $q = 'mutation($p:ID!,$c:ID!){addSubIssue(input:{issueId:$p,subIssueId:$c}){subIssue{number}}}'
-        Invoke-Gh @('api', 'graphql', '-H', 'GraphQL-Features: sub_issues', '-f', "query=$q", '-f', "p=$($fs.issueNodeId)", '-f', "c=$snode") -AllowFail | Out-Null
+        Invoke-GhOrRest @('api', 'graphql', '-H', 'GraphQL-Features: sub_issues', '-f', "query=$q", '-f', "p=$($fs.issueNodeId)", '-f', "c=$snode") {
+            Invoke-Rest "repos/$repoSlug/issues/$($fs.issue)/sub_issues" 'POST' @{ sub_issue_id = (Invoke-Rest "repos/$repoSlug/issues/$snum").id }
+        } -AllowFail | Out-Null
         $fs.subIssues[$t.id] = @{ number = $snum; nodeId = $snode; closed = $false }
         $created++
     }
@@ -224,7 +306,9 @@ function Sync-Progress {
     foreach ($id in @($fs.subIssues.Keys)) {
         $si = $fs.subIssues[$id]
         if ($doneIds -contains $id -and -not $si.closed) {
-            Invoke-Gh @('issue', 'close', "$($si.number)", '--repo', $repoSlug, '--reason', 'completed') -AllowFail | Out-Null
+            Invoke-GhOrRest @('issue', 'close', "$($si.number)", '--repo', $repoSlug, '--reason', 'completed') {
+                Invoke-Rest "repos/$repoSlug/issues/$($si.number)" 'PATCH' @{ state = 'closed'; state_reason = 'completed' }
+            } -AllowFail | Out-Null
             $si.closed = $true; $closed++
         }
     }
@@ -236,7 +320,10 @@ function Sync-Progress {
 }
 
 function Test-OpenPr {
-    $pr = Invoke-Gh @('pr', 'list', '--repo', $repoSlug, '--head', $branch, '--state', 'open', '--json', 'number', '--limit', '1') -AllowFail
+    $pr = Invoke-GhOrRest @('pr', 'list', '--repo', $repoSlug, '--head', $branch, '--state', 'open', '--json', 'number', '--limit', '1') {
+        $head = [uri]::EscapeDataString("$($repoSlug.Split('/')[0]):$branch")
+        ConvertTo-Json -Compress -AsArray -InputObject @(Invoke-Rest "repos/$repoSlug/pulls?state=open&head=$head&per_page=1" | ForEach-Object { @{ number = $_.number } })
+    } -AllowFail
     if ($pr) { try { return (($pr | ConvertFrom-Json).Count -gt 0) } catch { return $false } }
     return $false
 }
@@ -276,6 +363,6 @@ if ($Phase -eq 'done' -and $progress -and $progress.total -gt 0 -and $progress.d
 Set-CardStatus -Status $targetStatus
 Save-State
 
-$summary = [pscustomobject]@{ feature = $slug; repo = $repoSlug; issue = $fs.issue; project = $cfg.projectNumber; status = $fs.status; phase = $Phase; subIssues = $fs.subIssues.Count; dryRun = [bool]$DryRun }
-Write-Log "done: issue #$($fs.issue), status '$($fs.status)', $($fs.subIssues.Count) sub-issue(s)"
+$summary = [pscustomobject]@{ feature = $slug; repo = $repoSlug; issue = $fs.issue; project = $cfg.projectNumber; status = $fs.status; phase = $Phase; subIssues = $fs.subIssues.Count; dryRun = [bool]$DryRun; transport = $script:Transport }
+Write-Log "done: issue #$($fs.issue), status '$($fs.status)', $($fs.subIssues.Count) sub-issue(s) (transport: $script:Transport)"
 if ($Json) { $summary | ConvertTo-Json -Compress }
