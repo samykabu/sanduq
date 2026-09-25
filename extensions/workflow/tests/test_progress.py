@@ -11,6 +11,25 @@ SPEC.loader.exec_module(p)
 
 
 class ProgressTests(unittest.TestCase):
+    def test_sync_shows_requested_and_verified_actual_route_separately(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            tasks = root / 'tasks.md'
+            tasks.write_text('- [ ] T001 Implement parser\n', encoding='utf-8')
+            out = root / 'workflow/progress'
+            p.main(['init', '--tasks', str(tasks), '--output', str(out)])
+            ledger = root / 'workflow/delegations.json'
+            ledger.write_text(json.dumps({'attempts': [{
+                'identity': 'specs/example/T001', 'requested_harness': 'codex',
+                'requested_model': 'gpt-6-sol', 'actual_harness': 'codex',
+                'actual_model': None, 'status': 'successful', 'run_id': 'codex-1',
+                'evidence_location': '.delegate/runs/codex-1/result.json'}]}), encoding='utf-8')
+            p.main(['sync', '--output', str(out)])
+            page = (out / 'index.html').read_text(encoding='utf-8')
+            self.assertIn('gpt-6-sol', page)
+            self.assertIn('codex / unverified', page)
+            self.assertIn('codex-1', page)
+
     def test_resume_update_escape_and_merge(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

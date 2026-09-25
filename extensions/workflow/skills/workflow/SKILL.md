@@ -22,7 +22,22 @@ the package's pinned `requirements.txt` when missing. Never install a floating t
   revised with `workflow.py ci` and `workflow.py decisions` later. Keep Status
   for the lifecycle; the Decision single-select field is separate.
   Discover existing effort units/preferences; preserve exact meaning. Run `init --qa on|off
-  --manual on|off`. Configure provider choices, context policy and scope preferences in
+  --manual on|off --delegate on|off`. Ask once whether model-aware delegation is
+  enabled; its default is off. Configure model preferences, routes, fallback order,
+  install scope and per-task overrides in the project's `.specify/workflow.yml`.
+  A later YAML edit can opt in or out without reinitializing and without
+  invalidating receipts. After opting in, run `workflow.py doctor --project`
+  (read-only), then `delegation.py install` when doctor reports
+  `DELEGATE_SKILL_MISSING`, `_BROKEN` or `_INCOMPATIBLE`; it reuses a usable
+  project or global copy and otherwise installs the bundled one at the
+  configured scope, backing up a replaced copy outside skill folders. Report
+  any `DELEGATE_SKILL_REPLACED` or `DELEGATE_SKILL_LEGACY_BACKUP_MOVED` notice
+  from install, claim or dispatch output to the user. Run
+  `delegation.py annotate --feature specs/<feature>` to refresh pending task
+  metadata after an opt-in or route edit; a task the type rules misread takes an
+  `[Impl]` (or `[QA]`, `[Docs]`, `[Review]`) marker. Running work keeps its original route
+  snapshot and driver copy.
+  Configure provider choices, context policy and scope preferences in
   `.specify/workflow.yml`. Ask once where this project runs CI: GitHub-hosted runners,
   or self-hosted labels the user names. Do not assume either. Capture the runner labels
   per platform and whether that runner can `sudo apt-get` and provides Python, then record
@@ -96,6 +111,28 @@ the package's pinned `requirements.txt` when missing. Never install a floating t
    Unknown, estimated, stale or unreliable measurements do not justify a context pause.
    Continue ordinary stage transitions automatically and keep durable progress notes.
 4. Invoke the selected command in this host using its installed skill/command registration.
+   When `delegation.enabled` is true, instead use the claim's `delegation` route:
+   run `delegate_dispatch.py start --feature specs/<feature> --id stage:<stage>
+   --claim-token <token>`, then `delegate_dispatch.py collect --feature
+   specs/<feature> --run-id <id>` until terminal. If it returns a `replacement`,
+   collect that new run ID. Inspect actual outputs and checks before writing and
+   completing the normal stage receipt. A successful delegate result is candidate
+   evidence, not a passed stage. Failed, abandoned or unresolved work keeps the
+   claim active. The adapter distinguishes requested from harness-reported models;
+   an unreported actual model remains unverified. Disabled mode ignores old
+   routing tags and runs with the user's selected host model.
+   A rejected model is followed by the configured fallback automatically; a
+   start that provably created no run, or whose driver exited 5 with proof that
+   no agent launched, moves to the next candidate. On
+   `DELEGATION_START_UNCERTAIN`, never start the stage again: run
+   `delegate_dispatch.py recover --feature specs/<feature> --intent-id <id>`.
+   If it binds a run, collect it. If it reports `found: false`, close the intent
+   with `delegate_dispatch.py abandon --feature specs/<feature> --intent-id <id>
+   --reason "<why>"` and then start again; `abandon` refuses while a driver run
+   exists or a start may still be in flight. On `DELEGATION_LEDGER_BUSY` or
+   `DELEGATE_SKILL_INSTALL_BUSY`, retry the same command; a lock left by a dead
+   dispatcher on this host is recovered automatically, so never delete a lock
+   file whose named owner process is still running. An observation timeout is not a failed run.
    Read its current instruction source rather than guessing from a name. Native semantic
    commands may pause for real decisions. The managed preset prevents duplicate chaining.
    With `mode: revalidate`, retain the bound issue, feature path and existing branch.

@@ -10,7 +10,7 @@ import uuid
 from pathlib import Path
 import yaml
 from packaging.version import Version
-from workflow import WorkflowError, ensure_local_excludes, locked, read, registry, require, write
+from workflow import WorkflowError, ensure_local_excludes, load_policy, locked, read, registry, require, write
 from install import command, managed_files, restore, snapshot
 
 REPOSITORY = 'https://github.com/samykabu/sanduq'
@@ -41,6 +41,9 @@ def upgrade(root, version, apply=False, packages=None, runner=command, preserve_
             require(read(root / '.specify/superpowers-handoff.json', {}).get('status') not in ('executing', 'blocked'), 'LEGACY_EXECUTOR_OWNS_FEATURE')
             backup = root / '.specify/workflow/backups/upgrades' / uuid.uuid4().hex
             before = snapshot(root, backup)
+            delegation_before = load_policy(root)['delegation']
+            history_before = {path: content for path, content in before.items()
+                              if path.startswith('specs/') and path.endswith('/workflow/delegations.json')}
             ci_path = '.github/workflows/sanduq-workflow-gates.yml'
             ci_before = before.get(ci_path) if preserve_ci else None
         log = []
@@ -65,6 +68,12 @@ def upgrade(root, version, apply=False, packages=None, runner=command, preserve_
                         'path': ci_path, 'sha256': hashlib.sha256(ci_before).hexdigest()}})
             runner(root, [sys.executable, str(root / '.specify/extensions/workflow/scripts/install.py'),
                           '--root', str(root), '--apply', '--upgrade-owner', str(os.getpid()), *tail], log)
+            require(load_policy(root)['delegation'] == delegation_before,
+                    'DELEGATION_POLICY_PRESERVATION_FAILED')
+            after = managed_files(root)
+            require({path: content for path, content in after.items()
+                     if path.startswith('specs/') and path.endswith('/workflow/delegations.json')}
+                    == history_before, 'DELEGATION_HISTORY_PRESERVATION_FAILED')
             if ci_before is not None:
                 require((root / ci_path).read_bytes() == ci_before, 'PROJECT_CI_PRESERVATION_FAILED')
                 result['preserved_ci'] = {'path': ci_path, 'sha256': hashlib.sha256(ci_before).hexdigest()}

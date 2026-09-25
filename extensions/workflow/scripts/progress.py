@@ -207,6 +207,21 @@ def render(state):
                      for name, value in state['phases'].items())
     archived = ''.join('<li>' + escape(json.dumps(task, ensure_ascii=False)) + '</li>'
                        for task in state.get('archived_tasks', []))
+    delegation_rows = ''.join(
+        '<tr><td>' + escape(item.get('identity', '')) + '</td><td>' +
+        escape(item.get('requested_harness', '')) + ' / ' +
+        escape(item.get('requested_model') or 'CLI default') + '</td><td>' +
+        escape(item.get('actual_harness') or 'unverified') + ' / ' +
+        escape(item.get('actual_model') or 'unverified') + '</td><td>' +
+        escape(item.get('status', '')) + '</td><td>' +
+        escape(item.get('run_id', '')) + '</td><td>' +
+        escape(item.get('evidence_location', '')) + '</td></tr>'
+        for item in state.get('delegations', []))
+    delegations = ('<h2>Delegations</h2><div class="table"><table><thead><tr>'
+                   '<th scope="col">Task or stage</th><th scope="col">Requested route</th>'
+                   '<th scope="col">Reported actual route</th><th scope="col">Status</th>'
+                   '<th scope="col">Run ID</th><th scope="col">Evidence</th>'
+                   '</tr></thead><tbody>' + delegation_rows + '</tbody></table></div>') if delegation_rows else ''
     done = sum(task['status'] == 'done' for task in state['tasks'])
     total = len(state['tasks'])
     logo = ('<picture><source srcset="sanduq-logo-dark.png" media="(prefers-color-scheme: dark)">'
@@ -231,7 +246,7 @@ def render(state):
 <div class="table"><table id="tasks"><thead><tr><th scope="col">Task</th><th scope="col">Work</th><th scope="col">Phase</th>
 <th scope="col">Status</th><th scope="col">Agent</th>{token_heads}<th scope="col">Evidence or next step</th></tr></thead><tbody>{rows}</tbody>
 <tfoot><tr><th scope="row" colspan="5">Shown tasks</th>{token_foot}<td></td></tr></tfoot></table></div>
-{tokens}
+{tokens}{delegations}
 <h2>Phases</h2><ul>{phases}</ul><h2>Pull request</h2><p>{escape(state['pr'])}</p>
 <h2>Removed tasks</h2><ul>{archived}</ul></section>
 <section id="activity-panel" role="tabpanel" aria-labelledby="activity-tab" hidden>
@@ -386,7 +401,7 @@ def record_usage(state, args, parser):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     subs = parser.add_subparsers(dest='command', required=True)
-    for name in ('init', 'task', 'event', 'phase', 'pr', 'usage'):
+    for name in ('init', 'task', 'event', 'phase', 'pr', 'usage', 'sync'):
         sub = subs.add_parser(name)
         sub.add_argument('--output', required=True, type=Path)
         if name == 'init':
@@ -421,6 +436,8 @@ def main(argv=None):
                 sub.add_argument(flag, type=int)
             sub.add_argument('--harness')
             sub.add_argument('--model')
+        elif name == 'sync':
+            pass
         else:
             sub.add_argument('--url', required=True)
             sub.add_argument('--status', required=True, choices=('open', 'merged'))
@@ -465,6 +482,12 @@ def main(argv=None):
         state['pr'] = args.status + ': ' + args.url
     elif args.command == 'usage':
         record_usage(state, args, parser)
+    # The orchestrator calls sync after collecting a run. The tracked ledger is
+    # authoritative; the HTML report is a local view that can be rebuilt.
+    ledger = args.output.parent / 'delegations.json'
+    if ledger.is_file():
+        data = json.loads(ledger.read_text(encoding='utf-8'))
+        state['delegations'] = data.get('attempts', [])
     state['updated'] = stamp()
     args.output.mkdir(parents=True, exist_ok=True)
     state['logo'] = copy_logos(args.output)

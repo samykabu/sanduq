@@ -122,6 +122,45 @@ class CIGateTests(unittest.TestCase):
         self.assertEqual(result['status'], 'advisory_findings')
         self.assertFalse(result['feature_verified'])
 
+    def checkpoint_formats(self, run):
+        """The current digest and each legacy format an older checkpoint may carry."""
+        current = w.read(run.path)
+        snapshot = current['policy']
+        without_delegation = {k: v for k, v in snapshot.items() if k != 'delegation'}
+        def legacy(version, policy_snapshot, excluded):
+            state = copy.deepcopy(current)
+            state['policy'] = copy.deepcopy(policy_snapshot)
+            state['policy_digest'] = w.digest({k: v for k, v in policy_snapshot.items() if k not in excluded})
+            if version is None:
+                state.pop('policy_digest_version'); state.pop('ci_policy_digest')
+            else:
+                state['policy_digest_version'] = version
+            return state
+        return {'current': current,
+                'v2-with-delegation': legacy(2, snapshot, ('ci',)),
+                'v2-before-delegation': legacy(2, without_delegation, ('ci',)),
+                'full-with-delegation': legacy(None, snapshot, ()),
+                'full-before-delegation': legacy(None, without_delegation, ())}
+
+    def test_delegation_route_edit_keeps_ci_gate_current_in_every_digest_format(self):
+        run = self.ready()
+        self.assertEqual(w.read(run.path)['policy_digest_version'], w.POLICY_DIGEST_VERSION)
+        routed = copy.deepcopy(self.policy)
+        routed['delegation']['enabled'] = True
+        routed['delegation']['models']['codex']['standard'] = 'team-model'
+        routed['delegation']['install_scope'] = 'global'
+        routed = w.validate_policy(routed)
+        semantic = copy.deepcopy(self.policy)
+        semantic['execution']['checkpoints'] = 'every-phase'
+        semantic = w.validate_policy(semantic)
+        for name, state in self.checkpoint_formats(run).items():
+            with self.subTest(format=name):
+                w.write(run.path, state)
+                self.assertTrue(c.check(self.root, self.feature, self.policy)['passed'])
+                self.assertTrue(c.check(self.root, self.feature, routed)['passed'])
+                with self.assertRaisesRegex(w.WorkflowError, 'POLICY_CHANGED'):
+                    c.check(self.root, self.feature, semantic)
+
     def test_core_only_does_not_require_unselected_docs(self):
         self.ready();self.assertTrue(c.check(self.root,self.feature,self.policy)['passed'])
 

@@ -79,6 +79,7 @@ node "$DELEGATE" status <run_id>                 # starting|running|stalled|adri
 node "$DELEGATE" collect <run_id> --json         # the machine-readable result — parse this
 node "$DELEGATE" list                            # every run, oldest first
 node "$DELEGATE" prune --keep 20 --yes           # delete old run artifacts
+node "$DELEGATE" contract                        # machine-readable flags, fields, exit codes
 ```
 
 ## Reading the result
@@ -202,7 +203,7 @@ honours them.
 | `<bin> not found on PATH` | that CLI is not installed; run `doctor` |
 | `found <path> but could not resolve what it launches` | the CLI is installed behind a non-npm `.cmd` shim this driver cannot decode |
 | `doctor` shows `BROKEN: probe timed out` | usually a cold start; re-run `doctor` before concluding anything |
-| `supervisor failed to start` (exit 5) | the detached supervisor never acknowledged; check `runs/<id>/journal.jsonl` |
+| `supervisor failed to start` (exit 5) | the detached supervisor never acknowledged; check `runs/<id>/journal.jsonl`. The run is finalised `failed` with `containment_evidence: "the harness never launched"`; if the journal holds only `created` and `terminal` and the supervisor pid is gone, no agent ran |
 | `run <id> still executing` (exit 3) | add `--wait <seconds>` |
 | `Refusing to publish … still running` (exit 6) | the run is `adrift`: the supervisor died but the harness lives. Wait, or kill the pid it names |
 | `another process is finalising this run` (exit 7) | a live writer holds the claim; retry in a moment |
