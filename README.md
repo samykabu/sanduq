@@ -19,8 +19,10 @@ for a bounded task, or install the managed workflow to take a GitHub issue throu
 implementation, verification, documentation, and a pull request. Implementation uses a dedicated
 orchestrator and workers, with an HTML report that follows progress through an authorized PR merge.
 
-Workflow 1.4.0 adds token usage to the progress report, for each task, phase and the whole feature,
-and makes `--preserve-ci` work on any clone or worktree. Workflow 1.3.0 added issue decisions and an
+The unreleased Workflow 1.5.0 source adds opt-in model-aware delegation with
+editable routes and preserved run history. Workflow 1.4.0 adds token usage to
+the progress report for each task, phase and the whole feature, and makes
+`--preserve-ci` work on any clone or worktree. Workflow 1.3.0 added issue decisions and an
 optional evidence CI gate. Check [`catalog.json`](catalog.json) for the currently published version.
 If 1.4.0 is not yet listed, use the [local package procedure](#try-the-staged-workflow) in
 a disposable project until its release assets are published. See the
@@ -609,11 +611,11 @@ spec-prompt that Specify then binds to a branch.
 ## The managed Spec Kit workflow
 
 The [`workflow`](extensions/workflow/README.md) extension is the one that sequences the others. You
-choose QA and User Manual **once**, at init; after that a single resumable dispatcher runs each
+choose QA, User Manual and optional model-aware delegation at init; after that a single resumable dispatcher runs each
 stage, calls whichever provider your project actually has installed, and records what it did.
 
 ```bash
-python .specify/extensions/workflow/scripts/workflow.py init --qa on --manual off
+python .specify/extensions/workflow/scripts/workflow.py init --qa on --manual off --delegate off
 python .specify/extensions/workflow/scripts/install.py            # preview
 python .specify/extensions/workflow/scripts/install.py --apply    # backup, install, reconcile hooks
 python .specify/extensions/workflow/scripts/workflow.py doctor --project
@@ -621,6 +623,12 @@ python .specify/extensions/workflow/scripts/workflow.py doctor --project
 
 `doctor --project` is stricter than the plain doctor: it requires real board IDs, every Scope column,
 and every phase mapping. Claims enforce that check before any stage does semantic work.
+Delegation stays off unless selected with `--delegate on`. Later, edit
+`delegation.enabled`, model preferences, routes or task overrides in
+`.specify/workflow.yml` and run `doctor --project`. The workflow installs the
+bundled `delegate-task` skill at the configured scope when needed, records
+requested and verified actual routes separately, and keeps run history across
+upgrades. See the [workflow guide](extensions/workflow/README.md#optional-model-aware-delegation).
 
 ![The managed workflow, from scoping an issue through optional QA and manual analysis to one pull request](docs/assets/sanduq-managed-workflow.png)
 
@@ -737,10 +745,11 @@ edited to claim that a new package executed old work.
 
 | Path | Holds |
 | --- | --- |
-| `.specify/workflow.yml` | Project policy; which processes are on, provider preferences, context budget |
+| `.specify/workflow.yml` | Project policy; selected processes, provider and model routes, context budget |
 | `.specify/scope/github/` | Managed Scope artifacts |
 | `specs/<feature>/workflow/` | Per-feature checkpoint, handoff, resume prompt, receipts, evidence |
 | `specs/<feature>/workflow/progress/index.html` | Live implementation report through authorized PR merge |
+| `specs/<feature>/workflow/delegations.json` | Tracked delegation attempts, route decisions and usage |
 | `.specify/workflow/backups/installs/` | Backup ZIP and operation log for every install and upgrade |
 | `docs/workflow/implementation-plan.html` | The Archify dependency plan, regenerated after every decomposition |
 

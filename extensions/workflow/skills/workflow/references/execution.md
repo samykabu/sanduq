@@ -53,6 +53,22 @@ resources, acceptance checks and worker ID in the report and handoff. Give worke
 only their scope and the context needed to implement it. Workers must not stage,
 commit, push, merge, change shared report files or invoke another executor.
 
+When `.specify/workflow.yml` enables delegation, start each ready `T###` worker
+with `python .specify/extensions/workflow/scripts/delegate_dispatch.py start
+--feature specs/<feature> --id T###`. Pass `--task-file <path>` with its bounded
+assignment, owned paths, dependencies and acceptance checks. Pass `--cwd
+<isolated-worktree>` for concurrent writers. Collect the returned run ID with
+`delegate_dispatch.py collect`; follow any `replacement` ID and review the final
+result before accepting work. The adapter snapshots the route at start, records
+unavailable candidates and fallbacks, and allows one stronger retry for failed
+work with no measured edits. Do not reassign a running run when YAML changes.
+For a terminal result that is still too complex or incomplete, the orchestrator
+can run `delegate_dispatch.py reassign --feature specs/<feature> --run-id <id>
+--reason "<specific gap>"`; this starts at most one stronger attempt and records
+the reason. Review partial edits before choosing that path.
+When delegation is disabled, ignore routing comments and use the user's selected
+model with the existing worker tools.
+
 Fill available worker slots with ready, independent tasks. Reconsider the queue
 when a worker finishes or a dependency clears. Task order and a parallel marker
 are inputs to scheduling; inspect actual dependencies before running tasks
@@ -89,13 +105,18 @@ python .specify/extensions/workflow/scripts/progress.py usage --output specs/<fe
 python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T002 --agent <worker-id> --collect codex
 python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T003 --agent <run-id> --collect delegate --log .delegate/runs/<run-id>/result.json
 python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --overhead orchestrator --agent <orchestrator-id> --collect claude
+python .specify/extensions/workflow/scripts/progress.py sync --output specs/<feature>/workflow/progress
 ```
 
 `claude` finds `~/.claude/projects/*/*/subagents/agent-<id>.jsonl`, `codex` finds
 the rollout whose name ends with the thread ID, and `delegate` reads a
 delegate-task `result.json`. Pass `--log` for any other location, including the
-dispatcher's own session transcript. Only token counters are read. Collecting the
-same agent again replaces its figure, so collect overhead at each phase commit and
+dispatcher's own session transcript. Only token counters are read. `sync`
+rebuilds the visible delegation history from the tracked feature ledger;
+run it after each collected attempt and before the final report review. It shows
+the actual model only when the harness reported it. Raw prompts and transcripts
+stay in ignored `.delegate/runs/` artifacts. Collecting the same agent again
+replaces its figure, so collect overhead at each phase commit and
 at Finalize. A worker reused across tasks is split by each task's `running` to
 `done` window, so mark a task `running` when assigning it. When no log exists,
 record the worker's self-reported counts with `--fresh-input`, `--cached-input`

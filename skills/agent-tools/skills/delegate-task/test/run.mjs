@@ -1106,10 +1106,15 @@ t('E2E REPAIR-D1 success telemetry + exit 1 is published failed', () => {
 // nature. The result must say which, and the human view must not print a bare
 // null that reads like a bug.
 t('E2E a harness that reports neither cost nor model says so', () => {
-  const { result, runId } = e2e('reports', { FAKE_STREAM: CODEX_OK, FAKE_EXIT: '0' });
+  const { result, runId } = e2e('reports', { FAKE_STREAM: CODEX_OK, FAKE_EXIT: '0' },
+    ['--model', 'requested-codex-model']);
   assert.equal(result.cost_usd, null);
   assert.equal(result.cost_reported, false, 'codex genuinely never emits a cost');
   assert.equal(result.model_reported, false);
+  assert.equal(result.requested_model, 'requested-codex-model');
+  assert.equal(result.actual_model, null);
+  assert.equal(result.model_observed, false);
+  assert.equal(result.model, 'requested-codex-model', 'legacy field retains its old meaning');
   const human = spawnSync(process.execPath, [DRIVER, 'collect', runId],
     { encoding: 'utf8', timeout: 60_000, env: { ...process.env, ...RUNS_ENV } });
   assert.match(human.stdout, /cost {4}not reported by this harness/);

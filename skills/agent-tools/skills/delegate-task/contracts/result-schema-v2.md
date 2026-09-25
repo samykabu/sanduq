@@ -70,6 +70,9 @@ fields were never measured. It is never silently presented as though it had been
   "cost_usd": null,
   "cost_reported": false,
   "model_reported": false,
+  "requested_model": null,
+  "actual_model": null,
+  "model_observed": false,
 
   "session_id": "0198…",
   "session_capture": "streaming",
@@ -130,12 +133,21 @@ the per-line anti-DoS limit (1,000,000 characters, which can exceed that many UT
 
 ## `cost_reported` and `model_reported`
 
-Not every CLI reports every field. Codex emits neither a cost nor a model anywhere in its event
-stream, so both are `null` **by nature, not by a parsing failure**.
+Not every CLI reports every field. Codex emits neither a cost nor an observed
+model anywhere in its event stream, so `cost_usd` and `actual_model` are `null`
+**by nature, not by a parsing failure**. The legacy `model` field can still show
+the requested CLI override.
 
 These two booleans say which: `false` means the harness never reports it, so the `null` is
-expected and final. A `null` value with the flag `true` means we expected a figure and did not get
-one — which is a defect worth chasing.
+expected and final. For cost, a `null` value with `cost_reported: true` means an
+expected figure was not captured. For model identity, inspect `model_observed`
+and `actual_model` as described below.
+
+`model_reported` describes a harness capability, not proof that a particular
+run reported its model. `requested_model` is the CLI override. `actual_model`
+is populated only from parsed harness telemetry, and `model_observed` is true
+only in that case. The legacy `model` field may contain the request as a fallback;
+do not display it as the actual model without `model_observed: true`.
 
 The printed result renders the difference as "not reported by this harness" rather than a bare
 null, for the same reason `tokens.fidelity` exists: an absent measurement must not read as a

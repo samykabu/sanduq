@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 PRESETS = {'workflow': ('workflow', 'scope-gate', 'scope-brainstorm'),
            'scope': ('scope-gate', 'scope-brainstorm')}
-EXCLUDE = {'.git', '__pycache__', 'node_modules', '.specify', '.specify-dev', 'tests'}
+EXCLUDE = {'.git', '__pycache__', 'node_modules', '.specify', '.specify-dev', 'tests', 'test', 'runs'}
 
 
 def package(extension, output=None, root=ROOT):
@@ -25,6 +25,10 @@ def package(extension, output=None, root=ROOT):
     include(source, Path())
     for preset in PRESETS.get(extension, ()):
         include(root / 'presets' / preset, Path('presets') / preset)
+    if extension == 'workflow':
+        # Install the matching delegate-task skill from the same immutable
+        # workflow archive; consumer setup never resolves a floating branch.
+        include(root / 'skills/agent-tools/skills/delegate-task', Path('assets/delegate-task'))
     shared = root / 'extensions/scripts/shared/sanduq_freshness.py'
     if extension in ('assure', 'user-manual') and shared.exists():
         files[extension + '/scripts/sanduq_freshness.py'] = shared.read_bytes()

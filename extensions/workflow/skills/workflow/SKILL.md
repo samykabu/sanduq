@@ -22,7 +22,13 @@ the package's pinned `requirements.txt` when missing. Never install a floating t
   revised with `workflow.py ci` and `workflow.py decisions` later. Keep Status
   for the lifecycle; the Decision single-select field is separate.
   Discover existing effort units/preferences; preserve exact meaning. Run `init --qa on|off
-  --manual on|off`. Configure provider choices, context policy and scope preferences in
+  --manual on|off --delegate on|off`. Ask once whether model-aware delegation is
+  enabled; its default is off. Configure model preferences, routes, fallback order,
+  install scope and per-task overrides in the project's `.specify/workflow.yml`.
+  A later YAML edit can opt in or out without reinitializing. Run `delegation.py
+  annotate --feature specs/<feature>` to refresh pending task metadata after an
+  opt-in or route edit. Running work keeps its original route snapshot.
+  Configure provider choices, context policy and scope preferences in
   `.specify/workflow.yml`. Ask once where this project runs CI: GitHub-hosted runners,
   or self-hosted labels the user names. Do not assume either. Capture the runner labels
   per platform and whether that runner can `sudo apt-get` and provides Python, then record
@@ -96,6 +102,19 @@ the package's pinned `requirements.txt` when missing. Never install a floating t
    Unknown, estimated, stale or unreliable measurements do not justify a context pause.
    Continue ordinary stage transitions automatically and keep durable progress notes.
 4. Invoke the selected command in this host using its installed skill/command registration.
+   When `delegation.enabled` is true, instead use the claim's `delegation` route:
+   run `delegate_dispatch.py start --feature specs/<feature> --id stage:<stage>
+   --claim-token <token>`, then `delegate_dispatch.py collect --feature
+   specs/<feature> --run-id <id>` until terminal. If it returns a `replacement`,
+   collect that new run ID. Inspect actual outputs and checks before writing and
+   completing the normal stage receipt. A successful delegate result is candidate
+   evidence, not a passed stage. Failed, abandoned or unresolved work keeps the
+   claim active. The adapter distinguishes requested from harness-reported models;
+   an unreported actual model remains unverified. Disabled mode ignores old
+   routing tags and runs with the user's selected host model.
+   If the start response is lost, inspect the feature's `delegations.json` and
+   use `delegate_dispatch.py recover --feature specs/<feature> --intent-id <id>`
+   before considering another dispatch; an observation timeout is not a failed run.
    Read its current instruction source rather than guessing from a name. Native semantic
    commands may pause for real decisions. The managed preset prevents duplicate chaining.
    With `mode: revalidate`, retain the bound issue, feature path and existing branch.

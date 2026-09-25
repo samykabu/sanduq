@@ -1056,6 +1056,11 @@ function buildResult({
     // Distinguishes "this harness never says" from "we failed to parse it".
     cost_reported: Boolean(h.reports && h.reports.cost),
     model_reported: Boolean(h.reports && h.reports.model),
+    // `model` is retained for v2 readers and may fall back to the request.
+    // These fields let consumers tell an observed model from that fallback.
+    requested_model: meta.model || null,
+    actual_model: (parse && parse.model) || null,
+    model_observed: Boolean(parse && parse.model),
 
     session_id: sessionId || null,
     session_capture: h.session_capture,

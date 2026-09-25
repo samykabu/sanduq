@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Reviewed for release: the implementation progress report shows token usage per task, phase, overhead and feature, read from the agents' own harness logs (#24), and uses the Sanduq mark as its page icon; --preserve-ci installs and upgrades no longer roll back with CI_WORKFLOW_STALE on a clone or worktree without the local install receipt (#22)."
+  "versions": {"workflow": "1.5.0"},
+  "status": "implementation-in-progress",
+  "note": "Issue #26: opt-in model-aware delegation is under implementation and review. Publish only after the exact PR head, packaged archive and release verification pass."
 }

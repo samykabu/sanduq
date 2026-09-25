@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.5.0 (unreleased)
+
+- Add opt-in model-aware routing across workflow stages and implementation
+  tasks. Policy, model preferences, fallbacks and task overrides live in the
+  consumer's `.specify/workflow.yml`; delegation remains disabled by default.
+- Bundle `delegate-task` with the workflow package for project or global
+  installation. Record requested and harness-reported actual models separately,
+  including an explicit unverified state, fallback decisions, run evidence and
+  token usage in a feature-scoped ledger that survives upgrades.
+- Annotate pending tasks without changing their checkbox lines or semantic
+  fingerprints. Preserve active route snapshots and show attempts in the local
+  progress report.
+
 ## 1.4.0
 
 - The implementation progress report shows token usage (#24): fresh input,

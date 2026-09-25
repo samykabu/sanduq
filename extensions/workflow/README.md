@@ -1,6 +1,7 @@
 # Sanduq Workflow
 
-Workflow 1.4.0 adds token usage per task, phase and feature to the progress
+Unreleased Workflow 1.5.0 adds optional model-aware delegation. Workflow 1.4.0
+adds token usage per task, phase and feature to the progress
 report and makes `--preserve-ci` work on any checkout. Workflow 1.3.0 added issue
 decisions and an optional evidence CI gate. Check
 the repository catalog for the currently published version. See the
@@ -44,7 +45,8 @@ Spec Kit 1.0.11, commit 92b7cf7658a177cc417b7ddbeaa4c0a941a5f41b;
 its command completion is insufficient for production receipt semantics.
 Other versions require compatibility testing.
 
-For a managed project run `workflow.py init --qa on|off --manual on|off`, configure
+For a managed project run `workflow.py init --qa on|off --manual on|off --delegate
+on|off`, configure
 GitHub Project status mappings, run `install.py` preview/apply and run doctor. Only explicit
 selections enable processes. The dependency lock records exact intended versions;
 those pending releases cannot yet be installed from public release URLs.
@@ -72,6 +74,61 @@ repository, parent, feature and task ID; retries recover lost responses. Existin
 Project mappings are adopted only after verifying native parent links. Unmapped
 children block duplicate creation. `--sync-states` updates task issue completion
 without changing the publication evidence.
+
+## Optional model-aware delegation
+
+Delegation is off by default. Select it during init with `--delegate on`, or
+edit `delegation.enabled` in the consumer project's `.specify/workflow.yml` and
+run `workflow.py doctor --project`. The same YAML contains editable model names,
+routes, fallbacks, project/global skill install scope, and feature-qualified
+per-task overrides. The bundled model names are preferences, not proof that a
+particular CLI accepts them. Sanduq checks the installed `delegate-task` skill,
+Node and agent CLIs before dispatch; a rejected model is recorded and followed
+by the configured fallback. One stronger reassignment is allowed for failed work
+with no measured edits, or when the orchestrator explicitly marks a terminal
+result too complex with `delegate_dispatch.py reassign`. A running task keeps
+its start-time route when policy changes.
+
+`delegation.py annotate --feature specs/<feature>` adds readable metadata below
+pending `T###` tasks, preserving checkbox lines and completed tasks. The managed
+dispatcher also refreshes pending metadata when it claims a stage. Override a
+single task with `delegation.overrides["specs/<feature>/T001"]` in YAML. Routes
+resolve in this order: task override, YAML task-type route, shipped default.
+Disabled mode ignores existing annotations and runs with the user's selected
+model.
+
+For example, merge this override into the existing `delegation:` block (keep
+the generated `models:` and all six `routes:` entries):
+
+```yaml
+delegation:
+  enabled: true
+  install_scope: project
+  overrides:
+    specs/26-add-opt-in-model-aware-task-delegation/T001:
+      preferred: {harness: claude, tier: high}
+      fallbacks:
+        - {harness: selected, model: null}
+```
+
+`high`, `standard`, `light`, `documentation` and `review` resolve through the
+editable `models:` map. A
+`null` model asks the selected CLI to use its own default. `doctor --project`
+validates policy and installation; a model name is verified only when the CLI
+accepts a real dispatch. Use `delegation.py route --feature specs/<feature>
+--id T001 --type implementation` to inspect the resolved route before launch.
+
+The dispatcher retains stage claims. `delegate_dispatch.py start` and `collect`
+send semantic stages and bounded implementation tasks through the skill; the
+orchestrator checks artifacts before accepting a result. The tracked
+`specs/<feature>/workflow/delegations.json` records every attempt, requested
+route, fallback, result and usage. Raw prompts and logs remain in ignored
+`.delegate/runs/`. `progress.py sync` rebuilds the local HTML history view.
+When a harness does not report its actual model, the ledger and report say
+`unverified`; the requested model is never presented as measured fact.
+If a start response is lost, inspect the ledger's `starting` intent and run
+`delegate_dispatch.py recover --feature specs/<feature> --intent-id <id>`.
+It matches the driver's recorded intent before any replacement is scheduled.
 
 The project selects Disabled, Advisory, or Required CI evidence gating and
 individual rules at initialization or later. Managed-only scope lets ordinary
