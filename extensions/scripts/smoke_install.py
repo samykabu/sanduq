@@ -56,7 +56,7 @@ def smoke(host, superspec_source=None):
     for name in execution_names:
         assert protocol in snapshots[name], 'Missing execution protocol: ' + name
     installed_workflow = project / '.specify/extensions/workflow'
-    execution_files = ('skills/workflow/references/execution.md', 'scripts/progress.py')
+    execution_files = ('skills/workflow/references/execution.md', 'scripts/progress.py', 'scripts/usage.py')
     execution_snapshots = {}
     for relative in execution_files:
         installed = (installed_workflow / relative).read_bytes()
