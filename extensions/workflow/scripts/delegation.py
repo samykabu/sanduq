@@ -9,6 +9,7 @@ import os
 import re
 import shutil
 import socket
+import stat
 import subprocess
 import sys
 import time
@@ -149,6 +150,32 @@ def lock_held(path, token):
     return bool(owner and owner.get('token') == token)
 
 
+def release_owned_lock(path, token):
+    """Release our lock after transient Windows readers close their handles.
+
+    Opening a lock file to inspect its owner can briefly prevent unlink on
+    Windows. Recheck the token on every retry so a replacement lock is never
+    removed by the former owner.
+    """
+    deadline = time.monotonic() + 5
+    while True:
+        owner = lock_owner(path)
+        if owner is not None:
+            if owner.get('token') != token:
+                return
+            try:
+                path.unlink(missing_ok=True)
+                return
+            except PermissionError:
+                pass
+        elif not path.exists():
+            return
+        if time.monotonic() >= deadline:
+            raise DelegationError('DELEGATION_LOCK_RELEASE_BUSY: could not release ' + str(path) +
+                                  '; check that no process still has the file open')
+        time.sleep(0.02)
+
+
 @contextmanager
 def file_lock(path, timeout, busy):
     """Exclusive cross-process lock that recovers a dead owner's lock file.
@@ -180,8 +207,50 @@ def file_lock(path, timeout, busy):
         os.close(fd)
         yield token
     finally:
-        if lock_held(path, token):
-            path.unlink(missing_ok=True)
+        release_owned_lock(path, token)
+
+
+# Upgrade and install hold these while they snapshot, change and may roll back
+# the project's managed files, including every delegation ledger.
+MAINTENANCE_LOCKS = ('upgrade.lock', 'install.lock')
+
+
+def maintenance_in_progress(root, owners=()):
+    """Name the upgrade or install lock held by a process other than ``owners``.
+
+    A lock with no readable owner yet counts as held: its creator writes the
+    owner immediately after the exclusive create.
+    """
+    runtime = Path(root) / '.specify/workflow/runtime'
+    for name in MAINTENANCE_LOCKS:
+        path = runtime / name
+        if not path.exists():
+            continue
+        pid = (lock_owner(path) or {}).get('pid')
+        if pid is not None and pid in owners:
+            continue
+        return name
+    return None
+
+
+def require_no_maintenance(root, owners=()):
+    held = maintenance_in_progress(root, owners)
+    if held is None:
+        return
+    # These locks are never recovered automatically: a crashed upgrade or
+    # install leaves its lock behind, and waiting will not clear it.
+    lock = '.specify/workflow/runtime/' + held
+    owner = lock_owner(Path(root) / lock) or {}
+    pid = owner.get('pid')
+    who = ('pid ' + str(pid) + (' (created ' + str(owner['created']) + ')' if owner.get('created') else '')
+           if pid is not None else 'a process that has not recorded its pid')
+    check = ('check with "tasklist /FI \\"PID eq ' + str(pid) + '\\"" on Windows or "ps -p ' + str(pid) +
+             '" elsewhere' if pid is not None else 'check for a running upgrade.py or install.py')
+    raise DelegationError(
+        'WORKFLOW_UPGRADE_IN_PROGRESS: ' + lock + ' is held by ' + who + '. If that process is '
+        'still running, retry once it finishes. If it is not (' + check + '), the upgrade or '
+        'install crashed and the lock is stale: delete ' + lock + ', then rerun the upgrade or '
+        'install, because its rollback may not have completed')
 
 
 def validate_candidate(candidate):
@@ -250,6 +319,13 @@ COMPOUND_HEADS = (r'(?:logs?|logging|trails?|queues?|apis?|endpoints?|services?|
                   r'buttons?|links?|runners?|frameworks?|environments?|env|config|configuration|'
                   r'infrastructure|infra|containers?|databases?|db|servers?|accounts?|users?|'
                   r'reporters?|matrix|schema|state|store|entries|entry|trigger|hooks?)')
+# A documentation file named as the direct object or destination: a README,
+# changelog or contributing guide with or without its extension, a path under a
+# top-level docs/ folder, or any Markdown, reStructuredText or AsciiDoc file. A
+# code file under a nested docs folder ("src/docs/parser.py") is not one.
+DOC_FILE = (r'(?:(?:readme|changelog|contributing)(?:\.(?:md|mdx|rst|txt|adoc))?|'
+            r'docs?/[\w./-]*[\w-]|(?:[\w.-]+/)*[\w.-]+\.(?:md|mdx|rst|adoc))')
+DOC_END = r'(?:\s+(?:for|with|to|in|on|about|of)\b|\s*[.:;]?$)'
 # Only the task's leading action decides unmarked work, so a domain noun such
 # as "audit logging" or "review queue" never reroutes an implementation task,
 # whether it leads the description or not.
@@ -260,10 +336,12 @@ LEADING_ACTIONS = (
            r'factor(?:y|ies)|doubles?|mocks?|suites?|coverage|plans?|results?|' + COMPOUND_HEADS[3:-1] +
            r')\b)|capture\s+(?:[\w/-]+\s+){0,2}?screenshots?\b'),
     ('documentation', r'document\s+(?:the|how|why|all|each|every|our|a|an)\b|'
+                      r'document\s+(?:[\w/-]+\s+){0,4}?(?:in|into|to|under)\s+' + DOC_FILE + DOC_END + '|'
+                      r'(?:write|update|add|create|revise)\s+(?:the\s+)?' + DOC_FILE +
+                      r'(?:\s+(?:section|page|entry))?' + DOC_END + '|'
                       r'(?:write|update|add|create|revise)\s+(?:[\w/-]+\s+){0,3}?'
                       r'(?:docs?|documentation|readme|user manual|manual|release notes|changelog|guide)'
-                      r'(?:\s+(?:section|page|entry))?'
-                      r'(?:\s+(?:for|with|to|in|on|about|of)\b|\s*[.:;]?$)'),
+                      r'(?:\s+(?:section|page|entry))?' + DOC_END),
     ('review', r'(?:review|audit|inspect)\b(?!\s+' + COMPOUND_HEADS + r'\b)'),
 )
 # A leading check that also asks for code changes ("Inspect the parser and fix
@@ -461,6 +539,28 @@ def global_root():
     return Path.home()
 
 
+def is_junction(path):
+    """True for a Windows directory junction, which ``is_symlink`` does not report.
+
+    ``Path.is_junction`` only exists from Python 3.12; earlier versions read the
+    reparse tag directly.
+    """
+    path = Path(path)
+    if hasattr(path, 'is_junction'):
+        return path.is_junction()
+    if os.name != 'nt':
+        return False
+    try:
+        return os.lstat(path).st_reparse_tag == stat.IO_REPARSE_TAG_MOUNT_POINT
+    except (OSError, AttributeError):
+        return False
+
+
+def is_link(path):
+    """A symlink or a Windows junction: an entry that points at a folder elsewhere."""
+    return Path(path).is_symlink() or is_junction(path)
+
+
 def driver_compatibility(node, driver):
     """Return None when the driver reports the required contract, else the reason."""
     try:
@@ -601,18 +701,22 @@ def rejected_copies(status):
              for path in status.get('broken') or []] + list(status.get('incompatible') or []))
 
 
-def install_skill(root, host, scope, force_scope=False):
-    """Reuse any usable copy; otherwise install the bundled skill at the configured scope.
+def install_skill(root, host, scope, force_scope=False, upgrade_owner=None):
+    """Reuse any usable copy; otherwise install the bundled skill at ``scope``.
 
     Installation, legacy backup moves and backup rollback run under a lock per
     scope, so concurrent dispatchers never interleave; a waiter re-inspects and
-    reuses the copy the first one installed.
+    reuses the copy the first one installed. ``force_scope`` refreshes the copy
+    at ``scope`` even when a usable one exists. While an upgrade or install
+    owns the project's managed files, only that upgrade or install may change a
+    skill; everyone else is refused inside the project lock, which it drains.
     """
     require(scope in ('project', 'global'), 'DELEGATION_SCOPE_INVALID')
     legacy = legacy_backups(root)
     with contextlib.ExitStack() as stack:
         stack.enter_context(file_lock(install_lock_path(root, 'project'), INSTALL_LOCK_TIMEOUT,
                                       'DELEGATE_SKILL_INSTALL_BUSY'))
+        require_no_maintenance(root, (os.getpid(), upgrade_owner))
         if scope == 'global' or legacy['global']:
             stack.enter_context(file_lock(install_lock_path(root, 'global'), INSTALL_LOCK_TIMEOUT,
                                           'DELEGATE_SKILL_INSTALL_BUSY'))
@@ -657,25 +761,31 @@ def install_skill_locked(root, host, scope, force_scope):
         shutil.rmtree(staging, ignore_errors=True)
         raise
     rejected = {item['path']: item['reason'] for item in rejected_copies(existing)}
-    backup = move_aside(target, backups) if target.exists() or target.is_symlink() else None
+    # A dangling junction neither exists nor is a symlink, but it is still the
+    # user's entry: move the link itself aside so a failure can put it back.
+    dangling = is_link(target) and not target.exists()
+    backup = move_aside(target, backups) if target.exists() or is_link(target) else None
+    placed = False
     try:
         staging.rename(target)
+        placed = True
         require(all((target / name).is_file() for name in SKILL_FILES), 'DELEGATE_SKILL_INSTALL_FAILED')
     except Exception:
-        if target.is_symlink():
-            target.unlink()
-        elif target.exists():
+        # Only the copy this call put in place is removed. Anything still at the
+        # target after a failed rename belongs to someone else and stays.
+        if placed and not is_link(target) and target.exists():
             require(target.resolve().is_relative_to(target_root.resolve()),
                     'DELEGATE_SKILL_ROLLBACK_OUTSIDE_SCOPE')
             shutil.rmtree(target)
         shutil.rmtree(staging, ignore_errors=True)
-        if backup is not None:
+        if backup is not None and not os.path.lexists(target):
             backup.rename(target)
         raise
     replaced = None
     if backup is not None:
         replaced = [{'path': str(target), 'backup': str(backup),
-                     'reason': rejected.get(str(target), 'replaced at the configured scope')}]
+                     'reason': rejected.get(str(target), 'dangling link' if dangling else
+                                            'replaced at the configured scope')}]
         notices.append('DELEGATE_SKILL_REPLACED: ' + str(target) + ' (' + replaced[0]['reason'] +
                        ') was moved to ' + str(backup) + '; carry any local customisation '
                        'into the new copy by hand')
@@ -685,7 +795,29 @@ def install_skill_locked(root, host, scope, force_scope):
             'legacy_backups_moved': moved, 'notices': notices}
 
 
-def doctor(root, host, install=False, scope='project'):
+def owned_scope(root, host, driver):
+    """The scope whose Sanduq install location holds ``driver``, else None.
+
+    Only a real folder at the project or global location Sanduq installs to is
+    Sanduq's to refresh. A driver override, a plugin copy, another discovery
+    root or a symlinked or junctioned folder belongs to someone else.
+    """
+    agent = '.agents' if host == 'codex' else '.claude'
+    folder = Path(driver).resolve().parent
+    for scope, base in (('project', root), ('global', global_root())):
+        location = base / agent / 'skills/delegate-task'
+        if not is_link(location) and location.is_dir() and location.resolve() == folder:
+            return scope
+    return None
+
+
+def health_error(status):
+    """The failure code, with the failing copy and next action when doctor names them."""
+    error = status.get('error', 'DELEGATE_SKILL_UNAVAILABLE')
+    return error + ': ' + status['path'] + ': ' + status['action'] if status.get('action') else error
+
+
+def doctor(root, host, install=False, scope='project', upgrade_owner=None):
     node = shutil.which('node')
     if not node:
         return {'ok': False, 'error': 'NODE_MISSING'}
@@ -693,20 +825,34 @@ def doctor(root, host, install=False, scope='project'):
     version = re.search(r'v?(\d+)', probe.stdout)
     if probe.returncode or not version or int(version[1]) < 18:
         return {'ok': False, 'error': 'NODE_18_REQUIRED'}
-    status = install_skill(root, host, scope) if install else inspect_skill(root, host)
+    status = (install_skill(root, host, scope, upgrade_owner=upgrade_owner) if install
+              else inspect_skill(root, host))
     if not status['ok']:
         return status
     result = subprocess.run([node, status['driver'], 'doctor'], cwd=root,
                             capture_output=True, text=True, encoding='utf-8')
-    if result.returncode and install:
+    refresh = owned_scope(root, host, status['driver'])
+    if result.returncode and install and not status.get('installed') and refresh:
+        # Refresh the copy that failed, where it is. Installing at the
+        # configured scope instead would leave the failing copy first in the
+        # search order, and every later dispatch would replace the other one.
         first = status
-        status = install_skill(root, host, scope, force_scope=True)
+        status = install_skill(root, host, refresh, force_scope=True, upgrade_owner=upgrade_owner)
         status['notices'] = (first.get('notices') or []) + (status.get('notices') or [])
         result = subprocess.run([node, status['driver'], 'doctor'], cwd=root,
                                 capture_output=True, text=True, encoding='utf-8')
     if result.returncode:
+        owned = owned_scope(root, host, status['driver']) is not None
+        action = ('the copy was refreshed from the bundle and still fails; inspect the diagnostic'
+                  if status.get('installed') else
+                  'run "python .specify/extensions/workflow/scripts/delegation.py install" to refresh it'
+                  if owned else
+                  'Sanduq does not own this copy (a driver override, plugin, symlinked folder or '
+                  'another discovery root) and will not replace it; repair it, or remove it so a '
+                  'Sanduq install is used')
         return {**status, 'ok': False, 'error': 'DELEGATE_SKILL_DOCTOR_FAILED',
-                'diagnostic': result.stderr.strip() or result.stdout.strip()}
+                'path': str(Path(status['driver']).resolve().parent), 'owned': owned,
+                'action': action, 'diagnostic': result.stderr.strip() or result.stdout.strip()}
     available = {}
     cli_errors = {}
     for harness in ('codex', 'claude'):

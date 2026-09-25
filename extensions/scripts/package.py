@@ -9,7 +9,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 PRESETS = {'workflow': ('workflow', 'scope-gate', 'scope-brainstorm'),
            'scope': ('scope-gate', 'scope-brainstorm')}
-EXCLUDE = {'.git', '__pycache__', 'node_modules', '.specify', '.specify-dev', 'tests', 'test', 'runs'}
+EXCLUDE = {'.git', '__pycache__', 'node_modules', '.specify', '.specify-dev', 'tests', 'test', 'runs',
+           # Caches and reports a local test or lint run leaves behind, never package content.
+           '.pytest_cache', '.mypy_cache', '.ruff_cache', '.hypothesis', '.tox', '.nox', 'htmlcov',
+           '.coverage', '.nyc_output', 'coverage'}
 
 
 def package(extension, output=None, root=ROOT):
@@ -20,7 +23,7 @@ def package(extension, output=None, root=ROOT):
     def include(directory, prefix):
         for path in directory.rglob('*'):
             relative = path.relative_to(directory)
-            if path.is_file() and not any(part in EXCLUDE for part in relative.parts) and path.suffix != '.pyc':
+            if path.is_file() and not any(part in EXCLUDE for part in relative.parts) and path.suffix not in ('.pyc', '.pyo'):
                 files[(Path(extension) / prefix / relative).as_posix()] = path.read_bytes()
     include(source, Path())
     for preset in PRESETS.get(extension, ()):
