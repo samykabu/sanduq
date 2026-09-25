@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.4.0
 
 - The implementation progress report shows token usage (#24): fresh input,
   cached input and output for each task, a total of the tasks the filters show,
@@ -13,6 +13,20 @@
   The total covers implementation only; scoping, specification and planning come
   before the report exists.
 - The report uses the Sanduq mark as its page icon.
+- `install.py --preserve-ci` and `upgrade.py --preserve-ci` no longer roll back
+  with `CI_WORKFLOW_STALE` on a clone, worktree or machine without the
+  git-excluded `install-receipt.json` (#22). The installer hands the preserved
+  path straight to its health check, and the tracked `install-lock.json` now
+  records `preserved_ci` so every checkout treats that file as project-owned.
+  A lock that records nothing preserved takes precedence over an old local
+  receipt that still names the file.
+- `upgrade.py --preserve-ci` records the preserved file in the receipt before
+  it runs the target package's installer, so a target that reads only the
+  receipt also passes its health check. The upgrade snapshot restores the
+  receipt on rollback.
+- Upgrading to 1.3.0 with `--preserve-ci` from a checkout without the receipt
+  still fails, because 1.3.0's installer carries the original defect. Target
+  1.4.0 instead.
 
 ## 1.3.0
 
