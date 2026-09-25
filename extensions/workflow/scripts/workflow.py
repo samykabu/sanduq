@@ -62,14 +62,33 @@ def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
+POLICY_DIGEST_VERSION = 3
+# Sections that place or route work without changing what feature evidence means.
+OPERATIONAL_POLICY = ('ci', 'delegation')
+
+
 def delivery_digest(policy):
-    """CI placement does not change the meaning of feature-stage evidence."""
-    return digest({key: value for key, value in policy.items() if key != 'ci'})
+    """CI placement and delegation routing do not change the meaning of feature-stage evidence."""
+    return digest({key: value for key, value in policy.items() if key not in OPERATIONAL_POLICY})
 
 
 def checkpoint_policy_digest(state, policy):
-    """Preserve the full-policy hash contract of pre-split checkpoints."""
-    return delivery_digest(policy) if state.get('policy_digest_version') == 2 else digest(policy)
+    """Express the current policy in the digest format the checkpoint recorded.
+
+    Version 2 excluded only CI and pre-split checkpoints hashed the full policy.
+    Both hashed whatever delegation section their policy snapshot carried (none
+    before delegation existed), so that section is reused here: enabling,
+    disabling or rerouting delegation mid-lifecycle is never a semantic change.
+    """
+    version = state.get('policy_digest_version')
+    if version == POLICY_DIGEST_VERSION:
+        return delivery_digest(policy)
+    shaped = {key: value for key, value in policy.items()
+              if key != 'delegation' and not (version == 2 and key == 'ci')}
+    snapshot = state.get('policy')
+    if isinstance(snapshot, dict) and 'delegation' in snapshot:
+        shaped['delegation'] = snapshot['delegation']
+    return digest(shaped)
 
 
 def write(path, value):
@@ -444,18 +463,36 @@ def ci_errors(root, policy, preserved=None):
     return errors
 
 
-def doctor(root, policy, project=False, preserved_ci=None):
+def delegation_errors(root, policy):
+    """Read-only delegation health with the command that repairs a missing skill."""
+    from delegation import doctor as delegation_doctor
+    health = delegation_doctor(root, active_host(root))
+    if not health['ok']:
+        error = health['error']
+        if error in ('DELEGATE_SKILL_MISSING', 'DELEGATE_SKILL_BROKEN', 'DELEGATE_SKILL_INCOMPATIBLE',
+                     'DELEGATE_SKILL_DOCTOR_FAILED'):
+            scope = policy['delegation']['install_scope']
+            details = [item['path'] + ' (' + item['reason'] + ')' for item in health.get('incompatible') or []]
+            if details:
+                error += ': ' + '; '.join(details)
+            error += (': delegation is enabled but the delegate-task skill is not usable; run '
+                      '"python .specify/extensions/workflow/scripts/delegation.py install" to install it at '
+                      'the configured ' + scope + ' scope (delegation.install_scope), or set '
+                      'delegation.enabled to false')
+        return [error]
+    if not any(health['harnesses'].values()):
+        return ['DELEGATE_AGENT_CLI_UNAVAILABLE: no supported Codex or Claude CLI']
+    return []
+
+
+def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True):
     needed = ['scope', 'project', 'pr'] + (['assure'] if policy['processes']['qa'] else []) + (['user-manual'] if policy['processes']['user_manual'] else [])
     errors = ['DEPENDENCY_UNAVAILABLE: ' + name + ' ' + RANGES[name] for name in needed if not compatible(root, name)]
     if active_host(root) not in ('codex','claude'):
         errors.append('HOST_UNSUPPORTED: this release supports Codex and Claude skills mode')
-    if policy.get('delegation', {}).get('enabled') and active_host(root) in ('codex', 'claude'):
-        from delegation import doctor as delegation_doctor
-        delegation_health = delegation_doctor(root, active_host(root))
-        if not delegation_health['ok']:
-            errors.append(delegation_health['error'])
-        elif not any(delegation_health['harnesses'].values()):
-            errors.append('DELEGATE_AGENT_CLI_UNAVAILABLE: no supported Codex or Claude CLI')
+    if (check_delegation and policy.get('delegation', {}).get('enabled') and
+            active_host(root) in ('codex', 'claude')):
+        errors += delegation_errors(root, policy)
     bridge = read(root / '.specify/superpowers-handoff.json', {})
     if bridge.get('status') in ('executing', 'blocked'):
         errors.append('LEGACY_EXECUTOR_OWNS_FEATURE: reconcile the recorded bridge handoff before managed execution')
@@ -552,7 +589,13 @@ def fingerprint_files(root, paths):
                 content = re.sub(rb'(?m)^(\s*- )\[[ xX]\]', rb'\1[ ]', content)
                 # Routing comments are operational metadata. Route policy changes
                 # invalidate future dispatch, not earlier semantic task receipts.
-                content = re.sub(rb'(?m)^[ \t]*<!-- sanduq-delegation \{[^\r\n]*\} -->(?:\r?\n|$)', b'', content)
+                # A marker drops together with the newline that precedes it, so a
+                # final task line annotated without a terminal newline, or one an
+                # earlier release joined to its marker, hashes like the original.
+                marker = rb'[ \t]*<!-- sanduq-delegation \{[^\r\n]*\} -->[ \t]*(?=\r?\n|\Z)'
+                content = re.sub(rb'(?<=[^ \t\r\n])' + marker + rb'\r?\n\Z', b'', content)
+                content = re.sub(rb'\A' + marker + rb'(?:\r?\n)?', b'', content)
+                content = re.sub(rb'(?:\r?\n)?' + marker, b'', content)
             result[relative] = hashlib.sha256(content).hexdigest()
         else:
             result[relative] = None
@@ -714,7 +757,7 @@ class Run:
                                                       'invalidated': invalidated, 'preserved_as_historical': [s for s in state['receipts'] if s not in invalidated]})
             state['dependency_digest'] = package_digest(self.root)
             state['commands'] = commands
-            state['policy_digest_version'] = 2
+            state['policy_digest_version'] = POLICY_DIGEST_VERSION
             state['ci_policy_digest'] = digest(self.policy['ci'])
             if policy_digest != old_policy_digest:
                 state.setdefault('policy_changes', []).append({'from': old_policy_digest, 'to': policy_digest,
@@ -757,7 +800,7 @@ class Run:
             commands = resolve_commands(self.root, self.policy)
             state = {'schema_version': SCHEMA, 'run_id': uuid.uuid4().hex, 'repo_path': str(self.root),
                      'branch': git(self.root, 'branch', '--show-current'), 'feature': self.relative,
-                     'issue': issue, 'policy_digest_version': 2,
+                     'issue': issue, 'policy_digest_version': POLICY_DIGEST_VERSION,
                      'policy_digest': delivery_digest(self.policy),
                      'ci_policy_digest': digest(self.policy['ci']), 'commands': commands,
                      'policy': copy.deepcopy(self.policy),
@@ -793,16 +836,12 @@ class Run:
             require(not (self.root / '.specify/workflow/runtime/upgrade.lock').exists(), 'WORKFLOW_UPGRADE_IN_PROGRESS')
             state = self.load()
             require(not state['active'], 'STAGE_ALREADY_ACTIVE: recover or finish the recorded claim')
-            if self.policy['delegation']['enabled']:
-                from delegation import annotate_tasks, doctor as delegation_doctor
-                delegation_health = delegation_doctor(self.root, active_host(self.root), install=True,
-                                                      scope=self.policy['delegation']['install_scope'])
-                require(delegation_health['ok'], delegation_health.get('error', 'DELEGATE_SKILL_UNAVAILABLE'))
-                annotate_tasks(self.root, self.relative, self.policy['delegation'])
             for path in (self.root / 'specs').glob('*/workflow/checkpoint.json'):
                 require(path == self.path or not read(path, {}).get('active'), 'OTHER_FEATURE_STAGE_ACTIVE: ' + str(path))
             require(state['dependency_digest'] == package_digest(self.root), 'DEPENDENCY_CHANGED: review upgrade and migrate the checkpoint before execution')
-            health = doctor(self.root, self.policy, project=True)
+            # Delegation health is checked below, after every rejection, because
+            # the claim may install the skill it would otherwise report missing.
+            health = doctor(self.root, self.policy, project=True, check_delegation=False)
             require(health['ok'], '; '.join(health['errors']))
             gate = context_gate(self.policy, usage)
             if gate['pause']:
@@ -811,6 +850,19 @@ class Run:
             if not nxt.get('stage'):
                 return nxt
             stage = nxt['stage']
+            if self.policy['delegation']['enabled']:
+                # Side effects only once a stage will be claimed: a rejected claim
+                # leaves tasks.md and every skill location untouched.
+                from delegation import annotate_tasks, doctor as delegation_doctor
+                delegation_health = delegation_doctor(self.root, active_host(self.root), install=True,
+                                                      scope=self.policy['delegation']['install_scope'])
+                require(delegation_health['ok'], delegation_health.get('error', 'DELEGATE_SKILL_UNAVAILABLE'))
+                require(any(delegation_health['harnesses'].values()),
+                        'DELEGATE_AGENT_CLI_UNAVAILABLE: no supported Codex or Claude CLI')
+                annotate_tasks(self.root, self.relative, self.policy['delegation'])
+                notices = delegation_health.get('notices') or []
+            else:
+                notices = []
             current_policy_digest = checkpoint_policy_digest(state, self.policy)
             if state['policy_digest'] != current_policy_digest:
                 state.setdefault('policy_changes', []).append({'from':state['policy_digest'],'to':current_policy_digest,'at':now()})
@@ -835,7 +887,11 @@ class Run:
             state['status'] = 'in-progress'
             write(self.root / '.specify/feature.json', {'feature_directory': self.relative})
             self.save(state)
-            return {**state['active'], 'command': state['commands'][stage], 'feature': self.relative, 'issue': state['issue']}
+            claimed = {**state['active'], 'command': state['commands'][stage], 'feature': self.relative, 'issue': state['issue']}
+            if notices:
+                # Reported to the caller only; the checkpoint keeps the claim itself.
+                claimed['notices'] = notices
+            return claimed
 
     def complete(self, token, receipt):
         with locked(self.lock):

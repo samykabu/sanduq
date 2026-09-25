@@ -342,7 +342,9 @@ node "$DELEGATE" doctor
 
 Run artifacts hold your task text, the full prompt, and the harness's raw output. Set
 `DELEGATE_RUNS_DIR`, add `.delegate/` to the project's `.gitignore`, and clear old runs with
-`node "$DELEGATE" prune --keep 20 --yes`.
+`node "$DELEGATE" prune --keep 20 --yes`. `node "$DELEGATE" contract` prints the flags, result
+fields and exit codes the driver guarantees (`delegate-task.driver.v1`); the managed workflow reuses
+an installed copy only when this contract matches.
 
 ### Claude Code plugin installation
 
@@ -623,12 +625,17 @@ python .specify/extensions/workflow/scripts/workflow.py doctor --project
 
 `doctor --project` is stricter than the plain doctor: it requires real board IDs, every Scope column,
 and every phase mapping. Claims enforce that check before any stage does semantic work.
-Delegation stays off unless selected with `--delegate on`. Later, edit
-`delegation.enabled`, model preferences, routes or task overrides in
-`.specify/workflow.yml` and run `doctor --project`. The workflow installs the
-bundled `delegate-task` skill at the configured scope when needed, records
-requested and verified actual routes separately, and keeps run history across
-upgrades. See the [workflow guide](extensions/workflow/README.md#optional-model-aware-delegation).
+Delegation stays off unless selected with `--delegate on`. To opt in later, set
+`delegation.enabled` (and any model preferences, routes or task overrides) in
+`.specify/workflow.yml`, run `doctor --project` (read-only; it names the fix), then
+`delegation.py install`. That command reuses a usable project or global
+`delegate-task` copy and installs the bundled one at the configured scope only when
+neither passes the driver contract check; a replaced copy is backed up outside the
+skill folders and reported as a `DELEGATE_SKILL_REPLACED` notice. Turning delegation on or off or changing routes never invalidates
+finished stage receipts or the CI evidence gate. The dispatcher records requested
+and harness-reported models separately, falls back when a CLI rejects a model, and
+keeps a tracked attempt ledger across upgrades. See the
+[workflow guide](extensions/workflow/README.md#optional-model-aware-delegation).
 
 ![The managed workflow, from scoping an issue through optional QA and manual analysis to one pull request](docs/assets/sanduq-managed-workflow.png)
 

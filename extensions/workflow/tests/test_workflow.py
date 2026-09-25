@@ -1,3 +1,4 @@
+import copy
 import importlib.util
 import json
 import subprocess
@@ -296,7 +297,7 @@ class WorkflowTests(unittest.TestCase):
         result = run.migrate('Upgrade added the ci selection')
         state = w.read(run.path)
         self.assertEqual(state['policy_digest'], w.delivery_digest(run.policy))
-        self.assertEqual(state['policy_digest_version'], 2)
+        self.assertEqual(state['policy_digest_version'], w.POLICY_DIGEST_VERSION)
         self.assertEqual(state['ci_policy_digest'], w.digest(run.policy['ci']))
         self.assertIn('scope', state['receipts'])
         self.assertEqual(state['policy_changes'][-1]['via'], 'migrate')
@@ -323,6 +324,28 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(before, w.delivery_digest(run.policy))
         self.assertEqual(run.next(state)['stage'], 'specify')
         self.assertIn('scope', state['receipts'])
+
+    def test_delegation_selection_and_route_edits_keep_receipts_current(self):
+        run = self.run_object(); claim = run.claim(self.usage()); run.complete(claim['token'], self.receipt('scope'))
+        state = w.read(run.path)
+        # A 1.4.0 checkpoint: CI split out, no delegation section in its snapshot.
+        legacy = copy.deepcopy(state)
+        legacy['policy'].pop('delegation')
+        legacy['policy_digest_version'] = 2
+        legacy['policy_digest'] = w.digest({k: v for k, v in legacy['policy'].items() if k != 'ci'})
+        for name, recorded in (('current', state), ('v2-before-delegation', legacy)):
+            with self.subTest(checkpoint=name):
+                w.write(run.path, recorded)
+                for edit in ({'enabled': True}, {'enabled': True, 'install_scope': 'global'},
+                             {'enabled': False}):
+                    self.policy['delegation'].update(edit)
+                    self.policy['delegation']['models']['codex']['standard'] = 'team-model-' + str(len(edit))
+                    self.configure()
+                    run = self.run_object()
+                    current = run.load()
+                    self.assertEqual(current['policy_digest'], w.checkpoint_policy_digest(current, run.policy))
+                    self.assertEqual(run.next(current)['stage'], 'specify')
+                    self.assertIn('scope', current['receipts'])
 
     def test_explicit_upgrade_revalidation_invalidates_from_selected_stage(self):
         run=self.run_object();c=run.claim(self.usage());run.complete(c['token'],self.receipt('scope'))

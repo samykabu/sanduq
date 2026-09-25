@@ -75,61 +75,6 @@ Project mappings are adopted only after verifying native parent links. Unmapped
 children block duplicate creation. `--sync-states` updates task issue completion
 without changing the publication evidence.
 
-## Optional model-aware delegation
-
-Delegation is off by default. Select it during init with `--delegate on`, or
-edit `delegation.enabled` in the consumer project's `.specify/workflow.yml` and
-run `workflow.py doctor --project`. The same YAML contains editable model names,
-routes, fallbacks, project/global skill install scope, and feature-qualified
-per-task overrides. The bundled model names are preferences, not proof that a
-particular CLI accepts them. Sanduq checks the installed `delegate-task` skill,
-Node and agent CLIs before dispatch; a rejected model is recorded and followed
-by the configured fallback. One stronger reassignment is allowed for failed work
-with no measured edits, or when the orchestrator explicitly marks a terminal
-result too complex with `delegate_dispatch.py reassign`. A running task keeps
-its start-time route when policy changes.
-
-`delegation.py annotate --feature specs/<feature>` adds readable metadata below
-pending `T###` tasks, preserving checkbox lines and completed tasks. The managed
-dispatcher also refreshes pending metadata when it claims a stage. Override a
-single task with `delegation.overrides["specs/<feature>/T001"]` in YAML. Routes
-resolve in this order: task override, YAML task-type route, shipped default.
-Disabled mode ignores existing annotations and runs with the user's selected
-model.
-
-For example, merge this override into the existing `delegation:` block (keep
-the generated `models:` and all six `routes:` entries):
-
-```yaml
-delegation:
-  enabled: true
-  install_scope: project
-  overrides:
-    specs/26-add-opt-in-model-aware-task-delegation/T001:
-      preferred: {harness: claude, tier: high}
-      fallbacks:
-        - {harness: selected, model: null}
-```
-
-`high`, `standard`, `light`, `documentation` and `review` resolve through the
-editable `models:` map. A
-`null` model asks the selected CLI to use its own default. `doctor --project`
-validates policy and installation; a model name is verified only when the CLI
-accepts a real dispatch. Use `delegation.py route --feature specs/<feature>
---id T001 --type implementation` to inspect the resolved route before launch.
-
-The dispatcher retains stage claims. `delegate_dispatch.py start` and `collect`
-send semantic stages and bounded implementation tasks through the skill; the
-orchestrator checks artifacts before accepting a result. The tracked
-`specs/<feature>/workflow/delegations.json` records every attempt, requested
-route, fallback, result and usage. Raw prompts and logs remain in ignored
-`.delegate/runs/`. `progress.py sync` rebuilds the local HTML history view.
-When a harness does not report its actual model, the ledger and report say
-`unverified`; the requested model is never presented as measured fact.
-If a start response is lost, inspect the ledger's `starting` intent and run
-`delegate_dispatch.py recover --feature specs/<feature> --intent-id <id>`.
-It matches the driver's recorded intent before any replacement is scheduled.
-
 The project selects Disabled, Advisory, or Required CI evidence gating and
 individual rules at initialization or later. Managed-only scope lets ordinary
 source-only bug-fix PRs pass with an explicit `not_applicable` result. Enabled
@@ -157,3 +102,217 @@ The dispatcher ends at PR publication. Its `pr_open` state is not post-merge
 certification. Follow the skill's post-merge protocol and retain an external-state
 report of exact SHAs, checks and rollout observations. See the
 [Review Home pilot findings](../../docs/workflow-pilot-review.md).
+
+## Optional model-aware delegation
+
+Delegation is off by default. It routes workflow stages and implementation
+tasks to a preferred agent CLI and model through the bundled `delegate-task`
+skill, records every attempt, and leaves the dispatcher in charge of claims and
+receipts. A successful delegated run is candidate evidence for the orchestrator
+to inspect, never a passed stage or a completed task.
+
+### Turning it on, off or rerouting later
+
+Select it during init with `--delegate on`, or opt in later without
+reinitializing:
+
+1. Set `delegation.enabled: true` in `.specify/workflow.yml`, with any model,
+   route, `install_scope` or override edits.
+2. Run `python .specify/extensions/workflow/scripts/workflow.py doctor --project`.
+   Doctor is read-only. If no usable skill exists it reports
+   `DELEGATE_SKILL_MISSING`, `DELEGATE_SKILL_BROKEN` or
+   `DELEGATE_SKILL_INCOMPATIBLE` (with each rejected path and the reason) and
+   names the next command.
+3. Run `python .specify/extensions/workflow/scripts/delegation.py install`.
+   It reuses a usable project or global copy. Only when neither is usable does
+   it install the bundled copy at the configured `install_scope` (`project`,
+   the default, or `global`).
+4. Run `python .specify/extensions/workflow/scripts/delegation.py annotate
+   --feature specs/<feature>` to add routing metadata to pending tasks, then
+   claim the next stage as usual.
+
+A claim also installs a missing skill and refreshes pending task metadata, but
+only after it has passed every other check and found a stage to claim. A
+rejected claim, or one with no next stage (`ready_to_finalize`, `pr_open`),
+leaves `tasks.md` and every skill location untouched.
+
+Enabling, disabling or rerouting delegation is not a semantic policy change.
+It does not invalidate stage receipts, migrate a checkpoint or fail the CI
+evidence gate with `POLICY_CHANGED`, including for features already at
+`ready_to_finalize` or `pr_open`. Checkpoints written before the delegation
+section existed are compared as they were written. Other policy edits still
+invalidate the stages they reach. When delegation is disabled, existing
+routing comments are ignored and work runs with the user's selected model.
+Runs already started can still be collected.
+
+### Which installed skill is used
+
+A copy is usable only when its driver answers `node delegate.mjs contract` with
+contract `delegate-task.driver.v1`, result schema `delegate-task.result.v2`, and
+the flags, environment variable, exit codes and result fields the dispatcher
+reads. Those fields include `requested_model`, `actual_model`,
+`model_observed` and `coverage_complete`. Files that merely exist do not count.
+An older or customized copy that passes this check is reused unchanged. A broken
+or incompatible copy at the install target is replaced by the bundled version.
+The new copy is built and checked in a staging folder first, so a failed install
+never leaves a partial skill. The old copy is then moved aside in one rename,
+not deleted, to `.specify/workflow/backups/delegate-task/` for project scope or
+`~/.sanduq/backups/delegate-task/` for global scope. Both are outside every
+skill discovery directory, so the backup's `SKILL.md` never appears as a second
+skill. If the swap fails, the previous copy is restored. The install result,
+`delegate_dispatch.py start` and a claim report the replacement as a
+`DELEGATE_SKILL_REPLACED` notice naming the old path, why it was rejected and
+its backup, so a customization can be carried over by hand.
+
+`delegate-task.sanduq-backup-*` folders that earlier builds left inside
+`.agents/skills`, `.claude/skills` or `.codex/skills` are moved out on every
+install or reuse, not only when a copy is replaced. Project backups go to the
+project backup folder and global ones to `~/.sanduq/backups/delegate-task/`;
+nothing is written to the home folder unless a global legacy backup or a global
+install needs it. Each move is reported as `DELEGATE_SKILL_LEGACY_BACKUP_MOVED`.
+
+Installs are serialized per scope with a lock file
+(`.specify/workflow/runtime/delegate-skill-install.lock`, or
+`~/.sanduq/runtime/delegate-skill-install.lock` for global work). Concurrent
+dispatchers or claims wait, then re-inspect and reuse the copy the first one
+installed; a lock still held after 180 seconds returns the retryable
+`DELEGATE_SKILL_INSTALL_BUSY`. Other diagnoses: `NODE_MISSING` or `NODE_18_REQUIRED`,
+`DELEGATE_SKILL_DOCTOR_FAILED`, and `DELEGATE_AGENT_CLI_UNAVAILABLE` when neither
+Codex nor Claude works. A missing or broken individual CLI (`AGENT_CLI_MISSING`,
+`AGENT_CLI_BROKEN`) is recorded as a skipped route.
+
+A running attempt remembers the driver copy that started it. `collect` uses
+that copy even if both project and global copies exist or `install_scope`
+changes later. The stored path must still be a recognized skill location
+(`DELEGATION_DRIVER_UNTRUSTED` otherwise).
+
+### Routes, defaults and overrides
+
+Each stage and task has a work type. Its route resolves in this order: a
+feature-qualified task override, the YAML route for the work type, then the
+shipped default. Every shipped default prefers a tier on the selected host and
+falls back to that CLI's own default model (`model: null`).
+
+| Work type | Default tier | Codex model | Claude model | Stages |
+| --- | --- | --- | --- | --- |
+| discovery | high | gpt-6-astra | opus | scope, specify, clarify, plan, tasks |
+| implementation | standard | gpt-6-sol | sonnet | tasks only |
+| qa | light | gpt-6-terra | haiku | qa_analyze, verify, qa_document |
+| documentation | documentation | gpt-6-sol | opus | manual_analyze, manual_update |
+| review | review | gpt-6-sol | opus | analyze, review |
+| coordination | light | gpt-6-terra | haiku | taskstoissues, execute, ready, pr |
+
+The model names are editable preferences in `delegation.models`, not proof that
+a CLI accepts them. Use `delegation.py route --feature specs/<feature> --id T001
+--type implementation` to inspect a resolved route. For example, merge this
+override into the existing `delegation:` block, keeping the generated `models:`
+and all six `routes:` entries:
+
+```yaml
+delegation:
+  enabled: true
+  install_scope: project
+  overrides:
+    specs/26-add-opt-in-model-aware-task-delegation/T001:
+      preferred: {harness: claude, tier: high}
+      fallbacks:
+        - {harness: selected, model: null}
+```
+
+A task's type comes from an explicit marker in its leading tags: `[Impl]`,
+`[Implementation]` or `[Code]`; `[QA]`, `[Test]`, `[Tests]` or `[TDD]`; `[Doc]`,
+`[Docs]`, `[Documentation]` or `[Manual]`; `[Review]`. The implementation
+marker wins over the others and is the escape for any task the rules below
+misread. Without a marker, only an unambiguous leading action counts: "Run ...
+tests", "Write/Add ... tests for ...", "Test <something>", "Capture ...
+screenshots"; "Document the ...", "Update README/docs/guide/release notes"
+followed by a preposition or the end of the line; "Review/Audit/Inspect
+<something>". When the word after "Test", "Review", "Audit" or "Inspect" names
+something being built (log, queue, API, endpoint, service, page, component,
+runner, pipeline and similar), the task is implementation: "Audit log
+retention", "Review queue API endpoint", "Test runner integration". A check
+that also asks for a code change ("Inspect the parser and fix the crash",
+"Run tests and fix failures") is implementation too, as is "Create guide page
+component". Anything else is implementation. Route type only chooses
+a model. It never makes a run read-only, so a delegated review can write its
+evidence and run checks.
+
+`annotate` writes an HTML comment below each pending `T###` line. It never
+changes checkbox lines, completed tasks, running tasks or the semantic task
+fingerprints; a final task line without a newline gains one before its marker.
+
+### Starting, collecting and recovering
+
+`delegate_dispatch.py start` and `collect` run semantic stages (`--id
+stage:<stage> --claim-token <token>`) and bounded tasks (`--id T###`) through
+the skill. `--feature` accepts `specs/<name>`, `specs\<name>`, a trailing slash
+or an absolute path inside the project, here and in `delegation.py annotate` and
+`route`. All of these resolve to one `specs/<name>` identity for the ledger,
+the task markers and overrides. Paths outside `specs/` and `..` traversal are
+rejected with `DELEGATION_FEATURE_INVALID`. A second start of a task or stage that is
+already starting or running is refused with `DELEGATION_ALREADY_RUNNING`.
+
+- **Unavailable model.** When the CLI rejects the requested model ("unknown
+  model", "model ... does not exist", `model_not_found`, `not_found_error`,
+  "may not exist", and similar), the dispatcher records the decision and starts
+  the next configured fallback. It never substitutes a stronger model for a
+  rejected one. The wording must appear in the driver's status reason or the
+  last 40 lines of the CLI's stderr, and must name the requested model; a
+  structured `model_not_found` code needs no name. Worker output that merely
+  mentions a model, such as a test failing with "Model matching query does not
+  exist", does not count.
+- **Failed start.** If the driver exits without creating a run for the
+  attempt, nothing started. The same holds when the driver exits 5 because its
+  supervisor never acknowledged the start, and the run it left proves no agent
+  ran: its finalized result is `failed` with `containment_evidence: "the
+  harness never launched"`, its journal holds only `created` and `terminal`,
+  and the supervisor process is no longer alive. Either way the failure is
+  recorded (with the dead run's ID for exit 5) and the next candidate is tried.
+  If any of those proofs is missing, the start is uncertain instead. If every
+  candidate fails, the attempt is `blocked` and the task can be started again.
+- **Uncertain start.** If the driver's answer is lost, the dispatcher keeps a
+  `starting` intent and returns `DELEGATION_START_UNCERTAIN` rather than risk a
+  duplicate. Run `delegate_dispatch.py recover --feature specs/<feature>
+  --intent-id <id>` to bind the driver run. If `recover` reports `found: false`,
+  close the intent with `delegate_dispatch.py abandon --feature specs/<feature>
+  --intent-id <id> --reason "<why>"` and start again. `abandon` refuses when a
+  driver run exists for the intent, other than one already proved never
+  launched. It also waits 300 seconds after the start
+  when no launch outcome was recorded, since another dispatcher may still be
+  starting it.
+- **Automatic stronger retry.** At most `delegation.stronger_retry` (default 1)
+  stronger-tier reassignment runs for failed work. It runs only when the driver
+  measured no edits: `dirty_paths_changed` is `[]`, `head_changed` and
+  `index_changed` are `false`, and `coverage_complete` is `true`. Any of these
+  missing, null or different means no automatic retry. For a terminal result that is still
+  incomplete, the orchestrator may run `delegate_dispatch.py reassign --feature
+  specs/<feature> --run-id <id> --reason "<gap>"` within the same limit.
+- **Route snapshots.** A running attempt keeps its start-time route when YAML
+  changes. Each claimed stage records its route in the checkpoint.
+
+`collect` follows a `replacement` run ID when one was started. Concurrent
+dispatchers serialize their ledger writes, so parallel starts and collects never
+lose an attempt or start the same work twice. A busy ledger returns the
+retryable `DELEGATION_LEDGER_BUSY` after 15 seconds, naming the lock owner's
+process and host.
+
+The ledger lock is `.specify/workflow/runtime/delegation-<hash>.lock` and records
+its owner's process ID, host and a token. A lock whose owner has exited on this
+host is recovered automatically, and so is an owner record that was never
+written once it is 60 seconds old. A lock held by a live process, or by any
+process on another host, is never taken. Recovery captures the lock with a
+single rename and puts it back if it turned out to belong to a live owner. A
+dispatcher that finds its own lock replaced refuses to save the ledger. If the
+owner's process ID was reused by an unrelated process, the lock looks live:
+confirm the named process is not a dispatcher, then delete the lock file.
+
+### History and evidence
+
+The tracked `specs/<feature>/workflow/delegations.json` records every attempt,
+requested route, skipped or fallback decision, start failure, abandoned intent,
+result and token usage. It survives upgrades and is included in installer
+rollback snapshots. The requested model and the model the harness reported are
+kept apart. When a harness does not report its actual model, the ledger and
+report say `unverified`; the requested model is never shown as measured fact.
+Raw prompts and logs stay in the git-ignored `.delegate/runs/`, and
+`progress.py sync` rebuilds the local HTML history view from the ledger.

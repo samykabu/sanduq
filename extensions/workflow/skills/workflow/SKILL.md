@@ -25,9 +25,18 @@ the package's pinned `requirements.txt` when missing. Never install a floating t
   --manual on|off --delegate on|off`. Ask once whether model-aware delegation is
   enabled; its default is off. Configure model preferences, routes, fallback order,
   install scope and per-task overrides in the project's `.specify/workflow.yml`.
-  A later YAML edit can opt in or out without reinitializing. Run `delegation.py
-  annotate --feature specs/<feature>` to refresh pending task metadata after an
-  opt-in or route edit. Running work keeps its original route snapshot.
+  A later YAML edit can opt in or out without reinitializing and without
+  invalidating receipts. After opting in, run `workflow.py doctor --project`
+  (read-only), then `delegation.py install` when doctor reports
+  `DELEGATE_SKILL_MISSING`, `_BROKEN` or `_INCOMPATIBLE`; it reuses a usable
+  project or global copy and otherwise installs the bundled one at the
+  configured scope, backing up a replaced copy outside skill folders. Report
+  any `DELEGATE_SKILL_REPLACED` or `DELEGATE_SKILL_LEGACY_BACKUP_MOVED` notice
+  from install, claim or dispatch output to the user. Run
+  `delegation.py annotate --feature specs/<feature>` to refresh pending task
+  metadata after an opt-in or route edit; a task the type rules misread takes an
+  `[Impl]` (or `[QA]`, `[Docs]`, `[Review]`) marker. Running work keeps its original route
+  snapshot and driver copy.
   Configure provider choices, context policy and scope preferences in
   `.specify/workflow.yml`. Ask once where this project runs CI: GitHub-hosted runners,
   or self-hosted labels the user names. Do not assume either. Capture the runner labels
@@ -112,9 +121,18 @@ the package's pinned `requirements.txt` when missing. Never install a floating t
    claim active. The adapter distinguishes requested from harness-reported models;
    an unreported actual model remains unverified. Disabled mode ignores old
    routing tags and runs with the user's selected host model.
-   If the start response is lost, inspect the feature's `delegations.json` and
-   use `delegate_dispatch.py recover --feature specs/<feature> --intent-id <id>`
-   before considering another dispatch; an observation timeout is not a failed run.
+   A rejected model is followed by the configured fallback automatically; a
+   start that provably created no run, or whose driver exited 5 with proof that
+   no agent launched, moves to the next candidate. On
+   `DELEGATION_START_UNCERTAIN`, never start the stage again: run
+   `delegate_dispatch.py recover --feature specs/<feature> --intent-id <id>`.
+   If it binds a run, collect it. If it reports `found: false`, close the intent
+   with `delegate_dispatch.py abandon --feature specs/<feature> --intent-id <id>
+   --reason "<why>"` and then start again; `abandon` refuses while a driver run
+   exists or a start may still be in flight. On `DELEGATION_LEDGER_BUSY` or
+   `DELEGATE_SKILL_INSTALL_BUSY`, retry the same command; a lock left by a dead
+   dispatcher on this host is recovered automatically, so never delete a lock
+   file whose named owner process is still running. An observation timeout is not a failed run.
    Read its current instruction source rather than guessing from a name. Native semantic
    commands may pause for real decisions. The managed preset prevents duplicate chaining.
    With `mode: revalidate`, retain the bound issue, feature path and existing branch.

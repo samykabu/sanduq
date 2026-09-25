@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -35,14 +36,180 @@ def save(path, value):
     workflow.write(path, value)
 
 
+ACTIVE = ('starting', 'running')
+# Replacement intents that never produced a run and no longer block a retry.
+INACTIVE_INTENTS = ('blocked', 'intent-abandoned')
+LOCK_TIMEOUT = 15.0
+# An intent without a recorded launch outcome may still belong to a dispatcher
+# that is inside its driver start; the driver acknowledges within 15 seconds.
+ABANDON_GRACE_SECONDS = 300
+
+
+# One specs/<name> identity for every --feature spelling, shared with delegation.py.
+feature_identity = delegation.feature_identity
+
+
 def load_ledger(root, feature):
     path = delegation.ledger_path(root, feature)
     value = workflow.read(path, {'schema_version': 1, 'feature': feature,
                                  'attempts': [], 'route_decisions': []})
-    delegation.require(value.get('schema_version') == 1 and value.get('feature') == feature and
+    stored = value.get('feature')
+    if isinstance(stored, str) and stored != feature:
+        # Ledgers written before spellings were normalised keep their history.
+        try:
+            stored = feature_identity(root, stored)
+        except delegation.DelegationError:
+            pass
+    delegation.require(value.get('schema_version') == 1 and stored == feature and
                        isinstance(value.get('attempts'), list) and
                        isinstance(value.get('route_decisions'), list), 'DELEGATION_LEDGER_INVALID')
+    value['feature'] = feature
     return value
+
+
+@contextmanager
+def ledger_lock(root, feature):
+    """Serialise ledger read-modify-write across dispatcher processes.
+
+    Critical sections never include node or agent CLI launches, so a busy lock
+    means another dispatcher is mid-write; waiting is bounded and the error is
+    retryable rather than a silently lost attempt. A lock left by a dispatcher
+    that died on this host is recovered; a live owner's lock is never taken.
+    """
+    path = root / '.specify/workflow/runtime' / ('delegation-' + workflow.digest(feature) + '.lock')
+    with delegation.file_lock(path, LOCK_TIMEOUT, 'DELEGATION_LEDGER_BUSY') as token:
+        yield path, token
+
+
+@contextmanager
+def edit_ledger(root, feature):
+    """Re-read, mutate and save the ledger atomically; an exception saves nothing."""
+    with ledger_lock(root, feature) as (path, token):
+        value = load_ledger(root, feature)
+        yield value
+        # A lock recovered from under this process (only possible if it was
+        # judged dead) must never let it overwrite a newer owner's ledger.
+        delegation.require(delegation.lock_held(path, token),
+                           'DELEGATION_LEDGER_BUSY: the ledger lock was lost; retry the command')
+        save(delegation.ledger_path(root, feature), value)
+
+
+def read_ledger(root, feature):
+    with ledger_lock(root, feature):
+        return load_ledger(root, feature)
+
+
+def find_intent(ledger, intent_id):
+    return next((a for a in ledger['attempts'] if a.get('intent_id') == intent_id), None)
+
+
+def find_run(ledger, run_id):
+    return next((a for a in ledger['attempts'] if a.get('run_id') == run_id), None)
+
+
+def live_children(ledger, run_id):
+    return [a for a in ledger['attempts'] if a.get('parent_run_id') == run_id and
+            a.get('status') not in INACTIVE_INTENTS]
+
+
+def reserve(ledger, identity, parent_run_id):
+    delegation.require(not any(a.get('identity') == identity and a.get('status') in ACTIVE
+                               for a in ledger['attempts']), 'DELEGATION_ALREADY_RUNNING: ' + identity)
+    if parent_run_id:
+        delegation.require(not live_children(ledger, parent_run_id),
+                           'DELEGATION_ALREADY_REASSIGNED: ' + parent_run_id)
+
+
+def skill_folders(root):
+    """Every location inspect_skill may select a driver from; nothing else runs."""
+    folders = []
+    override = os.environ.get('SANDUQ_DELEGATE_DRIVER')
+    if override:
+        folders.append(Path(override).parent)
+    for host in ('codex', 'claude'):
+        folders += delegation.local_skill_paths(root, host)
+    plugin = os.environ.get('CLAUDE_PLUGIN_ROOT')
+    if plugin:
+        folders.append(Path(plugin) / 'skills/delegate-task')
+    return list(dict.fromkeys(folders))
+
+
+def pinned_driver(root, attempt):
+    """Use the installed driver copy that started this attempt."""
+    stored = attempt.get('driver')
+    if not stored:
+        status = delegation.inspect_skill(root, workflow.active_host(root))
+        delegation.require(status['ok'], status.get('error', 'DELEGATE_SKILL_UNAVAILABLE'))
+        return status['driver']
+    path = Path(stored)
+    path = (path if path.is_absolute() else root / path).resolve()
+    for folder in skill_folders(root):
+        if (folder / 'delegate.mjs').resolve() == path:
+            delegation.require(path.is_file() and (folder / 'SKILL.md').is_file() and
+                               (folder / 'contracts/result-schema-v2.md').is_file(),
+                               'DELEGATION_DRIVER_MISSING: reinstall the delegate-task skill at ' +
+                               str(folder))
+            return str(path)
+    raise delegation.DelegationError('DELEGATION_DRIVER_UNTRUSTED: ' + str(stored))
+
+
+def intent_run_dirs(root, intent_id):
+    """Every driver run directory whose meta.json carries this intent's marker."""
+    marker = 'Sanduq delegation intent: ' + intent_id
+    found = []
+    for path in (root / '.delegate/runs').glob('*/meta.json'):
+        meta = workflow.read(path, {})
+        if marker in (meta.get('constraint') or []):
+            found.append((path.parent, meta))
+    return found
+
+
+def dismissed_runs(intent):
+    """Runs this intent already proved never launched an agent."""
+    return {item['run_id'] for item in (intent or {}).get('start_failures', []) if item.get('run_id')}
+
+
+def intent_runs(root, intent_id, dismissed=()):
+    return [meta for _, meta in intent_run_dirs(root, intent_id) if meta.get('run_id') not in dismissed]
+
+
+def journal_states(directory):
+    states = set()
+    try:
+        lines = (directory / 'journal.jsonl').read_text(encoding='utf-8').splitlines()
+    except OSError:
+        return states
+    for line in lines:
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(entry, dict):
+            states.add(entry.get('state'))
+    return states
+
+
+def never_launched(directory, meta):
+    """True only when a driver run provably never reached an agent CLI.
+
+    The driver exits 5 when its supervisor did not acknowledge within the start
+    window; it then finalises a failed result saying the harness never
+    launched and kills the supervisor. The supervisor journals
+    ``supervisor_started`` before anything else and is the only process that
+    starts the agent, so a missing acknowledgement from a supervisor that is no
+    longer alive proves no agent ran. Anything else stays uncertain.
+    """
+    result = workflow.read(directory / 'result.json', None)
+    if not isinstance(result, dict) or result.get('run_id') != meta.get('run_id'):
+        return False
+    if (result.get('status') != 'failed' or result.get('permission_mode_applied') is not None or
+            result.get('containment_evidence') != 'the harness never launched'):
+        return False
+    # The start command journals only "created" and, via the finaliser,
+    # "terminal". Any other event means a supervisor ran.
+    if not journal_states(directory) <= {'created', 'terminal'}:
+        return False
+    return not delegation.process_alive(meta.get('supervisor_pid'))
 
 
 def task_description(root, feature, task_id):
@@ -116,9 +283,22 @@ def driver_env(root):
     return env
 
 
+class StartFailed(delegation.DelegationError):
+    """The driver process exited or never spawned, so its run directory is final."""
+
+    def __init__(self, message, exit_code=None):
+        super().__init__(message)
+        self.exit_code = exit_code
+
+
+# delegate.mjs exit code when its supervisor never acknowledged the start.
+SUPERVISOR_START_FAILED = 5
+
+
 def launch(root, driver, candidate, cwd, task, timeout, intent_id=None):
     node = shutil.which('node')
-    delegation.require(node is not None, 'NODE_MISSING')
+    if node is None:
+        raise StartFailed('NODE_MISSING')
     args = [node, driver, 'start', '--harness', candidate['harness'], '--cwd', str(cwd),
             '--timeout', str(timeout), '--task', task]
     if candidate['requested_model']:
@@ -129,11 +309,14 @@ def launch(root, driver, candidate, cwd, task, timeout, intent_id=None):
         args.append('--allow-commit')
     if intent_id:
         args += ['--constraint', 'Sanduq delegation intent: ' + intent_id]
-    result = subprocess.run(args, cwd=root, env=driver_env(root),
-                            capture_output=True, text=True, encoding='utf-8')
+    try:
+        result = subprocess.run(args, cwd=root, env=driver_env(root),
+                                capture_output=True, text=True, encoding='utf-8')
+    except OSError as exc:
+        raise StartFailed('DELEGATE_START_FAILED: ' + str(exc)[:500]) from exc
     if result.returncode:
-        raise delegation.DelegationError('DELEGATE_START_FAILED: ' +
-                                         (result.stderr.strip() or result.stdout.strip())[:500])
+        raise StartFailed('DELEGATE_START_FAILED: ' +
+                          (result.stderr.strip() or result.stdout.strip())[:500], result.returncode)
     try:
         payload = json.loads(result.stdout)
     except ValueError as exc:
@@ -144,44 +327,79 @@ def launch(root, driver, candidate, cwd, task, timeout, intent_id=None):
 
 
 def candidate_start(root, feature, identity, work_type, candidates, task_path, cwd,
-                    timeout, parent_run_id=None, retry_count=0):
+                    timeout, parent_run_id=None, retry_count=0, decision=None):
     config = workflow.load_policy(root)['delegation']
     status = delegation.doctor(root, workflow.active_host(root), install=True,
                                scope=config['install_scope'])
     delegation.require(status['ok'], status.get('error', 'DELEGATE_SKILL_UNAVAILABLE'))
-    ledger = load_ledger(root, feature)
     task = task_path.read_text(encoding='utf-8')
-    intent = {'intent_id': uuid.uuid4().hex, 'identity': identity,
-              'task_type': work_type, 'status': 'starting', 'started_at': stamp(),
-              'task_file': relative(root, task_path), 'cwd': relative(root, cwd),
-              'timeout': timeout, 'route_candidates': candidates,
-              'parent_run_id': parent_run_id, 'retry_count': retry_count}
-    ledger['attempts'].append(intent)
-    save(delegation.ledger_path(root, feature), ledger)
+    intent_id = uuid.uuid4().hex
+    dismissed = set()
+    with edit_ledger(root, feature) as ledger:
+        # The reservation and the route decision that justifies it are one
+        # write, so a concurrent start or collect cannot launch the work twice.
+        reserve(ledger, identity, parent_run_id)
+        if decision:
+            ledger['route_decisions'].append(decision)
+        ledger['attempts'].append({'intent_id': intent_id, 'identity': identity,
+                                   'task_type': work_type, 'status': 'starting',
+                                   'started_at': stamp(), 'task_file': relative(root, task_path),
+                                   'cwd': relative(root, cwd), 'timeout': timeout,
+                                   'route_candidates': candidates,
+                                   'driver': relative(root, status['driver']),
+                                   'parent_run_id': parent_run_id, 'retry_count': retry_count})
     for index, candidate in enumerate(candidates):
         if not status['harnesses'].get(candidate['harness']):
-            ledger['route_decisions'].append({'at': stamp(), 'identity': identity,
-                                              'requested': candidate, 'decision': 'skip',
-                                              'reason': status.get('cli_errors', {}).get(candidate['harness'],
-                                                                                       'AGENT_CLI_UNAVAILABLE')})
-            save(delegation.ledger_path(root, feature), ledger)
+            with edit_ledger(root, feature) as ledger:
+                ledger['route_decisions'].append({
+                    'at': stamp(), 'identity': identity, 'requested': candidate, 'decision': 'skip',
+                    'reason': status.get('cli_errors', {}).get(candidate['harness'],
+                                                              'AGENT_CLI_UNAVAILABLE')})
             continue
         selected = copy.deepcopy(candidate)
-        selected['read_only'] = work_type == 'review'
+        # Route type chooses a model, never filesystem permission: a delegated
+        # review writes its evidence and may run checks or schedule fixes.
+        selected['read_only'] = False
         selected['allow_commit'] = identity.endswith('/stage:execute')
         try:
-            started = launch(root, status['driver'], selected, cwd, task, timeout,
-                             intent['intent_id'])
+            started = launch(root, status['driver'], selected, cwd, task, timeout, intent_id)
         except delegation.DelegationError as error:
+            # The driver writes meta.json before it spawns a worker. An exited
+            # driver with no run for this intent proves nothing started, and so
+            # does exit 5 with a finalised never-launched run whose supervisor
+            # is gone. Only then may the next configured candidate run;
+            # anything else is uncertain.
+            runs = [(directory, meta) for directory, meta in intent_run_dirs(root, intent_id)
+                    if meta.get('run_id') not in dismissed]
+            not_launched = None
+            if (isinstance(error, StartFailed) and error.exit_code == SUPERVISOR_START_FAILED and
+                    len(runs) == 1 and never_launched(*runs[0])):
+                not_launched = runs[0][1]['run_id']
+            confirmed = isinstance(error, StartFailed) and (not runs or not_launched is not None)
+            with edit_ledger(root, feature) as ledger:
+                intent = find_intent(ledger, intent_id)
+                if confirmed:
+                    failure = {'at': stamp(), 'candidate_index': index, 'reason': str(error)}
+                    if not_launched:
+                        failure.update(run_id=not_launched, evidence='driver exit 5; result says the '
+                                       'harness never launched; supervisor never started and is gone')
+                        dismissed.add(not_launched)
+                    intent.setdefault('start_failures', []).append(failure)
+                else:
+                    intent['start_error'] = str(error)
+                ledger['route_decisions'].append({'at': stamp(), 'identity': identity,
+                                                  'requested': candidate,
+                                                  'decision': 'start-failed' if confirmed
+                                                  else 'start-uncertain',
+                                                  'reason': str(error), 'intent_id': intent_id,
+                                                  **({'run_id': not_launched} if not_launched else {})})
+            if confirmed:
+                continue
             # A lost start response does not prove the driver failed to launch.
             # Keep the intent for recovery instead of starting a second worker.
-            intent['start_error'] = str(error)
-            ledger['route_decisions'].append({'at': stamp(), 'identity': identity,
-                                              'requested': candidate, 'decision': 'start-uncertain',
-                                              'reason': str(error)})
-            save(delegation.ledger_path(root, feature), ledger)
-            raise delegation.DelegationError('DELEGATION_START_UNCERTAIN: recover intent ' +
-                                             intent['intent_id']) from error
+            raise delegation.DelegationError(
+                'DELEGATION_START_UNCERTAIN: recover intent ' + intent_id +
+                ', or abandon it with a reason once no driver run exists') from error
         attempt = {'identity': identity, 'task_type': work_type, 'run_id': started['run_id'],
                    'parent_run_id': parent_run_id, 'requested_harness': selected['harness'],
                    'requested_model': selected['requested_model'], 'actual_model': None,
@@ -193,25 +411,31 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
                    'started_at': stamp(), 'task_file': relative(root, task_path),
                    'cwd': relative(root, cwd), 'timeout': timeout,
                    'evidence_location': '.delegate/runs/' + started['run_id'] + '/result.json'}
-        intent.update(attempt)
-        if index:
-            ledger['route_decisions'].append({'at': stamp(), 'identity': identity,
-                                              'requested': candidates[0], 'actual_route': selected,
-                                              'decision': 'fallback',
-                                              'reason': 'Earlier candidates unavailable'})
-        save(delegation.ledger_path(root, feature), ledger)
-        return {'enabled': True, 'run_id': started['run_id'], 'state': started['state'],
-                'route': selected, 'evidence_location': attempt['evidence_location'],
-                'intent_id': intent['intent_id']}
-    intent.update(status='blocked', ended_at=stamp(),
-                  result_summary='No configured route could start')
-    save(delegation.ledger_path(root, feature), ledger)
+        with edit_ledger(root, feature) as ledger:
+            find_intent(ledger, intent_id).update(attempt)
+            if index:
+                ledger['route_decisions'].append({'at': stamp(), 'identity': identity,
+                                                  'requested': candidates[0], 'actual_route': selected,
+                                                  'decision': 'fallback',
+                                                  'reason': 'Earlier candidates unavailable or '
+                                                            'failed before a run existed'})
+        response = {'enabled': True, 'run_id': started['run_id'], 'state': started['state'],
+                    'route': selected, 'evidence_location': attempt['evidence_location'],
+                    'intent_id': intent_id}
+        if status.get('notices'):
+            # A replaced customised copy or moved legacy backup is reported, not hidden.
+            response['notices'] = status['notices']
+        return response
+    with edit_ledger(root, feature) as ledger:
+        find_intent(ledger, intent_id).update(status='blocked', ended_at=stamp(),
+                                              result_summary='No configured route could start')
     raise delegation.DelegationError('DELEGATION_ROUTES_UNAVAILABLE: ' + identity)
 
 
 def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
           token=None, timeout=None):
     root = root.resolve()
+    feature = feature_identity(root, feature)
     policy = workflow.load_policy(root)
     config = policy['delegation']
     claimed_route = None
@@ -247,10 +471,9 @@ def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
         text += '\nAdditional assignment and acceptance details:\n' + provided.read_text(encoding='utf-8')
     cwd = Path(cwd).resolve() if cwd else root
     delegation.require(cwd.is_dir(), 'DELEGATION_CWD_INVALID')
-    ledger = load_ledger(root, feature)
     full_identity = feature + '/' + identity
-    delegation.require(not any(a['identity'] == full_identity and a['status'] in ('starting', 'running')
-                               for a in ledger['attempts']), 'DELEGATION_ALREADY_RUNNING')
+    # Fast rejection only; candidate_start re-checks inside the ledger lock.
+    reserve(read_ledger(root, feature), full_identity, None)
     workflow.ensure_local_excludes(root)
     task_path = brief_file(root, text)
     if identity.startswith('stage:'):
@@ -264,42 +487,121 @@ def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
                            task_path, cwd, timeout)
 
 
-MODEL_ERROR = re.compile(r'unknown model|model (?:not found|is not available|not supported|unavailable)|'
-                         r'invalid model|unsupported model', re.I)
+# Wording the supported agent CLIs and their provider APIs use when a
+# requested model is unknown, retired or not available to the account.
+MODEL_ERROR = re.compile(
+    r'unknown model|invalid model|unsupported model|model_not_found|'
+    r'\bmodel\b[^\n]{0,160}?(?:not found|does not exist|may not exist|(?:is )?not available|'
+    r'(?:is )?not supported|unavailable)|'
+    r'not_found_error[^\n]{0,200}?\bmodel\b|\bmodel\b[^\n]{0,200}?not_found_error', re.I)
 
 
-def model_rejected(result):
-    reason = str(result.get('status_reason') or '')
+# Provider error codes that only ever mean the requested model was refused.
+MODEL_ERROR_CODE = re.compile(r'"(?:code|type)"\s*:\s*"model_not_found"|'
+                              r'not_found_error[^\n]{0,200}?\bmodel\b', re.I)
+STDERR_TAIL_LINES = 40
+
+
+def model_rejected(result, requested_model=None):
+    """True when the CLI refused the requested model, not when work merely mentions one.
+
+    Worker output such as "Model matching query does not exist" from a test run
+    must not count. When a model was requested, a wording match must name that
+    model; a structured provider code needs no name. stderr is read only from
+    its tail, where a CLI prints its terminal error.
+    """
+    texts = [str(result.get('status_reason') or '')]
     stderr = (result.get('artifacts') or {}).get('stderr')
     if stderr and Path(stderr).is_file():
-        reason += '\n' + Path(stderr).read_text(encoding='utf-8', errors='replace')[-4000:]
-    return bool(MODEL_ERROR.search(reason))
+        lines = Path(stderr).read_text(encoding='utf-8', errors='replace').splitlines()
+        texts += lines[-STDERR_TAIL_LINES:]
+    name = str(requested_model or '').casefold()
+    for index, text in enumerate(texts):
+        if MODEL_ERROR_CODE.search(text):
+            return True
+        if not MODEL_ERROR.search(text):
+            continue
+        if name:
+            if name in text.casefold():
+                return True
+        elif index == 0:
+            # No model was requested: only the driver's own status reason can
+            # say the CLI default was refused.
+            return True
+    return False
+
+
+def measured_no_edits(payload):
+    """True only when the driver measured the whole run window and saw no change."""
+    if payload.get('coverage_complete') is not True:
+        return False
+    return (payload.get('dirty_paths_changed') == [] and
+            isinstance(payload.get('dirty_paths_changed'), list) and
+            payload.get('head_changed') is False and payload.get('index_changed') is False)
+
+
+def measured_change(payload):
+    return bool(payload.get('dirty_paths_changed') or payload.get('head_changed') is True or
+                payload.get('index_changed') is True)
+
+
+def retry_plan(policy, attempt, payload, rejected, host):
+    """Return (candidates, reason, decision, retry_count) for an automatic retry."""
+    if payload['status'] != 'failed':
+        return None
+    if rejected:
+        # A rejected model did no work; keep the configured fallback order
+        # rather than trading it for a stronger-tier retry.
+        remaining = attempt['route_candidates'][attempt['candidate_index'] + 1:]
+        if not remaining or measured_change(payload):
+            return None
+        return remaining, 'requested model rejected by CLI', 'fallback', attempt['retry_count']
+    if (not measured_no_edits(payload) or
+            attempt['retry_count'] >= policy['delegation']['stronger_retry']):
+        return None
+    stronger = delegation.stronger_candidate(policy['delegation'], attempt_to_candidate(attempt), host)
+    if not stronger:
+        return None
+    return ([stronger], 'failed work eligible for one stronger reassignment', 'reassignment',
+            attempt['retry_count'] + 1)
+
+
+def replacement_link(ledger, attempt):
+    """Describe an existing replacement so collect never launches a second one."""
+    children = live_children(ledger, attempt['run_id'])
+    if children:
+        child = children[0]
+        if child.get('run_id'):
+            attempt['replacement_run_id'] = child['run_id']
+            return {'run_id': attempt['run_id'], 'status': attempt['status'],
+                    'replacement_run_id': child['run_id'], 'decision': 'already re-routed'}
+        return {'run_id': attempt['run_id'], 'status': attempt['status'],
+                'replacement_intent_id': child['intent_id'], 'decision': 'recover replacement intent'}
+    if attempt.get('replacement_run_id'):
+        return {'run_id': attempt['run_id'], 'status': attempt['status'],
+                'replacement_run_id': attempt['replacement_run_id'],
+                'decision': 'already re-routed'}
+    if (attempt['status'] not in ACTIVE and
+            any(a.get('parent_run_id') == attempt['run_id'] for a in ledger['attempts'])):
+        return {'run_id': attempt['run_id'], 'status': attempt['status'],
+                'decision': 'replacement intent ended without a run; use start or reassign'}
+    return None
 
 
 def collect(root, feature, run_id, auto_retry=True):
     root = root.resolve()
+    feature = feature_identity(root, feature)
     policy = workflow.load_policy(root)
-    ledger = load_ledger(root, feature)
-    attempt = next((a for a in ledger['attempts'] if a['run_id'] == run_id), None)
-    delegation.require(attempt is not None, 'DELEGATION_RUN_UNKNOWN: ' + run_id)
-    child = next((a for a in ledger['attempts'] if a.get('parent_run_id') == run_id), None)
-    if child:
-        if child.get('run_id'):
-            attempt['replacement_run_id'] = child['run_id']
-            save(delegation.ledger_path(root, feature), ledger)
-            return {'run_id': run_id, 'status': attempt['status'],
-                    'replacement_run_id': child['run_id'], 'decision': 'already re-routed'}
-        return {'run_id': run_id, 'status': attempt['status'],
-                'replacement_intent_id': child['intent_id'], 'decision': 'recover replacement intent'}
-    if attempt.get('replacement_run_id'):
-        return {'run_id': run_id, 'status': attempt['status'],
-                'replacement_run_id': attempt['replacement_run_id'],
-                'decision': 'already re-routed'}
-    status = delegation.inspect_skill(root, workflow.active_host(root))
-    delegation.require(status['ok'], status['error'] if not status['ok'] else '')
+    with edit_ledger(root, feature) as ledger:
+        attempt = find_run(ledger, run_id)
+        delegation.require(attempt is not None, 'DELEGATION_RUN_UNKNOWN: ' + run_id)
+        linked = replacement_link(ledger, attempt)
+    if linked:
+        return linked
+    driver = pinned_driver(root, attempt)
     node = shutil.which('node')
     delegation.require(node is not None, 'NODE_MISSING')
-    result = subprocess.run([node, status['driver'], 'collect', run_id, '--json'],
+    result = subprocess.run([node, driver, 'collect', run_id, '--json'],
                             cwd=root, env=driver_env(root), capture_output=True,
                             text=True, encoding='utf-8')
     if result.returncode == 3:
@@ -315,57 +617,55 @@ def collect(root, feature, run_id, auto_retry=True):
                        'DELEGATE_RESULT_INVALID')
     delegation.require(payload.get('harness') == attempt['requested_harness'],
                        'DELEGATE_HARNESS_MISMATCH')
-    attempt['status'] = payload['status']
-    attempt['ended_at'] = stamp()
-    attempt['result_summary'] = str(payload.get('summary') or '')[:2000]
-    attempt['status_provenance'] = payload.get('status_provenance')
-    attempt['actual_harness'] = payload.get('harness')
-    attempt['actual_model'] = payload.get('actual_model') if payload.get('model_observed') is True else None
-    attempt['actual_model_evidence'] = 'harness-reported' if attempt['actual_model'] else 'unverified'
-    attempt['token_usage'] = payload.get('tokens') if (payload.get('tokens') or {}).get('fidelity') in ('exact', 'partial') else None
-    attempt['changed_paths'] = payload.get('dirty_paths_changed')
-    attempt['evidence_location'] = relative(root, Path((payload.get('artifacts') or {}).get('dir',
-                                                    root / '.delegate/runs' / run_id)) / 'result.json')
-    save(delegation.ledger_path(root, feature), ledger)
+    rejected = model_rejected(payload, attempt['requested_model'])
+    with edit_ledger(root, feature) as ledger:
+        attempt = find_run(ledger, run_id)
+        attempt['status'] = payload['status']
+        attempt.setdefault('ended_at', stamp())
+        attempt['result_summary'] = str(payload.get('summary') or '')[:2000]
+        attempt['status_provenance'] = payload.get('status_provenance')
+        attempt['actual_harness'] = payload.get('harness')
+        attempt['actual_model'] = payload.get('actual_model') if payload.get('model_observed') is True else None
+        attempt['actual_model_evidence'] = 'harness-reported' if attempt['actual_model'] else 'unverified'
+        attempt['token_usage'] = payload.get('tokens') if (payload.get('tokens') or {}).get('fidelity') in ('exact', 'partial') else None
+        attempt['changed_paths'] = payload.get('dirty_paths_changed')
+        attempt['model_rejected'] = rejected
+        attempt['evidence_location'] = relative(root, Path((payload.get('artifacts') or {}).get('dir',
+                                                        root / '.delegate/runs' / run_id)) / 'result.json')
+        linked = replacement_link(ledger, attempt)
+        attempt = copy.deepcopy(attempt)
     response = {'run_id': run_id, 'status': attempt['status'],
                 'requested_model': attempt['requested_model'],
                 'actual_model': attempt['actual_model'],
                 'actual_model_evidence': attempt['actual_model_evidence'],
                 'harness': attempt['actual_harness'], 'evidence_location': attempt['evidence_location'],
                 'token_usage': attempt['token_usage'], 'result_summary': attempt['result_summary']}
-    if (not auto_retry or payload['status'] != 'failed' or payload.get('head_changed') or
-            payload.get('index_changed') or payload.get('dirty_paths_changed')):
+    if linked:
+        return {**response, **linked}
+    plan = retry_plan(policy, attempt, payload, rejected, workflow.active_host(root)) if auto_retry else None
+    if not plan:
         return response
-    candidates = attempt['route_candidates']
-    if model_rejected(payload):
-        remaining = candidates[attempt['candidate_index'] + 1:]
-        reason = 'requested model rejected by CLI'
-    elif attempt['retry_count'] < policy['delegation']['stronger_retry']:
-        stronger = delegation.stronger_candidate(policy['delegation'], attempt_to_candidate(attempt),
-                                                 workflow.active_host(root))
-        remaining = [stronger] if stronger else []
-        reason = 'failed work eligible for one stronger reassignment'
-    else:
-        remaining = []
-        reason = ''
-    if remaining:
-        task_path = root / attempt['task_file']
-        delegation.require(task_path.is_file(), 'DELEGATION_BRIEF_MISSING_FOR_RETRY')
-        ledger['route_decisions'].append({'at': stamp(), 'identity': attempt['identity'],
-                                          'requested': attempt_to_candidate(attempt),
-                                          'decision': 'fallback' if model_rejected(payload) else 'reassignment',
-                                          'reason': reason, 'after_run_id': run_id})
-        save(delegation.ledger_path(root, feature), ledger)
+    remaining, reason, kind, retry_count = plan
+    task_path = root / attempt['task_file']
+    delegation.require(task_path.is_file(), 'DELEGATION_BRIEF_MISSING_FOR_RETRY')
+    try:
         replacement = candidate_start(root, feature, attempt['identity'], attempt['task_type'],
                                       remaining, task_path, root / attempt['cwd'],
                                       attempt['timeout'], parent_run_id=run_id,
-                                      retry_count=attempt['retry_count'] + (0 if model_rejected(payload) else 1))
-        ledger = load_ledger(root, feature)
-        original = next(a for a in ledger['attempts'] if a['run_id'] == run_id)
-        original['replacement_run_id'] = replacement['run_id']
-        save(delegation.ledger_path(root, feature), ledger)
-        return {**response, 'replacement': replacement, 'decision': reason}
-    return response
+                                      retry_count=retry_count,
+                                      decision={'at': stamp(), 'identity': attempt['identity'],
+                                                'requested': attempt_to_candidate(attempt),
+                                                'decision': kind, 'reason': reason,
+                                                'after_run_id': run_id})
+    except delegation.DelegationError as error:
+        if not str(error).startswith(('DELEGATION_ALREADY_REASSIGNED', 'DELEGATION_ALREADY_RUNNING')):
+            raise
+        # A concurrent collect or reassign re-routed this run first.
+        return {**response, **(replacement_link(read_ledger(root, feature), attempt) or
+                               {'decision': 'already re-routed'})}
+    with edit_ledger(root, feature) as ledger:
+        find_run(ledger, run_id)['replacement_run_id'] = replacement['run_id']
+    return {**response, 'replacement': replacement, 'decision': reason}
 
 
 def attempt_to_candidate(attempt):
@@ -380,20 +680,20 @@ def attempt_to_candidate(attempt):
 def reassign(root, feature, run_id, reason, task_file=None):
     """Let the orchestrator escalate complex or partly changed terminal work."""
     root = root.resolve()
+    feature = feature_identity(root, feature)
     delegation.require(isinstance(reason, str) and reason.strip(),
                        'DELEGATION_REASSIGN_REASON_REQUIRED')
     policy = workflow.load_policy(root)
     config = policy['delegation']
     delegation.require(config['enabled'], 'DELEGATION_DISABLED')
-    ledger = load_ledger(root, feature)
-    prior = next((a for a in ledger['attempts'] if a.get('run_id') == run_id), None)
+    ledger = read_ledger(root, feature)
+    prior = find_run(ledger, run_id)
     delegation.require(prior is not None and prior.get('status') in
                        ('successful', 'failed', 'abandoned'), 'DELEGATION_PRIOR_RUN_NOT_TERMINAL')
     delegation.require(prior['retry_count'] < config['stronger_retry'],
                        'DELEGATION_RETRY_LIMIT_REACHED')
-    delegation.require(not prior.get('replacement_run_id') and
-                       not any(a.get('parent_run_id') == run_id for a in ledger['attempts']) and
-                       not any(a['identity'] == prior['identity'] and a['status'] in ('starting', 'running')
+    delegation.require(not prior.get('replacement_run_id') and not live_children(ledger, run_id) and
+                       not any(a['identity'] == prior['identity'] and a['status'] in ACTIVE
                                for a in ledger['attempts']), 'DELEGATION_ALREADY_REASSIGNED')
     stronger = delegation.stronger_candidate(config, attempt_to_candidate(prior),
                                              workflow.active_host(root))
@@ -406,52 +706,74 @@ def reassign(root, feature, run_id, reason, task_file=None):
                            'DELEGATION_TASK_FILE_INVALID')
         text += '\nUpdated assignment:\n' + extra.read_text(encoding='utf-8')
     brief = brief_file(root, text)
-    ledger['route_decisions'].append({'at': stamp(), 'identity': prior['identity'],
-                                      'requested': attempt_to_candidate(prior),
-                                      'decision': 'reassignment', 'reason': reason.strip(),
-                                      'after_run_id': run_id})
-    save(delegation.ledger_path(root, feature), ledger)
     replacement = candidate_start(root, feature, prior['identity'], prior['task_type'],
                                   [stronger], brief, root / prior['cwd'], prior['timeout'],
-                                  parent_run_id=run_id, retry_count=prior['retry_count'] + 1)
-    ledger = load_ledger(root, feature)
-    next(a for a in ledger['attempts'] if a['run_id'] == run_id)['replacement_run_id'] = replacement['run_id']
-    save(delegation.ledger_path(root, feature), ledger)
+                                  parent_run_id=run_id, retry_count=prior['retry_count'] + 1,
+                                  decision={'at': stamp(), 'identity': prior['identity'],
+                                            'requested': attempt_to_candidate(prior),
+                                            'decision': 'reassignment', 'reason': reason.strip(),
+                                            'after_run_id': run_id})
+    with edit_ledger(root, feature) as ledger:
+        find_run(ledger, run_id)['replacement_run_id'] = replacement['run_id']
     return replacement
 
 
 def recover_intent(root, feature, intent_id):
     """Recover a driver run created just before its Sanduq ledger write."""
     root = root.resolve()
-    ledger = load_ledger(root, feature)
-    intent = next((a for a in ledger['attempts'] if a.get('intent_id') == intent_id), None)
-    delegation.require(intent is not None, 'DELEGATION_INTENT_UNKNOWN')
-    if intent.get('run_id'):
-        return {'found': True, 'run_id': intent['run_id'], 'status': intent['status']}
-    delegation.require(intent['status'] == 'starting', 'DELEGATION_INTENT_NOT_STARTING')
-    found = []
-    for path in (root / '.delegate/runs').glob('*/meta.json'):
-        meta = workflow.read(path, {})
-        if 'Sanduq delegation intent: ' + intent_id in meta.get('constraint', []):
-            found.append(meta)
-    delegation.require(len(found) <= 1, 'DELEGATION_INTENT_AMBIGUOUS')
-    if not found:
-        return {'found': False, 'status': 'starting', 'intent_id': intent_id}
-    meta = found[0]
-    candidate_index = next((index for index, item in enumerate(intent['route_candidates'])
-                            if item['harness'] == meta.get('harness') and
-                            item['requested_model'] == meta.get('model')), None)
-    delegation.require(candidate_index is not None, 'DELEGATION_INTENT_ROUTE_MISMATCH')
-    candidate = intent['route_candidates'][candidate_index]
-    intent.update(run_id=meta['run_id'], requested_harness=meta['harness'],
-                  requested_model=meta.get('model'), actual_model=None,
-                  actual_model_evidence='pending', rule=candidate['rule'],
-                  choice=candidate['choice'], candidate_index=candidate_index,
-                  status='running', read_only=meta.get('permission') == 'sandbox',
-                  allow_commit=bool(meta.get('allow_commit')),
-                  evidence_location='.delegate/runs/' + meta['run_id'] + '/result.json')
-    save(delegation.ledger_path(root, feature), ledger)
+    feature = feature_identity(root, feature)
+    with edit_ledger(root, feature) as ledger:
+        intent = find_intent(ledger, intent_id)
+        delegation.require(intent is not None, 'DELEGATION_INTENT_UNKNOWN')
+        if intent.get('run_id'):
+            return {'found': True, 'run_id': intent['run_id'], 'status': intent['status']}
+        delegation.require(intent['status'] == 'starting', 'DELEGATION_INTENT_NOT_STARTING')
+        found = intent_runs(root, intent_id, dismissed_runs(intent))
+        delegation.require(len(found) <= 1, 'DELEGATION_INTENT_AMBIGUOUS')
+        if not found:
+            return {'found': False, 'status': 'starting', 'intent_id': intent_id,
+                    'next': 'abandon the intent with a reason, then dispatch the work again'}
+        meta = found[0]
+        candidate_index = next((index for index, item in enumerate(intent['route_candidates'])
+                                if item['harness'] == meta.get('harness') and
+                                item['requested_model'] == meta.get('model')), None)
+        delegation.require(candidate_index is not None, 'DELEGATION_INTENT_ROUTE_MISMATCH')
+        candidate = intent['route_candidates'][candidate_index]
+        intent.update(run_id=meta['run_id'], requested_harness=meta['harness'],
+                      requested_model=meta.get('model'), actual_model=None,
+                      actual_model_evidence='pending', rule=candidate['rule'],
+                      choice=candidate['choice'], candidate_index=candidate_index,
+                      status='running', read_only=meta.get('permission') == 'sandbox',
+                      allow_commit=bool(meta.get('allow_commit')),
+                      evidence_location='.delegate/runs/' + meta['run_id'] + '/result.json')
     return {'found': True, 'run_id': meta['run_id'], 'status': 'running'}
+
+
+def abandon_intent(root, feature, intent_id, reason):
+    """Close a start intent that provably has no driver run so the work can be dispatched again."""
+    root = root.resolve()
+    feature = feature_identity(root, feature)
+    delegation.require(isinstance(reason, str) and reason.strip(),
+                       'DELEGATION_ABANDON_REASON_REQUIRED')
+    with edit_ledger(root, feature) as ledger:
+        intent = find_intent(ledger, intent_id)
+        delegation.require(intent is not None, 'DELEGATION_INTENT_UNKNOWN')
+        delegation.require(intent.get('status') == 'starting' and not intent.get('run_id'),
+                           'DELEGATION_INTENT_NOT_STARTING')
+        delegation.require(not intent_runs(root, intent_id, dismissed_runs(intent)),
+                           'DELEGATION_INTENT_HAS_RUN: recover intent ' + intent_id)
+        if not intent.get('start_error'):
+            # No launch outcome was recorded: a dispatcher may still be inside
+            # its driver start, and the run's meta.json could appear any moment.
+            age = datetime.now(timezone.utc) - datetime.fromisoformat(intent['started_at'])
+            delegation.require(age.total_seconds() >= ABANDON_GRACE_SECONDS,
+                               'DELEGATION_INTENT_START_IN_PROGRESS: retry after ' +
+                               str(ABANDON_GRACE_SECONDS) + ' seconds')
+        intent.update(status='intent-abandoned', ended_at=stamp(), abandon_reason=reason.strip())
+        ledger['route_decisions'].append({'at': stamp(), 'identity': intent['identity'],
+                                          'decision': 'intent-abandoned', 'intent_id': intent_id,
+                                          'reason': reason.strip()})
+    return {'intent_id': intent_id, 'identity': intent['identity'], 'status': 'intent-abandoned'}
 
 
 def main(argv=None):
@@ -473,6 +795,10 @@ def main(argv=None):
     recover_cmd = sub.add_parser('recover')
     recover_cmd.add_argument('--feature', required=True)
     recover_cmd.add_argument('--intent-id', required=True)
+    abandon_cmd = sub.add_parser('abandon')
+    abandon_cmd.add_argument('--feature', required=True)
+    abandon_cmd.add_argument('--intent-id', required=True)
+    abandon_cmd.add_argument('--reason', required=True)
     reassign_cmd = sub.add_parser('reassign')
     reassign_cmd.add_argument('--feature', required=True)
     reassign_cmd.add_argument('--run-id', required=True)
@@ -487,6 +813,8 @@ def main(argv=None):
             result = collect(args.root, args.feature, args.run_id, not args.no_auto_retry)
         elif args.action == 'recover':
             result = recover_intent(args.root, args.feature, args.intent_id)
+        elif args.action == 'abandon':
+            result = abandon_intent(args.root, args.feature, args.intent_id, args.reason)
         else:
             result = reassign(args.root, args.feature, args.run_id, args.reason, args.task_file)
         print(json.dumps(result, indent=2))

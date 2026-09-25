@@ -1099,6 +1099,19 @@ function containmentEvidence(perm, verdict, g) {
 
 /* ---------- commands ---------- */
 
+// The terminal result for a start whose supervisor never acknowledged. Exit 5
+// follows it. Consumers (the Sanduq dispatcher) read `permission_mode_applied:
+// null` and `containment_evidence: 'the harness never launched'`, together with
+// a journal holding no supervisor event, as proof that no agent ran.
+function finalizeStartFailure({ meta, dir, why, t0 }) {
+  return finalizeOnce(dir, () => buildResult({
+    meta, dir, parse: null, launched: false,
+    statusRes: resolveStatus({ spawnError: why, exitCode: null, parse: null, self: null }),
+    self: null, gitCmp: { ...GIT_UNKNOWN }, roVerdict: null, sessionId: null,
+    exitCode: null, signal: null, t0, truncated: false,
+  }));
+}
+
 async function cmdStart(o) {
   const t0 = Date.now();
   const h = HARNESSES[o.harness];
@@ -1214,12 +1227,7 @@ async function cmdStart(o) {
   }
   if (!acked) {
     const why = spawnFailed || `supervisor did not acknowledge start within ${START_ACK_MS / 1000}s`;
-    finalizeOnce(dir, () => buildResult({
-      meta, dir, parse: null, launched: false,
-      statusRes: resolveStatus({ spawnError: why, exitCode: null, parse: null, self: null }),
-      self: null, gitCmp: { ...GIT_UNKNOWN }, roVerdict: null, sessionId: null,
-      exitCode: null, signal: null, t0, truncated: false,
-    }));
+    finalizeStartFailure({ meta, dir, why, t0 });
     killTree(child.pid);
     die(`supervisor failed to start: ${why}`, 5);
   }
@@ -1791,6 +1799,26 @@ function parseArgs(argv) {
   return [o, rest];
 }
 
+// Machine-readable capability contract. A consumer that depends on these flags,
+// fields and exit codes queries `delegate.mjs contract` rather than inferring
+// compatibility from files that merely exist. Bump `contract` on any removal.
+const DRIVER_CONTRACT = Object.freeze({
+  contract: 'delegate-task.driver.v1',
+  result_schema: SCHEMA,
+  commands: ['start', 'collect', 'status', 'list', 'doctor', 'prune', 'contract'],
+  start_flags: ['--harness', '--task', '--cwd', '--model', '--sandbox', '--timeout',
+    '--deliverable', '--constraint', '--resume', '--allow-commit'],
+  collect_flags: ['--wait', '--json'],
+  env: ['DELEGATE_RUNS_DIR'],
+  meta_fields: ['run_id', 'harness', 'model', 'constraint', 'permission', 'allow_commit'],
+  result_fields: ['schema', 'run_id', 'harness', 'status', 'status_reason', 'status_provenance',
+    'summary', 'requested_model', 'actual_model', 'model_observed', 'model_reported', 'tokens',
+    'dirty_paths_changed', 'head_changed', 'index_changed', 'coverage_complete', 'artifacts'],
+  exit_codes: { usage_or_start_refused: 2, collect_still_running: 3, supervisor_start_failed: 5 },
+});
+
+function cmdContract() { console.log(JSON.stringify(DRIVER_CONTRACT, null, 2)); }
+
 const HELP = `delegate.mjs - run one task on an external agent CLI, in the background
 
   start    --harness <id> --task <text> [--cwd DIR] [--model M] [--sandbox]
@@ -1801,6 +1829,7 @@ const HELP = `delegate.mjs - run one task on an external agent CLI, in the backg
   list
   doctor
   prune    [--keep N] [--older-than DAYS] [--yes]
+  contract print the machine-readable flags, fields and exit codes consumers rely on
 
 Harnesses: ${Object.keys(HARNESSES).join(', ')}
 Permissions default to full bypass; --sandbox requests each CLI's read-only mode.
@@ -1810,9 +1839,9 @@ Contracts: contracts/status-precedence.md, git-fields.md, result-schema-v2.md`;
 // Exported for test/run.mjs. The CLI only runs when this file is the entry point,
 // so importing it for a unit test does not execute a command.
 export {
-  HARNESSES, tokens, parseEnvelope, parsePorcelainZ, claimMismatch,
+  HARNESSES, DRIVER_CONTRACT, tokens, parseEnvelope, parsePorcelainZ, claimMismatch,
   readOnlyVerdict, normaliseResult, resolveBin, envelope, deltaEnvelope, policyLines,
-  gitCapture, gitCompare, headMovement, finalizeOnce, positiveIntEnv,
+  gitCapture, gitCompare, headMovement, finalizeOnce, finalizeStartFailure, positiveIntEnv,
 };
 
 const isMain = process.argv[1]
@@ -1828,6 +1857,7 @@ if (isMain) {
   else if (cmd === 'status') cmdStatus(rest[0] || die('status needs a run_id'));
   else if (cmd === 'list') cmdList();
   else if (cmd === 'doctor') cmdDoctor();
+  else if (cmd === 'contract') cmdContract();
   else if (cmd === 'prune') cmdPrune(opts);
   else { console.log(HELP); process.exit(cmd ? 2 : 0); }
 }

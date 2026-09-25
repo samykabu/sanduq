@@ -59,13 +59,41 @@ with `python .specify/extensions/workflow/scripts/delegate_dispatch.py start
 assignment, owned paths, dependencies and acceptance checks. Pass `--cwd
 <isolated-worktree>` for concurrent writers. Collect the returned run ID with
 `delegate_dispatch.py collect`; follow any `replacement` ID and review the final
-result before accepting work. The adapter snapshots the route at start, records
-unavailable candidates and fallbacks, and allows one stronger retry for failed
-work with no measured edits. Do not reassign a running run when YAML changes.
+result before accepting work. The adapter snapshots the route and driver copy
+at start, records unavailable candidates, rejected models and fallbacks, and
+refuses a second start of a task that is already starting or running. It makes
+one automatic stronger retry (`delegation.stronger_retry`) only for failed work
+whose measurement shows no edits: empty `dirty_paths_changed`, unchanged HEAD
+and index, and `coverage_complete: true`. Unknown or incomplete measurement means
+no automatic retry, so
+review the worktree yourself. Do not reassign a running run when YAML changes.
 For a terminal result that is still too complex or incomplete, the orchestrator
 can run `delegate_dispatch.py reassign --feature specs/<feature> --run-id <id>
---reason "<specific gap>"`; this starts at most one stronger attempt and records
-the reason. Review partial edits before choosing that path.
+--reason "<specific gap>"`; this starts at most one stronger attempt within the
+same limit and records the reason. Review partial edits before choosing that
+path.
+
+When a start fails:
+
+- `DELEGATION_ROUTES_UNAVAILABLE`: no candidate could start, and each either
+  created no run or left one proved never launched (driver exit 5, a
+  `failed` never-launched result, no supervisor event, supervisor gone). The attempt is recorded as `blocked`; fix the CLI or route (see
+  `workflow.py doctor --project`) and start the task again.
+- `DELEGATION_START_UNCERTAIN: recover intent <id>`: do not start the task
+  again or hand it to another worker. Run `delegate_dispatch.py recover
+  --feature specs/<feature> --intent-id <id>`. If it binds a run, collect it.
+  If it reports `found: false`, run `delegate_dispatch.py abandon --feature
+  specs/<feature> --intent-id <id> --reason "<why>"` and then start again.
+  `abandon` refuses while a driver run exists for the intent, and for 300
+  seconds after a start that recorded no outcome.
+- `DELEGATION_LEDGER_BUSY`: another dispatcher is writing the ledger; retry.
+  A lock whose owner died on this host is recovered on its own. Delete a lock
+  file by hand only after confirming the process and host it names are not a
+  running dispatcher.
+
+Record each abandoned intent's reason in the handoff. The ledger keeps it too.
+Treat routing type as model choice only: a delegated run is writable unless you
+isolate it yourself.
 When delegation is disabled, ignore routing comments and use the user's selected
 model with the existing worker tools.
 
