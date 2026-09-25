@@ -105,14 +105,16 @@ Inspect active feature checkpoints and outstanding GitHub writes before an
 upgrade. Resolve active claims, then use the transactional upgrade path:
 
 ```powershell
-python .specify/extensions/workflow/scripts/upgrade.py --version 1.3.0 --preserve-ci
-python .specify/extensions/workflow/scripts/upgrade.py --version 1.3.0 --preserve-ci --apply
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.3.1 --preserve-ci
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.3.1 --preserve-ci --apply
 python .specify/extensions/workflow/scripts/workflow.py doctor --project
 ```
 
-Replace `1.3.0` with the verified published version. `--preserve-ci` retains
+Replace `1.3.1` with the verified published version. `--preserve-ci` retains
 a customized gate file and is inappropriate if the selected mode is disabled
-while that file still runs. Preview, backup, and compare before any managed
+while that file still runs. Target 1.3.1 or later with `--preserve-ci`: on a
+clone or worktree without the local `install-receipt.json`, a 1.3.0 target
+rolls back with `CI_WORKFLOW_STALE` (#22). Preview, backup, and compare before any managed
 reset. If an older install has no active claims or unmapped project data, a
 clean Spec Kit reinitialization may be simpler; remove managed files only after
 the backup and ownership diff are complete. Preserve feature artifacts, Project
