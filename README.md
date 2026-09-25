@@ -922,8 +922,8 @@ The first command previews the operation; the second applies the same version wi
 rollback protection:
 
 ```bash
-python .specify/extensions/workflow/scripts/upgrade.py --version 1.3.0 --packages /absolute/path/to/sanduq-packages
-python .specify/extensions/workflow/scripts/upgrade.py --version 1.3.0 --packages /absolute/path/to/sanduq-packages --apply
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.3.1 --packages /absolute/path/to/sanduq-packages
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.3.1 --packages /absolute/path/to/sanduq-packages --apply
 python .specify/extensions/workflow/scripts/workflow.py doctor --project
 ```
 
