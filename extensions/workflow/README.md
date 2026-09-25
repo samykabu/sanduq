@@ -159,7 +159,11 @@ never leaves a partial skill. The old copy is then moved aside in one rename,
 not deleted, to `.specify/workflow/backups/delegate-task/` for project scope or
 `~/.sanduq/backups/delegate-task/` for global scope. Both are outside every
 skill discovery directory, so the backup's `SKILL.md` never appears as a second
-skill. If the swap fails, the previous copy is restored. The install result,
+skill. A dangling symlink or Windows junction at the install target (its folder
+is gone, for example on an unplugged drive) is moved aside the same way, as the
+link itself with its target unchanged, and reported with the reason
+`dangling link`. If the swap fails, the previous copy or link is restored, and
+nothing that was already at the target is deleted. The install result,
 `delegate_dispatch.py start` and a claim report the replacement as a
 `DELEGATE_SKILL_REPLACED` notice naming the old path, why it was rejected and
 its backup, so a customization can be carried over by hand.
@@ -180,6 +184,18 @@ installed; a lock still held after 180 seconds returns the retryable
 `DELEGATE_SKILL_DOCTOR_FAILED`, and `DELEGATE_AGENT_CLI_UNAVAILABLE` when neither
 Codex nor Claude works. A missing or broken individual CLI (`AGENT_CLI_MISSING`,
 `AGENT_CLI_BROKEN`) is recorded as a skipped route.
+
+If the driver's own `doctor` then fails, only the copy that failed is
+refreshed, and only where it is: a real folder at the project or global
+location Sanduq installs to is replaced in place and moved to that scope's
+backup folder. Sanduq never installs at the configured scope instead, since the
+failing copy would stay first in the search order and be refreshed again on
+every dispatch. A copy Sanduq does not own (a `SANDUQ_DELEGATE_DRIVER`
+override, a plugin copy, `~/.codex/skills`, or a symlinked folder or Windows
+directory junction) is never replaced: `DELEGATE_SKILL_DOCTOR_FAILED` names its
+path and says to repair it or remove it so a Sanduq install is used. A
+symlinked or junctioned skill folder is otherwise a normal install; the driver
+answers through the link.
 
 A running attempt remembers the driver copy that started it. `collect` uses
 that copy even if both project and global copies exist or `install_scope`
@@ -227,7 +243,14 @@ misread. Without a marker, only an unambiguous leading action counts: "Run ...
 tests", "Write/Add ... tests for ...", "Test <something>", "Capture ...
 screenshots"; "Document the ...", "Update README/docs/guide/release notes"
 followed by a preposition or the end of the line; "Review/Audit/Inspect
-<something>". When the word after "Test", "Review", "Audit" or "Inspect" names
+<something>". A documentation file named as the object also counts:
+"Update README.md with setup instructions", "Update docs/quickstart.md", "Add
+docs/api.md section for auth", "Document API endpoints in docs/api.md". That
+means a README, changelog or contributing file with or without its extension,
+a path under a top-level `docs/` folder, or any `.md`, `.mdx`, `.rst` or `.adoc`
+file. Code under a nested docs folder ("Update src/docs/parser.py") and
+"Document <thing>" without a documentation destination ("Document upload API")
+stay implementation. When the word after "Test", "Review", "Audit" or "Inspect" names
 something being built (log, queue, API, endpoint, service, page, component,
 runner, pipeline and similar), the task is implementation: "Audit log
 retention", "Review queue API endpoint", "Test runner integration". A check
@@ -287,6 +310,23 @@ already starting or running is refused with `DELEGATION_ALREADY_RUNNING`.
   missing, null or different means no automatic retry. For a terminal result that is still
   incomplete, the orchestrator may run `delegate_dispatch.py reassign --feature
   specs/<feature> --run-id <id> --reason "<gap>"` within the same limit.
+- **Dispatcher bookkeeping is not worker work.** The driver measures the whole
+  repository, and the dispatcher writes the tracked ledger while runs are live
+  (its own start record, and every parallel start or collect). A changed ledger
+  path is set aside only when the run worked in this checkout and the ledger
+  still holds exactly the bytes a dispatcher last saved, recorded in
+  `.specify/workflow/runtime/delegation-<hash>.written`. Before every save, the
+  dispatcher compares the file with that record. If anything else wrote it (a
+  worker, a rollback, or a ledger with no record at all), every `starting` or
+  `running` attempt is stamped `ledger_foreign_write_seen`, and that run's
+  ledger change stays a worker change even after a later dispatcher save has
+  absorbed the edit. The attempt records the raw `changed_paths`, the `dispatcher_paths_changed` set
+  aside, any `unattributed_bookkeeping_paths`, and the `worker_changed_paths`
+  that fallback and stronger retry decisions use. Setting a path aside never
+  makes an incomplete measurement complete. `tasks.md` is not set aside: the
+  driver reports paths, not content, so a marker refresh cannot be told apart
+  from a worker edit. Annotation happens at claims and stage completion, not
+  during task runs.
 - **Route snapshots.** A running attempt keeps its start-time route when YAML
   changes. Each claimed stage records its route in the checkpoint.
 
@@ -296,22 +336,56 @@ lose an attempt or start the same work twice. A busy ledger returns the
 retryable `DELEGATION_LEDGER_BUSY` after 15 seconds, naming the lock owner's
 process and host.
 
+An upgrade or install rolls back every ledger if it fails, so neither runs
+while an attempt is live and no dispatcher writes while one runs. `start`,
+`collect`, `reassign`, `recover`, `abandon` and a skill install refuse with the
+`WORKFLOW_UPGRADE_IN_PROGRESS` while
+`.specify/workflow/runtime/upgrade.lock` or `install.lock` exists. They check
+inside the ledger or skill-install lock. The error names the lock and the
+process ID recorded in it. These locks are never recovered automatically. If
+that process is still running, retry once it finishes. If it is not
+(`tasklist /FI "PID eq <pid>"` on Windows, `ps -p <pid>` elsewhere), the
+upgrade or install crashed: delete the lock file and rerun the upgrade or
+install, because its rollback may not have completed. After taking its own lock, `upgrade.py`
+and `install.py --apply` wait for any skill install in progress and take each
+feature's ledger lock in turn. They refuse with `DELEGATION_ATTEMPTS_ACTIVE`,
+naming each run or intent, while any attempt is `starting` or `running`.
+Collect, recover or abandon those first. The one exception is a start that had
+already reserved its attempt when the upgrade began: it may still record its
+run, because that reservation has already made the upgrade refuse.
+
 The ledger lock is `.specify/workflow/runtime/delegation-<hash>.lock` and records
 its owner's process ID, host and a token. A lock whose owner has exited on this
-host is recovered automatically, and so is an owner record that was never
+host is recovered automatically, and so is a lock whose owner record was never
 written once it is 60 seconds old. A lock held by a live process, or by any
 process on another host, is never taken. Recovery captures the lock with a
 single rename and puts it back if it turned out to belong to a live owner. A
 dispatcher that finds its own lock replaced refuses to save the ledger. If the
 owner's process ID was reused by an unrelated process, the lock looks live:
 confirm the named process is not a dispatcher, then delete the lock file.
+On Windows, releasing a lock retries brief file-sharing conflicts while
+checking the owner token before each attempt. A persistent conflict returns
+`DELEGATION_LOCK_RELEASE_BUSY` and names the lock file; a new owner's lock is
+never removed by the former owner.
 
 ### History and evidence
 
 The tracked `specs/<feature>/workflow/delegations.json` records every attempt,
 requested route, skipped or fallback decision, start failure, abandoned intent,
 result and token usage. It survives upgrades and is included in installer
-rollback snapshots. The requested model and the model the harness reported are
+rollback snapshots. Rollback snapshots take a project `delegate-task` skill
+folder's own files but not its raw `runs/` or `node_modules/` folders. A
+symlinked skill folder is recorded and restored as the link itself, never
+followed, and always as a folder link, even while its target is missing. A
+Windows directory junction (`mklink /J`) is handled the same way and is
+restored as a junction, never as a symlink. Rollback writes the junction's
+reparse data directly rather than running `mklink` through `cmd`, so a target
+path containing `%NAME%`, `&`, `^` or `!` comes back exactly, and a missing
+target is not created. Rollback makes each junction before
+it changes anything; if one cannot be made, it stops with
+`ROLLBACK_JUNCTION_FAILED`, leaves every file and the moved-aside original link
+as they are, and keeps the backup. A link is restored only where rollback leaves no unmanaged file behind
+(`ROLLBACK_CONFLICT` otherwise). The requested model and the model the harness reported are
 kept apart. When a harness does not report its actual model, the ledger and
 report say `unverified`; the requested model is never shown as measured fact.
 Raw prompts and logs stay in the git-ignored `.delegate/runs/`, and

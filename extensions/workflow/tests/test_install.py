@@ -1,5 +1,6 @@
 import json
 import hashlib
+import os
 import shutil
 import subprocess
 import sys
@@ -9,6 +10,7 @@ from unittest.mock import patch
 from pathlib import Path
 import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import delegation
 import install as installer
 import workflow as w
 import test_workflow as fixture
@@ -250,6 +252,220 @@ class InstallTests(unittest.TestCase):
         self.assertTrue(alias.is_symlink())
         self.assertEqual(target.read_text(encoding='utf-8'), 'Original command')
         self.assertEqual(installer.managed_files(self.root), before)
+
+    def delegate_link(self):
+        outside = tempfile.TemporaryDirectory(); self.addCleanup(outside.cleanup)
+        target = Path(outside.name).resolve() / 'delegate-task'
+        target.mkdir()
+        (target / 'SKILL.md').write_text('Shared skill', encoding='utf-8')
+        link = self.root / '.claude/skills/delegate-task'
+        link.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            link.symlink_to(target, target_is_directory=True)
+        except OSError as error:
+            self.skipTest('Host does not support test symlinks: ' + str(error))
+        return link, target
+
+    def replace_link_with_folder(self, link, backup):
+        # What a skill install does: move the link aside, then place a real copy.
+        link.rename(backup)
+        link.mkdir()
+        (link / 'SKILL.md').write_text('Bundled skill', encoding='utf-8')
+        (link / 'delegate.mjs').write_text('// bundled', encoding='utf-8')
+
+    def test_symlinked_delegate_skill_is_one_link_and_rolls_back(self):
+        link, target = self.delegate_link()
+        before = installer.snapshot(self.root, self.package / 'backup')
+        self.assertEqual(before['.claude/skills/delegate-task'],
+                         {'symlink': str(link.readlink()), 'directory': True})
+        self.assertFalse(any(name.startswith('.claude/skills/delegate-task/') for name in before))
+        self.replace_link_with_folder(link, self.package / 'moved-link')
+        installer.restore(self.root, before, installer.managed_files(self.root))
+        self.assertTrue(link.is_symlink())
+        self.assertEqual((link / 'SKILL.md').read_text(encoding='utf-8'), 'Shared skill')
+        self.assertEqual(sorted(p.name for p in target.iterdir()), ['SKILL.md'])
+        self.assertEqual(installer.managed_files(self.root), before)
+
+    def test_dangling_delegate_skill_link_rolls_back_as_a_folder_link(self):
+        link, target = self.delegate_link()
+        # The shared checkout the link points at is moved away for now.
+        parked = target.with_name('parked')
+        target.rename(parked)
+        self.assertFalse(link.exists())
+        before = installer.snapshot(self.root, self.package / 'backup')
+        self.assertEqual(before['.claude/skills/delegate-task'],
+                         {'symlink': str(link.readlink()), 'directory': True})
+        self.replace_link_with_folder(link, self.package / 'moved-link')
+        created = []
+        real_symlink_to = Path.symlink_to
+        def spy(path, to, target_is_directory=False):
+            created.append((path, target_is_directory))
+            return real_symlink_to(path, to, target_is_directory)
+        with patch.object(Path, 'symlink_to', spy):
+            installer.restore(self.root, before, installer.managed_files(self.root))
+        # Windows needs a directory link here; a file link would never open the folder.
+        self.assertEqual(created, [(link, True)])
+        self.assertTrue(link.is_symlink())
+        parked.rename(target)
+        self.assertEqual((link / 'SKILL.md').read_text(encoding='utf-8'), 'Shared skill')
+        self.assertEqual(installer.managed_files(self.root), before)
+
+    def test_link_rollback_never_deletes_unmanaged_files(self):
+        link, _ = self.delegate_link()
+        before = installer.snapshot(self.root, self.package / 'backup')
+        self.replace_link_with_folder(link, self.package / 'moved-link')
+        (link / 'runs/r1').mkdir(parents=True)
+        (link / 'runs/r1/result.json').write_text('{}', encoding='utf-8')
+        current = installer.managed_files(self.root)
+        with self.assertRaisesRegex(w.WorkflowError, 'ROLLBACK_CONFLICT: unmanaged files'):
+            installer.restore(self.root, before, current)
+        self.assertEqual(installer.managed_files(self.root), current)
+        self.assertTrue((link / 'runs/r1/result.json').is_file())
+
+    def delegate_junction(self):
+        outside = tempfile.TemporaryDirectory(); self.addCleanup(outside.cleanup)
+        target = Path(outside.name).resolve() / 'shared skill'
+        (target / 'runs/r1').mkdir(parents=True)
+        (target / 'SKILL.md').write_text('Shared skill', encoding='utf-8')
+        (target / 'runs/r1/prompt.txt').write_text('raw run data', encoding='utf-8')
+        link = self.root / '.claude/skills/delegate-task'
+        link.parent.mkdir(parents=True, exist_ok=True)
+        made = subprocess.run(['cmd', '/c', 'mklink', '/J', str(link), str(target)],
+                              capture_output=True, text=True)
+        self.assertEqual(made.returncode, 0, made.stderr or made.stdout)
+        self.addCleanup(lambda: delegation.is_link(link) and os.rmdir(link))
+        self.assertFalse(link.is_symlink())
+        return link, target
+
+    @staticmethod
+    def tree(folder):
+        return {p.relative_to(folder).as_posix(): p.read_bytes() for p in folder.rglob('*') if p.is_file()}
+
+    @unittest.skipUnless(os.name == 'nt', 'directory junctions exist only on Windows')
+    def test_junctioned_delegate_skill_is_one_link_and_rolls_back_as_a_junction(self):
+        link, target = self.delegate_junction()
+        untouched = self.tree(target)
+        before = installer.snapshot(self.root, self.package / 'backup')
+        self.assertEqual(before['.claude/skills/delegate-task'],
+                         {'symlink': os.readlink(link), 'directory': True, 'junction': True})
+        self.assertFalse(any(name.startswith('.claude/skills/delegate-task/') for name in before))
+        moved = self.package / 'moved-link'
+        self.replace_link_with_folder(link, moved)
+        self.addCleanup(lambda: delegation.is_link(moved) and os.rmdir(moved))
+        installer.restore(self.root, before, installer.managed_files(self.root))
+        self.assertTrue(delegation.is_junction(link))
+        self.assertFalse(link.is_symlink())
+        self.assertEqual((link / 'SKILL.md').read_text(encoding='utf-8'), 'Shared skill')
+        self.assertEqual(installer.managed_files(self.root), before)
+        # The moved-aside original link and the external target are left as they were.
+        self.assertTrue(delegation.is_junction(moved))
+        self.assertEqual(self.tree(target), untouched)
+        self.assertEqual(list((self.root / '.specify/workflow/runtime').glob('junction-restore-*')), [])
+
+    @unittest.skipUnless(os.name == 'nt', 'directory junctions exist only on Windows')
+    def test_dangling_delegate_skill_junction_rolls_back_as_a_junction(self):
+        link, target = self.delegate_junction()
+        parked = target.with_name('parked')
+        target.rename(parked)
+        self.assertFalse(link.exists())
+        before = installer.snapshot(self.root, self.package / 'backup')
+        self.assertTrue(before['.claude/skills/delegate-task']['junction'])
+        moved = self.package / 'moved-link'
+        self.replace_link_with_folder(link, moved)
+        self.addCleanup(lambda: delegation.is_link(moved) and os.rmdir(moved))
+        installer.restore(self.root, before, installer.managed_files(self.root))
+        self.assertTrue(delegation.is_junction(link))
+        parked.rename(target)
+        self.assertEqual((link / 'SKILL.md').read_text(encoding='utf-8'), 'Shared skill')
+        self.assertEqual(installer.managed_files(self.root), before)
+
+    @unittest.skipUnless(os.name == 'nt', 'directory junctions exist only on Windows')
+    def test_dangling_junction_target_with_shell_metacharacters_is_restored_exactly(self):
+        import _winapi
+        outside = tempfile.TemporaryDirectory(); self.addCleanup(outside.cleanup)
+        # cmd would expand %OS% (always defined) and could split on & or treat ^ ! as escapes.
+        target = Path(outside.name).resolve() / 'skill %OS% & ^caret !x! (1);='
+        target.mkdir()
+        link = self.root / '.claude/skills/delegate-task'
+        link.parent.mkdir(parents=True, exist_ok=True)
+        _winapi.CreateJunction(str(target), str(link))  # No shell involved in the original.
+        self.addCleanup(lambda: delegation.is_link(link) and os.rmdir(link))
+        target.rmdir()
+        recorded = os.readlink(link)
+        before = installer.snapshot(self.root, self.package / 'backup')
+        self.assertEqual(before['.claude/skills/delegate-task'],
+                         {'symlink': recorded, 'directory': True, 'junction': True})
+        moved = self.package / 'moved-link'
+        self.replace_link_with_folder(link, moved)
+        self.addCleanup(lambda: delegation.is_link(moved) and os.rmdir(moved))
+        with patch.object(subprocess, 'run', side_effect=AssertionError('no shell')), \
+             patch.object(Path, 'symlink_to', side_effect=AssertionError('never a symlink')):
+            installer.restore(self.root, before, installer.managed_files(self.root))
+        self.assertTrue(delegation.is_junction(link))
+        self.assertEqual(os.readlink(link), recorded)
+        self.assertIn('%OS%', os.readlink(link))
+        # The missing target is not created, and nothing else appears beside it.
+        self.assertFalse(os.path.lexists(target))
+        self.assertEqual(list(Path(outside.name).iterdir()), [])
+        self.assertEqual(installer.managed_files(self.root), before)
+        target.mkdir()
+        (target / 'SKILL.md').write_text('Shared skill', encoding='utf-8')
+        self.assertEqual((link / 'SKILL.md').read_text(encoding='utf-8'), 'Shared skill')
+        self.assertEqual(list((self.root / '.specify/workflow/runtime').glob('junction-restore-*')), [])
+
+    @unittest.skipUnless(os.name == 'nt', 'directory junctions exist only on Windows')
+    def test_junction_that_cannot_be_recreated_stops_rollback_before_any_change(self):
+        link, target = self.delegate_junction()
+        untouched = self.tree(target)
+        before = installer.snapshot(self.root, self.package / 'backup')
+        moved = self.package / 'moved-link'
+        self.replace_link_with_folder(link, moved)
+        self.addCleanup(lambda: delegation.is_link(moved) and os.rmdir(moved))
+        current = installer.managed_files(self.root)
+        with patch.object(installer, 'create_junction', side_effect=OSError('no junctions here')), \
+             patch.object(Path, 'symlink_to', side_effect=AssertionError('never a symlink')), \
+             self.assertRaisesRegex(w.WorkflowError, 'ROLLBACK_JUNCTION_FAILED: nothing was restored'):
+            installer.restore(self.root, before, current)
+        self.assertEqual(installer.managed_files(self.root), current)
+        self.assertTrue(delegation.is_junction(moved))
+        self.assertEqual(self.tree(target), untouched)
+        self.assertEqual(list((self.root / '.specify/workflow/runtime').glob('junction-restore-*')), [])
+
+    def test_real_delegate_skill_snapshot_excludes_run_data_and_rolls_back(self):
+        folder = self.root / '.agents/skills/delegate-task'
+        for name, text in (('SKILL.md', 'Skill'), ('contracts/result-schema-v2.md', 'Schema'),
+                           ('runs/codex-1/prompt.txt', 'secret'), ('node_modules/x/index.js', 'x'),
+                           ('contracts/runs/kept.md', 'nested runs folder is skill content')):
+            (folder / name).parent.mkdir(parents=True, exist_ok=True)
+            (folder / name).write_text(text, encoding='utf-8')
+        before = installer.snapshot(self.root, self.package / 'backup')
+        skill = sorted(name for name in before if name.startswith('.agents/skills/delegate-task/'))
+        self.assertEqual(skill, ['.agents/skills/delegate-task/SKILL.md',
+                                 '.agents/skills/delegate-task/contracts/result-schema-v2.md',
+                                 '.agents/skills/delegate-task/contracts/runs/kept.md'])
+        (folder / 'SKILL.md').write_text('Changed', encoding='utf-8')
+        (folder / 'delegate.mjs').write_text('// new', encoding='utf-8')
+        (folder / 'runs/codex-2').mkdir()
+        (folder / 'runs/codex-2/prompt.txt').write_text('live run', encoding='utf-8')
+        installer.restore(self.root, before, installer.managed_files(self.root))
+        self.assertEqual((folder / 'SKILL.md').read_text(encoding='utf-8'), 'Skill')
+        self.assertFalse((folder / 'delegate.mjs').exists())
+        self.assertEqual((folder / 'runs/codex-2/prompt.txt').read_text(encoding='utf-8'), 'live run')
+        self.assertEqual(installer.managed_files(self.root), before)
+
+    def test_install_refuses_while_a_delegation_attempt_is_active(self):
+        ledger = self.root / 'specs/001-example/workflow/delegations.json'
+        w.write(ledger, {'schema_version': 1, 'feature': 'specs/001-example',
+                         'attempts': [{'intent_id': 'i-1', 'status': 'starting'}], 'route_decisions': []})
+        commands = []
+        with patch.object(installer, 'install_aliases', return_value={}), \
+             patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}), \
+             patch.object(installer, 'required_gate_checks', return_value=[]), \
+             self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_ATTEMPTS_ACTIVE: .*intent i-1'):
+            installer.install(self.root, apply=True, package_root=self.package,
+                              runner=lambda root, args, log: commands.append(args))
+        self.assertEqual(commands, [])
+        self.assertFalse((self.root / '.specify/workflow/runtime/install.lock').exists())
 
     def test_owned_alias_upgrade_uses_previous_hash_and_preserves_local_edits(self):
         inventory = installer.install_aliases(self.root, self.package)

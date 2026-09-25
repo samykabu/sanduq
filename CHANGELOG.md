@@ -20,6 +20,29 @@ independently via `<extension>-vX.Y.Z` tags.
   `finalizeStartFailure`, and a contract test pins the never-launched result the workflow
   relies on to try the next configured route safely.
 
+### Fixed
+
+- `delegate.mjs` did nothing when started through a symlinked skill folder. Its entry-point
+  check compared the link path with the module's real path, so every command, including
+  `contract`, printed nothing and a symlinked install looked incompatible. It now compares
+  real paths, and a contract test runs the driver through a symlink.
+- Workflow 1.5.0 review follow-up: dispatcher ledger writes no longer count as worker edits
+  (and a worker's ledger edit hidden by a later dispatcher save still does), symlinked and
+  Windows-junctioned skill folders survive install and upgrade rollback as the same kind of
+  link (dangling links included) and are never replaced by `doctor`, upgrades and
+  dispatchers no longer race over live ledger records, a stale upgrade or install lock is
+  named with its owner process and how to clear it, documentation-file tasks route to documentation, and
+  a failing driver copy is refreshed where it is or reported. See the workflow changelog.
+- A skill install no longer deletes a dangling project `delegate-task` junction; the link is
+  backed up and restored if the install fails. Rollback recreates junctions without `cmd`, so a
+  target containing `%OS%`, `&`, `^` or `!` comes back exactly.
+- `extensions/scripts/package.py` no longer ships local test and lint caches. A workflow archive
+  built after a local `pytest` run carried `workflow/.pytest_cache/*`; `.pytest_cache`,
+  `.mypy_cache`, `.ruff_cache`, `.hypothesis`, `.tox`, `.nox`, coverage output and `.pyo` files
+  are now excluded, and a test builds the archive after the suite has run.
+- Workflow lock release now tolerates transient Windows file-sharing conflicts
+  while rechecking ownership before each retry.
+
 ## CI runners are a project decision — workflow 1.2.0, assure 2.2.0, user-manual 1.2.0 — 2026-09-22
 
 ### Changed

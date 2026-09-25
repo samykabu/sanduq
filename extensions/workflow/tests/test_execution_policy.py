@@ -17,6 +17,32 @@ spec.loader.exec_module(packager)
 
 
 class ExecutionPackageTests(unittest.TestCase):
+    def test_archive_leaves_out_local_test_and_lint_caches(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = root / 'extensions/demo'
+            content = {'extension.yml': 'extension: {}\n', 'scripts/run.py': 'print(1)\n'}
+            generated = ('.pytest_cache/v/cache/lastfailed', '.pytest_cache/CACHEDIR.TAG',
+                         'scripts/__pycache__/run.cpython-313.pyc', 'scripts/run.pyo',
+                         '.mypy_cache/3.13/run.json', '.ruff_cache/0.5/state', '.hypothesis/examples/x',
+                         '.tox/py/log', '.nox/py/log', 'htmlcov/index.html', '.coverage',
+                         'node_modules/x/index.js', '.nyc_output/out.json')
+            for name in (*content, *generated):
+                path = source / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content.get(name, 'generated\n'), encoding='utf-8')
+            package = packager.package('demo', output=root / 'demo.zip', root=root)
+            with zipfile.ZipFile(package['archive']) as archive:
+                self.assertEqual(sorted(archive.namelist()),
+                                 ['demo/extension.yml', 'demo/package-inventory.json', 'demo/scripts/run.py'])
+        # The real workflow archive too, even right after this suite has run in its folder.
+        with tempfile.TemporaryDirectory() as folder:
+            package = packager.package('workflow', output=Path(folder) / 'workflow.zip')
+            with zipfile.ZipFile(package['archive']) as archive:
+                cached = [name for name in archive.namelist()
+                          if set(name.split('/')) & packager.EXCLUDE or name.endswith(('.pyc', '.pyo'))]
+            self.assertEqual(cached, [])
+
     def test_archive_contains_both_composed_contracts_and_runnable_report(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
