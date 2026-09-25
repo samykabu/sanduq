@@ -8,6 +8,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import ntpath
+import os
 import shutil
 import subprocess
 import sys
@@ -20,6 +22,8 @@ from packaging.version import Version
 from packaging.specifiers import SpecifierSet
 from workflow import load_policy, read, write, require, inside, registry, doctor, locked, WorkflowError, RANGES, ensure_local_excludes, package_digest, active_host, github_repository, sanduq_ci
 from reconcile import reconcile
+from delegate_dispatch import maintenance_preflight
+from delegation import is_junction, is_link
 
 PACKAGE = Path(__file__).resolve().parents[1]
 DIRECTORIES = ('.specify/extensions', '.specify/presets')
@@ -29,22 +33,163 @@ FILES = ('.specify/extensions.yml', '.specify/workflow.yml', '.specify/workflow/
          '.github/workflows/sanduq-workflow-gates.yml', '.github/workflows/documentation-gates.yml')
 
 
+# Raw delegate-task run artifacts and dependencies are not skill content. They
+# can hold secrets a harness printed and change while a run is live.
+SKILL_RAW_DATA = ('runs', 'node_modules')
+
+
+def skill_files(folder):
+    """The delegate-task folder's own files, pruning raw run data and dependencies."""
+    found = []
+    for directory, dirs, names in os.walk(folder):
+        here = Path(directory)
+        if here == folder:
+            dirs[:] = [d for d in dirs if d not in SKILL_RAW_DATA]
+        # Never descend into a symlinked or junctioned folder; keep it as an
+        # entry so the link rule below still applies inside the skill.
+        links = [d for d in dirs if is_link(here / d)]
+        dirs[:] = [d for d in dirs if d not in links]
+        found += [here / d for d in links]
+        found += [here / n for n in names]
+    return found
+
+
 def managed_files(root):
     files = set()
+    # A symlinked or junctioned delegate-task folder is a user-managed install.
+    # It is kept as one link, never followed, so rollback restores the link itself.
+    skill_links = set()
     for folder in DIRECTORIES:
         path = inside(root, folder)
         if path.exists(): files.update(p for p in path.rglob('*') if p.is_file() or p.is_symlink())
     for folder in ('.agents/skills', '.claude/skills', '.claude/commands'):
         path = inside(root, folder)
         if path.exists():
-            for item in [*path.glob('speckit*'), *path.glob('delegate-task')]:
+            for item in path.glob('speckit*'):
                 files.update([item] if item.is_file() or item.is_symlink() else (p for p in item.rglob('*') if p.is_file() or p.is_symlink()))
+            for item in path.glob('delegate-task'):
+                if is_link(item):
+                    skill_links.add(item)
+                elif item.is_dir():
+                    files.update(skill_files(item))
+                else:
+                    files.add(item)
     # Delegation decisions are tracked feature history, not generated report
     # state. Include them in rollback snapshots without rewriting them.
     files.update((root / 'specs').glob('*/workflow/delegations.json'))
     files.update(root / f for f in FILES if (root / f).is_file())
-    require(all(p.resolve().is_relative_to(root) and not (p.is_symlink() and p.is_dir()) for p in files), 'MANAGED_PATH_SYMLINK_UNSUPPORTED')
-    return {p.relative_to(root).as_posix(): {'symlink': str(p.readlink())} if p.is_symlink() else p.read_bytes() for p in files}
+    require(all(p.resolve().is_relative_to(root) and not (is_link(p) and p.is_dir()) for p in files), 'MANAGED_PATH_SYMLINK_UNSUPPORTED')
+    # A link's own location must be inside the project; its target need not be.
+    require(all(p.parent.resolve().is_relative_to(root) for p in skill_links), 'MANAGED_PATH_SYMLINK_UNSUPPORTED')
+    result = {p.relative_to(root).as_posix(): {'symlink': str(p.readlink())} if p.is_symlink() else p.read_bytes() for p in files}
+    # A skill link is always a folder link, even while its target is missing:
+    # asking the target would restore a dangling link as a file link on Windows.
+    # A junction is recorded as one, so rollback never turns it into a symlink.
+    result.update({p.relative_to(root).as_posix(): {'symlink': str(p.readlink()), 'directory': True,
+                                                    **({'junction': True} if is_junction(p) else {})}
+                   for p in skill_links})
+    return result
+
+
+def remove_link(path):
+    """Remove a symlink or junction itself; Windows removes a directory link with rmdir."""
+    try:
+        path.unlink()
+    except (IsADirectoryError, PermissionError):
+        if not is_link(path):
+            raise
+        os.rmdir(path)
+
+
+# os.readlink reports a drive-letter junction target as \\?\C:\...; the
+# reparse data stores it as \??\C:\.... A volume path (\\?\Volume{...}\) keeps
+# its prefix, since without it the path means something else.
+EXTENDED_PATH_PREFIX = '\\\\?\\'
+IO_REPARSE_TAG_MOUNT_POINT = 0xA0000003
+FSCTL_SET_REPARSE_POINT = 0x000900A4
+
+
+def junction_target(value):
+    value = str(value)
+    rest = value[len(EXTENDED_PATH_PREFIX):]
+    drive = value.startswith(EXTENDED_PATH_PREFIX) and len(rest) >= 3 and rest[1:3] == ':\\'
+    return rest if drive else value
+
+
+def mount_point_data(target):
+    """The REPARSE_DATA_BUFFER of a junction to ``target``, byte for byte.
+
+    This is the record ``mklink /J`` writes. Nothing in it is parsed by a shell,
+    and the target need not exist, so a dangling junction comes back exactly.
+    """
+    import struct
+    substitute = '\\??\\' + (target[len(EXTENDED_PATH_PREFIX):]
+                             if target.startswith(EXTENDED_PATH_PREFIX) else target)
+    names = (substitute + '\0' + target + '\0').encode('utf-16-le')
+    substitute_bytes, print_bytes = len(substitute) * 2, len(target) * 2
+    body = struct.pack('<HHHH', 0, substitute_bytes, substitute_bytes + 2, print_bytes) + names
+    return struct.pack('<LHH', IO_REPARSE_TAG_MOUNT_POINT, len(body), 0) + body
+
+
+def set_mount_point(path, target):
+    """Turn the empty folder ``path`` into a junction to ``target``."""
+    import ctypes
+    from ctypes import wintypes
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.CreateFileW.restype = wintypes.HANDLE
+    kernel.CreateFileW.argtypes = (wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID,
+                                   wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE)
+    kernel.DeviceIoControl.restype = wintypes.BOOL
+    kernel.DeviceIoControl.argtypes = (wintypes.HANDLE, wintypes.DWORD, wintypes.LPVOID, wintypes.DWORD,
+                                       wintypes.LPVOID, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD),
+                                       wintypes.LPVOID)
+    kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+    generic_write, open_existing = 0x40000000, 3
+    backup_semantics, open_reparse_point = 0x02000000, 0x00200000
+    handle = kernel.CreateFileW(str(path), generic_write, 0, None, open_existing,
+                                backup_semantics | open_reparse_point, None)
+    if handle in (None, wintypes.HANDLE(-1).value):
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        data = mount_point_data(target)
+        buffer = ctypes.create_string_buffer(data, len(data))
+        returned = wintypes.DWORD()
+        if not kernel.DeviceIoControl(handle, FSCTL_SET_REPARSE_POINT, buffer, len(data),
+                                      None, 0, ctypes.byref(returned), None):
+            raise ctypes.WinError(ctypes.get_last_error())
+    finally:
+        kernel.CloseHandle(handle)
+
+
+def create_junction(path, target):
+    """Create a Windows directory junction at ``path`` pointing at ``target``.
+
+    It writes the junction's reparse data directly, so the target is kept
+    exactly, whether or not it exists, and never reaches a shell that would
+    expand %NAME% or other metacharacters in it. The target is never touched.
+    """
+    require(os.name == 'nt', 'ROLLBACK_JUNCTION_UNSUPPORTED: junctions exist only on Windows')
+    target = junction_target(target)
+    # A junction names a local volume: a drive path or a \\?\Volume{...}\ path.
+    require((ntpath.isabs(target) and not target.startswith('\\\\')) or target.startswith(EXTENDED_PATH_PREFIX),
+            'ROLLBACK_JUNCTION_FAILED: ' + str(path) + ' -> ' + target + ': not a local absolute path')
+    os.mkdir(path)
+    try:
+        set_mount_point(path, target)
+    except Exception as error:
+        os.rmdir(path)
+        raise WorkflowError('ROLLBACK_JUNCTION_FAILED: ' + str(path) + ' -> ' + target + ': ' + str(error)) from error
+    require(is_junction(path) and junction_target(os.readlink(path)) == target,
+            'ROLLBACK_JUNCTION_FAILED: ' + str(path) + ' does not point at ' + target)
+
+
+def clear_emptied_folder(path):
+    """Remove a real folder that rollback has already emptied of managed files."""
+    if not path.is_dir() or is_link(path):
+        return
+    for item in sorted(path.rglob('*'), key=lambda p: len(p.parts), reverse=True):
+        item.rmdir()
+    path.rmdir()
 
 
 def snapshot(root, directory):
@@ -63,20 +208,65 @@ def snapshot(root, directory):
 def restore(root, files, expected):
     current = managed_files(root)
     require(current == expected, 'ROLLBACK_CONFLICT: managed files changed; backup retained for review')
+    # A folder link comes back only where rollback leaves nothing behind: an
+    # unmanaged file there (such as a new copy's run data) is never deleted.
+    for name, content in files.items():
+        folder = root / name
+        if isinstance(content, dict) and content.get('directory') and folder.is_dir() and not is_link(folder):
+            leftovers = [p for p in folder.rglob('*') if not p.is_dir() and p.relative_to(root).as_posix() not in current]
+            require(not leftovers, 'ROLLBACK_CONFLICT: unmanaged files in ' + name + '; backup retained for review')
     # Only exact managed files within the already-validated project are touched.
     # Preserve empty directories instead of recursively deleting computed paths.
     def lexical(name):
         path = root / name
         require(path.parent.resolve().is_relative_to(root), 'ROLLBACK_PATH_OUTSIDE_PROJECT')
         return path  # Do not resolve a symlink and accidentally unlink its target.
-    for name in current.keys() - files.keys(): lexical(name).unlink()
-    for name, content in sorted(files.items(), key=lambda item: isinstance(item[1], dict)):
-        path = lexical(name); path.parent.mkdir(parents=True, exist_ok=True)
-        if path.is_symlink(): path.unlink()
-        if isinstance(content, dict):
-            if path.exists(): path.unlink()
-            path.symlink_to(content['symlink'])
-        else: path.write_bytes(content)
+    # Make every junction first, beside the runtime files, so one that cannot be
+    # made stops the rollback before anything changes. A junction is never
+    # brought back as a symlink.
+    staged = {}
+    try:
+        for name, content in files.items():
+            if isinstance(content, dict) and content.get('junction'):
+                lexical(name)
+                runtime = root / '.specify/workflow/runtime'; runtime.mkdir(parents=True, exist_ok=True)
+                staged[name] = runtime / ('junction-restore-' + uuid.uuid4().hex)
+                create_junction(staged[name], content['symlink'])
+    except Exception as error:
+        for link in staged.values():
+            if os.path.lexists(link): os.rmdir(link)  # A junction or a half-made empty folder.
+        raise WorkflowError('ROLLBACK_JUNCTION_FAILED: nothing was restored; backup retained for review: ' +
+                            str(error)) from error
+    try:
+        for name in current.keys() - files.keys():
+            path = lexical(name)
+            remove_link(path) if is_link(path) else path.unlink()
+        for name, content in sorted(files.items(), key=lambda item: isinstance(item[1], dict)):
+            path = lexical(name); path.parent.mkdir(parents=True, exist_ok=True)
+            if is_link(path): remove_link(path)
+            if isinstance(content, dict):
+                if content.get('directory'): clear_emptied_folder(path)
+                if path.exists(): path.unlink()
+                if content.get('junction'):
+                    staged.pop(name).rename(path)  # Moves the junction itself, never its target.
+                else:
+                    path.symlink_to(content['symlink'], target_is_directory=bool(content.get('directory')))
+            else: path.write_bytes(content)
+    finally:
+        for link in staged.values():
+            if os.path.lexists(link): os.rmdir(link)  # A junction or a half-made empty folder.
+
+
+def delegation_preflight(root):
+    """Refuse while a delegation attempt is live; dispatchers already see this lock.
+
+    delegate_dispatch is imported with this module, never lazily here: a first
+    import would write bytecode into the managed scripts folder mid-transaction.
+    """
+    try:
+        maintenance_preflight(root)
+    except ValueError as exc:
+        raise WorkflowError(str(exc)) from exc
 
 
 def command(root, args, log):
@@ -224,6 +414,8 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
         require(not upgrade or upgrade.get('pid') == upgrade_owner, 'WORKFLOW_UPGRADE_IN_PROGRESS')
         for path in (root / 'specs').glob('*/workflow/checkpoint.json'):
             require(not read(path, {}).get('active'), 'ACTIVE_STAGE_MUST_BE_RESOLVED: ' + str(path))
+        # A rollback restores every delegation ledger, so no attempt may be live.
+        delegation_preflight(root)
         ensure_local_excludes(root)
         backup = root / '.specify/workflow/backups/installs' / uuid.uuid4().hex
         before = snapshot(root, backup); log = []
@@ -243,10 +435,11 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
             alias_hashes = install_aliases(root, package_root)
             reconcile(root, apply=True)
             if policy['delegation']['enabled']:
-                from delegation import doctor as delegation_doctor
+                from delegation import doctor as delegation_doctor, health_error
                 delegation_health = delegation_doctor(root, active_host(root), install=True,
-                                                      scope=policy['delegation']['install_scope'])
-                require(delegation_health['ok'], delegation_health.get('error', 'DELEGATE_SKILL_UNAVAILABLE'))
+                                                      scope=policy['delegation']['install_scope'],
+                                                      upgrade_owner=upgrade_owner)
+                require(delegation_health['ok'], health_error(delegation_health))
             target = root / '.github/workflows/sanduq-workflow-gates.yml'
             # The shipped asset is a template. What lands in the project is the
             # project's own CI selection rendered from it, never a copy.

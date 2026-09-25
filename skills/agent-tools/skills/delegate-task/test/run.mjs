@@ -1735,6 +1735,29 @@ t('CONTRACT the skill runs from a copy with no repository around it', () => {
   fs.rmSync(iso, { recursive: true, force: true });
 });
 
+t('CONTRACT the driver answers when its skill folder is reached through a symlink', () => {
+  // A symlinked skill install used to print nothing: the entry-point check
+  // compared the link path with the real module path.
+  const holder = fs.mkdtempSync(path.join(os.tmpdir(), 'delegate-link-'));
+  const link = path.join(holder, 'delegate-task');
+  try {
+    fs.symlinkSync(path.join(HERE, '..'), link, 'dir');
+  } catch (e) {
+    fs.rmSync(holder, { recursive: true, force: true });
+    process.stdout.write(`(symlinks unavailable: ${e.code}) `);
+    return;
+  }
+  try {
+    const out = spawnSync(process.execPath, [path.join(link, 'delegate.mjs'), 'contract'],
+      { encoding: 'utf8', timeout: 30_000 });
+    assert.equal(out.status, 0, out.stderr);
+    assert.equal(JSON.parse(out.stdout).contract, DRIVER_CONTRACT.contract);
+  } finally {
+    fs.rmSync(link, { recursive: true, force: true });
+    fs.rmSync(holder, { recursive: true, force: true });
+  }
+});
+
 await Promise.all(pending);
 fs.rmSync(scratchRuns, { recursive: true, force: true });
 

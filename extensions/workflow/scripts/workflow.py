@@ -469,8 +469,11 @@ def delegation_errors(root, policy):
     health = delegation_doctor(root, active_host(root))
     if not health['ok']:
         error = health['error']
-        if error in ('DELEGATE_SKILL_MISSING', 'DELEGATE_SKILL_BROKEN', 'DELEGATE_SKILL_INCOMPATIBLE',
-                     'DELEGATE_SKILL_DOCTOR_FAILED'):
+        if error == 'DELEGATE_SKILL_DOCTOR_FAILED' and health.get('owned') is False:
+            # Installing cannot help: the first usable copy is not Sanduq's to replace.
+            error += ': ' + health['path'] + ': ' + health['action']
+        elif error in ('DELEGATE_SKILL_MISSING', 'DELEGATE_SKILL_BROKEN', 'DELEGATE_SKILL_INCOMPATIBLE',
+                       'DELEGATE_SKILL_DOCTOR_FAILED'):
             scope = policy['delegation']['install_scope']
             details = [item['path'] + ' (' + item['reason'] + ')' for item in health.get('incompatible') or []]
             if details:
@@ -853,10 +856,10 @@ class Run:
             if self.policy['delegation']['enabled']:
                 # Side effects only once a stage will be claimed: a rejected claim
                 # leaves tasks.md and every skill location untouched.
-                from delegation import annotate_tasks, doctor as delegation_doctor
+                from delegation import annotate_tasks, doctor as delegation_doctor, health_error
                 delegation_health = delegation_doctor(self.root, active_host(self.root), install=True,
                                                       scope=self.policy['delegation']['install_scope'])
-                require(delegation_health['ok'], delegation_health.get('error', 'DELEGATE_SKILL_UNAVAILABLE'))
+                require(delegation_health['ok'], health_error(delegation_health))
                 require(any(delegation_health['harnesses'].values()),
                         'DELEGATE_AGENT_CLI_UNAVAILABLE: no supported Codex or Claude CLI')
                 annotate_tasks(self.root, self.relative, self.policy['delegation'])

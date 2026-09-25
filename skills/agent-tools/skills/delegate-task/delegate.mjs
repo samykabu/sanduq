@@ -1844,8 +1844,12 @@ export {
   gitCapture, gitCompare, headMovement, finalizeOnce, finalizeStartFailure, positiveIntEnv,
 };
 
-const isMain = process.argv[1]
-  && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+// Node loads the entry module by its real path, so a skill folder reached
+// through a symlink must compare real paths or every command silently no-ops.
+function samePath(a, b) {
+  try { return fs.realpathSync(a) === fs.realpathSync(b); } catch { return path.resolve(a) === path.resolve(b); }
+}
+const isMain = process.argv[1] && samePath(process.argv[1], fileURLToPath(import.meta.url));
 
 if (isMain) {
   const cmd = process.argv[2];

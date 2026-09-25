@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 import os
 import re
@@ -81,17 +82,111 @@ def ledger_lock(root, feature):
         yield path, token
 
 
+def written_marker(root, feature):
+    """Runtime record of the ledger bytes this dispatcher last wrote."""
+    return root / '.specify/workflow/runtime' / ('delegation-' + workflow.digest(feature) + '.written')
+
+
+def ledger_bytes_digest(path):
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def ledger_written_by_dispatcher(root, feature):
+    """True when the ledger still holds exactly the bytes a dispatcher last saved.
+
+    Call it under the ledger lock. Any other writer since that save, such as
+    a worker or a rollback, leaves different bytes and the answer is False.
+    """
+    recorded = workflow.read(written_marker(root, feature), {}).get('sha256')
+    return recorded is not None and recorded == ledger_bytes_digest(delegation.ledger_path(root, feature))
+
+
+def ledger_foreign_write(root, feature):
+    """True when the ledger exists and no dispatcher save accounts for its bytes.
+
+    A ledger with no record of a dispatcher save (a fresh clone or an older
+    build) counts as foreign too: nothing proves who wrote it.
+    """
+    return (delegation.ledger_path(root, feature).exists() and
+            not ledger_written_by_dispatcher(root, feature))
+
+
+def maintenance_allows(ledger, key):
+    """While an upgrade or install runs, only records it has already seen may change.
+
+    Its preflight takes every ledger lock after creating its own lock and
+    refuses while any attempt is starting or running. So an attempt that is
+    still active here existed before that scan and the upgrade has refused;
+    finishing its bookkeeping is safe. New reservations and changes to
+    terminal records would be lost to a rollback and are refused.
+    """
+    if key is None:
+        return False
+    field, value = key
+    attempt = next((a for a in ledger['attempts'] if a.get(field) == value), None)
+    return attempt is not None and attempt.get('status') in ACTIVE
+
+
 @contextmanager
-def edit_ledger(root, feature):
-    """Re-read, mutate and save the ledger atomically; an exception saves nothing."""
+def edit_ledger(root, feature, active=None):
+    """Re-read, mutate and save the ledger atomically; an exception saves nothing.
+
+    ``active`` names the ``(field, value)`` of the one active attempt this edit
+    finishes; only such an edit may proceed while an upgrade or install runs.
+    """
     with ledger_lock(root, feature) as (path, token):
         value = load_ledger(root, feature)
+        if not maintenance_allows(value, active):
+            delegation.require_no_maintenance(root)
+        original = copy.deepcopy(value)
+        if ledger_foreign_write(root, feature):
+            # Someone other than a dispatcher wrote the ledger since the last
+            # save. This save would absorb that write and re-mark it as the
+            # dispatcher's bytes, so every live run durably records that its
+            # ledger change can no longer be attributed to Sanduq.
+            seen = stamp()
+            for attempt in value['attempts']:
+                if attempt.get('status') in ACTIVE:
+                    attempt.setdefault('ledger_foreign_write_seen', seen)
         yield value
+        if value == original:
+            # Nothing to record. Rewriting unchanged history would also re-mark
+            # someone else's edit to the file as the dispatcher's own bytes.
+            return
         # A lock recovered from under this process (only possible if it was
         # judged dead) must never let it overwrite a newer owner's ledger.
         delegation.require(delegation.lock_held(path, token),
                            'DELEGATION_LEDGER_BUSY: the ledger lock was lost; retry the command')
-        save(delegation.ledger_path(root, feature), value)
+        ledger = delegation.ledger_path(root, feature)
+        save(ledger, value)
+        workflow.write(written_marker(root, feature), {'sha256': ledger_bytes_digest(ledger)})
+
+
+def maintenance_preflight(root):
+    """Refuse an upgrade or install while any delegation attempt is still active.
+
+    The caller already holds its upgrade or install lock, so every dispatcher
+    critical section that starts after this point is refused. Draining the
+    project skill-install lock and taking each feature's ledger lock in turn
+    waits out those that began earlier, so the scan misses no reservation.
+    """
+    root = Path(root).resolve()
+    with delegation.file_lock(delegation.install_lock_path(root, 'project'),
+                              delegation.INSTALL_LOCK_TIMEOUT, 'DELEGATE_SKILL_INSTALL_BUSY'):
+        pass
+    active = []
+    for folder in sorted(path for path in (root / 'specs').glob('*') if path.is_dir()):
+        feature = 'specs/' + folder.name
+        with ledger_lock(root, feature):
+            ledger = workflow.read(delegation.ledger_path(root, feature), {})
+            active += [feature + ' ' + (a.get('run_id') or 'intent ' + str(a.get('intent_id'))) +
+                       ' (' + str(a.get('status')) + ')'
+                       for a in ledger.get('attempts', []) if a.get('status') in ACTIVE]
+    delegation.require(not active, 'DELEGATION_ATTEMPTS_ACTIVE: collect, recover or abandon ' +
+                       ', '.join(active) + ' before upgrading or reinstalling')
 
 
 def read_ledger(root, feature):
@@ -139,7 +234,7 @@ def pinned_driver(root, attempt):
     stored = attempt.get('driver')
     if not stored:
         status = delegation.inspect_skill(root, workflow.active_host(root))
-        delegation.require(status['ok'], status.get('error', 'DELEGATE_SKILL_UNAVAILABLE'))
+        delegation.require(status['ok'], delegation.health_error(status))
         return status['driver']
     path = Path(stored)
     path = (path if path.is_absolute() else root / path).resolve()
@@ -331,7 +426,7 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
     config = workflow.load_policy(root)['delegation']
     status = delegation.doctor(root, workflow.active_host(root), install=True,
                                scope=config['install_scope'])
-    delegation.require(status['ok'], status.get('error', 'DELEGATE_SKILL_UNAVAILABLE'))
+    delegation.require(status['ok'], delegation.health_error(status))
     task = task_path.read_text(encoding='utf-8')
     intent_id = uuid.uuid4().hex
     dismissed = set()
@@ -350,7 +445,7 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
                                    'parent_run_id': parent_run_id, 'retry_count': retry_count})
     for index, candidate in enumerate(candidates):
         if not status['harnesses'].get(candidate['harness']):
-            with edit_ledger(root, feature) as ledger:
+            with edit_ledger(root, feature, ('intent_id', intent_id)) as ledger:
                 ledger['route_decisions'].append({
                     'at': stamp(), 'identity': identity, 'requested': candidate, 'decision': 'skip',
                     'reason': status.get('cli_errors', {}).get(candidate['harness'],
@@ -376,7 +471,7 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
                     len(runs) == 1 and never_launched(*runs[0])):
                 not_launched = runs[0][1]['run_id']
             confirmed = isinstance(error, StartFailed) and (not runs or not_launched is not None)
-            with edit_ledger(root, feature) as ledger:
+            with edit_ledger(root, feature, ('intent_id', intent_id)) as ledger:
                 intent = find_intent(ledger, intent_id)
                 if confirmed:
                     failure = {'at': stamp(), 'candidate_index': index, 'reason': str(error)}
@@ -411,7 +506,7 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
                    'started_at': stamp(), 'task_file': relative(root, task_path),
                    'cwd': relative(root, cwd), 'timeout': timeout,
                    'evidence_location': '.delegate/runs/' + started['run_id'] + '/result.json'}
-        with edit_ledger(root, feature) as ledger:
+        with edit_ledger(root, feature, ('intent_id', intent_id)) as ledger:
             find_intent(ledger, intent_id).update(attempt)
             if index:
                 ledger['route_decisions'].append({'at': stamp(), 'identity': identity,
@@ -426,7 +521,7 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
             # A replaced customised copy or moved legacy backup is reported, not hidden.
             response['notices'] = status['notices']
         return response
-    with edit_ledger(root, feature) as ledger:
+    with edit_ledger(root, feature, ('intent_id', intent_id)) as ledger:
         find_intent(ledger, intent_id).update(status='blocked', ended_at=stamp(),
                                               result_summary='No configured route could start')
     raise delegation.DelegationError('DELEGATION_ROUTES_UNAVAILABLE: ' + identity)
@@ -446,6 +541,7 @@ def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
             claimed_route = active.get('delegation', {}).get('candidates')
     if not config['enabled'] and not claimed_route:
         return {'enabled': False, 'identity': identity, 'action': 'run-in-selected-host'}
+    delegation.require_no_maintenance(root)
     delegation.require(re.fullmatch(r'T\d{3,}|stage:[a-z_]+', identity) is not None,
                        'DELEGATION_IDENTITY_INVALID')
     timeout = timeout if timeout is not None else (7200 if identity == 'stage:execute' else 1800)
@@ -540,6 +636,37 @@ def measured_no_edits(payload):
             payload.get('head_changed') is False and payload.get('index_changed') is False)
 
 
+def bookkeeping_paths(root, feature, attempt, payload):
+    """Repository-relative paths only the dispatcher writes while a run is live.
+
+    The driver reports paths relative to the repository of the run's cwd. The
+    ledger belongs to that repository only when the run works in this checkout;
+    in a separate worktree its copy of the ledger is ordinary worker output.
+    """
+    repo = payload.get('repo_root')
+    if not repo:
+        found = subprocess.run(['git', 'rev-parse', '--show-toplevel'], cwd=root / attempt['cwd'],
+                               capture_output=True, text=True, encoding='utf-8')
+        repo = found.stdout.strip() if found.returncode == 0 else None
+    if not repo:
+        return set()
+    ledger = delegation.ledger_path(root, feature)
+    repo = Path(repo).resolve()
+    return {ledger.relative_to(repo).as_posix()} if ledger.is_relative_to(repo) else set()
+
+
+def worker_measurement(payload, internal, verified):
+    """The driver measurement with verified dispatcher bookkeeping removed.
+
+    Unverified bookkeeping stays in place, so it still counts as a worker
+    edit; an unknown measurement is never turned into "no edits".
+    """
+    changed = payload.get('dirty_paths_changed')
+    if not verified or not internal or not isinstance(changed, list):
+        return payload
+    return {**payload, 'dirty_paths_changed': [path for path in changed if path not in internal]}
+
+
 def measured_change(payload):
     return bool(payload.get('dirty_paths_changed') or payload.get('head_changed') is True or
                 payload.get('index_changed') is True)
@@ -591,6 +718,7 @@ def replacement_link(ledger, attempt):
 def collect(root, feature, run_id, auto_retry=True):
     root = root.resolve()
     feature = feature_identity(root, feature)
+    delegation.require_no_maintenance(root)
     policy = workflow.load_policy(root)
     with edit_ledger(root, feature) as ledger:
         attempt = find_run(ledger, run_id)
@@ -618,8 +746,21 @@ def collect(root, feature, run_id, auto_retry=True):
     delegation.require(payload.get('harness') == attempt['requested_harness'],
                        'DELEGATE_HARNESS_MISMATCH')
     rejected = model_rejected(payload, attempt['requested_model'])
+    raw_changed = payload.get('dirty_paths_changed')
+    internal = []
+    if isinstance(raw_changed, list) and any(str(path).endswith('/workflow/delegations.json')
+                                             for path in raw_changed):
+        owned = bookkeeping_paths(root, feature, attempt, payload)
+        internal = sorted(path for path in raw_changed if path in owned)
     with edit_ledger(root, feature) as ledger:
         attempt = find_run(ledger, run_id)
+        # Under the ledger lock, before this edit saves: the ledger is Sanduq's
+        # bookkeeping only if nothing but a dispatcher has written it since
+        # this run started. edit_ledger marks a live run the moment it sees a
+        # foreign write, even when a later dispatcher save has hidden it.
+        verified = (bool(internal) and ledger_written_by_dispatcher(root, feature) and
+                    not attempt.get('ledger_foreign_write_seen'))
+        measured = worker_measurement(payload, internal, verified)
         attempt['status'] = payload['status']
         attempt.setdefault('ended_at', stamp())
         attempt['result_summary'] = str(payload.get('summary') or '')[:2000]
@@ -628,7 +769,11 @@ def collect(root, feature, run_id, auto_retry=True):
         attempt['actual_model'] = payload.get('actual_model') if payload.get('model_observed') is True else None
         attempt['actual_model_evidence'] = 'harness-reported' if attempt['actual_model'] else 'unverified'
         attempt['token_usage'] = payload.get('tokens') if (payload.get('tokens') or {}).get('fidelity') in ('exact', 'partial') else None
-        attempt['changed_paths'] = payload.get('dirty_paths_changed')
+        # The raw driver measurement stays on record next to the attribution.
+        attempt['changed_paths'] = raw_changed
+        attempt['dispatcher_paths_changed'] = internal if verified else []
+        attempt['unattributed_bookkeeping_paths'] = [] if verified else internal
+        attempt['worker_changed_paths'] = measured.get('dirty_paths_changed')
         attempt['model_rejected'] = rejected
         attempt['evidence_location'] = relative(root, Path((payload.get('artifacts') or {}).get('dir',
                                                         root / '.delegate/runs' / run_id)) / 'result.json')
@@ -639,10 +784,13 @@ def collect(root, feature, run_id, auto_retry=True):
                 'actual_model': attempt['actual_model'],
                 'actual_model_evidence': attempt['actual_model_evidence'],
                 'harness': attempt['actual_harness'], 'evidence_location': attempt['evidence_location'],
-                'token_usage': attempt['token_usage'], 'result_summary': attempt['result_summary']}
+                'token_usage': attempt['token_usage'], 'result_summary': attempt['result_summary'],
+                'changed_paths': attempt['changed_paths'],
+                'worker_changed_paths': attempt['worker_changed_paths'],
+                'dispatcher_paths_changed': attempt['dispatcher_paths_changed']}
     if linked:
         return {**response, **linked}
-    plan = retry_plan(policy, attempt, payload, rejected, workflow.active_host(root)) if auto_retry else None
+    plan = retry_plan(policy, attempt, measured, rejected, workflow.active_host(root)) if auto_retry else None
     if not plan:
         return response
     remaining, reason, kind, retry_count = plan
@@ -683,6 +831,7 @@ def reassign(root, feature, run_id, reason, task_file=None):
     feature = feature_identity(root, feature)
     delegation.require(isinstance(reason, str) and reason.strip(),
                        'DELEGATION_REASSIGN_REASON_REQUIRED')
+    delegation.require_no_maintenance(root)
     policy = workflow.load_policy(root)
     config = policy['delegation']
     delegation.require(config['enabled'], 'DELEGATION_DISABLED')
@@ -722,6 +871,7 @@ def recover_intent(root, feature, intent_id):
     """Recover a driver run created just before its Sanduq ledger write."""
     root = root.resolve()
     feature = feature_identity(root, feature)
+    delegation.require_no_maintenance(root)
     with edit_ledger(root, feature) as ledger:
         intent = find_intent(ledger, intent_id)
         delegation.require(intent is not None, 'DELEGATION_INTENT_UNKNOWN')
@@ -755,6 +905,7 @@ def abandon_intent(root, feature, intent_id, reason):
     feature = feature_identity(root, feature)
     delegation.require(isinstance(reason, str) and reason.strip(),
                        'DELEGATION_ABANDON_REASON_REQUIRED')
+    delegation.require_no_maintenance(root)
     with edit_ledger(root, feature) as ledger:
         intent = find_intent(ledger, intent_id)
         delegation.require(intent is not None, 'DELEGATION_INTENT_UNKNOWN')

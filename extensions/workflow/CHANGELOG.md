@@ -55,6 +55,61 @@
 - Normalize `--feature` spellings to `specs/<name>` in the dispatcher and in
   `delegation.py annotate` and `route`, so overrides and markers match. Collect
   each run with the driver copy that started it.
+- Stop counting the dispatcher's own ledger writes as worker edits. A changed
+  `delegations.json` is set aside only when the run worked in this checkout and
+  the file still holds exactly the bytes a dispatcher last saved. Anything else
+  still counts, so a rejected model now reaches its fallback, and failed work
+  with no edits gets its stronger retry, even while parallel runs update the
+  ledger. Attempts record the raw `changed_paths` beside
+  `dispatcher_paths_changed`, `unattributed_bookkeeping_paths` and
+  `worker_changed_paths`. An unchanged ledger is no longer rewritten. A
+  foreign write seen before any dispatcher save stamps every live attempt
+  `ledger_foreign_write_seen`. A later save can no longer launder a worker's
+  ledger edit into bookkeeping and trigger a retry.
+- Install and upgrade work with a symlinked project `delegate-task` folder again,
+  even with delegation off. The link is snapshotted and restored as a folder
+  link, even when its target is missing, and is never followed. Rollback
+  snapshots leave out raw `runs/` and `node_modules/` data, and a link is not
+  restored over unmanaged files.
+- Treat a Windows directory junction at a `delegate-task` folder as a link,
+  like a symlink. Install and upgrade no longer walk into its target and refuse
+  with `MANAGED_PATH_SYMLINK_UNSUPPORTED`. Rollback restores it as a junction,
+  including a dangling one, or stops with `ROLLBACK_JUNCTION_FAILED` before
+  changing anything. `doctor` no longer takes a junctioned copy for a Sanduq
+  install and replaces it. Junction detection works on Python versions without
+  `Path.is_junction`.
+- Rollback writes a junction's reparse data directly instead of falling back to
+  `cmd /c mklink /J`. `cmd` expanded `%NAME%` inside the quoted target, so a
+  dangling junction whose target held a defined variable such as `%OS%` could
+  not be recreated and the rollback stopped. Targets with `%`, `&`, `^` or `!`
+  now come back exactly, and a missing target is never created.
+- A skill install over a dangling project `delegate-task` junction no longer
+  deletes it. A junction whose target is missing is neither `exists()` nor a
+  symlink, so it was not moved aside, the swap failed, and the cleanup removed
+  the link. It is now moved to the backup folder as the link itself (reason
+  `dangling link`) and put back if the install fails. Cleanup removes only the
+  copy the install itself placed.
+- Upgrades and installs refuse with `DELEGATION_ATTEMPTS_ACTIVE` while any
+  attempt is starting or running. Dispatcher `start`, `collect`, `reassign`,
+  `recover` and `abandon`, and skill installs, refuse with
+  `WORKFLOW_UPGRADE_IN_PROGRESS` while an upgrade or install holds its lock.
+  The error names the lock's recorded process ID. It says how to confirm a
+  crashed owner and remove the stale lock, because waiting never clears one.
+  Both sides check under the ledger and skill-install locks, so a rollback can
+  no longer overwrite a live attempt's record.
+- Retry lock-file removal when a transient Windows reader causes a sharing
+  violation. Every retry checks the owner token, so a replacement lock is left
+  alone; a persistent failure reports `DELEGATION_LOCK_RELEASE_BUSY`.
+- Route documentation tasks that name a documentation file ("Update README.md
+  with setup instructions", "Update docs/quickstart.md", "Document API
+  endpoints in docs/api.md") to the documentation tier. Code under a nested docs
+  folder and "Document <thing>" with no documentation destination stay
+  implementation.
+- When the driver's `doctor` fails, refresh only the copy that failed, in place,
+  if it is a Sanduq install location. Sanduq no longer reinstalls at the
+  configured scope on every dispatch. It reports a copy it does not own
+  (override, plugin, symlinked folder, other discovery root) with its path and
+  the repair action instead of replacing it.
 
 ## 1.4.0
 

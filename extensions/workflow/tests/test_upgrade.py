@@ -7,6 +7,8 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import upgrade
+import delegate_dispatch as dispatch
+import delegation
 import workflow as w
 import test_workflow as fixture
 
@@ -102,4 +104,54 @@ class UpgradeCITests(unittest.TestCase):
                 ledger.write_text('{"lost": true}', encoding='utf-8')
         with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_HISTORY_PRESERVATION_FAILED'):
             upgrade.upgrade(self.root, '1.1.1', apply=True, runner=runner)
+        self.assertEqual(ledger.read_bytes(), original)
+
+    def active_ledger(self, status):
+        ledger = self.root / self.feature / 'workflow/delegations.json'
+        w.write(ledger, {'schema_version': 1, 'feature': self.feature,
+                         'attempts': [{'intent_id': 'i-1', 'identity': self.feature + '/T001',
+                                       'status': status, 'run_id': 'codex-1'}],
+                         'route_decisions': []})
+        return ledger
+
+    def test_upgrade_refuses_while_a_delegation_attempt_is_starting_or_running(self):
+        for status in ('starting', 'running'):
+            with self.subTest(status=status):
+                ledger = self.active_ledger(status)
+                original = ledger.read_bytes()
+                commands = []
+                with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_ATTEMPTS_ACTIVE'):
+                    upgrade.upgrade(self.root, '1.1.1', apply=True,
+                                    runner=lambda root, args, log: commands.append(args))
+                self.assertEqual(commands, [])
+                self.assertEqual(ledger.read_bytes(), original)
+                self.assertFalse((self.root / '.specify/workflow/runtime/upgrade.lock').exists())
+
+    def test_dispatchers_are_refused_during_upgrade_and_history_survives_rollback(self):
+        policy_path = self.root / '.specify/workflow.yml'
+        policy = w.load_policy(self.root)
+        policy['delegation']['enabled'] = True
+        policy_path.write_text(yaml.safe_dump(policy), encoding='utf-8')
+        ledger = self.active_ledger('successful')
+        original = ledger.read_bytes()
+        refused = {}
+
+        def runner(root, args, log):
+            if args[0] != sys.executable:
+                return
+            for label, operation in {
+                    'start': lambda: dispatch.start(self.root, self.feature, 'T001'),
+                    'collect': lambda: dispatch.collect(self.root, self.feature, 'codex-1'),
+                    'reassign': lambda: dispatch.reassign(self.root, self.feature, 'codex-1', 'harder'),
+                    'recover': lambda: dispatch.recover_intent(self.root, self.feature, 'i-1'),
+                    'abandon': lambda: dispatch.abandon_intent(self.root, self.feature, 'i-1', 'gone')}.items():
+                try:
+                    operation()
+                except delegation.DelegationError as error:
+                    refused[label] = str(error)
+            raise w.WorkflowError('INSTALL_ROLLED_BACK: simulated')
+        with self.assertRaisesRegex(w.WorkflowError, 'WORKFLOW_UPGRADE_ROLLED_BACK'):
+            upgrade.upgrade(self.root, '1.1.1', apply=True, runner=runner)
+        self.assertEqual(sorted(refused), ['abandon', 'collect', 'reassign', 'recover', 'start'])
+        self.assertTrue(all(error.startswith('WORKFLOW_UPGRADE_IN_PROGRESS') for error in refused.values()))
         self.assertEqual(ledger.read_bytes(), original)

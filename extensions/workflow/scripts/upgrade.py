@@ -11,7 +11,7 @@ from pathlib import Path
 import yaml
 from packaging.version import Version
 from workflow import WorkflowError, ensure_local_excludes, load_policy, locked, read, registry, require, write
-from install import command, managed_files, restore, snapshot
+from install import command, delegation_preflight, managed_files, restore, snapshot
 
 REPOSITORY = 'https://github.com/samykabu/sanduq'
 
@@ -39,6 +39,10 @@ def upgrade(root, version, apply=False, packages=None, runner=command, preserve_
             for path in (root / 'specs').glob('*/workflow/checkpoint.json'):
                 require(not read(path, {}).get('active'), 'ACTIVE_STAGE_MUST_BE_RESOLVED')
             require(read(root / '.specify/superpowers-handoff.json', {}).get('status') not in ('executing', 'blocked'), 'LEGACY_EXECUTOR_OWNS_FEATURE')
+            # Dispatchers refuse new ledger writes once upgrade.lock exists; this
+            # waits out earlier ones and refuses while any attempt is live, so a
+            # rollback can never overwrite a running attempt's record.
+            delegation_preflight(root)
             backup = root / '.specify/workflow/backups/upgrades' / uuid.uuid4().hex
             before = snapshot(root, backup)
             delegation_before = load_policy(root)['delegation']
