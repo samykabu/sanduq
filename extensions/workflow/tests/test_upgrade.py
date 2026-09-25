@@ -36,6 +36,31 @@ class UpgradeCITests(unittest.TestCase):
         self.assertEqual(result['preserved_ci']['sha256'], hashlib.sha256(self.original).hexdigest())
         self.assertEqual(self.ci.read_bytes(), self.original)
 
+    def test_preserved_ci_is_recorded_before_the_target_installer_runs(self):
+        # Issue #22: a checkout without the git-excluded receipt. The target
+        # installer may be one that reads only the receipt during its health
+        # check, so the choice must already be on disk when it starts.
+        receipt = self.root / '.specify/workflow/install-receipt.json'
+        self.assertFalse(receipt.exists())
+        seen = []
+
+        def runner(root, args, log):
+            if args[0] == sys.executable:
+                seen.append(w.read(receipt, {}).get('preserved_ci'))
+        upgrade.upgrade(self.root, '1.1.1', apply=True, preserve_ci=True, runner=runner)
+        self.assertEqual(seen, [{'path': '.github/workflows/sanduq-workflow-gates.yml',
+                                 'sha256': hashlib.sha256(self.original).hexdigest()}])
+
+    def test_recorded_preservation_is_rolled_back_with_a_failed_upgrade(self):
+        receipt = self.root / '.specify/workflow/install-receipt.json'
+
+        def runner(root, args, log):
+            if args[0] == sys.executable:
+                raise w.WorkflowError('INSTALL_ROLLED_BACK: simulated')
+        with self.assertRaisesRegex(w.WorkflowError, 'WORKFLOW_UPGRADE_ROLLED_BACK'):
+            upgrade.upgrade(self.root, '1.1.1', apply=True, preserve_ci=True, runner=runner)
+        self.assertFalse(receipt.exists())
+
     def test_default_does_not_request_preservation(self):
         commands = []
         result = upgrade.upgrade(self.root, '1.1.1', apply=True,
