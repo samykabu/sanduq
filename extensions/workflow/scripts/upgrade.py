@@ -53,6 +53,16 @@ def upgrade(root, version, apply=False, packages=None, runner=command, preserve_
             tail = ['--packages', str(packages.resolve())] if packages else []
             if preserve_ci:
                 tail.append('--preserve-ci')
+            if ci_before is not None:
+                # A target installer may check CI health before it records the
+                # preserved file, and older ones read only the git-excluded
+                # receipt, which a fresh clone or worktree lacks (#22). Record
+                # the choice there first; the snapshot restores it on rollback.
+                receipt_path = root / '.specify/workflow/install-receipt.json'
+                receipt = read(receipt_path, {})
+                if (receipt.get('preserved_ci') or {}).get('path') != ci_path:
+                    write(receipt_path, {**receipt, 'preserved_ci': {
+                        'path': ci_path, 'sha256': hashlib.sha256(ci_before).hexdigest()}})
             runner(root, [sys.executable, str(root / '.specify/extensions/workflow/scripts/install.py'),
                           '--root', str(root), '--apply', '--upgrade-owner', str(os.getpid()), *tail], log)
             if ci_before is not None:
