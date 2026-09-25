@@ -75,3 +75,31 @@ class UpgradeCITests(unittest.TestCase):
         with self.assertRaisesRegex(w.WorkflowError, 'PROJECT_CI_PRESERVATION_FAILED'):
             upgrade.upgrade(self.root, '1.1.1', apply=True, preserve_ci=True, runner=runner)
         self.assertEqual(self.ci.read_bytes(), self.original)
+
+    def test_delegation_choices_and_history_survive_upgrade(self):
+        policy_path = self.root / '.specify/workflow.yml'
+        policy = w.load_policy(self.root)
+        policy['delegation']['enabled'] = True
+        policy['delegation']['models']['codex']['standard'] = 'team-model'
+        policy_path.write_text(yaml.safe_dump(policy), encoding='utf-8')
+        ledger = self.root / self.feature / 'workflow/delegations.json'
+        w.write(ledger, {'schema_version': 1, 'feature': self.feature,
+                         'attempts': [{'run_id': 'codex-1', 'status': 'successful'}],
+                         'route_decisions': []})
+        original = ledger.read_bytes()
+        upgrade.upgrade(self.root, '1.1.1', apply=True, runner=lambda *args: None)
+        self.assertEqual(w.load_policy(self.root)['delegation']['models']['codex']['standard'],
+                         'team-model')
+        self.assertEqual(ledger.read_bytes(), original)
+
+    def test_delegation_history_change_rolls_back_upgrade(self):
+        ledger = self.root / self.feature / 'workflow/delegations.json'
+        w.write(ledger, {'schema_version': 1, 'feature': self.feature,
+                         'attempts': [], 'route_decisions': []})
+        original = ledger.read_bytes()
+        def runner(root, args, log):
+            if args[0] == sys.executable:
+                ledger.write_text('{"lost": true}', encoding='utf-8')
+        with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_HISTORY_PRESERVATION_FAILED'):
+            upgrade.upgrade(self.root, '1.1.1', apply=True, runner=runner)
+        self.assertEqual(ledger.read_bytes(), original)

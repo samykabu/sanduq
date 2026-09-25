@@ -4,6 +4,22 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## Model-aware delegation — workflow 1.5.0, delegate-task driver contract (unreleased)
+
+### Added
+
+- Workflow 1.5.0 adds opt-in model-aware delegation of stages and tasks through the bundled
+  `delegate-task` skill. See [`extensions/workflow/CHANGELOG.md`](extensions/workflow/CHANGELOG.md)
+  and the [workflow guide](extensions/workflow/README.md#optional-model-aware-delegation).
+- `delegate-task` gains `node delegate.mjs contract`, which prints the machine-readable
+  `delegate-task.driver.v1` contract: commands, start and collect flags, `DELEGATE_RUNS_DIR`,
+  exit codes and published result fields, including `requested_model`, `actual_model` and
+  `model_observed`. A contract test checks that every listed field appears in a real result.
+  The workflow reuses an installed copy only when this contract matches.
+- The exit-5 start failure (supervisor never acknowledged) is produced by an exported
+  `finalizeStartFailure`, and a contract test pins the never-launched result the workflow
+  relies on to try the next configured route safely.
+
 ## CI runners are a project decision — workflow 1.2.0, assure 2.2.0, user-manual 1.2.0 — 2026-09-22
 
 ### Changed

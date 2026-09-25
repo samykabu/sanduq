@@ -1,5 +1,61 @@
 # Changelog
 
+## 1.5.0 (unreleased)
+
+- Add opt-in model-aware routing across workflow stages and implementation
+  tasks. Policy, model preferences, fallbacks and task overrides live in the
+  consumer's `.specify/workflow.yml`; delegation remains disabled by default.
+- Bundle `delegate-task` with the workflow package for project or global
+  installation. Record requested and harness-reported actual models separately,
+  including an explicit unverified state, fallback decisions, run evidence and
+  token usage in a feature-scoped ledger that survives upgrades.
+- Annotate pending tasks without changing their checkbox lines or semantic
+  fingerprints, including a final task line without a newline. Preserve active
+  route snapshots and show attempts in the local progress report.
+- Reuse a usable project or global `delegate-task` copy and install the bundled
+  one at the configured scope only when neither is usable. A copy is usable only
+  when `delegate.mjs contract` reports the `delegate-task.driver.v1` contract,
+  with result schema v2, requested/observed model fields and
+  `coverage_complete`. The bundled copy is built and checked in a staging folder
+  before it replaces anything. A broken or incompatible copy is moved to
+  `.specify/workflow/backups/delegate-task/` or
+  `~/.sanduq/backups/delegate-task/`, outside every skill discovery folder,
+  restored if the swap fails, and reported as a `DELEGATE_SKILL_REPLACED` notice
+  from install, dispatch and claim output. Installs are serialized per scope, so
+  concurrent dispatchers install once and then reuse that copy. Legacy
+  `delegate-task.sanduq-backup-*` folders leave every project and global skill
+  folder on each install or reuse, each into its own scope's backup folder.
+  `doctor` stays read-only and names `delegation.py install` and the configured
+  scope.
+- Enabling, disabling or rerouting delegation is not a semantic policy change:
+  receipts, migrations and the CI evidence gate ignore it (checkpoint digest
+  version 3), and older checkpoints are compared in their recorded format.
+- Claims install the skill and annotate tasks only after every other check
+  passes and a next stage exists.
+- Classify tasks by explicit markers or an unambiguous leading action. A domain
+  noun stays implementation wherever it appears, including at the start ("Audit
+  log retention", "Review queue API endpoint", "Test runner integration",
+  "Create guide page component"), and a check that also asks for a fix ("Inspect
+  the parser and fix the crash") is implementation. `[Impl]`,
+  `[Implementation]` or `[Code]` forces implementation. Routing never makes a
+  run read-only.
+- Serialize ledger writes across dispatchers and refuse a duplicate start. A
+  ledger lock left by a dispatcher that died on this host is recovered by a
+  single atomic capture; a live or other-host owner's lock is never taken, and
+  a displaced owner refuses to save.
+- Follow a rejected model with the configured fallback. Only a model error in
+  the status reason or the stderr tail that names the requested model (or a
+  structured `model_not_found` code) counts, not worker output that mentions a
+  model. Move past starts that provably created no run, and past a driver exit 5
+  whose finalized result, journal and dead supervisor prove no agent launched.
+  Keep any other uncertain start for `recover`. The new
+  `delegate_dispatch.py abandon --reason` closes an intent that has no run.
+- Automatic stronger retry needs a complete measurement showing no edits,
+  including `coverage_complete: true`.
+- Normalize `--feature` spellings to `specs/<name>` in the dispatcher and in
+  `delegation.py annotate` and `route`, so overrides and markers match. Collect
+  each run with the driver copy that started it.
+
 ## 1.4.0
 
 - The implementation progress report shows token usage (#24): fresh input,

@@ -53,6 +53,50 @@ resources, acceptance checks and worker ID in the report and handoff. Give worke
 only their scope and the context needed to implement it. Workers must not stage,
 commit, push, merge, change shared report files or invoke another executor.
 
+When `.specify/workflow.yml` enables delegation, start each ready `T###` worker
+with `python .specify/extensions/workflow/scripts/delegate_dispatch.py start
+--feature specs/<feature> --id T###`. Pass `--task-file <path>` with its bounded
+assignment, owned paths, dependencies and acceptance checks. Pass `--cwd
+<isolated-worktree>` for concurrent writers. Collect the returned run ID with
+`delegate_dispatch.py collect`; follow any `replacement` ID and review the final
+result before accepting work. The adapter snapshots the route and driver copy
+at start, records unavailable candidates, rejected models and fallbacks, and
+refuses a second start of a task that is already starting or running. It makes
+one automatic stronger retry (`delegation.stronger_retry`) only for failed work
+whose measurement shows no edits: empty `dirty_paths_changed`, unchanged HEAD
+and index, and `coverage_complete: true`. Unknown or incomplete measurement means
+no automatic retry, so
+review the worktree yourself. Do not reassign a running run when YAML changes.
+For a terminal result that is still too complex or incomplete, the orchestrator
+can run `delegate_dispatch.py reassign --feature specs/<feature> --run-id <id>
+--reason "<specific gap>"`; this starts at most one stronger attempt within the
+same limit and records the reason. Review partial edits before choosing that
+path.
+
+When a start fails:
+
+- `DELEGATION_ROUTES_UNAVAILABLE`: no candidate could start, and each either
+  created no run or left one proved never launched (driver exit 5, a
+  `failed` never-launched result, no supervisor event, supervisor gone). The attempt is recorded as `blocked`; fix the CLI or route (see
+  `workflow.py doctor --project`) and start the task again.
+- `DELEGATION_START_UNCERTAIN: recover intent <id>`: do not start the task
+  again or hand it to another worker. Run `delegate_dispatch.py recover
+  --feature specs/<feature> --intent-id <id>`. If it binds a run, collect it.
+  If it reports `found: false`, run `delegate_dispatch.py abandon --feature
+  specs/<feature> --intent-id <id> --reason "<why>"` and then start again.
+  `abandon` refuses while a driver run exists for the intent, and for 300
+  seconds after a start that recorded no outcome.
+- `DELEGATION_LEDGER_BUSY`: another dispatcher is writing the ledger; retry.
+  A lock whose owner died on this host is recovered on its own. Delete a lock
+  file by hand only after confirming the process and host it names are not a
+  running dispatcher.
+
+Record each abandoned intent's reason in the handoff. The ledger keeps it too.
+Treat routing type as model choice only: a delegated run is writable unless you
+isolate it yourself.
+When delegation is disabled, ignore routing comments and use the user's selected
+model with the existing worker tools.
+
 Fill available worker slots with ready, independent tasks. Reconsider the queue
 when a worker finishes or a dependency clears. Task order and a parallel marker
 are inputs to scheduling; inspect actual dependencies before running tasks
@@ -89,13 +133,18 @@ python .specify/extensions/workflow/scripts/progress.py usage --output specs/<fe
 python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T002 --agent <worker-id> --collect codex
 python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T003 --agent <run-id> --collect delegate --log .delegate/runs/<run-id>/result.json
 python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --overhead orchestrator --agent <orchestrator-id> --collect claude
+python .specify/extensions/workflow/scripts/progress.py sync --output specs/<feature>/workflow/progress
 ```
 
 `claude` finds `~/.claude/projects/*/*/subagents/agent-<id>.jsonl`, `codex` finds
 the rollout whose name ends with the thread ID, and `delegate` reads a
 delegate-task `result.json`. Pass `--log` for any other location, including the
-dispatcher's own session transcript. Only token counters are read. Collecting the
-same agent again replaces its figure, so collect overhead at each phase commit and
+dispatcher's own session transcript. Only token counters are read. `sync`
+rebuilds the visible delegation history from the tracked feature ledger;
+run it after each collected attempt and before the final report review. It shows
+the actual model only when the harness reported it. Raw prompts and transcripts
+stay in ignored `.delegate/runs/` artifacts. Collecting the same agent again
+replaces its figure, so collect overhead at each phase commit and
 at Finalize. A worker reused across tasks is split by each task's `running` to
 `done` window, so mark a task `running` when assigning it. When no log exists,
 record the worker's self-reported counts with `--fresh-input`, `--cached-input`

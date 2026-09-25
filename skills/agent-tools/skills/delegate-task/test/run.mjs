@@ -21,9 +21,9 @@ import { fileURLToPath } from 'node:url';
 import { StringDecoder } from 'node:string_decoder';
 
 import {
-  HARNESSES, resolveStatus, parseEnvelope, parsePorcelainZ, claimMismatch,
+  HARNESSES, DRIVER_CONTRACT, resolveStatus, parseEnvelope, parsePorcelainZ, claimMismatch,
   readOnlyVerdict, normaliseResult, tokens, envelope, deltaEnvelope,
-  gitCapture, gitCompare, positiveIntEnv, finalizeOnce, makeRetention,
+  gitCapture, gitCompare, positiveIntEnv, finalizeOnce, finalizeStartFailure, makeRetention,
 } from '../delegate.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -1106,14 +1106,37 @@ t('E2E REPAIR-D1 success telemetry + exit 1 is published failed', () => {
 // nature. The result must say which, and the human view must not print a bare
 // null that reads like a bug.
 t('E2E a harness that reports neither cost nor model says so', () => {
-  const { result, runId } = e2e('reports', { FAKE_STREAM: CODEX_OK, FAKE_EXIT: '0' });
+  const { result, runId } = e2e('reports', { FAKE_STREAM: CODEX_OK, FAKE_EXIT: '0' },
+    ['--model', 'requested-codex-model']);
   assert.equal(result.cost_usd, null);
   assert.equal(result.cost_reported, false, 'codex genuinely never emits a cost');
   assert.equal(result.model_reported, false);
+  assert.equal(result.requested_model, 'requested-codex-model');
+  assert.equal(result.actual_model, null);
+  assert.equal(result.model_observed, false);
+  assert.equal(result.model, 'requested-codex-model', 'legacy field retains its old meaning');
   const human = spawnSync(process.execPath, [DRIVER, 'collect', runId],
     { encoding: 'utf8', timeout: 60_000, env: { ...process.env, ...RUNS_ENV } });
   assert.match(human.stdout, /cost {4}not reported by this harness/);
   assert.match(human.stdout, /model=/);
+});
+
+// CONTRACT: consumers (the Sanduq workflow) gate reuse of an installed copy on
+// this output, so every advertised result field must really be published.
+t('CONTRACT the contract command matches what a real result carries', () => {
+  const out = spawnSync(process.execPath, [DRIVER, 'contract'], { encoding: 'utf8', timeout: 30_000 });
+  assert.equal(out.status, 0, out.stderr);
+  const contract = JSON.parse(out.stdout);
+  assert.deepEqual(contract, JSON.parse(JSON.stringify(DRIVER_CONTRACT)));
+  assert.equal(contract.contract, 'delegate-task.driver.v1');
+  const { result } = e2e('contract', { FAKE_STREAM: CODEX_OK, FAKE_EXIT: '0' }, ['--model', 'm1']);
+  assert.ok(result, 'collect produced no result');
+  assert.equal(result.schema, contract.result_schema);
+  for (const field of contract.result_fields) {
+    assert.ok(Object.hasOwn(result, field), `result is missing advertised field ${field}`);
+  }
+  const help = spawnSync(process.execPath, [DRIVER], { encoding: 'utf8', timeout: 30_000 }).stdout;
+  for (const flag of contract.start_flags) assert.ok(help.includes(flag), `help omits ${flag}`);
 });
 
 t('E2E the same stream at exit 0 is successful', () => {
@@ -1535,6 +1558,32 @@ t('CONTRACT finalizeOnce returns null - never a result - while a live owner hold
     JSON.stringify({ pid: process.pid, t: Date.now() }));
   const r = finalizeOnce(dir, () => { throw new Error('must not build behind a live owner'); });
   assert.equal(r, null);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+// CONTRACT: the Sanduq dispatcher treats exit 5 as a start that launched no
+// agent only when the finalised result says so in these exact fields.
+t('CONTRACT a start the supervisor never acknowledged finalises as never launched', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'delegate-noack-'));
+  const meta = {
+    run_id: path.basename(dir), parent_run_id: null, resume_session: null, harness: 'codex',
+    harness_label: 'OpenAI Codex', harness_version: 'test', tier: 'verified', task: 'Task',
+    cwd: dir, model: 'm1', deliverable: null, constraint: ['Sanduq delegation intent: abc'],
+    permission: 'bypass', allow_commit: false, raw: false, timeout_ms: 1000, clean_env: false,
+    keep_env: [], kept_env_names: null, started_at: new Date().toISOString(), nonce: 'n',
+    supervisor_pid: null,
+  };
+  const result = finalizeStartFailure({ meta, dir, why: 'supervisor did not acknowledge start within 15s', t0: Date.now() });
+  const written = JSON.parse(fs.readFileSync(path.join(dir, 'result.json'), 'utf8'));
+  for (const r of [result, written]) {
+    assert.equal(r.run_id, meta.run_id);
+    assert.equal(r.status, 'failed');
+    assert.equal(r.permission_mode_applied, null);
+    assert.equal(r.containment_evidence, 'the harness never launched');
+  }
+  const states = fs.readFileSync(path.join(dir, 'journal.jsonl'), 'utf8').trim().split(/\r?\n/)
+    .map((line) => JSON.parse(line).state);
+  assert.deepEqual(states, ['terminal']);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

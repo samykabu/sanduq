@@ -134,6 +134,42 @@
         "merge": false
       }
     },
+    "delegation": {
+      "type": "object",
+      "description": "Optional model-aware delegation; absent legacy policies default to disabled.",
+      "additionalProperties": false,
+      "required": ["enabled", "install_scope", "stronger_retry", "models", "routes", "overrides"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "install_scope": {"enum": ["project", "global"]},
+        "stronger_retry": {"enum": [0, 1]},
+        "models": {
+          "type": "object", "additionalProperties": false,
+          "required": ["codex", "claude"],
+          "properties": {
+            "codex": {"$ref": "#/$defs/model_tiers"},
+            "claude": {"$ref": "#/$defs/model_tiers"}
+          }
+        },
+        "routes": {
+          "type": "object", "additionalProperties": false,
+          "required": ["discovery", "implementation", "qa", "documentation", "review", "coordination"],
+          "properties": {
+            "discovery": {"$ref": "#/$defs/delegation_route"},
+            "implementation": {"$ref": "#/$defs/delegation_route"},
+            "qa": {"$ref": "#/$defs/delegation_route"},
+            "documentation": {"$ref": "#/$defs/delegation_route"},
+            "review": {"$ref": "#/$defs/delegation_route"},
+            "coordination": {"$ref": "#/$defs/delegation_route"}
+          }
+        },
+        "overrides": {
+          "type": "object", "patternProperties": {
+            "^specs/[^/]+/T[0-9]{3,}$": {"$ref": "#/$defs/delegation_route"}
+          }, "additionalProperties": false
+        }
+      }
+    },
     "ci": {
       "type": "object",
       "description": "Where and how this project runs the CI workflow files Sanduq renders for it.",
@@ -281,6 +317,39 @@
             }
           }
         }
+      }
+    }
+  },
+  "$defs": {
+    "model_tiers": {
+      "type": "object", "additionalProperties": false,
+      "required": ["high", "standard", "light", "documentation", "review"],
+      "properties": {
+        "high": {"type": "string", "minLength": 1},
+        "standard": {"type": "string", "minLength": 1},
+        "light": {"type": "string", "minLength": 1},
+        "documentation": {"type": "string", "minLength": 1},
+        "review": {"type": "string", "minLength": 1}
+      }
+    },
+    "delegation_candidate": {
+      "type": "object", "additionalProperties": false,
+      "required": ["harness"],
+      "properties": {
+        "harness": {"enum": ["selected", "codex", "claude"]},
+        "tier": {"enum": ["high", "standard", "light", "documentation", "review"]},
+        "model": {"type": ["string", "null"]}
+      },
+      "oneOf": [{"required": ["tier"], "not": {"required": ["model"]}},
+                 {"required": ["model"], "not": {"required": ["tier"]}}]
+    },
+    "delegation_route": {
+      "type": "object", "additionalProperties": false,
+      "required": ["preferred", "fallbacks"],
+      "properties": {
+        "preferred": {"$ref": "#/$defs/delegation_candidate"},
+        "fallbacks": {"type": "array", "maxItems": 5,
+                      "items": {"$ref": "#/$defs/delegation_candidate"}}
       }
     }
   }

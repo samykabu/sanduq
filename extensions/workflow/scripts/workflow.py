@@ -62,14 +62,33 @@ def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
+POLICY_DIGEST_VERSION = 3
+# Sections that place or route work without changing what feature evidence means.
+OPERATIONAL_POLICY = ('ci', 'delegation')
+
+
 def delivery_digest(policy):
-    """CI placement does not change the meaning of feature-stage evidence."""
-    return digest({key: value for key, value in policy.items() if key != 'ci'})
+    """CI placement and delegation routing do not change the meaning of feature-stage evidence."""
+    return digest({key: value for key, value in policy.items() if key not in OPERATIONAL_POLICY})
 
 
 def checkpoint_policy_digest(state, policy):
-    """Preserve the full-policy hash contract of pre-split checkpoints."""
-    return delivery_digest(policy) if state.get('policy_digest_version') == 2 else digest(policy)
+    """Express the current policy in the digest format the checkpoint recorded.
+
+    Version 2 excluded only CI and pre-split checkpoints hashed the full policy.
+    Both hashed whatever delegation section their policy snapshot carried (none
+    before delegation existed), so that section is reused here: enabling,
+    disabling or rerouting delegation mid-lifecycle is never a semantic change.
+    """
+    version = state.get('policy_digest_version')
+    if version == POLICY_DIGEST_VERSION:
+        return delivery_digest(policy)
+    shaped = {key: value for key, value in policy.items()
+              if key != 'delegation' and not (version == 2 and key == 'ci')}
+    snapshot = state.get('policy')
+    if isinstance(snapshot, dict) and 'delegation' in snapshot:
+        shaped['delegation'] = snapshot['delegation']
+    return digest(shaped)
 
 
 def write(path, value):
@@ -151,6 +170,7 @@ def prepare_issue(root, issue, gh=None):
 
 def default_policy(qa, manual):
     require(type(qa) is bool and type(manual) is bool, 'Select QA and User Manual explicitly.')
+    from delegation import DEFAULT_TIERS
     return {'schema_version': SCHEMA, 'processes': {'qa': qa, 'user_manual': manual},
             'execution': {'engine': 'auto', 'checkpoints': 'required-only'},
             'providers': {'clarification': 'prefer-superspec', 'tasks': 'prefer-superspec'},
@@ -161,6 +181,21 @@ def default_policy(qa, manual):
             'context': {'mode': 'measured-only', 'max_fraction': .60,
                         'checkpoint_fraction': .50, 'reserve_fraction': .10},
             'finalize': {'create_pr': True, 'merge': False}, 'updates': {'policy': 'reviewed'},
+            'delegation': {
+                'enabled': False, 'install_scope': 'project', 'stronger_retry': 1,
+                'models': {
+                    'codex': {'high': 'gpt-6-astra', 'standard': 'gpt-6-sol', 'light': 'gpt-6-terra',
+                              'documentation': 'gpt-6-sol', 'review': 'gpt-6-sol'},
+                    'claude': {'high': 'opus', 'standard': 'sonnet', 'light': 'haiku',
+                               'documentation': 'opus', 'review': 'opus'},
+                },
+                'routes': {
+                    name: {'preferred': {'harness': 'selected', 'tier': tier},
+                           'fallbacks': [{'harness': 'selected', 'model': None}]}
+                    for name, tier in DEFAULT_TIERS.items()
+                },
+                'overrides': {},
+            },
             'ci': sanduq_ci.default_ci()}
 
 
@@ -201,6 +236,14 @@ def validate_policy(policy):
     require(policy.get('issue_sync') == {'taskstoissues': 'required', 'parent_link': 'native-subissue'}, 'TASK_ISSUES_REQUIRED')
     require(policy.get('finalize') == {'create_pr': True, 'merge': False}, 'FINALIZE_POLICY_INVALID')
     require(policy.get('clarification', {}).get('resume_on_reinvoke') in ('reread-answers', 'manual-status'), 'CLARIFICATION_POLICY_INVALID')
+    # Older consumer policies remain valid and opt out until the project selects delegation.
+    if 'delegation' not in policy:
+        policy['delegation'] = copy.deepcopy(default_policy(False, False)['delegation'])
+    from delegation import validate_delegation
+    try:
+        validate_delegation(policy['delegation'])
+    except ValueError as exc:
+        raise WorkflowError(str(exc)) from exc
     decisions = policy.get('decisions')
     if decisions is not None:
         require(isinstance(decisions, dict) and decisions.get('transport') == 'github-issue',
@@ -420,11 +463,36 @@ def ci_errors(root, policy, preserved=None):
     return errors
 
 
-def doctor(root, policy, project=False, preserved_ci=None):
+def delegation_errors(root, policy):
+    """Read-only delegation health with the command that repairs a missing skill."""
+    from delegation import doctor as delegation_doctor
+    health = delegation_doctor(root, active_host(root))
+    if not health['ok']:
+        error = health['error']
+        if error in ('DELEGATE_SKILL_MISSING', 'DELEGATE_SKILL_BROKEN', 'DELEGATE_SKILL_INCOMPATIBLE',
+                     'DELEGATE_SKILL_DOCTOR_FAILED'):
+            scope = policy['delegation']['install_scope']
+            details = [item['path'] + ' (' + item['reason'] + ')' for item in health.get('incompatible') or []]
+            if details:
+                error += ': ' + '; '.join(details)
+            error += (': delegation is enabled but the delegate-task skill is not usable; run '
+                      '"python .specify/extensions/workflow/scripts/delegation.py install" to install it at '
+                      'the configured ' + scope + ' scope (delegation.install_scope), or set '
+                      'delegation.enabled to false')
+        return [error]
+    if not any(health['harnesses'].values()):
+        return ['DELEGATE_AGENT_CLI_UNAVAILABLE: no supported Codex or Claude CLI']
+    return []
+
+
+def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True):
     needed = ['scope', 'project', 'pr'] + (['assure'] if policy['processes']['qa'] else []) + (['user-manual'] if policy['processes']['user_manual'] else [])
     errors = ['DEPENDENCY_UNAVAILABLE: ' + name + ' ' + RANGES[name] for name in needed if not compatible(root, name)]
     if active_host(root) not in ('codex','claude'):
         errors.append('HOST_UNSUPPORTED: this release supports Codex and Claude skills mode')
+    if (check_delegation and policy.get('delegation', {}).get('enabled') and
+            active_host(root) in ('codex', 'claude')):
+        errors += delegation_errors(root, policy)
     bridge = read(root / '.specify/superpowers-handoff.json', {})
     if bridge.get('status') in ('executing', 'blocked'):
         errors.append('LEGACY_EXECUTOR_OWNS_FEATURE: reconcile the recorded bridge handoff before managed execution')
@@ -519,6 +587,15 @@ def fingerprint_files(root, paths):
             # Checkbox bookkeeping must not invalidate task publication or planning.
             if Path(relative).name == 'tasks.md':
                 content = re.sub(rb'(?m)^(\s*- )\[[ xX]\]', rb'\1[ ]', content)
+                # Routing comments are operational metadata. Route policy changes
+                # invalidate future dispatch, not earlier semantic task receipts.
+                # A marker drops together with the newline that precedes it, so a
+                # final task line annotated without a terminal newline, or one an
+                # earlier release joined to its marker, hashes like the original.
+                marker = rb'[ \t]*<!-- sanduq-delegation \{[^\r\n]*\} -->[ \t]*(?=\r?\n|\Z)'
+                content = re.sub(rb'(?<=[^ \t\r\n])' + marker + rb'\r?\n\Z', b'', content)
+                content = re.sub(rb'\A' + marker + rb'(?:\r?\n)?', b'', content)
+                content = re.sub(rb'(?:\r?\n)?' + marker, b'', content)
             result[relative] = hashlib.sha256(content).hexdigest()
         else:
             result[relative] = None
@@ -593,7 +670,7 @@ def ensure_local_excludes(root):
     current = path.read_text(encoding='utf-8') if path.exists() else ''
     patterns = ('/.specify/workflow/backups/', '/.specify/workflow/runtime/',
                 '/.specify/workflow/install-receipt.json', '/specs/*/workflow/backups/',
-                '/specs/*/workflow/progress/')
+                '/specs/*/workflow/progress/', '/.delegate/')
     missing = [pattern for pattern in patterns if pattern not in current.splitlines()]
     if missing:
         path.write_text(current.rstrip('\n') + '\n# Sanduq local backups and runtime\n' + '\n'.join(missing) + '\n', encoding='utf-8')
@@ -680,7 +757,7 @@ class Run:
                                                       'invalidated': invalidated, 'preserved_as_historical': [s for s in state['receipts'] if s not in invalidated]})
             state['dependency_digest'] = package_digest(self.root)
             state['commands'] = commands
-            state['policy_digest_version'] = 2
+            state['policy_digest_version'] = POLICY_DIGEST_VERSION
             state['ci_policy_digest'] = digest(self.policy['ci'])
             if policy_digest != old_policy_digest:
                 state.setdefault('policy_changes', []).append({'from': old_policy_digest, 'to': policy_digest,
@@ -723,7 +800,7 @@ class Run:
             commands = resolve_commands(self.root, self.policy)
             state = {'schema_version': SCHEMA, 'run_id': uuid.uuid4().hex, 'repo_path': str(self.root),
                      'branch': git(self.root, 'branch', '--show-current'), 'feature': self.relative,
-                     'issue': issue, 'policy_digest_version': 2,
+                     'issue': issue, 'policy_digest_version': POLICY_DIGEST_VERSION,
                      'policy_digest': delivery_digest(self.policy),
                      'ci_policy_digest': digest(self.policy['ci']), 'commands': commands,
                      'policy': copy.deepcopy(self.policy),
@@ -762,7 +839,9 @@ class Run:
             for path in (self.root / 'specs').glob('*/workflow/checkpoint.json'):
                 require(path == self.path or not read(path, {}).get('active'), 'OTHER_FEATURE_STAGE_ACTIVE: ' + str(path))
             require(state['dependency_digest'] == package_digest(self.root), 'DEPENDENCY_CHANGED: review upgrade and migrate the checkpoint before execution')
-            health = doctor(self.root, self.policy, project=True)
+            # Delegation health is checked below, after every rejection, because
+            # the claim may install the skill it would otherwise report missing.
+            health = doctor(self.root, self.policy, project=True, check_delegation=False)
             require(health['ok'], '; '.join(health['errors']))
             gate = context_gate(self.policy, usage)
             if gate['pause']:
@@ -771,6 +850,19 @@ class Run:
             if not nxt.get('stage'):
                 return nxt
             stage = nxt['stage']
+            if self.policy['delegation']['enabled']:
+                # Side effects only once a stage will be claimed: a rejected claim
+                # leaves tasks.md and every skill location untouched.
+                from delegation import annotate_tasks, doctor as delegation_doctor
+                delegation_health = delegation_doctor(self.root, active_host(self.root), install=True,
+                                                      scope=self.policy['delegation']['install_scope'])
+                require(delegation_health['ok'], delegation_health.get('error', 'DELEGATE_SKILL_UNAVAILABLE'))
+                require(any(delegation_health['harnesses'].values()),
+                        'DELEGATE_AGENT_CLI_UNAVAILABLE: no supported Codex or Claude CLI')
+                annotate_tasks(self.root, self.relative, self.policy['delegation'])
+                notices = delegation_health.get('notices') or []
+            else:
+                notices = []
             current_policy_digest = checkpoint_policy_digest(state, self.policy)
             if state['policy_digest'] != current_policy_digest:
                 state.setdefault('policy_changes', []).append({'from':state['policy_digest'],'to':current_policy_digest,'at':now()})
@@ -784,11 +876,22 @@ class Run:
             source = read(self.feature / 'scope-source.json', {})
             existing = (self.feature / 'spec.md').is_file() and f"{source.get('repo')}#{source.get('issue')}" == state['issue']
             state['active']['mode'] = 'revalidate' if existing and stage in ('scope', 'specify', 'clarify', 'plan', 'tasks') else 'initial'
+            if self.policy['delegation']['enabled']:
+                from delegation import STAGE_TYPES, selected_route
+                state['active']['delegation'] = {
+                    'identity': self.relative + '/stage:' + stage,
+                    'task_type': STAGE_TYPES[stage],
+                    'candidates': selected_route(self.policy['delegation'], STAGE_TYPES[stage], active_host(self.root)),
+                }
             state['active']['baseline'] = fingerprint_files(self.root, [p for r in state['receipts'].values() for p in r['fingerprints']])
             state['status'] = 'in-progress'
             write(self.root / '.specify/feature.json', {'feature_directory': self.relative})
             self.save(state)
-            return {**state['active'], 'command': state['commands'][stage], 'feature': self.relative, 'issue': state['issue']}
+            claimed = {**state['active'], 'command': state['commands'][stage], 'feature': self.relative, 'issue': state['issue']}
+            if notices:
+                # Reported to the caller only; the checkpoint keeps the claim itself.
+                claimed['notices'] = notices
+            return claimed
 
     def complete(self, token, receipt):
         with locked(self.lock):
@@ -816,6 +919,9 @@ class Run:
                 require(receipt.get('blocking_findings') == 0, 'BLOCKING_FINDINGS_REMAIN')
             if stage == 'pr':
                 require(receipt.get('images_verified') is True and receipt.get('pr_url', '').startswith('https://github.com/' + state['issue'].split('#')[0] + '/pull/'), 'PR_EVIDENCE_INCOMPLETE')
+            if stage in ('tasks', 'qa_analyze', 'manual_analyze') and self.policy['delegation']['enabled']:
+                from delegation import annotate_tasks
+                annotate_tasks(self.root, self.relative, self.policy['delegation'])
             # Known semantic transformations advance upstream artifact snapshots with an
             # explicit lineage record. They do not pretend the old artifact remained current.
             permitted = {'clarify': ['spec.md'], 'qa_analyze': ['tasks.md'], 'manual_analyze': ['tasks.md']}.get(stage, [])
@@ -872,6 +978,8 @@ def main():
     init = sub.add_parser('init')
     init.add_argument('--qa', choices=['on', 'off'], required=True)
     init.add_argument('--manual', choices=['on', 'off'], required=True)
+    init.add_argument('--delegate', choices=['on', 'off'],
+                      help='Opt into model-aware delegation; omitted on existing projects preserves their selection')
     init.add_argument('--gate-mode', choices=sanduq_ci.GATE_MODES,
                       help='Disabled, advisory or required workflow evidence gate; fresh policies default to advisory')
     init.add_argument('--gate-scope', choices=sanduq_ci.GATE_SCOPES,
@@ -930,9 +1038,14 @@ def main():
             if path.exists():
                 old = load_policy(root)
                 require(args.replace or old['processes'] == policy['processes'], 'POLICY_EXISTS: use --replace after reviewing changed selections')
+                if args.delegate is not None:
+                    require(args.replace or old['delegation']['enabled'] == (args.delegate == 'on'),
+                            'DELEGATION_SELECTION_EXISTS: use --replace after reviewing the changed selection')
                 policy = old
                 policy['processes'] = {'qa': args.qa == 'on', 'user_manual': args.manual == 'on'}
                 write(root / '.specify/workflow/backups' / (uuid.uuid4().hex + '.json'), load_policy(root))
+            if args.delegate is not None:
+                policy['delegation']['enabled'] = args.delegate == 'on'
             select_gate(policy['ci'], args.gate_mode, args.gate_scope, args.gate_rule)
             if args.decision_owner:
                 policy.setdefault('decisions', default_policy(False, False)['decisions'])['authorized_users'] = args.decision_owner

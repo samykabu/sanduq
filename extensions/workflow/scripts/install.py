@@ -37,8 +37,11 @@ def managed_files(root):
     for folder in ('.agents/skills', '.claude/skills', '.claude/commands'):
         path = inside(root, folder)
         if path.exists():
-            for item in path.glob('speckit*'):
+            for item in [*path.glob('speckit*'), *path.glob('delegate-task')]:
                 files.update([item] if item.is_file() or item.is_symlink() else (p for p in item.rglob('*') if p.is_file() or p.is_symlink()))
+    # Delegation decisions are tracked feature history, not generated report
+    # state. Include them in rollback snapshots without rewriting them.
+    files.update((root / 'specs').glob('*/workflow/delegations.json'))
     files.update(root / f for f in FILES if (root / f).is_file())
     require(all(p.resolve().is_relative_to(root) and not (p.is_symlink() and p.is_dir()) for p in files), 'MANAGED_PATH_SYMLINK_UNSUPPORTED')
     return {p.relative_to(root).as_posix(): {'symlink': str(p.readlink())} if p.is_symlink() else p.read_bytes() for p in files}
@@ -239,6 +242,11 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                 runner(root, ['specify','preset','add','--dev',operation['source'],'--priority',operation['priority']], log)
             alias_hashes = install_aliases(root, package_root)
             reconcile(root, apply=True)
+            if policy['delegation']['enabled']:
+                from delegation import doctor as delegation_doctor
+                delegation_health = delegation_doctor(root, active_host(root), install=True,
+                                                      scope=policy['delegation']['install_scope'])
+                require(delegation_health['ok'], delegation_health.get('error', 'DELEGATE_SKILL_UNAVAILABLE'))
             target = root / '.github/workflows/sanduq-workflow-gates.yml'
             # The shipped asset is a template. What lands in the project is the
             # project's own CI selection rendered from it, never a copy.
