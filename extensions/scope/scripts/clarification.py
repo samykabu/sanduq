@@ -10,7 +10,7 @@ import re
 import sys
 from pathlib import Path
 
-from scope import Scope, ScopeError, require, read_json, write_json
+from scope import Scope, ScopeError, require, read_json, write_json, with_transport
 
 FEATURE, WAITING = 'Feature Specification', 'Need Clarifications'
 RECORD = re.compile(r'\A<!-- speckit-clarification:(question|round) (\{[^\n]*\}) -->\n')
@@ -501,9 +501,9 @@ def main(argv=None):
             result = getattr(app, args.command.replace('-', '_'))(args.issue)
         if args.output:
             write_json(args.output, result)
-            print(json.dumps({'output': str(args.output), 'issue': result.get('issue', {}).get('number') if isinstance(result.get('issue'), dict) else result.get('issue')}, ensure_ascii=True))
+            print(json.dumps(with_transport({'output': str(args.output), 'issue': result.get('issue', {}).get('number') if isinstance(result.get('issue'), dict) else result.get('issue')}, app.gh), ensure_ascii=True))
         else:
-            print(json.dumps(result, indent=2, ensure_ascii=True))
+            print(json.dumps(with_transport(result, app.gh), indent=2, ensure_ascii=True))
         return 0
     except (ScopeError, OSError, ValueError, KeyError, TypeError) as exc:
         print(str(exc), file=sys.stderr)
