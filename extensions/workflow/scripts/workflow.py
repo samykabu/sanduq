@@ -374,14 +374,13 @@ def preserved_ci_path(root):
     """The CI file a --preserve-ci install handed to the project, if any.
 
     The tracked install lock is authoritative so every clone, worktree and
-    machine agrees; the git-excluded receipt only covers installs made before
-    the lock recorded it.
+    machine agrees, including when it records that nothing is preserved; the
+    git-excluded receipt only covers installs made before the lock had the key.
     """
-    for name in ('install-lock.json', 'install-receipt.json'):
-        preserved = (read(root / '.specify/workflow' / name, {}).get('preserved_ci') or {}).get('path')
-        if preserved:
-            return Path(preserved).as_posix()
-    return None
+    lock = read(root / '.specify/workflow/install-lock.json', {})
+    source = lock if 'preserved_ci' in lock else read(root / '.specify/workflow/install-receipt.json', {})
+    preserved = (source.get('preserved_ci') or {}).get('path')
+    return Path(preserved).as_posix() if preserved else None
 
 
 def ci_errors(root, policy, preserved=None):
