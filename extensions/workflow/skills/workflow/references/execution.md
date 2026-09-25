@@ -33,8 +33,8 @@ python .specify/extensions/workflow/scripts/progress.py init --tasks specs/<feat
 The report is titled from the plan's `# Tasks: <feature>` heading. Pass
 `--title "<feature title>"` to name it explicitly; rerunning `init` with a new
 title renames an existing report without losing its evidence. The report shows
-the Sanduq logo, a Phase column, Status and Phase filters and a separate
-Activity tab; filters and the chosen tab survive the automatic refresh. Record
+the Sanduq logo and page icon, a Phase column, token usage, Status and Phase
+filters and a separate Activity tab; filters and the chosen tab survive the automatic refresh. Record
 phase results under the exact phase heading from `tasks.md` so each phase
 appears once.
 
@@ -80,6 +80,29 @@ python .specify/extensions/workflow/scripts/progress.py task --output specs/<fea
 python .specify/extensions/workflow/scripts/progress.py event --output specs/<feature>/workflow/progress --message "Phase 1 tests passed; preparing phase commit"
 python .specify/extensions/workflow/scripts/progress.py phase --output specs/<feature>/workflow/progress --name "Phase 1" --status complete --commit <sha>
 ```
+
+Record token usage from the worker's own harness log whenever a task reaches
+`done` or `blocked`. Pass the host agent ID the worker was spawned with:
+
+```text
+python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T001 --agent <worker-id> --collect claude
+python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T002 --agent <worker-id> --collect codex
+python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T003 --agent <run-id> --collect delegate --log .delegate/runs/<run-id>/result.json
+python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --overhead orchestrator --agent <orchestrator-id> --collect claude
+```
+
+`claude` finds `~/.claude/projects/*/*/subagents/agent-<id>.jsonl`, `codex` finds
+the rollout whose name ends with the thread ID, and `delegate` reads a
+delegate-task `result.json`. Pass `--log` for any other location, including the
+dispatcher's own session transcript. Only token counters are read. Collecting the
+same agent again replaces its figure, so collect overhead at each phase commit and
+at Finalize. A worker reused across tasks is split by each task's `running` to
+`done` window, so mark a task `running` when assigning it. When no log exists,
+record the worker's self-reported counts with `--fresh-input`, `--cached-input`
+and `--output-tokens`; the report marks them. A log that cannot be found or read
+is recorded as unavailable and shown as a gap, never as zero. The report shows
+fresh input, cached input and output per task, the total of the filtered tasks,
+per phase, overhead and the feature; it covers implementation only.
 
 Use `pending`, `running`, `done` or `blocked` for task status. Mark task checkboxes
 done only after reviewing their implementation and required checks. Preserve
