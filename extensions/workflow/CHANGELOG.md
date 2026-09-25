@@ -1,7 +1,18 @@
 # Changelog
 
-## 1.3.1
+## 1.4.0
 
+- The implementation progress report shows token usage (#24): fresh input,
+  cached input and output for each task, a total of the tasks the filters show,
+  each phase, orchestration and review overhead, and the whole feature. The new
+  `progress.py usage` command reads the figures from the agents' own harness logs
+  (Claude Code subagent transcripts, Codex rollouts, delegate-task results). It
+  reads token counters only, never message content. Collecting again replaces a
+  figure instead of adding to it, a worker reused across tasks is split by each
+  task's running-to-done window, and a missing log shows as a gap, never as zero.
+  The total covers implementation only; scoping, specification and planning come
+  before the report exists.
+- The report uses the Sanduq mark as its page icon.
 - `install.py --preserve-ci` and `upgrade.py --preserve-ci` no longer roll back
   with `CI_WORKFLOW_STALE` on a clone, worktree or machine without the
   git-excluded `install-receipt.json` (#22). The installer hands the preserved
@@ -15,7 +26,7 @@
   receipt on rollback.
 - Upgrading to 1.3.0 with `--preserve-ci` from a checkout without the receipt
   still fails, because 1.3.0's installer carries the original defect. Target
-  1.3.1 instead.
+  1.4.0 instead.
 
 ## 1.3.0
 
