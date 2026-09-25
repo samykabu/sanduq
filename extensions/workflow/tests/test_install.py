@@ -168,6 +168,31 @@ class InstallTests(unittest.TestCase):
                 installer.install(self.root, apply=True, package_root=self.package, runner=lambda *args: None)
             self.assertEqual(target.read_bytes(), custom)
 
+    def test_preserve_ci_passes_health_check_on_a_checkout_without_a_receipt(self):
+        # Issue #22: the receipt is git-excluded, so a fresh clone or worktree
+        # has none. The health check runs before it is written and must still
+        # know the preserved file belongs to the project.
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b'name: Local policy\njobs: {}\n')
+        asset = self.root / '.specify/extensions/workflow/assets/github/workflow-gates.yml'
+        asset.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(self.package / 'assets/github/workflow-gates.yml', asset)
+        self.assertFalse((self.root / '.specify/workflow/install-receipt.json').exists())
+
+        def health(root, policy, project=False, preserved_ci=None):
+            errors = w.ci_errors(root, policy, preserved_ci)
+            return {'ok': not errors, 'errors': errors}
+        with patch.object(installer, 'install_aliases', return_value={}),              patch.object(installer, 'doctor', side_effect=health):
+            result = installer.install(self.root, apply=True, package_root=self.package,
+                                       runner=lambda *args: None, preserve_ci=True)
+        self.assertEqual(result['preserved_ci']['path'], '.github/workflows/sanduq-workflow-gates.yml')
+        # The tracked lock carries the choice to every other checkout.
+        lock = w.read(self.root / '.specify/workflow/install-lock.json')
+        self.assertEqual(lock['preserved_ci'], {'path': '.github/workflows/sanduq-workflow-gates.yml'})
+        (self.root / '.specify/workflow/install-receipt.json').unlink()
+        self.assertEqual(w.ci_errors(self.root, w.load_policy(self.root)), [])
+
     def test_preserve_ci_still_installs_template_when_project_has_no_ci_file(self):
         with patch.object(installer, 'install_aliases', return_value={}), \
              patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}):

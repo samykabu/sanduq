@@ -274,6 +274,30 @@ class PolicyIntegrationTests(unittest.TestCase):
                 {'preserved_ci': {'path': '.github/workflows/sanduq-workflow-gates.yml'}})
         self.assertEqual(w.ci_errors(self.root, policy), [])
 
+    def test_a_preserved_file_recorded_in_the_tracked_lock_needs_no_receipt(self):
+        self.install_asset()
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b'name: Local policy\njobs: {}\n')
+        policy = w.load_policy(self.root)
+        self.assertTrue(any('CI_WORKFLOW_STALE' in e for e in w.ci_errors(self.root, policy)))
+        self.assertEqual(w.ci_errors(self.root, policy, '.github/workflows/sanduq-workflow-gates.yml'), [])
+        w.write(self.root / '.specify/workflow/install-lock.json',
+                {'preserved_ci': {'path': '.github/workflows/sanduq-workflow-gates.yml'}})
+        self.assertFalse((self.root / '.specify/workflow/install-receipt.json').exists())
+        self.assertEqual(w.ci_errors(self.root, policy), [])
+
+    def test_a_lock_that_clears_preserved_ci_overrides_an_old_local_receipt(self):
+        self.install_asset()
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b'name: Local policy\njobs: {}\n')
+        policy = w.load_policy(self.root)
+        w.write(self.root / '.specify/workflow/install-receipt.json',
+                {'preserved_ci': {'path': '.github/workflows/sanduq-workflow-gates.yml'}})
+        w.write(self.root / '.specify/workflow/install-lock.json', {'preserved_ci': None})
+        self.assertTrue(any('CI_WORKFLOW_STALE' in e for e in w.ci_errors(self.root, policy)))
+
     def test_doctor_demands_a_reason_for_a_hosted_runner_the_project_forbade(self):
         self.install_asset()
         target = self.root / '.github/workflows/sanduq-workflow-gates.yml'

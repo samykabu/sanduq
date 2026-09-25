@@ -4,9 +4,11 @@ For installation in new or existing repositories, non-Spec Kit bug fixes,
 GitHub issue decisions, CI mode/rule choices, and later QA/User Manual
 opt-in or opt-out, see the [Sanduq Delivery usage guide](sanduq-delivery-usage.md).
 
-Workflow 1.3.0 adds issue decisions and an optional evidence CI gate. Check
-the repository catalog for the currently published version; the 1.3.0 package
-can be installed locally before its release asset and catalog promotion.
+Workflow 1.4.0 adds token usage per task, phase and feature to the progress
+report and makes `--preserve-ci` work on any checkout. Workflow 1.3.0 added
+issue decisions and an optional evidence CI gate. Check the repository catalog
+for the currently published version; the 1.4.0 package can be installed locally
+before its release asset and catalog promotion.
 
 ## One-time setup
 

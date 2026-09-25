@@ -370,12 +370,27 @@ MANAGED_CI = {
 }
 
 
-def ci_errors(root, policy):
+def preserved_ci_path(root):
+    """The CI file a --preserve-ci install handed to the project, if any.
+
+    The tracked install lock is authoritative so every clone, worktree and
+    machine agrees, including when it records that nothing is preserved; the
+    git-excluded receipt only covers installs made before the lock had the key.
+    """
+    lock = read(root / '.specify/workflow/install-lock.json', {})
+    source = lock if 'preserved_ci' in lock else read(root / '.specify/workflow/install-receipt.json', {})
+    preserved = (source.get('preserved_ci') or {}).get('path')
+    return Path(preserved).as_posix() if preserved else None
+
+
+def ci_errors(root, policy, preserved=None):
     """Check the project's CI selection against the workflow files on disk.
 
     Two failures matter: a runner the project's own policy forbids without a
     recorded reason, and a workflow file that no longer matches what the current
     selection renders, which means the selection was changed but never applied.
+    An installer that is preserving a file passes it as ``preserved`` because
+    nothing on disk records that choice until the install succeeds.
     """
     ci = policy.get('ci') or sanduq_ci.default_ci()
     evidence_file = root / '.github/workflows/sanduq-workflow-gates.yml'
@@ -387,9 +402,9 @@ def ci_errors(root, policy):
         return ['CI_GATE_DISABLED_FILE_PRESENT: remove a managed gate through the installer or review custom CI']
     present = {name: root / name for name in MANAGED_CI if (root / name).is_file()}
     errors = list(sanduq_ci.exception_errors(ci, [Path(name).name for name in present]))
-    preserved = (read(root / '.specify/workflow/install-receipt.json', {}).get('preserved_ci') or {}).get('path')
+    preserved = Path(preserved).as_posix() if preserved else preserved_ci_path(root)
     for name, target in sorted(present.items()):
-        if preserved and Path(preserved).as_posix() == name:
+        if preserved == name:
             continue  # explicitly kept by --preserve-ci; the project owns it
         asset = root / MANAGED_CI[name]
         if not asset.is_file():
@@ -405,7 +420,7 @@ def ci_errors(root, policy):
     return errors
 
 
-def doctor(root, policy, project=False):
+def doctor(root, policy, project=False, preserved_ci=None):
     needed = ['scope', 'project', 'pr'] + (['assure'] if policy['processes']['qa'] else []) + (['user-manual'] if policy['processes']['user_manual'] else [])
     errors = ['DEPENDENCY_UNAVAILABLE: ' + name + ' ' + RANGES[name] for name in needed if not compatible(root, name)]
     if active_host(root) not in ('codex','claude'):
@@ -445,7 +460,7 @@ def doctor(root, policy, project=False):
             errors.append('PRESET_REQUIRED: ' + preset)
         if preset_registry.get(preset, {}).get('enabled') is not True:
             errors.append('PRESET_NOT_ENABLED: ' + preset)
-    errors += ci_errors(root, policy)
+    errors += ci_errors(root, policy, preserved_ci)
     if project: errors += project_errors(root, policy)
     warnings = []
     drift = eol_drift(root)
