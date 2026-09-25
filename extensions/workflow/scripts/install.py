@@ -266,7 +266,10 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
             if legacy.exists():
                 require(reference.exists() and legacy.read_bytes().replace(b'\r\n',b'\n') == rendered(reference, policy).replace(b'\r\n',b'\n'), 'LEGACY_CI_HAS_LOCAL_EDITS: reconcile selected processes explicitly')
                 legacy.unlink()  # exact backed-up legacy gate; policy-aware gate replaces it
-            health = doctor(root, policy); require(health['ok'], '; '.join(health['errors']))
+            # The receipt and lock that record the preserved file are written
+            # only after this check, so hand the choice to the doctor directly.
+            health = doctor(root, policy, preserved_ci=(result['preserved_ci'] or {}).get('path'))
+            require(health['ok'], '; '.join(health['errors']))
             installed = registry(root)
             inventory = {}
             for name in sorted(set(selected) | {'workflow'}):
@@ -279,6 +282,9 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                 'schema_version': 1, 'host': active_host(root), 'processes': policy['processes'],
                 'extensions': inventory, 'dependency_digest': package_digest(root),
                 'aliases': alias_hashes,
+                # Tracked, unlike the receipt, so fresh clones and worktrees
+                # still treat a preserved CI file as project-owned.
+                'preserved_ci': {'path': result['preserved_ci']['path']} if result['preserved_ci'] else None,
                 'presets': {name: {key: entry.get(key) for key in ('version', 'enabled', 'priority', 'manifest_hash')}
                             for name, entry in read(root / '.specify/presets/.registry', {}).get('presets', {}).items()},
                 'tested_compatibility': {'spec_kit': lock.get('tested_spec_kit', {}), 'upstream_optional': lock.get('upstream_optional', {})},
