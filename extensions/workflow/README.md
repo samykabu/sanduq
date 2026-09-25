@@ -1,6 +1,8 @@
 # Sanduq Workflow
 
-Workflow 1.3.0 adds issue decisions and an optional evidence CI gate. Check
+Workflow 1.4.0 adds token usage per task, phase and feature to the progress
+report and makes `--preserve-ci` work on any checkout. Workflow 1.3.0 added issue
+decisions and an optional evidence CI gate. Check
 the repository catalog for the currently published version. See the
 [Delivery implementation plan](../../docs/sanduq-delivery-implementation-plan.md),
 [usage guide](../../docs/sanduq-delivery-usage.md), and

@@ -19,9 +19,10 @@ for a bounded task, or install the managed workflow to take a GitHub issue throu
 implementation, verification, documentation, and a pull request. Implementation uses a dedicated
 orchestrator and workers, with an HTML report that follows progress through an authorized PR merge.
 
-Workflow 1.3.0 adds issue decisions and an optional evidence CI gate. Check
-[`catalog.json`](catalog.json) for the currently published version. If 1.3.0 is
-not yet listed, use the [local package procedure](#try-the-staged-workflow) in
+Workflow 1.4.0 adds token usage to the progress report, for each task, phase and the whole feature,
+and makes `--preserve-ci` work on any clone or worktree. Workflow 1.3.0 added issue decisions and an
+optional evidence CI gate. Check [`catalog.json`](catalog.json) for the currently published version.
+If 1.4.0 is not yet listed, use the [local package procedure](#try-the-staged-workflow) in
 a disposable project until its release assets are published. See the
 [Delivery usage guide](docs/sanduq-delivery-usage.md) for setup and operation.
 
@@ -662,6 +663,34 @@ checks, phase commits and pushes, and PR status. Keep it updated after material 
 CI repairs and the verified merge when that work is authorized. Pending checks and failed checks
 remain visible; they never count as completion.
 
+The report also shows token usage. Each task has fresh input, cached input and output columns, and
+the footer adds up whichever tasks the Status and Phase filters show. A Token usage section totals
+each phase, the orchestration and review overhead, and the whole feature.
+
+![Progress report with token usage per task, per phase and for the feature](docs/assets/progress-token-usage.png)
+
+The orchestrator records a task's usage when the task finishes, by reading the worker's own harness
+log. Nobody types the numbers in:
+
+```text
+python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T001 --agent <worker-id> --collect claude
+python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T002 --agent <thread-id> --collect codex
+python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T003 --agent <run-id> --collect delegate --log .delegate/runs/<run-id>/result.json
+```
+
+`claude` reads the Claude Code subagent transcript, `codex` reads the Codex rollout, and `delegate`
+reads a [`delegate-task`](#delegate-task) result. Only token counters are read, never message
+content. A few rules keep the figures honest:
+
+- Collecting the same worker again replaces its figure rather than adding to it.
+- A worker reused for several tasks is split by each task's running and done times, so mark a task
+  `running` when you assign it.
+- A log that cannot be found shows as a dash and an Activity entry, never as zero. Self-reported
+  figures (`--fresh-input`, `--cached-input`, `--output-tokens`) are marked with an asterisk.
+- The feature total covers implementation only. Scoping, specification and planning happen before
+  the report exists. Figures from different harnesses or models are not comparable, and no cost is
+  shown.
+
 ```text
 /speckit-implement Keep implementing all approved phases. Delegate implementation to workers and
 run the maximum conflict-free ready tasks in parallel. Open and maintain the HTML progress report.
@@ -922,8 +951,8 @@ The first command previews the operation; the second applies the same version wi
 rollback protection:
 
 ```bash
-python .specify/extensions/workflow/scripts/upgrade.py --version 1.3.1 --packages /absolute/path/to/sanduq-packages
-python .specify/extensions/workflow/scripts/upgrade.py --version 1.3.1 --packages /absolute/path/to/sanduq-packages --apply
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.4.0 --packages /absolute/path/to/sanduq-packages
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.4.0 --packages /absolute/path/to/sanduq-packages --apply
 python .specify/extensions/workflow/scripts/workflow.py doctor --project
 ```
 
@@ -938,7 +967,9 @@ identity. For a new consumer, install the extracted package with
 
 If your project intentionally customizes `.github/workflows/sanduq-workflow-gates.yml`, add
 `--preserve-ci` to the upgrade command. This keeps that file while updating the package, presets,
-and generated skills. The upgrade receipt records the choice. Without this option, substantive
+and generated skills. The tracked `.specify/workflow/install-lock.json` records the choice, so every
+clone, worktree and machine treats the file as the project's own. Upgrade to 1.4.0 or later: a 1.3.0
+target still rolls back with `CI_WORKFLOW_STALE` on a checkout without the local install receipt. Without this option, substantive
 local CI edits still stop the upgrade; LF/CRLF checkout conversion alone is accepted.
 Keep the extracted package available while testing the development installation. These commands
 test staged source; they do not publish or promote it.

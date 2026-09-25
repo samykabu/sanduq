@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "versions": {
-    "workflow": "1.3.1"
+    "workflow": "1.4.0"
   },
   "status": "ready",
-  "note": "Reviewed for release: --preserve-ci installs and upgrades no longer roll back with CI_WORKFLOW_STALE on a clone or worktree without the local install receipt (#22); the tracked install lock records the preserved CI file."
+  "note": "Reviewed for release: the implementation progress report shows token usage per task, phase, overhead and feature, read from the agents' own harness logs (#24), and uses the Sanduq mark as its page icon; --preserve-ci installs and upgrades no longer roll back with CI_WORKFLOW_STALE on a clone or worktree without the local install receipt (#22)."
 }
