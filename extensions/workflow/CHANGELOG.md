@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- `install.py --preserve-ci` and `upgrade.py --preserve-ci` no longer roll back
+  with `CI_WORKFLOW_STALE` on a clone, worktree or machine without the
+  git-excluded `install-receipt.json` (#22). The installer hands the preserved
+  path straight to its health check, and the tracked `install-lock.json` now
+  records `preserved_ci` so every checkout treats that file as project-owned.
+
 ## 1.3.0
 
 - Issue-bound feature identity uses the GitHub issue number and title for the
