@@ -1,6 +1,6 @@
 # Sanduq Workflow
 
-Unreleased Workflow 1.5.0 adds optional model-aware delegation. Workflow 1.4.0
+Workflow 1.5.0 adds optional model-aware delegation. Workflow 1.4.0
 adds token usage per task, phase and feature to the progress
 report and makes `--preserve-ci` work on any checkout. Workflow 1.3.0 added issue
 decisions and an optional evidence CI gate. Check

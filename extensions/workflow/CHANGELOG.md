@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.5.0 (unreleased)
+## 1.5.0
 
 - Add opt-in model-aware routing across workflow stages and implementation
   tasks. Policy, model preferences, fallbacks and task overrides live in the
