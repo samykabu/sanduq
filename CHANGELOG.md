@@ -4,6 +4,13 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## Agent tools plugin 1.1.0 — 2026-09-26
+
+- Publish the `delegate-task` driver contract and symlink entry-point fix from
+  workflow 1.5.0 through the Claude Code `agent-tools` plugin. Bump the plugin
+  and marketplace versions so existing installations can discover the update.
+- Refresh the documented driver test count to 172 passing cases.
+
 ## Model-aware delegation — workflow 1.5.0, delegate-task driver contract
 
 ### Added
