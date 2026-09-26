@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-25T13:20:19.471894+00:00",
+  "updated_at": "2026-09-26T00:21:42.136098+00:00",
   "catalog_url": "https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json",
   "extensions": {
     "project": {
@@ -293,15 +293,15 @@
     "workflow": {
       "name": "Sanduq Workflow",
       "id": "workflow",
-      "version": "1.4.0",
-      "description": "GitHub issue decisions and resumable Scope-to-PR orchestration with optional QA, User Manual, and workflow evidence CI.",
+      "version": "1.5.0",
+      "description": "GitHub issue decisions and resumable Scope-to-PR orchestration with optional model-aware delegation, QA, User Manual, and workflow evidence CI.",
       "author": "Samy K. Abushanab",
       "license": "PolyForm-Noncommercial-1.0.0",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/workflow",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v1.4.0/workflow.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v1.5.0/workflow.zip",
       "requires": {
         "speckit_version": ">=1.0.0,<1.1.0",
         "tools": [
@@ -335,8 +335,8 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "fb579dd238acc4e9d0e7e8d58793cde4c6523cfa6639c9f90a04974a5e83a1f5",
-      "updated_at": "2026-09-25T13:20:19.471838+00:00"
+      "sha256": "9f39a9fb2607b98bf546aaed7c5fc5023003af53ff8d4b6f33f587a643e39d21",
+      "updated_at": "2026-09-26T00:21:42.136053+00:00"
     },
     "scope": {
       "name": "Speckit Scope",
