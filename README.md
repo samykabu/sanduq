@@ -19,12 +19,12 @@ for a bounded task, or install the managed workflow to take a GitHub issue throu
 implementation, verification, documentation, and a pull request. Implementation uses a dedicated
 orchestrator and workers, with an HTML report that follows progress through an authorized PR merge.
 
-The unreleased Workflow 1.5.0 source adds opt-in model-aware delegation with
+Workflow 1.5.0 adds opt-in model-aware delegation with
 editable routes and preserved run history. Workflow 1.4.0 adds token usage to
 the progress report for each task, phase and the whole feature, and makes
 `--preserve-ci` work on any clone or worktree. Workflow 1.3.0 added issue decisions and an
 optional evidence CI gate. Check [`catalog.json`](catalog.json) for the currently published version.
-If 1.4.0 is not yet listed, use the [local package procedure](#try-the-staged-workflow) in
+For a version not yet listed, use the [local package procedure](#try-the-staged-workflow) in
 a disposable project until its release assets are published. See the
 [Delivery usage guide](docs/sanduq-delivery-usage.md) for setup and operation.
 
@@ -967,8 +967,8 @@ The first command previews the operation; the second applies the same version wi
 rollback protection:
 
 ```bash
-python .specify/extensions/workflow/scripts/upgrade.py --version 1.4.0 --packages /absolute/path/to/sanduq-packages
-python .specify/extensions/workflow/scripts/upgrade.py --version 1.4.0 --packages /absolute/path/to/sanduq-packages --apply
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.5.0 --packages /absolute/path/to/sanduq-packages
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.5.0 --packages /absolute/path/to/sanduq-packages --apply
 python .specify/extensions/workflow/scripts/workflow.py doctor --project
 ```
 

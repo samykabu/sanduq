@@ -4,7 +4,7 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
-## Model-aware delegation — workflow 1.5.0, delegate-task driver contract (unreleased)
+## Model-aware delegation — workflow 1.5.0, delegate-task driver contract
 
 ### Added
 
