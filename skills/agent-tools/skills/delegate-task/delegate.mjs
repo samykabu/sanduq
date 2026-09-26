@@ -555,10 +555,11 @@ const HARNESSES = {
     versionArgs: ['--version'],
     args: ({ task, model, perm, resume }) => [
       'exec',
-      ...(resume ? ['resume', resume] : []),
       '--json', '--skip-git-repo-check',
       ...(model ? ['-m', model] : []),
       ...(perm === 'bypass' ? ['--dangerously-bypass-approvals-and-sandbox'] : ['-s', 'read-only']),
+      // Sandbox is an exec option, not an exec-resume option.
+      ...(resume ? ['resume', resume] : []),
       task,
     ],
     mode: (perm) => (perm === 'bypass' ? '--dangerously-bypass-approvals-and-sandbox' : '-s read-only'),
