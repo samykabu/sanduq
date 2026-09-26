@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
   "versions": {"workflow": "1.5.0"},
-  "status": "implementation-in-progress",
-  "note": "Issue #26: opt-in model-aware delegation is under implementation and review. Publish only after the exact PR head, packaged archive and release verification pass."
+  "status": "ready",
+  "note": "Issue #26: opt-in model-aware delegation and review fixes merged in PRs #28 and #29. Publish workflow 1.5.0 only after main CI and downloaded asset verification pass."
 }
