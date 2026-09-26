@@ -43,7 +43,7 @@ every project you delegate from. `node "$DELEGATE" prune --keep 20 --yes` clears
 At least one agent CLI must be on `PATH` and already logged in; `git` is what makes the measurement
 layer work.
 
-See the skill's [README](skills/delegate-task/README.md) — also available
+See the plugin [changelog](CHANGELOG.md) and the skill's [README](skills/delegate-task/README.md) — also available
 [in Arabic](skills/delegate-task/README.ar.md) — for worked examples, the result schema, and the
 three normative contracts. The root [README](../../README.md) lists every sanduq skill and
 extension.
@@ -54,5 +54,5 @@ extension.
 cd skills/delegate-task && node test/run.mjs
 ```
 
-169 cases. They drive a fake harness through `DELEGATE_BIN_<HARNESS>`, so the suite spends no
+172 cases. They drive a fake harness through `DELEGATE_BIN_<HARNESS>`, so the suite spends no
 tokens and needs no agent CLI installed.

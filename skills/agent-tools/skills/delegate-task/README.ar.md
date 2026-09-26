@@ -474,7 +474,7 @@ delegate-task/
   contracts/        مواصفات السلوك المُلزِمة
   references/       كيف تكتب مهمة، وكيف تراجع ما يعود منها
   assets/           رسوم هذا الملف ومصادرها بصيغة HTML
-  test/run.mjs      169 حالة اختبار
+  test/run.mjs      172 حالة اختبار
 
 $DELEGATE_RUNS_DIR/<run_id>/
   prompt.txt · meta.json · journal.jsonl · stdout.log · stderr.log · result.json
@@ -488,7 +488,7 @@ $DELEGATE_RUNS_DIR/<run_id>/
 
 | الفحص | النتيجة |
 |---|---|
-| `test/run.mjs` | **169 نجحت، 0 فشلت** |
+| `test/run.mjs` | **172 نجحت، 0 فشلت** |
 | هل للاختبارات أنياب | اختبار طَفَري: تُزرع عيوب متعمّدة ويجب أن تلتقطها الاختبارات |
 | مراجعة خصومية | 9 جولات ضد وكيل خارجي، عبر هذه المهارة نفسها |
 | كتابة حقيقية | قاس `greeting.txt`؛ وملف كان متسخاً **قبل** التشغيل بقي خارج الفرق |

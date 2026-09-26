@@ -503,7 +503,7 @@ delegate-task/
   assets/           the diagrams in this README, and their HTML sources
   contracts/        normative behaviour specs
   references/       how to brief a delegate, and how to review what comes back
-  test/run.mjs      169 cases; fixtures/ holds per-harness event streams
+  test/run.mjs      172 cases; fixtures/ holds per-harness event streams
 
 $DELEGATE_RUNS_DIR/<run_id>/
   prompt.txt · meta.json · journal.jsonl · stdout.log · stderr.log · result.json
@@ -517,7 +517,7 @@ binary is found with `DELEGATE_BIN_<HARNESS>`.
 
 | Check | Result |
 |---|---|
-| `test/run.mjs` | **169 passed, 0 failed** |
+| `test/run.mjs` | **172 passed, 0 failed** |
 | Suite has teeth | mutation-tested: deliberate defects injected, the suite required to catch each |
 | Adversarial review | 9 rounds against an external agent, run through this skill, each round mutation-testing the suite independently |
 | Live write run | measured `greeting.txt`; a file dirty *before* the run stayed out of the delta |
