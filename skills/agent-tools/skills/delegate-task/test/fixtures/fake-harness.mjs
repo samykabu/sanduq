@@ -21,6 +21,14 @@ if (argv.includes('--version')) {
   process.exit(0);
 }
 
+if (process.env.FAKE_CODEX_RESUME_SANDBOX) {
+  const expected = ['exec', '--json', '--skip-git-repo-check', '-m', 'test-model', '-s', 'read-only', 'resume', 'th_e2e'];
+  if (argv.length !== expected.length + 1 || expected.some((value, index) => argv[index] !== value)) {
+    process.stderr.write('Codex exec options must precede resume and its session ID.\n');
+    process.exit(2);
+  }
+}
+
 const body = process.env.FAKE_STREAM || '';
 const errBody = process.env.FAKE_STDERR || '';
 const code = Number(process.env.FAKE_EXIT || 0);

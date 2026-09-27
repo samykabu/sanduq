@@ -54,5 +54,14 @@ extension.
 cd skills/delegate-task && node test/run.mjs
 ```
 
-172 cases. They drive a fake harness through `DELEGATE_BIN_<HARNESS>`, so the suite spends no
+173 cases. They drive a fake harness through `DELEGATE_BIN_<HARNESS>`, so the suite spends no
 tokens and needs no agent CLI installed.
+
+## B6 validation (2026-09-27)
+
+Codex `exec` options, including `-s read-only`, now precede the `resume` subcommand. Verified against `codex-cli 0.157.1` help and a live sandboxed continuation.
+
+- Driver suite: 173 reported passing cases, 0 failures. The existing Windows-only no-op skip cases remain unexecuted POSIX coverage, not live passes.
+- Live parent: `codex-20260926232642-f56c99`; continuation: `codex-20260926232849-8610ae`; same session `01a0e00a-de27-71a2-900c-8f02ea434698`.
+- Continuation: successful (`harness_telemetry`), exit 0, permission mode `codex: -s read-only`, no measured Git file delta. This proves CLI continuation compatibility; the driver's Git measurement is not proof against every possible write.
+- The `delegate-task.driver.v1` and `delegate-task.result.v2` schemas are unchanged. Plugin version 1.1.1 is packaged as a standalone tagged release. Validation is local plus the live Codex continuation above; no GitHub CI pass or consumer adoption is claimed.
