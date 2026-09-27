@@ -164,18 +164,38 @@ def check_index(root, feature):
     state = read(inside(root, checkpoint), {})
     require(state.get('feature') == feature, 'CHECKPOINT_MISSING_OR_WRONG_FEATURE: ' + feature)
     paths = {checkpoint, '.specify/workflow.yml'}
+    own_feature = Path(feature).parts[1] if Path(feature).parts[:1] == ('specs',) and len(Path(feature).parts) > 1 else None
+    cross_feature = set()
     for stage, receipt in state.get('receipts', {}).items():
         if stage == 'pr':
             continue
         for key in ('fingerprints', 'source_fingerprints'):
-            paths.update(p for p, value in receipt.get(key, {}).items() if value is not None)
+            for p, value in receipt.get(key, {}).items():
+                if value is None:
+                    continue
+                paths.add(p)
+                parts = Path(p).parts
+                if own_feature and len(parts) > 1 and parts[0] == 'specs' and parts[1] != own_feature:
+                    cross_feature.add(p)
     tracked = set(git(root, 'ls-files', '--cached', '-z').split('\0'))
     unstaged = set(git(root, 'diff', '--name-only', '-z').split('\0'))
     missing = sorted(paths - tracked)
     modified = sorted(paths & unstaged)
-    require(not missing and not modified, 'EVIDENCE_NOT_PORTABLE: ' +
-            json.dumps({'not_in_index': missing, 'unstaged': modified}))
-    return {'feature': feature, 'indexed_paths': len(paths)}
+    if missing or modified:
+        # `git ls-files --others --ignored` never fails (unlike `git check-ignore`,
+        # whose exit code doubles as "nothing matched"), so it is safe with `git()`.
+        ignored = set(git(root, 'ls-files', '--others', '--ignored', '--exclude-standard', '-z').split('\0'))
+        recipes = ['git add -f ' + p for p in sorted(ignored & set(missing))]
+        detail = {'not_in_index': missing, 'unstaged': modified}
+        if recipes:
+            detail['ignored_by_git'] = sorted(ignored & set(missing))
+            detail['recipe'] = recipes
+        require(False, 'EVIDENCE_NOT_PORTABLE: ' + json.dumps(detail))
+    warnings = []
+    if cross_feature:
+        warnings.append('CROSS_FEATURE_EVIDENCE: receipt references path(s) under another feature\'s specs/ '
+                         'directory: ' + ', '.join(sorted(cross_feature)))
+    return {'feature': feature, 'indexed_paths': len(paths), 'warnings': warnings}
 
 
 def main():
@@ -207,13 +227,16 @@ def main():
         for feature in features:
             effective = dict(rules)
             applied_waivers = []
+            index_warnings = []
             while True:
                 try:
                     if args.check_index and effective['portability']:
-                        check_index(root, feature)
+                        index_warnings = check_index(root, feature)['warnings']
                     result = check(root, feature, policy, args.base_ref, effective,
                                    **({'verify_ci_evidence': True} if args.verify_ci_evidence else {}))
                     result['waivers'] = applied_waivers
+                    if index_warnings:
+                        result['index_warnings'] = index_warnings
                     results.append(result)
                     break
                 except WorkflowError as exc:

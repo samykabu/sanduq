@@ -13,6 +13,21 @@ from workflow import WorkflowError, require, inside, git, read, write, locked, d
 
 MARKER = re.compile(r'<!-- sanduq-task (\{[^\n]+\}) -->')
 
+# GitHub rejects an issue title over this many characters.
+TITLE_LIMIT = 256
+TITLE_ELLIPSIS = '...'
+
+
+def issue_title(task, description):
+    """A deterministic GitHub-legal title: `task: description`, shortened to the
+    headline when it would exceed GitHub's limit. The full description always
+    stays in the issue body (see `sync`), so shortening never drops information,
+    and the same input always shortens to the same title (idempotent re-sync)."""
+    title = task + ': ' + description
+    if len(title) <= TITLE_LIMIT:
+        return title
+    return title[:TITLE_LIMIT - len(TITLE_ELLIPSIS)].rstrip() + TITLE_ELLIPSIS
+
 
 def parse_tasks(text):
     tasks = {}
@@ -120,8 +135,7 @@ def sync(root, feature, parent, dependencies, apply=False, github=None):
             refs = [known[t]['number'] for t in dependencies.get(task, []) if t in known]
             if refs: text += '\nDepends on: ' + ', '.join('#' + str(n) for n in refs) + '\n'
             text += '<!-- /sanduq-task -->\n'
-            title = task + ': ' + tasks[task]['description']
-            require(len(title) <= 256, 'TASK_TITLE_TOO_LONG: shorten the task description for ' + task)
+            title = issue_title(task, tasks[task]['description'])
             issue = known.get(task)
             action = 'reuse' if issue else 'create'
             if apply and issue is None:
