@@ -20,6 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sanduq_hash import eol_drift, portable_files
 import sanduq_ci
+import source_key as sk
 
 import yaml
 from packaging.specifiers import SpecifierSet
@@ -47,7 +48,12 @@ AMENDMENT_ASSESSMENTS = ('unchanged', 'changed')
 # Receipts whose conclusion rests on earlier evidence; a `changed` amendment stales them.
 AMENDMENT_DEPENDENTS = ('verify', 'review', 'ready')
 # Receipt fields only the runtime writes; a submitted receipt may not carry them.
-RUNTIME_RECEIPT_FIELDS = ('amendments', 'stale')
+RUNTIME_RECEIPT_FIELDS = ('amendments', 'stale', 'head', 'source_key', 'ci_evidence', 'diff_reviewed',
+                          'revalidations')
+# Stages whose receipts also inventory source (`source_fingerprints`) and record `head` and `source_key`.
+SOURCE_STAGES = ('verify', 'review', 'ready')
+# How recovery recipes name the runtime in a consumer project.
+WORKFLOW_SCRIPT = 'python .specify/extensions/workflow/scripts/workflow.py'
 
 
 class WorkflowError(Exception):
@@ -223,11 +229,21 @@ def default_policy(qa, manual):
             'ci': sanduq_ci.default_ci()}
 
 
-def select_gate(ci, mode=None, scope=None, rules=()):
-    """Apply explicit gate choices while preserving unmentioned project settings."""
-    if mode is None and scope is None and not rules:
+def select_gate(ci, mode=None, scope=None, rules=(), keys=None):
+    """Apply explicit gate choices while preserving unmentioned project settings.
+
+    `keys` sets optional gate keys (`affected_command`, `verification_check`);
+    None leaves one unchanged and "none" removes it.
+    """
+    keys = {name: value for name, value in (keys or {}).items() if value is not None}
+    if mode is None and scope is None and not rules and not keys:
         return ci
     gate = copy.deepcopy(sanduq_ci.gate_config(ci))
+    for name, value in keys.items():
+        if value.strip().lower() == 'none':
+            gate.pop(name, None)
+        else:
+            gate[name] = value
     if mode is not None:
         gate['mode'] = mode
     if scope is not None:
@@ -748,16 +764,191 @@ def consulted_drift(root, feature, receipts):
     return drift
 
 
-def receipt_current(root, feature, stage, receipt):
-    if receipt.get('stale'): return False
+def gate_settings(policy):
+    """The gate section of a policy, or {} when none (legacy or no policy)."""
+    ci = (policy or {}).get('ci') or {}
+    return ci.get('gate') if isinstance(ci.get('gate'), dict) else {}
+
+
+def affected_command(policy):
+    try:
+        return sanduq_ci.affected_command(gate_settings(policy))
+    except sanduq_ci.CIPolicyError as exc:
+        raise WorkflowError(str(exc)) from exc
+
+
+def verification_check(policy):
+    try:
+        return sanduq_ci.verification_check(gate_settings(policy))
+    except sanduq_ci.CIPolicyError as exc:
+        raise WorkflowError(str(exc)) from exc
+
+
+def affected_lanes(root, command, paths):
+    """Classify paths through the project's affected-lane hook (`ci.gate.affected_command`).
+
+    The hook reads a JSON list of paths on stdin and prints
+    `{"paths": {"<path>": ["<lane>", ...]}}`. Any failure -- a non-zero exit,
+    output that is not that shape, or a path left unclassified -- raises, so
+    every caller fails closed.
+    """
+    try:
+        result = subprocess.run(command, cwd=root, input=json.dumps(sorted(paths)), capture_output=True,
+                                text=True, encoding='utf-8', timeout=600)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise WorkflowError('AFFECTED_COMMAND_FAILED: ' + str(exc)) from exc
+    require(result.returncode == 0, 'AFFECTED_COMMAND_FAILED: exit ' + str(result.returncode) + ': ' +
+            (result.stderr or result.stdout).strip()[:300])
+    try:
+        data = json.loads(result.stdout)
+    except ValueError as exc:
+        raise WorkflowError('AFFECTED_COMMAND_OUTPUT_INVALID: not JSON') from exc
+    mapping = data.get('paths') if isinstance(data, dict) else None
+    require(isinstance(mapping, dict), 'AFFECTED_COMMAND_OUTPUT_INVALID: expected {"paths": {"<path>": [lanes]}}')
+    missing = [path for path in paths if path not in mapping]
+    require(not missing, 'AFFECTED_COMMAND_OUTPUT_INVALID: no lanes for ' + ', '.join(sorted(missing)[:5]))
+    lanes = {}
+    for path in paths:
+        value = mapping[path]
+        require(isinstance(value, list) and all(isinstance(lane, str) and lane for lane in value),
+                'AFFECTED_COMMAND_OUTPUT_INVALID: lanes of ' + path)
+        lanes[path] = sorted(set(value))
+    return lanes
+
+
+def source_drift(receipt, current):
+    """Source paths added, removed or changed since the receipt's inventory."""
+    old = receipt.get('source_fingerprints') or {}
+    return sorted(path for path in set(old) | set(current)
+                  if path not in old or path not in current or old[path] != current[path])
+
+
+def current_source_key(root):
+    """HEAD and its source key, or (None, None) when HEAD does not describe the working tree.
+
+    The key is of a commit; a receipt inventories the working tree, so the two
+    are bound only while no source path the key counts differs from HEAD.
+    """
+    try:
+        if sk.dirty_source_paths(root):
+            return None, None
+        return git(root, 'rev-parse', 'HEAD'), sk.source_key(root, 'HEAD')
+    except (sk.SourceKeyError, WorkflowError):
+        return None, None
+
+
+def ci_evidence_current(root, receipt):
+    """A Verify receipt's recorded CI run still covers the current source.
+
+    The run concluded success with no lane gap, it covered every lane the
+    drift it was accepted for required, and its source key (the receipt's own)
+    is the key of the current, clean HEAD.
+    """
+    evidence = receipt.get('ci_evidence')
+    if not isinstance(evidence, dict) or evidence.get('conclusion') != 'success' or evidence.get('lane_gap'):
+        return False
+    if not set(evidence.get('required_lanes') or []) <= set(evidence.get('lanes') or []):
+        return False
+    _, key = current_source_key(root)
+    return key is not None and evidence.get('source_key') == key == receipt.get('source_key')
+
+
+def receipt_status(root, feature, stage, receipt, policy=None):
+    """Whether a receipt is current, and why not.
+
+    Explicit fingerprints (inputs and evidence) always keep their byte-hash
+    check. For Verify, Review and Ready the source inventory is compared next:
+    identical is current. A drifted inventory stays current only for a receipt
+    that records a `source_key` (1.6.0 and later) when, with no drifted path
+    among its explicit fingerprints, either (Verify only) its recorded CI run
+    covers the current source key, or the project's affected-lane hook maps
+    every drifted path to no lane. A legacy receipt without `source_key`, or a
+    project without the hook, keeps the identity rule; a failing hook fails closed.
+    """
+    if receipt.get('stale'):
+        return {'current': False, 'reason': 'marked-stale', 'stale': receipt['stale']}
     saved = receipt.get('fingerprints', {})
     required = set(required_inputs(root, feature, stage))
-    if not saved or not required <= set(saved): return False
+    if not saved or not required <= set(saved):
+        return {'current': False, 'reason': 'explicit-drift', 'paths': sorted(required - set(saved))}
     dependencies = dependency_fingerprints(receipt, required)
-    if fingerprint_files(root, dependencies) != dependencies: return False
-    if stage in ('verify', 'review', 'ready'):
-        return receipt.get('source_fingerprints') == source_fingerprints(root)
-    return True
+    now_hashes = fingerprint_files(root, dependencies)
+    if now_hashes != dependencies:
+        return {'current': False, 'reason': 'explicit-drift',
+                'paths': sorted(path for path in dependencies if now_hashes.get(path) != dependencies[path])}
+    if stage not in SOURCE_STAGES:
+        return {'current': True, 'via': 'identity'}
+    current = source_fingerprints(root)
+    if receipt.get('source_fingerprints') == current:
+        return {'current': True, 'via': 'identity'}
+    drift = source_drift(receipt, current)
+    stale = {'current': False, 'reason': 'source-drift', 'paths': drift}
+    if not receipt.get('source_key'):
+        return {**stale, 'rule': 'identity'}
+    explicit = sorted(set(drift) & set(saved))
+    if explicit:
+        return {**stale, 'rule': 'explicit-fingerprint', 'explicit': explicit}
+    if stage == 'verify' and ci_evidence_current(root, receipt):
+        return {'current': True, 'via': 'ci-evidence', 'paths': drift, 'run_id': receipt['ci_evidence'].get('run_id')}
+    command = affected_command(policy)
+    if not command:
+        return {**stale, 'rule': 'identity'}
+    try:
+        lanes = affected_lanes(root, command, drift)
+    except WorkflowError as exc:
+        return {**stale, 'rule': 'classification-failed', 'error': str(exc)}
+    laned = {path: value for path, value in lanes.items() if value}
+    if not laned:
+        return {'current': True, 'via': 'lane-free-drift', 'paths': drift}
+    return {**stale, 'rule': 'affected-lanes', 'lanes': laned}
+
+
+def receipt_current(root, feature, stage, receipt, policy=None):
+    return receipt_status(root, feature, stage, receipt, policy)['current']
+
+
+def recovery_recipe(feature, stage, status, policy, receipt):
+    """The exact commands that make a stale receipt current again (G6).
+
+    Offers `amend` for changed evidence, `revalidate` when a checked route
+    exists for source drift, and otherwise the claim/complete re-record.
+    """
+    at = ' --feature ' + feature
+    rerecord = (f'{WORKFLOW_SCRIPT} claim{at} --usage <usage.json> (it claims {stage}; if a claim is active, '
+                f'{WORKFLOW_SCRIPT} recover{at} --token <token> --reason "<why>" first), re-run {stage}, then '
+                f'{WORKFLOW_SCRIPT} complete{at} --token <token> --receipt <receipt.json>')
+    reason = status.get('reason')
+    if reason == 'marked-stale':
+        mark = status.get('stale') or {}
+        if mark.get('reason') == 'ci-lane-gap':
+            return [f'Run the verification check on a commit with the current source key covering lanes '
+                    f'{", ".join(mark.get("lanes") or [])}, then {WORKFLOW_SCRIPT} revalidate{at} --stage verify '
+                    f'--check-run <run id>', 'or re-record: ' + rerecord]
+        return ['Re-record (a changed amendment undermined this receipt): ' + rerecord]
+    if reason == 'explicit-drift':
+        evidence = set(receipt.get('evidence') or [])
+        steps = [f'{WORKFLOW_SCRIPT} amend{at} --stage {stage} --evidence {path} --reason "<why>" '
+                 f'--assessment unchanged|changed' for path in status.get('paths', []) if path in evidence]
+        if any(path not in evidence for path in status.get('paths', [])):
+            steps.append('An input changed, which no amendment covers; re-record: ' + rerecord)
+        return steps or [rerecord]
+    steps = []
+    if status.get('rule') == 'classification-failed':
+        steps.append('The affected-lane hook failed and the gate fails closed (' + str(status.get('error')) +
+                     '); fix ci.gate.affected_command, or continue below.')
+    if stage == 'verify':
+        check = verification_check(policy)
+        if check:
+            steps.append(f'Push HEAD, wait for the "{check["name"]}" check to pass on it, then '
+                         f'{WORKFLOW_SCRIPT} revalidate{at} --stage verify --check-run <run id>')
+    elif stage == 'review' and receipt.get('head'):
+        steps.append(f'Review git diff {receipt["head"]}..HEAD and record it in {feature}/evidence/<file>.md with '
+                     f'the lines "Diff reviewed: {receipt["head"]}..<HEAD sha>" and "Blocking findings: 0", then '
+                     f'{WORKFLOW_SCRIPT} revalidate{at} --stage review --diff-reviewed <that file>')
+    elif stage == 'ready':
+        steps.append(f'Once Verify and Review are current: {WORKFLOW_SCRIPT} revalidate{at} --stage ready')
+    steps.append(('or re-record: ' if steps else '') + rerecord)
+    return steps
 
 
 def receipt_drift(root, feature, stage, receipt):
@@ -766,11 +957,52 @@ def receipt_drift(root, feature, stage, receipt):
     current = fingerprint_files(root, set(saved) | set(required_inputs(root, feature, stage)))
     changed = {p for p in set(saved) | set(current) if saved.get(p) != current.get(p)}
     changed.update(set(required_inputs(root, feature, stage)) - set(receipt.get('fingerprints', {})))
-    if stage in ('verify', 'review', 'ready'):
+    if stage in SOURCE_STAGES:
         old = receipt.get('source_fingerprints', {})
         new = source_fingerprints(root)
         changed.update(p for p in set(old) | set(new) if p not in old or p not in new or old[p] != new[p])
     return sorted(changed)
+
+
+def ready_checks(root, feature, policy, state, base=None, rules=None):
+    """Task completion, task-issue mapping and selected documentation freshness.
+
+    The Ready stage's automated checks, shared by `ci_gate.py` (under the
+    project's gate rules) and `revalidate --stage ready` (all of them).
+    Returns the names of the checks that ran.
+    """
+    rules = rules or {'tasks': True, 'task_links': True, 'documentation': True}
+    directory = inside(root, feature)
+    ran = []
+    tasks = None
+    if rules.get('tasks') or rules.get('task_links'):
+        from task_issues import parse_tasks
+        tasks = parse_tasks((directory / 'tasks.md').read_text(encoding='utf-8-sig'))
+    if rules.get('tasks'):
+        require(all(t['done'] for t in tasks.values()), 'INCOMPLETE_TASKS')
+        ran.append('tasks')
+    if rules.get('task_links'):
+        mapping = read(directory / 'workflow/task-issues.json', {})
+        repo, parent = state['issue'].split('#')
+        require((mapping.get('repo'), mapping.get('parent'), mapping.get('feature')) == (repo, int(parent), feature),
+                'TASK_MAPPING_IDENTITY_MISMATCH')
+        require(set(tasks) <= set(mapping.get('tasks', {})) and all(mapping['tasks'][t].get('linked') for t in tasks),
+                'TASK_MAPPING_INCOMPLETE')
+        ran.append('task_links')
+    checks = []
+    if rules.get('documentation') and policy['processes']['qa']:
+        checks.append(['.specify/extensions/assure/scripts/assure_state.py', 'status', '--kind', 'document'])
+    if rules.get('documentation') and policy['processes']['user_manual']:
+        checks.append(['.specify/extensions/user-manual/scripts/manual_state.py', 'status'])
+    for args in checks:
+        require((root / args[0]).is_file(), 'SELECTED_PROCESS_MISSING: ' + args[0])
+        command = [sys.executable, *args, '--feature', feature, '--repo-root', str(root)]
+        if base: command += ['--base-ref', base]
+        result = subprocess.run(command, cwd=root, text=True, encoding='utf-8', capture_output=True)
+        require(result.returncode == 0, 'DOCUMENTATION_GATE_FAILED: ' + result.stdout + result.stderr)
+        require(json.loads(result.stdout).get('current') is True, 'DOCUMENTATION_NOT_CURRENT')
+        ran.append('documentation:' + Path(args[0]).stem)
+    return ran
 
 
 def default_actor(root):
@@ -978,8 +1210,189 @@ class Run:
             receipt.setdefault('amendments', []).append(record)
             self.save(state)
             return {'amended': True, 'stage': stage, 'amendment': copy.deepcopy(record),
-                    'current': receipt_current(self.root, self.relative, stage, receipt),
+                    'current': receipt_current(self.root, self.relative, stage, receipt, self.policy),
                     'stale': staled, 'next': self.next(state)}
+
+    def revalidate(self, stage, check_run=None, attempt=None, diff_reviewed=None, base_ref=None, reason=None,
+                   actor=None, github=None):
+        """Make a Verify, Review or Ready receipt current after source drift, through a check.
+
+        Nothing is re-stamped on a note: `verify` needs a successful CI run
+        (`--check-run`) on the current source key whose lanes cover every lane
+        the drift affects, `review` a recorded incremental review of
+        `git diff <review head>..HEAD` (`--diff-reviewed`), and `ready` passes
+        the Ready checks again. Explicit fingerprints must still byte-match and
+        are never re-hashed; `blocking_findings` and the stage's own evidence
+        are kept. A lane gap is recorded and keeps the Verify receipt stale.
+        """
+        require(stage in SOURCE_STAGES, 'REVALIDATE_STAGE_UNSUPPORTED: verify, review or ready')
+        require((check_run is not None) == (stage == 'verify'), 'REVALIDATE_VERIFY_NEEDS_CHECK_RUN: '
+                '--check-run <run id> applies to, and is required by, --stage verify')
+        require((diff_reviewed is not None) == (stage == 'review'), 'REVALIDATE_REVIEW_NEEDS_DIFF_REVIEW: '
+                '--diff-reviewed <evidence> applies to, and is required by, --stage review')
+        with locked(self.lock):
+            state = self.load()
+            require(not state['active'], 'ACTIVE_CLAIM_MUST_BE_RESOLVED_BEFORE_REVALIDATE')
+            require(stage in stages(self.policy), 'STAGE_NOT_SELECTED: ' + stage)
+            receipt = state['receipts'].get(stage)
+            require(receipt, 'RECEIPT_MISSING: ' + stage)
+            if state['policy_digest'] != checkpoint_policy_digest(state, self.policy):
+                require(BASE_STAGES.index(stage) < policy_cutoff(state.get('policy'), self.policy),
+                        'POLICY_CHANGED: the policy change reaches ' + stage + '; re-record it')
+            for earlier in stages(self.policy)[:stages(self.policy).index(stage)]:
+                prior = state['receipts'].get(earlier)
+                require(prior, 'EARLIER_STAGE_NOT_CURRENT: ' + earlier + ' has no receipt')
+                prior_status = receipt_status(self.root, self.relative, earlier, prior, self.policy)
+                require(prior_status['current'], 'EARLIER_STAGE_NOT_CURRENT: ' + earlier + ' (make it current before ' +
+                        stage + '). Recovery: ' + ' | '.join(
+                            recovery_recipe(self.relative, earlier, prior_status, self.policy, prior)))
+            mark = receipt.get('stale')
+            require(not mark or (stage == 'verify' and mark.get('reason') == 'ci-lane-gap'),
+                    'RECEIPT_MARKED_STALE: ' + json.dumps(mark) + '; a changed amendment needs a re-record')
+            status = receipt_status(self.root, self.relative, stage, {**receipt, 'stale': None}, self.policy)
+            if status.get('reason') == 'explicit-drift':
+                raise WorkflowError('EXPLICIT_FINGERPRINTS_CHANGED: ' + json.dumps(status['paths']) +
+                                    '; revalidation never re-hashes inputs or evidence. Recovery: ' +
+                                    ' | '.join(recovery_recipe(self.relative, stage, status, self.policy, receipt)))
+            require(not status['current'] or mark, 'REVALIDATION_NOT_NEEDED: ' + stage + ' is current')
+            dirty = sk.dirty_source_paths(self.root)
+            require(not dirty, 'SOURCE_TREE_DIRTY: commit or stash source changes first: ' + ', '.join(dirty[:10]))
+            head, key = git(self.root, 'rev-parse', 'HEAD'), sk.source_key(self.root, 'HEAD')
+            inventory = source_fingerprints(self.root)
+            drift = source_drift(receipt, inventory)
+            explicit = sorted(set(drift) & set(receipt.get('fingerprints', {})))
+            require(not explicit, 'EXPLICIT_FINGERPRINTS_CHANGED: ' + json.dumps(explicit) +
+                    ' drifted as source and are explicit fingerprints of ' + stage + '; re-record it')
+            record = {'via': {'verify': 'check-run', 'review': 'diff-review', 'ready': 'ready-checks'}[stage],
+                      'at': now(), 'actor': actor or default_actor(self.root), 'reason': reason,
+                      'from': {'head': receipt.get('head'), 'source_key': receipt.get('source_key')},
+                      'to': {'head': head, 'source_key': key}, 'drift': drift}
+            if stage == 'verify':
+                evidence, lanes = self.check_run_evidence(state, receipt, check_run, attempt, head, key, drift, github)
+                record.update(run_id=evidence['run_id'], attempt=evidence['attempt'],
+                              required_lanes=evidence['required_lanes'], lanes=evidence['lanes'],
+                              lane_gap=lanes['gap'], lanes_by_path=lanes['by_path'])
+                if lanes['gap']:
+                    record['outcome'] = 'stale'
+                    ensure_local_excludes(self.root)
+                    write(self.path.parent / 'backups' / (uuid.uuid4().hex + '.json'), state)
+                    receipt['stale'] = {'reason': 'ci-lane-gap', 'stage': 'verify', 'lanes': lanes['gap'],
+                                        'run_id': evidence['run_id'], 'at': record['at']}
+                    receipt.setdefault('revalidations', []).append(record)
+                    self.save(state)
+                    return {'revalidated': False, 'stage': stage, 'lane_gap': lanes['gap'],
+                            'run_id': evidence['run_id'], 'revalidation': copy.deepcopy(record),
+                            'recovery': recovery_recipe(self.relative, stage, {'reason': 'marked-stale',
+                                                        'stale': receipt['stale']}, self.policy, receipt),
+                            'next': self.next(state)}
+                receipt['ci_evidence'] = evidence
+            elif stage == 'review':
+                receipt['diff_reviewed'] = self.diff_review_evidence(receipt, diff_reviewed, head)
+                path = receipt['diff_reviewed']['evidence']
+                record['evidence'] = path
+                if path not in receipt['evidence']:
+                    receipt['evidence'].append(path)
+                receipt['fingerprints'][path] = receipt['diff_reviewed']['hash']
+            else:
+                try:
+                    record['checks'] = ready_checks(self.root, self.relative, self.policy, state,
+                                                    base_ref or state.get('target_branch'))
+                except Exception as exc:  # the task parser raises the importing module's error class
+                    if type(exc).__name__ != 'WorkflowError':
+                        raise
+                    raise WorkflowError('READY_CHECKS_FAILED: ' + str(exc)) from exc
+            record['outcome'] = 'current'
+            ensure_local_excludes(self.root)
+            write(self.path.parent / 'backups' / (uuid.uuid4().hex + '.json'), state)
+            receipt.pop('stale', None)
+            receipt['source_fingerprints'] = inventory
+            receipt['head'], receipt['source_key'] = head, key
+            receipt.setdefault('revalidations', []).append(record)
+            self.save(state)
+            return {'revalidated': True, 'stage': stage, 'revalidation': copy.deepcopy(record),
+                    'current': receipt_current(self.root, self.relative, stage, receipt, self.policy),
+                    'next': self.next(state)}
+
+    def check_run_evidence(self, state, receipt, run_id, attempt, head, key, drift, github=None):
+        """Read and validate one CI run as Verify evidence (the A9a plan contract).
+
+        Returns the `ci_evidence` record and the lane coverage: the lanes the
+        affected-lane hook assigns to the drifted source paths must all be in
+        the run's lanes, otherwise the gap is returned for the caller to record.
+        """
+        import ci_evidence
+        check = verification_check(self.policy)
+        require(check, 'CI_VERIFICATION_CHECK_UNSET: set ci.gate.verification_check to the job that certifies '
+                       'a verification run (e.g. "Bootstrap required lanes")')
+        require(re.fullmatch(r'[1-9]\d*', str(run_id)), 'CHECK_RUN_ID_INVALID: ' + str(run_id))
+        require(attempt is None or re.fullmatch(r'[1-9]\d*', str(attempt)), 'CHECK_RUN_ATTEMPT_INVALID')
+        command = affected_command(self.policy)
+        require(command or not drift, 'CI_AFFECTED_COMMAND_REQUIRED: the lanes the source drift affects cannot be '
+                                      'established without ci.gate.affected_command; re-record Verify instead')
+        by_path = affected_lanes(self.root, command, drift) if drift else {}
+        required = sorted({lane for lanes in by_path.values() for lane in lanes})
+        repository = github_repository(self.root)
+        client = github or ci_evidence.GhClient()
+        try:
+            evidence = ci_evidence.collect(client, repository, int(run_id), attempt and int(attempt),
+                                           check['artifact_prefix'])
+        except ci_evidence.EvidenceError as exc:
+            raise WorkflowError('CHECK_RUN_UNREADABLE: ' + str(exc)) from exc
+        plan = evidence['plan'] if isinstance(evidence['plan'], dict) else {}
+        local = None
+        if isinstance(plan.get('headSha'), str) and ci_evidence.SHA.match(plan['headSha']):
+            try:
+                local = {'tree': sk.tree_of(self.root, plan['headSha']), 'key': sk.source_key(self.root, plan['headSha'])}
+            except sk.SourceKeyError:
+                local = {'tree': 'unavailable (fetch ' + plan['headSha'] + ')', 'key': 'unavailable'}
+        errors = ci_evidence.validate(evidence, repository, int(run_id), check['name'], check['workflow'],
+                                      attempt and int(attempt), local, check['artifact_prefix'])
+        if not errors and plan['headSha'] != head:
+            ancestor = subprocess.run(['git', 'merge-base', '--is-ancestor', plan['headSha'], head], cwd=self.root,
+                                      capture_output=True)
+            if ancestor.returncode != 0:
+                errors.append(f'Run head {plan["headSha"]} is not a commit of this branch (an ancestor of {head}).')
+        if not errors and plan['sourceKey'] != key:
+            errors.append(f'Run {run_id} verified source key {plan["sourceKey"]}, not the current {key}: the source '
+                          f'changed after {plan["headSha"]}; use a run on a commit with the current source.')
+        require(not errors, 'CHECK_RUN_REJECTED: run ' + str(run_id) + ': ' + ' '.join(errors))
+        gap = sorted(set(required) - set(plan['lanes']))
+        record = {'run_id': int(run_id), 'attempt': int(evidence['attempt']), 'head': plan['headSha'],
+                  'source_key': plan['sourceKey'], 'tier': plan['tier'], 'lanes': list(plan['lanes']),
+                  'conclusion': 'success', 'check': check['name'], 'artifact': evidence['artifact'],
+                  'event': plan.get('event'), 'pull_request': plan.get('pullRequest'),
+                  'required_lanes': required, 'lane_gap': [], 'at': now()}
+        return record, {'gap': gap, 'by_path': {path: lanes for path, lanes in by_path.items() if lanes}}
+
+    def diff_review_evidence(self, receipt, evidence, head):
+        """A recorded incremental review of `git diff <review head>..HEAD`.
+
+        The file lives in the feature directory (portable, outside the source
+        key) and names the reviewed range and its outcome on two lines:
+        `Diff reviewed: <review head>..<HEAD>` and `Blocking findings: 0`.
+        """
+        base = receipt.get('head')
+        require(base, 'RECEIPT_HEAD_UNKNOWN: this review receipt predates 1.6.0 and records no head to diff from; '
+                      're-record Review')
+        require(isinstance(evidence, str) and evidence.startswith(self.relative + '/'),
+                'DIFF_REVIEW_EVIDENCE_OUTSIDE_FEATURE: record it under ' + self.relative + '/')
+        path = inside(self.root, evidence)
+        require(path.is_file(), 'EVIDENCE_MISSING: ' + evidence)
+        require(base != head, 'DIFF_REVIEW_EMPTY: the review head is HEAD; nothing was committed to review')
+        require(subprocess.run(['git', 'merge-base', '--is-ancestor', base, head], cwd=self.root,
+                               capture_output=True).returncode == 0,
+                'DIFF_REVIEW_BASE_NOT_ANCESTOR: ' + base + ' is not an ancestor of HEAD; re-record Review')
+        text = path.read_text(encoding='utf-8-sig', errors='replace')
+        marks = r'[\s*_`]*'
+        ranges = re.findall(r'(?im)^\W*Diff reviewed:' + marks + r'([0-9a-f]{7,40})' + marks + r'\.\.' + marks +
+                            r'([0-9a-f]{7,40})', text)
+        require(any(base.startswith(old) and head.startswith(new) for old, new in ranges),
+                'DIFF_REVIEW_RANGE_MISSING: ' + evidence + ' must name the reviewed range on a line '
+                '"Diff reviewed: ' + base + '..' + head + '"')
+        require(re.search(r'(?im)^\W*Blocking findings:' + marks + r'0\b', text),
+                'DIFF_REVIEW_OUTCOME_MISSING: ' + evidence + ' must state "Blocking findings: 0"')
+        return {'evidence': evidence, 'base': base, 'head': head,
+                'hash': fingerprint_files(self.root, [evidence])[evidence], 'at': now()}
 
     def start(self, issue):
         require(re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[1-9]\d*', issue), 'EXPLICIT_ISSUE_REQUIRED')
@@ -1025,9 +1438,11 @@ class Run:
             if receipt and BASE_STAGES.index(stage) >= cutoff:
                 return {'stage':stage,'command':state['commands'][stage],'reason':'policy-changed'}
             if receipt:
-                if receipt_current(self.root, self.relative, stage, receipt):
+                status = receipt_status(self.root, self.relative, stage, receipt, self.policy)
+                if status['current']:
                     continue
-                return {'stage': stage, 'reason': 'inputs-or-evidence-changed'}
+                return {'stage': stage, 'reason': 'inputs-or-evidence-changed',
+                        'recovery': recovery_recipe(self.relative, stage, status, self.policy, receipt)}
             if stage == 'pr' and not finalize:
                 return {'stage': None, 'status': 'ready_to_finalize', 'command': 'speckit.workflow.finalize'}
             return {'stage': stage, 'command': state['commands'][stage], 'reason': 'pending'}
@@ -1120,7 +1535,7 @@ class Run:
                 verify_ledger(self.root, self.relative, reconcile(self.root, self.relative))
             if stage == 'taskstoissues':
                 require(receipt.get('parent_issue') == state['issue'] and receipt.get('native_links_verified') is True, 'TASK_PARENT_NOT_VERIFIED')
-            if stage in ('verify', 'review', 'ready'):
+            if stage in SOURCE_STAGES:
                 require(receipt.get('blocking_findings') == 0, 'BLOCKING_FINDINGS_REMAIN')
             if stage == 'pr':
                 require(receipt.get('images_verified') is True and receipt.get('pr_url', '').startswith('https://github.com/' + state['issue'].split('#')[0] + '/pull/'), 'PR_EVIDENCE_INCOMPLETE')
@@ -1159,8 +1574,14 @@ class Run:
             decision_input = [self.relative + '/workflow/decisions.json'] if (self.feature / 'workflow/decisions.json').is_file() else []
             stored['fingerprints'] = fingerprint_files(self.root, receipt['inputs'] + receipt['evidence'] + required_inputs(self.root, self.relative, stage) + decision_input)
             require(all(v is not None for v in stored['fingerprints'].values()), 'INPUT_MISSING')
-            if stage in ('verify', 'review', 'ready'):
+            if stage in SOURCE_STAGES:
                 stored['source_fingerprints'] = source_fingerprints(self.root)
+                # The commit and its source key bind the inventory; with source
+                # changes outside HEAD the key would not describe it, so none is
+                # recorded and the identity rule applies to this receipt.
+                head, key = current_source_key(self.root)
+                if key:
+                    stored['head'], stored['source_key'] = head, key
             stored['completed_at'] = now()
             state['receipts'][stage] = stored
             state['active'] = None
@@ -1222,6 +1643,10 @@ def main():
     ci_parser.add_argument('--gate-mode', choices=sanduq_ci.GATE_MODES)
     ci_parser.add_argument('--gate-scope', choices=sanduq_ci.GATE_SCOPES)
     ci_parser.add_argument('--gate-rule', action='append', default=[], metavar='NAME=on|off')
+    ci_parser.add_argument('--affected-command', metavar='COMMAND',
+                           help='Affected-lane hook for source drift (JSON paths on stdin), or "none" to remove')
+    ci_parser.add_argument('--verification-check', metavar='CHECK',
+                           help='CI job accepted as Verify evidence by revalidate --check-run, or "none" to remove')
     decisions_parser = sub.add_parser('decisions', help='Show or update decision authority and field policy')
     decisions_parser.add_argument('--show', action='store_true')
     decisions_parser.add_argument('--owner', action='append', default=[], metavar='GITHUB_LOGIN')
@@ -1233,7 +1658,8 @@ def main():
     identity_parser.add_argument('--issue', required=True)
     prepare_parser = sub.add_parser('prepare', help='Prepare an issue-bound feature and its branch')
     prepare_parser.add_argument('--issue', required=True)
-    for name in ('start', 'next', 'claim', 'complete', 'pause', 'recover', 'bind', 'migrate', 'refresh', 'amend'):
+    for name in ('start', 'next', 'claim', 'complete', 'pause', 'recover', 'bind', 'migrate', 'refresh', 'amend',
+                 'revalidate'):
         cmd = sub.add_parser(name)
         cmd.add_argument('--feature', required=True)
         if name == 'start': cmd.add_argument('--issue', required=True)
@@ -1255,6 +1681,17 @@ def main():
             cmd.add_argument('--assessment', required=True, choices=AMENDMENT_ASSESSMENTS)
             cmd.add_argument('--actor', help='Defaults to the Git user name')
         if name == 'refresh': cmd.add_argument('--from-stage', choices=('scope', 'clarify'), required=True)
+        if name == 'revalidate':
+            cmd.add_argument('--stage', required=True, choices=SOURCE_STAGES)
+            cmd.add_argument('--check-run', metavar='RUN_ID',
+                             help='verify: the workflow run id whose plan artifact and ci.gate.verification_check '
+                                  'job are read through the GitHub REST API')
+            cmd.add_argument('--attempt', help='verify: the run attempt (default: the latest)')
+            cmd.add_argument('--diff-reviewed', metavar='EVIDENCE',
+                             help='review: the recorded incremental review of git diff <review head>..HEAD')
+            cmd.add_argument('--base-ref', help='ready: the base for documentation freshness (default: the bound target)')
+            cmd.add_argument('--reason', help='Recorded with the revalidation; never sufficient on its own')
+            cmd.add_argument('--actor', help='Defaults to the Git user name')
     args = parser.parse_args()
     root = args.root.resolve()
     try:
@@ -1294,7 +1731,9 @@ def main():
                 for key, value in (('system_packages', args.system_packages), ('python', args.python),
                                    ('python_version', args.python_version)):
                     if value: ci['capabilities'][key] = value
-                select_gate(ci, args.gate_mode, args.gate_scope, args.gate_rule)
+                select_gate(ci, args.gate_mode, args.gate_scope, args.gate_rule,
+                            {'affected_command': args.affected_command,
+                             'verification_check': args.verification_check})
                 write(root / '.specify/workflow/backups' / (uuid.uuid4().hex + '.json'), load_policy(root))
                 (root / '.specify/workflow.yml').write_text(
                     yaml.safe_dump(validate_policy(policy), sort_keys=False), encoding='utf-8')
@@ -1331,6 +1770,11 @@ def main():
             elif args.action == 'amend':
                 result = run.amend(args.stage, args.evidence, args.reason, args.assessment, args.actor)
             elif args.action == 'refresh': result = run.refresh(args.from_stage, args.reason)
+            elif args.action == 'revalidate':
+                result = run.revalidate(args.stage, args.check_run, args.attempt, args.diff_reviewed, args.base_ref,
+                                        args.reason, args.actor)
+                if not result['revalidated']:
+                    result['ok'] = False
             else:
                 with locked(run.lock):
                     state = run.load()

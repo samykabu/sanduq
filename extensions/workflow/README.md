@@ -98,6 +98,74 @@ changed.
   is not listed as that receipt's evidence is refused, as is an active claim.
   `ci_gate.py` accepts amended receipts and lists each amendment in its result.
 
+### Source drift and CI evidence (1.6.0)
+
+Verify, Review and Ready receipts inventory the source tree
+(`source_fingerprints`), so before 1.6.0 any later commit to a source path
+staled all three, even a README edit. They now also record `head` and
+`source_key`: the canonical key `bunyan-source-key/1` of HEAD's tree, computed
+by `scripts/source_key.py` from `git ls-tree -r -z --full-tree` on raw bytes
+(paths under `.specify/`, `.agents/`, `.claude/`, `.codex/`, `specs/`,
+`User-Manual/`, `docs/`, `graphify-out/`, `artifacts/` and every `*.md` are
+left out). The key is recorded only when no source path differs from HEAD.
+The shared fixture file `tests/fixtures/source-key.fixtures.json` is
+byte-identical to the consumer's copy and pinned by SHA-256 in the tests.
+
+Explicit fingerprints (inputs and evidence) keep their byte-hash check in every
+case. When the source inventory drifted:
+
+- **Affected-lane hook** (`ci.gate.affected_command`, optional). A command
+  string or argv list that reads a JSON list of repository paths on stdin and
+  prints `{"paths": {"<path>": ["<lane>", ...]}}`. A receipt with a
+  `source_key` stays current when every drifted path maps to no lane and none of
+  them is one of the receipt's explicit fingerprints. Markdown or committed
+  artifacts therefore keep Review current; a test, workflow or product-source
+  change stales it. A hook that fails, prints anything else or leaves a path out
+  fails closed (the receipt is stale). Without the hook, and for a legacy
+  receipt without `source_key`, the identity rule applies as before.
+- **A CI run as Verify evidence** (`ci.gate.verification_check`, optional: the
+  job name, or `{name, workflow, artifact_prefix}`; for Bunyan
+  `"Bootstrap required lanes"`). `workflow.py revalidate --feature
+  specs/<feature> --stage verify --check-run <run id> [--attempt <n>]` reads the
+  run, its jobs and its plan artifact `<prefix>-<run>-<attempt>`
+  (`verification-plan.json`, the consumer's verification-plan contract) through
+  the GitHub REST API (`gh api`). It requires the run completed, not cancelled,
+  with the named job concluding `success`; every plan field matching the run;
+  the plan's tree equal to the head commit's tree through the API and locally;
+  the plan's source key equal to the key recomputed locally and to the key of
+  the current clean HEAD; the run's head a commit of this branch; the receipt's
+  explicit fingerprints still byte-matching; and the run's lanes a superset of
+  the lanes the hook assigns to the drifted source paths (so the hook is
+  required when source drifted). It then writes `ci_evidence {run_id, head,
+  source_key, tier, lanes, conclusion, ...}`, re-inventories
+  `source_fingerprints` at HEAD and records a `revalidations[]` entry. Evidence,
+  summary and `blocking_findings` are untouched. A run whose lanes miss a
+  required lane records the gap, marks Verify `stale` (`ci-lane-gap`) and
+  exits 1; a later run covering the lanes closes it. The gate accepts a Verify
+  receipt whose inventory drifted while its CI run still covers the current
+  source key; `ci_gate.py --verify-ci-evidence` re-reads that run through the
+  API as well.
+- **Review** is revalidated only after an incremental review of
+  `git diff <review head>..HEAD` is recorded under `specs/<feature>/` with the
+  lines `Diff reviewed: <review head>..<HEAD>` and `Blocking findings: 0`:
+  `revalidate --stage review --diff-reviewed <file>` adds that file to the
+  receipt's evidence (with its hash) and records `diff_reviewed`. A review
+  receipt without `head` (written before 1.6.0) is re-recorded instead.
+- **Ready**: `revalidate --stage ready` re-runs task completion, the
+  task-issue mapping and the selected documentation freshness checks
+  (`--base-ref` defaults to the bound target branch).
+
+Revalidation needs every earlier stage current, no active claim and no
+uncommitted source change; it never re-hashes an input or evidence path and is
+never accepted on a `--reason` alone. A receipt a `changed` amendment staled is
+re-recorded. Both `next` (`recovery`) and a failing gate (`STALE_RECEIPT: ...;
+recovery: ...`) print the exact commands: `amend` for changed evidence,
+`revalidate` where a checked route applies, otherwise the `claim`/`complete`
+re-record. A typical sequence after a test change: push, wait for the check,
+`revalidate --stage verify --check-run <run>`, review the diff and record it,
+`revalidate --stage review --diff-reviewed <file>`, `revalidate --stage ready`,
+then commit the checkpoint (an operational path, so the source key is unchanged).
+
 Use `upgrade.py --version X.Y.Z` preview, then `--apply`, to update the workflow
 package and its integrations with outer rollback. Local staged testing supports
 `--packages <extracted-packages>`. See the [operating guide](../../docs/workflow-guide.md)
