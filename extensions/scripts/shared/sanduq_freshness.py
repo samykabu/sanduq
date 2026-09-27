@@ -39,6 +39,23 @@ def fingerprints(root, paths):
     return result
 
 
+def checkpoint_target_branch(feature):
+    """The feature's bound target branch recorded by `workflow.py start`, or
+    None when there is no checkpoint or no branch was captured. An explicit
+    --base-ref always wins over this; callers fall back to today's default
+    (the origin HEAD symbolic ref via base_ref()) when this is None.
+    """
+    checkpoint = Path(feature) / 'workflow/checkpoint.json'
+    if not checkpoint.is_file():
+        return None
+    try:
+        state = json.loads(checkpoint.read_text(encoding='utf-8-sig'))
+    except (ValueError, OSError):
+        return None
+    branch = state.get('target_branch')
+    return branch if isinstance(branch, str) and branch else None
+
+
 def base_ref(root, explicit=None):
     if explicit: return git(root, 'merge-base', 'HEAD', explicit).strip()
     try:

@@ -97,6 +97,21 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual((resumed['feature'], resumed['branch_owner']),
                          (result['feature'], 'existing-run'))
 
+    def test_start_records_the_branch_it_forked_from_as_the_bound_target(self):
+        # F16: assure_state.py/manual_state.py default --base-ref to this field.
+        original = w.git(self.root, 'branch', '--show-current')
+        subprocess.run(['git', 'switch', '-qc', '42-fix-checkout-timeout'], cwd=self.root, check=True)
+        run = w.Run(self.root, self.feature)
+        state = run.start('acme/app#10')
+        self.assertEqual(state['target_branch'], original)
+        self.assertEqual(run.load()['target_branch'], original)
+
+    def test_start_leaves_target_branch_none_without_a_prior_checkout(self):
+        # No branch switch happened before start in this fresh fixture repo, so
+        # Git's reflog has nothing for `@{-1}` to resolve.
+        run = self.run_object()
+        self.assertIsNone(run.load().get('target_branch'))
+
     def receipt(self, stage, inputs=None):
         # Semantic commands create these artifacts; fixtures provide the minimal outputs.
         directory = self.root / self.feature
