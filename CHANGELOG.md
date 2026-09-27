@@ -4,7 +4,7 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
-## Agent tools plugin 1.1.1 — 2026-09-27
+## Agent tools plugin 1.1.1 â€” 2026-09-27
 
 - Fix sandboxed Codex continuation by placing exec options before the resume subcommand (B6).
 - Add an end-to-end fake-harness test that rejects misplaced sandbox options.

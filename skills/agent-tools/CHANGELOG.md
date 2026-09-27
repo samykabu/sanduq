@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.1.1 — 2026-09-27
+## 1.1.1 â€” 2026-09-27
 
 - Fix sandboxed Codex continuation by placing exec options before the resume subcommand (B6).
 - Add an end-to-end fake-harness test that rejects misplaced sandbox options.
