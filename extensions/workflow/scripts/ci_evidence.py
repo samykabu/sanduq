@@ -78,8 +78,14 @@ def collect(client, repository, run_id, attempt=None, prefix=DEFAULT_ARTIFACT_PR
         plan = read_plan(client.download(f'repos/{repository}/actions/artifacts/{found[0]["id"]}/zip'))
     if isinstance(plan, dict) and isinstance(plan.get('headSha'), str) and SHA.match(plan['headSha']):
         head_tree = (client.api(f'repos/{repository}/git/commits/{plan["headSha"]}').get('tree') or {}).get('sha')
+    head_pulls = None
+    if run.get('event') == 'pull_request' and not run.get('pull_requests') and SHA.match(str(run.get('head_sha') or '')):
+        # GitHub empties a run's pull_requests once its pull request merges or closes. The pull requests whose head is
+        # still exactly the run's head commit name the same pull request.
+        head_pulls = [item.get('number') for item in client.api(f'repos/{repository}/commits/{run["head_sha"]}/pulls')
+                      if (item.get('head') or {}).get('sha') == run['head_sha']]
     return {'run': run, 'jobs': jobs, 'artifacts': artifacts, 'plan': plan, 'head_tree': head_tree,
-            'attempt': number, 'artifact': name}
+            'attempt': number, 'artifact': name, 'head_pulls': head_pulls}
 
 
 def _sorted_unique(values):
@@ -143,7 +149,7 @@ def validate(evidence, repository, run_id, check, workflow=None, attempt=None, l
     else:
         field('headSha', head, run.get('head_sha'))
     if plan.get('event') == 'pull_request':
-        numbers = [item.get('number') for item in run.get('pull_requests') or []]
+        numbers = [item.get('number') for item in run.get('pull_requests') or []] or list(evidence.get('head_pulls') or [])
         if type(plan.get('pullRequest')) is not int or plan['pullRequest'] not in numbers:
             errors.append(f'pullRequest {json.dumps(plan.get("pullRequest"))} is not a pull request of run '
                           f'{run.get("id")} ({", ".join(map(str, numbers)) or "none"}).')
