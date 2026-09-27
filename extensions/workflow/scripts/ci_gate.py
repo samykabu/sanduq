@@ -4,10 +4,11 @@ import argparse
 import json
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
-from workflow import load_policy, stages, read, require, inside, git, digest, checkpoint_policy_digest, receipt_current, receipt_drift, WorkflowError
+from workflow import (load_policy, stages, read, require, inside, git, digest, checkpoint_policy_digest, receipt_status,
+                      receipt_drift, recovery_recipe, ready_checks, github_repository, verification_check, WorkflowError,
+                      WORKFLOW_SCRIPT)
 import sanduq_ci
 
 
@@ -43,7 +44,40 @@ def resolve_features(root, base, explicit, allow_empty=False):
     return sorted(features)
 
 
-def check(root, feature, policy, base=None, rules=None):
+def recheck_ci_evidence(root, feature, stage, receipt, policy, github=None):
+    """Re-read a Verify receipt's recorded CI run through the REST API (`--verify-ci-evidence`).
+
+    The recorded `ci_evidence` is runtime-written like every receipt field;
+    this re-applies the plan contract to the live run for a reviewer who wants
+    the gate itself to see the run.
+    """
+    import ci_evidence
+    import source_key as sk
+    recorded = receipt['ci_evidence']
+    check = verification_check(policy)
+    require(check, 'CI_VERIFICATION_CHECK_UNSET: ' + feature)
+    repository = github_repository(root)
+    try:
+        evidence = ci_evidence.collect(github or ci_evidence.GhClient(), repository, int(recorded['run_id']),
+                                       recorded.get('attempt'), check['artifact_prefix'])
+    except ci_evidence.EvidenceError as exc:
+        raise WorkflowError('CI_EVIDENCE_UNREADABLE: ' + stage + ': ' + str(exc)) from exc
+    plan = evidence['plan'] if isinstance(evidence.get('plan'), dict) else {}
+    head = plan.get('headSha')
+    local = None
+    if isinstance(head, str) and ci_evidence.SHA.match(head):
+        try:
+            local = {'tree': sk.tree_of(root, head), 'key': sk.source_key(root, head)}
+        except sk.SourceKeyError:
+            local = {'tree': 'unavailable (fetch ' + head + ')', 'key': 'unavailable'}
+    errors = ci_evidence.validate(evidence, repository, int(recorded['run_id']), check['name'], check['workflow'],
+                                  recorded.get('attempt'), local, check['artifact_prefix'])
+    if not errors and (plan.get('sourceKey') != recorded.get('source_key') or head != recorded.get('head')):
+        errors.append('The run no longer matches the recorded ci_evidence.')
+    require(not errors, 'CI_EVIDENCE_REJECTED: ' + stage + ': run ' + str(recorded['run_id']) + ': ' + ' '.join(errors))
+
+
+def check(root, feature, policy, base=None, rules=None, verify_ci_evidence=False, github=None):
     rules = rules or sanduq_ci.LEGACY_GATE_RULES
     directory = inside(root, feature)
     require(directory.is_relative_to(root / 'specs'), 'FEATURE_PATH_INVALID')
@@ -51,38 +85,50 @@ def check(root, feature, policy, base=None, rules=None):
     require(state.get('feature') == feature and state.get('schema_version') == 1, 'CHECKPOINT_MISSING_OR_WRONG_FEATURE')
     require(not state.get('active'), 'ACTIVE_STAGE_REMAINS')
     if rules['receipts']:
-        require(state.get('policy_digest') == checkpoint_policy_digest(state, policy), 'POLICY_CHANGED')
+        require(state.get('policy_digest') == checkpoint_policy_digest(state, policy),
+                'POLICY_CHANGED: recovery: ' + WORKFLOW_SCRIPT + ' migrate --feature ' + feature + ' --preview, review '
+                'the invalidated list, then ' + WORKFLOW_SCRIPT + ' migrate --feature ' + feature + ' --reason "<why>" '
+                '(on the feature branch) and re-record any invalidated stage')
     source = read(directory / 'scope-source.json', {})
     require(f"{source.get('repo')}#{source.get('issue')}" == state.get('issue'), 'FEATURE_BINDING_MISMATCH')
-    amendments = []
+    amendments, revalidations, accepted = [], [], []
     if rules['receipts']:
         for stage in stages(policy):
             if stage == 'pr': continue  # PR publication follows readiness; never requires a recursive PR commit.
             receipt = state.get('receipts', {}).get(stage, {})
             require(receipt.get('outcome') == 'passed' and receipt.get('evidence'), 'RECEIPT_MISSING: ' + stage)
-            if not receipt_current(root, feature, stage, receipt):
+            status = receipt_status(root, feature, stage, receipt, policy)
+            if not status['current']:
                 stale = receipt.get('stale')
+                note = ''
+                if isinstance(stale, dict) and stale.get('reason') == 'ci-lane-gap':
+                    note = ('; marked stale by a lane gap of run ' + str(stale.get('run_id')) + ': ' +
+                            ', '.join(stale.get('lanes') or []))
+                elif isinstance(stale, dict):
+                    note = ('; marked stale by a changed amendment of ' + stale.get('stage', '?') + ' evidence ' +
+                            stale.get('path', '?'))
+                if status.get('rule') == 'classification-failed':
+                    note += '; the affected-lane hook failed (fails closed): ' + str(status.get('error'))
+                elif status.get('rule') == 'affected-lanes':
+                    note += '; drift reaching lanes: ' + json.dumps(status['lanes'])
                 raise WorkflowError('STALE_RECEIPT: ' + stage + '; changed paths: ' +
-                                    json.dumps(receipt_drift(root, feature, stage, receipt)) +
-                                    ('; marked stale by a changed amendment of ' + stale.get('stage', '?') + ' evidence ' +
-                                     stale.get('path', '?') if isinstance(stale, dict) else ''))
+                                    json.dumps(receipt_drift(root, feature, stage, receipt)) + note +
+                                    '; recovery: ' + ' | '.join(recovery_recipe(feature, stage, status, policy, receipt)))
+            if status.get('via') in ('ci-evidence', 'lane-free-drift'):
+                accepted.append({'stage': stage, 'via': status['via'], 'drift': status.get('paths', []),
+                                 **({'run_id': status.get('run_id')} if status['via'] == 'ci-evidence' else {})})
+                if status['via'] == 'ci-evidence' and verify_ci_evidence:
+                    recheck_ci_evidence(root, feature, stage, receipt, policy, github)
+            revalidations += [{'stage': stage, **{key: item.get(key) for key in
+                               ('via', 'outcome', 'at', 'actor', 'run_id', 'evidence', 'lane_gap')}}
+                              for item in receipt.get('revalidations', [])]
             # An amended receipt is accepted like any current one; the reviewer sees each amendment.
             amendments += [{'stage': stage, **{key: item.get(key) for key in
                             ('path', 'assessment', 'reason', 'actor', 'at', 'old_hash', 'new_hash')}}
                            for item in receipt.get('amendments', [])]
             if stage == 'clarify': require(receipt.get('unresolved') == 0 and receipt.get('answers_applied') is True, 'CLARIFICATION_UNRESOLVED')
             if stage in ('verify','review','ready'): require(receipt.get('blocking_findings') == 0, 'BLOCKING_FINDINGS_REMAIN')
-    tasks = None
-    if rules['tasks'] or rules['task_links']:
-        from task_issues import parse_tasks
-        tasks = parse_tasks((directory / 'tasks.md').read_text(encoding='utf-8-sig'))
-    if rules['tasks']:
-        require(all(t['done'] for t in tasks.values()), 'INCOMPLETE_TASKS')
-    if rules['task_links']:
-        mapping = read(directory / 'workflow/task-issues.json', {})
-        repo, parent = state['issue'].split('#')
-        require((mapping.get('repo'), mapping.get('parent'), mapping.get('feature')) == (repo, int(parent), feature), 'TASK_MAPPING_IDENTITY_MISMATCH')
-        require(set(tasks) <= set(mapping.get('tasks', {})) and all(mapping['tasks'][t].get('linked') for t in tasks), 'TASK_MAPPING_INCOMPLETE')
+    ready_checks(root, feature, policy, state, base, {'tasks': rules['tasks'], 'task_links': rules['task_links']})
     if rules['decisions']:
         from decisions import verify_ledger
         decisions = read(directory / 'workflow/decisions.json',
@@ -106,20 +152,9 @@ def check(root, feature, policy, base=None, rules=None):
         require(all(item['status'] == 'answered' for item in live), 'DECISION_LIVE_UNRESOLVED')
     if rules['candidate_merge']:
         check_candidate_merge(root)
-    checks = []
-    if rules['documentation'] and policy['processes']['qa']:
-        checks.append(['.specify/extensions/assure/scripts/assure_state.py', 'status', '--kind', 'document'])
-    if rules['documentation'] and policy['processes']['user_manual']:
-        checks.append(['.specify/extensions/user-manual/scripts/manual_state.py', 'status'])
-    for args in checks:
-        require((root / args[0]).is_file(), 'SELECTED_PROCESS_MISSING: ' + args[0])
-        command = [sys.executable, *args, '--feature', feature, '--repo-root', str(root)]
-        if base: command += ['--base-ref', base]
-        result = subprocess.run(command, cwd=root, text=True, encoding='utf-8', capture_output=True)
-        require(result.returncode == 0, 'DOCUMENTATION_GATE_FAILED: ' + result.stdout + result.stderr)
-        require(json.loads(result.stdout).get('current') is True, 'DOCUMENTATION_NOT_CURRENT')
+    ready_checks(root, feature, policy, state, base, {'documentation': rules['documentation']})
     return {'feature': feature, 'passed': True, 'rules': [name for name, enabled in rules.items() if enabled],
-            'amendments': amendments,
+            'amendments': amendments, 'revalidations': revalidations, 'accepted_drift': accepted,
             'scope': 'selected committed evidence checks; live answers are checked when selected; human acceptance is separate'}
 
 
@@ -152,6 +187,8 @@ def main():
                         help='PR number for an exact authorized rule waiver, when applicable')
     parser.add_argument('--check-index', action='store_true',
                         help='Require receipt dependencies in the Git index before publication')
+    parser.add_argument('--verify-ci-evidence', action='store_true',
+                        help='Re-read through the GitHub REST API every CI run a Verify receipt is accepted through')
     args = parser.parse_args(); root = args.root.resolve()
     mode = 'required'
     try:
@@ -174,7 +211,8 @@ def main():
                 try:
                     if args.check_index and effective['portability']:
                         check_index(root, feature)
-                    result = check(root, feature, policy, args.base_ref, effective)
+                    result = check(root, feature, policy, args.base_ref, effective,
+                                   **({'verify_ci_evidence': True} if args.verify_ci_evidence else {}))
                     result['waivers'] = applied_waivers
                     results.append(result)
                     break

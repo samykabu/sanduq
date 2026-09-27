@@ -31,23 +31,46 @@
       "type": "array", "items": {"$ref": "#/$defs/amendment"}
     },
     "stale": {
-      "description": "Set when a changed amendment of earlier evidence undermined this receipt; it must be re-recorded. Written by the runtime only.",
-      "type": "object", "required": ["reason", "stage", "path", "at"],
-      "properties": {"reason": {"const": "evidence-amended"}, "stage": {"type": "string"},
-                     "path": {"type": "string", "minLength": 1}, "at": {"type": "string", "format": "date-time"}}
+      "description": "Written by the runtime only. evidence-amended: a changed amendment of earlier evidence undermined this receipt; it must be re-recorded. ci-lane-gap: a CI run offered as Verify evidence missed lanes the source drift affects; a run covering them closes it through revalidate.",
+      "oneOf": [
+        {"type": "object", "required": ["reason", "stage", "path", "at"],
+         "properties": {"reason": {"const": "evidence-amended"}, "stage": {"type": "string"},
+                        "path": {"type": "string", "minLength": 1}, "at": {"type": "string", "format": "date-time"}}},
+        {"type": "object", "required": ["reason", "stage", "lanes", "run_id", "at"],
+         "properties": {"reason": {"const": "ci-lane-gap"}, "stage": {"const": "verify"},
+                        "lanes": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+                        "run_id": {"type": "integer"}, "at": {"type": "string", "format": "date-time"}}}
+      ]
     },
     "head": {"description": "Optional commit the receipt was recorded at.", "type": "string", "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"},
     "source_key": {"description": "Optional canonical source key at head, distinct from source_fingerprints. Without it the identity rule applies.", "$ref": "#/$defs/hash"},
     "ci_evidence": {
-      "description": "Optional CI run accepted as verification evidence.",
+      "description": "Optional CI run accepted as verification evidence, written by workflow.py revalidate --stage verify --check-run only. The gate accepts a Verify receipt whose source drifted when this run concluded success on the current source key with no lane gap.",
       "type": "object",
-      "properties": {"run_id": {"type": ["integer", "string"]}, "head": {"type": "string"}, "source_key": {"$ref": "#/$defs/hash"},
-                     "tier": {"type": "string"}, "lanes": {"type": "array", "items": {"type": "string"}}, "conclusion": {"type": "string"}}
+      "required": ["run_id", "head", "source_key", "tier", "lanes", "conclusion"],
+      "properties": {"run_id": {"type": ["integer", "string"]}, "attempt": {"type": "integer"},
+                     "head": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "source_key": {"$ref": "#/$defs/hash"},
+                     "tier": {"type": "string"}, "lanes": {"type": "array", "items": {"type": "string"}},
+                     "conclusion": {"const": "success"}, "check": {"type": "string"}, "artifact": {"type": "string"},
+                     "event": {"type": "string"}, "pull_request": {"type": ["integer", "null"]},
+                     "required_lanes": {"type": "array", "items": {"type": "string"}},
+                     "lane_gap": {"type": "array", "maxItems": 0}, "at": {"type": "string", "format": "date-time"}}
     },
     "diff_reviewed": {
-      "description": "Optional record of an incremental review of the diff since the receipt's head.",
+      "description": "Optional record of an incremental review of git diff <base>..<head>, written by workflow.py revalidate --stage review --diff-reviewed only.",
       "type": "object",
-      "properties": {"evidence": {"type": "string", "minLength": 1}, "base": {"type": "string"}, "head": {"type": "string"}}
+      "required": ["evidence", "base", "head"],
+      "properties": {"evidence": {"type": "string", "minLength": 1}, "base": {"type": "string"}, "head": {"type": "string"},
+                     "hash": {"$ref": "#/$defs/hash"}, "at": {"type": "string", "format": "date-time"}}
+    },
+    "revalidations": {
+      "description": "Checked revalidations of a Verify, Review or Ready receipt after source drift (workflow.py revalidate). Written by the runtime only; an entry with outcome stale records a lane gap and changed nothing else.",
+      "type": "array",
+      "items": {"type": "object", "required": ["via", "at", "actor", "outcome"], "properties": {
+        "via": {"enum": ["check-run", "diff-review", "ready-checks"]}, "at": {"type": "string", "format": "date-time"},
+        "actor": {"type": "string", "minLength": 1}, "outcome": {"enum": ["current", "stale"]},
+        "reason": {"type": ["string", "null"]}, "drift": {"type": "array", "items": {"type": "string"}}
+      }}
     }
   },
   "allOf": [

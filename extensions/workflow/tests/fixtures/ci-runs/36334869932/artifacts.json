@@ -1,0 +1,19 @@
+{
+  "total_count": 1,
+  "artifacts": [
+    {
+      "id": 10936644522,
+      "name": "bootstrap-plan-36334869932-1",
+      "size_in_bytes": 771,
+      "expired": false,
+      "digest": "sha256:7510ee00ba9bd3ad632093cab3652517c1d17f2bc38af8406fa6f50cb3037bd7",
+      "workflow_run": {
+        "id": 36334869932,
+        "repository_id": 1357361414,
+        "head_repository_id": 1357361414,
+        "head_branch": "develop",
+        "head_sha": "acd33dc27c168471b5979888a87178b62310a6ba"
+      }
+    }
+  ]
+}

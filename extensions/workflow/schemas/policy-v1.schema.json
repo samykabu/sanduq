@@ -213,6 +213,24 @@
                 "candidate_merge": {"type": "boolean"},
                 "live_answers": {"type": "boolean"}
               }
+            },
+            "affected_command": {
+              "description": "Optional affected-lane hook (1.6.0). Reads a JSON list of repository paths on stdin and prints {\"paths\": {\"<path>\": [\"<lane>\", ...]}}. Verify, Review and Ready receipts with a source_key stay current when every drifted source path maps to no lane and none is an explicit fingerprint; a failing hook fails closed. Without it the identity rule applies.",
+              "oneOf": [
+                {"type": "string", "minLength": 1},
+                {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+              ]
+            },
+            "verification_check": {
+              "description": "Optional CI check accepted as Verify evidence through workflow.py revalidate --stage verify --check-run (1.6.0): the job name, or {name, workflow, artifact_prefix}.",
+              "oneOf": [
+                {"type": "string", "minLength": 1},
+                {"type": "object", "required": ["name"], "additionalProperties": false, "properties": {
+                  "name": {"type": "string", "minLength": 1},
+                  "workflow": {"type": "string", "minLength": 1},
+                  "artifact_prefix": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"}
+                }}
+              ]
             }
           }
         },
