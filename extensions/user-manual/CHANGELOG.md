@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.2
 
 - `manual_state.py` defaults `--base-ref` to the feature's bound target
   branch recorded in its Workflow checkpoint instead of always assuming the

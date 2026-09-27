@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (1.6.0)
+## 1.6.0
 
 - The shipped `workflow-gates.yml` gate job no longer clones every branch and
   tag in the remote just to compute one merge-base. `actions/checkout` now
