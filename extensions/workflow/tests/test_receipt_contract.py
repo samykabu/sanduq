@@ -72,6 +72,7 @@ class Harness(unittest.TestCase):
 
 class LegacyCheckpointTests(Harness):
     """An anonymised 1.3.0 checkpoint of a finished feature, read and continued by this release."""
+    target_branch = None  # 1.3.0 checkpoints predate `target_branch`
 
     def setUp(self):
         super().setUp()
@@ -80,6 +81,10 @@ class LegacyCheckpointTests(Harness):
         subprocess.run(['git', 'switch', '-qc', fixture_008.BRANCH], cwd=self.root, check=True)
         self.original = fixture_008.materialise(self.root)
         self.feature = fixture_008.FEATURE
+        if self.target_branch is not None:
+            # A checkpoint started by 1.6.0 records the branch it forked from.
+            self.original['target_branch'] = self.target_branch
+            w.write(self.root / self.feature / 'workflow/checkpoint.json', self.original)
         self.commit_all('Materialise the anonymised 1.3.0 checkpoint')
         self.run = w.Run(self.root, self.feature)
 
@@ -122,6 +127,8 @@ class LegacyCheckpointTests(Harness):
         saved = self.run.load()
         self.assertEqual(saved['migrations'][-1], migration)
         self.assertEqual(saved['migrations'][:-1], self.original['migrations'])
+        self.assertEqual('target_branch' in saved, 'target_branch' in self.original)
+        self.assertEqual(saved.get('target_branch'), self.original.get('target_branch'))
         # Every receipt kept, byte for byte: nothing re-stamped.
         self.assertEqual(saved['receipts'], self.original['receipts'])
         checkpoint_validator().validate(saved)
@@ -167,6 +174,11 @@ class LegacyCheckpointTests(Harness):
         for stage, receipt in receipts.items():
             changed = {p for p in receipt['fingerprints'] if receipt['fingerprints'][p] != self.original['receipts'][stage]['fingerprints'][p]}
             self.assertEqual(changed, {fixture_008.AMENDED_EVIDENCE} if stage in stages else set())
+
+
+class LegacyCheckpointWithTargetBranchTests(LegacyCheckpointTests):
+    """The same checkpoint carrying the optional `target_branch` a 1.6.0 start records."""
+    target_branch = 'main'
 
 
 class InputRoleTests(Harness):
