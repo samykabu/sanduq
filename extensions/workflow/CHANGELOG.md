@@ -88,7 +88,8 @@
   keys. Neither key changes a policy digest.
 - Recovery recipes (G6). `next` returns `recovery` with a stale stage, and a
   failing gate appends `recovery: ...` to `STALE_RECEIPT`: the exact `amend`,
-  `revalidate` or `claim`/`complete` commands for that receipt.
+  `revalidate` or `claim`/`complete` commands for that receipt. `POLICY_CHANGED`
+  names the `migrate --preview` then `migrate --reason` sequence.
 - Tests replay both 007 failure shapes (changed verification inputs; a changed
   integration test) to a passing gate through `revalidate`, show that a narrower
   check leaves Verify stale, that Review revalidation without a diff review is
