@@ -54,14 +54,22 @@ def check(root, feature, policy, base=None, rules=None):
         require(state.get('policy_digest') == checkpoint_policy_digest(state, policy), 'POLICY_CHANGED')
     source = read(directory / 'scope-source.json', {})
     require(f"{source.get('repo')}#{source.get('issue')}" == state.get('issue'), 'FEATURE_BINDING_MISMATCH')
+    amendments = []
     if rules['receipts']:
         for stage in stages(policy):
             if stage == 'pr': continue  # PR publication follows readiness; never requires a recursive PR commit.
             receipt = state.get('receipts', {}).get(stage, {})
             require(receipt.get('outcome') == 'passed' and receipt.get('evidence'), 'RECEIPT_MISSING: ' + stage)
             if not receipt_current(root, feature, stage, receipt):
+                stale = receipt.get('stale')
                 raise WorkflowError('STALE_RECEIPT: ' + stage + '; changed paths: ' +
-                                    json.dumps(receipt_drift(root, feature, stage, receipt)))
+                                    json.dumps(receipt_drift(root, feature, stage, receipt)) +
+                                    ('; marked stale by a changed amendment of ' + stale.get('stage', '?') + ' evidence ' +
+                                     stale.get('path', '?') if isinstance(stale, dict) else ''))
+            # An amended receipt is accepted like any current one; the reviewer sees each amendment.
+            amendments += [{'stage': stage, **{key: item.get(key) for key in
+                            ('path', 'assessment', 'reason', 'actor', 'at', 'old_hash', 'new_hash')}}
+                           for item in receipt.get('amendments', [])]
             if stage == 'clarify': require(receipt.get('unresolved') == 0 and receipt.get('answers_applied') is True, 'CLARIFICATION_UNRESOLVED')
             if stage in ('verify','review','ready'): require(receipt.get('blocking_findings') == 0, 'BLOCKING_FINDINGS_REMAIN')
     tasks = None
@@ -111,6 +119,7 @@ def check(root, feature, policy, base=None, rules=None):
         require(result.returncode == 0, 'DOCUMENTATION_GATE_FAILED: ' + result.stdout + result.stderr)
         require(json.loads(result.stdout).get('current') is True, 'DOCUMENTATION_NOT_CURRENT')
     return {'feature': feature, 'passed': True, 'rules': [name for name, enabled in rules.items() if enabled],
+            'amendments': amendments,
             'scope': 'selected committed evidence checks; live answers are checked when selected; human acceptance is separate'}
 
 

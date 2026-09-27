@@ -39,6 +39,15 @@ COMMANDS = {'scope': 'speckit.scope.run', 'specify': 'speckit.specify',
             'manual_update': 'speckit.user-manual.update', 'pr': 'speckit.pr.generate',
             'verify': 'workflow:verification', 'review': 'workflow:review', 'ready': 'workflow:gates'}
 CORE_INPUTS = ['spec.md', 'plan.md', 'tasks.md', 'data-model.md', 'research.md', 'quickstart.md']
+# Receipt input roles. A receipt without `input_roles` is read as all-dependency.
+INPUT_ROLES = ('dependency', 'consulted')
+# Keys of the optional `receipts` policy section and their types.
+RECEIPT_POLICY_KEYS = {'require_input_roles': bool}
+AMENDMENT_ASSESSMENTS = ('unchanged', 'changed')
+# Receipts whose conclusion rests on earlier evidence; a `changed` amendment stales them.
+AMENDMENT_DEPENDENTS = ('verify', 'review', 'ready')
+# Receipt fields only the runtime writes; a submitted receipt may not carry them.
+RUNTIME_RECEIPT_FIELDS = ('amendments', 'stale')
 
 
 class WorkflowError(Exception):
@@ -210,6 +219,7 @@ def default_policy(qa, manual):
                 },
                 'overrides': {},
             },
+            'receipts': {'require_input_roles': False},
             'ci': sanduq_ci.default_ci()}
 
 
@@ -267,6 +277,12 @@ def validate_policy(policy):
                 and len({user.casefold() for user in users}) == len(users), 'DECISION_AUTHORITY_INVALID')
         require(isinstance(decisions.get('project_field'), str) and decisions['project_field'].strip(),
                 'DECISION_FIELD_INVALID')
+    # Optional and never filled in: an older policy keeps its digest.
+    receipts = policy.get('receipts')
+    if receipts is not None:
+        require(isinstance(receipts, dict) and all(
+            key in RECEIPT_POLICY_KEYS and type(value) is RECEIPT_POLICY_KEYS[key]
+            for key, value in receipts.items()), 'RECEIPTS_POLICY_INVALID')
     scope = policy.get('scope', {})
     require(isinstance(scope, dict), 'POLICY_SECTION_INVALID: scope')
     status_names = scope.get('statuses', {})
@@ -320,7 +336,9 @@ def policy_cutoff(previous, current):
                        'processes':'tasks','issue_sync':'taskstoissues','execution':'execute',
                        'finalize':'ready'}.items():
         if previous.get(key) != current.get(key): affected.append(BASE_STAGES.index(stage))
-    # Context and update scheduling do not retroactively invalidate semantic work.
+    # Context, update scheduling and receipt-contract keys (`receipts`) do not
+    # retroactively invalidate semantic work: requiring input roles applies to
+    # receipts written after the change, never to completed ones.
     return min(affected, default=len(BASE_STAGES))
 
 
@@ -656,10 +674,87 @@ def source_fingerprints(root):
     return fingerprint_files(root, selected)
 
 
+def consulted_inputs(receipt):
+    """Inputs the receipt declared as read for context only.
+
+    A receipt without `input_roles` (every receipt written before 1.6.0) has
+    none, so every input stays a dependency: never weaker than before.
+    """
+    roles = receipt.get('input_roles') or {}
+    return {path for path, entry in roles.items()
+            if isinstance(entry, dict) and entry.get('role') == 'consulted'}
+
+
+def dependency_fingerprints(receipt, required=()):
+    """The recorded hashes a receipt's conclusion rests on. Consulted inputs keep
+    their hash for provenance but do not decide whether the receipt is current;
+    a required input of the stage is always a dependency."""
+    consulted = consulted_inputs(receipt) - set(required)
+    return {path: value for path, value in receipt.get('fingerprints', {}).items() if path not in consulted}
+
+
+def role_exempt(feature, path):
+    """Feature artifacts and project memory are dependencies without a declaration."""
+    return path.startswith(feature + '/') or path.startswith('.specify/memory/')
+
+
+def require_input_roles(policy):
+    return (policy.get('receipts') or {}).get('require_input_roles') is True
+
+
+def validate_input_roles(root, feature, stage, receipt, policy):
+    """Check declared roles against the receipt's own input manifest.
+
+    Evidence and the stage's required inputs can never be consulted: the
+    stage's conclusion rests on them by definition. When the policy sets
+    `receipts.require_input_roles`, every input outside the feature directory
+    and `.specify/memory/` must carry a declared role, so nothing becomes
+    advisory by omission.
+    """
+    roles = receipt.get('input_roles')
+    if roles is None:
+        roles = {}
+    require(isinstance(roles, dict), 'INPUT_ROLES_INVALID: expected a map of input path to role')
+    inputs = receipt['inputs']
+    protected = set(receipt['evidence']) | set(required_inputs(root, feature, stage))
+    for path, entry in roles.items():
+        require(path in inputs, 'INPUT_ROLE_NOT_IN_MANIFEST: ' + str(path))
+        require(isinstance(entry, dict) and entry.get('role') in INPUT_ROLES and set(entry) <= {'role', 'because'},
+                'INPUT_ROLE_INVALID: ' + path + ' (expected {role: dependency|consulted, because: text})')
+        because = entry.get('because')
+        require(because is None or (isinstance(because, str) and because.strip()), 'INPUT_ROLE_REASON_INVALID: ' + path)
+        if entry['role'] == 'consulted':
+            require(because, 'INPUT_ROLE_REASON_REQUIRED: a consulted input states why the conclusion '
+                             'does not depend on its current content: ' + path)
+            require(path not in protected, 'INPUT_ROLE_CONSULTED_NOT_ALLOWED: ' + path +
+                    ' is evidence or a required input of ' + stage)
+    if require_input_roles(policy):
+        missing = [path for path in inputs if path not in roles and not role_exempt(feature, path)]
+        require(not missing, 'INPUT_ROLE_UNDECLARED: ' + ', '.join(missing))
+
+
+def consulted_drift(root, feature, receipts):
+    """Changed consulted inputs: reported as advisory drift, never as staleness."""
+    drift = []
+    for stage, receipt in receipts.items():
+        consulted = consulted_inputs(receipt) - set(required_inputs(root, feature, stage))
+        saved = {path: receipt['fingerprints'][path] for path in consulted
+                 if path in receipt.get('fingerprints', {})}
+        if not saved:
+            continue
+        current = fingerprint_files(root, saved)
+        for path in sorted(p for p in saved if current[p] != saved[p]):
+            drift.append({'stage': stage, 'path': path, 'because': receipt['input_roles'][path].get('because')})
+    return drift
+
+
 def receipt_current(root, feature, stage, receipt):
+    if receipt.get('stale'): return False
     saved = receipt.get('fingerprints', {})
-    if not saved or not set(required_inputs(root, feature, stage)) <= set(saved): return False
-    if fingerprint_files(root, saved) != saved: return False
+    required = set(required_inputs(root, feature, stage))
+    if not saved or not required <= set(saved): return False
+    dependencies = dependency_fingerprints(receipt, required)
+    if fingerprint_files(root, dependencies) != dependencies: return False
     if stage in ('verify', 'review', 'ready'):
         return receipt.get('source_fingerprints') == source_fingerprints(root)
     return True
@@ -667,15 +762,24 @@ def receipt_current(root, feature, stage, receipt):
 
 def receipt_drift(root, feature, stage, receipt):
     """Explain staleness without printing source content or weakening the gate."""
-    saved = receipt.get('fingerprints', {})
+    saved = dependency_fingerprints(receipt, required_inputs(root, feature, stage))
     current = fingerprint_files(root, set(saved) | set(required_inputs(root, feature, stage)))
     changed = {p for p in set(saved) | set(current) if saved.get(p) != current.get(p)}
-    changed.update(set(required_inputs(root, feature, stage)) - set(saved))
+    changed.update(set(required_inputs(root, feature, stage)) - set(receipt.get('fingerprints', {})))
     if stage in ('verify', 'review', 'ready'):
         old = receipt.get('source_fingerprints', {})
         new = source_fingerprints(root)
         changed.update(p for p in set(old) | set(new) if p not in old or p not in new or old[p] != new[p])
     return sorted(changed)
+
+
+def default_actor(root):
+    """Who recorded an amendment: the Git identity, else the OS user."""
+    try:
+        name = git(root, 'config', 'user.name')
+    except WorkflowError:
+        name = ''
+    return name or os.environ.get('USER') or os.environ.get('USERNAME') or 'unknown'
 
 
 def ensure_local_excludes(root):
@@ -754,36 +858,67 @@ class Run:
             require(not state['active'], 'ACTIVE_CLAIM_MUST_BE_RESOLVED_BEFORE_UPGRADE')
             health = doctor(self.root, self.policy)
             require(health['ok'], '; '.join(health['errors']))
+            require(isinstance(reason, str) and reason.strip(), 'MIGRATION_REASON_REQUIRED')
+            plan = self.migration_plan(state, invalidate_from)
             ensure_local_excludes(self.root)
             write(self.path.parent / 'backups' / (uuid.uuid4().hex + '.json'), state)
-            old_digest = state['dependency_digest']
-            old_policy_digest = state['policy_digest']
-            policy_digest = delivery_digest(self.policy)
-            commands = resolve_commands(self.root, self.policy)
-            changed = [stage for stage in stages(self.policy) if state['commands'].get(stage) != commands[stage]]
-            if policy_digest != old_policy_digest:
-                reached = policy_cutoff(state.get('policy'), self.policy)
-                if reached < len(BASE_STAGES): changed.append(BASE_STAGES[reached])
-            if invalidate_from:
-                require(invalidate_from in BASE_STAGES, 'INVALID_MIGRATION_STAGE')
-                changed.append(invalidate_from)
-            cutoff = min((BASE_STAGES.index(stage) for stage in changed), default=len(BASE_STAGES))
-            invalidated = [stage for stage in state['receipts'] if BASE_STAGES.index(stage) >= cutoff]
-            state.setdefault('migrations', []).append({'reason': reason, 'from': old_digest, 'at': now(),
-                                                      'policy_from': old_policy_digest, 'policy_to': policy_digest,
-                                                      'invalidated': invalidated, 'preserved_as_historical': [s for s in state['receipts'] if s not in invalidated]})
-            state['dependency_digest'] = package_digest(self.root)
-            state['commands'] = commands
+            entry = {'reason': reason, 'from': plan['from'], 'to': plan['to'], 'at': now(),
+                     'policy_from': plan['policy_from'], 'policy_to': plan['policy_to'],
+                     'invalidated': plan['invalidated'], 'preserved_as_historical': plan['preserved_as_historical']}
+            state.setdefault('migrations', []).append(entry)
+            state['dependency_digest'] = plan['to']
+            state['commands'] = plan['commands']
             state['policy_digest_version'] = POLICY_DIGEST_VERSION
             state['ci_policy_digest'] = digest(self.policy['ci'])
-            if policy_digest != old_policy_digest:
-                state.setdefault('policy_changes', []).append({'from': old_policy_digest, 'to': policy_digest,
+            if plan['policy_to'] != plan['policy_from']:
+                state.setdefault('policy_changes', []).append({'from': plan['policy_from'], 'to': plan['policy_to'],
                                                                'at': now(), 'via': 'migrate', 'reason': reason})
-                state['policy_digest'] = policy_digest
+                state['policy_digest'] = plan['policy_to']
                 state['policy'] = copy.deepcopy(self.policy)
-            for stage in invalidated: state['receipts'].pop(stage)
+            for stage in plan['invalidated']: state['receipts'].pop(stage)
             self.save(state)
-            return {'migrated': True, 'next': self.next(state)}
+            return {'migrated': True, 'migration': copy.deepcopy(entry), 'next': self.next(state)}
+
+    def migration_plan(self, state, invalidate_from=None):
+        """What a migration of this checkpoint would record, computed without writing.
+
+        `preview_migration` and `migrate` share this, so the reviewed lists are
+        exactly the lists the write records.
+        """
+        if invalidate_from:
+            require(invalidate_from in BASE_STAGES, 'INVALID_MIGRATION_STAGE')
+        old_policy_digest = state['policy_digest']
+        policy_digest = delivery_digest(self.policy)
+        commands = resolve_commands(self.root, self.policy)
+        changed = [stage for stage in stages(self.policy) if state['commands'].get(stage) != commands[stage]]
+        if policy_digest != old_policy_digest:
+            reached = policy_cutoff(state.get('policy'), self.policy)
+            if reached < len(BASE_STAGES): changed.append(BASE_STAGES[reached])
+        if invalidate_from:
+            changed.append(invalidate_from)
+        cutoff = min((BASE_STAGES.index(stage) for stage in changed), default=len(BASE_STAGES))
+        invalidated = [stage for stage in state['receipts'] if BASE_STAGES.index(stage) >= cutoff]
+        return {'from': state['dependency_digest'], 'to': package_digest(self.root),
+                'policy_from': old_policy_digest, 'policy_to': policy_digest,
+                'commands': commands, 'changed_commands': sorted(
+                    stage for stage in stages(self.policy) if state['commands'].get(stage) != commands[stage]),
+                'invalidated': invalidated,
+                'preserved_as_historical': [s for s in state['receipts'] if s not in invalidated]}
+
+    def preview_migration(self, invalidate_from=None):
+        """Non-mutating migrate: the exact lists the write would record, and what
+        would stop it. Loads through the same bound-branch check as `migrate`."""
+        state = self.load()
+        plan = self.migration_plan(state, invalidate_from)
+        blockers = []
+        if state['active']:
+            blockers.append('ACTIVE_CLAIM_MUST_BE_RESOLVED_BEFORE_UPGRADE')
+        blockers += doctor(self.root, self.policy)['errors']
+        return {'preview': True, 'feature': self.relative, 'invalidated': plan['invalidated'],
+                'preserved_as_historical': plan['preserved_as_historical'],
+                'dependency_from': plan['from'], 'dependency_to': plan['to'],
+                'policy_from': plan['policy_from'], 'policy_to': plan['policy_to'],
+                'changed_commands': plan['changed_commands'], 'blockers': blockers, 'can_apply': not blockers}
 
     def refresh(self, stage, reason):
         """Explicit invocation rereads remote requirements even when local files are unchanged."""
@@ -803,6 +938,48 @@ class Run:
                 for name in affected: state['receipts'].pop(name)
                 self.save(state)
             return {'refreshed': list(affected), 'next': self.next(state)}
+
+    def amend(self, stage, evidence, reason, assessment, actor=None):
+        """Re-hash one evidence entry of a completed receipt under a recorded assessment.
+
+        Every other fingerprint keeps its hash. `unchanged` asserts the stage's
+        conclusion and claimed checks still hold (an editorial fix); `changed`
+        says they moved, so the receipts resting on them (verify, review, ready,
+        from the amended stage on) are marked stale and must be re-recorded.
+        """
+        require(stage in BASE_STAGES, 'INVALID_AMEND_STAGE: ' + str(stage))
+        require(assessment in AMENDMENT_ASSESSMENTS, 'AMENDMENT_ASSESSMENT_INVALID: expected unchanged or changed')
+        require(isinstance(reason, str) and reason.strip(), 'AMENDMENT_REASON_REQUIRED')
+        with locked(self.lock):
+            state = self.load()
+            require(not state['active'], 'ACTIVE_CLAIM_MUST_BE_RESOLVED_BEFORE_AMEND')
+            receipt = state['receipts'].get(stage)
+            require(receipt, 'RECEIPT_MISSING: ' + stage)
+            require(evidence in receipt.get('evidence', []) and evidence in receipt.get('fingerprints', {}),
+                    'AMEND_PATH_NOT_EVIDENCE: ' + str(evidence) + ' is not listed as evidence of ' + stage)
+            inside(self.root, evidence)
+            new_hash = fingerprint_files(self.root, [evidence])[evidence]
+            require(new_hash is not None, 'EVIDENCE_MISSING: ' + evidence)
+            old_hash = receipt['fingerprints'][evidence]
+            require(new_hash != old_hash, 'AMENDMENT_NOT_NEEDED: ' + evidence + ' still matches the receipt')
+            ensure_local_excludes(self.root)
+            write(self.path.parent / 'backups' / (uuid.uuid4().hex + '.json'), state)
+            record = {'path': evidence, 'old_hash': old_hash, 'new_hash': new_hash, 'reason': reason.strip(),
+                      'assessment': assessment, 'actor': actor or default_actor(self.root), 'at': now()}
+            staled = []
+            if assessment == 'changed':
+                for name in AMENDMENT_DEPENDENTS:
+                    if BASE_STAGES.index(name) >= BASE_STAGES.index(stage) and name in state['receipts']:
+                        state['receipts'][name]['stale'] = {'reason': 'evidence-amended', 'stage': stage,
+                                                            'path': evidence, 'at': record['at']}
+                        staled.append(name)
+            record['staled'] = staled
+            receipt['fingerprints'][evidence] = new_hash
+            receipt.setdefault('amendments', []).append(record)
+            self.save(state)
+            return {'amended': True, 'stage': stage, 'amendment': copy.deepcopy(record),
+                    'current': receipt_current(self.root, self.relative, stage, receipt),
+                    'stale': staled, 'next': self.next(state)}
 
     def start(self, issue):
         require(re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[1-9]\d*', issue), 'EXPLICIT_ISSUE_REQUIRED')
@@ -833,6 +1010,14 @@ class Run:
         write(self.path, state)
 
     def next(self, state, finalize=False):
+        result = self.next_stage(state, finalize)
+        drift = consulted_drift(self.root, self.relative, state['receipts'])
+        if drift:
+            # Advisory only: a consulted input never stales its receipt.
+            result['advisory_drift'] = drift
+        return result
+
+    def next_stage(self, state, finalize=False):
         policy_changed = state['policy_digest'] != checkpoint_policy_digest(state, self.policy)
         cutoff = policy_cutoff(state.get('policy'), self.policy) if policy_changed else len(BASE_STAGES)
         for stage in stages(self.policy):
@@ -919,6 +1104,9 @@ class Run:
             require(receipt.get('stage') == stage and receipt.get('outcome') == 'passed', 'STAGE_NOT_PASSED')
             require(receipt.get('summary') and receipt.get('evidence'), 'EVIDENCE_REQUIRED')
             require(isinstance(receipt.get('inputs'), list) and receipt['inputs'], 'INPUT_MANIFEST_REQUIRED')
+            require(not any(field in receipt for field in RUNTIME_RECEIPT_FIELDS),
+                    'RECEIPT_FIELD_RESERVED: ' + ', '.join(f for f in RUNTIME_RECEIPT_FIELDS if f in receipt))
+            validate_input_roles(self.root, self.relative, stage, receipt, self.policy)
             for path in receipt['evidence']:
                 require(inside(self.root, path).is_file(), 'EVIDENCE_MISSING: ' + path)
             if stage == 'clarify':
@@ -944,8 +1132,19 @@ class Run:
             permitted = {'clarify': ['spec.md'], 'qa_analyze': ['tasks.md'], 'manual_analyze': ['tasks.md']}.get(stage, [])
             after = fingerprint_files(self.root, active['baseline'])
             changed = [p for p, before in active['baseline'].items() if after[p] != before]
+            # Only an earlier receipt's dependency can be undermined by this stage.
+            # A path every earlier receipt only consulted keeps its recorded hash
+            # (nothing is re-stamped) and `next` reports it as advisory drift.
+            dependencies = set()
+            for name, prior in state['receipts'].items():
+                dependencies.update(dependency_fingerprints(prior, required_inputs(self.root, self.relative, name)))
+            consulted = [p for p in changed if p not in dependencies]
+            changed = [p for p in changed if p in dependencies]
             unexpected = [p for p in changed if p not in [self.relative + '/' + f for f in permitted]]
             require(not unexpected, 'UPSTREAM_INPUT_CHANGED_DURING_STAGE: ' + ', '.join(unexpected))
+            if consulted:
+                state.setdefault('lineage', []).append({'stage': stage, 'advisory': True, 'consulted': {
+                    p: {'before': active['baseline'][p], 'after': after[p]} for p in consulted}, 'at': now()})
             if changed:
                 state.setdefault('lineage', []).append({'stage': stage, 'changes': {p: {'before': active['baseline'][p], 'after': after[p]} for p in changed}, 'at': now()})
                 for prior in state['receipts'].values():
@@ -953,6 +1152,8 @@ class Run:
                         if path in prior['fingerprints']:
                             prior['fingerprints'][path] = after[path]
             stored = copy.deepcopy(receipt)
+            if stored.get('input_roles') is None:
+                stored.pop('input_roles', None)  # absent means all-dependency
             stored['command'] = state['commands'][stage]
             stored['dependency_digest'] = state['dependency_digest']
             decision_input = [self.relative + '/workflow/decisions.json'] if (self.feature / 'workflow/decisions.json').is_file() else []
@@ -1032,7 +1233,7 @@ def main():
     identity_parser.add_argument('--issue', required=True)
     prepare_parser = sub.add_parser('prepare', help='Prepare an issue-bound feature and its branch')
     prepare_parser.add_argument('--issue', required=True)
-    for name in ('start', 'next', 'claim', 'complete', 'pause', 'recover', 'bind', 'migrate', 'refresh'):
+    for name in ('start', 'next', 'claim', 'complete', 'pause', 'recover', 'bind', 'migrate', 'refresh', 'amend'):
         cmd = sub.add_parser(name)
         cmd.add_argument('--feature', required=True)
         if name == 'start': cmd.add_argument('--issue', required=True)
@@ -1041,9 +1242,18 @@ def main():
         if name == 'complete':
             cmd.add_argument('--token', required=True)
             cmd.add_argument('--receipt', type=Path, required=True)
-        if name in ('pause', 'recover', 'migrate', 'refresh'): cmd.add_argument('--reason', required=True)
+        if name in ('pause', 'recover', 'refresh', 'amend'): cmd.add_argument('--reason', required=True)
+        if name == 'migrate': cmd.add_argument('--reason', help='Required unless --preview')
         if name in ('recover', 'bind'): cmd.add_argument('--token', required=True)
-        if name == 'migrate': cmd.add_argument('--invalidate-from', choices=BASE_STAGES)
+        if name == 'migrate':
+            cmd.add_argument('--invalidate-from', choices=BASE_STAGES)
+            cmd.add_argument('--preview', action='store_true',
+                             help='Report the exact invalidated and preserved stages without writing')
+        if name == 'amend':
+            cmd.add_argument('--stage', required=True, choices=BASE_STAGES)
+            cmd.add_argument('--evidence', required=True, help='One evidence path listed in that receipt')
+            cmd.add_argument('--assessment', required=True, choices=AMENDMENT_ASSESSMENTS)
+            cmd.add_argument('--actor', help='Defaults to the Git user name')
         if name == 'refresh': cmd.add_argument('--from-stage', choices=('scope', 'clarify'), required=True)
     args = parser.parse_args()
     root = args.root.resolve()
@@ -1116,7 +1326,10 @@ def main():
             elif args.action == 'claim': result = run.claim(read(args.usage), args.finalize)
             elif args.action == 'complete': result = run.complete(args.token, read(args.receipt, {}))
             elif args.action == 'bind': result = run.bind(args.token)
+            elif args.action == 'migrate' and args.preview: result = run.preview_migration(args.invalidate_from)
             elif args.action == 'migrate': result = run.migrate(args.reason, args.invalidate_from)
+            elif args.action == 'amend':
+                result = run.amend(args.stage, args.evidence, args.reason, args.assessment, args.actor)
             elif args.action == 'refresh': result = run.refresh(args.from_stage, args.reason)
             else:
                 with locked(run.lock):

@@ -21,7 +21,34 @@
     "native_links_verified": {"const": true},
     "parent_issue": {"type": "string", "pattern": "^[^/]+/[^#]+#[1-9][0-9]*$"},
     "images_verified": {"const": true},
-    "pr_url": {"type": "string", "pattern": "^https://github\\.com/[^/]+/[^/]+/pull/[1-9][0-9]*$"}
+    "pr_url": {"type": "string", "pattern": "^https://github\\.com/[^/]+/[^/]+/pull/[1-9][0-9]*$"},
+    "input_roles": {
+      "description": "Optional declared role per input path; every key is listed in inputs. A receipt without it is read as all-dependency.",
+      "type": "object", "additionalProperties": {"$ref": "#/$defs/input_role"}
+    },
+    "amendments": {
+      "description": "Assessed evidence amendments recorded by workflow.py amend. Written by the runtime only.",
+      "type": "array", "items": {"$ref": "#/$defs/amendment"}
+    },
+    "stale": {
+      "description": "Set when a changed amendment of earlier evidence undermined this receipt; it must be re-recorded. Written by the runtime only.",
+      "type": "object", "required": ["reason", "stage", "path", "at"],
+      "properties": {"reason": {"const": "evidence-amended"}, "stage": {"type": "string"},
+                     "path": {"type": "string", "minLength": 1}, "at": {"type": "string", "format": "date-time"}}
+    },
+    "head": {"description": "Optional commit the receipt was recorded at.", "type": "string", "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"},
+    "source_key": {"description": "Optional canonical source key at head, distinct from source_fingerprints. Without it the identity rule applies.", "$ref": "#/$defs/hash"},
+    "ci_evidence": {
+      "description": "Optional CI run accepted as verification evidence.",
+      "type": "object",
+      "properties": {"run_id": {"type": ["integer", "string"]}, "head": {"type": "string"}, "source_key": {"$ref": "#/$defs/hash"},
+                     "tier": {"type": "string"}, "lanes": {"type": "array", "items": {"type": "string"}}, "conclusion": {"type": "string"}}
+    },
+    "diff_reviewed": {
+      "description": "Optional record of an incremental review of the diff since the receipt's head.",
+      "type": "object",
+      "properties": {"evidence": {"type": "string", "minLength": 1}, "base": {"type": "string"}, "head": {"type": "string"}}
+    }
   },
   "allOf": [
     {"if": {"properties": {"stage": {"const": "clarify"}}}, "then": {"required": ["unresolved", "answers_applied"]}},
@@ -31,6 +58,20 @@
   ],
   "$defs": {
     "hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "paths": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+    "paths": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "input_role": {
+      "type": "object", "required": ["role"], "additionalProperties": false,
+      "properties": {"role": {"enum": ["dependency", "consulted"]}, "because": {"type": "string", "minLength": 1}},
+      "if": {"properties": {"role": {"const": "consulted"}}}, "then": {"required": ["because"]}
+    },
+    "amendment": {
+      "type": "object", "required": ["path", "old_hash", "new_hash", "reason", "assessment", "actor", "at"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1}, "old_hash": {"$ref": "#/$defs/hash"}, "new_hash": {"$ref": "#/$defs/hash"},
+        "reason": {"type": "string", "minLength": 1}, "assessment": {"enum": ["unchanged", "changed"]},
+        "actor": {"type": "string", "minLength": 1}, "at": {"type": "string", "format": "date-time"},
+        "staled": {"type": "array", "items": {"type": "string"}}
+      }
+    }
   }
 }
