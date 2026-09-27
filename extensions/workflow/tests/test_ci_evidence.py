@@ -90,6 +90,22 @@ class RecordedRunTests(unittest.TestCase):
             errors = self.check(fake_github.recorded(PUSH_RUN), PUSH_RUN, attempt=2)[1]
             self.assertTrue(any('not 2' in error for error in errors), errors)
 
+    def test_partial_rerun_is_covered_by_the_earlier_attempts_plan(self):
+        # Attempt 2 re-ran only failed jobs, so it reused attempt 1's plan job and published no artifact of its own.
+        runs = f'repos/{REPOSITORY}/actions/runs/{PUSH_RUN}'
+        client = fake_github.recorded(PUSH_RUN)
+        rerun = dict(client.responses[runs], run_attempt=2)
+        client.responses[runs] = rerun
+        client.responses[f'{runs}/attempts/2'] = rerun
+        client.responses[f'{runs}/attempts/2/jobs?per_page=100'] = client.responses[f'{runs}/attempts/1/jobs?per_page=100']
+        evidence, errors = self.check(client, PUSH_RUN)
+        self.assertEqual(errors, [])
+        self.assertEqual(evidence['artifact'], f'bootstrap-plan-{PUSH_RUN}-1')
+        # With no plan at any attempt it still fails.
+        client.responses[f'{runs}/artifacts?per_page=100&name=bootstrap-plan-{PUSH_RUN}-1']['artifacts'] = []
+        errors = self.check(client, PUSH_RUN)[1]
+        self.assertTrue(any('no artifact' in error for error in errors), errors)
+
     def test_unreadable_run_and_artifact(self):
         with self.assertRaises(ce.EvidenceError):
             ce.collect(fake_github.FakeGitHub(), REPOSITORY, PUSH_RUN)
