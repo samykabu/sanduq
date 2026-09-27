@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- `manual_state.py` defaults `--base-ref` to the feature's bound target
+  branch recorded in its Workflow checkpoint instead of always assuming the
+  origin HEAD default branch, when the checkpoint recorded one. An explicit
+  `--base-ref` still wins, and a feature with no checkpoint, or none recorded,
+  keeps today's origin-HEAD default (F16).
+
 ## 1.3.1
 
 - The bundled freshness helper shares Workflow's checkout-independent

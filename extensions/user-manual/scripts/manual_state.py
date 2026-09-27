@@ -5,11 +5,11 @@ import json
 import sys
 from pathlib import Path
 try:
-    from sanduq_freshness import record_or_status
+    from sanduq_freshness import record_or_status, checkpoint_target_branch
 except ModuleNotFoundError:
     # Source checkout only; release archives bundle the canonical helper.
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts/shared'))
-    from sanduq_freshness import record_or_status
+    from sanduq_freshness import record_or_status, checkpoint_target_branch
 
 
 def main():
@@ -25,8 +25,9 @@ def main():
     kind = 'manual'
     state = root / 'User-Manual/.state/features' / f'{feature.name}.json'
     outputs = args.output or [p.relative_to(root).as_posix() for p in (root / 'User-Manual').rglob('*') if p.is_file() and not any(part in ('.state', 'site', 'pdf', '__pycache__') for part in p.relative_to(root / 'User-Manual').parts)]
+    base_ref = args.base_ref or checkpoint_target_branch(feature)
     try:
-        result = record_or_status(root, feature, kind, state, args.action, outputs, args.base_ref)
+        result = record_or_status(root, feature, kind, state, args.action, outputs, base_ref)
     except (ValueError, OSError) as exc:
         result = {'current': False, 'reason': str(exc)}
     print(json.dumps(result))

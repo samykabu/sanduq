@@ -117,6 +117,20 @@ def github_repository(root):
     return match[1]
 
 
+def previous_branch(root):
+    """The branch checked out immediately before the current one, via Git's own
+    reflog-backed `@{-1}` shorthand -- the target the feature branch forked
+    from, captured once at Start before any later checkout can shadow it.
+
+    Best-effort: None on a shallow or single-branch checkout, a detached HEAD
+    with no prior checkout in this reflog, or any other Git failure.
+    """
+    result = subprocess.run(['git', 'rev-parse', '--abbrev-ref', '@{-1}'], cwd=root,
+                            capture_output=True, text=True, encoding='utf-8')
+    value = result.stdout.strip()
+    return value if result.returncode == 0 and value and value != '@' else None
+
+
 def issue_identity(root, issue, gh=None):
     """Derive a stable safe initial path and branch from the bound GitHub issue."""
     require(re.fullmatch(r'[1-9]\d*', str(issue)), 'ISSUE_NUMBER_REQUIRED')
@@ -806,7 +820,7 @@ class Run:
                      'issue': issue, 'policy_digest_version': POLICY_DIGEST_VERSION,
                      'policy_digest': delivery_digest(self.policy),
                      'ci_policy_digest': digest(self.policy['ci']), 'commands': commands,
-                     'policy': copy.deepcopy(self.policy),
+                     'policy': copy.deepcopy(self.policy), 'target_branch': previous_branch(self.root),
                      'receipts': {}, 'generation': 0, 'active': None, 'status': 'in-progress'}
             state['dependency_digest'] = package_digest(self.root)
             self.save(state)

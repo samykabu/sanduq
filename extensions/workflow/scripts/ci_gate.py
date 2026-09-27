@@ -27,7 +27,8 @@ def resolve_features(root, base, explicit, allow_empty=False):
     try:
         comparison = git(root, 'merge-base', 'HEAD', base)
     except WorkflowError as exc:
-        raise WorkflowError('BASE_HISTORY_UNAVAILABLE: fetch the target and PR history (checkout fetch-depth: 0); ' + str(exc)) from exc
+        raise WorkflowError('BASE_HISTORY_UNAVAILABLE: fetch the target and PR history '
+                            '(an unbounded fetch of the base ref, or checkout fetch-depth: 0); ' + str(exc)) from exc
     changed = git(root, 'diff', '--name-only', '-z', comparison, 'HEAD').split('\0')
     features = set(explicit)
     for path in changed:
