@@ -182,6 +182,30 @@ the package's pinned `requirements.txt` when missing. Never install a floating t
    hold; `changed` marks Verify, Review and Ready (from the amended stage on) stale
    so they are re-recorded. Only a path listed as that receipt's evidence can be
    amended; the gate lists every amendment for the reviewer.
+   **Recovery after source drift (G6).** When `next` returns `inputs-or-evidence-changed`
+   or the gate fails with `STALE_RECEIPT`, run the `recovery` commands it prints, in order;
+   never copy hashes forward and never revalidate on a note. The recipes are:
+   - Changed evidence of a completed stage: the `amend` command above.
+   - Verify stale after source drift (`ci.gate.verification_check` set): push HEAD, wait
+     for that check to pass on it, then `workflow.py revalidate --feature ... --stage verify
+     --check-run <run id>`. It needs the affected-lane hook, a clean source tree and
+     current earlier stages. If it reports a `lane_gap`, Verify stays stale: run the check
+     on a commit with the same source key covering those lanes (or re-record Verify), then
+     revalidate again. A rejected run (other source key, failed or cancelled check, missing
+     or mismatched plan artifact) changes nothing.
+   - Review stale after source drift: review `git diff <review head>..HEAD` for real, record
+     it in `specs/<feature>/evidence/<file>.md` with the lines
+     `Diff reviewed: <review head>..<HEAD>`, the findings, and `Blocking findings: 0`, then
+     `workflow.py revalidate --feature ... --stage review --diff-reviewed <file>`. A review
+     receipt without `head` (pre-1.6.0) is re-recorded.
+   - Ready, once Verify and Review are current: `workflow.py revalidate --feature ...
+     --stage ready` (it re-runs task, mapping and documentation checks).
+   - Then commit the checkpoint and evidence together; the source key does not move.
+   - Otherwise (an input changed, a `changed` amendment, a legacy receipt, no configured
+     route): re-record with `claim`, the stage, and `complete` (after `recover` if a
+     claim is active).
+   With `ci.gate.affected_command` set, drift the hook maps to no lane (Markdown,
+   committed artifacts) keeps Verify, Review and Ready current; a failing hook fails closed.
 6. Run `complete --feature ... --token ... --receipt <file>`. Re-read the next stage. Continue
    automatically without asking about routine transitions. If blocked, use `pause --reason`
    and report the actual question or failure. Preserve required human review/deployment gates.

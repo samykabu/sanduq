@@ -50,8 +50,50 @@
   receipt's evidence, an unchanged file, a missing file or an active claim is
   refused. `ci_gate.py` accepts amended receipts, lists every amendment in its
   result and names a changed amendment when it reports a stale receipt.
-- A submitted receipt may not carry the runtime-written `amendments` or `stale`
+- A submitted receipt may not carry the runtime-written `amendments`, `stale`,
+  `head`, `source_key`, `ci_evidence`, `diff_reviewed` or `revalidations`
   fields.
+- Canonical source key (B3). New `scripts/source_key.py` computes
+  `bunyan-source-key/1` from `git ls-tree -r -z --full-tree <tree>` on raw bytes
+  (words and workflow-state paths left out), reproducing every case of the
+  shared `tests/fixtures/source-key.fixtures.json` (byte-identical to the
+  consumer's copy, pinned by SHA-256 and marked `-text`), also through real
+  trees with executable, symlink and submodule entries. Verify, Review and Ready
+  receipts record `head` and `source_key` when no source path differs from HEAD.
+- Source-drift classification (B3, G1). New optional policy key
+  `ci.gate.affected_command` (schema and validation): a hook that reads a JSON
+  path list on stdin and prints `{"paths": {path: [lanes]}}`. `receipt_current`
+  keeps a Verify, Review or Ready receipt with a `source_key` current when every
+  drifted source path maps to no lane and none is among its explicit
+  fingerprints; a failing hook fails closed. Without the hook, and for a receipt
+  without `source_key`, the identity rule applies unchanged.
+- CI run as Verify evidence and checked revalidation (B4, G2). New optional
+  policy key `ci.gate.verification_check`. `workflow.py revalidate --stage
+  verify --check-run <run id>` reads the run, its jobs and its plan artifact
+  (`<prefix>-<run>-<attempt>/verification-plan.json`) through the GitHub REST
+  API (`scripts/ci_evidence.py`, an injectable `gh api` client), requires
+  success, every plan field matching the run, the tree and source key
+  recomputed locally, the current source key, explicit fingerprints
+  byte-matching and the run's lanes covering every lane the drift reaches; it
+  writes `ci_evidence {run_id, head, source_key, tier, lanes, conclusion, ...}`
+  and re-inventories the source. A lane gap is recorded, marks Verify stale
+  (`ci-lane-gap`) and stays until a covering run. `revalidate --stage review
+  --diff-reviewed <evidence>` requires a recorded incremental review of
+  `git diff <review head>..HEAD` (`diff_reviewed`); `revalidate --stage ready`
+  re-runs the Ready checks. Every revalidation is appended to `revalidations[]`
+  and none is accepted on a note. `ci_gate.py` accepts a Verify receipt through
+  `ci_evidence` on the current source key, lists revalidations and accepted
+  drift, and with `--verify-ci-evidence` re-reads each such run through the API.
+  `workflow.py ci --affected-command/--verification-check` sets or removes the
+  keys. Neither key changes a policy digest.
+- Recovery recipes (G6). `next` returns `recovery` with a stale stage, and a
+  failing gate appends `recovery: ...` to `STALE_RECEIPT`: the exact `amend`,
+  `revalidate` or `claim`/`complete` commands for that receipt.
+- Tests replay both 007 failure shapes (changed verification inputs; a changed
+  integration test) to a passing gate through `revalidate`, show that a narrower
+  check leaves Verify stale, that Review revalidation without a diff review is
+  refused, the 008 shape (legacy receipts) against a fake plan artifact, and a
+  real recorded Bunyan plan artifact validated against its run metadata.
 
 ## 1.5.0
 

@@ -90,7 +90,57 @@ def validate_gate(gate):
         if rules[rule]:
             _require(all(rules[dependency] for dependency in dependencies),
                      'CI_GATE_RULE_DEPENDENCY: ' + rule + ' requires ' + ', '.join(dependencies))
+    if 'affected_command' in gate:
+        affected_command(gate)
+    if 'verification_check' in gate:
+        verification_check(gate)
     return gate
+
+
+def affected_command(gate):
+    """The optional affected-lane hook as an argv list, or None (1.6.0, B3).
+
+    The hook reads a JSON list of repository paths on stdin and prints
+    `{"paths": {"<path>": ["<lane>", ...]}}`; a path mapped to `[]` affects no
+    lane. It is given as an argv list or one command string (split like a POSIX
+    shell, without running one).
+    """
+    import shlex
+    value = (gate or {}).get('affected_command')
+    if value is None:
+        return None
+    if isinstance(value, str):
+        try:
+            value = shlex.split(value)
+        except ValueError as exc:
+            raise CIPolicyError('CI_AFFECTED_COMMAND_INVALID: ' + str(exc)) from exc
+    _require(isinstance(value, list) and value and all(isinstance(part, str) and part for part in value),
+             'CI_AFFECTED_COMMAND_INVALID: expected a command string or a non-empty argv list')
+    return list(value)
+
+
+def verification_check(gate):
+    """The CI check accepted as Verify evidence, normalised, or None (1.6.0, B4).
+
+    Either the check (job) name, or `{name, workflow, artifact_prefix}`: the job
+    that must conclude success, the workflow run name it must belong to
+    (optional) and the plan artifact prefix (default `bootstrap-plan`).
+    """
+    value = (gate or {}).get('verification_check')
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = {'name': value}
+    _require(isinstance(value, dict) and set(value) <= {'name', 'workflow', 'artifact_prefix'},
+             'CI_VERIFICATION_CHECK_INVALID: expected a check name or {name, workflow, artifact_prefix}')
+    for key in ('name', 'workflow', 'artifact_prefix'):
+        _require(key not in value or (isinstance(value[key], str) and value[key].strip()),
+                 'CI_VERIFICATION_CHECK_INVALID: ' + key)
+    _require('name' in value, 'CI_VERIFICATION_CHECK_INVALID: name')
+    _require(re.fullmatch(r'[A-Za-z0-9._-]+', value.get('artifact_prefix', 'bootstrap-plan')),
+             'CI_VERIFICATION_CHECK_INVALID: artifact_prefix')
+    return {'name': value['name'], 'workflow': value.get('workflow'),
+            'artifact_prefix': value.get('artifact_prefix', 'bootstrap-plan')}
 
 
 def hosted(labels):

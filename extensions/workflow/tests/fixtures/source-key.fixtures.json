@@ -1,0 +1,349 @@
+{
+  "algorithm": "bunyan-source-key/1",
+  "description": "Shared fixtures for the canonical source key (plan A9a). Bunyan eng/ci/source-key.mjs and Sanduq source_key.py must reproduce every key. Entries are git ls-tree -r -z --full-tree records; paths are UTF-8.",
+  "excludedPrefixes": [
+    ".specify/",
+    ".agents/",
+    ".claude/",
+    ".codex/",
+    "specs/",
+    "User-Manual/",
+    "docs/",
+    "graphify-out/",
+    "artifacts/"
+  ],
+  "cases": [
+    {
+      "name": "source",
+      "description": "Three source files.",
+      "entries": [
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "path": "src/App.cs"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "path": "web/src/main.tsx"
+        },
+        {
+          "mode": "100755",
+          "type": "blob",
+          "object": "cccccccccccccccccccccccccccccccccccccccc",
+          "path": "eng/ci/linux.sh"
+        }
+      ],
+      "key": "2fc91ee2c975a37060cd82f1b88f96d2821ec816c767fa61260a69d6e74a4b75"
+    },
+    {
+      "name": "markdown-and-excluded-only-change",
+      "description": "Adds Markdown (any case) and files under every excluded prefix; the key equals \"source\".",
+      "entries": [
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "path": "src/App.cs"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "path": "web/src/main.tsx"
+        },
+        {
+          "mode": "100755",
+          "type": "blob",
+          "object": "cccccccccccccccccccccccccccccccccccccccc",
+          "path": "eng/ci/linux.sh"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "dddddddddddddddddddddddddddddddddddddddd",
+          "path": "README.md"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "dddddddddddddddddddddddddddddddddddddddd",
+          "path": "src/NOTES.MD"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "dddddddddddddddddddddddddddddddddddddddd",
+          "path": "web/guide.Md"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "dddddddddddddddddddddddddddddddddddddddd",
+          "path": ".specify/memory/x.json"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "dddddddddddddddddddddddddddddddddddddddd",
+          "path": ".agents/skills/a.txt"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "dddddddddddddddddddddddddddddddddddddddd",
+          "path": ".claude/settings.json"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "dddddddddddddddddddddddddddddddddddddddd",
+          "path": ".codex/config.toml"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "dddddddddddddddddddddddddddddddddddddddd",
+          "path": "specs/008/plan.yaml"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "dddddddddddddddddddddddddddddddddddddddd",
+          "path": "User-Manual/en/index.html"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "dddddddddddddddddddddddddddddddddddddddd",
+          "path": "docs/development/ci.md"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "dddddddddddddddddddddddddddddddddddddddd",
+          "path": "docs/a/b/c.txt"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "dddddddddddddddddddddddddddddddddddddddd",
+          "path": "graphify-out/graph.json"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "dddddddddddddddddddddddddddddddddddddddd",
+          "path": "artifacts/ci/x.json"
+        }
+      ],
+      "key": "2fc91ee2c975a37060cd82f1b88f96d2821ec816c767fa61260a69d6e74a4b75"
+    },
+    {
+      "name": "prefix-lookalikes-are-included",
+      "description": "Paths that only resemble excluded prefixes are source.",
+      "entries": [
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "path": "src/App.cs"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "path": "web/src/main.tsx"
+        },
+        {
+          "mode": "100755",
+          "type": "blob",
+          "object": "cccccccccccccccccccccccccccccccccccccccc",
+          "path": "eng/ci/linux.sh"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "dddddddddddddddddddddddddddddddddddddddd",
+          "path": "docsx/a.txt"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "dddddddddddddddddddddddddddddddddddddddd",
+          "path": "src/docs/x.txt"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "dddddddddddddddddddddddddddddddddddddddd",
+          "path": "Docs/a.txt"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "dddddddddddddddddddddddddddddddddddddddd",
+          "path": "user-manual/a.txt"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "dddddddddddddddddddddddddddddddddddddddd",
+          "path": "specs"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "dddddddddddddddddddddddddddddddddddddddd",
+          "path": "README.md.txt"
+        }
+      ],
+      "key": "de645d7a89fd206e40b35e584437dd977adf62f14d789d2dc2eaa079bd2dae91"
+    },
+    {
+      "name": "source-change",
+      "description": "One object id changes.",
+      "entries": [
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "dddddddddddddddddddddddddddddddddddddddd",
+          "path": "src/App.cs"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "path": "web/src/main.tsx"
+        },
+        {
+          "mode": "100755",
+          "type": "blob",
+          "object": "cccccccccccccccccccccccccccccccccccccccc",
+          "path": "eng/ci/linux.sh"
+        }
+      ],
+      "key": "4fc52ff413dea3f72d57bb1a817d5c2edfe479787b63033c146de1b07cce0aac"
+    },
+    {
+      "name": "mode-only-change",
+      "description": "Only the executable bit changes.",
+      "entries": [
+        {
+          "mode": "100755",
+          "type": "blob",
+          "object": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "path": "src/App.cs"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "path": "web/src/main.tsx"
+        },
+        {
+          "mode": "100755",
+          "type": "blob",
+          "object": "cccccccccccccccccccccccccccccccccccccccc",
+          "path": "eng/ci/linux.sh"
+        }
+      ],
+      "key": "51caa298447955671d608b013303ce7bd980a0437d4698f962564b84b3a1dc25"
+    },
+    {
+      "name": "symlink-and-submodule",
+      "description": "A symlink and a submodule entry are part of the key.",
+      "entries": [
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "path": "src/App.cs"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "path": "web/src/main.tsx"
+        },
+        {
+          "mode": "100755",
+          "type": "blob",
+          "object": "cccccccccccccccccccccccccccccccccccccccc",
+          "path": "eng/ci/linux.sh"
+        },
+        {
+          "mode": "120000",
+          "type": "blob",
+          "object": "dddddddddddddddddddddddddddddddddddddddd",
+          "path": "tools/link"
+        },
+        {
+          "mode": "160000",
+          "type": "commit",
+          "object": "dddddddddddddddddddddddddddddddddddddddd",
+          "path": "vendor/lib"
+        }
+      ],
+      "key": "1c2ace7c32da152ca6765896eab79607927cdbd3e7323e6abe6ffdc04627481d"
+    },
+    {
+      "name": "unusual-names-and-byte-order",
+      "description": "Spaces, non-ASCII and byte-order sorting (uppercase before lowercase, ASCII before UTF-8).",
+      "entries": [
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "path": "src/with space.cs"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "path": "src/zeta.cs"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "path": "src/Émile.cs"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "path": "src/Zulu.cs"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "path": "src/日本.ts"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "path": "src/a b/c d.txt"
+        }
+      ],
+      "key": "1af243ded5e7481ff9172dcb32faf4618ab069e16b90d941a416ea310f27b8a3"
+    },
+    {
+      "name": "empty",
+      "description": "No included entries.",
+      "entries": [
+        {
+          "mode": "100644",
+          "type": "blob",
+          "object": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "path": "docs/only.md"
+        }
+      ],
+      "key": "cbdd34bb407fd1da536d21c04bcd63da3c7792c0fdeca59c62431c340eddf6c9"
+    }
+  ]
+}

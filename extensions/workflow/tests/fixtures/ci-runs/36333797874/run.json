@@ -1,0 +1,18 @@
+{
+  "id": 36333797874,
+  "name": "Bootstrap verification",
+  "run_attempt": 1,
+  "event": "pull_request",
+  "status": "completed",
+  "conclusion": "success",
+  "head_sha": "270dfb5e43e2a66a95ba3b5e12dc3d1c46b22891",
+  "head_branch": "ci/a9a-verification-plan-artifact",
+  "pull_requests": [],
+  "workflow_id": 356156736,
+  "created_at": "2026-09-27T16:35:23Z",
+  "run_started_at": "2026-09-27T16:35:23Z",
+  "updated_at": "2026-09-27T16:51:31Z",
+  "repository": {
+    "full_name": "abushanab-net/Bunyan"
+  }
+}
