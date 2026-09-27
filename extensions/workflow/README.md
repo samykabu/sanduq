@@ -1,7 +1,9 @@
 # Sanduq Workflow
 
-Workflow 1.5.0 adds optional model-aware delegation. Workflow 1.4.0
-adds token usage per task, phase and feature to the progress
+Workflow 1.6.0 hardens the evidence gate: input roles and assessed amendments on
+receipts, source-drift classification through an affected-lanes hook, and CI runs
+accepted as Verify evidence through `revalidate --check-run`. Workflow 1.5.0 added optional model-aware delegation. Workflow 1.4.0
+added token usage per task, phase and feature to the progress
 report and makes `--preserve-ci` work on any checkout. Workflow 1.3.0 added issue
 decisions and an optional evidence CI gate. Check
 the repository catalog for the currently published version. See the
