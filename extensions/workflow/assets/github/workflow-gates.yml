@@ -10,10 +10,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: ${{ github.event.pull_request.commits + 1 }}
       # sanduq:if not candidate_merge
           ref: ${{ github.event.pull_request.head.sha }}
       # sanduq:endif
+      - name: Fetch the PR base branch for the gate's merge-base comparison
+        run: git fetch --no-tags --prune origin "${{ github.event.pull_request.base.ref }}"
       # sanduq:if python_setup_action
       - uses: actions/setup-python@v5
         with:

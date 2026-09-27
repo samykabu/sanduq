@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- The shipped `workflow-gates.yml` gate job no longer clones every branch and
+  tag in the remote just to compute one merge-base. `actions/checkout` now
+  fetches only `${{ github.event.pull_request.commits + 1 }}` generations of
+  the PR head (enough to reach the commit it forked from), and a new step
+  fetches the PR base branch's full history explicitly; `ci_gate.py`'s
+  `resolve_features()` still finds the same merge-base either way (G5).
+- `workflow.py start` records the branch the feature branch was created from
+  as `target_branch` in the checkpoint (via Git's `@{-1}` previous-checkout
+  shorthand), best-effort and `null` when Git cannot determine it (a shallow
+  or single-branch checkout, or no prior checkout in this reflog).
+  `assure_state.py` and `manual_state.py` use it to default `--base-ref` to
+  the feature's actual bound target instead of always assuming the origin
+  HEAD default branch (F16).
+
 ## 1.5.0
 
 - Add opt-in model-aware routing across workflow stages and implementation

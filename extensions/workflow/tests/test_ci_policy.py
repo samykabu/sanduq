@@ -204,7 +204,32 @@ class MergeCandidateTemplateTests(unittest.TestCase):
         selection['gate']['rules']['candidate_merge'] = True
         merged = ci.render(source, selection).decode()
         self.assertNotIn('ref: ${{ github.event.pull_request.head.sha }}', merged)
-        self.assertIn('fetch-depth: 0', merged)
+        # G5: the base ref is fetched explicitly instead of a blanket fetch-depth: 0
+        # (which clones every branch and tag in the remote), in both modes.
+        self.assertNotIn('fetch-depth: 0', merged)
+        self.assertIn('fetch-depth: ${{ github.event.pull_request.commits + 1 }}', merged)
+        self.assertIn('git fetch --no-tags --prune origin "${{ github.event.pull_request.base.ref }}"', merged)
+
+
+class GateJobHygieneTests(unittest.TestCase):
+    def test_the_gate_never_ships_a_blanket_fetch_depth_zero(self):
+        # G5: fetch-depth: 0 clones every branch and tag in the remote just to
+        # compute one merge-base; a bounded PR-history fetch plus an explicit
+        # fetch of the base ref is enough for ci_gate.py's resolve_features().
+        body = ASSETS['workflow-gates.yml'].read_bytes().decode()
+        self.assertNotIn('fetch-depth: 0', body)
+
+    def test_the_base_ref_is_fetched_before_the_gate_runs(self):
+        body = ci.render(ASSETS['workflow-gates.yml'].read_bytes(), ci.default_ci()).decode()
+        document = yaml.safe_load(body)
+        steps = document['jobs']['workflow-evidence']['steps']
+        names = [step.get('uses') or step.get('name') or step.get('run') for step in steps]
+        fetch_index = next(i for i, step in enumerate(steps)
+                           if 'fetch' in (step.get('run') or '') and 'base.ref' in (step.get('run') or ''))
+        gate_index = next(i for i, step in enumerate(steps) if 'ci_gate.py' in (step.get('run') or ''))
+        checkout_index = names.index('actions/checkout@v4')
+        self.assertLess(checkout_index, fetch_index, names)
+        self.assertLess(fetch_index, gate_index, names)
 
 
 class ExceptionTests(unittest.TestCase):

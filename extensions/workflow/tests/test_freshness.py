@@ -100,3 +100,16 @@ class FreshnessTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'base-ref'):f.inputs(self.root,self.feature,'document')
         with self.assertRaises(ValueError):f.record_or_status(self.root,self.feature,'document',self.state,'record',[],self.base)
         with self.assertRaises(ValueError):f.fingerprints(self.root,['../escape'])
+
+    def test_checkpoint_target_branch_reads_the_feature_checkpoint(self):
+        # F16: assure_state.py/manual_state.py default --base-ref to this.
+        feature_dir = self.root / self.feature
+        self.assertIsNone(f.checkpoint_target_branch(feature_dir))
+        checkpoint = feature_dir / 'workflow/checkpoint.json'
+        checkpoint.parent.mkdir(parents=True, exist_ok=True)
+        checkpoint.write_text(json.dumps({'target_branch': 'develop'}), encoding='utf-8')
+        self.assertEqual(f.checkpoint_target_branch(feature_dir), 'develop')
+        checkpoint.write_text(json.dumps({'target_branch': None}), encoding='utf-8')
+        self.assertIsNone(f.checkpoint_target_branch(feature_dir))
+        checkpoint.write_text('not json', encoding='utf-8')
+        self.assertIsNone(f.checkpoint_target_branch(feature_dir))
