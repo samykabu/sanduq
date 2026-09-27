@@ -14,6 +14,7 @@ PUSH_RUN, PR_RUN = 36334869932, 36333797874
 # Recomputed by source_key.py from the Bunyan repository for tree 7d58f42 (the tree of both runs' heads), matching
 # the artifacts' sourceKey; recorded so the tests need neither the repository nor the network.
 TREE = '7d58f42d5a14cc94ca4f234bd7cd626090f94c57'
+HEAD = '270dfb5e43e2a66a95ba3b5e12dc3d1c46b22891'
 KEY = '23e9caebc5ffa4b40d64a61e36a6d7fd62b5b5efcb5a99747c2f4738b2c9cb3c'
 LOCAL = {'tree': TREE, 'key': KEY}
 
@@ -45,12 +46,18 @@ class RecordedRunTests(unittest.TestCase):
         plan = evidence['plan']
         self.assertEqual((plan['event'], plan['tier'], plan['pullRequest']), ('pull_request', 'pr', 761))
         self.assertEqual((plan['headTreeSha'], plan['sourceKey']), (TREE, KEY))
-        # GitHub empties a run's pull_requests once the PR merges, so the recorded run no longer names PR 761:
-        # the contract's PR check is the only one that fails, as it must for a PR it cannot confirm.
-        self.assertEqual(errors, ['pullRequest 761 is not a pull request of run 36333797874 (none).'])
-        merged = fake_github.recorded(PR_RUN)
-        merged.responses[f'repos/{REPOSITORY}/actions/runs/{PR_RUN}']['pull_requests'] = [{'number': 761}]
-        self.assertEqual(self.check(merged, PR_RUN)[1], [])
+        # GitHub empties a run's pull_requests once the PR merges; the recorded run no longer names PR 761, so the
+        # pull requests whose head is still the run's head confirm it instead.
+        self.assertEqual(errors, [])
+        self.assertEqual(evidence['head_pulls'], [761])
+        listed = fake_github.recorded(PR_RUN)
+        listed.responses[f'repos/{REPOSITORY}/actions/runs/{PR_RUN}']['pull_requests'] = [{'number': 761}]
+        self.assertEqual(self.check(listed, PR_RUN)[1], [])
+        # A pull request whose head has moved on, or none at all, does not confirm the run.
+        for pulls in ([{'number': 761, 'head': {'sha': 'f' * 40}}], []):
+            moved = fake_github.recorded(PR_RUN)
+            moved.responses[f'repos/{REPOSITORY}/commits/{HEAD}/pulls'] = pulls
+            self.assertEqual(self.check(moved, PR_RUN)[1], ['pullRequest 761 is not a pull request of run 36333797874 (none).'])
         # The PR tier ran a subset of the merge tier's lanes on the same key.
         push = self.check(fake_github.recorded(PUSH_RUN), PUSH_RUN)[0]['plan']
         self.assertLess(set(plan['lanes']), set(push['lanes']))

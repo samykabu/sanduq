@@ -53,8 +53,11 @@ def recorded(run_id):
     folder = RECORDED / str(run_id)
     load = lambda name: json.loads((folder / name).read_text(encoding='utf-8'))  # noqa: E731
     run = load('run.json')
-    return FakeGitHub().add_run(run['repository']['full_name'], run, load('jobs.json'), load('artifacts.json'),
-                                (folder / 'artifact.zip').read_bytes(), load('commit.json'))
+    client = FakeGitHub().add_run(run['repository']['full_name'], run, load('jobs.json'), load('artifacts.json'),
+                                  (folder / 'artifact.zip').read_bytes(), load('commit.json'))
+    if (folder / 'pulls.json').is_file():
+        client.responses[f'repos/{run["repository"]["full_name"]}/commits/{run["head_sha"]}/pulls'] = load('pulls.json')
+    return client
 
 
 def plan_zip(plan):
