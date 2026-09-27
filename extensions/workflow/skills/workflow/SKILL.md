@@ -160,6 +160,28 @@ the package's pinned `requirements.txt` when missing. Never install a floating t
    cannot receive a passed receipt. Include all relevant inputs, not just the evidence file.
    A pending or conflicted issue decision blocks a passed receipt. Reread the
    issue decision ledger before completion and include it in the stage inputs.
+   Declare input roles in the optional `input_roles` map, keyed by a path listed in
+   `inputs`: `{"role": "dependency"}` when the stage's conclusion rests on the file's
+   content, or `{"role": "consulted", "because": "<one line>"}` when it was read for
+   context only (for example, "implementation target of T012; the plan does not
+   depend on its current content"). A file Scope or Plan reads is consulted only
+   when the conclusion does not depend on its current content; when in doubt it
+   is a dependency. Evidence and the stage's required spec/plan/task artifacts are
+   always dependencies. Every input keeps its hash either way. A changed dependency
+   stales the receipt and fails a later stage with
+   `UPSTREAM_INPUT_CHANGED_DURING_STAGE`; a changed consulted input is reported by
+   `next` as `advisory_drift` and must be read before relying on it. A receipt
+   without `input_roles` is read as all-dependency. When the policy sets
+   `receipts.require_input_roles: true`, every input outside `specs/<feature>/`
+   and `.specify/memory/` needs a declared role or `complete` refuses the receipt.
+   If only a completed stage's evidence file changed afterwards (a typo, a
+   clarification), do not re-record the stage and do not copy hashes forward: run
+   `workflow.py amend --feature ... --stage <stage> --evidence <path> --reason
+   "<why>" --assessment unchanged|changed` once per receipt that lists the file as
+   evidence. `unchanged` asserts the stage's conclusion and claimed checks still
+   hold; `changed` marks Verify, Review and Ready (from the amended stage on) stale
+   so they are re-recorded. Only a path listed as that receipt's evidence can be
+   amended; the gate lists every amendment for the reviewer.
 6. Run `complete --feature ... --token ... --receipt <file>`. Re-read the next stage. Continue
    automatically without asking about routine transitions. If blocked, use `pause --reason`
    and report the actual question or failure. Preserve required human review/deployment gates.
@@ -295,3 +317,9 @@ the new package's installer in an outer backup/rollback transaction. Active clai
 must be resolved first. Never use an unreviewed floating version or downgrade state.
 After reviewing an upgrade and resolving active claims, use `workflow.py migrate
 --feature ... --reason <review evidence>`. It backs up the checkpoint, preserves current historical evidence with its original dependency digest, and invalidates changed command selections. Use `--invalidate-from <stage>` for changed stage contracts. It never rewrites old receipts as new executions.
+Run `workflow.py migrate --feature ... --preview` first, on the feature's bound
+branch: it writes nothing and returns the exact `invalidated` and
+`preserved_as_historical` lists (and any blockers) the migration would record.
+Review them, then migrate; the applying call returns the saved `migrations[]`
+entry. Confirm it matches the preview, then prove continuation with the next
+permitted `claim`.

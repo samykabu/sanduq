@@ -170,6 +170,17 @@
         }
       }
     },
+    "receipts": {
+      "type": "object",
+      "description": "Optional receipt contract; an absent section or key means its default.",
+      "additionalProperties": false,
+      "properties": {
+        "require_input_roles": {
+          "type": "boolean", "default": false,
+          "description": "Require a declared input role for every receipt input outside specs/<feature>/ and .specify/memory/."
+        }
+      }
+    },
     "ci": {
       "type": "object",
       "description": "Where and how this project runs the CI workflow files Sanduq renders for it.",

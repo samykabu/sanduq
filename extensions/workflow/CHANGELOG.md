@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## Unreleased (1.6.0)
 
 - The shipped `workflow-gates.yml` gate job no longer clones every branch and
   tag in the remote just to compute one merge-base. `actions/checkout` now
@@ -15,6 +15,43 @@
   `assure_state.py` and `manual_state.py` use it to default `--base-ref` to
   the feature's actual bound target instead of always assuming the origin
   HEAD default branch (F16).
+- Receipt and checkpoint compatibility contract. `inputs` stays a list of
+  paths; `receipt-v1.schema.json` gains the optional `input_roles`,
+  `amendments`, `head`, `source_key`, `ci_evidence` and `diff_reviewed` fields
+  (and the runtime-written `stale` mark), `checkpoint-v1.schema.json` documents
+  `migrations[]`, and `policy-v1.schema.json` the optional `receipts` section.
+  A receipt without `input_roles` is read as all-dependency, so no existing
+  receipt becomes weaker. An anonymised 1.3.0 checkpoint of a finished feature
+  is read, previewed, migrated with every receipt kept byte for byte, gated
+  with the same verdict before and after, and continued with a claim in tests.
+- `workflow.py migrate --preview` returns, without writing, the exact
+  `invalidated` and `preserved_as_historical` lists, the digest changes and any
+  blockers the migration would record. The applying `migrate` shares the same
+  computation and returns the saved `migrations[]` entry, which now also records
+  the new dependency digest (`to`).
+- Declared input roles. `complete` accepts `input_roles: {path: {role:
+  dependency|consulted, because}}`, checks every key against the receipt's
+  `inputs`, requires a `because` for a consulted input and refuses a consulted
+  role on evidence or on a stage's required artifacts. Only dependencies decide
+  `receipt_current` and the upstream-change check, so a consulted file changed
+  by a later stage (the implementation-target cascade) no longer raises
+  `UPSTREAM_INPUT_CHANGED_DURING_STAGE`; its recorded hash is kept, the change
+  is logged as an advisory lineage entry and `next` reports it as
+  `advisory_drift`. A dependency, or an undeclared input, still fails.
+- New policy key `receipts.require_input_roles` (default `false`). When `true`,
+  `complete` refuses an undeclared role for any input outside `specs/<feature>/`
+  and `.specify/memory/`. It is never filled into an existing policy, so policy
+  digests do not move on upgrade; turning it on invalidates no completed receipt.
+- `workflow.py amend --feature --stage --evidence <path> --reason --assessment
+  unchanged|changed` re-hashes one evidence entry of one receipt and appends
+  `{path, old_hash, new_hash, reason, assessment, actor, at}` to its
+  `amendments[]`, after backing up the checkpoint. `changed` marks Verify,
+  Review and Ready (from the amended stage on) stale. A path that is not that
+  receipt's evidence, an unchanged file, a missing file or an active claim is
+  refused. `ci_gate.py` accepts amended receipts, lists every amendment in its
+  result and names a changed amendment when it reports a stale receipt.
+- A submitted receipt may not carry the runtime-written `amendments` or `stale`
+  fields.
 
 ## 1.5.0
 
