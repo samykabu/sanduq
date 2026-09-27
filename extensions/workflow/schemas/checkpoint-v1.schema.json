@@ -29,6 +29,16 @@
       ]
     },
     "status": {"enum": ["in-progress", "paused", "ready_to_finalize", "pr_open", "blocked", "failed"]},
+    "migrations": {
+      "description": "Reviewed migrations. workflow.py migrate --preview returns the same invalidated and preserved lists before the write.",
+      "type": "array",
+      "items": {"type": "object", "required": ["reason", "from", "at", "invalidated", "preserved_as_historical"], "properties": {
+        "reason": {"type": "string", "minLength": 1}, "from": {"type": "string"}, "to": {"type": "string"},
+        "at": {"type": "string", "format": "date-time"}, "policy_from": {"type": "string"}, "policy_to": {"type": "string"},
+        "invalidated": {"type": "array", "items": {"type": "string"}},
+        "preserved_as_historical": {"type": "array", "items": {"type": "string"}}
+      }}
+    },
     "updated_at": {"type": "string", "format": "date-time"},
     "head": {"type": "string"}
   }

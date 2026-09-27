@@ -62,6 +62,41 @@ explicit Specify claim can bind a new branch after verifying scope-source.json.
 Use `recover` with the recorded token after inspecting possible remote writes;
 use `migrate` after reviewing a dependency upgrade. Both preserve an audit trail.
 A migration backs up the checkpoint, preserves still-current historical evidence and invalidates changed command selections. Use `--invalidate-from <stage>` when an upgrade changes a stage contract.
+`migrate --preview` writes nothing and returns the exact `invalidated` and
+`preserved_as_historical` lists the migration would record, with any blockers;
+the applying `migrate` returns the saved `migrations[]` entry. Both load the
+checkpoint through the bound-branch check, so run them on the feature's branch.
+
+### Receipt contract (1.6.0)
+
+Receipts stay backward-compatible: `inputs` is still a list of paths, and every
+new field is optional (`input_roles`, `amendments`, `head`, `source_key`,
+`ci_evidence`, `diff_reviewed`; see `schemas/receipt-v1.schema.json`). Reading a
+1.3.0-1.5.x checkpoint needs no migration; continuing it after the upgrade needs
+the reviewed `migrate` above, which invalidates nothing when no semantic policy
+changed.
+
+- **Input roles.** `input_roles: {"<path>": {"role": "dependency" | "consulted",
+  "because": "<text>"}}` declares why each input is listed. Only dependencies
+  decide whether a receipt is current and whether a later stage fails with
+  `UPSTREAM_INPUT_CHANGED_DURING_STAGE`. A consulted input needs a `because`,
+  keeps its recorded hash (it is never re-stamped) and, when it changes, is
+  reported by `next` as `advisory_drift`. Evidence and a stage's required
+  artifacts cannot be consulted. A receipt without roles is read as
+  all-dependency, exactly as before. The policy key
+  `receipts.require_input_roles` (default `false`) makes `complete` refuse an
+  undeclared role for any input outside `specs/<feature>/` and
+  `.specify/memory/`. Changing it is a policy change that invalidates no
+  completed receipt; run `migrate` once to record the new policy digest.
+- **Assessed amendments.** `workflow.py amend --feature specs/<feature> --stage
+  <stage> --evidence <path> --reason "<why>" --assessment unchanged|changed`
+  re-hashes that one evidence entry of that receipt and appends
+  `{path, old_hash, new_hash, reason, assessment, actor, at}` to its
+  `amendments[]`; every other hash is kept and the checkpoint is backed up.
+  `unchanged` keeps the receipt current; `changed` marks Verify, Review and
+  Ready (from the amended stage on) stale so they are re-recorded. A path that
+  is not listed as that receipt's evidence is refused, as is an active claim.
+  `ci_gate.py` accepts amended receipts and lists each amendment in its result.
 
 Use `upgrade.py --version X.Y.Z` preview, then `--apply`, to update the workflow
 package and its integrations with outer rollback. Local staged testing supports
