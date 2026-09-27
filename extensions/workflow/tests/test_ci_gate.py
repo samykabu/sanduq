@@ -174,6 +174,78 @@ class CIGateTests(unittest.TestCase):
         with self.assertRaisesRegex(w.WorkflowError, 'unstaged.*verify.txt'):
             c.check_index(self.root, self.feature)
 
+    def test_index_preflight_reports_add_force_recipe_for_gitignored_evidence(self):
+        run = self.ready()
+        (self.root / '.gitignore').write_text('*.log\n', encoding='utf-8')
+        ignored_evidence = run.feature / 'evidence/verify.log'
+        ignored_evidence.write_text('ignored evidence', encoding='utf-8')
+        state = w.read(run.path)
+        state['receipts']['verify']['fingerprints'][self.feature + '/evidence/verify.log'] = w.fingerprint_files(
+            self.root, [self.feature + '/evidence/verify.log'])[self.feature + '/evidence/verify.log']
+        run.save(state)
+        subprocess.run(['git', 'add', '.gitignore'], cwd=self.root, check=True)
+        with self.assertRaisesRegex(w.WorkflowError, 'EVIDENCE_NOT_PORTABLE') as failure:
+            c.check_index(self.root, self.feature)
+        message = str(failure.exception)
+        self.assertIn('git add -f ' + self.feature + '/evidence/verify.log', message)
+
+    def test_index_preflight_warns_on_cross_feature_evidence_path(self):
+        run = self.ready()
+        state = w.read(run.path)
+        other = 'specs/002-other/evidence/verify.txt'
+        (self.root / other).parent.mkdir(parents=True, exist_ok=True)
+        (self.root / other).write_text('borrowed evidence', encoding='utf-8')
+        state['receipts']['verify']['fingerprints'][other] = w.fingerprint_files(self.root, [other])[other]
+        run.save(state)
+        subprocess.run(['git', 'add', '.'], cwd=self.root, check=True)
+        result = c.check_index(self.root, self.feature)
+        self.assertEqual(len(result['warnings']), 1)
+        self.assertIn('CROSS_FEATURE_EVIDENCE', result['warnings'][0])
+        self.assertIn(other, result['warnings'][0])
+
+    def test_index_preflight_has_no_warnings_when_all_evidence_is_own(self):
+        run = self.ready()
+        subprocess.run(['git', 'add', '.'], cwd=self.root, check=True)
+        self.assertEqual(c.check_index(self.root, self.feature)['warnings'], [])
+
+    def test_check_index_warnings_surface_on_gate_result(self):
+        self.policy['ci']['gate']['mode'] = 'required'
+        self.configure()
+        warning = ("CROSS_FEATURE_EVIDENCE: receipt references path(s) under another feature's "
+                   "specs/ directory: specs/002-other/evidence/verify.txt")
+        def fake_check(root, feature, policy, base, rules):
+            return {'feature': feature, 'passed': True, 'rules': ['receipts']}
+        output = io.StringIO()
+        with patch.object(c, 'resolve_features', return_value=[self.feature]), \
+             patch.object(c, 'check_index', return_value={'feature': self.feature, 'indexed_paths': 3,
+                                                          'warnings': [warning]}), \
+             patch.object(c, 'check', side_effect=fake_check), \
+             patch.object(sys, 'argv', ['ci_gate.py', '--root', str(self.root),
+                                        '--base-ref', 'HEAD', '--check-index']), \
+             contextlib.redirect_stdout(output):
+            code = c.main()
+        result = __import__('json').loads(output.getvalue())
+        self.assertEqual(code, 0)
+        self.assertIn('CROSS_FEATURE_EVIDENCE', result['features'][0]['index_warnings'][0])
+
+    def test_check_index_without_warnings_omits_the_field(self):
+        self.policy['ci']['gate']['mode'] = 'required'
+        self.configure()
+        def fake_check(root, feature, policy, base, rules):
+            return {'feature': feature, 'passed': True, 'rules': ['receipts']}
+        output = io.StringIO()
+        with patch.object(c, 'resolve_features', return_value=[self.feature]), \
+             patch.object(c, 'check_index', return_value={'feature': self.feature, 'indexed_paths': 3,
+                                                          'warnings': []}), \
+             patch.object(c, 'check', side_effect=fake_check), \
+             patch.object(sys, 'argv', ['ci_gate.py', '--root', str(self.root),
+                                        '--base-ref', 'HEAD', '--check-index']), \
+             contextlib.redirect_stdout(output):
+            code = c.main()
+        result = __import__('json').loads(output.getvalue())
+        self.assertEqual(code, 0)
+        self.assertNotIn('index_warnings', result['features'][0])
+
     def test_source_drift_reports_paths_without_contents(self):
         self.ready()
         (self.root / 'new-build.props').write_text('private contents')
