@@ -4,6 +4,12 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## Agent tools plugin 1.1.1 — 2026-09-27
+
+- Fix sandboxed Codex continuation by placing exec options before the resume subcommand (B6).
+- Add an end-to-end fake-harness test that rejects misplaced sandbox options.
+- Keep the driver and result schemas unchanged; this is an argument-order fix.
+
 ## Agent tools plugin 1.1.0 — 2026-09-26
 
 - Publish the `delegate-task` driver contract and symlink entry-point fix from

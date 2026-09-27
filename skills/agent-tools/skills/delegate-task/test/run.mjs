@@ -268,8 +268,9 @@ t('CONTRACT permission_mode_applied is stated per harness', () => {
 
 t('CONTRACT resume argv is harness-shaped', () => {
   assert.deepEqual(
-    HARNESSES.codex.args({ task: 't', model: null, perm: 'bypass', resume: 'th_1' }).slice(0, 3),
-    ['exec', 'resume', 'th_1'], 'codex resume is a subcommand, not a flag');
+    HARNESSES.codex.args({ task: 't', model: null, perm: 'bypass', resume: 'th_1' }),
+    ['exec', '--json', '--skip-git-repo-check', '--dangerously-bypass-approvals-and-sandbox', 'resume', 'th_1', 't'],
+    'codex exec options precede the resume subcommand');
   assert.ok(HARNESSES.claude.args({ task: 't', model: null, perm: 'bypass', resume: 's1' }).includes('--resume'));
   assert.ok(HARNESSES.opencode.args({ task: 't', model: null, perm: 'bypass', resume: 's1' }).includes('--session'));
   assert.ok(HARNESSES.copilot.args({ task: 't', model: null, perm: 'bypass', resume: 's1' }).includes('--resume=s1'));
@@ -1151,6 +1152,15 @@ t('E2E a session id is captured from the live stream and enables resume', () => 
   const { result } = e2e('sess', { FAKE_STREAM: CODEX_OK, FAKE_EXIT: '0' });
   assert.equal(result.session_id, 'th_e2e');
   assert.equal(result.session_capture, 'streaming');
+});
+
+t('B6 a sandboxed Codex resume delivers exec options before the subcommand', () => {
+  const parent = e2e('resume-parent', { FAKE_STREAM: CODEX_OK }, ['--sandbox']);
+  assert.equal(parent.result.status, 'successful');
+  const resumed = e2e('resume-sandbox', { FAKE_STREAM: CODEX_OK, FAKE_CODEX_RESUME_SANDBOX: '1' },
+    ['--sandbox', '--resume', parent.runId, '--model', 'test-model']);
+  assert.equal(resumed.result.status, 'successful');
+  assert.equal(resumed.result.session_id, 'th_e2e');
 });
 
 t('E2E a truncated stream is abandoned, not successful', () => {
