@@ -4,6 +4,18 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## Evidence gate — workflow 1.6.0, assure 2.2.2, user-manual 1.3.2 — 2026-09-27
+
+- Workflow 1.6.0: backward-compatible receipt contract (optional `input_roles`, `amendments`, `head`,
+  `source_key`, `ci_evidence`, `diff_reviewed`); consulted inputs report advisory drift instead of
+  staling a stage (B0, B1); `migrate --preview`; `amend --assessment unchanged|changed` for one evidence
+  entry (B2); canonical `bunyan-source-key/1` with shared fixtures and drift classification through
+  `ci.gate.affected_command` (B3); `revalidate --stage verify --check-run`, `--stage review
+  --diff-reviewed` and `--stage ready`, with CI runs accepted as Verify evidence under
+  `ci.gate.verification_check` and exact recovery recipes on gate failures (B4, G6); the gate job
+  fetches only the base branch (B5); merged pull request runs are confirmed by their head commit.
+- Assure 2.2.2 and User Manual 1.3.2: `--base-ref` defaults to the feature's recorded target branch (F16).
+
 ## Agent tools plugin 1.1.1 — 2026-09-27
 
 - Fix sandboxed Codex continuation by placing exec options before the resume subcommand (B6).

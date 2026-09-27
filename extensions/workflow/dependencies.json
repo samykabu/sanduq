@@ -9,10 +9,10 @@
   },
   "selected": {
     "qa": {
-      "assure": "2.2.1"
+      "assure": "2.2.2"
     },
     "user_manual": {
-      "user-manual": "1.3.1"
+      "user-manual": "1.3.2"
     }
   },
   "upstream_optional": {
