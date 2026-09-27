@@ -63,6 +63,19 @@ def read_plan(archive):
         return None
 
 
+def plan_attempt(artifacts, run_id, attempt, prefix=DEFAULT_ARTIFACT_PREFIX):
+    """The latest attempt at or before `attempt` that published a plan artifact, or None.
+
+    Re-running only failed jobs starts a new attempt that reuses the earlier plan job's result without publishing a new
+    artifact; the plan of that earlier attempt is the one the new attempt runs.
+    """
+    names = {item.get('name') for item in artifacts or [] if not item.get('expired')}
+    for number in range(int(attempt or 0), 0, -1):
+        if artifact_name(run_id, number, prefix) in names:
+            return number
+    return None
+
+
 def collect(client, repository, run_id, attempt=None, prefix=DEFAULT_ARTIFACT_PREFIX):
     """Read the run attempt, its jobs, its plan artifact and the plan head's tree."""
     base = f'repos/{repository}/actions/runs/{run_id}'
@@ -70,8 +83,13 @@ def collect(client, repository, run_id, attempt=None, prefix=DEFAULT_ARTIFACT_PR
     number = attempt or latest.get('run_attempt')
     run = latest if str(number) == str(latest.get('run_attempt')) else client.api(f'{base}/attempts/{number}')
     jobs = client.api(f'{base}/attempts/{number}/jobs?per_page=100').get('jobs') or []
-    name = artifact_name(run_id, number, prefix)
-    artifacts = client.api(f'{base}/artifacts?per_page=100&name={name}').get('artifacts') or []
+    artifacts = []
+    for earlier in range(int(number), 0, -1):
+        listed = client.api(f'{base}/artifacts?per_page=100&name={artifact_name(run_id, earlier, prefix)}').get('artifacts') or []
+        artifacts.extend(listed)
+        if plan_attempt(listed, run_id, earlier, prefix) == earlier:
+            break
+    name = artifact_name(run_id, plan_attempt(artifacts, run_id, number, prefix) or number, prefix)
     plan, head_tree = None, None
     found = [item for item in artifacts if item.get('name') == name and not item.get('expired')]
     if len(found) == 1:
@@ -118,7 +136,8 @@ def validate(evidence, repository, run_id, check, workflow=None, attempt=None, l
         seen = ', '.join(str(job.get('conclusion')) for job in required) or 'missing'
         errors.append(f'The {check} check of run {run.get("id")} attempt {run.get("run_attempt")} '
                       f'did not conclude success ({seen}).')
-    name = artifact_name(run.get('id'), run.get('run_attempt'), prefix)
+    planned = plan_attempt(evidence.get('artifacts'), run.get('id'), run.get('run_attempt'), prefix) or int(run.get('run_attempt') or 0)
+    name = artifact_name(run.get('id'), planned, prefix)
     found = [item for item in evidence.get('artifacts') or [] if item.get('name') == name]
     if len(found) != 1:
         errors.append(f'Run {run.get("id")} has {len(found) or "no"} artifact(s) named {name}.')
@@ -142,7 +161,7 @@ def validate(evidence, repository, run_id, check, workflow=None, attempt=None, l
     field('workflow', plan.get('workflow'), run.get('name'))
     field('event', plan.get('event'), run.get('event'))
     field('runId', plan.get('runId'), int(run.get('id') or 0))
-    field('runAttempt', plan.get('runAttempt'), int(run.get('run_attempt') or 0))
+    field('runAttempt', plan.get('runAttempt'), planned)
     head = plan.get('headSha')
     if not (isinstance(head, str) and SHA.match(head)):
         errors.append(f'headSha {json.dumps(head)} is not a 40-hex commit.')
