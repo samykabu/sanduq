@@ -178,7 +178,11 @@ with `--apply` within authorized issue work. Native sub-issues are identified by
 repository, parent, feature and task ID; retries recover lost responses. Existing
 Project mappings are adopted only after verifying native parent links. Unmapped
 children block duplicate creation. `--sync-states` updates task issue completion
-without changing the publication evidence.
+without changing the publication evidence. A task title (`T### : description`)
+over GitHub's 256-character issue title limit is shortened to the headline
+instead of rejected; the full description is always kept in the issue body.
+Shortening is deterministic, so re-syncing an unchanged task recomputes the
+same title and body and neither creates a duplicate issue nor rewrites it.
 
 The project selects Disabled, Advisory, or Required CI evidence gating and
 individual rules at initialization or later. Managed-only scope lets ordinary
@@ -191,10 +195,16 @@ loads in an authenticated private-repository view.
 Before publication, run `ci_gate.py --feature specs/<feature> --base-ref <target-sha>
 --check-index` after staging reviewed evidence, then repeat the gate in a clean
 checkout of the candidate commit. Missing/unstaged dependencies are reported by
-path; the command never stages files. Target-branch source changes invalidate old
-verification even when Git merges cleanly. Configure `workflow-evidence` as a
-required branch check only when this project has deliberately selected Required
-mode; otherwise leave its branch rule optional.
+path; the command never stages files. When a missing path is one Git itself
+ignores (e.g. a `*.log` match), the report names the exact `git add -f <path>`
+recipe to recover it. It also warns, without failing the check, when a
+receipt's recorded evidence references a path under another feature's
+`specs/` directory (surfaced as `index_warnings` on that feature's gate
+result) -- a likely copy/paste or fixture mistake worth reviewing before
+publication. Target-branch source changes invalidate old verification even
+when Git merges cleanly. Configure `workflow-evidence` as a required branch
+check only when this project has deliberately selected Required mode;
+otherwise leave its branch rule optional.
 
 UTF-8 text fingerprints normalize CRLF across checkout platforms. Explicit Git
 `-text`, SQL, NUL-bearing and non-UTF-8 files remain byte exact; lone CR is not

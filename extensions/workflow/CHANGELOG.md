@@ -1,6 +1,21 @@
 # Changelog
 
-## 1.6.0
+## Unreleased (1.6.1)
+
+- `task_issues.py` no longer rejects a task whose title (`T### : description`)
+  would exceed GitHub's 256-character issue title limit. The title is
+  shortened to the headline (truncated to fit, with a trailing `...`) while
+  the issue body still carries the full, untruncated description. Shortening
+  is a pure function of the task ID and description, so a re-sync recomputes
+  the same title and body every time and neither creates a duplicate issue
+  nor keeps rewriting the body (F14).
+- `ci_gate.py --check-index` now reports, for each evidence path missing from
+  the Git index that Git itself ignores (e.g. a `*.log` match), the exact
+  `git add -f <path>` recipe to recover it, alongside the existing
+  `not_in_index`/`unstaged` report. It also warns (without failing the check)
+  when a receipt's recorded fingerprints reference a path under another
+  feature's `specs/` directory, surfaced as `index_warnings` on the gate
+  result for that feature (F17).
 
 - The shipped `workflow-gates.yml` gate job no longer clones every branch and
   tag in the remote just to compute one merge-base. `actions/checkout` now

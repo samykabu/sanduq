@@ -120,6 +120,36 @@ class TaskIssueTests(unittest.TestCase):
         with self.assertRaisesRegex(t.WorkflowError,'UNMAPPED_EXISTING_TASK'):t.sync(self.root,feature,10,{},True,self.gh)
         self.assertEqual(self.gh.writes,[])
 
+    def test_issue_title_deterministic_and_within_github_limit(self):
+        self.assertEqual(t.issue_title('T001', 'Short task'), 'T001: Short task')
+        long_description = 'B' * 500
+        title = t.issue_title('T001', long_description)
+        self.assertLessEqual(len(title), 256)
+        self.assertTrue(title.endswith('...'))
+        self.assertEqual(title, t.issue_title('T001', long_description))
+
+    def test_long_task_title_is_shortened_with_full_text_kept_in_body(self):
+        feature = self.feature('001-a', 10)
+        long_description = 'A' * 300
+        (self.root / feature / 'tasks.md').write_text('- [ ] T001 ' + long_description + '\n')
+        result = t.sync(self.root, feature, 10, {}, True, self.gh)
+        number = result['tasks']['T001']['number']
+        issue = self.gh.issues[number]
+        self.assertLessEqual(len(issue['title']), 256)
+        self.assertTrue(issue['title'].startswith('T001: '))
+        self.assertTrue(issue['title'].endswith('...'))
+        self.assertIn(long_description, issue['body'])
+        # A re-sync of the unchanged task must not create a duplicate issue,
+        # relink it, or keep rewriting the (already up to date) title/body.
+        writes_before = len(self.gh.writes)
+        issues_before = len(self.gh.issues)
+        rerun = t.sync(self.root, feature, 10, {}, True, self.gh)
+        self.assertEqual(rerun['tasks']['T001']['number'], number)
+        self.assertEqual(len(self.gh.issues), issues_before)
+        self.assertEqual(len(self.gh.writes), writes_before)
+        self.assertEqual(self.gh.issues[number]['title'], issue['title'])
+        self.assertEqual(self.gh.issues[number]['body'], issue['body'])
+
     def test_state_sync_closes_reopens_and_preserves_mapping(self):
         feature=self.feature('001-a',10);result=t.sync(self.root,feature,10,{},True,self.gh)
         before=(self.root/feature/'workflow/task-issues.json').read_bytes()
