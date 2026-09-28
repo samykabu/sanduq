@@ -13,6 +13,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import uuid
 import zipfile
 from pathlib import Path
@@ -24,7 +25,7 @@ from workflow import load_policy, read, write, require, inside, registry, doctor
 from reconcile import reconcile
 from delegate_dispatch import maintenance_preflight
 from delegation import is_junction, is_link
-from hosts import ALIASES, installed_hosts, register_hosts, skill_errors, skill_report
+from hosts import ALIASES, HOST_SKILLS, installed_hosts, register_hosts, skill_errors, skill_report
 
 PACKAGE = Path(__file__).resolve().parents[1]
 DIRECTORIES = ('.specify/extensions', '.specify/presets')
@@ -338,6 +339,10 @@ def ci_matches_managed(content, asset, receipt):
 
 
 ALIAS_AGENTS = ('.agents', '.claude')
+# The host whose Spec Kit integration renders each alias folder.
+ALIAS_HOSTS = {'.agents': 'codex', '.claude': 'claude'}
+# Local state that never feeds a Spec Kit render and may be large or locked.
+RENDER_SKIP = ('.specify/workflow/backups', '.specify/workflow/runtime')
 
 
 def alias_targets(root, package_root):
@@ -354,71 +359,109 @@ def alias_targets(root, package_root):
             yield name, source, accepted, destination
 
 
-def generated_by_spec_kit(root, name, content):
-    """True when ``content`` is the skill Spec Kit renders for an installed extension's command.
+def content_hash(content):
+    """SHA-256 of the whole file with CRLF normalised to LF, as git may check it out either way."""
+    return hashlib.sha256(content.replace(b'\r\n', b'\n')).hexdigest()
 
-    Spec Kit writes ``name: <skill>`` and ``metadata.source: <extension>:<file>``
-    in the frontmatter of every extension skill it registers, and rewrites the
-    file whenever it registers that extension for a host again. Such a file is
-    Spec Kit's output for this alias name (for example the upstream Bridge
-    executor after a bare ``specify integration use``), not a local edit, so it
-    is replaced; the transaction snapshot keeps a copy.
+
+def alias_recognised(content, source, accepted, previous):
+    """True when ``content`` (the whole file) is Sanduq's own alias content.
+
+    That is: absent, the packaged alias, an accepted legacy alias hash, or the
+    hash the last install recorded in install-lock.json. Frontmatter alone
+    never decides: a body edited under unchanged frontmatter has another hash.
     """
-    text = content.decode('utf-8-sig', errors='replace').replace('\r\n', '\n')
-    if not text.startswith('---\n') or '\n---' not in text[4:]:
-        return False
+    if content is None:
+        return True
+    value = content_hash(content)
+    return value == content_hash(source) or value in accepted or value == previous
+
+
+def spec_kit_render(root, host, runner=command):
+    """Hashes of the alias files Spec Kit generates for ``host`` from this project's current sources.
+
+    The project's ``.specify`` folder is copied into an empty temporary project
+    and the public ``specify integration use <host>`` command renders every
+    enabled extension's skills there, exactly as it does in the project. The
+    project itself is never touched. Any failure yields no hashes, so nothing
+    is then recognised as generated.
+    """
+    if host not in installed_hosts(root):
+        return {}
+    skip = {(root / path).resolve() for path in RENDER_SKIP}
+
+    def ignore(directory, names):
+        here = Path(directory).resolve()
+        return [name for name in names if here / name in skip]
+    temp = Path(tempfile.mkdtemp(prefix='sanduq-alias-render-'))
     try:
-        front = yaml.safe_load(text[4:text.index('\n---', 4)]) or {}
-    except yaml.YAMLError:
-        return False
-    if not isinstance(front, dict) or front.get('name') != name:
-        return False
-    metadata = front.get('metadata') if isinstance(front.get('metadata'), dict) else {}
-    extension = str(metadata.get('source', '')).split(':', 1)[0]
-    if not extension or extension not in registry(root):
-        return False
-    manifest = root / '.specify/extensions' / extension / 'extension.yml'
-    try:
-        document = yaml.safe_load(manifest.read_text(encoding='utf-8-sig')) or {}
-        commands = [item for item in (document.get('provides') or {}).get('commands') or [] if isinstance(item, dict)]
-    except (OSError, yaml.YAMLError, AttributeError):
-        return False
-    names = [item.get('name') for item in commands] + [alias for item in commands for alias in item.get('aliases') or []]
-    return name in {str(item).replace('.', '-') for item in names}
+        shutil.copytree(root / '.specify', temp / '.specify', symlinks=True, ignore=ignore)
+        runner(temp, ['specify', 'integration', 'use', host], [])
+        found = {}
+        for name in ALIASES:
+            path = temp / HOST_SKILLS[host] / name / 'SKILL.md'
+            if path.is_file():
+                found[name] = content_hash(path.read_bytes())
+        return found
+    except (OSError, WorkflowError, subprocess.SubprocessError, shutil.Error):
+        return {}
+    finally:
+        shutil.rmtree(temp, ignore_errors=True)
 
 
-def alias_local_edit(content, source, accepted, previous, root=None, name=None):
-    """True when ``content`` is neither the packaged alias nor content Sanduq may replace."""
-    if content is None or content == source:
-        return False
-    value = hashlib.sha256(content.replace(b'\r\n', b'\n')).hexdigest()
-    if value in accepted or previous == value:
-        return False
-    return not (root is not None and generated_by_spec_kit(root, name, content))
+def review_aliases(root, package_root, runner=command):
+    """Judge every existing alias file before anything changes.
 
-
-def alias_edit_errors(root, package_root):
-    """Aliases a user has edited, found before anything is changed."""
+    Returns ``{'generated': {key: hash}, 'unrecognized': {key: hash}}``. An
+    alias Sanduq recognises as its own is in neither. ``generated`` holds files
+    whose full content is exactly what Spec Kit renders for that command from
+    the current sources (for example the upstream Bridge executor a bare
+    ``specify integration use`` wrote). ``unrecognized`` holds everything
+    else: a local edit. Spec Kit runs only when some alias is not recognised.
+    """
     previous = read(root / '.specify/workflow/install-lock.json', {}).get('aliases', {})
-    errors = []
+    renders, review = {}, {'generated': {}, 'unrecognized': {}}
     for name, source, accepted, destination in alias_targets(root, package_root):
         key = destination.relative_to(root).as_posix()
         content = destination.read_bytes() if destination.is_file() else None
-        if alias_local_edit(content, source, accepted, previous.get(key), root, name):
-            errors.append('ALIAS_HAS_LOCAL_EDITS: ' + key + '; migrate this customization into Sanduq before replacement')
-    return errors
+        if alias_recognised(content, source, accepted, previous.get(key)):
+            continue
+        value = content_hash(content)
+        host = ALIAS_HOSTS[key.split('/', 1)[0]]
+        if host not in renders:
+            renders[host] = spec_kit_render(root, host, runner)
+        review['generated' if renders[host].get(name) == value else 'unrecognized'][key] = value
+    return review
 
 
-def install_aliases(root, package_root, baseline=None):
+def local_edit_error(key):
+    return ('ALIAS_HAS_LOCAL_EDITS: ' + key + '; migrate this customization into Sanduq, or rerun with '
+            '--replace-unrecognized-aliases to back it up and replace it')
+
+
+def alias_edit_errors(root, package_root, runner=command, review=None):
+    """Aliases a user has edited, found before anything is changed."""
+    review = review_aliases(root, package_root, runner) if review is None else review
+    return [local_edit_error(key) for key in sorted(review['unrecognized'])]
+
+
+def install_aliases(root, package_root, baseline=None, generated=None, replace_unrecognized=False, backup=None,
+                    replaced=None):
     """Write the managed aliases into every host skill folder.
 
     ``baseline`` is the transaction's snapshot. Spec Kit regenerates an alias
     from upstream sources whenever it registers extensions for a host, so the
-    content judged for local edits is what the file held before the
-    transaction, not what Spec Kit just wrote over it. A file Spec Kit created
-    during the transaction is never a local edit.
+    content judged is what the file held before the transaction: whatever our
+    own ``specify`` call wrote over it (or created) during this transaction is
+    replaced whenever that earlier content is. The earlier content is replaced
+    silently only when it is Sanduq's own alias content or its hash is in
+    ``generated`` (Spec Kit's own render, from ``review_aliases`` before the
+    transaction). Anything else is a local edit and is refused, unless
+    ``replace_unrecognized`` is set: the file is then copied into ``backup``
+    first and recorded in ``replaced``.
     """
     previous = read(root / '.specify/workflow/install-lock.json', {}).get('aliases', {})
+    generated = generated or {}
     inventory = {}
     for name, source, accepted, destination in alias_targets(root, package_root):
         key = destination.relative_to(root).as_posix()
@@ -426,16 +469,23 @@ def install_aliases(root, package_root, baseline=None):
         if baseline is not None:
             original = baseline.get(key)
             content = original if isinstance(original, bytes) else None if original is None else content
-        require(not alias_local_edit(content, source, accepted, previous.get(key), root, name),
-                'ALIAS_HAS_LOCAL_EDITS: ' + name + '; migrate this customization into Sanduq before replacement')
+        if not alias_recognised(content, source, accepted, previous.get(key)) and \
+                generated.get(key) != content_hash(content):
+            require(replace_unrecognized and backup is not None, local_edit_error(key))
+            saved = Path(backup) / 'unrecognized-aliases' / key
+            saved.parent.mkdir(parents=True, exist_ok=True)
+            saved.write_bytes(content)
+            if replaced is not None:
+                replaced.append({'path': key, 'backup': str(saved)})
         destination.parent.mkdir(parents=True, exist_ok=True)
         if destination.is_symlink(): destination.unlink()  # Never patch its upstream command target.
         destination.write_bytes(source)
-        inventory[key] = hashlib.sha256(source.replace(b'\r\n', b'\n')).hexdigest()
+        inventory[key] = content_hash(source)
     return inventory
 
 
-def install(root, apply=False, packages=None, package_root=PACKAGE, runner=command, upgrade_owner=None, preserve_ci=False):
+def install(root, apply=False, packages=None, package_root=PACKAGE, runner=command, upgrade_owner=None, preserve_ci=False,
+            replace_unrecognized_aliases=False):
     root = root.resolve(); policy = load_policy(root)
     lock = read(package_root / 'dependencies.json')
     require(lock and lock.get('repository') == 'https://github.com/samykabu/sanduq', 'INVALID_DEPENDENCY_LOCK')
@@ -479,8 +529,14 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                         're_register': [['specify', 'integration', 'use', host] for host in hosts if host != default_host] +
                                        ([['specify', 'integration', 'use', default_host]] if len(hosts) > 1 else [])},
               'gate': sanduq_ci.gate_config(policy['ci']),
-              'preserve_ci_requested': preserve_ci, 'preserved_ci': None}
-    if not apply: return result
+              'preserve_ci_requested': preserve_ci, 'preserved_ci': None,
+              'replace_unrecognized_aliases_requested': replace_unrecognized_aliases}
+    if not apply:
+        review = review_aliases(root, package_root, runner)
+        result['aliases'] = {'generated_by_spec_kit': sorted(review['generated']),
+                             'unrecognized': sorted(review['unrecognized']),
+                             'blockers': [] if replace_unrecognized_aliases else alias_edit_errors(root, package_root, review=review)}
+        return result
     upgrade = read(root / '.specify/workflow/runtime/upgrade.lock', {})
     require(not upgrade or upgrade.get('pid') == upgrade_owner, 'WORKFLOW_UPGRADE_IN_PROGRESS')
     bridge = read(root / '.specify/superpowers-handoff.json', {})
@@ -495,6 +551,12 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
             require(not read(path, {}).get('active'), 'ACTIVE_STAGE_MUST_BE_RESOLVED: ' + str(path))
         # A rollback restores every delegation ledger, so no attempt may be live.
         delegation_preflight(root)
+        # Judge every alias against the sources as they are now, before any
+        # Spec Kit command changes them; a local edit stops here untouched.
+        review = review_aliases(root, package_root, runner)
+        if not replace_unrecognized_aliases:
+            errors = alias_edit_errors(root, package_root, review=review)
+            require(not errors, '; '.join(errors))
         ensure_local_excludes(root)
         backup = root / '.specify/workflow/backups/installs' / uuid.uuid4().hex
         before = snapshot(root, backup); log = []
@@ -512,7 +574,11 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                     runner(root, ['specify','preset','remove',operation['name']], log)
                 runner(root, ['specify','preset','add','--dev',operation['source'],'--priority',operation['priority']], log)
             result['hosts']['re_registered'] = register_hosts(root, runner, log, default_host, hosts)
-            alias_hashes = install_aliases(root, package_root, baseline=before)
+            replaced = []
+            alias_hashes = install_aliases(root, package_root, baseline=before, generated=review['generated'],
+                                           replace_unrecognized=replace_unrecognized_aliases, backup=backup,
+                                           replaced=replaced)
+            result['replaced_unrecognized_aliases'] = replaced
             reconcile(root, apply=True)
             host_errors = skill_errors(skill_report(root, hosts))
             # Nothing may rewrite an alias after it is written (Spec Kit ran above).
@@ -594,9 +660,12 @@ if __name__ == '__main__':
     parser.add_argument('--packages', type=Path, help='Extracted, verified local package directory for offline development')
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--preserve-ci', action='store_true', help='Keep the existing project workflow-gates CI file byte-for-byte')
+    parser.add_argument('--replace-unrecognized-aliases', action='store_true',
+                        help='Back up, then replace, a managed alias file whose content Sanduq does not recognise')
     parser.add_argument('--upgrade-owner', type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
     try:
-        print(json.dumps(install(args.root,args.apply,args.packages,upgrade_owner=args.upgrade_owner,preserve_ci=args.preserve_ci),indent=2))
+        print(json.dumps(install(args.root,args.apply,args.packages,upgrade_owner=args.upgrade_owner,preserve_ci=args.preserve_ci,
+                                 replace_unrecognized_aliases=args.replace_unrecognized_aliases),indent=2))
     except (WorkflowError, ValueError, OSError, KeyError) as exc:
         print(json.dumps({'ok':False,'error':str(exc)})); sys.exit(1)

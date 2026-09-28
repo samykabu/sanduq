@@ -1765,6 +1765,8 @@ def main():
     host_parser.add_argument('--use', choices=['codex', 'claude'],
                              help='Make this installed integration the default; omit to report host status')
     host_parser.add_argument('--preview', action='store_true', help='Report the switch plan without changing anything')
+    host_parser.add_argument('--replace-unrecognized-aliases', action='store_true',
+                             help='Back up, then replace, a managed alias file whose content Sanduq does not recognise')
     doctor_parser = sub.add_parser('doctor')
     doctor_parser.add_argument('--project', action='store_true', help='Also validate configured board identities, phase/status mapping and required sync')
     sub.add_parser('project-defaults')
@@ -1867,7 +1869,8 @@ def main():
         elif args.action == 'host':
             import hosts
             if args.use:
-                result = hosts.switch(root, args.use, preview=args.preview)
+                result = hosts.switch(root, args.use, preview=args.preview,
+                                      replace_unrecognized_aliases=args.replace_unrecognized_aliases)
                 if args.preview and not result['can_apply']:
                     result['ok'] = False
             else:

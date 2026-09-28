@@ -45,17 +45,29 @@ class FakeSpecify:
     def __init__(self, test):
         self.test = test
         self.calls = []
+        self.renders = []  # Temporary projects Spec Kit rendered skills into
+        self.cwd = None
+        self.bridge = UPSTREAM_BRIDGE  # What registering the upstream Bridge writes
 
     @property
     def root(self):
-        return self.test.root
+        return self.cwd or self.test.root
 
     def __call__(self, root, args, log):
+        if Path(root).resolve() != self.test.root.resolve():
+            # Sanduq's render of the expected skills, in a temporary copy.
+            self.renders.append(list(args))
+            self.cwd = Path(root)
+            try:
+                return self.use(args[3])
+            finally:
+                self.cwd = None
         self.calls.append(list(args))
         log.append({'args': list(args), 'exit_code': 0, 'stdout': '', 'stderr': ''})
         if args[0] == sys.executable:
             owner = int(args[args.index('--upgrade-owner') + 1])
-            installer.install(root, apply=True, package_root=self.test.package, runner=self, upgrade_owner=owner)
+            installer.install(root, apply=True, package_root=self.test.package, runner=self, upgrade_owner=owner,
+                              replace_unrecognized_aliases='--replace-unrecognized-aliases' in args)
         elif args[1:3] == ['extension', 'add']:
             self.extension_add(args)
         elif args[1:3] == ['integration', 'use']:
@@ -102,7 +114,7 @@ class FakeSpecify:
             if name == 'speckit-superpowers-bridge':
                 path = self.root / hosts.HOST_SKILLS[host] / 'speckit-superpowers-bridge/SKILL.md'
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_bytes(UPSTREAM_BRIDGE)
+                path.write_bytes(self.bridge)
 
 
 def write_manifest(root, name, version, repository=SANDUQ):
@@ -261,7 +273,8 @@ class SwitchTests(HostTests):
 
     def test_switch_re_registers_a_host_an_older_upgrade_emptied(self):
         shutil.rmtree(self.root / '.agents/skills/speckit-assure-analyze')
-        plan = hosts.switch(self.root, 'claude', preview=True, package_root=self.package)
+        plan = hosts.switch(self.root, 'claude', preview=True, package_root=self.package,
+                            runner=self.specify)
         self.assertEqual(plan['skills_before']['missing'], {'codex': ['speckit-assure-analyze']})
         self.assertEqual(plan['commands'], [['specify', 'integration', 'use', h] for h in ('claude', 'codex', 'claude')])
         result = hosts.switch(self.root, 'claude', runner=self.specify, package_root=self.package)
@@ -315,7 +328,8 @@ class SwitchTests(HostTests):
         self.policy['delegation']['enabled'] = True
         self.policy['delegation']['models']['claude']['high'] = 'gpt-6-astra'
         self.configure()
-        plan = hosts.switch(self.root, 'claude', preview=True, package_root=self.package)
+        plan = hosts.switch(self.root, 'claude', preview=True, package_root=self.package,
+                            runner=self.specify)
         self.assertIn('delegation.models.claude.high is "gpt-6-astra", a codex model: set a claude model',
                       plan['delegation']['required_changes'])
         self.assertFalse(plan['can_apply'])
@@ -323,14 +337,16 @@ class SwitchTests(HostTests):
     def test_disabled_delegation_only_advises(self):
         self.policy['delegation']['models']['claude']['high'] = 'gpt-6-astra'
         self.configure()
-        plan = hosts.switch(self.root, 'claude', preview=True, package_root=self.package)
+        plan = hosts.switch(self.root, 'claude', preview=True, package_root=self.package,
+                            runner=self.specify)
         self.assertEqual(plan['delegation']['required_changes'], [])
         self.assertTrue(plan['delegation']['advisories'])
 
     def test_switch_to_a_host_that_is_not_installed_is_refused(self):
         w.write(self.root / '.specify/integration.json', {'installed_integrations': ['codex'],
                                                           'default_integration': 'codex'})
-        plan = hosts.switch(self.root, 'claude', preview=True, package_root=self.package)
+        plan = hosts.switch(self.root, 'claude', preview=True, package_root=self.package,
+                            runner=self.specify)
         self.assertIn('HOST_NOT_INSTALLED', ' '.join(plan['blockers']))
 
     def test_upstream_bridge_left_by_a_bare_integration_use_is_replaced(self):
@@ -341,7 +357,8 @@ class SwitchTests(HostTests):
         self.assertEqual(alias.read_bytes(), UPSTREAM_BRIDGE)
         self.assertIn('ALIAS_NOT_RESTORED: .claude/skills/speckit-superpowers-bridge/SKILL.md',
                       hosts.status(self.root, self.package)['aliases_not_restored'])
-        plan = hosts.switch(self.root, 'claude', preview=True, package_root=self.package)
+        plan = hosts.switch(self.root, 'claude', preview=True, package_root=self.package,
+                            runner=self.specify)
         self.assertTrue(plan['can_apply'], plan['blockers'])
         hosts.switch(self.root, 'claude', runner=self.specify, package_root=self.package)
         self.assert_complete()
@@ -349,8 +366,114 @@ class SwitchTests(HostTests):
     def test_hand_edited_upstream_bridge_is_still_a_local_edit(self):
         alias = self.root / '.claude/skills/speckit-superpowers-bridge/SKILL.md'
         alias.write_bytes(UPSTREAM_BRIDGE.replace(b'source: speckit-superpowers-bridge:', b'source: mine:'))
-        plan = hosts.switch(self.root, 'claude', preview=True, package_root=self.package)
+        plan = hosts.switch(self.root, 'claude', preview=True, package_root=self.package,
+                            runner=self.specify)
         self.assertIn('ALIAS_HAS_LOCAL_EDITS: .claude/skills/speckit-superpowers-bridge/SKILL.md', ' '.join(plan['blockers']))
+
+    def bunyan_alias(self):
+        """The review's scenario: upstream Bridge frontmatter, local instructions appended below it."""
+        alias = self.root / '.claude/skills/speckit-superpowers-bridge/SKILL.md'
+        alias.write_bytes(UPSTREAM_BRIDGE + b'\n## Bunyan local instructions\n\nRun the Bunyan gates first.\n')
+        return alias
+
+    def test_body_edit_under_generated_frontmatter_is_refused(self):
+        alias = self.bunyan_alias()
+        edited = alias.read_bytes()
+        key = '.claude/skills/speckit-superpowers-bridge/SKILL.md'
+        plan = hosts.switch(self.root, 'claude', preview=True, package_root=self.package, runner=self.specify)
+        self.assertIn('ALIAS_HAS_LOCAL_EDITS: ' + key, ' '.join(plan['blockers']))
+        self.assertEqual(plan['aliases_unrecognized'], [key])
+        self.assertTrue(self.specify.renders)  # Spec Kit's own render was compared, and differs
+        before = tree(self.root)
+        with self.assertRaisesRegex(w.WorkflowError, 'ALIAS_HAS_LOCAL_EDITS: ' + re.escape(key)):
+            hosts.switch(self.root, 'claude', runner=self.specify, package_root=self.package)
+        self.assertEqual(tree(self.root), before)
+        with self.assertRaisesRegex(w.WorkflowError, 'ALIAS_HAS_LOCAL_EDITS: ' + re.escape(key)):
+            self.install()
+        self.assertEqual(alias.read_bytes(), edited)
+        self.assertEqual(tree(self.root), before)
+
+    def test_opt_in_backs_up_and_replaces_an_unrecognized_alias_on_switch(self):
+        edited = self.bunyan_alias().read_bytes()
+        plan = hosts.switch(self.root, 'claude', preview=True, package_root=self.package, runner=self.specify,
+                            replace_unrecognized_aliases=True)
+        self.assertTrue(plan['can_apply'], plan['blockers'])
+        result = hosts.switch(self.root, 'claude', runner=self.specify, package_root=self.package,
+                              replace_unrecognized_aliases=True)
+        [entry] = result['replaced_unrecognized_aliases']
+        self.assertEqual(entry['path'], '.claude/skills/speckit-superpowers-bridge/SKILL.md')
+        self.assertTrue(Path(entry['backup']).is_relative_to(Path(result['backup'])))
+        self.assertEqual(Path(entry['backup']).read_bytes(), edited)
+        self.assert_complete()
+
+    def test_opt_in_backs_up_and_replaces_an_unrecognized_alias_on_install(self):
+        edited = self.bunyan_alias().read_bytes()
+        with patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}):
+            result = installer.install(self.root, apply=True, package_root=self.package, runner=self.specify,
+                                       replace_unrecognized_aliases=True)
+        [entry] = result['replaced_unrecognized_aliases']
+        self.assertEqual(entry['path'], '.claude/skills/speckit-superpowers-bridge/SKILL.md')
+        self.assertTrue(Path(entry['backup']).is_relative_to(Path(result['backup'])))
+        self.assertEqual(Path(entry['backup']).read_bytes(), edited)
+        self.assert_complete()
+
+    def test_opt_in_passes_through_upgrade(self):
+        edited = self.bunyan_alias().read_bytes()
+        packages = self.package / 'packages'
+        (packages / 'workflow').mkdir(parents=True)
+        (packages / 'workflow/extension.yml').write_text(yaml.safe_dump({'extension': {
+            'id': 'workflow', 'version': '1.1.1', 'repository': SANDUQ}}), encoding='utf-8')
+        alias = self.root / '.claude/skills/speckit-superpowers-bridge/SKILL.md'
+        with patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}):
+            with self.assertRaisesRegex(w.WorkflowError, 'ALIAS_HAS_LOCAL_EDITS'):
+                upgrade.upgrade(self.root, '1.1.1', apply=True, packages=packages, runner=self.specify)
+            self.assertEqual(alias.read_bytes(), edited)
+            upgrade.upgrade(self.root, '1.1.1', apply=True, packages=packages, runner=self.specify,
+                            replace_unrecognized_aliases=True)
+        [install] = [c for c in self.specify.calls[-12:] if c[0] == sys.executable][-1:]
+        self.assertIn('--replace-unrecognized-aliases', install)
+        saved = list((self.root / '.specify/workflow/backups/installs').rglob('SKILL.md'))
+        self.assertEqual([p.read_bytes() for p in saved], [edited])
+        self.assert_complete()
+
+    def test_content_spec_kit_writes_during_the_transaction_is_replaced(self):
+        # Before the transaction the alias is the managed one; this transaction's
+        # own `specify integration use` writes content Sanduq cannot recognise.
+        self.specify.bridge = UPSTREAM_BRIDGE + b'\nSome newer upstream wording.\n'
+        result = hosts.switch(self.root, 'claude', runner=self.specify, package_root=self.package)
+        self.assertEqual(result['replaced_unrecognized_aliases'], [])
+        self.assertEqual(self.specify.renders, [])  # judged by the snapshot, not by a render
+        self.assert_complete()
+        self.install()
+        self.assert_complete()
+
+    def test_managed_legacy_and_lock_hashes_need_no_render(self):
+        agents = self.root / '.agents/skills/speckit-superpowers-bridge/SKILL.md'
+        claude = self.root / '.claude/skills/speckit-superpowers-bridge/SKILL.md'
+        scope = self.root / '.claude/skills/speckit-scope/SKILL.md'
+        legacy = b'Legacy bridge alias'
+        w.write(self.package / 'assets/legacy-bridge-alias-hashes.json', [installer.content_hash(legacy)])
+        agents.write_bytes(legacy)
+        recorded = b'Alias an earlier install wrote'
+        claude.write_bytes(recorded)
+        lock = w.read(self.root / '.specify/workflow/install-lock.json')
+        lock['aliases']['.claude/skills/speckit-superpowers-bridge/SKILL.md'] = installer.content_hash(recorded)
+        w.write(self.root / '.specify/workflow/install-lock.json', lock)
+        scope.write_bytes(scope.read_bytes().replace(b'\n', b'\r\n'))  # the managed source, CRLF checkout
+        review = installer.review_aliases(self.root, self.package, self.specify)
+        self.assertEqual(review, {'generated': {}, 'unrecognized': {}})
+        self.assertEqual(self.specify.renders, [])
+        self.install()
+        self.assert_complete()
+
+    def test_upstream_bridge_generated_with_other_sources_is_not_recognised(self):
+        # The exact upstream text only counts while Spec Kit still renders it
+        # from the installed sources; a render that differs leaves it a local edit.
+        self.specify.use('claude')
+        self.specify.bridge = UPSTREAM_BRIDGE.replace(b'run every task now', b'run the next task')
+        plan = hosts.switch(self.root, 'claude', preview=True, package_root=self.package, runner=self.specify)
+        self.assertIn('ALIAS_HAS_LOCAL_EDITS: .claude/skills/speckit-superpowers-bridge/SKILL.md',
+                      ' '.join(plan['blockers']))
 
     def test_edited_alias_blocks_switch_before_anything_changes(self):
         alias = self.root / '.agents/skills/speckit-scope/SKILL.md'
