@@ -1,9 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "workflow": "1.6.4",
-    "user-manual": "1.3.3"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Preview artifact retention (#47): user-manual-preview.yml keeps retention-days: 2 instead of 14, so the Cloudflare preview workflow's single read is not blocked by a filled artifact quota. Workflow 1.6.4 pins the released User Manual 1.3.3; Workflow itself is unchanged. Assure unchanged since 2.2.2. Publish only after main CI and downloaded asset verification pass."
 }
