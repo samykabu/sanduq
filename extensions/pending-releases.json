@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "B14 F14/F17 (#38), partial re-run plan fix (#39), review round 1 fixes (#40): complete ci_evidence record, gate always re-reads CI evidence when ci.gate.verification_check is set, diff-review hash binding, template gate job permissions. Assure and User Manual unchanged since 2.2.2/1.3.2. Publish only after main CI and downloaded asset verification pass."
+  "versions": {
+    "workflow": "1.6.2"
+  },
+  "status": "ready",
+  "note": "Lossless host switching (#43): installer/upgrader keep every installed host's skills and managed aliases, new workflow.py host --use/--preview command, doctor warns on incomplete non-default hosts. Assure and User Manual unchanged since 2.2.2/1.3.2. Publish only after main CI and downloaded asset verification pass."
 }

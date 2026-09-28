@@ -4,6 +4,27 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## Lossless host switching — workflow 1.6.2 — 2026-09-28
+
+- Installs and upgrades keep every installed host's skills and managed aliases.
+  Spec Kit registers extension skills only for the default integration, so
+  `specify extension add --force` removed the other host's skills on every
+  `install.py`/`upgrade.py --apply`; the installer now re-registers each other
+  Codex or Claude host, restores its integration files byte for byte,
+  re-applies the managed aliases to every host folder, and rolls back on
+  `HOST_SKILLS_MISSING`, `HOST_OVERLAY_MISSING` or `ALIAS_NOT_RESTORED`.
+- Managed aliases are judged for local edits by content before the
+  transaction, so Bridge content Spec Kit regenerates is replaced instead of
+  failing with `ALIAS_HAS_LOCAL_EDITS`, while a real local edit is still
+  refused before anything changes.
+- New `workflow.py host [--use codex|claude] [--preview]` reports host status
+  or switches the default host, re-registering incomplete hosts, restoring
+  aliases, installing delegate-task for the new host when enabled, and
+  rolling back on failure; it refuses (and `--preview` reports) delegation
+  policy that cannot route to the new host.
+- Doctor warns when a non-default host is missing managed skills or aliases,
+  naming `workflow.py host --use <default>` as the repair.
+
 ## Evidence gate fixes — workflow 1.6.1 — 2026-09-28
 
 - A Verify receipt's `ci_evidence` is current only when it is the complete record
