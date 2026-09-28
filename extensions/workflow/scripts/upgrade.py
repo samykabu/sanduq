@@ -16,7 +16,8 @@ from install import command, delegation_preflight, managed_files, restore, snaps
 REPOSITORY = 'https://github.com/samykabu/sanduq'
 
 
-def upgrade(root, version, apply=False, packages=None, runner=command, preserve_ci=False):
+def upgrade(root, version, apply=False, packages=None, runner=command, preserve_ci=False,
+            replace_unrecognized_aliases=False):
     root = root.resolve()
     require(re.fullmatch(r'\d+\.\d+\.\d+', version), 'EXPLICIT_RELEASE_VERSION_REQUIRED')
     current = registry(root).get('workflow', {})
@@ -31,7 +32,8 @@ def upgrade(root, version, apply=False, packages=None, runner=command, preserve_
         args = ['specify', 'extension', 'add', 'workflow', '--from', url, '--force']
     result = {'applied': False, 'from': current['version'], 'to': version, 'source': url,
               'distribution': 'local-development' if packages else 'release', 'command': args,
-              'preserve_ci_requested': preserve_ci, 'preserved_ci': None}
+              'preserve_ci_requested': preserve_ci, 'preserved_ci': None,
+              'replace_unrecognized_aliases_requested': replace_unrecognized_aliases}
     if not apply: return result
     ensure_local_excludes(root)
     with locked(root / '.specify/workflow/runtime/upgrade.lock'):
@@ -60,6 +62,8 @@ def upgrade(root, version, apply=False, packages=None, runner=command, preserve_
             tail = ['--packages', str(packages.resolve())] if packages else []
             if preserve_ci:
                 tail.append('--preserve-ci')
+            if replace_unrecognized_aliases:
+                tail.append('--replace-unrecognized-aliases')
             if ci_before is not None:
                 # A target installer may check CI health before it records the
                 # preserved file, and older ones read only the git-excluded
@@ -81,6 +85,12 @@ def upgrade(root, version, apply=False, packages=None, runner=command, preserve_
             if ci_before is not None:
                 require((root / ci_path).read_bytes() == ci_before, 'PROJECT_CI_PRESERVATION_FAILED')
                 result['preserved_ci'] = {'path': ci_path, 'sha256': hashlib.sha256(ci_before).hexdigest()}
+            try:
+                installed = json.loads(log[-1].get('stdout') or '{}')
+            except ValueError:
+                installed = {}
+            result['replaced_unrecognized_aliases'] = (installed.get('replaced_unrecognized_aliases') or []
+                                                       if isinstance(installed, dict) else [])
             result.update(applied=True, backup=str(backup), commands=log)
             write(backup / 'result.json', {'ok': True, **result})
             return result
@@ -98,8 +108,11 @@ if __name__ == '__main__':
     parser.add_argument('--packages', type=Path, help='Verified extracted packages for development')
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--preserve-ci', action='store_true', help='Retain the project workflow-gates CI file during the upgrade')
+    parser.add_argument('--replace-unrecognized-aliases', action='store_true',
+                        help='Back up, then replace, a managed alias file whose content Sanduq does not recognise')
     args = parser.parse_args()
     try:
-        print(json.dumps(upgrade(args.root, args.version, args.apply, args.packages, preserve_ci=args.preserve_ci), indent=2))
+        print(json.dumps(upgrade(args.root, args.version, args.apply, args.packages, preserve_ci=args.preserve_ci,
+                                 replace_unrecognized_aliases=args.replace_unrecognized_aliases), indent=2))
     except (WorkflowError, ValueError, OSError, KeyError) as error:
         print(json.dumps({'ok': False, 'error': str(error)})); sys.exit(1)

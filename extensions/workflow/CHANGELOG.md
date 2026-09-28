@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased (1.6.3)
+
+- An alias file (`speckit-superpowers-bridge`, `speckit-scope` in `.agents/skills` or
+  `.claude/skills`) is no longer classified by its frontmatter. 1.6.2 replaced any
+  alias whose frontmatter `name` was the alias and whose `metadata.source` named an
+  installed extension, whatever its body, so local instructions added under
+  unchanged upstream frontmatter were lost on the next reinstall or
+  `workflow.py host --use`. Now an existing alias is replaced silently only when the
+  SHA-256 of its whole content (CRLF normalised) is the packaged alias, an accepted
+  legacy hash, the hash in `install-lock.json` `aliases`, or exactly what Spec Kit
+  generates for that command: Sanduq renders it with `specify integration use <host>`
+  in a temporary copy of `.specify` and compares the full hash. Content Spec Kit
+  writes during the same transaction is still replaced. Anything else is refused
+  with `ALIAS_HAS_LOCAL_EDITS: <path>` before anything changes; `install.py` and
+  `workflow.py host --use` previews list it.
+- New `--replace-unrecognized-aliases` on `install.py`, `upgrade.py` and
+  `workflow.py host --use`: backs each unrecognised alias up to
+  `unrecognized-aliases/<path>` in the run's backup folder, then replaces it, and
+  reports each path and backup under `replaced_unrecognized_aliases`.
+
 ## 1.6.2
 
 - Installs and upgrades keep every installed integration. Spec Kit registers

@@ -85,12 +85,29 @@ installed Codex or Claude host after the packages change: it runs
 every host folder and checks that each host has every command of the installed Sanduq
 extensions, the same Sanduq preset overlays and the packaged aliases. Any gap
 (`HOST_SKILLS_MISSING`, `HOST_OVERLAY_MISSING`, `ALIAS_NOT_RESTORED`) rolls the install
-back. A single-host project runs no extra commands. An alias is judged for local edits by
-what it held before the transaction, so content Spec Kit wrote during it is replaced,
-while a real edit is still refused with `ALIAS_HAS_LOCAL_EDITS`. A skill Spec Kit rendered
-for an installed extension under the alias name (its frontmatter `name` is the alias and
-`metadata.source` names that extension, as after a bare `specify integration use`) is
-Spec Kit's output, not a local edit, and is replaced as well.
+back. A single-host project runs no extra commands.
+
+An existing alias file is judged by its whole content (CRLF normalised to LF), never by
+its frontmatter alone, and by what it held before the transaction, so content Spec Kit
+wrote during the transaction is replaced whenever the earlier content is. It is replaced
+without asking only when its SHA-256 is one of:
+
+- the packaged alias;
+- an accepted legacy alias hash (`assets/legacy-*-alias-hashes.json`);
+- the hash `.specify/workflow/install-lock.json` `aliases` recorded for that path;
+- exactly the file Spec Kit generates for that command now. Sanduq copies `.specify`
+  into an empty temporary project, runs `specify integration use <host>` there and
+  compares the full hash of the alias it renders, so the upstream Bridge a bare
+  `specify integration use` left behind is replaced. The project is not touched, and
+  the render runs only when an alias matches none of the hashes above.
+
+Anything else, such as local instructions added under unchanged upstream frontmatter, is
+a local edit: `install.py`, `upgrade.py` and `workflow.py host --use` refuse with
+`ALIAS_HAS_LOCAL_EDITS: <path>` before anything changes, and the previews list it. Move
+the customization into Sanduq, or pass `--replace-unrecognized-aliases` to replace it
+anyway: the file is first copied to `unrecognized-aliases/<path>` in that run's backup
+folder (`.specify/workflow/backups/installs/<id>` or `.../hosts/<id>`), and the result
+lists each path with its backup under `replaced_unrecognized_aliases`.
 
 Change the default host with the supported command, never with a bare
 `specify integration use`:
