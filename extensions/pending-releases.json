@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Lossless host switching (#43): installer/upgrader keep every installed host's skills and managed aliases, new workflow.py host --use/--preview command, doctor warns on incomplete non-default hosts. Assure and User Manual unchanged since 2.2.2/1.3.2. Publish only after main CI and downloaded asset verification pass."
+  "versions": {
+    "workflow": "1.6.3"
+  },
+  "status": "ready",
+  "note": "Alias local-edit protection (#45): managed aliases are judged by full-content hash (packaged, legacy, install-lock, or exact Spec Kit render), never by frontmatter; new --replace-unrecognized-aliases opt-in backs up and replaces. Assure and User Manual unchanged since 2.2.2/1.3.2. Publish only after main CI and downloaded asset verification pass."
 }

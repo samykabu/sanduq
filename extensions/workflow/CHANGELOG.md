@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (1.6.3)
+## 1.6.3
 
 - An alias file (`speckit-superpowers-bridge`, `speckit-scope` in `.agents/skills` or
   `.claude/skills`) is no longer classified by its frontmatter. 1.6.2 replaced any
