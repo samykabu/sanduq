@@ -6,6 +6,7 @@ integration test); both end green through `revalidate`. The CI side is a fake Gi
 artifact that follows the A9a contract, so nothing here touches the network.
 """
 import copy
+import hashlib
 import json
 import subprocess
 import sys
@@ -90,10 +91,11 @@ class DriftHarness(Harness):
             self.write(path, (self.root / path).read_text(encoding='utf-8') + ' changed')
         self.commit_all(message)
 
-    def gate(self):
+    def gate(self, github=None):
         policy = w.load_policy(self.root)
         c.check_index(self.root, self.feature)
-        return c.check(self.root, self.feature, policy, None, self.gate_rules(policy))
+        return c.check(self.root, self.feature, policy, None, self.gate_rules(policy),
+                       github=github or getattr(self, 'client', None))
 
     def status(self, stage):
         return w.receipt_status(self.root, self.feature, stage, self.run.load()['receipts'][stage], self.policy)
@@ -104,14 +106,23 @@ class DriftHarness(Harness):
         self.next_run += 1
         client = fake_github.fake_run('acme/app', self.next_run, head, sk.tree_of(self.root, head),
                                       sk.source_key(self.root, head), lanes, **options)
+        self.client = client
         return self.next_run, client
 
-    def review_evidence(self, name='review-diff.md', base=None, head=None, blocking='0'):
+    def review_evidence(self, name='review-diff.md', base=None, head=None, blocking='0', diff_sha256=None,
+                        reviewer='Reviewer A'):
+        """A diff-review note; by default bound to the true hash of the reviewed diff."""
         base = base or self.run.load()['receipts']['review']['head']
         head = head or self.head()
-        return self.write(self.feature + '/evidence/' + name,
-                          f'# Incremental review\n\n- **Diff reviewed:** `{base}..{head}`\n'
-                          f'- Findings: none\n- Blocking findings: {blocking}\n')
+        if diff_sha256 is None:
+            diff_sha256 = w.diff_review_sha256(self.root, base, head)
+        lines = ['# Incremental review', '', f'- **Diff reviewed:** `{base}..{head}`']
+        if diff_sha256:
+            lines.append(f'- **Diff sha256:** `{diff_sha256}`')
+        if reviewer is not None:
+            lines.append(f'- **Reviewer:** {reviewer}')
+        lines += ['- Findings: none', f'- Blocking findings: {blocking}', '']
+        return self.write(self.feature + '/evidence/' + name, '\n'.join(lines))
 
     def revalidate_all(self):
         run_id, client = self.green_run()
@@ -384,7 +395,7 @@ class RevalidateFrom007Tests(DriftHarness):
         cases = {
             'no range': (self.write(self.feature + '/evidence/note.md', 'Looks fine.\nBlocking findings: 0\n'),
                          'DIFF_REVIEW_RANGE_MISSING'),
-            'another range': (self.review_evidence('old.md', base='1234567', head='89abcde'),
+            'another range': (self.review_evidence('old.md', base='1234567', head='89abcde', diff_sha256='f' * 64),
                               'DIFF_REVIEW_RANGE_MISSING'),
             'blocking findings': (self.review_evidence('blocking.md', blocking='2'), 'DIFF_REVIEW_OUTCOME_MISSING'),
             'outside the feature': (self.write('notes/review.md', f'Diff reviewed: {review_head}..{self.head()}\n'
@@ -442,6 +453,187 @@ class RevalidateFrom007Tests(DriftHarness):
         client.responses[f'repos/acme/app/actions/runs/{run_id}']['conclusion'] = 'cancelled'
         with self.assertRaisesRegex(w.WorkflowError, 'CI_EVIDENCE_REJECTED: verify'):
             c.check(self.root, self.feature, policy, None, rules, verify_ci_evidence=True, github=client)
+
+
+class CiEvidenceIntegrityTests(DriftHarness):
+    """1.6.1: a committed `ci_evidence` is never trusted on its own (fail closed)."""
+
+    def accept_through_ci_evidence(self):
+        self.change(SHAPE_TEST_CHANGE)
+        self.revalidate_all()
+        self.commit_all('Revalidated')
+        self.change(['README.md'])  # Verify now rests on its CI run (same key)
+        status = self.status('verify')
+        self.assertEqual((status['current'], status['via']), (True, 'ci-evidence'))
+        return self.run.load()['receipts']['verify']
+
+    def rerun(self, receipt, **options):
+        """The recorded run served again, with its responses changed by `options`."""
+        evidence = receipt['ci_evidence']
+        head = evidence['head']
+        return fake_github.fake_run('acme/app', evidence['run_id'], head, sk.tree_of(self.root, head),
+                                    options.pop('key', evidence['source_key']), ALL_LANES, **options)
+
+    def test_a_partial_or_forged_ci_evidence_is_not_current(self):
+        receipt = self.accept_through_ci_evidence()
+        self.assertTrue(w.ci_evidence_current(self.root, receipt))
+        evidence = receipt['ci_evidence']
+        # The reviewed forgery: only the conclusion and the current source key.
+        forged = {**receipt, 'ci_evidence': {'conclusion': 'success', 'source_key': evidence['source_key']}}
+        self.assertFalse(w.ci_evidence_current(self.root, forged))
+        status = w.receipt_status(self.root, self.feature, 'verify', forged, self.policy)
+        self.assertNotEqual(status.get('via'), 'ci-evidence')
+        for field in ('run_id', 'attempt', 'head', 'source_key', 'tier', 'lanes', 'required_lanes', 'conclusion',
+                      'lane_gap'):
+            with self.subTest(missing=field):
+                partial = {key: value for key, value in evidence.items() if key != field}
+                self.assertFalse(w.ci_evidence_current(self.root, {**receipt, 'ci_evidence': partial}))
+        malformed = {
+            'run_id as a string': {'run_id': str(evidence['run_id'])},
+            'run_id zero': {'run_id': 0},
+            'run_id boolean': {'run_id': True},
+            'attempt zero': {'attempt': 0},
+            'short head': {'head': evidence['head'][:12]},
+            'head not of this branch': {'head': 'f' * 40},
+            'short source key': {'source_key': evidence['source_key'][:63]},
+            'empty tier': {'tier': ' '},
+            'lanes as a string': {'lanes': 'backend-unit'},
+            'lanes not strings': {'lanes': [1]},
+            'required_lanes not strings': {'required_lanes': [None]},
+            'required lane not run': {'required_lanes': ['web-other']},
+            'failed conclusion': {'conclusion': 'failure'},
+            'lane gap': {'lane_gap': ['web-chromium']},
+            'lane gap null': {'lane_gap': None},
+        }
+        for name, change in malformed.items():
+            with self.subTest(malformed=name):
+                self.assertFalse(w.ci_evidence_current(self.root, {**receipt, 'ci_evidence': {**evidence, **change}}))
+        self.assertFalse(w.ci_evidence_current(self.root, {k: v for k, v in receipt.items() if k != 'head'}))
+
+    def test_a_run_on_an_ancestor_with_the_same_key_stays_current(self):
+        receipt = self.accept_through_ci_evidence()
+        moved = {**receipt, 'head': self.head()}  # the run's head is now an ancestor of the receipt's head
+        self.assertNotEqual(moved['head'], receipt['ci_evidence']['head'])
+        self.assertTrue(w.ci_evidence_current(self.root, moved))
+
+    def test_the_gate_always_rereads_the_run(self):
+        receipt = self.accept_through_ci_evidence()
+        run_id = receipt['ci_evidence']['run_id']
+        self.client.calls.clear()
+        result = self.gate()  # no flag
+        self.assertIn({'stage': 'verify', 'via': 'ci-evidence', 'drift': ['README.md'], 'run_id': run_id},
+                      result['accepted_drift'])
+        self.assertIn(f'repos/acme/app/actions/runs/{run_id}', self.client.calls)
+        cases = {
+            'check failed': (self.rerun(receipt, check_conclusion='failure'), 'CI_EVIDENCE_REJECTED: verify'),
+            'run cancelled': (self.rerun(receipt, conclusion='cancelled'), 'CI_EVIDENCE_REJECTED: verify'),
+            'key differs': (self.rerun(receipt, plan_overrides={'sourceKey': 'e' * 64}),
+                            'CI_EVIDENCE_REJECTED: verify'),
+            'artifact gone': (self.rerun(receipt, artifact=False), 'CI_EVIDENCE_REJECTED: verify'),
+        }
+        for name, (client, error) in cases.items():
+            with self.subTest(name):
+                with self.assertRaisesRegex(w.WorkflowError, error):
+                    self.gate(github=client)
+
+    def test_the_gate_fails_closed_when_the_run_cannot_be_read(self):
+        self.accept_through_ci_evidence()
+
+        class Broken(fake_github.FakeGitHub):
+            def api(self, endpoint):
+                raise OSError('gh: command not found')
+
+        for name, client in {'HTTP error': fake_github.FakeGitHub(), 'no gh': Broken()}.items():
+            with self.subTest(name):
+                with self.assertRaisesRegex(w.WorkflowError, 'CI_EVIDENCE_UNREADABLE: verify.*actions: read'):
+                    self.gate(github=client)
+
+    def test_the_gate_fails_closed_without_a_verification_check(self):
+        self.accept_through_ci_evidence()
+        self.policy['ci']['gate'].pop('verification_check')
+        self.configure()
+        self.commit_all('Drop the verification check')
+        with self.assertRaisesRegex(w.WorkflowError, 'CI_VERIFICATION_CHECK_UNSET'):
+            self.gate()
+
+    def test_the_command_line_flag_is_still_accepted(self):
+        receipt = self.accept_through_ci_evidence()
+        policy = w.load_policy(self.root)
+        rules = self.gate_rules(policy)
+        for flag in (True, False):
+            with self.subTest(verify_ci_evidence=flag):
+                with self.assertRaisesRegex(w.WorkflowError, 'CI_EVIDENCE_REJECTED'):
+                    c.check(self.root, self.feature, policy, None, rules, verify_ci_evidence=flag,
+                            github=self.rerun(receipt, check_conclusion='failure'))
+
+
+class DiffReviewBindingTests(DriftHarness):
+    """1.6.1: a diff-review note is bound to the exact diff (`Diff sha256:`) and names its reviewer."""
+
+    def setUp(self):
+        super().setUp()
+        self.base = self.run.load()['receipts']['review']['head']
+        self.change(SHAPE_TEST_CHANGE, 'First source change')
+        self.first = self.head()
+        # Words, an excluded prefix and an upper-case Markdown file drift too; none of them is source.
+        self.write('docs/notes.txt', 'words')
+        self.write('guide/INTRO.MD', 'words')
+        self.change(['src/App.Api/Projects/ProjectEndpoints.cs', 'README.md'], 'Second source change')
+        run_id, client = self.green_run()
+        self.run.revalidate('verify', check_run=run_id, github=client)
+        self.before = self.run.path.read_bytes()
+
+    def independent_hash(self, base, head):
+        """The diff of exactly the source-key paths, listed explicitly instead of through the pathspec."""
+        names = subprocess.run(['git', 'diff-tree', '-r', '--name-only', '-z', '--no-renames', base, head],
+                               cwd=self.root, capture_output=True, check=True).stdout.split(b'\0')
+        paths = [name.decode() for name in names if name and sk.is_source_path(name)]
+        self.assertEqual(sorted(paths), sorted(['src/App.Api/Projects/ProjectEndpoints.cs', SHAPE_TEST_CHANGE[0]]))
+        diff = subprocess.run(['git', '-c', 'core.quotePath=true', 'diff-tree', '-r', '-p', '--binary',
+                               '--no-renames', base, head, '--', *paths], cwd=self.root, capture_output=True,
+                              check=True).stdout
+        return hashlib.sha256(diff).hexdigest()
+
+    def test_the_correct_hash_is_accepted(self):
+        expected = self.independent_hash(self.base, self.head())
+        self.assertEqual(w.diff_review_sha256(self.root, self.base, self.head()), expected)
+        result = self.run.revalidate('review', diff_reviewed=self.review_evidence())
+        self.assertTrue(result['revalidated'])
+        recorded = self.run.load()['receipts']['review']['diff_reviewed']
+        self.assertEqual((recorded['diff_sha256'], recorded['reviewer']), (expected, 'Reviewer A'))
+        checkpoint_validator().validate(self.run.load())
+
+    def test_a_stale_or_wrong_hash_is_refused(self):
+        cases = {
+            'stale (an earlier head)': w.diff_review_sha256(self.root, self.base, self.first),
+            'wrong': '0' * 64,
+        }
+        for name, value in cases.items():
+            with self.subTest(name):
+                with self.assertRaises(w.WorkflowError) as failure:
+                    self.run.revalidate('review', diff_reviewed=self.review_evidence(diff_sha256=value))
+                message = str(failure.exception)
+                self.assertIn('DIFF_REVIEW_HASH_MISMATCH', message)
+                self.assertIn(w.diff_review_shell(self.base, self.head()) + ' | sha256sum', message)
+                self.assertEqual(self.run.path.read_bytes(), self.before)
+
+    def test_a_missing_hash_or_reviewer_is_refused(self):
+        cases = {
+            'no hash': ({'diff_sha256': ''}, 'DIFF_REVIEW_HASH_MISSING.*diff-tree.*sha256sum'),
+            'no reviewer line': ({'reviewer': None}, 'DIFF_REVIEW_REVIEWER_MISSING'),
+            'empty reviewer': ({'reviewer': ''}, 'DIFF_REVIEW_REVIEWER_MISSING'),
+        }
+        for name, (options, error) in cases.items():
+            with self.subTest(name):
+                with self.assertRaisesRegex(w.WorkflowError, error):
+                    self.run.revalidate('review', diff_reviewed=self.review_evidence(**options))
+                self.assertEqual(self.run.path.read_bytes(), self.before)
+
+    def test_the_recovery_recipe_names_the_hash_command(self):
+        recovery = ' '.join(self.run.next(self.run.load())['recovery'])
+        for part in ('Diff sha256: <hash>', 'Reviewer: <who reviewed it>',
+                     w.diff_review_shell(self.base, 'HEAD') + ' | sha256sum'):
+            self.assertIn(part, recovery)
 
 
 class PolicyKeyTests(Harness):

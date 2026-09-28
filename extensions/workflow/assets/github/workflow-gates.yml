@@ -7,6 +7,11 @@ permissions:
 jobs:
   workflow-evidence:
     runs-on: __sanduq_runs_on_linux__
+    # actions: read lets the gate re-read the CI run a Verify receipt is accepted through.
+    permissions:
+      contents: read
+      issues: read
+      actions: read
     steps:
       - uses: actions/checkout@v4
         with:

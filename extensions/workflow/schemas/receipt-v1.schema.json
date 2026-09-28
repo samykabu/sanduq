@@ -45,7 +45,7 @@
     "head": {"description": "Optional commit the receipt was recorded at.", "type": "string", "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"},
     "source_key": {"description": "Optional canonical source key at head, distinct from source_fingerprints. Without it the identity rule applies.", "$ref": "#/$defs/hash"},
     "ci_evidence": {
-      "description": "Optional CI run accepted as verification evidence, written by workflow.py revalidate --stage verify --check-run only. The gate accepts a Verify receipt whose source drifted when this run concluded success on the current source key with no lane gap.",
+      "description": "Optional CI run accepted as verification evidence, written by workflow.py revalidate --stage verify --check-run only. The gate accepts a Verify receipt whose source drifted only when the record is complete (every field revalidate writes, well-formed), this run concluded success on the current source key with no lane gap, and the gate re-reads the run through the GitHub API.",
       "type": "object",
       "required": ["run_id", "head", "source_key", "tier", "lanes", "conclusion"],
       "properties": {"run_id": {"type": ["integer", "string"]}, "attempt": {"type": "integer"},
@@ -57,11 +57,12 @@
                      "lane_gap": {"type": "array", "maxItems": 0}, "at": {"type": "string", "format": "date-time"}}
     },
     "diff_reviewed": {
-      "description": "Optional record of an incremental review of git diff <base>..<head>, written by workflow.py revalidate --stage review --diff-reviewed only.",
+      "description": "Optional record of an incremental review of the source diff <base>..<head>, written by workflow.py revalidate --stage review --diff-reviewed only. Since 1.6.1 it records diff_sha256, the SHA-256 of the exact diff-tree output the evidence names, and the reviewer.",
       "type": "object",
       "required": ["evidence", "base", "head"],
       "properties": {"evidence": {"type": "string", "minLength": 1}, "base": {"type": "string"}, "head": {"type": "string"},
-                     "hash": {"$ref": "#/$defs/hash"}, "at": {"type": "string", "format": "date-time"}}
+                     "hash": {"$ref": "#/$defs/hash"}, "at": {"type": "string", "format": "date-time"},
+                     "diff_sha256": {"$ref": "#/$defs/hash"}, "reviewer": {"type": "string", "minLength": 1}}
     },
     "revalidations": {
       "description": "Checked revalidations of a Verify, Review or Ready receipt after source drift (workflow.py revalidate). Written by the runtime only; an entry with outcome stale records a lane gap and changed nothing else.",
