@@ -86,8 +86,8 @@ def upgrade(root, version, apply=False, packages=None, runner=command, preserve_
                 require((root / ci_path).read_bytes() == ci_before, 'PROJECT_CI_PRESERVATION_FAILED')
                 result['preserved_ci'] = {'path': ci_path, 'sha256': hashlib.sha256(ci_before).hexdigest()}
             try:
-                installed = json.loads(log[-1].get('stdout') or '{}')
-            except ValueError:
+                installed = json.loads((log[-1] if log else {}).get('stdout') or '{}')
+            except (ValueError, AttributeError):
                 installed = {}
             result['replaced_unrecognized_aliases'] = (installed.get('replaced_unrecognized_aliases') or []
                                                        if isinstance(installed, dict) else [])
