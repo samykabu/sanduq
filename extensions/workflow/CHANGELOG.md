@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased (1.6.2)
+
+- Installs and upgrades keep every installed integration. Spec Kit registers
+  extension skills only for the default integration, so `specify extension add
+  --force` removed the other host's skills on every `install.py`/`upgrade.py
+  --apply`. The installer now re-registers each other Codex or Claude host in
+  `.specify/integration.json` `installed_integrations` through
+  `specify integration use`, restores the recorded default and its integration
+  files byte for byte, re-applies the managed aliases to every host folder, and
+  rolls back on `HOST_SKILLS_MISSING`, `HOST_OVERLAY_MISSING` or
+  `ALIAS_NOT_RESTORED`.
+- Managed aliases are judged for local edits by their content before the
+  transaction, so upstream Bridge content that Spec Kit regenerates during it is
+  replaced instead of failing with `ALIAS_HAS_LOCAL_EDITS`; a real local edit is
+  still refused, now before anything changes during a host switch. An alias
+  that holds the skill Spec Kit rendered for an installed extension (frontmatter
+  `name` is the alias, `metadata.source` names that extension), as a bare
+  `specify integration use` leaves it, is replaced rather than refused.
+- New `workflow.py host [--use codex|claude] [--preview]`: reports host status,
+  or switches the default host through `specify integration use`, re-registers
+  incomplete hosts, restores the managed aliases, installs the delegate-task
+  skill for the new host when delegation is enabled, verifies every host, runs
+  doctor, rolls back on failure, and reports the dependency digest change and the
+  exact `migrate` commands for each affected checkpoint. It refuses (and
+  `--preview` reports) delegation policy that cannot route to the new host,
+  without rewriting `.specify/workflow.yml`. `--preview` changes nothing.
+- Doctor warns when a host other than the default is missing managed skills or
+  aliases, naming `workflow.py host --use <default>` as the repair.
+- `smoke_install.py --second-host <host>` exercises a two-integration project with
+  the real Spec Kit CLI.
+
 ## 1.6.1
 
 - A Verify receipt's `ci_evidence` is current only when it is the complete
