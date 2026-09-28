@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (1.6.2)
+## 1.6.2
 
 - Installs and upgrades keep every installed integration. Spec Kit registers
   extension skills only for the default integration, so `specify extension add

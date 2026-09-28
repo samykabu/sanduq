@@ -19,7 +19,12 @@ for a bounded task, or install the managed workflow to take a GitHub issue throu
 implementation, verification, documentation, and a pull request. Implementation uses a dedicated
 orchestrator and workers, with an HTML report that follows progress through an authorized PR merge.
 
-Workflow 1.6.1 closes evidence-gate gaps: a Verify receipt's CI evidence must be the
+Workflow 1.6.2 makes host switching lossless: installs and upgrades keep every
+installed host's skills and managed aliases instead of Spec Kit's registration
+wiping the non-default host, and a new `workflow.py host [--use codex|claude]
+[--preview]` reports host status or switches the default, re-registering
+incomplete hosts and restoring aliases with rollback on failure. Workflow 1.6.1
+closes evidence-gate gaps: a Verify receipt's CI evidence must be the
 complete record `revalidate` writes and a diff review is bound to a hashed diff, long
 GitHub issue titles are shortened instead of rejected, and `ci_gate.py --check-index`
 flags evidence paths Git ignores and cross-feature fingerprints. Workflow 1.6.0 hardened
@@ -973,8 +978,8 @@ The first command previews the operation; the second applies the same version wi
 rollback protection:
 
 ```bash
-python .specify/extensions/workflow/scripts/upgrade.py --version 1.6.1 --packages /absolute/path/to/sanduq-packages
-python .specify/extensions/workflow/scripts/upgrade.py --version 1.6.1 --packages /absolute/path/to/sanduq-packages --apply
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.6.2 --packages /absolute/path/to/sanduq-packages
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.6.2 --packages /absolute/path/to/sanduq-packages --apply
 python .specify/extensions/workflow/scripts/workflow.py doctor --project
 ```
 
