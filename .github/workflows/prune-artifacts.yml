@@ -1,0 +1,88 @@
+name: Prune old artifacts
+
+# Owner-approved policy (2026-09-28): keep only the newest GitHub Actions
+# artifact of each artifact "module" and delete older copies, to control
+# Actions storage usage. GitHub Release assets are out of scope and are
+# never touched here.
+on:
+  schedule:
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+concurrency:
+  group: prune-artifacts
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete superseded artifacts, keep newest per module
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Exempt prefixes are never considered for deletion, no matter
+            // how many copies pile up.
+            const EXEMPT_PREFIXES = [];
+
+            // Grouping key = the artifact name normalised so per-run
+            // variants group together: replace any run of 6+ digits with
+            // <N> (covers run ids, PR numbers stay distinct since they are
+            // normally short). docmost's buildx names
+            // `<prefix>~<6 alnum>.dockerbuild` collapse to
+            // `<prefix>~*.dockerbuild`. Otherwise the exact name is the key.
+            const dockerbuildRe = /^(.*)~[0-9a-zA-Z]{6}\.dockerbuild$/;
+            const digitRunRe = /\d{6,}/g;
+            function normalize(name) {
+              const m = name.match(dockerbuildRe);
+              if (m) return `${m[1]}~*.dockerbuild`;
+              return name.replace(digitRunRe, '<N>');
+            }
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const artifacts = await github.paginate(
+              github.rest.actions.listArtifactsForRepo,
+              { owner, repo, per_page: 100 }
+            );
+
+            const groups = new Map();
+            let exemptCount = 0;
+            for (const a of artifacts) {
+              if (EXEMPT_PREFIXES.some((p) => a.name.startsWith(p))) {
+                exemptCount++;
+                continue;
+              }
+              const key = normalize(a.name);
+              if (!groups.has(key)) groups.set(key, []);
+              groups.get(key).push(a);
+            }
+
+            // Within a key, keep the newest by created_at among non-expired
+            // artifacts; delete the rest (including any expired copies).
+            let deletedCount = 0;
+            let deletedBytes = 0;
+            for (const [key, items] of groups) {
+              const nonExpired = items.filter((a) => !a.expired);
+              let keeperId = null;
+              if (nonExpired.length > 0) {
+                nonExpired.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                keeperId = nonExpired[0].id;
+              }
+              for (const a of items) {
+                if (a.id === keeperId) continue;
+                core.info(`Deleting artifact ${a.id} "${a.name}" (module "${key}", ${a.size_in_bytes} bytes, created ${a.created_at}, expired=${a.expired})`);
+                try {
+                  await github.rest.actions.deleteArtifact({ owner, repo, artifact_id: a.id });
+                  deletedCount++;
+                  deletedBytes += a.size_in_bytes;
+                } catch (error) {
+                  core.warning(`Failed to delete artifact ${a.id} "${a.name}": ${error.message}`);
+                }
+              }
+            }
+
+            core.info(`Modules: ${groups.size}, exempted: ${exemptCount}, deleted: ${deletedCount} artifact(s), ${deletedBytes} bytes reclaimed.`);
