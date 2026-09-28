@@ -354,3 +354,9 @@ branch: it writes nothing and returns the exact `invalidated` and
 Review them, then migrate; the applying call returns the saved `migrations[]`
 entry. Confirm it matches the preview, then prove continuation with the next
 permitted `claim`.
+To change the default host (Codex or Claude), never run a bare `specify integration
+use`: it rewrites the managed aliases with upstream content. Run `workflow.py host
+--use codex|claude --preview`, review its blockers, delegation findings and
+`checkpoints_to_migrate`, then run it without `--preview` and migrate each listed
+checkpoint on its branch. `workflow.py host --use <current default>` re-registers a
+host that lost its skills.

@@ -11,7 +11,7 @@ from pathlib import Path
 from package import package, ROOT
 
 
-def smoke(host, superspec_source=None):
+def smoke(host, superspec_source=None, second_host=None):
     folder = ROOT / 'dist/install-tests'; folder.mkdir(parents=True, exist_ok=True)
     workspace = Path(tempfile.mkdtemp(prefix=host + '-', dir=folder)).resolve()
     assert workspace.is_relative_to(folder.resolve())
@@ -25,6 +25,8 @@ def smoke(host, superspec_source=None):
             raise RuntimeError(f'{args} failed ({result.returncode}); inspect {workspace}')
         return result.stdout
     run(['specify','init','--here','--force','--ignore-agent-tools','--integration',host] + (['--integration-options=--skills'] if host == 'codex' else []))
+    if second_host:
+        run(['specify','integration','install',second_host] + (['--integration-options=--skills'] if second_host == 'codex' else []))
     for name in ('illustrate','project','scope','pr','assure','user-manual','workflow'):
         result = package(name, output=workspace / 'archives' / (name + '.zip'))
         with zipfile.ZipFile(result['archive']) as archive: archive.extractall(workspace / 'packages')
@@ -83,7 +85,24 @@ def smoke(host, superspec_source=None):
     assert (report / 'state.json').read_bytes() == report_before
     run([sys.executable,progress,'task','--output',str(report),'--id','T001','--status','done'])
     assert json.loads((report / 'state.json').read_text(encoding='utf-8'))['tasks'][0]['status'] == 'done'
-    result = {'host':host,'superspec':bool(superspec_source),'ok':True,'workspace':str(workspace),'commands':commands,
+    if second_host:
+        # The public reinstall above registered the workflow skills for the
+        # default host only; a switch re-registers every installed host,
+        # restores the managed aliases and passes doctor, in both directions.
+        def status(expected=0):
+            return json.loads(run([sys.executable,runtime,'host'], expected))
+        dropped = status(expected=1)
+        assert dropped['skills']['missing'].get(second_host), dropped
+        for target in (second_host, host):
+            plan = json.loads(run([sys.executable,runtime,'host','--use',target,'--preview']))
+            assert plan['can_apply'], plan
+            switched = json.loads(run([sys.executable,runtime,'host','--use',target]))
+            assert switched['applied'] and switched['doctor']['ok'], switched
+            assert status()['ok'], status()
+            assert json.loads(run([sys.executable,runtime,'doctor']))['ok']
+        run([sys.executable,installer,'--packages',str(workspace / 'packages'),'--apply'])
+        assert status()['ok'] and status()['default'] == host, status()
+    result = {'host':host,'second_host':second_host,'superspec':bool(superspec_source),'ok':True,'workspace':str(workspace),'commands':commands,
               'verified':'installation, executor composition, bundled execution protocol, installed report CLI and state preservation, four policy choices, reconciliation, doctor and same-version reinstall; no semantic agent execution or live GitHub acceptance'}
     (workspace / 'result.json').write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8')
     return result
@@ -93,6 +112,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--host', choices=('codex','claude'), required=True)
     parser.add_argument('--superspec-source', type=Path)
+    parser.add_argument('--second-host', choices=('codex','claude'),
+                        help='Also install this integration, then check installs and host switches keep both complete')
     args = parser.parse_args()
-    result = smoke(args.host,args.superspec_source)
+    if args.second_host == args.host: parser.error('--second-host must differ from --host')
+    result = smoke(args.host,args.superspec_source,args.second_host)
     print(json.dumps({k:v for k,v in result.items() if k != 'commands'},indent=2))
