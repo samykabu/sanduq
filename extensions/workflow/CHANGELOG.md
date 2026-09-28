@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.6.4
+
+- Pin the released User Manual 1.3.3 in `dependencies.json`. User Manual 1.3.3
+  drops the private preview artifact's `upload-artifact` retention from 14 days
+  to 2: the Cloudflare preview workflow reads it once, right after the run, and
+  14 days of ~20 MB copies per push had filled the org's artifact storage and
+  was blocking every Bootstrap run. Workflow itself is unchanged; a project on
+  1.6.3 that already carried the 2-day retention as a local edit (as Bunyan did)
+  saw its installed workflow file marked `CI_WORKFLOW_STALE` because the
+  template still rendered 14 days. Upgrading to 1.6.4 clears that.
+
 ## 1.6.3
 
 - An alias file (`speckit-superpowers-bridge`, `speckit-scope` in `.agents/skills` or

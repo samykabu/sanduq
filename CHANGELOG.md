@@ -4,6 +4,18 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## Preview artifact retention — workflow 1.6.4, user-manual 1.3.3 — 2026-09-28
+
+- User Manual 1.3.3: the `user-manual-preview.yml` template's private preview
+  artifact now keeps `retention-days: 2` instead of 14. The Cloudflare preview
+  workflow reads the artifact once, right after the run; 14 days of ~20 MB
+  copies per push had filled the org's artifact storage and was blocking every
+  Bootstrap run.
+- Workflow 1.6.4 pins the released User Manual 1.3.3 in `dependencies.json`.
+  Workflow itself is unchanged; this clears `CI_WORKFLOW_STALE` for any
+  project whose installed `user-manual-preview.yml` already carried the
+  2-day retention as a local edit.
+
 ## Alias local-edit protection — workflow 1.6.3 — 2026-09-28
 
 - A managed alias (`speckit-superpowers-bridge`, `speckit-scope`) is no longer
