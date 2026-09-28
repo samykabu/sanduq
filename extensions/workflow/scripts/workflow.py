@@ -537,6 +537,26 @@ def delegation_errors(root, policy):
     return []
 
 
+def host_warnings(root):
+    """Another installed host that lost managed skills or aliases still works as the default.
+
+    It becomes a failure only once that host is selected, so it is a warning
+    with the command that repairs it.
+    """
+    import hosts
+    installed = hosts.installed_hosts(root)
+    others = [host for host in installed if host != active_host(root)]
+    if not others:
+        return []
+    problems = hosts.skill_errors(hosts.skill_report(root, others))
+    try:
+        problems += hosts.alias_errors(root, Path(__file__).resolve().parents[1], others)
+    except OSError:
+        pass  # a source tree without the packaged aliases
+    repair = WORKFLOW_SCRIPT + ' host --use ' + str(active_host(root))
+    return [problem + '; run "' + repair + '" to re-register every installed host' for problem in problems]
+
+
 def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True):
     needed = ['scope', 'project', 'pr'] + (['assure'] if policy['processes']['qa'] else []) + (['user-manual'] if policy['processes']['user_manual'] else [])
     errors = ['DEPENDENCY_UNAVAILABLE: ' + name + ' ' + RANGES[name] for name in needed if not compatible(root, name)]
@@ -582,7 +602,7 @@ def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True
             errors.append('PRESET_NOT_ENABLED: ' + preset)
     errors += ci_errors(root, policy, preserved_ci)
     if project: errors += project_errors(root, policy)
-    warnings = []
+    warnings = host_warnings(root)
     drift = eol_drift(root)
     if drift:
         warnings.append(
@@ -1741,6 +1761,10 @@ def main():
     decisions_parser.add_argument('--show', action='store_true')
     decisions_parser.add_argument('--owner', action='append', default=[], metavar='GITHUB_LOGIN')
     decisions_parser.add_argument('--field-name')
+    host_parser = sub.add_parser('host', help='Show installed hosts, or switch the default host without losing skills')
+    host_parser.add_argument('--use', choices=['codex', 'claude'],
+                             help='Make this installed integration the default; omit to report host status')
+    host_parser.add_argument('--preview', action='store_true', help='Report the switch plan without changing anything')
     doctor_parser = sub.add_parser('doctor')
     doctor_parser.add_argument('--project', action='store_true', help='Also validate configured board identities, phase/status mapping and required sync')
     sub.add_parser('project-defaults')
@@ -1840,6 +1864,14 @@ def main():
                 write(root / '.specify/workflow/backups' / (uuid.uuid4().hex + '.json'), load_policy(root))
                 (root / '.specify/workflow.yml').write_text(yaml.safe_dump(policy, sort_keys=False), encoding='utf-8')
             result = {'decisions': config, 'saved': bool(not args.show and (args.owner or args.field_name))}
+        elif args.action == 'host':
+            import hosts
+            if args.use:
+                result = hosts.switch(root, args.use, preview=args.preview)
+                if args.preview and not result['can_apply']:
+                    result['ok'] = False
+            else:
+                result = hosts.status(root)
         elif args.action == 'doctor':
             result = doctor(root, load_policy(root), project=args.project)
         elif args.action == 'project-defaults':

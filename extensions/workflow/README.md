@@ -60,6 +60,89 @@ those pending releases cannot yet be installed from public release URLs.
 Scope's community catalog name is ambiguous. Always use the Sanduq archive URL or
 verified staged package, never a bare `specify extension add scope` command.
 
+## Switching hosts
+
+A project can have several Spec Kit integrations installed (for example `codex` and
+`claude`, listed in `.specify/integration.json` `installed_integrations`), but Spec Kit
+registers extension commands and skills only for the default one. Two things follow:
+
+- `specify extension add --force`, which every install and upgrade runs, removes the
+  reinstalled extension's skills from every other host folder.
+- `specify integration use <host>` regenerates the new default's skills from upstream
+  sources, which replaces Sanduq's managed aliases (`speckit-superpowers-bridge`,
+  `speckit-scope`) with the upstream content, including the unguarded Bridge executor.
+
+`install.py --apply` (and so `upgrade.py --apply`) therefore re-registers every
+installed Codex or Claude host after the packages change: it runs
+`specify integration use <other>` for each other host, then
+`specify integration use <default>`, and puts `.specify/integration.json` and
+`.specify/init-options.json` back byte for byte. It then writes the managed aliases into
+every host folder and checks that each host has every command of the installed Sanduq
+extensions, the same Sanduq preset overlays and the packaged aliases. Any gap
+(`HOST_SKILLS_MISSING`, `HOST_OVERLAY_MISSING`, `ALIAS_NOT_RESTORED`) rolls the install
+back. A single-host project runs no extra commands. An alias is judged for local edits by
+what it held before the transaction, so content Spec Kit wrote during it is replaced,
+while a real edit is still refused with `ALIAS_HAS_LOCAL_EDITS`. A skill Spec Kit rendered
+for an installed extension under the alias name (its frontmatter `name` is the alias and
+`metadata.source` names that extension, as after a bare `specify integration use`) is
+Spec Kit's output, not a local edit, and is replaced as well.
+
+Change the default host with the supported command, never with a bare
+`specify integration use`:
+
+```text
+python .specify/extensions/workflow/scripts/workflow.py host                       # status
+python .specify/extensions/workflow/scripts/workflow.py host --use claude --preview
+python .specify/extensions/workflow/scripts/workflow.py host --use claude
+```
+
+`host` with no option reports the default, the installed hosts, any missing skills or
+aliases and the current dependency digest. `--use codex|claude` then:
+
+1. refuses, without changing anything, when the host is not installed
+   (`HOST_NOT_INSTALLED`), a stage claim is active, a legacy Bridge handoff is
+   executing, an alias has local edits, an upgrade is running, or the delegation policy
+   cannot route to the new host (below);
+2. under the install and dispatch locks, snapshots the managed files and runs
+   `specify integration use <host>`;
+3. re-registers any other installed host that is missing managed skills (the repair
+   for a project an earlier upgrade left incomplete; `--use <current default>` is
+   therefore also the repair command doctor names);
+4. restores the managed aliases in every host folder, reconciles the managed hooks and,
+   when delegation is enabled, installs the delegate-task skill for the new host at
+   `delegation.install_scope`;
+5. verifies every host as the installer does, runs doctor and rolls everything back
+   (`HOST_SWITCH_ROLLED_BACK`) when a check fails or doctor reports an error it did not
+   report before the switch;
+6. records the new host, aliases and digest in `.specify/workflow/install-lock.json`.
+
+The result reports `dependency_digest.before`, `.after` and `.changed`. The digest
+fingerprints `.specify/integration.json` and `.specify/init-options.json`, so a real
+switch always changes it, and `checkpoints_to_migrate` lists every feature checkpoint
+whose recorded digest no longer matches, with its branch and the exact commands
+(`git switch <branch>`, `workflow.py migrate --feature <feature> --preview`, then
+`migrate --feature <feature> --reason "Host switched from <old> to <new>"`);
+`already_stale: true` marks one that did not match the digest before the switch either
+and so needed `migrate` regardless. Until a
+checkpoint is migrated, `claim` refuses it with `DEPENDENCY_CHANGED`.
+
+The delegation check reads `.specify/workflow.yml` and never rewrites it. With
+delegation enabled, `delegation.required_changes` lists what must change before the
+switch can apply: a missing `delegation.models.<host>` tier, a tier model that names
+the other host's model family (for example a `gpt-*` model under `models.claude`), a
+route that follows the selected host but pins the other host's model, or an unknown
+tier. `delegation.notes` lists routes that pin a harness explicitly and so keep
+delegating to it after the switch. With delegation disabled the same findings are
+`advisories` and do not block.
+
+`--preview` changes nothing, runs no command and returns the same plan: the commands it
+would run, the skills each host lacks now, the aliases it would restore, the delegation
+findings, whether the digest will change and the checkpoints that will need `migrate`,
+plus `blockers` and `can_apply`. The switch does not restore templates or scripts that
+`specify integration use` refreshes outside the managed files; without `--force` Spec
+Kit keeps customized ones. Doctor warns (`HOST_SKILLS_MISSING: <other host>`) when a
+host other than the default has lost managed skills, with the repair command.
+
 ## State and recovery
 
 Policy lives in `.specify/workflow.yml`. Feature state lives under
