@@ -299,9 +299,10 @@ def status(root, package_root=None):
             'ok': not skill_errors(report) and not aliases}
 
 
-def switch(root, target, preview=False, runner=None, package_root=None):
+def switch(root, target, preview=False, runner=None, package_root=None, replace_unrecognized_aliases=False):
     """Make ``target`` the default host without losing any host's managed skills."""
-    from install import command, delegation_preflight, install_aliases, alias_edit_errors, restore, snapshot
+    from install import (command, delegation_preflight, install_aliases, alias_edit_errors, restore, review_aliases,
+                         snapshot)
     from reconcile import reconcile
     runner = runner or command
     package_root = package_root or PACKAGE
@@ -325,7 +326,11 @@ def switch(root, target, preview=False, runner=None, package_root=None):
             blockers.append('ACTIVE_STAGE_MUST_BE_RESOLVED: ' + feature)
     if read(root / '.specify/superpowers-handoff.json', {}).get('status') in ('executing', 'blocked'):
         blockers.append('LEGACY_EXECUTOR_OWNS_FEATURE: reconcile its actual work before switching hosts')
-    blockers += alias_edit_errors(root, package_root)
+    # Judged before any Spec Kit command runs; Spec Kit's own render counts only
+    # when the whole file is exactly what it generates from the current sources.
+    review = review_aliases(root, package_root, runner)
+    if not replace_unrecognized_aliases:
+        blockers += alias_edit_errors(root, package_root, review=review)
     upgrade = read(root / '.specify/workflow/runtime/upgrade.lock', {})
     if upgrade:
         blockers.append('WORKFLOW_UPGRADE_IN_PROGRESS')
@@ -345,6 +350,9 @@ def switch(root, target, preview=False, runner=None, package_root=None):
             'unsupported_hosts': unsupported_hosts(root), 'commands': commands,
             'skills_before': before_report,
             'aliases_to_restore': [path for path in alias_errors(root, package_root, hosts)],
+            'aliases_generated_by_spec_kit': sorted(review['generated']),
+            'aliases_unrecognized': sorted(review['unrecognized']),
+            'replace_unrecognized_aliases_requested': replace_unrecognized_aliases,
             'delegation': delegation,
             'dependency_digest': {'before': digest_before, 'will_change': predicted,
                                   'why': ('.specify/integration.json and .specify/init-options.json are part of '
@@ -372,7 +380,10 @@ def switch(root, target, preview=False, runner=None, package_root=None):
             others = [host for host in hosts if host != target and
                       (host in after_use['missing'] or host in after_use['overlay_missing'])]
             registered = register_hosts(root, runner, log, target, hosts, only=others)
-            aliases = install_aliases(root, package_root, baseline=before)
+            replaced = []
+            aliases = install_aliases(root, package_root, baseline=before, generated=review['generated'],
+                                      replace_unrecognized=replace_unrecognized_aliases, backup=backup,
+                                      replaced=replaced)
             reconcile(root, apply=True)
             if policy['delegation']['enabled']:
                 from delegation import doctor as delegation_doctor, health_error
@@ -392,6 +403,7 @@ def switch(root, target, preview=False, runner=None, package_root=None):
             result = {**plan, 'preview': False, 'applied': True, 'backup': str(backup),
                       'executed': [entry['args'] for entry in log],
                       're_registered_hosts': registered, 'aliases_restored': sorted(aliases),
+                      'replaced_unrecognized_aliases': replaced,
                       'doctor': health,
                       'dependency_digest': {'before': digest_before, 'after': digest_after,
                                             'changed': digest_after != digest_before},
