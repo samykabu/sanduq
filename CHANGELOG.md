@@ -4,6 +4,22 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## Alias local-edit protection — workflow 1.6.3 — 2026-09-28
+
+- A managed alias (`speckit-superpowers-bridge`, `speckit-scope`) is no longer
+  classified by its frontmatter. 1.6.2 replaced any alias whose frontmatter named
+  the alias and an installed extension, whatever its body, so local instructions
+  added under unchanged upstream frontmatter were lost on reinstall or host
+  switch. An alias is now replaced silently only when the hash of its whole
+  content is the packaged alias, an accepted legacy hash, the install-lock hash,
+  or exactly what Spec Kit renders for that command (rendered in a temporary
+  copy of `.specify`); content Spec Kit writes during the same transaction is
+  still replaced. Anything else is refused with `ALIAS_HAS_LOCAL_EDITS: <path>`
+  before anything changes.
+- New `--replace-unrecognized-aliases` on `install.py`, `upgrade.py` and
+  `workflow.py host --use` backs each unrecognised alias up into the run's backup
+  folder, replaces it and reports the backup path.
+
 ## Lossless host switching — workflow 1.6.2 — 2026-09-28
 
 - Installs and upgrades keep every installed host's skills and managed aliases.

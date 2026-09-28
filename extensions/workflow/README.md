@@ -1,6 +1,10 @@
 # Sanduq Workflow
 
-Workflow 1.6.2 makes host switching lossless: installs and upgrades keep every
+Workflow 1.6.3 stops judging a managed alias by its frontmatter: an alias
+is replaced silently only when its whole content hash is the packaged alias, an
+accepted legacy or install-lock hash, or exactly what Spec Kit renders for that
+command; any other content is refused with `ALIAS_HAS_LOCAL_EDITS` unless
+`--replace-unrecognized-aliases` backs it up first. Workflow 1.6.2 makes host switching lossless: installs and upgrades keep every
 installed host's skills and managed aliases instead of Spec Kit's registration
 wiping the non-default host, and a new `workflow.py host [--use codex|claude]
 [--preview]` reports host status or switches the default, re-registering

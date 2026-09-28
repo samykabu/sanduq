@@ -19,7 +19,11 @@ for a bounded task, or install the managed workflow to take a GitHub issue throu
 implementation, verification, documentation, and a pull request. Implementation uses a dedicated
 orchestrator and workers, with an HTML report that follows progress through an authorized PR merge.
 
-Workflow 1.6.2 makes host switching lossless: installs and upgrades keep every
+Workflow 1.6.3 stops judging a managed alias by its frontmatter: an alias
+is replaced silently only when its whole content hash is the packaged alias, an
+accepted legacy or install-lock hash, or exactly what Spec Kit renders for that
+command; any other content is refused with `ALIAS_HAS_LOCAL_EDITS` unless
+`--replace-unrecognized-aliases` backs it up first. Workflow 1.6.2 makes host switching lossless: installs and upgrades keep every
 installed host's skills and managed aliases instead of Spec Kit's registration
 wiping the non-default host, and a new `workflow.py host [--use codex|claude]
 [--preview]` reports host status or switches the default, re-registering
@@ -978,8 +982,8 @@ The first command previews the operation; the second applies the same version wi
 rollback protection:
 
 ```bash
-python .specify/extensions/workflow/scripts/upgrade.py --version 1.6.2 --packages /absolute/path/to/sanduq-packages
-python .specify/extensions/workflow/scripts/upgrade.py --version 1.6.2 --packages /absolute/path/to/sanduq-packages --apply
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.6.3 --packages /absolute/path/to/sanduq-packages
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.6.3 --packages /absolute/path/to/sanduq-packages --apply
 python .specify/extensions/workflow/scripts/workflow.py doctor --project
 ```
 
