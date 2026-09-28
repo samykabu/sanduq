@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (1.3.3)
+## 1.3.3
 
 - The private preview artifact `upload-artifact` step now keeps `retention-days: 2`
   instead of 14. The Cloudflare preview workflow reads the artifact once, right

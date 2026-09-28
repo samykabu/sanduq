@@ -1,6 +1,6 @@
 # Sanduq Workflow
 
-Workflow 1.6.3 stops judging a managed alias by its frontmatter: an alias
+Workflow 1.6.4 pins the released User Manual 1.3.3, whose private preview artifact now keeps `retention-days: 2` instead of 14 so the Cloudflare preview workflow's single read is not blocked by a filled artifact quota; Workflow itself is unchanged. Workflow 1.6.3 stops judging a managed alias by its frontmatter: an alias
 is replaced silently only when its whole content hash is the packaged alias, an
 accepted legacy or install-lock hash, or exactly what Spec Kit renders for that
 command; any other content is refused with `ALIAS_HAS_LOCAL_EDITS` unless
