@@ -212,6 +212,15 @@ class MergeCandidateTemplateTests(unittest.TestCase):
 
 
 class GateJobHygieneTests(unittest.TestCase):
+    def test_the_gate_can_reread_ci_runs(self):
+        # 1.6.1: the gate re-reads every CI run a Verify receipt is accepted
+        # through, so the job needs actions: read and the token in the gate step.
+        document = yaml.safe_load(ci.render(ASSETS['workflow-gates.yml'].read_bytes(), ci.default_ci()).decode())
+        job = document['jobs']['workflow-evidence']
+        self.assertEqual(job['permissions'], {'contents': 'read', 'issues': 'read', 'actions': 'read'})
+        gate = next(step for step in job['steps'] if 'ci_gate.py' in (step.get('run') or ''))
+        self.assertEqual(gate['env']['GH_TOKEN'], '${{ github.token }}')
+
     def test_the_gate_never_ships_a_blanket_fetch_depth_zero(self):
         # G5: fetch-depth: 0 clones every branch and tag in the remote just to
         # compute one merge-base; a bounded PR-history fetch plus an explicit

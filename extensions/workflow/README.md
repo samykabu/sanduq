@@ -145,14 +145,46 @@ case. When the source inventory drifted:
   required lane records the gap, marks Verify `stale` (`ci-lane-gap`) and
   exits 1; a later run covering the lanes closes it. The gate accepts a Verify
   receipt whose inventory drifted while its CI run still covers the current
-  source key; `ci_gate.py --verify-ci-evidence` re-reads that run through the
-  API as well.
-- **Review** is revalidated only after an incremental review of
-  `git diff <review head>..HEAD` is recorded under `specs/<feature>/` with the
-  lines `Diff reviewed: <review head>..<HEAD>` and `Blocking findings: 0`:
-  `revalidate --stage review --diff-reviewed <file>` adds that file to the
-  receipt's evidence (with its hash) and records `diff_reviewed`. A review
-  receipt without `head` (written before 1.6.0) is re-recorded instead.
+  source key, and only when its `ci_evidence` is the complete record
+  `revalidate` writes: `run_id` and `attempt` positive integers, `head` 40-hex
+  and the receipt's `head` (or a commit of it), `source_key` 64-hex, a
+  non-empty `tier`, `lanes` and `required_lanes` lists of strings with
+  `required_lanes` inside `lanes`, `conclusion: success` and an empty
+  `lane_gap`. A missing or malformed field is not current (fail closed). The
+  checkpoint is a committed file, so `ci_gate.py` never trusts the record
+  alone: it always re-reads every run a Verify receipt is accepted through
+  (the check job, the plan artifact, the tree and the source key) through the
+  REST API, and fails closed when it cannot (`CI_EVIDENCE_UNREADABLE`: an API
+  error, no token or no `gh`; `CI_VERIFICATION_CHECK_UNSET`: no
+  `ci.gate.verification_check` to read it by) or when the run no longer
+  matches (`CI_EVIDENCE_REJECTED`). The shipped gate job has
+  `permissions: actions: read` and passes `GH_TOKEN` for this;
+  `--verify-ci-evidence` (1.6.0) is still accepted and changes nothing.
+- **Review** is revalidated only after an incremental review of the source
+  diff `<review head>..HEAD` is recorded under `specs/<feature>/` with four
+  lines: `Diff reviewed: <review head>..<HEAD>`, `Diff sha256: <hash>`,
+  `Reviewer: <name>` (non-empty) and `Blocking findings: 0`. The hash binds the
+  note to the exact diff, so a note written without the diff, or kept from an
+  earlier range, is refused (`DIFF_REVIEW_HASH_MISSING`,
+  `DIFF_REVIEW_HASH_MISMATCH`, `DIFF_REVIEW_REVIEWER_MISSING`, each printing
+  the command below). It is the SHA-256 of the exact bytes this command
+  prints, run in a POSIX shell (Git Bash on Windows):
+
+  ```sh
+  git -c core.quotePath=true diff-tree -r -p --binary --no-renames <review head> <HEAD> -- . \
+    ':(exclude).specify/' ':(exclude).agents/' ':(exclude).claude/' ':(exclude).codex/' \
+    ':(exclude)specs/' ':(exclude)User-Manual/' ':(exclude)docs/' ':(exclude)graphify-out/' \
+    ':(exclude)artifacts/' ':(exclude,glob,icase)**/*.md' | sha256sum
+  ```
+
+  `diff-tree` is plumbing, so personal diff settings (prefixes, colour,
+  renames, algorithm, external or textconv drivers) cannot change the bytes,
+  and the pathspec keeps exactly the paths the source key counts (the
+  source-key exclusions, and `*.md` in any case). `revalidate --stage review
+  --diff-reviewed <file>` recomputes it, adds the file to the receipt's
+  evidence (with its hash) and records `diff_reviewed` with `diff_sha256` and
+  `reviewer`. A review receipt without `head` (written before 1.6.0) is
+  re-recorded instead.
 - **Ready**: `revalidate --stage ready` re-runs task completion, the
   task-issue mapping and the selected documentation freshness checks
   (`--base-ref` defaults to the bound target branch).

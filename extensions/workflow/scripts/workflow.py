@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import unicodedata
@@ -837,20 +838,88 @@ def current_source_key(root):
         return None, None
 
 
+_HEX40 = re.compile(r'[0-9a-f]{40}')
+_HEX64 = re.compile(r'[0-9a-f]{64}')
+
+
+def _positive_int(value):
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def _string_list(value):
+    return isinstance(value, list) and all(isinstance(item, str) and item for item in value)
+
+
+def diff_review_command(base, head):
+    """The one command whose output a recorded incremental review is bound to (`Diff sha256:`).
+
+    `git diff-tree` is plumbing, so user diff configuration (prefixes, colour,
+    renames, algorithm, external drivers, textconv) cannot change its bytes;
+    `--binary` puts binary changes in the hash; the pathspec keeps exactly the
+    paths the source key counts (`source_key.is_source_path`): no excluded
+    prefix and no `*.md` in any ASCII case.
+    """
+    pathspec = ['.'] + [':(exclude)' + prefix for prefix in sk.EXCLUDED_PREFIXES] + [':(exclude,glob,icase)**/*.md']
+    return ['git', '-c', 'core.quotePath=true', 'diff-tree', '-r', '-p', '--binary', '--no-renames', base, head,
+            '--', *pathspec]
+
+
+def diff_review_shell(base, head):
+    """`diff_review_command` spelled for a POSIX shell (Git Bash on Windows)."""
+    return shlex.join(diff_review_command(base, head))
+
+
+def diff_review_sha256(root, base, head):
+    """The SHA-256 of the bytes `diff_review_command(base, head)` prints."""
+    env = {key: value for key, value in os.environ.items()
+           if key not in ('GIT_LITERAL_PATHSPECS', 'GIT_GLOB_PATHSPECS', 'GIT_NOGLOB_PATHSPECS', 'GIT_ICASE_PATHSPECS')}
+    result = subprocess.run(diff_review_command(base, head), cwd=root, capture_output=True, env=env)
+    require(result.returncode == 0,
+            'DIFF_REVIEW_DIFF_FAILED: ' + result.stderr.decode('utf-8', 'replace').strip()[:300])
+    return hashlib.sha256(result.stdout).hexdigest()
+
+
+def ci_evidence_complete(receipt):
+    """Whether a receipt's `ci_evidence` is the complete record `revalidate --stage verify` writes.
+
+    `ci_evidence` lives in a committed checkpoint, so a hand-edited or partial
+    record must never pass: every field the runtime writes is required and
+    well-formed (fail closed), not defaulted.
+    """
+    evidence = receipt.get('ci_evidence')
+    if not isinstance(evidence, dict):
+        return False
+    head, key = evidence.get('head'), evidence.get('source_key')
+    return (_positive_int(evidence.get('run_id')) and _positive_int(evidence.get('attempt'))
+            and isinstance(head, str) and bool(_HEX40.fullmatch(head))
+            and isinstance(receipt.get('head'), str) and bool(_HEX40.fullmatch(receipt['head']))
+            and isinstance(key, str) and bool(_HEX64.fullmatch(key))
+            and isinstance(evidence.get('tier'), str) and bool(evidence['tier'].strip())
+            and _string_list(evidence.get('lanes')) and _string_list(evidence.get('required_lanes'))
+            and evidence.get('conclusion') == 'success'
+            and 'lane_gap' in evidence and evidence['lane_gap'] == []
+            and set(evidence['required_lanes']) <= set(evidence['lanes']))
+
+
 def ci_evidence_current(root, receipt):
     """A Verify receipt's recorded CI run still covers the current source.
 
-    The run concluded success with no lane gap, it covered every lane the
-    drift it was accepted for required, and its source key (the receipt's own)
-    is the key of the current, clean HEAD.
+    The record is complete (`ci_evidence_complete`); the run concluded success
+    with no lane gap and covered every lane the drift it was accepted for
+    required; its head is the receipt's head or a commit of it (revalidate
+    accepts a run on an ancestor with the same source key); and its source key
+    (the receipt's own) is the key of the current, clean HEAD.
     """
-    evidence = receipt.get('ci_evidence')
-    if not isinstance(evidence, dict) or evidence.get('conclusion') != 'success' or evidence.get('lane_gap'):
+    if not ci_evidence_complete(receipt):
         return False
-    if not set(evidence.get('required_lanes') or []) <= set(evidence.get('lanes') or []):
-        return False
+    evidence = receipt['ci_evidence']
+    if evidence['head'] != receipt['head']:
+        ancestor = subprocess.run(['git', 'merge-base', '--is-ancestor', evidence['head'], receipt['head']],
+                                  cwd=root, capture_output=True)
+        if ancestor.returncode != 0:
+            return False
     _, key = current_source_key(root)
-    return key is not None and evidence.get('source_key') == key == receipt.get('source_key')
+    return key is not None and evidence['source_key'] == key == receipt.get('source_key')
 
 
 def receipt_status(root, feature, stage, receipt, policy=None):
@@ -942,8 +1011,10 @@ def recovery_recipe(feature, stage, status, policy, receipt):
             steps.append(f'Push HEAD, wait for the "{check["name"]}" check to pass on it, then '
                          f'{WORKFLOW_SCRIPT} revalidate{at} --stage verify --check-run <run id>')
     elif stage == 'review' and receipt.get('head'):
-        steps.append(f'Review git diff {receipt["head"]}..HEAD and record it in {feature}/evidence/<file>.md with '
-                     f'the lines "Diff reviewed: {receipt["head"]}..<HEAD sha>" and "Blocking findings: 0", then '
+        steps.append(f'Review the source diff {receipt["head"]}..HEAD and record it in {feature}/evidence/<file>.md '
+                     f'with the lines "Diff reviewed: {receipt["head"]}..<HEAD sha>", "Diff sha256: <hash>" (the '
+                     f'SHA-256 of the exact bytes of: {diff_review_shell(receipt["head"], "HEAD")} | sha256sum), '
+                     f'"Reviewer: <who reviewed it>" and "Blocking findings: 0", then '
                      f'{WORKFLOW_SCRIPT} revalidate{at} --stage review --diff-reviewed <that file>')
     elif stage == 'ready':
         steps.append(f'Once Verify and Review are current: {WORKFLOW_SCRIPT} revalidate{at} --stage ready')
@@ -1365,11 +1436,14 @@ class Run:
         return record, {'gap': gap, 'by_path': {path: lanes for path, lanes in by_path.items() if lanes}}
 
     def diff_review_evidence(self, receipt, evidence, head):
-        """A recorded incremental review of `git diff <review head>..HEAD`.
+        """A recorded incremental review of the source diff `<review head>..HEAD`.
 
         The file lives in the feature directory (portable, outside the source
-        key) and names the reviewed range and its outcome on two lines:
-        `Diff reviewed: <review head>..<HEAD>` and `Blocking findings: 0`.
+        key) and carries four lines: `Diff reviewed: <review head>..<HEAD>`,
+        `Diff sha256: <hash>` (the SHA-256 of the bytes `diff_review_command`
+        prints for that range, which binds the note to the exact diff so it
+        cannot be written blind or reused for another), a non-empty
+        `Reviewer: <name>` and `Blocking findings: 0`.
         """
         base = receipt.get('head')
         require(base, 'RECEIPT_HEAD_UNKNOWN: this review receipt predates 1.6.0 and records no head to diff from; '
@@ -1391,7 +1465,23 @@ class Run:
                 '"Diff reviewed: ' + base + '..' + head + '"')
         require(re.search(r'(?im)^\W*Blocking findings:' + marks + r'0\b', text),
                 'DIFF_REVIEW_OUTCOME_MISSING: ' + evidence + ' must state "Blocking findings: 0"')
-        return {'evidence': evidence, 'base': base, 'head': head,
+        # Within the line only: an empty "Reviewer:" must not borrow the next line.
+        reviewers = [value.strip(' \t*_`') for value in re.findall(r'(?im)^[^\w\n]*Reviewer:[ \t*_`]*(.*)$', text)]
+        reviewers = [value for value in reviewers if value]
+        require(reviewers, 'DIFF_REVIEW_REVIEWER_MISSING: ' + evidence + ' must name who reviewed the diff on a '
+                           'line "Reviewer: <name>"')
+        expected = diff_review_sha256(self.root, base, head)
+        recipe = ('compute it with: ' + diff_review_shell(base, head) + ' | sha256sum  (in a POSIX shell such as '
+                  'Git Bash: the hash is of the exact bytes), review that diff, and record the hash on the line '
+                  '"Diff sha256: <hash>"')
+        hashes = [value.lower() for value in
+                  re.findall(r'(?im)^\W*Diff sha256:' + marks + r'([0-9a-f]{64})\b', text)]
+        require(hashes, 'DIFF_REVIEW_HASH_MISSING: ' + evidence + ' must bind the review to the diff on a line '
+                        '"Diff sha256: <hash>". Recovery: ' + recipe)
+        require(expected in hashes, 'DIFF_REVIEW_HASH_MISMATCH: ' + evidence + ' records Diff sha256 ' +
+                ', '.join(hashes) + ', which is not the hash of the diff ' + base + '..' + head +
+                ' (a stale note, or a note for another diff). Recovery: ' + recipe)
+        return {'evidence': evidence, 'base': base, 'head': head, 'diff_sha256': expected, 'reviewer': reviewers[0],
                 'hash': fingerprint_files(self.root, [evidence])[evidence], 'at': now()}
 
     def start(self, issue):

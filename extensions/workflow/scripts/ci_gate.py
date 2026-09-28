@@ -45,23 +45,28 @@ def resolve_features(root, base, explicit, allow_empty=False):
 
 
 def recheck_ci_evidence(root, feature, stage, receipt, policy, github=None):
-    """Re-read a Verify receipt's recorded CI run through the REST API (`--verify-ci-evidence`).
+    """Re-read a Verify receipt's recorded CI run through the REST API.
 
-    The recorded `ci_evidence` is runtime-written like every receipt field;
-    this re-applies the plan contract to the live run for a reviewer who wants
-    the gate itself to see the run.
+    `ci_evidence` is runtime-written, but it lives in a committed checkpoint,
+    so the gate never trusts the record alone: every Verify receipt accepted
+    through it is re-read here and the plan contract re-applied to the live
+    run. A run that cannot be read (no policy check, no token, an API error)
+    fails closed.
     """
     import ci_evidence
     import source_key as sk
     recorded = receipt['ci_evidence']
     check = verification_check(policy)
-    require(check, 'CI_VERIFICATION_CHECK_UNSET: ' + feature)
+    require(check, 'CI_VERIFICATION_CHECK_UNSET: ' + feature + ': Verify is accepted through CI run ' +
+            str(recorded.get('run_id')) + ', which the gate must re-read; set ci.gate.verification_check or '
+            're-record Verify')
     repository = github_repository(root)
     try:
         evidence = ci_evidence.collect(github or ci_evidence.GhClient(), repository, int(recorded['run_id']),
                                        recorded.get('attempt'), check['artifact_prefix'])
-    except ci_evidence.EvidenceError as exc:
-        raise WorkflowError('CI_EVIDENCE_UNREADABLE: ' + stage + ': ' + str(exc)) from exc
+    except (ci_evidence.EvidenceError, OSError, ValueError) as exc:
+        raise WorkflowError('CI_EVIDENCE_UNREADABLE: ' + stage + ': run ' + str(recorded.get('run_id')) + ': ' +
+                            str(exc) + ' (the gate job needs permissions actions: read and GH_TOKEN)') from exc
     plan = evidence['plan'] if isinstance(evidence.get('plan'), dict) else {}
     head = plan.get('headSha')
     local = None
@@ -77,7 +82,12 @@ def recheck_ci_evidence(root, feature, stage, receipt, policy, github=None):
     require(not errors, 'CI_EVIDENCE_REJECTED: ' + stage + ': run ' + str(recorded['run_id']) + ': ' + ' '.join(errors))
 
 
-def check(root, feature, policy, base=None, rules=None, verify_ci_evidence=False, github=None):
+def check(root, feature, policy, base=None, rules=None, verify_ci_evidence=True, github=None):
+    """Evaluate the selected evidence rules for one feature.
+
+    `verify_ci_evidence` is kept for callers of 1.6.0 and changes nothing: a
+    Verify receipt accepted through `ci_evidence` is always re-read.
+    """
     rules = rules or sanduq_ci.LEGACY_GATE_RULES
     directory = inside(root, feature)
     require(directory.is_relative_to(root / 'specs'), 'FEATURE_PATH_INVALID')
@@ -117,7 +127,7 @@ def check(root, feature, policy, base=None, rules=None, verify_ci_evidence=False
             if status.get('via') in ('ci-evidence', 'lane-free-drift'):
                 accepted.append({'stage': stage, 'via': status['via'], 'drift': status.get('paths', []),
                                  **({'run_id': status.get('run_id')} if status['via'] == 'ci-evidence' else {})})
-                if status['via'] == 'ci-evidence' and verify_ci_evidence:
+                if status['via'] == 'ci-evidence':
                     recheck_ci_evidence(root, feature, stage, receipt, policy, github)
             revalidations += [{'stage': stage, **{key: item.get(key) for key in
                                ('via', 'outcome', 'at', 'actor', 'run_id', 'evidence', 'lane_gap')}}
@@ -208,7 +218,8 @@ def main():
     parser.add_argument('--check-index', action='store_true',
                         help='Require receipt dependencies in the Git index before publication')
     parser.add_argument('--verify-ci-evidence', action='store_true',
-                        help='Re-read through the GitHub REST API every CI run a Verify receipt is accepted through')
+                        help='Accepted for compatibility; the gate always re-reads through the GitHub REST API '
+                             'every CI run a Verify receipt is accepted through')
     args = parser.parse_args(); root = args.root.resolve()
     mode = 'required'
     try:
@@ -232,8 +243,7 @@ def main():
                 try:
                     if args.check_index and effective['portability']:
                         index_warnings = check_index(root, feature)['warnings']
-                    result = check(root, feature, policy, args.base_ref, effective,
-                                   **({'verify_ci_evidence': True} if args.verify_ci_evidence else {}))
+                    result = check(root, feature, policy, args.base_ref, effective)
                     result['waivers'] = applied_waivers
                     if index_warnings:
                         result['index_warnings'] = index_warnings
