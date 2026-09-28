@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased (1.3.3)
+
+- The private preview artifact `upload-artifact` step now keeps `retention-days: 2`
+  instead of 14. The Cloudflare preview workflow reads the artifact once, right
+  after the run; 14 days of ~20 MB copies per push filled the account's artifact
+  storage and blocked every Bootstrap run (2026-09-28). A short comment above the
+  setting records why, so the rendered workflow file matches byte for byte across
+  every project that installs this extension.
+
 ## 1.3.2
 
 - `manual_state.py` defaults `--base-ref` to the feature's bound target
