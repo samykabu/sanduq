@@ -4,6 +4,22 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## Evidence gate fixes — workflow 1.6.1 — 2026-09-28
+
+- A Verify receipt's `ci_evidence` is current only when it is the complete record
+  `revalidate --stage verify` writes; `ci_gate.py` always re-reads every CI run a Verify
+  receipt is accepted through and fails closed when it cannot, and the shipped gate job
+  gains `permissions: actions: read`.
+- `revalidate --stage review --diff-reviewed` binds the note to the exact diff with a
+  `Diff sha256:` hash and a non-empty `Reviewer:` line.
+- `revalidate --stage verify --check-run` accepts the plan artifact of the latest attempt
+  at or before the checked one, so re-running only the failed jobs of a verification run
+  no longer breaks the check.
+- `task_issues.py` shortens a task title over GitHub's 256-character issue limit to the
+  headline instead of rejecting it (F14); `ci_gate.py --check-index` names the exact
+  `git add -f <path>` recipe for evidence Git ignores and warns on cross-feature
+  fingerprint paths (F17).
+
 ## Evidence gate — workflow 1.6.0, assure 2.2.2, user-manual 1.3.2 — 2026-09-27
 
 - Workflow 1.6.0: backward-compatible receipt contract (optional `input_roles`, `amendments`, `head`,
