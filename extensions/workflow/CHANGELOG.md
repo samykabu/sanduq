@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (1.6.1)
+## 1.6.1
 
 - A Verify receipt's `ci_evidence` is current only when it is the complete
   record `revalidate --stage verify` writes (`run_id` and `attempt` positive
@@ -27,6 +27,13 @@
   (`DIFF_REVIEW_HASH_MISSING`) or reviewer (`DIFF_REVIEW_REVIEWER_MISSING`) is
   refused with the exact command to compute it; `diff_reviewed` records
   `diff_sha256` and `reviewer`.
+- `revalidate --stage verify --check-run` accepts the plan artifact of the
+  latest attempt at or before the checked one, instead of only the checked
+  attempt's own. Re-running just the failed jobs of a verification run starts
+  a new attempt that reuses the earlier plan job, so no plan artifact exists
+  for the new attempt; `collect()` now takes that earlier attempt's plan and
+  `validate()` requires `runAttempt` to name it. A run with no plan at any
+  attempt still fails. Same rule as Bunyan's `plan-evidence.mjs`.
 - `task_issues.py` no longer rejects a task whose title (`T### : description`)
   would exceed GitHub's 256-character issue title limit. The title is
   shortened to the headline (truncated to fit, with a trailing `...`) while
@@ -41,6 +48,8 @@
   when a receipt's recorded fingerprints reference a path under another
   feature's `specs/` directory, surfaced as `index_warnings` on the gate
   result for that feature (F17).
+
+## 1.6.0
 
 - The shipped `workflow-gates.yml` gate job no longer clones every branch and
   tag in the remote just to compute one merge-base. `actions/checkout` now
