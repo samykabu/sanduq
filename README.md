@@ -19,9 +19,13 @@ for a bounded task, or install the managed workflow to take a GitHub issue throu
 implementation, verification, documentation, and a pull request. Implementation uses a dedicated
 orchestrator and workers, with an HTML report that follows progress through an authorized PR merge.
 
-Workflow 1.6.0 hardens the evidence gate: input roles and assessed amendments on
-receipts, source-drift classification through an affected-lanes hook, and CI runs
-accepted as Verify evidence through `revalidate --check-run`. Workflow 1.5.0 added opt-in model-aware
+Workflow 1.6.1 closes evidence-gate gaps: a Verify receipt's CI evidence must be the
+complete record `revalidate` writes and a diff review is bound to a hashed diff, long
+GitHub issue titles are shortened instead of rejected, and `ci_gate.py --check-index`
+flags evidence paths Git ignores and cross-feature fingerprints. Workflow 1.6.0 hardened
+the evidence gate: input roles and assessed amendments on receipts, source-drift
+classification through an affected-lanes hook, and CI runs accepted as Verify evidence
+through `revalidate --check-run`. Workflow 1.5.0 added opt-in model-aware
 delegation with editable routes and preserved run history. Workflow 1.4.0 added token usage to
 the progress report for each task, phase and the whole feature, and makes
 `--preserve-ci` work on any clone or worktree. Workflow 1.3.0 added issue decisions and an
@@ -969,8 +973,8 @@ The first command previews the operation; the second applies the same version wi
 rollback protection:
 
 ```bash
-python .specify/extensions/workflow/scripts/upgrade.py --version 1.6.0 --packages /absolute/path/to/sanduq-packages
-python .specify/extensions/workflow/scripts/upgrade.py --version 1.6.0 --packages /absolute/path/to/sanduq-packages --apply
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.6.1 --packages /absolute/path/to/sanduq-packages
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.6.1 --packages /absolute/path/to/sanduq-packages --apply
 python .specify/extensions/workflow/scripts/workflow.py doctor --project
 ```
 

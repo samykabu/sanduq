@@ -1,8 +1,12 @@
 # Sanduq Workflow
 
-Workflow 1.6.0 hardens the evidence gate: input roles and assessed amendments on
-receipts, source-drift classification through an affected-lanes hook, and CI runs
-accepted as Verify evidence through `revalidate --check-run`. Workflow 1.5.0 added optional model-aware delegation. Workflow 1.4.0
+Workflow 1.6.1 closes evidence-gate gaps: a Verify receipt's CI evidence must be the
+complete record `revalidate` writes and a diff review is bound to a hashed diff, long
+GitHub issue titles are shortened instead of rejected, and `ci_gate.py --check-index`
+flags evidence paths Git ignores and cross-feature fingerprints. Workflow 1.6.0 hardened
+the evidence gate: input roles and assessed amendments on receipts, source-drift
+classification through an affected-lanes hook, and CI runs accepted as Verify evidence
+through `revalidate --check-run`. Workflow 1.5.0 added optional model-aware delegation. Workflow 1.4.0
 added token usage per task, phase and feature to the progress
 report and makes `--preserve-ci` work on any checkout. Workflow 1.3.0 added issue
 decisions and an optional evidence CI gate. Check
