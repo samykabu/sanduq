@@ -2,6 +2,31 @@
 
 ## Unreleased (1.6.1)
 
+- A Verify receipt's `ci_evidence` is current only when it is the complete
+  record `revalidate --stage verify` writes (`run_id` and `attempt` positive
+  integers, `head` 40-hex and the receipt's head or a commit of it,
+  `source_key` 64-hex, a non-empty `tier`, `lanes` and `required_lanes` lists
+  of strings with `required_lanes` inside `lanes`, `conclusion: success`, an
+  empty `lane_gap`). A hand-edited or partial record in the committed
+  checkpoint no longer passes on defaults (fail closed).
+- `ci_gate.py` always re-reads, through the REST API, every CI run a Verify
+  receipt is accepted through, and fails closed when it cannot read it
+  (`CI_EVIDENCE_UNREADABLE`), when no `ci.gate.verification_check` names the
+  check to read it by (`CI_VERIFICATION_CHECK_UNSET`), or when the run no
+  longer matches (`CI_EVIDENCE_REJECTED`). `--verify-ci-evidence` is still
+  accepted and changes nothing. The shipped `workflow-gates.yml` gate job
+  gains `permissions: actions: read` (with `contents` and `issues: read`) so
+  its existing `GH_TOKEN` can read runs and artifacts.
+- `revalidate --stage review --diff-reviewed <file>` binds the note to the
+  exact diff: besides `Diff reviewed: <review head>..<HEAD>` and
+  `Blocking findings: 0` it requires `Diff sha256: <hash>`, the SHA-256 of the
+  bytes of `git -c core.quotePath=true diff-tree -r -p --binary --no-renames
+  <review head> <HEAD> -- .` plus one `:(exclude)<prefix>` per source-key
+  exclusion and `:(exclude,glob,icase)**/*.md`, and a non-empty `Reviewer:`
+  line. A stale or wrong hash (`DIFF_REVIEW_HASH_MISMATCH`), a missing hash
+  (`DIFF_REVIEW_HASH_MISSING`) or reviewer (`DIFF_REVIEW_REVIEWER_MISSING`) is
+  refused with the exact command to compute it; `diff_reviewed` records
+  `diff_sha256` and `reviewer`.
 - `task_issues.py` no longer rejects a task whose title (`T### : description`)
   would exceed GitHub's 256-character issue title limit. The title is
   shortened to the headline (truncated to fit, with a trailing `...`) while

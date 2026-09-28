@@ -192,12 +192,19 @@ the package's pinned `requirements.txt` when missing. Never install a floating t
      current earlier stages. If it reports a `lane_gap`, Verify stays stale: run the check
      on a commit with the same source key covering those lanes (or re-record Verify), then
      revalidate again. A rejected run (other source key, failed or cancelled check, missing
-     or mismatched plan artifact) changes nothing.
-   - Review stale after source drift: review `git diff <review head>..HEAD` for real, record
-     it in `specs/<feature>/evidence/<file>.md` with the lines
-     `Diff reviewed: <review head>..<HEAD>`, the findings, and `Blocking findings: 0`, then
-     `workflow.py revalidate --feature ... --stage review --diff-reviewed <file>`. A review
-     receipt without `head` (pre-1.6.0) is re-recorded.
+     or mismatched plan artifact) changes nothing. Never edit `ci_evidence` by hand: an
+     incomplete record is not current, and the gate re-reads every run it accepts Verify
+     through (`CI_EVIDENCE_UNREADABLE` / `CI_EVIDENCE_REJECTED`: re-run the check and
+     revalidate, or re-record Verify).
+   - Review stale after source drift: review the source diff `<review head>..HEAD` for real,
+     record it in `specs/<feature>/evidence/<file>.md` with the lines
+     `Diff reviewed: <review head>..<HEAD>`, `Diff sha256: <hash>` (the SHA-256 of the exact
+     bytes of the `git -c core.quotePath=true diff-tree -r -p --binary --no-renames ...` command
+     the recovery prints, piped to `sha256sum` in a POSIX shell), `Reviewer: <name>`, the
+     findings, and `Blocking findings: 0`, then
+     `workflow.py revalidate --feature ... --stage review --diff-reviewed <file>`. A stale or
+     wrong hash, or a missing reviewer, is refused; never reuse a note for another range. A
+     review receipt without `head` (pre-1.6.0) is re-recorded.
    - Ready, once Verify and Review are current: `workflow.py revalidate --feature ...
      --stage ready` (it re-runs task, mapping and documentation checks).
    - Then commit the checkpoint and evidence together; the source key does not move.
