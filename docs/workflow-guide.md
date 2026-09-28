@@ -4,7 +4,12 @@ For installation in new or existing repositories, non-Spec Kit bug fixes,
 GitHub issue decisions, CI mode/rule choices, and later QA/User Manual
 opt-in or opt-out, see the [Sanduq Delivery usage guide](sanduq-delivery-usage.md).
 
-Workflow 1.6.1 closes evidence-gate gaps: a Verify receipt's CI evidence must be the
+Workflow 1.6.2 makes host switching lossless: installs and upgrades keep every
+installed host's skills and managed aliases instead of Spec Kit's registration
+wiping the non-default host, and a new `workflow.py host [--use codex|claude]
+[--preview]` reports host status or switches the default, re-registering
+incomplete hosts and restoring aliases with rollback on failure. Workflow 1.6.1
+closes evidence-gate gaps: a Verify receipt's CI evidence must be the
 complete record `revalidate` writes and a diff review is bound to a hashed diff, long
 GitHub issue titles are shortened instead of rejected, and `ci_gate.py --check-index`
 flags evidence paths Git ignores and cross-feature fingerprints. Workflow 1.6.0 hardened
