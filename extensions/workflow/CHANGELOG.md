@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- `doctor --project` reports a `skill_inventory` block (new `skill_inventory.py`):
+  per-root skill count, total and max frontmatter `description:` bytes, and total
+  `SKILL.md` bytes for `~/.claude/skills`, `.claude/skills` and `.agents/skills`,
+  plus combined totals and cross-root duplicate skill names. Always reported in
+  full, even below threshold, so C4 (skill pruning) can use it. Doctor warns
+  `SKILL_INVENTORY_LARGE` (non-blocking) past 150 combined skills or 20 KiB of
+  combined description bytes; either threshold is overridable per-project under
+  `policy['skills']['inventory_thresholds']`. See the README's "Skill inventory
+  (doctor)" section for the reasoning and JSON shape. "Never invoked" pruning
+  stays out of scope until a telemetry source and window exist.
+
 ## 1.6.4
 
 - Pin the released User Manual 1.3.3 in `dependencies.json`. User Manual 1.3.3

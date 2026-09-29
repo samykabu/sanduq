@@ -169,6 +169,35 @@ plus `blockers` and `can_apply`. The switch does not restore templates or script
 Kit keeps customized ones. Doctor warns (`HOST_SKILLS_MISSING: <other host>`) when a
 host other than the default has lost managed skills, with the repair command.
 
+## Skill inventory (doctor)
+
+`doctor --project` reports a `skill_inventory` block, always with the full numbers,
+whether or not anything is over threshold: per root (`home` = `~/.claude/skills`,
+`project_claude` = `.claude/skills`, `project_agents` = `.agents/skills`) it gives
+`skill_count`, the total and max frontmatter `description:` bytes, and total
+`SKILL.md` bytes; `combined` sums those across roots; `duplicates` lists a skill
+name installed under more than one root. Every root tolerates being missing, an
+unreadable or malformed `SKILL.md` (no frontmatter, or a `description` that is not
+a string counts as 0 bytes, never an error), and a symlink or junction skill folder
+(resolved and counted once, never followed recursively, so a cycle cannot loop).
+The home root resolves through `Path.home()`, overridable with `SANDUQ_HOME` (tests
+must set it rather than touch the real machine's home).
+
+Doctor warns `SKILL_INVENTORY_LARGE` (non-blocking) when the combined skill count
+exceeds 150, or combined description bytes exceed 20 KiB (20480), across all three
+roots. Frontmatter `description:` text is what a host loads into every session just
+to list what is available, before any skill is invoked, so its combined size
+approximates a fixed per-session token cost; 150 skills and 20 KiB were picked as a
+generous multiple of a well-kept single project's own skill set (a few dozen skills
+at well under 150 bytes of description each) — comfortably above normal use, but low
+enough to flag the kind of unpruned accumulation across marketplaces, plugins and a
+project's own skills/ that C4 (skill pruning) is meant to catch. Override either key
+under `policy['skills']['inventory_thresholds']` (`skill_count`, `description_bytes`;
+positive integers only) in `.specify/workflow.yml`. Deciding what to prune, including
+any "never invoked" signal, needs a telemetry source and a window neither doctor nor
+this inventory has; that judgement (and the pruning pass itself) is owner-only and
+out of this package's scope.
+
 ## State and recovery
 
 Policy lives in `.specify/workflow.yml`. Feature state lives under

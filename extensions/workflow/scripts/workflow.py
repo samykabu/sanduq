@@ -21,6 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sanduq_hash import eol_drift, portable_files
 import sanduq_ci
+import skill_inventory
 import source_key as sk
 
 import yaml
@@ -300,6 +301,16 @@ def validate_policy(policy):
         require(isinstance(receipts, dict) and all(
             key in RECEIPT_POLICY_KEYS and type(value) is RECEIPT_POLICY_KEYS[key]
             for key, value in receipts.items()), 'RECEIPTS_POLICY_INVALID')
+    skills = policy.get('skills')
+    if skills is not None:
+        require(isinstance(skills, dict), 'POLICY_SECTION_INVALID: skills')
+        overrides = skills.get('inventory_thresholds')
+        if overrides is not None:
+            require(isinstance(overrides, dict) and overrides
+                    and set(overrides) <= set(skill_inventory.DEFAULT_THRESHOLDS)
+                    and all(type(value) is int and value > 0 for value in overrides.values()),
+                    'SKILL_INVENTORY_THRESHOLDS_INVALID: expected positive integers for '
+                    + ', '.join(sorted(skill_inventory.DEFAULT_THRESHOLDS)))
     scope = policy.get('scope', {})
     require(isinstance(scope, dict), 'POLICY_SECTION_INVALID: scope')
     status_names = scope.get('statuses', {})
@@ -603,6 +614,10 @@ def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True
     errors += ci_errors(root, policy, preserved_ci)
     if project: errors += project_errors(root, policy)
     warnings = host_warnings(root)
+    inventory = skill_inventory.inventory(root, policy)
+    large = skill_inventory.warning(inventory)
+    if large:
+        warnings.append(large)
     drift = eol_drift(root)
     if drift:
         warnings.append(
@@ -613,6 +628,7 @@ def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True
             '.gitattributes (or set core.autocrlf=false), then re-checkout the files listed by "git ls-files --eol" '
             'with "git -c core.autocrlf=false checkout -- <path>".')
     return {'ok': not errors, 'errors': errors, 'warnings': warnings, 'project_checked': project,
+            'skill_inventory': inventory,
             'context': 'Only fresh reliable measurements can trigger context pauses; unavailable or estimated usage is nonblocking outside explicit strict mode'}
 
 
