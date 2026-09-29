@@ -53,9 +53,10 @@ ASSIGN_MARKERS = [
     'the `[collect]` marker or an explicit override (B12), never by default',  # T0 x standing rule 5
     'roughly 150K tokens resident',                                       # T0 hand-off
     '`git stash` and `git add -A`/`git add .` are forbidden for a worker',  # S6
-    'as are `delegate_dispatch.py accept` and `delegate_dispatch.py '
-    'trust-reset`',                                                       # B12: also forbidden for a worker
-    'ledger-trust decisions the orchestration agent alone makes',         # B12: why accept/trust-reset are forbidden
+    'as are `delegate_dispatch.py accept`, `delegate_dispatch.py trust-reset` and '
+    '`delegate_dispatch.py adopt`',                                       # B12: also forbidden for a worker
+    '`accept`/`trust-reset`/`adopt` are ledger-trust decisions the '
+    'orchestration agent alone makes',                                    # B12: why they are forbidden
     'Staging stays with the orchestration agent, which stages a '
     "worker's owned paths by explicit name",                              # S6 fix: no self-contradiction
     '--tasks specs/<feature>/tasks.md --output specs/<feature>/workflow/progress --summary',  # B7 --summary default
@@ -146,6 +147,16 @@ B12_TEXT = (
     "once, since its recorded attempt has no `claim_token` and can never "
     'satisfy `complete`. `trust-reset` is an orchestration-agent command, '
     "never a worker's."
+    ' A checked task with no delegation attempt reaches Ready only through '
+    '`delegate_dispatch.py adopt --feature <feature> --id <task> --command '
+    '"<acceptance check>" --expect counts|files [--owned <path>]`. It refuses '
+    '(`DELEGATION_ADOPT_HAS_ATTEMPT`) if any attempt already exists for that '
+    'task, and otherwise runs the acceptance check with the same machinery as '
+    '`accept` (no shell, `.bat`/`.cmd` shims refused, bounded timeout, output '
+    'cap, owned-path containment, sha256 evidence), recording a successful '
+    'attempt only when the check passes. There is no self-certification or '
+    'exemption path: a project that enables delegation mid-feature adopts '
+    'each already-checked task individually, with a real check.'
 )
 
 # The dispatcher-operations.md marker list must include B12's new [Collect] marker
@@ -177,6 +188,13 @@ class ExecutionProtocolB11Tests(unittest.TestCase):
                     'workflow/skills/workflow/references/dispatcher-operations.md').decode('utf-8'))
                 cls.assign = normalize(cls.raw_assign)
                 cls.report = normalize(cls.raw_report)
+                reference_prefix = 'workflow/skills/workflow/references/'
+                core_path = 'workflow/skills/workflow/SKILL.md'
+                cls.all_reference_texts = {
+                    name: archive.read(name).decode('utf-8')
+                    for name in archive.namelist()
+                    if name.startswith(reference_prefix) or name == core_path
+                }
 
     def test_assign_carries_every_b11_marker(self):
         missing = [m for m in ASSIGN_MARKERS if normalize(m) not in self.assign]
@@ -247,6 +265,19 @@ class ExecutionProtocolB11Tests(unittest.TestCase):
 
     def test_diff_field_uses_the_line_count_wording(self):
         self.assertIn('Diff: <+/- line counts per file, uncommitted>', self.raw_report)
+
+    def test_no_reference_mentions_the_retired_exemption_terms(self):
+        # B12 replaced its exemption path with the evidence-based `adopt` command;
+        # neither of these terms named the old self-certification/exemption
+        # mechanism may reappear in any installed reference or the core.
+        stale_terms = ('orchestrator-executed', 'delegation_enabled_for_execute')
+        offenders = {
+            name: [term for term in stale_terms if term in text]
+            for name, text in self.all_reference_texts.items()
+        }
+        offenders = {name: terms for name, terms in offenders.items() if terms}
+        self.assertEqual(offenders, {},
+                          f'Retired exemption term(s) found: {offenders}')
 
 
 if __name__ == '__main__':

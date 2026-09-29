@@ -178,6 +178,17 @@ any stage claimed under an older checkpoint once, since its recorded attempt
 has no `claim_token` and can never satisfy `complete`. `trust-reset` is an
 orchestration-agent command, never a worker's.
 
+A checked task with no delegation attempt reaches Ready only through
+`delegate_dispatch.py adopt --feature <feature> --id <task> --command
+"<acceptance check>" --expect counts|files [--owned <path>]`. It refuses
+(`DELEGATION_ADOPT_HAS_ATTEMPT`) if any attempt already exists for that task,
+and otherwise runs the acceptance check with the same machinery as `accept`
+(no shell, `.bat`/`.cmd` shims refused, bounded timeout, output cap,
+owned-path containment, sha256 evidence), recording a successful attempt only
+when the check passes. There is no self-certification or exemption path: a
+project that enables delegation mid-feature adopts each already-checked task
+individually, with a real check.
+
 ## Continue through delivery
 
 The orchestration agent returns the Execute evidence to the dispatcher. It stays
