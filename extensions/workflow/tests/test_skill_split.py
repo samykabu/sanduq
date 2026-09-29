@@ -96,6 +96,50 @@ REWORD_EXCEPTIONS = [
      "now says 'Sync native task issues once per phase, not once per task: ...', "
      "preserving the same substance (sync through the dispatcher, after accepted "
      "batches) while fixing the timing to a single call per phase."),
+    ('```text python .specify/extensions/workflow/scripts/progress.py init --tasks '
+     'specs/<feature>/tasks.md --output specs/<feature>/workflow/progress ```',
+     "B11 (Sprint 4) added the B7 '--summary' flag to every routine progress.py/"
+     "task_issues.py example call once B7 shipped it in the same release; the "
+     "command in references/execution-assign.md is the same 'progress.py init "
+     "--tasks ... --output ...' call with ' --summary' appended, so the sentence "
+     "unit (the whole fenced block, one unit because it has no sentence-ending "
+     "punctuation) no longer matches byte-for-byte."),
+    ('```text python .specify/extensions/workflow/scripts/progress.py task --output '
+     'specs/<feature>/workflow/progress --id T001 --status running --agent <worker-id> '
+     '--note "Own src/example.py; depends on T000" python .specify/extensions/workflow/'
+     'scripts/progress.py task --output specs/<feature>/workflow/progress --id T001 '
+     '--status done --agent <worker-id> --note "Acceptance check passed; evidence: '
+     'evidence/T001.txt" python .specify/extensions/workflow/scripts/progress.py event '
+     '--output specs/<feature>/workflow/progress --message "Phase 1 tests passed; '
+     'preparing phase commit" python .specify/extensions/workflow/scripts/progress.py '
+     'phase --output specs/<feature>/workflow/progress --name "Phase 1" --status '
+     'complete --commit <sha> ```',
+     "same B7 '--summary' addition as above, applied to the task/event/phase example "
+     "block in references/execution-report.md; every command is unchanged apart from "
+     "the appended ' --summary'."),
+    ('```text python .specify/extensions/workflow/scripts/progress.py usage --output '
+     'specs/<feature>/workflow/progress --id T001 --agent <worker-id> --collect claude '
+     'python .specify/extensions/workflow/scripts/progress.py usage --output '
+     'specs/<feature>/workflow/progress --id T002 --agent <worker-id> --collect codex '
+     'python .specify/extensions/workflow/scripts/progress.py usage --output '
+     'specs/<feature>/workflow/progress --id T003 --agent <run-id> --collect delegate '
+     '--log .delegate/runs/<run-id>/result.json python .specify/extensions/workflow/'
+     'scripts/progress.py usage --output specs/<feature>/workflow/progress --overhead '
+     'orchestrator --agent <orchestrator-id> --collect claude python .specify/'
+     'extensions/workflow/scripts/progress.py sync --output specs/<feature>/workflow/'
+     'progress ```',
+     "same B7 '--summary' addition as above, applied to the usage/sync example block "
+     "in references/execution-report.md; every command is unchanged apart from the "
+     "appended ' --summary'."),
+    ('```text python .specify/extensions/workflow/scripts/progress.py pr --output '
+     'specs/<feature>/workflow/progress --url <pr-url> --status open python .specify/'
+     'extensions/workflow/scripts/progress.py event --output specs/<feature>/workflow/'
+     'progress --message "CI failure: <check>; fix assigned to <worker-id>" python '
+     '.specify/extensions/workflow/scripts/progress.py pr --output specs/<feature>/'
+     'workflow/progress --url <pr-url> --status merged ```',
+     "same B7 '--summary' addition as above, applied to the PR-status example block "
+     "in references/execution-report.md; every command is unchanged apart from the "
+     "appended ' --summary'."),
 ]
 
 

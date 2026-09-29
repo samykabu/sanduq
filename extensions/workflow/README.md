@@ -108,10 +108,11 @@ for workers (S6); and a consumers checklist runs after every fix (F11). It also
 places `task_issues.py --sync-states` at the phase boundary rather than per task
 (from B7), records dispatcher overhead with `progress.py usage --overhead
 dispatcher --agent <id> --collect claude --log <path>` at every phase commit,
-and names the planned `--summary` default for routine script calls, noting it
-is not yet implemented on `task_issues.py`, `progress.py`, `assure_state.py`,
-`manual_state.py` or `project-sync` (B7 has not shipped it as of this release).
-`execution-report.md` carries a marked placeholder section, "Light-tier
+and puts `--summary` (B7: `ok`/`error` plus counts, or `skipped reason=...`
+when a call had nothing to do) on every routine `task_issues.py` and
+`progress.py` example call, reserving `--json` for a call whose result must be
+parsed programmatically. `execution-report.md` carries a marked placeholder
+section, "Light-tier
 collection results (B12)", for B12's still-being-revised delegation text.
 `extensions/workflow/tests/test_execution_protocol_b11.py` asserts these rules
 are present in the installed reference files.

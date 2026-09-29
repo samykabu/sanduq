@@ -36,11 +36,11 @@
   `task_issues.py --sync-states` now runs once per phase boundary, not once
   per task (from B7), and the dispatcher's own token usage is recorded with
   `progress.py usage --overhead dispatcher --agent <id> --collect claude --log
-  <path>` at every phase commit. The planned `--summary` default for routine
-  calls to `task_issues.py`, `progress.py`, `assure_state.py`,
-  `manual_state.py` and `project-sync` is documented, noting it is not yet
-  implemented on any of the five (B7 has not shipped it). A marked placeholder
-  section, "Light-tier collection results (B12)", awaits B12's final text.
+  <path>` at every phase commit. Every routine `task_issues.py` and
+  `progress.py` example call now carries `--summary` (B7: `ok`/`error` plus
+  counts, or `skipped reason=...`), with `--json` reserved for a call whose
+  result must be parsed programmatically. A marked placeholder section,
+  "Light-tier collection results (B12)", awaits B12's final text.
   New `extensions/workflow/tests/test_execution_protocol_b11.py` asserts every
   rule above is present in the installed reference files, following
   `test_skill_split.py`'s style. No version bump; no script behavior changed.

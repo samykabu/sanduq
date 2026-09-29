@@ -32,6 +32,7 @@ ASSIGN_MARKERS = [
     'the `[collect]` marker or an explicit override (B12), never by default',  # T0 x standing rule 5
     'roughly 150K tokens resident',                                       # T0 hand-off
     '`git stash` and `git add -A`/`git add .` are forbidden for a worker',  # S6
+    '--tasks specs/<feature>/tasks.md --output specs/<feature>/workflow/progress --summary',  # B7 --summary default
 ]
 
 REPORT_MARKERS = [
@@ -52,7 +53,9 @@ REPORT_MARKERS = [
     "`sync_states()` already walks",                                   # B7 cadence rationale
     'Never infer human-review completion from generated evidence',
     'Prefer `--summary`',                                              # B7 quiet-output default
-    'is not yet implemented on any of the five',                       # honest status, no invented flag
+    'skipped reason=<why>',                                            # B7 --summary skip form
+    "--parent ... --apply --summary",                                  # --summary on the sync-states call
+    '--collect claude --summary',                                      # --summary on a usage example
 ]
 
 TASK_CLASSES = ('implementation', 'qa_author', 'qa_collect', 'documentation', 'review')

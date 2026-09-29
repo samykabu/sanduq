@@ -29,7 +29,7 @@ simulated role or serial parent execution as agent delegation.
 The orchestration agent creates the report before assigning the first task:
 
 ```text
-python .specify/extensions/workflow/scripts/progress.py init --tasks specs/<feature>/tasks.md --output specs/<feature>/workflow/progress
+python .specify/extensions/workflow/scripts/progress.py init --tasks specs/<feature>/tasks.md --output specs/<feature>/workflow/progress --summary
 ```
 
 The report is titled from the plan's `# Tasks: <feature>` heading. Pass

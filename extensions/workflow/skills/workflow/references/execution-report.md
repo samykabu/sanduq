@@ -11,21 +11,21 @@ The orchestration agent is the sole report writer. Update it on assignment,
 completion, failure, recovery and each lifecycle transition. Use actual task IDs:
 
 ```text
-python .specify/extensions/workflow/scripts/progress.py task --output specs/<feature>/workflow/progress --id T001 --status running --agent <worker-id> --note "Own src/example.py; depends on T000"
-python .specify/extensions/workflow/scripts/progress.py task --output specs/<feature>/workflow/progress --id T001 --status done --agent <worker-id> --note "Acceptance check passed; evidence: evidence/T001.txt"
-python .specify/extensions/workflow/scripts/progress.py event --output specs/<feature>/workflow/progress --message "Phase 1 tests passed; preparing phase commit"
-python .specify/extensions/workflow/scripts/progress.py phase --output specs/<feature>/workflow/progress --name "Phase 1" --status complete --commit <sha>
+python .specify/extensions/workflow/scripts/progress.py task --output specs/<feature>/workflow/progress --id T001 --status running --agent <worker-id> --note "Own src/example.py; depends on T000" --summary
+python .specify/extensions/workflow/scripts/progress.py task --output specs/<feature>/workflow/progress --id T001 --status done --agent <worker-id> --note "Acceptance check passed; evidence: evidence/T001.txt" --summary
+python .specify/extensions/workflow/scripts/progress.py event --output specs/<feature>/workflow/progress --message "Phase 1 tests passed; preparing phase commit" --summary
+python .specify/extensions/workflow/scripts/progress.py phase --output specs/<feature>/workflow/progress --name "Phase 1" --status complete --commit <sha> --summary
 ```
 
 Record token usage from the worker's own harness log whenever a task reaches
 `done` or `blocked`. Pass the host agent ID the worker was spawned with:
 
 ```text
-python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T001 --agent <worker-id> --collect claude
-python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T002 --agent <worker-id> --collect codex
-python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T003 --agent <run-id> --collect delegate --log .delegate/runs/<run-id>/result.json
-python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --overhead orchestrator --agent <orchestrator-id> --collect claude
-python .specify/extensions/workflow/scripts/progress.py sync --output specs/<feature>/workflow/progress
+python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T001 --agent <worker-id> --collect claude --summary
+python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T002 --agent <worker-id> --collect codex --summary
+python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T003 --agent <run-id> --collect delegate --log .delegate/runs/<run-id>/result.json --summary
+python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --overhead orchestrator --agent <orchestrator-id> --collect claude --summary
+python .specify/extensions/workflow/scripts/progress.py sync --output specs/<feature>/workflow/progress --summary
 ```
 
 `claude` finds `~/.claude/projects/*/*/subagents/agent-<id>.jsonl`, `codex` finds
@@ -49,7 +49,7 @@ At every phase commit, the orchestration agent also records the dispatcher's own
 overhead, reading its session transcript path from the handoff:
 
 ```text
-python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --overhead dispatcher --agent <dispatcher-session-id> --collect claude --log <dispatcher's own session transcript>
+python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --overhead dispatcher --agent <dispatcher-session-id> --collect claude --log <dispatcher's own session transcript> --summary
 ```
 
 Do this immediately after that phase's `progress.py phase --status complete`
@@ -63,19 +63,19 @@ failed attempts alongside subsequent successful evidence.
 Sync native task issues once per phase, not once per task: after every task in
 the phase is committed and its documentation tasks (QA Document, Manual Update,
 where selected) are done, run `task_issues.py --sync-states --feature ...
---parent ... --apply` exactly once for the phase. `sync_states()` already walks
-every task in `tasks.md` on each call, so a single call at the phase boundary
-reports and applies every completed task's state together; calling it after
-each task repeats the same walk for no new information. Never infer
-human-review completion from generated evidence: a human-review task's issue
-closes only on the human's own signal, never because its evidence file exists.
+--parent ... --apply --summary` exactly once for the phase. `sync_states()`
+already walks every task in `tasks.md` on each call, so a single call at the
+phase boundary reports and applies every completed task's state together;
+calling it after each task repeats the same walk for no new information. Never
+infer human-review completion from generated evidence: a human-review task's
+issue closes only on the human's own signal, never because its evidence file
+exists.
 
-Prefer `--summary` (a one-line ok/error result with counts) for routine protocol
-calls to `task_issues.py`, `progress.py`, `assure_state.py`, `manual_state.py`
-and `project-sync`; reserve `--json` for a call whose result must be parsed
-programmatically. As of this release, `--summary` is not yet implemented on any
-of the five (only `project-sync --json` exists); until it ships, read each
-script's existing output directly.
+Prefer `--summary` (a one-line result with counts) for routine protocol calls
+to `task_issues.py`, `progress.py`, `assure_state.py`, `manual_state.py` and
+`project-sync`: it prints `ok` or `error` plus counts, or `skipped
+reason=<why>` when the call had nothing to do. Reserve `--json` for a call
+whose result must be parsed programmatically.
 
 Continue until every implementation phase is finished. At each phase boundary,
 run the required checks, inspect the combined diff, and have the orchestration
@@ -170,9 +170,9 @@ merge authorization, keep the report at the actual PR state and request only the
 missing authorization after the PR is concrete and reviewable.
 
 ```text
-python .specify/extensions/workflow/scripts/progress.py pr --output specs/<feature>/workflow/progress --url <pr-url> --status open
-python .specify/extensions/workflow/scripts/progress.py event --output specs/<feature>/workflow/progress --message "CI failure: <check>; fix assigned to <worker-id>"
-python .specify/extensions/workflow/scripts/progress.py pr --output specs/<feature>/workflow/progress --url <pr-url> --status merged
+python .specify/extensions/workflow/scripts/progress.py pr --output specs/<feature>/workflow/progress --url <pr-url> --status open --summary
+python .specify/extensions/workflow/scripts/progress.py event --output specs/<feature>/workflow/progress --message "CI failure: <check>; fix assigned to <worker-id>" --summary
+python .specify/extensions/workflow/scripts/progress.py pr --output specs/<feature>/workflow/progress --url <pr-url> --status merged --summary
 ```
 
 Set `merged` only after reading GitHub's actual merged state and merge SHA. Record
