@@ -21,7 +21,7 @@ import tempfile
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import delegation
 import workflow
@@ -1052,6 +1052,29 @@ def parse_files(text):
 TRAVERSAL_SEGMENT = re.compile(r'(^|[\\/])\.\.($|[\\/])')
 
 
+def _path_escapes_relative(text):
+    """True when ``text`` is rooted, drive-anchored or otherwise absolute on
+    Windows or POSIX, checked explicitly with both flavours rather than the
+    host's own ``Path`` class (finding, round 6).
+
+    ``Path.is_absolute()`` alone is not enough on Windows: a root-relative
+    path like ``\\x`` (a root but no drive) resolves to the root of whatever
+    the *current* drive happens to be, and a drive-relative path like
+    ``C:x`` (a drive but no root) resolves relative to that drive's own,
+    separately tracked working directory -- both escape the intended
+    directory while ``PureWindowsPath.is_absolute()`` requires both a drive
+    and a root together and returns ``False`` for each on its own. Checking
+    ``PureWindowsPath`` explicitly (not the host's ``Path``) catches this
+    even when the code runs on POSIX, where a literal ``C:x`` or ``\\x``
+    string would otherwise be treated as an ordinary, safe-looking relative
+    path name.
+    """
+    windows = PureWindowsPath(text)
+    if windows.drive or windows.root or windows.is_absolute():
+        return True
+    return PurePosixPath(text).is_absolute()
+
+
 def file_sha256(path):
     digest = hashlib.sha256()
     with open(path, 'rb') as handle:
@@ -1062,44 +1085,60 @@ def file_sha256(path):
 
 def owned_roots(cwd, owned_paths):
     """Resolve each declared owned path relative to ``cwd``; ``None`` on any
-    absolute path or ``..`` traversal in the declaration itself."""
+    rooted/drive-anchored/absolute path (either flavour) or ``..`` traversal
+    in the declaration itself, or on a resolved root that lands outside
+    ``cwd`` (for example because the declared name is itself a symlink to
+    somewhere else): an owned root is only ever a subdirectory of the task's
+    own working directory, never a way to point evidence checks elsewhere.
+    """
     cwd = Path(cwd).resolve()
     roots = []
     for raw in (owned_paths or ['.']):
         text = str(raw).strip()
-        if not text or Path(text).is_absolute() or TRAVERSAL_SEGMENT.search(text):
+        if not text or _path_escapes_relative(text) or TRAVERSAL_SEGMENT.search(text):
             return None
-        roots.append((cwd / text).resolve())
+        try:
+            resolved = (cwd / text).resolve()
+        except OSError:
+            return None
+        if not resolved.is_relative_to(cwd):
+            return None
+        roots.append(resolved)
     return roots or None
 
 
 def validate_owned_files(cwd, owned_paths, paths):
     """Every path must exist, be non-empty, and resolve inside a declared owned path.
 
-    Defends against absolute paths, ``..`` traversal and symlink escapes: an
-    absolute path or a literal ``..`` segment is rejected outright, and every
-    remaining candidate is fully resolved (following any symlink to its real
-    location) before containment against ``owned_paths`` (each resolved
-    relative to ``cwd``; the whole ``cwd`` when none were declared, e.g. a
-    pre-B12-review ledger) is checked, so a symlink whose target lands
-    outside every owned root cannot pass. Any single invalid path fails the
-    whole list, matching the guard's "no partial acceptance" rule. Returns a
-    list of ``{path, sha256, size}`` records (finding 8a), or ``None``.
+    Defends against rooted/drive-anchored/absolute paths (Windows and POSIX,
+    checked explicitly regardless of the host OS -- ``\\x``, ``C:x``,
+    ``C:\\x`` and ``//host/x`` are all rejected even though a bare
+    ``Path.is_absolute()`` check misses the first two), ``..`` traversal and
+    symlink escapes: every remaining candidate is fully resolved (following
+    any symlink to its real location) before it is required to stay inside
+    both ``cwd`` itself and at least one declared owned path (each resolved
+    relative to ``cwd`` and itself required to stay inside it; the whole
+    ``cwd`` when none were declared, e.g. a pre-B12-review ledger), so
+    neither a symlinked "owned" directory nor a symlinked file can land
+    outside the task's own working directory. Any single invalid path fails
+    the whole list, matching the guard's "no partial acceptance" rule.
+    Returns a list of ``{path, sha256, size}`` records (finding 8a), or
+    ``None``.
     """
+    cwd = Path(cwd).resolve()
     roots = owned_roots(cwd, owned_paths)
     if roots is None:
         return None
-    cwd = Path(cwd).resolve()
     verified = []
     for raw in paths:
         text = str(raw).strip()
-        if not text or Path(text).is_absolute() or TRAVERSAL_SEGMENT.search(text):
+        if not text or _path_escapes_relative(text) or TRAVERSAL_SEGMENT.search(text):
             return None
         try:
             candidate = (cwd / text).resolve()
         except OSError:
             return None
-        if not any(candidate.is_relative_to(owned) for owned in roots):
+        if not candidate.is_relative_to(cwd) or not any(candidate.is_relative_to(owned) for owned in roots):
             return None
         try:
             if not candidate.is_file():
@@ -1806,6 +1845,37 @@ def trust_reset(root, feature, reason):
     return {'feature': feature, 'trust': 'trusted', **entry}
 
 
+def orchestrator_executed(root, feature, task_id, reason):
+    """Record ``task_id`` as the orchestrator's own direct work, never
+    delegated through the dispatcher (round 6, finding 2).
+
+    The Ready gate normally requires a checked task to have a successful
+    delegated attempt once delegation is enabled; tasks.md itself never
+    timestamps an individual checkbox, so it cannot on its own distinguish a
+    task done before delegation was enabled for this feature from one that
+    simply skipped the dispatcher. This is the escape hatch for the case the
+    execute stage's own receipt cannot cover by itself: delegation turned on
+    partway through one long-lived execute stage, so some of its tasks
+    predate enablement even though the stage's receipt (stamped once, at the
+    end) shows delegation enabled by then. An orchestrator-only, human-facing
+    admission -- a worker brief forbids delegate_dispatch.py entirely -- so
+    the reason is retained for audit, not validated for content.
+    """
+    root = root.resolve()
+    feature = feature_identity(root, feature)
+    delegation.require(isinstance(reason, str) and reason.strip(),
+                       'DELEGATION_ORCHESTRATOR_EXECUTED_REASON_REQUIRED')
+    delegation.require_no_maintenance(root)
+    try:
+        actor = getpass.getuser()
+    except Exception:
+        actor = None
+    entry = {'task_id': task_id, 'at': stamp(), 'actor': actor, 'reason': reason.strip()}
+    with edit_ledger(root, feature) as ledger:
+        ledger.setdefault('orchestrator_executed', []).append(entry)
+    return {'feature': feature, **entry}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=Path.cwd())
@@ -1849,6 +1919,10 @@ def main(argv=None):
     trust_reset_cmd = sub.add_parser('trust-reset')
     trust_reset_cmd.add_argument('--feature', required=True)
     trust_reset_cmd.add_argument('--reason', required=True)
+    orchestrator_executed_cmd = sub.add_parser('orchestrator-executed')
+    orchestrator_executed_cmd.add_argument('--feature', required=True)
+    orchestrator_executed_cmd.add_argument('--id', required=True)
+    orchestrator_executed_cmd.add_argument('--reason', required=True)
     args = parser.parse_args(argv)
     try:
         if args.action == 'start':
@@ -1865,6 +1939,8 @@ def main(argv=None):
                             args.timeout, args.owned)
         elif args.action == 'trust-reset':
             result = trust_reset(args.root, args.feature, args.reason)
+        elif args.action == 'orchestrator-executed':
+            result = orchestrator_executed(args.root, args.feature, args.id, args.reason)
         else:
             result = reassign(args.root, args.feature, args.run_id, args.reason, args.task_file)
         print(json.dumps(result, indent=2))

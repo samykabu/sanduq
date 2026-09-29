@@ -737,6 +737,59 @@ class DelegationTests(unittest.TestCase):
             'tasks': True, 'task_links': False, 'documentation': False})
         self.assertIn('tasks', ran)
 
+    def test_ready_task_gate_rejects_a_checked_task_with_no_delegation_attempt(self):
+        """Round 6, finding 2: the gate previously only rejected a checked
+        task whose latest attempt existed and had failed; one with no
+        attempt at all slipped through unnoticed. Delegation enabled for the
+        execute stage (its own receipt says so) and no attempt anywhere for
+        T001 must fail, not pass."""
+        self.tasks('- [x] T001 [Collect] Run smoke suite\n')
+        self.enable()
+        run = w.Run(self.root, self.feature)
+        run.start('acme/app#10')
+        state = run.load()
+        state.setdefault('receipts', {})['execute'] = {'delegation_enabled_for_execute': True}
+        with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_TASK_UNVERIFIED'):
+            w.ready_checks(self.root, self.feature, self.policy, state, rules={
+                'tasks': True, 'task_links': False, 'documentation': False})
+
+    def test_ready_task_gate_grandfathers_a_task_completed_before_delegation_was_enabled(self):
+        """Round 6, finding 2: when the execute stage's own receipt records
+        that delegation was OFF at the claim that completed it, none of its
+        tasks was ever expected to go through the dispatcher, so a checked
+        task with no attempt at all is exempt, not merely warned -- the rule
+        chosen so enabling delegation mid-feature does not retroactively
+        fail a stage that already finished without it."""
+        self.tasks('- [x] T001 [Collect] Run smoke suite\n')
+        self.enable()
+        run = w.Run(self.root, self.feature)
+        run.start('acme/app#10')
+        state = run.load()
+        state.setdefault('receipts', {})['execute'] = {'delegation_enabled_for_execute': False}
+        ran = w.ready_checks(self.root, self.feature, self.policy, state, rules={
+            'tasks': True, 'task_links': False, 'documentation': False})
+        self.assertIn('tasks', ran)
+
+    def test_ready_task_gate_accepts_an_orchestrator_executed_marker(self):
+        """Round 6, finding 2: the finer-grained escape hatch for a task done
+        before delegation was turned on partway through one long-lived
+        execute stage, even though the stage's own receipt (stamped only
+        once, at the end) shows delegation enabled by then. The marker must
+        both exempt the task and be durably recorded."""
+        self.tasks('- [x] T001 [Collect] Run smoke suite\n')
+        self.enable()
+        run = w.Run(self.root, self.feature)
+        run.start('acme/app#10')
+        state = run.load()
+        state.setdefault('receipts', {})['execute'] = {'delegation_enabled_for_execute': True}
+        result = dispatch.orchestrator_executed(self.root, self.feature, 'T001',
+                                                'Implemented directly before delegation was turned on')
+        self.assertEqual(result['task_id'], 'T001')
+        self.assertIn('T001', delegation.orchestrator_executed_tasks(self.root, self.feature))
+        ran = w.ready_checks(self.root, self.feature, self.policy, state, rules={
+            'tasks': True, 'task_links': False, 'documentation': False})
+        self.assertIn('tasks', ran)
+
     def test_trust_reset_refuses_the_probe_hand_edit_with_marker_deleted(self):
         """Finding 1, round 4, the exact probe: hand-edit the ledger, delete
         the local marker so no mismatch is ever detected, then call
@@ -1347,6 +1400,32 @@ class DelegationTests(unittest.TestCase):
                 link.unlink(missing_ok=True)
         finally:
             shutil.rmtree(outside_dir, ignore_errors=True)
+
+    def test_validate_owned_files_rejects_windows_root_and_drive_anchored_paths(self):
+        """Round 6, finding 1: Path.is_absolute() misses a root-relative
+        ("\\x") or drive-relative ("C:x") Windows path, which still escapes
+        the current directory when resolved against it. Checked explicitly
+        with both path flavours regardless of host OS, since the host here
+        may not even be Windows."""
+        cwd = self.root
+        probes = ['\\x', 'C:x', 'C:\\x', '//host/x', '..\\x']
+        for probe in probes:
+            with self.subTest(probe=probe):
+                self.assertIsNone(dispatch.owned_roots(cwd, [probe]))
+                self.assertIsNone(dispatch.validate_owned_files(cwd, None, [probe]))
+
+    def test_accept_rejects_windows_root_and_drive_anchored_file_paths(self):
+        """Round 6, finding 1, end to end: the same five probes must also
+        leave an `accept` call unverified, not merely fail the low-level
+        helper in isolation."""
+        run_id = self._unverified_run()
+        for probe in ('\\x', 'C:x', 'C:\\x', '//host/x', '..\\x'):
+            with self.subTest(probe=probe), \
+                 patch.object(dispatch, 'run_capped',
+                             return_value=self.fake_run_capped(0, json.dumps({'files': [probe]}))):
+                result = dispatch.accept(self.root, self.feature, run_id, 'collect', 'files')
+            self.assertFalse(result['accepted'])
+            self.assertEqual(result['status'], 'unverified')
 
     def test_accept_failed_command_stays_unverified(self):
         run_id = self._unverified_run()

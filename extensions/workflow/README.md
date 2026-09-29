@@ -987,7 +987,45 @@ with `DELEGATION_STAGE_NOT_VERIFIED` otherwise. The Ready task gate
 (`ci_gate.py`'s `tasks` rule, and `revalidate --stage ready`) similarly
 refuses a checked `[x]` task whose latest delegated attempt is anything but
 `successful` (running, starting, failed, abandoned or unverified) with
-`DELEGATION_TASK_UNVERIFIED`, naming every such task.
+`DELEGATION_TASK_UNVERIFIED`, naming every such task — including one with
+**no** attempt at all, not only one that exists and failed.
+
+**A checked task with no attempt at all: the grandfather rule.** `tasks.md`
+never timestamps an individual checkbox, so the gate cannot on its own tell a
+task done before delegation was enabled for this feature from one that
+simply skipped the dispatcher after delegation was already on. Two
+exceptions keep enforcement from breaking a project that turns delegation on
+mid-feature, both read from records the checkpoint and ledger already keep
+(or, for the second, a new one this rule adds):
+
+1. **The execute stage's own receipt.** `complete()` stamps
+   `delegation_enabled_for_execute` on the `execute` receipt once, from
+   `active['delegation']` at the claim that completed it — the same field
+   that already selects a stage's own delegation route. When that is
+   `False` (delegation was off at completion), the whole stage is exempt:
+   nothing in it was ever expected to go through the dispatcher, so a
+   missing attempt proves nothing. This is deliberately stage-wide, not
+   per-task, because no finer-grained history exists for an already-finished
+   stage.
+2. **An explicit `orchestrator-executed` marker**, for the case the receipt
+   above cannot cover: delegation turned on *partway through* one
+   long-lived `execute` stage (claimed, worked on, checkpointed and
+   re-claimed over several sessions before finally completing), so some
+   tasks predate enablement even though the stage's receipt — stamped only
+   once, at the very end — shows delegation enabled by then. Run
+   `delegate_dispatch.py orchestrator-executed --feature <f> --id <task> --reason "<text>"`
+   to record that the orchestrator implemented that specific task directly;
+   the entry (`task_id`, `at`, `actor`, `reason`) is appended to
+   `delegations.json`'s `orchestrator_executed` list, the same tamper-evident
+   ledger every attempt lives in, and exempts only that task. Like
+   `trust-reset`, this is an orchestrator-only, human-facing admission — a
+   worker brief forbids `delegate_dispatch.py` entirely — and the reason is
+   kept for audit, not validated for content.
+
+Neither exception is available before delegation is enabled at all, or once
+the execute receipt exists and reports `delegation_enabled_for_execute:
+true` with no matching `orchestrator-executed` entry: at that point a
+missing attempt is exactly what `DELEGATION_TASK_UNVERIFIED` is for.
 
 **Ledger trust.** Both `complete` and the Ready gate also read
 `delegation.ledger_trust_state`, a tri-state check: `'trusted'` (the local

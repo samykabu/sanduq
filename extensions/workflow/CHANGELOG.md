@@ -108,6 +108,28 @@
   asserts every rule above is present in the installed reference files,
   including an exact-text check of the B12 section, following
   `test_skill_split.py`'s style. No version bump; no script behavior changed.
+- Delegation guard, round 6 corrections (B12). `delegate_dispatch.py`'s
+  `owned_roots`/`validate_owned_files` now reject a root-relative (`\x`) or
+  drive-relative (`C:x`) Windows path that `Path.is_absolute()` alone
+  misses, checking `PureWindowsPath`/`PurePosixPath` explicitly regardless
+  of host OS, and require every resolved owned root and candidate file to
+  stay inside the recorded `cwd` itself, not only inside a declared owned
+  root. The Ready task gate's `tasks` rule previously only rejected a
+  checked task whose latest delegated attempt existed and had failed; one
+  with no attempt at all slipped through, because the check only ran when
+  `latest_attempt` returned non-`None`. Fixed by requiring `'successful'`
+  from a missing attempt too, with two grandfathers so a project that
+  enables delegation mid-feature is not retroactively broken: the `execute`
+  stage's own receipt now records `delegation_enabled_for_execute` (stamped
+  once, from `active['delegation']`, when `complete()` finishes that stage),
+  exempting the whole stage when it is `False`; and a new
+  `delegate_dispatch.py orchestrator-executed --feature <f> --id <task>
+  --reason "<text>"` command records a specific task as the orchestrator's
+  own direct work in `delegations.json`'s new `orchestrator_executed` list,
+  exempting only that task for the finer-grained case of delegation turned
+  on partway through one long-lived `execute` stage. See the README's
+  "grandfather rule" section for the full rationale.
+
 - Delegation guard, round 5 corrections (B12; consensus). Round 4's
   `TIER_QUALIFIER_TOKENS` (`high`, `xhigh`, `max`, `pro`, `large`) rejected a
   light-tier model match too eagerly — the unsafe direction, since a false
