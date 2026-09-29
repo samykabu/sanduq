@@ -501,8 +501,13 @@ def ensure(name, root, dependencies_file, checks_file=None, policy_file=None, ap
             try:
                 _, latest_pre = parse_version(latest)
                 # A pre-release catalog release (e.g. '3.0.0-rc.1') is never "newer": it must
-                # never be surfaced to the user or auto-installed as a stable upgrade.
-                is_newer = (latest_pre is None and latest != entry.get('version')
+                # never be surfaced to the user or auto-installed as a stable upgrade. Nor is a
+                # catalog version that is merely *different* from the installed one: it must be
+                # strictly greater by SemVer precedence, or an older-but-still-range-compatible
+                # catalog result (e.g. installed 1.2.0, catalog 1.1.0, both satisfying '^1.0.0')
+                # would be reported and even auto-installed as an "update".
+                is_newer = (latest_pre is None
+                            and compare_versions(latest, entry.get('version')) > 0
                             and version_satisfies(latest, range_expr))
             except DepsError:
                 # An unparseable catalog version (a format this script doesn't recognise) is
