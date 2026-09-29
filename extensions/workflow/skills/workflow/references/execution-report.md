@@ -189,6 +189,16 @@ when the check passes. There is no self-certification or exemption path: a
 project that enables delegation mid-feature adopts each already-checked task
 individually, with a real check.
 
+An adopted attempt is bound to the task's content: `adopt` records a sha256 of
+the task line (minus its checkbox state, whitespace normalised), and Ready
+re-checks that hash at completion time, refusing with
+`DELEGATION_ADOPT_TASK_CHANGED` if the task was edited or replaced under the
+same id since adoption. Since an adopted attempt has no dispatcher route to
+escalate, `reassign` refuses it with
+`DELEGATION_REASSIGN_ADOPTED_UNSUPPORTED`; the supported recovery is to
+re-run `adopt` with a corrected acceptance check, or to `start` the task
+normally.
+
 ## Continue through delivery
 
 The orchestration agent returns the Execute evidence to the dispatcher. It stays
