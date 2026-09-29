@@ -20,7 +20,10 @@ In Codex, use the available agent spawn, message and status tools. In Claude, us
 the installed host's agent/team tools. Check their actual capabilities and limits;
 do not invent tool names or assume a child can spawn workers. If nested spawning
 is unavailable, the dispatcher creates workers on the orchestration agent's
-behalf and forwards results. The orchestration agent still controls assignments.
+behalf and forwards results. Where this fallback applies, the dispatcher
+spawns the batch with blocking calls and forwards each T7 result once,
+unchanged, the same as the orchestration agent would; it does not relay,
+re-summarise or add commentary. The orchestration agent still controls assignments.
 Reserve capacity for it and the dispatcher, and release idle workers when needed.
 If the host has no usable subagent support or cannot fit a worker, record that
 specific blocker and request a supported host/configuration. Do not report a
@@ -56,8 +59,8 @@ only their scope and the context needed to implement it. Workers must not stage,
 commit, push, merge, change shared report files or invoke another executor.
 `git stash` and `git add -A`/`git add .` are forbidden for a worker: a stash can
 hide another agent's uncommitted change, and a wildcard add can stage paths
-outside the worker's owned scope. A worker stages only the exact paths it was
-assigned, named explicitly.
+outside the worker's owned scope. Staging stays with the orchestration agent,
+which stages a worker's owned paths by explicit name.
 
 When `.specify/workflow.yml` enables delegation, start each ready `T###` worker
 with `python .specify/extensions/workflow/scripts/delegate_dispatch.py start
@@ -134,13 +137,23 @@ turn while it still owns background work that is running. Block on it (a
 foreground wait with a bounded, re-armed timeout, or the host's own blocking or
 monitor primitive) and report exactly once, when the work concludes.
 "Waiting for X" is never a valid final message from any agent in this protocol.
+For a run started through `delegate_dispatch.py`, block with a bounded
+foreground loop around `delegate_dispatch.py collect` until the run's status is
+terminal (not `starting` or `running`), rather than ending the turn to wait for
+a separate notification.
 
 Turn budgets bound how large a worker's resident context is allowed to grow,
 because turn count, not what a worker reads at the start, explains almost all of
-its token cost. Each figure below is a policy budget (fresh input plus output
-tokens for the task), not a hard stop: the progress report flags an overrun
-amber or red the way it flags a failed lane, and the worker explains the
-overrun in its evidence instead of being cut off mid-task.
+its token cost. Each figure below is a policy budget on fresh input plus output
+tokens only; it excludes cache reads, which are about 96% of a worker's total
+token volume and are not part of the budget. It is not a hard stop: when
+accepting a task, the orchestration agent compares the task's recorded
+`progress.py usage` figure against its class budget, and logs any overrun
+instead of cutting the worker off mid-task:
+
+```text
+python .specify/extensions/workflow/scripts/progress.py event --output specs/<feature>/workflow/progress --message "Budget overrun T###: <class> <figure>/<budget>: <reason>" --summary
+```
 
 | Task class | Turn budget (fresh + output) | Notes |
 | --- | --- | --- |
