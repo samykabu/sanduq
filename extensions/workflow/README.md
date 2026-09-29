@@ -893,10 +893,40 @@ an exit-zero run with no parsable or in-bounds evidence records
 `'unverified'` instead, exactly like `accept`. Either way the attempt lands
 in `delegations.json` like any other and `latest_attempt` reads it like any
 other: the Ready gate never special-cases an adopted attempt beyond the
-content binding above. Like `trust-reset`, `adopt` is orchestrator-only —
-every worker brief forbids `delegate_dispatch.py` entirely, `adopt` included
-— a worker must never be the one judging whether its own unattempted work
-now counts as verified.
+content binding above. The command runs from the repo root (round 9,
+finding 2), not pinned to the feature directory as an earlier release had
+it — an aggregate, repo-root-relative check can now run at all — while the
+feature directory remains the *default* owned root `--expect files`
+validates against when `--owned` is not given, unchanged in effect. Like
+`trust-reset`, `adopt` is orchestrator-only — every worker brief forbids
+`delegate_dispatch.py` entirely, `adopt` included — a worker must never be
+the one judging whether its own unattempted work now counts as verified.
+
+**Defence in depth: a worker cannot call back into the dispatcher.**
+`driver_env` sets `SANDUQ_DELEGATED_RUN` (to this dispatch's own intent id)
+in the environment of every driver subprocess it launches, so a delegated
+worker's own process tree inherits it (round 9, finding 1a: a worker
+running `delegate_dispatch.py adopt` on its own checked-but-unattempted
+task, or `accept` on its own unverified result, would otherwise be able to
+self-certify its own work with a fabricated command). `adopt`, `accept`,
+`reassign` and `trust-reset` all refuse with `DELEGATION_WORKER_CONTEXT`
+the moment that variable is set. This is defence in depth, not a security
+boundary: a worker could unset the variable before invoking the dispatcher,
+so the worker brief's own instruction never to run these commands (above)
+remains the primary control.
+
+**Visibility: every orchestrator-run check is a Ready-gate warning.**
+Whenever the Ready gate accepts a task because the orchestrator itself ran
+and judged a check — `adopt` for a task with no dispatcher attempt at all,
+`accept` for an unverified light-tier result — it appends a warning a
+reviewer will actually see, not only a passing check silently indistinguishable
+from a worker's own verified attempt (round 9, finding 1b): `DELEGATION_TASK_ADOPTED:
+<task> via "<command>" (<expect>, exit <code>)` or `DELEGATION_TASK_ACCEPTED:
+<task> via "<command>" (<expect>, exit <code>)`. `ci_gate.py` already prints
+every warning here to stderr and appends it to `$GITHUB_STEP_SUMMARY` when
+the runner sets that variable, exactly as it does for
+`DELEGATION_LEDGER_TRUST_UNVERIFIED_LOCAL`, so this needed no separate gate
+change.
 
 **`reassign` and an adopted attempt.** An adopted attempt has no dispatcher
 route, task file or retry count to escalate from — it was never dispatched

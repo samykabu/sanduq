@@ -439,10 +439,43 @@ def brief_file(root, text):
     return path
 
 
-def driver_env(root):
+def driver_env(root, run_context=None):
+    """Environment for the driver subprocess and, through it, every worker it
+    spawns underneath.
+
+    ``run_context``, when given, is set as ``SANDUQ_DELEGATED_RUN`` (round 9,
+    finding 1a): a delegated worker process tree inherits it, so
+    ``adopt``, ``accept``, ``reassign`` and ``trust-reset`` refuse with
+    ``DELEGATION_WORKER_CONTEXT`` when run from inside that tree -- a worker
+    must never certify its own unattempted or unverified work. This is
+    defence in depth only, not a security boundary: a worker could unset the
+    variable before invoking the dispatcher, so the worker brief's own
+    instruction never to run these commands remains the primary control. The
+    value is this dispatch's own intent id, recorded on the ledger as
+    ``intent_id`` -- the driver (``delegate.mjs``, outside this project's
+    scope) assigns the eventual ``run_id`` itself, only after the worker is
+    already spawned, so the intent id is the identifying token available at
+    spawn time.
+    """
     env = os.environ.copy()
     env['DELEGATE_RUNS_DIR'] = str(root / '.delegate/runs')
+    if run_context:
+        env['SANDUQ_DELEGATED_RUN'] = run_context
     return env
+
+
+def require_not_worker_context():
+    """Refuse when this process is itself running inside a delegated
+    worker's process tree (round 9, finding 1a): ``SANDUQ_DELEGATED_RUN``,
+    set by ``driver_env`` for every worker at spawn time, must never let
+    that worker call back into the dispatcher to certify its own
+    unattempted or unverified work. Called first by ``adopt``, ``accept``,
+    ``reassign`` and ``trust-reset``. Defence in depth only -- see
+    ``driver_env``'s own docstring for why this is not a security boundary.
+    """
+    delegation.require(not os.environ.get('SANDUQ_DELEGATED_RUN'),
+                       'DELEGATION_WORKER_CONTEXT: this process is running inside a delegated worker '
+                       '(SANDUQ_DELEGATED_RUN is set); only the orchestrator may run this command')
 
 
 class StartFailed(delegation.DelegationError):
@@ -472,7 +505,7 @@ def launch(root, driver, candidate, cwd, task, timeout, intent_id=None):
     if intent_id:
         args += ['--constraint', 'Sanduq delegation intent: ' + intent_id]
     try:
-        result = subprocess.run(args, cwd=root, env=driver_env(root),
+        result = subprocess.run(args, cwd=root, env=driver_env(root, intent_id),
                                 capture_output=True, text=True, encoding='utf-8')
     except OSError as exc:
         raise StartFailed('DELEGATE_START_FAILED: ' + str(exc)[:500]) from exc
@@ -1586,6 +1619,7 @@ def attempt_to_candidate(attempt):
 
 def reassign(root, feature, run_id, reason, task_file=None):
     """Let the orchestrator escalate complex or partly changed terminal work."""
+    require_not_worker_context()
     root = root.resolve()
     feature = feature_identity(root, feature)
     delegation.require(isinstance(reason, str) and reason.strip(),
@@ -1668,6 +1702,7 @@ def accept(root, feature, run_id, command, expect, timeout=None, owned=None):
     failed command or a timeout all leave the attempt ``unverified``; every
     attempt is recorded in the ledger regardless of outcome.
     """
+    require_not_worker_context()
     root = root.resolve()
     feature = feature_identity(root, feature)
     delegation.require(expect in ACCEPT_EXPECTS, 'DELEGATION_ACCEPT_EXPECT_INVALID')
@@ -1821,6 +1856,7 @@ def trust_reset(root, feature, reason):
     ``starting`` or ``running``, so a reset can never race a live dispatch
     that might still change the very bytes being reviewed.
     """
+    require_not_worker_context()
     root = root.resolve()
     feature = feature_identity(root, feature)
     delegation.require(isinstance(reason, str) and reason.strip(),
@@ -1902,7 +1938,17 @@ def adopt(root, feature, task_id, command, expect, timeout=None, owned=None):
     command, a timeout, or an exit-zero run with no parsable or in-bounds
     evidence records ``unverified`` instead -- the Ready gate then treats
     the result exactly like any other attempt, never as an exemption.
+
+    Runs from the repo root, never the feature directory (round 9, finding
+    2): the acceptance command is the orchestrator's own, already-trusted
+    check, and pinning its cwd to a subdirectory the task happens to live
+    under serves no purpose an attacker could exploit that running from
+    root does not already close off just as well -- while a repo-root
+    check (for example an aggregate test command) previously had no way to
+    run at all. The feature directory remains the *default* owned root for
+    ``--expect files``, unchanged in effect from before.
     """
+    require_not_worker_context()
     root = root.resolve()
     feature = feature_identity(root, feature)
     delegation.require(re.fullmatch(r'T\d{3,}', task_id) is not None, 'DELEGATION_IDENTITY_INVALID')
@@ -1936,10 +1982,9 @@ def adopt(root, feature, task_id, command, expect, timeout=None, owned=None):
                        'uses a shell, reopening the class of injection shell=False is meant to close. '
                        'Run the underlying executable directly instead (for example "node <script>.js" '
                        'rather than an npx.cmd shim)')
-    cwd = (root / feature).resolve()
-    delegation.require(cwd.is_dir(), 'DELEGATION_ADOPT_CWD_INVALID')
+    cwd = root
     args = build_command_argv(command)
-    owned_paths = list(owned) if owned else ['.']
+    owned_paths = list(owned) if owned else [feature]
     run = run_capped(args, cwd, timeout)
     text = run['output']
     evidence = None
@@ -2029,8 +2074,8 @@ def main(argv=None):
     adopt_cmd.add_argument('--expect', choices=ACCEPT_EXPECTS, required=True)
     adopt_cmd.add_argument('--timeout', type=int)
     adopt_cmd.add_argument('--owned', action='append',
-                           help='A path (repeatable) to check "files" evidence against; defaults to '
-                                'the whole feature directory when omitted')
+                           help='A path (repeatable), relative to the repo root, to check "files" '
+                                'evidence against; defaults to the feature directory when omitted')
     args = parser.parse_args(argv)
     try:
         if args.action == 'start':

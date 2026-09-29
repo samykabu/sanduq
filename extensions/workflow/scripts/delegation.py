@@ -88,6 +88,13 @@ def task_line_content_sha256(line):
     match = TASK_LINE.match(line)
     require(match is not None, 'DELEGATION_TASK_LINE_INVALID')
     content = re.sub(r'^\s*-\s*\[[ xX]\]\s*', '', match.group(1))
+    # annotate_tasks relocates an inline "<!-- sanduq-delegation ... -->"
+    # marker onto its own line on the very next run, even for an already
+    # checked task (round 9, finding 3): stripping it here means that
+    # relocation -- pure formatting, no substantive change to the task --
+    # does not itself invalidate an adoption made while the marker was
+    # still inline.
+    content = INLINE_MARKER.sub('', content)
     return hashlib.sha256(re.sub(r'\s+', ' ', content).strip().encode('utf-8')).hexdigest()
 
 

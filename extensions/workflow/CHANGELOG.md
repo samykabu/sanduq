@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- Delegation guard, round 9 corrections (B12; final Opus verification, one
+  MEDIUM and two LOW). `driver_env` now sets `SANDUQ_DELEGATED_RUN` (this
+  dispatch's own intent id) for every driver subprocess and, through it,
+  every worker it spawns; `adopt`, `accept`, `reassign` and `trust-reset`
+  all refuse with `DELEGATION_WORKER_CONTEXT` when that variable is set --
+  defence in depth against a worker self-certifying its own unattempted or
+  unverified work with a fabricated command, not a security boundary (a
+  worker could unset it; the worker brief's own prohibition remains
+  primary). `ready_checks` now appends a Ready-gate warning for every task
+  the orchestrator itself resolved rather than a worker's own attempt --
+  `DELEGATION_TASK_ADOPTED: <task> via "<command>" (<expect>, exit <code>)`
+  for an adoption, `DELEGATION_TASK_ACCEPTED: ...` for an `accept` -- which
+  `ci_gate.py`'s existing warning forwarding already surfaces to stderr and
+  `$GITHUB_STEP_SUMMARY`. `adopt`'s acceptance command now runs from the
+  repo root instead of being pinned to the feature directory, which
+  remains only the *default* owned root for `--expect files`. Fixed
+  `task_line_content_sha256` to strip an inline
+  `<!-- sanduq-delegation ... -->` marker before hashing: `annotate_tasks`
+  relocates such a marker onto its own line on its very next run, even for
+  an already checked task, which had been failing an otherwise-valid
+  adoption's binding at Ready.
+
 - Delegation guard, round 8 corrections (B12). `delegate_dispatch.py
   adopt` now requires `--id <task>` to exist in `tasks.md` and be checked
   before running anything (`DELEGATION_ADOPT_TASK_UNKNOWN` /

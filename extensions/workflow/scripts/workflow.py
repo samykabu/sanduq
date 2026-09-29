@@ -1134,9 +1134,34 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
                 attempt = latest_attempt(root, feature, task_id) or {}
                 if attempt.get('status') != 'successful':
                     not_verified.append(task_id)
-                elif (attempt.get('adopted') and attempt.get('task_line_sha256') and
-                      task_line_content_sha256(current_lines[task_id]) != attempt['task_line_sha256']):
+                    continue
+                if (attempt.get('adopted') and attempt.get('task_line_sha256') and
+                        task_line_content_sha256(current_lines[task_id]) != attempt['task_line_sha256']):
                     changed.append(task_id)
+                    continue
+                # An orchestrator-run check resolving a task -- adopt for one
+                # with no dispatcher attempt at all, accept for an unverified
+                # light-tier one -- is exactly the kind of self-certification
+                # this whole guard exists to police everywhere else; a
+                # reviewer must be able to see every task that reached Ready
+                # this way, not only ones a worker actually attempted (round
+                # 9, finding 1b). Advisory only: status is already enforced
+                # above, and ci_gate already forwards every warning here to
+                # stderr and $GITHUB_STEP_SUMMARY.
+                if warnings is None:
+                    continue
+                source = (attempt.get('accepted_evidence') or {}).get('source')
+                if source == 'adopt':
+                    warnings.append('DELEGATION_TASK_ADOPTED: ' + task_id + ' via "' +
+                                    str(attempt.get('command')) + '" (' + str(attempt.get('expect')) +
+                                    ', exit ' + str(attempt.get('exit_code')) + ')')
+                elif source == 'accept':
+                    resolved = next((a for a in attempt.get('acceptance_attempts', []) if a.get('accepted')),
+                                    None)
+                    if resolved:
+                        warnings.append('DELEGATION_TASK_ACCEPTED: ' + task_id + ' via "' +
+                                        str(resolved.get('command')) + '" (' + str(resolved.get('expect')) +
+                                        ', exit ' + str(resolved.get('exit_code')) + ')')
             require(not not_verified, 'DELEGATION_TASK_UNVERIFIED: ' + ', '.join(sorted(not_verified)) +
                     ' - resolve with delegate_dispatch.py accept or reassign, or adopt it with an '
                     'acceptance check, before Ready')
