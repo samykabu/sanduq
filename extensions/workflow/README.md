@@ -703,11 +703,17 @@ trailing qualifier alone is never enough — `claude-opus-4-7` does not match
 `claude-haiku-4-5`, `gpt-6-sol` does not match the bare family prefix
 `gpt-6`, and bare `codex` does not match `gpt-6-sol-codex` (`codex`,
 `openai` and `anthropic`, like the provider names, are generic tokens on
-their own). A contained run immediately followed by a tier word (`high`,
-`xhigh`, `max`, `pro`, `large`) is also rejected: `o4-mini` does not match
-`o4-mini-high`, a genuinely different reasoning-effort tier of the same base
-model, not the same model with an incidental build or date suffix appended.
-`collect` records the driver's
+their own). A contained run immediately followed by an effort word (`high`
+or `xhigh` — not `max`, `pro` or `large`, which are ordinary size words a
+real light-tier variant can carry, such as `haiku-large-ctx` or
+`gpt-6-terra-pro`) is rejected only when the *fuller* identifier is itself
+one of the harness's own configured models for some other tier: `o4-mini`
+fails to match `o4-mini-high` only when policy configures `o4-mini-high` as
+some other tier's model, confirming it is a genuinely different,
+higher-effort tier rather than an incidental suffix. Without that
+confirmation the match still holds — a wrongly rejected match would let a
+light-tier run skip the guard entirely, which is worse than an unnecessary
+guard on a model that turns out to be genuinely different. `collect` records the driver's
 raw `successful`/`failed`/`abandoned` verdict as usual, but when the guard
 applies and the verdict is `successful`, the ledger outcome becomes
 `unverified` unless the worker's own summary names a produced-file list (as

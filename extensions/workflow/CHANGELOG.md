@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Delegation guard, round 5 corrections (B12; consensus). Round 4's
+  `TIER_QUALIFIER_TOKENS` (`high`, `xhigh`, `max`, `pro`, `large`) rejected a
+  light-tier model match too eagerly — the unsafe direction, since a false
+  "different model" skips the guard entirely. `max`/`pro`/`large` are no
+  longer tier qualifiers at all (`haiku-large-ctx` and `gpt-6-terra-pro` now
+  correctly match their light-tier base model); the remaining effort words
+  (`high`, `xhigh`) reject a match only when `model_family_matches` is told
+  the fuller identifier is itself one of the harness's configured non-light
+  models (`is_light_tier_run` now passes every other configured tier's model
+  as `non_light_models`) — otherwise the safe default is still a match.
+  `ci_gate.py`'s `report_warnings` now wraps its `$GITHUB_STEP_SUMMARY`
+  append in `try`/`except OSError`, falling back to the stderr print it
+  already does: an unwritable summary path no longer turns a passing gate
+  into a reported failure.
+
 - Delegation guard, round 4 corrections (B12). `delegate_dispatch.py
   trust-reset` no longer clears trust on request alone: it refuses with
   `DELEGATION_TRUST_RESET_NOTHING_TO_RESET` unless a persisted tamper flag

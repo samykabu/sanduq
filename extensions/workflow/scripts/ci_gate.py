@@ -216,15 +216,23 @@ def report_warnings(results):
     never see DELEGATION_LEDGER_TRUST_UNVERIFIED_LOCAL, since it changes
     nothing about the gate's pass/fail outcome. Printed to stderr always, and
     appended to $GITHUB_STEP_SUMMARY when the runner sets it; never affects
-    the exit code.
+    the exit code. The summary write is best-effort (round 5, finding 2):
+    this runs inside `main`'s own try block, so an unwritable or missing
+    $GITHUB_STEP_SUMMARY path must never turn a passing gate into a reported
+    failure -- the warning was already printed to stderr regardless.
     """
     lines = [warning for result in results for warning in (result.get('warnings') or [])]
     for line in lines:
         print(line, file=sys.stderr)
     summary_path = os.environ.get('GITHUB_STEP_SUMMARY')
     if lines and summary_path:
-        with open(summary_path, 'a', encoding='utf-8') as handle:
-            handle.write(''.join('- ' + line + '\n' for line in lines))
+        try:
+            with open(summary_path, 'a', encoding='utf-8') as handle:
+                handle.write(''.join('- ' + line + '\n' for line in lines))
+        except OSError as exc:
+            print('DELEGATION_LEDGER_TRUST_WARNING_SUMMARY_UNWRITABLE: could not append to '
+                 '$GITHUB_STEP_SUMMARY (' + str(exc) + '); the warnings above were still printed '
+                 'to stderr', file=sys.stderr)
 
 
 def main():

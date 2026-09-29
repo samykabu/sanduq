@@ -1120,13 +1120,33 @@ def validate_owned_files(cwd, owned_paths, paths):
 # Tokens too generic to prove a family match by themselves: purely numeric
 # (version numbers), a bare provider name, or a size/tier word shared across
 # an entire, otherwise unrelated model line.
+# Words too generic to prove a family match by themselves when they are the
+# ONLY non-numeric token in the shorter, contained identifier (checked by
+# `model_family_matches` before it even looks at tier qualifiers below).
+# "large"/"pro"/"max" live here as bare size/tier words that plenty of
+# unrelated model lines reuse, not because they signal a *different* tier the
+# way the narrower TIER_QUALIFIER_TOKENS below does -- the two sets serve
+# different questions and are not expected to overlap; the round 5 fix that
+# narrowed TIER_QUALIFIER_TOKENS to effort words removed 'max'/'pro'/'large'
+# from it for exactly that reason.
 GENERIC_MODEL_TOKENS = {'gpt', 'claude', 'codex', 'openai', 'anthropic', 'mini', 'small', 'medium',
                         'large', 'pro', 'max', 'lite', 'base', 'preview'}
-# A contained run immediately followed by one of these changes the model's
-# identity, not just its build or date (round 4, finding 3): "o4-mini-high"
-# is a different reasoning-effort tier of "o4-mini", not the same model with
-# a harmless suffix appended the way a date or build number would be.
-TIER_QUALIFIER_TOKENS = {'high', 'xhigh', 'max', 'pro', 'large'}
+# A contained run immediately followed by one of these MAY change the
+# model's identity rather than merely extend it (round 4, finding 3), but
+# unlike a build or date suffix this cannot be told apart from a harmless
+# variant by the token alone: "haiku-large-ctx" is still Haiku (a context-
+# window variant), while "o4-mini-high" is a genuinely different, more
+# expensive reasoning-effort tier of "o4-mini". Limited to actual effort
+# words (round 5, finding 1): "large"/"pro"/"max" used to sit here too and
+# produced false negatives for real light-tier variants like
+# "haiku-large-ctx" or "gpt-6-terra-pro" -- the unsafe direction, since a
+# false negative here means a light-tier run's guard is skipped entirely.
+# Even for "high"/"xhigh", the exclusion only actually applies when the
+# fuller identifier is a policy-configured non-light model (see
+# `model_family_matches`'s ``non_light_models``); otherwise the safe
+# default is to still match, so the guard is never silently bypassed just
+# because a harness-reported name happens to end in an effort word.
+TIER_QUALIFIER_TOKENS = {'high', 'xhigh'}
 
 
 def _model_tokens(model):
@@ -1134,14 +1154,15 @@ def _model_tokens(model):
     return [token for token in text.split('-') if token]
 
 
-def model_family_matches(candidate_model, configured_model):
+def model_family_matches(candidate_model, configured_model, non_light_models=None):
     """True only when the two model identifiers are the same, or one is a
     whole dash-delimited token run inside the other, not immediately followed
-    by a tier qualifier (round 3 finding 3, round 4 finding 3: a shared-
-    token-anywhere rule was too broad and matched unrelated sibling models --
-    ``claude-opus-4-7`` against ``claude-haiku-4-5``, or
-    ``gpt-6-terra-codex`` against ``gpt-6-sol-codex`` -- that merely share a
-    provider prefix or a trailing qualifier).
+    by a *confirmed* tier qualifier (round 3 finding 3, round 4 finding 3,
+    round 5 finding 1: a shared-token-anywhere rule was too broad and matched
+    unrelated sibling models -- ``claude-opus-4-7`` against
+    ``claude-haiku-4-5``, or ``gpt-6-terra-codex`` against
+    ``gpt-6-sol-codex`` -- that merely share a provider prefix or a trailing
+    qualifier).
 
     ``"haiku"`` matches ``"claude-haiku-4-5"`` (a whole token inside it);
     ``"claude-haiku-4-5"`` matches ``"claude-haiku-4-5-20251001"`` (a whole
@@ -1150,11 +1171,19 @@ def model_family_matches(candidate_model, configured_model):
     version number or a bare provider/size word (``"gpt"``, ``"codex"``,
     ``"openai"``, ``"anthropic"`` and similar), so ``"gpt-6"`` does not match
     ``"gpt-6-sol"`` (every sibling in that family shares that generic
-    prefix) and bare ``"codex"`` does not match ``"gpt-6-sol-codex"``. A
-    match is also rejected when the contained run is immediately followed by
-    a tier word such as ``"high"``: ``"o4-mini"`` does not match
-    ``"o4-mini-high"``, a genuinely different reasoning-effort tier of the
-    same base model, not the same model with an incidental suffix.
+    prefix) and bare ``"codex"`` does not match ``"gpt-6-sol-codex"``.
+
+    A match is rejected for a contained run immediately followed by an
+    effort word (``"high"``, ``"xhigh"``) only when ``non_light_models``
+    (the policy's own configured models for every tier but light, on the
+    same harness) confirms the *fuller* identifier is itself one of them --
+    proving it is a deliberately different, non-light tier, not an
+    incidental suffix. Without that confirmation the uncertainty is
+    resolved the safe way, toward still matching: a false "different
+    model" here would let a light-tier run skip the guard entirely, which
+    is worse than an unnecessary guard on a genuinely different model.
+    ``"o4-mini"`` fails to match ``"o4-mini-high"`` only when policy has
+    ``"o4-mini-high"`` configured as some other tier's model.
     """
     a_tokens, b_tokens = _model_tokens(candidate_model), _model_tokens(configured_model)
     if not a_tokens or not b_tokens:
@@ -1164,11 +1193,13 @@ def model_family_matches(candidate_model, configured_model):
     inner, outer = (a_tokens, b_tokens) if len(a_tokens) <= len(b_tokens) else (b_tokens, a_tokens)
     if not any(token not in GENERIC_MODEL_TOKENS and not token.isdigit() for token in inner):
         return False
+    confirmed_non_light = {tuple(_model_tokens(model)) for model in (non_light_models or ())}
     span = len(inner)
     for i in range(len(outer) - span + 1):
         if outer[i:i + span] != inner:
             continue
-        if i + span < len(outer) and outer[i + span] in TIER_QUALIFIER_TOKENS:
+        if (i + span < len(outer) and outer[i + span] in TIER_QUALIFIER_TOKENS and
+                tuple(outer) in confirmed_non_light):
             continue
         return True
     return False
@@ -1198,10 +1229,12 @@ def is_light_tier_run(attempt, policy):
     if tier is None and attempt.get('task_type') == 'qa_collect':
         return True
     harness = attempt.get('requested_harness')
-    light_model = ((policy or {}).get('delegation', {}).get('models', {}).get(harness) or {}).get('light')
+    tiers = (policy or {}).get('delegation', {}).get('models', {}).get(harness) or {}
+    light_model = tiers.get('light')
+    non_light_models = [model for name, model in tiers.items() if name != 'light']
     if light_model:
         for observed in (attempt.get('requested_model'), attempt.get('actual_model')):
-            if observed and model_family_matches(observed, light_model):
+            if observed and model_family_matches(observed, light_model, non_light_models):
                 return True
     return False
 

@@ -371,3 +371,20 @@ class CIGateTests(unittest.TestCase):
                 c.report_warnings([{'feature': self.feature, 'warnings': []}])
             self.assertEqual(stderr.getvalue(), '')
             self.assertFalse(summary_path.exists())
+
+    def test_report_warnings_falls_back_to_stderr_when_summary_is_unwritable(self):
+        """Finding 2, round 5: report_warnings runs inside main's own try
+        block, so an OSError from an unwritable $GITHUB_STEP_SUMMARY must
+        never propagate and turn a passing gate into a reported failure."""
+        results = [{'feature': self.feature,
+                   'warnings': ['DELEGATION_LEDGER_TRUST_UNVERIFIED_LOCAL: x']}]
+        stderr = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            # A directory, not a file: opening it for append raises OSError.
+            unwritable = Path(tmp) / 'unwritable-dir'
+            unwritable.mkdir()
+            with contextlib.redirect_stderr(stderr), \
+                 patch.dict(os.environ, {'GITHUB_STEP_SUMMARY': str(unwritable)}):
+                c.report_warnings(results)  # must not raise
+        self.assertIn('DELEGATION_LEDGER_TRUST_UNVERIFIED_LOCAL', stderr.getvalue())
+        self.assertIn('SUMMARY_UNWRITABLE', stderr.getvalue())

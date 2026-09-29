@@ -1,5 +1,6 @@
 """Opt-in routing, task compatibility and measured delegation history."""
 import contextlib
+import copy
 import io
 import json
 import os
@@ -1028,17 +1029,61 @@ class DelegationTests(unittest.TestCase):
 
     def test_model_family_matches_round_4_probes(self):
         """Finding 3, round 4: codex/openai/anthropic are generic tokens too
-        (bare "codex" proves nothing about a specific model), and a
-        contained run immediately followed by a tier word ("high", "max",
-        "pro", "large", "xhigh") is a different model, not the same one with
-        an incidental suffix."""
-        self.assertFalse(dispatch.model_family_matches('o4-mini', 'o4-mini-high'))
-        self.assertFalse(dispatch.model_family_matches('o4-mini-high', 'o4-mini'))
+        (bare "codex" proves nothing about a specific model). A contained run
+        followed by an effort word is only rejected once round 5's
+        non_light_models confirmation is given (see the round 5 test);
+        without it, the safe default is still a match."""
         self.assertFalse(dispatch.model_family_matches('codex', 'gpt-6-sol-codex'))
         self.assertFalse(dispatch.model_family_matches('gpt-6-sol-codex', 'codex'))
-        # A non-generic contained run followed by something other than a
-        # tier word is unaffected (still matches).
+        # A non-generic contained run followed by something other than an
+        # effort word is unaffected (still matches).
         self.assertTrue(dispatch.model_family_matches('o4-mini-20260101', 'o4-mini'))
+
+    def test_model_family_matches_round_5_probes(self):
+        """Finding 1, round 5: the round 4 fix was itself too eager and gave
+        false negatives for real light-tier variants -- the unsafe direction,
+        since a false "not light" means the guard is skipped entirely.
+        "large"/"pro"/"max" no longer reject a match at all; "high"/"xhigh"
+        reject one only when the fuller identifier is a policy-configured
+        non-light model, confirming it is genuinely a different tier."""
+        # Always true now: these were the round 4 false negatives.
+        self.assertTrue(dispatch.model_family_matches('haiku-large-ctx', 'haiku'))
+        self.assertTrue(dispatch.model_family_matches('gpt-6-terra-pro', 'gpt-6-terra'))
+        self.assertTrue(dispatch.model_family_matches('gpt-6-terra-high', 'gpt-6-terra'))
+        # Uncertain (no non_light_models given): the safe default is match.
+        self.assertTrue(dispatch.model_family_matches('o4-mini-high', 'o4-mini'))
+        self.assertTrue(dispatch.model_family_matches('o4-mini', 'o4-mini-high'))
+        # Confirmed: "o4-mini-high" is itself configured as a real, different
+        # (non-light) tier -- now genuinely rejected.
+        self.assertFalse(dispatch.model_family_matches('o4-mini-high', 'o4-mini',
+                                                       non_light_models=['o4-mini-high']))
+        self.assertFalse(dispatch.model_family_matches('o4-mini', 'o4-mini-high',
+                                                       non_light_models=['o4-mini-high']))
+        # A confirmed non-light model that is NOT the fuller identifier here
+        # does not spuriously reject an unrelated pair.
+        self.assertTrue(dispatch.model_family_matches('o4-mini-high', 'o4-mini',
+                                                       non_light_models=['some-other-model']))
+
+    def test_is_light_tier_run_uses_policy_non_light_models_for_effort_words(self):
+        """Finding 1, round 5, end to end through is_light_tier_run: a
+        harness-reported model ending in an effort word only escapes the
+        guard when policy itself configures that exact string as some other
+        tier's model."""
+        policy = copy.deepcopy(self.policy)
+        policy['delegation']['models']['codex']['light'] = 'o4-mini'
+        policy['delegation']['models']['codex']['high'] = 'o4-mini-high'
+        attempt = self._attempt(tier=None, task_type='implementation', harness='codex',
+                                requested_model='gpt-6-sol', actual_model='o4-mini-high')
+        # Confirmed non-light (policy configures 'high' to this exact model):
+        # the guard does not apply.
+        self.assertFalse(dispatch.is_light_tier_run(attempt, policy))
+        # Without that exact configuration, the same reported model is
+        # treated as still possibly the light model (safe default).
+        policy2 = copy.deepcopy(self.policy)
+        policy2['delegation']['models']['codex']['light'] = 'o4-mini'
+        attempt2 = self._attempt(tier=None, task_type='implementation', harness='codex',
+                                 requested_model='gpt-6-sol', actual_model='o4-mini-high')
+        self.assertTrue(dispatch.is_light_tier_run(attempt2, policy2))
 
     def test_collect_never_trusts_counts_in_the_worker_summary(self):
         """Finding 3: even fully-framed, parsable counts in a worker's own
