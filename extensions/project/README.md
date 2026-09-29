@@ -61,13 +61,19 @@ scripts/bash/project-sync.sh --phase <phase> [--dry-run] [--no-sub-issues] [--fo
 `-Summary`/`--summary` prints exactly one line to stdout instead of the full
 `-Json`/`--json` summary: `ok issue=<n> status=<status> created=<n> closed=<n>`
 on success, `skipped reason=<reason>` on a graceful degradation (never `ok` — a
-skip is not success), or `error <message>` on a usage error (for example when
-`-Summary`/`--summary` and `-Json`/`--json` are both given) or a mid-run failure
-(bash: `error exit=<rc> line=<n>`; PowerShell: `error <exception message>`).
-Under `-Summary`/`--summary` the run log moves off stdout (PowerShell:
-`Write-Verbose`, silent unless `-Verbose` is also passed; Bash: stderr) so
-stdout is exactly the one line above; without the flag the run log is
-unchanged. Exit codes are unchanged by `-Summary`/`--summary`.
+skip is not success), or `error reason=<message>` on a usage error (for
+example when `-Summary`/`--summary` and `-Json`/`--json` are both given) or a
+mid-run failure — Bash additionally carries `exit=<rc>` right after `error`
+and, when the failing command is known, ` line=<n>` at the end (e.g. `error
+exit=1 reason=Managed parent binding mismatch line=172`; `reason=unknown`
+when nothing more specific was recorded). Under `-Summary`/`--summary` the
+run log moves off stdout — Bash to stderr; PowerShell to the real stderr
+stream via `[Console]::Error`, not `Write-Verbose`, which still leaks to
+stdout under `-Verbose`/`$VerbosePreference = 'Continue'` — so stdout is
+exactly the one line above regardless of caller-set verbosity; without the
+flag the run log is unchanged. An unrecognised argument is always a stderr
+diagnostic, never stdout output. Exit codes are unchanged by
+`-Summary`/`--summary`.
 
 ## Files
 

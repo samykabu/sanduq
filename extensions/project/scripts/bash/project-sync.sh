@@ -5,7 +5,11 @@
 #
 # Usage: project-sync.sh --phase <open|analysis|engineer-review|ready|in-progress|in-review|done|auto>
 #                        [--feature <slug>] [--dry-run] [--no-sub-issues] [--force] [--json] [--summary]
-set -euo pipefail
+# -E (errtrace) makes the ERR trap below fire for a failing command inside a
+# function too, not only at the script's top level (bash's default); nearly
+# all of this script's real work happens inside functions (ensure_parent,
+# set_status, ...), so without -E most real failures would report line=0.
+set -Eeuo pipefail
 
 PHASE="auto"; FEATURE=""; DRYRUN=0; NOSUB=0; FORCE=0; JSON=0; SUMMARY=0
 while [ $# -gt 0 ]; do case "$1" in
@@ -16,22 +20,27 @@ while [ $# -gt 0 ]; do case "$1" in
   --force) FORCE=1; shift;;
   --json) JSON=1; shift;;
   --summary) SUMMARY=1; shift;;
-  *) echo "[project][warn] unknown arg: $1"; shift;;
+  *) echo "[project][warn] unknown arg: $1" >&2; shift;;
 esac; done
 # --summary (one line: ok/error, counts) and --json (full machine-readable
 # summary) are mutually exclusive; --summary never changes the exit code a
-# caller sees for a given outcome, only what is printed on success.
+# caller sees for a given outcome, only what is printed on success. Every
+# `error` line shares one shape with project-sync.ps1's: `reason=<msg>`;
+# bash additionally carries `exit=<rc>` (and `line=<n>` when known).
 if [ "$SUMMARY" = 1 ] && [ "$JSON" = 1 ]; then
-  echo "error --summary and --json cannot be combined"
+  echo "error exit=2 reason=--summary and --json cannot be combined"
   exit 2
 fi
 CREATED_COUNT=0; CLOSED_COUNT=0
 SUMMARY_DONE=0
+LAST_WARN=""
 
 # Under --summary, run-log lines (log/warn) are not part of the one-line
-# contract, so they move to stderr instead of polluting stdout.
+# contract, so they move to stderr instead of polluting stdout. warn() also
+# records its message in LAST_WARN, so a later `warn ...; exit 1` site (no
+# failing command for the ERR trap to see) still has a cause to report.
 log()  { if [ "$SUMMARY" = 1 ]; then echo "[project] $*" >&2; else echo "[project] $*"; fi; }
-warn() { if [ "$SUMMARY" = 1 ]; then echo "[project][warn] $*" >&2; else echo "[project][warn] $*"; fi; }
+warn() { LAST_WARN="$*"; if [ "$SUMMARY" = 1 ]; then echo "[project][warn] $*" >&2; else echo "[project][warn] $*"; fi; }
 skip() {
   warn "skipped: $*"
   SUMMARY_DONE=1
@@ -45,12 +54,20 @@ gh_run() { if [ "$DRYRUN" = 1 ]; then log "DRYRUN gh $*"; return 0; fi; gh "$@";
 
 # Past this point `set -e` can abort the script on any unguarded failure
 # (a real gh/jq/git error, not a graceful skip). Under --summary that must
-# still surface as one `error exit=<rc> line=<n>` line rather than silence
-# or a raw shell trace; SUMMARY_DONE keeps the EXIT trap from firing after
-# our own controlled ok/skipped line has already been printed.
+# still surface as one `error exit=<rc> reason=<msg>[ line=<n>]` line rather
+# than silence or a raw shell trace; SUMMARY_DONE keeps the EXIT trap from
+# firing after our own controlled ok/skipped line has already been printed.
+# FAIL_LINE comes from the ERR trap, which only fires for a command that
+# actually failed; a plain `warn ...; exit 1` site has no such command, so
+# FAIL_LINE stays unknown there and the line clause is omitted, while
+# LAST_WARN (set immediately before it, by warn()) still supplies the reason.
 if [ "$SUMMARY" = 1 ]; then
   trap 'FAIL_LINE=$LINENO' ERR
-  trap 'rc=$?; if [ "$rc" -ne 0 ] && [ "$SUMMARY_DONE" != 1 ]; then echo "error exit=$rc line=${FAIL_LINE:-0}"; fi' EXIT
+  trap 'rc=$?; if [ "$rc" -ne 0 ] && [ "$SUMMARY_DONE" != 1 ]; then
+    msg="error exit=$rc reason=${LAST_WARN:-unknown}"
+    [ -n "${FAIL_LINE:-}" ] && msg="$msg line=$FAIL_LINE"
+    echo "$msg"
+  fi' EXIT
 fi
 
 command -v gh >/dev/null 2>&1 || skip "gh CLI not installed"

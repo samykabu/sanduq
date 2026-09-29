@@ -13,10 +13,13 @@ first to be missing on the machine running the test, so these tests assert
 the *shape* of the skip line rather than its exact reason text.
 
 Under `--summary`/`-Summary`, stdout must be exactly one line: the run log
-(bash `log`/`warn`, PowerShell `Write-Log`) moves off stdout, a graceful skip
-prints `skipped reason=...` (never `ok` — a skip is not success), a genuine
-mid-run failure (bash `set -e`, PowerShell `$ErrorActionPreference = 'Stop'`)
-is caught and reported as one `error ...` line, and a real success prints
+(bash `log`/`warn`, PowerShell `Write-Log`) moves off stdout — even with
+`$VerbosePreference = 'Continue'`, since PowerShell's `Write-Verbose` is not
+enough on its own — a graceful skip prints `skipped reason=...` (never `ok`
+— a skip is not success), a genuine mid-run failure (bash `set -e`,
+PowerShell `$ErrorActionPreference = 'Stop'`) is caught and reported as one
+`error reason=<msg>` line (bash additionally carries `exit=<rc>` and, when
+known, `line=<n>`), and a real success prints
 `ok issue=<n> status=<status> created=<n> closed=<n>`.
 """
 import os
@@ -147,7 +150,7 @@ class ProjectSyncSummaryTests(unittest.TestCase):
             self.skipTest('bash not available')
         result = run_bash_script(SH, ['--phase', 'open', '--summary', '--json'], self.root)
         self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertEqual(result.stdout.strip(), 'error --summary and --json cannot be combined')
+        self.assertEqual(result.stdout.strip(), 'error exit=2 reason=--summary and --json cannot be combined')
 
     def test_pwsh_summary_and_json_together_is_rejected(self):
         if not shutil.which('pwsh'):
@@ -155,8 +158,18 @@ class ProjectSyncSummaryTests(unittest.TestCase):
         result = subprocess.run(['pwsh', '-NoProfile', '-File', str(PS1), '-Phase', 'open', '-Summary', '-Json'],
                                  cwd=self.root, text=True, capture_output=True)
         self.assertEqual(result.returncode, 2, result.stderr)
-        # The PowerShell message names its own -Summary/-Json parameters.
-        self.assertEqual(result.stdout.strip(), 'error -Summary and -Json cannot be combined')
+        # F11: the same `error reason=<msg>` shape as bash (which additionally
+        # carries `exit=<rc>`); the message names ps1's own -Summary/-Json.
+        self.assertEqual(result.stdout.strip(), 'error reason=-Summary and -Json cannot be combined')
+
+    def test_bash_unknown_arg_warning_goes_to_stderr(self):
+        # F11: an unrecognised flag is a diagnostic, not summary output, so it
+        # must never land on stdout regardless of --summary/--json/neither.
+        if not shutil.which('bash'):
+            self.skipTest('bash not available')
+        result = run_bash_script(SH, ['--phase', 'open', '--bogus-flag', '--summary'], self.root)
+        self.assertNotIn('unknown arg', result.stdout)
+        self.assertIn('unknown arg: --bogus-flag', result.stderr)
 
     # -- graceful skip: exactly one stdout line, never "ok" -----------------
 
@@ -179,9 +192,31 @@ class ProjectSyncSummaryTests(unittest.TestCase):
         self.assertEqual(len(lines), 1, result.stdout)
         self.assertRegex(lines[0], r'^skipped reason=.+$')
 
+    def test_pwsh_summary_stdout_is_one_line_even_with_verbose_preference(self):
+        # F10: Write-Verbose alone is not enough — it still reaches stdout
+        # when the caller sets -Verbose or $VerbosePreference = 'Continue'.
+        # Write-Log must route to [Console]::Error instead, which neither can
+        # affect, so stdout stays exactly the one summary line regardless.
+        if not shutil.which('pwsh'):
+            self.skipTest('pwsh not available')
+        wrapper = self.root / '_verbose_wrapper.ps1'
+        wrapper.write_text(
+            "$VerbosePreference = 'Continue'\n"
+            f"& '{PS1.as_posix()}' -Phase open -Summary\n",
+            encoding='utf-8')
+        result = subprocess.run(['pwsh', '-NoProfile', '-File', str(wrapper)],
+                                 cwd=self.root, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = result.stdout.splitlines()
+        self.assertEqual(len(lines), 1, result.stdout)
+        self.assertRegex(lines[0], r'^skipped reason=.+$')
+
     # -- mid-run failure: exactly one "error ..." line, never "ok" ----------
 
     def test_bash_summary_mid_run_failure_is_one_error_line(self):
+        # A broken (but present) jq fails on the first real config read, a
+        # raw command failure with no preceding warn(): reason falls back to
+        # "unknown" and the ERR trap still knows the failing line.
         if not shutil.which('bash'):
             self.skipTest('bash not available')
         subprocess.run(['git', 'remote', 'add', 'origin', 'https://github.com/acme/app.git'],
@@ -191,17 +226,39 @@ class ProjectSyncSummaryTests(unittest.TestCase):
         config.write_text('{}', encoding='utf-8')
         fakebin = Path(tempfile.mkdtemp())
         write_script(fakebin / 'gh', FAKE_GH_SH)
-        # jq is present (passing `command -v jq`) but broken: past the skip
-        # gates, the first real jq call (reading config.json) fails and, per
-        # F2, must surface as one `error exit=<rc> line=<n>` line, not a raw
-        # shell trace and not a stray "ok".
         write_script(fakebin / 'jq', '#!/usr/bin/env bash\nexit 1\n')
         result = run_bash_script(SH, ['--phase', 'open', '--summary'], self.root, env=prepend_path(fakebin))
         self.assertNotEqual(result.returncode, 0, result.stdout)
         lines = result.stdout.splitlines()
         self.assertEqual(len(lines), 1, result.stdout)
-        self.assertRegex(lines[0], r'^error exit=\d+ line=\d+$')
+        self.assertRegex(lines[0], r'^error exit=\d+ reason=unknown line=\d+$')
         self.assertNotIn('ok ', result.stdout)
+
+    def test_bash_summary_warn_then_exit_reports_last_warn_as_reason(self):
+        # F9: `warn "..."; exit 1` (e.g. project-sync.sh's managed-mode
+        # parent-binding checks) has no failing command for the ERR trap to
+        # see, so line stays unknown — but LAST_WARN (set by warn() right
+        # before the exit) still supplies a real reason, not "unknown".
+        # Reaching this branch needs config.json parsed for real (managed
+        # mode is checked only after PROJ_NUM/PROJ_ID/... are read), so this
+        # needs a genuine jq like the success-path tests above.
+        if not shutil.which('bash'):
+            self.skipTest('bash not available')
+        if not bash_has(self.root, 'jq'):
+            self.skipTest('a real jq is required to reach the managed-mode check')
+        self.configure_repo()
+        (self.root / '.specify').mkdir(exist_ok=True)
+        (self.root / '.specify/workflow.yml').write_text('schema: 1\n', encoding='utf-8')  # -> MANAGED=1
+        # No specs/<feature>/scope-source.json: the managed branch's first
+        # check ("Managed workflow requires scope-source.json") fires.
+        fakebin = Path(tempfile.mkdtemp())
+        write_script(fakebin / 'gh', FAKE_GH_SH)
+        result = run_bash_script(SH, ['--phase', 'open', '--summary', '--feature', 'example'],
+                                  self.root, env=prepend_path(fakebin))
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        lines = result.stdout.splitlines()
+        self.assertEqual(len(lines), 1, result.stdout)
+        self.assertEqual(lines[0], 'error exit=1 reason=Managed workflow requires scope-source.json')
 
     def test_pwsh_summary_mid_run_failure_is_one_error_line(self):
         if not shutil.which('pwsh'):
@@ -218,7 +275,8 @@ class ProjectSyncSummaryTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0, result.stdout)
         lines = result.stdout.splitlines()
         self.assertEqual(len(lines), 1, result.stdout)
-        self.assertTrue(lines[0].startswith('error '), result.stdout)
+        # F11: same `error reason=<msg>` shape as bash.
+        self.assertTrue(lines[0].startswith('error reason='), result.stdout)
         self.assertNotIn('ok ', result.stdout)
 
     # -- real success: one "ok ..." line with counts (bash/ps1 parity) ------

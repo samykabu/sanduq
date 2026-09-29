@@ -45,18 +45,22 @@ param(
 $ErrorActionPreference = 'Stop'
 
 if ($Summary -and $Json) {
-    Write-Output 'error -Summary and -Json cannot be combined'
+    # Matches project-sync.sh's `error reason=<msg>` shape (bash additionally
+    # carries `exit=<rc>`, which a plain PowerShell exit code already is).
+    Write-Output 'error reason=-Summary and -Json cannot be combined'
     exit 2
 }
 $script:CreatedCount = 0
 $script:ClosedCount = 0
 
 # Under -Summary, run-log lines are not part of the one-line contract, so
-# they move to the verbose stream (silent unless -Verbose is also passed)
-# instead of polluting stdout via Write-Host.
+# they move to the real stderr stream instead of polluting stdout via
+# Write-Host. Write-Verbose is not enough here: it still reaches stdout when
+# the caller sets -Verbose or $VerbosePreference = 'Continue', so this uses
+# [Console]::Error directly, which -Verbose/$VerbosePreference cannot affect.
 function Write-Log { param([string]$Msg, [string]$Level = 'info')
     $prefix = switch ($Level) { 'warn' { '[project][warn]' } 'error' { '[project][error]' } default { '[project]' } }
-    if ($Summary) { Write-Verbose "$prefix $Msg" } else { Write-Host "$prefix $Msg" }
+    if ($Summary) { [Console]::Error.WriteLine("$prefix $Msg") } else { Write-Host "$prefix $Msg" }
 }
 function Skip { param([string]$Reason)
     Write-Log "skipped: $Reason" 'warn'
@@ -402,7 +406,7 @@ if ($Summary) {
     # rather than a raw stack trace; default behaviour is unchanged.
     if ($Summary) {
         $message = ($_.Exception.Message -replace '\s+', ' ').Trim()
-        Write-Output "error $message"
+        Write-Output "error reason=$message"
         exit 1
     }
     throw
