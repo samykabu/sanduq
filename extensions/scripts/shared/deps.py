@@ -11,10 +11,15 @@ Ships identically into `pr/scripts/deps.py`, `assure/scripts/deps.py`, and
 `user-manual/scripts/deps.py` by `extensions/scripts/package.py`; canonical source and tests live
 here, under `extensions/scripts/shared/` and `extensions/scripts/tests/`.
 
+No third-party dependency: `dependencies.yml` and `.specify/extension-dependencies.yml` are parsed
+by a small, strict, narrow-subset reader (see `read_yaml` below) instead of PyYAML, because nothing
+in the install/upgrade path (`install.py`, `upgrade.py`, `specify`) installs a package's
+`requirements.txt` before its commands run.
+
 Usage:
     python deps.py ensure illustrate [--root PATH] [--dependencies-file PATH]
                                       [--checks-file PATH] [--policy-file PATH]
-                                      [--approve] [--skip-catalog-check]
+                                      [--approve] [--skip-catalog-check] [--timeout SECONDS]
 
 Prints exactly one line and exits 0 when the dependency is ready, non-zero otherwise.
 """
@@ -28,73 +33,225 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-try:
-    import yaml
-except ModuleNotFoundError as _exc:  # pragma: no cover - environment guard
-    yaml = None
-    _YAML_IMPORT_ERROR = _exc
-else:
-    _YAML_IMPORT_ERROR = None
-
 DEFAULT_POLICY = {'update_policy': 'prompt', 'check_interval_hours': 24}
+DEFAULT_TIMEOUT_SECONDS = 60
 
 _COMPARATORS = {
-    '==': lambda a, b: a == b,
-    '!=': lambda a, b: a != b,
-    '>=': lambda a, b: a >= b,
-    '<=': lambda a, b: a <= b,
-    '>': lambda a, b: a > b,
-    '<': lambda a, b: a < b,
+    '==': lambda a, b: compare_versions(a, b) == 0,
+    '!=': lambda a, b: compare_versions(a, b) != 0,
+    '>=': lambda a, b: compare_versions(a, b) >= 0,
+    '<=': lambda a, b: compare_versions(a, b) <= 0,
+    '>': lambda a, b: compare_versions(a, b) > 0,
+    '<': lambda a, b: compare_versions(a, b) < 0,
 }
-_CLAUSE_RE = re.compile(r'^(==|!=|>=|<=|>|<)\s*([0-9]+(?:\.[0-9]+)*)$')
+# Longer operators must precede their prefixes ('>=' before '>', etc.) so the alternation
+# matches the intended one. Bound accepts an optional 'v'/'V' prefix, a dotted numeric core,
+# an optional '-<prerelease>' suffix and an optional '+<build>' suffix (SemVer-shaped).
+_BOUND = r'[vV]?[0-9]+(?:\.[0-9]+)*(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?'
+_CLAUSE_RE = re.compile(r'^(==|!=|>=|<=|~=|\^|>|<)\s*(' + _BOUND + r')$')
+_VERSION_RE = re.compile(
+    r'^[vV]?(?P<core>[0-9]+(?:\.[0-9]+)*)'
+    r'(?:-(?P<prerelease>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?'
+    r'(?:\+(?P<build>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$'
+)
+# What `specify extension info <id>` actually prints (plain Rich-rendered text, no --json
+# option exists as of specify_cli 1.0.11/pinned commit 8147943512404afb9d99c6252cb9bf84369fd0b0):
+# a header line "\n<Name> (v<version>)..." — see command_info.py's `_print_extension_info`
+# (catalog hit) and its "installed locally, not in catalog" fallback. Both put the version in
+# the first "(v...)" parenthetical.
+_CATALOG_HEADER_RE = re.compile(r'\(v([^)]+)\)')
 
 
 class DepsError(ValueError):
     """A malformed version, range, or dependency file."""
 
 
-def _require_yaml():
-    if yaml is None:
-        raise DepsError('PyYAML is required to read dependencies.yml (pip install PyYAML): ' + str(_YAML_IMPORT_ERROR))
-    return yaml
-
-
 def parse_version(text):
+    """Parse a version string into (core_tuple, prerelease_identifiers_or_None). Build
+    metadata (a trailing '+...') is accepted but discarded: SemVer precedence ignores it."""
     text = str(text).strip()
-    parts = [p for p in text.split('.') if p != '']
-    if not parts or not all(p.isdigit() for p in parts):
+    match = _VERSION_RE.match(text)
+    if not match:
         raise DepsError('Not a supported version: ' + repr(text))
-    return tuple(int(p) for p in parts)
+    core = tuple(int(part) for part in match.group('core').split('.'))
+    prerelease = match.group('prerelease')
+    identifiers = tuple(prerelease.split('.')) if prerelease else None
+    return core, identifiers
+
+
+def _identifier_key(identifier):
+    # SemVer precedence: numeric identifiers compare numerically and always sort below any
+    # alphanumeric identifier; alphanumeric identifiers compare as ASCII strings.
+    if identifier.isdigit():
+        return (0, int(identifier), '')
+    return (1, 0, identifier)
+
+
+def compare_versions(a, b):
+    """SemVer precedence comparison; returns <0, 0, or >0. Accepts version strings or
+    pre-parsed (core, prerelease) tuples, as returned by `parse_version`."""
+    a_core, a_pre = parse_version(a) if isinstance(a, str) else a
+    b_core, b_pre = parse_version(b) if isinstance(b, str) else b
+    width = max(len(a_core), len(b_core))
+    a_core = a_core + (0,) * (width - len(a_core))
+    b_core = b_core + (0,) * (width - len(b_core))
+    if a_core != b_core:
+        return -1 if a_core < b_core else 1
+    if a_pre is None and b_pre is None:
+        return 0
+    if a_pre is None:  # a release has higher precedence than any of its pre-releases
+        return 1
+    if b_pre is None:
+        return -1
+    a_keys = [_identifier_key(part) for part in a_pre]
+    b_keys = [_identifier_key(part) for part in b_pre]
+    for a_key, b_key in zip(a_keys, b_keys):
+        if a_key != b_key:
+            return -1 if a_key < b_key else 1
+    if len(a_keys) != len(b_keys):
+        return -1 if len(a_keys) < len(b_keys) else 1
+    return 0
+
+
+def _expand_clause(op, bound):
+    """Translate the npm-style '^' and PEP 440 '~=' operators into an equivalent
+    (>=, <) pair; every other operator is returned unchanged."""
+    if op == '^':
+        core, _ = parse_version(bound)
+        core = core + (0,) * max(0, 3 - len(core))
+        major, minor, patch = core[0], core[1], core[2]
+        if major > 0:
+            upper = (major + 1, 0, 0)
+        elif minor > 0:
+            upper = (0, minor + 1, 0)
+        else:
+            upper = (0, 0, patch + 1)
+        return [('>=', bound), ('<', '.'.join(str(part) for part in upper))]
+    if op == '~=':
+        core, _ = parse_version(bound)
+        if len(core) < 2:
+            raise DepsError("'~=' requires at least major.minor: " + repr(bound))
+        upper = core[:-2] + (core[-2] + 1, 0)
+        return [('>=', bound), ('<', '.'.join(str(part) for part in upper))]
+    return [(op, bound)]
 
 
 def version_satisfies(installed, range_expr):
-    """A comma-separated AND of simple comparator clauses, e.g. '>=2.0.0,<3.0.0'."""
-    installed_tuple = parse_version(installed)
-    for clause in str(range_expr).split(','):
-        clause = clause.strip()
-        if not clause:
+    """An AND of simple comparator clauses. Clauses may be separated by commas and/or
+    whitespace, e.g. '>=2.0.0,<3.0.0' or '>=2.0.0 <3.0.0'. Supports ==, !=, >=, <=, >, <,
+    the PEP 440 '~=' compatible-release operator, and the npm-style '^' caret operator;
+    pre-release/build-metadata suffixes and a leading 'v' are accepted per SemVer."""
+    for raw_clause in re.split(r'[,\s]+', str(range_expr).strip()):
+        if not raw_clause:
             continue
-        match = _CLAUSE_RE.match(clause)
+        match = _CLAUSE_RE.match(raw_clause)
         if not match:
-            raise DepsError('Unsupported version range clause: ' + repr(clause))
+            raise DepsError('Unsupported version range clause: ' + repr(raw_clause))
         op, bound = match.groups()
-        bound_tuple = parse_version(bound)
-        width = max(len(installed_tuple), len(bound_tuple))
-        a = installed_tuple + (0,) * (width - len(installed_tuple))
-        b = bound_tuple + (0,) * (width - len(bound_tuple))
-        if not _COMPARATORS[op](a, b):
-            return False
+        for expanded_op, expanded_bound in _expand_clause(op, bound):
+            if not _COMPARATORS[expanded_op](installed, expanded_bound):
+                return False
     return True
 
 
+def _parse_scalar(text):
+    text = text.strip()
+    if not text:
+        return None
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in ('"', "'"):
+        return text[1:-1]
+    if text == 'true':
+        return True
+    if text == 'false':
+        return False
+    if text in ('null', '~'):
+        return None
+    if text == '[]':
+        return []
+    if text == '{}':
+        return {}
+    if re.fullmatch(r'-?[0-9]+', text):
+        return int(text)
+    return text
+
+
 def read_yaml(path, default=None):
+    """Read the narrow YAML subset actually used by `dependencies.yml` and
+    `.specify/extension-dependencies.yml`: top-level `key: value` scalars, plus at most one
+    level of either a flat mapping (`defaults:` followed by indented `key: value` lines) or a
+    list of flat mappings (`dependencies:` followed by indented `- key: value` items, each
+    optionally continued by further indented `key: value` lines). Nothing deeper is supported;
+    an unrecognised construct raises `DepsError` rather than silently mis-parsing. This is
+    deliberately not a general YAML parser — see the module docstring for why.
+    """
     if default is None:
         default = {}
     if path is None or not Path(path).is_file():
         return default
-    _require_yaml()
-    with open(path, 'r', encoding='utf-8-sig') as handle:
-        return yaml.safe_load(handle) or {}
+
+    lines = []  # (lineno, indent, stripped_content), comments/blank lines removed
+    for lineno, raw in enumerate(Path(path).read_text(encoding='utf-8-sig').splitlines(), 1):
+        stripped = raw.strip()
+        if not stripped or stripped.startswith('#') or stripped == '---' or stripped.startswith('%'):
+            continue
+        indent = len(raw) - len(raw.lstrip(' '))
+        lines.append((lineno, indent, stripped))
+
+    result = {}
+    i, total = 0, len(lines)
+    while i < total:
+        lineno, indent, stripped = lines[i]
+        if indent != 0:
+            raise DepsError('Unsupported YAML indentation at line %d: %r' % (lineno, stripped))
+        if ':' not in stripped:
+            raise DepsError('Unsupported YAML line %d: %r' % (lineno, stripped))
+        key, _, value = stripped.partition(':')
+        key, value = key.strip(), value.strip()
+        i += 1
+        if value:
+            result[key] = _parse_scalar(value)
+            continue
+        if i >= total or lines[i][1] <= indent:
+            result[key] = None
+            continue
+        child_indent = lines[i][1]
+        if lines[i][2].startswith('- '):
+            items = []
+            while i < total and lines[i][1] == child_indent and lines[i][2].startswith('- '):
+                _, _, item_line = lines[i]
+                item = {}
+                body = item_line[2:].strip()
+                i += 1
+                if body:
+                    if ':' not in body:
+                        raise DepsError('Unsupported YAML list item at line %d: %r' % (lineno, body))
+                    k, _, v = body.partition(':')
+                    item[k.strip()] = _parse_scalar(v.strip())
+                field_indent = None
+                while i < total and lines[i][1] > child_indent:
+                    f_lineno, f_indent, f_line = lines[i]
+                    if field_indent is None:
+                        field_indent = f_indent
+                    elif f_indent != field_indent:
+                        raise DepsError('Unsupported YAML indentation at line %d: %r' % (f_lineno, f_line))
+                    if ':' not in f_line:
+                        raise DepsError('Unsupported YAML line %d: %r' % (f_lineno, f_line))
+                    k, _, v = f_line.partition(':')
+                    item[k.strip()] = _parse_scalar(v.strip())
+                    i += 1
+                items.append(item)
+            result[key] = items
+        else:
+            mapping = {}
+            while i < total and lines[i][1] == child_indent:
+                f_lineno, _, f_line = lines[i]
+                if ':' not in f_line:
+                    raise DepsError('Unsupported YAML line %d: %r' % (f_lineno, f_line))
+                k, _, v = f_line.partition(':')
+                mapping[k.strip()] = _parse_scalar(v.strip())
+                i += 1
+            result[key] = mapping
+    return result
 
 
 def read_json(path, default=None):
@@ -151,30 +308,47 @@ class _FakeCompleted:
         self.stderr = stderr
 
 
-def run_specify(args, runner):
+def run_specify(args, runner, input=None, timeout=None):
+    """Run `specify <args>`. Both `specify extension add --from <url>` (without `--dev`) and
+    `specify extension update` can prompt interactively (`typer.confirm`, no `--yes`/`--force`
+    equivalent exists in specify_cli 1.0.11): pass `input='y\\n'` to auto-confirm an authorised
+    mutation, and otherwise close stdin (`DEVNULL`) so an unexpected prompt fails fast (Click
+    raises `Abort` on EOF) instead of hanging on an inherited interactive stdin. Every call has a
+    timeout; `subprocess.TimeoutExpired` is treated as a plain command failure, not raised.
+    """
+    kwargs = {'capture_output': True, 'text': True, 'encoding': 'utf-8',
+              'timeout': DEFAULT_TIMEOUT_SECONDS if timeout is None else timeout}
+    if input is not None:
+        kwargs['input'] = input
+    else:
+        kwargs['stdin'] = subprocess.DEVNULL
     try:
-        return runner(['specify'] + list(args), capture_output=True, text=True, encoding='utf-8')
+        return runner(['specify'] + list(args), **kwargs)
     except FileNotFoundError as exc:
         return _FakeCompleted(127, '', str(exc))
+    except subprocess.TimeoutExpired as exc:
+        return _FakeCompleted(124, '', 'timed out after ' + str(exc.timeout) + 's: ' + str(exc))
     except OSError as exc:
         return _FakeCompleted(1, '', str(exc))
 
 
-def catalog_version(name, runner):
-    result = run_specify(['extension', 'info', name], runner)
+def catalog_version(name, runner, timeout=None):
+    """The catalog's current version for `name`, from `specify extension info`'s plain-text
+    header, or None if the command failed or the header could not be found/parsed. Never
+    raises: an unparseable or absent catalog version is something to ignore, not a fatal error.
+    """
+    result = run_specify(['extension', 'info', name], runner, timeout=timeout)
     if result.returncode != 0 or not result.stdout:
         return None
+    match = _CATALOG_HEADER_RE.search(result.stdout)
+    if not match:
+        return None
+    candidate = match.group(1).strip()
     try:
-        data = json.loads(result.stdout)
-    except ValueError:
+        parse_version(candidate)
+    except DepsError:
         return None
-    if not isinstance(data, dict):
-        return None
-    for key in ('version', 'catalog_version', 'latest_version'):
-        value = data.get(key)
-        if isinstance(value, str):
-            return value
-    return None
+    return candidate
 
 
 def _recipe(name, existing):
@@ -182,7 +356,7 @@ def _recipe(name, existing):
 
 
 def ensure(name, root, dependencies_file, checks_file=None, policy_file=None, approve=False,
-           skip_catalog_check=False, runner=subprocess.run, now=None):
+           skip_catalog_check=False, runner=subprocess.run, now=None, timeout=None):
     """Return (ok, message). `ok` is False exactly when the dependency is missing/incompatible
     and cannot be brought into range under the effective policy; `message` is always one line.
     """
@@ -221,7 +395,11 @@ def ensure(name, root, dependencies_file, checks_file=None, policy_file=None, ap
                 reason = 'installed ' + str(entry.get('version')) + ' is outside ' + range_expr
             return False, (name + ': ' + reason + ' (policy ' + update_policy + '); run: ' + _recipe(name, bool(entry)))
         action = 'update' if entry else 'add'
-        result = run_specify(['extension', action, name], runner)
+        # 'update' always prompts "Update these extensions?" with no --yes equivalent; feed it
+        # a confirmation since this branch only runs once the policy has authorised the change.
+        # 'add' (no --from) never prompts, so it keeps stdin closed via run_specify's default.
+        result = run_specify(['extension', action, name], runner,
+                              input='y\n' if action == 'update' else None, timeout=timeout)
         entry, compatible = compatible_entry()
         if not compatible:
             detail_lines = [line for line in (result.stderr or result.stdout or '').strip().splitlines() if line.strip()]
@@ -240,18 +418,28 @@ def ensure(name, root, dependencies_file, checks_file=None, policy_file=None, ap
             due = True
 
     newer_note = ''
-    if due:
-        latest = None if skip_catalog_check else catalog_version(name, runner)
-        checked[name] = {'checked_at': now.isoformat(), 'installed_version': entry.get('version')}
-        write_json(checks_file, checked)
-        if latest and latest != entry.get('version') and version_satisfies(latest, range_expr):
-            if update_policy == 'auto':
-                run_specify(['extension', 'update', name], runner)
-                refreshed, refreshed_ok = compatible_entry()
-                if refreshed_ok:
-                    entry = refreshed
-            else:
-                newer_note = '; newer compatible release ' + latest + ' available: run ' + _recipe(name, True)
+    if due and not skip_catalog_check:
+        latest = catalog_version(name, runner, timeout=timeout)
+        if latest is not None:
+            # Record the check only now: a skipped probe (--skip-catalog-check) or one that
+            # failed/returned nothing must not stamp checked_at, or a working install would
+            # look "recently checked" for check_interval_hours despite having learned nothing.
+            checked[name] = {'checked_at': now.isoformat(), 'installed_version': entry.get('version')}
+            write_json(checks_file, checked)
+            try:
+                is_newer = latest != entry.get('version') and version_satisfies(latest, range_expr)
+            except DepsError:
+                # An unparseable catalog version (a format this script doesn't recognise) is
+                # ignored, not fatal: the dependency itself is already known-compatible here.
+                is_newer = False
+            if is_newer:
+                if update_policy == 'auto':
+                    run_specify(['extension', 'update', name], runner, input='y\n', timeout=timeout)
+                    refreshed, refreshed_ok = compatible_entry()
+                    if refreshed_ok:
+                        entry = refreshed
+                else:
+                    newer_note = '; newer compatible release ' + latest + ' available: run ' + _recipe(name, True)
 
     return True, (name + ': ok (installed ' + str(entry.get('version')) + ', satisfies ' + range_expr + ')' + newer_note)
 
@@ -282,6 +470,8 @@ def main(argv=None):
                                 help='Explicit user approval to install/update under the prompt policy')
     ensure_parser.add_argument('--skip-catalog-check', action='store_true',
                                 help='Skip the read-only catalog freshness probe (no network)')
+    ensure_parser.add_argument('--timeout', type=float, default=None,
+                                help='Per-subprocess-call timeout in seconds (default: %d)' % DEFAULT_TIMEOUT_SECONDS)
 
     args = parser.parse_args(argv)
 
@@ -292,7 +482,7 @@ def main(argv=None):
     try:
         ok, message = ensure(args.name, root, dependencies_file, checks_file=args.checks_file,
                               policy_file=args.policy_file, approve=args.approve,
-                              skip_catalog_check=args.skip_catalog_check)
+                              skip_catalog_check=args.skip_catalog_check, timeout=args.timeout)
     except DepsError as exc:
         print(args.name + ': ' + str(exc))
         return 1

@@ -12,9 +12,36 @@ All notable changes to the Pull Request Workflow extension.
   recipe, now in one tested script instead of three duplicated prose copies (B9).
 - The illustrate `SKILL.md` is now loaded only when step 4 actually decides a diagram is
   warranted, not unconditionally at step 0.
-- Moved the mandatory PR image-embedding rules (commit-pinned `?raw=true` links, never
-  `raw.githubusercontent.com`, contents-API verification) out of the command body into
-  `references/pr-image-embedding.md`, loaded only when the PR has a diagram or screenshot to embed.
+- Moved the mandatory PR image-embedding rules out of the command body into
+  `references/pr-image-embedding.md`, loaded only when the PR has a diagram or screenshot to embed;
+  it keeps the commit-pinned `?raw=true` / never-`raw.githubusercontent.com` rules verbatim and adds
+  the standing contents-API verification line (`gh api repos/<o>/<r>/contents/<path>?ref=<sha>`,
+  rule 6 / F21) that the inline instructions had not spelled out explicitly.
+- `scripts/deps.py`: fixed after Opus review of the first B9 cut —
+  - `specify extension info` has no `--json` output (specify_cli 1.0.11, the commit pinned in
+    `.github/workflows/ci.yml`); the catalog freshness probe now parses the real plain-text
+    `Name (vX.Y.Z)` header instead of expecting JSON that was never going to arrive.
+  - `specify extension update` always shows an interactive `typer.confirm` with no `--yes`
+    equivalent; an authorised update now gets `input='y\n'`, every other call closes stdin
+    (`subprocess.DEVNULL`) so an unexpected prompt fails fast instead of hanging, and every
+    subprocess call has a timeout (`subprocess.TimeoutExpired` is a plain failure, not an
+    exception).
+  - The version comparator now follows SemVer precedence for pre-release/build-metadata suffixes,
+    a leading `v`, space-separated clauses, and the `^`/`~=` operators; a still-unparseable catalog
+    version is ignored (advisory only), so it can never turn an already-compatible install into a
+    reported failure.
+  - `.specify/extensions/.dependency-checks.json` now records a check only when the catalog probe
+    actually ran and succeeded, not on every `due` cycle (a skipped or failed probe no longer hides
+    the next real check for `check_interval_hours`).
+  - Dropped the PyYAML dependency and `requirements.txt`: nothing in the install/upgrade path
+    installs a package's `requirements.txt` before its commands run, so `dependencies.yml` and
+    `.specify/extension-dependencies.yml` are now read by a small built-in parser instead
+    (tested against the real files of all three consuming packages). `python` stays a required
+    tool for `pr` — it is what runs `deps.py` — but ships no third-party dependency.
+  - A failure now points at `deps.py ensure illustrate --approve` for the user to re-run after
+    approving, instead of a bare "re-run this command"; an exit-0 result's "newer compatible
+    release" note is now explicitly surfaced to the user instead of only appearing in the printed
+    line.
 
 ### Fixed
 

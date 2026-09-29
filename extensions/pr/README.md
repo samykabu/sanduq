@@ -72,7 +72,11 @@ reviewers or bots have commented on an open PR.
 ## Requirements
 
 - `git` and an authenticated `gh` CLI are required for review feedback and PR creation/update.
-- `python` (with `PyYAML`, see `requirements.txt`) is required to run `scripts/deps.py`.
+- `python` is now required (previously `pr` shipped no scripts at all): `scripts/deps.py` runs the
+  illustrate dependency check that used to be inline instructions. It has no third-party
+  dependency — nothing in the install/upgrade path installs a package's `requirements.txt` before
+  its commands run, so `deps.py` parses `dependencies.yml` with a small built-in reader instead of
+  requiring PyYAML.
 - PR generation still writes the documentation if `git`, `gh`, authentication, or a remote is
   unavailable, and reports why it skipped the PR step.
 - Diagram generation requires `illustrate >=2.0.0,<3.0.0`. Step 0 of `speckit.pr.generate` runs

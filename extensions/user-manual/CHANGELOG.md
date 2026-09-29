@@ -9,7 +9,21 @@
   failing closed when illustrate cannot be brought into range. Its `SKILL.md` loads only when a
   diagram is actually about to be added or generated. `dependencies.yml` gained an explicit
   `defaults:` block (`update_policy: prompt`, `check_interval_hours: 24`) matching `pr` and
-  `assure` (B9).
+  `assure` (B9). A failure now points at `deps.py ensure illustrate --approve` for the user to
+  re-run after approving, and an exit-0 "newer compatible release" note is surfaced to the user
+  instead of only appearing in the printed line.
+- `scripts/deps.py`: fixed after Opus review — parses `specify extension info`'s real plain-text
+  `Name (vX.Y.Z)` header (it has no `--json` output); feeds `specify extension update`'s
+  unavoidable `typer.confirm` prompt an explicit `y` only on an authorised update and otherwise
+  closes stdin so an unexpected prompt fails fast instead of hanging; every subprocess call now has
+  a timeout (a timeout is a plain failure, not an exception); the version comparator follows SemVer
+  precedence for pre-release/build-metadata suffixes, a leading `v`, space-separated clauses, and
+  `^`/`~=`, and ignores a still-unparseable catalog version instead of failing an already-compatible
+  install; `.dependency-checks.json` now records a check only when the catalog probe actually ran
+  and succeeded. Dropped the PyYAML dependency: `dependencies.yml` and
+  `.specify/extension-dependencies.yml` are read by a small built-in parser (nothing installs a
+  package's `requirements.txt` before its commands run), tested against the real files of all three
+  consuming packages.
 
 ## 1.3.3
 

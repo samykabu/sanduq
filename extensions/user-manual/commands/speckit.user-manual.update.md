@@ -35,9 +35,15 @@ Flags: `--feature <path>`, `--full`, `--module <id>`, `--skip-runtime`, `--no-bu
 6. Use the API, screenshot, release, and Illustrate skills only for applicable surfaces. For
    Illustrate, first run `python .specify/extensions/user-manual/scripts/deps.py ensure illustrate`;
    load its `SKILL.md` and the matching type reference only when a diagram will actually be
-   generated, and on a non-zero exit skip diagram generation (reporting the script's result) rather
-   than inventing one. Capture screenshots with deterministic synthetic fixtures; never use
-   production data.
+   generated — this direct resource path works in the current run even if the agent only discovers
+   newly registered skills in a new conversation. A trailing "newer compatible release available"
+   note does not block generation; pass it on to the user. On a non-zero exit, skip diagram
+   generation (reporting the script's result) rather than inventing one; if the result names a
+   `specify extension add/update illustrate` recipe and the user approves, re-run
+   `python .specify/extensions/user-manual/scripts/deps.py ensure illustrate --approve` (under a
+   `manual` policy, the user runs the printed `specify extension …` command themselves instead,
+   then this command can simply be re-run). Capture screenshots with deterministic synthetic
+   fixtures; never use production data.
 7. Update `User-Manual/.state/coverage.json`, including source evidence, affected modules, pages,
    audiences, languages, assets, and known gaps.
 8. Unless `--no-build`, run the audit and build scripts for all configured editions. Always create a

@@ -30,8 +30,15 @@ Flags: `--feature <path>`, `--report-only`.
    - Diagrams: before adding any diagram task, run
      `python .specify/extensions/user-manual/scripts/deps.py ensure illustrate`. On a zero exit,
      load the installed `.specify/extensions/illustrate/skill/SKILL.md` and the matching type
-     reference only at that point, right before adding the task. On a non-zero exit, report the
-     script's one-line result and skip diagram tasks instead of inventing one.
+     reference only at that point, right before adding the task — this direct resource path works
+     in the current run even if the agent only discovers newly registered skills in a new
+     conversation. A trailing "newer compatible release available" note does not block adding the
+     task; pass it on to the user. On a non-zero exit, report the script's one-line result and skip
+     diagram tasks instead of inventing one; if the result names a `specify extension add/update
+     illustrate` recipe and the user approves, re-run
+     `python .specify/extensions/user-manual/scripts/deps.py ensure illustrate --approve` (under a
+     `manual` policy, the user runs the printed `specify extension …` command themselves instead,
+     then this command can simply be re-run).
 6. Add concrete tasks for affected audience pages, English content, optional Arabic updates,
    tutorials/how-to/reference/explanation, deterministic screenshots, API bundles/examples,
    architecture/infrastructure/ER diagrams, data dictionary changes, release notes, migration

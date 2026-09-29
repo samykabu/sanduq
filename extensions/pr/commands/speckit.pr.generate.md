@@ -57,11 +57,16 @@ when the dependency is missing or incompatible and cannot be brought into range 
 policy.
 
 - Exit `0`: the dependency is ready. Do **not** load `.specify/extensions/illustrate/skill/SKILL.md`
-  yet — defer that to step 4, and only when a diagram is actually going to be generated there.
+  yet — defer that to step 4, and only when a diagram is actually going to be generated there; this
+  direct resource path works in the current run even if the agent only discovers newly registered
+  skills in a new conversation. If the one-line result also names a "newer compatible release
+  available", pass that note on to the user — it did not block this run.
 - Non-zero exit: report the script's one-line result verbatim, continue the non-diagram work,
   explicitly skip diagram generation, and do not silently use another diagram system. If the result
-  names a `specify extension add/update illustrate` recipe, surface it so the user can approve it
-  (or run it themselves under a `manual` policy) and re-run this command.
+  names a `specify extension add/update illustrate` recipe, surface it to the user; if they approve,
+  re-run `python .specify/extensions/pr/scripts/deps.py ensure illustrate --approve` (under a
+  `manual` policy, the user runs the printed `specify extension …` command themselves instead, then
+  this command can simply be re-run).
 
 
 ### 1. Resolve the active feature
