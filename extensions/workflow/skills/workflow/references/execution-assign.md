@@ -57,10 +57,12 @@ Record each assignment's stable task IDs, prerequisites, owned paths, shared
 resources, acceptance checks and worker ID in the report and handoff. Give workers
 only their scope and the context needed to implement it. Workers must not stage,
 commit, push, merge, change shared report files or invoke another executor.
-`git stash` and `git add -A`/`git add .` are forbidden for a worker: a stash can
-hide another agent's uncommitted change, and a wildcard add can stage paths
-outside the worker's owned scope. Staging stays with the orchestration agent,
-which stages a worker's owned paths by explicit name.
+`git stash` and `git add -A`/`git add .` are forbidden for a worker, as are
+`delegate_dispatch.py accept` and `delegate_dispatch.py trust-reset`: a stash
+can hide another agent's uncommitted change, a wildcard add can stage paths
+outside the worker's owned scope, and `accept`/`trust-reset` are ledger-trust
+decisions the orchestration agent alone makes. Staging stays with the
+orchestration agent, which stages a worker's owned paths by explicit name.
 
 When `.specify/workflow.yml` enables delegation, start each ready `T###` worker
 with `python .specify/extensions/workflow/scripts/delegate_dispatch.py start

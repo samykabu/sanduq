@@ -167,6 +167,17 @@ counts|files [--owned <path>]`, which runs that check itself (never a
 sha256/size evidence. `accept --owned` may only narrow the paths recorded at
 `start`. A note never accepts an `unverified` run.
 
+Ledger trust is tri-state, not pass/fail: no local `.written` marker (a fresh
+checkout or CI runner) is a warning only, not a block — status is still
+enforced. A genuine tamper (a marker that disagrees) is sticky and survives a
+later legitimate write; resolve it with `delegate_dispatch.py trust-reset
+--feature <f> --reason "<text>"` only after reviewing exactly what changed —
+this catches accidental and local tampering only, never a forged commit, so CI
+integrity still rests on review. After upgrading to this release, re-delegate
+any stage claimed under an older checkpoint once, since its recorded attempt
+has no `claim_token` and can never satisfy `complete`. `trust-reset` is an
+orchestration-agent command, never a worker's.
+
 ## Continue through delivery
 
 The orchestration agent returns the Execute evidence to the dispatcher. It stays

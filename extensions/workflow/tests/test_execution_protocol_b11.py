@@ -53,6 +53,9 @@ ASSIGN_MARKERS = [
     'the `[collect]` marker or an explicit override (B12), never by default',  # T0 x standing rule 5
     'roughly 150K tokens resident',                                       # T0 hand-off
     '`git stash` and `git add -A`/`git add .` are forbidden for a worker',  # S6
+    'as are `delegate_dispatch.py accept` and `delegate_dispatch.py '
+    'trust-reset`',                                                       # B12: also forbidden for a worker
+    'ledger-trust decisions the orchestration agent alone makes',         # B12: why accept/trust-reset are forbidden
     'Staging stays with the orchestration agent, which stages a '
     "worker's owned paths by explicit name",                              # S6 fix: no self-contradiction
     '--tasks specs/<feature>/tasks.md --output specs/<feature>/workflow/progress --summary',  # B7 --summary default
@@ -132,6 +135,17 @@ B12_TEXT = (
     'itself (never a `.bat`/`.cmd` shim on Windows — use the underlying '
     'executable) and records sha256/size evidence. `accept --owned` may only '
     'narrow the paths recorded at `start`. A note never accepts an `unverified` run.'
+    ' Ledger trust is tri-state, not pass/fail: no local `.written` marker (a '
+    'fresh checkout or CI runner) is a warning only, not a block — status is '
+    'still enforced. A genuine tamper (a marker that disagrees) is sticky and '
+    'survives a later legitimate write; resolve it with `delegate_dispatch.py '
+    'trust-reset --feature <f> --reason "<text>"` only after reviewing exactly '
+    'what changed — this catches accidental and local tampering only, never a '
+    'forged commit, so CI integrity still rests on review. After upgrading to '
+    'this release, re-delegate any stage claimed under an older checkpoint '
+    "once, since its recorded attempt has no `claim_token` and can never "
+    'satisfy `complete`. `trust-reset` is an orchestration-agent command, '
+    "never a worker's."
 )
 
 # The dispatcher-operations.md marker list must include B12's new [Collect] marker
