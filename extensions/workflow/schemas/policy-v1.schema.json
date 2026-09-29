@@ -179,8 +179,9 @@
         },
         "fixed_collection_commands": {
           "type": "object",
-          "description": "Optional stage -> exact resolved-command string map (1.7+). A stage named here routes to the light-eligible qa_collect only while its resolved command still matches the named string exactly; empty (the default) means no stage is ever inferred as qa_collect.",
-          "additionalProperties": {"type": "string", "minLength": 1}
+          "description": "Optional verify -> exact resolved-command string map (1.7+). Only \"verify\" may ever be named (never a discovery or other stage); its value routes it to the light-eligible qa_collect only while its resolved command still matches exactly, and never when the value itself is a workflow: pseudo-command or a speckit. skill invocation (those are never a genuinely fixed external script). Empty (the default) means verify is never inferred as qa_collect.",
+          "propertyNames": {"enum": ["verify"]},
+          "additionalProperties": {"type": "string", "minLength": 1, "not": {"pattern": "^(workflow:|speckit\\.)"}}
         }
       }
     },

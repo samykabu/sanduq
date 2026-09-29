@@ -450,6 +450,38 @@ class DelegationTests(unittest.TestCase):
         return {'ok': True, 'driver': str(self.skill_copy(self.root)),
                 'harnesses': {'codex': True, 'claude': True}}
 
+    def test_start_requires_owned_for_a_qa_collect_task(self):
+        """Finding 4, round 2: a light-tier or qa_collect start without
+        --owned is refused rather than silently defaulting to the whole cwd."""
+        self.tasks('- [ ] T001 [Collect] Run smoke suite\n')
+        self.enable()
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch.object(dispatch, 'launch', return_value={'run_id': 'codex-1', 'state': 'running'}):
+            with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_OWNED_PATHS_REQUIRED'):
+                dispatch.start(self.root, self.feature, 'T001')
+            # With --owned, the same start succeeds.
+            result = dispatch.start(self.root, self.feature, 'T001', owned=['.'])
+        self.assertEqual(result['route']['tier'], 'light')
+
+    def test_start_requires_owned_for_a_light_tier_override(self):
+        self.tasks()
+        self.enable()
+        self.policy['delegation']['overrides'][self.feature + '/T001'] = {
+            'preferred': {'harness': 'selected', 'tier': 'light'}, 'fallbacks': []}
+        self.configure()
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch.object(dispatch, 'launch', return_value={'run_id': 'codex-1', 'state': 'running'}):
+            with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_OWNED_PATHS_REQUIRED'):
+                dispatch.start(self.root, self.feature, 'T001')
+
+    def test_start_does_not_require_owned_for_standard_tier_work(self):
+        self.tasks()
+        self.enable()
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch.object(dispatch, 'launch', return_value={'run_id': 'codex-1', 'state': 'running'}):
+            result = dispatch.start(self.root, self.feature, 'T001')
+        self.assertEqual(result['route']['tier'], 'standard')
+
     def test_dispatch_records_unverified_actual_model_and_usage(self):
         self.tasks()
         self.enable()
@@ -536,9 +568,11 @@ class DelegationTests(unittest.TestCase):
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
              patch.object(dispatch, 'launch', return_value={'run_id': 'codex-scope', 'state': 'running'}):
             dispatch.start(self.root, self.feature, 'stage:scope', token=claim['token'])
-        ledger = dispatch.load_ledger(self.root, self.feature)
-        ledger['attempts'][0]['status'] = 'unverified'
-        w.write(delegation.ledger_path(self.root, self.feature), ledger)
+        # A tracked dispatcher write (edit_ledger), not a hand-edit, so the
+        # ledger stays trusted (finding 2b, round 2) and the test exercises
+        # DELEGATION_STAGE_NOT_VERIFIED rather than DELEGATION_LEDGER_UNTRUSTED.
+        with dispatch.edit_ledger(self.root, self.feature) as ledger:
+            ledger['attempts'][0]['status'] = 'unverified'
         receipt = fixture.WorkflowTests.receipt(self, 'scope')
         with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_STAGE_NOT_VERIFIED'):
             run.complete(claim['token'], receipt)
@@ -575,10 +609,11 @@ class DelegationTests(unittest.TestCase):
         self.enable()
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
              patch.object(dispatch, 'launch', return_value={'run_id': 'codex-1', 'state': 'running'}):
-            dispatch.start(self.root, self.feature, 'T001')
-        ledger = dispatch.load_ledger(self.root, self.feature)
-        ledger['attempts'][0]['status'] = status
-        w.write(delegation.ledger_path(self.root, self.feature), ledger)
+            dispatch.start(self.root, self.feature, 'T001', owned=['.'])
+        # A tracked dispatcher write (edit_ledger), not a hand-edit, so the
+        # ledger stays trusted (finding 2b, round 2).
+        with dispatch.edit_ledger(self.root, self.feature) as ledger:
+            ledger['attempts'][0]['status'] = status
         path.write_text(path.read_text(encoding='utf-8').replace('- [ ] T001', '- [x] T001'),
                         encoding='utf-8')
         run = w.Run(self.root, self.feature)
@@ -728,7 +763,7 @@ class DelegationTests(unittest.TestCase):
         self.enable()
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
              patch.object(dispatch, 'launch', return_value={'run_id': 'codex-1', 'state': 'running'}):
-            started = dispatch.start(self.root, self.feature, 'T001')
+            started = dispatch.start(self.root, self.feature, 'T001', owned=['.'])
         self.assertEqual(started['route']['tier'], 'light')
         payload = {'run_id': 'codex-1', 'status': 'successful', 'summary': summary,
                    'harness': 'codex', 'model': 'gpt-6-terra', 'model_reported': False,
@@ -748,6 +783,60 @@ class DelegationTests(unittest.TestCase):
     def test_collect_light_tier_success_without_evidence_stays_unverified(self):
         self._unverified_run()
 
+    def _attempt(self, tier=None, model=None, task_type='qa_collect', requested_model='gpt-6-terra',
+                actual_model=None, harness='codex'):
+        candidate = {'harness': harness, 'requested_model': requested_model}
+        if tier is not None:
+            candidate['tier'] = tier
+        elif model is not None:
+            candidate['model'] = model
+        return {'route_candidates': [candidate], 'candidate_index': 0, 'task_type': task_type,
+               'requested_harness': harness, 'requested_model': requested_model, 'actual_model': actual_model}
+
+    def test_is_light_tier_run_direct(self):
+        """Finding 3c, round 2: direct coverage of every branch, including a
+        tier-less light candidate (a fallback picked by explicit model)."""
+        policy = self.policy
+        # tier: light is always light, regardless of task_type.
+        self.assertTrue(dispatch.is_light_tier_run(
+            self._attempt(tier='light', task_type='implementation'), policy))
+        # No tier label at all (a fallback candidate configured by model, or
+        # an override): the qa_collect task_type applies.
+        self.assertTrue(dispatch.is_light_tier_run(
+            self._attempt(tier=None, model=None, task_type='qa_collect'), policy))
+        # An explicit standard-or-above tier is a genuine escalation and is
+        # exempt from the task_type rule (finding 3a).
+        self.assertFalse(dispatch.is_light_tier_run(
+            self._attempt(tier='standard', task_type='qa_collect', requested_model='gpt-6-sol'), policy))
+        # Not qa_collect and no tier: an ordinary implementation fallback.
+        self.assertFalse(dispatch.is_light_tier_run(
+            self._attempt(tier=None, task_type='implementation', requested_model='gpt-6-sol'), policy))
+        # A tier-less candidate whose requested model matches the
+        # configured light model by family, not exact string.
+        self.assertTrue(dispatch.is_light_tier_run(
+            self._attempt(tier=None, task_type='implementation', requested_model='gpt-6-terra'), policy))
+
+    def test_is_light_tier_run_matches_model_by_family_not_exact_string(self):
+        """Finding 3b, round 2: a harness-reported full identifier
+        ("claude-haiku-4-5-...") must match the configured alias ("haiku") by
+        family, not only by exact string equality."""
+        policy = self.policy
+        attempt = self._attempt(tier='standard', task_type='implementation', harness='claude',
+                                requested_model='sonnet', actual_model='claude-haiku-4-5-20260101')
+        self.assertTrue(dispatch.is_light_tier_run(attempt, policy))
+        # An unrelated actual model does not match.
+        attempt['actual_model'] = 'claude-opus-4-5-20260101'
+        self.assertFalse(dispatch.is_light_tier_run(attempt, policy))
+
+    def test_model_family_matches_examples(self):
+        self.assertTrue(dispatch.model_family_matches('claude-haiku-4-5-20260101', 'haiku'))
+        self.assertTrue(dispatch.model_family_matches('haiku', 'claude-haiku-4-5-20260101'))
+        self.assertTrue(dispatch.model_family_matches('gpt-6-terra-20260315', 'gpt-6-terra'))
+        self.assertFalse(dispatch.model_family_matches('claude-opus-4-5', 'haiku'))
+        self.assertFalse(dispatch.model_family_matches('gpt-6-sol', 'gpt-6-terra'))
+        self.assertFalse(dispatch.model_family_matches('', 'haiku'))
+        self.assertFalse(dispatch.model_family_matches(None, 'haiku'))
+
     def test_collect_never_trusts_counts_in_the_worker_summary(self):
         """Finding 3: even fully-framed, parsable counts in a worker's own
         summary must never verify a light-tier result; only accept (or a
@@ -756,7 +845,7 @@ class DelegationTests(unittest.TestCase):
         self.enable()
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
              patch.object(dispatch, 'launch', return_value={'run_id': 'codex-1', 'state': 'running'}):
-            dispatch.start(self.root, self.feature, 'T001')
+            dispatch.start(self.root, self.feature, 'T001', owned=['.'])
         payload = {'run_id': 'codex-1', 'status': 'successful',
                    'summary': '===================== 12 passed in 0.10s =====================',
                    'harness': 'codex', 'model': 'gpt-6-terra', 'model_reported': False,
@@ -782,7 +871,7 @@ class DelegationTests(unittest.TestCase):
         (self.root / 'produced.log').write_text('genuinely produced\n', encoding='utf-8')
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
              patch.object(dispatch, 'launch', return_value={'run_id': 'codex-1', 'state': 'running'}):
-            dispatch.start(self.root, self.feature, 'T001')
+            dispatch.start(self.root, self.feature, 'T001', owned=['.'])
         payload = {'run_id': 'codex-1', 'status': 'successful',
                    'summary': json.dumps({'files': ['README.md', 'produced.log']}),
                    'harness': 'codex', 'model': 'gpt-6-terra', 'model_reported': False,
@@ -806,7 +895,7 @@ class DelegationTests(unittest.TestCase):
         (self.root / 'produced.log').write_text('genuinely produced\n', encoding='utf-8')
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
              patch.object(dispatch, 'launch', return_value={'run_id': 'codex-1', 'state': 'running'}):
-            dispatch.start(self.root, self.feature, 'T001')
+            dispatch.start(self.root, self.feature, 'T001', owned=['.'])
         payload = {'run_id': 'codex-1', 'status': 'successful',
                    'summary': json.dumps({'files': ['produced.log']}),
                    'harness': 'codex', 'model': 'gpt-6-terra', 'model_reported': False,
@@ -835,6 +924,30 @@ class DelegationTests(unittest.TestCase):
         self.assertEqual(ledger['attempts'][0]['replacement_run_id'], 'codex-2')
         self.assertEqual(ledger['attempts'][1]['parent_run_id'], run_id)
 
+    def test_reassign_to_standard_actually_resolves_on_collect(self):
+        """Finding 3a, round 2: the qa_collect task_type never changes on
+        reassignment, so the guard must not re-fire for the standard-tier
+        replacement just because attempt['task_type'] is still 'qa_collect' --
+        otherwise reassign could never actually resolve an unverified task."""
+        run_id = self._unverified_run()
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch.object(dispatch, 'launch', return_value={'run_id': 'codex-2', 'state': 'running'}):
+            replacement = dispatch.reassign(self.root, self.feature, run_id,
+                                            'Needs an independently verified standard-tier run')
+        self.assertEqual(replacement['route']['tier'], 'standard')
+        payload = {'run_id': 'codex-2', 'status': 'successful', 'summary': 'Implemented and verified',
+                   'harness': 'codex', 'model': 'gpt-6-sol', 'model_reported': False,
+                   'actual_model': None, 'model_observed': False,
+                   'status_provenance': {'primary': 'harness_telemetry'},
+                   'dirty_paths_changed': [], 'artifacts': {'dir': str(self.root / '.delegate/runs/codex-2')}}
+        with patch.object(delegation, 'inspect_skill', return_value=self.fake_doctor()), \
+             patch.object(dispatch.shutil, 'which', return_value='node'), \
+             patch.object(dispatch.subprocess, 'run',
+                         return_value=subprocess.CompletedProcess([], 0, json.dumps(payload), '')):
+            result = dispatch.collect(self.root, self.feature, 'codex-2')
+        self.assertEqual(result['status'], 'successful')
+        self.assertEqual(dispatch.load_ledger(self.root, self.feature)['attempts'][1]['status'], 'successful')
+
     def fake_run_capped(self, exit_code, output, truncated=False, timed_out=False):
         return {'exit_code': exit_code, 'output': output, 'truncated': truncated, 'timed_out': timed_out}
 
@@ -851,6 +964,24 @@ class DelegationTests(unittest.TestCase):
         self.assertEqual(ledger['attempts'][0]['acceptance_attempts'][0]['exit_code'], 0)
         self.assertTrue(ledger['attempts'][0]['acceptance_attempts'][0]['accepted'])
 
+    def test_collect_after_accept_returns_the_recorded_result_without_reprocessing(self):
+        """Finding 3d, round 2: collect on an already-terminal, accepted run
+        must not re-run the driver or the light-tier guard -- doing so could
+        downgrade an accepted "successful" back to "unverified" since the
+        driver's own payload still carries no evidence."""
+        run_id = self._unverified_run()
+        with patch.object(dispatch, 'run_capped',
+                          return_value=self.fake_run_capped(0, '{"total": 5, "passed": 5, "failed": 0}')):
+            dispatch.accept(self.root, self.feature, run_id, 'pytest -q', 'counts')
+        self.assertEqual(dispatch.load_ledger(self.root, self.feature)['attempts'][0]['status'], 'successful')
+        with patch.object(dispatch.shutil, 'which', return_value='node'), \
+             patch.object(dispatch.subprocess, 'run') as run:
+            result = dispatch.collect(self.root, self.feature, run_id)
+        run.assert_not_called()
+        self.assertEqual(result['status'], 'successful')
+        self.assertEqual(result['accepted_evidence']['counts'], {'total': 5, 'passed': 5, 'failed': 0})
+        self.assertEqual(dispatch.load_ledger(self.root, self.feature)['attempts'][0]['status'], 'successful')
+
     def test_accept_with_valid_files_resolves_unverified(self):
         run_id = self._unverified_run()
         (self.root / 'evidence.log').write_text('collected output', encoding='utf-8')
@@ -864,7 +995,7 @@ class DelegationTests(unittest.TestCase):
         self.assertEqual(result['evidence']['files'][0]['size'], len('collected output'))
 
     def test_accept_owned_flag_restricts_files_for_this_call(self):
-        """Finding 8a: --owned narrows (or widens) the check for one call."""
+        """Finding 8a: --owned narrows the check for one call."""
         run_id = self._unverified_run()
         (self.root / 'allowed').mkdir()
         (self.root / 'allowed/evidence.log').write_text('ok', encoding='utf-8')
@@ -879,6 +1010,27 @@ class DelegationTests(unittest.TestCase):
                           return_value=self.fake_run_capped(0, json.dumps({'files': ['allowed/evidence.log']}))):
             result = dispatch.accept(self.root, self.feature, run_id, 'collect', 'files',
                                      owned=['allowed'])
+        self.assertTrue(result['accepted'])
+
+    def test_accept_owned_may_only_narrow_never_widen(self):
+        """Finding 4, round 2: --owned may only narrow the paths recorded at
+        start; it must not be able to lift that bound for one call."""
+        run_id = self._unverified_run(task_line='- [ ] T001 [Collect] Run smoke suite\n')
+        # _unverified_run starts T001 with owned=['.'] (round 1's default);
+        # give it a narrower recorded set to prove --owned cannot escape it.
+        with dispatch.edit_ledger(self.root, self.feature) as ledger:
+            ledger['attempts'][0]['owned_paths'] = ['allowed']
+        (self.root / 'allowed').mkdir()
+        (self.root / 'allowed/evidence.log').write_text('ok', encoding='utf-8')
+        (self.root / 'outside.log').write_text('ok', encoding='utf-8')
+        with patch.object(dispatch, 'run_capped',
+                          return_value=self.fake_run_capped(0, '{"files": ["outside.log"]}')):
+            with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_ACCEPT_OWNED_MUST_NARROW'):
+                dispatch.accept(self.root, self.feature, run_id, 'collect', 'files', owned=['.'])
+        # Narrowing further, inside the recorded 'allowed' root, is fine.
+        with patch.object(dispatch, 'run_capped',
+                          return_value=self.fake_run_capped(0, '{"files": ["allowed/evidence.log"]}')):
+            result = dispatch.accept(self.root, self.feature, run_id, 'collect', 'files', owned=['allowed'])
         self.assertTrue(result['accepted'])
 
     def test_accept_bare_note_or_empty_output_stays_unverified(self):
@@ -957,6 +1109,30 @@ class DelegationTests(unittest.TestCase):
         self.assertEqual(result['status'], 'unverified')
         self.assertEqual(result['exit_code'], 1)
 
+    def test_command_targets_windows_shim_detection(self):
+        """Finding 5, round 2 (BatBadBut): a .bat/.cmd target, explicit or
+        resolved from PATH, is only ever flagged on Windows."""
+        with patch.object(dispatch.os, 'name', 'nt'):
+            self.assertTrue(dispatch.command_targets_windows_shim('npx.cmd --version'))
+            self.assertTrue(dispatch.command_targets_windows_shim('"C:\\tools\\run.bat" --flag'))
+            self.assertFalse(dispatch.command_targets_windows_shim('node script.js'))
+            self.assertFalse(dispatch.command_targets_windows_shim('C:\\tools\\run.exe --flag'))
+            with patch.object(dispatch.shutil, 'which', return_value='C:\\npm\\npm.cmd'):
+                self.assertTrue(dispatch.command_targets_windows_shim('npm test'))
+            with patch.object(dispatch.shutil, 'which', return_value='C:\\node\\node.exe'):
+                self.assertFalse(dispatch.command_targets_windows_shim('node script.js'))
+        with patch.object(dispatch.os, 'name', 'posix'):
+            # Never flagged off Windows, even for a literal .bat/.cmd target.
+            self.assertFalse(dispatch.command_targets_windows_shim('npx.cmd --version'))
+
+    def test_accept_refuses_a_windows_shim_command(self):
+        run_id = self._unverified_run()
+        with patch.object(dispatch.os, 'name', 'nt'), \
+             patch.object(dispatch, 'run_capped') as run_capped:
+            with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_ACCEPT_COMMAND_IS_SHIM'):
+                dispatch.accept(self.root, self.feature, run_id, 'npx.cmd jest', 'counts')
+        run_capped.assert_not_called()
+
     def test_accept_cwd_allows_a_registered_worktree_outside_root(self):
         """Finding 8b: a task's cwd may be a separate worktree of the same
         repository; accept must not refuse it just for being outside root."""
@@ -1020,10 +1196,20 @@ class DelegationTests(unittest.TestCase):
             ('[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0\n[INFO] Running com.acme.OtherTest\n'
              'Results:\n\nTests run: 15, Failures: 2, Errors: 1, Skipped: 0\n',
              {'total': 15, 'passed': 12, 'failed': 3}),
+            # The real Maven layout, round 2 finding 6: [INFO]/[ERROR] line
+            # prefixes on both the "Results:" line and the aggregate itself.
+            ('[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 - in com.acme.OkTest\n'
+             '[INFO] Results:\n\n[ERROR] Tests run: 7, Failures: 2, Errors: 0, Skipped: 0\n',
+             {'total': 7, 'passed': 5, 'failed': 2}),
             # Python unittest.
             ('Ran 5 tests in 0.002s\n\nOK', {'total': 5, 'passed': 5, 'failed': 0}),
             ('Ran 5 tests in 0.002s\n\nFAILED (failures=2, errors=1)',
              {'total': 5, 'passed': 2, 'failed': 3}),
+            # dotnet test, round 2 finding 6.
+            ('Passed!  - Failed:     0, Passed:    12, Skipped:     0, Total:    12',
+             {'total': 12, 'passed': 12, 'failed': 0}),
+            ('Failed!  - Failed:     2, Passed:    10, Skipped:     0, Total:    12',
+             {'total': 12, 'passed': 10, 'failed': 2}),
             # node --test: fields need not be adjacent (real output interleaves
             # "# suites", "# duration_ms" and similar between them).
             ('# tests 7\n# suites 1\n# pass 5\n# cancelled 0\n# fail 2\n# duration_ms 12.3',
@@ -1043,13 +1229,20 @@ class DelegationTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(dispatch.parse_counts(text), expected)
 
-    def test_parse_counts_uses_the_last_summary_within_one_category(self):
-        # A flaky rerun's final, all-green state is what counts, not the
-        # first (failing) attempt pasted earlier in the same log.
+    def test_parse_counts_pytest_reruns_any_failed_bar_counts_as_failed(self):
+        """Finding 6c, round 2: a pytest "rerun failed only" invocation can
+        print a real failure, then a later, clean bar for just the retried
+        subset; taking the chronologically last bar (round 1's rule) would
+        silently report the whole run as passing. Any failed>0 occurrence
+        anywhere in the output makes the category report failed."""
         text = ('===== 2 failed, 3 passed in 0.10s =====\n'
-                'retrying...\n'
+                'retrying failed tests...\n'
                 '===== 5 passed in 0.09s =====')
-        self.assertEqual(dispatch.parse_counts(text), {'total': 5, 'passed': 5, 'failed': 0})
+        self.assertEqual(dispatch.parse_counts(text), {'total': 5, 'passed': 3, 'failed': 2})
+        # No failed>0 occurrence anywhere: the last (and only meaningfully
+        # distinct) clean bar is used as before.
+        clean = '===== 3 passed in 0.05s =====\n===== 3 passed in 0.09s ====='
+        self.assertEqual(dispatch.parse_counts(clean), {'total': 3, 'passed': 3, 'failed': 0})
 
     def test_collect_recovers_unlinked_replacement_without_duplicate_launch(self):
         self.tasks()
@@ -1078,10 +1271,10 @@ class DelegationTests(unittest.TestCase):
         payload.update(fields)
         return {key: value for key, value in payload.items() if value is not ...}
 
-    def start_one(self, identity='T001', run_id='codex-1'):
+    def start_one(self, identity='T001', run_id='codex-1', owned=None):
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
              patch.object(dispatch, 'launch', return_value={'run_id': run_id, 'state': 'running'}):
-            return dispatch.start(self.root, self.feature, identity)
+            return dispatch.start(self.root, self.feature, identity, owned=owned)
 
     def collect_with(self, payload, launch, run_id='codex-1'):
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
@@ -1219,7 +1412,7 @@ class DelegationTests(unittest.TestCase):
         stderr.write_text('Unknown model gpt-6-terra', encoding='utf-8')
         self.start_one(run_id='codex-1')
         # A second task starts in parallel: an ordinary dispatcher save.
-        self.start_one('T002', 'codex-2')
+        self.start_one('T002', 'codex-2', owned=['.'])
         cases = (
             ('stronger retry', 'codex-1', {}, 'gpt-6-astra', 'codex-3'),
             ('model fallback', 'codex-2', {'status_reason': '', 'artifacts': {
@@ -1959,16 +2152,57 @@ class DelegationTests(unittest.TestCase):
         self.assertEqual(delegation.stage_work_type({}, 'verify'), 'qa_author')
 
     def test_stage_work_type_routes_to_collect_only_when_policy_names_the_exact_command(self):
-        fixed = {'verify': 'workflow:verification'}
-        self.assertEqual(delegation.stage_work_type({'verify': 'workflow:verification'}, 'verify', fixed),
-                         'qa_collect')
+        # A genuinely fixed external script (never workflow: or speckit.) may
+        # route verify to qa_collect once policy names it exactly.
+        fixed = {'verify': 'scripts/run-fixed-verification.sh'}
+        self.assertEqual(delegation.stage_work_type(
+            {'verify': 'scripts/run-fixed-verification.sh'}, 'verify', fixed), 'qa_collect')
         # The policy names a command, but the resolved command no longer
         # matches it exactly: stays qa_author, never inferred.
-        self.assertEqual(delegation.stage_work_type({'verify': 'speckit.custom.verify'}, 'verify', fixed),
+        self.assertEqual(delegation.stage_work_type({'verify': 'scripts/other.sh'}, 'verify', fixed),
                          'qa_author')
         # A stage the policy never named for fixed collection is unaffected.
         self.assertEqual(delegation.stage_work_type({'qa_analyze': 'speckit.assure.analyze'},
                                                      'qa_analyze', fixed), 'qa_author')
+
+    def test_stage_work_type_rejects_workflow_and_speckit_fixed_values(self):
+        """Finding 1, round 2: naming verify's own real default command
+        ("workflow:verification") in fixed_collection_commands must not
+        silently restore the pre-round-1-fix behaviour, and a speckit. skill
+        invocation is never a genuinely fixed external script either."""
+        for value in ('workflow:verification', 'speckit.custom.verify'):
+            with self.subTest(value=value):
+                fixed = {'verify': value}
+                self.assertEqual(delegation.stage_work_type({'verify': value}, 'verify', fixed),
+                                 'qa_author')
+
+    def test_stage_work_type_never_returns_qa_collect_for_a_discovery_stage(self):
+        """Finding 1, round 2, the literal exploit: naming a discovery stage
+        in fixed_collection_commands (however it got there) must never move
+        it off standard."""
+        for stage in ('scope', 'specify', 'clarify', 'plan', 'tasks'):
+            with self.subTest(stage=stage):
+                fixed = {stage: 'speckit.plan', 'verify': 'speckit.plan'}
+                commands = {stage: 'speckit.plan', 'verify': 'speckit.plan'}
+                self.assertEqual(delegation.stage_work_type(commands, stage, fixed), 'discovery')
+                self.assertNotEqual(delegation.stage_work_type(commands, stage, fixed), 'qa_collect')
+
+    def test_validate_delegation_rejects_non_verify_or_shim_fixed_collection_commands(self):
+        config = json.loads(json.dumps(self.policy['delegation']))
+        config['fixed_collection_commands'] = {'plan': 'speckit.plan'}
+        with self.assertRaisesRegex(delegation.DelegationError,
+                                    'DELEGATION_FIXED_COLLECTION_COMMANDS_INVALID'):
+            delegation.validate_delegation(config)
+        config['fixed_collection_commands'] = {'verify': 'workflow:verification'}
+        with self.assertRaisesRegex(delegation.DelegationError,
+                                    'DELEGATION_FIXED_COLLECTION_COMMANDS_INVALID'):
+            delegation.validate_delegation(config)
+        config['fixed_collection_commands'] = {'verify': 'speckit.custom.verify'}
+        with self.assertRaisesRegex(delegation.DelegationError,
+                                    'DELEGATION_FIXED_COLLECTION_COMMANDS_INVALID'):
+            delegation.validate_delegation(config)
+        config['fixed_collection_commands'] = {'verify': 'scripts/run-fixed-verification.sh'}
+        delegation.validate_delegation(config)  # does not raise
 
     def test_stage_work_type_covers_qa_document_and_qa_analyze_and_discovery(self):
         commands = {'qa_document': 'speckit.assure.document', 'qa_analyze': 'speckit.assure.analyze',
@@ -2002,6 +2236,22 @@ class DelegationTests(unittest.TestCase):
         # A routes dict with neither qa nor qa_author/qa_collect is still invalid.
         incomplete = {k: v for k, v in legacy_routes.items() if k != 'qa'}
         self.assertTrue(list(routes_validator.iter_errors(incomplete)))
+
+    def test_schema_restricts_fixed_collection_commands_to_verify(self):
+        """Finding 1, round 2: the schema's own propertyNames restricts
+        fixed_collection_commands to "verify", and rejects a workflow: or
+        speckit. value even for that one allowed key."""
+        import json as jsonlib
+        from jsonschema import Draft202012Validator
+        schema_path = Path(__file__).resolve().parents[1] / 'schemas' / 'policy-v1.schema.json'
+        policy_schema = jsonlib.loads(schema_path.read_text(encoding='utf-8'))
+        validator = Draft202012Validator(policy_schema)
+        fixed_schema = policy_schema['properties']['delegation']['properties']['fixed_collection_commands']
+        fixed_validator = validator.evolve(schema=fixed_schema)
+        self.assertEqual(list(fixed_validator.iter_errors({'verify': 'scripts/run.sh'})), [])
+        self.assertTrue(list(fixed_validator.iter_errors({'plan': 'speckit.plan'})))
+        self.assertTrue(list(fixed_validator.iter_errors({'verify': 'workflow:verification'})))
+        self.assertTrue(list(fixed_validator.iter_errors({'verify': 'speckit.custom.verify'})))
 
     def test_legacy_qa_route_migrates_to_qa_author_with_fresh_qa_collect(self):
         legacy = self.policy.copy()

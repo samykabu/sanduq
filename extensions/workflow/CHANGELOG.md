@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+- Delegation guard, round 2 corrections (B12). `complete` and the Ready task
+  gate now also require the ledger itself to be trustworthy
+  (`DELEGATION_LEDGER_UNTRUSTED` when it exists but was not last written by a
+  tracked dispatcher operation such as `collect`, `accept` or `reassign`,
+  never when there is simply no delegation activity yet) and require the
+  delegated attempt's `claim_token` (recorded at `start`) to match the exact
+  claim being completed, so a successful attempt from an earlier claim of the
+  same stage cannot satisfy a different, later re-claim; the Ready gate
+  rejects every non-`successful` delegated status, not only `unverified`.
+  `delegation.fixed_collection_commands` now allows only the `verify` key
+  (schema `propertyNames`) and never a `workflow:`- or `speckit.`-prefixed
+  value (not even `verify`'s own real default, `workflow:verification`,
+  which would otherwise silently restore the pre-fix behaviour): no stage,
+  discovery above all, can be routed to `qa_collect` through it any other
+  way. The light-tier guard's `qa_collect`-task-type rule now applies only
+  to a tier-less candidate, so a genuine standard-tier `reassign` (which
+  never changes a task's classification) is exempt and can actually resolve
+  an `unverified` result; its model match is now by family
+  (`claude-haiku-4-5-...` matches the configured alias `haiku`), not exact
+  string equality. `collect` on an already-terminal run (one `accept` already
+  resolved, in particular) returns the recorded result unchanged instead of
+  re-running the driver and the guard a second time, which could otherwise
+  downgrade an accepted `successful` back to `unverified`. A light-tier or
+  `qa_collect` `start` must declare `--owned` itself now (no more silent
+  whole-`cwd` default), and `accept --owned` may only narrow the paths
+  recorded at `start`, never widen them. `accept` refuses a `.bat`/`.cmd`
+  target, explicit or PATH-resolved (the "BatBadBut" class: Windows always
+  runs those through `cmd.exe` even without a shell here), naming the
+  underlying executable to run instead. The reporter-counts parser gained the
+  real JUnit/Maven `[INFO]`/`[ERROR]`-prefixed layout and dotnet test's
+  `Passed!`/`Failed!` line, and now treats any `failed > 0` pytest bar
+  anywhere in the output as failed, so a "rerun failed tests only" pytest
+  invocation cannot hide an earlier real failure behind a later, clean
+  partial bar.
+
 - Delegation: collection route and light-tier guard (B12). `qa` splits into
   `qa_author` (standard-tier authoring and analysis) and `qa_collect`
   (light-eligible: running an existing, fixed check and reporting its

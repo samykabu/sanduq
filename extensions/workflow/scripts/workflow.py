@@ -1083,13 +1083,20 @@ def ready_checks(root, feature, policy, state, base=None, rules=None):
         require(all(t['done'] for t in tasks.values()), 'INCOMPLETE_TASKS')
         if policy.get('delegation', {}).get('enabled'):
             # A checked task delegated through the dispatcher must have a
-            # verified outcome, not merely a checkbox (finding 1): a light-tier
-            # result the guard left unverified never earns Ready on its own.
-            from delegation import latest_attempt
-            unverified = [task_id for task_id in tasks
-                         if (attempt := latest_attempt(root, feature, task_id)) is not None and
-                         attempt.get('status') == 'unverified']
-            require(not unverified, 'DELEGATION_TASK_UNVERIFIED: ' + ', '.join(sorted(unverified)) +
+            # verified, successful outcome, not merely a checkbox (finding 1):
+            # a light-tier result the guard left unverified, or any other
+            # non-successful status (running, starting, failed, abandoned --
+            # finding 2c, round 2), never earns Ready on its own. The ledger
+            # itself must still be the dispatcher's own, unedited bytes
+            # (finding 2b, round 2): a hand-edited "successful" is not trusted.
+            from delegation import latest_attempt, ledger_state_trusted
+            require(ledger_state_trusted(root, feature),
+                    'DELEGATION_LEDGER_UNTRUSTED: the delegation ledger does not match what a '
+                    'dispatcher last wrote for ' + feature + '; investigate before Ready')
+            not_verified = [task_id for task_id in tasks
+                           if (attempt := latest_attempt(root, feature, task_id)) is not None and
+                           attempt.get('status') != 'successful']
+            require(not not_verified, 'DELEGATION_TASK_UNVERIFIED: ' + ', '.join(sorted(not_verified)) +
                     ' - resolve with delegate_dispatch.py accept or reassign before Ready')
         ran.append('tasks')
     if rules.get('task_links'):
@@ -1661,12 +1668,24 @@ class Run:
                 # dispatcher's own ledger (never the receipt's self-report) to show
                 # the delegated attempt actually succeeded, following any reassignment
                 # to its terminal end (finding 1: the guard was previously unread).
-                from delegation import latest_attempt
+                # The ledger itself must still be the dispatcher's own, unedited
+                # bytes (finding 2b, round 2): a hand-edited "successful" status
+                # is never trusted. The attempt must also have been started
+                # under this exact claim (finding 2a, round 2): a successful
+                # attempt left over from an earlier claim of this same stage
+                # (for example one abandoned and re-claimed) must not satisfy
+                # a different, later claim it was never part of.
+                from delegation import latest_attempt, ledger_state_trusted
+                require(ledger_state_trusted(self.root, self.relative),
+                        'DELEGATION_LEDGER_UNTRUSTED: the delegation ledger does not match what a '
+                        'dispatcher last wrote for ' + self.relative + '; investigate before completing')
                 stage_attempt = latest_attempt(self.root, self.relative, 'stage:' + stage)
-                require(stage_attempt is not None and stage_attempt.get('status') == 'successful',
+                require(stage_attempt is not None and stage_attempt.get('status') == 'successful' and
+                        stage_attempt.get('claim_token') == token,
                         'DELEGATION_STAGE_NOT_VERIFIED: the latest delegate_dispatch attempt for stage:' +
                         stage + ' is ' + (str(stage_attempt.get('status')) if stage_attempt else 'missing') +
-                        ', not successful; collect, accept or reassign it before completing this stage')
+                        ' or was not started under this claim; collect, accept or reassign it before '
+                        'completing this stage')
             if stage == 'clarify':
                 require(receipt.get('unresolved') == 0 and receipt.get('answers_applied') is True, 'CLARIFICATION_UNRESOLVED')
             if BASE_STAGES.index(stage) >= BASE_STAGES.index('specify'):

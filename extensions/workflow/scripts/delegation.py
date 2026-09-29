@@ -349,21 +349,39 @@ def migrate_qa_route(config):
     return None
 
 
+# The only key fixed_collection_commands may ever route (schema and
+# validate_delegation enforce the same restriction on the policy itself;
+# this is the second, load-bearing enforcement inside stage_work_type, so an
+# unvalidated dict passed directly -- as a test, or any future caller, might
+# -- can still never move a discovery stage, or any stage but verify, to
+# qa_collect). A value naming a runtime pseudo-command ("workflow:...") or a
+# skill invocation ("speckit....") is never a genuinely fixed external
+# script and is rejected even when it is the stage's own real default
+# command (finding 1, round 2: policy naming verify's actual default,
+# "workflow:verification", must not silently restore the pre-fix behaviour).
+FIXED_COLLECTION_ALLOWED_STAGE = 'verify'
+FIXED_COLLECTION_REJECTED_PREFIXES = ('workflow:', 'speckit.')
+
+
 def stage_work_type(commands, stage, fixed_collection_commands=None):
     """The delegation work type for one stage, given its resolved command map.
 
     ``commands`` is the checkpoint's resolved ``stage -> command`` map (the same
     one ``workflow.py`` persists at claim time), so a caller anywhere in the
     lifecycle classifies a stage identically. ``fixed_collection_commands`` is
-    the optional ``delegation.fixed_collection_commands`` policy map; only a
-    stage explicitly named there, whose resolved command still matches the
-    named string exactly, routes to qa_collect. Without that policy key (the
-    default), no stage is ever inferred as qa_collect.
+    the optional ``delegation.fixed_collection_commands`` policy map; only
+    ``verify``, named there with a resolved-command match that is not a
+    ``workflow:`` or ``speckit.`` value, ever routes to qa_collect. Every
+    other stage -- discovery above all -- always returns its STAGE_TYPES
+    default, regardless of what the map contains for it.
     """
     require(stage in STAGE_TYPES, 'DELEGATION_STAGE_INVALID')
-    fixed = (fixed_collection_commands or {}).get(stage)
-    if fixed is not None and (commands or {}).get(stage) == fixed:
-        return 'qa_collect'
+    if stage == FIXED_COLLECTION_ALLOWED_STAGE:
+        fixed = (fixed_collection_commands or {}).get(FIXED_COLLECTION_ALLOWED_STAGE)
+        if (fixed is not None and not fixed.startswith(FIXED_COLLECTION_REJECTED_PREFIXES) and
+                (commands or {}).get(FIXED_COLLECTION_ALLOWED_STAGE) == fixed):
+            require(STAGE_TYPES[stage] != 'discovery', 'DELEGATION_STAGE_INVALID')
+            return 'qa_collect'
     return STAGE_TYPES[stage]
 
 
@@ -417,10 +435,13 @@ def validate_delegation(config):
                 'DELEGATION_OVERRIDE_KEY_INVALID: ' + str(key))
         validate_route(route)
     fixed = config['fixed_collection_commands']
-    require(isinstance(fixed, dict) and
-            all(isinstance(k, str) and k.strip() and isinstance(v, str) and v.strip()
-                for k, v in fixed.items()),
-            'DELEGATION_FIXED_COLLECTION_COMMANDS_INVALID')
+    require(isinstance(fixed, dict) and set(fixed) <= {FIXED_COLLECTION_ALLOWED_STAGE} and
+            all(isinstance(v, str) and v.strip() for v in fixed.values()),
+            'DELEGATION_FIXED_COLLECTION_COMMANDS_INVALID: only "' +
+            FIXED_COLLECTION_ALLOWED_STAGE + '" may be named')
+    require(all(not v.startswith(FIXED_COLLECTION_REJECTED_PREFIXES) for v in fixed.values()),
+            'DELEGATION_FIXED_COLLECTION_COMMANDS_INVALID: a workflow: or speckit. command is '
+            'never a fixed external script')
     return config
 
 
@@ -551,6 +572,22 @@ def ledger_path(root, feature):
     require(path.is_relative_to(root.resolve() / 'specs') and
             path.parent.parent == (root / feature).resolve(), 'DELEGATION_FEATURE_INVALID')
     return path
+
+
+def ledger_state_trusted(root, feature):
+    """True when the ledger is either absent (no delegation activity yet, not
+    itself suspicious) or matches what a dispatcher last wrote (finding 2b,
+    round 2). False only when the file exists but its bytes were changed by
+    something other than a tracked dispatcher write -- collect, accept and
+    reassign all go through ``edit_ledger``, which records what it saved; a
+    hand-edited status (for example changing an attempt to "successful"
+    directly in the file) must never be trusted by ``complete`` or the Ready
+    gate.
+    """
+    from delegate_dispatch import ledger_written_by_dispatcher
+    if not ledger_path(root, feature).is_file():
+        return True
+    return ledger_written_by_dispatcher(root, feature)
 
 
 def latest_attempt(root, feature, identity):

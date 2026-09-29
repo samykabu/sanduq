@@ -447,7 +447,8 @@ def launch(root, driver, candidate, cwd, task, timeout, intent_id=None):
 
 
 def candidate_start(root, feature, identity, work_type, candidates, task_path, cwd,
-                    timeout, parent_run_id=None, retry_count=0, decision=None, owned_paths=None):
+                    timeout, parent_run_id=None, retry_count=0, decision=None, owned_paths=None,
+                    claim_token=None):
     config = workflow.load_policy(root)['delegation']
     status = delegation.doctor(root, workflow.active_host(root), install=True,
                                scope=config['install_scope'])
@@ -472,6 +473,7 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
                                    'cwd': relative(root, cwd), 'timeout': timeout,
                                    'owned_paths': owned_paths, 'route_candidates': candidates,
                                    'driver': relative(root, status['driver']),
+                                   'claim_token': claim_token,
                                    'parent_run_id': parent_run_id, 'retry_count': retry_count})
     for index, candidate in enumerate(candidates):
         if not status['harnesses'].get(candidate['harness']):
@@ -535,6 +537,7 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
                    'allow_commit': selected['allow_commit'],
                    'started_at': stamp(), 'task_file': relative(root, task_path),
                    'cwd': relative(root, cwd), 'timeout': timeout, 'owned_paths': owned_paths,
+                   'claim_token': claim_token,
                    'evidence_location': '.delegate/runs/' + started['run_id'] + '/result.json'}
         with edit_ledger(root, feature, ('intent_id', intent_id)) as ledger:
             find_intent(ledger, intent_id).update(attempt)
@@ -610,8 +613,18 @@ def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
     else:
         candidates = delegation.selected_route(config, work_type, workflow.active_host(root),
                                                 full_identity)
+    # A light-tier or qa_collect start must declare its owned paths itself
+    # (finding 4, round 2): the evidence guard needs a bounded set to check
+    # summary or accept file evidence against, not a silent default to the
+    # whole working directory.
+    requires_owned = work_type == 'qa_collect' or (candidates and candidates[0].get('tier') == 'light')
+    delegation.require(not requires_owned or owned,
+                       'DELEGATION_OWNED_PATHS_REQUIRED: a light-tier or qa_collect start must declare '
+                       '--owned <path> (repeatable); the light-tier evidence guard checks file evidence '
+                       'against a bounded owned-path set, never the whole working directory by default')
     return candidate_start(root, feature, full_identity, work_type, candidates,
-                           task_path, cwd, timeout, owned_paths=owned)
+                           task_path, cwd, timeout, owned_paths=owned,
+                           claim_token=token if identity.startswith('stage:') else None)
 
 
 # Wording the supported agent CLIs and their provider APIs use when a
@@ -828,19 +841,29 @@ def _block_counts(match):
 
 
 def _counts_from_labeled_block(block):
-    """Extract JUnit/Maven ``Label: N`` pairs (label first, unlike pytest/Jest)."""
+    """Extract ``Label: N`` pairs (label first, unlike pytest/Jest): JUnit/Maven's
+    Tests run/Failures/Errors/Skipped, and dotnet test's Total/Passed/Failed/Skipped.
+    An ``[INFO]``/``[ERROR]`` line prefix (Maven's own convention) is not part
+    of any label and does not stop it matching.
+    """
     found = {}
-    for label, number in re.findall(r'(Tests(?:\s+run)?|Failures|Errors|Skipped)\s*:\s*(\d+)', block, re.I):
+    for label, number in re.findall(
+            r'(Tests(?:\s+run)?|Failures|Errors|Skipped|Total|Passed|Failed)\s*:\s*(\d+)', block, re.I):
         key = re.sub(r'\s+', ' ', label.strip().lower())
         found[key] = found.get(key, 0) + int(number)
-    total = found.get('tests run', found.get('tests'))
+    total = found.get('tests run', found.get('tests', found.get('total')))
+    failed = found.get('failures', 0) + found.get('errors', 0) + found.get('failed', 0)
+    passed = found.get('passed')
     if total is None:
+        if passed is None:
+            return None
+        total = passed + failed
+    if total <= 0:
         return None
-    failed = found.get('failures', 0) + found.get('errors', 0)
-    return {'total': total, 'passed': total - failed, 'failed': failed}
+    return {'total': total, 'passed': passed if passed is not None else total - failed, 'failed': failed}
 
 
-def _results_section_counts(match):
+def _labeled_block_counts(match):
     return _counts_from_labeled_block(match.group(1))
 
 
@@ -881,19 +904,28 @@ def _node_test_counts(text):
 # "Results:" section, and "I ran it: 10 passed, 0 failed" all match nothing
 # below and so parse to None, never a false "failed: 0"). See the format list
 # documented on QA_COLLECT_ADDENDUM, the README delegation section and here:
-#   1. pytest's "===== ... in N.Ns =====" summary bar.
+#   1. pytest's "===== ... in N.Ns =====" summary bar. Its category prefers
+#      any occurrence with failed > 0 over the chronologically last one
+#      (round 2, finding 6c): a "rerun failed only" pytest invocation can
+#      print an earlier bar with real failures, then a later, clean bar for
+#      just the retried subset -- taking the literal last bar would silently
+#      report the whole run as passing.
 #   2. Jest's "Tests: ..." line.
-#   3. JUnit/Maven's aggregate "Results:" section, never an earlier per-class
+#   3. JUnit/Maven's aggregate "Results:" section (an "[INFO]"/"[ERROR]" line
+#      prefix does not stop it matching), never an earlier per-class
 #      "Tests run:" line lacking that header.
 #   4. Python unittest's "Ran N tests ..." followed by "OK" or "FAILED (...)".
+#   5. dotnet test's "Passed!"/"Failed!" summary line.
 # node's --test runner "# tests/# pass/# fail" lines are checked separately
 # below (they need not be contiguous; see ``_node_test_counts``).
+PYTEST_CATEGORY = 0
 COUNT_PATTERNS = (
     (re.compile(r'=+([^=\n]*?\bin\s+[\d.]+s[^=\n]*?)=+', re.I), _block_counts),
     (re.compile(r'Tests:([^\n]+)', re.I), _block_counts),
-    (re.compile(r'Results:\s*\r?\n+([^\n]+)', re.I), _results_section_counts),
+    (re.compile(r'Results:\s*\r?\n+([^\n]+)', re.I), _labeled_block_counts),
     (re.compile(r'Ran\s+(\d+)\s+tests?\b[^\n]*\r?\n+\s*OK\b', re.I), _unittest_ok_counts),
     (re.compile(r'Ran\s+(\d+)\s+tests?\b[^\n]*\r?\n+\s*FAILED\s*\(([^)]*)\)', re.I), _unittest_failed_counts),
+    (re.compile(r'(?:Passed|Failed)!\s*-\s*([^\n]+)', re.I), _labeled_block_counts),
 )
 
 
@@ -908,11 +940,15 @@ def parse_counts(text):
     ``COUNT_PATTERNS``; a bare "N passed, N failed" or "Tests run: N,
     Failures: N" without it matches nothing): pytest's summary bar, Jest's
     ``Tests:`` line, a JUnit/Maven ``Results:`` section, Python unittest's
-    ``Ran N tests`` plus ``OK``/``FAILED (...)``, and node ``--test``'s
-    ``# tests``/``# pass``/``# fail`` lines.
+    ``Ran N tests`` plus ``OK``/``FAILED (...)``, dotnet test's
+    ``Passed!``/``Failed!`` line, and node ``--test``'s ``# tests``/``#
+    pass``/``# fail`` lines.
 
-    Each pattern category is tried independently across the whole text and
-    only its *last* match counts (a rerun's final state, not an earlier one).
+    Each pattern category is tried independently across the whole text. Every
+    category but pytest's uses only its *last* match (a rerun's final state,
+    not an earlier one); pytest's uses the last match that has ``failed > 0``,
+    if any, else its own last match, so a rerun-failed-only pytest invocation
+    cannot hide an earlier real failure behind a later, clean partial bar.
     If more than one category produces a match and they disagree, the parse
     is ambiguous and returns ``None`` rather than guessing between them.
     """
@@ -924,13 +960,14 @@ def parse_counts(text):
     text = text or ''
     per_category = {}
     for index, (pattern, convert) in enumerate(COUNT_PATTERNS):
-        last = None
-        for match in pattern.finditer(text):
-            counts = convert(match)
-            if counts:
-                last = counts
-        if last is not None:
-            per_category[index] = last
+        matches = [counts for m in pattern.finditer(text) if (counts := convert(m))]
+        if not matches:
+            continue
+        if index == PYTEST_CATEGORY:
+            failed_matches = [counts for counts in matches if counts['failed'] > 0]
+            per_category[index] = failed_matches[-1] if failed_matches else matches[-1]
+        else:
+            per_category[index] = matches[-1]
     node_counts = _node_test_counts(text)
     if node_counts:
         per_category['node'] = node_counts
@@ -1017,25 +1054,64 @@ def validate_owned_files(cwd, owned_paths, paths):
     return verified or None
 
 
+# Size/tier words too generic to prove two model names share a family on
+# their own (a "mini" or "pro" variant of two unrelated model lines would
+# otherwise look related). Purely numeric tokens (version numbers) are
+# excluded the same way in ``model_family_matches``.
+GENERIC_MODEL_TOKENS = {'mini', 'small', 'medium', 'large', 'pro', 'max', 'lite', 'base', 'preview'}
+
+
+def model_family_matches(candidate_model, configured_model):
+    """True when two model identifiers plausibly name the same model family.
+
+    A configured alias (``haiku``) and the full identifier a harness actually
+    reports (``claude-haiku-4-5-20260101``) are not the same string but do
+    name the same family; exact string equality let a real light-tier run
+    escape the guard whenever the harness reported its full name (finding 3b,
+    round 2). Matches when either normalised name contains the other as a
+    substring, or when they share a dash-separated token that is not a
+    generic size/tier word or a bare version number.
+    """
+    a = re.sub(r'[^a-z0-9]+', '-', str(candidate_model or '').strip().lower()).strip('-')
+    b = re.sub(r'[^a-z0-9]+', '-', str(configured_model or '').strip().lower()).strip('-')
+    if not a or not b:
+        return False
+    if a in b or b in a:
+        return True
+    distinctive = lambda name: {t for t in name.split('-')
+                                if len(t) >= 4 and not t.isdigit() and t not in GENERIC_MODEL_TOKENS}
+    return bool(distinctive(a) & distinctive(b))
+
+
 def is_light_tier_run(attempt, policy):
     """True when this attempt's guard must apply, by tier, task type or model.
 
-    The selected candidate's own recorded ``tier`` is the usual signal, but a
-    fallback candidate configured by explicit ``model`` (no ``tier`` key) or a
-    task explicitly classified ``qa_collect`` must not bypass the guard just
-    because its route entry happens to omit a tier label (finding 6): either
-    one, or the requested or harness-reported actual model matching that
-    harness's configured light-tier model, is also sufficient.
+    The selected candidate's own recorded ``tier`` is the usual signal. A
+    candidate with no ``tier`` label at all (a fallback configured by
+    explicit ``model``, or an override) cannot itself say it is not light, so
+    the task's own ``qa_collect`` classification applies only then -- an
+    explicit standard-or-above tier is a genuine escalation (for example
+    ``reassign`` to standard) and is exempt from the task-type rule (finding
+    3a, round 2: task_type never changes on reassignment, so applying it
+    unconditionally meant a qa_collect task could never actually resolve
+    through a standard-tier reassignment). Independently of tier, the
+    requested or harness-reported actual model matching that harness's
+    configured light-tier model *by family* (finding 3b) is also sufficient,
+    since a fallback candidate can name a model the harness then reports back
+    under a different but equivalent full identifier.
     """
     candidate = attempt['route_candidates'][attempt['candidate_index']] or {}
-    if candidate.get('tier') == 'light':
+    tier = candidate.get('tier')
+    if tier == 'light':
         return True
-    if attempt.get('task_type') == 'qa_collect':
+    if tier is None and attempt.get('task_type') == 'qa_collect':
         return True
     harness = attempt.get('requested_harness')
     light_model = ((policy or {}).get('delegation', {}).get('models', {}).get(harness) or {}).get('light')
-    if light_model and light_model in (attempt.get('requested_model'), attempt.get('actual_model')):
-        return True
+    if light_model:
+        for observed in (attempt.get('requested_model'), attempt.get('actual_model')):
+            if observed and model_family_matches(observed, light_model):
+                return True
     return False
 
 
@@ -1096,6 +1172,43 @@ def build_command_argv(command):
     args = shlex.split(command)
     delegation.require(args, 'DELEGATION_ACCEPT_COMMAND_REQUIRED')
     return args
+
+
+WINDOWS_SHIM_EXTENSIONS = ('.bat', '.cmd')
+
+
+def command_target_token(command):
+    """The acceptance command's own leading token (its executable), quoted or not."""
+    text = command.strip()
+    if text.startswith('"'):
+        end = text.find('"', 1)
+        return text[1:end] if end > 0 else text[1:]
+    parts = text.split(None, 1)
+    return parts[0] if parts else ''
+
+
+def command_targets_windows_shim(command):
+    """True when the acceptance command's executable is, or would resolve on
+    PATH to, a ``.bat``/``.cmd`` shim (finding 5, round 2: the "BatBadBut"
+    vulnerability class). Windows' ``CreateProcess`` cannot run a batch file
+    directly: it always routes it through ``cmd.exe``, which re-parses
+    quoting, even though this module never sets ``shell=True`` and never
+    passes the command through a shell itself -- an argument built from
+    untrusted content could still be interpreted as a second command.
+    """
+    if os.name != 'nt':
+        return False
+    token = command_target_token(command)
+    if not token:
+        return False
+    suffix = Path(token).suffix.lower()
+    if suffix in WINDOWS_SHIM_EXTENSIONS:
+        return True
+    if not suffix:
+        resolved = shutil.which(token)
+        if resolved and Path(resolved).suffix.lower() in WINDOWS_SHIM_EXTENSIONS:
+            return True
+    return False
 
 
 def kill_process_tree(proc):
@@ -1162,6 +1275,24 @@ def run_capped(args, cwd, timeout):
     return {'exit_code': exit_code, 'output': text, 'truncated': truncated, 'timed_out': timed_out}
 
 
+def _recorded_response(attempt):
+    """The collect-shaped response for an attempt already fully processed."""
+    response = {'run_id': attempt['run_id'], 'status': attempt['status'],
+                'requested_model': attempt.get('requested_model'),
+                'actual_model': attempt.get('actual_model'),
+                'actual_model_evidence': attempt.get('actual_model_evidence'),
+                'harness': attempt.get('actual_harness'), 'evidence_location': attempt.get('evidence_location'),
+                'token_usage': attempt.get('token_usage'), 'result_summary': attempt.get('result_summary'),
+                'changed_paths': attempt.get('changed_paths'),
+                'worker_changed_paths': attempt.get('worker_changed_paths'),
+                'dispatcher_paths_changed': attempt.get('dispatcher_paths_changed')}
+    if attempt.get('unverified_reason'):
+        response['unverified_reason'] = attempt['unverified_reason']
+    if attempt.get('accepted_evidence'):
+        response['accepted_evidence'] = attempt['accepted_evidence']
+    return response
+
+
 def collect(root, feature, run_id, auto_retry=True):
     root = root.resolve()
     feature = feature_identity(root, feature)
@@ -1171,8 +1302,18 @@ def collect(root, feature, run_id, auto_retry=True):
         attempt = find_run(ledger, run_id)
         delegation.require(attempt is not None, 'DELEGATION_RUN_UNKNOWN: ' + run_id)
         linked = replacement_link(ledger, attempt)
+        # Already fully processed (finding 3d, round 2): a repeated collect on
+        # a terminal run -- especially one accept already resolved -- must
+        # return what is on record, never re-run the driver or the light-tier
+        # guard a second time and risk downgrading an accepted result back to
+        # unverified.
+        already_done = (linked is None and attempt.get('status') in TERMINAL_STATUSES and
+                        (attempt.get('ended_at') is not None or attempt.get('accepted_evidence') is not None))
+        recorded = copy.deepcopy(attempt) if already_done else None
     if linked:
         return linked
+    if recorded is not None:
+        return _recorded_response(recorded)
     driver = pinned_driver(root, attempt)
     node = shutil.which('node')
     delegation.require(node is not None, 'NODE_MISSING')
@@ -1239,19 +1380,7 @@ def collect(root, feature, run_id, auto_retry=True):
                                                         root / '.delegate/runs' / run_id)) / 'result.json')
         linked = replacement_link(ledger, attempt)
         attempt = copy.deepcopy(attempt)
-    response = {'run_id': run_id, 'status': attempt['status'],
-                'requested_model': attempt['requested_model'],
-                'actual_model': attempt['actual_model'],
-                'actual_model_evidence': attempt['actual_model_evidence'],
-                'harness': attempt['actual_harness'], 'evidence_location': attempt['evidence_location'],
-                'token_usage': attempt['token_usage'], 'result_summary': attempt['result_summary'],
-                'changed_paths': attempt['changed_paths'],
-                'worker_changed_paths': attempt['worker_changed_paths'],
-                'dispatcher_paths_changed': attempt['dispatcher_paths_changed']}
-    if attempt.get('unverified_reason'):
-        response['unverified_reason'] = attempt['unverified_reason']
-    if attempt.get('accepted_evidence'):
-        response['accepted_evidence'] = attempt['accepted_evidence']
+    response = _recorded_response(attempt)
     if linked:
         return {**response, **linked}
     plan = retry_plan(policy, attempt, measured, rejected, workflow.active_host(root)) if auto_retry else None
@@ -1265,6 +1394,7 @@ def collect(root, feature, run_id, auto_retry=True):
                                       remaining, task_path, root / attempt['cwd'],
                                       attempt['timeout'], parent_run_id=run_id,
                                       retry_count=retry_count, owned_paths=attempt.get('owned_paths'),
+                                      claim_token=attempt.get('claim_token'),
                                       decision={'at': stamp(), 'identity': attempt['identity'],
                                                 'requested': attempt_to_candidate(attempt),
                                                 'decision': kind, 'reason': reason,
@@ -1324,7 +1454,7 @@ def reassign(root, feature, run_id, reason, task_file=None):
     replacement = candidate_start(root, feature, prior['identity'], prior['task_type'],
                                   [stronger], brief, root / prior['cwd'], prior['timeout'],
                                   parent_run_id=run_id, retry_count=prior['retry_count'] + 1,
-                                  owned_paths=prior.get('owned_paths'),
+                                  owned_paths=prior.get('owned_paths'), claim_token=prior.get('claim_token'),
                                   decision={'at': stamp(), 'identity': prior['identity'],
                                             'requested': attempt_to_candidate(prior),
                                             'decision': 'reassignment', 'reason': reason.strip(),
@@ -1381,8 +1511,26 @@ def accept(root, feature, run_id, command, expect, timeout=None, owned=None):
     cwd = (root / attempt['cwd']).resolve()
     delegation.require(cwd.is_dir() and (cwd.is_relative_to(root) or cwd in registered_worktrees(root)),
                        'DELEGATION_ACCEPT_CWD_INVALID')
+    delegation.require(not command_targets_windows_shim(command),
+                       'DELEGATION_ACCEPT_COMMAND_IS_SHIM: the acceptance command targets a .bat/.cmd '
+                       'shim; Windows always runs it through cmd.exe even though this dispatcher never '
+                       'uses a shell, reopening the class of injection shell=False is meant to close. '
+                       'Run the underlying executable directly instead (for example "node <script>.js" '
+                       'rather than an npx.cmd shim)')
     args = build_command_argv(command)
-    owned_paths = owned if owned else attempt.get('owned_paths')
+    # --owned may only narrow what was declared at start, never widen it
+    # (finding 4, round 2): otherwise a task started with a bounded owned set
+    # could have that bound quietly lifted for one acceptance call.
+    owned_paths = attempt.get('owned_paths')
+    if owned:
+        recorded_roots = owned_roots(cwd, owned_paths) or [Path(cwd).resolve()]
+        narrowed_roots = owned_roots(cwd, owned)
+        delegation.require(narrowed_roots is not None and all(
+            any(candidate.is_relative_to(recorded) for recorded in recorded_roots)
+            for candidate in narrowed_roots),
+            'DELEGATION_ACCEPT_OWNED_MUST_NARROW: --owned may only narrow the paths recorded at '
+            'start, never widen them')
+        owned_paths = owned
     run = run_capped(args, cwd, timeout)
     text = run['output']
     evidence = None
