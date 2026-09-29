@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Replaced the verbatim "Ensure the Illustrate dependency" instruction block in
+  `speckit.assure.analyze` and `speckit.assure.document` with one call each to the shared
+  `scripts/deps.py ensure illustrate` (also shipped to `pr` and `user-manual`); same
+  registry/policy/catalog checks and failure recipe, now in one tested script instead of
+  duplicated prose (B9). The illustrate `SKILL.md` is now loaded only when a diagram task or asset
+  is actually being added, not unconditionally at step 0a.
+
 ## 2.2.2
 
 - `assure_state.py` defaults `--base-ref` to the feature's bound target

@@ -6,3 +6,6 @@ dependencies:
 defaults:
   update_policy: prompt
   check_interval_hours: 24
+defaults:
+  update_policy: prompt
+  check_interval_hours: 24

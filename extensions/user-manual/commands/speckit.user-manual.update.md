@@ -32,8 +32,12 @@ Flags: `--feature <path>`, `--full`, `--module <id>`, `--skip-runtime`, `--no-bu
      enumerations and values, and sensitive-data classification.
 5. Write plain English. When Arabic is enabled, write natural plain Arabic with RTL-safe structure;
    do not transliterate technical prose or leave machine-like literal translations.
-6. Use the API, screenshot, release, and Illustrate skills only for applicable surfaces. Capture
-   screenshots with deterministic synthetic fixtures; never use production data.
+6. Use the API, screenshot, release, and Illustrate skills only for applicable surfaces. For
+   Illustrate, first run `python .specify/extensions/user-manual/scripts/deps.py ensure illustrate`;
+   load its `SKILL.md` and the matching type reference only when a diagram will actually be
+   generated, and on a non-zero exit skip diagram generation (reporting the script's result) rather
+   than inventing one. Capture screenshots with deterministic synthetic fixtures; never use
+   production data.
 7. Update `User-Manual/.state/coverage.json`, including source evidence, affected modules, pages,
    audiences, languages, assets, and known gaps.
 8. Unless `--no-build`, run the audit and build scripts for all configured editions. Always create a

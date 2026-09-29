@@ -27,7 +27,11 @@ Flags: `--feature <path>`, `--report-only`.
    - API surface: `skills/api-docs/SKILL.md`.
    - UI or mobile screens: `skills/ui-screenshots/SKILL.md`.
    - Compatibility, upgrade, or release behavior: `skills/release-docs/SKILL.md`.
-   - Diagrams: installed Illustrate skill and the matching type reference.
+   - Diagrams: before adding any diagram task, run
+     `python .specify/extensions/user-manual/scripts/deps.py ensure illustrate`. On a zero exit,
+     load the installed `.specify/extensions/illustrate/skill/SKILL.md` and the matching type
+     reference only at that point, right before adding the task. On a non-zero exit, report the
+     script's one-line result and skip diagram tasks instead of inventing one.
 6. Add concrete tasks for affected audience pages, English content, optional Arabic updates,
    tutorials/how-to/reference/explanation, deterministic screenshots, API bundles/examples,
    architecture/infrastructure/ER diagrams, data dictionary changes, release notes, migration

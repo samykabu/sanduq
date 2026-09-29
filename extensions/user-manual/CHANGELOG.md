@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- `speckit.user-manual.analyze` and `speckit.user-manual.update` now ensure the `illustrate`
+  dependency with the shared `scripts/deps.py ensure illustrate` (also shipped to `pr` and
+  `assure`) instead of the previous informal "load the installed Illustrate skill" wording; the
+  script checks the Spec Kit registry, follows the project's `update_policy`, and prints one line,
+  failing closed when illustrate cannot be brought into range. Its `SKILL.md` loads only when a
+  diagram is actually about to be added or generated. `dependencies.yml` gained an explicit
+  `defaults:` block (`update_policy: prompt`, `check_interval_hours: 24`) matching `pr` and
+  `assure` (B9).
+
 ## 1.3.3
 
 - The private preview artifact `upload-artifact` step now keeps `retention-days: 2`

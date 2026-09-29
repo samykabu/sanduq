@@ -41,31 +41,27 @@ resolve feature -> documentation preflights -> gather ground truth -> generate d
 
 ### 0. Ensure the Illustrate dependency
 
-Before resolving the feature, read `.specify/extensions/pr/dependencies.yml` and enforce its
-`illustrate` requirement.
+Before resolving the feature, ensure the `illustrate` dependency declared in
+`.specify/extensions/pr/dependencies.yml` is installed, enabled, and within its declared SemVer
+range:
 
-1. Read `.specify/extensions/.registry` as the installed-version source of truth.
-2. Read the optional project policy at `.specify/extension-dependencies.yml`. Supported
-   `update_policy` values are:
-   - `prompt` (default): ask before `specify extension add illustrate` or
-     `specify extension update illustrate`.
-   - `auto`: the user has pre-authorized dependency installation and updates.
-   - `manual`: never mutate dependencies; report the exact command the user must run.
-3. If `illustrate` is absent, disabled, or outside the declared SemVer range, follow the policy
-   and install/update it. Never make this extension-state change under `prompt` without explicit
-   approval.
-4. For an installed compatible version, use `.specify/extensions/.dependency-checks.json` to avoid
-   catalog checks more often than `check_interval_hours`. When due, run
-   `specify extension info illustrate` (read-only), compare the catalog version with the
-   registry version, and follow the update policy if a newer compatible release exists.
-5. After any add/update, re-read the registry and verify the version before continuing. Record the
-   checked time and installed version in `.specify/extensions/.dependency-checks.json`.
-6. Load `.specify/extensions/illustrate/skill/SKILL.md` and resolve its references/assets
-   relative to that skill directory. This direct resource path works in the current run even if the
-   agent only discovers newly registered skills in a new conversation.
-7. If installation/update is declined or unavailable, continue the non-diagram work, explicitly skip
-   diagram generation, and report the missing dependency. Do not silently use another diagram
-   system.
+```text
+python .specify/extensions/pr/scripts/deps.py ensure illustrate
+```
+
+The script performs the same checks this step used to spell out: it reads the installed-version
+registry, follows the project's `update_policy` (`prompt` default/`auto`/`manual`) without ever
+mutating dependencies under `prompt` without explicit approval, rate-limits the catalog freshness
+probe by `check_interval_hours`, and records the check. It prints one line and exits non-zero only
+when the dependency is missing or incompatible and cannot be brought into range under the current
+policy.
+
+- Exit `0`: the dependency is ready. Do **not** load `.specify/extensions/illustrate/skill/SKILL.md`
+  yet — defer that to step 4, and only when a diagram is actually going to be generated there.
+- Non-zero exit: report the script's one-line result verbatim, continue the non-diagram work,
+  explicitly skip diagram generation, and do not silently use another diagram system. If the result
+  names a `specify extension add/update illustrate` recipe, surface it so the user can approve it
+  (or run it themselves under a `manual` policy) and re-run this command.
 
 
 ### 1. Resolve the active feature
@@ -130,9 +126,12 @@ If something is unknown, **omit it** — do not fabricate test counts, coverage,
 
 ### 4. Select and generate useful Illustrate assets
 
-Before writing the feature documents, use the installed `illustrate` skill's selection guide to
-decide whether a visual teaches the reviewer more than prose or a table. Choose only types supported
-by the evidence:
+Decide first, from the gathered evidence, whether any visual would teach the reviewer more than
+prose or a table. Only if step 0 confirmed `illustrate` is ready and at least one diagram looks
+warranted, load `.specify/extensions/illustrate/skill/SKILL.md` now (resolve its references/assets
+relative to that skill directory) and use its selection guide to decide among the types below. If no
+diagram is warranted, skip loading the skill entirely — it is not needed to write the two documents.
+Choose only types supported by the evidence:
 
 - **Architecture** for components, boundaries, integrations, infrastructure, security zones, or
   deployment topology.
@@ -176,35 +175,10 @@ For each applicable diagram:
 6. If no supported visual materially improves comprehension, omit diagrams. Do not invent one.
 7. If PNG export is unavailable, keep the HTML source, add a clear "PNG export pending" note in the
    doc, and report the follow-up. Do not embed a broken image.
-8. **Mandatory inline visuals, including private repositories.** Build an inventory of every
-   reviewer-facing diagram and screenshot in `<Feature>-Explained.md`. Embed each in the PR body
-   as an image with descriptive alt text, including Illustrate/Archify exports and screenshots.
-   A file link, HTML-source link, or link to the explanation document does not satisfy this rule.
-   - Use a renderable image export for each diagram; link editable HTML/JSON sources in addition.
-     Do not fabricate images when none is relevant, or silently omit an expected export that failed.
-   - For private repositories, prefer supported GitHub attachment uploads and their returned asset
-     URLs when available. Otherwise use repository image URLs verified for an authorized reviewer.
-     A commit-pinned candidate is
-     `![<alt text>](https://github.com/<account>/<repo>/blob/<commit-sha>/<encoded-path>?raw=true)`.
-     This URL shape is not a guarantee of image loading: verify it in the actual PR.
-   - For repository-backed assets, commit/push the images within the authorized scope and verify
-     their paths at the remote commit before publishing references. Pin the verified commit instead
-     of a moving branch. Do not claim unreachable commits guarantee permanent asset retention.
-   - Do not use unauthenticated `raw.githubusercontent.com` links for private assets, add tokens to
-     URLs, upload private material to public hosts, or rely on base64/data URLs that GitHub sanitizes.
-   - After PR creation/update, retrieve rendered HTML with the appropriate GitHub API media type
-     (for example `application/vnd.github.full+json` and `.body_html`) and reconcile its image
-     elements against the inventory. GitHub may proxy/rewrite URLs; do not require literal equality
-     to one hard-coded `<img src>` string.
-   - Verify actual image loading in an authenticated browser with repository access. The presence
-     of `<img>` elements alone is not proof of successful loading. Repair broken embeds and recheck;
-     if verification is unavailable, report PR creation separately from unverified image visibility.
-     Do not report the full generation task complete until required visuals are verified.
-   - Preserve existing unrelated PR content and avoid duplicate image sections on retry. If upload,
-     export, permissions, or PR body limits prevent complete embedding, record the missing assets
-     and recovery action; do not silently replace them with links or discard visuals.
-   Relative image paths remain suitable inside repository Markdown. Apply this same contract to
-   every generated agent skill from this canonical command; never maintain divergent installed edits.
+8. **Mandatory inline visuals, including private repositories.** If this PR has any reviewer-facing
+   diagram or screenshot (from this step or from an installed QA/User Manual extension), load
+   `.specify/extensions/pr/references/pr-image-embedding.md` now — before writing or updating the PR
+   body in step 6 — and follow it exactly. If the PR has no visuals at all, skip loading it.
 
 ### 5. Write the two documents under `docs/<feature-slug>/`
 

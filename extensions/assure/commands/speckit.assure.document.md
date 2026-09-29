@@ -44,31 +44,27 @@ tester-facing artifact separate from the audience-aware application documentatio
 
 ### 0a. Ensure the Illustrate dependency
 
-Before resolving the feature, read `.specify/extensions/assure/dependencies.yml` and enforce its
-`illustrate` requirement.
+Before resolving the feature, ensure the `illustrate` dependency declared in
+`.specify/extensions/assure/dependencies.yml` is installed, enabled, and within its declared SemVer
+range:
 
-1. Read `.specify/extensions/.registry` as the installed-version source of truth.
-2. Read the optional project policy at `.specify/extension-dependencies.yml`. Supported
-   `update_policy` values are:
-   - `prompt` (default): ask before `specify extension add illustrate` or
-     `specify extension update illustrate`.
-   - `auto`: the user has pre-authorized dependency installation and updates.
-   - `manual`: never mutate dependencies; report the exact command the user must run.
-3. If `illustrate` is absent, disabled, or outside the declared SemVer range, follow the policy
-   and install/update it. Never make this extension-state change under `prompt` without explicit
-   approval.
-4. For an installed compatible version, use `.specify/extensions/.dependency-checks.json` to avoid
-   catalog checks more often than `check_interval_hours`. When due, run
-   `specify extension info illustrate` (read-only), compare the catalog version with the
-   registry version, and follow the update policy if a newer compatible release exists.
-5. After any add/update, re-read the registry and verify the version before continuing. Record the
-   checked time and installed version in `.specify/extensions/.dependency-checks.json`.
-6. Load `.specify/extensions/illustrate/skill/SKILL.md` and resolve its references/assets
-   relative to that skill directory. This direct resource path works in the current run even if the
-   agent only discovers newly registered skills in a new conversation.
-7. If installation/update is declined or unavailable, continue the non-diagram work, explicitly skip
-   diagram generation, and report the missing dependency. Do not silently use another diagram
-   system.
+```text
+python .specify/extensions/assure/scripts/deps.py ensure illustrate
+```
+
+The script performs the checks this step used to spell out: it reads the installed-version
+registry, follows the project's `update_policy` (`prompt` default/`auto`/`manual`) without ever
+mutating dependencies under `prompt` without explicit approval, rate-limits the catalog freshness
+probe by `check_interval_hours`, and records the check. It prints one line and exits non-zero only
+when the dependency is missing or incompatible and cannot be brought into range under the current
+policy.
+
+- Exit `0`: the dependency is ready. Do **not** load `.specify/extensions/illustrate/skill/SKILL.md`
+  yet — defer that to step 6, and only when a diagram is actually going to be generated there.
+- Non-zero exit: report the script's one-line result verbatim, continue the non-diagram work,
+  explicitly skip diagram generation, and do not silently use another diagram system. If the result
+  names a `specify extension add/update illustrate` recipe, surface it so the user can approve it
+  (or run it themselves under a `manual` policy) and re-run this command.
 
 
 ### 1. Resolve the active feature
@@ -196,7 +192,9 @@ Manual content, in order:
 2. Prerequisites and dev tooling: start commands, dev URLs, dashboards, environment variable names
    only, and redacted test-account guidance.
 3. Illustrate visuals where applicable:
-   - Use the installed `illustrate` selection guide to choose among all twenty-seven types:
+   - If step 0a confirmed `illustrate` is ready and a visual looks warranted, load
+     `.specify/extensions/illustrate/skill/SKILL.md` now (not before) and use its selection guide to
+     choose among all twenty-seven types:
      architecture, IT current-state, flowchart, sequence, state machine, ER/data model, timeline,
      swimlane, quadrant, radar, loop, nested, tree, org chart, layers, venn, pyramid, bar, line,
      Gantt, scatter, high-level, process, medallion, data flow, DP integration, and DP security
@@ -226,11 +224,11 @@ Manual content, in order:
 
 Do not hand-take screenshots or diagram exports.
 
-- Diagrams: load the relevant
-  `.specify/extensions/illustrate/skill/references/type-*.md`, generate source HTML from the
-  selected Illustrate template/variant, then export PNG with the installed
-  `scripts/export_diagram.py` utility and `references/export.md` contract. Keep HTML sources and
-  PNGs together under
+- Diagrams: load the matching
+  `.specify/extensions/illustrate/skill/references/type-*.md` (from the SKILL.md already loaded in
+  step 5.3 for this diagram), generate source HTML from the selected Illustrate template/variant,
+  then export PNG with the installed `scripts/export_diagram.py` utility and `references/export.md`
+  contract. Keep HTML sources and PNGs together under
   `<assets-dir>/diagrams/`, embed PNGs, and link the HTML sources.
 - If diagram PNG export cannot run, keep the HTML source, mark the PNG as pending in the manual, and
   report the follow-up. Do not embed a broken image.

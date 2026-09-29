@@ -4,6 +4,18 @@ All notable changes to the Pull Request Workflow extension.
 
 ## [Unreleased]
 
+### Changed
+
+- Replaced the verbatim "Ensure the Illustrate dependency" instruction block in
+  `speckit.pr.generate` with one call to the shared `scripts/deps.py ensure illustrate` (also
+  shipped to `assure` and `user-manual`); same registry/policy/catalog checks and failure
+  recipe, now in one tested script instead of three duplicated prose copies (B9).
+- The illustrate `SKILL.md` is now loaded only when step 4 actually decides a diagram is
+  warranted, not unconditionally at step 0.
+- Moved the mandatory PR image-embedding rules (commit-pinned `?raw=true` links, never
+  `raw.githubusercontent.com`, contents-API verification) out of the command body into
+  `references/pr-image-embedding.md`, loaded only when the PR has a diagram or screenshot to embed.
+
 ### Fixed
 
 - PR generation instructions require every reviewer-facing diagram and screenshot to be embedded
