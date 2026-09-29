@@ -210,6 +210,23 @@ def check_index(root, feature):
     return {'feature': feature, 'indexed_paths': len(paths), 'warnings': warnings}
 
 
+def report_warnings(results):
+    """Surface each feature's non-fatal warnings (round 4, finding 2): a
+    reviewer reading only the job log or the PR checks tab would otherwise
+    never see DELEGATION_LEDGER_TRUST_UNVERIFIED_LOCAL, since it changes
+    nothing about the gate's pass/fail outcome. Printed to stderr always, and
+    appended to $GITHUB_STEP_SUMMARY when the runner sets it; never affects
+    the exit code.
+    """
+    lines = [warning for result in results for warning in (result.get('warnings') or [])]
+    for line in lines:
+        print(line, file=sys.stderr)
+    summary_path = os.environ.get('GITHUB_STEP_SUMMARY')
+    if lines and summary_path:
+        with open(summary_path, 'a', encoding='utf-8') as handle:
+            handle.write(''.join('- ' + line + '\n' for line in lines))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=Path.cwd())
@@ -262,6 +279,7 @@ def main():
                         raise WorkflowError(str(exc) + '; ' + str(waiver_error)) from waiver_error
                     applied_waivers.append(waiver)
                     effective[rule] = False
+        report_warnings(results)
         print(json.dumps({'ok': True, 'status': 'passed', 'features': results}, indent=2)); return 0
     except (WorkflowError, ValueError, OSError, KeyError) as exc:
         advisory = mode == 'advisory'

@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- Delegation guard, round 4 corrections (B12). `delegate_dispatch.py
+  trust-reset` no longer clears trust on request alone: it refuses with
+  `DELEGATION_TRUST_RESET_NOTHING_TO_RESET` unless a persisted tamper flag
+  already exists (closing the probe of hand-editing the ledger, deleting the
+  local `.written` marker so no mismatch is ever detected, then calling
+  trust-reset to mint a fresh `'trusted'` marker over the unreviewed edit),
+  and with `DELEGATION_TRUST_RESET_ATTEMPTS_ACTIVE` while any attempt for the
+  feature is starting or running. `trust-reset` is orchestrator-only and
+  human-authorised: both `stage_brief` and `task_brief` now explicitly
+  forbid a worker from running any `delegate_dispatch.py` command (`start`,
+  `collect`, `accept`, `reassign`, `recover`, `abandon` or `trust-reset`) on
+  its own run, another run, or another task. `ci_gate.py` now prints every
+  `ready_checks` warning (`DELEGATION_LEDGER_TRUST_UNVERIFIED_LOCAL` in
+  particular) to stderr and appends it to `$GITHUB_STEP_SUMMARY` when the
+  runner sets that variable, without changing the gate's exit code; the
+  README documents that deleting the local marker by hand downgrades a
+  detected tamper back to `'unverified-local'` rather than clearing it
+  honestly. The light-tier model-family match now also treats `codex`,
+  `openai` and `anthropic` as generic tokens (bare `codex` no longer matches
+  `gpt-6-sol-codex`) and rejects a contained run immediately followed by a
+  tier word (`high`, `xhigh`, `max`, `pro`, `large`), so `o4-mini` no longer
+  matches `o4-mini-high`.
+
 - Delegation guard, round 3 corrections (B12). The ledger trust read is now
   tri-state (`delegation.ledger_trust_state`) instead of a single pass/fail
   boolean, because `delegations.json` is committed while its local

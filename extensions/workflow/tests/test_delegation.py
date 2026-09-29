@@ -722,6 +722,12 @@ class DelegationTests(unittest.TestCase):
         with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_LEDGER_UNTRUSTED'):
             w.ready_checks(self.root, self.feature, self.policy, state, rules={
                 'tasks': True, 'task_links': False, 'documentation': False})
+        # A real tracked write would have detected and persisted the tamper
+        # as a side effect (test_foreign_write_is_not_laundered_by_a_later_
+        # dispatcher_write proves that path); simulate that detection here so
+        # this test can focus on trust_reset's own behaviour (round 4,
+        # finding 1: trust-reset now refuses without a persisted tamper).
+        delegation.record_foreign_write(self.root, self.feature)
         result = dispatch.trust_reset(self.root, self.feature,
                                       'Reviewed the hand-edit; it only fixed a typo in the summary')
         self.assertEqual(result['trust'], 'trusted')
@@ -729,6 +735,59 @@ class DelegationTests(unittest.TestCase):
         ran = w.ready_checks(self.root, self.feature, self.policy, state, rules={
             'tasks': True, 'task_links': False, 'documentation': False})
         self.assertIn('tasks', ran)
+
+    def test_trust_reset_refuses_the_probe_hand_edit_with_marker_deleted(self):
+        """Finding 1, round 4, the exact probe: hand-edit the ledger, delete
+        the local marker so no mismatch is ever detected, then call
+        trust-reset -- it must refuse, not mint a fresh 'trusted' marker
+        over an unreviewed, undetected edit."""
+        self._checked_task_with_delegation_status('successful')
+        ledger_path = delegation.ledger_path(self.root, self.feature)
+        raw = json.loads(ledger_path.read_text(encoding='utf-8'))
+        raw['attempts'][0]['result_summary'] = 'a worker quietly edited this'
+        ledger_path.write_text(json.dumps(raw), encoding='utf-8')
+        dispatch.written_marker(self.root, self.feature).unlink()  # no mismatch is ever seen
+        self.assertEqual(delegation.ledger_trust_state(self.root, self.feature), 'unverified-local')
+        with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_TRUST_RESET_NOTHING_TO_RESET'):
+            dispatch.trust_reset(self.root, self.feature, 'attempting to bless this')
+        # Refused, so the ledger still reads as unverified-local, not trusted.
+        self.assertEqual(delegation.ledger_trust_state(self.root, self.feature), 'unverified-local')
+
+    def test_trust_reset_refuses_while_an_attempt_is_active(self):
+        """Finding 1, round 4: trust-reset must not race a live dispatch
+        that might still change the very bytes being reviewed."""
+        run_id = self._unverified_run(
+            task_line='- [ ] T001 [Collect] Run smoke suite\n- [ ] T002 [P] Implement parser\n')
+        ledger_path = delegation.ledger_path(self.root, self.feature)
+        raw = json.loads(ledger_path.read_text(encoding='utf-8'))
+        raw['attempts'][0]['result_summary'] = 'hand-edited'
+        ledger_path.write_text(json.dumps(raw), encoding='utf-8')
+        with patch.object(dispatch, 'run_capped',
+                          return_value=self.fake_run_capped(0, '{"total": 5, "passed": 5, "failed": 0}')):
+            dispatch.accept(self.root, self.feature, run_id, 'pytest -q', 'counts')  # detects + persists
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch.object(dispatch, 'launch', return_value={'run_id': 'codex-2', 'state': 'running'}):
+            dispatch.start(self.root, self.feature, 'T002')  # left running, never collected
+        with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_TRUST_RESET_ATTEMPTS_ACTIVE'):
+            dispatch.trust_reset(self.root, self.feature, 'Reviewed; nothing running should block this')
+
+    def test_worker_briefs_forbid_delegate_dispatch_commands(self):
+        """Finding 1, round 4: a worker must never run delegate_dispatch.py
+        itself, on this run, another run or another task -- trust-reset in
+        particular is orchestrator-only and human-authorised."""
+        self.assertIn('Never run delegate_dispatch.py', dispatch.NO_DISPATCHER_COMMANDS)
+        self.assertIn('trust-reset', dispatch.NO_DISPATCHER_COMMANDS)
+        self.assertIn('orchestrator-only', dispatch.NO_DISPATCHER_COMMANDS)
+        self.tasks('- [ ] T001 [P] Implement parser\n')
+        self.enable()
+        self.assertIn(dispatch.NO_DISPATCHER_COMMANDS, dispatch.task_brief(self.root, self.feature, 'T001'))
+        run = w.Run(self.root, self.feature)
+        run.start('acme/app#10')
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}):
+            claim = run.claim({'session_id': 'test-session'})
+        self.assertIn(dispatch.NO_DISPATCHER_COMMANDS,
+                      dispatch.stage_brief(self.root, self.feature, 'scope', claim['token']))
 
     def test_foreign_write_is_not_laundered_by_a_later_dispatcher_write(self):
         """Finding 2, round 3: a later legitimate dispatcher write (accept,
@@ -966,6 +1025,20 @@ class DelegationTests(unittest.TestCase):
         self.assertFalse(dispatch.model_family_matches('claude-sonnet-4-6', 'claude-haiku-4-5-20251001'))
         self.assertFalse(dispatch.model_family_matches('gpt-6-terra-codex', 'gpt-6-sol-codex'))
         self.assertFalse(dispatch.model_family_matches('gpt-6-sol', 'gpt-6'))
+
+    def test_model_family_matches_round_4_probes(self):
+        """Finding 3, round 4: codex/openai/anthropic are generic tokens too
+        (bare "codex" proves nothing about a specific model), and a
+        contained run immediately followed by a tier word ("high", "max",
+        "pro", "large", "xhigh") is a different model, not the same one with
+        an incidental suffix."""
+        self.assertFalse(dispatch.model_family_matches('o4-mini', 'o4-mini-high'))
+        self.assertFalse(dispatch.model_family_matches('o4-mini-high', 'o4-mini'))
+        self.assertFalse(dispatch.model_family_matches('codex', 'gpt-6-sol-codex'))
+        self.assertFalse(dispatch.model_family_matches('gpt-6-sol-codex', 'codex'))
+        # A non-generic contained run followed by something other than a
+        # tier word is unaffected (still matches).
+        self.assertTrue(dispatch.model_family_matches('o4-mini-20260101', 'o4-mini'))
 
     def test_collect_never_trusts_counts_in_the_worker_summary(self):
         """Finding 3: even fully-framed, parsable counts in a worker's own

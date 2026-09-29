@@ -367,6 +367,20 @@ QA_COLLECT_ADDENDUM = (
 )
 
 
+# Round 4, finding 1: nothing else stops a worker from running the
+# dispatcher's own commands on its own or another task's run -- collecting or
+# accepting its own light-tier result, reassigning another attempt, or
+# resetting a trust flag it has no business seeing, let alone clearing.
+# trust-reset in particular is orchestrator-only and human-authorised: it
+# records an actor and a reason precisely because only a human reviewing an
+# actual diff may decide a detected tamper is benign.
+NO_DISPATCHER_COMMANDS = (
+    'Never run delegate_dispatch.py yourself (start, collect, accept, reassign, recover, abandon or '
+    'trust-reset) -- not on this run, another run, or another task. Those are the dispatcher\'s own '
+    'commands; trust-reset in particular is an orchestrator-only, human-authorised decision.\n'
+)
+
+
 def stage_brief(root, feature, stage, token, work_type=None):
     state = workflow.read(root / feature / 'workflow/checkpoint.json', {})
     active = state.get('active') or {}
@@ -396,7 +410,7 @@ def stage_brief(root, feature, stage, token, work_type=None):
         'report the pending decision to the dispatcher.\n'
         'Return the concrete input paths, evidence paths, checks executed and any blocker. '
         'The dispatcher will inspect them and complete the receipt; your own success claim is '
-        'not a passed Sanduq stage. ' + ownership
+        'not a passed Sanduq stage. ' + ownership + NO_DISPATCHER_COMMANDS
     )
     return text + QA_COLLECT_ADDENDUM if work_type == 'qa_collect' else text
 
@@ -410,7 +424,7 @@ def task_brief(root, feature, task_id, work_type=None):
         'provided by the orchestrator. Run relevant checks and return paths to real evidence. '
         'Do not stage, commit, push, change task checkboxes, update the shared progress report, '
         'claim workflow stages or close GitHub issues. The orchestrator will review and integrate '
-        'your work.\n'
+        'your work.\n' + NO_DISPATCHER_COMMANDS
     )
     return text + QA_COLLECT_ADDENDUM if work_type == 'qa_collect' else text
 
@@ -1106,8 +1120,13 @@ def validate_owned_files(cwd, owned_paths, paths):
 # Tokens too generic to prove a family match by themselves: purely numeric
 # (version numbers), a bare provider name, or a size/tier word shared across
 # an entire, otherwise unrelated model line.
-GENERIC_MODEL_TOKENS = {'gpt', 'claude', 'mini', 'small', 'medium', 'large', 'pro', 'max', 'lite',
-                        'base', 'preview'}
+GENERIC_MODEL_TOKENS = {'gpt', 'claude', 'codex', 'openai', 'anthropic', 'mini', 'small', 'medium',
+                        'large', 'pro', 'max', 'lite', 'base', 'preview'}
+# A contained run immediately followed by one of these changes the model's
+# identity, not just its build or date (round 4, finding 3): "o4-mini-high"
+# is a different reasoning-effort tier of "o4-mini", not the same model with
+# a harmless suffix appended the way a date or build number would be.
+TIER_QUALIFIER_TOKENS = {'high', 'xhigh', 'max', 'pro', 'large'}
 
 
 def _model_tokens(model):
@@ -1117,9 +1136,10 @@ def _model_tokens(model):
 
 def model_family_matches(candidate_model, configured_model):
     """True only when the two model identifiers are the same, or one is a
-    whole dash-delimited token run inside the other (round 3, finding 3: a
-    shared-token-anywhere rule was too broad and matched unrelated sibling
-    models -- ``claude-opus-4-7`` against ``claude-haiku-4-5``, or
+    whole dash-delimited token run inside the other, not immediately followed
+    by a tier qualifier (round 3 finding 3, round 4 finding 3: a shared-
+    token-anywhere rule was too broad and matched unrelated sibling models --
+    ``claude-opus-4-7`` against ``claude-haiku-4-5``, or
     ``gpt-6-terra-codex`` against ``gpt-6-sol-codex`` -- that merely share a
     provider prefix or a trailing qualifier).
 
@@ -1127,10 +1147,14 @@ def model_family_matches(candidate_model, configured_model):
     ``"claude-haiku-4-5"`` matches ``"claude-haiku-4-5-20251001"`` (a whole
     prefix run of tokens, the harness's own build/date suffix appended). The
     contained run must include at least one token that is not purely a
-    version number or a bare provider/size word, so ``"gpt-6"`` does not
-    match ``"gpt-6-sol"``: every sibling model in that family (``sol``,
-    ``terra``, ``astra``) shares that same generic ``"gpt-6"`` prefix, so it
-    proves nothing on its own.
+    version number or a bare provider/size word (``"gpt"``, ``"codex"``,
+    ``"openai"``, ``"anthropic"`` and similar), so ``"gpt-6"`` does not match
+    ``"gpt-6-sol"`` (every sibling in that family shares that generic
+    prefix) and bare ``"codex"`` does not match ``"gpt-6-sol-codex"``. A
+    match is also rejected when the contained run is immediately followed by
+    a tier word such as ``"high"``: ``"o4-mini"`` does not match
+    ``"o4-mini-high"``, a genuinely different reasoning-effort tier of the
+    same base model, not the same model with an incidental suffix.
     """
     a_tokens, b_tokens = _model_tokens(candidate_model), _model_tokens(configured_model)
     if not a_tokens or not b_tokens:
@@ -1141,7 +1165,13 @@ def model_family_matches(candidate_model, configured_model):
     if not any(token not in GENERIC_MODEL_TOKENS and not token.isdigit() for token in inner):
         return False
     span = len(inner)
-    return any(outer[i:i + span] == inner for i in range(len(outer) - span + 1))
+    for i in range(len(outer) - span + 1):
+        if outer[i:i + span] != inner:
+            continue
+        if i + span < len(outer) and outer[i + span] in TIER_QUALIFIER_TOKENS:
+            continue
+        return True
+    return False
 
 
 def is_light_tier_run(attempt, policy):
@@ -1694,6 +1724,20 @@ def trust_reset(root, feature, reason):
     (and cannot) prove the current bytes are correct -- only that a human
     reviewed and accepted them; CI integrity ultimately rests on review, not
     on this mechanism (see the README's local-only trust limit).
+
+    This is an orchestrator-only, human-authorised command (round 4, finding
+    1): a worker brief explicitly forbids running it (or any other
+    delegate_dispatch.py command). It refuses outright when there is nothing
+    to reset (``DELEGATION_TRUST_RESET_NOTHING_TO_RESET``): with no persisted
+    tamper on record, this call would not be clearing a detected tamper, it
+    would be blessing whatever the ledger's current bytes happen to be --
+    exactly the laundering path this command exists to close, not open. A
+    prior probe: hand-edit the ledger, delete the local ``.written`` marker
+    (so no mismatch is ever detected), then call trust-reset -- with this
+    check, that now refuses instead of minting a fresh "trusted" marker over
+    the unreviewed edit. It also refuses while any attempt for the feature is
+    ``starting`` or ``running``, so a reset can never race a live dispatch
+    that might still change the very bytes being reviewed.
     """
     root = root.resolve()
     feature = feature_identity(root, feature)
@@ -1703,13 +1747,23 @@ def trust_reset(root, feature, reason):
     with ledger_lock(root, feature):
         marker = delegation.foreign_write_marker(root, feature)
         record = workflow.read(marker, None)
+        delegation.require(record is not None,
+                           'DELEGATION_TRUST_RESET_NOTHING_TO_RESET: no persisted tamper is recorded '
+                           'for ' + feature + '; trust-reset only clears an already-detected tamper, it '
+                           'never blesses the ledger\'s current bytes on its own')
+        ledger = load_ledger(root, feature)
+        active = [a.get('run_id') or ('intent ' + str(a.get('intent_id')))
+                 for a in ledger['attempts'] if a.get('status') in ACTIVE]
+        delegation.require(not active, 'DELEGATION_TRUST_RESET_ATTEMPTS_ACTIVE: ' +
+                           ', '.join(sorted(str(item) for item in active)) +
+                           ' is starting or running; collect, recover or abandon it before trust-reset')
         new_sha = ledger_bytes_digest(delegation.ledger_path(root, feature))
         try:
             actor = getpass.getuser()
         except Exception:
             actor = None
         entry = {'at': stamp(), 'actor': actor, 'reason': reason.strip(),
-                'old_sha256': (record or {}).get('digest_at_detection'), 'new_sha256': new_sha}
+                'old_sha256': record.get('digest_at_detection'), 'new_sha256': new_sha}
         log_path = delegation.trust_reset_log_path(root, feature)
         log = workflow.read(log_path, [])
         log.append(entry)

@@ -700,8 +700,14 @@ token run that includes at least one non-generic token
 string equality alone let a real light-tier run escape whenever the harness
 reported its full name instead of the alias). A shared provider prefix or
 trailing qualifier alone is never enough — `claude-opus-4-7` does not match
-`claude-haiku-4-5`, and `gpt-6-sol` does not match the bare family prefix
-`gpt-6`, which every sibling model in that line shares. `collect` records the driver's
+`claude-haiku-4-5`, `gpt-6-sol` does not match the bare family prefix
+`gpt-6`, and bare `codex` does not match `gpt-6-sol-codex` (`codex`,
+`openai` and `anthropic`, like the provider names, are generic tokens on
+their own). A contained run immediately followed by a tier word (`high`,
+`xhigh`, `max`, `pro`, `large`) is also rejected: `o4-mini` does not match
+`o4-mini-high`, a genuinely different reasoning-effort tier of the same base
+model, not the same model with an incidental build or date suffix appended.
+`collect` records the driver's
 raw `successful`/`failed`/`abandoned` verdict as usual, but when the guard
 applies and the verdict is `successful`, the ledger outcome becomes
 `unverified` unless the worker's own summary names a produced-file list (as
@@ -837,18 +843,41 @@ persisted tamper flag not yet cleared). Only `'unverified-local'` is a
 warning: it is recorded as `delegation_ledger_trust` on the completed
 receipt and appended to `ci_gate.py`'s `warnings`, while task and stage
 status are still fully enforced. `'untrusted'` still refuses with
-`DELEGATION_LEDGER_UNTRUSTED`. Detecting a genuine tamper (a marker that
-existed and now disagrees) persists a feature-level flag that a later,
-perfectly legitimate dispatcher write does **not** clear on its own — only
-`delegate_dispatch.py trust-reset --feature <f> --reason "<text>"` does,
-after a human reviews exactly what changed; it records the actor, time,
-reason and the exact bytes on both sides. **This detects accidental and
-local tampering only.** `delegations.json` is a tracked, committed file:
-anyone who can commit to the repository can commit a fabricated ledger just
-as easily as a legitimate one, and this mechanism cannot tell the
-difference. CI integrity for delegation evidence ultimately rests on code
-review of that commit, the same as any other tracked file — not on
-`ledger_trust_state`, which exists only to catch an accidental or purely
+`DELEGATION_LEDGER_UNTRUSTED`. `ci_gate.py` prints every collected warning to
+stderr, and appends it to `$GITHUB_STEP_SUMMARY` when the runner sets that
+variable, so a reviewer sees `DELEGATION_LEDGER_TRUST_UNVERIFIED_LOCAL` even
+though it never changes the gate's exit code. Note that deleting the local
+`.written` marker by hand does not clear a detected tamper honestly — it
+downgrades what would read as `'untrusted'` back down to `'unverified-local'`
+(no marker to disagree with), which is exactly why detecting a genuine
+tamper is sticky (below) rather than relying on the marker's mere presence.
+
+Detecting a genuine tamper (a marker that existed and now disagrees) persists
+a feature-level flag that a later, perfectly legitimate dispatcher write does
+**not** clear on its own — only `delegate_dispatch.py trust-reset --feature
+<f> --reason "<text>"` does, after a human reviews exactly what changed; it
+records the actor, time, reason and the exact bytes on both sides.
+**`trust-reset` is an orchestrator-only, human-authorised command, never a
+worker's**: both `stage_brief` and `task_brief` explicitly forbid a worker
+from running any `delegate_dispatch.py` command (`start`, `collect`,
+`accept`, `reassign`, `recover`, `abandon` or `trust-reset`) at all — on its
+own run, another run, or another task. `trust-reset` itself also refuses
+outright with `DELEGATION_TRUST_RESET_NOTHING_TO_RESET` when there is no
+persisted tamper flag to clear: it only ever clears an *already-detected*
+tamper, and never mints a fresh `'trusted'` marker over the ledger's current
+bytes just because it was asked to — the exact probe this closes is a
+hand-edit followed by deleting the local marker (so no mismatch is ever
+detected) and then calling `trust-reset`, hoping it blesses the edit; it now
+refuses. It also refuses with `DELEGATION_TRUST_RESET_ATTEMPTS_ACTIVE` while
+any attempt for the feature is `starting` or `running`, so a reset can never
+race a live dispatch that might still change the very bytes under review.
+
+**This detects accidental and local tampering only.** `delegations.json` is a
+tracked, committed file: anyone who can commit to the repository can commit a
+fabricated ledger just as easily as a legitimate one, and this mechanism
+cannot tell the difference. CI integrity for delegation evidence ultimately
+rests on code review of that commit, the same as any other tracked file — not
+on `ledger_trust_state`, which exists only to catch an accidental or purely
 local hand-edit on one machine.
 
 ### History and evidence
