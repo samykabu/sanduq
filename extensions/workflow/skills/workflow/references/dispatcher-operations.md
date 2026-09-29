@@ -32,7 +32,7 @@ any `DELEGATE_SKILL_REPLACED` or `DELEGATE_SKILL_LEGACY_BACKUP_MOVED` notice
 from install, claim or dispatch output to the user. Run
 `delegation.py annotate --feature specs/<feature>` to refresh pending task
 metadata after an opt-in or route edit; a task the type rules misread takes an
-`[Impl]` (or `[QA]`, `[Docs]`, `[Review]`) marker. Running work keeps its original route
+`[Impl]` (or `[QA]`, `[Docs]`, `[Review]`, `[Collect]`) marker. Running work keeps its original route
 snapshot and driver copy.
 Configure provider choices, context policy and scope preferences in
 `.specify/workflow.yml`. Ask once where this project runs CI: GitHub-hosted runners,

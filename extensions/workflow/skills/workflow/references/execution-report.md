@@ -115,7 +115,7 @@ Status: done | blocked | partial
 Files touched: <paths, or "none">
 Tests: <RED-to-GREEN summary, e.g. "12 passed, 0 failed (dotnet test, persistence-integration)">
 Evidence: <path(s) under specs/<feature>/evidence/>
-Diff: <files changed, uncommitted>
+Diff: <+/- line counts per file, uncommitted>
 Consumers checked: <which consumers were checked, or "n/a" with why>
 Tokens: <fresh/cached/output if the worker's harness reports them, else "unlogged">
 Blockers: <none, or the exact blocking condition>
@@ -147,12 +147,36 @@ skipped only when it verifiably does not apply, never by default:
 
 ## Light-tier collection results (B12)
 
-Placeholder. B12's delegation text, the `[collect]` marker, the `unverified`
-ledger outcome and the `delegate_dispatch.py accept` acceptance path, is still
-being revised upstream. This section will describe how a light-tier
-(`qa_collect`) run's result is recorded here and read back before its task is
-accepted. Do not write or rely on an interim rule in this section; the
-orchestrator will supply the final text.
+When delegation is enabled, `start` a light-tier or `qa_collect` task with
+`--owned <path>` (repeatable) — it is now required, never a silent
+whole-directory default. A light-tier `successful` result is never accepted on
+a bare claim: `collect` only trusts a produced-file list that is both inside
+the declared owned paths and among the driver's own measured changes — never
+counts from a worker's summary.
+
+Completing a delegated stage or checking off a delegated task is not enough
+either: `complete` and the Ready gate both require the dispatcher's own
+ledger — untampered, and for `complete`, started under the exact claim being
+completed — to show the attempt `successful`; any other status, including
+`unverified`, `running` or a hand-edited ledger, is refused.
+
+Resolve `unverified` with `reassign` to a standard tier, or
+`delegate_dispatch.py accept --run-id <id> --command "<check>" --expect
+counts|files [--owned <path>]`, which runs that check itself (never a
+`.bat`/`.cmd` shim on Windows — use the underlying executable) and records
+sha256/size evidence. `accept --owned` may only narrow the paths recorded at
+`start`. A note never accepts an `unverified` run.
+
+Ledger trust is tri-state, not pass/fail: no local `.written` marker (a fresh
+checkout or CI runner) is a warning only, not a block — status is still
+enforced. A genuine tamper (a marker that disagrees) is sticky and survives a
+later legitimate write; resolve it with `delegate_dispatch.py trust-reset
+--feature <f> --reason "<text>"` only after reviewing exactly what changed —
+this catches accidental and local tampering only, never a forged commit, so CI
+integrity still rests on review. After upgrading to this release, re-delegate
+any stage claimed under an older checkpoint once, since its recorded attempt
+has no `claim_token` and can never satisfy `complete`. `trust-reset` is an
+orchestration-agent command, never a worker's.
 
 ## Continue through delivery
 

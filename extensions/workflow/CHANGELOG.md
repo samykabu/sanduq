@@ -87,10 +87,26 @@
   <path>` at every phase commit. Every routine `task_issues.py` and
   `progress.py` example call now carries `--summary` (B7: `ok`/`error` plus
   counts, or `skipped reason=...`), with `--json` reserved for a call whose
-  result must be parsed programmatically. A marked placeholder section,
-  "Light-tier collection results (B12)", awaits B12's final text.
-  New `extensions/workflow/tests/test_execution_protocol_b11.py` asserts every
-  rule above is present in the installed reference files, following
+  result must be parsed programmatically. The "Light-tier collection results
+  (B12)" section carries B12's consensus text: a `qa_collect` `start` requires
+  `--owned <path>`; `collect` trusts only a produced-file list inside those
+  paths and among the driver's own measured changes; `complete` and the Ready
+  gate both require the dispatcher's ledger to show `successful`; an
+  `unverified` run is resolved only by `reassign` or a checked
+  `delegate_dispatch.py accept`, never a note. `references/dispatcher-
+  operations.md` gained the `[Collect]` task marker alongside `[Impl]`, `[QA]`,
+  `[Docs]` and `[Review]`, and its `--sync-states` rule now matches the
+  phase-boundary cadence and names the dispatcher as owner. Review fixes: the
+  S6 self-contradiction (staging now stays with the orchestration agent, never
+  a worker); the T7 template's `Commit:` line replaced by `Diff: <+/- line
+  counts per file, uncommitted>`; the T0 budget mechanism corrected to what
+  `progress.py` actually supports (an orchestrator comparison against the
+  class budget, logged via `progress.py event --summary`, excluding the ~96%
+  of tokens that are cache reads); the dispatcher's session ID and transcript
+  path added to the handoff; and the F1/nested-spawn-fallback wording
+  reconciled. New `extensions/workflow/tests/test_execution_protocol_b11.py`
+  asserts every rule above is present in the installed reference files,
+  including an exact-text check of the B12 section, following
   `test_skill_split.py`'s style. No version bump; no script behavior changed.
 
 ## 1.6.4

@@ -1,7 +1,8 @@
 """B11 (Sprint 4, Stream B): prove the execution-protocol rules from the retrospective
 (F1, F2, F3, F11, T0, T7, T8, S6), the B7 sync-states cadence and quiet-output default,
-and the B12 placeholder are present in the *installed* reference files, not just the
-working tree, so a future edit or a packaging regression cannot silently drop them.
+and B12's now-final light-tier collection text are present in the *installed*
+reference files, not just the working tree, so a future edit or a packaging
+regression cannot silently drop them.
 
 Follows test_skill_split.py's approach of checking exact marker phrases, but reads
 them from the archive `extensions/scripts/package.py` builds (the same one `install.py`
@@ -52,6 +53,9 @@ ASSIGN_MARKERS = [
     'the `[collect]` marker or an explicit override (B12), never by default',  # T0 x standing rule 5
     'roughly 150K tokens resident',                                       # T0 hand-off
     '`git stash` and `git add -A`/`git add .` are forbidden for a worker',  # S6
+    'as are `delegate_dispatch.py accept` and `delegate_dispatch.py '
+    'trust-reset`',                                                       # B12: also forbidden for a worker
+    'ledger-trust decisions the orchestration agent alone makes',         # B12: why accept/trust-reset are forbidden
     'Staging stays with the orchestration agent, which stages a '
     "worker's owned paths by explicit name",                              # S6 fix: no self-contradiction
     '--tasks specs/<feature>/tasks.md --output specs/<feature>/workflow/progress --summary',  # B7 --summary default
@@ -72,8 +76,7 @@ REPORT_MARKERS = [
     'A wake-up that carries no new information produces no message',   # F3
     'read its summary first',                                          # T8
     'only for a lane that failed',                                     # T8
-    '## Light-tier collection results (B12)',                          # B12 placeholder
-    'the orchestrator will supply the final text',                     # B12 placeholder
+    '## Light-tier collection results (B12)',                          # B12 heading
     'At every phase commit, the orchestration agent also records the '
     "dispatcher's own",                                                # dispatcher usage cadence
     'python .specify/extensions/workflow/scripts/progress.py usage --output '
@@ -111,6 +114,46 @@ F11_BULLETS = [
 
 TASK_CLASSES = ('implementation', 'qa_author', 'qa_collect', 'documentation', 'review')
 
+# B12 reached consensus; this is its exact text for the "Light-tier collection
+# results" section, verbatim as the coordinator supplied it. The installed section
+# body (everything after the heading, up to the next heading) must equal this,
+# normalised, so no sentence of it can be silently dropped, reworded or reordered.
+B12_TEXT = (
+    'When delegation is enabled, `start` a light-tier or `qa_collect` task with '
+    '`--owned <path>` (repeatable) — it is now required, never a silent '
+    'whole-directory default. A light-tier `successful` result is never accepted '
+    'on a bare claim: `collect` only trusts a produced-file list that is both '
+    "inside the declared owned paths and among the driver's own measured changes "
+    '— never counts from a worker\'s summary. Completing a delegated stage or '
+    'checking off a delegated task is not enough either: `complete` and the Ready '
+    "gate both require the dispatcher's own ledger — untampered, and for "
+    '`complete`, started under the exact claim being completed — to show the '
+    'attempt `successful`; any other status, including `unverified`, `running` or '
+    'a hand-edited ledger, is refused. Resolve `unverified` with `reassign` to a '
+    'standard tier, or `delegate_dispatch.py accept --run-id <id> --command '
+    '"<check>" --expect counts|files [--owned <path>]`, which runs that check '
+    'itself (never a `.bat`/`.cmd` shim on Windows — use the underlying '
+    'executable) and records sha256/size evidence. `accept --owned` may only '
+    'narrow the paths recorded at `start`. A note never accepts an `unverified` run.'
+    ' Ledger trust is tri-state, not pass/fail: no local `.written` marker (a '
+    'fresh checkout or CI runner) is a warning only, not a block — status is '
+    'still enforced. A genuine tamper (a marker that disagrees) is sticky and '
+    'survives a later legitimate write; resolve it with `delegate_dispatch.py '
+    'trust-reset --feature <f> --reason "<text>"` only after reviewing exactly '
+    'what changed — this catches accidental and local tampering only, never a '
+    'forged commit, so CI integrity still rests on review. After upgrading to '
+    'this release, re-delegate any stage claimed under an older checkpoint '
+    "once, since its recorded attempt has no `claim_token` and can never "
+    'satisfy `complete`. `trust-reset` is an orchestration-agent command, '
+    "never a worker's."
+)
+
+# The dispatcher-operations.md marker list must include B12's new [Collect] marker
+# alongside the four it already had.
+DISPATCHER_OPS_MARKERS = [
+    '`[Impl]` (or `[QA]`, `[Docs]`, `[Review]`, `[Collect]`) marker',
+]
+
 
 def normalize(text):
     # Markdown hard-wraps a paragraph at ~80 columns, so a marker phrase this
@@ -130,6 +173,8 @@ class ExecutionProtocolB11Tests(unittest.TestCase):
                     'workflow/skills/workflow/references/execution-assign.md').decode('utf-8')
                 cls.raw_report = archive.read(
                     'workflow/skills/workflow/references/execution-report.md').decode('utf-8')
+                cls.dispatcher_ops = normalize(archive.read(
+                    'workflow/skills/workflow/references/dispatcher-operations.md').decode('utf-8'))
                 cls.assign = normalize(cls.raw_assign)
                 cls.report = normalize(cls.raw_report)
 
@@ -178,6 +223,30 @@ class ExecutionProtocolB11Tests(unittest.TestCase):
         bullets = [ln[2:].strip() for ln in section.splitlines() if ln.startswith('- ')]
         self.assertEqual(bullets, F11_BULLETS,
                           f'F11 consumers checklist bullets changed or incomplete: {bullets}')
+
+    def test_b12_section_matches_the_consensus_text_exactly(self):
+        heading = '## Light-tier collection results (B12)'
+        start = self.raw_report.index(heading) + len(heading)
+        end = self.raw_report.index('## Continue through delivery', start)
+        body = normalize(self.raw_report[start:end])
+        self.assertEqual(body, normalize(B12_TEXT),
+                          'The B12 section no longer matches the consensus text exactly '
+                          '(a word was dropped, reworded or reordered).')
+
+    def test_b12_section_is_no_longer_a_placeholder(self):
+        # Guards against a regression back to the pre-consensus placeholder wording.
+        for stale in ('Placeholder.', 'still being revised upstream',
+                      'the orchestrator will supply the final text'):
+            self.assertNotIn(stale, self.report,
+                              f'B12 placeholder text {stale!r} should have been replaced')
+
+    def test_dispatcher_operations_names_the_collect_marker(self):
+        missing = [m for m in DISPATCHER_OPS_MARKERS if normalize(m) not in self.dispatcher_ops]
+        self.assertEqual(missing, [],
+                          f'Missing from the installed dispatcher-operations.md: {missing}')
+
+    def test_diff_field_uses_the_line_count_wording(self):
+        self.assertIn('Diff: <+/- line counts per file, uncommitted>', self.raw_report)
 
 
 if __name__ == '__main__':
