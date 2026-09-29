@@ -90,6 +90,12 @@ REWORD_EXCEPTIONS = [
      "`.specify/workflow.yml` exists, follow legacy-guard.md and STOP before the upstream "
      "legacy instructions below; otherwise continue with them unchanged.'; the words are "
      "the same but no longer form this exact original sentence."),
+    ("Sync native task issues through the dispatcher after accepted batches.",
+     "B11 (Sprint 4) replaced this one-line rule with the fuller, checkable phase-"
+     "boundary cadence from retrospective finding B7: references/execution-report.md "
+     "now says 'Sync native task issues once per phase, not once per task: ...', "
+     "preserving the same substance (sync through the dispatcher, after accepted "
+     "batches) while fixing the timing to a single call per phase."),
 ]
 
 

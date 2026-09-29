@@ -45,10 +45,37 @@ is recorded as unavailable and shown as a gap, never as zero. The report shows
 fresh input, cached input and output per task, the total of the filtered tasks,
 per phase, overhead and the feature; it covers implementation only.
 
+At every phase commit, the orchestration agent also records the dispatcher's own
+overhead, reading its session transcript path from the handoff:
+
+```text
+python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --overhead dispatcher --agent <dispatcher-session-id> --collect claude --log <dispatcher's own session transcript>
+```
+
+Do this immediately after that phase's `progress.py phase --status complete`
+call, so dispatcher overhead is measured at the same cadence as the phase
+itself instead of reconstructed afterwards.
+
 Use `pending`, `running`, `done` or `blocked` for task status. Mark task checkboxes
 done only after reviewing their implementation and required checks. Preserve
-failed attempts alongside subsequent successful evidence. Sync native task issues
-through the dispatcher after accepted batches.
+failed attempts alongside subsequent successful evidence.
+
+Sync native task issues once per phase, not once per task: after every task in
+the phase is committed and its documentation tasks (QA Document, Manual Update,
+where selected) are done, run `task_issues.py --sync-states --feature ...
+--parent ... --apply` exactly once for the phase. `sync_states()` already walks
+every task in `tasks.md` on each call, so a single call at the phase boundary
+reports and applies every completed task's state together; calling it after
+each task repeats the same walk for no new information. Never infer
+human-review completion from generated evidence: a human-review task's issue
+closes only on the human's own signal, never because its evidence file exists.
+
+Prefer `--summary` (a one-line ok/error result with counts) for routine protocol
+calls to `task_issues.py`, `progress.py`, `assure_state.py`, `manual_state.py`
+and `project-sync`; reserve `--json` for a call whose result must be parsed
+programmatically. As of this release, `--summary` is not yet implemented on any
+of the five (only `project-sync --json` exists); until it ships, read each
+script's existing output directly.
 
 Continue until every implementation phase is finished. At each phase boundary,
 run the required checks, inspect the combined diff, and have the orchestration
@@ -66,6 +93,66 @@ not authorized. Under `required-only`, routine phase transitions and backend
 choice do not need another approval. Human review tasks, unresolved requirements,
 security decisions and deployment approvals remain real gates. Record concrete
 blockers and continue independent authorized work.
+
+## Report only on state change (F3)
+
+A wake-up that carries no new information produces no message beyond the
+minimum the harness requires: a background task still running, a poll with an
+unchanged status, or a repeat of the same "still running" note are not state
+changes. Report when a task is accepted, a commit is pushed, a blocker appears
+or a decision is needed, and stop there; do not re-narrate the same pending
+state after every notification.
+
+## Structured worker results (T7)
+
+A worker returns its result in exactly this ten-line form; the orchestration
+agent forwards these lines, or a pointer to them, never the worker's full
+prose, to the dispatcher and to the report:
+
+```text
+Task: <T### and title>
+Status: done | blocked | partial
+Files touched: <paths, or "none">
+Tests: <RED-to-GREEN summary, e.g. "12 passed, 0 failed (dotnet test, persistence-integration)">
+Evidence: <path(s) under specs/<feature>/evidence/>
+Commit: <sha, or "not committed">
+Consumers checked: <which consumers were checked, or "n/a" with why>
+Tokens: <fresh/cached/output if the worker's harness reports them, else "unlogged">
+Blockers: <none, or the exact blocking condition>
+Next: <what the orchestrator should do, or "none">
+```
+
+## Read verification summaries before raw output (T8)
+
+When a task's evidence is a verification run, read its summary first: run ID,
+per-lane pass/fail counts and artifact paths, from whatever the project's
+verification tooling prints. Open a raw reporter file (Playwright, vitest,
+dotnet test JSON) only for a lane that failed, and only that failing test's
+section. A fully green run is read from its summary alone; the raw artifacts
+stay on disk either way, for anyone who needs them later.
+
+## Consumers checklist after a fix (F11)
+
+Before returning a result for any fix, a review finding, a mid-execute defect,
+a rename or a contract change, the worker checks each of the following and
+records which applied in the result's "Consumers checked" line; a consumer is
+skipped only when it verifiably does not apply, never by default:
+
+- End-to-end/integration specs that reference the changed name, route or contract.
+- The lane registry (titles, counts) if a test's identity or count changed.
+- QA capture specs and their generated sample output.
+- Manual/User-Manual pages and sample copies describing the changed behavior.
+- Contract docs, through the project's pending-artifact-updates convention where one exists.
+- PR image pins, when a changed screenshot is embedded in the PR body.
+
+## Light-tier collection results (B12)
+
+Placeholder. B12's delegation text, the `[collect]` marker, the `unverified`
+ledger outcome and the `delegate_dispatch.py accept` acceptance path, is still
+being revised upstream. This section will describe how a light-tier
+(`qa_collect`) run's result is recorded here and read back before its task is
+accepted. Do not write or rely on an interim rule in this section; the
+orchestrator will supply the final text.
 
 ## Continue through delivery
 

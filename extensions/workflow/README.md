@@ -94,6 +94,28 @@ sentences whose target relocated); `extensions/scripts/smoke_install.py` and
 `test_execution_policy.py` check the built package and an installed fixture
 project carry every stage's reference and stay under the core budget.
 
+`execution-assign.md` and `execution-report.md` also carry the retrospective's
+execution-protocol rules (B11): workers are spawned with blocking, concurrent
+tool calls whose results return to the orchestration agent directly rather than
+through the dispatcher (F1); no agent ends a turn while it still owns running
+background work (F2); the dispatcher reports only on an actual state change
+(F3); a turn-budget table per task class (implementation, qa_author, qa_collect,
+documentation, review) and a planned hand-off once a worker's context passes
+~150K tokens (T0); a worker's result is a fixed ten-line structure (T7); a
+verification summary is read before raw reporter output, which is opened only
+for a failed lane (T8); `git stash` and `git add -A`/`git add .` are forbidden
+for workers (S6); and a consumers checklist runs after every fix (F11). It also
+places `task_issues.py --sync-states` at the phase boundary rather than per task
+(from B7), records dispatcher overhead with `progress.py usage --overhead
+dispatcher --agent <id> --collect claude --log <path>` at every phase commit,
+and names the planned `--summary` default for routine script calls, noting it
+is not yet implemented on `task_issues.py`, `progress.py`, `assure_state.py`,
+`manual_state.py` or `project-sync` (B7 has not shipped it as of this release).
+`execution-report.md` carries a marked placeholder section, "Light-tier
+collection results (B12)", for B12's still-being-revised delegation text.
+`extensions/workflow/tests/test_execution_protocol_b11.py` asserts these rules
+are present in the installed reference files.
+
 ## Switching hosts
 
 A project can have several Spec Kit integrations installed (for example `codex` and

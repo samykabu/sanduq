@@ -54,6 +54,10 @@ Record each assignment's stable task IDs, prerequisites, owned paths, shared
 resources, acceptance checks and worker ID in the report and handoff. Give workers
 only their scope and the context needed to implement it. Workers must not stage,
 commit, push, merge, change shared report files or invoke another executor.
+`git stash` and `git add -A`/`git add .` are forbidden for a worker: a stash can
+hide another agent's uncommitted change, and a wildcard add can stage paths
+outside the worker's owned scope. A worker stages only the exact paths it was
+assigned, named explicitly.
 
 When `.specify/workflow.yml` enables delegation, start each ready `T###` worker
 with `python .specify/extensions/workflow/scripts/delegate_dispatch.py start
@@ -114,3 +118,40 @@ ready, delegate it to one worker and record the dependency preventing concurrenc
 Never invent extra work merely to occupy slots. The orchestration agent reviews
 worker results, integrates changes, checks acceptance evidence and requests fixes.
 Unverified worker claims remain pending.
+
+## Spawn pattern, blocking waits and turn budgets (F1, F2, T0)
+
+Spawn a batch of ready workers with several tool calls in the same message,
+blocking rather than backgrounded: every worker in the batch runs concurrently,
+and each worker's own result is delivered straight to the orchestration agent
+that spawned it. Never route a worker's result to the dispatcher for relay and
+re-summarising; the dispatcher hears from the orchestration agent only at batch
+boundaries (tasks accepted, the phase commit SHA, a blocker). This applies
+whether the batch runs in-session or through `delegate_dispatch.py`.
+
+No agent in this protocol, dispatcher, orchestration agent or worker, ends its
+turn while it still owns background work that is running. Block on it (a
+foreground wait with a bounded, re-armed timeout, or the host's own blocking or
+monitor primitive) and report exactly once, when the work concludes.
+"Waiting for X" is never a valid final message from any agent in this protocol.
+
+Turn budgets bound how large a worker's resident context is allowed to grow,
+because turn count, not what a worker reads at the start, explains almost all of
+its token cost. Each figure below is a policy budget (fresh input plus output
+tokens for the task), not a hard stop: the progress report flags an overrun
+amber or red the way it flags a failed lane, and the worker explains the
+overrun in its evidence instead of being cut off mid-task.
+
+| Task class | Turn budget (fresh + output) | Notes |
+| --- | --- | --- |
+| implementation | ~120K (~200K for an integration-heavy task) | Unit-scoped work stays near the lower figure. |
+| qa_author | ~300K | Authoring a Playwright spec, an API-sample test or a 20+-state capture; never Haiku (standing rule 5). |
+| qa_collect | ~60K | Running an existing, stable spec or script and collecting its counts or files; Haiku-eligible only when the task line carries the `[collect]` marker or an explicit override (B12), never by default. |
+| documentation | ~180K | QA Document, Manual Update and similar lifecycle writes. |
+| review | ~200K for a first independent pass; ~50K for the same reviewer's later pass | Reusing the reviewer by message across passes is markedly cheaper than a fresh spawn per pass. |
+
+When a worker's own context passes roughly 150K tokens resident, plan a hand-off
+at the next safe boundary, such as a finished subtask, a passing test or a
+committed file, rather than letting it grow further. Record the hand-off point
+and the evidence already produced in the report, so the replacement worker
+resumes from there instead of redoing it.
