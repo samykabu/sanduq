@@ -3,28 +3,5 @@ description: Sanduq managed lifecycle overlay
 ---
 
 <!-- sanduq-workflow-managed:v1 -->
-If `.specify/workflow.yml` is absent, continue with the upstream command unchanged.
-Otherwise read `.specify/extensions/workflow/skills/workflow/SKILL.md` and the
-checkpoint for the explicitly bound feature. If this invocation has no active
-matching stage claim, enter the dispatcher (scope for a new issue, continue for
-an existing feature) and STOP this outer invocation when it returns. Inside a
-matching claim, execute the domain work below once, then return control to the
-dispatcher. Never recursively enter the dispatcher from the claimed command.
-The dispatcher alone chooses and calls the next stage. Keep mandatory safety and
-binding guards. Disabled hooks stay disabled. Do not independently invoke another
-task generator, executor, or PR hook. Use bounded batches. Only reliable measured context can trigger a context pause;
-missing, estimated or stale usage must not stop automatic continuation.
-
-
-When revalidating an existing tasks.md, reconcile only changed requirements. Keep
-stable task IDs, completed checkboxes and native issue mappings for unchanged work.
-Add new work and reopen genuinely invalidated tasks with a recorded reason. Do not
-replace the existing task list with a fresh numbered template.
-
-For material task breakdown or acceptance choices, use the workflow decision
-adapter on the bound GitHub issue. Post options there, pause the claimed stage,
-and resume from authorized issue answers. Do not ask in the VS Code conversation.
-Record the applied decision and tasks.md as evidence before returning a passed
-Tasks receipt.
-
-Continue the applicable upstream domain instructions below.
+Managed overlay: see `.specify/extensions/workflow/skills/workflow/references/dispatcher-operations.md#managed-overlay-contract`.
+Inside a matching claim, read `.specify/extensions/workflow/skills/workflow/references/stage-tasks.md` (Core Tasks provider), then continue with the upstream instructions below.

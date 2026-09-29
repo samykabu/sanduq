@@ -51,14 +51,24 @@ def smoke(host, superspec_source=None, second_host=None):
         assert text.count('<!-- sanduq-workflow-managed:v1 -->') == 1, name
         assert len(text) > 2500, 'Lost upstream command body: ' + name
         snapshots[name] = text
-    protocol = '.specify/extensions/workflow/skills/workflow/references/execution.md'
+    protocol = '.specify/extensions/workflow/skills/workflow/references/stage-execute.md'
     execution_names = ['speckit-implement']
     if superspec_source:
         execution_names.append('speckit-superspec-execute')
     for name in execution_names:
-        assert protocol in snapshots[name], 'Missing execution protocol: ' + name
+        assert protocol in snapshots[name], 'Missing execute stage reference: ' + name
     installed_workflow = project / '.specify/extensions/workflow'
-    execution_files = ('skills/workflow/references/execution.md', 'scripts/progress.py', 'scripts/usage.py')
+    # Every claimable stage's reference must be present in the installed copy (B8):
+    # the split core SKILL.md plus one references/stage-<name>.md per BASE_STAGES entry.
+    spec = importlib.util.spec_from_file_location('installed_workflow_runtime', installed_workflow / 'scripts/workflow.py')
+    installed_runtime = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(installed_runtime)
+    for stage in installed_runtime.BASE_STAGES:
+        reference = installed_workflow / installed_runtime.stage_reference(stage)
+        assert reference.is_file(), 'Missing installed stage reference: ' + str(reference)
+    assert len((installed_workflow / 'skills/workflow/SKILL.md').read_bytes()) <= 6144, 'Core SKILL.md over the 6 KB budget'
+    execution_files = ('skills/workflow/references/execution-assign.md', 'skills/workflow/references/execution-report.md',
+                        'scripts/progress.py', 'scripts/usage.py')
     execution_snapshots = {}
     for relative in execution_files:
         installed = (installed_workflow / relative).read_bytes()

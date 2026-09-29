@@ -69,6 +69,31 @@ those pending releases cannot yet be installed from public release URLs.
 Scope's community catalog name is ambiguous. Always use the Sanduq archive URL or
 verified staged package, never a bare `specify extension add scope` command.
 
+## Dispatcher core and per-stage references
+
+`skills/workflow/SKILL.md` is a core dispatcher (<= 6 KB): entry points, the stage
+loop and receipt rules, each pointing at the reference that carries its detail.
+`claim`'s response carries a `reference` field (`workflow.stage_reference(stage)`)
+naming the exact `skills/workflow/references/stage-<stage>.md` for the claimed
+stage; read that file, never guess it from the stage name. Cross-cutting detail
+lives in `references/dispatcher-operations.md` (init/continue/status/doctor/
+reconcile, context/telemetry, Project Sync, the managed-overlay contract,
+interruption/GitHub behavior and package updates), `references/
+delegation-and-decisions.md` (invoking a claimed command through delegation or a
+paused decision) and `references/receipt-rules.md` (input roles, `amend`, and the
+G6 recovery recipes). The former single `references/execution.md` is now
+`references/execution-assign.md` (start/resume, assign work) and `references/
+execution-report.md` (update the report, finish phases, continue through
+delivery); `references/stage-execute.md` points at both. Each overlay in
+`presets/workflow/commands/*.md` is a <= 5-line pointer into the skill and its
+claimed reference; `presets/workflow/commands/speckit.speckit-superpowers-bridge.
+*.md` instead point at `references/legacy-guard.md`. `extensions/workflow/tests/
+test_skill_split.py` proves every rule from the pre-split files was moved, not
+dropped (an explicit, reasoned exception list covers the handful of pointer
+sentences whose target relocated); `extensions/scripts/smoke_install.py` and
+`test_execution_policy.py` check the built package and an installed fixture
+project carry every stage's reference and stay under the core budget.
+
 ## Switching hosts
 
 A project can have several Spec Kit integrations installed (for example `codex` and

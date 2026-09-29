@@ -49,14 +49,25 @@ class ExecutionPackageTests(unittest.TestCase):
             package = packager.package('workflow', output=root / 'workflow.zip')
             with zipfile.ZipFile(package['archive']) as archive:
                 inventory = json.loads(archive.read('workflow/package-inventory.json'))
-                for relative in ('skills/workflow/references/execution.md', 'scripts/progress.py'):
+                for relative in ('skills/workflow/references/execution-assign.md',
+                                 'skills/workflow/references/execution-report.md', 'scripts/progress.py'):
                     name = 'workflow/' + relative
                     self.assertEqual(hashlib.sha256(archive.read(name)).hexdigest(), inventory[name])
-                protocol = '.specify/extensions/workflow/skills/workflow/references/execution.md'
+                protocol = '.specify/extensions/workflow/skills/workflow/references/stage-execute.md'
                 for executor in ('implement', 'superspec.execute'):
                     source = archive.read(f'workflow/presets/workflow/commands/speckit.{executor}.md').decode('utf-8-sig')
                     self.assertIn(protocol, source)
                     self.assertEqual(source.count('<!-- sanduq-workflow-managed:v1 -->'), 1)
+                # B8: every claimable stage's reference must be in the archive, and the
+                # core SKILL.md (which names them through `claim`'s `reference` field
+                # and workflow.py's stage_reference()) stays under the 6 KB budget.
+                sys.path.insert(0, str(ROOT / 'extensions/workflow/scripts'))
+                import workflow as w
+                core = archive.read('workflow/skills/workflow/SKILL.md')
+                self.assertLessEqual(len(core), 6144, 'Core SKILL.md over the 6 KB budget')
+                for stage in w.BASE_STAGES:
+                    name = 'workflow/' + w.stage_reference(stage)
+                    self.assertEqual(hashlib.sha256(archive.read(name)).hexdigest(), inventory[name], stage)
                 archive.extractall(root / 'installed')
             helper = root / 'installed/workflow/scripts/progress.py'
             tasks = root / 'tasks.md'

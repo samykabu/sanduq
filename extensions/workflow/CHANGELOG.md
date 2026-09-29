@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+- Split `skills/workflow/SKILL.md` (29 KB) into a core dispatcher (entry points,
+  stage loop, receipt rules, <= 6 KB) plus one `skills/workflow/references/
+  stage-<name>.md` per claimable stage. `claim` now returns a `reference` field
+  (`workflow.stage_reference(stage)`) naming the exact file to read for the
+  claimed stage. Cross-cutting detail moved to `references/dispatcher-
+  operations.md`, `references/delegation-and-decisions.md` and `references/
+  receipt-rules.md`. `references/execution.md` split into `references/
+  execution-assign.md` (start/resume, assign work) and `references/
+  execution-report.md` (report updates, finishing phases, delivery); every
+  overlay in `presets/workflow/commands/*.md` shrank to a <= 5-line pointer,
+  and the three `speckit-superpowers-bridge` legacy overlays point at a new
+  shared `references/legacy-guard.md`. No rule was dropped: `extensions/
+  workflow/tests/test_skill_split.py` diffs the pre-split files (read from git
+  history) against the new set and fails on anything not moved, with an
+  explicit, reasoned list for the handful of pointer sentences whose target
+  relocated. `extensions/scripts/smoke_install.py`, `smoke_upgrade.py` and
+  `test_execution_policy.py` were updated for the new paths and additionally
+  assert every stage's reference is present in the built archive and an
+  installed fixture project. No version bump; no script behavior changed
+  beyond packaging the new files.
+
 ## 1.6.4
 
 - Pin the released User Manual 1.3.3 in `dependencies.json`. User Manual 1.3.3
