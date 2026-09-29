@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased
+
+- Delegation: collection route and light-tier guard (B12). `qa` splits into
+  `qa_author` (standard-tier authoring and analysis) and `qa_collect`
+  (light-eligible: running an existing, fixed check and reporting its
+  result); a pre-1.7 policy's `qa` route keeps working, read in place as
+  `qa_author` with a fresh, light-eligible `qa_collect` route added, and a
+  ledger with historical `"task_type": "qa"` entries stays readable. Routing
+  to `qa_collect` is never a heuristic: only an explicit `[Collect]` task
+  marker or a per-task override reaches it; combined with any other explicit
+  marker it is ambiguous and falls back to implementation. `verify` routes to
+  `qa_collect` only while its resolved command is still the fixed
+  `workflow:verification` script, else `qa_author`; `qa_document` routes to
+  `documentation`. Discovery (Scope, Specify, Clarify, Plan, Tasks) is never
+  light: its default tier is now `standard`, and the schema rejects a `light`
+  preferred or fallback tier anywhere in `delegation.routes.discovery`
+  (`DELEGATION_DISCOVERY_LIGHT_FORBIDDEN`). A light-tier `successful` result
+  is never taken on trust: `collect` marks it `unverified` unless the
+  worker's own summary already carries parsable reporter counts or a
+  produced-file list inside the task's working directory; a note never
+  changes an `unverified` outcome. New `delegate_dispatch.py accept --run-id
+  <id> --command <acceptance command> --expect counts|files` runs that
+  command itself (no shell, the task's own working directory, a bounded
+  timeout and a hard output cap), records the command, exit code and raw
+  output in the ledger, and resolves `unverified` to `successful` only when
+  the command exits `0` and its output satisfies the same schema, defending
+  against absolute paths, `..` traversal and symlink escapes for `files`.
+  `reassign` to a standard tier also resolves an `unverified` prior run.
+
 ## 1.6.4
 
 - Pin the released User Manual 1.3.3 in `dependencies.json`. User Manual 1.3.3

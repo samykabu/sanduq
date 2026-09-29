@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -40,6 +41,12 @@ def save(path, value):
 ACTIVE = ('starting', 'running')
 # Replacement intents that never produced a run and no longer block a retry.
 INACTIVE_INTENTS = ('blocked', 'intent-abandoned')
+# Terminal ledger outcomes for a run, including the light-tier guard's own
+# ``unverified`` (B12): a driver-reported ``successful`` at a light tier with
+# no raw counts or produced-file evidence. Only a standard-tier reassignment
+# or ``accept`` running the acceptance command independently resolves it; a
+# note never does, because there is no ledger path that accepts free text.
+TERMINAL_STATUSES = ('successful', 'failed', 'abandoned', 'unverified')
 LOCK_TIMEOUT = 15.0
 # An intent without a recorded launch outcome may still belong to a dispatcher
 # that is inside its driver start; the driver acknowledges within 15 seconds.
@@ -318,7 +325,22 @@ def task_description(root, feature, task_id):
     return matches[0]
 
 
-def stage_brief(root, feature, stage, token):
+# Appended only for the light-eligible qa_collect route (an explicit [collect]
+# marker or a per-task override put it there, never a heuristic): the worker
+# must self-report parsable evidence, because a light-tier result without it
+# stays unverified and is never accepted on a bare claim of success.
+QA_COLLECT_ADDENDUM = (
+    'This is a light-tier collection task: run the existing check and report its result; do not '
+    'author new tests or code. In your final summary, report either raw reporter counts as JSON '
+    '({"total": N, "passed": N, "failed": N}) or your test runner\'s own summary line (for example '
+    'pytest\'s "N passed, N failed", Jest\'s "Tests: N failed, N passed, N total", or a JUnit '
+    'console summary), or a produced-file list as JSON ({"files": ["<path>", ...]}) with paths '
+    'relative to your working directory. Without one of these the result stays unverified and is '
+    'not accepted.\n'
+)
+
+
+def stage_brief(root, feature, stage, token, work_type=None):
     state = workflow.read(root / feature / 'workflow/checkpoint.json', {})
     active = state.get('active') or {}
     delegation.require(active.get('stage') == stage and active.get('token') == token,
@@ -337,7 +359,7 @@ def stage_brief(root, feature, stage, token):
         'dispatcher claim yourself.\n' if stage == 'execute' else
         'Do not commit, push or alter the progress report.\n'
     )
-    return (
+    text = (
         f'Execute only the Sanduq {stage} stage for {feature}, bound to {state["issue"]}.\n'
         f'The dispatcher already owns claim {token}; do not call workflow claim, complete, next, '
         'migrate, recover or another stage.\n'
@@ -349,11 +371,12 @@ def stage_brief(root, feature, stage, token):
         'The dispatcher will inspect them and complete the receipt; your own success claim is '
         'not a passed Sanduq stage. ' + ownership
     )
+    return text + QA_COLLECT_ADDENDUM if work_type == 'qa_collect' else text
 
 
-def task_brief(root, feature, task_id):
+def task_brief(root, feature, task_id, work_type=None):
     description = task_description(root, feature, task_id)
-    return (
+    text = (
         f'Implement only {task_id} for {feature}: {description}\n'
         f'Read {feature}/spec.md, plan.md and tasks.md, project instructions, and the Sanduq '
         'execution protocol. Respect the assigned files, dependencies and shared resources '
@@ -362,6 +385,7 @@ def task_brief(root, feature, task_id):
         'claim workflow stages or close GitHub issues. The orchestrator will review and integrate '
         'your work.\n'
     )
+    return text + QA_COLLECT_ADDENDUM if work_type == 'qa_collect' else text
 
 
 def brief_file(root, text):
@@ -553,13 +577,13 @@ def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
     if identity.startswith('stage:'):
         stage = identity.removeprefix('stage:')
         delegation.require(stage in delegation.STAGE_TYPES and token, 'DELEGATION_STAGE_INVALID')
-        work_type = delegation.STAGE_TYPES[stage]
-        text = stage_brief(root, feature, stage, token)
+        work_type = delegation.stage_work_type(checkpoint.get('commands', {}), stage)
+        text = stage_brief(root, feature, stage, token, work_type)
     else:
         description = task_description(root, feature, identity)
-        text = task_brief(root, feature, identity)
         work_type = work_type or delegation.task_type(description)
         delegation.require(work_type in delegation.TYPES, 'DELEGATION_TASK_TYPE_INVALID')
+        text = task_brief(root, feature, identity, work_type)
     if task_file:
         provided = Path(task_file).resolve()
         delegation.require(provided.is_file() and provided.is_relative_to(root),
@@ -715,6 +739,205 @@ def replacement_link(ledger, attempt):
     return None
 
 
+# ---------------------------------------------------------------------------
+# Light-tier evidence (B12): a light-tier run is accepted only when its result
+# carries raw reporter counts or a produced-file list, never on a bare claim
+# of success. The same parsers serve ``collect`` (reading a worker's own
+# self-reported summary) and ``accept`` (reading an acceptance command's own
+# output, run independently by the orchestrator); only the latter is
+# authoritative verification, but both apply the identical, documented schema.
+# ---------------------------------------------------------------------------
+
+LIGHT_TIER_EVIDENCE_MISSING_REASON = (
+    'LIGHT_TIER_EVIDENCE_MISSING: a light-tier result needs parsable reporter counts '
+    '(total > 0, failed = 0) or a produced-file list inside the task\'s owned paths; run '
+    '"delegate_dispatch.py accept --run-id <id> --command <acceptance command> --expect '
+    'counts|files", or reassign to a standard tier')
+
+
+def _parse_json_object(text):
+    """The whole text, or its single outermost ``{...}`` block, parsed as a JSON object."""
+    text = (text or '').strip()
+    if not text:
+        return None
+    try:
+        value = json.loads(text)
+        return value if isinstance(value, dict) else None
+    except ValueError:
+        pass
+    match = re.search(r'\{.*\}', text, re.S)
+    if not match:
+        return None
+    try:
+        value = json.loads(match.group(0))
+        return value if isinstance(value, dict) else None
+    except ValueError:
+        return None
+
+
+def _as_int(value):
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _counts_from_json(obj):
+    total, passed, failed = _as_int(obj.get('total')), _as_int(obj.get('passed')), _as_int(obj.get('failed'))
+    if total is not None and failed is not None:
+        return {'total': total, 'passed': passed if passed is not None else total - failed, 'failed': failed}
+    tests, failures, errors = _as_int(obj.get('tests')), _as_int(obj.get('failures')), _as_int(obj.get('errors'))
+    if tests is not None and failures is not None:
+        failed = failures + (errors or 0)
+        return {'total': tests, 'passed': tests - failed, 'failed': failed}
+    return None
+
+
+def _jest_counts(match):
+    total, passed = int(match[3]), int(match[2])
+    failed = int(match[1]) if match[1] is not None else total - passed
+    return {'total': total, 'passed': passed, 'failed': failed}
+
+
+def _junit_counts(match):
+    total, failed = int(match[1]), int(match[2]) + int(match[3] or 0)
+    return {'total': total, 'passed': total - failed, 'failed': failed}
+
+
+def _pytest_counts(match):
+    passed, failed = int(match[1]), int(match[2] or 0) + int(match[3] or 0)
+    return {'total': passed + failed, 'passed': passed, 'failed': failed}
+
+
+# Tried in this order (most specific reporter shape first) after the JSON
+# forms; the first pattern that matches wins. See the format list documented
+# on QA_COLLECT_ADDENDUM, the README delegation section and this module.
+COUNT_PATTERNS = (
+    (re.compile(r'Tests:\s*(?:(\d+)\s+failed,\s*)?(\d+)\s+passed,\s*(\d+)\s+total', re.I), _jest_counts),
+    (re.compile(r'Tests(?:\s+run)?:\s*(\d+),\s*Failures:\s*(\d+)(?:,\s*Errors:\s*(\d+))?', re.I), _junit_counts),
+    (re.compile(r'(\d+)\s+passed(?:,\s*(\d+)\s+failed)?(?:,\s*(\d+)\s+error)?', re.I), _pytest_counts),
+)
+
+
+def parse_counts(text):
+    """Parse total/passed/failed from JSON or a supported reporter's text output.
+
+    Supported inputs, tried in this order, first match wins: (1) JSON
+    ``{"total": N, "passed": N, "failed": N}`` (``passed`` optional, computed as
+    ``total - failed``); (2) JUnit-style JSON ``{"tests": N, "failures": N,
+    "errors": N}`` (``errors`` optional; ``failed = failures + errors``);
+    (3) Jest's ``"Tests: N failed, N passed, N total"`` (or the all-passed form
+    without the leading "N failed,"); (4) a JUnit console summary ``"Tests run:
+    N, Failures: N, Errors: N"``; (5) pytest's ``"N passed, N failed"`` (both
+    ``failed`` and an ``error`` count are optional, defaulting to 0). Anything
+    else, or an ambiguous parse, returns ``None``.
+    """
+    obj = _parse_json_object(text)
+    if isinstance(obj, dict):
+        counts = _counts_from_json(obj)
+        if counts:
+            return counts
+    for pattern, convert in COUNT_PATTERNS:
+        match = pattern.search(text or '')
+        if match:
+            return convert(match)
+    return None
+
+
+def parse_files(text):
+    """Parse a JSON ``{"files": [...]}`` object, else collect ``FILE: <path>`` lines."""
+    obj = _parse_json_object(text)
+    if isinstance(obj, dict) and isinstance(obj.get('files'), list):
+        items = [str(item) for item in obj['files'] if isinstance(item, str) and item.strip()]
+        return items or None
+    lines = [line.split(':', 1)[1].strip() for line in (text or '').splitlines()
+             if line.strip()[:5].upper() == 'FILE:']
+    return lines or None
+
+
+TRAVERSAL_SEGMENT = re.compile(r'(^|[\\/])\.\.($|[\\/])')
+
+
+def validate_owned_files(owned_root, paths):
+    """Every path must exist, be non-empty, and resolve inside ``owned_root``.
+
+    Defends against absolute paths, ``..`` traversal and symlink escapes: an
+    absolute path or a literal ``..`` segment is rejected outright, and every
+    remaining candidate is fully resolved (following any symlink to its real
+    location) before its containment is checked, so a symlink whose target
+    lands outside ``owned_root`` cannot pass. Any single invalid path fails
+    the whole list, matching the guard's "no partial acceptance" rule.
+    """
+    owned_root = Path(owned_root).resolve()
+    verified = []
+    for raw in paths:
+        text = str(raw).strip()
+        if not text or Path(text).is_absolute() or TRAVERSAL_SEGMENT.search(text):
+            return None
+        try:
+            candidate = (owned_root / text).resolve()
+        except OSError:
+            return None
+        if not candidate.is_relative_to(owned_root):
+            return None
+        try:
+            if not candidate.is_file() or candidate.stat().st_size <= 0:
+                return None
+        except OSError:
+            return None
+        verified.append(text)
+    return verified or None
+
+
+def light_tier_evidence(text, root, attempt):
+    """Evidence for a light-tier run's own self-reported summary, or ``None``.
+
+    Tries counts first, then a produced-file list, since a worker's own report
+    (unlike ``accept``) does not declare which one it means.
+    """
+    counts = parse_counts(text)
+    if counts and counts['total'] > 0 and counts['failed'] == 0:
+        return {'expect': 'counts', 'source': 'summary', 'counts': counts}
+    paths = parse_files(text)
+    if paths:
+        valid = validate_owned_files((root / attempt['cwd']).resolve(), paths)
+        if valid:
+            return {'expect': 'files', 'source': 'summary', 'files': valid}
+    return None
+
+
+ACCEPT_OUTPUT_CAP = 200_000  # characters kept per stream before parsing or storing
+ACCEPT_LEDGER_OUTPUT_CAP = 20_000  # characters of that kept in the ledger record
+
+
+def run_capped(args, cwd, timeout):
+    """Run a fixed argv with no shell, a wall-clock timeout and a hard output cap.
+
+    ``args`` is an argv list (``shlex.split`` of the configured acceptance
+    command), never a shell string, so no shell metacharacter in it is special
+    and nothing is interpolated; ``cwd`` is always the task's own recorded
+    worktree, never a caller-supplied path. Output is captured the same way
+    every other driver call in this module captures it (decoded text, UTF-8,
+    replacing undecodable bytes), then each stream is truncated to
+    ``ACCEPT_OUTPUT_CAP`` characters before it is parsed or written to the
+    ledger, so a runaway or hostile command cannot exhaust memory or bloat
+    either.
+    """
+    timed_out = False
+    try:
+        result = subprocess.run(args, cwd=cwd, capture_output=True, timeout=timeout,
+                                text=True, encoding='utf-8', errors='replace')
+        exit_code, out, err = result.returncode, result.stdout or '', result.stderr or ''
+    except subprocess.TimeoutExpired as exc:
+        timed_out = True
+        exit_code = None
+        out = exc.stdout if isinstance(exc.stdout, str) else ''
+        err = exc.stderr if isinstance(exc.stderr, str) else ''
+    except OSError as exc:
+        return {'exit_code': None, 'output': str(exc), 'truncated': False, 'timed_out': False}
+    truncated = len(out) > ACCEPT_OUTPUT_CAP or len(err) > ACCEPT_OUTPUT_CAP
+    out, err = out[:ACCEPT_OUTPUT_CAP], err[:ACCEPT_OUTPUT_CAP]
+    text = out + ('\n--- stderr ---\n' + err if err.strip() else '')
+    return {'exit_code': exit_code, 'output': text, 'truncated': truncated, 'timed_out': timed_out}
+
+
 def collect(root, feature, run_id, auto_retry=True):
     root = root.resolve()
     feature = feature_identity(root, feature)
@@ -775,6 +998,20 @@ def collect(root, feature, run_id, auto_retry=True):
         attempt['unattributed_bookkeeping_paths'] = [] if verified else internal
         attempt['worker_changed_paths'] = measured.get('dirty_paths_changed')
         attempt['model_rejected'] = rejected
+        # Light-tier guard (B12): a light-tier "successful" result is never
+        # taken on trust. Only parsable evidence in the worker's own summary
+        # keeps it successful; anything else stays unverified until accept or
+        # a standard-tier reassignment supplies it. A note is not a path here:
+        # nothing in this ledger accepts free text as evidence.
+        tier = (attempt['route_candidates'][attempt['candidate_index']] or {}).get('tier')
+        if tier == 'light' and attempt['status'] == 'successful':
+            evidence = light_tier_evidence(payload.get('summary') or '', root, attempt)
+            if evidence:
+                attempt['accepted_evidence'] = evidence
+                attempt['accepted_at'] = stamp()
+            else:
+                attempt['status'] = 'unverified'
+                attempt['unverified_reason'] = LIGHT_TIER_EVIDENCE_MISSING_REASON
         attempt['evidence_location'] = relative(root, Path((payload.get('artifacts') or {}).get('dir',
                                                         root / '.delegate/runs' / run_id)) / 'result.json')
         linked = replacement_link(ledger, attempt)
@@ -788,6 +1025,10 @@ def collect(root, feature, run_id, auto_retry=True):
                 'changed_paths': attempt['changed_paths'],
                 'worker_changed_paths': attempt['worker_changed_paths'],
                 'dispatcher_paths_changed': attempt['dispatcher_paths_changed']}
+    if attempt.get('unverified_reason'):
+        response['unverified_reason'] = attempt['unverified_reason']
+    if attempt.get('accepted_evidence'):
+        response['accepted_evidence'] = attempt['accepted_evidence']
     if linked:
         return {**response, **linked}
     plan = retry_plan(policy, attempt, measured, rejected, workflow.active_host(root)) if auto_retry else None
@@ -837,8 +1078,10 @@ def reassign(root, feature, run_id, reason, task_file=None):
     delegation.require(config['enabled'], 'DELEGATION_DISABLED')
     ledger = read_ledger(root, feature)
     prior = find_run(ledger, run_id)
-    delegation.require(prior is not None and prior.get('status') in
-                       ('successful', 'failed', 'abandoned'), 'DELEGATION_PRIOR_RUN_NOT_TERMINAL')
+    # unverified is terminal too: a light-tier "successful" without evidence is
+    # exactly the case a standard-tier reassignment is meant to resolve.
+    delegation.require(prior is not None and prior.get('status') in TERMINAL_STATUSES,
+                       'DELEGATION_PRIOR_RUN_NOT_TERMINAL')
     delegation.require(prior['retry_count'] < config['stronger_retry'],
                        'DELEGATION_RETRY_LIMIT_REACHED')
     delegation.require(not prior.get('replacement_run_id') and not live_children(ledger, run_id) and
@@ -865,6 +1108,83 @@ def reassign(root, feature, run_id, reason, task_file=None):
     with edit_ledger(root, feature) as ledger:
         find_run(ledger, run_id)['replacement_run_id'] = replacement['run_id']
     return replacement
+
+
+ACCEPT_EXPECTS = ('counts', 'files')
+ACCEPT_TIMEOUT_DEFAULT = 1800
+
+
+def accept(root, feature, run_id, command, expect, timeout=None):
+    """Independently run and judge an acceptance command for an unverified run.
+
+    The only new dispatcher command in B12: it resolves a light-tier
+    ``unverified`` outcome without a standard-tier reassignment, by running a
+    fixed command the orchestrator supplies and inspecting its own output --
+    never the worker's self-report a second time. The command runs with no
+    shell (``shlex.split`` into argv, never interpolated into a shell string)
+    in the task's own recorded working directory (never a caller-supplied
+    path), under a bounded timeout and a hard output cap (``run_capped``).
+
+    It accepts only when the command exits 0 and its output satisfies the
+    requested schema: ``counts`` needs parsable total > 0 and failed == 0;
+    ``files`` needs every path to exist, be non-empty and resolve inside the
+    task's owned paths (its ``cwd``), rejecting absolute paths, ``..``
+    traversal and symlink escapes. Exit-zero empty output, unparsable output
+    (including a bare free-text note with no structured evidence), a missing
+    or empty file, a path outside the owned set, a failed command or a
+    timeout all leave the attempt ``unverified``; every attempt is recorded in
+    the ledger regardless of outcome.
+    """
+    root = root.resolve()
+    feature = feature_identity(root, feature)
+    delegation.require(expect in ACCEPT_EXPECTS, 'DELEGATION_ACCEPT_EXPECT_INVALID')
+    delegation.require(isinstance(command, str) and command.strip(),
+                       'DELEGATION_ACCEPT_COMMAND_REQUIRED')
+    timeout = timeout if timeout is not None else ACCEPT_TIMEOUT_DEFAULT
+    delegation.require(type(timeout) is int and 0 < timeout <= 28800, 'DELEGATION_TIMEOUT_INVALID')
+    delegation.require_no_maintenance(root)
+    ledger = read_ledger(root, feature)
+    attempt = find_run(ledger, run_id)
+    delegation.require(attempt is not None, 'DELEGATION_RUN_UNKNOWN: ' + run_id)
+    delegation.require(attempt.get('status') == 'unverified',
+                       'DELEGATION_RUN_NOT_UNVERIFIED: only an unverified light-tier result can be accepted')
+    cwd = (root / attempt['cwd']).resolve()
+    delegation.require(cwd.is_dir() and cwd.is_relative_to(root), 'DELEGATION_ACCEPT_CWD_INVALID')
+    try:
+        args = shlex.split(command, posix=(os.name != 'nt'))
+    except ValueError as exc:
+        raise delegation.DelegationError('DELEGATION_ACCEPT_COMMAND_INVALID: ' + str(exc)) from exc
+    delegation.require(args, 'DELEGATION_ACCEPT_COMMAND_REQUIRED')
+    run = run_capped(args, cwd, timeout)
+    text = run['output']
+    evidence = None
+    if run['exit_code'] == 0:
+        if expect == 'counts':
+            counts = parse_counts(text)
+            if counts and counts['total'] > 0 and counts['failed'] == 0:
+                evidence = {'expect': 'counts', 'source': 'accept', 'counts': counts}
+        else:
+            paths = parse_files(text)
+            valid = validate_owned_files(cwd, paths) if paths else None
+            if valid:
+                evidence = {'expect': 'files', 'source': 'accept', 'files': valid}
+    with edit_ledger(root, feature) as ledger:
+        attempt = find_run(ledger, run_id)
+        delegation.require(attempt is not None and attempt.get('status') == 'unverified',
+                           'DELEGATION_RUN_NOT_UNVERIFIED: only an unverified light-tier result can be accepted')
+        record = {'at': stamp(), 'command': command, 'expect': expect, 'exit_code': run['exit_code'],
+                  'timed_out': run.get('timed_out', False), 'output_truncated': run.get('truncated', False),
+                  'accepted': evidence is not None, 'output': text[:ACCEPT_LEDGER_OUTPUT_CAP]}
+        attempt.setdefault('acceptance_attempts', []).append(record)
+        if evidence:
+            attempt['status'] = 'successful'
+            attempt['accepted_evidence'] = evidence
+            attempt['accepted_at'] = stamp()
+            attempt.pop('unverified_reason', None)
+        result = copy.deepcopy(attempt)
+    return {'run_id': run_id, 'status': result['status'], 'accepted': evidence is not None,
+            'expect': expect, 'exit_code': run['exit_code'], 'timed_out': run.get('timed_out', False),
+            'output_truncated': run.get('truncated', False), 'evidence': evidence}
 
 
 def recover_intent(root, feature, intent_id):
@@ -955,6 +1275,12 @@ def main(argv=None):
     reassign_cmd.add_argument('--run-id', required=True)
     reassign_cmd.add_argument('--reason', required=True)
     reassign_cmd.add_argument('--task-file', type=Path)
+    accept_cmd = sub.add_parser('accept')
+    accept_cmd.add_argument('--feature', required=True)
+    accept_cmd.add_argument('--run-id', required=True)
+    accept_cmd.add_argument('--command', required=True)
+    accept_cmd.add_argument('--expect', choices=ACCEPT_EXPECTS, required=True)
+    accept_cmd.add_argument('--timeout', type=int)
     args = parser.parse_args(argv)
     try:
         if args.action == 'start':
@@ -966,6 +1292,8 @@ def main(argv=None):
             result = recover_intent(args.root, args.feature, args.intent_id)
         elif args.action == 'abandon':
             result = abandon_intent(args.root, args.feature, args.intent_id, args.reason)
+        elif args.action == 'accept':
+            result = accept(args.root, args.feature, args.run_id, args.command, args.expect, args.timeout)
         else:
             result = reassign(args.root, args.feature, args.run_id, args.reason, args.task_file)
         print(json.dumps(result, indent=2))

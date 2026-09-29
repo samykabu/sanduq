@@ -280,7 +280,10 @@ def validate_policy(policy):
     # Older consumer policies remain valid and opt out until the project selects delegation.
     if 'delegation' not in policy:
         policy['delegation'] = copy.deepcopy(default_policy(False, False)['delegation'])
-    from delegation import validate_delegation
+    from delegation import migrate_qa_route, validate_delegation
+    # Pre-1.7 policies routed everything QA-shaped through a single ``qa`` key;
+    # read in place as qa_author, with a fresh light-eligible qa_collect added.
+    migrate_qa_route(policy['delegation'])
     try:
         validate_delegation(policy['delegation'])
     except ValueError as exc:
@@ -1604,11 +1607,12 @@ class Run:
             existing = (self.feature / 'spec.md').is_file() and f"{source.get('repo')}#{source.get('issue')}" == state['issue']
             state['active']['mode'] = 'revalidate' if existing and stage in ('scope', 'specify', 'clarify', 'plan', 'tasks') else 'initial'
             if self.policy['delegation']['enabled']:
-                from delegation import STAGE_TYPES, selected_route
+                from delegation import selected_route, stage_work_type
+                work_type = stage_work_type(state['commands'], stage)
                 state['active']['delegation'] = {
                     'identity': self.relative + '/stage:' + stage,
-                    'task_type': STAGE_TYPES[stage],
-                    'candidates': selected_route(self.policy['delegation'], STAGE_TYPES[stage], active_host(self.root)),
+                    'task_type': work_type,
+                    'candidates': selected_route(self.policy['delegation'], work_type, active_host(self.root)),
                 }
             state['active']['baseline'] = fingerprint_files(self.root, [p for r in state['receipts'].values() for p in r['fingerprints']])
             state['status'] = 'in-progress'

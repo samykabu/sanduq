@@ -471,18 +471,31 @@ falls back to that CLI's own default model (`model: null`).
 
 | Work type | Default tier | Codex model | Claude model | Stages |
 | --- | --- | --- | --- | --- |
-| discovery | high | gpt-6-astra | opus | scope, specify, clarify, plan, tasks |
+| discovery | standard | gpt-6-sol | sonnet | scope, specify, clarify, plan, tasks |
 | implementation | standard | gpt-6-sol | sonnet | tasks only |
-| qa | light | gpt-6-terra | haiku | qa_analyze, verify, qa_document |
-| documentation | documentation | gpt-6-sol | opus | manual_analyze, manual_update |
+| qa_author | standard | gpt-6-sol | sonnet | qa_analyze |
+| qa_collect | light | gpt-6-terra | haiku | verify (only while its command is the fixed collection script), qa_collect-marked tasks |
+| documentation | documentation | gpt-6-sol | opus | manual_analyze, manual_update, qa_document |
 | review | review | gpt-6-sol | opus | analyze, review |
 | coordination | light | gpt-6-terra | haiku | taskstoissues, execute, ready, pr |
+
+Discovery is never light: its default is standard (Scope and Plan may still be
+overridden to high by policy), and the schema rejects a `light` preferred or
+fallback tier anywhere in `delegation.routes.discovery`
+(`DELEGATION_DISCOVERY_LIGHT_FORBIDDEN`). `qa` (pre-1.7) split into `qa_author`
+(authoring and analysing QA work, standard) and `qa_collect` (running an
+existing, fixed check and reporting its result, light-eligible and guarded; see
+below). A policy that still has a single `qa` route keeps working: reading it
+maps that route onto `qa_author` in place and adds a fresh, light-eligible
+`qa_collect` route (the same default every new policy gets); nothing is
+rewritten to disk, and a ledger with historical `"task_type": "qa"` entries
+stays readable.
 
 The model names are editable preferences in `delegation.models`, not proof that
 a CLI accepts them. Use `delegation.py route --feature specs/<feature> --id T001
 --type implementation` to inspect a resolved route. For example, merge this
 override into the existing `delegation:` block, keeping the generated `models:`
-and all six `routes:` entries:
+and all seven `routes:` entries:
 
 ```yaml
 delegation:
@@ -496,14 +509,16 @@ delegation:
 ```
 
 A task's type comes from an explicit marker in its leading tags: `[Impl]`,
-`[Implementation]` or `[Code]`; `[QA]`, `[Test]`, `[Tests]` or `[TDD]`; `[Doc]`,
-`[Docs]`, `[Documentation]` or `[Manual]`; `[Review]`. The implementation
-marker wins over the others and is the escape for any task the rules below
-misread. Without a marker, only an unambiguous leading action counts: "Run ...
-tests", "Write/Add ... tests for ...", "Test <something>", "Capture ...
-screenshots"; "Document the ...", "Update README/docs/guide/release notes"
-followed by a preposition or the end of the line; "Review/Audit/Inspect
-<something>". A documentation file named as the object also counts:
+`[Implementation]` or `[Code]`; `[QA]`, `[Test]`, `[Tests]` or `[TDD]` (routes
+to `qa_author`, standard); `[Doc]`, `[Docs]`, `[Documentation]` or `[Manual]`;
+`[Review]`. The implementation marker wins over the others and is the escape
+for any task the rules below misread. Without a marker, only an unambiguous
+leading action counts: "Run ... tests", "Write/Add ... tests for ...", "Test
+<something>", "Capture ... screenshots"; "Document the ...", "Update
+README/docs/guide/release notes" followed by a preposition or the end of the
+line; "Review/Audit/Inspect <something>". These heuristics, and every explicit
+marker above, route only to `qa_author`, `documentation` or `review`: nothing
+is ever inferred as `qa_collect`. A documentation file named as the object also counts:
 "Update README.md with setup instructions", "Update docs/quickstart.md", "Add
 docs/api.md section for auth", "Document API endpoints in docs/api.md". That
 means a README, changelog or contributing file with or without its extension,
@@ -519,6 +534,18 @@ that also asks for a code change ("Inspect the parser and fix the crash",
 component". Anything else is implementation. Route type only chooses
 a model. It never makes a run read-only, so a delegated review can write its
 evidence and run checks.
+
+`[Collect]` is the sole explicit route to `qa_collect`: run an existing,
+fixed check and report its result, never author new tests or code. It is
+checked before every other marker and every heuristic, so it is never inferred
+from unmarked task text. Combined with any other explicit marker in the same
+leading tag block (for example `[QA] [Collect]`) it is ambiguous and falls
+back to implementation (standard), never a guess at which one wins. The other
+explicit route to a light-eligible tier is a per-task override in
+`delegation.overrides` naming `tier: light` for that task's identity: also
+explicit, never a heuristic. `qa_document` (writing the QA test manual) is
+`documentation`, not `qa_author` or `qa_collect`, since it is authored prose,
+not a check to run.
 
 `annotate` writes an HTML comment below each pending `T###` line. It never
 changes checkbox lines, completed tasks, running tasks or the semantic task
@@ -627,6 +654,51 @@ On Windows, releasing a lock retries brief file-sharing conflicts while
 checking the owner token before each attempt. A persistent conflict returns
 `DELEGATION_LOCK_RELEASE_BUSY` and names the lock file; a new owner's lock is
 never removed by the former owner.
+
+### Light-tier evidence and `accept`
+
+A light-tier run (`qa_collect`, or any route whose selected candidate resolves
+to the `light` tier) is never taken on trust. `collect` records the driver's
+raw `successful`/`failed`/`abandoned` verdict as usual, but when the selected
+tier is `light` and the verdict is `successful`, the ledger outcome becomes
+`unverified` unless the worker's own summary already carries parsable
+evidence: raw reporter counts (JSON `{"total": N, "passed": N, "failed": N}`,
+or JUnit-style `{"tests": N, "failures": N, "errors": N}`) with `total > 0` and
+`failed == 0`, parsed from JSON anywhere in the summary or from pytest's `"N
+passed, N failed"`, Jest's `"Tests: N failed, N passed, N total"` or a JUnit
+console summary (`"Tests run: N, Failures: N, Errors: N"`); or a produced-file
+list as JSON `{"files": ["<path>", ...]}` with every path existing, non-empty,
+and resolving inside the task's own working directory. `unverified` is a
+terminal ledger status like `successful`, `failed` and `abandoned`; a note
+never changes it, because nothing in the ledger accepts free text as evidence.
+
+Two ways resolve an `unverified` attempt:
+
+- **`reassign`** to a standard (or stronger) tier, as for any other terminal
+  result; the replacement run's own evidence resolves the identity once
+  collected.
+- **`delegate_dispatch.py accept --feature specs/<feature> --run-id <id>
+  --command "<acceptance command>" --expect counts|files [--timeout <seconds>]`**
+  runs that command itself, independently of the worker's own report, and
+  judges its output by the same schema above. The command runs with no shell
+  (`shlex.split`, never a shell string, so nothing in it is interpolated or
+  given special meaning) inside the task's own recorded working directory
+  (never a caller-supplied path), under a bounded timeout (default 1800s, max
+  28800s) and a hard output cap (200,000 characters per stream, truncated
+  before it is parsed or stored). It accepts only when the command exits `0`
+  and, for `counts`, parses to `total > 0` and `failed == 0`, or, for `files`,
+  every path exists, is non-empty and resolves inside the task's owned
+  working directory: an absolute path, a literal `..` segment, a missing or
+  empty file, or a symlink whose real target lands outside that directory are
+  all rejected (paths are fully resolved, following any symlink to its real
+  location, before containment is checked). Exit-zero empty output, a bare
+  free-text note with no structured evidence, an unparsable result, a failed
+  command and a timeout all leave the attempt `unverified`. Every attempt,
+  accepted or not, is recorded under the ledger attempt's
+  `acceptance_attempts`: the command, exit code, whether it timed out or its
+  output was truncated, and the (capped) raw output. `accept` refuses with
+  `DELEGATION_RUN_NOT_UNVERIFIED` on any run that is not currently
+  `unverified`.
 
 ### History and evidence
 

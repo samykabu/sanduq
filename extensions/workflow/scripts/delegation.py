@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import copy
 import json
 import os
 import re
@@ -19,18 +20,39 @@ from pathlib import Path
 
 import yaml
 
-TYPES = ('discovery', 'implementation', 'qa', 'documentation', 'review', 'coordination')
-DEFAULT_TIERS = {'discovery': 'high', 'implementation': 'standard', 'qa': 'light',
-                 'documentation': 'documentation', 'review': 'review', 'coordination': 'light'}
+# ``qa`` split in two (B12): ``qa_author`` is standard-tier authored QA work
+# (writing tests, analysing coverage); ``qa_collect`` is the light-eligible
+# route for running an existing, fixed check and reporting its result. Nothing
+# routes to ``qa_collect`` by inference; see ``task_type`` and ``stage_work_type``.
+TYPES = ('discovery', 'implementation', 'qa_author', 'qa_collect', 'documentation',
+         'review', 'coordination')
+# Discovery (Scope, Specify, Clarify, Plan, Tasks) is never light: standard by
+# default, with Scope and Plan overridable to high by policy. qa_collect is the
+# only route whose default is light; every other route defaults to a tier that
+# still requires the guard's evidence only when an override sends it to light.
+DEFAULT_TIERS = {'discovery': 'standard', 'implementation': 'standard', 'qa_author': 'standard',
+                 'qa_collect': 'light', 'documentation': 'documentation', 'review': 'review',
+                 'coordination': 'light'}
 MODEL_PROFILES = ('high', 'standard', 'light', 'documentation', 'review')
 STAGE_TYPES = {
     'scope': 'discovery', 'specify': 'discovery', 'clarify': 'discovery',
-    'plan': 'discovery', 'tasks': 'discovery', 'qa_analyze': 'qa',
+    'plan': 'discovery', 'tasks': 'discovery', 'qa_analyze': 'qa_author',
     'manual_analyze': 'documentation', 'analyze': 'review',
     'taskstoissues': 'coordination', 'execute': 'coordination',
-    'verify': 'qa', 'review': 'review', 'qa_document': 'qa',
+    'verify': 'qa_author', 'review': 'review', 'qa_document': 'documentation',
     'manual_update': 'documentation', 'ready': 'coordination', 'pr': 'coordination',
 }
+# The one stage whose Sanduq-owned command is a deterministic collection
+# script, never an authored skill invocation. ``stage_work_type`` routes it to
+# the light-eligible qa_collect only while its resolved command is still
+# exactly this fixed script; a project that ever rebinds ``verify`` to
+# something else keeps it on qa_author, never qa_collect by inference.
+FIXED_COLLECTION_COMMANDS = {'verify': 'workflow:verification'}
+# The default route a fresh qa_collect gets: light-eligible, one fallback that
+# lets the harness use its own default model. Used both for a brand-new policy
+# and to complete a policy migrated from the pre-1.7 single ``qa`` route.
+DEFAULT_QA_COLLECT_ROUTE = {'preferred': {'harness': 'selected', 'tier': 'light'},
+                            'fallbacks': [{'harness': 'selected', 'model': None}]}
 TASK_LINE = re.compile(r'^(\s*- \[([ xX])\]\s+(T\d{3,})\b.*)$')
 MARKER = re.compile(r'^\s*<!-- sanduq-delegation (\{[^\n]+\}) -->\s*$')
 INLINE_MARKER = re.compile(r'[ \t]*(<!-- sanduq-delegation \{[^\n]+\} -->)[ \t]*$')
@@ -265,7 +287,7 @@ def validate_candidate(candidate):
                 isinstance(candidate['model'], str) and candidate['model'].strip(), 'DELEGATION_MODEL_INVALID')
 
 
-def validate_route(route):
+def validate_route(route, allow_light=True):
     require(isinstance(route, dict) and set(route) == {'preferred', 'fallbacks'},
             'DELEGATION_ROUTE_INVALID')
     validate_candidate(route['preferred'])
@@ -273,6 +295,41 @@ def validate_route(route):
             'DELEGATION_FALLBACKS_INVALID')
     for candidate in route['fallbacks']:
         validate_candidate(candidate)
+    if not allow_light:
+        require(all(candidate.get('tier') != 'light' for candidate in (route['preferred'], *route['fallbacks'])),
+                'DELEGATION_DISCOVERY_LIGHT_FORBIDDEN')
+
+
+def migrate_qa_route(config):
+    """Map a pre-1.7 policy's single ``qa`` route onto ``qa_author``, in place.
+
+    ``qa_collect`` is new: a project that never had it gets the same default
+    shape every fresh policy gets, so it is always present and always
+    light-eligible, never inherited from the old ``qa`` route (which may have
+    pointed anywhere).
+    """
+    if not isinstance(config, dict):
+        return
+    routes = config.get('routes')
+    if not isinstance(routes, dict) or 'qa' not in routes:
+        return
+    legacy = routes.pop('qa')
+    routes.setdefault('qa_author', legacy)
+    routes.setdefault('qa_collect', copy.deepcopy(DEFAULT_QA_COLLECT_ROUTE))
+
+
+def stage_work_type(commands, stage):
+    """The delegation work type for one stage, given its resolved command map.
+
+    ``commands`` is the checkpoint's resolved ``stage -> command`` map (the same
+    one ``workflow.py`` persists at claim time), so a caller anywhere in the
+    lifecycle classifies a stage identically. See ``FIXED_COLLECTION_COMMANDS``.
+    """
+    require(stage in STAGE_TYPES, 'DELEGATION_STAGE_INVALID')
+    fixed = FIXED_COLLECTION_COMMANDS.get(stage)
+    if fixed is not None and (commands or {}).get(stage) == fixed:
+        return 'qa_collect'
+    return STAGE_TYPES[stage]
 
 
 def validate_delegation(config):
@@ -294,8 +351,8 @@ def validate_delegation(config):
                 'DELEGATION_MODEL_INVALID: ' + harness)
     routes = config['routes']
     require(isinstance(routes, dict) and set(routes) == set(TYPES), 'DELEGATION_ROUTES_INVALID')
-    for route in routes.values():
-        validate_route(route)
+    for name, route in routes.items():
+        validate_route(route, allow_light=name != 'discovery')
     require(isinstance(config['overrides'], dict), 'DELEGATION_OVERRIDES_INVALID')
     for key, route in config['overrides'].items():
         require(isinstance(key, str) and OVERRIDE_KEY.fullmatch(key),
@@ -306,9 +363,15 @@ def validate_delegation(config):
 
 TASK_PREFIX = re.compile(r'^\s*(?:- \[[ xX]\]\s+)?(?:T\d{3,}\b\s*)?(?:\[[^\]]*\]\s*)*', re.I)
 TYPE_MARKERS = (('implementation', r'\[(?:impl|implement|implementation|code)\]'),
-                ('qa', r'\[(?:qa|test|tests|tdd)\]'),
+                ('qa_author', r'\[(?:qa|test|tests|tdd)\]'),
                 ('documentation', r'\[(?:doc|docs|documentation|manual)\]'),
                 ('review', r'\[review\]'))
+# The only way a task ever routes to the light-eligible qa_collect: an
+# explicit, unambiguous marker. It is checked separately from TYPE_MARKERS
+# (never folded into the heuristic loop below) so it is never inferred from
+# task text, and combining it with any other explicit marker is ambiguous and
+# falls back to implementation (standard) rather than guessing which one wins.
+COLLECT_MARKER = re.compile(r'\[collect\]')
 # Nouns that turn a leading "test", "review", "audit" or "inspect" into the
 # name of something being built: "Audit log retention", "Review queue API",
 # "Test runner integration" are implementation work.
@@ -330,7 +393,7 @@ DOC_END = r'(?:\s+(?:for|with|to|in|on|about|of)\b|\s*[.:;]?$)'
 # as "audit logging" or "review queue" never reroutes an implementation task,
 # whether it leads the description or not.
 LEADING_ACTIONS = (
-    ('qa', r'(?:run|execute)\s+(?:[\w/-]+\s+){0,4}?(?:tests?|test suites?|suites?|checks)\b|'
+    ('qa_author', r'(?:run|execute)\s+(?:[\w/-]+\s+){0,4}?(?:tests?|test suites?|suites?|checks)\b|'
            r'(?:write|add|create)\s+(?:[\w/-]+\s+){0,3}?tests?(?:\s+(?:for|of|to|in|covering|that)\b|\s*[.:;]?$)|'
            r'smoke[- ]test\b|test\b(?!\s+(?:data|fixtures?|harness|helpers?|utils?|utilities|'
            r'factor(?:y|ies)|doubles?|mocks?|suites?|coverage|plans?|results?|' + COMPOUND_HEADS[3:-1] +
@@ -356,12 +419,16 @@ def task_type(description):
 
     Anything unclear stays implementation, the route every task can take.
     ``[Impl]`` (or ``[Implementation]``, ``[Code]``) forces implementation.
+    ``[Collect]`` is the sole explicit route to qa_collect; combined with any
+    other explicit marker it is ambiguous and falls back to implementation.
     """
     value = description.casefold()
     prefix = TASK_PREFIX.match(value)[0]
-    for work_type, marker in TYPE_MARKERS:
-        if re.search(marker, prefix):
-            return work_type
+    matched = [work_type for work_type, marker in TYPE_MARKERS if re.search(marker, prefix)]
+    if COLLECT_MARKER.search(prefix):
+        return 'implementation' if matched else 'qa_collect'
+    if matched:
+        return matched[0]
     action = value[len(prefix):].strip()
     for work_type, pattern in LEADING_ACTIONS:
         if re.match(pattern, action):

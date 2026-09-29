@@ -72,7 +72,9 @@ class DelegationTests(unittest.TestCase):
              patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}):
             claim = run.claim({'session_id': 'test-session'})
         self.assertEqual(claim['delegation']['task_type'], 'discovery')
-        self.assertEqual(claim['delegation']['candidates'][0]['requested_model'], 'gpt-6-astra')
+        # Discovery defaults to standard, never light (B12); Scope and Plan
+        # may still be overridden to high by policy, but nothing infers it.
+        self.assertEqual(claim['delegation']['candidates'][0]['requested_model'], 'gpt-6-sol')
         self.assertIn('sanduq-delegation', path.read_text(encoding='utf-8'))
 
     def rejected_claim_leaves_no_trace(self, run, expected, **patches):
@@ -187,10 +189,13 @@ class DelegationTests(unittest.TestCase):
             delegation.validate_delegation(config)
 
     def test_default_routes_cover_all_work_types_on_both_harnesses(self):
+        # TYPES order: discovery, implementation, qa_author, qa_collect,
+        # documentation, review, coordination. Discovery and qa_author are
+        # standard (never light); qa_collect and coordination stay light.
         expected = {
-            'codex': ['gpt-6-astra', 'gpt-6-sol', 'gpt-6-terra',
+            'codex': ['gpt-6-sol', 'gpt-6-sol', 'gpt-6-sol', 'gpt-6-terra',
                       'gpt-6-sol', 'gpt-6-sol', 'gpt-6-terra'],
-            'claude': ['opus', 'sonnet', 'haiku', 'opus', 'opus', 'haiku'],
+            'claude': ['sonnet', 'sonnet', 'sonnet', 'haiku', 'opus', 'opus', 'haiku'],
         }
         for host, models in expected.items():
             actual = [delegation.selected_route(self.policy['delegation'], work_type, host)[0]
@@ -204,7 +209,7 @@ class DelegationTests(unittest.TestCase):
         result = delegation.annotate_tasks(self.root, self.feature, self.policy['delegation'], 'codex')
         self.assertEqual(result['annotated'], 2)
         text = path.read_text(encoding='utf-8')
-        self.assertIn('"task_type": "qa"', text)
+        self.assertIn('"task_type": "qa_author"', text)
         self.assertEqual(list(task_issues.parse_tasks(text)), ['T001', 'T002', 'T003'])
         self.assertEqual(before, w.fingerprint_files(self.root, [self.feature + '/tasks.md']))
         self.assertFalse(delegation.annotate_tasks(self.root, self.feature,
@@ -498,7 +503,8 @@ class DelegationTests(unittest.TestCase):
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
              patch.object(dispatch, 'launch', return_value={'run_id': 'codex-scope', 'state': 'running'}):
             result = dispatch.start(self.root, self.feature, 'stage:scope', token=claim['token'])
-        self.assertEqual(result['route']['requested_model'], 'gpt-6-astra')
+        # Discovery defaults to standard (never light), not high (B12).
+        self.assertEqual(result['route']['requested_model'], 'gpt-6-sol')
         checkpoint = w.read(self.root / self.feature / 'workflow/checkpoint.json')
         self.assertEqual(checkpoint['active']['token'], claim['token'])
         self.assertEqual(checkpoint['receipts'], {})
@@ -622,6 +628,184 @@ class DelegationTests(unittest.TestCase):
         self.assertEqual(ledger['attempts'][1]['retry_count'], 1)
         self.assertTrue(any('migration safety' in item['reason']
                             for item in ledger['route_decisions']))
+
+    def _unverified_run(self, task_line='- [ ] T001 [Collect] Run smoke suite\n', summary='not evidence'):
+        """Start a qa_collect (light-tier) task and collect a bare success claim.
+
+        With no parsable counts or file list in the driver's summary, the
+        guard must leave the ledger status ``unverified``.
+        """
+        self.tasks(task_line)
+        self.enable()
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch.object(dispatch, 'launch', return_value={'run_id': 'codex-1', 'state': 'running'}):
+            started = dispatch.start(self.root, self.feature, 'T001')
+        self.assertEqual(started['route']['tier'], 'light')
+        payload = {'run_id': 'codex-1', 'status': 'successful', 'summary': summary,
+                   'harness': 'codex', 'model': 'gpt-6-terra', 'model_reported': False,
+                   'actual_model': None, 'model_observed': False,
+                   'status_provenance': {'primary': 'harness_telemetry'},
+                   'dirty_paths_changed': [], 'artifacts': {'dir': str(self.root / '.delegate/runs/codex-1')}}
+        with patch.object(delegation, 'inspect_skill', return_value=self.fake_doctor()), \
+             patch.object(dispatch.shutil, 'which', return_value='node'), \
+             patch.object(dispatch.subprocess, 'run',
+                         return_value=subprocess.CompletedProcess([], 0, json.dumps(payload), '')):
+            result = dispatch.collect(self.root, self.feature, 'codex-1')
+        self.assertEqual(result['status'], 'unverified')
+        self.assertIn('LIGHT_TIER_EVIDENCE_MISSING', result['unverified_reason'])
+        self.assertEqual(dispatch.load_ledger(self.root, self.feature)['attempts'][0]['status'], 'unverified')
+        return 'codex-1'
+
+    def test_collect_light_tier_success_without_evidence_stays_unverified(self):
+        self._unverified_run()
+
+    def test_collect_light_tier_success_with_parsable_counts_is_verified(self):
+        self.tasks('- [ ] T001 [Collect] Run smoke suite\n')
+        self.enable()
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch.object(dispatch, 'launch', return_value={'run_id': 'codex-1', 'state': 'running'}):
+            dispatch.start(self.root, self.feature, 'T001')
+        payload = {'run_id': 'codex-1', 'status': 'successful', 'summary': '12 passed, 0 failed',
+                   'harness': 'codex', 'model': 'gpt-6-terra', 'model_reported': False,
+                   'actual_model': None, 'model_observed': False,
+                   'status_provenance': {'primary': 'harness_telemetry'},
+                   'dirty_paths_changed': [], 'artifacts': {'dir': str(self.root / '.delegate/runs/codex-1')}}
+        with patch.object(delegation, 'inspect_skill', return_value=self.fake_doctor()), \
+             patch.object(dispatch.shutil, 'which', return_value='node'), \
+             patch.object(dispatch.subprocess, 'run',
+                         return_value=subprocess.CompletedProcess([], 0, json.dumps(payload), '')):
+            result = dispatch.collect(self.root, self.feature, 'codex-1')
+        self.assertEqual(result['status'], 'successful')
+        self.assertEqual(result['accepted_evidence']['counts'], {'total': 12, 'passed': 12, 'failed': 0})
+        ledger = dispatch.load_ledger(self.root, self.feature)
+        self.assertEqual(ledger['attempts'][0]['status'], 'successful')
+        self.assertEqual(ledger['attempts'][0]['accepted_evidence']['source'], 'summary')
+
+    def test_reassign_from_unverified_starts_standard_tier_replacement(self):
+        run_id = self._unverified_run()
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch.object(dispatch, 'launch', return_value={'run_id': 'codex-2', 'state': 'running'}):
+            result = dispatch.reassign(self.root, self.feature, run_id,
+                                       'Needs an independently verified standard-tier run')
+        self.assertEqual(result['route']['tier'], 'standard')
+        ledger = dispatch.load_ledger(self.root, self.feature)
+        self.assertEqual(ledger['attempts'][0]['status'], 'unverified')
+        self.assertEqual(ledger['attempts'][0]['replacement_run_id'], 'codex-2')
+        self.assertEqual(ledger['attempts'][1]['parent_run_id'], run_id)
+
+    def test_accept_with_valid_counts_resolves_unverified(self):
+        run_id = self._unverified_run()
+        with patch.object(dispatch.subprocess, 'run',
+                          return_value=subprocess.CompletedProcess(
+                              [], 0, '{"total": 5, "passed": 5, "failed": 0}', '')):
+            result = dispatch.accept(self.root, self.feature, run_id, 'pytest -q', 'counts')
+        self.assertTrue(result['accepted'])
+        self.assertEqual(result['status'], 'successful')
+        ledger = dispatch.load_ledger(self.root, self.feature)
+        self.assertEqual(ledger['attempts'][0]['status'], 'successful')
+        self.assertEqual(ledger['attempts'][0]['acceptance_attempts'][0]['command'], 'pytest -q')
+        self.assertEqual(ledger['attempts'][0]['acceptance_attempts'][0]['exit_code'], 0)
+        self.assertTrue(ledger['attempts'][0]['acceptance_attempts'][0]['accepted'])
+
+    def test_accept_with_valid_files_resolves_unverified(self):
+        run_id = self._unverified_run()
+        (self.root / 'evidence.log').write_text('collected output', encoding='utf-8')
+        with patch.object(dispatch.subprocess, 'run',
+                          return_value=subprocess.CompletedProcess(
+                              [], 0, '{"files": ["evidence.log"]}', '')):
+            result = dispatch.accept(self.root, self.feature, run_id, 'collect-evidence', 'files')
+        self.assertTrue(result['accepted'])
+        self.assertEqual(result['status'], 'successful')
+        self.assertEqual(result['evidence']['files'], ['evidence.log'])
+
+    def test_accept_bare_note_or_empty_output_stays_unverified(self):
+        run_id = self._unverified_run()
+        for output in ('', 'Looks good, all good, trust me, it passed.'):
+            with self.subTest(output=output), \
+                 patch.object(dispatch.subprocess, 'run',
+                             return_value=subprocess.CompletedProcess([], 0, output, '')):
+                result = dispatch.accept(self.root, self.feature, run_id, 'echo note', 'counts')
+            self.assertFalse(result['accepted'])
+            self.assertEqual(result['status'], 'unverified')
+        ledger = dispatch.load_ledger(self.root, self.feature)
+        self.assertEqual(len(ledger['attempts'][0]['acceptance_attempts']), 2)
+
+    def test_accept_fabricated_or_empty_file_stays_unverified(self):
+        run_id = self._unverified_run()
+        (self.root / 'empty.log').write_text('', encoding='utf-8')
+        for output in ('{"files": ["does-not-exist.log"]}', '{"files": ["empty.log"]}', '{"files": []}'):
+            with self.subTest(output=output), \
+                 patch.object(dispatch.subprocess, 'run',
+                             return_value=subprocess.CompletedProcess([], 0, output, '')):
+                result = dispatch.accept(self.root, self.feature, run_id, 'collect', 'files')
+            self.assertFalse(result['accepted'])
+            self.assertEqual(result['status'], 'unverified')
+
+    def test_accept_rejects_absolute_traversal_and_symlink_escape_paths(self):
+        run_id = self._unverified_run()
+        outside_dir = self.root.parent / ('outside-' + self.feature.replace('/', '-'))
+        outside_dir.mkdir(exist_ok=True)
+        (outside_dir / 'secret.log').write_text('secret', encoding='utf-8')
+        try:
+            cases = [json.dumps({'files': ['../' + outside_dir.name + '/secret.log']}),
+                     json.dumps({'files': [str(outside_dir / 'secret.log')]})]
+            for output in cases:
+                with self.subTest(output=output), \
+                     patch.object(dispatch.subprocess, 'run',
+                                 return_value=subprocess.CompletedProcess([], 0, output, '')):
+                    result = dispatch.accept(self.root, self.feature, run_id, 'collect', 'files')
+                self.assertFalse(result['accepted'])
+                self.assertEqual(result['status'], 'unverified')
+            link = self.root / 'linked-out'
+            try:
+                os.symlink(outside_dir, link, target_is_directory=True)
+            except OSError:
+                self.skipTest('symlink creation is not permitted on this host')
+            try:
+                with patch.object(dispatch.subprocess, 'run',
+                                  return_value=subprocess.CompletedProcess(
+                                      [], 0, '{"files": ["linked-out/secret.log"]}', '')):
+                    result = dispatch.accept(self.root, self.feature, run_id, 'collect', 'files')
+                self.assertFalse(result['accepted'])
+                self.assertEqual(result['status'], 'unverified')
+            finally:
+                link.unlink(missing_ok=True)
+        finally:
+            shutil.rmtree(outside_dir, ignore_errors=True)
+
+    def test_accept_failed_command_stays_unverified(self):
+        run_id = self._unverified_run()
+        with patch.object(dispatch.subprocess, 'run',
+                          return_value=subprocess.CompletedProcess(
+                              [], 1, '{"total": 5, "passed": 5, "failed": 0}', 'boom')):
+            result = dispatch.accept(self.root, self.feature, run_id, 'pytest -q', 'counts')
+        self.assertFalse(result['accepted'])
+        self.assertEqual(result['status'], 'unverified')
+        self.assertEqual(result['exit_code'], 1)
+
+    def test_accept_refuses_a_run_that_is_not_unverified(self):
+        self.tasks()
+        self.enable()
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch.object(dispatch, 'launch', return_value={'run_id': 'codex-1', 'state': 'running'}):
+            dispatch.start(self.root, self.feature, 'T001')
+        with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_RUN_NOT_UNVERIFIED'):
+            dispatch.accept(self.root, self.feature, 'codex-1', 'pytest -q', 'counts')
+
+    def test_parse_counts_supports_documented_reporter_formats(self):
+        cases = [
+            ('{"total": 4, "passed": 3, "failed": 1}', {'total': 4, 'passed': 3, 'failed': 1}),
+            ('{"tests": 4, "failures": 1, "errors": 1}', {'total': 4, 'passed': 2, 'failed': 2}),
+            ('12 passed, 2 failed', {'total': 14, 'passed': 12, 'failed': 2}),
+            ('40 passed in 3.21s', {'total': 40, 'passed': 40, 'failed': 0}),
+            ('Tests: 2 failed, 12 passed, 14 total', {'total': 14, 'passed': 12, 'failed': 2}),
+            ('Tests: 14 passed, 14 total', {'total': 14, 'passed': 14, 'failed': 0}),
+            ('Tests run: 14, Failures: 2, Errors: 1', {'total': 14, 'passed': 11, 'failed': 3}),
+            ('not a reporter line', None),
+        ]
+        for text, expected in cases:
+            with self.subTest(text=text):
+                self.assertEqual(dispatch.parse_counts(text), expected)
 
     def test_collect_recovers_unlinked_replacement_without_duplicate_launch(self):
         self.tasks()
@@ -782,11 +966,12 @@ class DelegationTests(unittest.TestCase):
         self.assertEqual(result['worker_changed_paths'], [ledger])
 
     def test_dispatcher_only_parallel_writes_still_allow_fallback_and_retry(self):
-        self.tasks()
+        # T002 is explicit light-tier collection work, routed to gpt-6-terra
+        # before its CLI-default fallback (qa_author, unmarked, is standard).
+        self.tasks('- [ ] T001 [P] Implement parser\n- [ ] T002 [Collect] Run tests\n- [x] T003 Done docs\n')
         self.enable()
         ledger = self.ledger_path_in_repo()
         stderr = self.root / 'model-error.txt'
-        # T002 is QA work, routed to gpt-6-terra before its CLI-default fallback.
         stderr.write_text('Unknown model gpt-6-terra', encoding='utf-8')
         self.start_one(run_id='codex-1')
         # A second task starts in parallel: an ordinary dispatcher save.
@@ -1446,17 +1631,18 @@ class DelegationTests(unittest.TestCase):
             '- [ ] T047 [P] [Implementation] Update README with setup steps': 'implementation',
             '- [ ] T048 [Code] [QA] Run the integration test suite': 'implementation',
             # Explicit markers win in the leading tag block.
-            '- [ ] T020 [QA] Check signup': 'qa',
-            '- [ ] T021 [P] [TDD] Implement parser': 'qa',
+            '- [ ] T020 [QA] Check signup': 'qa_author',
+            '- [ ] T021 [P] [TDD] Implement parser': 'qa_author',
             '- [ ] T022 [Docs] Refresh setup': 'documentation',
             '- [ ] T023 [Manual] Explain exports': 'documentation',
             '- [ ] T024 [P] [Review] Check auth module': 'review',
-            # Clear unmarked QA, documentation and review actions keep their routes.
-            '- [ ] T030 Run the integration test suite': 'qa',
-            '- [ ] T031 Write contract test for POST /users in tests/contract/test_users.py': 'qa',
-            '- [ ] T032 Add unit tests': 'qa',
-            '- [ ] T033 [P] [US2] Test login flow in the browser': 'qa',
-            '- [ ] T034 Capture screenshots of the settings page': 'qa',
+            # Clear unmarked QA, documentation and review actions keep their
+            # routes, but never qa_collect: a heuristic never lands there.
+            '- [ ] T030 Run the integration test suite': 'qa_author',
+            '- [ ] T031 Write contract test for POST /users in tests/contract/test_users.py': 'qa_author',
+            '- [ ] T032 Add unit tests': 'qa_author',
+            '- [ ] T033 [P] [US2] Test login flow in the browser': 'qa_author',
+            '- [ ] T034 Capture screenshots of the settings page': 'qa_author',
             '- [ ] T035 Update README with setup steps': 'documentation',
             '- [ ] T036 Document the export API': 'documentation',
             '- [ ] T037 Write release notes for 1.5': 'documentation',
@@ -1479,10 +1665,86 @@ class DelegationTests(unittest.TestCase):
             '- [ ] T060 Update README.md and fix the build script': 'implementation',
             '- [ ] T061 Create docs/ folder structure': 'implementation',
             '- [ ] T062 Update config.py for docs': 'implementation',
+            # [Collect] is the sole explicit route to the light-eligible
+            # qa_collect; never inferred from unmarked text or a heuristic.
+            '- [ ] T063 [Collect] Run the release smoke suite': 'qa_collect',
+            '- [ ] T064 [P] [Collect] Run coverage and report totals': 'qa_collect',
+            # Combined with any other explicit marker, [Collect] is ambiguous
+            # and falls back to implementation (standard), never a guess.
+            '- [ ] T065 [QA] [Collect] Run tests': 'implementation',
+            '- [ ] T066 [Collect] [Review] Run tests': 'implementation',
         }
         for description, work_type in expected.items():
             with self.subTest(description=description):
                 self.assertEqual(delegation.task_type(description), work_type)
+
+    def test_default_tiers_never_route_discovery_or_heuristic_qa_to_light(self):
+        self.assertEqual(delegation.DEFAULT_TIERS['discovery'], 'standard')
+        self.assertEqual(delegation.DEFAULT_TIERS['qa_author'], 'standard')
+        self.assertEqual(delegation.DEFAULT_TIERS['qa_collect'], 'light')
+        self.assertNotIn('qa', delegation.TYPES)
+        self.assertIn('qa_author', delegation.TYPES)
+        self.assertIn('qa_collect', delegation.TYPES)
+
+    def test_schema_forbids_light_preferred_tier_for_discovery_route(self):
+        config = self.policy['delegation']
+        config['routes']['discovery']['preferred'] = {'harness': 'selected', 'tier': 'light'}
+        with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_DISCOVERY_LIGHT_FORBIDDEN'):
+            delegation.validate_delegation(config)
+
+    def test_schema_forbids_light_fallback_tier_for_discovery_route(self):
+        config = self.policy['delegation']
+        config['routes']['discovery']['fallbacks'] = [{'harness': 'selected', 'tier': 'light'}]
+        with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_DISCOVERY_LIGHT_FORBIDDEN'):
+            delegation.validate_delegation(config)
+
+    def test_qa_collect_route_may_still_be_light(self):
+        # The restriction is discovery-only; qa_collect keeps its light default.
+        delegation.validate_delegation(self.policy['delegation'])
+        self.assertEqual(self.policy['delegation']['routes']['qa_collect']['preferred']['tier'], 'light')
+
+    def test_stage_work_type_routes_verify_to_collect_only_for_the_fixed_script(self):
+        self.assertEqual(delegation.stage_work_type({'verify': 'workflow:verification'}, 'verify'),
+                         'qa_collect')
+        # A project that ever rebinds verify away from the fixed script keeps
+        # it on qa_author instead of inferring qa_collect.
+        self.assertEqual(delegation.stage_work_type({'verify': 'speckit.custom.verify'}, 'verify'),
+                         'qa_author')
+        self.assertEqual(delegation.stage_work_type({}, 'verify'), 'qa_author')
+
+    def test_stage_work_type_covers_qa_document_and_qa_analyze_and_discovery(self):
+        commands = {'qa_document': 'speckit.assure.document', 'qa_analyze': 'speckit.assure.analyze',
+                   'scope': 'speckit.scope.run'}
+        self.assertEqual(delegation.stage_work_type(commands, 'qa_document'), 'documentation')
+        self.assertEqual(delegation.stage_work_type(commands, 'qa_analyze'), 'qa_author')
+        self.assertEqual(delegation.stage_work_type(commands, 'scope'), 'discovery')
+
+    def test_legacy_qa_route_migrates_to_qa_author_with_fresh_qa_collect(self):
+        legacy = self.policy.copy()
+        legacy['delegation'] = json.loads(json.dumps(legacy['delegation']))
+        legacy_qa_route = {'preferred': {'harness': 'selected', 'model': 'legacy-model'}, 'fallbacks': []}
+        legacy['delegation']['routes'].pop('qa_author')
+        legacy['delegation']['routes'].pop('qa_collect')
+        legacy['delegation']['routes']['qa'] = legacy_qa_route
+        migrated = w.validate_policy(legacy)
+        self.assertEqual(migrated['delegation']['routes']['qa_author'], legacy_qa_route)
+        self.assertEqual(migrated['delegation']['routes']['qa_collect']['preferred']['tier'], 'light')
+        self.assertNotIn('qa', migrated['delegation']['routes'])
+
+    def test_legacy_ledger_with_qa_task_type_stays_readable(self):
+        self.tasks()
+        self.enable()
+        path = dispatch.delegation.ledger_path(self.root, self.feature)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        w.write(path, {'schema_version': 1, 'feature': self.feature, 'route_decisions': [],
+                       'attempts': [{'run_id': 'codex-legacy', 'identity': self.feature + '/T001',
+                                    'task_type': 'qa', 'status': 'successful',
+                                    'route_candidates': [{'harness': 'codex', 'requested_model': 'gpt-6-sol',
+                                                          'tier': 'standard'}],
+                                    'candidate_index': 0, 'retry_count': 0, 'cwd': '.',
+                                    'timeout': 1800, 'task_file': '.delegate/briefs/legacy.txt'}]})
+        ledger = dispatch.load_ledger(self.root, self.feature)
+        self.assertEqual(ledger['attempts'][0]['task_type'], 'qa')
 
     def test_review_and_implementation_routes_launch_writable(self):
         self.tasks('- [ ] T001 Implement parser\n- [ ] T002 [Review] Check parser\n')
@@ -1763,12 +2025,12 @@ class DelegationTests(unittest.TestCase):
         for spelling in ('specs/../' + name, '../specs/' + name, 'specs/' + name + '/..', 'specs',
                          'other/' + name, str(Path(tempfile.gettempdir()) / 'specs' / name)):
             with self.subTest(spelling=spelling):
-                for action in (['route', '--feature', spelling, '--id', 'T001', '--type', 'qa'],
+                for action in (['route', '--feature', spelling, '--id', 'T001', '--type', 'qa_author'],
                                ['annotate', '--feature', spelling]):
                     code, failed = self.run_cli(*action)
                     self.assertEqual(code, 1)
                     self.assertIn('DELEGATION_FEATURE_INVALID', failed['error'])
-        code, failed = self.run_cli('route', '--feature', self.feature, '--id', '../T001', '--type', 'qa')
+        code, failed = self.run_cli('route', '--feature', self.feature, '--id', '../T001', '--type', 'qa_author')
         self.assertIn('DELEGATION_IDENTITY_INVALID', failed['error'])
         # The workflow claim and the dispatcher share this one identity function.
         self.assertIs(dispatch.feature_identity, delegation.feature_identity)
