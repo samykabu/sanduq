@@ -136,11 +136,10 @@ def _expand_clause(op, bound):
     return [(op, bound)]
 
 
-def version_satisfies(installed, range_expr):
-    """An AND of simple comparator clauses. Clauses may be separated by commas and/or
-    whitespace, e.g. '>=2.0.0,<3.0.0' or '>=2.0.0 <3.0.0'. Supports ==, !=, >=, <=, >, <,
-    the PEP 440 '~=' compatible-release operator, and the npm-style '^' caret operator;
-    pre-release/build-metadata suffixes and a leading 'v' are accepted per SemVer."""
+def _expand_range(range_expr):
+    """Expand a whole range expression into a flat list of (op, bound) comparator pairs,
+    splitting on commas and/or whitespace and translating '^'/'~=' first."""
+    comparators = []
     for raw_clause in re.split(r'[,\s]+', str(range_expr).strip()):
         if not raw_clause:
             continue
@@ -148,9 +147,40 @@ def version_satisfies(installed, range_expr):
         if not match:
             raise DepsError('Unsupported version range clause: ' + repr(raw_clause))
         op, bound = match.groups()
-        for expanded_op, expanded_bound in _expand_clause(op, bound):
-            if not _COMPARATORS[expanded_op](installed, expanded_bound):
-                return False
+        comparators.extend(_expand_clause(op, bound))
+    return comparators
+
+
+def version_satisfies(installed, range_expr):
+    """An AND of simple comparator clauses. Clauses may be separated by commas and/or
+    whitespace, e.g. '>=2.0.0,<3.0.0' or '>=2.0.0 <3.0.0'. Supports ==, !=, >=, <=, >, <,
+    the PEP 440 '~=' compatible-release operator, and the npm-style '^' caret operator;
+    pre-release/build-metadata suffixes and a leading 'v' are accepted per SemVer.
+
+    Follows npm-semver's pre-release rule: an installed pre-release version (e.g.
+    '3.0.0-rc.1') satisfies a range only if some comparator's bound shares its exact
+    major.minor.patch AND that bound itself carries a pre-release tag. A plain '>=2.0.0,<3.0.0'
+    range therefore never matches any pre-release, even one numerically inside the range —
+    without this, '2.5.0-rc.1' and even '3.0.0-rc.1' would incorrectly satisfy it.
+    """
+    comparators = _expand_range(range_expr)
+    installed_core, installed_pre = parse_version(installed)
+    if installed_pre is not None:
+        def _same_core(bound_core):
+            width = max(len(installed_core), len(bound_core))
+            a = installed_core + (0,) * (width - len(installed_core))
+            b = bound_core + (0,) * (width - len(bound_core))
+            return a == b
+
+        eligible = any(
+            _same_core(parse_version(bound)[0]) and parse_version(bound)[1] is not None
+            for _, bound in comparators
+        )
+        if not eligible:
+            return False
+    for op, bound in comparators:
+        if not _COMPARATORS[op](installed, bound):
+            return False
     return True
 
 
@@ -158,21 +188,54 @@ def _parse_scalar(text):
     text = text.strip()
     if not text:
         return None
-    if len(text) >= 2 and text[0] == text[-1] and text[0] in ('"', "'"):
+    if text[0] in ('"', "'"):
+        if len(text) < 2 or text[-1] != text[0]:
+            raise DepsError('Unbalanced quote in value: ' + repr(text))
         return text[1:-1]
+    if text[0] in ('[', '{'):
+        if text in ('[]', '{}'):
+            return [] if text == '[]' else {}
+        raise DepsError('Flow-style YAML value is not supported: ' + repr(text))
     if text == 'true':
         return True
     if text == 'false':
         return False
     if text in ('null', '~'):
         return None
-    if text == '[]':
-        return []
-    if text == '{}':
-        return {}
     if re.fullmatch(r'-?[0-9]+', text):
         return int(text)
     return text
+
+
+def _parse_key(text):
+    key = text.strip()
+    if key and key[0] in ('"', "'"):
+        raise DepsError('Quoted keys are not supported: ' + repr(text))
+    return key
+
+
+def _set_unique(mapping, key, value, lineno):
+    if key in mapping:
+        raise DepsError('Duplicate key %r at line %d' % (key, lineno))
+    mapping[key] = value
+
+
+def _strip_comment(raw_line):
+    """Drop a trailing ' #...'/'\\t#...' comment, respecting quotes: a '#' inside a quoted
+    scalar (e.g. a version range that happened to contain one) is never treated as a comment.
+    An unterminated quote is left as-is here; `_parse_scalar` raises on it once the value is
+    extracted, so the error names the actual malformed value instead of a mangled one.
+    """
+    quote = None
+    for i, ch in enumerate(raw_line):
+        if quote:
+            if ch == quote:
+                quote = None
+        elif ch in ('"', "'"):
+            quote = ch
+        elif ch == '#' and (i == 0 or raw_line[i - 1] in (' ', '\t')):
+            return raw_line[:i]
+    return raw_line
 
 
 def read_yaml(path, default=None):
@@ -191,10 +254,14 @@ def read_yaml(path, default=None):
 
     lines = []  # (lineno, indent, stripped_content), comments/blank lines removed
     for lineno, raw in enumerate(Path(path).read_text(encoding='utf-8-sig').splitlines(), 1):
-        stripped = raw.strip()
+        content = _strip_comment(raw).rstrip()
+        stripped = content.strip()
         if not stripped or stripped.startswith('#') or stripped == '---' or stripped.startswith('%'):
             continue
-        indent = len(raw) - len(raw.lstrip(' '))
+        leading = content[:len(content) - len(content.lstrip())]
+        if '\t' in leading:
+            raise DepsError('Tab in leading whitespace at line %d: %r' % (lineno, raw))
+        indent = len(leading)
         lines.append((lineno, indent, stripped))
 
     result = {}
@@ -206,27 +273,27 @@ def read_yaml(path, default=None):
         if ':' not in stripped:
             raise DepsError('Unsupported YAML line %d: %r' % (lineno, stripped))
         key, _, value = stripped.partition(':')
-        key, value = key.strip(), value.strip()
+        key, value = _parse_key(key), value.strip()
         i += 1
         if value:
-            result[key] = _parse_scalar(value)
+            _set_unique(result, key, _parse_scalar(value), lineno)
             continue
         if i >= total or lines[i][1] <= indent:
-            result[key] = None
+            _set_unique(result, key, None, lineno)
             continue
         child_indent = lines[i][1]
         if lines[i][2].startswith('- '):
             items = []
             while i < total and lines[i][1] == child_indent and lines[i][2].startswith('- '):
-                _, _, item_line = lines[i]
+                item_lineno, _, item_line = lines[i]
                 item = {}
                 body = item_line[2:].strip()
                 i += 1
                 if body:
                     if ':' not in body:
-                        raise DepsError('Unsupported YAML list item at line %d: %r' % (lineno, body))
+                        raise DepsError('Unsupported YAML list item at line %d: %r' % (item_lineno, body))
                     k, _, v = body.partition(':')
-                    item[k.strip()] = _parse_scalar(v.strip())
+                    _set_unique(item, _parse_key(k), _parse_scalar(v.strip()), item_lineno)
                 field_indent = None
                 while i < total and lines[i][1] > child_indent:
                     f_lineno, f_indent, f_line = lines[i]
@@ -237,10 +304,10 @@ def read_yaml(path, default=None):
                     if ':' not in f_line:
                         raise DepsError('Unsupported YAML line %d: %r' % (f_lineno, f_line))
                     k, _, v = f_line.partition(':')
-                    item[k.strip()] = _parse_scalar(v.strip())
+                    _set_unique(item, _parse_key(k), _parse_scalar(v.strip()), f_lineno)
                     i += 1
                 items.append(item)
-            result[key] = items
+            _set_unique(result, key, items, lineno)
         else:
             mapping = {}
             while i < total and lines[i][1] == child_indent:
@@ -248,9 +315,9 @@ def read_yaml(path, default=None):
                 if ':' not in f_line:
                     raise DepsError('Unsupported YAML line %d: %r' % (f_lineno, f_line))
                 k, _, v = f_line.partition(':')
-                mapping[k.strip()] = _parse_scalar(v.strip())
+                _set_unique(mapping, _parse_key(k), _parse_scalar(v.strip()), f_lineno)
                 i += 1
-            result[key] = mapping
+            _set_unique(result, key, mapping, lineno)
     return result
 
 
@@ -278,7 +345,12 @@ def registry_entry(root, name):
 
 def dependency_declaration(dependencies_file, name):
     data = read_yaml(dependencies_file)
-    for entry in (data.get('dependencies') or []):
+    dependencies = data.get('dependencies')
+    if dependencies is None:
+        dependencies = []
+    if not isinstance(dependencies, list) or not all(isinstance(item, dict) for item in dependencies):
+        raise DepsError("'dependencies' must be a list of mappings in " + str(dependencies_file))
+    for entry in dependencies:
         if entry.get('id') == name:
             return entry
     return None
@@ -375,7 +447,7 @@ def ensure(name, root, dependencies_file, checks_file=None, policy_file=None, ap
     policy = project_policy(root, package_data.get('defaults'), policy_file)
     update_policy = policy.get('update_policy', 'prompt')
     if update_policy not in ('prompt', 'auto', 'manual'):
-        update_policy = 'prompt'
+        raise DepsError('Unsupported update_policy: ' + repr(update_policy))
 
     def compatible_entry():
         entry = registry_entry(root, name)
@@ -427,7 +499,11 @@ def ensure(name, root, dependencies_file, checks_file=None, policy_file=None, ap
             checked[name] = {'checked_at': now.isoformat(), 'installed_version': entry.get('version')}
             write_json(checks_file, checked)
             try:
-                is_newer = latest != entry.get('version') and version_satisfies(latest, range_expr)
+                _, latest_pre = parse_version(latest)
+                # A pre-release catalog release (e.g. '3.0.0-rc.1') is never "newer": it must
+                # never be surfaced to the user or auto-installed as a stable upgrade.
+                is_newer = (latest_pre is None and latest != entry.get('version')
+                            and version_satisfies(latest, range_expr))
             except DepsError:
                 # An unparseable catalog version (a format this script doesn't recognise) is
                 # ignored, not fatal: the dependency itself is already known-compatible here.

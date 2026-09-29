@@ -23,6 +23,14 @@
   `.specify/extension-dependencies.yml` are read by a small built-in parser (nothing installs a
   package's `requirements.txt` before its commands run), tested against the real files of all three
   consuming packages.
+- `scripts/deps.py`: further fixes from a second review round — an inline comment no longer
+  corrupts `update_policy` into an unrecognised value that silently fell back to `prompt` (an
+  actually unknown value now raises instead); the range comparator applies npm-semver's
+  pre-release rule, so `>=2.0.0,<3.0.0` never admits a pre-release version and a pre-release
+  catalog release is never reported or auto-installed as "newer"; the parser now rejects a tab
+  in leading whitespace, a duplicate key, a quoted key, a flow-style `[`/`{` value (previously an
+  `AttributeError` later), and an unbalanced quote, type-checks `dependencies` as a list of
+  mappings, and reports a malformed list item's own line number.
 
 ## 2.2.2
 

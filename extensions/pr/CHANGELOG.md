@@ -42,6 +42,21 @@ All notable changes to the Pull Request Workflow extension.
     approving, instead of a bare "re-run this command"; an exit-0 result's "newer compatible
     release" note is now explicitly surfaced to the user instead of only appearing in the printed
     line.
+- `scripts/deps.py`: further fixes from a second review round —
+  - An inline comment (`update_policy: manual  # never mutate`) was folded into the policy value,
+    which fell back to `prompt` and let `--approve` mutate a project whose policy said `manual`;
+    comments are now stripped correctly (respecting quotes), and an actually unknown
+    `update_policy` now raises instead of silently defaulting.
+  - The range comparator applies npm-semver's pre-release rule: a pre-release (e.g.
+    `3.0.0-rc.1`) only satisfies a range when some comparator shares its exact major.minor.patch
+    and itself carries a pre-release tag — a plain `>=2.0.0,<3.0.0` no longer lets any
+    pre-release through, and a pre-release catalog version is never reported or auto-installed
+    as "newer".
+  - The parser is now stricter: a tab in leading whitespace, a duplicate key, a quoted key, a
+    flow-style `[`/`{` value, and an unbalanced quote all raise `DepsError` (the flow-style case
+    previously crashed later with an unrelated `AttributeError`); `dependencies` is type-checked
+    as a list of mappings; a malformed list item's error now names its own line, not its parent
+    key's.
 
 ### Fixed
 
