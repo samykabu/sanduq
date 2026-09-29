@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- Delegation guard, round 7 corrections (B12). Round 6's two exemptions for
+  a checked task with no delegation attempt were both reviewed as bypasses
+  and removed outright: the stage-wide `delegation_enabled_for_execute`
+  checkpoint field (mutable, unfingerprinted, never read again) is no longer
+  stamped by `complete()` or read by `ready_checks`, and the
+  `orchestrator-executed` command, its ledger `orchestrator_executed` list,
+  and `delegation.orchestrator_executed_tasks()` are deleted entirely; a
+  legacy ledger or checkpoint still carrying either is inert. **Upgrade
+  note:** a project enabling delegation mid-feature must instead adopt each
+  already-checked task with its own acceptance check. Replaced with
+  `delegate_dispatch.py adopt --feature <f> --id <task> --command
+  "<acceptance check>" --expect counts|files [--owned <path>]`: it refuses
+  with `DELEGATION_ADOPT_HAS_ATTEMPT` when any attempt already exists for
+  the task (those go through `accept` or `reassign` instead), otherwise runs
+  the acceptance command with exactly `accept`'s own machinery (argv
+  building, the BatBadBut shim refusal, timeout, output cap, owned-path
+  containment, per-file sha256), and records a new attempt --
+  `status: 'successful'` and `adopted: true` only when the check passes,
+  `'unverified'` otherwise -- that the Ready gate then reads like any other
+  attempt, never as an exemption. `adopt` joins the worker-forbidden
+  dispatcher commands in every brief. See the README's "adopt it, never
+  exempt it" section for the full rationale.
+
 - Delegation guard, round 6 corrections (B12). `delegate_dispatch.py`'s
   `owned_roots`/`validate_owned_files` now reject a root-relative (`\x`) or
   drive-relative (`C:x`) Windows path that `Path.is_absolute()` alone

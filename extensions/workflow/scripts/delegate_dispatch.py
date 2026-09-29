@@ -375,9 +375,11 @@ QA_COLLECT_ADDENDUM = (
 # records an actor and a reason precisely because only a human reviewing an
 # actual diff may decide a detected tamper is benign.
 NO_DISPATCHER_COMMANDS = (
-    'Never run delegate_dispatch.py yourself (start, collect, accept, reassign, recover, abandon or '
-    'trust-reset) -- not on this run, another run, or another task. Those are the dispatcher\'s own '
-    'commands; trust-reset in particular is an orchestrator-only, human-authorised decision.\n'
+    'Never run delegate_dispatch.py yourself (start, collect, accept, reassign, recover, abandon, '
+    'adopt or trust-reset) -- not on this run, another run, or another task. Those are the '
+    'dispatcher\'s own commands; trust-reset in particular is an orchestrator-only, '
+    'human-authorised decision, and adopt is orchestrator-only for the same reason -- a worker must '
+    'never be the one judging whether its own unattempted work now counts as verified.\n'
 )
 
 
@@ -1845,35 +1847,95 @@ def trust_reset(root, feature, reason):
     return {'feature': feature, 'trust': 'trusted', **entry}
 
 
-def orchestrator_executed(root, feature, task_id, reason):
-    """Record ``task_id`` as the orchestrator's own direct work, never
-    delegated through the dispatcher (round 6, finding 2).
+def adopt(root, feature, task_id, command, expect, timeout=None, owned=None):
+    """Bring a checked task that has no delegation attempt at all under the
+    ledger's own evidence, by independently running an acceptance check --
+    never by asserting an exemption (round 7, findings 1-2 removed both
+    prior bypasses: a worker could self-certify with the now-deleted
+    ``orchestrator-executed`` command, and the stage-wide
+    ``delegation_enabled_for_execute: false`` checkpoint field was a mutable,
+    unfingerprinted flag the Ready gate trusted outright).
 
-    The Ready gate normally requires a checked task to have a successful
-    delegated attempt once delegation is enabled; tasks.md itself never
-    timestamps an individual checkbox, so it cannot on its own distinguish a
-    task done before delegation was enabled for this feature from one that
-    simply skipped the dispatcher. This is the escape hatch for the case the
-    execute stage's own receipt cannot cover by itself: delegation turned on
-    partway through one long-lived execute stage, so some of its tasks
-    predate enablement even though the stage's receipt (stamped once, at the
-    end) shows delegation enabled by then. An orchestrator-only, human-facing
-    admission -- a worker brief forbids delegate_dispatch.py entirely -- so
-    the reason is retained for audit, not validated for content.
+    Adoption is for work legitimately done before delegation was enabled for
+    this feature -- a task that has never been started, accepted or
+    reassigned through the dispatcher. It refuses outright with
+    ``DELEGATION_ADOPT_HAS_ATTEMPT`` the moment any attempt already exists
+    for the task, whatever its status: that one already has its own
+    evidence path (``accept`` for an unverified result, ``reassign`` for a
+    stuck one), and adopt must never offer a second, easier route around it.
+
+    Runs ``command`` with exactly ``accept``'s own machinery: no shell
+    (``build_command_argv``), the BatBadBut shim refusal
+    (``command_targets_windows_shim``), a bounded timeout, a hard output cap
+    with the whole process tree killed on timeout (``run_capped``), and the
+    same ``counts``/``files`` evidence schema, including owned-path
+    containment (``validate_owned_files``) and per-file sha256. Only a
+    passing check records a new, ``successful`` attempt with ``adopted:
+    True``, the command, exit code, capped output and evidence; a failing
+    command, a timeout, or an exit-zero run with no parsable or in-bounds
+    evidence records ``unverified`` instead -- the Ready gate then treats
+    the result exactly like any other attempt, never as an exemption.
     """
     root = root.resolve()
     feature = feature_identity(root, feature)
-    delegation.require(isinstance(reason, str) and reason.strip(),
-                       'DELEGATION_ORCHESTRATOR_EXECUTED_REASON_REQUIRED')
+    delegation.require(re.fullmatch(r'T\d{3,}', task_id) is not None, 'DELEGATION_IDENTITY_INVALID')
+    delegation.require(expect in ACCEPT_EXPECTS, 'DELEGATION_ACCEPT_EXPECT_INVALID')
+    delegation.require(isinstance(command, str) and command.strip(),
+                       'DELEGATION_ACCEPT_COMMAND_REQUIRED')
+    timeout = timeout if timeout is not None else ACCEPT_TIMEOUT_DEFAULT
+    delegation.require(type(timeout) is int and 0 < timeout <= 28800, 'DELEGATION_TIMEOUT_INVALID')
     delegation.require_no_maintenance(root)
-    try:
-        actor = getpass.getuser()
-    except Exception:
-        actor = None
-    entry = {'task_id': task_id, 'at': stamp(), 'actor': actor, 'reason': reason.strip()}
+    full_identity = feature + '/' + task_id
+    ledger = read_ledger(root, feature)
+    delegation.require(not any(a.get('identity') == full_identity for a in ledger.get('attempts', [])),
+                       'DELEGATION_ADOPT_HAS_ATTEMPT: an attempt already exists for ' + task_id +
+                       '; resolve it with accept or reassign instead of adopting it')
+    delegation.require(not command_targets_windows_shim(command),
+                       'DELEGATION_ACCEPT_COMMAND_IS_SHIM: the acceptance command targets a .bat/.cmd '
+                       'shim; Windows always runs it through cmd.exe even though this dispatcher never '
+                       'uses a shell, reopening the class of injection shell=False is meant to close. '
+                       'Run the underlying executable directly instead (for example "node <script>.js" '
+                       'rather than an npx.cmd shim)')
+    cwd = (root / feature).resolve()
+    delegation.require(cwd.is_dir(), 'DELEGATION_ADOPT_CWD_INVALID')
+    args = build_command_argv(command)
+    owned_paths = list(owned) if owned else ['.']
+    run = run_capped(args, cwd, timeout)
+    text = run['output']
+    evidence = None
+    if run['exit_code'] == 0:
+        if expect == 'counts':
+            counts = parse_counts(text)
+            if counts and counts['total'] > 0 and counts['failed'] == 0:
+                evidence = {'expect': 'counts', 'source': 'adopt', 'counts': counts}
+        else:
+            paths = parse_files(text)
+            valid = validate_owned_files(cwd, owned_paths, paths) if paths else None
+            if valid:
+                evidence = {'expect': 'files', 'source': 'adopt', 'files': valid}
+    run_id = 'adopt-' + uuid.uuid4().hex
     with edit_ledger(root, feature) as ledger:
-        ledger.setdefault('orchestrator_executed', []).append(entry)
-    return {'feature': feature, **entry}
+        delegation.require(not any(a.get('identity') == full_identity for a in ledger.get('attempts', [])),
+                           'DELEGATION_ADOPT_HAS_ATTEMPT: an attempt already exists for ' + task_id +
+                           '; resolve it with accept or reassign instead of adopting it')
+        attempt = {'identity': full_identity, 'task_type': 'adopted', 'run_id': run_id,
+                  'adopted': True, 'status': 'successful' if evidence is not None else 'unverified',
+                  'started_at': stamp(), 'ended_at': stamp(), 'cwd': relative(root, cwd),
+                  'timeout': timeout, 'owned_paths': owned_paths, 'command': command, 'expect': expect,
+                  'exit_code': run['exit_code'], 'timed_out': run.get('timed_out', False),
+                  'output_truncated': run.get('truncated', False),
+                  'output': text[:ACCEPT_LEDGER_OUTPUT_CAP]}
+        if evidence:
+            attempt['accepted_evidence'] = evidence
+            attempt['accepted_at'] = stamp()
+        else:
+            attempt['unverified_reason'] = 'DELEGATION_ADOPT_CHECK_DID_NOT_PASS'
+        ledger['attempts'].append(attempt)
+        result = copy.deepcopy(attempt)
+    return {'run_id': run_id, 'task_id': task_id, 'status': result['status'],
+           'adopted': evidence is not None, 'expect': expect, 'exit_code': run['exit_code'],
+           'timed_out': run.get('timed_out', False), 'output_truncated': run.get('truncated', False),
+           'evidence': evidence}
 
 
 def main(argv=None):
@@ -1919,10 +1981,15 @@ def main(argv=None):
     trust_reset_cmd = sub.add_parser('trust-reset')
     trust_reset_cmd.add_argument('--feature', required=True)
     trust_reset_cmd.add_argument('--reason', required=True)
-    orchestrator_executed_cmd = sub.add_parser('orchestrator-executed')
-    orchestrator_executed_cmd.add_argument('--feature', required=True)
-    orchestrator_executed_cmd.add_argument('--id', required=True)
-    orchestrator_executed_cmd.add_argument('--reason', required=True)
+    adopt_cmd = sub.add_parser('adopt')
+    adopt_cmd.add_argument('--feature', required=True)
+    adopt_cmd.add_argument('--id', required=True)
+    adopt_cmd.add_argument('--command', required=True)
+    adopt_cmd.add_argument('--expect', choices=ACCEPT_EXPECTS, required=True)
+    adopt_cmd.add_argument('--timeout', type=int)
+    adopt_cmd.add_argument('--owned', action='append',
+                           help='A path (repeatable) to check "files" evidence against; defaults to '
+                                'the whole feature directory when omitted')
     args = parser.parse_args(argv)
     try:
         if args.action == 'start':
@@ -1939,8 +2006,9 @@ def main(argv=None):
                             args.timeout, args.owned)
         elif args.action == 'trust-reset':
             result = trust_reset(args.root, args.feature, args.reason)
-        elif args.action == 'orchestrator-executed':
-            result = orchestrator_executed(args.root, args.feature, args.id, args.reason)
+        elif args.action == 'adopt':
+            result = adopt(args.root, args.feature, args.id, args.command, args.expect,
+                           args.timeout, args.owned)
         else:
             result = reassign(args.root, args.feature, args.run_id, args.reason, args.task_file)
         print(json.dumps(result, indent=2))

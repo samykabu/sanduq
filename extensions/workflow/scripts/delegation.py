@@ -672,26 +672,6 @@ def latest_attempt(root, feature, identity):
     return current
 
 
-def orchestrator_executed_tasks(root, feature):
-    """Task ids the orchestrator explicitly recorded as its own direct work,
-    never delegated through the dispatcher (round 6, finding 2).
-
-    A narrow, per-task Ready-gate exemption recorded by
-    ``delegate_dispatch.py orchestrator-executed``, distinct from -- and
-    finer-grained than -- the stage-wide grandfather for a task completed
-    before delegation was enabled for the feature at all: it covers the case
-    where delegation was turned on partway through one long-lived execute
-    stage, so some of its tasks predate enablement even though the stage's
-    own receipt (stamped only once, at the end) shows delegation enabled by
-    then.
-    """
-    path = ledger_path(root, feature)
-    if not path.is_file():
-        return set()
-    ledger = json.loads(path.read_text(encoding='utf-8'))
-    return {entry['task_id'] for entry in ledger.get('orchestrator_executed', [])}
-
-
 def active_task_ids(root, feature):
     path = ledger_path(root, feature)
     active = set()

@@ -740,55 +740,105 @@ class DelegationTests(unittest.TestCase):
     def test_ready_task_gate_rejects_a_checked_task_with_no_delegation_attempt(self):
         """Round 6, finding 2: the gate previously only rejected a checked
         task whose latest attempt existed and had failed; one with no
-        attempt at all slipped through unnoticed. Delegation enabled for the
-        execute stage (its own receipt says so) and no attempt anywhere for
-        T001 must fail, not pass."""
+        attempt at all slipped through unnoticed. Delegation enabled and no
+        attempt anywhere for T001 must fail, not pass."""
         self.tasks('- [x] T001 [Collect] Run smoke suite\n')
         self.enable()
         run = w.Run(self.root, self.feature)
         run.start('acme/app#10')
         state = run.load()
-        state.setdefault('receipts', {})['execute'] = {'delegation_enabled_for_execute': True}
         with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_TASK_UNVERIFIED'):
             w.ready_checks(self.root, self.feature, self.policy, state, rules={
                 'tasks': True, 'task_links': False, 'documentation': False})
 
-    def test_ready_task_gate_grandfathers_a_task_completed_before_delegation_was_enabled(self):
-        """Round 6, finding 2: when the execute stage's own receipt records
-        that delegation was OFF at the claim that completed it, none of its
-        tasks was ever expected to go through the dispatcher, so a checked
-        task with no attempt at all is exempt, not merely warned -- the rule
-        chosen so enabling delegation mid-feature does not retroactively
-        fail a stage that already finished without it."""
+    def test_ready_task_gate_ignores_a_legacy_execute_receipt_delegation_off_field(self):
+        """Round 7, finding 2: the round-6 'delegation_enabled_for_execute:
+        false' checkpoint exemption was itself a reviewed bypass (mutable,
+        unfingerprinted, stage-wide) and is removed. A checkpoint left over
+        from that release, or hand-crafted to read this way, must not
+        exempt anything: a checked task with no attempt still fails."""
         self.tasks('- [x] T001 [Collect] Run smoke suite\n')
         self.enable()
         run = w.Run(self.root, self.feature)
         run.start('acme/app#10')
         state = run.load()
         state.setdefault('receipts', {})['execute'] = {'delegation_enabled_for_execute': False}
-        ran = w.ready_checks(self.root, self.feature, self.policy, state, rules={
-            'tasks': True, 'task_links': False, 'documentation': False})
-        self.assertIn('tasks', ran)
+        with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_TASK_UNVERIFIED'):
+            w.ready_checks(self.root, self.feature, self.policy, state, rules={
+                'tasks': True, 'task_links': False, 'documentation': False})
 
-    def test_ready_task_gate_accepts_an_orchestrator_executed_marker(self):
-        """Round 6, finding 2: the finer-grained escape hatch for a task done
-        before delegation was turned on partway through one long-lived
-        execute stage, even though the stage's own receipt (stamped only
-        once, at the end) shows delegation enabled by then. The marker must
-        both exempt the task and be durably recorded."""
+    def test_ready_task_gate_ignores_a_legacy_orchestrator_executed_ledger_list(self):
+        """Round 7, finding 1: the round-6 'orchestrator-executed' command
+        let a worker self-certify its own unattempted work and is removed
+        entirely. A ledger that still carries the list it used to write --
+        left over from that release, or hand-crafted -- must not be
+        honoured: a checked task with no attempt still fails."""
         self.tasks('- [x] T001 [Collect] Run smoke suite\n')
         self.enable()
         run = w.Run(self.root, self.feature)
         run.start('acme/app#10')
         state = run.load()
-        state.setdefault('receipts', {})['execute'] = {'delegation_enabled_for_execute': True}
-        result = dispatch.orchestrator_executed(self.root, self.feature, 'T001',
-                                                'Implemented directly before delegation was turned on')
-        self.assertEqual(result['task_id'], 'T001')
-        self.assertIn('T001', delegation.orchestrator_executed_tasks(self.root, self.feature))
+        with dispatch.edit_ledger(self.root, self.feature) as ledger:
+            ledger['orchestrator_executed'] = [{'task_id': 'T001', 'at': dispatch.stamp(),
+                                                'actor': 'someone', 'reason': 'legacy record'}]
+        self.assertFalse(hasattr(dispatch, 'orchestrator_executed'))
+        self.assertFalse(hasattr(delegation, 'orchestrator_executed_tasks'))
+        with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_TASK_UNVERIFIED'):
+            w.ready_checks(self.root, self.feature, self.policy, state, rules={
+                'tasks': True, 'task_links': False, 'documentation': False})
+
+    def test_adopt_refuses_when_an_attempt_already_exists(self):
+        """Round 7, finding 2 (adopt): any existing attempt for the task --
+        even one merely started, never mind unverified or failed -- already
+        has its own resolution path (accept or reassign); adopt must never
+        offer a second, easier one."""
+        self.tasks('- [ ] T001 [Collect] Run smoke suite\n')
+        self.enable()
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch.object(dispatch, 'launch', return_value={'run_id': 'codex-1', 'state': 'running'}):
+            dispatch.start(self.root, self.feature, 'T001', owned=['.'])
+        with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_ADOPT_HAS_ATTEMPT'):
+            dispatch.adopt(self.root, self.feature, 'T001', 'pytest -q', 'counts')
+
+    def test_adopt_with_a_passing_check_makes_ready_pass(self):
+        """Round 7, finding 2 (adopt): a checked task with no attempt at all,
+        given a real acceptance check that passes, is recorded as an
+        ordinary successful attempt and Ready accepts it -- no exemption,
+        independently verified evidence instead."""
+        self.tasks('- [x] T001 [Collect] Run smoke suite\n')
+        self.enable()
+        with patch.object(dispatch, 'run_capped',
+                          return_value=self.fake_run_capped(0, '{"total": 5, "passed": 5, "failed": 0}')):
+            result = dispatch.adopt(self.root, self.feature, 'T001', 'pytest -q', 'counts')
+        self.assertTrue(result['adopted'])
+        self.assertEqual(result['status'], 'successful')
+        self.assertEqual(delegation.latest_attempt(self.root, self.feature, 'T001')['status'], 'successful')
+        run = w.Run(self.root, self.feature)
+        run.start('acme/app#10')
+        state = run.load()
         ran = w.ready_checks(self.root, self.feature, self.policy, state, rules={
             'tasks': True, 'task_links': False, 'documentation': False})
         self.assertIn('tasks', ran)
+
+    def test_adopt_with_a_failing_or_empty_check_stays_unverified(self):
+        """Round 7, finding 2 (adopt): a failing command, and an exit-zero
+        run with no parsable evidence, both record 'unverified', and Ready
+        still refuses -- adoption is a real check, not a rubber stamp."""
+        cases = [('T001', 1, '{"total": 5, "passed": 4, "failed": 1}'), ('T002', 0, '')]
+        self.tasks('- [x] T001 [Collect] Run smoke suite\n- [x] T002 [Collect] Run lint\n')
+        self.enable()
+        for task_id, exit_code, output in cases:
+            with self.subTest(task_id=task_id), \
+                 patch.object(dispatch, 'run_capped', return_value=self.fake_run_capped(exit_code, output)):
+                result = dispatch.adopt(self.root, self.feature, task_id, 'pytest -q', 'counts')
+            self.assertFalse(result['adopted'])
+            self.assertEqual(result['status'], 'unverified')
+        run = w.Run(self.root, self.feature)
+        run.start('acme/app#10')
+        state = run.load()
+        with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_TASK_UNVERIFIED'):
+            w.ready_checks(self.root, self.feature, self.policy, state, rules={
+                'tasks': True, 'task_links': False, 'documentation': False})
 
     def test_trust_reset_refuses_the_probe_hand_edit_with_marker_deleted(self):
         """Finding 1, round 4, the exact probe: hand-edit the ledger, delete

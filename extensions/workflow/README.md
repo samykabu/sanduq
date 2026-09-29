@@ -840,42 +840,49 @@ refuses a checked `[x]` task whose latest delegated attempt is anything but
 `DELEGATION_TASK_UNVERIFIED`, naming every such task — including one with
 **no** attempt at all, not only one that exists and failed.
 
-**A checked task with no attempt at all: the grandfather rule.** `tasks.md`
-never timestamps an individual checkbox, so the gate cannot on its own tell a
-task done before delegation was enabled for this feature from one that
-simply skipped the dispatcher after delegation was already on. Two
-exceptions keep enforcement from breaking a project that turns delegation on
-mid-feature, both read from records the checkpoint and ledger already keep
-(or, for the second, a new one this rule adds):
+**A checked task with no attempt at all: adopt it, never exempt it.**
+`tasks.md` never timestamps an individual checkbox, so the gate cannot on
+its own tell a task done before delegation was enabled for this feature from
+one that simply skipped the dispatcher after delegation was already on. Two
+earlier exemptions tried to paper over that gap and were both removed as
+reviewed bypasses (round 7): a stage-wide `delegation_enabled_for_execute`
+field stamped once on the `execute` receipt — mutable, unfingerprinted, and
+never read by any digest or signature — would wave through *every* task in
+the stage on a single flag; and an `orchestrator-executed` command let
+anyone holding the CLI (a worker included, since nothing separately enforced
+who called it) self-certify a specific task as done outside the dispatcher
+with a free-text reason nothing checked. Neither is read any more. A
+checkpoint or ledger still carrying either from that release is inert: it
+does not exempt anything, and `ready_checks` no longer imports the function
+that used to read it.
 
-1. **The execute stage's own receipt.** `complete()` stamps
-   `delegation_enabled_for_execute` on the `execute` receipt once, from
-   `active['delegation']` at the claim that completed it — the same field
-   that already selects a stage's own delegation route. When that is
-   `False` (delegation was off at completion), the whole stage is exempt:
-   nothing in it was ever expected to go through the dispatcher, so a
-   missing attempt proves nothing. This is deliberately stage-wide, not
-   per-task, because no finer-grained history exists for an already-finished
-   stage.
-2. **An explicit `orchestrator-executed` marker**, for the case the receipt
-   above cannot cover: delegation turned on *partway through* one
-   long-lived `execute` stage (claimed, worked on, checkpointed and
-   re-claimed over several sessions before finally completing), so some
-   tasks predate enablement even though the stage's receipt — stamped only
-   once, at the very end — shows delegation enabled by then. Run
-   `delegate_dispatch.py orchestrator-executed --feature <f> --id <task> --reason "<text>"`
-   to record that the orchestrator implemented that specific task directly;
-   the entry (`task_id`, `at`, `actor`, `reason`) is appended to
-   `delegations.json`'s `orchestrator_executed` list, the same tamper-evident
-   ledger every attempt lives in, and exempts only that task. Like
-   `trust-reset`, this is an orchestrator-only, human-facing admission — a
-   worker brief forbids `delegate_dispatch.py` entirely — and the reason is
-   kept for audit, not validated for content.
+The only way a checked task without its own dispatcher attempt now earns
+Ready is `delegate_dispatch.py adopt --feature <f> --id <task> --command
+"<acceptance check>" --expect counts|files [--owned <path>]` — evidence,
+not an assertion. It is for a task genuinely done before delegation existed
+for this feature (or otherwise never dispatched) and refuses outright with
+`DELEGATION_ADOPT_HAS_ATTEMPT` the moment *any* attempt already exists for
+that task, whatever its status: a task once started, accepted, or left
+unverified already has its own resolution path (`accept` or `reassign`), and
+`adopt` must never open a second, easier one next to it. Otherwise it runs
+`--command` with exactly `accept`'s own machinery — no shell
+(`build_command_argv`), the BatBadBut shim refusal, a bounded timeout, a
+hard output cap with the process tree killed on timeout (`run_capped`), and
+the same `counts`/`files` schema, owned-path containment and per-file
+sha256 evidence — and only a passing check records a new attempt with
+`status: 'successful'` and `adopted: true`; a failing command, a timeout, or
+an exit-zero run with no parsable or in-bounds evidence records
+`'unverified'` instead, exactly like `accept`. Either way the attempt lands
+in `delegations.json` like any other and `latest_attempt` reads it like any
+other: the Ready gate never special-cases an adopted attempt, because it
+does not need to. Like `trust-reset`, `adopt` is orchestrator-only — every
+worker brief forbids `delegate_dispatch.py` entirely, `adopt` included — a
+worker must never be the one judging whether its own unattempted work now
+counts as verified.
 
-Neither exception is available before delegation is enabled at all, or once
-the execute receipt exists and reports `delegation_enabled_for_execute:
-true` with no matching `orchestrator-executed` entry: at that point a
-missing attempt is exactly what `DELEGATION_TASK_UNVERIFIED` is for.
+A project that enables delegation mid-feature adopts each already-checked
+task with its own acceptance check, once, rather than relying on any
+checkpoint field or self-report to wave the whole batch through.
 
 **Ledger trust.** Both `complete` and the Ready gate also read
 `delegation.ledger_trust_state`, a tri-state check: `'trusted'` (the local
