@@ -58,12 +58,16 @@ scripts/bash/project-sync.sh --phase <phase> [--dry-run] [--no-sub-issues] [--fo
 
 `<phase>` ∈ `open | analysis | engineer-review | ready | in-progress | in-review | done | auto`.
 
-`-Summary`/`--summary` prints one line instead of the full `-Json`/`--json` summary:
-`ok issue=<n> status=<status> created=<n> closed=<n>` on success, `ok skipped=1
-reason=<reason>` on a graceful degradation, or `error <message>` (for example when
-`-Summary`/`--summary` and `-Json`/`--json` are both given, which is rejected).
-The run log (unaffected by either flag) is unchanged, and exit codes are unchanged
-by `-Summary`/`--summary`.
+`-Summary`/`--summary` prints exactly one line to stdout instead of the full
+`-Json`/`--json` summary: `ok issue=<n> status=<status> created=<n> closed=<n>`
+on success, `skipped reason=<reason>` on a graceful degradation (never `ok` — a
+skip is not success), or `error <message>` on a usage error (for example when
+`-Summary`/`--summary` and `-Json`/`--json` are both given) or a mid-run failure
+(bash: `error exit=<rc> line=<n>`; PowerShell: `error <exception message>`).
+Under `-Summary`/`--summary` the run log moves off stdout (PowerShell:
+`Write-Verbose`, silent unless `-Verbose` is also passed; Bash: stderr) so
+stdout is exactly the one line above; without the flag the run log is
+unchanged. Exit codes are unchanged by `-Summary`/`--summary`.
 
 ## Files
 

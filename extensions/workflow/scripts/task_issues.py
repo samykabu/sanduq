@@ -193,18 +193,18 @@ def sync_states(root, feature, parent, apply=False, github=None):
 
 
 def sync_summary(result):
-    """One line: `ok created=<n> reused=<n> total=<n>`, for `--summary`."""
+    """One line: `ok created=<n> reused=<n> total=<n> dry_run=0|1`, for `--summary`."""
     tasks = result['tasks'].values()
     created = sum(t['action'] == 'create' for t in tasks)
     reused = sum(t['action'] == 'reuse' for t in tasks)
-    return f'ok created={created} reused={reused} total={len(tasks)}'
+    return f'ok created={created} reused={reused} total={len(tasks)} dry_run={int(result["dry_run"])}'
 
 
 def sync_states_summary(result):
-    """One line: `ok opened=<n> closed=<n> changed=<n>`, for `--summary`."""
+    """One line: `ok opened=<n> closed=<n> changed=<n> dry_run=0|1`, for `--summary`."""
     opened = sum(c['to'] == 'open' for c in result['changes'])
     closed = sum(c['to'] == 'closed' for c in result['changes'])
-    return f'ok opened={opened} closed={closed} changed={len(result["changes"])}'
+    return f'ok opened={opened} closed={closed} changed={len(result["changes"])} dry_run={int(result["dry_run"])}'
 
 
 def main():
@@ -235,6 +235,15 @@ def main():
             print('error ' + str(exc))
         else:
             print(json.dumps({'ok': False, 'error': str(exc)}))
+        return 1
+    except Exception as exc:
+        # Any other unhandled exception (a corrupt journal/state file, a
+        # missing tasks.md, ...) still must not crash with a raw traceback
+        # under --summary; default (no-flag)/--json behaviour is unchanged
+        # and keeps today's traceback-and-nonzero-exit.
+        if not args.summary:
+            raise
+        print(f'error {type(exc).__name__}: {exc}')
         return 1
 
 

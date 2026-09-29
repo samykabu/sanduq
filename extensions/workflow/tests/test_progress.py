@@ -178,6 +178,33 @@ class SummaryAndJsonTests(unittest.TestCase):
                 p.main(['event', '--output', str(out), '--message', 'x', '--summary', '--json'])
             self.assertEqual(ctx.exception.code, 2)
 
+    def test_summary_reports_any_unhandled_exception_as_one_line(self):
+        # F7: a corrupt state.json raises a plain json.JSONDecodeError deep
+        # inside _run, well outside the fail()/parser.error() paths;
+        # --summary must still print one `error <Type>: <msg>` line and exit
+        # 1, not a raw traceback.
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory) / 'report'
+            out.mkdir()
+            (out / 'state.json').write_text('not valid json{', encoding='utf-8')
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf), self.assertRaises(SystemExit) as ctx:
+                p.main(['event', '--output', str(out), '--message', 'hi', '--summary'])
+            self.assertEqual(ctx.exception.code, 1)
+            line = buf.getvalue().strip()
+            self.assertTrue(line.startswith('error JSONDecodeError: '), line)
+            self.assertEqual(len(line.splitlines()), 1)
+
+    def test_default_still_raises_on_corrupt_state(self):
+        # Default (no --summary) behaviour for an exception outside the
+        # fail()/parser.error() paths is unchanged: it still raises.
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory) / 'report'
+            out.mkdir()
+            (out / 'state.json').write_text('not valid json{', encoding='utf-8')
+            with self.assertRaises(json.JSONDecodeError):
+                p.main(['event', '--output', str(out), '--message', 'hi'])
+
 
 class ReportTitleTests(unittest.TestCase):
     def run_report(self, out, *args):

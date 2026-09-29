@@ -462,6 +462,22 @@ def main(argv=None):
     if args.summary and args.json:
         parser.error('--summary and --json cannot be combined')
     fail = summary_error if args.summary else parser.error
+    try:
+        _run(args, fail)
+    except SystemExit:
+        raise
+    except Exception as exc:
+        # Any other unhandled exception (a corrupt state.json, a corrupt
+        # delegations ledger, ...) still must not crash with a raw traceback
+        # under --summary; default (no-flag)/--json behaviour is unchanged
+        # and keeps today's traceback-and-nonzero-exit.
+        if not args.summary:
+            raise
+        print(f'error {type(exc).__name__}: {exc}')
+        sys.exit(1)
+
+
+def _run(args, fail):
     target = args.output / 'state.json'
     if args.command == 'init':
         tasks, phases = read_plan(args.tasks, fail)

@@ -26,16 +26,32 @@ if [ "$SUMMARY" = 1 ] && [ "$JSON" = 1 ]; then
   exit 2
 fi
 CREATED_COUNT=0; CLOSED_COUNT=0
+SUMMARY_DONE=0
 
-log()  { echo "[project] $*"; }
-warn() { echo "[project][warn] $*"; }
+# Under --summary, run-log lines (log/warn) are not part of the one-line
+# contract, so they move to stderr instead of polluting stdout.
+log()  { if [ "$SUMMARY" = 1 ]; then echo "[project] $*" >&2; else echo "[project] $*"; fi; }
+warn() { if [ "$SUMMARY" = 1 ]; then echo "[project][warn] $*" >&2; else echo "[project][warn] $*"; fi; }
 skip() {
   warn "skipped: $*"
-  if [ "$SUMMARY" = 1 ]; then echo "ok skipped=1 reason=$*"
+  SUMMARY_DONE=1
+  # A graceful skip is not success (SKILL.md): the first token is `skipped`,
+  # never `ok`.
+  if [ "$SUMMARY" = 1 ]; then echo "skipped reason=$*"
   elif [ "$JSON" = 1 ]; then echo "{\"skipped\":true,\"reason\":\"$*\"}"; fi
   exit 0
 }
 gh_run() { if [ "$DRYRUN" = 1 ]; then log "DRYRUN gh $*"; return 0; fi; gh "$@"; }
+
+# Past this point `set -e` can abort the script on any unguarded failure
+# (a real gh/jq/git error, not a graceful skip). Under --summary that must
+# still surface as one `error exit=<rc> line=<n>` line rather than silence
+# or a raw shell trace; SUMMARY_DONE keeps the EXIT trap from firing after
+# our own controlled ok/skipped line has already been printed.
+if [ "$SUMMARY" = 1 ]; then
+  trap 'FAIL_LINE=$LINENO' ERR
+  trap 'rc=$?; if [ "$rc" -ne 0 ] && [ "$SUMMARY_DONE" != 1 ]; then echo "error exit=$rc line=${FAIL_LINE:-0}"; fi' EXIT
+fi
 
 command -v gh >/dev/null 2>&1 || skip "gh CLI not installed"
 command -v jq >/dev/null 2>&1 || skip "jq not installed"
@@ -311,6 +327,7 @@ set_status "$TARGET"
 save_state
 if [ -f "$REST_MARK" ]; then TRANSPORT="rest"; fi
 log "done: issue #$ISSUE, status '$CURRENT', phase '$PHASE' (transport: $TRANSPORT)"
+SUMMARY_DONE=1
 if [ "$SUMMARY" = 1 ]; then
   echo "ok issue=$ISSUE status=$CURRENT created=$CREATED_COUNT closed=$CLOSED_COUNT"
 elif [ "$JSON" = 1 ]; then

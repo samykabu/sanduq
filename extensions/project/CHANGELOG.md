@@ -2,12 +2,24 @@
 
 ## Unreleased
 
-- `project-sync` (Bash and PowerShell) gains `-Summary`/`--summary`: one line
-  (`ok issue=<n> status=<status> created=<n> closed=<n>`, `ok skipped=1
-  reason=<reason>` on graceful degradation, or `error <message>`) as an
-  alternative to the `-Json`/`--json` summary, which is unchanged.
-  `-Summary`/`--summary` and `-Json`/`--json` together is rejected. Default
-  (no flag) behaviour and every exit code are unchanged (B7).
+- `project-sync` (Bash and PowerShell) gains `-Summary`/`--summary`: exactly
+  one stdout line (`ok issue=<n> status=<status> created=<n> closed=<n>` on
+  success; `skipped reason=<reason>` on a graceful degradation — a skip is
+  not success, so it never starts with `ok`; `error <message>` on a usage
+  error or a mid-run failure) as an alternative to the `-Json`/`--json`
+  summary, which is unchanged. Under `-Summary`/`--summary` the run log
+  (PowerShell `Write-Log`, Bash `log`/`warn`) moves off stdout so it never
+  breaks the one-line contract; a genuine mid-run failure (bash `set -e`,
+  PowerShell `$ErrorActionPreference = 'Stop'`) is now also caught and
+  reported as that one `error` line instead of a raw shell trace or
+  uncaught exception. `-Summary`/`--summary` and `-Json`/`--json` together
+  is rejected. Default (no flag) behaviour and every exit code are
+  unchanged (B7).
+- Fix: the PowerShell script's own `$summary` local variable collided
+  case-insensitively with the `-Summary` switch parameter, so assigning it
+  overwrote `-Summary` with a `PSCustomObject` and crashed every non-skip
+  run with a `MetadataError` right before printing the final summary.
+  Renamed to `$jsonSummary` (B7 review fix).
 - `project-sync` (Bash and PowerShell) falls back to the GitHub REST API when the GraphQL budget
   is exhausted: Project item add/lookup and Status edits, parent issue lookup/creation, sub-issue
   creation and linking, sub-issue closing and the open-PR check. The real budget is checked, since

@@ -37,7 +37,10 @@ def main():
         result = {'current': False, 'reason': str(exc)}
     if args.summary:
         word = 'ok' if result['current'] else 'error'
-        detail = ' recorded=1' if result.get('recorded') else f" reason={result.get('reason', 'n/a')}"
+        # A raised exception's message can itself carry embedded newlines; a
+        # summary line must still be exactly one line.
+        reason = ' '.join(str(result.get('reason', 'n/a')).split())
+        detail = ' recorded=1' if result.get('recorded') else f' reason={reason}'
         print(f'{word} action={args.action} kind={kind} outputs={len(outputs)}{detail}')
     else:
         print(json.dumps(result))

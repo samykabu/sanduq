@@ -330,10 +330,15 @@ over GitHub's 256-character issue title limit is shortened to the headline
 instead of rejected; the full description is always kept in the issue body.
 Shortening is deterministic, so re-syncing an unchanged task recomputes the
 same title and body and neither creates a duplicate issue nor rewrites it.
-`--summary` prints one line (`ok created=<n> reused=<n> total=<n>` for a sync,
-`ok opened=<n> closed=<n> changed=<n>` for `--sync-states`, or `error <message>`)
-instead of the full JSON result; `--json` keeps today's full JSON output.
-`--summary` and `--json` together is rejected. Exit codes are unchanged either way.
+`--summary` prints one line (`ok created=<n> reused=<n> total=<n> dry_run=0|1` for a
+sync, `ok opened=<n> closed=<n> changed=<n> dry_run=0|1` for `--sync-states`, or
+`error <message>`) instead of the full JSON result; `--json` prints exactly what
+the default (no-flag) output already prints today, byte for byte — it is a way
+to request that output explicitly, not a new format. `--summary` and `--json`
+together is rejected. Exit codes are unchanged either way, including for an
+exception outside the normal `WorkflowError`/`ValueError`/`KeyError` set, which
+`--summary` also reports as one `error <Type>: <message>` line instead of a
+raw traceback.
 
 The project selects Disabled, Advisory, or Required CI evidence gating and
 individual rules at initialization or later. Managed-only scope lets ordinary

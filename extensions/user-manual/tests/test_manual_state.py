@@ -5,14 +5,22 @@ An explicit --base-ref still wins, and a feature with no checkpoint (or no
 recorded target) falls back to today's default (sanduq_freshness.base_ref's
 origin/HEAD lookup).
 """
+import contextlib
+import importlib.util
+import io
 import json
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 MANUAL_STATE = Path(__file__).resolve().parents[2] / 'user-manual/scripts/manual_state.py'
+
+SPEC = importlib.util.spec_from_file_location('manual_state', MANUAL_STATE)
+manual_state = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(manual_state)
 
 
 class ManualStateFixture:
@@ -108,6 +116,40 @@ class ManualStateSummaryTests(ManualStateFixture, unittest.TestCase):
         proc = subprocess.run(command, cwd=self.root, text=True, capture_output=True, encoding='utf-8')
         self.assertEqual(proc.returncode, 2, proc.stdout)
         self.assertIn('--summary and --json cannot be combined', proc.stderr)
+
+    def test_json_flag_matches_the_unflagged_default_byte_for_byte(self):
+        # F8: --json is not a new format for this script; it is the same
+        # `json.dumps(result)` the no-flag default already printed.
+        self.checkpoint('develop')
+        self.run_summary('record')  # record once so `status` below is deterministic either way
+        default_proc = subprocess.run([sys.executable, str(MANUAL_STATE), 'status', '--feature', str(self.feature),
+                                        '--repo-root', str(self.root), '--output', 'User-Manual/guide.md'],
+                                       cwd=self.root, text=True, capture_output=True, encoding='utf-8')
+        json_proc = subprocess.run([sys.executable, str(MANUAL_STATE), 'status', '--feature', str(self.feature),
+                                     '--repo-root', str(self.root), '--output', 'User-Manual/guide.md', '--json'],
+                                    cwd=self.root, text=True, capture_output=True, encoding='utf-8')
+        self.assertEqual(default_proc.stdout, json_proc.stdout)
+        self.assertEqual(default_proc.returncode, json_proc.returncode)
+
+
+class ManualStateSummaryWhitespaceTests(unittest.TestCase):
+    """F6: a reason with embedded newlines/whitespace still prints as one
+    line under --summary. Exercised by importing the module directly and
+    monkeypatching record_or_status, since a real multi-line freshness
+    failure is not easy to reproduce deterministically through the CLI."""
+
+    def test_reason_with_embedded_newlines_collapses_to_one_line(self):
+        messy = {'current': False, 'reason': 'first line\nsecond   line\twith\ttabs\n'}
+        argv = ['manual_state.py', 'status', '--feature', 'specs/001-example',
+                '--output', 'User-Manual/guide.md', '--summary']
+        buf = io.StringIO()
+        with mock.patch.object(manual_state, 'record_or_status', return_value=messy), \
+             mock.patch.object(sys, 'argv', argv), contextlib.redirect_stdout(buf):
+            code = manual_state.main()
+        self.assertEqual(code, 1)
+        line = buf.getvalue()
+        self.assertEqual(len(line.splitlines()), 1, repr(line))
+        self.assertEqual(line.strip(), 'error action=status kind=manual outputs=1 reason=first line second line with tabs')
 
 
 if __name__ == '__main__':
