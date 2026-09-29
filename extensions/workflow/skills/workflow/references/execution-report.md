@@ -199,6 +199,15 @@ escalate, `reassign` refuses it with
 re-run `adopt` with a corrected acceptance check, or to `start` the task
 normally.
 
+Every delegated worker inherits `SANDUQ_DELEGATED_RUN` in its environment, so
+`adopt`, `accept`, `reassign` and `trust-reset` refuse with
+`DELEGATION_WORKER_CONTEXT` when run from inside a worker's own session
+(defence in depth, not a boundary). The Ready gate also warns, with
+`DELEGATION_TASK_ADOPTED` or `DELEGATION_TASK_ACCEPTED` naming the command, on
+every task that reached Ready because the orchestrator ran and judged the
+check rather than because a worker's own delegated attempt succeeded; review
+those warnings before merging.
+
 ## Continue through delivery
 
 The orchestration agent returns the Execute evidence to the dispatcher. It stays

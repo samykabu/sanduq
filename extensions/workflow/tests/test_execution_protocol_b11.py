@@ -53,10 +53,10 @@ ASSIGN_MARKERS = [
     'the `[collect]` marker or an explicit override (B12), never by default',  # T0 x standing rule 5
     'roughly 150K tokens resident',                                       # T0 hand-off
     '`git stash` and `git add -A`/`git add .` are forbidden for a worker',  # S6
-    'as are `delegate_dispatch.py accept`, `delegate_dispatch.py trust-reset` and '
-    '`delegate_dispatch.py adopt`',                                       # B12: also forbidden for a worker
-    '`accept`/`trust-reset`/`adopt` are ledger-trust decisions the '
-    'orchestration agent alone makes',                                    # B12: why they are forbidden
+    'as are `delegate_dispatch.py accept`, `delegate_dispatch.py reassign`, '
+    '`delegate_dispatch.py trust-reset` and `delegate_dispatch.py adopt`',  # B12: also forbidden for a worker
+    '`accept`/`reassign`/`trust-reset`/`adopt` are ledger-trust decisions '
+    'the orchestration agent alone makes',                                # B12: why they are forbidden
     'Staging stays with the orchestration agent, which stages a '
     "worker's owned paths by explicit name",                              # S6 fix: no self-contradiction
     '--tasks specs/<feature>/tasks.md --output specs/<feature>/workflow/progress --summary',  # B7 --summary default
@@ -166,6 +166,14 @@ B12_TEXT = (
     '`DELEGATION_REASSIGN_ADOPTED_UNSUPPORTED`; the supported recovery is to '
     're-run `adopt` with a corrected acceptance check, or to `start` the task '
     'normally.'
+    ' Every delegated worker inherits `SANDUQ_DELEGATED_RUN` in its '
+    'environment, so `adopt`, `accept`, `reassign` and `trust-reset` refuse '
+    "with `DELEGATION_WORKER_CONTEXT` when run from inside a worker's own "
+    'session (defence in depth, not a boundary). The Ready gate also warns, '
+    'with `DELEGATION_TASK_ADOPTED` or `DELEGATION_TASK_ACCEPTED` naming the '
+    'command, on every task that reached Ready because the orchestrator ran '
+    "and judged the check rather than because a worker's own delegated "
+    'attempt succeeded; review those warnings before merging.'
 )
 
 # The dispatcher-operations.md marker list must include B12's new [Collect] marker
