@@ -37,6 +37,14 @@ and general manual structure remain in the core User Manual skill. HTML/PDF rend
 deterministic build step, including module-specific PDFs through
 `build_manual.py --module <id> --pdf`.
 
+Diagrams depend on `illustrate >=2.0.0,<3.0.0`. Before adding or generating one,
+`speckit.user-manual.analyze` and `speckit.user-manual.update` run
+`python .specify/extensions/user-manual/scripts/deps.py ensure illustrate`, which checks the Spec
+Kit registry, follows `.specify/extension-dependencies.yml`'s `update_policy`
+(`prompt`/`auto`/`manual`) without mutating dependencies under `prompt` without explicit approval,
+and prints one line, failing closed when illustrate cannot be brought into range. Its `SKILL.md` is
+loaded only at that point, never eagerly.
+
 ## Builds
 
 Material for MkDocs is pinned for reproducible HTML builds. The content contract remains portable
