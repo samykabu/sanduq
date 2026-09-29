@@ -482,6 +482,22 @@ class DelegationTests(unittest.TestCase):
             result = dispatch.start(self.root, self.feature, 'T001')
         self.assertEqual(result['route']['tier'], 'standard')
 
+    def test_start_requires_owned_when_a_fallback_candidate_is_light(self):
+        """Finding 6, round 3: the owned-paths requirement must look at every
+        candidate in the route's fallback chain, not only the preferred one."""
+        self.tasks()
+        self.enable()
+        self.policy['delegation']['overrides'][self.feature + '/T001'] = {
+            'preferred': {'harness': 'selected', 'tier': 'standard'},
+            'fallbacks': [{'harness': 'selected', 'tier': 'light'}]}
+        self.configure()
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch.object(dispatch, 'launch', return_value={'run_id': 'codex-1', 'state': 'running'}):
+            with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_OWNED_PATHS_REQUIRED'):
+                dispatch.start(self.root, self.feature, 'T001')
+            result = dispatch.start(self.root, self.feature, 'T001', owned=['.'])
+        self.assertEqual(result['route']['tier'], 'standard')
+
     def test_dispatch_records_unverified_actual_model_and_usage(self):
         self.tasks()
         self.enable()
@@ -599,7 +615,43 @@ class DelegationTests(unittest.TestCase):
             dispatch.collect(self.root, self.feature, 'codex-scope')
         receipt = fixture.WorkflowTests.receipt(self, 'scope')
         run.complete(claim['token'], receipt)
+        stored = run.load()['receipts']['scope']
         self.assertIn('scope', run.load()['receipts'])
+        # A real local write marker exists here, so trust is recorded as
+        # 'trusted', not the fresh-checkout warning state.
+        self.assertEqual(stored.get('delegation_ledger_trust'), 'trusted')
+
+    def test_complete_refuses_a_legacy_stage_attempt_with_no_claim_token(self):
+        """Finding 5, round 3: a stage attempt recorded before claim_token
+        existed has none and can never match a claim's token; complete
+        refuses it exactly as it would any other unmatched claim, and the
+        recovery is to re-delegate the stage once under this workflow
+        release (documented in the CHANGELOG as an upgrade note)."""
+        self.enable()
+        run = w.Run(self.root, self.feature)
+        run.start('acme/app#10')
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}):
+            claim = run.claim({'session_id': 'test-session'})
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch.object(dispatch, 'launch', return_value={'run_id': 'codex-scope', 'state': 'running'}):
+            dispatch.start(self.root, self.feature, 'stage:scope', token=claim['token'])
+        payload = {'run_id': 'codex-scope', 'status': 'successful', 'summary': 'Scoped',
+                   'harness': 'codex', 'model': 'gpt-6-sol', 'model_reported': False,
+                   'actual_model': None, 'model_observed': False,
+                   'status_provenance': {'primary': 'harness_telemetry'},
+                   'dirty_paths_changed': [], 'artifacts': {'dir': str(self.root / '.delegate/runs/codex-scope')}}
+        with patch.object(delegation, 'inspect_skill', return_value=self.fake_doctor()), \
+             patch.object(dispatch.shutil, 'which', return_value='node'), \
+             patch.object(dispatch.subprocess, 'run',
+                         return_value=subprocess.CompletedProcess([], 0, json.dumps(payload), '')):
+            dispatch.collect(self.root, self.feature, 'codex-scope')
+        # Simulate a pre-claim_token ledger entry (an older workflow release).
+        with dispatch.edit_ledger(self.root, self.feature) as ledger:
+            del ledger['attempts'][0]['claim_token']
+        receipt = fixture.WorkflowTests.receipt(self, 'scope')
+        with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_STAGE_NOT_VERIFIED'):
+            run.complete(claim['token'], receipt)
 
     def _checked_task_with_delegation_status(self, status):
         # Start and collect T001 unchecked (start refuses an already-checked
@@ -634,6 +686,69 @@ class DelegationTests(unittest.TestCase):
         ran = w.ready_checks(self.root, self.feature, self.policy, state, rules={
             'tasks': True, 'task_links': False, 'documentation': False})
         self.assertIn('tasks', ran)
+
+    def test_ready_gate_passes_with_warning_on_fresh_checkout_no_marker(self):
+        """Finding 1, round 3: delegations.json is committed but the
+        .written marker is local-only runtime state; a fresh clone or a CI
+        checkout has no marker at all and must be warned, never refused."""
+        state = self._checked_task_with_delegation_status('successful')
+        # Simulate a fresh checkout: the ledger is exactly as a real
+        # dispatcher left it, but this machine has no local marker for it.
+        dispatch.written_marker(self.root, self.feature).unlink()
+        warnings = []
+        ran = w.ready_checks(self.root, self.feature, self.policy, state, rules={
+            'tasks': True, 'task_links': False, 'documentation': False}, warnings=warnings)
+        self.assertIn('tasks', ran)
+        self.assertTrue(any('DELEGATION_LEDGER_TRUST_UNVERIFIED_LOCAL' in item for item in warnings))
+
+    def test_ready_gate_refuses_a_hand_edit_once_a_marker_is_established(self):
+        """Finding 1, round 3: once a marker WAS established, a hand-edit
+        that disagrees with it is refused, not merely warned."""
+        state = self._checked_task_with_delegation_status('successful')
+        ledger_path = delegation.ledger_path(self.root, self.feature)
+        raw = json.loads(ledger_path.read_text(encoding='utf-8'))
+        raw['attempts'][0]['result_summary'] = 'hand-edited'
+        ledger_path.write_text(json.dumps(raw), encoding='utf-8')
+        with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_LEDGER_UNTRUSTED'):
+            w.ready_checks(self.root, self.feature, self.policy, state, rules={
+                'tasks': True, 'task_links': False, 'documentation': False})
+
+    def test_trust_reset_restores_trust_after_a_hand_edit(self):
+        state = self._checked_task_with_delegation_status('successful')
+        ledger_path = delegation.ledger_path(self.root, self.feature)
+        raw = json.loads(ledger_path.read_text(encoding='utf-8'))
+        raw['attempts'][0]['result_summary'] = 'hand-edited'
+        ledger_path.write_text(json.dumps(raw), encoding='utf-8')
+        with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_LEDGER_UNTRUSTED'):
+            w.ready_checks(self.root, self.feature, self.policy, state, rules={
+                'tasks': True, 'task_links': False, 'documentation': False})
+        result = dispatch.trust_reset(self.root, self.feature,
+                                      'Reviewed the hand-edit; it only fixed a typo in the summary')
+        self.assertEqual(result['trust'], 'trusted')
+        self.assertEqual(delegation.ledger_trust_state(self.root, self.feature), 'trusted')
+        ran = w.ready_checks(self.root, self.feature, self.policy, state, rules={
+            'tasks': True, 'task_links': False, 'documentation': False})
+        self.assertIn('tasks', ran)
+
+    def test_foreign_write_is_not_laundered_by_a_later_dispatcher_write(self):
+        """Finding 2, round 3: a later legitimate dispatcher write (accept,
+        here) must not silently restore trust after a genuine tamper was
+        already detected and persisted."""
+        run_id = self._unverified_run()
+        ledger_path = delegation.ledger_path(self.root, self.feature)
+        raw = json.loads(ledger_path.read_text(encoding='utf-8'))
+        raw['attempts'][0]['result_summary'] = 'hand-edited'
+        ledger_path.write_text(json.dumps(raw), encoding='utf-8')
+        with patch.object(dispatch, 'run_capped',
+                          return_value=self.fake_run_capped(0, '{"total": 5, "passed": 5, "failed": 0}')):
+            dispatch.accept(self.root, self.feature, run_id, 'pytest -q', 'counts')
+        # accept's own write re-anchors the ordinary marker at its own new,
+        # legitimate bytes -- but the sticky tamper flag must still hold.
+        self.assertEqual(delegation.ledger_trust_state(self.root, self.feature), 'untrusted')
+        with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_TRUST_RESET_REASON_REQUIRED'):
+            dispatch.trust_reset(self.root, self.feature, '')
+        dispatch.trust_reset(self.root, self.feature, 'Reviewed; the edit only touched result_summary')
+        self.assertEqual(delegation.ledger_trust_state(self.root, self.feature), 'trusted')
 
     def test_dispatch_permissions_are_explicit(self):
         calls = []
@@ -836,6 +951,21 @@ class DelegationTests(unittest.TestCase):
         self.assertFalse(dispatch.model_family_matches('gpt-6-sol', 'gpt-6-terra'))
         self.assertFalse(dispatch.model_family_matches('', 'haiku'))
         self.assertFalse(dispatch.model_family_matches(None, 'haiku'))
+
+    def test_model_family_matches_round_3_probes(self):
+        """Finding 3, round 3: the shared-token rule was too broad. Only an
+        exact match, or one identifier fully containing the other as a whole
+        dash-delimited token run (with at least one non-generic token in the
+        contained run), counts."""
+        # Positive: a whole token, and a whole multi-token prefix run.
+        self.assertTrue(dispatch.model_family_matches('claude-haiku-4-5', 'haiku'))
+        self.assertTrue(dispatch.model_family_matches('claude-haiku-4-5-20251001', 'claude-haiku-4-5'))
+        # Negative: sibling models that share only a provider or a generic,
+        # family-wide prefix/suffix, never a real identity.
+        self.assertFalse(dispatch.model_family_matches('claude-opus-4-7', 'claude-haiku-4-5'))
+        self.assertFalse(dispatch.model_family_matches('claude-sonnet-4-6', 'claude-haiku-4-5-20251001'))
+        self.assertFalse(dispatch.model_family_matches('gpt-6-terra-codex', 'gpt-6-sol-codex'))
+        self.assertFalse(dispatch.model_family_matches('gpt-6-sol', 'gpt-6'))
 
     def test_collect_never_trusts_counts_in_the_worker_summary(self):
         """Finding 3: even fully-framed, parsable counts in a worker's own
@@ -1210,6 +1340,17 @@ class DelegationTests(unittest.TestCase):
              {'total': 12, 'passed': 12, 'failed': 0}),
             ('Failed!  - Failed:     2, Passed:    10, Skipped:     0, Total:    12',
              {'total': 12, 'passed': 10, 'failed': 2}),
+            # dotnet's older VSTest console form, round 3 finding 4: fields on
+            # separate lines under "Total tests:".
+            ('Total tests: 14\n     Passed: 12\n     Failed: 2\n    Skipped: 0',
+             {'total': 14, 'passed': 12, 'failed': 2}),
+            ('Total tests: 14. Passed: 14. Failed: 0. Skipped: 0.',
+             {'total': 14, 'passed': 14, 'failed': 0}),
+            # Real Maven, round 3 finding 4: a blank line between "Results:"
+            # and the aggregate can itself carry a bare "[INFO]" log prefix,
+            # not just be empty.
+            ('[INFO] Results:\n[INFO] \n[ERROR] Tests run: 7, Failures: 2, Errors: 0, Skipped: 0\n',
+             {'total': 7, 'passed': 5, 'failed': 2}),
             # node --test: fields need not be adjacent (real output interleaves
             # "# suites", "# duration_ms" and similar between them).
             ('# tests 7\n# suites 1\n# pass 5\n# cancelled 0\n# fail 2\n# duration_ms 12.3',
@@ -1243,6 +1384,15 @@ class DelegationTests(unittest.TestCase):
         # distinct) clean bar is used as before.
         clean = '===== 3 passed in 0.05s =====\n===== 3 passed in 0.09s ====='
         self.assertEqual(dispatch.parse_counts(clean), {'total': 3, 'passed': 3, 'failed': 0})
+
+    def test_parse_counts_dotnet_multi_project_any_failed_line_means_failed(self):
+        """Finding 4, round 3: a multi-project dotnet solution prints one
+        Passed!/Failed! line per project; a later project's clean line must
+        not hide an earlier project's real failure."""
+        text = ('Passed!  - Failed:     0, Passed:     5, Skipped:     0, Total:     5\n'
+                'Failed!  - Failed:     1, Passed:     4, Skipped:     0, Total:     5\n'
+                'Passed!  - Failed:     0, Passed:     3, Skipped:     0, Total:     3\n')
+        self.assertEqual(dispatch.parse_counts(text), {'total': 5, 'passed': 4, 'failed': 1})
 
     def test_collect_recovers_unlinked_replacement_without_duplicate_launch(self):
         self.tasks()

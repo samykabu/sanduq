@@ -693,10 +693,15 @@ example a `reassign` escalation — is exempt from this one rule, since a
 task's classification never changes on reassignment and applying it
 unconditionally would mean a `qa_collect` task could never actually resolve
 through a standard-tier `reassign`); or the requested or harness-reported
-actual model matches that harness's configured `light` model *by family*
+actual model matches that harness's configured `light` model *by family*: the
+same identifier, or one fully containing the other as a whole dash-delimited
+token run that includes at least one non-generic token
 (`claude-haiku-4-5-20260101` matches the configured alias `haiku`; exact
 string equality alone let a real light-tier run escape whenever the harness
-reported its full name instead of the alias). `collect` records the driver's
+reported its full name instead of the alias). A shared provider prefix or
+trailing qualifier alone is never enough — `claude-opus-4-7` does not match
+`claude-haiku-4-5`, and `gpt-6-sol` does not match the bare family prefix
+`gpt-6`, which every sibling model in that line shares. `collect` records the driver's
 raw `successful`/`failed`/`abandoned` verdict as usual, but when the guard
 applies and the verdict is `successful`, the ledger outcome becomes
 `unverified` unless the worker's own summary names a produced-file list (as
@@ -767,11 +772,13 @@ Three ways resolve an `unverified` attempt:
 
 **Owned paths.** A light-tier result's file evidence (in a worker's summary or
 in `accept`'s command output) must resolve inside the task's declared owned
-paths, not merely its whole working directory. A light-tier or `qa_collect`
-`start` must declare `--owned <path>` itself (repeatable) — there is no
-silent default to the whole `--cwd`; omitting it is refused with
-`DELEGATION_OWNED_PATHS_REQUIRED`. They carry forward unchanged across an
-automatic stronger retry or a manual `reassign`. `accept --owned <path>`
+paths, not merely its whole working directory. A start is required to
+declare `--owned <path>` itself (repeatable) — there is no silent default to
+the whole `--cwd` — whenever *any* candidate anywhere in the route's fallback
+chain is light, not only the preferred one (a fallback beyond the first can
+still land the run on the light tier); omitting `--owned` there is refused
+with `DELEGATION_OWNED_PATHS_REQUIRED`. They carry forward unchanged across
+an automatic stronger retry or a manual `reassign`. `accept --owned <path>`
 narrows them for that one acceptance call only, without changing what is
 recorded on the attempt; it can never widen them past what was recorded at
 `start` (`DELEGATION_ACCEPT_OWNED_MUST_NARROW` otherwise).
@@ -780,28 +787,30 @@ recorded on the attempt; it can never widen them past what was recorded at
 a worker's own self-report, which never supplies counts at all): JSON
 `{"total": N, "passed": N, "failed": N}` (`passed` optional, computed as
 `total - failed`) or JUnit-style `{"tests": N, "failures": N, "errors": N}`
-(`errors` optional; `failed = failures + errors`); or one of six text
+(`errors` optional; `failed = failures + errors`); or one of seven text
 formats, each requiring that reporter's own real framing so a bare "N passed,
 N failed" fragment pasted out of context (or invented) never parses as a
 false success: pytest's `"===== ... in N.Ns ====="` summary bar; Jest's
 `"Tests: ..."` line; a JUnit/Maven aggregate `"Results:"` section, including
-the real Maven layout with `[INFO]`/`[ERROR]` line prefixes (an earlier
+the real Maven layout with `[INFO]`/`[ERROR]` line prefixes and a blank,
+log-prefixed line between `"Results:"` and the aggregate (an earlier
 per-class `"Tests run:"` line with no `"Results:"` header is ignored, even
 elsewhere in the same transcript); Python unittest's `"Ran N tests ..."`
 followed by `"OK"` or `"FAILED (...)"`; dotnet test's `"Passed!"`/`"Failed!"`
-summary line; and node's `--test` runner's `"# tests"`/`"# pass"`/`"# fail"`
-lines (not necessarily adjacent — real output interleaves other fields
-between them). Every text format reads its outcomes independently of their
-order within the line or block. Each format is checked independently across
-the whole output; every format but pytest's uses only its last occurrence (a
-rerun's final state, not an earlier attempt pasted earlier in the same log).
-pytest's own category instead uses its last occurrence that has `failed > 0`,
-if any, else its own last occurrence: a "rerun failed tests only" pytest
-invocation can print a real failure, then a later, clean bar for just the
-retried subset, and taking the literal last bar would silently report the
-whole run as passing. If more than one format produces a result and they
-disagree, the parse is ambiguous and returns unparsed rather than guessing
-between them.
+summary line, and its older VSTest console form (`"Total tests: N"` with
+`Passed`/`Failed` on the same or following lines); and node's `--test`
+runner's `"# tests"`/`"# pass"`/`"# fail"` lines (not necessarily adjacent —
+real output interleaves other fields between them). Every text format reads
+its outcomes independently of their order within the line or block. Most
+formats use only their last occurrence (a rerun's final state, not an
+earlier attempt pasted earlier in the same log); pytest's bar and dotnet's
+`"Passed!"`/`"Failed!"` line instead use the last occurrence that has
+`failed > 0`, if any, else their own last occurrence: a "rerun failed tests
+only" pytest invocation, or one failing project in a multi-project dotnet
+solution, can print a real failure and then a later, clean bar or project,
+and taking the literal last one would silently report the whole run as
+passing. If more than one format produces a result and they disagree, the
+parse is ambiguous and returns unparsed rather than guessing between them.
 
 **Enforcement.** A delegated stage's claim recording a route is not itself
 completion: `complete` requires the dispatcher's own ledger — never the
@@ -809,18 +818,38 @@ receipt's self-report — to show the claimed stage's latest delegated attempt
 (following any `reassign` chain to its terminal end) as `successful` and
 started under this exact claim (its recorded `claim_token`, from `start`,
 matching the claim being completed — a successful attempt left over from an
-earlier claim of the same stage cannot satisfy a different, later re-claim),
-and refuses with `DELEGATION_STAGE_NOT_VERIFIED` otherwise. The Ready task
-gate (`ci_gate.py`'s `tasks` rule, and `revalidate --stage ready`) similarly
+earlier claim of the same stage cannot satisfy a different, later re-claim;
+a legacy attempt recorded before `claim_token` existed has none and can
+never match, so re-delegate the stage once after upgrading), and refuses
+with `DELEGATION_STAGE_NOT_VERIFIED` otherwise. The Ready task gate
+(`ci_gate.py`'s `tasks` rule, and `revalidate --stage ready`) similarly
 refuses a checked `[x]` task whose latest delegated attempt is anything but
 `successful` (running, starting, failed, abandoned or unverified) with
-`DELEGATION_TASK_UNVERIFIED`, naming every such task. Both also require the
-ledger itself to be trustworthy: `DELEGATION_LEDGER_UNTRUSTED` when the
-ledger file exists but does not match what a tracked dispatcher write
-(`collect`, `accept`, `reassign`) last recorded — a status changed by hand,
-without going through the dispatcher, is never trusted. A feature with no
-delegation activity yet (no ledger file at all) is not itself suspicious and
-is not refused this way.
+`DELEGATION_TASK_UNVERIFIED`, naming every such task.
+
+**Ledger trust.** Both `complete` and the Ready gate also read
+`delegation.ledger_trust_state`, a tri-state check: `'trusted'` (the local
+`.written` marker matches the ledger's current bytes); `'unverified-local'`
+(no local marker at all — the normal state for a CI checkout or a fresh
+clone, since `delegations.json` is committed but its marker lives in
+gitignored runtime state); or `'untrusted'` (a marker that disagrees, or a
+persisted tamper flag not yet cleared). Only `'unverified-local'` is a
+warning: it is recorded as `delegation_ledger_trust` on the completed
+receipt and appended to `ci_gate.py`'s `warnings`, while task and stage
+status are still fully enforced. `'untrusted'` still refuses with
+`DELEGATION_LEDGER_UNTRUSTED`. Detecting a genuine tamper (a marker that
+existed and now disagrees) persists a feature-level flag that a later,
+perfectly legitimate dispatcher write does **not** clear on its own — only
+`delegate_dispatch.py trust-reset --feature <f> --reason "<text>"` does,
+after a human reviews exactly what changed; it records the actor, time,
+reason and the exact bytes on both sides. **This detects accidental and
+local tampering only.** `delegations.json` is a tracked, committed file:
+anyone who can commit to the repository can commit a fabricated ledger just
+as easily as a legitimate one, and this mechanism cannot tell the
+difference. CI integrity for delegation evidence ultimately rests on code
+review of that commit, the same as any other tracked file — not on
+`ledger_trust_state`, which exists only to catch an accidental or purely
+local hand-edit on one machine.
 
 ### History and evidence
 

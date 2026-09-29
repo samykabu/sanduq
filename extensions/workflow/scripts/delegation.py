@@ -574,20 +574,71 @@ def ledger_path(root, feature):
     return path
 
 
-def ledger_state_trusted(root, feature):
-    """True when the ledger is either absent (no delegation activity yet, not
-    itself suspicious) or matches what a dispatcher last wrote (finding 2b,
-    round 2). False only when the file exists but its bytes were changed by
-    something other than a tracked dispatcher write -- collect, accept and
-    reassign all go through ``edit_ledger``, which records what it saved; a
-    hand-edited status (for example changing an attempt to "successful"
-    directly in the file) must never be trusted by ``complete`` or the Ready
-    gate.
+def foreign_write_marker(root, feature):
+    """Persisted, sticky record that a genuine ledger tamper was detected for
+    this feature (round 3, finding 2). Distinct from the ordinary written
+    marker: cleared only by an explicit ``delegate_dispatch.py trust-reset``,
+    so a later legitimate dispatcher write (which rewrites the ordinary
+    marker to match the file it just saved) can never quietly launder an
+    earlier hand-edit back into looking trusted.
     """
-    from delegate_dispatch import ledger_written_by_dispatcher
-    if not ledger_path(root, feature).is_file():
-        return True
-    return ledger_written_by_dispatcher(root, feature)
+    from workflow import digest
+    return root / '.specify/workflow/runtime' / ('delegation-' + digest(feature) + '.tampered')
+
+
+def trust_reset_log_path(root, feature):
+    from workflow import digest
+    return root / '.specify/workflow/runtime' / ('delegation-' + digest(feature) + '.trust-resets.json')
+
+
+def record_foreign_write(root, feature):
+    """Persist the sticky tamper flag once, keeping the first detection's own
+    digest (round 3, finding 2). A no-op if already recorded, so a second
+    detection before ``trust-reset`` does not overwrite the original evidence.
+    """
+    from datetime import datetime, timezone
+    from workflow import write
+    from delegate_dispatch import ledger_bytes_digest
+    marker = foreign_write_marker(root, feature)
+    if marker.is_file():
+        return
+    write(marker, {'detected_at': datetime.now(timezone.utc).isoformat(),
+                   'digest_at_detection': ledger_bytes_digest(ledger_path(root, feature))})
+
+
+def ledger_trust_state(root, feature):
+    """Tri-state trust read for the delegation ledger (round 3, findings 1-2).
+
+    ``'untrusted'``: a genuine tamper was detected and persisted
+    (``foreign_write_marker``) and not yet cleared by ``trust-reset``, or the
+    ordinary written marker exists but no longer matches the ledger's current
+    bytes. Refused by ``complete`` and the Ready gate.
+
+    ``'unverified-local'``: there is no ordinary written marker at all.
+    Normal for a CI checkout or a fresh clone -- ``delegations.json`` is
+    committed, but the marker lives in local-only runtime state -- and not
+    itself suspicious; a warning, not a block. It resolves to ``'trusted'``
+    on its own the first time a dispatcher operation writes the ledger on
+    this checkout. This detects accidental and local tampering only: anyone
+    who can commit the ledger file can also commit a fabricated one, so CI
+    integrity ultimately rests on review, not on this check.
+
+    ``'trusted'``: the marker exists and matches, and no unresolved tamper
+    is on record.
+    """
+    from workflow import read
+    from delegate_dispatch import ledger_bytes_digest, written_marker
+    if foreign_write_marker(root, feature).is_file():
+        return 'untrusted'
+    recorded = read(written_marker(root, feature), {}).get('sha256')
+    if recorded is None:
+        return 'unverified-local'
+    return 'trusted' if recorded == ledger_bytes_digest(ledger_path(root, feature)) else 'untrusted'
+
+
+def ledger_state_trusted(root, feature):
+    """Back-compat boolean: ``True`` unless the tri-state read is ``'untrusted'``."""
+    return ledger_trust_state(root, feature) != 'untrusted'
 
 
 def latest_attempt(root, feature, identity):

@@ -101,7 +101,7 @@ def check(root, feature, policy, base=None, rules=None, verify_ci_evidence=True,
                 '(on the feature branch) and re-record any invalidated stage')
     source = read(directory / 'scope-source.json', {})
     require(f"{source.get('repo')}#{source.get('issue')}" == state.get('issue'), 'FEATURE_BINDING_MISMATCH')
-    amendments, revalidations, accepted = [], [], []
+    amendments, revalidations, accepted, warnings = [], [], [], []
     if rules['receipts']:
         for stage in stages(policy):
             if stage == 'pr': continue  # PR publication follows readiness; never requires a recursive PR commit.
@@ -138,7 +138,8 @@ def check(root, feature, policy, base=None, rules=None, verify_ci_evidence=True,
                            for item in receipt.get('amendments', [])]
             if stage == 'clarify': require(receipt.get('unresolved') == 0 and receipt.get('answers_applied') is True, 'CLARIFICATION_UNRESOLVED')
             if stage in ('verify','review','ready'): require(receipt.get('blocking_findings') == 0, 'BLOCKING_FINDINGS_REMAIN')
-    ready_checks(root, feature, policy, state, base, {'tasks': rules['tasks'], 'task_links': rules['task_links']})
+    ready_checks(root, feature, policy, state, base, {'tasks': rules['tasks'], 'task_links': rules['task_links']},
+                warnings=warnings)
     if rules['decisions']:
         from decisions import verify_ledger
         decisions = read(directory / 'workflow/decisions.json',
@@ -162,9 +163,10 @@ def check(root, feature, policy, base=None, rules=None, verify_ci_evidence=True,
         require(all(item['status'] == 'answered' for item in live), 'DECISION_LIVE_UNRESOLVED')
     if rules['candidate_merge']:
         check_candidate_merge(root)
-    ready_checks(root, feature, policy, state, base, {'documentation': rules['documentation']})
+    ready_checks(root, feature, policy, state, base, {'documentation': rules['documentation']}, warnings=warnings)
     return {'feature': feature, 'passed': True, 'rules': [name for name, enabled in rules.items() if enabled],
             'amendments': amendments, 'revalidations': revalidations, 'accepted_drift': accepted,
+            'warnings': warnings,
             'scope': 'selected committed evidence checks; live answers are checked when selected; human acceptance is separate'}
 
 

@@ -2,6 +2,49 @@
 
 ## Unreleased
 
+- Delegation guard, round 3 corrections (B12). The ledger trust read is now
+  tri-state (`delegation.ledger_trust_state`) instead of a single pass/fail
+  boolean, because `delegations.json` is committed while its local
+  `.written` marker lives in gitignored runtime state: a fresh clone or a CI
+  checkout has no marker at all and was wrongly refused
+  (`DELEGATION_LEDGER_UNTRUSTED`) by every `complete` and by the Ready gate.
+  `'unverified-local'` (no marker) is now recorded as a warning only
+  (`delegation_ledger_trust` on the completed receipt; `warnings` in
+  `ci_gate.py`'s result) while task and stage status are still enforced;
+  `'untrusted'` (a marker that disagrees, or a persisted tamper) still
+  refuses. A genuine tamper is now sticky: detecting it persists a
+  feature-level flag that a later legitimate dispatcher write no longer
+  clears on its own, closing a hand-edit-laundering path. New
+  `delegate_dispatch.py trust-reset --feature <f> --reason "<text>"` is the
+  only way to clear it, and records who, when, why and the exact bytes on
+  both sides. **This detects accidental and local tampering only**: anyone
+  who can commit the ledger file can commit a fabricated one just as easily,
+  so CI integrity still rests on review, not on this mechanism — see the
+  README's delegation section.
+
+  **Upgrade note**: a stage attempt recorded before this release added
+  `claim_token` has none and can never match a later claim's token, so
+  `complete` refuses it as `DELEGATION_STAGE_NOT_VERIFIED` even if the
+  attempt itself was genuinely successful. Re-delegate the stage once
+  (`delegate_dispatch.py start --id stage:<stage> --claim-token <token>`)
+  under this release to record a fresh, matching attempt; this is a one-time
+  cost per open, already-delegated stage claim.
+
+  The light-tier model-family match (round 2) was too broad and matched
+  unrelated sibling models that merely shared a provider prefix or a
+  trailing qualifier (`claude-opus-4-7` against `claude-haiku-4-5`,
+  `gpt-6-terra-codex` against `gpt-6-sol-codex`, `gpt-6-sol` against the
+  bare family prefix `gpt-6`); it now matches only an exact identifier, or
+  one fully containing the other as a whole dash-delimited token run that
+  includes at least one non-generic token. `start` now requires `--owned`
+  when *any* candidate in a route's fallback chain is light, not only the
+  preferred one. The reporter-counts parser tolerates a blank, log-level-
+  prefixed line (`[INFO]` alone) between Maven's `Results:` and its
+  aggregate, supports the older dotnet VSTest console form (`Total tests:
+  N` with `Passed`/`Failed` on the same or following lines), and, like
+  pytest's rerun rule, treats any `Failed!` line in a multi-project dotnet
+  solution as failed rather than only its last project's line.
+
 - Delegation guard, round 2 corrections (B12). `complete` and the Ready task
   gate now also require the ledger itself to be trustworthy
   (`DELEGATION_LEDGER_UNTRUSTED` when it exists but was not last written by a

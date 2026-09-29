@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import getpass
 import hashlib
 import json
 import os
@@ -116,10 +117,29 @@ def ledger_foreign_write(root, feature):
     """True when the ledger exists and no dispatcher save accounts for its bytes.
 
     A ledger with no record of a dispatcher save (a fresh clone or an older
-    build) counts as foreign too: nothing proves who wrote it.
+    build) counts as foreign too: nothing proves who wrote it. Used only for
+    worker-edit attribution (bookkeeping paths, retry decisions); it is
+    deliberately broad, since a missing marker is common and not itself
+    suspicious there. ``ledger_genuinely_tampered`` below is the narrower
+    check for the sticky trust flag (round 3, finding 2).
     """
     return (delegation.ledger_path(root, feature).exists() and
             not ledger_written_by_dispatcher(root, feature))
+
+
+def ledger_genuinely_tampered(root, feature):
+    """True only when the ordinary written marker exists but disagrees with
+    the ledger's current bytes -- never merely absent (round 3, findings 1-2).
+
+    A fresh clone or CI checkout has no marker at all and is not itself
+    suspicious (see ``delegation.ledger_trust_state``'s ``'unverified-local'``);
+    a marker that WAS established and now disagrees means something changed
+    the ledger without a tracked dispatcher write since.
+    """
+    recorded = workflow.read(written_marker(root, feature), {}).get('sha256')
+    if recorded is None:
+        return False
+    return recorded != ledger_bytes_digest(delegation.ledger_path(root, feature))
 
 
 def maintenance_allows(ledger, key):
@@ -159,6 +179,12 @@ def edit_ledger(root, feature, active=None):
             for attempt in value['attempts']:
                 if attempt.get('status') in ACTIVE:
                     attempt.setdefault('ledger_foreign_write_seen', seen)
+        if ledger_genuinely_tampered(root, feature):
+            # A real tamper (not merely a missing marker): persist the sticky
+            # flag before this edit's own save would otherwise re-anchor the
+            # marker at the new bytes and quietly launder it away (round 3,
+            # finding 2). Only trust-reset clears it.
+            delegation.record_foreign_write(root, feature)
         yield value
         if value == original:
             # Nothing to record. Rewriting unchanged history would also re-mark
@@ -616,8 +642,10 @@ def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
     # A light-tier or qa_collect start must declare its owned paths itself
     # (finding 4, round 2): the evidence guard needs a bounded set to check
     # summary or accept file evidence against, not a silent default to the
-    # whole working directory.
-    requires_owned = work_type == 'qa_collect' or (candidates and candidates[0].get('tier') == 'light')
+    # whole working directory. Any candidate in the whole fallback chain
+    # being light is enough (round 3, finding 6): a fallback beyond the
+    # preferred candidate can still land the run on the light tier.
+    requires_owned = work_type == 'qa_collect' or any(c.get('tier') == 'light' for c in candidates)
     delegation.require(not requires_owned or owned,
                        'DELEGATION_OWNED_PATHS_REQUIRED: a light-tier or qa_collect start must declare '
                        '--owned <path> (repeatable); the light-tier evidence guard checks file evidence '
@@ -848,10 +876,11 @@ def _counts_from_labeled_block(block):
     """
     found = {}
     for label, number in re.findall(
-            r'(Tests(?:\s+run)?|Failures|Errors|Skipped|Total|Passed|Failed)\s*:\s*(\d+)', block, re.I):
+            r'(Tests(?:\s+run)?|Total\s+tests|Failures|Errors|Skipped|Total|Passed|Failed)\s*:\s*(\d+)',
+            block, re.I):
         key = re.sub(r'\s+', ' ', label.strip().lower())
         found[key] = found.get(key, 0) + int(number)
-    total = found.get('tests run', found.get('tests', found.get('total')))
+    total = found.get('tests run', found.get('tests', found.get('total tests', found.get('total'))))
     failed = found.get('failures', 0) + found.get('errors', 0) + found.get('failed', 0)
     passed = found.get('passed')
     if total is None:
@@ -915,17 +944,31 @@ def _node_test_counts(text):
 #      prefix does not stop it matching), never an earlier per-class
 #      "Tests run:" line lacking that header.
 #   4. Python unittest's "Ran N tests ..." followed by "OK" or "FAILED (...)".
-#   5. dotnet test's "Passed!"/"Failed!" summary line.
+#   5. dotnet test's "Passed!"/"Failed!" summary line. A multi-project
+#      solution prints one such line per project; like pytest, this category
+#      prefers any occurrence with failed > 0 over the last one (round 3,
+#      finding 4), so one failing project is never hidden behind a later,
+#      passing project's clean line.
+#   6. dotnet's older VSTest console form, "Total tests: N" with Passed/Failed
+#      on the same or following lines.
 # node's --test runner "# tests/# pass/# fail" lines are checked separately
 # below (they need not be contiguous; see ``_node_test_counts``).
-PYTEST_CATEGORY = 0
+PREFER_FAILED_CATEGORIES = {0, 5}  # pytest's bar, dotnet's Passed!/Failed! line
 COUNT_PATTERNS = (
     (re.compile(r'=+([^=\n]*?\bin\s+[\d.]+s[^=\n]*?)=+', re.I), _block_counts),
     (re.compile(r'Tests:([^\n]+)', re.I), _block_counts),
-    (re.compile(r'Results:\s*\r?\n+([^\n]+)', re.I), _labeled_block_counts),
+    # A blank line between "Results:" and the aggregate may itself carry a
+    # bare log-level prefix ("[INFO]" alone) in real Maven output; skip any
+    # number of such blank (optionally bracket-prefixed) lines, not just
+    # literally empty ones (round 3, finding 4).
+    (re.compile(r'Results:[ \t]*\r?\n(?:[ \t]*(?:\[\w+\])?[ \t]*\r?\n)*[ \t]*([^\n]+)', re.I),
+     _labeled_block_counts),
     (re.compile(r'Ran\s+(\d+)\s+tests?\b[^\n]*\r?\n+\s*OK\b', re.I), _unittest_ok_counts),
     (re.compile(r'Ran\s+(\d+)\s+tests?\b[^\n]*\r?\n+\s*FAILED\s*\(([^)]*)\)', re.I), _unittest_failed_counts),
     (re.compile(r'(?:Passed|Failed)!\s*-\s*([^\n]+)', re.I), _labeled_block_counts),
+    # dotnet's older VSTest console form, its fields possibly on separate
+    # lines; capture "Total tests:" and up to the next few lines.
+    (re.compile(r'(Total\s+tests\s*:[^\n]*(?:\r?\n[ \t]*[^\n]*){0,3})', re.I), _labeled_block_counts),
 )
 
 
@@ -944,13 +987,15 @@ def parse_counts(text):
     ``Passed!``/``Failed!`` line, and node ``--test``'s ``# tests``/``#
     pass``/``# fail`` lines.
 
-    Each pattern category is tried independently across the whole text. Every
-    category but pytest's uses only its *last* match (a rerun's final state,
-    not an earlier one); pytest's uses the last match that has ``failed > 0``,
-    if any, else its own last match, so a rerun-failed-only pytest invocation
-    cannot hide an earlier real failure behind a later, clean partial bar.
-    If more than one category produces a match and they disagree, the parse
-    is ambiguous and returns ``None`` rather than guessing between them.
+    Each pattern category is tried independently across the whole text. Most
+    categories use only their *last* match (a rerun's final state, not an
+    earlier one); pytest's bar and dotnet's ``Passed!``/``Failed!`` line use
+    the last match that has ``failed > 0``, if any, else their own last
+    match, so a rerun-failed-only pytest invocation, or one failing project
+    in a multi-project dotnet solution, cannot hide behind a later, clean
+    bar or project. If more than one category produces a match and they
+    disagree, the parse is ambiguous and returns ``None`` rather than
+    guessing between them.
     """
     obj = _parse_json_object(text)
     if isinstance(obj, dict):
@@ -963,7 +1008,7 @@ def parse_counts(text):
         matches = [counts for m in pattern.finditer(text) if (counts := convert(m))]
         if not matches:
             continue
-        if index == PYTEST_CATEGORY:
+        if index in PREFER_FAILED_CATEGORIES:
             failed_matches = [counts for counts in matches if counts['failed'] > 0]
             per_category[index] = failed_matches[-1] if failed_matches else matches[-1]
         else:
@@ -1058,29 +1103,45 @@ def validate_owned_files(cwd, owned_paths, paths):
 # their own (a "mini" or "pro" variant of two unrelated model lines would
 # otherwise look related). Purely numeric tokens (version numbers) are
 # excluded the same way in ``model_family_matches``.
-GENERIC_MODEL_TOKENS = {'mini', 'small', 'medium', 'large', 'pro', 'max', 'lite', 'base', 'preview'}
+# Tokens too generic to prove a family match by themselves: purely numeric
+# (version numbers), a bare provider name, or a size/tier word shared across
+# an entire, otherwise unrelated model line.
+GENERIC_MODEL_TOKENS = {'gpt', 'claude', 'mini', 'small', 'medium', 'large', 'pro', 'max', 'lite',
+                        'base', 'preview'}
+
+
+def _model_tokens(model):
+    text = re.sub(r'[^a-z0-9]+', '-', str(model or '').strip().lower()).strip('-')
+    return [token for token in text.split('-') if token]
 
 
 def model_family_matches(candidate_model, configured_model):
-    """True when two model identifiers plausibly name the same model family.
+    """True only when the two model identifiers are the same, or one is a
+    whole dash-delimited token run inside the other (round 3, finding 3: a
+    shared-token-anywhere rule was too broad and matched unrelated sibling
+    models -- ``claude-opus-4-7`` against ``claude-haiku-4-5``, or
+    ``gpt-6-terra-codex`` against ``gpt-6-sol-codex`` -- that merely share a
+    provider prefix or a trailing qualifier).
 
-    A configured alias (``haiku``) and the full identifier a harness actually
-    reports (``claude-haiku-4-5-20260101``) are not the same string but do
-    name the same family; exact string equality let a real light-tier run
-    escape the guard whenever the harness reported its full name (finding 3b,
-    round 2). Matches when either normalised name contains the other as a
-    substring, or when they share a dash-separated token that is not a
-    generic size/tier word or a bare version number.
+    ``"haiku"`` matches ``"claude-haiku-4-5"`` (a whole token inside it);
+    ``"claude-haiku-4-5"`` matches ``"claude-haiku-4-5-20251001"`` (a whole
+    prefix run of tokens, the harness's own build/date suffix appended). The
+    contained run must include at least one token that is not purely a
+    version number or a bare provider/size word, so ``"gpt-6"`` does not
+    match ``"gpt-6-sol"``: every sibling model in that family (``sol``,
+    ``terra``, ``astra``) shares that same generic ``"gpt-6"`` prefix, so it
+    proves nothing on its own.
     """
-    a = re.sub(r'[^a-z0-9]+', '-', str(candidate_model or '').strip().lower()).strip('-')
-    b = re.sub(r'[^a-z0-9]+', '-', str(configured_model or '').strip().lower()).strip('-')
-    if not a or not b:
+    a_tokens, b_tokens = _model_tokens(candidate_model), _model_tokens(configured_model)
+    if not a_tokens or not b_tokens:
         return False
-    if a in b or b in a:
+    if a_tokens == b_tokens:
         return True
-    distinctive = lambda name: {t for t in name.split('-')
-                                if len(t) >= 4 and not t.isdigit() and t not in GENERIC_MODEL_TOKENS}
-    return bool(distinctive(a) & distinctive(b))
+    inner, outer = (a_tokens, b_tokens) if len(a_tokens) <= len(b_tokens) else (b_tokens, a_tokens)
+    if not any(token not in GENERIC_MODEL_TOKENS and not token.isdigit() for token in inner):
+        return False
+    span = len(inner)
+    return any(outer[i:i + span] == inner for i in range(len(outer) - span + 1))
 
 
 def is_light_tier_run(attempt, policy):
@@ -1623,6 +1684,41 @@ def abandon_intent(root, feature, intent_id, reason):
     return {'intent_id': intent_id, 'identity': intent['identity'], 'status': 'intent-abandoned'}
 
 
+def trust_reset(root, feature, reason):
+    """Explicitly clear a persisted ledger tamper flag (round 3, findings 1-2).
+
+    Only a human decision resolves genuine tampering: this records who, when
+    and why, and the exact bytes on both sides, then re-anchors the ordinary
+    written marker at the ledger's current bytes so normal dispatcher
+    operation is read as trusted again from this point forward. It does not
+    (and cannot) prove the current bytes are correct -- only that a human
+    reviewed and accepted them; CI integrity ultimately rests on review, not
+    on this mechanism (see the README's local-only trust limit).
+    """
+    root = root.resolve()
+    feature = feature_identity(root, feature)
+    delegation.require(isinstance(reason, str) and reason.strip(),
+                       'DELEGATION_TRUST_RESET_REASON_REQUIRED')
+    delegation.require_no_maintenance(root)
+    with ledger_lock(root, feature):
+        marker = delegation.foreign_write_marker(root, feature)
+        record = workflow.read(marker, None)
+        new_sha = ledger_bytes_digest(delegation.ledger_path(root, feature))
+        try:
+            actor = getpass.getuser()
+        except Exception:
+            actor = None
+        entry = {'at': stamp(), 'actor': actor, 'reason': reason.strip(),
+                'old_sha256': (record or {}).get('digest_at_detection'), 'new_sha256': new_sha}
+        log_path = delegation.trust_reset_log_path(root, feature)
+        log = workflow.read(log_path, [])
+        log.append(entry)
+        workflow.write(log_path, log)
+        marker.unlink(missing_ok=True)
+        workflow.write(written_marker(root, feature), {'sha256': new_sha})
+    return {'feature': feature, 'trust': 'trusted', **entry}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=Path.cwd())
@@ -1663,6 +1759,9 @@ def main(argv=None):
     accept_cmd.add_argument('--owned', action='append',
                             help='A path (repeatable) to check "files" evidence against for this '
                                  'call, overriding the paths recorded at start')
+    trust_reset_cmd = sub.add_parser('trust-reset')
+    trust_reset_cmd.add_argument('--feature', required=True)
+    trust_reset_cmd.add_argument('--reason', required=True)
     args = parser.parse_args(argv)
     try:
         if args.action == 'start':
@@ -1677,6 +1776,8 @@ def main(argv=None):
         elif args.action == 'accept':
             result = accept(args.root, args.feature, args.run_id, args.command, args.expect,
                             args.timeout, args.owned)
+        elif args.action == 'trust-reset':
+            result = trust_reset(args.root, args.feature, args.reason)
         else:
             result = reassign(args.root, args.feature, args.run_id, args.reason, args.task_file)
         print(json.dumps(result, indent=2))
