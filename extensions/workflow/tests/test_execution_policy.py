@@ -66,7 +66,9 @@ class ExecutionPackageTests(unittest.TestCase):
                 core = archive.read('workflow/skills/workflow/SKILL.md')
                 self.assertLessEqual(len(core), 6144, 'Core SKILL.md over the 6 KB budget')
                 for stage in w.BASE_STAGES:
-                    name = 'workflow/' + w.stage_reference(stage)
+                    # stage_reference() is project-relative (`.specify/extensions/workflow/...`);
+                    # strip that prefix to get the path inside the `workflow/` archive entry.
+                    name = 'workflow/' + w.stage_reference(stage)[len(w.WORKFLOW_PACKAGE_PREFIX):]
                     self.assertEqual(hashlib.sha256(archive.read(name)).hexdigest(), inventory[name], stage)
                 archive.extractall(root / 'installed')
             helper = root / 'installed/workflow/scripts/progress.py'

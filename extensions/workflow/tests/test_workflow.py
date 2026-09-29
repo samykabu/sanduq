@@ -477,13 +477,16 @@ class WorkflowTests(unittest.TestCase):
         # B8: the core SKILL.md tells the dispatcher exactly which reference to load for
         # each stage (`claim`'s `reference` field, `stage_reference()`); this proves the
         # source tree actually ships one references/stage-<name>.md per BASE_STAGES entry,
-        # so no stage's `claim` can ever name a file that does not exist.
+        # so no stage's `claim` can ever name a file that does not exist. `reference` is
+        # project-relative (matches the installed layout: `.specify/extensions/workflow/...`),
+        # so it is resolved against the package root by stripping WORKFLOW_PACKAGE_PREFIX.
         package_root = Path(__file__).resolve().parents[1]
         seen = set()
         for stage in w.BASE_STAGES:
             reference = w.stage_reference(stage)
-            self.assertTrue(reference.startswith('skills/workflow/references/stage-'), reference)
-            self.assertTrue((package_root / reference).is_file(), reference)
+            self.assertTrue(reference.startswith(w.WORKFLOW_PACKAGE_PREFIX + 'skills/workflow/references/stage-'), reference)
+            package_relative = reference[len(w.WORKFLOW_PACKAGE_PREFIX):]
+            self.assertTrue((package_root / package_relative).is_file(), reference)
             seen.add(reference)
         self.assertEqual(len(seen), len(w.BASE_STAGES), 'stage_reference() must be unique per stage')
 

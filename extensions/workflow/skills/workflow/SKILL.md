@@ -12,12 +12,11 @@ the package's pinned `requirements.txt` when missing. Never install a floating t
 
 ## Entry points
 
-`init`, `continue`, `status`, `doctor` and `reconcile` are detailed in
-[references/dispatcher-operations.md](references/dispatcher-operations.md).
-`scope` and `clarify` enter the stage loop below and are detailed in their stage
-reference (`references/stage-scope.md`, `references/stage-clarify.md`).
-`finalize` runs the same loop with `--finalize`; see
-[references/stage-pr.md](references/stage-pr.md).
+`init`, `continue`, `status`, `doctor`, `reconcile`: see
+[dispatcher-operations.md](references/dispatcher-operations.md). `scope`, `clarify`
+enter the stage loop below; see `references/stage-scope.md`,
+`references/stage-clarify.md`. `finalize` runs the same loop with `--finalize`; see
+[stage-pr.md](references/stage-pr.md).
 
 ## Stage loop
 
@@ -25,32 +24,37 @@ reference (`references/stage-scope.md`, `references/stage-clarify.md`).
    ambiguous binding, active foreign executor, or a changed package lock. Never skip a gate.
 2. Only reliable measured host context usage can trigger a context pause; without it,
    continue automatically in bounded batches. Never invent percentages or a stop estimate.
-   Full rule: [references/dispatcher-operations.md#context-and-telemetry-stage-loop-step-2](references/dispatcher-operations.md#context-and-telemetry-stage-loop-step-2).
+   Full rule: [context-and-telemetry](references/dispatcher-operations.md#context-and-telemetry-stage-loop-step-2).
 3. `claim --feature ... --usage <file>` returns the stage, command and claim token. It also
    returns a `reference`: the exact `references/stage-<stage>.md` to read before acting on
    this claim. If it checkpoints based on a fresh reliable measurement, save the handoff and
    use a supported host continuation mechanism when available; otherwise return the
-   fresh-session prompt. Unknown, estimated, stale or unreliable measurements do not justify
+   fresh-session prompt. Handoff contents and GitHub-discussion rules:
+   [interruption-and-github-behavior](references/dispatcher-operations.md#interruption-and-github-behavior).
+   Unknown, estimated, stale or unreliable measurements do not justify
    a context pause. Continue ordinary stage transitions automatically and keep durable
    progress notes.
 4. Invoke the selected command in this host using its installed skill/command registration,
    or its delegation route when `delegation.enabled` is true. Full rule, including decision
-   escalation: [references/delegation-and-decisions.md](references/delegation-and-decisions.md).
-5. Record an honest receipt JSON: `stage`, `outcome: passed`, `summary`, `inputs`, `evidence`,
-   and the optional `input_roles` map. A receipt without `input_roles` is read as
+   escalation: [delegation-and-decisions.md](references/delegation-and-decisions.md).
+5. Before writing any receipt, read
+   [receipt-rules.md](references/receipt-rules.md): it holds the rules for what
+   makes a receipt honest (failed/skipped/pending work cannot pass, a pending or conflicted
+   issue decision blocks a passed receipt and must be in the stage inputs, checkpoint files
+   never belong in the input manifest), declaring `input_roles`, `amend`, and the recovery
+   recipes after source drift or a `STALE_RECEIPT` gate failure; never revalidate on a note
+   alone. Record an honest receipt JSON: `stage`, `outcome: passed`, `summary`, `inputs`,
+   `evidence`, and the optional `input_roles` map. A receipt without `input_roles` is read as
    all-dependency. A changed dependency stales the receipt and fails a later stage with
    `UPSTREAM_INPUT_CHANGED_DURING_STAGE`; a changed consulted input is reported by `next` as
    `advisory_drift`. If only a completed stage's evidence file changed afterwards, do not
-   re-record the stage and do not copy hashes forward: use `amend`. Recovery after source
-   drift or a `STALE_RECEIPT` gate failure: read
-   [references/receipt-rules.md](references/receipt-rules.md) and run its recipes in order;
-   never revalidate on a note alone. Add the stage-specific fields in this stage's own
-   reference.
+   re-record the stage and do not copy hashes forward: use `amend`. Add the stage-specific
+   fields in this stage's own reference.
 6. Run `complete --feature ... --token ... --receipt <file>`. Re-read the next stage.
    Continue automatically without asking about routine transitions. If blocked, use
    `pause --reason` and report the actual question or failure. Preserve required human
    review/deployment gates. Project Sync and native task-issue sync timing:
-   [references/dispatcher-operations.md#project-sync-and-task-issue-sync-stage-loop-step-6](references/dispatcher-operations.md#project-sync-and-task-issue-sync-stage-loop-step-6).
+   [project-sync](references/dispatcher-operations.md#project-sync-and-task-issue-sync-stage-loop-step-6).
 7. When `ready_to_finalize` is reached, honor the existing publication authorization.
    If the user already requested a PR, continue with Finalize automatically. Otherwise
    report readiness and obtain the missing PR authorization. Executor hooks never
@@ -81,11 +85,11 @@ exactly that file, never guess from the stage name alone.
 Paths are relative to `references/`. A managed command overlay
 (`presets/workflow/commands/*.md`) is a short pointer into this skill and its
 claimed reference; the contract it points to (enter/stop/never-recurse) is
-[references/dispatcher-operations.md#managed-overlay-contract](references/dispatcher-operations.md#managed-overlay-contract).
+[managed-overlay-contract](references/dispatcher-operations.md#managed-overlay-contract).
 The `speckit-superpowers-bridge` legacy overlays instead point to
-[references/legacy-guard.md](references/legacy-guard.md).
+[legacy-guard.md](references/legacy-guard.md).
 
 ## Updates
 
 Package, upgrade and host-switch procedures:
-[references/dispatcher-operations.md#updates](references/dispatcher-operations.md#updates).
+[updates](references/dispatcher-operations.md#updates).

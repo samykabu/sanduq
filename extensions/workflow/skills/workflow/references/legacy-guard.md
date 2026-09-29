@@ -9,5 +9,7 @@ and reconciled from actual evidence; never change it to complete merely to pass 
 guard. Do not start a second executor or write another legacy handoff. For execute,
 invoke `speckit.workflow.continue` for the explicitly bound feature and return.
 For guard/handoff, report the managed owner and return without mutating legacy state.
-STOP this invocation before the upstream legacy instructions below. Unmanaged
+Each `speckit-superpowers-bridge` overlay carries its own inline STOP before the
+upstream legacy instructions that follow it in that overlay file (this guide has
+none, since it is a shared reference, not an overlay). Unmanaged
 projects retain those upstream instructions unchanged.

@@ -22,3 +22,6 @@ T001-title deduplication and issue-creation loop with:
    parent issue, feature and task ID, and verifies native GitHub sub-issue links.
 4. Include its result and journal as evidence. Never also execute the core's old
    MCP creation loop or Project's task creator. A missing adapter is a blocker.
+
+Task de-duplication identity and handoff/GitHub rules:
+`references/dispatcher-operations.md#interruption-and-github-behavior`.

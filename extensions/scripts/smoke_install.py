@@ -64,7 +64,9 @@ def smoke(host, superspec_source=None, second_host=None):
     installed_runtime = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(installed_runtime)
     for stage in installed_runtime.BASE_STAGES:
-        reference = installed_workflow / installed_runtime.stage_reference(stage)
+        # stage_reference() is project-relative (`.specify/extensions/workflow/...`), so it
+        # resolves directly against the project root, not against installed_workflow.
+        reference = project / installed_runtime.stage_reference(stage)
         assert reference.is_file(), 'Missing installed stage reference: ' + str(reference)
     assert len((installed_workflow / 'skills/workflow/SKILL.md').read_bytes()) <= 6144, 'Core SKILL.md over the 6 KB budget'
     execution_files = ('skills/workflow/references/execution-assign.md', 'skills/workflow/references/execution-report.md',

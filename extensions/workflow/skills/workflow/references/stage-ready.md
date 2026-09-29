@@ -2,6 +2,10 @@
 
 Loaded when `claim` returns `stage: ready` (runtime `workflow:gates`).
 
+Before this pass, read the publication preflight in
+`references/stage-pr.md#publication-preflight-and-post-merge-verification` and
+prepare portable evidence there: it must run before the last Verify/Review/Ready pass.
+
 ## Required work and evidence
 
 Verify task completion by category, issue mapping, review/tests and selected

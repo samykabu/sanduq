@@ -46,7 +46,8 @@ REWORD_EXCEPTIONS = [
     ("Run the stage loop below.",
      "the stage loop moved from this entry-point bullet into core SKILL.md; "
      "references/stage-scope.md now says 'Run the stage loop in the core skill.'"),
-    ("If the bound PR is already merged, use the post-merge verification protocol below;",
+    ("If the bound PR is already merged, use the post-merge verification protocol below; "
+     "do not create a replacement PR or claim the old readiness receipt verifies new source.",
      "the post-merge verification section now precedes this sentence inside "
      "references/stage-pr.md (both moved into the same file), so the pointer reads "
      "'...protocol above;' there."),
@@ -65,7 +66,8 @@ REWORD_EXCEPTIONS = [
      "the Stage contracts table moved out of SKILL.md into per-stage references; "
      "references/receipt-rules.md now says 'Add the stage-specific fields in this "
      "stage's own reference.'"),
-    ("execute the domain work below once",
+    ("Inside a matching claim, execute the domain work below once, then return control to "
+     "the dispatcher.",
      "the managed-overlay boilerplate is now centralised in "
      "references/dispatcher-operations.md, decoupled from the per-command body it used "
      "to immediately precede in each preset file; 'below' was dropped ('execute the "
@@ -162,16 +164,22 @@ class SkillSplitCompletenessTests(unittest.TestCase):
     def setUpClass(cls):
         core = ROOT / 'extensions/workflow/skills/workflow/SKILL.md'
         references = sorted((ROOT / 'extensions/workflow/skills/workflow/references').glob('*.md'))
-        cls.new_files = [core] + references
+        # The current (post-split) overlay pointer files are also searched: a few of them
+        # inline a short, verbatim-preserved original sentence (e.g. the legacy guard's
+        # STOP line) rather than only pointing elsewhere, and that counts as moved, not
+        # dropped, even though the overlay body is otherwise new pointer text.
+        overlays = sorted((ROOT / 'presets/workflow/commands').glob('*.md'))
+        cls.new_files = [core] + references + overlays
         cls.new_corpus = normalize('\n\n'.join(p.read_text(encoding='utf-8') for p in cls.new_files))
-        cls.exceptions = [normalize(text) for text, _reason in REWORD_EXCEPTIONS]
+        cls.exceptions = {normalize(text) for text, _reason in REWORD_EXCEPTIONS}
 
     def covered(self, unit):
         if unit in self.new_corpus:
             return True
-        # An exception covers a unit when the unit is (part of) the documented original
-        # phrase; it never manufactures coverage for unrelated text.
-        return any(unit in exc or exc in unit for exc in self.exceptions)
+        # An exception covers a unit only on an exact match after normalisation, never a
+        # substring in either direction: a short exception phrase must not silently swallow
+        # a longer, unrelated dropped sentence that happens to contain it (or vice versa).
+        return unit in self.exceptions
 
     def test_every_original_sentence_is_moved_not_dropped(self):
         missing = []
@@ -205,6 +213,40 @@ class SkillSplitCompletenessTests(unittest.TestCase):
             if mentions_elsewhere < 1:
                 unreachable.append(target.name)
         self.assertEqual(unreachable, [], f'Orphaned reference file(s) never named: {unreachable}')
+
+    def read_reference(self, name):
+        return (ROOT / 'extensions/workflow/skills/workflow/references' / name).read_text(encoding='utf-8')
+
+    def test_core_reads_receipt_rules_before_every_receipt(self):
+        # Review finding 3: core step 5 must load receipt-rules.md unconditionally (not
+        # only on drift/STALE_RECEIPT), because the passed-receipt rules (no pass on
+        # failed/skipped/pending work, pending decisions block, decision ledger in inputs,
+        # no checkpoint files in the manifest) live only in that reference.
+        core = (ROOT / 'extensions/workflow/skills/workflow/SKILL.md').read_text(encoding='utf-8')
+        self.assertIn('Before writing any receipt, read', core)
+        self.assertIn('receipt-rules.md', core)
+        rules = normalize(self.read_reference('receipt-rules.md'))
+        for rule in ('cannot receive a passed receipt', 'blocks a passed receipt',
+                     'Reread the', 'checkpoint files in input manifests'):
+            self.assertIn(rule, rules)
+
+    def test_verify_review_ready_point_at_the_publication_preflight(self):
+        # Review finding 4: the preflight in stage-pr.md must run before the last
+        # Verify/Review/Ready pass, so each of those three stage references names it.
+        anchor = 'stage-pr.md#publication-preflight-and-post-merge-verification'
+        for name in ('stage-verify.md', 'stage-review.md', 'stage-ready.md'):
+            self.assertIn(anchor, self.read_reference(name), name)
+
+    def test_handoff_and_github_rules_are_linked_from_their_consumers(self):
+        # Review finding 5: dispatcher-operations.md's handoff/GitHub-discussion/task-
+        # dedup rules must be reachable from core step 3 and from the two stages whose
+        # work is GitHub discussions (clarify) and GitHub issue/task identity
+        # (taskstoissues), not just sitting unlinked in dispatcher-operations.md.
+        anchor = 'dispatcher-operations.md#interruption-and-github-behavior'
+        core = (ROOT / 'extensions/workflow/skills/workflow/SKILL.md').read_text(encoding='utf-8')
+        self.assertIn(anchor, core)
+        for name in ('stage-clarify.md', 'stage-taskstoissues.md'):
+            self.assertIn(anchor, self.read_reference(name), name)
 
 
 if __name__ == '__main__':

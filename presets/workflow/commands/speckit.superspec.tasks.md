@@ -3,5 +3,5 @@ description: Sanduq managed lifecycle overlay
 ---
 
 <!-- sanduq-workflow-managed:v1 -->
-Managed overlay: see `.specify/extensions/workflow/skills/workflow/references/dispatcher-operations.md#managed-overlay-contract`.
+If `.specify/workflow.yml` exists and there is no active matching claim, enter the dispatcher and STOP; never re-enter it from a claim. Full contract: `.specify/extensions/workflow/skills/workflow/references/dispatcher-operations.md#managed-overlay-contract`.
 Inside a matching claim, read `.specify/extensions/workflow/skills/workflow/references/stage-tasks.md` (SuperSpec Tasks provider), then continue with the upstream instructions below.
