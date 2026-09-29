@@ -1097,7 +1097,7 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
             # since delegations.json is committed but the marker is local
             # runtime state) is a warning only, and status is still enforced
             # (round 3, findings 1-2).
-            from delegation import latest_attempt, ledger_trust_state
+            from delegation import latest_attempt, ledger_trust_state, task_line_content_sha256, task_lines
             trust = ledger_trust_state(root, feature)
             require(trust != 'untrusted',
                     'DELEGATION_LEDGER_UNTRUSTED: the delegation ledger for ' + feature + ' was tampered '
@@ -1121,12 +1121,28 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
             # without its own dispatcher attempt earns Ready: run
             # "delegate_dispatch.py adopt" to independently verify it with a
             # real acceptance check, which records an ordinary successful
-            # attempt latest_attempt reads like any other.
-            not_verified = [task_id for task_id in tasks
-                           if (latest_attempt(root, feature, task_id) or {}).get('status') != 'successful']
+            # attempt latest_attempt reads like any other -- except that an
+            # adopted attempt also carries a binding (round 8, finding 1): a
+            # sha256 of the task line's content (minus its checkbox state,
+            # whitespace normalised) at the moment it was adopted. A task
+            # whose current line no longer matches that digest -- edited,
+            # or a different task entirely reusing the same id -- must not
+            # ride the earlier adoption to Ready.
+            current_lines = task_lines((directory / 'tasks.md').read_text(encoding='utf-8-sig'))
+            not_verified, changed = [], []
+            for task_id in tasks:
+                attempt = latest_attempt(root, feature, task_id) or {}
+                if attempt.get('status') != 'successful':
+                    not_verified.append(task_id)
+                elif (attempt.get('adopted') and attempt.get('task_line_sha256') and
+                      task_line_content_sha256(current_lines[task_id]) != attempt['task_line_sha256']):
+                    changed.append(task_id)
             require(not not_verified, 'DELEGATION_TASK_UNVERIFIED: ' + ', '.join(sorted(not_verified)) +
                     ' - resolve with delegate_dispatch.py accept or reassign, or adopt it with an '
                     'acceptance check, before Ready')
+            require(not changed, 'DELEGATION_ADOPT_TASK_CHANGED: ' + ', '.join(sorted(changed)) +
+                    ' - the task line changed since it was adopted; re-run delegate_dispatch.py adopt '
+                    'with a fresh acceptance check before Ready')
         ran.append('tasks')
     if rules.get('task_links'):
         mapping = read(directory / 'workflow/task-issues.json', {})

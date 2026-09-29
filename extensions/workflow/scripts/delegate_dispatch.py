@@ -1600,6 +1600,14 @@ def reassign(root, feature, run_id, reason, task_file=None):
     # exactly the case a standard-tier reassignment is meant to resolve.
     delegation.require(prior is not None and prior.get('status') in TERMINAL_STATUSES,
                        'DELEGATION_PRIOR_RUN_NOT_TERMINAL')
+    # An adopted attempt has no dispatcher route, task file or retry count to
+    # escalate from (round 8, finding 2: reassign crashed with a bare
+    # KeyError on 'retry_count' trying); adopt is its own, supported recovery.
+    delegation.require(not prior.get('adopted'),
+                       'DELEGATION_REASSIGN_ADOPTED_UNSUPPORTED: an adopted attempt has no dispatcher '
+                       'route to escalate; re-run "delegate_dispatch.py adopt" with a corrected '
+                       'acceptance check, or "start" the task normally to create a real dispatched '
+                       'attempt reassign can act on')
     delegation.require(prior['retry_count'] < config['stronger_retry'],
                        'DELEGATION_RETRY_LIMIT_REACHED')
     delegation.require(not prior.get('replacement_run_id') and not live_children(ledger, run_id) and
@@ -1858,11 +1866,30 @@ def adopt(root, feature, task_id, command, expect, timeout=None, owned=None):
 
     Adoption is for work legitimately done before delegation was enabled for
     this feature -- a task that has never been started, accepted or
-    reassigned through the dispatcher. It refuses outright with
-    ``DELEGATION_ADOPT_HAS_ATTEMPT`` the moment any attempt already exists
-    for the task, whatever its status: that one already has its own
-    evidence path (``accept`` for an unverified result, ``reassign`` for a
-    stuck one), and adopt must never offer a second, easier route around it.
+    reassigned through the dispatcher. Before running anything it requires
+    ``task_id`` to name a task that actually exists in ``tasks.md`` and is
+    currently checked (round 8, finding 1: Codex adopted an absent task,
+    then a different, later task added under the same id rode the earlier
+    adoption to Ready) -- ``DELEGATION_ADOPT_TASK_UNKNOWN`` or
+    ``DELEGATION_ADOPT_TASK_NOT_CHECKED`` otherwise -- and it records on the
+    attempt a binding to that task's current content: a sha256 of the task
+    line's text with the checkbox state removed and whitespace normalised
+    (``delegation.task_line_content_sha256``). The Ready gate re-hashes the
+    live line at completion time and refuses with
+    ``DELEGATION_ADOPT_TASK_CHANGED`` on a mismatch, so editing the task
+    (including swapping in different work under the same id) after adoption
+    cannot ride the earlier check to Ready.
+
+    It refuses outright with ``DELEGATION_ADOPT_HAS_ATTEMPT`` unless every
+    existing attempt for the task is itself an unverified adoption (round 8,
+    finding 2: a fresh task has none at all; a task whose only history is a
+    failed ``adopt`` may be re-adopted with a corrected check, since that is
+    the supported recovery reassign cannot offer an adopted attempt). Any
+    other existing attempt -- started, accepted, or a successful adoption
+    already on record -- already has its own resolution path (``accept`` for
+    an unverified dispatched result, ``reassign`` for a stuck one, a fresh
+    ``adopt`` call is pointless once one has already succeeded), and adopt
+    must never offer a second, easier route around it.
 
     Runs ``command`` with exactly ``accept``'s own machinery: no shell
     (``build_command_argv``), the BatBadBut shim refusal
@@ -1885,9 +1912,22 @@ def adopt(root, feature, task_id, command, expect, timeout=None, owned=None):
     timeout = timeout if timeout is not None else ACCEPT_TIMEOUT_DEFAULT
     delegation.require(type(timeout) is int and 0 < timeout <= 28800, 'DELEGATION_TIMEOUT_INVALID')
     delegation.require_no_maintenance(root)
+    tasks_path = root / feature / 'tasks.md'
+    delegation.require(tasks_path.is_file(), 'DELEGATION_TASKS_MISSING')
+    matches = [line.strip() for line in tasks_path.read_text(encoding='utf-8-sig').splitlines()
+              if (found := delegation.TASK_LINE.match(line)) and found[3] == task_id]
+    delegation.require(len(matches) == 1,
+                       'DELEGATION_ADOPT_TASK_UNKNOWN: ' + task_id + ' is not a task in ' +
+                       relative(root, tasks_path))
+    task_line = matches[0]
+    delegation.require(task_line[:5].lower() == '- [x]',
+                       'DELEGATION_ADOPT_TASK_NOT_CHECKED: ' + task_id + ' must be checked off in '
+                       'tasks.md before it can be adopted')
+    task_line_sha256 = delegation.task_line_content_sha256(task_line)
     full_identity = feature + '/' + task_id
     ledger = read_ledger(root, feature)
-    delegation.require(not any(a.get('identity') == full_identity for a in ledger.get('attempts', [])),
+    existing = [a for a in ledger.get('attempts', []) if a.get('identity') == full_identity]
+    delegation.require(all(a.get('adopted') and a.get('status') == 'unverified' for a in existing),
                        'DELEGATION_ADOPT_HAS_ATTEMPT: an attempt already exists for ' + task_id +
                        '; resolve it with accept or reassign instead of adopting it')
     delegation.require(not command_targets_windows_shim(command),
@@ -1915,7 +1955,8 @@ def adopt(root, feature, task_id, command, expect, timeout=None, owned=None):
                 evidence = {'expect': 'files', 'source': 'adopt', 'files': valid}
     run_id = 'adopt-' + uuid.uuid4().hex
     with edit_ledger(root, feature) as ledger:
-        delegation.require(not any(a.get('identity') == full_identity for a in ledger.get('attempts', [])),
+        existing = [a for a in ledger.get('attempts', []) if a.get('identity') == full_identity]
+        delegation.require(all(a.get('adopted') and a.get('status') == 'unverified' for a in existing),
                            'DELEGATION_ADOPT_HAS_ATTEMPT: an attempt already exists for ' + task_id +
                            '; resolve it with accept or reassign instead of adopting it')
         attempt = {'identity': full_identity, 'task_type': 'adopted', 'run_id': run_id,
@@ -1924,7 +1965,7 @@ def adopt(root, feature, task_id, command, expect, timeout=None, owned=None):
                   'timeout': timeout, 'owned_paths': owned_paths, 'command': command, 'expect': expect,
                   'exit_code': run['exit_code'], 'timed_out': run.get('timed_out', False),
                   'output_truncated': run.get('truncated', False),
-                  'output': text[:ACCEPT_LEDGER_OUTPUT_CAP]}
+                  'output': text[:ACCEPT_LEDGER_OUTPUT_CAP], 'task_line_sha256': task_line_sha256}
         if evidence:
             attempt['accepted_evidence'] = evidence
             attempt['accepted_at'] = stamp()
@@ -1935,7 +1976,7 @@ def adopt(root, feature, task_id, command, expect, timeout=None, owned=None):
     return {'run_id': run_id, 'task_id': task_id, 'status': result['status'],
            'adopted': evidence is not None, 'expect': expect, 'exit_code': run['exit_code'],
            'timed_out': run.get('timed_out', False), 'output_truncated': run.get('truncated', False),
-           'evidence': evidence}
+           'evidence': evidence, 'task_line_sha256': task_line_sha256}
 
 
 def main(argv=None):

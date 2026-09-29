@@ -792,11 +792,13 @@ class DelegationTests(unittest.TestCase):
         even one merely started, never mind unverified or failed -- already
         has its own resolution path (accept or reassign); adopt must never
         offer a second, easier one."""
-        self.tasks('- [ ] T001 [Collect] Run smoke suite\n')
+        path = self.tasks('- [ ] T001 [Collect] Run smoke suite\n')
         self.enable()
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
              patch.object(dispatch, 'launch', return_value={'run_id': 'codex-1', 'state': 'running'}):
             dispatch.start(self.root, self.feature, 'T001', owned=['.'])
+        path.write_text(path.read_text(encoding='utf-8').replace('- [ ] T001', '- [x] T001'),
+                        encoding='utf-8')
         with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_ADOPT_HAS_ATTEMPT'):
             dispatch.adopt(self.root, self.feature, 'T001', 'pytest -q', 'counts')
 
@@ -839,6 +841,71 @@ class DelegationTests(unittest.TestCase):
         with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_TASK_UNVERIFIED'):
             w.ready_checks(self.root, self.feature, self.policy, state, rules={
                 'tasks': True, 'task_links': False, 'documentation': False})
+
+    def test_adopt_refuses_an_unknown_task_id(self):
+        """Round 8, finding 1: Codex recorded a successful adoption for an
+        absent T999; adopt must refuse before running anything when the
+        task id names nothing in tasks.md."""
+        self.tasks('- [x] T001 [Collect] Run smoke suite\n')
+        self.enable()
+        with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_ADOPT_TASK_UNKNOWN'):
+            dispatch.adopt(self.root, self.feature, 'T999', 'pytest -q', 'counts')
+
+    def test_adopt_refuses_an_unchecked_task(self):
+        """Round 8, finding 1: adopting is for work already done; an
+        unchecked task has no completed work to bind the check to."""
+        self.tasks('- [ ] T001 [Collect] Run smoke suite\n')
+        self.enable()
+        with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_ADOPT_TASK_NOT_CHECKED'):
+            dispatch.adopt(self.root, self.feature, 'T001', 'pytest -q', 'counts')
+
+    def test_ready_task_gate_rejects_an_adopted_task_edited_after_adoption(self):
+        """Round 8, finding 1: Codex adopted T999 while absent, then a
+        different, later T999 added under the same id rode the earlier
+        adoption to Ready. The adopted attempt's bound sha256 of the task
+        line's content must catch that: editing the line (even leaving it
+        checked) after adoption fails Ready, not passes it."""
+        path = self.tasks('- [x] T001 [Collect] Run smoke suite\n')
+        self.enable()
+        with patch.object(dispatch, 'run_capped',
+                          return_value=self.fake_run_capped(0, '{"total": 3, "passed": 3, "failed": 0}')):
+            dispatch.adopt(self.root, self.feature, 'T001', 'pytest -q', 'counts')
+        path.write_text('- [x] T001 [Collect] Run a completely different check\n', encoding='utf-8')
+        run = w.Run(self.root, self.feature)
+        run.start('acme/app#10')
+        state = run.load()
+        with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_ADOPT_TASK_CHANGED'):
+            w.ready_checks(self.root, self.feature, self.policy, state, rules={
+                'tasks': True, 'task_links': False, 'documentation': False})
+
+    def test_reassign_on_an_adopted_attempt_gives_a_structured_error(self):
+        """Round 8, finding 2: reassign used to crash with a bare KeyError
+        on 'retry_count' for an adopted attempt, which has no dispatcher
+        route, task file or retry count to escalate from. It must refuse
+        cleanly instead, pointing at adopt's own recovery."""
+        self.tasks('- [x] T001 [Collect] Run smoke suite\n')
+        self.enable()
+        with patch.object(dispatch, 'run_capped', return_value=self.fake_run_capped(1, '')):
+            result = dispatch.adopt(self.root, self.feature, 'T001', 'pytest -q', 'counts')
+        self.assertEqual(result['status'], 'unverified')
+        with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_REASSIGN_ADOPTED_UNSUPPORTED'):
+            dispatch.reassign(self.root, self.feature, result['run_id'], 'Escalating a failed adoption')
+
+    def test_readopt_after_a_failed_adoption_succeeds(self):
+        """Round 8, finding 2: a task whose only attempts are unverified
+        adoptions may be re-adopted with a corrected check -- the
+        supported recovery, since reassign cannot act on an adopted
+        attempt."""
+        self.tasks('- [x] T001 [Collect] Run smoke suite\n')
+        self.enable()
+        with patch.object(dispatch, 'run_capped', return_value=self.fake_run_capped(1, '')):
+            first = dispatch.adopt(self.root, self.feature, 'T001', 'pytest -q', 'counts')
+        self.assertEqual(first['status'], 'unverified')
+        with patch.object(dispatch, 'run_capped',
+                          return_value=self.fake_run_capped(0, '{"total": 3, "passed": 3, "failed": 0}')):
+            second = dispatch.adopt(self.root, self.feature, 'T001', 'pytest -q', 'counts')
+        self.assertEqual(second['status'], 'successful')
+        self.assertEqual(delegation.latest_attempt(self.root, self.feature, 'T001')['status'], 'successful')
 
     def test_trust_reset_refuses_the_probe_hand_edit_with_marker_deleted(self):
         """Finding 1, round 4, the exact probe: hand-edit the ledger, delete

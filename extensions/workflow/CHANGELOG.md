@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- Delegation guard, round 8 corrections (B12). `delegate_dispatch.py
+  adopt` now requires `--id <task>` to exist in `tasks.md` and be checked
+  before running anything (`DELEGATION_ADOPT_TASK_UNKNOWN` /
+  `DELEGATION_ADOPT_TASK_NOT_CHECKED`), and records a sha256 binding of the
+  task line's content (checkbox state removed, whitespace normalised;
+  `delegation.task_line_content_sha256`) on the new attempt. `ready_checks`
+  re-hashes the live line at completion and refuses with
+  `DELEGATION_ADOPT_TASK_CHANGED` on a mismatch, closing the gap where
+  adopting an absent task id and later adding a different checked task
+  under that same id let the earlier adoption ride to Ready. `reassign` no
+  longer crashes with a bare `KeyError` on `retry_count` for an adopted
+  attempt (it has no dispatcher route, task file or retry count to escalate
+  from); it now refuses cleanly with `DELEGATION_REASSIGN_ADOPTED_UNSUPPORTED`,
+  pointing at a corrected `adopt` or a normal `start`. `adopt` itself now
+  accepts a task whose only attempts are unverified adoptions, so re-adoption
+  with a corrected check is the supported recovery; any other existing
+  attempt still refuses with `DELEGATION_ADOPT_HAS_ATTEMPT`.
+
 - Delegation guard, round 7 corrections (B12). Round 6's two exemptions for
   a checked task with no delegation attempt were both reviewed as bypasses
   and removed outright: the stage-wide `delegation_enabled_for_execute`
