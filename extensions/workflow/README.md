@@ -323,11 +323,22 @@ with `--apply` within authorized issue work. Native sub-issues are identified by
 repository, parent, feature and task ID; retries recover lost responses. Existing
 Project mappings are adopted only after verifying native parent links. Unmapped
 children block duplicate creation. `--sync-states` updates task issue completion
-without changing the publication evidence. A task title (`T### : description`)
+without changing the publication evidence; it walks every task in `tasks.md` on
+each call, so it is safe to invoke once per phase for a whole batch of newly
+completed tasks rather than once per task. A task title (`T### : description`)
 over GitHub's 256-character issue title limit is shortened to the headline
 instead of rejected; the full description is always kept in the issue body.
 Shortening is deterministic, so re-syncing an unchanged task recomputes the
 same title and body and neither creates a duplicate issue nor rewrites it.
+`--summary` prints one line (`ok created=<n> reused=<n> total=<n> dry_run=0|1` for a
+sync, `ok opened=<n> closed=<n> changed=<n> dry_run=0|1` for `--sync-states`, or
+`error <message>`) instead of the full JSON result; `--json` prints exactly what
+the default (no-flag) output already prints today, byte for byte — it is a way
+to request that output explicitly, not a new format. `--summary` and `--json`
+together is rejected. Exit codes are unchanged either way, including for an
+exception outside the normal `WorkflowError`/`ValueError`/`KeyError` set, which
+`--summary` also reports as one `error <Type>: <message>` line instead of a
+raw traceback.
 
 The project selects Disabled, Advisory, or Required CI evidence gating and
 individual rules at initialization or later. Managed-only scope lets ordinary
@@ -650,3 +661,8 @@ kept apart. When a harness does not report its actual model, the ledger and
 report say `unverified`; the requested model is never shown as measured fact.
 Raw prompts and logs stay in the git-ignored `.delegate/runs/`, and
 `progress.py sync` rebuilds the local HTML history view from the ledger.
+Every `progress.py` subcommand accepts `--summary` (one line, e.g.
+`ok done=<n> total=<n> pending=<n> running=<n> blocked=<n>`, or `error <message>`
+on a validation failure) and `--json` (the full `state.json` content) as
+alternatives to the default output (just the report path); `--summary` and
+`--json` together is rejected, and exit codes are unchanged either way.

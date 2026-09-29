@@ -10,17 +10,28 @@ test_assure_init.py in this same directory for the established pattern), so
 its CLI is exercised here, matching the workflow suite the regression matrix
 in ci.yml already runs.
 """
+import contextlib
+import importlib.util
+import io
 import json
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ASSURE_STATE = Path(__file__).resolve().parents[2] / 'assure/scripts/assure_state.py'
 
+SPEC = importlib.util.spec_from_file_location('assure_state', ASSURE_STATE)
+assure_state = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(assure_state)
 
-class AssureStateBaseRefDefaultTests(unittest.TestCase):
+
+class AssureStateFixture:
+    """Shared fixture (not a TestCase itself) so the --summary tests below do
+    not re-run the base-ref tests through inheritance."""
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -56,6 +67,8 @@ class AssureStateBaseRefDefaultTests(unittest.TestCase):
         result = subprocess.run(command, cwd=self.root, text=True, capture_output=True, encoding='utf-8')
         return json.loads(result.stdout), result
 
+
+class AssureStateBaseRefDefaultTests(AssureStateFixture, unittest.TestCase):
     def test_defaults_to_the_checkpoints_bound_target_branch(self):
         self.checkpoint('develop')
         result, proc = self.run_state('record')
@@ -80,6 +93,73 @@ class AssureStateBaseRefDefaultTests(unittest.TestCase):
         result, proc = self.run_state('status')
         self.assertFalse(result['current'])
         self.assertIn('base-ref', result['reason'])
+
+
+class AssureStateSummaryTests(AssureStateFixture, unittest.TestCase):
+    """B7: --summary prints one ok/error line instead of the full JSON, on the
+    same setUp fixture as the base-ref tests above."""
+
+    def run_summary(self, action, base_ref=None):
+        command = [sys.executable, str(ASSURE_STATE), action, '--feature', str(self.feature),
+                   '--repo-root', str(self.root), '--kind', 'document',
+                   '--output', 'docs/001-example/QA.md', '--summary']
+        if base_ref:
+            command += ['--base-ref', base_ref]
+        return subprocess.run(command, cwd=self.root, text=True, capture_output=True, encoding='utf-8')
+
+    def test_summary_success_line_on_record(self):
+        self.checkpoint('develop')
+        proc = self.run_summary('record')
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout.strip(), 'ok action=record kind=document outputs=1 recorded=1')
+
+    def test_summary_error_line_when_stale(self):
+        proc = self.run_summary('status')
+        self.assertEqual(proc.returncode, 1, proc.stdout)
+        self.assertTrue(proc.stdout.strip().startswith('error action=status kind=document outputs=1 reason='), proc.stdout)
+
+    def test_summary_and_json_together_is_rejected(self):
+        command = [sys.executable, str(ASSURE_STATE), 'status', '--feature', str(self.feature),
+                   '--repo-root', str(self.root), '--kind', 'document', '--summary', '--json']
+        proc = subprocess.run(command, cwd=self.root, text=True, capture_output=True, encoding='utf-8')
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        self.assertIn('--summary and --json cannot be combined', proc.stderr)
+
+    def test_json_flag_matches_the_unflagged_default_byte_for_byte(self):
+        # F8: --json is not a new format for this script; it is the same
+        # `json.dumps(result)` the no-flag default already printed.
+        self.checkpoint('develop')
+        self.run_summary('record')  # record once so `status` below is deterministic either way
+        default_proc = subprocess.run([sys.executable, str(ASSURE_STATE), 'status', '--feature', str(self.feature),
+                                        '--repo-root', str(self.root), '--kind', 'document',
+                                        '--output', 'docs/001-example/QA.md'],
+                                       cwd=self.root, text=True, capture_output=True, encoding='utf-8')
+        json_proc = subprocess.run([sys.executable, str(ASSURE_STATE), 'status', '--feature', str(self.feature),
+                                     '--repo-root', str(self.root), '--kind', 'document',
+                                     '--output', 'docs/001-example/QA.md', '--json'],
+                                    cwd=self.root, text=True, capture_output=True, encoding='utf-8')
+        self.assertEqual(default_proc.stdout, json_proc.stdout)
+        self.assertEqual(default_proc.returncode, json_proc.returncode)
+
+
+class AssureStateSummaryWhitespaceTests(unittest.TestCase):
+    """F6: a reason with embedded newlines/whitespace still prints as one
+    line under --summary. Exercised by importing the module directly and
+    monkeypatching record_or_status, since a real multi-line freshness
+    failure is not easy to reproduce deterministically through the CLI."""
+
+    def test_reason_with_embedded_newlines_collapses_to_one_line(self):
+        messy = {'current': False, 'reason': 'first line\nsecond   line\twith\ttabs\n'}
+        argv = ['assure_state.py', 'status', '--feature', 'specs/001-example', '--kind', 'document',
+                '--output', 'docs/001-example/QA.md', '--summary']
+        buf = io.StringIO()
+        with mock.patch.object(assure_state, 'record_or_status', return_value=messy), \
+             mock.patch.object(sys, 'argv', argv), contextlib.redirect_stdout(buf):
+            code = assure_state.main()
+        self.assertEqual(code, 1)
+        line = buf.getvalue()
+        self.assertEqual(len(line.splitlines()), 1, repr(line))
+        self.assertEqual(line.strip(), 'error action=status kind=document outputs=1 reason=first line second line with tabs')
 
 
 if __name__ == '__main__':

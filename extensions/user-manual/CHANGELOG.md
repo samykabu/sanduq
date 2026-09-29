@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- `manual_state.py` gains `--summary` (one line: `ok`/`error`, e.g. `ok
+  action=record kind=manual outputs=1 recorded=1`) as an alternative to
+  today's full JSON output, which stays exactly as it was and is now also
+  selectable explicitly with `--json` (byte for byte the same as today's
+  default). `--summary` and `--json` together is rejected. Default (no flag)
+  behaviour and the exit code are unchanged. A `reason` carrying embedded
+  whitespace or newlines is collapsed to a single line so `--summary` always
+  prints exactly one line (B7).
+
 ## 1.3.3
 
 - The private preview artifact `upload-artifact` step now keeps `retention-days: 2`

@@ -4,10 +4,14 @@
 # (logs + exits 0) if gh/jq/remote/scope/config preconditions are not met.
 #
 # Usage: project-sync.sh --phase <open|analysis|engineer-review|ready|in-progress|in-review|done|auto>
-#                        [--feature <slug>] [--dry-run] [--no-sub-issues] [--force] [--json]
-set -euo pipefail
+#                        [--feature <slug>] [--dry-run] [--no-sub-issues] [--force] [--json] [--summary]
+# -E (errtrace) makes the ERR trap below fire for a failing command inside a
+# function too, not only at the script's top level (bash's default); nearly
+# all of this script's real work happens inside functions (ensure_parent,
+# set_status, ...), so without -E most real failures would report line=0.
+set -Eeuo pipefail
 
-PHASE="auto"; FEATURE=""; DRYRUN=0; NOSUB=0; FORCE=0; JSON=0
+PHASE="auto"; FEATURE=""; DRYRUN=0; NOSUB=0; FORCE=0; JSON=0; SUMMARY=0
 while [ $# -gt 0 ]; do case "$1" in
   --phase) PHASE="$2"; shift 2;;
   --feature) FEATURE="$2"; shift 2;;
@@ -15,13 +19,56 @@ while [ $# -gt 0 ]; do case "$1" in
   --no-sub-issues) NOSUB=1; shift;;
   --force) FORCE=1; shift;;
   --json) JSON=1; shift;;
-  *) echo "[project][warn] unknown arg: $1"; shift;;
+  --summary) SUMMARY=1; shift;;
+  *) echo "[project][warn] unknown arg: $1" >&2; shift;;
 esac; done
+# --summary (one line: ok/error, counts) and --json (full machine-readable
+# summary) are mutually exclusive; --summary never changes the exit code a
+# caller sees for a given outcome, only what is printed on success. Every
+# `error` line shares one shape with project-sync.ps1's: `reason=<msg>`;
+# bash additionally carries `exit=<rc>` (and `line=<n>` when known).
+if [ "$SUMMARY" = 1 ] && [ "$JSON" = 1 ]; then
+  echo "error exit=2 reason=--summary and --json cannot be combined"
+  exit 2
+fi
+CREATED_COUNT=0; CLOSED_COUNT=0
+SUMMARY_DONE=0
+LAST_WARN=""
 
-log()  { echo "[project] $*"; }
-warn() { echo "[project][warn] $*"; }
-skip() { warn "skipped: $*"; [ "$JSON" = 1 ] && echo "{\"skipped\":true,\"reason\":\"$*\"}"; exit 0; }
+# Under --summary, run-log lines (log/warn) are not part of the one-line
+# contract, so they move to stderr instead of polluting stdout. warn() also
+# records its message in LAST_WARN, so a later `warn ...; exit 1` site (no
+# failing command for the ERR trap to see) still has a cause to report.
+log()  { if [ "$SUMMARY" = 1 ]; then echo "[project] $*" >&2; else echo "[project] $*"; fi; }
+warn() { LAST_WARN="$*"; if [ "$SUMMARY" = 1 ]; then echo "[project][warn] $*" >&2; else echo "[project][warn] $*"; fi; }
+skip() {
+  warn "skipped: $*"
+  SUMMARY_DONE=1
+  # A graceful skip is not success (SKILL.md): the first token is `skipped`,
+  # never `ok`.
+  if [ "$SUMMARY" = 1 ]; then echo "skipped reason=$*"
+  elif [ "$JSON" = 1 ]; then echo "{\"skipped\":true,\"reason\":\"$*\"}"; fi
+  exit 0
+}
 gh_run() { if [ "$DRYRUN" = 1 ]; then log "DRYRUN gh $*"; return 0; fi; gh "$@"; }
+
+# Past this point `set -e` can abort the script on any unguarded failure
+# (a real gh/jq/git error, not a graceful skip). Under --summary that must
+# still surface as one `error exit=<rc> reason=<msg>[ line=<n>]` line rather
+# than silence or a raw shell trace; SUMMARY_DONE keeps the EXIT trap from
+# firing after our own controlled ok/skipped line has already been printed.
+# FAIL_LINE comes from the ERR trap, which only fires for a command that
+# actually failed; a plain `warn ...; exit 1` site has no such command, so
+# FAIL_LINE stays unknown there and the line clause is omitted, while
+# LAST_WARN (set immediately before it, by warn()) still supplies the reason.
+if [ "$SUMMARY" = 1 ]; then
+  trap 'FAIL_LINE=$LINENO' ERR
+  trap 'rc=$?; if [ "$rc" -ne 0 ] && [ "$SUMMARY_DONE" != 1 ]; then
+    msg="error exit=$rc reason=${LAST_WARN:-unknown}"
+    [ -n "${FAIL_LINE:-}" ] && msg="$msg line=$FAIL_LINE"
+    echo "$msg"
+  fi' EXIT
+fi
 
 command -v gh >/dev/null 2>&1 || skip "gh CLI not installed"
 command -v jq >/dev/null 2>&1 || skip "jq not installed"
@@ -217,25 +264,24 @@ sync_sub_issues() {
   [ "$NOSUB" = 1 ] && return
   [ -z "$NODE" ] && { warn "no parent node id; skipping sub-issues"; return; }
   gh label create spec-task --repo "$REPO" --color D4C5F9 --force >/dev/null 2>&1 || true
-  local created=0
   while IFS=$'\t' read -r _ id desc; do
     [ -z "$id" ] && continue
     echo "$ST" | jq -e --arg s "$SLUG" --arg i "$id" '.[$s].subIssues[$i]' >/dev/null 2>&1 && continue
-    if [ "$DRYRUN" = 1 ]; then log "DRYRUN create sub-issue '$SLUG $id: $desc'"; created=$((created+1)); continue; fi
+    if [ "$DRYRUN" = 1 ]; then log "DRYRUN create sub-issue '$SLUG $id: $desc'"; CREATED_COUNT=$((CREATED_COUNT+1)); continue; fi
     local surl snum snode
     surl="$(create_issue "$SLUG $id: $desc" "Task \`$id\` of feature \`$SLUG\` (parent #$ISSUE)." spec-task)"
     snum="$(echo "$surl" | sed -E 's#.*/issues/([0-9]+).*#\1#')"
     snode="$(issue_node "$snum")"
     link_sub_issue "$snum" "$snode" >/dev/null 2>&1 || warn "sub-issue link failed for $id"
     ST="$(echo "$ST" | jq --arg s "$SLUG" --arg i "$id" --argjson n "$snum" --arg nd "$snode" '.[$s].subIssues[$i] = {number:$n,nodeId:$nd,closed:false}')"
-    created=$((created+1))
+    CREATED_COUNT=$((CREATED_COUNT+1))
   done < <(parse_tasks)
-  [ "$created" -gt 0 ] && log "created $created sub-issue(s)"
+  [ "$CREATED_COUNT" -gt 0 ] && log "created $CREATED_COUNT sub-issue(s)"
 }
 
 sync_progress() {
   if [ "$MANAGED" = 1 ]; then log 'Task issue states are owned by the workflow adapter'; return; fi
-  local total closed=0
+  local total
   total="$(echo "$ST" | jq -r --arg s "$SLUG" '(.[$s].subIssues // {}) | length')"
   [ "$total" = 0 ] && return
   while IFS=$'\t' read -r d id _; do
@@ -246,11 +292,11 @@ sync_progress() {
     if [ -n "$num" ] && [ "$isclosed" != "true" ]; then
       close_issue "$num" >/dev/null 2>&1 || true
       ST="$(echo "$ST" | jq --arg s "$SLUG" --arg i "$id" '.[$s].subIssues[$i].closed = true')"
-      closed=$((closed+1))
+      CLOSED_COUNT=$((CLOSED_COUNT+1))
     fi
   done < <(parse_tasks)
   local done_c; done_c="$(echo "$ST" | jq -r --arg s "$SLUG" '[.[$s].subIssues[] | select(.closed==true)] | length')"
-  [ "$closed" -gt 0 ] && log "closed $closed completed sub-issue(s)"
+  [ "$CLOSED_COUNT" -gt 0 ] && log "closed $CLOSED_COUNT completed sub-issue(s)"
   log "sub-issue progress: $done_c/$total"
 }
 
@@ -298,4 +344,9 @@ set_status "$TARGET"
 save_state
 if [ -f "$REST_MARK" ]; then TRANSPORT="rest"; fi
 log "done: issue #$ISSUE, status '$CURRENT', phase '$PHASE' (transport: $TRANSPORT)"
-[ "$JSON" = 1 ] && echo "{\"feature\":\"$SLUG\",\"repo\":\"$REPO\",\"issue\":$ISSUE,\"status\":\"$CURRENT\",\"phase\":\"$PHASE\",\"transport\":\"$TRANSPORT\"}"
+SUMMARY_DONE=1
+if [ "$SUMMARY" = 1 ]; then
+  echo "ok issue=$ISSUE status=$CURRENT created=$CREATED_COUNT closed=$CLOSED_COUNT"
+elif [ "$JSON" = 1 ]; then
+  echo "{\"feature\":\"$SLUG\",\"repo\":\"$REPO\",\"issue\":$ISSUE,\"status\":\"$CURRENT\",\"phase\":\"$PHASE\",\"transport\":\"$TRANSPORT\"}"
+fi
