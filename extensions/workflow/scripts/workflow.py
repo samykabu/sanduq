@@ -51,7 +51,7 @@ AMENDMENT_ASSESSMENTS = ('unchanged', 'changed')
 AMENDMENT_DEPENDENTS = ('verify', 'review', 'ready')
 # Receipt fields only the runtime writes; a submitted receipt may not carry them.
 RUNTIME_RECEIPT_FIELDS = ('amendments', 'stale', 'head', 'source_key', 'ci_evidence', 'diff_reviewed',
-                          'revalidations')
+                          'revalidations', 'delegation_ledger_trust')
 # Stages whose receipts also inventory source (`source_fingerprints`) and record `head` and `source_key`.
 SOURCE_STAGES = ('verify', 'review', 'ready')
 # How recovery recipes name the runtime in a consumer project.
@@ -235,6 +235,7 @@ def default_policy(qa, manual):
                     for name, tier in DEFAULT_TIERS.items()
                 },
                 'overrides': {},
+                'fixed_collection_commands': {},
             },
             'receipts': {'require_input_roles': False},
             'ci': sanduq_ci.default_ci()}
@@ -290,7 +291,13 @@ def validate_policy(policy):
     # Older consumer policies remain valid and opt out until the project selects delegation.
     if 'delegation' not in policy:
         policy['delegation'] = copy.deepcopy(default_policy(False, False)['delegation'])
-    from delegation import validate_delegation
+    from delegation import migrate_qa_route, validate_delegation
+    # Pre-1.7 policies predate fixed_collection_commands; empty means no stage
+    # is ever inferred as qa_collect, matching today's behaviour exactly.
+    policy['delegation'].setdefault('fixed_collection_commands', {})
+    # Pre-1.7 policies routed everything QA-shaped through a single ``qa`` key;
+    # read in place as qa_author, with a fresh light-eligible qa_collect added.
+    migrate_qa_route(policy['delegation'])
     try:
         validate_delegation(policy['delegation'])
     except ValueError as exc:
@@ -634,6 +641,9 @@ def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True
         except Exception as exc:
             skill_inventory_result = None
             warnings.append('SKILL_INVENTORY_UNAVAILABLE: ' + str(exc))
+    if isinstance(policy.get('delegation'), dict):
+        from delegation import light_tier_route_warnings
+        warnings += light_tier_route_warnings(policy['delegation'])
     drift = eol_drift(root)
     if drift:
         warnings.append(
@@ -1089,12 +1099,15 @@ def receipt_drift(root, feature, stage, receipt):
     return sorted(changed)
 
 
-def ready_checks(root, feature, policy, state, base=None, rules=None):
+def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=None):
     """Task completion, task-issue mapping and selected documentation freshness.
 
     The Ready stage's automated checks, shared by `ci_gate.py` (under the
     project's gate rules) and `revalidate --stage ready` (all of them).
-    Returns the names of the checks that ran.
+    Returns the names of the checks that ran. When given, `warnings` collects
+    non-fatal advisories in place (for example a local-only trust read on a
+    fresh checkout or CI runner, round 3 finding 1); the caller decides how
+    to surface them.
     """
     rules = rules or {'tasks': True, 'task_links': True, 'documentation': True}
     directory = inside(root, feature)
@@ -1105,6 +1118,36 @@ def ready_checks(root, feature, policy, state, base=None, rules=None):
         tasks = parse_tasks((directory / 'tasks.md').read_text(encoding='utf-8-sig'))
     if rules.get('tasks'):
         require(all(t['done'] for t in tasks.values()), 'INCOMPLETE_TASKS')
+        if policy.get('delegation', {}).get('enabled'):
+            # A checked task delegated through the dispatcher must have a
+            # verified, successful outcome, not merely a checkbox (finding 1):
+            # a light-tier result the guard left unverified, or any other
+            # non-successful status (running, starting, failed, abandoned --
+            # finding 2c, round 2), never earns Ready on its own. The ledger
+            # itself must still be trustworthy: 'untrusted' (a genuine,
+            # persisted tamper, or a marker that disagrees with the current
+            # bytes) refuses; 'unverified-local' (no local write marker at
+            # all -- the normal state for a CI checkout or a fresh clone,
+            # since delegations.json is committed but the marker is local
+            # runtime state) is a warning only, and status is still enforced
+            # (round 3, findings 1-2).
+            from delegation import latest_attempt, ledger_trust_state
+            trust = ledger_trust_state(root, feature)
+            require(trust != 'untrusted',
+                    'DELEGATION_LEDGER_UNTRUSTED: the delegation ledger for ' + feature + ' was tampered '
+                    'with (a hand-edit, or one not yet cleared by trust-reset); run '
+                    '"delegate_dispatch.py trust-reset --feature ' + feature + ' --reason <text>" only '
+                    'after reviewing exactly what changed')
+            if trust == 'unverified-local' and warnings is not None:
+                warnings.append('DELEGATION_LEDGER_TRUST_UNVERIFIED_LOCAL: no local dispatcher-write '
+                                'marker for ' + feature + ' (expected on a fresh checkout or CI runner); '
+                                'delegated task status is still enforced, but local tamper detection '
+                                'cannot vouch for this ledger on this machine')
+            not_verified = [task_id for task_id in tasks
+                           if (attempt := latest_attempt(root, feature, task_id)) is not None and
+                           attempt.get('status') != 'successful']
+            require(not not_verified, 'DELEGATION_TASK_UNVERIFIED: ' + ', '.join(sorted(not_verified)) +
+                    ' - resolve with delegate_dispatch.py accept or reassign before Ready')
         ran.append('tasks')
     if rules.get('task_links'):
         mapping = read(directory / 'workflow/task-issues.json', {})
@@ -1638,11 +1681,13 @@ class Run:
             existing = (self.feature / 'spec.md').is_file() and f"{source.get('repo')}#{source.get('issue')}" == state['issue']
             state['active']['mode'] = 'revalidate' if existing and stage in ('scope', 'specify', 'clarify', 'plan', 'tasks') else 'initial'
             if self.policy['delegation']['enabled']:
-                from delegation import STAGE_TYPES, selected_route
+                from delegation import selected_route, stage_work_type
+                work_type = stage_work_type(state['commands'], stage,
+                                            self.policy['delegation'].get('fixed_collection_commands'))
                 state['active']['delegation'] = {
                     'identity': self.relative + '/stage:' + stage,
-                    'task_type': STAGE_TYPES[stage],
-                    'candidates': selected_route(self.policy['delegation'], STAGE_TYPES[stage], active_host(self.root)),
+                    'task_type': work_type,
+                    'candidates': selected_route(self.policy['delegation'], work_type, active_host(self.root)),
                 }
             state['active']['baseline'] = fingerprint_files(self.root, [p for r in state['receipts'].values() for p in r['fingerprints']])
             state['status'] = 'in-progress'
@@ -1669,6 +1714,37 @@ class Run:
             validate_input_roles(self.root, self.relative, stage, receipt, self.policy)
             for path in receipt['evidence']:
                 require(inside(self.root, path).is_file(), 'EVIDENCE_MISSING: ' + path)
+            delegation_ledger_trust = None
+            if self.policy['delegation']['enabled'] and active.get('delegation'):
+                # The claim recorded a delegation route for this stage; require the
+                # dispatcher's own ledger (never the receipt's self-report) to show
+                # the delegated attempt actually succeeded, following any reassignment
+                # to its terminal end (finding 1: the guard was previously unread).
+                # The ledger itself must still be trustworthy: 'untrusted' (a
+                # genuine, persisted tamper, or a marker that disagrees with the
+                # current bytes) refuses; 'unverified-local' (no local write
+                # marker at all -- the normal state for a CI checkout or a fresh
+                # clone) is recorded on the receipt as a warning, not a block
+                # (round 3, findings 1-2). The attempt must also have been
+                # started under this exact claim (finding 2a, round 2): a
+                # successful attempt left over from an earlier claim of this
+                # same stage (for example one abandoned and re-claimed) must
+                # not satisfy a different, later claim it was never part of.
+                from delegation import latest_attempt, ledger_trust_state
+                delegation_ledger_trust = ledger_trust_state(self.root, self.relative)
+                require(delegation_ledger_trust != 'untrusted',
+                        'DELEGATION_LEDGER_UNTRUSTED: the delegation ledger for ' + self.relative +
+                        ' was tampered with (a hand-edit, or one not yet cleared by trust-reset); run '
+                        '"delegate_dispatch.py trust-reset --feature ' + self.relative +
+                        ' --reason <text>" only after reviewing exactly what changed')
+                stage_attempt = latest_attempt(self.root, self.relative, 'stage:' + stage)
+                require(stage_attempt is not None and stage_attempt.get('status') == 'successful' and
+                        stage_attempt.get('claim_token') == token,
+                        'DELEGATION_STAGE_NOT_VERIFIED: the latest delegate_dispatch attempt for stage:' +
+                        stage + ' is ' + (str(stage_attempt.get('status')) if stage_attempt else 'missing') +
+                        ' or was not started under this claim; collect, accept or reassign it before '
+                        'completing this stage. A legacy attempt recorded before claim_token existed has '
+                        'none and will never match; re-delegate the stage once under this workflow release')
             if stage == 'clarify':
                 require(receipt.get('unresolved') == 0 and receipt.get('answers_applied') is True, 'CLARIFICATION_UNRESOLVED')
             if BASE_STAGES.index(stage) >= BASE_STAGES.index('specify'):
@@ -1714,6 +1790,11 @@ class Run:
             stored = copy.deepcopy(receipt)
             if stored.get('input_roles') is None:
                 stored.pop('input_roles', None)  # absent means all-dependency
+            if delegation_ledger_trust is not None:
+                # A warning record, never a block: 'unverified-local' means no
+                # local dispatcher-write marker existed to check against (a
+                # fresh checkout or CI runner), not that anything was wrong.
+                stored['delegation_ledger_trust'] = delegation_ledger_trust
             stored['command'] = state['commands'][stage]
             stored['dependency_digest'] = state['dependency_digest']
             decision_input = [self.relative + '/workflow/decisions.json'] if (self.feature / 'workflow/decisions.json').is_file() else []

@@ -101,7 +101,7 @@ def check(root, feature, policy, base=None, rules=None, verify_ci_evidence=True,
                 '(on the feature branch) and re-record any invalidated stage')
     source = read(directory / 'scope-source.json', {})
     require(f"{source.get('repo')}#{source.get('issue')}" == state.get('issue'), 'FEATURE_BINDING_MISMATCH')
-    amendments, revalidations, accepted = [], [], []
+    amendments, revalidations, accepted, warnings = [], [], [], []
     if rules['receipts']:
         for stage in stages(policy):
             if stage == 'pr': continue  # PR publication follows readiness; never requires a recursive PR commit.
@@ -138,7 +138,8 @@ def check(root, feature, policy, base=None, rules=None, verify_ci_evidence=True,
                            for item in receipt.get('amendments', [])]
             if stage == 'clarify': require(receipt.get('unresolved') == 0 and receipt.get('answers_applied') is True, 'CLARIFICATION_UNRESOLVED')
             if stage in ('verify','review','ready'): require(receipt.get('blocking_findings') == 0, 'BLOCKING_FINDINGS_REMAIN')
-    ready_checks(root, feature, policy, state, base, {'tasks': rules['tasks'], 'task_links': rules['task_links']})
+    ready_checks(root, feature, policy, state, base, {'tasks': rules['tasks'], 'task_links': rules['task_links']},
+                warnings=warnings)
     if rules['decisions']:
         from decisions import verify_ledger
         decisions = read(directory / 'workflow/decisions.json',
@@ -162,9 +163,10 @@ def check(root, feature, policy, base=None, rules=None, verify_ci_evidence=True,
         require(all(item['status'] == 'answered' for item in live), 'DECISION_LIVE_UNRESOLVED')
     if rules['candidate_merge']:
         check_candidate_merge(root)
-    ready_checks(root, feature, policy, state, base, {'documentation': rules['documentation']})
+    ready_checks(root, feature, policy, state, base, {'documentation': rules['documentation']}, warnings=warnings)
     return {'feature': feature, 'passed': True, 'rules': [name for name, enabled in rules.items() if enabled],
             'amendments': amendments, 'revalidations': revalidations, 'accepted_drift': accepted,
+            'warnings': warnings,
             'scope': 'selected committed evidence checks; live answers are checked when selected; human acceptance is separate'}
 
 
@@ -206,6 +208,31 @@ def check_index(root, feature):
         warnings.append('CROSS_FEATURE_EVIDENCE: receipt references path(s) under another feature\'s specs/ '
                          'directory: ' + ', '.join(sorted(cross_feature)))
     return {'feature': feature, 'indexed_paths': len(paths), 'warnings': warnings}
+
+
+def report_warnings(results):
+    """Surface each feature's non-fatal warnings (round 4, finding 2): a
+    reviewer reading only the job log or the PR checks tab would otherwise
+    never see DELEGATION_LEDGER_TRUST_UNVERIFIED_LOCAL, since it changes
+    nothing about the gate's pass/fail outcome. Printed to stderr always, and
+    appended to $GITHUB_STEP_SUMMARY when the runner sets it; never affects
+    the exit code. The summary write is best-effort (round 5, finding 2):
+    this runs inside `main`'s own try block, so an unwritable or missing
+    $GITHUB_STEP_SUMMARY path must never turn a passing gate into a reported
+    failure -- the warning was already printed to stderr regardless.
+    """
+    lines = [warning for result in results for warning in (result.get('warnings') or [])]
+    for line in lines:
+        print(line, file=sys.stderr)
+    summary_path = os.environ.get('GITHUB_STEP_SUMMARY')
+    if lines and summary_path:
+        try:
+            with open(summary_path, 'a', encoding='utf-8') as handle:
+                handle.write(''.join('- ' + line + '\n' for line in lines))
+        except OSError as exc:
+            print('DELEGATION_LEDGER_TRUST_WARNING_SUMMARY_UNWRITABLE: could not append to '
+                 '$GITHUB_STEP_SUMMARY (' + str(exc) + '); the warnings above were still printed '
+                 'to stderr', file=sys.stderr)
 
 
 def main():
@@ -260,6 +287,7 @@ def main():
                         raise WorkflowError(str(exc) + '; ' + str(waiver_error)) from waiver_error
                     applied_waivers.append(waiver)
                     effective[rule] = False
+        report_warnings(results)
         print(json.dumps({'ok': True, 'status': 'passed', 'features': results}, indent=2)); return 0
     except (WorkflowError, ValueError, OSError, KeyError) as exc:
         advisory = mode == 'advisory'

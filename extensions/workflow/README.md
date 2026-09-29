@@ -621,18 +621,51 @@ falls back to that CLI's own default model (`model: null`).
 
 | Work type | Default tier | Codex model | Claude model | Stages |
 | --- | --- | --- | --- | --- |
-| discovery | high | gpt-6-astra | opus | scope, specify, clarify, plan, tasks |
+| discovery | standard | gpt-6-sol | sonnet | scope, specify, clarify, plan, tasks |
 | implementation | standard | gpt-6-sol | sonnet | tasks only |
-| qa | light | gpt-6-terra | haiku | qa_analyze, verify, qa_document |
-| documentation | documentation | gpt-6-sol | opus | manual_analyze, manual_update |
+| qa_author | standard | gpt-6-sol | sonnet | qa_analyze, verify (always, by default) |
+| qa_collect | light | gpt-6-terra | haiku | `verify`, only when `delegation.fixed_collection_commands.verify` names its resolved command exactly (nothing by default); `[Collect]`-marked tasks |
+| documentation | documentation | gpt-6-sol | opus | manual_analyze, manual_update, qa_document |
 | review | review | gpt-6-sol | opus | analyze, review |
-| coordination | light | gpt-6-terra | haiku | taskstoissues, execute, ready, pr |
+| coordination | high | gpt-6-astra | opus | taskstoissues, execute, ready, pr |
+
+Discovery is never light: its default is standard (Scope and Plan may still be
+overridden to high by policy), and the schema rejects a `light` preferred or
+fallback tier anywhere in `delegation.routes.discovery`
+(`DELEGATION_DISCOVERY_LIGHT_FORBIDDEN`). Coordination defaults to high (never
+light): it claims and completes workflow stages and issues, not a cheap
+default (standing rule 5, C2). `verify` is not a fixed script by default: it
+selects tests, handles lane gaps and reports blocking findings (see the
+workflow skill), so it always routes to `qa_author` unless the project's
+`delegation.fixed_collection_commands` policy map names `verify` with the
+exact command string it must still resolve to. That map's only allowed key is
+`verify` (the schema's own `propertyNames` rejects any other stage, including
+every discovery stage), and its value may never start with `workflow:` or
+`speckit.` — not even `verify`'s own real default,
+`"workflow:verification"`, since naming a stage's fixed pseudo-command or
+skill invocation is never a genuinely fixed *external* script and would
+silently restore the very inference this restriction exists to prevent.
+`doctor` warns (`DELEGATION_LIGHT_TIER_ROUTE`) whenever `qa_author` or
+`coordination` still routes to light in the loaded policy, whatever the
+reason.
+
+`qa` (pre-1.7) split into `qa_author` (authoring and analysing QA work,
+standard) and `qa_collect` (running an existing, fixed check and reporting its
+result, light-eligible and guarded; see below); the schema accepts either the
+deprecated `qa` key or both `qa_author` and `qa_collect`, so it never rejects
+what `load_policy` itself accepts. A policy that still has a single `qa` route
+keeps working: reading it maps that route onto `qa_author` in place (unless
+that route, the pre-1.7 default, had a light-tier candidate itself — then
+`qa_author` resets to the new standard default instead, so a legacy install
+never keeps sending authored QA work to the light tier) and adds a fresh,
+light-eligible `qa_collect` route; nothing is rewritten to disk, and a ledger
+with historical `"task_type": "qa"` entries stays readable.
 
 The model names are editable preferences in `delegation.models`, not proof that
 a CLI accepts them. Use `delegation.py route --feature specs/<feature> --id T001
 --type implementation` to inspect a resolved route. For example, merge this
 override into the existing `delegation:` block, keeping the generated `models:`
-and all six `routes:` entries:
+and all seven `routes:` entries:
 
 ```yaml
 delegation:
@@ -643,17 +676,27 @@ delegation:
       preferred: {harness: claude, tier: high}
       fallbacks:
         - {harness: selected, model: null}
+  fixed_collection_commands:
+    verify: "scripts/run-fixed-verification.sh"
 ```
 
+`fixed_collection_commands` is empty by default, so no stage is ever inferred
+as `qa_collect`; naming `verify` there (the only key the schema allows) opts
+it in only while its resolved command still matches the given string exactly,
+and only for a genuinely external script — never a `workflow:` pseudo-command
+or a `speckit.` skill invocation.
+
 A task's type comes from an explicit marker in its leading tags: `[Impl]`,
-`[Implementation]` or `[Code]`; `[QA]`, `[Test]`, `[Tests]` or `[TDD]`; `[Doc]`,
-`[Docs]`, `[Documentation]` or `[Manual]`; `[Review]`. The implementation
-marker wins over the others and is the escape for any task the rules below
-misread. Without a marker, only an unambiguous leading action counts: "Run ...
-tests", "Write/Add ... tests for ...", "Test <something>", "Capture ...
-screenshots"; "Document the ...", "Update README/docs/guide/release notes"
-followed by a preposition or the end of the line; "Review/Audit/Inspect
-<something>". A documentation file named as the object also counts:
+`[Implementation]` or `[Code]`; `[QA]`, `[Test]`, `[Tests]` or `[TDD]` (routes
+to `qa_author`, standard); `[Doc]`, `[Docs]`, `[Documentation]` or `[Manual]`;
+`[Review]`. The implementation marker wins over the others and is the escape
+for any task the rules below misread. Without a marker, only an unambiguous
+leading action counts: "Run ... tests", "Write/Add ... tests for ...", "Test
+<something>", "Capture ... screenshots"; "Document the ...", "Update
+README/docs/guide/release notes" followed by a preposition or the end of the
+line; "Review/Audit/Inspect <something>". These heuristics, and every explicit
+marker above, route only to `qa_author`, `documentation` or `review`: nothing
+is ever inferred as `qa_collect`. A documentation file named as the object also counts:
 "Update README.md with setup instructions", "Update docs/quickstart.md", "Add
 docs/api.md section for auth", "Document API endpoints in docs/api.md". That
 means a README, changelog or contributing file with or without its extension,
@@ -669,6 +712,18 @@ that also asks for a code change ("Inspect the parser and fix the crash",
 component". Anything else is implementation. Route type only chooses
 a model. It never makes a run read-only, so a delegated review can write its
 evidence and run checks.
+
+`[Collect]` is the sole explicit route to `qa_collect`: run an existing,
+fixed check and report its result, never author new tests or code. It is
+checked before every other marker and every heuristic, so it is never inferred
+from unmarked task text. Combined with any other explicit marker in the same
+leading tag block (for example `[QA] [Collect]`) it is ambiguous and falls
+back to implementation (standard), never a guess at which one wins. The other
+explicit route to a light-eligible tier is a per-task override in
+`delegation.overrides` naming `tier: light` for that task's identity: also
+explicit, never a heuristic. `qa_document` (writing the QA test manual) is
+`documentation`, not `qa_author` or `qa_collect`, since it is authored prose,
+not a check to run.
 
 `annotate` writes an HTML comment below each pending `T###` line. It never
 changes checkbox lines, completed tasks, running tasks or the semantic task
@@ -777,6 +832,209 @@ On Windows, releasing a lock retries brief file-sharing conflicts while
 checking the owner token before each attempt. A persistent conflict returns
 `DELEGATION_LOCK_RELEASE_BUSY` and names the lock file; a new owner's lock is
 never removed by the former owner.
+
+### Light-tier evidence and `accept`
+
+A light-tier run is never taken on trust. The guard applies whenever the
+selected candidate's own tier is `light`; the candidate has no tier at all
+(a fallback chosen by explicit `model`, or an override) and the task's
+classified type is `qa_collect` (an explicit standard-or-above tier — for
+example a `reassign` escalation — is exempt from this one rule, since a
+task's classification never changes on reassignment and applying it
+unconditionally would mean a `qa_collect` task could never actually resolve
+through a standard-tier `reassign`); or the requested or harness-reported
+actual model matches that harness's configured `light` model *by family*: the
+same identifier, or one fully containing the other as a whole dash-delimited
+token run that includes at least one non-generic token
+(`claude-haiku-4-5-20260101` matches the configured alias `haiku`; exact
+string equality alone let a real light-tier run escape whenever the harness
+reported its full name instead of the alias). A shared provider prefix or
+trailing qualifier alone is never enough — `claude-opus-4-7` does not match
+`claude-haiku-4-5`, `gpt-6-sol` does not match the bare family prefix
+`gpt-6`, and bare `codex` does not match `gpt-6-sol-codex` (`codex`,
+`openai` and `anthropic`, like the provider names, are generic tokens on
+their own). A contained run immediately followed by an effort word (`high`
+or `xhigh` — not `max`, `pro` or `large`, which are ordinary size words a
+real light-tier variant can carry, such as `haiku-large-ctx` or
+`gpt-6-terra-pro`) is rejected only when the *fuller* identifier is itself
+one of the harness's own configured models for some other tier: `o4-mini`
+fails to match `o4-mini-high` only when policy configures `o4-mini-high` as
+some other tier's model, confirming it is a genuinely different,
+higher-effort tier rather than an incidental suffix. Without that
+confirmation the match still holds — a wrongly rejected match would let a
+light-tier run skip the guard entirely, which is worse than an unnecessary
+guard on a model that turns out to be genuinely different. `collect` records the driver's
+raw `successful`/`failed`/`abandoned` verdict as usual, but when the guard
+applies and the verdict is `successful`, the ledger outcome becomes
+`unverified` unless the worker's own summary names a produced-file list (as
+JSON `{"files": ["<path>", ...]}`) whose every path is both inside the
+task's declared owned paths (see below) and among the paths the driver
+itself measured this run as having changed — an unrelated, pre-existing file
+such as a checked-in README can never pass just because the summary names
+it. Raw reporter counts in a worker's own summary are never accepted at
+all, at any time: only `accept`'s independently run command, or a future
+driver-captured command transcript, may supply counts. `unverified` is a
+terminal ledger status like `successful`, `failed` and `abandoned`; a note
+never changes it, because nothing in the ledger accepts free text as
+evidence, and neither `complete` nor the Ready task gate accepts one on a
+bare claim of success either (see below). Collecting an already-terminal run
+again (one `accept` already resolved, in particular) returns the recorded
+result unchanged rather than re-running the driver and the guard a second
+time, which could otherwise downgrade an accepted `successful` back to
+`unverified`.
+
+Three ways resolve an `unverified` attempt:
+
+- **`reassign`** to a standard (or stronger) tier, as for any other terminal
+  result; the replacement run's own evidence resolves the identity once
+  collected.
+- **`delegate_dispatch.py accept --feature specs/<feature> --run-id <id>
+  --command "<acceptance command>" --expect counts|files [--timeout <seconds>]
+  [--owned <path>]`** runs that command itself, independently of the worker's
+  own report, and judges its output by the same schema below. The command
+  runs with no shell: on POSIX, `shlex.split` into an argv list (there is no
+  shell here to parse quoting, so this module must); on Windows, the raw
+  command string is passed straight to `subprocess`, which hands it to
+  `CreateProcess` directly (never through `cmd.exe`) for Windows' own native
+  quoting — `shlex.split(..., posix=False)` would leave literal quote
+  characters inside each argument, which is wrong once that is one argv
+  element. It runs inside the task's own recorded working directory, or, when
+  that directory is outside the project root (an isolated worktree given to
+  `start --cwd`), a worktree `git worktree list --porcelain` itself confirms
+  belongs to this repository — never an arbitrary caller-supplied path.
+  stdout and stderr are captured to spooled temp files rather than in-memory
+  pipes, under a bounded timeout (default 1800s, max 28800s) with only the
+  first 200,000 bytes of each stream ever read back, so a runaway or hostile
+  command cannot exhaust the dispatcher's own memory; on a timeout the whole
+  process tree is killed (Windows `taskkill /T /F /PID`, POSIX its own
+  process group), not just the immediate child, before anything is read.
+  It refuses outright, before running anything, when the command's own
+  executable is (or, unresolved, would resolve on PATH to) a Windows
+  `.bat`/`.cmd` shim (`DELEGATION_ACCEPT_COMMAND_IS_SHIM`): Windows always
+  routes a batch file through `cmd.exe` even though this dispatcher never
+  sets `shell=True` and never builds a shell command line itself, reopening
+  the very class of injection risk `shell=False` is meant to close (the
+  "BatBadBut" vulnerability class) — an `npx` invocation resolves to
+  `npx.cmd` on Windows, for example, so run the underlying executable
+  directly instead (`node <script>.js` rather than the `npx.cmd` shim).
+  It accepts only when the command exits `0` and, for `counts`, parses to
+  `total > 0` and `failed == 0` (see the reporter formats below), or, for
+  `files`, every path exists, is non-empty and resolves inside a declared
+  owned path: an absolute path, a literal `..` segment, a missing or empty
+  file, or a symlink whose real target lands outside every owned root are all
+  rejected (paths are fully resolved, following any symlink to its real
+  location, before containment is checked). Each accepted file's evidence
+  records its sha256 and size. Exit-zero empty output, a bare free-text note
+  with no structured evidence, an unparsable result, a failed command and a
+  timeout all leave the attempt `unverified`. Every attempt, accepted or not,
+  is recorded under the ledger attempt's `acceptance_attempts`: the command,
+  exit code, whether it timed out or its output was truncated, and the
+  (capped) raw output. `accept` refuses with `DELEGATION_RUN_NOT_UNVERIFIED`
+  on any run that is not currently `unverified`.
+
+**Owned paths.** A light-tier result's file evidence (in a worker's summary or
+in `accept`'s command output) must resolve inside the task's declared owned
+paths, not merely its whole working directory. A start is required to
+declare `--owned <path>` itself (repeatable) — there is no silent default to
+the whole `--cwd` — whenever *any* candidate anywhere in the route's fallback
+chain is light, not only the preferred one (a fallback beyond the first can
+still land the run on the light tier); omitting `--owned` there is refused
+with `DELEGATION_OWNED_PATHS_REQUIRED`. They carry forward unchanged across
+an automatic stronger retry or a manual `reassign`. `accept --owned <path>`
+narrows them for that one acceptance call only, without changing what is
+recorded on the attempt; it can never widen them past what was recorded at
+`start` (`DELEGATION_ACCEPT_OWNED_MUST_NARROW` otherwise).
+
+**Reporter count formats** (`accept --expect counts`, and JSON forms only for
+a worker's own self-report, which never supplies counts at all): JSON
+`{"total": N, "passed": N, "failed": N}` (`passed` optional, computed as
+`total - failed`) or JUnit-style `{"tests": N, "failures": N, "errors": N}`
+(`errors` optional; `failed = failures + errors`); or one of seven text
+formats, each requiring that reporter's own real framing so a bare "N passed,
+N failed" fragment pasted out of context (or invented) never parses as a
+false success: pytest's `"===== ... in N.Ns ====="` summary bar; Jest's
+`"Tests: ..."` line; a JUnit/Maven aggregate `"Results:"` section, including
+the real Maven layout with `[INFO]`/`[ERROR]` line prefixes and a blank,
+log-prefixed line between `"Results:"` and the aggregate (an earlier
+per-class `"Tests run:"` line with no `"Results:"` header is ignored, even
+elsewhere in the same transcript); Python unittest's `"Ran N tests ..."`
+followed by `"OK"` or `"FAILED (...)"`; dotnet test's `"Passed!"`/`"Failed!"`
+summary line, and its older VSTest console form (`"Total tests: N"` with
+`Passed`/`Failed` on the same or following lines); and node's `--test`
+runner's `"# tests"`/`"# pass"`/`"# fail"` lines (not necessarily adjacent —
+real output interleaves other fields between them). Every text format reads
+its outcomes independently of their order within the line or block. Most
+formats use only their last occurrence (a rerun's final state, not an
+earlier attempt pasted earlier in the same log); pytest's bar and dotnet's
+`"Passed!"`/`"Failed!"` line instead use the last occurrence that has
+`failed > 0`, if any, else their own last occurrence: a "rerun failed tests
+only" pytest invocation, or one failing project in a multi-project dotnet
+solution, can print a real failure and then a later, clean bar or project,
+and taking the literal last one would silently report the whole run as
+passing. If more than one format produces a result and they disagree, the
+parse is ambiguous and returns unparsed rather than guessing between them.
+
+**Enforcement.** A delegated stage's claim recording a route is not itself
+completion: `complete` requires the dispatcher's own ledger — never the
+receipt's self-report — to show the claimed stage's latest delegated attempt
+(following any `reassign` chain to its terminal end) as `successful` and
+started under this exact claim (its recorded `claim_token`, from `start`,
+matching the claim being completed — a successful attempt left over from an
+earlier claim of the same stage cannot satisfy a different, later re-claim;
+a legacy attempt recorded before `claim_token` existed has none and can
+never match, so re-delegate the stage once after upgrading), and refuses
+with `DELEGATION_STAGE_NOT_VERIFIED` otherwise. The Ready task gate
+(`ci_gate.py`'s `tasks` rule, and `revalidate --stage ready`) similarly
+refuses a checked `[x]` task whose latest delegated attempt is anything but
+`successful` (running, starting, failed, abandoned or unverified) with
+`DELEGATION_TASK_UNVERIFIED`, naming every such task.
+
+**Ledger trust.** Both `complete` and the Ready gate also read
+`delegation.ledger_trust_state`, a tri-state check: `'trusted'` (the local
+`.written` marker matches the ledger's current bytes); `'unverified-local'`
+(no local marker at all — the normal state for a CI checkout or a fresh
+clone, since `delegations.json` is committed but its marker lives in
+gitignored runtime state); or `'untrusted'` (a marker that disagrees, or a
+persisted tamper flag not yet cleared). Only `'unverified-local'` is a
+warning: it is recorded as `delegation_ledger_trust` on the completed
+receipt and appended to `ci_gate.py`'s `warnings`, while task and stage
+status are still fully enforced. `'untrusted'` still refuses with
+`DELEGATION_LEDGER_UNTRUSTED`. `ci_gate.py` prints every collected warning to
+stderr, and appends it to `$GITHUB_STEP_SUMMARY` when the runner sets that
+variable, so a reviewer sees `DELEGATION_LEDGER_TRUST_UNVERIFIED_LOCAL` even
+though it never changes the gate's exit code. Note that deleting the local
+`.written` marker by hand does not clear a detected tamper honestly — it
+downgrades what would read as `'untrusted'` back down to `'unverified-local'`
+(no marker to disagree with), which is exactly why detecting a genuine
+tamper is sticky (below) rather than relying on the marker's mere presence.
+
+Detecting a genuine tamper (a marker that existed and now disagrees) persists
+a feature-level flag that a later, perfectly legitimate dispatcher write does
+**not** clear on its own — only `delegate_dispatch.py trust-reset --feature
+<f> --reason "<text>"` does, after a human reviews exactly what changed; it
+records the actor, time, reason and the exact bytes on both sides.
+**`trust-reset` is an orchestrator-only, human-authorised command, never a
+worker's**: both `stage_brief` and `task_brief` explicitly forbid a worker
+from running any `delegate_dispatch.py` command (`start`, `collect`,
+`accept`, `reassign`, `recover`, `abandon` or `trust-reset`) at all — on its
+own run, another run, or another task. `trust-reset` itself also refuses
+outright with `DELEGATION_TRUST_RESET_NOTHING_TO_RESET` when there is no
+persisted tamper flag to clear: it only ever clears an *already-detected*
+tamper, and never mints a fresh `'trusted'` marker over the ledger's current
+bytes just because it was asked to — the exact probe this closes is a
+hand-edit followed by deleting the local marker (so no mismatch is ever
+detected) and then calling `trust-reset`, hoping it blesses the edit; it now
+refuses. It also refuses with `DELEGATION_TRUST_RESET_ATTEMPTS_ACTIVE` while
+any attempt for the feature is `starting` or `running`, so a reset can never
+race a live dispatch that might still change the very bytes under review.
+
+**This detects accidental and local tampering only.** `delegations.json` is a
+tracked, committed file: anyone who can commit to the repository can commit a
+fabricated ledger just as easily as a legitimate one, and this mechanism
+cannot tell the difference. CI integrity for delegation evidence ultimately
+rests on code review of that commit, the same as any other tracked file — not
+on `ledger_trust_state`, which exists only to catch an accidental or purely
+local hand-edit on one machine.
 
 ### History and evidence
 
