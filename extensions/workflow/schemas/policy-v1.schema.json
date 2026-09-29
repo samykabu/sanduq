@@ -181,6 +181,23 @@
         }
       }
     },
+    "skills": {
+      "type": "object",
+      "description": "Optional doctor skill-inventory thresholds; an absent section or key means the shipped default (see workflow README, 'Skill inventory (doctor)').",
+      "additionalProperties": false,
+      "properties": {
+        "inventory_thresholds": {
+          "type": "object",
+          "description": "Per-host-session-load threshold overrides; every key is optional.",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "skill_count": {"type": "integer", "minimum": 1},
+            "description_bytes": {"type": "integer", "minimum": 1}
+          }
+        }
+      }
+    },
     "ci": {
       "type": "object",
       "description": "Where and how this project runs the CI workflow files Sanduq renders for it.",

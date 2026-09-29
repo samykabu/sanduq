@@ -16,6 +16,40 @@
   of a raw traceback. `task_issues.py --sync-states` already walks every
   task in `tasks.md` per call, so it needs no change to be called once per
   phase for a batch of newly completed tasks instead of once per task (B7).
+- `doctor --project` reports a `skill_inventory` block (new `skill_inventory.py`),
+  per **host session load** rather than one cross-host sum: `hosts.claude`
+  (`~/.claude/skills` + project `.claude/skills` + installed plugin skills, read
+  from `~/.claude/plugins/installed_plugins.json`) and `hosts.codex`
+  (`$CODEX_HOME`/`~/.codex` skills + `~/.agents/skills` + project `.agents/skills`),
+  each with its own `combined` totals and same-host `duplicates`; a name shared
+  between a claude root and a codex root (Sanduq installs the same command skill
+  into both) is reported separately under `mirrors`, not counted as a duplicate or
+  summed twice. Per-root numbers (`skill_count`, total/max frontmatter
+  `description:` bytes, total `SKILL.md` bytes) are still reported in full, even
+  below threshold, so C4 (skill pruning) can use them. Doctor warns
+  `SKILL_INVENTORY_LARGE` (non-blocking) per host past 200 skills or 40 KiB of
+  that host's own combined description bytes (measured against Bunyan; see the
+  README); either threshold is overridable per-project under
+  `policy['skills']['inventory_thresholds']`, now also in `policy-v1.schema.json`.
+  The scan runs only on `doctor --project` (not on every `migrate`/`upgrade`
+  doctor call) and a scan failure is caught and reported as
+  `SKILL_INVENTORY_UNAVAILABLE`, never a doctor failure. The home-override env var
+  is `SANDUQ_SKILLS_HOME` (was `SANDUQ_HOME`); `$CODEX_HOME` is honoured for the
+  Codex root. See the README's "Skill inventory (doctor)" section for the
+  reasoning and JSON shape. "Never invoked" pruning stays out of scope until a
+  telemetry source and window exist.
+- `claude_plugins` now filters and confines what it scans from
+  `installed_plugins.json`: a `project`/`local`-scoped entry only counts for
+  the matching project (`projectPath`), a plugin turned off in
+  `enabledPlugins` (user `settings.json`, overridden by the project's own,
+  overridden by its `settings.local.json`) is skipped, and every `installPath`
+  must resolve (following symlinks) inside `~/.claude/plugins` itself; a UNC
+  path is rejected by its literal text before any filesystem access. Anything
+  rejected on the confinement/UNC check is listed under
+  `claude_plugins.skipped_install_paths` instead of silently dropped.
+  `$CODEX_HOME/skills` is confirmed live (cited in the README and in
+  `skill_inventory.codex_home_root`'s docstring, checked against the installed
+  Codex CLI 0.159.0), so it stays a normal counted root, not `legacy`.
 
 ## 1.6.4
 
