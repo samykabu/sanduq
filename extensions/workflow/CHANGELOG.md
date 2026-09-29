@@ -50,6 +50,48 @@
   `$CODEX_HOME/skills` is confirmed live (cited in the README and in
   `skill_inventory.codex_home_root`'s docstring, checked against the installed
   Codex CLI 0.159.0), so it stays a normal counted root, not `legacy`.
+- Split `skills/workflow/SKILL.md` (29 KB) into a core dispatcher (entry points,
+  stage loop, receipt rules, <= 6 KB) plus one `skills/workflow/references/
+  stage-<name>.md` per claimable stage. `claim` now returns a `reference` field
+  (`workflow.stage_reference(stage)`) naming the exact file to read for the
+  claimed stage. Cross-cutting detail moved to `references/dispatcher-
+  operations.md`, `references/delegation-and-decisions.md` and `references/
+  receipt-rules.md`. `references/execution.md` split into `references/
+  execution-assign.md` (start/resume, assign work) and `references/
+  execution-report.md` (report updates, finishing phases, delivery); every
+  overlay in `presets/workflow/commands/*.md` shrank to a <= 5-line pointer,
+  and the three `speckit-superpowers-bridge` legacy overlays point at a new
+  shared `references/legacy-guard.md`. No rule was dropped: `extensions/
+  workflow/tests/test_skill_split.py` diffs the pre-split files (read from git
+  history) against the new set and fails on anything not moved, with an
+  explicit, reasoned list for the handful of pointer sentences whose target
+  relocated. `extensions/scripts/smoke_install.py`, `smoke_upgrade.py` and
+  `test_execution_policy.py` were updated for the new paths and additionally
+  assert every stage's reference is present in the built archive and an
+  installed fixture project. No version bump; no script behavior changed
+  beyond packaging the new files.
+- Execution protocol updates (B11): `references/execution-assign.md` and
+  `references/execution-report.md` now state the retrospective's rules as
+  concrete, checkable instructions instead of prose: blocking parallel worker
+  spawns whose results return to the orchestration agent, never the dispatcher
+  (F1); no agent ends a turn while it owns running background work (F2);
+  report only on a state change (F3); a turn-budget table per task class
+  (implementation, qa_author, qa_collect, documentation, review) plus a
+  planned hand-off at ~150K resident context (T0); a fixed ten-line worker
+  result (T7); read a verification summary before raw reporter output, opened
+  only for a failed lane (T8); `git stash` and `git add -A`/`git add .`
+  forbidden for workers (S6); a consumers checklist after every fix (F11).
+  `task_issues.py --sync-states` now runs once per phase boundary, not once
+  per task (from B7), and the dispatcher's own token usage is recorded with
+  `progress.py usage --overhead dispatcher --agent <id> --collect claude --log
+  <path>` at every phase commit. Every routine `task_issues.py` and
+  `progress.py` example call now carries `--summary` (B7: `ok`/`error` plus
+  counts, or `skipped reason=...`), with `--json` reserved for a call whose
+  result must be parsed programmatically. A marked placeholder section,
+  "Light-tier collection results (B12)", awaits B12's final text.
+  New `extensions/workflow/tests/test_execution_protocol_b11.py` asserts every
+  rule above is present in the installed reference files, following
+  `test_skill_split.py`'s style. No version bump; no script behavior changed.
 
 ## 1.6.4
 

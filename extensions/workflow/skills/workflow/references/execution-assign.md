@@ -1,9 +1,11 @@
-# Implementation orchestration
+# Implementation orchestration: assign
 
 Use this protocol for both core Implement and SuperSpec Execute in a managed
 Sanduq workflow. The installed preset supplies it without editing either upstream
 command. The dispatcher keeps the Execute claim and remains the only agent that
-chooses lifecycle stages.
+chooses lifecycle stages. This half covers starting, resuming and assigning work;
+[`execution-report.md`](execution-report.md) covers updating the report, finishing
+phases and continuing through delivery.
 
 ## Start and resume
 
@@ -27,7 +29,7 @@ simulated role or serial parent execution as agent delegation.
 The orchestration agent creates the report before assigning the first task:
 
 ```text
-python .specify/extensions/workflow/scripts/progress.py init --tasks specs/<feature>/tasks.md --output specs/<feature>/workflow/progress
+python .specify/extensions/workflow/scripts/progress.py init --tasks specs/<feature>/tasks.md --output specs/<feature>/workflow/progress --summary
 ```
 
 The report is titled from the plan's `# Tasks: <feature>` heading. Pass
@@ -52,6 +54,10 @@ Record each assignment's stable task IDs, prerequisites, owned paths, shared
 resources, acceptance checks and worker ID in the report and handoff. Give workers
 only their scope and the context needed to implement it. Workers must not stage,
 commit, push, merge, change shared report files or invoke another executor.
+`git stash` and `git add -A`/`git add .` are forbidden for a worker: a stash can
+hide another agent's uncommitted change, and a wildcard add can stage paths
+outside the worker's owned scope. A worker stages only the exact paths it was
+assigned, named explicitly.
 
 When `.specify/workflow.yml` enables delegation, start each ready `T###` worker
 with `python .specify/extensions/workflow/scripts/delegate_dispatch.py start
@@ -113,91 +119,39 @@ Never invent extra work merely to occupy slots. The orchestration agent reviews
 worker results, integrates changes, checks acceptance evidence and requests fixes.
 Unverified worker claims remain pending.
 
-## Update the report and finish phases
+## Spawn pattern, blocking waits and turn budgets (F1, F2, T0)
 
-The orchestration agent is the sole report writer. Update it on assignment,
-completion, failure, recovery and each lifecycle transition. Use actual task IDs:
+Spawn a batch of ready workers with several tool calls in the same message,
+blocking rather than backgrounded: every worker in the batch runs concurrently,
+and each worker's own result is delivered straight to the orchestration agent
+that spawned it. Never route a worker's result to the dispatcher for relay and
+re-summarising; the dispatcher hears from the orchestration agent only at batch
+boundaries (tasks accepted, the phase commit SHA, a blocker). This applies
+whether the batch runs in-session or through `delegate_dispatch.py`.
 
-```text
-python .specify/extensions/workflow/scripts/progress.py task --output specs/<feature>/workflow/progress --id T001 --status running --agent <worker-id> --note "Own src/example.py; depends on T000"
-python .specify/extensions/workflow/scripts/progress.py task --output specs/<feature>/workflow/progress --id T001 --status done --agent <worker-id> --note "Acceptance check passed; evidence: evidence/T001.txt"
-python .specify/extensions/workflow/scripts/progress.py event --output specs/<feature>/workflow/progress --message "Phase 1 tests passed; preparing phase commit"
-python .specify/extensions/workflow/scripts/progress.py phase --output specs/<feature>/workflow/progress --name "Phase 1" --status complete --commit <sha>
-```
+No agent in this protocol, dispatcher, orchestration agent or worker, ends its
+turn while it still owns background work that is running. Block on it (a
+foreground wait with a bounded, re-armed timeout, or the host's own blocking or
+monitor primitive) and report exactly once, when the work concludes.
+"Waiting for X" is never a valid final message from any agent in this protocol.
 
-Record token usage from the worker's own harness log whenever a task reaches
-`done` or `blocked`. Pass the host agent ID the worker was spawned with:
+Turn budgets bound how large a worker's resident context is allowed to grow,
+because turn count, not what a worker reads at the start, explains almost all of
+its token cost. Each figure below is a policy budget (fresh input plus output
+tokens for the task), not a hard stop: the progress report flags an overrun
+amber or red the way it flags a failed lane, and the worker explains the
+overrun in its evidence instead of being cut off mid-task.
 
-```text
-python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T001 --agent <worker-id> --collect claude
-python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T002 --agent <worker-id> --collect codex
-python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T003 --agent <run-id> --collect delegate --log .delegate/runs/<run-id>/result.json
-python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --overhead orchestrator --agent <orchestrator-id> --collect claude
-python .specify/extensions/workflow/scripts/progress.py sync --output specs/<feature>/workflow/progress
-```
+| Task class | Turn budget (fresh + output) | Notes |
+| --- | --- | --- |
+| implementation | ~120K (~200K for an integration-heavy task) | Unit-scoped work stays near the lower figure. |
+| qa_author | ~300K | Authoring a Playwright spec, an API-sample test or a 20+-state capture; never Haiku (standing rule 5). |
+| qa_collect | ~60K | Running an existing, stable spec or script and collecting its counts or files; Haiku-eligible only when the task line carries the `[collect]` marker or an explicit override (B12), never by default. |
+| documentation | ~180K | QA Document, Manual Update and similar lifecycle writes. |
+| review | ~200K for a first independent pass; ~50K for the same reviewer's later pass | Reusing the reviewer by message across passes is markedly cheaper than a fresh spawn per pass. |
 
-`claude` finds `~/.claude/projects/*/*/subagents/agent-<id>.jsonl`, `codex` finds
-the rollout whose name ends with the thread ID, and `delegate` reads a
-delegate-task `result.json`. Pass `--log` for any other location, including the
-dispatcher's own session transcript. Only token counters are read. `sync`
-rebuilds the visible delegation history from the tracked feature ledger;
-run it after each collected attempt and before the final report review. It shows
-the actual model only when the harness reported it. Raw prompts and transcripts
-stay in ignored `.delegate/runs/` artifacts. Collecting the same agent again
-replaces its figure, so collect overhead at each phase commit and
-at Finalize. A worker reused across tasks is split by each task's `running` to
-`done` window, so mark a task `running` when assigning it. When no log exists,
-record the worker's self-reported counts with `--fresh-input`, `--cached-input`
-and `--output-tokens`; the report marks them. A log that cannot be found or read
-is recorded as unavailable and shown as a gap, never as zero. The report shows
-fresh input, cached input and output per task, the total of the filtered tasks,
-per phase, overhead and the feature; it covers implementation only.
-
-Use `pending`, `running`, `done` or `blocked` for task status. Mark task checkboxes
-done only after reviewing their implementation and required checks. Preserve
-failed attempts alongside subsequent successful evidence. Sync native task issues
-through the dispatcher after accepted batches.
-
-Continue until every implementation phase is finished. At each phase boundary,
-run the required checks, inspect the combined diff, and have the orchestration
-agent commit and push that phase's completed changes to the bound feature branch.
-Stage only the intended paths; preserve unrelated user changes. Record the actual
-commit SHA and push result. A completed local phase with a failed push remains
-unpublished; diagnose the failure and retry without claiming remote success.
-Keep the report directory out of receipt input manifests and implicit source
-inventories; its routine updates must not stale source verification. Retain it
-locally through merge, with stable evidence stored separately in the feature.
-
-Existing authorization for phase commits and pushes carries forward. Respect an
-explicit user restriction and record the precise limitation if publication is
-not authorized. Under `required-only`, routine phase transitions and backend
-choice do not need another approval. Human review tasks, unresolved requirements,
-security decisions and deployment approvals remain real gates. Record concrete
-blockers and continue independent authorized work.
-
-## Continue through delivery
-
-The orchestration agent returns the Execute evidence to the dispatcher. It stays
-available to update the report and schedule fixes while the dispatcher runs
-Verify, Review, selected documentation and Ready. Never complete a claim or call
-the next lifecycle stage from a worker or from an executor hook.
-
-When the user's request authorizes a PR, the dispatcher continues through Finalize
-automatically once its prerequisites pass. When merge is also authorized, monitor
-checks and reviews on the exact final head, delegate fixes, revalidate affected
-evidence, and merge through the normal protected path only when required checks
-are green and approvals are satisfied. Do not bypass branch protections. Without
-merge authorization, keep the report at the actual PR state and request only the
-missing authorization after the PR is concrete and reviewable.
-
-```text
-python .specify/extensions/workflow/scripts/progress.py pr --output specs/<feature>/workflow/progress --url <pr-url> --status open
-python .specify/extensions/workflow/scripts/progress.py event --output specs/<feature>/workflow/progress --message "CI failure: <check>; fix assigned to <worker-id>"
-python .specify/extensions/workflow/scripts/progress.py pr --output specs/<feature>/workflow/progress --url <pr-url> --status merged
-```
-
-Set `merged` only after reading GitHub's actual merged state and merge SHA. Record
-the final check results and post-merge verification in the handoff and report.
-PR creation, merge, deployment and live acceptance are separate facts. Keep the
-report current through all work in the user's authorized scope; a progress page
-does not replace test receipts, review evidence or the workflow checkpoint.
+When a worker's own context passes roughly 150K tokens resident, plan a hand-off
+at the next safe boundary, such as a finished subtask, a passing test or a
+committed file, rather than letting it grow further. Record the hand-off point
+and the evidence already produced in the report, so the replacement worker
+resumes from there instead of redoing it.

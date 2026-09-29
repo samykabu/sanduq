@@ -69,6 +69,54 @@ those pending releases cannot yet be installed from public release URLs.
 Scope's community catalog name is ambiguous. Always use the Sanduq archive URL or
 verified staged package, never a bare `specify extension add scope` command.
 
+## Dispatcher core and per-stage references
+
+`skills/workflow/SKILL.md` is a core dispatcher (<= 6 KB): entry points, the stage
+loop and receipt rules, each pointing at the reference that carries its detail.
+`claim`'s response carries a `reference` field (`workflow.stage_reference(stage)`)
+naming the exact `skills/workflow/references/stage-<stage>.md` for the claimed
+stage; read that file, never guess it from the stage name. Cross-cutting detail
+lives in `references/dispatcher-operations.md` (init/continue/status/doctor/
+reconcile, context/telemetry, Project Sync, the managed-overlay contract,
+interruption/GitHub behavior and package updates), `references/
+delegation-and-decisions.md` (invoking a claimed command through delegation or a
+paused decision) and `references/receipt-rules.md` (input roles, `amend`, and the
+G6 recovery recipes). The former single `references/execution.md` is now
+`references/execution-assign.md` (start/resume, assign work) and `references/
+execution-report.md` (update the report, finish phases, continue through
+delivery); `references/stage-execute.md` points at both. Each overlay in
+`presets/workflow/commands/*.md` is a <= 5-line pointer into the skill and its
+claimed reference; `presets/workflow/commands/speckit.speckit-superpowers-bridge.
+*.md` instead point at `references/legacy-guard.md`. `extensions/workflow/tests/
+test_skill_split.py` proves every rule from the pre-split files was moved, not
+dropped (an explicit, reasoned exception list covers the handful of pointer
+sentences whose target relocated); `extensions/scripts/smoke_install.py` and
+`test_execution_policy.py` check the built package and an installed fixture
+project carry every stage's reference and stay under the core budget.
+
+`execution-assign.md` and `execution-report.md` also carry the retrospective's
+execution-protocol rules (B11): workers are spawned with blocking, concurrent
+tool calls whose results return to the orchestration agent directly rather than
+through the dispatcher (F1); no agent ends a turn while it still owns running
+background work (F2); the dispatcher reports only on an actual state change
+(F3); a turn-budget table per task class (implementation, qa_author, qa_collect,
+documentation, review) and a planned hand-off once a worker's context passes
+~150K tokens (T0); a worker's result is a fixed ten-line structure (T7); a
+verification summary is read before raw reporter output, which is opened only
+for a failed lane (T8); `git stash` and `git add -A`/`git add .` are forbidden
+for workers (S6); and a consumers checklist runs after every fix (F11). It also
+places `task_issues.py --sync-states` at the phase boundary rather than per task
+(from B7), records dispatcher overhead with `progress.py usage --overhead
+dispatcher --agent <id> --collect claude --log <path>` at every phase commit,
+and puts `--summary` (B7: `ok`/`error` plus counts, or `skipped reason=...`
+when a call had nothing to do) on every routine `task_issues.py` and
+`progress.py` example call, reserving `--json` for a call whose result must be
+parsed programmatically. `execution-report.md` carries a marked placeholder
+section, "Light-tier
+collection results (B12)", for B12's still-being-revised delegation text.
+`extensions/workflow/tests/test_execution_protocol_b11.py` asserts these rules
+are present in the installed reference files.
+
 ## Switching hosts
 
 A project can have several Spec Kit integrations installed (for example `codex` and

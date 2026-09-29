@@ -56,6 +56,15 @@ RUNTIME_RECEIPT_FIELDS = ('amendments', 'stale', 'head', 'source_key', 'ci_evide
 SOURCE_STAGES = ('verify', 'review', 'ready')
 # How recovery recipes name the runtime in a consumer project.
 WORKFLOW_SCRIPT = 'python .specify/extensions/workflow/scripts/workflow.py'
+# Where the workflow package lands inside a consumer project, so `claim`'s `reference`
+# field is directly usable by a reader without knowing the installed layout separately.
+WORKFLOW_PACKAGE_PREFIX = '.specify/extensions/workflow/'
+# Where `claim` tells the dispatcher to read this stage's own instructions, project-relative
+# (matches the installed layout, e.g. `.specify/extensions/workflow/skills/workflow/
+# references/stage-scope.md`). One file per BASE_STAGES entry; see SKILL.md's stage
+# reference map and extensions/workflow/tests/test_workflow.py for the completeness check.
+def stage_reference(stage):
+    return WORKFLOW_PACKAGE_PREFIX + 'skills/workflow/references/stage-' + stage + '.md'
 
 
 class WorkflowError(Exception):
@@ -1639,7 +1648,8 @@ class Run:
             state['status'] = 'in-progress'
             write(self.root / '.specify/feature.json', {'feature_directory': self.relative})
             self.save(state)
-            claimed = {**state['active'], 'command': state['commands'][stage], 'feature': self.relative, 'issue': state['issue']}
+            claimed = {**state['active'], 'command': state['commands'][stage], 'feature': self.relative, 'issue': state['issue'],
+                       'reference': stage_reference(stage)}
             if notices:
                 # Reported to the caller only; the checkpoint keeps the claim itself.
                 claimed['notices'] = notices
