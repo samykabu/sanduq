@@ -91,11 +91,23 @@ REWORD_EXCEPTIONS = [
      "legacy instructions below; otherwise continue with them unchanged.'; the words are "
      "the same but no longer form this exact original sentence."),
     ("Sync native task issues through the dispatcher after accepted batches.",
-     "B11 (Sprint 4) replaced this one-line rule with the fuller, checkable phase-"
-     "boundary cadence from retrospective finding B7: references/execution-report.md "
-     "now says 'Sync native task issues once per phase, not once per task: ...', "
-     "preserving the same substance (sync through the dispatcher, after accepted "
-     "batches) while fixing the timing to a single call per phase."),
+     "cadence changed to once per phase (plan package B7); owner stated in "
+     "dispatcher-operations.md."),
+    ("After completed execution batches and documentation tasks, run "
+     "`task_issues.py --sync-states --feature ... --parent ... --apply` to "
+     "close/reopen the correct native task issues.",
+     "same B7 cadence change as above, applied to this original SKILL.md sentence "
+     "(moved verbatim into references/dispatcher-operations.md by B8): it now reads "
+     "'Once per phase boundary, ... the dispatcher runs `task_issues.py "
+     "--sync-states ... --apply --summary` ...', naming the dispatcher as the "
+     "owner and adding the B7 `--summary` flag, per the B11 review fix."),
+    ("The checkpoint must be supplemented with concrete pending task IDs, test "
+     "results, decisions, GitHub URLs, background process handles and unresolved "
+     "approvals in handoff.md.",
+     "B11 review fix (finding 4): references/dispatcher-operations.md's handoff-"
+     "contents list now also names the dispatcher's own session ID and session "
+     "transcript path, since execution-report.md's dispatcher-usage recording "
+     "reads that path from the handoff; the surrounding items are unchanged."),
     ('```text python .specify/extensions/workflow/scripts/progress.py init --tasks '
      'specs/<feature>/tasks.md --output specs/<feature>/workflow/progress ```',
      "B11 (Sprint 4) added the B7 '--summary' flag to every routine progress.py/"

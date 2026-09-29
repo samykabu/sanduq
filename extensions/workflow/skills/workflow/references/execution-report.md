@@ -60,16 +60,16 @@ Use `pending`, `running`, `done` or `blocked` for task status. Mark task checkbo
 done only after reviewing their implementation and required checks. Preserve
 failed attempts alongside subsequent successful evidence.
 
-Sync native task issues once per phase, not once per task: after every task in
-the phase is committed and its documentation tasks (QA Document, Manual Update,
-where selected) are done, run `task_issues.py --sync-states --feature ...
---parent ... --apply --summary` exactly once for the phase. `sync_states()`
-already walks every task in `tasks.md` on each call, so a single call at the
-phase boundary reports and applies every completed task's state together;
-calling it after each task repeats the same walk for no new information. Never
-infer human-review completion from generated evidence: a human-review task's
-issue closes only on the human's own signal, never because its evidence file
-exists.
+Sync native task issues once per phase, not once per task: the dispatcher owns
+this call and runs `task_issues.py --sync-states --feature ... --parent ...
+--apply --summary` exactly once per phase, after every task in the phase is
+committed and its documentation tasks (QA Document, Manual Update, where
+selected) are done. `sync_states()` already walks every task in `tasks.md` on
+each call, so a single call at the phase boundary reports and applies every
+completed task's state together; calling it after each task repeats the same
+walk for no new information. Never infer human-review completion from
+generated evidence: a human-review task's issue closes only on the human's own
+signal, never because its evidence file exists.
 
 Prefer `--summary` (a one-line result with counts) for routine protocol calls
 to `task_issues.py`, `progress.py`, `assure_state.py`, `manual_state.py` and
@@ -115,7 +115,7 @@ Status: done | blocked | partial
 Files touched: <paths, or "none">
 Tests: <RED-to-GREEN summary, e.g. "12 passed, 0 failed (dotnet test, persistence-integration)">
 Evidence: <path(s) under specs/<feature>/evidence/>
-Commit: <sha, or "not committed">
+Diff: <files changed, uncommitted>
 Consumers checked: <which consumers were checked, or "n/a" with why>
 Tokens: <fresh/cached/output if the worker's harness reports them, else "unlogged">
 Blockers: <none, or the exact blocking condition>
