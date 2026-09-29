@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `project-sync` (Bash and PowerShell) gains `-Summary`/`--summary`: one line
+  (`ok issue=<n> status=<status> created=<n> closed=<n>`, `ok skipped=1
+  reason=<reason>` on graceful degradation, or `error <message>`) as an
+  alternative to the `-Json`/`--json` summary, which is unchanged.
+  `-Summary`/`--summary` and `-Json`/`--json` together is rejected. Default
+  (no flag) behaviour and every exit code are unchanged (B7).
 - `project-sync` (Bash and PowerShell) falls back to the GitHub REST API when the GraphQL budget
   is exhausted: Project item add/lookup and Status edits, parent issue lookup/creation, sub-issue
   creation and linking, sub-issue closing and the open-PR check. The real budget is checked, since

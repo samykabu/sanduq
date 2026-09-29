@@ -1,11 +1,14 @@
+import contextlib
 import copy
 import importlib.util
+import io
 import json
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 SCRIPTS = Path(__file__).resolve().parents[1] / 'scripts'
 sys.path.insert(0, str(SCRIPTS))
@@ -160,3 +163,45 @@ class TaskIssueTests(unittest.TestCase):
         t.sync_states(self.root,feature,10,True,self.gh)
         self.assertEqual(self.gh.issues[result['tasks']['T001']['number']]['state'],'open')
         self.assertEqual((self.root/feature/'workflow/task-issues.json').read_bytes(),before)
+
+    def test_sync_states_handles_a_batch_of_tasks_in_one_call(self):
+        # B7: `--sync-states` must be callable once per phase for a batch of
+        # tasks. sync_states() already walks every task in tasks.md on each
+        # call, so completing several tasks in the same phase and syncing once
+        # reports (and applies) every transition together; no new code needed.
+        feature = self.feature('001-a', 10)
+        result = t.sync(self.root, feature, 10, {}, True, self.gh)
+        tasks = self.root / feature / 'tasks.md'
+        tasks.write_text('- [x] T001 First behavior\n- [x] T1000 Second behavior\n')
+        outcome = t.sync_states(self.root, feature, 10, True, self.gh)
+        self.assertEqual({c['task'] for c in outcome['changes']}, {'T001', 'T1000'})
+        self.assertEqual(self.gh.issues[result['tasks']['T001']['number']]['state'], 'closed')
+        self.assertEqual(self.gh.issues[result['tasks']['T1000']['number']]['state'], 'closed')
+
+
+class TaskIssuesSummaryTests(unittest.TestCase):
+    def test_sync_summary_counts_created_and_reused(self):
+        result = {'tasks': {'T001': {'action': 'create'}, 'T002': {'action': 'reuse'}, 'T003': {'action': 'reuse'}}}
+        self.assertEqual(t.sync_summary(result), 'ok created=1 reused=2 total=3')
+
+    def test_sync_states_summary_counts_transitions(self):
+        result = {'changes': [{'task': 'T001', 'to': 'closed'}, {'task': 'T002', 'to': 'open'}]}
+        self.assertEqual(t.sync_states_summary(result), 'ok opened=1 closed=1 changed=2')
+
+    def test_cli_summary_error_line_without_gh(self):
+        # DEPENDENCY_FILE_REQUIRED is raised before any GitHub call, so this
+        # exercises --summary's error line with no gh/network dependency.
+        with tempfile.TemporaryDirectory() as directory:
+            argv = ['task_issues.py', '--root', directory, '--feature', 'specs/example',
+                    '--parent', '1', '--summary']
+            buf = io.StringIO()
+            with mock.patch.object(sys, 'argv', argv), contextlib.redirect_stdout(buf):
+                code = t.main()
+            self.assertEqual(code, 1)
+            self.assertEqual(buf.getvalue().strip(), 'error DEPENDENCY_FILE_REQUIRED')
+
+    def test_cli_rejects_summary_and_json_together(self):
+        argv = ['task_issues.py', '--feature', 'specs/example', '--parent', '1', '--summary', '--json']
+        with mock.patch.object(sys, 'argv', argv), self.assertRaises(SystemExit) as ctx:
+            t.main()
+        self.assertEqual(ctx.exception.code, 2)

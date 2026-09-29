@@ -1,4 +1,6 @@
+import contextlib
 import importlib.util
+import io
 import json
 import re
 from pathlib import Path
@@ -122,6 +124,59 @@ class ProgressTests(unittest.TestCase):
                 p.main(args)
             self.assertEqual((out / 'state.json').read_bytes(), previous)
 
+
+
+class SummaryAndJsonTests(unittest.TestCase):
+    """B7: --summary (one ok/error line) and --json (full state) beside the
+    unchanged default (report path)."""
+
+    def run_captured(self, *args):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            p.main(list(args))
+        return buf.getvalue().strip()
+
+    def setup_report(self, root):
+        tasks, out = root / 'tasks.md', root / 'report'
+        tasks.write_text('- [ ] T001 First\n- [x] T002 Second\n', encoding='utf-8')
+        p.main(['init', '--tasks', str(tasks), '--output', str(out)])
+        return out
+
+    def test_default_still_prints_only_the_report_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            out = self.setup_report(Path(directory))
+            line = self.run_captured('task', '--output', str(out), '--id', 'T001', '--status', 'running')
+            self.assertEqual(line, str(out / 'index.html'))
+
+    def test_summary_line_reports_status_counts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            out = self.setup_report(Path(directory))
+            line = self.run_captured('task', '--output', str(out), '--id', 'T001', '--status', 'running', '--summary')
+            self.assertEqual(line, 'ok done=1 total=2 pending=0 running=1 blocked=0')
+
+    def test_json_prints_the_full_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            out = self.setup_report(Path(directory))
+            line = self.run_captured('event', '--output', str(out), '--message', 'hello', '--json')
+            payload = json.loads(line)
+            self.assertEqual(payload, json.loads((out / 'state.json').read_text(encoding='utf-8')))
+            self.assertIn('hello', payload['events'])
+
+    def test_summary_error_line_for_unknown_task(self):
+        with tempfile.TemporaryDirectory() as directory:
+            out = self.setup_report(Path(directory))
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf), self.assertRaises(SystemExit) as ctx:
+                p.main(['task', '--output', str(out), '--id', 'unknown', '--status', 'done', '--summary'])
+            self.assertEqual(ctx.exception.code, 2)
+            self.assertEqual(buf.getvalue().strip(), 'error Unknown task ID: unknown')
+
+    def test_summary_and_json_together_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            out = self.setup_report(Path(directory))
+            with self.assertRaises(SystemExit) as ctx:
+                p.main(['event', '--output', str(out), '--message', 'x', '--summary', '--json'])
+            self.assertEqual(ctx.exception.code, 2)
 
 
 class ReportTitleTests(unittest.TestCase):

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- `assure_state.py` gains `--summary` (one line: `ok`/`error`, e.g. `ok
+  action=record kind=document outputs=1 recorded=1`) as an alternative to
+  today's full JSON output, which stays exactly as it was and is now also
+  selectable explicitly with `--json`. `--summary` and `--json` together is
+  rejected. Default (no flag) behaviour and the exit code are unchanged (B7).
+
 ## 2.2.2
 
 - `assure_state.py` defaults `--base-ref` to the feature's bound target

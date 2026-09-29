@@ -15,7 +15,10 @@ from pathlib import Path
 MANUAL_STATE = Path(__file__).resolve().parents[2] / 'user-manual/scripts/manual_state.py'
 
 
-class ManualStateBaseRefDefaultTests(unittest.TestCase):
+class ManualStateFixture:
+    """Shared fixture (not a TestCase itself) so the --summary tests below do
+    not re-run the base-ref tests through inheritance."""
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -50,6 +53,8 @@ class ManualStateBaseRefDefaultTests(unittest.TestCase):
         result = subprocess.run(command, cwd=self.root, text=True, capture_output=True, encoding='utf-8')
         return json.loads(result.stdout), result
 
+
+class ManualStateBaseRefDefaultTests(ManualStateFixture, unittest.TestCase):
     def test_defaults_to_the_checkpoints_bound_target_branch(self):
         self.checkpoint('develop')
         result, proc = self.run_state('record')
@@ -74,6 +79,35 @@ class ManualStateBaseRefDefaultTests(unittest.TestCase):
         result, proc = self.run_state('status')
         self.assertFalse(result['current'])
         self.assertIn('base-ref', result['reason'])
+
+
+class ManualStateSummaryTests(ManualStateFixture, unittest.TestCase):
+    """B7: --summary prints one ok/error line instead of the full JSON."""
+
+    def run_summary(self, action, base_ref=None):
+        command = [sys.executable, str(MANUAL_STATE), action, '--feature', str(self.feature),
+                   '--repo-root', str(self.root), '--output', 'User-Manual/guide.md', '--summary']
+        if base_ref:
+            command += ['--base-ref', base_ref]
+        return subprocess.run(command, cwd=self.root, text=True, capture_output=True, encoding='utf-8')
+
+    def test_summary_success_line_on_record(self):
+        self.checkpoint('develop')
+        proc = self.run_summary('record')
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout.strip(), 'ok action=record kind=manual outputs=1 recorded=1')
+
+    def test_summary_error_line_when_stale(self):
+        proc = self.run_summary('status')
+        self.assertEqual(proc.returncode, 1, proc.stdout)
+        self.assertTrue(proc.stdout.strip().startswith('error action=status kind=manual outputs=1 reason='), proc.stdout)
+
+    def test_summary_and_json_together_is_rejected(self):
+        command = [sys.executable, str(MANUAL_STATE), 'status', '--feature', str(self.feature),
+                   '--repo-root', str(self.root), '--summary', '--json']
+        proc = subprocess.run(command, cwd=self.root, text=True, capture_output=True, encoding='utf-8')
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        self.assertIn('--summary and --json cannot be combined', proc.stderr)
 
 
 if __name__ == '__main__':

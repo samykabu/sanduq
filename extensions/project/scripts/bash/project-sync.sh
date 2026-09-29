@@ -4,10 +4,10 @@
 # (logs + exits 0) if gh/jq/remote/scope/config preconditions are not met.
 #
 # Usage: project-sync.sh --phase <open|analysis|engineer-review|ready|in-progress|in-review|done|auto>
-#                        [--feature <slug>] [--dry-run] [--no-sub-issues] [--force] [--json]
+#                        [--feature <slug>] [--dry-run] [--no-sub-issues] [--force] [--json] [--summary]
 set -euo pipefail
 
-PHASE="auto"; FEATURE=""; DRYRUN=0; NOSUB=0; FORCE=0; JSON=0
+PHASE="auto"; FEATURE=""; DRYRUN=0; NOSUB=0; FORCE=0; JSON=0; SUMMARY=0
 while [ $# -gt 0 ]; do case "$1" in
   --phase) PHASE="$2"; shift 2;;
   --feature) FEATURE="$2"; shift 2;;
@@ -15,12 +15,26 @@ while [ $# -gt 0 ]; do case "$1" in
   --no-sub-issues) NOSUB=1; shift;;
   --force) FORCE=1; shift;;
   --json) JSON=1; shift;;
+  --summary) SUMMARY=1; shift;;
   *) echo "[project][warn] unknown arg: $1"; shift;;
 esac; done
+# --summary (one line: ok/error, counts) and --json (full machine-readable
+# summary) are mutually exclusive; --summary never changes the exit code a
+# caller sees for a given outcome, only what is printed on success.
+if [ "$SUMMARY" = 1 ] && [ "$JSON" = 1 ]; then
+  echo "error --summary and --json cannot be combined"
+  exit 2
+fi
+CREATED_COUNT=0; CLOSED_COUNT=0
 
 log()  { echo "[project] $*"; }
 warn() { echo "[project][warn] $*"; }
-skip() { warn "skipped: $*"; [ "$JSON" = 1 ] && echo "{\"skipped\":true,\"reason\":\"$*\"}"; exit 0; }
+skip() {
+  warn "skipped: $*"
+  if [ "$SUMMARY" = 1 ]; then echo "ok skipped=1 reason=$*"
+  elif [ "$JSON" = 1 ]; then echo "{\"skipped\":true,\"reason\":\"$*\"}"; fi
+  exit 0
+}
 gh_run() { if [ "$DRYRUN" = 1 ]; then log "DRYRUN gh $*"; return 0; fi; gh "$@"; }
 
 command -v gh >/dev/null 2>&1 || skip "gh CLI not installed"
@@ -217,25 +231,24 @@ sync_sub_issues() {
   [ "$NOSUB" = 1 ] && return
   [ -z "$NODE" ] && { warn "no parent node id; skipping sub-issues"; return; }
   gh label create spec-task --repo "$REPO" --color D4C5F9 --force >/dev/null 2>&1 || true
-  local created=0
   while IFS=$'\t' read -r _ id desc; do
     [ -z "$id" ] && continue
     echo "$ST" | jq -e --arg s "$SLUG" --arg i "$id" '.[$s].subIssues[$i]' >/dev/null 2>&1 && continue
-    if [ "$DRYRUN" = 1 ]; then log "DRYRUN create sub-issue '$SLUG $id: $desc'"; created=$((created+1)); continue; fi
+    if [ "$DRYRUN" = 1 ]; then log "DRYRUN create sub-issue '$SLUG $id: $desc'"; CREATED_COUNT=$((CREATED_COUNT+1)); continue; fi
     local surl snum snode
     surl="$(create_issue "$SLUG $id: $desc" "Task \`$id\` of feature \`$SLUG\` (parent #$ISSUE)." spec-task)"
     snum="$(echo "$surl" | sed -E 's#.*/issues/([0-9]+).*#\1#')"
     snode="$(issue_node "$snum")"
     link_sub_issue "$snum" "$snode" >/dev/null 2>&1 || warn "sub-issue link failed for $id"
     ST="$(echo "$ST" | jq --arg s "$SLUG" --arg i "$id" --argjson n "$snum" --arg nd "$snode" '.[$s].subIssues[$i] = {number:$n,nodeId:$nd,closed:false}')"
-    created=$((created+1))
+    CREATED_COUNT=$((CREATED_COUNT+1))
   done < <(parse_tasks)
-  [ "$created" -gt 0 ] && log "created $created sub-issue(s)"
+  [ "$CREATED_COUNT" -gt 0 ] && log "created $CREATED_COUNT sub-issue(s)"
 }
 
 sync_progress() {
   if [ "$MANAGED" = 1 ]; then log 'Task issue states are owned by the workflow adapter'; return; fi
-  local total closed=0
+  local total
   total="$(echo "$ST" | jq -r --arg s "$SLUG" '(.[$s].subIssues // {}) | length')"
   [ "$total" = 0 ] && return
   while IFS=$'\t' read -r d id _; do
@@ -246,11 +259,11 @@ sync_progress() {
     if [ -n "$num" ] && [ "$isclosed" != "true" ]; then
       close_issue "$num" >/dev/null 2>&1 || true
       ST="$(echo "$ST" | jq --arg s "$SLUG" --arg i "$id" '.[$s].subIssues[$i].closed = true')"
-      closed=$((closed+1))
+      CLOSED_COUNT=$((CLOSED_COUNT+1))
     fi
   done < <(parse_tasks)
   local done_c; done_c="$(echo "$ST" | jq -r --arg s "$SLUG" '[.[$s].subIssues[] | select(.closed==true)] | length')"
-  [ "$closed" -gt 0 ] && log "closed $closed completed sub-issue(s)"
+  [ "$CLOSED_COUNT" -gt 0 ] && log "closed $CLOSED_COUNT completed sub-issue(s)"
   log "sub-issue progress: $done_c/$total"
 }
 
@@ -298,4 +311,8 @@ set_status "$TARGET"
 save_state
 if [ -f "$REST_MARK" ]; then TRANSPORT="rest"; fi
 log "done: issue #$ISSUE, status '$CURRENT', phase '$PHASE' (transport: $TRANSPORT)"
-[ "$JSON" = 1 ] && echo "{\"feature\":\"$SLUG\",\"repo\":\"$REPO\",\"issue\":$ISSUE,\"status\":\"$CURRENT\",\"phase\":\"$PHASE\",\"transport\":\"$TRANSPORT\"}"
+if [ "$SUMMARY" = 1 ]; then
+  echo "ok issue=$ISSUE status=$CURRENT created=$CREATED_COUNT closed=$CLOSED_COUNT"
+elif [ "$JSON" = 1 ]; then
+  echo "{\"feature\":\"$SLUG\",\"repo\":\"$REPO\",\"issue\":$ISSUE,\"status\":\"$CURRENT\",\"phase\":\"$PHASE\",\"transport\":\"$TRANSPORT\"}"
+fi

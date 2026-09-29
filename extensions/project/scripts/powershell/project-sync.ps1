@@ -28,6 +28,8 @@
 .PARAMETER NoSubIssues  On the 'ready' phase, do not create task sub-issues.
 .PARAMETER Force     Allow moving the card to an earlier status (override no-regress).
 .PARAMETER Json      Emit a machine-readable JSON summary as the last line.
+.PARAMETER Summary   Emit one line (ok/error, counts) instead of the JSON summary; mutually
+                     exclusive with -Json. Never changes the exit code, only what is printed.
 #>
 [CmdletBinding()]
 param(
@@ -37,9 +39,17 @@ param(
     [switch]$DryRun,
     [switch]$NoSubIssues,
     [switch]$Force,
-    [switch]$Json
+    [switch]$Json,
+    [switch]$Summary
 )
 $ErrorActionPreference = 'Stop'
+
+if ($Summary -and $Json) {
+    Write-Output 'error --summary and --json cannot be combined'
+    exit 2
+}
+$script:CreatedCount = 0
+$script:ClosedCount = 0
 
 function Write-Log { param([string]$Msg, [string]$Level = 'info')
     $prefix = switch ($Level) { 'warn' { '[project][warn]' } 'error' { '[project][error]' } default { '[project]' } }
@@ -47,7 +57,8 @@ function Write-Log { param([string]$Msg, [string]$Level = 'info')
 }
 function Skip { param([string]$Reason)
     Write-Log "skipped: $Reason" 'warn'
-    if ($Json) { [pscustomobject]@{ skipped = $true; reason = $Reason } | ConvertTo-Json -Compress }
+    if ($Summary) { Write-Output "ok skipped=1 reason=$Reason" }
+    elseif ($Json) { [pscustomobject]@{ skipped = $true; reason = $Reason } | ConvertTo-Json -Compress }
     exit 0
 }
 function Get-RepoRoot {
@@ -295,6 +306,7 @@ function Sync-SubIssues {
         $fs.subIssues[$t.id] = @{ number = $snum; nodeId = $snode; closed = $false }
         $created++
     }
+    $script:CreatedCount = $created
     if ($created -gt 0) { Write-Log "created $created sub-issue(s)" }
 }
 
@@ -312,6 +324,7 @@ function Sync-Progress {
             $si.closed = $true; $closed++
         }
     }
+    $script:ClosedCount = $closed
     if ($closed -gt 0) { Write-Log "closed $closed completed sub-issue(s)" }
     $total = $fs.subIssues.Count
     $done = @($fs.subIssues.Values | Where-Object { $_.closed }).Count
@@ -365,4 +378,8 @@ Save-State
 
 $summary = [pscustomobject]@{ feature = $slug; repo = $repoSlug; issue = $fs.issue; project = $cfg.projectNumber; status = $fs.status; phase = $Phase; subIssues = $fs.subIssues.Count; dryRun = [bool]$DryRun; transport = $script:Transport }
 Write-Log "done: issue #$($fs.issue), status '$($fs.status)', $($fs.subIssues.Count) sub-issue(s) (transport: $script:Transport)"
-if ($Json) { $summary | ConvertTo-Json -Compress }
+if ($Summary) {
+    Write-Output "ok issue=$($fs.issue) status=$($fs.status) created=$script:CreatedCount closed=$script:ClosedCount"
+} elseif ($Json) {
+    $summary | ConvertTo-Json -Compress
+}

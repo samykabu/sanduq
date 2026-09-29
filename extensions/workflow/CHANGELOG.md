@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- `task_issues.py` and `progress.py` gain `--summary` (one line: `ok`/`error`
+  plus counts, e.g. `ok created=2 reused=5 total=7` or `ok done=3 total=8
+  pending=2 running=2 blocked=1`) as an alternative to today's full JSON
+  output, which stays exactly as it was and is now also selectable explicitly
+  with `--json`. `--summary` and `--json` together is rejected. Default (no
+  flag) behaviour and every exit code are unchanged. `task_issues.py
+  --sync-states` already walks every task in `tasks.md` per call, so it needs
+  no change to be called once per phase for a batch of newly completed tasks
+  instead of once per task (B7).
+
 ## 1.6.4
 
 - Pin the released User Manual 1.3.3 in `dependencies.json`. User Manual 1.3.3

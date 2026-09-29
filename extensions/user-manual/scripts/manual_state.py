@@ -19,7 +19,11 @@ def main():
     parser.add_argument('--repo-root', type=Path, default=Path.cwd())
     parser.add_argument('--base-ref')
     parser.add_argument('--output', action='append', default=[])
+    parser.add_argument('--summary', action='store_true', help='Print one line (ok/error, counts) instead of the full JSON result')
+    parser.add_argument('--json', action='store_true', help="Print the full JSON result (today's default output)")
     args = parser.parse_args()
+    if args.summary and args.json:
+        parser.error('--summary and --json cannot be combined')
     root = args.repo_root.resolve()
     feature = args.feature if args.feature.is_absolute() else root / args.feature
     kind = 'manual'
@@ -30,7 +34,12 @@ def main():
         result = record_or_status(root, feature, kind, state, args.action, outputs, base_ref)
     except (ValueError, OSError) as exc:
         result = {'current': False, 'reason': str(exc)}
-    print(json.dumps(result))
+    if args.summary:
+        word = 'ok' if result['current'] else 'error'
+        detail = ' recorded=1' if result.get('recorded') else f" reason={result.get('reason', 'n/a')}"
+        print(f'{word} action={args.action} kind={kind} outputs={len(outputs)}{detail}')
+    else:
+        print(json.dumps(result))
     return 0 if result['current'] else 1
 
 

@@ -52,11 +52,18 @@ scripts/bash/project-init.sh --hooks-mode required --non-interactive
 ## Usage
 
 ```bash
-pwsh scripts/powershell/project-sync.ps1 -Phase <phase> [-DryRun] [-NoSubIssues] [-Force] [-Json]
-scripts/bash/project-sync.sh --phase <phase> [--dry-run] [--no-sub-issues] [--force] [--json]
+pwsh scripts/powershell/project-sync.ps1 -Phase <phase> [-DryRun] [-NoSubIssues] [-Force] [-Json] [-Summary]
+scripts/bash/project-sync.sh --phase <phase> [--dry-run] [--no-sub-issues] [--force] [--json] [--summary]
 ```
 
 `<phase>` ∈ `open | analysis | engineer-review | ready | in-progress | in-review | done | auto`.
+
+`-Summary`/`--summary` prints one line instead of the full `-Json`/`--json` summary:
+`ok issue=<n> status=<status> created=<n> closed=<n>` on success, `ok skipped=1
+reason=<reason>` on a graceful degradation, or `error <message>` (for example when
+`-Summary`/`--summary` and `-Json`/`--json` are both given, which is rejected).
+The run log (unaffected by either flag) is unchanged, and exit codes are unchanged
+by `-Summary`/`--summary`.
 
 ## Files
 

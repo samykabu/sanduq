@@ -288,7 +288,7 @@ def plan_title(path):
     return None
 
 
-def read_plan(path, parser):
+def read_plan(path, fail):
     tasks, phases, identities = [], {}, set()
     phase = None
     for line in path.read_text(encoding='utf-8').splitlines():
@@ -300,14 +300,14 @@ def read_plan(path, parser):
         if match:
             check, identity, title = match.groups()
             if identity in identities:
-                parser.error('Duplicate task ID: ' + identity)
+                fail('Duplicate task ID: ' + identity)
             identities.add(identity)
             task = dict(id=identity, title=title, status='done' if check.lower() == 'x' else 'pending')
             if phase:
                 task['phase'] = phase
             tasks.append(task)
     if not tasks:
-        parser.error('No checkbox tasks found. Use: - [ ] T001 Description')
+        fail('No checkbox tasks found. Use: - [ ] T001 Description')
     return tasks, phases
 
 
@@ -358,16 +358,16 @@ def reused(state, agent, task):
     return False
 
 
-def record_usage(state, args, parser):
+def record_usage(state, args, fail):
     if args.id is not None:
         task = next((t for t in state['tasks'] if t['id'] == args.id), None)
         if task is None:
-            parser.error('Unknown task ID: ' + args.id)
+            fail('Unknown task ID: ' + args.id)
         since, until = args.since, args.until
         # A delegate result covers one run already; harness logs may span several tasks.
         if args.collect in ('claude', 'codex') and since is None and until is None                 and reused(state, args.agent, task):
             if not task.get('started_at'):
-                parser.error('Agent ' + args.agent + ' also worked on other tasks. Mark ' + args.id +
+                fail('Agent ' + args.agent + ' also worked on other tasks. Mark ' + args.id +
                              ' running before assigning it, or pass --since, so its log can be split.')
             since, until = task['started_at'], task.get('ended_at')
         entries = task.setdefault('usage', [])
@@ -398,12 +398,29 @@ def record_usage(state, args, parser):
     entries[:] = [e for e in entries if not same(e, entry)] + [entry]
 
 
+def summary_error(message, code=2):
+    """Print one `error <message>` line and exit, matching argparse's own error
+    exit code (2) so `--summary` never changes what code a caller sees."""
+    print('error ' + message)
+    sys.exit(code)
+
+
+def state_summary(state):
+    """One line: `ok done=<n> total=<n> ...`, for `--summary`."""
+    tasks = state['tasks']
+    counts = {status: sum(t['status'] == status for t in tasks) for status in STATUSES}
+    return ('ok done={done} total={total} pending={pending} running={running} blocked={blocked}'
+            .format(total=len(tasks), **counts))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     subs = parser.add_subparsers(dest='command', required=True)
     for name in ('init', 'task', 'event', 'phase', 'pr', 'usage', 'sync'):
         sub = subs.add_parser(name)
         sub.add_argument('--output', required=True, type=Path)
+        sub.add_argument('--summary', action='store_true', help='Print one line (ok/error, counts) instead of the report path')
+        sub.add_argument('--json', action='store_true', help="Print the full state as JSON instead of the report path")
         if name == 'init':
             sub.add_argument('--tasks', required=True, type=Path)
             sub.add_argument('--title', help="Report title; defaults to the plan's '# Tasks: <feature>' heading")
@@ -442,9 +459,12 @@ def main(argv=None):
             sub.add_argument('--url', required=True)
             sub.add_argument('--status', required=True, choices=('open', 'merged'))
     args = parser.parse_args(argv)
+    if args.summary and args.json:
+        parser.error('--summary and --json cannot be combined')
+    fail = summary_error if args.summary else parser.error
     target = args.output / 'state.json'
     if args.command == 'init':
-        tasks, phases = read_plan(args.tasks, parser)
+        tasks, phases = read_plan(args.tasks, fail)
         derived = plan_title(args.tasks)
         if target.exists():
             state = json.loads(target.read_text(encoding='utf-8'))
@@ -458,12 +478,12 @@ def main(argv=None):
             state = dict(title=args.title or derived or DEFAULT_TITLE, tasks=tasks, phases=phases, events=[], pr='Not created')
     else:
         if not target.exists():
-            parser.error('Initialize the report before updating it.')
+            fail('Initialize the report before updating it.')
         state = json.loads(target.read_text(encoding='utf-8'))
     if args.command == 'task':
         task = next((t for t in state['tasks'] if t['id'] == args.id), None)
         if task is None:
-            parser.error('Unknown task ID: ' + args.id)
+            fail('Unknown task ID: ' + args.id)
         task['status'] = args.status
         # Attempt timestamps split one reused worker's log between its tasks.
         if args.status == 'running':
@@ -481,7 +501,7 @@ def main(argv=None):
     elif args.command == 'pr':
         state['pr'] = args.status + ': ' + args.url
     elif args.command == 'usage':
-        record_usage(state, args, parser)
+        record_usage(state, args, fail)
     # The orchestrator calls sync after collecting a run. The tracked ledger is
     # authoritative; the HTML report is a local view that can be rebuilt.
     ledger = args.output.parent / 'delegations.json'
@@ -496,7 +516,12 @@ def main(argv=None):
     atomic(args.output / 'index.html', render(state))
     if getattr(args, 'open', False):
         webbrowser.open((args.output / 'index.html').resolve().as_uri())
-    print(args.output / 'index.html')
+    if args.summary:
+        print(state_summary(state))
+    elif args.json:
+        print(json.dumps(state))
+    else:
+        print(args.output / 'index.html')
 
 
 if __name__ == '__main__':
