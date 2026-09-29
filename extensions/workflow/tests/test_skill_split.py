@@ -84,6 +84,12 @@ REWORD_EXCEPTIONS = [
      "the bold lead-in '**Recovery after source drift (G6).**' became the markdown "
      "heading '## Recovery after source drift (G6)' in references/receipt-rules.md; "
      "headings carry no trailing period, so the punctuation differs by one character."),
+    ("STOP this invocation before the upstream legacy instructions below.",
+     "B8 follow-up (three low notes, consensus): each speckit-superpowers-bridge overlay "
+     "now merges its legacy-guard.md pointer and this STOP into one sentence, 'If "
+     "`.specify/workflow.yml` exists, follow legacy-guard.md and STOP before the upstream "
+     "legacy instructions below; otherwise continue with them unchanged.'; the words are "
+     "the same but no longer form this exact original sentence."),
 ]
 
 
@@ -247,6 +253,21 @@ class SkillSplitCompletenessTests(unittest.TestCase):
         self.assertIn(anchor, core)
         for name in ('stage-clarify.md', 'stage-taskstoissues.md'):
             self.assertIn(anchor, self.read_reference(name), name)
+
+    def test_every_overlay_inlines_stop_and_names_its_contract_or_guard(self):
+        # Review findings 1/2 (and the three-low-notes follow-up A): a direct invocation
+        # of any managed command with no active claim must read an inline STOP, not just a
+        # pointer; every overlay in presets/workflow/commands/*.md must therefore carry the
+        # literal word STOP and name either the managed-overlay contract anchor (the 12
+        # sanduq-workflow-managed:v1 overlays) or legacy-guard.md (the 3
+        # speckit-superpowers-bridge overlays).
+        overlays_dir = ROOT / 'presets/workflow/commands'
+        overlays = sorted(overlays_dir.glob('*.md'))
+        self.assertGreaterEqual(len(overlays), 15, 'Expected all managed + legacy overlays')
+        for path in overlays:
+            text = path.read_text(encoding='utf-8')
+            self.assertIn('STOP', text, path.name)
+            self.assertTrue('#managed-overlay-contract' in text or 'legacy-guard.md' in text, path.name)
 
 
 if __name__ == '__main__':

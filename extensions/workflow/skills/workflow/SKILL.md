@@ -26,8 +26,9 @@ enter the stage loop below; see `references/stage-scope.md`,
    continue automatically in bounded batches. Never invent percentages or a stop estimate.
    Full rule: [context-and-telemetry](references/dispatcher-operations.md#context-and-telemetry-stage-loop-step-2).
 3. `claim --feature ... --usage <file>` returns the stage, command and claim token. It also
-   returns a `reference`: the exact `references/stage-<stage>.md` to read before acting on
-   this claim. If it checkpoints based on a fresh reliable measurement, save the handoff and
+   returns a `reference`: the exact project-relative path, e.g.
+   `.specify/extensions/workflow/skills/workflow/references/stage-<stage>.md`, to read
+   before acting. If it checkpoints based on a fresh reliable measurement, save the handoff and
    use a supported host continuation mechanism when available; otherwise return the
    fresh-session prompt. Handoff contents and GitHub-discussion rules:
    [interruption-and-github-behavior](references/dispatcher-operations.md#interruption-and-github-behavior).
@@ -68,8 +69,9 @@ freshness and task mapping. Preserve their distinct evidence and run necessary r
 
 ## Stage reference map
 
-`claim`'s `reference` field always names the row below for the claimed `stage`; load
-exactly that file, never guess from the stage name alone.
+`claim`'s `reference` field (project-relative, per step 3) names the file for the
+claimed `stage`; load exactly that file, never guess from the stage name alone. The
+table's `Reference` column is relative to `references/` only, unlike the field.
 
 | Stage | Reference | Stage | Reference |
 | --- | --- | --- | --- |
@@ -82,7 +84,7 @@ exactly that file, never guess from the stage name alone.
 | manual_analyze | stage-manual_analyze.md | ready | stage-ready.md |
 | analyze | stage-analyze.md | pr | stage-pr.md |
 
-Paths are relative to `references/`. A managed command overlay
+A managed command overlay
 (`presets/workflow/commands/*.md`) is a short pointer into this skill and its
 claimed reference; the contract it points to (enter/stop/never-recurse) is
 [managed-overlay-contract](references/dispatcher-operations.md#managed-overlay-contract).
