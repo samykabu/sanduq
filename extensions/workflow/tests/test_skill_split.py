@@ -108,6 +108,13 @@ REWORD_EXCEPTIONS = [
      "contents list now also names the dispatcher's own session ID and session "
      "transcript path, since execution-report.md's dispatcher-usage recording "
      "reads that path from the handoff; the surrounding items are unchanged."),
+    ("Run `delegation.py annotate --feature specs/<feature>` to refresh pending task "
+     "metadata after an opt-in or route edit; a task the type rules misread takes an "
+     "`[Impl]` (or `[QA]`, `[Docs]`, `[Review]`) marker.",
+     "B12 (Sprint 4) reached consensus: light-tier `qa_collect` work is marked with a "
+     "new `[Collect]` marker alongside the existing four, so "
+     "references/dispatcher-operations.md's list now reads '... (or `[QA]`, `[Docs]`, "
+     "`[Review]`, `[Collect]`) marker.'; the rest of the sentence is unchanged."),
     ('```text python .specify/extensions/workflow/scripts/progress.py init --tasks '
      'specs/<feature>/tasks.md --output specs/<feature>/workflow/progress ```',
      "B11 (Sprint 4) added the B7 '--summary' flag to every routine progress.py/"

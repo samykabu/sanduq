@@ -111,11 +111,19 @@ dispatcher --agent <id> --collect claude --log <path>` at every phase commit,
 and puts `--summary` (B7: `ok`/`error` plus counts, or `skipped reason=...`
 when a call had nothing to do) on every routine `task_issues.py` and
 `progress.py` example call, reserving `--json` for a call whose result must be
-parsed programmatically. `execution-report.md` carries a marked placeholder
-section, "Light-tier
-collection results (B12)", for B12's still-being-revised delegation text.
-`extensions/workflow/tests/test_execution_protocol_b11.py` asserts these rules
-are present in the installed reference files.
+parsed programmatically. `execution-report.md`'s "Light-tier collection results
+(B12)" section carries B12's consensus text: a light-tier `qa_collect` `start`
+requires `--owned <path>`; `collect` trusts only a produced-file list inside
+those paths and among the driver's own measured changes; `complete` and the
+Ready gate both require the dispatcher's own ledger to show `successful`; an
+`unverified` run is resolved only by `reassign` or a checked
+`delegate_dispatch.py accept`, never by a note. `references/dispatcher-
+operations.md`'s task-marker list gained `[Collect]` alongside `[Impl]`,
+`[QA]`, `[Docs]` and `[Review]`, and its `--sync-states` rule now matches
+execution-report.md's phase-boundary cadence and names the dispatcher as
+owner. `extensions/workflow/tests/test_execution_protocol_b11.py` asserts
+these rules are present in the installed reference files, including an
+exact-text check of the B12 section.
 
 ## Switching hosts
 
