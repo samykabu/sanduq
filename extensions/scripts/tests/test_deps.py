@@ -253,6 +253,36 @@ class EnsurePresentTests(unittest.TestCase):
         self.assertTrue(ok)
         self.assertNotIn('newer', message)
 
+    def test_older_compatible_catalog_version_is_not_reported_as_newer(self):
+        # Reproduced bug: only 'latest != installed' was checked, not that latest is actually
+        # greater by SemVer precedence; an older-but-still-in-range catalog result (installed
+        # 2.1.2, catalog 2.1.0, both satisfying '>=2.0.0,<3.0.0') was incorrectly treated as
+        # "newer" purely because the strings differed.
+        runner = FakeRunner(script={('extension', 'info', 'illustrate'):
+                                     deps._FakeCompleted(0, real_info_text(version='2.1.0'), '')})
+        ok, message = deps.ensure('illustrate', self.root, self.deps_file, runner=runner)
+        self.assertTrue(ok)
+        self.assertNotIn('newer', message)
+
+    def test_equal_catalog_version_is_not_reported_as_newer(self):
+        runner = FakeRunner(script={('extension', 'info', 'illustrate'):
+                                     deps._FakeCompleted(0, real_info_text(version='2.1.2'), '')})
+        ok, message = deps.ensure('illustrate', self.root, self.deps_file, runner=runner)
+        self.assertTrue(ok)
+        self.assertNotIn('newer', message)
+
+    def test_auto_policy_never_auto_installs_an_older_compatible_catalog_version(self):
+        # Same bug under 'auto': ensure() ran 'specify extension update' to "update" to an older
+        # compatible release (installed 2.1.2, catalog 2.1.0, both satisfying '>=2.0.0,<3.0.0').
+        write_yaml(self.root / '.specify/extension-dependencies.yml', 'update_policy: auto\n')
+        runner = FakeRunner(script={('extension', 'info', 'illustrate'):
+                                     deps._FakeCompleted(0, real_info_text(version='2.1.0'), '')})
+        ok, message = deps.ensure('illustrate', self.root, self.deps_file, runner=runner)
+        self.assertTrue(ok)
+        self.assertNotIn('newer', message)
+        update_calls = [c for c in runner.calls if c['args'][1:3] == ['extension', 'update']]
+        self.assertEqual(update_calls, [])
+
     def test_unparseable_catalog_version_is_ignored_not_fatal(self):
         runner = FakeRunner(script={('extension', 'info', 'illustrate'):
                                      deps._FakeCompleted(0, '\nIllustrate (vlatest)\n', '')})
