@@ -6,28 +6,68 @@
   `qa_author` (standard-tier authoring and analysis) and `qa_collect`
   (light-eligible: running an existing, fixed check and reporting its
   result); a pre-1.7 policy's `qa` route keeps working, read in place as
-  `qa_author` with a fresh, light-eligible `qa_collect` route added, and a
-  ledger with historical `"task_type": "qa"` entries stays readable. Routing
-  to `qa_collect` is never a heuristic: only an explicit `[Collect]` task
-  marker or a per-task override reaches it; combined with any other explicit
-  marker it is ambiguous and falls back to implementation. `verify` routes to
-  `qa_collect` only while its resolved command is still the fixed
-  `workflow:verification` script, else `qa_author`; `qa_document` routes to
+  `qa_author` with a fresh, light-eligible `qa_collect` route added. Because
+  the pre-1.7 default itself routed `qa` to the light tier, a legacy route
+  with any light-tier candidate resets `qa_author` to the new standard
+  default instead of inheriting it, and `doctor` warns whenever
+  `qa_author` or `coordination` still routes to light (`coordination`'s own
+  default is now `high`, matching standing rule 5 and C2 — it claims and
+  completes workflow stages and issues, never a cheap default; the wrong
+  `light` default in the initial B12 draft is corrected here before it ever
+  shipped). A ledger with historical `"task_type": "qa"` entries stays
+  readable. Routing to `qa_collect` is never a heuristic: only an explicit
+  `[Collect]` task marker or a per-task override reaches it; combined with
+  any other explicit marker it is ambiguous and falls back to
+  implementation. `verify` is not a fixed script by default (it selects
+  tests, handles lane gaps and reports blocking findings) and always routes
+  to `qa_author`; a stage routes to `qa_collect` only when the new
+  `delegation.fixed_collection_commands` policy map names it and its
+  resolved command still matches that exact string. `qa_document` routes to
   `documentation`. Discovery (Scope, Specify, Clarify, Plan, Tasks) is never
-  light: its default tier is now `standard`, and the schema rejects a `light`
+  light: its default tier is `standard`, and the schema rejects a `light`
   preferred or fallback tier anywhere in `delegation.routes.discovery`
-  (`DELEGATION_DISCOVERY_LIGHT_FORBIDDEN`). A light-tier `successful` result
-  is never taken on trust: `collect` marks it `unverified` unless the
-  worker's own summary already carries parsable reporter counts or a
-  produced-file list inside the task's working directory; a note never
-  changes an `unverified` outcome. New `delegate_dispatch.py accept --run-id
-  <id> --command <acceptance command> --expect counts|files` runs that
-  command itself (no shell, the task's own working directory, a bounded
-  timeout and a hard output cap), records the command, exit code and raw
-  output in the ledger, and resolves `unverified` to `successful` only when
-  the command exits `0` and its output satisfies the same schema, defending
-  against absolute paths, `..` traversal and symlink escapes for `files`.
-  `reassign` to a standard tier also resolves an `unverified` prior run.
+  (`DELEGATION_DISCOVERY_LIGHT_FORBIDDEN`); the schema also accepts a
+  deprecated raw `qa` route (either `qa`, or both `qa_author` and
+  `qa_collect`, must be present) so it never rejects what `load_policy`
+  reads.
+  A light-tier `successful` result is never taken on trust, whether by its
+  route's own tier, a `qa_collect` task type, or a fallback candidate whose
+  requested or harness-reported model matches the harness's configured
+  light-tier model: `collect` marks it `unverified` unless a produced-file
+  list in the worker's own summary is both inside the task's owned paths and
+  among the paths the driver itself measured as changed (an unrelated
+  pre-existing file, such as a checked-in README, can never pass); counts
+  are never accepted from a worker's summary at all, only from `accept`. A
+  note never changes an `unverified` outcome, and neither does completing
+  the delegated stage or checking off a delegated task on its own: `complete`
+  now requires the dispatcher's ledger to show the claimed stage's delegated
+  attempt as `successful`, and the Ready task gate refuses a checked task
+  whose latest delegated attempt is `unverified`.
+  New `delegate_dispatch.py accept --run-id <id> --command <acceptance
+  command> --expect counts|files [--owned <path>]` runs that command itself
+  (argv via `shlex.split` on POSIX, the raw string for Windows' own
+  `CreateProcess` quoting; the task's own recorded working directory, or a
+  worktree `git worktree list` itself confirms belongs to the repository; a
+  bounded timeout with the whole process tree killed on timeout; output
+  captured to spooled temp files with only a bounded prefix ever read back),
+  records the command, exit code and raw output in the ledger, and resolves
+  `unverified` to `successful` only when the command exits `0` and its
+  output satisfies the same schema, defending against absolute paths, `..`
+  traversal and symlink escapes for `files` (each accepted file's sha256 and
+  size are recorded). The owned paths a light-tier result's file evidence
+  must resolve inside can be declared at `start --owned <path>` (repeatable;
+  defaults to the whole working directory) and are carried forward across a
+  retry or reassignment; `accept --owned` overrides them for one call.
+  `reassign` to a standard tier also resolves an `unverified` prior run. The
+  reporter-counts parser (used by `accept --expect counts`) requires a real
+  reporter's own framing per format (pytest's summary bar, Jest's `Tests:`
+  line, a JUnit/Maven `Results:` aggregate section, Python unittest's `Ran N
+  tests` plus `OK`/`FAILED (...)`, node `--test`'s `# tests`/`# pass`/`#
+  fail` lines) rather than a bare "N passed, N failed" substring that could
+  appear in prose or be pasted out of context, reads each summary's outcomes
+  independently of their order, uses each format's last occurrence, and
+  returns unparsed (never a guess) when two different reporter formats in
+  the same output disagree.
 
 ## 1.6.4
 

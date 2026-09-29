@@ -225,6 +225,7 @@ def default_policy(qa, manual):
                     for name, tier in DEFAULT_TIERS.items()
                 },
                 'overrides': {},
+                'fixed_collection_commands': {},
             },
             'receipts': {'require_input_roles': False},
             'ci': sanduq_ci.default_ci()}
@@ -281,6 +282,9 @@ def validate_policy(policy):
     if 'delegation' not in policy:
         policy['delegation'] = copy.deepcopy(default_policy(False, False)['delegation'])
     from delegation import migrate_qa_route, validate_delegation
+    # Pre-1.7 policies predate fixed_collection_commands; empty means no stage
+    # is ever inferred as qa_collect, matching today's behaviour exactly.
+    policy['delegation'].setdefault('fixed_collection_commands', {})
     # Pre-1.7 policies routed everything QA-shaped through a single ``qa`` key;
     # read in place as qa_author, with a fresh light-eligible qa_collect added.
     migrate_qa_route(policy['delegation'])
@@ -606,6 +610,9 @@ def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True
     errors += ci_errors(root, policy, preserved_ci)
     if project: errors += project_errors(root, policy)
     warnings = host_warnings(root)
+    if isinstance(policy.get('delegation'), dict):
+        from delegation import light_tier_route_warnings
+        warnings += light_tier_route_warnings(policy['delegation'])
     drift = eol_drift(root)
     if drift:
         warnings.append(
@@ -1074,6 +1081,16 @@ def ready_checks(root, feature, policy, state, base=None, rules=None):
         tasks = parse_tasks((directory / 'tasks.md').read_text(encoding='utf-8-sig'))
     if rules.get('tasks'):
         require(all(t['done'] for t in tasks.values()), 'INCOMPLETE_TASKS')
+        if policy.get('delegation', {}).get('enabled'):
+            # A checked task delegated through the dispatcher must have a
+            # verified outcome, not merely a checkbox (finding 1): a light-tier
+            # result the guard left unverified never earns Ready on its own.
+            from delegation import latest_attempt
+            unverified = [task_id for task_id in tasks
+                         if (attempt := latest_attempt(root, feature, task_id)) is not None and
+                         attempt.get('status') == 'unverified']
+            require(not unverified, 'DELEGATION_TASK_UNVERIFIED: ' + ', '.join(sorted(unverified)) +
+                    ' - resolve with delegate_dispatch.py accept or reassign before Ready')
         ran.append('tasks')
     if rules.get('task_links'):
         mapping = read(directory / 'workflow/task-issues.json', {})
@@ -1608,7 +1625,8 @@ class Run:
             state['active']['mode'] = 'revalidate' if existing and stage in ('scope', 'specify', 'clarify', 'plan', 'tasks') else 'initial'
             if self.policy['delegation']['enabled']:
                 from delegation import selected_route, stage_work_type
-                work_type = stage_work_type(state['commands'], stage)
+                work_type = stage_work_type(state['commands'], stage,
+                                            self.policy['delegation'].get('fixed_collection_commands'))
                 state['active']['delegation'] = {
                     'identity': self.relative + '/stage:' + stage,
                     'task_type': work_type,
@@ -1638,6 +1656,17 @@ class Run:
             validate_input_roles(self.root, self.relative, stage, receipt, self.policy)
             for path in receipt['evidence']:
                 require(inside(self.root, path).is_file(), 'EVIDENCE_MISSING: ' + path)
+            if self.policy['delegation']['enabled'] and active.get('delegation'):
+                # The claim recorded a delegation route for this stage; require the
+                # dispatcher's own ledger (never the receipt's self-report) to show
+                # the delegated attempt actually succeeded, following any reassignment
+                # to its terminal end (finding 1: the guard was previously unread).
+                from delegation import latest_attempt
+                stage_attempt = latest_attempt(self.root, self.relative, 'stage:' + stage)
+                require(stage_attempt is not None and stage_attempt.get('status') == 'successful',
+                        'DELEGATION_STAGE_NOT_VERIFIED: the latest delegate_dispatch attempt for stage:' +
+                        stage + ' is ' + (str(stage_attempt.get('status')) if stage_attempt else 'missing') +
+                        ', not successful; collect, accept or reassign it before completing this stage')
             if stage == 'clarify':
                 require(receipt.get('unresolved') == 0 and receipt.get('answers_applied') is True, 'CLARIFICATION_UNRESOLVED')
             if BASE_STAGES.index(stage) >= BASE_STAGES.index('specify'):

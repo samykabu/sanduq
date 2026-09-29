@@ -473,23 +473,37 @@ falls back to that CLI's own default model (`model: null`).
 | --- | --- | --- | --- | --- |
 | discovery | standard | gpt-6-sol | sonnet | scope, specify, clarify, plan, tasks |
 | implementation | standard | gpt-6-sol | sonnet | tasks only |
-| qa_author | standard | gpt-6-sol | sonnet | qa_analyze |
-| qa_collect | light | gpt-6-terra | haiku | verify (only while its command is the fixed collection script), qa_collect-marked tasks |
+| qa_author | standard | gpt-6-sol | sonnet | qa_analyze, verify (always, by default) |
+| qa_collect | light | gpt-6-terra | haiku | a stage named in `delegation.fixed_collection_commands` whose resolved command still matches exactly (nothing by default); `[Collect]`-marked tasks |
 | documentation | documentation | gpt-6-sol | opus | manual_analyze, manual_update, qa_document |
 | review | review | gpt-6-sol | opus | analyze, review |
-| coordination | light | gpt-6-terra | haiku | taskstoissues, execute, ready, pr |
+| coordination | high | gpt-6-astra | opus | taskstoissues, execute, ready, pr |
 
 Discovery is never light: its default is standard (Scope and Plan may still be
 overridden to high by policy), and the schema rejects a `light` preferred or
 fallback tier anywhere in `delegation.routes.discovery`
-(`DELEGATION_DISCOVERY_LIGHT_FORBIDDEN`). `qa` (pre-1.7) split into `qa_author`
-(authoring and analysing QA work, standard) and `qa_collect` (running an
-existing, fixed check and reporting its result, light-eligible and guarded; see
-below). A policy that still has a single `qa` route keeps working: reading it
-maps that route onto `qa_author` in place and adds a fresh, light-eligible
-`qa_collect` route (the same default every new policy gets); nothing is
-rewritten to disk, and a ledger with historical `"task_type": "qa"` entries
-stays readable.
+(`DELEGATION_DISCOVERY_LIGHT_FORBIDDEN`). Coordination defaults to high (never
+light): it claims and completes workflow stages and issues, not a cheap
+default (standing rule 5, C2). `verify` is not a fixed script by default: it
+selects tests, handles lane gaps and reports blocking findings (see the
+workflow skill), so it always routes to `qa_author` unless the project's
+`delegation.fixed_collection_commands` policy map names `verify` (or another
+stage) with the exact command string that stage must still resolve to; only
+then does that one stage route to `qa_collect`. `doctor` warns
+(`DELEGATION_LIGHT_TIER_ROUTE`) whenever `qa_author` or `coordination` still
+routes to light in the loaded policy, whatever the reason.
+
+`qa` (pre-1.7) split into `qa_author` (authoring and analysing QA work,
+standard) and `qa_collect` (running an existing, fixed check and reporting its
+result, light-eligible and guarded; see below); the schema accepts either the
+deprecated `qa` key or both `qa_author` and `qa_collect`, so it never rejects
+what `load_policy` itself accepts. A policy that still has a single `qa` route
+keeps working: reading it maps that route onto `qa_author` in place (unless
+that route, the pre-1.7 default, had a light-tier candidate itself — then
+`qa_author` resets to the new standard default instead, so a legacy install
+never keeps sending authored QA work to the light tier) and adds a fresh,
+light-eligible `qa_collect` route; nothing is rewritten to disk, and a ledger
+with historical `"task_type": "qa"` entries stays readable.
 
 The model names are editable preferences in `delegation.models`, not proof that
 a CLI accepts them. Use `delegation.py route --feature specs/<feature> --id T001
@@ -506,7 +520,13 @@ delegation:
       preferred: {harness: claude, tier: high}
       fallbacks:
         - {harness: selected, model: null}
+  fixed_collection_commands:
+    verify: "workflow:verification"
 ```
+
+`fixed_collection_commands` is empty by default, so no stage is ever inferred
+as `qa_collect`; naming a stage there opts it in only while its resolved
+command still matches the given string exactly.
 
 A task's type comes from an explicit marker in its leading tags: `[Impl]`,
 `[Implementation]` or `[Code]`; `[QA]`, `[Test]`, `[Tests]` or `[TDD]` (routes
@@ -657,48 +677,103 @@ never removed by the former owner.
 
 ### Light-tier evidence and `accept`
 
-A light-tier run (`qa_collect`, or any route whose selected candidate resolves
-to the `light` tier) is never taken on trust. `collect` records the driver's
-raw `successful`/`failed`/`abandoned` verdict as usual, but when the selected
-tier is `light` and the verdict is `successful`, the ledger outcome becomes
-`unverified` unless the worker's own summary already carries parsable
-evidence: raw reporter counts (JSON `{"total": N, "passed": N, "failed": N}`,
-or JUnit-style `{"tests": N, "failures": N, "errors": N}`) with `total > 0` and
-`failed == 0`, parsed from JSON anywhere in the summary or from pytest's `"N
-passed, N failed"`, Jest's `"Tests: N failed, N passed, N total"` or a JUnit
-console summary (`"Tests run: N, Failures: N, Errors: N"`); or a produced-file
-list as JSON `{"files": ["<path>", ...]}` with every path existing, non-empty,
-and resolving inside the task's own working directory. `unverified` is a
+A light-tier run is never taken on trust. The guard applies whenever the
+selected candidate's own tier is `light`, the task's classified type is
+`qa_collect`, or the requested or harness-reported actual model equals that
+harness's configured `light` model (a fallback candidate chosen by explicit
+`model` rather than `tier` cannot bypass it just because its route entry
+omits a tier label). `collect` records the driver's raw
+`successful`/`failed`/`abandoned` verdict as usual, but when the guard
+applies and the verdict is `successful`, the ledger outcome becomes
+`unverified` unless the worker's own summary names a produced-file list (as
+JSON `{"files": ["<path>", ...]}`) whose every path is both inside the
+task's declared owned paths (see below) and among the paths the driver
+itself measured this run as having changed — an unrelated, pre-existing file
+such as a checked-in README can never pass just because the summary names
+it. Raw reporter counts in a worker's own summary are never accepted at
+all, at any time: only `accept`'s independently run command, or a future
+driver-captured command transcript, may supply counts. `unverified` is a
 terminal ledger status like `successful`, `failed` and `abandoned`; a note
-never changes it, because nothing in the ledger accepts free text as evidence.
+never changes it, because nothing in the ledger accepts free text as
+evidence, and neither `complete` nor the Ready task gate accepts one on a
+bare claim of success either (see below).
 
-Two ways resolve an `unverified` attempt:
+Three ways resolve an `unverified` attempt:
 
 - **`reassign`** to a standard (or stronger) tier, as for any other terminal
   result; the replacement run's own evidence resolves the identity once
   collected.
 - **`delegate_dispatch.py accept --feature specs/<feature> --run-id <id>
-  --command "<acceptance command>" --expect counts|files [--timeout <seconds>]`**
-  runs that command itself, independently of the worker's own report, and
-  judges its output by the same schema above. The command runs with no shell
-  (`shlex.split`, never a shell string, so nothing in it is interpolated or
-  given special meaning) inside the task's own recorded working directory
-  (never a caller-supplied path), under a bounded timeout (default 1800s, max
-  28800s) and a hard output cap (200,000 characters per stream, truncated
-  before it is parsed or stored). It accepts only when the command exits `0`
-  and, for `counts`, parses to `total > 0` and `failed == 0`, or, for `files`,
-  every path exists, is non-empty and resolves inside the task's owned
-  working directory: an absolute path, a literal `..` segment, a missing or
-  empty file, or a symlink whose real target lands outside that directory are
-  all rejected (paths are fully resolved, following any symlink to its real
-  location, before containment is checked). Exit-zero empty output, a bare
-  free-text note with no structured evidence, an unparsable result, a failed
-  command and a timeout all leave the attempt `unverified`. Every attempt,
-  accepted or not, is recorded under the ledger attempt's
-  `acceptance_attempts`: the command, exit code, whether it timed out or its
-  output was truncated, and the (capped) raw output. `accept` refuses with
-  `DELEGATION_RUN_NOT_UNVERIFIED` on any run that is not currently
-  `unverified`.
+  --command "<acceptance command>" --expect counts|files [--timeout <seconds>]
+  [--owned <path>]`** runs that command itself, independently of the worker's
+  own report, and judges its output by the same schema below. The command
+  runs with no shell: on POSIX, `shlex.split` into an argv list (there is no
+  shell here to parse quoting, so this module must); on Windows, the raw
+  command string is passed straight to `subprocess`, which hands it to
+  `CreateProcess` directly (never through `cmd.exe`) for Windows' own native
+  quoting — `shlex.split(..., posix=False)` would leave literal quote
+  characters inside each argument, which is wrong once that is one argv
+  element. It runs inside the task's own recorded working directory, or, when
+  that directory is outside the project root (an isolated worktree given to
+  `start --cwd`), a worktree `git worktree list --porcelain` itself confirms
+  belongs to this repository — never an arbitrary caller-supplied path.
+  stdout and stderr are captured to spooled temp files rather than in-memory
+  pipes, under a bounded timeout (default 1800s, max 28800s) with only the
+  first 200,000 bytes of each stream ever read back, so a runaway or hostile
+  command cannot exhaust the dispatcher's own memory; on a timeout the whole
+  process tree is killed (Windows `taskkill /T /F /PID`, POSIX its own
+  process group), not just the immediate child, before anything is read.
+  It accepts only when the command exits `0` and, for `counts`, parses to
+  `total > 0` and `failed == 0` (see the reporter formats below), or, for
+  `files`, every path exists, is non-empty and resolves inside a declared
+  owned path: an absolute path, a literal `..` segment, a missing or empty
+  file, or a symlink whose real target lands outside every owned root are all
+  rejected (paths are fully resolved, following any symlink to its real
+  location, before containment is checked). Each accepted file's evidence
+  records its sha256 and size. Exit-zero empty output, a bare free-text note
+  with no structured evidence, an unparsable result, a failed command and a
+  timeout all leave the attempt `unverified`. Every attempt, accepted or not,
+  is recorded under the ledger attempt's `acceptance_attempts`: the command,
+  exit code, whether it timed out or its output was truncated, and the
+  (capped) raw output. `accept` refuses with `DELEGATION_RUN_NOT_UNVERIFIED`
+  on any run that is not currently `unverified`.
+
+**Owned paths.** A light-tier result's file evidence (in a worker's summary or
+in `accept`'s command output) must resolve inside the task's declared owned
+paths, not merely its whole working directory. `start --owned <path>`
+(repeatable) records them on the attempt; omitted, they default to the whole
+`--cwd`. They carry forward unchanged across an automatic stronger retry or a
+manual `reassign`. `accept --owned <path>` overrides them for that one
+acceptance call only, without changing what is recorded on the attempt.
+
+**Reporter count formats** (`accept --expect counts`, and JSON forms only for
+a worker's own self-report, which never supplies counts at all): JSON
+`{"total": N, "passed": N, "failed": N}` (`passed` optional, computed as
+`total - failed`) or JUnit-style `{"tests": N, "failures": N, "errors": N}`
+(`errors` optional; `failed = failures + errors`); or one of five text
+formats, each requiring that reporter's own real framing so a bare "N passed,
+N failed" fragment pasted out of context (or invented) never parses as a
+false success: pytest's `"===== ... in N.Ns ====="` summary bar; Jest's
+`"Tests: ..."` line; a JUnit/Maven aggregate `"Results:"` section (an earlier
+per-class `"Tests run:"` line with no such header is ignored, even elsewhere
+in the same transcript); Python unittest's `"Ran N tests ..."` followed by
+`"OK"` or `"FAILED (...)"`; and node's `--test` runner's `"# tests"`/`"#
+pass"`/`"# fail"` lines (not necessarily adjacent — real output interleaves
+other fields between them). Every text format reads its outcomes
+independently of their order within the line or block. Each format is
+checked independently across the whole output and only its last occurrence
+counts (a rerun's final state, not an earlier attempt pasted earlier in the
+same log); if more than one format produces a result and they disagree, the
+parse is ambiguous and returns unparsed rather than guessing between them.
+
+**Enforcement.** A delegated stage's claim recording a route is not itself
+completion: `complete` requires the dispatcher's own ledger — never the
+receipt's self-report — to show the claimed stage's latest delegated attempt
+(following any `reassign` chain to its terminal end) as `successful`, and
+refuses with `DELEGATION_STAGE_NOT_VERIFIED` otherwise. The Ready task gate
+(`ci_gate.py`'s `tasks` rule, and `revalidate --stage ready`) similarly
+refuses a checked `[x]` task whose latest delegated attempt is `unverified`
+with `DELEGATION_TASK_UNVERIFIED`, naming every such task.
 
 ### History and evidence
 

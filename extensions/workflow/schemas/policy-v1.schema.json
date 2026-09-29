@@ -138,7 +138,8 @@
       "type": "object",
       "description": "Optional model-aware delegation; absent legacy policies default to disabled.",
       "additionalProperties": false,
-      "required": ["enabled", "install_scope", "stronger_retry", "models", "routes", "overrides"],
+      "required": ["enabled", "install_scope", "stronger_retry", "models", "routes", "overrides",
+                   "fixed_collection_commands"],
       "properties": {
         "enabled": {"type": "boolean"},
         "install_scope": {"enum": ["project", "global"]},
@@ -153,7 +154,6 @@
         },
         "routes": {
           "type": "object", "additionalProperties": false,
-          "required": ["discovery", "implementation", "qa_author", "qa_collect", "documentation", "review", "coordination"],
           "properties": {
             "discovery": {"$ref": "#/$defs/delegation_route_not_light"},
             "implementation": {"$ref": "#/$defs/delegation_route"},
@@ -161,13 +161,26 @@
             "qa_collect": {"$ref": "#/$defs/delegation_route"},
             "documentation": {"$ref": "#/$defs/delegation_route"},
             "review": {"$ref": "#/$defs/delegation_route"},
-            "coordination": {"$ref": "#/$defs/delegation_route"}
-          }
+            "coordination": {"$ref": "#/$defs/delegation_route"},
+            "qa": {"$ref": "#/$defs/delegation_route", "description": "Deprecated pre-1.7 route. workflow.py reads it in place as qa_author (adding a fresh qa_collect) and never writes it back; a schema consumer that validates a raw pre-migration project file needs it declared here."}
+          },
+          "allOf": [
+            {"required": ["discovery", "implementation", "documentation", "review", "coordination"]},
+            {"anyOf": [
+              {"required": ["qa_author", "qa_collect"]},
+              {"required": ["qa"]}
+            ]}
+          ]
         },
         "overrides": {
           "type": "object", "patternProperties": {
             "^specs/[^/]+/T[0-9]{3,}$": {"$ref": "#/$defs/delegation_route"}
           }, "additionalProperties": false
+        },
+        "fixed_collection_commands": {
+          "type": "object",
+          "description": "Optional stage -> exact resolved-command string map (1.7+). A stage named here routes to the light-eligible qa_collect only while its resolved command still matches the named string exactly; empty (the default) means no stage is ever inferred as qa_collect.",
+          "additionalProperties": {"type": "string", "minLength": 1}
         }
       }
     },

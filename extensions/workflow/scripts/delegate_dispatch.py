@@ -16,6 +16,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -446,13 +447,18 @@ def launch(root, driver, candidate, cwd, task, timeout, intent_id=None):
 
 
 def candidate_start(root, feature, identity, work_type, candidates, task_path, cwd,
-                    timeout, parent_run_id=None, retry_count=0, decision=None):
+                    timeout, parent_run_id=None, retry_count=0, decision=None, owned_paths=None):
     config = workflow.load_policy(root)['delegation']
     status = delegation.doctor(root, workflow.active_host(root), install=True,
                                scope=config['install_scope'])
     delegation.require(status['ok'], delegation.health_error(status))
     task = task_path.read_text(encoding='utf-8')
     intent_id = uuid.uuid4().hex
+    # The owned paths a light-tier result's evidence must resolve inside
+    # (finding 8a); recorded at start so accept and the summary-evidence guard
+    # in collect share one authoritative record instead of assuming the whole
+    # cwd. Carried forward unchanged across a retry or reassignment.
+    owned_paths = list(owned_paths) if owned_paths else ['.']
     dismissed = set()
     with edit_ledger(root, feature) as ledger:
         # The reservation and the route decision that justifies it are one
@@ -464,7 +470,7 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
                                    'task_type': work_type, 'status': 'starting',
                                    'started_at': stamp(), 'task_file': relative(root, task_path),
                                    'cwd': relative(root, cwd), 'timeout': timeout,
-                                   'route_candidates': candidates,
+                                   'owned_paths': owned_paths, 'route_candidates': candidates,
                                    'driver': relative(root, status['driver']),
                                    'parent_run_id': parent_run_id, 'retry_count': retry_count})
     for index, candidate in enumerate(candidates):
@@ -528,7 +534,7 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
                    'read_only': selected['read_only'], 'status': 'running',
                    'allow_commit': selected['allow_commit'],
                    'started_at': stamp(), 'task_file': relative(root, task_path),
-                   'cwd': relative(root, cwd), 'timeout': timeout,
+                   'cwd': relative(root, cwd), 'timeout': timeout, 'owned_paths': owned_paths,
                    'evidence_location': '.delegate/runs/' + started['run_id'] + '/result.json'}
         with edit_ledger(root, feature, ('intent_id', intent_id)) as ledger:
             find_intent(ledger, intent_id).update(attempt)
@@ -552,7 +558,7 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
 
 
 def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
-          token=None, timeout=None):
+          token=None, timeout=None, owned=None):
     root = root.resolve()
     feature = feature_identity(root, feature)
     policy = workflow.load_policy(root)
@@ -577,7 +583,8 @@ def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
     if identity.startswith('stage:'):
         stage = identity.removeprefix('stage:')
         delegation.require(stage in delegation.STAGE_TYPES and token, 'DELEGATION_STAGE_INVALID')
-        work_type = delegation.stage_work_type(checkpoint.get('commands', {}), stage)
+        work_type = delegation.stage_work_type(checkpoint.get('commands', {}), stage,
+                                               config.get('fixed_collection_commands'))
         text = stage_brief(root, feature, stage, token, work_type)
     else:
         description = task_description(root, feature, identity)
@@ -604,7 +611,7 @@ def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
         candidates = delegation.selected_route(config, work_type, workflow.active_host(root),
                                                 full_identity)
     return candidate_start(root, feature, full_identity, work_type, candidates,
-                           task_path, cwd, timeout)
+                           task_path, cwd, timeout, owned_paths=owned)
 
 
 # Wording the supported agent CLIs and their provider APIs use when a
@@ -790,55 +797,149 @@ def _counts_from_json(obj):
     return None
 
 
-def _jest_counts(match):
-    total, passed = int(match[3]), int(match[2])
-    failed = int(match[1]) if match[1] is not None else total - passed
+def _counts_from_block(block):
+    """Extract passed/failed/total keyword counts from one span, order-independent.
+
+    A single reporter line or block may list its outcomes in any order (real
+    pytest and Jest summaries put failures before passes); this reads every
+    ``N <keyword>`` pair in the span regardless of position instead of
+    assuming a fixed sequence (finding 2: order-dependent matching silently
+    read only the first "N passed" and missed an earlier "N failed").
+    """
+    found = {}
+    for number, word in re.findall(r'(\d+)\s+(passed|failed|errors?|total|skipped)\b', block, re.I):
+        found[word.lower()] = found.get(word.lower(), 0) + int(number)
+    failed = found.get('failed', 0) + found.get('error', 0) + found.get('errors', 0)
+    if 'total' in found:
+        total = found['total']
+        passed = found.get('passed', total - failed)
+    elif 'passed' in found or failed:
+        passed = found.get('passed', 0)
+        total = passed + failed
+    else:
+        return None
+    if total <= 0:
+        return None
     return {'total': total, 'passed': passed, 'failed': failed}
 
 
-def _junit_counts(match):
-    total, failed = int(match[1]), int(match[2]) + int(match[3] or 0)
+def _block_counts(match):
+    return _counts_from_block(match.group(1))
+
+
+def _counts_from_labeled_block(block):
+    """Extract JUnit/Maven ``Label: N`` pairs (label first, unlike pytest/Jest)."""
+    found = {}
+    for label, number in re.findall(r'(Tests(?:\s+run)?|Failures|Errors|Skipped)\s*:\s*(\d+)', block, re.I):
+        key = re.sub(r'\s+', ' ', label.strip().lower())
+        found[key] = found.get(key, 0) + int(number)
+    total = found.get('tests run', found.get('tests'))
+    if total is None:
+        return None
+    failed = found.get('failures', 0) + found.get('errors', 0)
     return {'total': total, 'passed': total - failed, 'failed': failed}
 
 
-def _pytest_counts(match):
-    passed, failed = int(match[1]), int(match[2] or 0) + int(match[3] or 0)
-    return {'total': passed + failed, 'passed': passed, 'failed': failed}
+def _results_section_counts(match):
+    return _counts_from_labeled_block(match.group(1))
 
 
-# Tried in this order (most specific reporter shape first) after the JSON
-# forms; the first pattern that matches wins. See the format list documented
-# on QA_COLLECT_ADDENDUM, the README delegation section and this module.
+def _unittest_ok_counts(match):
+    total = int(match[1])
+    return {'total': total, 'passed': total, 'failed': 0}
+
+
+def _unittest_failed_counts(match):
+    total = int(match[1])
+    parts = dict(re.findall(r'(failures|errors)=(\d+)', match[2], re.I))
+    failed = int(parts.get('failures', 0)) + int(parts.get('errors', 0))
+    if failed <= 0:
+        return None
+    return {'total': total, 'passed': total - failed, 'failed': failed}
+
+
+# node's --test runner writes each summary field on its own TAP comment line,
+# not necessarily adjacent to the others (real output interleaves "# suites",
+# "# cancelled", "# duration_ms" and similar between them), so these are
+# matched independently by ``parse_counts`` rather than as one contiguous span.
+NODE_TEST_FIELDS = {'total': re.compile(r'^#\s*tests\s+(\d+)\s*$', re.I | re.M),
+                    'passed': re.compile(r'^#\s*pass\s+(\d+)\s*$', re.I | re.M),
+                    'failed': re.compile(r'^#\s*fail\s+(\d+)\s*$', re.I | re.M)}
+
+
+def _node_test_counts(text):
+    matches = {key: list(pattern.finditer(text)) for key, pattern in NODE_TEST_FIELDS.items()}
+    if not all(matches.values()):
+        return None
+    return {key: int(items[-1][1]) for key, items in matches.items()}
+
+
+# Every pattern requires the real framing a genuine reporter transcript has,
+# never a bare "N passed, N failed" substring that could appear in prose or
+# be pasted out of context (finding 2's probes: "3 failed, 10 passed in
+# 0.52s" with no "====" bars, a bare "Tests run: 3, Failures: 0" with no
+# "Results:" section, and "I ran it: 10 passed, 0 failed" all match nothing
+# below and so parse to None, never a false "failed: 0"). See the format list
+# documented on QA_COLLECT_ADDENDUM, the README delegation section and here:
+#   1. pytest's "===== ... in N.Ns =====" summary bar.
+#   2. Jest's "Tests: ..." line.
+#   3. JUnit/Maven's aggregate "Results:" section, never an earlier per-class
+#      "Tests run:" line lacking that header.
+#   4. Python unittest's "Ran N tests ..." followed by "OK" or "FAILED (...)".
+# node's --test runner "# tests/# pass/# fail" lines are checked separately
+# below (they need not be contiguous; see ``_node_test_counts``).
 COUNT_PATTERNS = (
-    (re.compile(r'Tests:\s*(?:(\d+)\s+failed,\s*)?(\d+)\s+passed,\s*(\d+)\s+total', re.I), _jest_counts),
-    (re.compile(r'Tests(?:\s+run)?:\s*(\d+),\s*Failures:\s*(\d+)(?:,\s*Errors:\s*(\d+))?', re.I), _junit_counts),
-    (re.compile(r'(\d+)\s+passed(?:,\s*(\d+)\s+failed)?(?:,\s*(\d+)\s+error)?', re.I), _pytest_counts),
+    (re.compile(r'=+([^=\n]*?\bin\s+[\d.]+s[^=\n]*?)=+', re.I), _block_counts),
+    (re.compile(r'Tests:([^\n]+)', re.I), _block_counts),
+    (re.compile(r'Results:\s*\r?\n+([^\n]+)', re.I), _results_section_counts),
+    (re.compile(r'Ran\s+(\d+)\s+tests?\b[^\n]*\r?\n+\s*OK\b', re.I), _unittest_ok_counts),
+    (re.compile(r'Ran\s+(\d+)\s+tests?\b[^\n]*\r?\n+\s*FAILED\s*\(([^)]*)\)', re.I), _unittest_failed_counts),
 )
 
 
 def parse_counts(text):
-    """Parse total/passed/failed from JSON or a supported reporter's text output.
+    """Parse total/passed/failed from JSON, or a supported reporter's own framing.
 
-    Supported inputs, tried in this order, first match wins: (1) JSON
-    ``{"total": N, "passed": N, "failed": N}`` (``passed`` optional, computed as
-    ``total - failed``); (2) JUnit-style JSON ``{"tests": N, "failures": N,
-    "errors": N}`` (``errors`` optional; ``failed = failures + errors``);
-    (3) Jest's ``"Tests: N failed, N passed, N total"`` (or the all-passed form
-    without the leading "N failed,"); (4) a JUnit console summary ``"Tests run:
-    N, Failures: N, Errors: N"``; (5) pytest's ``"N passed, N failed"`` (both
-    ``failed`` and an ``error`` count are optional, defaulting to 0). Anything
-    else, or an ambiguous parse, returns ``None``.
+    JSON forms: ``{"total": N, "passed": N, "failed": N}`` (``passed`` optional,
+    computed as ``total - failed``), or JUnit-style ``{"tests": N, "failures":
+    N, "errors": N}`` (``errors`` optional; ``failed = failures + errors``).
+
+    Text forms (each requires the reporter's own real framing, documented on
+    ``COUNT_PATTERNS``; a bare "N passed, N failed" or "Tests run: N,
+    Failures: N" without it matches nothing): pytest's summary bar, Jest's
+    ``Tests:`` line, a JUnit/Maven ``Results:`` section, Python unittest's
+    ``Ran N tests`` plus ``OK``/``FAILED (...)``, and node ``--test``'s
+    ``# tests``/``# pass``/``# fail`` lines.
+
+    Each pattern category is tried independently across the whole text and
+    only its *last* match counts (a rerun's final state, not an earlier one).
+    If more than one category produces a match and they disagree, the parse
+    is ambiguous and returns ``None`` rather than guessing between them.
     """
     obj = _parse_json_object(text)
     if isinstance(obj, dict):
         counts = _counts_from_json(obj)
         if counts:
             return counts
-    for pattern, convert in COUNT_PATTERNS:
-        match = pattern.search(text or '')
-        if match:
-            return convert(match)
-    return None
+    text = text or ''
+    per_category = {}
+    for index, (pattern, convert) in enumerate(COUNT_PATTERNS):
+        last = None
+        for match in pattern.finditer(text):
+            counts = convert(match)
+            if counts:
+                last = counts
+        if last is not None:
+            per_category[index] = last
+    node_counts = _node_test_counts(text)
+    if node_counts:
+        per_category['node'] = node_counts
+    if not per_category:
+        return None
+    distinct = {tuple(sorted(counts.items())) for counts in per_category.values()}
+    if len(distinct) > 1:
+        return None
+    return next(iter(per_category.values()))
 
 
 def parse_files(text):
@@ -855,86 +956,209 @@ def parse_files(text):
 TRAVERSAL_SEGMENT = re.compile(r'(^|[\\/])\.\.($|[\\/])')
 
 
-def validate_owned_files(owned_root, paths):
-    """Every path must exist, be non-empty, and resolve inside ``owned_root``.
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with open(path, 'rb') as handle:
+        for chunk in iter(lambda: handle.read(65536), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def owned_roots(cwd, owned_paths):
+    """Resolve each declared owned path relative to ``cwd``; ``None`` on any
+    absolute path or ``..`` traversal in the declaration itself."""
+    cwd = Path(cwd).resolve()
+    roots = []
+    for raw in (owned_paths or ['.']):
+        text = str(raw).strip()
+        if not text or Path(text).is_absolute() or TRAVERSAL_SEGMENT.search(text):
+            return None
+        roots.append((cwd / text).resolve())
+    return roots or None
+
+
+def validate_owned_files(cwd, owned_paths, paths):
+    """Every path must exist, be non-empty, and resolve inside a declared owned path.
 
     Defends against absolute paths, ``..`` traversal and symlink escapes: an
     absolute path or a literal ``..`` segment is rejected outright, and every
     remaining candidate is fully resolved (following any symlink to its real
-    location) before its containment is checked, so a symlink whose target
-    lands outside ``owned_root`` cannot pass. Any single invalid path fails
-    the whole list, matching the guard's "no partial acceptance" rule.
+    location) before containment against ``owned_paths`` (each resolved
+    relative to ``cwd``; the whole ``cwd`` when none were declared, e.g. a
+    pre-B12-review ledger) is checked, so a symlink whose target lands
+    outside every owned root cannot pass. Any single invalid path fails the
+    whole list, matching the guard's "no partial acceptance" rule. Returns a
+    list of ``{path, sha256, size}`` records (finding 8a), or ``None``.
     """
-    owned_root = Path(owned_root).resolve()
+    roots = owned_roots(cwd, owned_paths)
+    if roots is None:
+        return None
+    cwd = Path(cwd).resolve()
     verified = []
     for raw in paths:
         text = str(raw).strip()
         if not text or Path(text).is_absolute() or TRAVERSAL_SEGMENT.search(text):
             return None
         try:
-            candidate = (owned_root / text).resolve()
+            candidate = (cwd / text).resolve()
         except OSError:
             return None
-        if not candidate.is_relative_to(owned_root):
+        if not any(candidate.is_relative_to(owned) for owned in roots):
             return None
         try:
-            if not candidate.is_file() or candidate.stat().st_size <= 0:
+            if not candidate.is_file():
+                return None
+            size = candidate.stat().st_size
+            if size <= 0:
                 return None
         except OSError:
             return None
-        verified.append(text)
+        verified.append({'path': text, 'sha256': file_sha256(candidate), 'size': size})
     return verified or None
+
+
+def is_light_tier_run(attempt, policy):
+    """True when this attempt's guard must apply, by tier, task type or model.
+
+    The selected candidate's own recorded ``tier`` is the usual signal, but a
+    fallback candidate configured by explicit ``model`` (no ``tier`` key) or a
+    task explicitly classified ``qa_collect`` must not bypass the guard just
+    because its route entry happens to omit a tier label (finding 6): either
+    one, or the requested or harness-reported actual model matching that
+    harness's configured light-tier model, is also sufficient.
+    """
+    candidate = attempt['route_candidates'][attempt['candidate_index']] or {}
+    if candidate.get('tier') == 'light':
+        return True
+    if attempt.get('task_type') == 'qa_collect':
+        return True
+    harness = attempt.get('requested_harness')
+    light_model = ((policy or {}).get('delegation', {}).get('models', {}).get(harness) or {}).get('light')
+    if light_model and light_model in (attempt.get('requested_model'), attempt.get('actual_model')):
+        return True
+    return False
 
 
 def light_tier_evidence(text, root, attempt):
     """Evidence for a light-tier run's own self-reported summary, or ``None``.
 
-    Tries counts first, then a produced-file list, since a worker's own report
-    (unlike ``accept``) does not declare which one it means.
+    Counts are never accepted from a worker's own summary (finding 3): only
+    an independently run ``accept`` command, or a driver-captured command
+    transcript, may supply them. A produced-file list is accepted only when
+    every path is both declared inside the task's owned paths AND among the
+    paths the driver itself measured this run as having changed
+    (``worker_changed_paths``): an unrelated, pre-existing file (a checked-in
+    README, say) can never pass just because the summary names it.
     """
-    counts = parse_counts(text)
-    if counts and counts['total'] > 0 and counts['failed'] == 0:
-        return {'expect': 'counts', 'source': 'summary', 'counts': counts}
     paths = parse_files(text)
-    if paths:
-        valid = validate_owned_files((root / attempt['cwd']).resolve(), paths)
-        if valid:
-            return {'expect': 'files', 'source': 'summary', 'files': valid}
-    return None
+    if not paths:
+        return None
+    cwd = (root / attempt['cwd']).resolve()
+    valid = validate_owned_files(cwd, attempt.get('owned_paths'), paths)
+    if not valid:
+        return None
+    changed = set(attempt.get('worker_changed_paths') or ())
+    if not all(item['path'] in changed for item in valid):
+        return None
+    return {'expect': 'files', 'source': 'summary', 'files': valid}
 
 
-ACCEPT_OUTPUT_CAP = 200_000  # characters kept per stream before parsing or storing
+def registered_worktrees(root):
+    """Every worktree ``git`` itself knows about for the repository at ``root``."""
+    result = subprocess.run(['git', 'worktree', 'list', '--porcelain'], cwd=root,
+                            capture_output=True, text=True, encoding='utf-8')
+    if result.returncode != 0:
+        return set()
+    found = set()
+    for line in result.stdout.splitlines():
+        if line.startswith('worktree '):
+            try:
+                found.add(Path(line[len('worktree '):]).resolve())
+            except OSError:
+                pass
+    return found
+
+
+def build_command_argv(command):
+    """The acceptance command as ``subprocess`` should receive it, per platform.
+
+    On Windows, ``CreateProcess`` (which ``subprocess`` calls directly when
+    ``shell=False``, never through ``cmd.exe``) parses its own command-line
+    quoting; passing the string through unchanged is the correct, native way
+    to preserve quoted arguments such as a path with spaces.
+    ``shlex.split(..., posix=False)`` keeps the quote characters themselves in
+    each token, which is wrong once that token is one ``argv`` element
+    (finding 8c). On POSIX there is no such native parser and no shell here,
+    so the string must still be split into an argv list ourselves.
+    """
+    if os.name == 'nt':
+        return command
+    args = shlex.split(command)
+    delegation.require(args, 'DELEGATION_ACCEPT_COMMAND_REQUIRED')
+    return args
+
+
+def kill_process_tree(proc):
+    """Kill the whole process tree, not just the direct child (finding 8d).
+
+    A command that spawns its own children (a shell wrapper, a test runner
+    that forks workers) would otherwise survive its parent's termination and
+    keep running, and could keep writing to the very file this function's
+    caller is about to read.
+    """
+    if os.name == 'nt':
+        subprocess.run(['taskkill', '/T', '/F', '/PID', str(proc.pid)], capture_output=True)
+        return
+    import signal
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        proc.kill()
+
+
+ACCEPT_OUTPUT_CAP = 200_000  # bytes kept per stream before parsing or storing
 ACCEPT_LEDGER_OUTPUT_CAP = 20_000  # characters of that kept in the ledger record
 
 
 def run_capped(args, cwd, timeout):
-    """Run a fixed argv with no shell, a wall-clock timeout and a hard output cap.
+    """Run a fixed command with no shell, a wall-clock timeout and a hard output cap.
 
-    ``args`` is an argv list (``shlex.split`` of the configured acceptance
-    command), never a shell string, so no shell metacharacter in it is special
-    and nothing is interpolated; ``cwd`` is always the task's own recorded
-    worktree, never a caller-supplied path. Output is captured the same way
-    every other driver call in this module captures it (decoded text, UTF-8,
-    replacing undecodable bytes), then each stream is truncated to
-    ``ACCEPT_OUTPUT_CAP`` characters before it is parsed or written to the
-    ledger, so a runaway or hostile command cannot exhaust memory or bloat
-    either.
+    ``args`` is an argv list on POSIX or the raw command string on Windows
+    (``build_command_argv``), never passed through a shell, so no shell
+    metacharacter is special and nothing is interpolated; ``cwd`` is always
+    the task's own recorded (or explicitly declared) working directory, never
+    an arbitrary caller-supplied path. stdout and stderr are captured to
+    spooled temp files rather than in-memory pipes, and only the first
+    ``ACCEPT_OUTPUT_CAP`` bytes of each are ever read back, so a runaway or
+    hostile command cannot exhaust the dispatcher's own memory. On a timeout
+    the whole process tree is killed (``kill_process_tree``), not just the
+    immediate child, before its output is read.
     """
-    timed_out = False
-    try:
-        result = subprocess.run(args, cwd=cwd, capture_output=True, timeout=timeout,
-                                text=True, encoding='utf-8', errors='replace')
-        exit_code, out, err = result.returncode, result.stdout or '', result.stderr or ''
-    except subprocess.TimeoutExpired as exc:
-        timed_out = True
-        exit_code = None
-        out = exc.stdout if isinstance(exc.stdout, str) else ''
-        err = exc.stderr if isinstance(exc.stderr, str) else ''
-    except OSError as exc:
-        return {'exit_code': None, 'output': str(exc), 'truncated': False, 'timed_out': False}
+    popen_kwargs = {} if os.name == 'nt' else {'start_new_session': True}
+    with tempfile.TemporaryFile() as out_file, tempfile.TemporaryFile() as err_file:
+        try:
+            proc = subprocess.Popen(args, cwd=cwd, stdout=out_file, stderr=err_file, **popen_kwargs)
+        except OSError as exc:
+            return {'exit_code': None, 'output': str(exc), 'truncated': False, 'timed_out': False}
+        timed_out = False
+        try:
+            exit_code = proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            kill_process_tree(proc)
+            try:
+                exit_code = proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                exit_code = None
+        out_file.seek(0)
+        err_file.seek(0)
+        out = out_file.read(ACCEPT_OUTPUT_CAP + 1)
+        err = err_file.read(ACCEPT_OUTPUT_CAP + 1)
     truncated = len(out) > ACCEPT_OUTPUT_CAP or len(err) > ACCEPT_OUTPUT_CAP
     out, err = out[:ACCEPT_OUTPUT_CAP], err[:ACCEPT_OUTPUT_CAP]
-    text = out + ('\n--- stderr ---\n' + err if err.strip() else '')
+    out_text = out.decode('utf-8', errors='replace')
+    err_text = err.decode('utf-8', errors='replace')
+    text = out_text + ('\n--- stderr ---\n' + err_text if err_text.strip() else '')
     return {'exit_code': exit_code, 'output': text, 'truncated': truncated, 'timed_out': timed_out}
 
 
@@ -1003,8 +1227,7 @@ def collect(root, feature, run_id, auto_retry=True):
         # keeps it successful; anything else stays unverified until accept or
         # a standard-tier reassignment supplies it. A note is not a path here:
         # nothing in this ledger accepts free text as evidence.
-        tier = (attempt['route_candidates'][attempt['candidate_index']] or {}).get('tier')
-        if tier == 'light' and attempt['status'] == 'successful':
+        if is_light_tier_run(attempt, policy) and attempt['status'] == 'successful':
             evidence = light_tier_evidence(payload.get('summary') or '', root, attempt)
             if evidence:
                 attempt['accepted_evidence'] = evidence
@@ -1041,7 +1264,7 @@ def collect(root, feature, run_id, auto_retry=True):
         replacement = candidate_start(root, feature, attempt['identity'], attempt['task_type'],
                                       remaining, task_path, root / attempt['cwd'],
                                       attempt['timeout'], parent_run_id=run_id,
-                                      retry_count=retry_count,
+                                      retry_count=retry_count, owned_paths=attempt.get('owned_paths'),
                                       decision={'at': stamp(), 'identity': attempt['identity'],
                                                 'requested': attempt_to_candidate(attempt),
                                                 'decision': kind, 'reason': reason,
@@ -1101,6 +1324,7 @@ def reassign(root, feature, run_id, reason, task_file=None):
     replacement = candidate_start(root, feature, prior['identity'], prior['task_type'],
                                   [stronger], brief, root / prior['cwd'], prior['timeout'],
                                   parent_run_id=run_id, retry_count=prior['retry_count'] + 1,
+                                  owned_paths=prior.get('owned_paths'),
                                   decision={'at': stamp(), 'identity': prior['identity'],
                                             'requested': attempt_to_candidate(prior),
                                             'decision': 'reassignment', 'reason': reason.strip(),
@@ -1114,26 +1338,32 @@ ACCEPT_EXPECTS = ('counts', 'files')
 ACCEPT_TIMEOUT_DEFAULT = 1800
 
 
-def accept(root, feature, run_id, command, expect, timeout=None):
+def accept(root, feature, run_id, command, expect, timeout=None, owned=None):
     """Independently run and judge an acceptance command for an unverified run.
 
     The only new dispatcher command in B12: it resolves a light-tier
     ``unverified`` outcome without a standard-tier reassignment, by running a
     fixed command the orchestrator supplies and inspecting its own output --
     never the worker's self-report a second time. The command runs with no
-    shell (``shlex.split`` into argv, never interpolated into a shell string)
-    in the task's own recorded working directory (never a caller-supplied
-    path), under a bounded timeout and a hard output cap (``run_capped``).
+    shell (``build_command_argv``: argv via ``shlex.split`` on POSIX, the raw
+    string for Windows' own ``CreateProcess`` quoting; finding 8c) in the
+    task's own recorded working directory -- its original ``cwd``, or, when
+    that is outside ``root``, a worktree ``git worktree list`` itself
+    confirms belongs to this repository (finding 8b; a caller-supplied path is
+    never accepted) -- under a bounded timeout and a hard output cap with the
+    whole process tree killed on timeout (``run_capped``).
 
     It accepts only when the command exits 0 and its output satisfies the
     requested schema: ``counts`` needs parsable total > 0 and failed == 0;
     ``files`` needs every path to exist, be non-empty and resolve inside the
-    task's owned paths (its ``cwd``), rejecting absolute paths, ``..``
-    traversal and symlink escapes. Exit-zero empty output, unparsable output
-    (including a bare free-text note with no structured evidence), a missing
-    or empty file, a path outside the owned set, a failed command or a
-    timeout all leave the attempt ``unverified``; every attempt is recorded in
-    the ledger regardless of outcome.
+    task's owned paths (``--owned``, or the paths recorded at ``start``, or
+    the whole ``cwd`` when neither declared any), rejecting absolute paths,
+    ``..`` traversal and symlink escapes; each accepted file's evidence
+    records its sha256 and size (finding 8a). Exit-zero empty output,
+    unparsable output (including a bare free-text note with no structured
+    evidence), a missing or empty file, a path outside the owned set, a
+    failed command or a timeout all leave the attempt ``unverified``; every
+    attempt is recorded in the ledger regardless of outcome.
     """
     root = root.resolve()
     feature = feature_identity(root, feature)
@@ -1149,12 +1379,10 @@ def accept(root, feature, run_id, command, expect, timeout=None):
     delegation.require(attempt.get('status') == 'unverified',
                        'DELEGATION_RUN_NOT_UNVERIFIED: only an unverified light-tier result can be accepted')
     cwd = (root / attempt['cwd']).resolve()
-    delegation.require(cwd.is_dir() and cwd.is_relative_to(root), 'DELEGATION_ACCEPT_CWD_INVALID')
-    try:
-        args = shlex.split(command, posix=(os.name != 'nt'))
-    except ValueError as exc:
-        raise delegation.DelegationError('DELEGATION_ACCEPT_COMMAND_INVALID: ' + str(exc)) from exc
-    delegation.require(args, 'DELEGATION_ACCEPT_COMMAND_REQUIRED')
+    delegation.require(cwd.is_dir() and (cwd.is_relative_to(root) or cwd in registered_worktrees(root)),
+                       'DELEGATION_ACCEPT_CWD_INVALID')
+    args = build_command_argv(command)
+    owned_paths = owned if owned else attempt.get('owned_paths')
     run = run_capped(args, cwd, timeout)
     text = run['output']
     evidence = None
@@ -1165,7 +1393,7 @@ def accept(root, feature, run_id, command, expect, timeout=None):
                 evidence = {'expect': 'counts', 'source': 'accept', 'counts': counts}
         else:
             paths = parse_files(text)
-            valid = validate_owned_files(cwd, paths) if paths else None
+            valid = validate_owned_files(cwd, owned_paths, paths) if paths else None
             if valid:
                 evidence = {'expect': 'files', 'source': 'accept', 'files': valid}
     with edit_ledger(root, feature) as ledger:
@@ -1259,6 +1487,9 @@ def main(argv=None):
     start_cmd.add_argument('--cwd', type=Path)
     start_cmd.add_argument('--claim-token')
     start_cmd.add_argument('--timeout', type=int)
+    start_cmd.add_argument('--owned', action='append',
+                           help='A path (repeatable) this task owns, relative to --cwd; '
+                                'defaults to the whole cwd when omitted')
     collect_cmd = sub.add_parser('collect')
     collect_cmd.add_argument('--feature', required=True)
     collect_cmd.add_argument('--run-id', required=True)
@@ -1281,11 +1512,14 @@ def main(argv=None):
     accept_cmd.add_argument('--command', required=True)
     accept_cmd.add_argument('--expect', choices=ACCEPT_EXPECTS, required=True)
     accept_cmd.add_argument('--timeout', type=int)
+    accept_cmd.add_argument('--owned', action='append',
+                            help='A path (repeatable) to check "files" evidence against for this '
+                                 'call, overriding the paths recorded at start')
     args = parser.parse_args(argv)
     try:
         if args.action == 'start':
             result = start(args.root, args.feature, args.id, args.type, args.task_file,
-                           args.cwd, args.claim_token, args.timeout)
+                           args.cwd, args.claim_token, args.timeout, args.owned)
         elif args.action == 'collect':
             result = collect(args.root, args.feature, args.run_id, not args.no_auto_retry)
         elif args.action == 'recover':
@@ -1293,7 +1527,8 @@ def main(argv=None):
         elif args.action == 'abandon':
             result = abandon_intent(args.root, args.feature, args.intent_id, args.reason)
         elif args.action == 'accept':
-            result = accept(args.root, args.feature, args.run_id, args.command, args.expect, args.timeout)
+            result = accept(args.root, args.feature, args.run_id, args.command, args.expect,
+                            args.timeout, args.owned)
         else:
             result = reassign(args.root, args.feature, args.run_id, args.reason, args.task_file)
         print(json.dumps(result, indent=2))
