@@ -24,6 +24,18 @@
   Codex root. See the README's "Skill inventory (doctor)" section for the
   reasoning and JSON shape. "Never invoked" pruning stays out of scope until a
   telemetry source and window exist.
+- `claude_plugins` now filters and confines what it scans from
+  `installed_plugins.json`: a `project`/`local`-scoped entry only counts for
+  the matching project (`projectPath`), a plugin turned off in
+  `enabledPlugins` (user `settings.json`, overridden by the project's own,
+  overridden by its `settings.local.json`) is skipped, and every `installPath`
+  must resolve (following symlinks) inside `~/.claude/plugins` itself; a UNC
+  path is rejected by its literal text before any filesystem access. Anything
+  rejected on the confinement/UNC check is listed under
+  `claude_plugins.skipped_install_paths` instead of silently dropped.
+  `$CODEX_HOME/skills` is confirmed live (cited in the README and in
+  `skill_inventory.codex_home_root`'s docstring, checked against the installed
+  Codex CLI 0.159.0), so it stays a normal counted root, not `legacy`.
 
 ## 1.6.4
 

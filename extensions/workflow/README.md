@@ -179,27 +179,47 @@ a Claude session and a Codex session read different, overlapping directories, an
 summing them double-counts every skill Sanduq installs into both.
 
 - `claude` loads `roots.claude_home` (`~/.claude/skills`), `roots.claude_project`
-  (`.claude/skills`), and `roots.claude_plugins` — every installed plugin's skills,
-  read only from `~/.claude/plugins/installed_plugins.json`'s recorded
-  `installPath` per plugin (the one place Claude Code itself records which
-  installed copy is live; the wider `plugins/cache` and `plugins/marketplaces`
-  trees hold every version ever fetched, including a `.trash` of superseded ones,
-  and are never scanned directly). A missing or unparseable manifest is reported
-  as `"counted": false` with a `reason`, rather than guessed at from the cache.
+  (`.claude/skills`), and `roots.claude_plugins` — every installed, enabled
+  plugin's skills, read only from `~/.claude/plugins/installed_plugins.json`'s
+  recorded `installPath` per plugin (the one place Claude Code itself records
+  which installed copy is live; the wider `plugins/cache` and
+  `plugins/marketplaces` trees hold every version ever fetched, including a
+  `.trash` of superseded ones, and are never scanned directly). A missing or
+  unparseable manifest is reported as `"counted": false` with a `reason`, rather
+  than guessed at from the cache. Three checks apply per manifest entry before it
+  is scanned: a `project`- or `local`-scoped entry only counts when its
+  `projectPath` resolves to this project (a `user`-scoped or unmarked entry
+  always counts); a plugin turned off in `enabledPlugins` is skipped (checked in
+  `~/.claude/settings.json`, then the project's own `.claude/settings.json`,
+  then its `.claude/settings.local.json` — each later file's explicit
+  true/false wins over the one before it); and its `installPath` must resolve,
+  following symlinks, to somewhere inside `~/.claude/plugins` itself, or it is
+  rejected and listed under `claude_plugins.skipped_install_paths` (a UNC path,
+  `\\host\share` or `//host/share`, is rejected by its literal text before any
+  filesystem access at all, since resolving or stat-ing an unreachable network
+  path can hang or error slowly).
 - `codex` loads `roots.codex_home` (`$CODEX_HOME/skills`, or `~/.codex/skills`
   when that real Codex CLI environment variable — never renamed — is unset),
   `roots.agents_home` (`~/.agents/skills`), and `roots.agents_project`
-  (`.agents/skills`).
+  (`.agents/skills`). `$CODEX_HOME/skills` is confirmed live, not legacy:
+  checked 2026-09-29 against the installed Codex CLI (codex-cli 0.159.0), whose
+  compiled binary (`@openai/codex-win32-x64` vendor `codex.exe`) embeds the
+  literal default-expansion `"${CODEX_HOME:-$HOME/.codex}/skills"` next to its
+  `SkillsList` client request, and the directory on this machine holds real
+  per-skill folders a session actually reads (plus a `.system` subfolder of
+  bundled skills this flat, one-level scan does not descend into, same as
+  every other root here).
 
 `roots` always gives the full per-root numbers (`skill_count`, total and max
 frontmatter `description:` bytes, total `SKILL.md` bytes; `claude_plugins` adds
-`counted`/`reason`). `hosts.claude` and `hosts.codex` each give `combined` (summed
-over exactly that host's own roots) and `duplicates` — a skill name repeated
-*within* that host's own roots (home vs. project vs., for claude, a plugin).
-`mirrors` lists a name shared between a claude root and a codex root separately:
-Sanduq itself installs the same command skill into both `.claude/skills` and
-`.agents/skills` at every level it manages, so that overlap is an expected mirror,
-not a duplicate, and never inflates either host's `combined`.
+`counted`/`reason`/`skipped_install_paths`). `hosts.claude` and `hosts.codex`
+each give `combined` (summed over exactly that host's own roots) and
+`duplicates` — a skill name repeated *within* that host's own roots (home vs.
+project vs., for claude, a plugin). `mirrors` lists a name shared between a
+claude root and a codex root separately: Sanduq itself installs the same
+command skill into both `.claude/skills` and `.agents/skills` at every level it
+manages, so that overlap is an expected mirror, not a duplicate, and never
+inflates either host's `combined`.
 
 Every root tolerates being missing, an unreadable or malformed `SKILL.md` (no
 frontmatter, or a `description` that is not a string, counts as 0 bytes, never an

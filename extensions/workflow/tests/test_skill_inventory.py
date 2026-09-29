@@ -243,8 +243,12 @@ class SkillInventoryTests(unittest.TestCase):
         plugins = self.inv()['roots']['claude_plugins']
         self.assertFalse(plugins['counted'])
 
+    def plugin_cache_dir(self, *parts):
+        """A plugin install path that lives inside ~/.claude/plugins, as N2 requires."""
+        return self.home.joinpath('.claude', 'plugins', 'cache', *parts)
+
     def test_valid_manifest_is_scanned_through_its_install_path(self):
-        install_dir = self.base / 'plugin-cache/figma/2.2.120'
+        install_dir = self.plugin_cache_dir('claude-plugins-official', 'figma', '2.2.120')
         write_skill(install_dir / 'skills', 'figma-use', description='Use figma')
         write_skill(install_dir / 'skills', 'figma-code-connect', description='Connect')
         self.write_installed_plugins({
@@ -255,9 +259,13 @@ class SkillInventoryTests(unittest.TestCase):
         self.assertIsNone(plugins['reason'])
         self.assertEqual(plugins['skill_count'], 2)
         self.assertGreater(plugins['description_bytes'], 0)
+        self.assertEqual(plugins['skipped_install_paths'], [])
+        # The scan actually used the manifest's installPath, not a guess: the two
+        # skill names it found only exist under install_dir.
+        self.assertEqual((install_dir / 'skills' / 'figma-use' / 'SKILL.md').is_file(), True)
 
     def test_plugin_skills_count_toward_the_claude_host_only(self):
-        install_dir = self.base / 'plugin-cache/typesafe/0.5.7'
+        install_dir = self.plugin_cache_dir('typesafe-ai', 'typesafe', '0.5.7')
         write_skill(install_dir / 'skills', 'typesafe-ai', description='d')
         self.write_installed_plugins({
             'typesafe@typesafe-ai': [{'scope': 'user', 'installPath': str(install_dir)}],
@@ -267,7 +275,7 @@ class SkillInventoryTests(unittest.TestCase):
         self.assertEqual(result['hosts']['codex']['combined']['skill_count'], 0)
 
     def test_malformed_plugin_entry_is_skipped_others_still_scanned(self):
-        install_dir = self.base / 'plugin-cache/good/1.0.0'
+        install_dir = self.plugin_cache_dir('somewhere', 'good', '1.0.0')
         write_skill(install_dir / 'skills', 'good-skill', description='d')
         self.write_installed_plugins({
             'bad-plugin@nowhere': 'not-a-list',
@@ -279,24 +287,152 @@ class SkillInventoryTests(unittest.TestCase):
         self.assertEqual(plugins['skill_count'], 1)
 
     def test_duplicate_install_path_across_plugin_entries_counted_once(self):
-        install_dir = self.base / 'plugin-cache/shared/1.0.0'
+        install_dir = self.plugin_cache_dir('market', 'shared', '1.0.0')
         write_skill(install_dir / 'skills', 'shared-skill', description='d')
         self.write_installed_plugins({
             'a@market': [{'scope': 'user', 'installPath': str(install_dir)}],
-            'b@market': [{'scope': 'project', 'installPath': str(install_dir)}],
+            'b@market': [{'scope': 'user', 'installPath': str(install_dir)}],
         })
         plugins = self.inv()['roots']['claude_plugins']
         self.assertEqual(plugins['skill_count'], 1)
 
     def test_plugin_skill_name_repeated_in_project_root_is_a_same_host_duplicate(self):
-        install_dir = self.base / 'plugin-cache/dup/1.0.0'
+        install_dir = self.plugin_cache_dir('market', 'dup', '1.0.0')
         write_skill(install_dir / 'skills', 'dup-skill', description='d')
         self.write_installed_plugins({'dup@market': [{'scope': 'user', 'installPath': str(install_dir)}]})
         write_skill(self.project / '.claude/skills', 'dup-skill', description='d')
         result = self.inv()
         self.assertIn('dup-skill', result['hosts']['claude']['duplicates'])
-        self.assertEqual(sorted(result['hosts']['claude']['duplicates']['dup-skill']),
-                          ['claude_plugins', 'claude_project'])
+
+    # --- N1: scope/projectPath and enabledPlugins ---------------------------
+
+    def test_project_scoped_entry_for_this_project_is_included(self):
+        install_dir = self.plugin_cache_dir('market', 'proj-match', '1.0.0')
+        write_skill(install_dir / 'skills', 'proj-skill', description='d')
+        self.write_installed_plugins({
+            'proj@market': [{'scope': 'project', 'installPath': str(install_dir), 'projectPath': str(self.project)}],
+        })
+        plugins = self.inv()['roots']['claude_plugins']
+        self.assertEqual(plugins['skill_count'], 1)
+
+    def test_project_scoped_entry_for_a_different_project_is_excluded(self):
+        install_dir = self.plugin_cache_dir('market', 'proj-mismatch', '1.0.0')
+        write_skill(install_dir / 'skills', 'proj-skill', description='d')
+        other_project = self.base / 'a-different-project'
+        self.write_installed_plugins({
+            'proj@market': [{'scope': 'project', 'installPath': str(install_dir), 'projectPath': str(other_project)}],
+        })
+        plugins = self.inv()['roots']['claude_plugins']
+        self.assertEqual(plugins['skill_count'], 0)
+
+    def test_local_scoped_entry_for_a_different_project_is_excluded(self):
+        install_dir = self.plugin_cache_dir('market', 'local-mismatch', '1.0.0')
+        write_skill(install_dir / 'skills', 'local-skill', description='d')
+        self.write_installed_plugins({
+            'proj@market': [{'scope': 'local', 'installPath': str(install_dir),
+                             'projectPath': str(self.base / 'elsewhere')}],
+        })
+        plugins = self.inv()['roots']['claude_plugins']
+        self.assertEqual(plugins['skill_count'], 0)
+
+    def test_project_scoped_entry_without_project_path_is_excluded(self):
+        install_dir = self.plugin_cache_dir('market', 'no-project-path', '1.0.0')
+        write_skill(install_dir / 'skills', 'x-skill', description='d')
+        self.write_installed_plugins({
+            'proj@market': [{'scope': 'project', 'installPath': str(install_dir)}],
+        })
+        plugins = self.inv()['roots']['claude_plugins']
+        self.assertEqual(plugins['skill_count'], 0)
+
+    def write_settings(self, path, enabled_plugins):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({'enabledPlugins': enabled_plugins}), encoding='utf-8')
+
+    def test_plugin_disabled_in_user_settings_is_skipped(self):
+        install_dir = self.plugin_cache_dir('market', 'off', '1.0.0')
+        write_skill(install_dir / 'skills', 'off-skill', description='d')
+        self.write_installed_plugins({'off@market': [{'scope': 'user', 'installPath': str(install_dir)}]})
+        self.write_settings(self.home / '.claude/settings.json', {'off@market': False})
+        plugins = self.inv()['roots']['claude_plugins']
+        self.assertEqual(plugins['skill_count'], 0)
+
+    def test_project_settings_override_user_settings_for_enablement(self):
+        install_dir = self.plugin_cache_dir('market', 'reenabled', '1.0.0')
+        write_skill(install_dir / 'skills', 're-skill', description='d')
+        self.write_installed_plugins({'re@market': [{'scope': 'user', 'installPath': str(install_dir)}]})
+        self.write_settings(self.home / '.claude/settings.json', {'re@market': False})
+        self.write_settings(self.project / '.claude/settings.json', {'re@market': True})
+        plugins = self.inv()['roots']['claude_plugins']
+        self.assertEqual(plugins['skill_count'], 1)
+
+    def test_project_local_settings_override_project_settings_for_enablement(self):
+        install_dir = self.plugin_cache_dir('market', 'localoff', '1.0.0')
+        write_skill(install_dir / 'skills', 'local-off-skill', description='d')
+        self.write_installed_plugins({'lo@market': [{'scope': 'user', 'installPath': str(install_dir)}]})
+        self.write_settings(self.project / '.claude/settings.json', {'lo@market': True})
+        self.write_settings(self.project / '.claude/settings.local.json', {'lo@market': False})
+        plugins = self.inv()['roots']['claude_plugins']
+        self.assertEqual(plugins['skill_count'], 0)
+
+    def test_plugin_not_mentioned_in_any_settings_file_defaults_to_enabled(self):
+        install_dir = self.plugin_cache_dir('market', 'unmentioned', '1.0.0')
+        write_skill(install_dir / 'skills', 'unmentioned-skill', description='d')
+        self.write_installed_plugins({'um@market': [{'scope': 'user', 'installPath': str(install_dir)}]})
+        self.write_settings(self.home / '.claude/settings.json', {'someone-else@market': False})
+        plugins = self.inv()['roots']['claude_plugins']
+        self.assertEqual(plugins['skill_count'], 1)
+
+    # --- N2: installPath confinement and UNC rejection ----------------------
+
+    def test_install_path_outside_claude_plugins_is_skipped_and_recorded(self):
+        outside = self.base / 'somewhere-else' / 'not-under-plugins'
+        write_skill(outside / 'skills', 'escaped-skill', description='d')
+        self.write_installed_plugins({'esc@market': [{'scope': 'user', 'installPath': str(outside)}]})
+        plugins = self.inv()['roots']['claude_plugins']
+        self.assertEqual(plugins['skill_count'], 0)
+        self.assertEqual(len(plugins['skipped_install_paths']), 1)
+        self.assertEqual(plugins['skipped_install_paths'][0]['installPath'], str(outside))
+        self.assertIn('outside', plugins['skipped_install_paths'][0]['reason'])
+
+    def test_unc_install_path_is_skipped_and_recorded_without_touching_the_filesystem(self):
+        for unc in (r'\\evil-host\share\plugin', '//evil-host/share/plugin'):
+            with self.subTest(unc=unc):
+                self.write_installed_plugins({'unc@market': [{'scope': 'user', 'installPath': unc}]})
+                plugins = self.inv()['roots']['claude_plugins']
+                self.assertEqual(plugins['skill_count'], 0)
+                self.assertEqual(len(plugins['skipped_install_paths']), 1)
+                self.assertEqual(plugins['skipped_install_paths'][0]['installPath'], unc)
+                self.assertIn('UNC', plugins['skipped_install_paths'][0]['reason'])
+
+    def test_symlinked_install_path_staying_inside_claude_plugins_is_accepted(self):
+        real_target = self.plugin_cache_dir('market', 'real-plugin-storage')
+        write_skill(real_target / 'skills', 'linked-skill', description='d')
+        link = self.plugin_cache_dir('market', 'linked-plugin')
+        try:
+            link.symlink_to(real_target, target_is_directory=True)
+        except OSError as error:
+            self.skipTest('Host does not support test symlinks: ' + str(error))
+        self.write_installed_plugins({'linked@market': [{'scope': 'user', 'installPath': str(link)}]})
+        plugins = self.inv()['roots']['claude_plugins']
+        self.assertEqual(plugins['skill_count'], 1)
+        self.assertEqual(plugins['skipped_install_paths'], [])
+
+    def test_symlinked_install_path_escaping_claude_plugins_is_skipped(self):
+        # The confinement check resolves symlinks first (N2): a link that SITS
+        # inside ~/.claude/plugins but points outside it must still be rejected.
+        outside_target = self.base / 'real-plugin-storage-outside'
+        write_skill(outside_target / 'skills', 'escaped-skill', description='d')
+        link = self.plugin_cache_dir('market', 'escaping-plugin')
+        link.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            link.symlink_to(outside_target, target_is_directory=True)
+        except OSError as error:
+            self.skipTest('Host does not support test symlinks: ' + str(error))
+        self.write_installed_plugins({'escaping@market': [{'scope': 'user', 'installPath': str(link)}]})
+        plugins = self.inv()['roots']['claude_plugins']
+        self.assertEqual(plugins['skill_count'], 0)
+        self.assertEqual(len(plugins['skipped_install_paths']), 1)
+        self.assertIn('outside', plugins['skipped_install_paths'][0]['reason'])
 
 
 class SkillInventoryPolicySchemaTests(unittest.TestCase):

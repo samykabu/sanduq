@@ -10,13 +10,20 @@ telemetry source and window exist (see the plan, package B10).
 Host sessions read different, overlapping sets of directories:
 
 - ``claude`` loads home ``~/.claude/skills``, project ``.claude/skills``, and
-  every installed plugin's skills (read from
+  every installed, enabled plugin's skills (read from
   ``~/.claude/plugins/installed_plugins.json``, the one place Claude Code
   itself records exactly which installed copy is live; the wider plugin cache
-  and marketplace trees hold stale versions and are not scanned). When that
-  manifest is missing or unreadable, plugin skills are reported as not
+  and marketplace trees hold stale versions and are not scanned). A
+  ``project``/``local``-scoped entry only counts for the matching project; a
+  plugin ``enabledPlugins`` turns off (user settings, overridden by the
+  project's own, overridden by its local settings) is skipped; an
+  ``installPath`` must resolve inside ``~/.claude/plugins`` itself (a UNC
+  path is rejected by text alone, before touching the filesystem) or it is
+  recorded under ``skipped_install_paths`` instead of scanned. When the
+  manifest itself is missing or unreadable, plugin skills are reported as not
   counted rather than guessed at.
-- ``codex`` loads ``$CODEX_HOME`` (or ``~/.codex``) skills, home
+- ``codex`` loads ``$CODEX_HOME`` (or ``~/.codex``) skills — confirmed live
+  against the installed Codex CLI, see ``codex_home_root`` — home
   ``~/.agents/skills``, and project ``.agents/skills``.
 
 Sanduq itself installs the same command skill under both ``.claude/skills``
@@ -72,7 +79,18 @@ def home_root():
 def codex_home_root(home=None):
     """Portable resolution of $CODEX_HOME: the real Codex CLI convention, honoured as-is
     (never renamed) so a project's own Codex setup is read correctly; falls
-    back to ``<home>/.codex``."""
+    back to ``<home>/.codex``.
+
+    ``<CODEX_HOME>/skills`` is confirmed live, not legacy: the installed Codex
+    CLI (codex-cli 0.159.0, `@openai/codex-win32-x64` vendor `codex.exe`,
+    checked 2026-09-29) embeds the literal default-expansion
+    ``"${CODEX_HOME:-$HOME/.codex}/skills"`` alongside its `SkillsList`
+    client request and `ReloadUserConfig`'s `force_reload`, and the directory
+    on disk holds real per-skill folders (each its own `SKILL.md`) a session
+    actually reads, plus a `.system` subfolder of bundled skills (imagegen,
+    skill-creator, skill-installer, ...) this flat one-level scan does not
+    descend into, matching every other root here.
+    """
     override = os.environ.get('CODEX_HOME')
     if override:
         return Path(override)
@@ -204,7 +222,58 @@ def _aggregate_scans(scans):
     }
 
 
-def _plugin_skills_claude(home):
+def _is_unc_path(value):
+    """A UNC-style network path (``\\\\host\\share`` or ``//host/share``), checked
+    on the raw string alone: resolving or stat-ing an unreachable network host
+    can hang or error slowly, so this is decided before any filesystem call."""
+    return value.startswith('\\\\') or value.startswith('//')
+
+
+def _confine_to_plugins_root(install_path, plugins_root):
+    """Resolve ``install_path`` (following symlinks) and require it to land inside
+    ``plugins_root`` (already resolved). Returns ``(resolved_path, None)`` when
+    accepted, or ``(None, reason)`` when it must be skipped instead."""
+    if _is_unc_path(install_path):
+        return None, 'UNC path'
+    try:
+        resolved = Path(install_path).resolve()
+    except OSError:
+        return None, 'could not resolve'
+    if not resolved.is_relative_to(plugins_root):
+        return None, 'outside ~/.claude/plugins'
+    return resolved, None
+
+
+def _read_enabled_plugins(path):
+    """The `enabledPlugins` map of one settings.json-shaped file, or {} when the
+    file is missing, unreadable, malformed, or has none."""
+    try:
+        raw = path.read_text(encoding='utf-8-sig')
+    except OSError:
+        return {}
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return {}
+    enabled = data.get('enabledPlugins') if isinstance(data, dict) else None
+    if not isinstance(enabled, dict):
+        return {}
+    return {key: value for key, value in enabled.items() if isinstance(key, str)}
+
+
+def _effective_enabled_plugins(home, root):
+    """User settings, then the project's settings.json, then its settings.local.json:
+    each layer's explicit true/false for a plugin overrides the layer before
+    it; a plugin no layer mentions is left out (defaults to enabled, the
+    unchanged prior behaviour when no settings file disables it)."""
+    effective = {}
+    effective.update(_read_enabled_plugins(Path(home) / '.claude' / 'settings.json'))
+    effective.update(_read_enabled_plugins(Path(root) / '.claude' / 'settings.json'))
+    effective.update(_read_enabled_plugins(Path(root) / '.claude' / 'settings.local.json'))
+    return effective
+
+
+def _plugin_skills_claude(home, root):
     """Claude Code plugin skills, read only through the installed-plugins manifest.
 
     ``~/.claude/plugins/installed_plugins.json`` records each installed
@@ -215,6 +284,18 @@ def _plugin_skills_claude(home):
     or one whose "plugins" key isn't a map, is reported as not counted rather
     than guessed at; entries within it that are malformed are skipped
     individually so one bad entry does not lose the rest.
+
+    A ``project``- or ``local``-scoped entry only applies to *this* project
+    (its ``projectPath`` must resolve to ``root``); a ``user``-scoped or
+    unmarked entry always applies. A plugin explicitly disabled in
+    ``enabledPlugins`` (user ``settings.json``, overridden by the project's
+    own ``settings.json``, overridden by its ``settings.local.json``) is
+    skipped entirely. Every ``installPath`` must resolve, following symlinks,
+    to somewhere inside ``~/.claude/plugins`` itself; a UNC path
+    (``\\\\host\\share`` or ``//host/share``) is rejected by its literal text
+    before any filesystem access (resolving or even stat-ing an unreachable
+    network path can hang or error slowly), and anything rejected is listed
+    under ``skipped_install_paths`` rather than silently dropped.
     """
     manifest_path = Path(home) / '.claude' / 'plugins' / 'installed_plugins.json'
     base = {'path': str(manifest_path)}
@@ -222,36 +303,54 @@ def _plugin_skills_claude(home):
         raw = manifest_path.read_text(encoding='utf-8-sig')
     except OSError:
         return {**base, 'exists': False, 'counted': False,
-                'reason': 'installed_plugins.json not found', **dict(EMPTY_SCAN)}
+                'reason': 'installed_plugins.json not found', 'skipped_install_paths': [], **dict(EMPTY_SCAN)}
     try:
         data = json.loads(raw)
     except ValueError:
         return {**base, 'exists': True, 'counted': False,
-                'reason': 'installed_plugins.json is not valid JSON', **dict(EMPTY_SCAN)}
+                'reason': 'installed_plugins.json is not valid JSON', 'skipped_install_paths': [],
+                **dict(EMPTY_SCAN)}
     plugins = data.get('plugins') if isinstance(data, dict) else None
     if not isinstance(plugins, dict):
         return {**base, 'exists': True, 'counted': False,
-                'reason': 'installed_plugins.json has no "plugins" object', **dict(EMPTY_SCAN)}
+                'reason': 'installed_plugins.json has no "plugins" object', 'skipped_install_paths': [],
+                **dict(EMPTY_SCAN)}
+    plugins_root = (Path(home) / '.claude' / 'plugins').resolve()
+    project_root = Path(root).resolve()
+    enabled = _effective_enabled_plugins(home, root)
     seen_install_paths = set()
+    skipped_install_paths = []
     scans = []
-    for entries in plugins.values():
+    for plugin_key, entries in plugins.items():
+        if enabled.get(plugin_key) is False:
+            continue
         if not isinstance(entries, list):
             continue
         for entry in entries:
             if not isinstance(entry, dict):
                 continue
+            if entry.get('scope') in ('project', 'local'):
+                project_path = entry.get('projectPath')
+                if not isinstance(project_path, str) or not project_path:
+                    continue
+                try:
+                    if Path(project_path).resolve() != project_root:
+                        continue
+                except OSError:
+                    continue
             install_path = entry.get('installPath')
             if not isinstance(install_path, str) or not install_path:
                 continue
-            try:
-                resolved = Path(install_path).resolve()
-            except OSError:
+            resolved, reason = _confine_to_plugins_root(install_path, plugins_root)
+            if resolved is None:
+                skipped_install_paths.append({'installPath': install_path, 'reason': reason})
                 continue
             if resolved in seen_install_paths:
                 continue
             seen_install_paths.add(resolved)
             scans.append(_scan_root(resolved / 'skills'))
-    return {**base, 'exists': True, 'counted': True, 'reason': None, **_aggregate_scans(scans)}
+    return {**base, 'exists': True, 'counted': True, 'reason': None,
+            'skipped_install_paths': skipped_install_paths, **_aggregate_scans(scans)}
 
 
 def thresholds(policy=None):
@@ -279,7 +378,7 @@ def inventory(root, policy=None, home=None, codex_home=None):
     home_dir = Path(home) if home is not None else home_root()
     directory_roots = resolve_roots(root, home_dir, codex_home)
     per_root = {name: _scan_root(path) for name, path in directory_roots.items()}
-    per_root['claude_plugins'] = _plugin_skills_claude(home_dir)
+    per_root['claude_plugins'] = _plugin_skills_claude(home_dir, root)
 
     hosts = {}
     for host, root_names in HOST_ROOTS.items():
