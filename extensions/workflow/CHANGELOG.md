@@ -2,16 +2,28 @@
 
 ## Unreleased
 
-- `doctor --project` reports a `skill_inventory` block (new `skill_inventory.py`):
-  per-root skill count, total and max frontmatter `description:` bytes, and total
-  `SKILL.md` bytes for `~/.claude/skills`, `.claude/skills` and `.agents/skills`,
-  plus combined totals and cross-root duplicate skill names. Always reported in
-  full, even below threshold, so C4 (skill pruning) can use it. Doctor warns
-  `SKILL_INVENTORY_LARGE` (non-blocking) past 150 combined skills or 20 KiB of
-  combined description bytes; either threshold is overridable per-project under
-  `policy['skills']['inventory_thresholds']`. See the README's "Skill inventory
-  (doctor)" section for the reasoning and JSON shape. "Never invoked" pruning
-  stays out of scope until a telemetry source and window exist.
+- `doctor --project` reports a `skill_inventory` block (new `skill_inventory.py`),
+  per **host session load** rather than one cross-host sum: `hosts.claude`
+  (`~/.claude/skills` + project `.claude/skills` + installed plugin skills, read
+  from `~/.claude/plugins/installed_plugins.json`) and `hosts.codex`
+  (`$CODEX_HOME`/`~/.codex` skills + `~/.agents/skills` + project `.agents/skills`),
+  each with its own `combined` totals and same-host `duplicates`; a name shared
+  between a claude root and a codex root (Sanduq installs the same command skill
+  into both) is reported separately under `mirrors`, not counted as a duplicate or
+  summed twice. Per-root numbers (`skill_count`, total/max frontmatter
+  `description:` bytes, total `SKILL.md` bytes) are still reported in full, even
+  below threshold, so C4 (skill pruning) can use them. Doctor warns
+  `SKILL_INVENTORY_LARGE` (non-blocking) per host past 200 skills or 40 KiB of
+  that host's own combined description bytes (measured against Bunyan; see the
+  README); either threshold is overridable per-project under
+  `policy['skills']['inventory_thresholds']`, now also in `policy-v1.schema.json`.
+  The scan runs only on `doctor --project` (not on every `migrate`/`upgrade`
+  doctor call) and a scan failure is caught and reported as
+  `SKILL_INVENTORY_UNAVAILABLE`, never a doctor failure. The home-override env var
+  is `SANDUQ_SKILLS_HOME` (was `SANDUQ_HOME`); `$CODEX_HOME` is honoured for the
+  Codex root. See the README's "Skill inventory (doctor)" section for the
+  reasoning and JSON shape. "Never invoked" pruning stays out of scope until a
+  telemetry source and window exist.
 
 ## 1.6.4
 

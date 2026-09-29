@@ -171,32 +171,66 @@ host other than the default has lost managed skills, with the repair command.
 
 ## Skill inventory (doctor)
 
-`doctor --project` reports a `skill_inventory` block, always with the full numbers,
-whether or not anything is over threshold: per root (`home` = `~/.claude/skills`,
-`project_claude` = `.claude/skills`, `project_agents` = `.agents/skills`) it gives
-`skill_count`, the total and max frontmatter `description:` bytes, and total
-`SKILL.md` bytes; `combined` sums those across roots; `duplicates` lists a skill
-name installed under more than one root. Every root tolerates being missing, an
-unreadable or malformed `SKILL.md` (no frontmatter, or a `description` that is not
-a string counts as 0 bytes, never an error), and a symlink or junction skill folder
-(resolved and counted once, never followed recursively, so a cycle cannot loop).
-The home root resolves through `Path.home()`, overridable with `SANDUQ_HOME` (tests
-must set it rather than touch the real machine's home).
+`doctor --project` reports a `skill_inventory` block (never on a plain `doctor`,
+including a `migrate`/`upgrade`-triggered one, so those never pay its cost; a scan
+failure is caught and turned into a `SKILL_INVENTORY_UNAVAILABLE` warning, never a
+doctor failure). It is reported **per host session load**, not one cross-host sum:
+a Claude session and a Codex session read different, overlapping directories, and
+summing them double-counts every skill Sanduq installs into both.
 
-Doctor warns `SKILL_INVENTORY_LARGE` (non-blocking) when the combined skill count
-exceeds 150, or combined description bytes exceed 20 KiB (20480), across all three
-roots. Frontmatter `description:` text is what a host loads into every session just
-to list what is available, before any skill is invoked, so its combined size
-approximates a fixed per-session token cost; 150 skills and 20 KiB were picked as a
-generous multiple of a well-kept single project's own skill set (a few dozen skills
-at well under 150 bytes of description each) — comfortably above normal use, but low
-enough to flag the kind of unpruned accumulation across marketplaces, plugins and a
-project's own skills/ that C4 (skill pruning) is meant to catch. Override either key
-under `policy['skills']['inventory_thresholds']` (`skill_count`, `description_bytes`;
-positive integers only) in `.specify/workflow.yml`. Deciding what to prune, including
-any "never invoked" signal, needs a telemetry source and a window neither doctor nor
-this inventory has; that judgement (and the pruning pass itself) is owner-only and
-out of this package's scope.
+- `claude` loads `roots.claude_home` (`~/.claude/skills`), `roots.claude_project`
+  (`.claude/skills`), and `roots.claude_plugins` — every installed plugin's skills,
+  read only from `~/.claude/plugins/installed_plugins.json`'s recorded
+  `installPath` per plugin (the one place Claude Code itself records which
+  installed copy is live; the wider `plugins/cache` and `plugins/marketplaces`
+  trees hold every version ever fetched, including a `.trash` of superseded ones,
+  and are never scanned directly). A missing or unparseable manifest is reported
+  as `"counted": false` with a `reason`, rather than guessed at from the cache.
+- `codex` loads `roots.codex_home` (`$CODEX_HOME/skills`, or `~/.codex/skills`
+  when that real Codex CLI environment variable — never renamed — is unset),
+  `roots.agents_home` (`~/.agents/skills`), and `roots.agents_project`
+  (`.agents/skills`).
+
+`roots` always gives the full per-root numbers (`skill_count`, total and max
+frontmatter `description:` bytes, total `SKILL.md` bytes; `claude_plugins` adds
+`counted`/`reason`). `hosts.claude` and `hosts.codex` each give `combined` (summed
+over exactly that host's own roots) and `duplicates` — a skill name repeated
+*within* that host's own roots (home vs. project vs., for claude, a plugin).
+`mirrors` lists a name shared between a claude root and a codex root separately:
+Sanduq itself installs the same command skill into both `.claude/skills` and
+`.agents/skills` at every level it manages, so that overlap is an expected mirror,
+not a duplicate, and never inflates either host's `combined`.
+
+Every root tolerates being missing, an unreadable or malformed `SKILL.md` (no
+frontmatter, or a `description` that is not a string, counts as 0 bytes, never an
+error), and a symlink or junction skill folder (resolved and counted once, never
+followed recursively, so a cycle cannot loop). The home root resolves through
+`Path.home()`, overridable with `SANDUQ_SKILLS_HOME` (tests must set it rather
+than touch the real machine's home).
+
+Doctor warns `SKILL_INVENTORY_LARGE` (non-blocking) per host whose own combined
+skill count exceeds 200, or combined description bytes exceed 40 KiB (40960); a
+project heavy on one host and light on the other gets exactly one warning, not
+zero or two by averaging. Frontmatter `description:` text is what a host loads
+into every session just to list what is available, before any skill is invoked,
+so its combined size approximates a fixed per-session token cost. Measured source
+for the defaults (`workflow.py doctor --project`, read-only, against Bunyan,
+2026-09-29): one project's own skill root is 86 skills / 10578 bytes on both
+hosts (`roots.claude_project` and `roots.agents_project`); 200 skills / 40 KiB is
+roughly double that count and four times the bytes, giving headroom for home and
+plugin skills before flagging. On that same measurement Bunyan's actual per-host
+session load was already far past both — claude 379 skills / 144351 bytes, codex
+385 skills / 149763 bytes, driven by an unpruned `~/.claude/skills` and
+`~/.agents/skills` (273 and 272 skills) — which is exactly the kind of
+accumulation across marketplaces, plugins and a project's own skills/ that C4
+(skill pruning) exists to catch; a claim of "a few dozen skills" for a project's
+own root does not hold once a project the size of Bunyan is measured. Override
+either key under `policy['skills']['inventory_thresholds']` (`skill_count`,
+`description_bytes`; positive integers only) in `.specify/workflow.yml` — applied
+independently to each host's own combined total, not to a cross-host sum.
+Deciding what to prune, including any "never invoked" signal, needs a telemetry
+source and a window neither doctor nor this inventory has; that judgement (and
+the pruning pass itself) is owner-only and out of this package's scope.
 
 ## State and recovery
 

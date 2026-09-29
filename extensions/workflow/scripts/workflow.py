@@ -614,10 +614,17 @@ def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True
     errors += ci_errors(root, policy, preserved_ci)
     if project: errors += project_errors(root, policy)
     warnings = host_warnings(root)
-    inventory = skill_inventory.inventory(root, policy)
-    large = skill_inventory.warning(inventory)
-    if large:
-        warnings.append(large)
+    # Only a --project doctor run pays for this (migrate/upgrade doctor calls do
+    # not), and a scan failure (an unreadable plugin manifest, an odd path) is
+    # reported, never allowed to fail doctor itself.
+    skill_inventory_result = None
+    if project:
+        try:
+            skill_inventory_result = skill_inventory.inventory(root, policy)
+            warnings += skill_inventory.warnings(skill_inventory_result)
+        except Exception as exc:
+            skill_inventory_result = None
+            warnings.append('SKILL_INVENTORY_UNAVAILABLE: ' + str(exc))
     drift = eol_drift(root)
     if drift:
         warnings.append(
@@ -627,9 +634,11 @@ def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True
             'working tree see different bytes than CI. Remedy: commit or stash edits, add "*.sql -text" to '
             '.gitattributes (or set core.autocrlf=false), then re-checkout the files listed by "git ls-files --eol" '
             'with "git -c core.autocrlf=false checkout -- <path>".')
-    return {'ok': not errors, 'errors': errors, 'warnings': warnings, 'project_checked': project,
-            'skill_inventory': inventory,
-            'context': 'Only fresh reliable measurements can trigger context pauses; unavailable or estimated usage is nonblocking outside explicit strict mode'}
+    result = {'ok': not errors, 'errors': errors, 'warnings': warnings, 'project_checked': project,
+              'context': 'Only fresh reliable measurements can trigger context pauses; unavailable or estimated usage is nonblocking outside explicit strict mode'}
+    if project:
+        result['skill_inventory'] = skill_inventory_result
+    return result
 
 
 def context_gate(policy, usage):
