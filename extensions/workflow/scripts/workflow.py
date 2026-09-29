@@ -1131,7 +1131,7 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
             # since delegations.json is committed but the marker is local
             # runtime state) is a warning only, and status is still enforced
             # (round 3, findings 1-2).
-            from delegation import latest_attempt, ledger_trust_state, orchestrator_executed_tasks
+            from delegation import latest_attempt, ledger_trust_state
             trust = ledger_trust_state(root, feature)
             require(trust != 'untrusted',
                     'DELEGATION_LEDGER_UNTRUSTED: the delegation ledger for ' + feature + ' was tampered '
@@ -1144,32 +1144,23 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
                                 'delegated task status is still enforced, but local tamper detection '
                                 'cannot vouch for this ledger on this machine')
             # A checked task with NO attempt at all previously slipped through
-            # unnoticed (round 6, finding 2): the walrus below only rejected a
-            # task whose latest attempt *existed* and had failed, never one
+            # unnoticed (round 6, finding 2): the previous check only rejected
+            # a task whose latest attempt *existed* and had failed, never one
             # missing outright. Fixed by requiring 'successful' from an empty
-            # record too. Two grandfathers keep that fix from breaking a
-            # project that enables delegation mid-feature, since tasks.md
-            # itself never timestamps an individual checkbox: (a) when the
-            # execute stage's own receipt records that delegation was OFF at
-            # the claim that completed it ('delegation_enabled_for_execute',
-            # stamped once by complete()), the whole stage is exempt -- none
-            # of its tasks was ever expected to go through the dispatcher.
-            # (b) for the finer case where delegation was turned on partway
-            # through one long-lived execute stage, so some tasks predate
-            # enablement even though the stage's receipt (stamped only once,
-            # at the end) shows delegation enabled by then, the orchestrator
-            # can record a specific task as its own direct work with
-            # "delegate_dispatch.py orchestrator-executed", exempting only
-            # that task, never the whole stage.
-            execute_receipt = state.get('receipts', {}).get('execute', {})
-            if execute_receipt.get('delegation_enabled_for_execute') is not False:
-                exempt = orchestrator_executed_tasks(root, feature)
-                not_verified = [task_id for task_id in tasks
-                               if task_id not in exempt and
-                               (latest_attempt(root, feature, task_id) or {}).get('status') != 'successful']
-                require(not not_verified, 'DELEGATION_TASK_UNVERIFIED: ' + ', '.join(sorted(not_verified)) +
-                        ' - resolve with delegate_dispatch.py accept or reassign, or record it as '
-                        'orchestrator-executed with a reason, before Ready')
+            # record too. Round 7 removed two exemptions reviewed as bypasses:
+            # a stage-wide 'delegation_enabled_for_execute: false' checkpoint
+            # field (mutable, unfingerprinted, and never read here again), and
+            # a per-task 'orchestrator-executed' self-certification a worker
+            # could invoke. There is now exactly one way a checked task
+            # without its own dispatcher attempt earns Ready: run
+            # "delegate_dispatch.py adopt" to independently verify it with a
+            # real acceptance check, which records an ordinary successful
+            # attempt latest_attempt reads like any other.
+            not_verified = [task_id for task_id in tasks
+                           if (latest_attempt(root, feature, task_id) or {}).get('status') != 'successful']
+            require(not not_verified, 'DELEGATION_TASK_UNVERIFIED: ' + ', '.join(sorted(not_verified)) +
+                    ' - resolve with delegate_dispatch.py accept or reassign, or adopt it with an '
+                    'acceptance check, before Ready')
         ran.append('tasks')
     if rules.get('task_links'):
         mapping = read(directory / 'workflow/task-issues.json', {})
@@ -1817,14 +1808,6 @@ class Run:
                 # local dispatcher-write marker existed to check against (a
                 # fresh checkout or CI runner), not that anything was wrong.
                 stored['delegation_ledger_trust'] = delegation_ledger_trust
-            if stage == 'execute':
-                # The Ready gate's per-task delegation check (round 6, finding
-                # 2) reads this historical snapshot, not today's policy: it
-                # grandfathers every task in this stage when delegation was
-                # OFF at the claim that completed it, since tasks.md never
-                # timestamps an individual checkbox and none of them was ever
-                # expected to go through the dispatcher.
-                stored['delegation_enabled_for_execute'] = bool(active.get('delegation'))
             stored['command'] = state['commands'][stage]
             stored['dependency_digest'] = state['dependency_digest']
             decision_input = [self.relative + '/workflow/decisions.json'] if (self.feature / 'workflow/decisions.json').is_file() else []

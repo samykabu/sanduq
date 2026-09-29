@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 import ci_gate as c
+import delegate_dispatch as dispatch
 import workflow as w
 import waivers
 import test_workflow as fixture
@@ -154,6 +155,17 @@ class CIGateTests(unittest.TestCase):
         semantic = copy.deepcopy(self.policy)
         semantic['execution']['checkpoints'] = 'every-phase'
         semantic = w.validate_policy(semantic)
+        # T001 was checked off while delegation was off; the `routed` variant
+        # below turns delegation on, and the Ready gate now requires a real
+        # attempt for every checked task once it is (round 7 removed the
+        # exemptions this used to rely on implicitly) -- adopt it once, the
+        # documented way to bring pre-delegation work under evidence, so
+        # this test still exercises digest-format compatibility rather than
+        # an unrelated delegation refusal.
+        with patch.object(dispatch, 'run_capped',
+                          return_value={'exit_code': 0, 'output': '{"total": 1, "passed": 1, "failed": 0}',
+                                        'truncated': False, 'timed_out': False}):
+            dispatch.adopt(self.root, self.feature, 'T001', 'pytest -q', 'counts')
         for name, state in self.checkpoint_formats(run).items():
             with self.subTest(format=name):
                 w.write(run.path, state)
