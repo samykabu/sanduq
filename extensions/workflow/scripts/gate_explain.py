@@ -7,12 +7,20 @@ into a structured recovery recipe by reusing `workflow.receipt_status` and
 calls -- rather than re-deriving drift classification. `--auto-fix` never
 invents a new classification: it runs `Run.amend` (standing rule 4's own
 checked re-hash) and only when every drifted path of the failing stage is
-already one of that receipt's declared `evidence` paths (`explicit-drift`
-whose recovery is amend-only, never a fallback re-record). A dependency
-change, a lane-affecting source drift, a lane gap or a changed amendment are
-never eligible; those always print the recipe only. `--reason` is required
-for a fix and is never fabricated: the caller states, in their own words, why
-the assessment holds.
+already one of that receipt's declared `evidence` paths *and* is not also a
+declared input or a required core artifact of that stage (review round 1,
+finding 1: a path can be listed as both `evidence` and a dependency the
+stage's conclusion actually rests on -- amending that path's hash under
+`unchanged` would silently launder a real semantic change, not just fix a
+typo in a proof-of-work write-up). A dependency change, a lane-affecting
+source drift, a lane gap or a changed amendment are never eligible; those
+always print the recipe only. `--reason` and `--assessment` are both required
+for a fix (no default): the caller states, in their own words, why the
+assessment holds, and chooses `unchanged` or `changed` deliberately. Refuses
+outright inside a delegated worker or orchestrator process
+(`SANDUQ_DELEGATED_RUN`/`SANDUQ_DELEGATED_ROLE`, finding 3): this is a
+dispatcher-level decision, never a worker's. Every eligible path is
+re-validated before any is amended (finding 11), so a fix is all-or-nothing.
 """
 from __future__ import annotations
 
@@ -25,7 +33,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ci_gate
 import sanduq_ci
-from workflow import Run, WorkflowError, recovery_recipe, require, receipt_status
+from delegate_dispatch import require_not_worker_context
+from workflow import Run, WorkflowError, fingerprint_files, inside, recovery_recipe, require, receipt_status, \
+    required_inputs
 
 STALE_RECEIPT = re.compile(r'^STALE_RECEIPT: (?P<stage>[a-z_]+);')
 
@@ -54,23 +64,44 @@ def explain(root, feature, base_ref):
         result['stage'] = stage
         result['recovery'] = recovery_recipe(feature, stage, status, policy, receipt)
         evidence = set(receipt.get('evidence') or [])
+        # A path that is also a declared input, or one of the stage's required
+        # core artifacts, is never amend-only eligible even if it is listed as
+        # evidence too: the stage's conclusion may rest on its content.
+        non_amendable = set(receipt.get('inputs') or []) | set(required_inputs(root, feature, stage))
+        drifted = set(status.get('paths') or [])
         result['evidence_only_eligible'] = bool(
-            status.get('reason') == 'explicit-drift' and status.get('paths')
-            and set(status['paths']) <= evidence)
+            status.get('reason') == 'explicit-drift' and drifted
+            and drifted <= evidence and not (drifted & non_amendable))
         if result['evidence_only_eligible']:
-            result['evidence_only_paths'] = sorted(status['paths'])
+            result['evidence_only_paths'] = sorted(drifted)
             result['stage_for_fix'] = stage
         return result
 
 
 def auto_fix(root, feature, explanation, reason, assessment):
-    """Apply the amend recipe `explain` found eligible. Refuses anything else."""
+    """Apply the amend recipe `explain` found eligible. Refuses anything else.
+
+    Pre-validates every path amend() would itself check (existence, hash
+    actually changed) against one loaded state snapshot before amending any
+    of them, so a mid-list failure never leaves a partial fix applied.
+    """
     require(explanation.get('evidence_only_eligible'), 'GATE_EXPLAIN_NOT_EVIDENCE_ONLY: nothing safe to auto-fix')
     require(isinstance(reason, str) and reason.strip(), 'GATE_EXPLAIN_REASON_REQUIRED')
     require(assessment in ('unchanged', 'changed'), 'GATE_EXPLAIN_ASSESSMENT_INVALID')
-    run = Run(root.resolve(), feature)
+    root = root.resolve()
+    require_not_worker_context(feature)
+    run = Run(root, feature)
     stage = explanation['stage_for_fix']
-    amendments = [run.amend(stage, path, reason, assessment) for path in explanation['evidence_only_paths']]
+    state = run.load()
+    receipt = state.get('receipts', {}).get(stage) or {}
+    paths = explanation['evidence_only_paths']
+    for path in paths:
+        inside(root, path)
+        new_hash = fingerprint_files(root, [path])[path]
+        require(new_hash is not None, 'EVIDENCE_MISSING: ' + path)
+        old_hash = (receipt.get('fingerprints') or {}).get(path)
+        require(old_hash is not None and new_hash != old_hash, 'AMENDMENT_NOT_NEEDED: ' + path)
+    amendments = [run.amend(stage, path, reason, assessment) for path in paths]
     return {'ok': True, 'stage': stage, 'amendments': amendments}
 
 
@@ -81,17 +112,18 @@ def main():
     parser.add_argument('--base-ref', required=True)
     parser.add_argument('--auto-fix', action='store_true')
     parser.add_argument('--reason')
-    parser.add_argument('--assessment', choices=('unchanged', 'changed'), default='unchanged')
+    parser.add_argument('--assessment', choices=('unchanged', 'changed'))
     args = parser.parse_args()
     try:
         explanation = explain(args.root, args.feature, args.base_ref)
         fixed = False
         if args.auto_fix and not explanation.get('ok', True):
+            require(args.assessment is not None, 'GATE_EXPLAIN_ASSESSMENT_REQUIRED: --assessment unchanged|changed')
             explanation['fix'] = auto_fix(args.root, args.feature, explanation, args.reason, args.assessment)
             fixed = explanation['fix'].get('ok', False)
         print(json.dumps(explanation, indent=2))
         return 0 if explanation.get('ok') or fixed else 1
-    except WorkflowError as exc:
+    except (WorkflowError, ValueError) as exc:
         print(json.dumps({'ok': False, 'error': str(exc)}, indent=2))
         return 1
 

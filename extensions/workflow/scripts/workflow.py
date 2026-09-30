@@ -1404,6 +1404,8 @@ class Run:
         require(stage in BASE_STAGES, 'INVALID_AMEND_STAGE: ' + str(stage))
         require(assessment in AMENDMENT_ASSESSMENTS, 'AMENDMENT_ASSESSMENT_INVALID: expected unchanged or changed')
         require(isinstance(reason, str) and reason.strip(), 'AMENDMENT_REASON_REQUIRED')
+        from delegate_dispatch import require_not_worker_context
+        require_not_worker_context(self.relative)
         with locked(self.lock):
             state = self.load()
             require(not state['active'], 'ACTIVE_CLAIM_MUST_BE_RESOLVED_BEFORE_AMEND')

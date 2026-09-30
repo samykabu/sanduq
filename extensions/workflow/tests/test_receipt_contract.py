@@ -428,6 +428,20 @@ class AmendmentTests(Harness):
         with self.assertRaisesRegex(w.WorkflowError, 'ACTIVE_CLAIM_MUST_BE_RESOLVED_BEFORE_AMEND'):
             run.amend('execute', path, 'why', 'unchanged')
 
+    def test_amend_refuses_inside_a_delegated_worker(self):
+        # B13 review round 1, finding 3: amend is a dispatcher-level,
+        # human-authorised decision (standing rule 4), never a worker's.
+        import os
+        from unittest.mock import patch
+        run = self.ready()
+        path = self.edit_execute_evidence()
+        with patch.dict(os.environ, {'SANDUQ_DELEGATED_RUN': self.feature + '/T001'}):
+            with self.assertRaisesRegex(ValueError, 'DELEGATION_WORKER_CONTEXT'):
+                run.amend('execute', path, 'why', 'unchanged')
+        # Nothing was amended.
+        result = run.amend('execute', path, 'why', 'unchanged')
+        self.assertTrue(result['current'])
+
 
 class CommandLineTests(Harness):
     def cli(self, *args):
