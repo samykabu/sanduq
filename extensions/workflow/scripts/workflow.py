@@ -12,6 +12,7 @@ import shlex
 import subprocess
 import sys
 import unicodedata
+import urllib.parse
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -157,26 +158,77 @@ def previous_branch(root):
     return value if result.returncode == 0 and value and value != '@' else None
 
 
+def _strip_dotgit(path):
+    """Drop one trailing `.git` (case-insensitively -- real hosts vary), once."""
+    return path[:-4] if path[-4:].lower() == '.git' else path
+
+
+def _normalize_path_remote(path):
+    """A local-filesystem remote (a bare path, `file://`, a Windows drive path):
+    fold separator style only, never case -- these are real filesystem paths,
+    and folding case could merge two distinct case-sensitive paths into one
+    identity (round 1, finding 3).
+    """
+    path = path.replace('\\', '/')
+    while len(path) > 1 and path.endswith('/'):
+        path = path[:-1]
+    return _strip_dotgit(path)
+
+
 def normalize_remote_url(url):
-    """Fold scheme, credential and case differences that name the same remote.
+    """Fold scheme, credential, case and port-vs-path differences that name
+    the same remote (round 1, finding 3 -- see the earlier revision's
+    docstring for the original rationale, which still holds for the host
+    and case handling below).
 
     ``https://user:pass@Github.com/Acme/App.git``, ``git@github.com:Acme/App.git``
-    and ``ssh://git@github.com/Acme/App/`` all normalise to ``github.com/acme/app``:
+    and ``ssh://git@github.com/Acme/App/`` all normalise to ``github.com/Acme/App``:
     the scheme and any embedded credentials carry no identity, the host is
-    case-insensitive by DNS convention (so it is lowered), and a trailing
-    ``.git``/``/`` is cosmetic. The repository *path* keeps its case: some
-    Git hosts (self-hosted GitLab, Bitbucket Server) treat paths case
-    sensitively, so lowering it could fold two distinct repositories into
-    one identity, which would be a security regression, not a convenience.
+    case-insensitive by DNS convention (so it is lowered, and a trailing
+    root ``.`` is folded), and a trailing ``.git``/``/`` is cosmetic. The
+    repository *path* keeps its case.
+
+    A real URL is parsed with `urllib.parse` rather than an ad-hoc regex:
+    its `.hostname`/`.port` correctly separate a userinfo trick
+    (``https://github.com@evil.com/...`` is ``evil.com``, not
+    ``github.com``) and correctly reject a malformed one
+    (``https://evil.com:github.com/...`` has a non-numeric "port" and is
+    refused down to the opaque, unfolded fallback below -- never
+    misread as a path). An explicit, resolvable port is kept as
+    ``host:port``, distinct from a URL with no port at all: an SSH URL's
+    ``:22`` is a port, never the start of the path, which a shared regex
+    for both the URL and the legacy SCP-shorthand forms could not tell
+    apart from a path that happens to start with a numeric segment (the
+    ``ssh://host:22/team/app`` vs ``https://host/22/team/app`` collision
+    this replaces). Anything with no scheme and no resolvable host --
+    SCP shorthand (``[user@]host:path``, but never a single-letter
+    "host" immediately followed by ``/`` or ``\\``, which is a Windows
+    drive letter, not a hostname) or a bare local path -- falls through to
+    ``_normalize_path_remote``, which never folds case.
     """
-    match = re.fullmatch(r'(?:[\w+.-]+://)?(?:[^@/]*@)?([^/:]+)[:/](.+)', url.strip())
-    if not match:
-        return url.strip().lower()
-    host, path = match.groups()
-    path = path.rstrip('/')
-    if path.endswith('.git'):
-        path = path[:-4]
-    return host.lower() + '/' + path
+    url = url.strip()
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme == 'file':
+        return _normalize_path_remote(parts.path or url)
+    if parts.scheme and parts.netloc:
+        try:
+            host = parts.hostname
+            if host is None:
+                raise ValueError('no host')
+            host = host.rstrip('.').lower()
+            port = parts.port
+            if port:
+                host += ':' + str(port)
+            return host + '/' + _strip_dotgit(parts.path.strip('/'))
+        except ValueError:
+            pass  # malformed (e.g. a non-numeric port): fall through, unfolded
+    if '://' not in url:
+        scp = re.fullmatch(r'(?:[^@/\s]*@)?([^@/:\s]+):(.+)', url)
+        if scp:
+            host, path = scp.groups()
+            if not (len(host) == 1 and host.isalpha()):  # else a Windows drive letter, not SCP
+                return host.rstrip('.').lower() + '/' + _strip_dotgit(path.rstrip('/'))
+    return _normalize_path_remote(url)
 
 
 def normalized_remote(root):

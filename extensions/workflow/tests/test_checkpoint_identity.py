@@ -42,6 +42,7 @@ class HelperTests(unittest.TestCase):
             'git@github.com:Acme/App.git',
             'ssh://git@GITHUB.COM/Acme/App/',
             'https://github.com/Acme/App',
+            'https://github.com./Acme/App',  # DNS-rooted form of the same host
         ]
         normalised = {w.normalize_remote_url(url) for url in forms}
         self.assertEqual(normalised, {'github.com/Acme/App'})
@@ -51,6 +52,59 @@ class HelperTests(unittest.TestCase):
         # hosts (self-hosted GitLab/Bitbucket) are case sensitive there.
         self.assertNotEqual(w.normalize_remote_url('https://example.com/Acme/App.git'),
                             w.normalize_remote_url('https://example.com/acme/app.git'))
+
+    def test_normalize_remote_url_strips_dotgit_case_insensitively_once(self):
+        self.assertEqual(w.normalize_remote_url('https://github.com/Acme/App.GIT'), 'github.com/Acme/App')
+        # Only one suffix is stripped -- a doubled one is not a real convention to fold further.
+        self.assertEqual(w.normalize_remote_url('https://github.com/Acme/App.git.git'), 'github.com/Acme/App.git')
+
+    def test_normalize_remote_url_strips_trailing_slashes_and_trailing_dotgit_slash(self):
+        self.assertEqual(w.normalize_remote_url('https://github.com/Acme/App//'), 'github.com/Acme/App')
+        self.assertEqual(w.normalize_remote_url('https://github.com/Acme/App.git/'), 'github.com/Acme/App')
+
+    def test_normalize_remote_url_keeps_an_explicit_port_distinct_from_a_numeric_path_segment(self):
+        # Round 1, finding 3: the original regex read an SSH URL's explicit
+        # port as the first path segment, so this pair collided into one
+        # identity even though they name unrelated things.
+        port_form = w.normalize_remote_url('ssh://git@git.example.com:22/team/app.git')
+        path_form = w.normalize_remote_url('https://git.example.com/22/team/app')
+        self.assertEqual(port_form, 'git.example.com:22/team/app')
+        self.assertEqual(path_form, 'git.example.com/22/team/app')
+        self.assertNotEqual(port_form, path_form)
+
+    def test_normalize_remote_url_drops_query_and_fragment(self):
+        self.assertEqual(w.normalize_remote_url('https://github.com/Acme/App?x=1'), 'github.com/Acme/App')
+        self.assertEqual(w.normalize_remote_url('https://github.com/Acme/App#frag'), 'github.com/Acme/App')
+
+    def test_normalize_remote_url_resists_userinfo_host_confusion(self):
+        # The real host is whichever comes after the last unescaped '@';
+        # a remote crafted to *look* like it starts with github.com must
+        # never be read as github.com.
+        self.assertEqual(w.normalize_remote_url('https://github.com@evil.com/Acme/App'), 'evil.com/Acme/App')
+        self.assertEqual(w.normalize_remote_url('https://user:pass@github.com/Acme/App'), 'github.com/Acme/App')
+
+    def test_normalize_remote_url_never_crashes_on_a_malformed_port_and_never_case_folds_it(self):
+        # A non-numeric "port" (a URL-confusion attempt, or just malformed
+        # input) must not crash and must not be misparsed as SCP shorthand
+        # (which would read "https" as the host and evil.com's "://" tail
+        # as its path).
+        for original in ('https://evil.com:github.com/Acme/App', 'https://gitlab.com:Acme/App'):
+            value = w.normalize_remote_url(original)
+            self.assertEqual(value, original)  # opaque, unfolded fallback -- never crashes, never case-folds
+
+    def test_normalize_remote_url_windows_drive_paths_collide_by_separator_only(self):
+        forward = w.normalize_remote_url('C:/repos/App.git')
+        back = w.normalize_remote_url('C:\\repos\\App.git')
+        self.assertEqual(forward, 'C:/repos/App')
+        self.assertEqual(forward, back)
+        # A single-letter "host" is a drive letter, never SCP shorthand;
+        # the path keeps its case (a lowercase drive letter is a different string).
+        self.assertNotEqual(forward, w.normalize_remote_url('c:/repos/App.git'))
+
+    def test_normalize_remote_url_file_uri_and_bare_path_are_not_case_folded(self):
+        self.assertEqual(w.normalize_remote_url('file:///srv/git/App.git'), '/srv/git/App')
+        self.assertEqual(w.normalize_remote_url('/srv/git/App.git'), '/srv/git/App')
+        self.assertEqual(w.normalize_remote_url('../App'), '../App')
 
     def test_identity_matches_remote_is_authoritative_over_shared_root_commit(self):
         # A fork shares root-commit history but has a different remote --
