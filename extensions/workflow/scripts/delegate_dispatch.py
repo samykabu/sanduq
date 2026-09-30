@@ -1446,6 +1446,21 @@ def build_command_argv(command):
     return args
 
 
+def is_windows_host():
+    """Whether this process is running on Windows.
+
+    A thin, independently-mockable seam over ``os.name`` used only for shim detection
+    (``command_targets_windows_shim``). Tests must patch this function rather
+    than ``os.name`` itself: ``os`` is a single shared module object, so
+    patching ``os.name`` directly (even via ``patch.object(dispatch.os,
+    'name', ...)``) mutates it process-wide and also changes which
+    ``pathlib`` flavour every ``Path(...)`` call in this process uses --
+    including unrelated ``Path(root).resolve()`` calls made from POSIX test
+    code, which then breaks by building a ``WindowsPath`` on a POSIX host.
+    """
+    return os.name == 'nt'
+
+
 WINDOWS_SHIM_EXTENSIONS = ('.bat', '.cmd')
 
 
@@ -1468,7 +1483,7 @@ def command_targets_windows_shim(command):
     passes the command through a shell itself -- an argument built from
     untrusted content could still be interpreted as a second command.
     """
-    if os.name != 'nt':
+    if not is_windows_host():
         return False
     token = command_target_token(command)
     if not token:

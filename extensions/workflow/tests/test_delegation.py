@@ -1837,7 +1837,12 @@ class DelegationTests(unittest.TestCase):
 
     def test_accept_refuses_a_windows_shim_command(self):
         run_id = self._unverified_run()
-        with patch.object(dispatch.os, 'name', 'nt'), \
+        # Patch the shim-detection seam only (never os.name/pathlib globally): os is a
+        # single shared module object, so patching os.name directly would also change
+        # which pathlib flavour every Path(...) call in this process uses, including the
+        # unrelated Path(root).resolve() inside feature_identity, breaking it on a POSIX
+        # test host.
+        with patch.object(dispatch, 'is_windows_host', return_value=True), \
              patch.object(dispatch, 'run_capped') as run_capped:
             with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_ACCEPT_COMMAND_IS_SHIM'):
                 dispatch.accept(self.root, self.feature, run_id, 'npx.cmd jest', 'counts')
