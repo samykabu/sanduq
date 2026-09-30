@@ -109,11 +109,20 @@ def turn_budget_row(work_type):
     return None
 
 
+GIT_S6_RULE = (
+    'Never run `git stash`, and never `git add -A` or `git add .`: a stash can hide another '
+    "agent's uncommitted change and a wildcard add can stage paths outside your owned scope. "
+    'The orchestration agent stages your owned paths by explicit name.\n'
+)
+
+
 def forbidden_commands_text(work_type):
-    """The S6 rule, reusing `delegate_dispatch`'s own constants (finding 10) rather than
-    scraping execution-assign.md's prose paragraph -- one source of truth for both the
-    delegated brief `delegate_dispatch.task_brief` writes and this one."""
-    text = dd.NO_DISPATCHER_COMMANDS
+    """The S6 rule: the git sentence (`git stash`, `git add -A`/`git add .`) plus
+    `delegate_dispatch`'s own `NO_DISPATCHER_COMMANDS`/`QA_COLLECT_ADDENDUM` constants
+    (finding 10), so the dispatcher commands have one source of truth shared with the
+    brief a real delegated worker already gets, without dropping the git half of S6
+    (round 2, finding 11)."""
+    text = GIT_S6_RULE + dd.NO_DISPATCHER_COMMANDS
     return text + dd.QA_COLLECT_ADDENDUM if work_type == 'qa_collect' else text
 
 

@@ -37,11 +37,18 @@ class WorkerBriefTests(unittest.TestCase):
     def test_forbidden_commands_text_reuses_delegate_dispatch_constant(self):
         # Finding 10: the exact NO_DISPATCHER_COMMANDS constant, not a
         # second, hand-scraped copy of a prose paragraph.
-        self.assertEqual(wb.forbidden_commands_text('implementation'), dd.NO_DISPATCHER_COMMANDS)
+        self.assertIn(dd.NO_DISPATCHER_COMMANDS, wb.forbidden_commands_text('implementation'))
 
     def test_forbidden_commands_text_appends_qa_collect_addendum(self):
         text = wb.forbidden_commands_text('qa_collect')
-        self.assertEqual(text, dd.NO_DISPATCHER_COMMANDS + dd.QA_COLLECT_ADDENDUM)
+        self.assertTrue(text.endswith(dd.NO_DISPATCHER_COMMANDS + dd.QA_COLLECT_ADDENDUM))
+
+    def test_brief_forbids_git_stash_and_wildcard_add(self):
+        # Round 2, finding 11: the B11 S6 git half must not be dropped.
+        brief, _, _ = wb.build(self.root, self.feature, 'T001')
+        self.assertIn('git stash', brief)
+        self.assertIn('git add -A', brief)
+        self.assertIn('git add .', brief)
 
     def test_spawn_and_wait_rules_are_f1_and_f2(self):
         f1, f2 = wb.spawn_and_wait_rules()
