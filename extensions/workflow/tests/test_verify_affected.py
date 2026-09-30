@@ -48,6 +48,24 @@ RUN_LANES_NOISY = textwrap.dedent('''\
     sys.stderr.write("E" * 5_000_000)
     sys.exit(2)
 ''')
+RUN_LANES_EMPTY = textwrap.dedent('''    import json, sys
+    payload = json.loads(sys.stdin.read())
+    with open(payload["results_path"], "w", encoding="utf-8") as handle:
+        json.dump({"lanes": {}}, handle)
+''')
+RUN_LANES_ONE_FAILED = textwrap.dedent('''    import json, sys
+    payload = json.loads(sys.stdin.read())
+    with open(payload["results_path"], "w", encoding="utf-8") as handle:
+        json.dump({"lanes": {lane: {"outcome": "failed" if lane == "laneB" else "passed"}
+                             for lane in payload["lanes"]}}, handle)
+''')
+RUN_LANES_FLOOD = textwrap.dedent('''    import sys
+    sys.stdin.read()
+    chunk = "F" * 100_000
+    while True:
+        sys.stdout.write(chunk)
+        sys.stdout.flush()
+''')
 RUN_LANES_HANGS = textwrap.dedent('''\
     import sys, time
     sys.stdin.read()
@@ -237,6 +255,60 @@ class VerifyAffectedTests(unittest.TestCase):
             va.run(self.root, self.feature, base)
         self.assertIn('VERIFY_COMMAND_FAILED', str(ctx.exception))
         self.assertLess(len(str(ctx.exception)), 1000)
+
+    def _ran(self, script, extra_lanes=None):
+        base = self._base_ref()
+        self.policy['ci']['gate']['verify_command'] = self._script('run_lanes.py', script)
+        self._write_policy()
+        return va.run(self.root, self.feature, base, extra_lanes=extra_lanes or ['laneA'],
+                      results_path='out/results.json')
+
+    def test_empty_results_with_a_requested_lane_is_not_ok(self):
+        # Round 3, finding 4: exit 0 plus any JSON is not a pass.
+        result = self._ran(RUN_LANES_EMPTY)
+        self.assertFalse(result['ok'])
+        self.assertEqual(result['missing_lanes'], ['laneA'])
+        self.assertEqual(result['status'], 'failed')
+
+    def test_a_failed_lane_is_not_ok_and_is_listed(self):
+        result = self._ran(RUN_LANES_ONE_FAILED, extra_lanes=['laneA', 'laneB'])
+        self.assertFalse(result['ok'])
+        self.assertEqual(result['failed_lanes'], ['laneB'])
+        self.assertEqual(result['missing_lanes'], [])
+
+    def test_non_object_results_are_not_ok(self):
+        result = self._ran(RUN_LANES_LIST_RESULT)
+        self.assertFalse(result['ok'])
+        self.assertFalse(result['results_schema_valid'])
+
+    def test_all_requested_lanes_passing_is_ok(self):
+        result = self._ran(RUN_LANES_OK)
+        self.assertTrue(result['ok'])
+
+    def test_cli_exits_non_zero_when_a_lane_failed(self):
+        base = self._base_ref()
+        self.policy['ci']['gate']['verify_command'] = self._script('run_lanes.py', RUN_LANES_ONE_FAILED)
+        self._write_policy()
+        proc = subprocess.run([sys.executable, str(Path(__file__).resolve().parents[1] / 'scripts/verify_affected.py'),
+                               '--root', str(self.root), '--feature', self.feature, '--base-ref', base,
+                               '--lane', 'laneB', '--results', 'out/results.json'], capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 1)
+        self.assertFalse(json.loads(proc.stdout)['ok'])
+
+    def test_sustained_output_is_stopped_while_the_command_runs(self):
+        # Round 3, finding 5: the cap is enforced during the run, not only
+        # when the output is read back, so a runaway spool cannot fill a disk.
+        import time
+        from unittest.mock import patch
+        base = self._base_ref()
+        self.policy['ci']['gate']['verify_command'] = self._script('run_lanes.py', RUN_LANES_FLOOD)
+        self._write_policy()
+        started = time.monotonic()
+        with patch.object(va, 'HARD_OUTPUT_LIMIT', 300_000), patch.object(va, 'POLL_SECONDS', 0.05):
+            with self.assertRaises(w.WorkflowError) as ctx:
+                va.run(self.root, self.feature, base, extra_lanes=['laneA'], results_path='out/results.json')
+        self.assertIn('VERIFY_COMMAND_OUTPUT_LIMIT', str(ctx.exception))
+        self.assertLess(time.monotonic() - started, 30)
 
     def test_cli_prints_json_and_exits_zero_on_success(self):
         base = self._base_ref()

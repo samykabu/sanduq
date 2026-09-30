@@ -32,6 +32,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -41,6 +42,9 @@ from workflow import WorkflowError, affected_command, affected_lanes, gate_setti
 
 # Bytes kept per output stream before it is discarded (delegate_dispatch's own cap).
 OUTPUT_CAP = 200_000
+# A spool file past this many bytes while the command is still running kills it.
+HARD_OUTPUT_LIMIT = 10 * OUTPUT_CAP
+POLL_SECONDS = 0.25
 
 
 class VerifyAffectedError(WorkflowError):
@@ -119,15 +123,28 @@ def run_lanes(root, command, lanes, results_path, timeout=3600):
                                     **popen_kwargs)
         except OSError as exc:
             raise VerifyAffectedError('VERIFY_COMMAND_FAILED: ' + str(exc)) from exc
-        try:
-            proc.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            dd.kill_process_tree(proc)
+        # Poll instead of one blocking wait so the cap is enforced *while the
+        # command runs*: a spool file that passes HARD_OUTPUT_LIMIT (round 3,
+        # finding 5) gets the whole process tree killed before it fills the disk.
+        deadline = time.monotonic() + timeout
+        failure = None
+        while True:
             try:
-                proc.wait(timeout=10)
+                proc.wait(timeout=POLL_SECONDS)
+                break
             except subprocess.TimeoutExpired:
                 pass
-            raise VerifyAffectedError('VERIFY_COMMAND_TIMEOUT: exceeded ' + str(timeout) + 's') from None
+            if max(os.fstat(out_file.fileno()).st_size, os.fstat(err_file.fileno()).st_size) > HARD_OUTPUT_LIMIT:
+                failure = 'VERIFY_COMMAND_OUTPUT_LIMIT: output exceeded ' + str(HARD_OUTPUT_LIMIT) + ' bytes'
+            elif time.monotonic() >= deadline:
+                failure = 'VERIFY_COMMAND_TIMEOUT: exceeded ' + str(timeout) + 's'
+            if failure:
+                dd.kill_process_tree(proc)
+                try:
+                    proc.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    pass
+                raise VerifyAffectedError(failure)
         out_file.seek(0)
         err_file.seek(0)
         stdout = out_file.read(OUTPUT_CAP).decode('utf-8', errors='replace')
@@ -156,6 +173,22 @@ def summarize(results):
     return {'lanes': len(lanes), 'passed': passed, 'failed': failed}
 
 
+def validate_results(results, requested):
+    """(missing lanes, failed lanes, schema_ok) for a verifier's results (round 3, finding 4).
+
+    Exit 0 plus *any* JSON is not a pass: the results must be an object with a
+    `lanes` object, carry every requested lane, and each lane's `outcome` must
+    be `passed`. A lane whose entry is malformed counts as failed.
+    """
+    lanes = results.get('lanes') if isinstance(results, dict) else None
+    if not isinstance(lanes, dict):
+        return sorted(requested), [], False
+    missing = sorted(lane for lane in requested if lane not in lanes)
+    failed = sorted(lane for lane in requested if lane in lanes and not (
+        isinstance(lanes[lane], dict) and lanes[lane].get('outcome') == 'passed'))
+    return missing, failed, True
+
+
 def run(root, feature, base_ref, extra_lanes=None, results_path=None, timeout=3600):
     root = root.resolve()
     policy = load_policy(root)
@@ -182,8 +215,11 @@ def run(root, feature, base_ref, extra_lanes=None, results_path=None, timeout=36
     results = ({**results, 'source': 'local', 'ci_grade': False} if isinstance(results, dict)
                else {'results': results, 'source': 'local', 'ci_grade': False})
     (root / results_path).write_text(json.dumps(results, indent=2), encoding='utf-8')
-    return {'ok': True, 'status': 'ran', 'diffed_paths': paths, 'lanes': sorted(lanes),
+    missing, failed, schema_ok = validate_results(results, lanes)
+    ok = schema_ok and not missing and not failed
+    return {'ok': ok, 'status': 'ran' if ok else 'failed', 'diffed_paths': paths, 'lanes': sorted(lanes),
             'results_path': results_path, 'source': 'local', 'ci_grade': False,
+            'missing_lanes': missing, 'failed_lanes': failed, 'results_schema_valid': schema_ok,
             'results_summary': summarize(results)}
 
 
@@ -199,7 +235,7 @@ def main():
     try:
         result = run(args.root, args.feature, args.base_ref, args.lane, args.results_path)
         print(json.dumps(result, indent=2))
-        return 0
+        return 0 if result.get('ok') else 1
     except WorkflowError as exc:
         print(json.dumps({'ok': False, 'error': str(exc)}, indent=2))
         return 1
