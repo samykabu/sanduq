@@ -189,6 +189,34 @@ when the check passes. There is no self-certification or exemption path: a
 project that enables delegation mid-feature adopts each already-checked task
 individually, with a real check.
 
+An adopted attempt is bound to the task's content: `adopt` records a sha256 of
+the task line (minus its checkbox state, whitespace normalised), and Ready
+re-checks that hash at completion time, refusing with
+`DELEGATION_ADOPT_TASK_CHANGED` if the task was edited or replaced under the
+same id since adoption. Since an adopted attempt has no dispatcher route to
+escalate, `reassign` refuses it with
+`DELEGATION_REASSIGN_ADOPTED_UNSUPPORTED`; the supported recovery is to
+re-run `adopt` with a corrected acceptance check, or to `start` the task
+normally.
+
+Every delegated worker inherits `SANDUQ_DELEGATED_RUN` in its environment, so
+`adopt`, `accept`, `reassign` and `trust-reset` refuse with
+`DELEGATION_WORKER_CONTEXT` when run from inside a worker's own session
+(defence in depth, not a boundary). The Ready gate also warns, with
+`DELEGATION_TASK_ADOPTED` or `DELEGATION_TASK_ACCEPTED` naming the command, on
+every task that reached Ready because the orchestrator ran and judged the
+check rather than because a worker's own delegated attempt succeeded; review
+those warnings before merging.
+
+The delegated Execute stage runs under `SANDUQ_DELEGATED_ROLE=orchestrator`
+and `SANDUQ_DELEGATED_FEATURE=<feature>` (never `SANDUQ_DELEGATED_RUN`), which
+lets it, and only it, run `delegate_dispatch.py start`, `collect`, `accept`,
+`reassign` and `adopt` for its own feature's `T###` tasks. `trust-reset`, a
+`stage:*` identity or another feature all refuse with
+`DELEGATION_ORCHESTRATOR_SCOPE`. The task workers it dispatches get an
+ordinary `SANDUQ_DELEGATED_RUN` environment of their own and never inherit
+this role.
+
 ## Continue through delivery
 
 The orchestration agent returns the Execute evidence to the dispatcher. It stays

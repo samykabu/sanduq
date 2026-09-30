@@ -57,13 +57,19 @@ Record each assignment's stable task IDs, prerequisites, owned paths, shared
 resources, acceptance checks and worker ID in the report and handoff. Give workers
 only their scope and the context needed to implement it. Workers must not stage,
 commit, push, merge, change shared report files or invoke another executor.
-`git stash` and `git add -A`/`git add .` are forbidden for a worker, as are
-`delegate_dispatch.py accept`, `delegate_dispatch.py trust-reset` and
-`delegate_dispatch.py adopt`: a stash can hide another agent's uncommitted
-change, a wildcard add can stage paths outside the worker's owned scope, and
-`accept`/`trust-reset`/`adopt` are ledger-trust decisions the orchestration
-agent alone makes. Staging stays with the orchestration agent, which stages a
-worker's owned paths by explicit name.
+`git stash` and `git add -A`/`git add .` are forbidden for a task worker, as
+are `delegate_dispatch.py accept`, `delegate_dispatch.py reassign`,
+`delegate_dispatch.py trust-reset` and `delegate_dispatch.py adopt`: a stash
+can hide another agent's uncommitted change, a wildcard add can stage paths
+outside the worker's owned scope, and `accept`/`reassign`/`trust-reset`/`adopt`
+are ledger-trust decisions the orchestration agent alone makes. The one
+exception is the delegated Execute stage itself: it runs with an orchestrator
+scope over its own feature's `T###` tasks and legitimately calls `start`,
+`collect`, `accept`, `reassign` and `adopt` for them; `trust-reset` stays
+forbidden even for it (see "Light-tier collection results (B12)" in
+execution-report.md). An ordinary task worker never has that scope. Staging
+stays with the orchestration agent, which stages a worker's owned paths by
+explicit name.
 
 When `.specify/workflow.yml` enables delegation, start each ready `T###` worker
 with `python .specify/extensions/workflow/scripts/delegate_dispatch.py start
@@ -133,7 +139,13 @@ and each worker's own result is delivered straight to the orchestration agent
 that spawned it. Never route a worker's result to the dispatcher for relay and
 re-summarising; the dispatcher hears from the orchestration agent only at batch
 boundaries (tasks accepted, the phase commit SHA, a blocker). This applies
-whether the batch runs in-session or through `delegate_dispatch.py`.
+whether the batch runs in-session or through `delegate_dispatch.py`. When the
+Execute stage itself is delegated (`delegate_dispatch.py start --id
+stage:execute`), its orchestrator-scoped process is the orchestration agent
+for this purpose: it spawns and collects its own feature's task workers
+directly, through its own `start`/`collect` calls, and reports to the
+dispatcher only at batch boundaries, the same as an in-session orchestration
+agent.
 
 No agent in this protocol, dispatcher, orchestration agent or worker, ends its
 turn while it still owns background work that is running. Block on it (a
