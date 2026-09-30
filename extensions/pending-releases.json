@@ -1,12 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "workflow": "1.7.0",
-    "assure": "2.3.0",
-    "user-manual": "1.4.0",
-    "pr": "4.2.0",
-    "project": "2.2.0"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Sprint 4 (B7-B12): quiet --summary output across task_issues.py, progress.py, assure_state.py, manual_state.py and project-sync (B7); workflow's dispatcher SKILL.md split into a core plus per-stage references (B8); a shared scripts/deps.py ensure illustrate replacing duplicated prose in assure, pr and user-manual, and a new required python tool for pr (B9); doctor's per-host skill_inventory with the SANDUQ_SKILLS_HOME rename (B10); execution-protocol rules made concrete in workflow's execution references (B11); and the delegation guard's qa_author/qa_collect split, coordination defaulting to high, ledger trust states, and evidence-based adopt/accept in place of the removed delegation_enabled_for_execute and orchestrator-executed exemptions (B12). Workflow's dependencies.json pins the released project 2.2.0, pr 4.2.0, assure 2.3.0 and user-manual 1.4.0. Scope and illustrate are unchanged since 1.4.0/2.1.2. Publish only after main CI and downloaded asset verification pass."
 }
