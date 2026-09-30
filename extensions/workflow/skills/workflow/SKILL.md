@@ -12,7 +12,7 @@ the package's pinned `requirements.txt` when missing. Never install a floating t
 
 ## Entry points
 
-`init`, `continue`, `status`, `doctor`, `reconcile`: see
+`init`, `continue`, `status`, `doctor`, `reconcile`, `relocate`: see
 [dispatcher-operations.md](references/dispatcher-operations.md). `scope`, `clarify`
 enter the stage loop below; see `references/stage-scope.md`,
 `references/stage-clarify.md`. `finalize` runs the same loop with `--finalize`; see

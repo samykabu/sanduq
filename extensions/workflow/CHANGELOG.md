@@ -83,6 +83,84 @@
   then reports `oversized: true`); and builds its CLI JSON with `json.dumps`
   instead of hand-built strings (a Windows path's backslashes broke it).
 
+- **Checkpoint identity design fix.** A checkpoint no longer hard-gates every
+  command on the absolute `repo_path` it was started from, which failed
+  `CHECKPOINT_IDENTITY_MISMATCH` on any other clone, worktree, instance,
+  delegated worker or CI runner, with no supported fix. It now records a
+  portable `repo_identity`: the normalised `origin` remote and/or the
+  repository's root commit, chosen so a shallow CI checkout of the same
+  origin still matches, and a root commit that is no longer the current
+  deterministic pick (e.g. after `git merge --allow-unrelated-histories`
+  adds an older one) is still accepted when it remains reachable from
+  HEAD. `Run.load()` compares this portable identity *and* requires the
+  checkpoint's bound issue to name this repository's own GitHub remote
+  (the same binding `start` and the scope extension's `bound_claim`
+  already require), resolved from any remote form (any scheme, an
+  embedded token, with or without `.git`) and compared case-insensitively
+  -- without a GitHub remote to check that against, it is refused and
+  pointed at `relocate`. A legacy (pre-1.8.0) checkpoint that only has
+  `repo_path` is accepted once both of those checks pass, and upgraded to
+  `repo_identity` on its next write. A checkpoint copied from a genuinely
+  different repository is still refused, whether legacy or new. When
+  neither repository being compared is a shallow clone, the root commit
+  must also match even when the remote does (a shared remote is still
+  just local Git config, and this catches one simply copied into an
+  unrelated clone); see the README's threat model for what this identity
+  check does and does not defend against.
+- A legacy (pre-1.8.0) checkpoint is adopted only when it records a full-hex
+  commit id (`head`, or a receipt `head`) reachable from this repository's
+  HEAD; otherwise it is refused with an error naming
+  `relocate --allow-history-change`. `relocate` likewise blocks a checkpoint
+  whose recorded root history is not this repository's unless
+  `--allow-history-change` is passed (recorded as `history_changed` in the
+  `relocations[]` entry), requires a resolved GitHub remote to apply,
+  refuses `--issue`/`--keep-issue-number` when the repository did not change
+  (`RELOCATE_ISSUE_NOT_APPLICABLE`), and restores `scope-source.json` if the
+  checkpoint write fails. The scope extension's `bound_claim` now runs the
+  same identity gate (`verify_checkpoint_identity`).
+- **New `workflow.py relocate --feature <f> [--preview] --reason "<why>"`.**
+  The explicit, logged rebind for a checkpoint whose identity legitimately
+  moved (a renamed remote, a migrated org, or a fork). Preview reports the
+  old and new identity without writing; applying appends a `relocations[]`
+  entry with actor, time, reason and both identities. Every receipt is
+  preserved and no stage is invalidated. Refuses a branch mismatch unless
+  `--allow-branch-rebind` is also passed (logged either way); refuses when
+  the checkpoint's bound issue names a different GitHub repository than
+  this one now resolves to, unless `--allow-repository-rename` is also
+  passed (logged either way) -- this is the check that stops `relocate`
+  itself from laundering a foreign checkpoint into an unrelated repository.
+  A repository change never rebinds the issue automatically: it stays
+  blocked until `--keep-issue-number` (a rename/transfer only, never a
+  fork) or `--issue <owner/repo#n>` (naming the exact new issue) says
+  which; `scope-source.json` is rebound in the same locked write as the
+  checkpoint, so a later `start` for the rebound issue does not fail
+  `FEATURE_BINDING_MISMATCH` against a source file still naming the old
+  repository. Refuses inside a delegated worker or orchestrator context,
+  and reaches the checkpoint directly, bypassing the identity gate it
+  exists to get past, recomputing everything from a fresh read taken
+  under the lock rather than trusting values read before it.
+- `repo_path` is still written (by `start`, the legacy-upgrade path and
+  `relocate`) as the current absolute root, purely so a pre-1.8.0 reader
+  does not `KeyError` on a checkpoint this version writes; nothing in this
+  version reads or compares it. It will be removed once no supported
+  release still needs it.
+- `normalize_remote_url` (and `github_repository`, built on it) now parses
+  a scheme URL with `urllib.parse` instead of an ad-hoc regex, fixing a
+  real collision (an SSH URL's explicit port, e.g. `ssh://host:22/team/app`,
+  no longer folds into the same identity as an unrelated path that happens
+  to start with a numeric segment, e.g. `https://host/22/team/app`) and a
+  URL-confusion risk (a malformed remote, e.g. a non-numeric port, now
+  falls back to an opaque, unfolded identity instead of risking a
+  misparse), and accepts every valid GitHub remote form (`ssh://`, an
+  embedded token). A port equal to its scheme's well-known default (22 for
+  `ssh`, 443 for `https`) carries no identity and is folded away. A
+  local-path remote (a bare path, `file://`, or a Windows drive path) is
+  never case-folded, except a Windows drive letter itself (`C:`/`c:`),
+  which genuinely is case-insensitive.
+- `schemas/checkpoint-v1.schema.json`: `repo_path` is no longer required
+  (kept, optional); adds optional `repo_identity` (`remote`, `root_commit`,
+  `shallow`) and `relocations[]`.
+
 ## 1.7.0
 
 - **B7 — quiet output.** `task_issues.py` and `progress.py` gain `--summary`
