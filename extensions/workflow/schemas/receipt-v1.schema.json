@@ -72,6 +72,10 @@
         "actor": {"type": "string", "minLength": 1}, "outcome": {"enum": ["current", "stale"]},
         "reason": {"type": ["string", "null"]}, "drift": {"type": "array", "items": {"type": "string"}}
       }}
+    },
+    "delegation_ledger_trust": {
+      "description": "Written by the runtime only, on a stage whose claim recorded a delegation route (workflow.py complete, 1.7+, round 3): the tri-state trust read of the delegation ledger at completion time. 'trusted' or 'unverified-local' (no local dispatcher-write marker, the normal state for a fresh checkout or CI runner) are recorded as a warning; 'untrusted' refuses completion and is never stored.",
+      "enum": ["trusted", "unverified-local"]
     }
   },
   "allOf": [

@@ -41,6 +41,11 @@ def package(extension, output=None, root=ROOT):
     ci = root / 'extensions/workflow/scripts/sanduq_ci.py'
     if extension in ('assure', 'user-manual') and ci.exists():
         files[extension + '/scripts/sanduq_ci.py'] = ci.read_bytes()
+    # pr, assure and user-manual commands all call `deps.py ensure <id>` instead of repeating the
+    # dependency-check instructions verbatim (B9); ship the one canonical implementation to each.
+    deps_script = root / 'extensions/scripts/shared/deps.py'
+    if extension in ('pr', 'assure', 'user-manual') and deps_script.exists():
+        files[extension + '/scripts/deps.py'] = deps_script.read_bytes()
     inventory = {name: hashlib.sha256(value).hexdigest() for name, value in sorted(files.items())}
     files[extension + '/package-inventory.json'] = (json.dumps(inventory, indent=2) + '\n').encode()
     output = output or root / 'dist' / (extension + '.zip')

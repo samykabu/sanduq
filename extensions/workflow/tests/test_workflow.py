@@ -200,6 +200,8 @@ class WorkflowTests(unittest.TestCase):
                 self.assertEqual(run.next(run.load())['status'], 'ready_to_finalize')
             claim = run.claim(self.usage(), finalize=stage == 'pr')
             self.assertEqual(claim['stage'], stage)
+            # B8: the claim names the exact per-stage reference the dispatcher must read.
+            self.assertEqual(claim['reference'], w.stage_reference(stage))
             with self.assertRaisesRegex(w.WorkflowError, 'ALREADY_ACTIVE'): run.claim(self.usage())
             run.complete(claim['token'], self.receipt(stage))
             run = w.Run(self.root, self.feature)  # fresh runtime instance every stage
@@ -470,6 +472,28 @@ class WorkflowTests(unittest.TestCase):
         with self.assertRaisesRegex(w.WorkflowError,'SECTION_INVALID'):w.validate_policy(policy)
         (self.root/'.specify/extensions.yml').write_text('hooks: wrong')
         with self.assertRaisesRegex(w.WorkflowError,'HOOK_CONFIG_INVALID'):w.doctor(self.root,self.policy)
+
+    def test_every_stage_has_an_installed_reference_file(self):
+        # B8: the core SKILL.md tells the dispatcher exactly which reference to load for
+        # each stage (`claim`'s `reference` field, `stage_reference()`); this proves the
+        # source tree actually ships one references/stage-<name>.md per BASE_STAGES entry,
+        # so no stage's `claim` can ever name a file that does not exist. `reference` is
+        # project-relative (matches the installed layout: `.specify/extensions/workflow/...`),
+        # so it is resolved against the package root by stripping WORKFLOW_PACKAGE_PREFIX.
+        package_root = Path(__file__).resolve().parents[1]
+        seen = set()
+        for stage in w.BASE_STAGES:
+            reference = w.stage_reference(stage)
+            self.assertTrue(reference.startswith(w.WORKFLOW_PACKAGE_PREFIX + 'skills/workflow/references/stage-'), reference)
+            package_relative = reference[len(w.WORKFLOW_PACKAGE_PREFIX):]
+            self.assertTrue((package_root / package_relative).is_file(), reference)
+            seen.add(reference)
+        self.assertEqual(len(seen), len(w.BASE_STAGES), 'stage_reference() must be unique per stage')
+
+    def test_core_skill_stays_under_the_six_kilobyte_budget(self):
+        package_root = Path(__file__).resolve().parents[1]
+        core = package_root / 'skills/workflow/SKILL.md'
+        self.assertLessEqual(core.stat().st_size, 6144, 'Core SKILL.md over the 6 KB budget')
 
 
 if __name__ == '__main__':

@@ -1,6 +1,7 @@
 import copy
 import contextlib
 import io
+import os
 import subprocess
 import sys
 import tempfile
@@ -9,6 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 import ci_gate as c
+import delegate_dispatch as dispatch
 import workflow as w
 import waivers
 import test_workflow as fixture
@@ -153,6 +155,17 @@ class CIGateTests(unittest.TestCase):
         semantic = copy.deepcopy(self.policy)
         semantic['execution']['checkpoints'] = 'every-phase'
         semantic = w.validate_policy(semantic)
+        # T001 was checked off while delegation was off; the `routed` variant
+        # below turns delegation on, and the Ready gate now requires a real
+        # attempt for every checked task once it is (round 7 removed the
+        # exemptions this used to rely on implicitly) -- adopt it once, the
+        # documented way to bring pre-delegation work under evidence, so
+        # this test still exercises digest-format compatibility rather than
+        # an unrelated delegation refusal.
+        with patch.object(dispatch, 'run_capped',
+                          return_value={'exit_code': 0, 'output': '{"total": 1, "passed": 1, "failed": 0}',
+                                        'truncated': False, 'timed_out': False}):
+            dispatch.adopt(self.root, self.feature, 'T001', 'pytest -q', 'counts')
         for name, state in self.checkpoint_formats(run).items():
             with self.subTest(format=name):
                 w.write(run.path, state)
@@ -334,3 +347,56 @@ class CIGateTests(unittest.TestCase):
                 c.resolve_features(clone, target, [])
             subprocess.run(['git', 'fetch', '-q', '--unshallow', 'origin', branch, 'target'], cwd=clone, check=True)
             self.assertEqual(c.resolve_features(clone, target, []), [self.feature])
+
+    def test_report_warnings_prints_to_stderr_and_writes_step_summary(self):
+        """Finding 2, round 4: a ready_checks warning (unverified-local
+        ledger trust, in particular) must reach a reviewer even though it
+        never changes the gate's exit code."""
+        results = [{'feature': self.feature, 'warnings': [
+            'DELEGATION_LEDGER_TRUST_UNVERIFIED_LOCAL: no local dispatcher-write marker for ' + self.feature]}]
+        stderr = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            summary_path = Path(tmp) / 'summary.md'
+            with contextlib.redirect_stderr(stderr), \
+                 patch.dict(os.environ, {'GITHUB_STEP_SUMMARY': str(summary_path)}):
+                c.report_warnings(results)
+            self.assertIn('DELEGATION_LEDGER_TRUST_UNVERIFIED_LOCAL', stderr.getvalue())
+            self.assertTrue(summary_path.is_file())
+            self.assertIn('DELEGATION_LEDGER_TRUST_UNVERIFIED_LOCAL', summary_path.read_text(encoding='utf-8'))
+
+    def test_report_warnings_still_prints_to_stderr_without_step_summary(self):
+        results = [{'feature': self.feature,
+                   'warnings': ['DELEGATION_LEDGER_TRUST_UNVERIFIED_LOCAL: x']}]
+        stderr = io.StringIO()
+        env = dict(os.environ)
+        env.pop('GITHUB_STEP_SUMMARY', None)
+        with contextlib.redirect_stderr(stderr), patch.dict(os.environ, env, clear=True):
+            c.report_warnings(results)
+        self.assertIn('DELEGATION_LEDGER_TRUST_UNVERIFIED_LOCAL', stderr.getvalue())
+
+    def test_report_warnings_no_op_when_there_are_no_warnings(self):
+        stderr = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            summary_path = Path(tmp) / 'summary.md'
+            with contextlib.redirect_stderr(stderr), \
+                 patch.dict(os.environ, {'GITHUB_STEP_SUMMARY': str(summary_path)}):
+                c.report_warnings([{'feature': self.feature, 'warnings': []}])
+            self.assertEqual(stderr.getvalue(), '')
+            self.assertFalse(summary_path.exists())
+
+    def test_report_warnings_falls_back_to_stderr_when_summary_is_unwritable(self):
+        """Finding 2, round 5: report_warnings runs inside main's own try
+        block, so an OSError from an unwritable $GITHUB_STEP_SUMMARY must
+        never propagate and turn a passing gate into a reported failure."""
+        results = [{'feature': self.feature,
+                   'warnings': ['DELEGATION_LEDGER_TRUST_UNVERIFIED_LOCAL: x']}]
+        stderr = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            # A directory, not a file: opening it for append raises OSError.
+            unwritable = Path(tmp) / 'unwritable-dir'
+            unwritable.mkdir()
+            with contextlib.redirect_stderr(stderr), \
+                 patch.dict(os.environ, {'GITHUB_STEP_SUMMARY': str(unwritable)}):
+                c.report_warnings(results)  # must not raise
+        self.assertIn('DELEGATION_LEDGER_TRUST_UNVERIFIED_LOCAL', stderr.getvalue())
+        self.assertIn('SUMMARY_UNWRITABLE', stderr.getvalue())

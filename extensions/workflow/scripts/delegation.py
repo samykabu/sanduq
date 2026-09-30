@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import copy
+import hashlib
 import json
 import os
 import re
@@ -19,18 +21,46 @@ from pathlib import Path
 
 import yaml
 
-TYPES = ('discovery', 'implementation', 'qa', 'documentation', 'review', 'coordination')
-DEFAULT_TIERS = {'discovery': 'high', 'implementation': 'standard', 'qa': 'light',
-                 'documentation': 'documentation', 'review': 'review', 'coordination': 'light'}
+# ``qa`` split in two (B12): ``qa_author`` is standard-tier authored QA work
+# (writing tests, analysing coverage); ``qa_collect`` is the light-eligible
+# route for running an existing, fixed check and reporting its result. Nothing
+# routes to ``qa_collect`` by inference; see ``task_type`` and ``stage_work_type``.
+TYPES = ('discovery', 'implementation', 'qa_author', 'qa_collect', 'documentation',
+         'review', 'coordination')
+# Discovery (Scope, Specify, Clarify, Plan, Tasks) is never light: standard by
+# default, with Scope and Plan overridable to high by policy. qa_collect is the
+# only route whose default is light; coordination defaults to high per standing
+# rule 5 and C2 (coordination -> high): it claims and completes workflow
+# stages and issues, review/coordination-grade work, never a cheap default.
+DEFAULT_TIERS = {'discovery': 'standard', 'implementation': 'standard', 'qa_author': 'standard',
+                 'qa_collect': 'light', 'documentation': 'documentation', 'review': 'review',
+                 'coordination': 'high'}
 MODEL_PROFILES = ('high', 'standard', 'light', 'documentation', 'review')
 STAGE_TYPES = {
     'scope': 'discovery', 'specify': 'discovery', 'clarify': 'discovery',
-    'plan': 'discovery', 'tasks': 'discovery', 'qa_analyze': 'qa',
+    'plan': 'discovery', 'tasks': 'discovery', 'qa_analyze': 'qa_author',
     'manual_analyze': 'documentation', 'analyze': 'review',
     'taskstoissues': 'coordination', 'execute': 'coordination',
-    'verify': 'qa', 'review': 'review', 'qa_document': 'qa',
+    'verify': 'qa_author', 'review': 'review', 'qa_document': 'documentation',
     'manual_update': 'documentation', 'ready': 'coordination', 'pr': 'coordination',
 }
+# qa_collect is never inferred from a stage's identity: ``verify`` selects
+# tests, handles lane gaps and reports blocking findings (SKILL.md), so it is
+# not a fixed script by default and stays qa_author. A project may name an
+# explicit stage -> command mapping in policy
+# (``delegation.fixed_collection_commands``, empty by default); only when a
+# stage's resolved command still matches that exact string does
+# ``stage_work_type`` route it to the light-eligible qa_collect.
+# The default route a fresh qa_collect gets: light-eligible, one fallback that
+# lets the harness use its own default model. Used both for a brand-new policy
+# and to complete a policy migrated from the pre-1.7 single ``qa`` route.
+DEFAULT_QA_COLLECT_ROUTE = {'preferred': {'harness': 'selected', 'tier': 'light'},
+                            'fallbacks': [{'harness': 'selected', 'model': None}]}
+# The standard-tier route qa_author gets reset to when a pre-1.7 policy's
+# ``qa`` route was itself the old light-tier default (or any light candidate):
+# a legacy install must not keep sending authored QA work to Haiku (finding 5).
+DEFAULT_QA_AUTHOR_ROUTE = {'preferred': {'harness': 'selected', 'tier': 'standard'},
+                           'fallbacks': [{'harness': 'selected', 'model': None}]}
 TASK_LINE = re.compile(r'^(\s*- \[([ xX])\]\s+(T\d{3,})\b.*)$')
 MARKER = re.compile(r'^\s*<!-- sanduq-delegation (\{[^\n]+\}) -->\s*$')
 INLINE_MARKER = re.compile(r'[ \t]*(<!-- sanduq-delegation \{[^\n]+\} -->)[ \t]*$')
@@ -44,6 +74,39 @@ class DelegationError(ValueError):
 def require(condition, message):
     if not condition:
         raise DelegationError(message)
+
+
+def task_line_content_sha256(line):
+    """sha256 of a task line's content, minus its checkbox state and with
+    whitespace normalised (round 8, finding 1): the binding an adopted
+    attempt records at ``adopt`` time and the Ready gate checks at
+    completion time. Re-checking, unchecking or reformatting the line does
+    not itself change this digest, but editing its substantive text --
+    including swapping in a different task under the same id -- does, so a
+    stale adoption is caught rather than silently carried over to new work.
+    """
+    match = TASK_LINE.match(line)
+    require(match is not None, 'DELEGATION_TASK_LINE_INVALID')
+    content = re.sub(r'^\s*-\s*\[[ xX]\]\s*', '', match.group(1))
+    # annotate_tasks relocates an inline "<!-- sanduq-delegation ... -->"
+    # marker onto its own line on the very next run, even for an already
+    # checked task (round 9, finding 3): stripping it here means that
+    # relocation -- pure formatting, no substantive change to the task --
+    # does not itself invalidate an adoption made while the marker was
+    # still inline.
+    content = INLINE_MARKER.sub('', content)
+    return hashlib.sha256(re.sub(r'\s+', ' ', content).strip().encode('utf-8')).hexdigest()
+
+
+def task_lines(text):
+    """Map of task id -> its exact current line (stripped), read once for
+    checking every adopted attempt's binding at Ready (round 8, finding 1)."""
+    lines = {}
+    for line in text.splitlines():
+        match = TASK_LINE.match(line)
+        if match:
+            lines[match.group(3)] = match.group(1).strip()
+    return lines
 
 
 def feature_identity(root, feature):
@@ -265,7 +328,7 @@ def validate_candidate(candidate):
                 isinstance(candidate['model'], str) and candidate['model'].strip(), 'DELEGATION_MODEL_INVALID')
 
 
-def validate_route(route):
+def validate_route(route, allow_light=True):
     require(isinstance(route, dict) and set(route) == {'preferred', 'fallbacks'},
             'DELEGATION_ROUTE_INVALID')
     validate_candidate(route['preferred'])
@@ -273,11 +336,114 @@ def validate_route(route):
             'DELEGATION_FALLBACKS_INVALID')
     for candidate in route['fallbacks']:
         validate_candidate(candidate)
+    if not allow_light:
+        require(all(candidate.get('tier') != 'light' for candidate in (route['preferred'], *route['fallbacks'])),
+                'DELEGATION_DISCOVERY_LIGHT_FORBIDDEN')
+
+
+def _route_has_light_candidate(route):
+    if not isinstance(route, dict):
+        return False
+    candidates = [route.get('preferred')] + list(route.get('fallbacks') or ())
+    return any(isinstance(c, dict) and c.get('tier') == 'light' for c in candidates)
+
+
+def migrate_qa_route(config):
+    """Map a pre-1.7 policy's single ``qa`` route onto ``qa_author``, in place.
+
+    ``qa_collect`` is new: a project that never had it gets the same default
+    shape every fresh policy gets, so it is always present and always
+    light-eligible, never inherited from the old ``qa`` route (which may have
+    pointed anywhere).
+
+    The pre-1.7 default routed ``qa`` to the light tier (today's qa_collect
+    default is exactly that old shape). A legacy policy that never customised
+    it, or that customised it to some other light-tier route, would otherwise
+    keep sending authored QA work to the light tier forever (finding 5): any
+    light candidate in the legacy route resets qa_author to the new standard
+    default instead of inheriting it. Returns a notice string when that reset
+    happened, else ``None``, for the caller to surface (``doctor``).
+    """
+    if not isinstance(config, dict):
+        return None
+    routes = config.get('routes')
+    if not isinstance(routes, dict) or 'qa' not in routes:
+        return None
+    legacy = routes.pop('qa')
+    routes.setdefault('qa_collect', copy.deepcopy(DEFAULT_QA_COLLECT_ROUTE))
+    if 'qa_author' in routes:
+        return None
+    if _route_has_light_candidate(legacy):
+        routes['qa_author'] = copy.deepcopy(DEFAULT_QA_AUTHOR_ROUTE)
+        return ('DELEGATION_LEGACY_QA_AUTHOR_RESET: the pre-1.7 delegation.routes.qa route sent '
+                'authored QA work to the light tier; qa_author was reset in memory to the standard '
+                'default. Review delegation.routes.qa_author and edit .specify/workflow.yml if a '
+                'different route is wanted.')
+    routes['qa_author'] = legacy
+    return None
+
+
+# The only key fixed_collection_commands may ever route (schema and
+# validate_delegation enforce the same restriction on the policy itself;
+# this is the second, load-bearing enforcement inside stage_work_type, so an
+# unvalidated dict passed directly -- as a test, or any future caller, might
+# -- can still never move a discovery stage, or any stage but verify, to
+# qa_collect). A value naming a runtime pseudo-command ("workflow:...") or a
+# skill invocation ("speckit....") is never a genuinely fixed external
+# script and is rejected even when it is the stage's own real default
+# command (finding 1, round 2: policy naming verify's actual default,
+# "workflow:verification", must not silently restore the pre-fix behaviour).
+FIXED_COLLECTION_ALLOWED_STAGE = 'verify'
+FIXED_COLLECTION_REJECTED_PREFIXES = ('workflow:', 'speckit.')
+
+
+def stage_work_type(commands, stage, fixed_collection_commands=None):
+    """The delegation work type for one stage, given its resolved command map.
+
+    ``commands`` is the checkpoint's resolved ``stage -> command`` map (the same
+    one ``workflow.py`` persists at claim time), so a caller anywhere in the
+    lifecycle classifies a stage identically. ``fixed_collection_commands`` is
+    the optional ``delegation.fixed_collection_commands`` policy map; only
+    ``verify``, named there with a resolved-command match that is not a
+    ``workflow:`` or ``speckit.`` value, ever routes to qa_collect. Every
+    other stage -- discovery above all -- always returns its STAGE_TYPES
+    default, regardless of what the map contains for it.
+    """
+    require(stage in STAGE_TYPES, 'DELEGATION_STAGE_INVALID')
+    if stage == FIXED_COLLECTION_ALLOWED_STAGE:
+        fixed = (fixed_collection_commands or {}).get(FIXED_COLLECTION_ALLOWED_STAGE)
+        if (fixed is not None and not fixed.startswith(FIXED_COLLECTION_REJECTED_PREFIXES) and
+                (commands or {}).get(FIXED_COLLECTION_ALLOWED_STAGE) == fixed):
+            require(STAGE_TYPES[stage] != 'discovery', 'DELEGATION_STAGE_INVALID')
+            return 'qa_collect'
+    return STAGE_TYPES[stage]
+
+
+def light_tier_route_warnings(config):
+    """Non-fatal advisories for a route defaulted to light where it should not be.
+
+    qa_author (authored QA work: writing or analysing tests, finding 5) and
+    coordination (claims and completes stages, finding 6/7) both default to a
+    standard-or-above tier; a policy that still routes either to light is
+    valid (nothing forbids it outside discovery) but is very likely a stale
+    pre-1.7 default or an unintended edit, so ``doctor`` surfaces it.
+    """
+    warnings = []
+    routes = (config or {}).get('routes') or {}
+    for name, label in (('qa_author', 'authored QA work (writing or analysing tests)'),
+                        ('coordination', 'stage claim/completion and issue coordination')):
+        if _route_has_light_candidate(routes.get(name)):
+            warnings.append(
+                'DELEGATION_LIGHT_TIER_ROUTE: delegation.routes.' + name + ' has a light-tier '
+                'candidate; ' + label + ' should not default to the light tier. Review '
+                'delegation.routes.' + name + ' in .specify/workflow.yml.')
+    return warnings
 
 
 def validate_delegation(config):
     require(isinstance(config, dict) and set(config) ==
-            {'enabled', 'install_scope', 'stronger_retry', 'models', 'routes', 'overrides'},
+            {'enabled', 'install_scope', 'stronger_retry', 'models', 'routes', 'overrides',
+             'fixed_collection_commands'},
             'DELEGATION_POLICY_INVALID')
     require(type(config['enabled']) is bool, 'DELEGATION_SELECTION_INVALID')
     require(config['install_scope'] in ('project', 'global'), 'DELEGATION_SCOPE_INVALID')
@@ -293,22 +459,37 @@ def validate_delegation(config):
         require(all(isinstance(value, str) and value.strip() for value in models[harness].values()),
                 'DELEGATION_MODEL_INVALID: ' + harness)
     routes = config['routes']
-    require(isinstance(routes, dict) and set(routes) == set(TYPES), 'DELEGATION_ROUTES_INVALID')
-    for route in routes.values():
-        validate_route(route)
+    require(isinstance(routes, dict) and set(routes) >= set(TYPES) and
+            set(routes) <= set(TYPES) | {'qa'}, 'DELEGATION_ROUTES_INVALID')
+    for name, route in routes.items():
+        validate_route(route, allow_light=name != 'discovery')
     require(isinstance(config['overrides'], dict), 'DELEGATION_OVERRIDES_INVALID')
     for key, route in config['overrides'].items():
         require(isinstance(key, str) and OVERRIDE_KEY.fullmatch(key),
                 'DELEGATION_OVERRIDE_KEY_INVALID: ' + str(key))
         validate_route(route)
+    fixed = config['fixed_collection_commands']
+    require(isinstance(fixed, dict) and set(fixed) <= {FIXED_COLLECTION_ALLOWED_STAGE} and
+            all(isinstance(v, str) and v.strip() for v in fixed.values()),
+            'DELEGATION_FIXED_COLLECTION_COMMANDS_INVALID: only "' +
+            FIXED_COLLECTION_ALLOWED_STAGE + '" may be named')
+    require(all(not v.startswith(FIXED_COLLECTION_REJECTED_PREFIXES) for v in fixed.values()),
+            'DELEGATION_FIXED_COLLECTION_COMMANDS_INVALID: a workflow: or speckit. command is '
+            'never a fixed external script')
     return config
 
 
 TASK_PREFIX = re.compile(r'^\s*(?:- \[[ xX]\]\s+)?(?:T\d{3,}\b\s*)?(?:\[[^\]]*\]\s*)*', re.I)
 TYPE_MARKERS = (('implementation', r'\[(?:impl|implement|implementation|code)\]'),
-                ('qa', r'\[(?:qa|test|tests|tdd)\]'),
+                ('qa_author', r'\[(?:qa|test|tests|tdd)\]'),
                 ('documentation', r'\[(?:doc|docs|documentation|manual)\]'),
                 ('review', r'\[review\]'))
+# The only way a task ever routes to the light-eligible qa_collect: an
+# explicit, unambiguous marker. It is checked separately from TYPE_MARKERS
+# (never folded into the heuristic loop below) so it is never inferred from
+# task text, and combining it with any other explicit marker is ambiguous and
+# falls back to implementation (standard) rather than guessing which one wins.
+COLLECT_MARKER = re.compile(r'\[collect\]')
 # Nouns that turn a leading "test", "review", "audit" or "inspect" into the
 # name of something being built: "Audit log retention", "Review queue API",
 # "Test runner integration" are implementation work.
@@ -330,7 +511,7 @@ DOC_END = r'(?:\s+(?:for|with|to|in|on|about|of)\b|\s*[.:;]?$)'
 # as "audit logging" or "review queue" never reroutes an implementation task,
 # whether it leads the description or not.
 LEADING_ACTIONS = (
-    ('qa', r'(?:run|execute)\s+(?:[\w/-]+\s+){0,4}?(?:tests?|test suites?|suites?|checks)\b|'
+    ('qa_author', r'(?:run|execute)\s+(?:[\w/-]+\s+){0,4}?(?:tests?|test suites?|suites?|checks)\b|'
            r'(?:write|add|create)\s+(?:[\w/-]+\s+){0,3}?tests?(?:\s+(?:for|of|to|in|covering|that)\b|\s*[.:;]?$)|'
            r'smoke[- ]test\b|test\b(?!\s+(?:data|fixtures?|harness|helpers?|utils?|utilities|'
            r'factor(?:y|ies)|doubles?|mocks?|suites?|coverage|plans?|results?|' + COMPOUND_HEADS[3:-1] +
@@ -356,12 +537,16 @@ def task_type(description):
 
     Anything unclear stays implementation, the route every task can take.
     ``[Impl]`` (or ``[Implementation]``, ``[Code]``) forces implementation.
+    ``[Collect]`` is the sole explicit route to qa_collect; combined with any
+    other explicit marker it is ambiguous and falls back to implementation.
     """
     value = description.casefold()
     prefix = TASK_PREFIX.match(value)[0]
-    for work_type, marker in TYPE_MARKERS:
-        if re.search(marker, prefix):
-            return work_type
+    matched = [work_type for work_type, marker in TYPE_MARKERS if re.search(marker, prefix)]
+    if COLLECT_MARKER.search(prefix):
+        return 'implementation' if matched else 'qa_collect'
+    if matched:
+        return matched[0]
     action = value[len(prefix):].strip()
     for work_type, pattern in LEADING_ACTIONS:
         if re.match(pattern, action):
@@ -421,6 +606,104 @@ def ledger_path(root, feature):
     require(path.is_relative_to(root.resolve() / 'specs') and
             path.parent.parent == (root / feature).resolve(), 'DELEGATION_FEATURE_INVALID')
     return path
+
+
+def foreign_write_marker(root, feature):
+    """Persisted, sticky record that a genuine ledger tamper was detected for
+    this feature (round 3, finding 2). Distinct from the ordinary written
+    marker: cleared only by an explicit ``delegate_dispatch.py trust-reset``,
+    so a later legitimate dispatcher write (which rewrites the ordinary
+    marker to match the file it just saved) can never quietly launder an
+    earlier hand-edit back into looking trusted.
+    """
+    from workflow import digest
+    return root / '.specify/workflow/runtime' / ('delegation-' + digest(feature) + '.tampered')
+
+
+def trust_reset_log_path(root, feature):
+    from workflow import digest
+    return root / '.specify/workflow/runtime' / ('delegation-' + digest(feature) + '.trust-resets.json')
+
+
+def record_foreign_write(root, feature):
+    """Persist the sticky tamper flag once, keeping the first detection's own
+    digest (round 3, finding 2). A no-op if already recorded, so a second
+    detection before ``trust-reset`` does not overwrite the original evidence.
+    """
+    from datetime import datetime, timezone
+    from workflow import write
+    from delegate_dispatch import ledger_bytes_digest
+    marker = foreign_write_marker(root, feature)
+    if marker.is_file():
+        return
+    write(marker, {'detected_at': datetime.now(timezone.utc).isoformat(),
+                   'digest_at_detection': ledger_bytes_digest(ledger_path(root, feature))})
+
+
+def ledger_trust_state(root, feature):
+    """Tri-state trust read for the delegation ledger (round 3, findings 1-2).
+
+    ``'untrusted'``: a genuine tamper was detected and persisted
+    (``foreign_write_marker``) and not yet cleared by ``trust-reset``, or the
+    ordinary written marker exists but no longer matches the ledger's current
+    bytes. Refused by ``complete`` and the Ready gate.
+
+    ``'unverified-local'``: there is no ordinary written marker at all.
+    Normal for a CI checkout or a fresh clone -- ``delegations.json`` is
+    committed, but the marker lives in local-only runtime state -- and not
+    itself suspicious; a warning, not a block. It resolves to ``'trusted'``
+    on its own the first time a dispatcher operation writes the ledger on
+    this checkout. This detects accidental and local tampering only: anyone
+    who can commit the ledger file can also commit a fabricated one, so CI
+    integrity ultimately rests on review, not on this check.
+
+    ``'trusted'``: the marker exists and matches, and no unresolved tamper
+    is on record.
+    """
+    from workflow import read
+    from delegate_dispatch import ledger_bytes_digest, written_marker
+    if foreign_write_marker(root, feature).is_file():
+        return 'untrusted'
+    recorded = read(written_marker(root, feature), {}).get('sha256')
+    if recorded is None:
+        return 'unverified-local'
+    return 'trusted' if recorded == ledger_bytes_digest(ledger_path(root, feature)) else 'untrusted'
+
+
+def ledger_state_trusted(root, feature):
+    """Back-compat boolean: ``True`` unless the tri-state read is ``'untrusted'``."""
+    return ledger_trust_state(root, feature) != 'untrusted'
+
+
+def latest_attempt(root, feature, identity):
+    """The final attempt in the reassignment chain for one identity, else None.
+
+    ``identity`` is the bare suffix after ``feature + '/'``: ``stage:<stage>``
+    or a bare task id such as ``T001``. The newest ``started_at`` among
+    same-identity attempts is the live thread's own start (an automatic
+    stronger retry or a manual reassignment is a later, chained attempt), and
+    following ``replacement_run_id`` from there reaches its terminal end. Used
+    to enforce that a delegated stage or task was actually verified before
+    ``complete`` or the Ready task gate accept it (finding 1).
+    """
+    path = ledger_path(root, feature)
+    if not path.is_file():
+        return None
+    ledger = json.loads(path.read_text(encoding='utf-8'))
+    full = feature + '/' + identity
+    candidates = [a for a in ledger.get('attempts', []) if a.get('identity') == full and a.get('run_id')]
+    if not candidates:
+        return None
+    current = max(candidates, key=lambda a: a.get('started_at') or '')
+    seen = set()
+    while current.get('replacement_run_id') and current['run_id'] not in seen:
+        seen.add(current['run_id'])
+        following = next((a for a in ledger['attempts']
+                          if a.get('run_id') == current['replacement_run_id']), None)
+        if following is None:
+            break
+        current = following
+    return current
 
 
 def active_task_ids(root, feature):

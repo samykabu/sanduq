@@ -4,10 +4,14 @@
 # (logs + exits 0) if gh/jq/remote/scope/config preconditions are not met.
 #
 # Usage: project-sync.sh --phase <open|analysis|engineer-review|ready|in-progress|in-review|done|auto>
-#                        [--feature <slug>] [--dry-run] [--no-sub-issues] [--force] [--json]
-set -euo pipefail
+#                        [--feature <slug>] [--dry-run] [--no-sub-issues] [--force] [--json] [--summary]
+# -E (errtrace) makes the ERR trap below fire for a failing command inside a
+# function too, not only at the script's top level (bash's default); nearly
+# all of this script's real work happens inside functions (ensure_parent,
+# set_status, ...), so without -E most real failures would report line=0.
+set -Eeuo pipefail
 
-PHASE="auto"; FEATURE=""; DRYRUN=0; NOSUB=0; FORCE=0; JSON=0
+PHASE="auto"; FEATURE=""; DRYRUN=0; NOSUB=0; FORCE=0; JSON=0; SUMMARY=0
 while [ $# -gt 0 ]; do case "$1" in
   --phase) PHASE="$2"; shift 2;;
   --feature) FEATURE="$2"; shift 2;;
@@ -15,13 +19,68 @@ while [ $# -gt 0 ]; do case "$1" in
   --no-sub-issues) NOSUB=1; shift;;
   --force) FORCE=1; shift;;
   --json) JSON=1; shift;;
-  *) echo "[project][warn] unknown arg: $1"; shift;;
+  --summary) SUMMARY=1; shift;;
+  *) echo "[project][warn] unknown arg: $1" >&2; shift;;
 esac; done
+# --summary (one line: ok/error, counts) and --json (full machine-readable
+# summary) are mutually exclusive; --summary never changes the exit code a
+# caller sees for a given outcome, only what is printed on success. Every
+# `error` line shares one shape with project-sync.ps1's: `reason=<msg>`;
+# bash additionally carries `exit=<rc>` (and `line=<n>` when known).
+if [ "$SUMMARY" = 1 ] && [ "$JSON" = 1 ]; then
+  echo "error exit=2 reason=--summary and --json cannot be combined"
+  exit 2
+fi
+CREATED_COUNT=0; CLOSED_COUNT=0
+SUMMARY_DONE=0
+LAST_WARN=""
 
-log()  { echo "[project] $*"; }
-warn() { echo "[project][warn] $*"; }
-skip() { warn "skipped: $*"; [ "$JSON" = 1 ] && echo "{\"skipped\":true,\"reason\":\"$*\"}"; exit 0; }
+# Under --summary, run-log lines (log/warn) are not part of the one-line
+# contract, so they move to stderr instead of polluting stdout. warn() also
+# records its message in LAST_WARN, so a later `warn ...; exit 1` site (no
+# failing command for the ERR trap to see) still has a cause to report.
+log()  { if [ "$SUMMARY" = 1 ]; then echo "[project] $*" >&2; else echo "[project] $*"; fi; }
+warn() { LAST_WARN="$*"; if [ "$SUMMARY" = 1 ]; then echo "[project][warn] $*" >&2; else echo "[project][warn] $*"; fi; }
+skip() {
+  warn "skipped: $*"
+  SUMMARY_DONE=1
+  # A graceful skip is not success (SKILL.md): the first token is `skipped`,
+  # never `ok`.
+  if [ "$SUMMARY" = 1 ]; then echo "skipped reason=$*"
+  elif [ "$JSON" = 1 ]; then echo "{\"skipped\":true,\"reason\":\"$*\"}"; fi
+  exit 0
+}
 gh_run() { if [ "$DRYRUN" = 1 ]; then log "DRYRUN gh $*"; return 0; fi; gh "$@"; }
+
+# Past this point `set -e` can abort the script on any unguarded failure
+# (a real gh/jq/git error, not a graceful skip). Under --summary that must
+# still surface as one `error exit=<rc> reason=<msg>[ line=<n>]` line rather
+# than silence or a raw shell trace; SUMMARY_DONE keeps this trap from firing
+# after our own controlled ok/skipped line has already been printed.
+# FAIL_LINE comes from the ERR trap, which only fires for a command that
+# actually failed; a plain `warn ...; exit 1` site has no such command, so
+# FAIL_LINE stays unknown there and the line clause is omitted, while
+# LAST_WARN (set immediately before it, by warn()) still supplies the reason.
+#
+# on_exit is installed once, here, as the script's only EXIT trap: bash keeps
+# a single handler per signal, so a later, unconditional `trap ... EXIT`
+# elsewhere (there was one, for removing REST_MARK) would silently replace
+# this one instead of running alongside it, discarding the whole --summary
+# error line. REST_MARK itself is declared here (rather than where it is
+# first used, further down) so on_exit can always reference it, including on
+# an early skip/exit before TRANSPORT/REST_MARK's own section runs.
+REST_MARK="${TMPDIR:-/tmp}/project-sync-rest.$$"
+on_exit() {
+  local rc=$?
+  rm -f "$REST_MARK"
+  if [ "$SUMMARY" = 1 ] && [ "$rc" -ne 0 ] && [ "$SUMMARY_DONE" != 1 ]; then
+    msg="error exit=$rc reason=${LAST_WARN:-unknown}"
+    [ -n "${FAIL_LINE:-}" ] && msg="$msg line=$FAIL_LINE"
+    echo "$msg"
+  fi
+}
+trap on_exit EXIT
+[ "$SUMMARY" = 1 ] && trap 'FAIL_LINE=$LINENO' ERR
 
 command -v gh >/dev/null 2>&1 || skip "gh CLI not installed"
 command -v jq >/dev/null 2>&1 || skip "jq not installed"
@@ -61,9 +120,9 @@ REST_BASE="$OWNER_PATH/$OWNER/projectsV2/$PROJ_NUM"
 # exhausted the REST API (a separate budget) serves the same operation. `gh project` can report
 # exhaustion as an unrelated error ("unknown owner type"), so the real budget is checked.
 TRANSPORT="graphql"
-# Shared with command substitutions (subshells), which cannot set TRANSPORT in this shell.
-REST_MARK="${TMPDIR:-/tmp}/project-sync-rest.$$"
-trap 'rm -f "$REST_MARK"' EXIT
+# REST_MARK is declared near the top of the script now (see on_exit), shared
+# with command substitutions (subshells), which cannot set TRANSPORT in this
+# shell.
 graphql_exhausted() {
   local out
   if out="$(gh api graphql -f query='{rateLimit{remaining}}' --jq '.data.rateLimit.remaining' 2>&1)"; then
@@ -130,7 +189,17 @@ sget() { echo "$ST" | jq -r ".\"$SLUG\".$1 // empty"; }
 ISSUE="$(sget issue)"; NODE="$(sget issueNodeId)"; ITEM="$(sget itemId)"; CURRENT="$(sget status)"
 [ -z "$ISSUE" ] && ISSUE=0
 save_state() { [ "$DRYRUN" = 1 ] && return 0; echo "$ST" > "$STATE_FILE"; }
-st_set() { ST="$(echo "$ST" | jq --arg s "$SLUG" ".[\$s].$1 = $2")"; }
+# $2 is always a plain value, never jq source text: it is passed through
+# --arg (a real jq string, safely escaped) so a value that itself contains a
+# `"`, `{`/`}` or any other jq-significant character can never break the
+# program. (Previously callers built $2 by hand-wrapping the value in
+# literal quotes, e.g. `st_set issueNodeId "\"$NODE\""`; that raw text was
+# spliced straight into the filter, so a value shaped like a JSON object --
+# e.g. `gh issue view --json id -q .id` falling back to its unfiltered
+# `{"id":"..."}` output -- produced a syntactically invalid program instead
+# of a stored string.) st_set_num is for the one integer field (issue #).
+st_set() { ST="$(echo "$ST" | jq --arg s "$SLUG" --arg v "$2" ".[\$s].$1 = \$v")"; }
+st_set_num() { ST="$(echo "$ST" | jq --arg s "$SLUG" --argjson v "$2" ".[\$s].$1 = \$v")"; }
 [ "$(echo "$ST" | jq -r --arg s "$SLUG" 'has($s)')" = "true" ] || ST="$(echo "$ST" | jq --arg s "$SLUG" '.[$s]={issue:0,issueNodeId:"",itemId:"",status:"",subIssues:{}}')"
 
 ensure_parent() {
@@ -143,7 +212,7 @@ ensure_parent() {
     [ "$ISSUE" = 0 ] || [ "$ISSUE" = "$bound_issue" ] || { warn 'Project state conflicts with Scope parent binding'; exit 1; }
     ISSUE="$bound_issue"
     NODE="$(issue_node "$ISSUE")"
-    st_set issue "$ISSUE"; st_set issueNodeId "\"$NODE\""; return
+    st_set_num issue "$ISSUE"; st_set issueNodeId "$NODE"; return
   fi
   if [ "${ISSUE:-0}" -gt 0 ] 2>/dev/null; then return; fi
   local found n
@@ -155,7 +224,7 @@ ensure_parent() {
   n="$(echo "$found" | jq -r --arg s "$SLUG" 'map(select(.title|test($s;"i")))[0].number // empty')"
   if [ -n "$n" ]; then
     ISSUE="$n"; NODE="$(echo "$found" | jq -r --arg s "$SLUG" 'map(select(.title|test($s;"i")))[0].id')"
-    log "found existing parent issue #$ISSUE"; st_set issue "$ISSUE"; st_set issueNodeId "\"$NODE\""; return
+    log "found existing parent issue #$ISSUE"; st_set_num issue "$ISSUE"; st_set issueNodeId "$NODE"; return
   fi
   if [ "$DRYRUN" = 1 ]; then log "DRYRUN create parent issue for $SLUG"; ISSUE=-1; return; fi
   gh label create spec-feature --repo "$REPO" --color BFD4F2 --force >/dev/null 2>&1 || true
@@ -163,7 +232,7 @@ ensure_parent() {
   url="$(create_issue "[$SLUG] $TITLE" "Tracking issue for Spec Kit feature \`$SLUG\` (branch \`$BRANCH\`). Managed by the sanduq project extension." spec-feature)"
   ISSUE="$(echo "$url" | sed -E 's#.*/issues/([0-9]+).*#\1#')"
   NODE="$(issue_node "$ISSUE")"
-  st_set issue "$ISSUE"; st_set issueNodeId "\"$NODE\""; log "created parent issue #$ISSUE"
+  st_set_num issue "$ISSUE"; st_set issueNodeId "$NODE"; log "created parent issue #$ISSUE"
 }
 
 ensure_in_project() {
@@ -184,7 +253,7 @@ ensure_in_project() {
         | jq -r --argjson n "$ISSUE" '.items[] | select(.content.number==$n) | .id' | head -1)"
     fi
   fi
-  [ -n "$ITEM" ] && { st_set itemId "\"$ITEM\""; log "issue #$ISSUE on Project #$PROJ_NUM"; }
+  [ -n "$ITEM" ] && { st_set itemId "$ITEM"; log "issue #$ISSUE on Project #$PROJ_NUM"; }
 }
 
 set_status() {
@@ -197,7 +266,7 @@ set_status() {
     use_rest || { warn "could not set status '$s'"; exit 1; }
     rest_set_single_select "$ITEM" "$STATUS_FIELD" "$opt"
   fi
-  CURRENT="$s"; st_set status "\"$s\""; log "status -> $s"
+  CURRENT="$s"; st_set status "$s"; log "status -> $s"
 }
 
 parse_tasks() {
@@ -217,25 +286,24 @@ sync_sub_issues() {
   [ "$NOSUB" = 1 ] && return
   [ -z "$NODE" ] && { warn "no parent node id; skipping sub-issues"; return; }
   gh label create spec-task --repo "$REPO" --color D4C5F9 --force >/dev/null 2>&1 || true
-  local created=0
   while IFS=$'\t' read -r _ id desc; do
     [ -z "$id" ] && continue
     echo "$ST" | jq -e --arg s "$SLUG" --arg i "$id" '.[$s].subIssues[$i]' >/dev/null 2>&1 && continue
-    if [ "$DRYRUN" = 1 ]; then log "DRYRUN create sub-issue '$SLUG $id: $desc'"; created=$((created+1)); continue; fi
+    if [ "$DRYRUN" = 1 ]; then log "DRYRUN create sub-issue '$SLUG $id: $desc'"; CREATED_COUNT=$((CREATED_COUNT+1)); continue; fi
     local surl snum snode
     surl="$(create_issue "$SLUG $id: $desc" "Task \`$id\` of feature \`$SLUG\` (parent #$ISSUE)." spec-task)"
     snum="$(echo "$surl" | sed -E 's#.*/issues/([0-9]+).*#\1#')"
     snode="$(issue_node "$snum")"
     link_sub_issue "$snum" "$snode" >/dev/null 2>&1 || warn "sub-issue link failed for $id"
     ST="$(echo "$ST" | jq --arg s "$SLUG" --arg i "$id" --argjson n "$snum" --arg nd "$snode" '.[$s].subIssues[$i] = {number:$n,nodeId:$nd,closed:false}')"
-    created=$((created+1))
+    CREATED_COUNT=$((CREATED_COUNT+1))
   done < <(parse_tasks)
-  [ "$created" -gt 0 ] && log "created $created sub-issue(s)"
+  [ "$CREATED_COUNT" -gt 0 ] && log "created $CREATED_COUNT sub-issue(s)"
 }
 
 sync_progress() {
   if [ "$MANAGED" = 1 ]; then log 'Task issue states are owned by the workflow adapter'; return; fi
-  local total closed=0
+  local total
   total="$(echo "$ST" | jq -r --arg s "$SLUG" '(.[$s].subIssues // {}) | length')"
   [ "$total" = 0 ] && return
   while IFS=$'\t' read -r d id _; do
@@ -246,11 +314,11 @@ sync_progress() {
     if [ -n "$num" ] && [ "$isclosed" != "true" ]; then
       close_issue "$num" >/dev/null 2>&1 || true
       ST="$(echo "$ST" | jq --arg s "$SLUG" --arg i "$id" '.[$s].subIssues[$i].closed = true')"
-      closed=$((closed+1))
+      CLOSED_COUNT=$((CLOSED_COUNT+1))
     fi
   done < <(parse_tasks)
   local done_c; done_c="$(echo "$ST" | jq -r --arg s "$SLUG" '[.[$s].subIssues[] | select(.closed==true)] | length')"
-  [ "$closed" -gt 0 ] && log "closed $closed completed sub-issue(s)"
+  [ "$CLOSED_COUNT" -gt 0 ] && log "closed $CLOSED_COUNT completed sub-issue(s)"
   log "sub-issue progress: $done_c/$total"
 }
 
@@ -298,4 +366,9 @@ set_status "$TARGET"
 save_state
 if [ -f "$REST_MARK" ]; then TRANSPORT="rest"; fi
 log "done: issue #$ISSUE, status '$CURRENT', phase '$PHASE' (transport: $TRANSPORT)"
-[ "$JSON" = 1 ] && echo "{\"feature\":\"$SLUG\",\"repo\":\"$REPO\",\"issue\":$ISSUE,\"status\":\"$CURRENT\",\"phase\":\"$PHASE\",\"transport\":\"$TRANSPORT\"}"
+SUMMARY_DONE=1
+if [ "$SUMMARY" = 1 ]; then
+  echo "ok issue=$ISSUE status=$CURRENT created=$CREATED_COUNT closed=$CLOSED_COUNT"
+elif [ "$JSON" = 1 ]; then
+  echo "{\"feature\":\"$SLUG\",\"repo\":\"$REPO\",\"issue\":$ISSUE,\"status\":\"$CURRENT\",\"phase\":\"$PHASE\",\"transport\":\"$TRANSPORT\"}"
+fi

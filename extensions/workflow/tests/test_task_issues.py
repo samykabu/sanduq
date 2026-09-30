@@ -1,11 +1,15 @@
+import contextlib
 import copy
 import importlib.util
+import io
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 SCRIPTS = Path(__file__).resolve().parents[1] / 'scripts'
 sys.path.insert(0, str(SCRIPTS))
@@ -160,3 +164,127 @@ class TaskIssueTests(unittest.TestCase):
         t.sync_states(self.root,feature,10,True,self.gh)
         self.assertEqual(self.gh.issues[result['tasks']['T001']['number']]['state'],'open')
         self.assertEqual((self.root/feature/'workflow/task-issues.json').read_bytes(),before)
+
+    def test_sync_states_handles_a_batch_of_tasks_in_one_call(self):
+        # B7: `--sync-states` must be callable once per phase for a batch of
+        # tasks. sync_states() already walks every task in tasks.md on each
+        # call, so completing several tasks in the same phase and syncing once
+        # reports (and applies) every transition together; no new code needed.
+        feature = self.feature('001-a', 10)
+        result = t.sync(self.root, feature, 10, {}, True, self.gh)
+        tasks = self.root / feature / 'tasks.md'
+        tasks.write_text('- [x] T001 First behavior\n- [x] T1000 Second behavior\n')
+        outcome = t.sync_states(self.root, feature, 10, True, self.gh)
+        self.assertEqual({c['task'] for c in outcome['changes']}, {'T001', 'T1000'})
+        self.assertEqual(self.gh.issues[result['tasks']['T001']['number']]['state'], 'closed')
+        self.assertEqual(self.gh.issues[result['tasks']['T1000']['number']]['state'], 'closed')
+
+
+class TaskIssuesSummaryTests(unittest.TestCase):
+    def test_sync_summary_counts_created_and_reused(self):
+        result = {'tasks': {'T001': {'action': 'create'}, 'T002': {'action': 'reuse'}, 'T003': {'action': 'reuse'}},
+                  'dry_run': False}
+        self.assertEqual(t.sync_summary(result), 'ok created=1 reused=2 total=3 dry_run=0')
+
+    def test_sync_summary_reports_dry_run(self):
+        result = {'tasks': {'T001': {'action': 'create'}}, 'dry_run': True}
+        self.assertEqual(t.sync_summary(result), 'ok created=1 reused=0 total=1 dry_run=1')
+
+    def test_sync_states_summary_counts_transitions(self):
+        result = {'changes': [{'task': 'T001', 'to': 'closed'}, {'task': 'T002', 'to': 'open'}], 'dry_run': False}
+        self.assertEqual(t.sync_states_summary(result), 'ok opened=1 closed=1 changed=2 dry_run=0')
+
+    def test_cli_summary_error_line_without_gh(self):
+        # DEPENDENCY_FILE_REQUIRED is raised before any GitHub call, so this
+        # exercises --summary's error line with no gh/network dependency.
+        with tempfile.TemporaryDirectory() as directory:
+            argv = ['task_issues.py', '--root', directory, '--feature', 'specs/example',
+                    '--parent', '1', '--summary']
+            buf = io.StringIO()
+            with mock.patch.object(sys, 'argv', argv), contextlib.redirect_stdout(buf):
+                code = t.main()
+            self.assertEqual(code, 1)
+            self.assertEqual(buf.getvalue().strip(), 'error DEPENDENCY_FILE_REQUIRED')
+
+    def test_cli_rejects_summary_and_json_together(self):
+        argv = ['task_issues.py', '--feature', 'specs/example', '--parent', '1', '--summary', '--json']
+        with mock.patch.object(sys, 'argv', argv), self.assertRaises(SystemExit) as ctx:
+            t.main()
+        self.assertEqual(ctx.exception.code, 2)
+
+    def test_cli_summary_reports_any_unhandled_exception_as_one_line(self):
+        # F7: a missing tasks.md raises a plain FileNotFoundError, outside the
+        # WorkflowError/ValueError/KeyError set the previous except clause
+        # covered; --summary must still print one `error <Type>: <msg>` line
+        # and exit 1, not a raw traceback.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            feature = root / 'specs/example'
+            feature.mkdir(parents=True)
+            (feature / 'scope-source.json').write_text(json.dumps({'repo': 'acme/app', 'issue': 1}))
+            deps = root / 'deps.json'
+            deps.write_text('{}')
+            subprocess.run(['git', 'init', '-q'], cwd=root, check=True)
+            subprocess.run(['git', 'remote', 'add', 'origin', 'git@github.com:acme/app.git'], cwd=root, check=True)
+            argv = ['task_issues.py', '--root', str(root), '--feature', 'specs/example',
+                    '--parent', '1', '--dependencies', str(deps), '--summary']
+            buf = io.StringIO()
+            with mock.patch.object(sys, 'argv', argv), contextlib.redirect_stdout(buf):
+                code = t.main()
+            self.assertEqual(code, 1)
+            line = buf.getvalue().strip()
+            self.assertTrue(line.startswith('error FileNotFoundError: '), line)
+            self.assertEqual(len(line.splitlines()), 1)
+
+    def test_cli_default_still_raises_the_unhandled_exception(self):
+        # Default (no --summary) behaviour for an exception outside the
+        # existing except clause is unchanged: it still raises/tracebacks.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            feature = root / 'specs/example'
+            feature.mkdir(parents=True)
+            (feature / 'scope-source.json').write_text(json.dumps({'repo': 'acme/app', 'issue': 1}))
+            deps = root / 'deps.json'
+            deps.write_text('{}')
+            subprocess.run(['git', 'init', '-q'], cwd=root, check=True)
+            subprocess.run(['git', 'remote', 'add', 'origin', 'git@github.com:acme/app.git'], cwd=root, check=True)
+            argv = ['task_issues.py', '--root', str(root), '--feature', 'specs/example',
+                    '--parent', '1', '--dependencies', str(deps)]
+            with mock.patch.object(sys, 'argv', argv):
+                with self.assertRaises(FileNotFoundError):
+                    t.main()
+
+    def test_json_flag_matches_the_unflagged_default_byte_for_byte(self):
+        # F8: --json is not a new format; it is the same
+        # `json.dumps(result, indent=2)`/error JSON the no-flag default
+        # already printed, on the error path (deterministic, no gh needed)
+        # and the success path (via FakeGitHub).
+        def run(argv):
+            buf = io.StringIO()
+            with mock.patch.object(sys, 'argv', argv), contextlib.redirect_stdout(buf):
+                code = t.main()
+            return code, buf.getvalue()
+
+        with tempfile.TemporaryDirectory() as directory:
+            base = ['task_issues.py', '--root', directory, '--feature', 'specs/example', '--parent', '1']
+            default_code, default_out = run(base)
+            json_code, json_out = run(base + ['--json'])
+            self.assertEqual((default_code, default_out), (json_code, json_out))
+
+        gh = FakeGitHub()
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        subprocess.run(['git', 'init', '-q'], cwd=root, check=True)
+        subprocess.run(['git', 'remote', 'add', 'origin', 'git@github.com:acme/app.git'], cwd=root, check=True)
+        folder = root / 'specs/001-a'; folder.mkdir(parents=True)
+        (folder / 'scope-source.json').write_text(json.dumps({'repo': 'acme/app', 'issue': 10}))
+        (folder / 'tasks.md').write_text('- [ ] T001 First behavior\n')
+        deps = root / 'deps.json'; deps.write_text('{}')
+        with mock.patch.object(t, 'GitHub', return_value=gh):
+            default_code, default_out = run(['task_issues.py', '--root', str(root), '--feature', 'specs/001-a',
+                                              '--parent', '10', '--dependencies', str(deps)])
+        with mock.patch.object(t, 'GitHub', return_value=gh):
+            json_code, json_out = run(['task_issues.py', '--root', str(root), '--feature', 'specs/001-a',
+                                        '--parent', '10', '--dependencies', str(deps), '--json'])
+        self.assertEqual((default_code, default_out), (json_code, json_out))
+        self.assertIn('"action": "create"', default_out)
