@@ -795,6 +795,25 @@ class RelocateTests(Harness):
         run.relocate('same repo', allow_history_change=True)  # without them it applies
         self.assertEqual(run.load()['issue'], 'acme/app#10')
 
+    def test_a_failure_between_the_scope_source_and_checkpoint_writes_splits_nothing(self):
+        """Codex round 1, finding 4: `scope-source.json` used to be written
+        before the checkpoint save, so a failure in between left the pair
+        split (scope rebound, checkpoint not)."""
+        from unittest import mock
+        run = self.rename_remote()
+        source = self.root / self.feature / 'scope-source.json'
+        source_before, checkpoint_before = source.read_bytes(), run.path.read_bytes()
+        with mock.patch.object(w.Run, 'save', side_effect=OSError('disk full between the two writes')):
+            with self.assertRaisesRegex(OSError, 'disk full'):
+                run.relocate('renamed', allow_repository_rename=True, keep_issue_number=True)
+        self.assertEqual(source.read_bytes(), source_before)
+        self.assertEqual(run.path.read_bytes(), checkpoint_before)
+        self.assertEqual([p.name for p in source.parent.glob('scope-source.json.*.tmp')], [])
+        # Nothing was half-applied, so the same relocate still succeeds.
+        run.relocate('renamed', allow_repository_rename=True, keep_issue_number=True)
+        self.assertEqual(json.loads(source.read_text(encoding='utf-8'))['repo'], 'acme-renamed/app')
+        self.assertEqual(run.load()['issue'], 'acme-renamed/app#10')
+
     def test_relocate_requires_a_reason(self):
         run = self.rename_remote()
         with self.assertRaisesRegex(w.WorkflowError, 'RELOCATE_REASON_REQUIRED'):

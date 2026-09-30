@@ -1835,6 +1835,7 @@ class Run:
                     'allow_repository_rename': allow_repository_rename, 'new_issue': plan['new_issue'],
                     'history_changed': plan['history_changed'], 'allow_history_change': allow_history_change,
                     'blockers': plan['blockers'], 'can_apply': not plan['blockers']}
+        scope_rebind = None
         with locked(self.lock):
             state = read(self.path)
             require(state and state.get('schema_version') == SCHEMA, 'WORKFLOW_START_REQUIRED')
@@ -1853,22 +1854,35 @@ class Run:
                 entry.update(repository_renamed=True, old_repository=plan['old_repo'],
                             new_repository=plan['new_repo'], new_issue=plan['new_issue'])
                 # `scope-source.json` binds the same issue independently (`start`,
-                # `bind` and the scope extension's `bound_claim` all compare it);
-                # rebind it here too, before the checkpoint write below, so a
-                # crash between the two never leaves the checkpoint looking
-                # relocated while scope-source.json still names the old repo --
-                # re-running relocate afterwards recomputes and rewrites both
-                # identically, so this is safe to retry.
+                # `bind` and the scope extension's `bound_claim` all compare it),
+                # so it is rebound together with the checkpoint (Codex round 1,
+                # finding 4): the new content is prepared first, then replaced
+                # in just before the checkpoint write, and put back to its
+                # original bytes if that write fails, so a failure between the
+                # two never leaves the pair split. A hard kill between them
+                # still leaves the scope file ahead of the checkpoint, which
+                # re-running relocate recomputes and rewrites identically.
                 source_path = self.feature / 'scope-source.json'
                 source = read(source_path, {})
                 if source:
                     new_owner_repo, new_number = plan['new_issue'].split('#')
-                    write(source_path, {**source, 'repo': new_owner_repo, 'issue': int(new_number)})
+                    scope_rebind = (source_path, source_path.read_bytes(),
+                                    {**source, 'repo': new_owner_repo, 'issue': int(new_number)})
                 state['issue'] = plan['new_issue']
             state['repo_path'] = str(self.root)  # never compared; kept only for an older reader (see CHANGELOG)
             state['repo_identity'] = plan['new_identity']
             state.setdefault('relocations', []).append(entry)
-            self.save(state)
+            if scope_rebind:
+                source_path, original_bytes, rebound = scope_rebind
+                write(source_path, rebound)
+            try:
+                self.save(state)
+            except BaseException:
+                if scope_rebind:
+                    restore = source_path.with_name(source_path.name + '.' + uuid.uuid4().hex + '.tmp')
+                    restore.write_bytes(original_bytes)
+                    os.replace(restore, source_path)
+                raise
             return {'relocated': True, 'feature': self.relative, 'relocation': copy.deepcopy(entry)}
 
     def bind(self, token):
