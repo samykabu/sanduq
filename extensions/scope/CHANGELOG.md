@@ -1,7 +1,11 @@
 # Changelog
 
-## Unreleased
+## 1.5.0
 
+- `extension.yml` now declares `requires.extensions: workflow >=1.8.0,<2.0.0`
+  (required), because `bound_claim` uses workflow's checkpoint identity gate.
+  Spec Kit does not enforce `requires.extensions`; the workflow installer
+  does (see workflow 1.8.0).
 - `bound_claim` (`workflow_policy.py`) no longer compares a checkpoint's
   absolute `repo_path` (machine- and clone-specific; still written by
   workflow 1.8.0+ so an older reader does not `KeyError`, but never read
@@ -11,7 +15,9 @@
   bug `workflow.py`'s `Run.load()` fixes. It now also runs workflow's own
   checkpoint identity gate (`repo_identity`, or a legacy checkpoint's
   reachable history, and the issue naming this repository's GitHub remote)
-  before accepting the claim, and refuses it on any failure.
+  before accepting the claim, and refuses it on any failure. This needs the
+  sibling workflow extension (1.8.0 or newer) installed beside scope; with
+  none loadable the claim is refused.
 - Serve Project board reads and writes (`item-list`, `field-list`, `item-add`, and
   single-select/text `item-edit`) from the REST Projects API when the GraphQL budget is
   exhausted. The real budget is checked, because `gh project` can report exhaustion as an
@@ -20,7 +26,7 @@
   `graphql+rest`) to printed JSON results of Scope and clarification commands that touched the
   Project. Saved `--output` files are unchanged.
 
-## 1.4.0 (unreleased)
+## 1.4.0
 
 - Move canonical source from Bunyan; add managed effort policy, automatic clarification reread and configurable board/artifact mappings.
 - Revalidate open progressed features under matching workflow claims without resetting
