@@ -43,6 +43,9 @@ ASSIGN_MARKERS = [
     "run's status is terminal",                                           # F2 x delegate_dispatch.py
     'Where this fallback applies, the dispatcher',                        # F1 x nested-spawn fallback
     'forwards each T7 result once, unchanged',                            # F1 x nested-spawn fallback
+    'its orchestrator-scoped process is the orchestration agent for this '
+    'purpose',                                                            # F1 x delegated-Execute-stage
+    "it spawns and collects its own feature's task workers directly",     # F1 x delegated-Execute-stage
     'Turn budgets bound how large',                                       # T0
     'it excludes cache reads, which are about 96% of a worker\'s total '
     'token volume',                                                       # T0 budget basis
@@ -52,11 +55,15 @@ ASSIGN_MARKERS = [
     'never Haiku (standing rule 5)',                                      # T0 x standing rule 5
     'the `[collect]` marker or an explicit override (B12), never by default',  # T0 x standing rule 5
     'roughly 150K tokens resident',                                       # T0 hand-off
-    '`git stash` and `git add -A`/`git add .` are forbidden for a worker',  # S6
+    '`git stash` and `git add -A`/`git add .` are forbidden for a task worker',  # S6
     'as are `delegate_dispatch.py accept`, `delegate_dispatch.py reassign`, '
-    '`delegate_dispatch.py trust-reset` and `delegate_dispatch.py adopt`',  # B12: also forbidden for a worker
+    '`delegate_dispatch.py trust-reset` and `delegate_dispatch.py adopt`',  # B12: also forbidden for a task worker
     '`accept`/`reassign`/`trust-reset`/`adopt` are ledger-trust decisions '
     'the orchestration agent alone makes',                                # B12: why they are forbidden
+    'The one exception is the delegated Execute stage itself',           # B12: Execute-orchestrator exception
+    "it runs with an orchestrator scope over its own feature's `T###` tasks",
+    '`trust-reset` stays forbidden even for it',                         # B12: trust-reset still refused
+    'An ordinary task worker never has that scope',
     'Staging stays with the orchestration agent, which stages a '
     "worker's owned paths by explicit name",                              # S6 fix: no self-contradiction
     '--tasks specs/<feature>/tasks.md --output specs/<feature>/workflow/progress --summary',  # B7 --summary default
@@ -174,6 +181,15 @@ B12_TEXT = (
     'command, on every task that reached Ready because the orchestrator ran '
     "and judged the check rather than because a worker's own delegated "
     'attempt succeeded; review those warnings before merging.'
+    ' The delegated Execute stage runs under '
+    '`SANDUQ_DELEGATED_ROLE=orchestrator` and '
+    '`SANDUQ_DELEGATED_FEATURE=<feature>` (never `SANDUQ_DELEGATED_RUN`), '
+    'which lets it, and only it, run `delegate_dispatch.py start`, '
+    '`collect`, `accept`, `reassign` and `adopt` for its own feature\'s '
+    '`T###` tasks. `trust-reset`, a `stage:*` identity or another feature '
+    'all refuse with `DELEGATION_ORCHESTRATOR_SCOPE`. The task workers it '
+    'dispatches get an ordinary `SANDUQ_DELEGATED_RUN` environment of their '
+    'own and never inherit this role.'
 )
 
 # The dispatcher-operations.md marker list must include B12's new [Collect] marker

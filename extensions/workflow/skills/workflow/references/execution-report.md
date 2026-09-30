@@ -208,6 +208,15 @@ every task that reached Ready because the orchestrator ran and judged the
 check rather than because a worker's own delegated attempt succeeded; review
 those warnings before merging.
 
+The delegated Execute stage runs under `SANDUQ_DELEGATED_ROLE=orchestrator`
+and `SANDUQ_DELEGATED_FEATURE=<feature>` (never `SANDUQ_DELEGATED_RUN`), which
+lets it, and only it, run `delegate_dispatch.py start`, `collect`, `accept`,
+`reassign` and `adopt` for its own feature's `T###` tasks. `trust-reset`, a
+`stage:*` identity or another feature all refuse with
+`DELEGATION_ORCHESTRATOR_SCOPE`. The task workers it dispatches get an
+ordinary `SANDUQ_DELEGATED_RUN` environment of their own and never inherit
+this role.
+
 ## Continue through delivery
 
 The orchestration agent returns the Execute evidence to the dispatcher. It stays
