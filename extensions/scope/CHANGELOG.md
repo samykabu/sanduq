@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `bound_claim` (`workflow_policy.py`) no longer compares a checkpoint's
+  absolute `repo_path` (machine- and clone-specific, and never written by
+  workflow 1.8.0+) against the current repository root; the `issue` field
+  it already checks just above binds the claim to the portable GitHub
+  repo string instead. Fixes the same checkpoint-identity design bug
+  `workflow.py`'s `Run.load()` fixes.
 - Serve Project board reads and writes (`item-list`, `field-list`, `item-add`, and
   single-select/text `item-edit`) from the REST Projects API when the GraphQL budget is
   exhausted. The real budget is checked, because `gh project` can report exhaustion as an
