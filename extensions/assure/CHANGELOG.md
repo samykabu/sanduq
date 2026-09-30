@@ -1,44 +1,42 @@
 # Changelog
 
-## Unreleased
+## 2.3.0
 
-- `assure_state.py` gains `--summary` (one line: `ok`/`error`, e.g. `ok
-  action=record kind=document outputs=1 recorded=1`) as an alternative to
-  today's full JSON output, which stays exactly as it was and is now also
-  selectable explicitly with `--json` (byte for byte the same as today's
-  default). `--summary` and `--json` together is rejected. Default (no flag)
-  behaviour and the exit code are unchanged. A `reason` carrying embedded
-  whitespace or newlines is collapsed to a single line so `--summary` always
-  prints exactly one line (B7).
-- Replaced the verbatim "Ensure the Illustrate dependency" instruction block in
-  `speckit.assure.analyze` and `speckit.assure.document` with one call each to the shared
-  `scripts/deps.py ensure illustrate` (also shipped to `pr` and `user-manual`); same
-  registry/policy/catalog checks and failure recipe, now in one tested script instead of
-  duplicated prose (B9). The illustrate `SKILL.md` is now loaded only when a diagram task or asset
-  is actually being added, not unconditionally at step 0a. A failure now points at
-  `deps.py ensure illustrate --approve` for the user to re-run after approving, and an exit-0
-  "newer compatible release" note is surfaced to the user instead of only appearing in the printed
+- **B7 — quiet output.** `assure_state.py` gains `--summary` (one line:
+  `ok`/`error`, e.g. `ok action=record kind=document outputs=1
+  recorded=1`) as an alternative to the previous full JSON output, which is
+  unchanged and now also selectable explicitly with `--json`. `--summary`
+  and `--json` together is rejected; default (no flag) behaviour and the
+  exit code are unchanged. A `reason` with embedded whitespace or newlines
+  is collapsed to a single line so `--summary` always prints exactly one
   line.
-- `scripts/deps.py`: fixed after Opus review — parses `specify extension info`'s real plain-text
-  `Name (vX.Y.Z)` header (it has no `--json` output); feeds `specify extension update`'s
-  unavoidable `typer.confirm` prompt an explicit `y` only on an authorised update and otherwise
-  closes stdin so an unexpected prompt fails fast instead of hanging; every subprocess call now has
-  a timeout (a timeout is a plain failure, not an exception); the version comparator follows SemVer
-  precedence for pre-release/build-metadata suffixes, a leading `v`, space-separated clauses, and
-  `^`/`~=`, and ignores a still-unparseable catalog version instead of failing an already-compatible
-  install; `.dependency-checks.json` now records a check only when the catalog probe actually ran
-  and succeeded. Dropped the PyYAML dependency: `dependencies.yml` and
-  `.specify/extension-dependencies.yml` are read by a small built-in parser (nothing installs a
-  package's `requirements.txt` before its commands run), tested against the real files of all three
-  consuming packages.
-- `scripts/deps.py`: further fixes from a second review round — an inline comment no longer
-  corrupts `update_policy` into an unrecognised value that silently fell back to `prompt` (an
-  actually unknown value now raises instead); the range comparator applies npm-semver's
-  pre-release rule, so `>=2.0.0,<3.0.0` never admits a pre-release version and a pre-release
-  catalog release is never reported or auto-installed as "newer"; the parser now rejects a tab
-  in leading whitespace, a duplicate key, a quoted key, a flow-style `[`/`{` value (previously an
-  `AttributeError` later), and an unbalanced quote, type-checks `dependencies` as a list of
-  mappings, and reports a malformed list item's own line number.
+- **B9 — shared dependency script.** `speckit.assure.analyze` and
+  `speckit.assure.document` now ensure the `illustrate` dependency with the
+  shared `scripts/deps.py ensure illustrate` (also shipped to `pr` and
+  `user-manual`) instead of duplicated prose: it checks the Spec Kit
+  registry, follows the project's `update_policy`, and prints one line,
+  failing closed with `deps.py ensure illustrate --approve` as the
+  recovery when illustrate cannot be brought into range; an exit-0 "newer
+  compatible release" note is surfaced to the user. Illustrate's
+  `SKILL.md` now loads only when a diagram task or asset is actually being
+  added, not unconditionally at step 0a.
+
+  `deps.py` itself parses `specify extension info`'s real plain-text
+  `Name (vX.Y.Z)` header (it has no `--json` output); answers `specify
+  extension update`'s unavoidable `typer.confirm` prompt with an explicit
+  `y` only on an authorised update, closing stdin otherwise so an
+  unexpected prompt fails fast; every subprocess call has a timeout; the
+  version comparator follows SemVer precedence for pre-release/build-
+  metadata suffixes, a leading `v`, space-separated clauses, `^`/`~=`, and
+  npm-semver's pre-release range rule (a plain `>=2.0.0,<3.0.0` never
+  admits a pre-release version). `.dependency-checks.json` records a check
+  only when the catalog probe actually ran and succeeded. It ships no
+  third-party dependency: `dependencies.yml` and
+  `.specify/extension-dependencies.yml` are read by a small built-in
+  parser (nothing installs a package's `requirements.txt` before its
+  commands run) that rejects a tab in leading whitespace, a duplicate or
+  quoted key, a flow-style value, and an unbalanced quote, and reports a
+  malformed list item's own line number.
 
 ## 2.2.2
 

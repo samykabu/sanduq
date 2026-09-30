@@ -1,6 +1,12 @@
 # Sanduq Workflow
 
-Workflow 1.6.4 pins the released User Manual 1.3.3, whose private preview artifact now keeps `retention-days: 2` instead of 14 so the Cloudflare preview workflow's single read is not blocked by a filled artifact quota; Workflow itself is unchanged. Workflow 1.6.3 stops judging a managed alias by its frontmatter: an alias
+Workflow 1.7.0 defaults coordination to `high`, splits `qa` into `qa_author`
+and light-eligible `qa_collect`, requires `--owned` for a light-tier or
+`qa_collect` start, and tightens the Ready/complete gates to require a
+successful dispatcher-recorded attempt for every checked task (mid-feature
+adoption goes through the new `delegate_dispatch.py adopt`); `doctor
+--project` also reports a per-host skill inventory (`SANDUQ_SKILLS_HOME`
+replaces `SANDUQ_HOME`). Workflow 1.6.4 pins the released User Manual 1.3.3, whose private preview artifact now keeps `retention-days: 2` instead of 14 so the Cloudflare preview workflow's single read is not blocked by a filled artifact quota; Workflow itself is unchanged. Workflow 1.6.3 stops judging a managed alias by its frontmatter: an alias
 is replaced silently only when its whole content hash is the packaged alias, an
 accepted legacy or install-lock hash, or exactly what Spec Kit renders for that
 command; any other content is refused with `ALIAS_HAS_LOCAL_EDITS` unless
@@ -995,7 +1001,7 @@ refuses a checked `[x]` task whose latest delegated attempt is anything but
 its own tell a task done before delegation was enabled for this feature from
 one that simply skipped the dispatcher after delegation was already on. Two
 earlier exemptions tried to paper over that gap and were both removed as
-reviewed bypasses (round 7): a stage-wide `delegation_enabled_for_execute`
+reviewed bypasses: a stage-wide `delegation_enabled_for_execute`
 field stamped once on the `execute` receipt — mutable, unfingerprinted, and
 never read by any digest or signature — would wave through *every* task in
 the stage on a single flag; and an `orchestrator-executed` command let
@@ -1011,10 +1017,10 @@ Ready is `delegate_dispatch.py adopt --feature <f> --id <task> --command
 "<acceptance check>" --expect counts|files [--owned <path>]` — evidence,
 not an assertion. Before running anything it requires `<task>` to actually
 exist in `tasks.md` and be currently checked (`DELEGATION_ADOPT_TASK_UNKNOWN`
-or `DELEGATION_ADOPT_TASK_NOT_CHECKED` otherwise) — round 8 closed the gap
+or `DELEGATION_ADOPT_TASK_NOT_CHECKED` otherwise), closing the gap
 where adopting an absent id, then later adding a different checked task
 under that same id, let the earlier adoption ride to Ready for work it
-never checked at all — and it records on the new attempt a binding to that
+never checked at all, and it records on the new attempt a binding to that
 task's current content: a sha256 of the task line with its checkbox state
 removed and whitespace normalised (`delegation.task_line_content_sha256`).
 The Ready gate re-hashes the live line at completion time and refuses with
@@ -1043,8 +1049,7 @@ an exit-zero run with no parsable or in-bounds evidence records
 `'unverified'` instead, exactly like `accept`. Either way the attempt lands
 in `delegations.json` like any other and `latest_attempt` reads it like any
 other: the Ready gate never special-cases an adopted attempt beyond the
-content binding above. The command runs from the repo root (round 9,
-finding 2), not pinned to the feature directory as an earlier release had
+content binding above. The command runs from the repo root, not pinned to the feature directory as an earlier release had
 it — an aggregate, repo-root-relative check can now run at all — while the
 feature directory remains the *default* owned root `--expect files`
 validates against when `--owned` is not given, unchanged in effect. Like
@@ -1057,8 +1062,7 @@ feature's tasks, because for it that self-judgement *is* the job.
 
 **Defence in depth: a worker cannot call back into the dispatcher.**
 `driver_env` sets one of two, mutually exclusive environment shapes for
-every driver subprocess it launches (round 9, finding 1a; refined role-aware
-in round 10, finding 1). A plain worker -- any task, and any stage other
+every driver subprocess it launches. A plain worker -- any task, and any stage other
 than `execute` -- inherits `SANDUQ_DELEGATED_RUN` (this dispatch's own
 intent id); `adopt`, `accept`, `reassign`, `trust-reset`, `start` and
 `collect` all refuse it outright with `DELEGATION_WORKER_CONTEXT` (a worker
@@ -1093,14 +1097,14 @@ Whenever the Ready gate accepts a task because the orchestrator itself ran
 and judged a check — `adopt` for a task with no dispatcher attempt at all,
 `accept` for an unverified light-tier result — it appends a warning a
 reviewer will actually see, not only a passing check silently indistinguishable
-from a worker's own verified attempt (round 9, finding 1b): `DELEGATION_TASK_ADOPTED:
+from a worker's own verified attempt: `DELEGATION_TASK_ADOPTED:
 <task> via "<command>" (<expect>, exit <code>)` or `DELEGATION_TASK_ACCEPTED:
 <task> via "<command>" (<expect>, exit <code>)`. `ci_gate.py` already prints
 every warning here to stderr and appends it to `$GITHUB_STEP_SUMMARY` when
 the runner sets that variable, exactly as it does for
 `DELEGATION_LEDGER_TRUST_UNVERIFIED_LOCAL`, so this needed no separate gate
-change. **A reviewer must actually read these two lines when they appear**
-(round 10, finding 3): unlike a worker's own delegated attempt, an
+change. **A reviewer must actually read these two lines when they appear**:
+unlike a worker's own delegated attempt, an
 orchestrator-context `adopt` or `accept` trusts the orchestrator's own
 choice of acceptance command outright, with no independent dispatch to
 cross-check it against -- the warning is the only place that trust is
@@ -1109,7 +1113,7 @@ visible, and skipping it defeats the whole point of surfacing it.
 **`reassign` and an adopted attempt.** An adopted attempt has no dispatcher
 route, task file or retry count to escalate from — it was never dispatched
 in the first place — so `reassign` refuses it outright with
-`DELEGATION_REASSIGN_ADOPTED_UNSUPPORTED` (round 8, finding 2; it used to
+`DELEGATION_REASSIGN_ADOPTED_UNSUPPORTED` (it used to
 crash with a bare `KeyError` on `retry_count` instead) and points at the two
 real recoveries: re-run `adopt` with a corrected acceptance check, or `start`
 the task normally to create a real dispatched attempt `reassign` can act on.

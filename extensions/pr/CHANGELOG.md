@@ -2,71 +2,53 @@
 
 All notable changes to the Pull Request Workflow extension.
 
-## [Unreleased]
+## [4.2.0] - 2026-09-30
 
 ### Changed
 
-- Replaced the verbatim "Ensure the Illustrate dependency" instruction block in
-  `speckit.pr.generate` with one call to the shared `scripts/deps.py ensure illustrate` (also
-  shipped to `assure` and `user-manual`); same registry/policy/catalog checks and failure
-  recipe, now in one tested script instead of three duplicated prose copies (B9).
-- The illustrate `SKILL.md` is now loaded only when step 4 actually decides a diagram is
-  warranted, not unconditionally at step 0.
+- **B9 — shared dependency script.** Replaced the verbatim "Ensure the
+  Illustrate dependency" instruction block in `speckit.pr.generate` with one
+  call to the shared `scripts/deps.py ensure illustrate` (also shipped to
+  `assure` and `user-manual`); the illustrate `SKILL.md` now loads only when
+  step 4 actually decides a diagram is warranted, not unconditionally at
+  step 0. `deps.py` parses `specify extension info`'s real plain-text `Name
+  (vX.Y.Z)` header (it has no `--json` output); answers `specify extension
+  update`'s unavoidable `typer.confirm` prompt with an explicit `y` only on
+  an authorised update, closing stdin otherwise so an unexpected prompt
+  fails fast; every subprocess call has a timeout; the version comparator
+  follows SemVer precedence for pre-release/build-metadata suffixes, a
+  leading `v`, space-separated clauses, `^`/`~=`, and npm-semver's
+  pre-release range rule; the built-in parser for `dependencies.yml` and
+  `.specify/extension-dependencies.yml` (no PyYAML; nothing installs a
+  package's `requirements.txt` before its commands run) rejects a tab in
+  leading whitespace, a duplicate or quoted key, a flow-style value, and an
+  unbalanced quote, and reports a malformed list item's own line. A failure
+  points at `deps.py ensure illustrate --approve`; an exit-0 "newer
+  compatible release" note is surfaced to the user.
+
+  **Upgrade note:** `pr` now requires Python on the host (it is what runs
+  `deps.py`), declared in `extension.yml`; it still ships no third-party
+  dependency.
 - Moved the mandatory PR image-embedding rules out of the command body into
-  `references/pr-image-embedding.md`, loaded only when the PR has a diagram or screenshot to embed;
-  it keeps the commit-pinned `?raw=true` / never-`raw.githubusercontent.com` rules verbatim and adds
-  the standing contents-API verification line (`gh api repos/<o>/<r>/contents/<path>?ref=<sha>`,
-  rule 6 / F21) that the inline instructions had not spelled out explicitly.
-- `scripts/deps.py`: fixed after Opus review of the first B9 cut —
-  - `specify extension info` has no `--json` output (specify_cli 1.0.11, the commit pinned in
-    `.github/workflows/ci.yml`); the catalog freshness probe now parses the real plain-text
-    `Name (vX.Y.Z)` header instead of expecting JSON that was never going to arrive.
-  - `specify extension update` always shows an interactive `typer.confirm` with no `--yes`
-    equivalent; an authorised update now gets `input='y\n'`, every other call closes stdin
-    (`subprocess.DEVNULL`) so an unexpected prompt fails fast instead of hanging, and every
-    subprocess call has a timeout (`subprocess.TimeoutExpired` is a plain failure, not an
-    exception).
-  - The version comparator now follows SemVer precedence for pre-release/build-metadata suffixes,
-    a leading `v`, space-separated clauses, and the `^`/`~=` operators; a still-unparseable catalog
-    version is ignored (advisory only), so it can never turn an already-compatible install into a
-    reported failure.
-  - `.specify/extensions/.dependency-checks.json` now records a check only when the catalog probe
-    actually ran and succeeded, not on every `due` cycle (a skipped or failed probe no longer hides
-    the next real check for `check_interval_hours`).
-  - Dropped the PyYAML dependency and `requirements.txt`: nothing in the install/upgrade path
-    installs a package's `requirements.txt` before its commands run, so `dependencies.yml` and
-    `.specify/extension-dependencies.yml` are now read by a small built-in parser instead
-    (tested against the real files of all three consuming packages). `python` stays a required
-    tool for `pr` — it is what runs `deps.py` — but ships no third-party dependency.
-  - A failure now points at `deps.py ensure illustrate --approve` for the user to re-run after
-    approving, instead of a bare "re-run this command"; an exit-0 result's "newer compatible
-    release" note is now explicitly surfaced to the user instead of only appearing in the printed
-    line.
-- `scripts/deps.py`: further fixes from a second review round —
-  - An inline comment (`update_policy: manual  # never mutate`) was folded into the policy value,
-    which fell back to `prompt` and let `--approve` mutate a project whose policy said `manual`;
-    comments are now stripped correctly (respecting quotes), and an actually unknown
-    `update_policy` now raises instead of silently defaulting.
-  - The range comparator applies npm-semver's pre-release rule: a pre-release (e.g.
-    `3.0.0-rc.1`) only satisfies a range when some comparator shares its exact major.minor.patch
-    and itself carries a pre-release tag — a plain `>=2.0.0,<3.0.0` no longer lets any
-    pre-release through, and a pre-release catalog version is never reported or auto-installed
-    as "newer".
-  - The parser is now stricter: a tab in leading whitespace, a duplicate key, a quoted key, a
-    flow-style `[`/`{` value, and an unbalanced quote all raise `DepsError` (the flow-style case
-    previously crashed later with an unrelated `AttributeError`); `dependencies` is type-checked
-    as a list of mappings; a malformed list item's error now names its own line, not its parent
-    key's.
+  `references/pr-image-embedding.md`, loaded only when the PR has a diagram
+  or screenshot to embed; it keeps the commit-pinned `?raw=true` /
+  never-`raw.githubusercontent.com` rules verbatim and adds the standing
+  contents-API verification line (`gh api repos/<o>/<r>/contents/<path>?ref=<sha>`)
+  that the inline instructions had not spelled out explicitly.
 
 ### Fixed
 
-- PR generation instructions require every reviewer-facing diagram and screenshot to be embedded
-  inline, with an asset inventory and no link-only substitutions. Private-repository images use
-  supported attachments or verified repository URLs; rendered HTML and authenticated image loading
-  are checked separately. Generated skills inherit this canonical command contract.
-- Removed the assumption that a commit-pinned `?raw=true` URL or a literal `<img>` match alone proves
-  private image visibility. Missing exports, inaccessible images and body limits remain explicit
-  incomplete outcomes. This is an instruction update; live private-PR acceptance is still required.
+- PR generation instructions require every reviewer-facing diagram and
+  screenshot to be embedded inline, with an asset inventory and no
+  link-only substitutions. Private-repository images use supported
+  attachments or verified repository URLs; rendered HTML and authenticated
+  image loading are checked separately. Generated skills inherit this
+  canonical command contract.
+- Removed the assumption that a commit-pinned `?raw=true` URL or a literal
+  `<img>` match alone proves private image visibility. Missing exports,
+  inaccessible images and body limits remain explicit incomplete outcomes.
+  This is an instruction update; live private-PR acceptance is still
+  required.
 
 ## [4.0.0] - 2026-07-18
 
