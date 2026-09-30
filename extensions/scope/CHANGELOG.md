@@ -2,6 +2,10 @@
 
 ## 1.5.0
 
+- `extension.yml` now declares `requires.extensions: workflow >=1.8.0,<2.0.0`
+  (required), because `bound_claim` uses workflow's checkpoint identity gate.
+  Spec Kit does not enforce `requires.extensions`; the workflow installer
+  does (see workflow 1.8.0).
 - `bound_claim` (`workflow_policy.py`) no longer compares a checkpoint's
   absolute `repo_path` (machine- and clone-specific; still written by
   workflow 1.8.0+ so an older reader does not `KeyError`, but never read

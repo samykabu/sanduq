@@ -83,6 +83,13 @@
   local-path remote (a bare path, `file://`, or a Windows drive path) is
   never case-folded, except a Windows drive letter itself (`C:`/`c:`),
   which genuinely is case-insensitive.
+- The installer enforces a sibling package's `requires.extensions` entry
+  naming `workflow` (Spec Kit itself only validates that `requires` is a
+  mapping): `install.py` refuses a staged or already-installed package whose
+  manifest needs a workflow version outside this installer's own, with
+  `WORKFLOW_VERSION_UNSUPPORTED`. Scope 1.5.0 declares `workflow
+  >=1.8.0,<2.0.0`. A package fetched from a release URL is checked once it is
+  installed, on the next install or upgrade run.
 - **B13 — five new utility skills.** Five new entry points, none a claimed
   stage, each shipped as a command plus a runtime script with unit tests:
   - `speckit-workflow-verify-affected` (`verify_affected.py`): runs a

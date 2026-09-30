@@ -22,6 +22,8 @@ independently via `<extension>-vX.Y.Z` tags.
   workflow's checkpoint identity gate instead (needs workflow 1.8.0 beside
   it); Project board reads and writes fall back to the REST Projects API when
   the GraphQL budget is exhausted and name the transport used.
+- Scope 1.5.0 declares `requires.extensions: workflow >=1.8.0,<2.0.0`; the
+  workflow installer enforces it (`WORKFLOW_VERSION_UNSUPPORTED`).
 - Workflow's `dependencies.json` pins Scope 1.5.0. Assure 2.3.0, User Manual
   1.4.0, PR 4.2.0, Project 2.2.0 and Illustrate 2.1.2 are unchanged since
   their last release tags and keep their existing pins.

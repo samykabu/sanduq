@@ -9,6 +9,10 @@ extension:
   license: MIT
 requires:
   speckit_version: ">=1.0.0"
+  extensions:
+    - id: workflow
+      version: ">=1.8.0,<2.0.0"
+      required: true
   tools:
     - name: gh
       required: true

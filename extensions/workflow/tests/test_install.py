@@ -220,6 +220,36 @@ class InstallTests(unittest.TestCase):
         with self.assertRaisesRegex(w.WorkflowError, 'NEWER_DEPENDENCY_DISABLED'):
             installer.install(self.root, package_root=self.package)
 
+    def test_scope_1_5_0_declares_it_requires_workflow_1_8_0(self):
+        source = Path(__file__).resolve().parents[2] / 'scope/extension.yml'
+        doc = yaml.safe_load(source.read_text(encoding='utf-8'))
+        self.assertEqual(doc['extension']['version'], '1.5.0')
+        self.assertIn({'id': 'workflow', 'version': '>=1.8.0,<2.0.0', 'required': True},
+                      doc['requires']['extensions'])
+        installer.check_workflow_requirement('scope', doc, '1.8.0')
+        installer.check_workflow_requirement('scope', doc, '1.9.3')
+        for unsupported in ('1.7.0', '1.7.9', '2.0.0'):
+            with self.assertRaisesRegex(w.WorkflowError, 'WORKFLOW_VERSION_UNSUPPORTED'):
+                installer.check_workflow_requirement('scope', doc, unsupported)
+
+    def test_installer_refuses_installed_scope_1_5_0_under_workflow_1_7_0(self):
+        source = Path(__file__).resolve().parents[2] / 'scope/extension.yml'
+        installed = self.root / '.specify/extensions/scope/extension.yml'
+        installed.write_text(source.read_text(encoding='utf-8'), encoding='utf-8')
+        with patch.object(installer, 'workflow_version', return_value='1.7.0'):
+            with self.assertRaisesRegex(w.WorkflowError, 'WORKFLOW_VERSION_UNSUPPORTED: scope requires workflow'):
+                installer.install(self.root, package_root=self.package)
+
+    def test_installer_refuses_staged_scope_1_5_0_under_workflow_1_7_0(self):
+        staged = self.package / 'staged'
+        for name in ('illustrate', 'project', 'scope', 'pr', 'assure', 'user-manual'):
+            shutil.copytree(Path(__file__).resolve().parents[2] / name, staged / name,
+                            ignore=shutil.ignore_patterns('__pycache__', 'tests'))
+        self.version('scope', '1.4.0')
+        with patch.object(installer, 'workflow_version', return_value='1.7.0'):
+            with self.assertRaisesRegex(w.WorkflowError, 'WORKFLOW_VERSION_UNSUPPORTED'):
+                installer.install(self.root, package_root=self.package, packages=staged)
+
     def test_unrelated_scope_package_cannot_be_overwritten(self):
         p = self.root / '.specify/extensions/scope/extension.yml'
         manifest = yaml.safe_load(p.read_text(encoding='utf-8'))
