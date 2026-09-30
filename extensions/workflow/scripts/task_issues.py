@@ -192,6 +192,21 @@ def sync_states(root, feature, parent, apply=False, github=None):
     return result
 
 
+def sync_summary(result):
+    """One line: `ok created=<n> reused=<n> total=<n> dry_run=0|1`, for `--summary`."""
+    tasks = result['tasks'].values()
+    created = sum(t['action'] == 'create' for t in tasks)
+    reused = sum(t['action'] == 'reuse' for t in tasks)
+    return f'ok created={created} reused={reused} total={len(tasks)} dry_run={int(result["dry_run"])}'
+
+
+def sync_states_summary(result):
+    """One line: `ok opened=<n> closed=<n> changed=<n> dry_run=0|1`, for `--summary`."""
+    opened = sum(c['to'] == 'open' for c in result['changes'])
+    closed = sum(c['to'] == 'closed' for c in result['changes'])
+    return f'ok opened={opened} closed={closed} changed={len(result["changes"])} dry_run={int(result["dry_run"])}'
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=Path.cwd())
@@ -200,17 +215,35 @@ def main():
     parser.add_argument('--dependencies', type=Path, help='JSON task-ID dependency mapping, explicitly {} if independent')
     parser.add_argument('--sync-states', action='store_true', help='Update already-linked issue states from completed tasks; never create issues')
     parser.add_argument('--apply', action='store_true')
+    parser.add_argument('--summary', action='store_true', help='Print one line (ok/error, counts) instead of the full JSON result')
+    parser.add_argument('--json', action='store_true', help='Print the full JSON result (today\'s default output)')
     args = parser.parse_args()
+    if args.summary and args.json:
+        parser.error('--summary and --json cannot be combined')
     try:
         if args.sync_states:
             result = sync_states(args.root, args.feature, args.parent, args.apply)
+            line = sync_states_summary(result)
         else:
             require(args.dependencies and args.dependencies.is_file(), 'DEPENDENCY_FILE_REQUIRED')
             result = sync(args.root, args.feature, args.parent, read(args.dependencies), args.apply)
-        print(json.dumps(result, indent=2))
+            line = sync_summary(result)
+        print(line if args.summary else json.dumps(result, indent=2))
         return 0
     except (WorkflowError, ValueError, KeyError) as exc:
-        print(json.dumps({'ok': False, 'error': str(exc)}))
+        if args.summary:
+            print('error ' + str(exc))
+        else:
+            print(json.dumps({'ok': False, 'error': str(exc)}))
+        return 1
+    except Exception as exc:
+        # Any other unhandled exception (a corrupt journal/state file, a
+        # missing tasks.md, ...) still must not crash with a raw traceback
+        # under --summary; default (no-flag)/--json behaviour is unchanged
+        # and keeps today's traceback-and-nonzero-exit.
+        if not args.summary:
+            raise
+        print(f'error {type(exc).__name__}: {exc}')
         return 1
 
 

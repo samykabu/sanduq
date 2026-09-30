@@ -33,4 +33,11 @@ Both analysis and documentation use feature-scoped freshness manifests under
 `.specify/extensions/assure/state/`. The existence of an old manual is not enough to pass a lifecycle
 gate.
 
-The extension depends on `illustrate >=2.0.0,<3.0.0` for applicable diagrams.
+The extension depends on `illustrate >=2.0.0,<3.0.0` for applicable diagrams. Both
+`speckit.assure.analyze` and `speckit.assure.document` ensure it with
+`python .specify/extensions/assure/scripts/deps.py ensure illustrate` before touching the feature;
+the script checks the Spec Kit registry, follows `.specify/extension-dependencies.yml`'s
+`update_policy` (`prompt`/`auto`/`manual`) without mutating dependencies under `prompt` without
+explicit approval, and prints one line, failing closed when illustrate cannot be brought into
+range. Its `SKILL.md` itself is loaded later, only when a diagram is actually about to be added or
+generated.

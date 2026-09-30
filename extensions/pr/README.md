@@ -72,12 +72,24 @@ reviewers or bots have commented on an open PR.
 ## Requirements
 
 - `git` and an authenticated `gh` CLI are required for review feedback and PR creation/update.
+- `python` is now required (previously `pr` shipped no scripts at all): `scripts/deps.py` runs the
+  illustrate dependency check that used to be inline instructions. It has no third-party
+  dependency — nothing in the install/upgrade path installs a package's `requirements.txt` before
+  its commands run, so `deps.py` parses `dependencies.yml` with a small built-in reader instead of
+  requiring PyYAML.
 - PR generation still writes the documentation if `git`, `gh`, authentication, or a remote is
   unavailable, and reports why it skipped the PR step.
-- Diagram generation requires `illustrate >=2.0.0,<3.0.0`. The command checks Spec Kit's
-  registry and follows the project dependency policy before installing or updating it.
+- Diagram generation requires `illustrate >=2.0.0,<3.0.0`. Step 0 of `speckit.pr.generate` runs
+  `python .specify/extensions/pr/scripts/deps.py ensure illustrate`, which checks Spec Kit's
+  registry and follows the project's `.specify/extension-dependencies.yml` policy
+  (`prompt`/`auto`/`manual`) before installing or updating it, printing one line and failing closed
+  when the dependency cannot be brought into range. The illustrate `SKILL.md` itself is loaded only
+  later, when a diagram is actually about to be generated — never eagerly at step 0.
 - `assure` and `user-manual` are optional integrations. The PR command never installs them implicitly,
   but enforces their configured policies when a target project has installed them.
+- The PR image-embedding rules (commit-pinned `?raw=true` links, never `raw.githubusercontent.com`,
+  contents-API verification) live in `references/pr-image-embedding.md` and are loaded only when the
+  generated PR actually has a diagram or screenshot to embed.
 
 ## Migrating from `pr-review`
 

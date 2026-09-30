@@ -79,8 +79,16 @@ def main():
     workflow_result = upgrade(root, future_version, apply=True, packages=workspace / 'packages')
     assert registry(root)['workflow']['version'] == future_version
     verify_progress()
-    for relative in ('scripts/progress.py', 'scripts/usage.py', 'skills/workflow/references/execution.md'):
+    for relative in ('scripts/progress.py', 'scripts/usage.py', 'skills/workflow/references/execution-assign.md',
+                     'skills/workflow/references/execution-report.md'):
         assert (root / '.specify/extensions/workflow' / relative).read_bytes() == (source / relative).read_bytes()
+    from workflow import BASE_STAGES, WORKFLOW_PACKAGE_PREFIX, stage_reference
+    for stage in BASE_STAGES:
+        # stage_reference() is project-relative (`.specify/extensions/workflow/...`); strip
+        # that prefix to get the path inside `source` (the package root, i.e. workflow/).
+        relative = stage_reference(stage)
+        package_relative = relative[len(WORKFLOW_PACKAGE_PREFIX):]
+        assert (root / relative).read_bytes() == (source / package_relative).read_bytes(), relative
     assert json.loads(config.read_text()) == {'custom_project_setting':'preserve-me'}
     receipt = {'ok':True,'from':'pr 4.0.2 (downloaded published asset)','to':'pr 4.1.0 (staged)',
                'published_archive_sha256':hashlib.sha256((downloads/'pr.zip').read_bytes()).hexdigest(),

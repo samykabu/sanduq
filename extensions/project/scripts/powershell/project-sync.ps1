@@ -28,6 +28,8 @@
 .PARAMETER NoSubIssues  On the 'ready' phase, do not create task sub-issues.
 .PARAMETER Force     Allow moving the card to an earlier status (override no-regress).
 .PARAMETER Json      Emit a machine-readable JSON summary as the last line.
+.PARAMETER Summary   Emit one line (ok/error, counts) instead of the JSON summary; mutually
+                     exclusive with -Json. Never changes the exit code, only what is printed.
 #>
 [CmdletBinding()]
 param(
@@ -37,17 +39,35 @@ param(
     [switch]$DryRun,
     [switch]$NoSubIssues,
     [switch]$Force,
-    [switch]$Json
+    [switch]$Json,
+    [switch]$Summary
 )
 $ErrorActionPreference = 'Stop'
 
+if ($Summary -and $Json) {
+    # Matches project-sync.sh's `error reason=<msg>` shape (bash additionally
+    # carries `exit=<rc>`, which a plain PowerShell exit code already is).
+    Write-Output 'error reason=-Summary and -Json cannot be combined'
+    exit 2
+}
+$script:CreatedCount = 0
+$script:ClosedCount = 0
+
+# Under -Summary, run-log lines are not part of the one-line contract, so
+# they move to the real stderr stream instead of polluting stdout via
+# Write-Host. Write-Verbose is not enough here: it still reaches stdout when
+# the caller sets -Verbose or $VerbosePreference = 'Continue', so this uses
+# [Console]::Error directly, which -Verbose/$VerbosePreference cannot affect.
 function Write-Log { param([string]$Msg, [string]$Level = 'info')
     $prefix = switch ($Level) { 'warn' { '[project][warn]' } 'error' { '[project][error]' } default { '[project]' } }
-    Write-Host "$prefix $Msg"
+    if ($Summary) { [Console]::Error.WriteLine("$prefix $Msg") } else { Write-Host "$prefix $Msg" }
 }
 function Skip { param([string]$Reason)
     Write-Log "skipped: $Reason" 'warn'
-    if ($Json) { [pscustomobject]@{ skipped = $true; reason = $Reason } | ConvertTo-Json -Compress }
+    # A graceful skip is not success (SKILL.md): the first token is
+    # `skipped`, never `ok`.
+    if ($Summary) { Write-Output "skipped reason=$Reason" }
+    elseif ($Json) { [pscustomobject]@{ skipped = $true; reason = $Reason } | ConvertTo-Json -Compress }
     exit 0
 }
 function Get-RepoRoot {
@@ -112,6 +132,8 @@ function Invoke-GhOrRest { param([string[]]$GhArgs, [scriptblock]$Rest, [switch]
     if ($DryRun) { Write-Log "DRYRUN REST equivalent of gh $($GhArgs[0]) $($GhArgs[1])"; return $null }
     try { return (& $Rest) } catch { if ($AllowFail) { return $null }; throw }
 }
+
+try {
 
 $repoRoot = Get-RepoRoot
 Set-Location $repoRoot
@@ -295,6 +317,7 @@ function Sync-SubIssues {
         $fs.subIssues[$t.id] = @{ number = $snum; nodeId = $snode; closed = $false }
         $created++
     }
+    $script:CreatedCount = $created
     if ($created -gt 0) { Write-Log "created $created sub-issue(s)" }
 }
 
@@ -312,6 +335,7 @@ function Sync-Progress {
             $si.closed = $true; $closed++
         }
     }
+    $script:ClosedCount = $closed
     if ($closed -gt 0) { Write-Log "closed $closed completed sub-issue(s)" }
     $total = $fs.subIssues.Count
     $done = @($fs.subIssues.Values | Where-Object { $_.closed }).Count
@@ -363,6 +387,27 @@ if ($Phase -eq 'done' -and $progress -and $progress.total -gt 0 -and $progress.d
 Set-CardStatus -Status $targetStatus
 Save-State
 
-$summary = [pscustomobject]@{ feature = $slug; repo = $repoSlug; issue = $fs.issue; project = $cfg.projectNumber; status = $fs.status; phase = $Phase; subIssues = $fs.subIssues.Count; dryRun = [bool]$DryRun; transport = $script:Transport }
+# Named $jsonSummary, never $summary: PowerShell variable names are
+# case-insensitive, and $summary would silently collide with the -Summary
+# switch parameter (assigning this object to it, then throwing a
+# MetadataError the moment anything reads $Summary as a switch again).
+$jsonSummary = [pscustomobject]@{ feature = $slug; repo = $repoSlug; issue = $fs.issue; project = $cfg.projectNumber; status = $fs.status; phase = $Phase; subIssues = $fs.subIssues.Count; dryRun = [bool]$DryRun; transport = $script:Transport }
 Write-Log "done: issue #$($fs.issue), status '$($fs.status)', $($fs.subIssues.Count) sub-issue(s) (transport: $script:Transport)"
-if ($Json) { $summary | ConvertTo-Json -Compress }
+if ($Summary) {
+    Write-Output "ok issue=$($fs.issue) status=$($fs.status) created=$script:CreatedCount closed=$script:ClosedCount"
+} elseif ($Json) {
+    $jsonSummary | ConvertTo-Json -Compress
+}
+
+} catch {
+    # `Skip` exits the process directly (never throws), so only a genuine
+    # mid-run failure (a terminating error under $ErrorActionPreference =
+    # 'Stop') reaches here. Under -Summary that must still be one line
+    # rather than a raw stack trace; default behaviour is unchanged.
+    if ($Summary) {
+        $message = ($_.Exception.Message -replace '\s+', ' ').Trim()
+        Write-Output "error reason=$message"
+        exit 1
+    }
+    throw
+}

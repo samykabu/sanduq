@@ -138,7 +138,8 @@
       "type": "object",
       "description": "Optional model-aware delegation; absent legacy policies default to disabled.",
       "additionalProperties": false,
-      "required": ["enabled", "install_scope", "stronger_retry", "models", "routes", "overrides"],
+      "required": ["enabled", "install_scope", "stronger_retry", "models", "routes", "overrides",
+                   "fixed_collection_commands"],
       "properties": {
         "enabled": {"type": "boolean"},
         "install_scope": {"enum": ["project", "global"]},
@@ -153,20 +154,34 @@
         },
         "routes": {
           "type": "object", "additionalProperties": false,
-          "required": ["discovery", "implementation", "qa", "documentation", "review", "coordination"],
           "properties": {
-            "discovery": {"$ref": "#/$defs/delegation_route"},
+            "discovery": {"$ref": "#/$defs/delegation_route_not_light"},
             "implementation": {"$ref": "#/$defs/delegation_route"},
-            "qa": {"$ref": "#/$defs/delegation_route"},
+            "qa_author": {"$ref": "#/$defs/delegation_route"},
+            "qa_collect": {"$ref": "#/$defs/delegation_route"},
             "documentation": {"$ref": "#/$defs/delegation_route"},
             "review": {"$ref": "#/$defs/delegation_route"},
-            "coordination": {"$ref": "#/$defs/delegation_route"}
-          }
+            "coordination": {"$ref": "#/$defs/delegation_route"},
+            "qa": {"$ref": "#/$defs/delegation_route", "description": "Deprecated pre-1.7 route. workflow.py reads it in place as qa_author (adding a fresh qa_collect) and never writes it back; a schema consumer that validates a raw pre-migration project file needs it declared here."}
+          },
+          "allOf": [
+            {"required": ["discovery", "implementation", "documentation", "review", "coordination"]},
+            {"anyOf": [
+              {"required": ["qa_author", "qa_collect"]},
+              {"required": ["qa"]}
+            ]}
+          ]
         },
         "overrides": {
           "type": "object", "patternProperties": {
             "^specs/[^/]+/T[0-9]{3,}$": {"$ref": "#/$defs/delegation_route"}
           }, "additionalProperties": false
+        },
+        "fixed_collection_commands": {
+          "type": "object",
+          "description": "Optional verify -> exact resolved-command string map (1.7+). Only \"verify\" may ever be named (never a discovery or other stage); its value routes it to the light-eligible qa_collect only while its resolved command still matches exactly, and never when the value itself is a workflow: pseudo-command or a speckit. skill invocation (those are never a genuinely fixed external script). Empty (the default) means verify is never inferred as qa_collect.",
+          "propertyNames": {"enum": ["verify"]},
+          "additionalProperties": {"type": "string", "minLength": 1, "not": {"pattern": "^(workflow:|speckit\\.)"}}
         }
       }
     },
@@ -178,6 +193,23 @@
         "require_input_roles": {
           "type": "boolean", "default": false,
           "description": "Require a declared input role for every receipt input outside specs/<feature>/ and .specify/memory/."
+        }
+      }
+    },
+    "skills": {
+      "type": "object",
+      "description": "Optional doctor skill-inventory thresholds; an absent section or key means the shipped default (see workflow README, 'Skill inventory (doctor)').",
+      "additionalProperties": false,
+      "properties": {
+        "inventory_thresholds": {
+          "type": "object",
+          "description": "Per-host-session-load threshold overrides; every key is optional.",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "skill_count": {"type": "integer", "minimum": 1},
+            "description_bytes": {"type": "integer", "minimum": 1}
+          }
         }
       }
     },
@@ -379,6 +411,27 @@
         "preferred": {"$ref": "#/$defs/delegation_candidate"},
         "fallbacks": {"type": "array", "maxItems": 5,
                       "items": {"$ref": "#/$defs/delegation_candidate"}}
+      }
+    },
+    "delegation_candidate_not_light": {
+      "description": "Discovery (Scope, Specify, Clarify, Plan, Tasks) is never light-tier (B12).",
+      "type": "object", "additionalProperties": false,
+      "required": ["harness"],
+      "properties": {
+        "harness": {"enum": ["selected", "codex", "claude"]},
+        "tier": {"enum": ["high", "standard", "documentation", "review"]},
+        "model": {"type": ["string", "null"]}
+      },
+      "oneOf": [{"required": ["tier"], "not": {"required": ["model"]}},
+                 {"required": ["model"], "not": {"required": ["tier"]}}]
+    },
+    "delegation_route_not_light": {
+      "type": "object", "additionalProperties": false,
+      "required": ["preferred", "fallbacks"],
+      "properties": {
+        "preferred": {"$ref": "#/$defs/delegation_candidate_not_light"},
+        "fallbacks": {"type": "array", "maxItems": 5,
+                      "items": {"$ref": "#/$defs/delegation_candidate_not_light"}}
       }
     }
   }

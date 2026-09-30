@@ -90,6 +90,10 @@
           {
             "name": "gh",
             "required": false
+          },
+          {
+            "name": "python",
+            "required": true
           }
         ]
       },
