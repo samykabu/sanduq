@@ -1,9 +1,11 @@
 """B13: speckit-workflow-apply-pending applies workflow/pending-artifact-updates.md (F15) --
 the mechanical half only; it never judges wording, and it reports staleness with the gate's
 own recovery recipe rather than re-validating anything itself."""
+import os
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import apply_pending as ap
@@ -72,6 +74,100 @@ class ApplyPendingTests(unittest.TestCase):
         result = ap.apply(self.root, self.feature, apply_changes=True)
         self.assertEqual(len(result['rejected']), 1)
         self.assertIn('TARGET_FILE_MISSING', result['rejected'][0]['reason'])
+
+    def test_parent_traversal_target_is_rejected(self):
+        # Review round 1, finding 4: a `..` target must never escape
+        # <feature>/contracts, data-model.md or research.md.
+        victim = self.root / 'outside-victim.md'
+        victim.write_text('# Victim\n\n## Sec\n\nOriginal.\n', encoding='utf-8')
+        entry = ('## specs/001-example/contracts/../../../outside-victim.md#Sec\n'
+                 'Status: pending\n```markdown\nPwned.\n```\n')
+        self.pending.write_text(entry, encoding='utf-8')
+        result = ap.apply(self.root, self.feature, apply_changes=True)
+        self.assertEqual(len(result['rejected']), 1)
+        reason = result['rejected'][0]['reason']
+        self.assertTrue(reason.startswith('PENDING_TARGET_ABSOLUTE_REFUSED') or
+                        reason.startswith('PATH_OUTSIDE_PROJECT') or
+                        reason.startswith('PENDING_TARGET_NOT_ALLOWED'), reason)
+        self.assertEqual(victim.read_text(encoding='utf-8'), '# Victim\n\n## Sec\n\nOriginal.\n')
+
+    def test_absolute_path_target_is_rejected(self):
+        victim = self.root / 'outside-victim.md'
+        victim.write_text('# Victim\n\n## Sec\n\nOriginal.\n', encoding='utf-8')
+        absolute = str(victim).replace('\\', '/')
+        entry = f'## {absolute}#Sec\nStatus: pending\n```markdown\nPwned.\n```\n'
+        self.pending.write_text(entry, encoding='utf-8')
+        result = ap.apply(self.root, self.feature, apply_changes=True)
+        self.assertEqual(len(result['rejected']), 1)
+        self.assertIn('PENDING_TARGET_ABSOLUTE_REFUSED', result['rejected'][0]['reason'])
+        self.assertEqual(victim.read_text(encoding='utf-8'), '# Victim\n\n## Sec\n\nOriginal.\n')
+
+    def test_symlinked_target_escaping_contracts_is_rejected(self):
+        victim = self.root / 'outside-victim.md'
+        victim.write_text('# Victim\n\n## Sec\n\nOriginal.\n', encoding='utf-8')
+        link = self.directory / 'contracts' / 'link.md'
+        try:
+            link.symlink_to(victim)
+        except OSError:
+            self.skipTest('symlinks unsupported (no privilege) on this host')
+        entry = '## specs/001-example/contracts/link.md#Sec\nStatus: pending\n```markdown\nPwned.\n```\n'
+        self.pending.write_text(entry, encoding='utf-8')
+        result = ap.apply(self.root, self.feature, apply_changes=True)
+        self.assertEqual(len(result['rejected']), 1)
+        self.assertIn('PENDING_TARGET_NOT_ALLOWED', result['rejected'][0]['reason'])
+        self.assertEqual(victim.read_text(encoding='utf-8'), '# Victim\n\n## Sec\n\nOriginal.\n')
+
+    def test_pending_file_itself_must_stay_inside_the_repo(self):
+        outside = self.root.parent / 'outside-pending.md'
+        try:
+            outside.write_text(ENTRY, encoding='utf-8')
+            with self.assertRaises(w.WorkflowError) as ctx:
+                ap.apply(self.root, self.feature, pending_path='../outside-pending.md', apply_changes=False)
+            self.assertIn('PATH_OUTSIDE_PROJECT', str(ctx.exception))
+        finally:
+            outside.unlink(missing_ok=True)
+
+    def test_apply_refuses_inside_a_delegated_worker(self):
+        self.pending.write_text(ENTRY, encoding='utf-8')
+        with patch.dict(os.environ, {'SANDUQ_DELEGATED_RUN': 'specs/001-example/T001'}):
+            with self.assertRaises(ValueError) as ctx:
+                ap.apply(self.root, self.feature, apply_changes=True)
+        self.assertIn('DELEGATION_WORKER_CONTEXT', str(ctx.exception))
+        self.assertNotIn('deprecated', (self.directory / 'contracts/api.md').read_text(encoding='utf-8'))
+
+    def test_apply_refuses_while_a_claim_is_active(self):
+        self.policy = w.default_policy(False, False)
+        self.configure()
+        run = w.Run(self.root, self.feature)
+        run.start('acme/app#10')
+        w.write(run.feature / 'scope-source.json', {'repo': 'acme/app', 'issue': 10})
+        run.claim({'session_id': 's', 'observed_at': w.now(), 'method': 'estimated', 'fraction': .1,
+                  'next_fraction': .05})
+        self.pending.write_text(ENTRY, encoding='utf-8')
+        with self.assertRaises(w.WorkflowError) as ctx:
+            ap.apply(self.root, self.feature, apply_changes=True)
+        self.assertIn('APPLY_PENDING_ACTIVE_CLAIM_MUST_BE_RESOLVED', str(ctx.exception))
+        self.assertNotIn('deprecated', (self.directory / 'contracts/api.md').read_text(encoding='utf-8'))
+
+    def test_stale_check_failure_is_reported_not_swallowed(self):
+        # Review round 1, finding 5: a real error computing staleness must
+        # surface as `stale: null` + `stale_error`, never a bare `[]` that
+        # looks identical to "confirmed nothing is stale".
+        self.policy = w.default_policy(False, False)
+        self.configure()
+        run = w.Run(self.root, self.feature)
+        run.start('acme/app#10')
+        contract_path = self.feature + '/contracts/api.md'
+        state = run.load()
+        state['receipts']['plan'] = {'stage': 'plan', 'summary': 'planned', 'outcome': 'passed',
+                                     'inputs': [contract_path], 'evidence': [contract_path],
+                                     'fingerprints': w.fingerprint_files(self.root, [contract_path])}
+        run.save(state)
+        with patch('apply_pending.stale_after', side_effect=w.WorkflowError('BOOM: simulated failure')):
+            self.pending.write_text(ENTRY, encoding='utf-8')
+            result = ap.apply(self.root, self.feature, apply_changes=True)
+        self.assertIsNone(result['stale'])
+        self.assertIn('BOOM', result['stale_error'])
 
     def test_apply_reports_staleness_of_a_receipt_that_fingerprinted_the_target(self):
         self.policy = w.default_policy(False, False)

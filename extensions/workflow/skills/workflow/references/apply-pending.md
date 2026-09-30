@@ -30,9 +30,23 @@ each pending entry's proposed wording against the actual shipped code (F15's
 "verifying each item against code"); the script only performs the mechanical
 half. It locates the named heading in the target file, replaces its body up
 to the next heading of the same or shallower level, and marks the entry
-`applied` (with `Applied:`/`Actor:`) or `rejected` (`ANCHOR_NOT_FOUND` or
-`TARGET_FILE_MISSING`, with a `Reason:`); an already-decided entry is left
-untouched, so re-running is safe.
+`applied` (with `Applied:`/`Actor:`) or `rejected` (`ANCHOR_NOT_FOUND`,
+`TARGET_FILE_MISSING`, `PENDING_TARGET_ABSOLUTE_REFUSED` or
+`PENDING_TARGET_NOT_ALLOWED`, with a `Reason:`); an already-decided entry is
+left untouched, so re-running is safe.
+
+Every target is confined to `<feature>/contracts/**`, `<feature>/data-model.md`
+or `<feature>/research.md` (review round 1, finding 4): an absolute path,
+`..`, or a symlink anywhere on the way that would resolve outside those
+locations is rejected per-entry, exactly like the checks above, never
+silently normalised or followed. The pending file itself is contained the
+same way, as a hard failure rather than a per-entry rejection.
+
+`--apply` refuses outright inside a delegated worker or orchestrator process
+(`SANDUQ_DELEGATED_RUN`/`SANDUQ_DELEGATED_ROLE`, finding 3, matching
+`Run.amend`'s own guard) and while a claim is active for the feature
+(`APPLY_PENDING_ACTIVE_CLAIM_MUST_BE_RESOLVED`) -- this is a dispatcher-level
+decision, never a worker's, made on a stable checkpoint.
 
 When `--apply` touches a path that is a dependency of an already-passed
 receipt (Plan and Analyze commonly fingerprint contracts, data-model and
@@ -40,4 +54,7 @@ research explicitly), the result's `stale` list names each stage that is no
 longer current, with the exact `recovery_recipe` -- the same structured
 recipe `gate-explain` prints. Run it (typically a re-record through
 `claim`/`complete`, since a dependency, not evidence, changed); this script
-never re-validates a stage itself.
+never re-validates a stage itself. When a touched path is fingerprinted but
+the staleness check itself fails, the result reports `stale: null` with a
+`stale_error` message, never silently folding that failure into an empty
+`[]` that would look identical to "confirmed nothing is stale" (finding 5).

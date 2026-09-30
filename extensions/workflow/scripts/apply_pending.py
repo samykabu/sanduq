@@ -21,6 +21,15 @@ Entry format (the file this script reads and rewrites)::
 
 `Status` becomes `applied` (with `Applied: <utc>` and `Actor:`) or `rejected`
 (with `Reason:`) after `--apply`; an already-decided entry is left untouched.
+
+Every target is confined to `<feature>/contracts/**`, `<feature>/data-model.md`
+or `<feature>/research.md` (review round 1, finding 4): an absolute path,
+`..`, or a symlink anywhere on the way that would resolve outside those
+locations is rejected per-entry, never silently normalised or followed. The
+pending file itself is contained the same way. `--apply` refuses outright
+inside a delegated worker or orchestrator process
+(`SANDUQ_DELEGATED_RUN`/`SANDUQ_DELEGATED_ROLE`, finding 3, matching
+`Run.amend`'s own guard) and while a claim is active for the feature.
 """
 from __future__ import annotations
 
@@ -31,7 +40,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from workflow import Run, WorkflowError, default_actor, now, receipt_status, recovery_recipe, require, stages
+from delegate_dispatch import require_not_worker_context
+from workflow import Run, WorkflowError, default_actor, inside, now, receipt_status, recovery_recipe, require, stages
 
 ENTRY = re.compile(
     r'^## (?P<target>\S+)#(?P<anchor>.+?)\s*\n'
@@ -44,6 +54,28 @@ DEFAULT_PENDING = 'workflow/pending-artifact-updates.md'
 
 def parse_entries(text):
     return [match.groupdict() | {'span': match.span()} for match in ENTRY.finditer(text)]
+
+
+def resolve_target(root, feature, relative):
+    """The allowed absolute path for a pending entry's target, or raises.
+
+    Only `<feature>/contracts/**`, `<feature>/data-model.md` and
+    `<feature>/research.md` are writable targets. An absolute path is
+    refused before any resolution; `inside()` then resolves the path (which
+    follows every symlink on the way) and requires the *result* stay inside
+    the repository, catching `..` and a symlink escape identically. The
+    allow-list check below runs on that fully-resolved path too, so a
+    symlink that stays inside the repo but points at, say, another
+    feature's spec.md is still refused.
+    """
+    require(relative and not Path(relative).is_absolute(), 'PENDING_TARGET_ABSOLUTE_REFUSED: ' + str(relative))
+    resolved = inside(root, relative)
+    feature_dir = inside(root, feature)
+    contracts_dir = (feature_dir / 'contracts').resolve()
+    allowed_exact = {(feature_dir / 'data-model.md').resolve(), (feature_dir / 'research.md').resolve()}
+    require(resolved.is_relative_to(contracts_dir) or resolved in allowed_exact,
+            'PENDING_TARGET_NOT_ALLOWED: ' + str(relative))
+    return resolved
 
 
 def replace_section(text, anchor, new_body):
@@ -92,7 +124,16 @@ def stale_after(root, feature, policy, touched_paths):
 
 def apply(root, feature, pending_path=None, apply_changes=False, actor=None):
     root = root.resolve()
-    pending_path = root / (pending_path or (feature + '/' + DEFAULT_PENDING))
+    if apply_changes:
+        require_not_worker_context(feature)
+        try:
+            active_state = Run(root, feature).load()
+        except WorkflowError:
+            active_state = None
+        require(not (active_state and active_state.get('active')),
+                'APPLY_PENDING_ACTIVE_CLAIM_MUST_BE_RESOLVED: resolve the active claim before applying')
+    pending_relative = pending_path or (feature + '/' + DEFAULT_PENDING)
+    pending_path = inside(root, pending_relative)
     text = read_text(pending_path)
     require(text.strip(), 'PENDING_FILE_EMPTY: ' + str(pending_path))
     entries = parse_entries(text)
@@ -101,7 +142,11 @@ def apply(root, feature, pending_path=None, apply_changes=False, actor=None):
     for entry in entries:
         if entry['status'] != 'pending':
             continue
-        target = root / entry['target']
+        try:
+            target = resolve_target(root, feature, entry['target'])
+        except WorkflowError as exc:
+            decided.append({**entry, 'outcome': 'rejected', 'reason': str(exc)})
+            continue
         target_text = read_text(target)
         if not target_text:
             decided.append({**entry, 'outcome': 'rejected', 'reason': 'TARGET_FILE_MISSING: ' + entry['target']})
@@ -124,11 +169,13 @@ def apply(root, feature, pending_path=None, apply_changes=False, actor=None):
         try:
             run = Run(root, feature)
             result['stale'] = stale_after(root, feature, run.policy, touched)
-        except WorkflowError:
-            # No checkpoint (or no policy) yet for this feature: nothing to
-            # stale-check. Applying is still safe; there is simply no receipt
-            # to warn about.
-            result['stale'] = []
+        except WorkflowError as exc:
+            # Never silently claim "nothing stale" when the check itself
+            # could not run (finding 5): null is distinct from an empty
+            # list, and the error is reported so the caller can investigate
+            # rather than assume the touched paths are receipt-free.
+            result['stale'] = None
+            result['stale_error'] = str(exc)
     return result
 
 
@@ -178,7 +225,7 @@ def main():
         result = apply(args.root, args.feature, args.pending_file, args.apply, args.actor)
         print(json.dumps(result, indent=2))
         return 0
-    except WorkflowError as exc:
+    except (WorkflowError, ValueError) as exc:
         print(json.dumps({'ok': False, 'error': str(exc)}, indent=2))
         return 1
 
