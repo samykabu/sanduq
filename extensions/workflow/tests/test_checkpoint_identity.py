@@ -461,9 +461,12 @@ class RelocateTests(Harness):
         # bound to, so this exercises --allow-repository-rename as well as
         # the identity rebind (see the branch-mismatch and repository-
         # rename tests below for each blocker in isolation).
+        # --keep-issue-number: round 2, finding N2 requires an explicit
+        # choice for a repository rename/transfer rather than assuming one.
         run = self.rename_remote()
         raw_before = run.path.read_bytes()
-        preview = run.relocate('Org renamed acme -> acme-renamed', preview=True, allow_repository_rename=True)
+        preview = run.relocate('Org renamed acme -> acme-renamed', preview=True,
+                               allow_repository_rename=True, keep_issue_number=True)
         self.assertTrue(preview['preview'])
         self.assertTrue(preview['can_apply'])
         self.assertEqual(preview['old_identity']['remote'], 'github.com/acme/app')
@@ -471,9 +474,11 @@ class RelocateTests(Harness):
         self.assertTrue(preview['repository_renamed'])
         self.assertEqual(preview['old_repository'], 'acme/app')
         self.assertEqual(preview['new_repository'], 'acme-renamed/app')
+        self.assertEqual(preview['new_issue'], 'acme-renamed/app#10')
         self.assertEqual(run.path.read_bytes(), raw_before)  # preview never writes
 
-        result = run.relocate('Org renamed acme -> acme-renamed', allow_repository_rename=True)
+        result = run.relocate('Org renamed acme -> acme-renamed', allow_repository_rename=True,
+                              keep_issue_number=True)
         self.assertTrue(result['relocated'])
         relocation = result['relocation']
         self.assertEqual(relocation['reason'], 'Org renamed acme -> acme-renamed')
@@ -483,10 +488,12 @@ class RelocateTests(Harness):
         self.assertTrue(relocation['repository_renamed'])
         self.assertEqual(relocation['old_repository'], 'acme/app')
         self.assertEqual(relocation['new_repository'], 'acme-renamed/app')
+        self.assertEqual(relocation['new_issue'], 'acme-renamed/app#10')
 
         after = run.load()  # now accepted under the new identity
         self.assertEqual(after['repo_identity']['remote'], 'github.com/acme-renamed/app')
         self.assertEqual(after['repo_path'], str(self.root))  # refreshed, still written (finding 5)
+        self.assertEqual(after['issue'], 'acme-renamed/app#10')
         self.assertEqual(after['relocations'][-1], relocation)
         after_hash = hashlib.sha256(json.dumps(after['receipts'], sort_keys=True).encode()).hexdigest()
         self.assertEqual(before_hash, after_hash)
@@ -497,15 +504,16 @@ class RelocateTests(Harness):
         git(self.root, 'switch', '-qc', 'a-different-branch')
         run = w.Run(self.root, self.feature)
 
-        preview = run.relocate('Org renamed', preview=True, allow_repository_rename=True)
+        preview = run.relocate('Org renamed', preview=True, allow_repository_rename=True, keep_issue_number=True)
         self.assertFalse(preview['can_apply'])
         self.assertFalse(preview['branch_matches'])
         self.assertTrue(any('CHECKPOINT_BRANCH_MISMATCH' in b for b in preview['blockers']))
 
         with self.assertRaisesRegex(w.WorkflowError, 'CHECKPOINT_BRANCH_MISMATCH'):
-            run.relocate('Org renamed', allow_repository_rename=True)
+            run.relocate('Org renamed', allow_repository_rename=True, keep_issue_number=True)
 
-        result = run.relocate('Org renamed', allow_branch_rebind=True, allow_repository_rename=True)
+        result = run.relocate('Org renamed', allow_branch_rebind=True, allow_repository_rename=True,
+                              keep_issue_number=True)
         self.assertTrue(result['relocation']['branch_rebound'])
         self.assertEqual(result['relocation']['branch_to'], 'a-different-branch')
         self.assertEqual(run.load()['branch'], 'a-different-branch')
@@ -515,7 +523,10 @@ class RelocateTests(Harness):
         checkpoint bound to acme/app#10 into an unrelated repository
         (evil/other) -- preview reported `can_apply: True`. `relocate` must
         block that the same way `load` would, unless the caller explicitly
-        confirms the rename with `--allow-repository-rename`.
+        confirms the rename with `--allow-repository-rename` -- and (round
+        2, finding N2) names the exact new issue explicitly, since a
+        changed owner is exactly the fork case where the issue number
+        cannot be assumed to carry over.
         """
         run = self.rename_remote('https://github.com/evil/other.git')
 
@@ -531,11 +542,18 @@ class RelocateTests(Harness):
             run.relocate('claiming this checkpoint')
         self.assertEqual(run.path.read_bytes(), raw_before)  # refused apply never writes
 
-        result = run.relocate('claiming this checkpoint', allow_repository_rename=True)
+        # --allow-repository-rename alone is still not enough: without an
+        # explicit issue choice this is blocked by RELOCATE_ISSUE_REQUIRED.
+        with self.assertRaisesRegex(w.WorkflowError, 'RELOCATE_ISSUE_REQUIRED'):
+            run.relocate('claiming this checkpoint', allow_repository_rename=True)
+
+        result = run.relocate('claiming this checkpoint', allow_repository_rename=True, new_issue='evil/other#99')
         self.assertTrue(result['relocation']['repository_renamed'])
         self.assertEqual(result['relocation']['old_repository'], 'acme/app')
         self.assertEqual(result['relocation']['new_repository'], 'evil/other')
+        self.assertEqual(result['relocation']['new_issue'], 'evil/other#99')
         self.assertEqual(run.load()['repo_identity']['remote'], 'github.com/evil/other')
+        self.assertEqual(run.load()['issue'], 'evil/other#99')
 
     def test_relocate_apply_recomputes_from_a_fresh_read_under_the_lock(self):
         """Round 1, finding 2: `old_identity`/`branch_matches` used to be
@@ -545,13 +563,13 @@ class RelocateTests(Harness):
         `new_identity`, not anything cached from before either call.
         """
         run = self.rename_remote('https://github.com/acme-renamed-once/app.git')
-        first = run.relocate('first move', allow_repository_rename=True)['relocation']
+        first = run.relocate('first move', allow_repository_rename=True, keep_issue_number=True)['relocation']
         self.assertEqual(first['old_identity']['remote'], 'github.com/acme/app')
         self.assertEqual(first['new_identity']['remote'], 'github.com/acme-renamed-once/app')
 
         git(self.root, 'remote', 'set-url', 'origin', 'https://github.com/acme-renamed-twice/app.git')
         run2 = w.Run(self.root, self.feature)
-        second = run2.relocate('second move', allow_repository_rename=True)['relocation']
+        second = run2.relocate('second move', allow_repository_rename=True, keep_issue_number=True)['relocation']
         self.assertEqual(second['old_identity']['remote'], first['new_identity']['remote'])
         self.assertEqual(second['new_identity']['remote'], 'github.com/acme-renamed-twice/app')
 
@@ -559,6 +577,49 @@ class RelocateTests(Harness):
         run = self.rename_remote()
         with self.assertRaisesRegex(w.WorkflowError, 'RELOCATE_REASON_REQUIRED'):
             run.relocate('   ')
+
+    def test_relocate_repository_rename_never_assumes_the_issue_number(self):
+        """Round 2, finding N2: --allow-repository-rename on its own must
+        never auto-rebind the issue -- a rename/transfer keeps the same
+        number, but a fork's numbering is independent, and there is no
+        offline way to tell the two apart. Either explicit option works;
+        passing both is refused; --issue must name the resolved repository.
+        """
+        run = self.rename_remote()  # acme/app -> acme-renamed/app
+
+        with self.assertRaisesRegex(w.WorkflowError, 'RELOCATE_ISSUE_REQUIRED'):
+            run.relocate('renamed', allow_repository_rename=True)
+
+        with self.assertRaisesRegex(w.WorkflowError, 'RELOCATE_ISSUE_OPTIONS_CONFLICT'):
+            run.relocate('renamed', allow_repository_rename=True, keep_issue_number=True,
+                        new_issue='acme-renamed/app#10')
+
+        with self.assertRaisesRegex(w.WorkflowError, 'RELOCATE_ISSUE_REPOSITORY_MISMATCH'):
+            run.relocate('renamed', allow_repository_rename=True, new_issue='someone-else/app#1')
+
+        result = run.relocate('renamed', allow_repository_rename=True, new_issue='acme-renamed/app#42')
+        self.assertEqual(result['relocation']['new_issue'], 'acme-renamed/app#42')
+        self.assertEqual(run.load()['issue'], 'acme-renamed/app#42')
+
+    def test_start_after_a_legitimate_rename_succeeds(self):
+        """Round 2, finding N3: relocate rebinds the checkpoint's `issue`
+        but used to leave `scope-source.json` naming the old repository,
+        so a later `start` for the same (now-rebound) issue failed
+        FEATURE_BINDING_MISMATCH against it. relocate must rebind
+        `scope-source.json` in the same locked write as the checkpoint.
+        """
+        run = self.rename_remote()
+        result = run.relocate('Org renamed acme -> acme-renamed', allow_repository_rename=True,
+                              keep_issue_number=True)
+        new_issue = result['relocation']['new_issue']
+        self.assertEqual(new_issue, 'acme-renamed/app#10')
+        source = json.loads((self.root / self.feature / 'scope-source.json').read_text(encoding='utf-8'))
+        self.assertEqual(source, {'repo': 'acme-renamed/app', 'issue': 10})
+
+        # This used to fail FEATURE_BINDING_MISMATCH against a
+        # scope-source.json still naming acme/app.
+        resumed = w.Run(self.root, self.feature).start(new_issue)
+        self.assertEqual(resumed['issue'], new_issue)
 
     def test_relocate_refused_inside_a_delegated_worker_context(self):
         run = self.rename_remote()

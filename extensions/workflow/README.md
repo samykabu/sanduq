@@ -346,9 +346,12 @@ only when neither side has a remote.
 
 `Run.load()` also requires the checkpoint's bound issue to name this
 repository's own GitHub remote — the same binding `start` and the scope
-extension's `bound_claim` already require. Without a GitHub remote to check
-that against at all, the checkpoint is refused and pointed at `relocate`
-rather than trusted: a repository with no remote configured cannot load an
+extension's `bound_claim` already require, resolved from the remote
+(any scheme, an embedded token, with or without `.git`) the same way the
+portable identity is, and compared case-insensitively (GitHub repository
+names are not case sensitive). Without a GitHub remote to check that
+against at all, the checkpoint is refused and pointed at `relocate` rather
+than trusted: a repository with no remote configured cannot load an
 existing checkpoint, though `workflow.py`'s lower-level identity primitives
 still support one for other purposes.
 
@@ -360,10 +363,11 @@ above pass, then upgraded to `repo_identity` on its next write. A checkpoint
 copied from a genuinely different repository is still refused, whether
 legacy or new: this is the security property the design protects.
 
-Moving a repository legitimately — a fork, a renamed remote, a migrated
-GitHub org — changes that identity and is refused the same way, since it is
-indistinguishable from a checkpoint that does not belong here without a human
-saying so. Run:
+Moving a repository legitimately — a renamed remote or a migrated GitHub
+org (both keep the same issue numbers), or a fork (which does not: its
+issue numbering is independent of what it forked from) — changes that
+identity and is refused the same way, since it is indistinguishable from a
+checkpoint that does not belong here without a human saying so. Run:
 
 ```
 workflow.py relocate --feature specs/<feature> --preview --reason "<why>"
@@ -375,17 +379,24 @@ repository, and the current branch binding, without changing anything; the
 applying call rebinds the checkpoint and appends a `relocations[]` entry
 (`actor`, `at`, `reason`, `old_identity`, `new_identity`, and — only when the
 GitHub repository itself changed — `repository_renamed`, `old_repository`,
-`new_repository`). No receipt is touched and no stage is invalidated —
-relocate never revisits what evidence means. A branch mismatch is refused
-unless `--allow-branch-rebind` is also passed; a checkpoint whose bound issue
-names a different GitHub repository than this one now resolves to is refused
-unless `--allow-repository-rename` is also passed — this is the check that
-stops `relocate` itself from being used to launder a foreign checkpoint into
-an unrelated repository, and either flag's effect is logged in the same
-entry regardless. When a repository rename is confirmed, `issue` is rebound
-to the new repository (the same issue number) so the checkpoint's next
-`load` accepts what was just confirmed instead of refusing it again.
-Relocate is refused inside any delegated worker or
+`new_repository`, `new_issue`). No receipt is touched and no stage is
+invalidated — relocate never revisits what evidence means. A branch
+mismatch is refused unless `--allow-branch-rebind` is also passed; a
+checkpoint whose bound issue names a different GitHub repository than this
+one now resolves to is refused unless `--allow-repository-rename` is also
+passed — this is the check that stops `relocate` itself from being used to
+launder a foreign checkpoint into an unrelated repository, and either
+flag's effect is logged in the same entry regardless.
+
+A repository change never rebinds the issue automatically: pass
+`--keep-issue-number` to assume the number carries over (a GitHub rename or
+transfer only — never a fork) or `--issue <owner/repo#n>` (which must name
+the repository this one now resolves to) to bind the exact new issue
+instead; passing neither leaves the repository change blocked, and passing
+both is refused. `scope-source.json` is rebound in the same locked write as
+the checkpoint, so a later `start` for the same issue does not fail
+`FEATURE_BINDING_MISMATCH` against a source file still naming the old
+repository. Relocate is refused inside any delegated worker or
 orchestrator context (`DELEGATION_WORKER_CONTEXT`) and while a claim is
 active; it reaches the checkpoint directly, bypassing the identity and
 branch checks `load` enforces everywhere else, because that gate is exactly
