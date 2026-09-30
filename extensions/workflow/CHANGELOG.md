@@ -1,421 +1,142 @@
 # Changelog
 
-## Unreleased
+## 1.7.0
 
-- `task_issues.py` and `progress.py` gain `--summary` (one line: `ok`/`error`
-  plus counts, e.g. `ok created=2 reused=5 total=7 dry_run=0` or `ok done=3
-  total=8 pending=2 running=2 blocked=1`) and an explicit `--json`.
-  `task_issues.py --json` prints exactly today's default output, byte for
-  byte (its default was already the full JSON result). `progress.py --json`
-  is new: today's default only ever printed the report path, so `--json`
-  is an additional way to get the full `state.json` content, not a repeat of
-  today's output. `--summary` and `--json` together is rejected in both.
-  Default (no flag) behaviour and every exit code are unchanged, including
-  for an exception outside each script's previously-handled set, which
-  `--summary` now also reports as one `error <Type>: <message>` line instead
-  of a raw traceback. `task_issues.py --sync-states` already walks every
-  task in `tasks.md` per call, so it needs no change to be called once per
-  phase for a batch of newly completed tasks instead of once per task (B7).
-- `doctor --project` reports a `skill_inventory` block (new `skill_inventory.py`),
-  per **host session load** rather than one cross-host sum: `hosts.claude`
-  (`~/.claude/skills` + project `.claude/skills` + installed plugin skills, read
-  from `~/.claude/plugins/installed_plugins.json`) and `hosts.codex`
-  (`$CODEX_HOME`/`~/.codex` skills + `~/.agents/skills` + project `.agents/skills`),
-  each with its own `combined` totals and same-host `duplicates`; a name shared
-  between a claude root and a codex root (Sanduq installs the same command skill
-  into both) is reported separately under `mirrors`, not counted as a duplicate or
-  summed twice. Per-root numbers (`skill_count`, total/max frontmatter
-  `description:` bytes, total `SKILL.md` bytes) are still reported in full, even
-  below threshold, so C4 (skill pruning) can use them. Doctor warns
-  `SKILL_INVENTORY_LARGE` (non-blocking) per host past 200 skills or 40 KiB of
-  that host's own combined description bytes (measured against Bunyan; see the
-  README); either threshold is overridable per-project under
-  `policy['skills']['inventory_thresholds']`, now also in `policy-v1.schema.json`.
-  The scan runs only on `doctor --project` (not on every `migrate`/`upgrade`
-  doctor call) and a scan failure is caught and reported as
-  `SKILL_INVENTORY_UNAVAILABLE`, never a doctor failure. The home-override env var
-  is `SANDUQ_SKILLS_HOME` (was `SANDUQ_HOME`); `$CODEX_HOME` is honoured for the
-  Codex root. See the README's "Skill inventory (doctor)" section for the
-  reasoning and JSON shape. "Never invoked" pruning stays out of scope until a
-  telemetry source and window exist.
-- `claude_plugins` now filters and confines what it scans from
-  `installed_plugins.json`: a `project`/`local`-scoped entry only counts for
-  the matching project (`projectPath`), a plugin turned off in
-  `enabledPlugins` (user `settings.json`, overridden by the project's own,
-  overridden by its `settings.local.json`) is skipped, and every `installPath`
-  must resolve (following symlinks) inside `~/.claude/plugins` itself; a UNC
-  path is rejected by its literal text before any filesystem access. Anything
-  rejected on the confinement/UNC check is listed under
-  `claude_plugins.skipped_install_paths` instead of silently dropped.
-  `$CODEX_HOME/skills` is confirmed live (cited in the README and in
-  `skill_inventory.codex_home_root`'s docstring, checked against the installed
-  Codex CLI 0.159.0), so it stays a normal counted root, not `legacy`.
-- Split `skills/workflow/SKILL.md` (29 KB) into a core dispatcher (entry points,
-  stage loop, receipt rules, <= 6 KB) plus one `skills/workflow/references/
-  stage-<name>.md` per claimable stage. `claim` now returns a `reference` field
-  (`workflow.stage_reference(stage)`) naming the exact file to read for the
-  claimed stage. Cross-cutting detail moved to `references/dispatcher-
-  operations.md`, `references/delegation-and-decisions.md` and `references/
-  receipt-rules.md`. `references/execution.md` split into `references/
-  execution-assign.md` (start/resume, assign work) and `references/
-  execution-report.md` (report updates, finishing phases, delivery); every
-  overlay in `presets/workflow/commands/*.md` shrank to a <= 5-line pointer,
-  and the three `speckit-superpowers-bridge` legacy overlays point at a new
-  shared `references/legacy-guard.md`. No rule was dropped: `extensions/
-  workflow/tests/test_skill_split.py` diffs the pre-split files (read from git
-  history) against the new set and fails on anything not moved, with an
-  explicit, reasoned list for the handful of pointer sentences whose target
-  relocated. `extensions/scripts/smoke_install.py`, `smoke_upgrade.py` and
-  `test_execution_policy.py` were updated for the new paths and additionally
-  assert every stage's reference is present in the built archive and an
-  installed fixture project. No version bump; no script behavior changed
-  beyond packaging the new files.
-- Execution protocol updates (B11): `references/execution-assign.md` and
-  `references/execution-report.md` now state the retrospective's rules as
-  concrete, checkable instructions instead of prose: blocking parallel worker
-  spawns whose results return to the orchestration agent, never the dispatcher
-  (F1); no agent ends a turn while it owns running background work (F2);
-  report only on a state change (F3); a turn-budget table per task class
-  (implementation, qa_author, qa_collect, documentation, review) plus a
-  planned hand-off at ~150K resident context (T0); a fixed ten-line worker
-  result (T7); read a verification summary before raw reporter output, opened
-  only for a failed lane (T8); `git stash` and `git add -A`/`git add .`
-  forbidden for workers (S6); a consumers checklist after every fix (F11).
-  `task_issues.py --sync-states` now runs once per phase boundary, not once
-  per task (from B7), and the dispatcher's own token usage is recorded with
-  `progress.py usage --overhead dispatcher --agent <id> --collect claude --log
-  <path>` at every phase commit. Every routine `task_issues.py` and
-  `progress.py` example call now carries `--summary` (B7: `ok`/`error` plus
-  counts, or `skipped reason=...`), with `--json` reserved for a call whose
-  result must be parsed programmatically. The "Light-tier collection results
-  (B12)" section carries B12's consensus text: a `qa_collect` `start` requires
-  `--owned <path>`; `collect` trusts only a produced-file list inside those
-  paths and among the driver's own measured changes; `complete` and the Ready
-  gate both require the dispatcher's ledger to show `successful`; an
-  `unverified` run is resolved only by `reassign` or a checked
-  `delegate_dispatch.py accept`, never a note. `references/dispatcher-
-  operations.md` gained the `[Collect]` task marker alongside `[Impl]`, `[QA]`,
-  `[Docs]` and `[Review]`, and its `--sync-states` rule now matches the
-  phase-boundary cadence and names the dispatcher as owner. Review fixes: the
-  S6 self-contradiction (staging now stays with the orchestration agent, never
-  a worker); the T7 template's `Commit:` line replaced by `Diff: <+/- line
-  counts per file, uncommitted>`; the T0 budget mechanism corrected to what
-  `progress.py` actually supports (an orchestrator comparison against the
-  class budget, logged via `progress.py event --summary`, excluding the ~96%
-  of tokens that are cache reads); the dispatcher's session ID and transcript
-  path added to the handoff; and the F1/nested-spawn-fallback wording
-  reconciled. New `extensions/workflow/tests/test_execution_protocol_b11.py`
-  asserts every rule above is present in the installed reference files,
-  including an exact-text check of the B12 section, following
-  `test_skill_split.py`'s style. No version bump; no script behavior changed.
-- Delegation guard, round 11 corrections (B12; consensus, two LOW).
-  `require_not_worker_context` now checks `SANDUQ_DELEGATED_RUN` first, so
-  it always wins and gives `DELEGATION_WORKER_CONTEXT` even when
-  `SANDUQ_DELEGATED_ROLE`/`SANDUQ_DELEGATED_FEATURE` also happen to be set
-  (that combination should not occur, but was previously read as the
-  orchestrator role regardless). `recover` and `abandon` now also call
-  `require_not_worker_context(feature, <intent identity>)`, matching
-  `start`/`collect`/`accept`/`reassign`/`adopt`: a plain worker is refused
-  outright, and the delegated Execute orchestrator is allowed only for a
-  `T###` intent of its own feature. The Execute stage brief's allowed-
-  command list now includes `recover` and `abandon`.
+- **B7 — quiet output.** `task_issues.py` and `progress.py` gain `--summary`
+  (one line: `ok`/`error` plus counts, e.g. `ok created=2 reused=5 total=7
+  dry_run=0` or `ok done=3 total=8 pending=2 running=2 blocked=1`) and an
+  explicit `--json`. `task_issues.py --json` matches the previous default
+  output byte for byte; `progress.py --json` is new, since the previous
+  default only ever printed the report path. `--summary` and `--json`
+  together is rejected in both; default (no flag) behaviour and every exit
+  code are unchanged, and an unhandled exception is reported under
+  `--summary` as one `error <Type>: <message>` line instead of a raw
+  traceback. `task_issues.py --sync-states` now runs once per phase
+  boundary rather than once per task, and the dispatcher's own token usage
+  is recorded with `progress.py usage --overhead dispatcher --agent <id>
+  --collect claude --log <path>` at every phase commit.
 
-- Delegation guard, round 10 corrections (B12; blocking fix, one HIGH and
-  two LOW). Round 9's `SANDUQ_DELEGATED_RUN` guard wrongly barred the
-  delegated Execute orchestrator from dispatching and resolving its own
-  task workers, even though its own brief and `references/execution*.md`
-  tell it to. `driver_env` now sets a different, role-aware environment for
-  the `stage:execute` launch specifically:
-  `SANDUQ_DELEGATED_ROLE=orchestrator` plus `SANDUQ_DELEGATED_FEATURE`,
-  never `SANDUQ_DELEGATED_RUN`. `require_not_worker_context` (now also
-  called by `start` and `collect`, not only `adopt`/`accept`/`reassign`/
-  `trust-reset`) is role-aware: under the orchestrator role it allows
-  `start`, `collect`, `accept`, `reassign` and `adopt` for a `T###` task of
-  that same feature only, refusing `trust-reset`, any `stage:*` identity
-  and any other feature with `DELEGATION_ORCHESTRATOR_SCOPE`. A task worker
-  the orchestrator itself launches gets an ordinary worker environment from
-  its own `launch()` call, with `SANDUQ_DELEGATED_ROLE`/`FEATURE` explicitly
-  stripped so it never inherits the orchestrator's scope. The Execute stage
-  brief now states this narrower rule in place of the blanket
-  `NO_DISPATCHER_COMMANDS`; task briefs are unchanged. `launch()` also now
-  passes `--keep-env` for all three `SANDUQ_DELEGATED_*` names, so a future
-  `--clean-env` launch does not silently drop whichever was actually set
-  (the Node-level fake-harness/`FAKE_REPORT_ENV` isolation test for this
-  lives in `skills/agent-tools/skills/delegate-task/test/run.mjs`, out of
-  this extension's scope; covered here instead by asserting the constructed
-  argv). The README now says plainly that a reviewer must read the
-  `DELEGATION_TASK_ADOPTED`/`DELEGATION_TASK_ACCEPTED` warning lines,
-  because an orchestrator-context `adopt` or `accept` trusts the
-  orchestrator's own choice of command with nothing independent to
-  cross-check it against.
+- **B8 — dispatcher core split.** `skills/workflow/SKILL.md` (29 KB) is
+  split into a core dispatcher (entry points, stage loop, receipt rules,
+  <= 6 KB) plus one `skills/workflow/references/stage-<name>.md` per
+  claimable stage; `claim` returns a `reference` field naming the exact
+  file to read for the claimed stage. Cross-cutting detail moved to
+  `references/dispatcher-operations.md`, `references/delegation-and-
+  decisions.md` and `references/receipt-rules.md`; `references/
+  execution.md` split into `references/execution-assign.md` (start/resume,
+  assign work) and `references/execution-report.md` (report updates,
+  finishing phases, delivery). This is a packaging change only: no rule was
+  dropped and no script behaviour changed, verified by a test that diffs
+  the pre-split files against the new set.
 
-- Delegation guard, round 9 corrections (B12; final Opus verification, one
-  MEDIUM and two LOW). `driver_env` now sets `SANDUQ_DELEGATED_RUN` (this
-  dispatch's own intent id) for every driver subprocess and, through it,
-  every worker it spawns; `adopt`, `accept`, `reassign` and `trust-reset`
-  all refuse with `DELEGATION_WORKER_CONTEXT` when that variable is set --
-  defence in depth against a worker self-certifying its own unattempted or
-  unverified work with a fabricated command, not a security boundary (a
-  worker could unset it; the worker brief's own prohibition remains
-  primary). `ready_checks` now appends a Ready-gate warning for every task
-  the orchestrator itself resolved rather than a worker's own attempt --
-  `DELEGATION_TASK_ADOPTED: <task> via "<command>" (<expect>, exit <code>)`
-  for an adoption, `DELEGATION_TASK_ACCEPTED: ...` for an `accept` -- which
-  `ci_gate.py`'s existing warning forwarding already surfaces to stderr and
-  `$GITHUB_STEP_SUMMARY`. `adopt`'s acceptance command now runs from the
-  repo root instead of being pinned to the feature directory, which
-  remains only the *default* owned root for `--expect files`. Fixed
-  `task_line_content_sha256` to strip an inline
-  `<!-- sanduq-delegation ... -->` marker before hashing: `annotate_tasks`
-  relocates such a marker onto its own line on its very next run, even for
-  an already checked task, which had been failing an otherwise-valid
-  adoption's binding at Ready.
+- **B10 — skill inventory in doctor.** `doctor --project` reports a
+  `skill_inventory` block, one entry per **host session load** rather than
+  a cross-host sum: `hosts.claude` (`~/.claude/skills` + project
+  `.claude/skills` + installed plugin skills) and `hosts.codex`
+  (`$CODEX_HOME`/`~/.codex` skills + `~/.agents/skills` + project
+  `.agents/skills`), each with its own totals and same-host duplicates; a
+  name shared between a claude root and a codex root is reported
+  separately under `mirrors`, never double-counted. Doctor warns
+  (non-blocking) `SKILL_INVENTORY_LARGE` past 200 skills or 40 KiB of a
+  host's own combined description bytes, both overridable under
+  `policy['skills']['inventory_thresholds']`. `claude_plugins` confines
+  itself to the current project's plugin scope, honours
+  `enabledPlugins`/`settings.local.json`, and requires every `installPath`
+  to resolve inside `~/.claude/plugins`; anything rejected is listed under
+  `claude_plugins.skipped_install_paths`. A scan failure is reported as
+  `SKILL_INVENTORY_UNAVAILABLE`, never a doctor failure.
 
-- Delegation guard, round 8 corrections (B12). `delegate_dispatch.py
-  adopt` now requires `--id <task>` to exist in `tasks.md` and be checked
-  before running anything (`DELEGATION_ADOPT_TASK_UNKNOWN` /
-  `DELEGATION_ADOPT_TASK_NOT_CHECKED`), and records a sha256 binding of the
-  task line's content (checkbox state removed, whitespace normalised;
-  `delegation.task_line_content_sha256`) on the new attempt. `ready_checks`
-  re-hashes the live line at completion and refuses with
-  `DELEGATION_ADOPT_TASK_CHANGED` on a mismatch, closing the gap where
-  adopting an absent task id and later adding a different checked task
-  under that same id let the earlier adoption ride to Ready. `reassign` no
-  longer crashes with a bare `KeyError` on `retry_count` for an adopted
-  attempt (it has no dispatcher route, task file or retry count to escalate
-  from); it now refuses cleanly with `DELEGATION_REASSIGN_ADOPTED_UNSUPPORTED`,
-  pointing at a corrected `adopt` or a normal `start`. `adopt` itself now
-  accepts a task whose only attempts are unverified adoptions, so re-adoption
-  with a corrected check is the supported recovery; any other existing
-  attempt still refuses with `DELEGATION_ADOPT_HAS_ATTEMPT`.
+  **Upgrade note:** the home-override environment variable is renamed
+  `SANDUQ_SKILLS_HOME` (was `SANDUQ_HOME`); update any script or CI job
+  that set the old name.
 
-- Delegation guard, round 7 corrections (B12). Round 6's two exemptions for
-  a checked task with no delegation attempt were both reviewed as bypasses
-  and removed outright: the stage-wide `delegation_enabled_for_execute`
-  checkpoint field (mutable, unfingerprinted, never read again) is no longer
-  stamped by `complete()` or read by `ready_checks`, and the
-  `orchestrator-executed` command, its ledger `orchestrator_executed` list,
-  and `delegation.orchestrator_executed_tasks()` are deleted entirely; a
-  legacy ledger or checkpoint still carrying either is inert. **Upgrade
-  note:** a project enabling delegation mid-feature must instead adopt each
-  already-checked task with its own acceptance check. Replaced with
-  `delegate_dispatch.py adopt --feature <f> --id <task> --command
-  "<acceptance check>" --expect counts|files [--owned <path>]`: it refuses
-  with `DELEGATION_ADOPT_HAS_ATTEMPT` when any attempt already exists for
-  the task (those go through `accept` or `reassign` instead), otherwise runs
-  the acceptance command with exactly `accept`'s own machinery (argv
-  building, the BatBadBut shim refusal, timeout, output cap, owned-path
-  containment, per-file sha256), and records a new attempt --
-  `status: 'successful'` and `adopted: true` only when the check passes,
-  `'unverified'` otherwise -- that the Ready gate then reads like any other
-  attempt, never as an exemption. `adopt` joins the worker-forbidden
-  dispatcher commands in every brief. See the README's "adopt it, never
-  exempt it" section for the full rationale.
+- **B11 — execution protocol.** `references/execution-assign.md` and
+  `references/execution-report.md` state the review's rules as concrete,
+  checkable instructions: parallel worker spawns block and their results
+  return to the orchestration agent, never the dispatcher; no agent ends
+  its turn while it owns running background work; report only on a state
+  change; a turn-budget table per task class with a planned hand-off at
+  ~150K resident context; a fixed ten-line worker result; read a
+  verification summary before raw reporter output; `git stash` and
+  `git add -A`/`git add .` are forbidden for workers; a consumers checklist
+  follows every fix.
 
-- Delegation guard, round 6 corrections (B12). `delegate_dispatch.py`'s
-  `owned_roots`/`validate_owned_files` now reject a root-relative (`\x`) or
-  drive-relative (`C:x`) Windows path that `Path.is_absolute()` alone
-  misses, checking `PureWindowsPath`/`PurePosixPath` explicitly regardless
-  of host OS, and require every resolved owned root and candidate file to
-  stay inside the recorded `cwd` itself, not only inside a declared owned
-  root. The Ready task gate's `tasks` rule previously only rejected a
-  checked task whose latest delegated attempt existed and had failed; one
-  with no attempt at all slipped through, because the check only ran when
-  `latest_attempt` returned non-`None`. Fixed by requiring `'successful'`
-  from a missing attempt too, with two grandfathers so a project that
-  enables delegation mid-feature is not retroactively broken: the `execute`
-  stage's own receipt now records `delegation_enabled_for_execute` (stamped
-  once, from `active['delegation']`, when `complete()` finishes that stage),
-  exempting the whole stage when it is `False`; and a new
-  `delegate_dispatch.py orchestrator-executed --feature <f> --id <task>
-  --reason "<text>"` command records a specific task as the orchestrator's
-  own direct work in `delegations.json`'s new `orchestrator_executed` list,
-  exempting only that task for the finer-grained case of delegation turned
-  on partway through one long-lived `execute` stage. See the README's
-  "grandfather rule" section for the full rationale.
+- **B12 — delegation guard.** `qa` splits into `qa_author` (standard-tier
+  authoring and analysis) and `qa_collect` (light-eligible: running an
+  existing, fixed check and reporting its result). Coordination now
+  defaults to `high`, never light: it claims and completes workflow stages
+  and issues, not a cheap default. Discovery is never light. Routing to
+  `qa_collect` is never a heuristic: only an explicit `[Collect]` task
+  marker or a per-task override reaches it; `verify` always routes to
+  `qa_author` unless `delegation.fixed_collection_commands.verify` names
+  its resolved command exactly. A light-tier or `qa_collect` `start` must
+  declare `--owned` itself; there is no silent whole-checkout default.
 
-- Delegation guard, round 5 corrections (B12; consensus). Round 4's
-  `TIER_QUALIFIER_TOKENS` (`high`, `xhigh`, `max`, `pro`, `large`) rejected a
-  light-tier model match too eagerly — the unsafe direction, since a false
-  "different model" skips the guard entirely. `max`/`pro`/`large` are no
-  longer tier qualifiers at all (`haiku-large-ctx` and `gpt-6-terra-pro` now
-  correctly match their light-tier base model); the remaining effort words
-  (`high`, `xhigh`) reject a match only when `model_family_matches` is told
-  the fuller identifier is itself one of the harness's configured non-light
-  models (`is_light_tier_run` now passes every other configured tier's model
-  as `non_light_models`) — otherwise the safe default is still a match.
-  `ci_gate.py`'s `report_warnings` now wraps its `$GITHUB_STEP_SUMMARY`
-  append in `try`/`except OSError`, falling back to the stderr print it
-  already does: an unwritable summary path no longer turns a passing gate
-  into a reported failure.
+  A light-tier "successful" result is never taken on trust: `collect`
+  marks it `unverified` unless the worker's own produced-file list is both
+  inside the task's owned paths and among the paths the driver itself
+  measured as changed; counts are accepted only from `accept`, never from
+  a worker's own summary. New `delegate_dispatch.py accept --run-id <id>
+  --command <acceptance command> --expect counts|files [--owned <path>]`
+  runs that command with a bounded timeout and no shell, and resolves
+  `unverified` to `successful` only when it exits `0` and its output
+  satisfies the schema. The reporter-counts parser requires a real
+  reporter's own framing (pytest, Jest, JUnit/Maven, Python unittest,
+  dotnet test, node `--test`) and returns unparsed, never a guess, when two
+  formats disagree.
 
-- Delegation guard, round 4 corrections (B12). `delegate_dispatch.py
-  trust-reset` no longer clears trust on request alone: it refuses with
-  `DELEGATION_TRUST_RESET_NOTHING_TO_RESET` unless a persisted tamper flag
-  already exists (closing the probe of hand-editing the ledger, deleting the
-  local `.written` marker so no mismatch is ever detected, then calling
-  trust-reset to mint a fresh `'trusted'` marker over the unreviewed edit),
-  and with `DELEGATION_TRUST_RESET_ATTEMPTS_ACTIVE` while any attempt for the
-  feature is starting or running. `trust-reset` is orchestrator-only and
-  human-authorised: both `stage_brief` and `task_brief` now explicitly
-  forbid a worker from running any `delegate_dispatch.py` command (`start`,
-  `collect`, `accept`, `reassign`, `recover`, `abandon` or `trust-reset`) on
-  its own run, another run, or another task. `ci_gate.py` now prints every
-  `ready_checks` warning (`DELEGATION_LEDGER_TRUST_UNVERIFIED_LOCAL` in
-  particular) to stderr and appends it to `$GITHUB_STEP_SUMMARY` when the
-  runner sets that variable, without changing the gate's exit code; the
-  README documents that deleting the local marker by hand downgrades a
-  detected tamper back to `'unverified-local'` rather than clearing it
-  honestly. The light-tier model-family match now also treats `codex`,
-  `openai` and `anthropic` as generic tokens (bare `codex` no longer matches
-  `gpt-6-sol-codex`) and rejects a contained run immediately followed by a
-  tier word (`high`, `xhigh`, `max`, `pro`, `large`), so `o4-mini` no longer
-  matches `o4-mini-high`.
+  The ledger's trust state is tri-state: `'unverified-local'` (no local
+  `.written` marker, as on a fresh clone or CI checkout) is a warning only;
+  a genuine mismatch (`'untrusted'`) still refuses and is sticky until
+  `delegate_dispatch.py trust-reset --feature <f> --reason "<text>"`, which
+  is orchestrator-only and requires an existing tamper flag. This detects
+  accidental and local tampering only; CI integrity still rests on review,
+  not on this mechanism.
 
-- Delegation guard, round 3 corrections (B12). The ledger trust read is now
-  tri-state (`delegation.ledger_trust_state`) instead of a single pass/fail
-  boolean, because `delegations.json` is committed while its local
-  `.written` marker lives in gitignored runtime state: a fresh clone or a CI
-  checkout has no marker at all and was wrongly refused
-  (`DELEGATION_LEDGER_UNTRUSTED`) by every `complete` and by the Ready gate.
-  `'unverified-local'` (no marker) is now recorded as a warning only
-  (`delegation_ledger_trust` on the completed receipt; `warnings` in
-  `ci_gate.py`'s result) while task and stage status are still enforced;
-  `'untrusted'` (a marker that disagrees, or a persisted tamper) still
-  refuses. A genuine tamper is now sticky: detecting it persists a
-  feature-level flag that a later legitimate dispatcher write no longer
-  clears on its own, closing a hand-edit-laundering path. New
-  `delegate_dispatch.py trust-reset --feature <f> --reason "<text>"` is the
-  only way to clear it, and records who, when, why and the exact bytes on
-  both sides. **This detects accidental and local tampering only**: anyone
-  who can commit the ledger file can commit a fabricated one just as easily,
-  so CI integrity still rests on review, not on this mechanism — see the
-  README's delegation section.
+  `complete` and the Ready task gate both require the dispatcher's own
+  ledger — never a receipt's self-report — to show the claimed stage's or
+  task's latest delegated attempt as `successful`, with `claim_token`
+  matching the exact claim being completed; a checked task with **no**
+  attempt at all now also fails the gate.
 
-  **Upgrade note**: a stage attempt recorded before this release added
+  **Upgrade note:** a project that enables delegation mid-feature can no
+  longer wave a batch of already-checked tasks through with a stage-wide
+  flag or a self-certification command; adopt each already-checked task
+  once instead, with `delegate_dispatch.py adopt --feature <f> --id <task>
+  --command "<acceptance check>" --expect counts|files [--owned <path>]`,
+  which runs the acceptance check itself and records a binding to the
+  task's exact current content. `adopt` and `accept` run by the
+  orchestrator are visible: the Ready gate emits a
+  `DELEGATION_TASK_ADOPTED`/`DELEGATION_TASK_ACCEPTED` warning a reviewer
+  must read, since neither has an independent dispatch to cross-check it
+  against. `reassign` refuses an adopted attempt outright
+  (`DELEGATION_REASSIGN_ADOPTED_UNSUPPORTED`); re-adopt with a corrected
+  check, or `start` the task normally.
+
+  **Upgrade note:** a stage attempt recorded before this release added
   `claim_token` has none and can never match a later claim's token, so
   `complete` refuses it as `DELEGATION_STAGE_NOT_VERIFIED` even if the
-  attempt itself was genuinely successful. Re-delegate the stage once
+  attempt itself succeeded. Re-delegate the stage once
   (`delegate_dispatch.py start --id stage:<stage> --claim-token <token>`)
-  under this release to record a fresh, matching attempt; this is a one-time
-  cost per open, already-delegated stage claim.
+  under this release; this is a one-time cost per open, already-delegated
+  stage claim.
 
-  The light-tier model-family match (round 2) was too broad and matched
-  unrelated sibling models that merely shared a provider prefix or a
-  trailing qualifier (`claude-opus-4-7` against `claude-haiku-4-5`,
-  `gpt-6-terra-codex` against `gpt-6-sol-codex`, `gpt-6-sol` against the
-  bare family prefix `gpt-6`); it now matches only an exact identifier, or
-  one fully containing the other as a whole dash-delimited token run that
-  includes at least one non-generic token. `start` now requires `--owned`
-  when *any* candidate in a route's fallback chain is light, not only the
-  preferred one. The reporter-counts parser tolerates a blank, log-level-
-  prefixed line (`[INFO]` alone) between Maven's `Results:` and its
-  aggregate, supports the older dotnet VSTest console form (`Total tests:
-  N` with `Passed`/`Failed` on the same or following lines), and, like
-  pytest's rerun rule, treats any `Failed!` line in a multi-project dotnet
-  solution as failed rather than only its last project's line.
+  **Upgrade note:** legacy `qa` routes map to `qa_author` automatically. A
+  pre-1.7 policy's single `qa` route keeps working, read in place as
+  `qa_author`, with a fresh `qa_collect` route added; a legacy route with
+  any light-tier candidate resets `qa_author` to the new standard default
+  instead of inheriting it, so a legacy install never keeps routing
+  authored QA work to the light tier.
 
-- Delegation guard, round 2 corrections (B12). `complete` and the Ready task
-  gate now also require the ledger itself to be trustworthy
-  (`DELEGATION_LEDGER_UNTRUSTED` when it exists but was not last written by a
-  tracked dispatcher operation such as `collect`, `accept` or `reassign`,
-  never when there is simply no delegation activity yet) and require the
-  delegated attempt's `claim_token` (recorded at `start`) to match the exact
-  claim being completed, so a successful attempt from an earlier claim of the
-  same stage cannot satisfy a different, later re-claim; the Ready gate
-  rejects every non-`successful` delegated status, not only `unverified`.
-  `delegation.fixed_collection_commands` now allows only the `verify` key
-  (schema `propertyNames`) and never a `workflow:`- or `speckit.`-prefixed
-  value (not even `verify`'s own real default, `workflow:verification`,
-  which would otherwise silently restore the pre-fix behaviour): no stage,
-  discovery above all, can be routed to `qa_collect` through it any other
-  way. The light-tier guard's `qa_collect`-task-type rule now applies only
-  to a tier-less candidate, so a genuine standard-tier `reassign` (which
-  never changes a task's classification) is exempt and can actually resolve
-  an `unverified` result; its model match is now by family
-  (`claude-haiku-4-5-...` matches the configured alias `haiku`), not exact
-  string equality. `collect` on an already-terminal run (one `accept` already
-  resolved, in particular) returns the recorded result unchanged instead of
-  re-running the driver and the guard a second time, which could otherwise
-  downgrade an accepted `successful` back to `unverified`. A light-tier or
-  `qa_collect` `start` must declare `--owned` itself now (no more silent
-  whole-`cwd` default), and `accept --owned` may only narrow the paths
-  recorded at `start`, never widen them. `accept` refuses a `.bat`/`.cmd`
-  target, explicit or PATH-resolved (the "BatBadBut" class: Windows always
-  runs those through `cmd.exe` even without a shell here), naming the
-  underlying executable to run instead. The reporter-counts parser gained the
-  real JUnit/Maven `[INFO]`/`[ERROR]`-prefixed layout and dotnet test's
-  `Passed!`/`Failed!` line, and now treats any `failed > 0` pytest bar
-  anywhere in the output as failed, so a "rerun failed tests only" pytest
-  invocation cannot hide an earlier real failure behind a later, clean
-  partial bar.
-
-- Delegation: collection route and light-tier guard (B12). `qa` splits into
-  `qa_author` (standard-tier authoring and analysis) and `qa_collect`
-  (light-eligible: running an existing, fixed check and reporting its
-  result); a pre-1.7 policy's `qa` route keeps working, read in place as
-  `qa_author` with a fresh, light-eligible `qa_collect` route added. Because
-  the pre-1.7 default itself routed `qa` to the light tier, a legacy route
-  with any light-tier candidate resets `qa_author` to the new standard
-  default instead of inheriting it, and `doctor` warns whenever
-  `qa_author` or `coordination` still routes to light (`coordination`'s own
-  default is now `high`, matching standing rule 5 and C2 — it claims and
-  completes workflow stages and issues, never a cheap default; the wrong
-  `light` default in the initial B12 draft is corrected here before it ever
-  shipped). A ledger with historical `"task_type": "qa"` entries stays
-  readable. Routing to `qa_collect` is never a heuristic: only an explicit
-  `[Collect]` task marker or a per-task override reaches it; combined with
-  any other explicit marker it is ambiguous and falls back to
-  implementation. `verify` is not a fixed script by default (it selects
-  tests, handles lane gaps and reports blocking findings) and always routes
-  to `qa_author`; a stage routes to `qa_collect` only when the new
-  `delegation.fixed_collection_commands` policy map names it and its
-  resolved command still matches that exact string. `qa_document` routes to
-  `documentation`. Discovery (Scope, Specify, Clarify, Plan, Tasks) is never
-  light: its default tier is `standard`, and the schema rejects a `light`
-  preferred or fallback tier anywhere in `delegation.routes.discovery`
-  (`DELEGATION_DISCOVERY_LIGHT_FORBIDDEN`); the schema also accepts a
-  deprecated raw `qa` route (either `qa`, or both `qa_author` and
-  `qa_collect`, must be present) so it never rejects what `load_policy`
-  reads.
-  A light-tier `successful` result is never taken on trust, whether by its
-  route's own tier, a `qa_collect` task type, or a fallback candidate whose
-  requested or harness-reported model matches the harness's configured
-  light-tier model: `collect` marks it `unverified` unless a produced-file
-  list in the worker's own summary is both inside the task's owned paths and
-  among the paths the driver itself measured as changed (an unrelated
-  pre-existing file, such as a checked-in README, can never pass); counts
-  are never accepted from a worker's summary at all, only from `accept`. A
-  note never changes an `unverified` outcome, and neither does completing
-  the delegated stage or checking off a delegated task on its own: `complete`
-  now requires the dispatcher's ledger to show the claimed stage's delegated
-  attempt as `successful`, and the Ready task gate refuses a checked task
-  whose latest delegated attempt is `unverified`.
-  New `delegate_dispatch.py accept --run-id <id> --command <acceptance
-  command> --expect counts|files [--owned <path>]` runs that command itself
-  (argv via `shlex.split` on POSIX, the raw string for Windows' own
-  `CreateProcess` quoting; the task's own recorded working directory, or a
-  worktree `git worktree list` itself confirms belongs to the repository; a
-  bounded timeout with the whole process tree killed on timeout; output
-  captured to spooled temp files with only a bounded prefix ever read back),
-  records the command, exit code and raw output in the ledger, and resolves
-  `unverified` to `successful` only when the command exits `0` and its
-  output satisfies the same schema, defending against absolute paths, `..`
-  traversal and symlink escapes for `files` (each accepted file's sha256 and
-  size are recorded). The owned paths a light-tier result's file evidence
-  must resolve inside can be declared at `start --owned <path>` (repeatable;
-  defaults to the whole working directory) and are carried forward across a
-  retry or reassignment; `accept --owned` overrides them for one call.
-  `reassign` to a standard tier also resolves an `unverified` prior run. The
-  reporter-counts parser (used by `accept --expect counts`) requires a real
-  reporter's own framing per format (pytest's summary bar, Jest's `Tests:`
-  line, a JUnit/Maven `Results:` aggregate section, Python unittest's `Ran N
-  tests` plus `OK`/`FAILED (...)`, node `--test`'s `# tests`/`# pass`/`#
-  fail` lines) rather than a bare "N passed, N failed" substring that could
-  appear in prose or be pasted out of context, reads each summary's outcomes
-  independently of their order, uses each format's last occurrence, and
-  returns unparsed (never a guess) when two different reporter formats in
-  the same output disagree.
+  The delegated Execute stage is the one exception to "a worker cannot
+  call back into the dispatcher": launching it sets
+  `SANDUQ_DELEGATED_ROLE=orchestrator` (never `SANDUQ_DELEGATED_RUN`),
+  under which `start`, `collect`, `accept`, `reassign`, `adopt`, `recover`
+  and `abandon` are allowed only for a `T###` task of its own feature;
+  every other stage identity, and any other feature, still refuses with
+  `DELEGATION_ORCHESTRATOR_SCOPE`. The task workers it launches get an
+  ordinary worker environment with the orchestrator's own scope variables
+  stripped, so they never inherit it.
 
 ## 1.6.4
 

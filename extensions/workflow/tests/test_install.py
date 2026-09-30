@@ -207,7 +207,7 @@ class InstallTests(unittest.TestCase):
                                             w.load_policy(self.root)))
 
     def test_newer_compatible_package_is_retained_without_downgrade(self):
-        self.version('pr', '4.2.0')
+        self.version('pr', '4.2.1')
         result = installer.install(self.root, package_root=self.package)
         self.assertEqual(result['retained_newer'][0]['extension'], 'pr')
         self.assertNotIn('pr', [op['extension'] for op in result['extensions']])
@@ -216,7 +216,7 @@ class InstallTests(unittest.TestCase):
         self.version('pr', '5.0.0')
         with self.assertRaisesRegex(w.WorkflowError, 'NEWER_DEPENDENCY_INCOMPATIBLE'):
             installer.install(self.root, package_root=self.package)
-        self.version('pr', '4.2.0', enabled=False)
+        self.version('pr', '4.2.1', enabled=False)
         with self.assertRaisesRegex(w.WorkflowError, 'NEWER_DEPENDENCY_DISABLED'):
             installer.install(self.root, package_root=self.package)
 

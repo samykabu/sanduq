@@ -4,7 +4,13 @@ For installation in new or existing repositories, non-Spec Kit bug fixes,
 GitHub issue decisions, CI mode/rule choices, and later QA/User Manual
 opt-in or opt-out, see the [Sanduq Delivery usage guide](sanduq-delivery-usage.md).
 
-Workflow 1.6.4 pins the released User Manual 1.3.3, whose private preview artifact now keeps `retention-days: 2` instead of 14 so the Cloudflare preview workflow's single read is not blocked by a filled artifact quota; Workflow itself is unchanged. Workflow 1.6.3 stops judging a managed alias by its frontmatter: an alias
+Workflow 1.7.0 defaults coordination to `high`, splits `qa` into `qa_author`
+and light-eligible `qa_collect`, requires `--owned` for a light-tier or
+`qa_collect` start, and tightens the Ready/complete gates to require a
+successful dispatcher-recorded attempt for every checked task (mid-feature
+adoption goes through the new `delegate_dispatch.py adopt`); `doctor
+--project` also reports a per-host skill inventory (`SANDUQ_SKILLS_HOME`
+replaces `SANDUQ_HOME`). Workflow 1.6.4 pins the released User Manual 1.3.3, whose private preview artifact now keeps `retention-days: 2` instead of 14 so the Cloudflare preview workflow's single read is not blocked by a filled artifact quota; Workflow itself is unchanged. Workflow 1.6.3 stops judging a managed alias by its frontmatter: an alias
 is replaced silently only when its whole content hash is the packaged alias, an
 accepted legacy or install-lock hash, or exactly what Spec Kit renders for that
 command; any other content is refused with `ALIAS_HAS_LOCAL_EDITS` unless
