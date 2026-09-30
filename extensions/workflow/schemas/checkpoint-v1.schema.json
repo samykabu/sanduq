@@ -7,14 +7,15 @@
   "properties": {
     "schema_version": {"const": 1},
     "run_id": {"type": "string", "minLength": 1},
-    "repo_path": {"type": "string", "minLength": 1, "description": "Legacy (pre-1.8.0) absolute path; no longer written or compared. Kept only so an unread legacy checkpoint still validates."},
+    "repo_path": {"type": "string", "minLength": 1, "description": "The absolute root at the time of the last write. 1.8.0+ never reads or compares it; it is written only so a pre-1.8.0 reader does not KeyError on a checkpoint this version writes, and is slated for removal once no supported release still needs it."},
     "repo_identity": {
-      "description": "Portable repository identity (1.8.0+): the normalised origin remote and/or the root commit SHA. Absent on a checkpoint the current repository has not yet upgraded (see repo_path).",
+      "description": "Portable repository identity (1.8.0+): the normalised origin remote and/or the root commit SHA, and whether this clone was shallow when recorded. Absent on a checkpoint the current repository has not yet upgraded (see repo_path).",
       "type": "object",
       "required": ["remote", "root_commit"],
       "properties": {
         "remote": {"type": ["string", "null"], "minLength": 1},
-        "root_commit": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$"}
+        "root_commit": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$"},
+        "shallow": {"type": ["boolean", "null"]}
       }
     },
     "branch": {"type": "string", "minLength": 1},

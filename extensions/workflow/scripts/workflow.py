@@ -266,13 +266,27 @@ def root_commit_sha(root):
     return shas[0] if shas else None
 
 
+def is_shallow_clone(root):
+    """True/False, or None when Git cannot say (an old Git, or any other
+    failure -- treated as "don't know", never as a mismatch)."""
+    result = subprocess.run(['git', 'rev-parse', '--is-shallow-repository'], cwd=root,
+                            capture_output=True, text=True, encoding='utf-8')
+    if result.returncode != 0:
+        return None
+    value = result.stdout.strip()
+    return {'true': True, 'false': False}.get(value)
+
+
 def repo_identity(root):
     """This repository's portable identity: the normalised `origin` remote
     and/or the root commit SHA -- never an absolute path, which is the
     checkpoint-identity design bug this replaces (a path is machine- and
-    clone-specific; a remote URL and a commit SHA are not).
+    clone-specific; a remote URL and a commit SHA are not). Also records
+    whether this clone is shallow, which `identity_matches` uses -- never
+    an identity signal by itself, only a reason to skip the extra check it
+    would otherwise make.
     """
-    return {'remote': normalized_remote(root), 'root_commit': root_commit_sha(root)}
+    return {'remote': normalized_remote(root), 'root_commit': root_commit_sha(root), 'shallow': is_shallow_clone(root)}
 
 
 def identity_matches(recorded, current):
@@ -285,18 +299,31 @@ def identity_matches(recorded, current):
     truncated at the shallow boundary, not the repository's true root --
     match its own origin without a spurious CHECKPOINT_IDENTITY_MISMATCH.
 
-    The root commit is used only as a fallback, and only when *neither*
-    side has a remote (a repo with no `origin` configured on both ends);
-    both must resolve one and it must be equal. Every other combination --
-    one side has a remote and the other does not, or neither side can
-    resolve any signal at all -- is refused. That refusal is deliberate:
-    a fork, a renamed remote or a migrated org all change the remote (and
-    often keep the same root commit), so accepting a root-commit match on
-    its own would silently accept exactly the cases the design calls for
-    routing through the reviewed, logged `relocate` command instead.
+    A shared remote is still just local Git config, spoofable by whoever
+    controls the working tree (see the README's threat model); when both
+    sides are confidently *not* shallow (`shallow is False`, not merely
+    absent or unknown -- a legacy identity or an old Git that could not say
+    stays lenient), the root commit is also required to match, catching a
+    remote that was simply copied into an unrelated clone. `shallow` absent
+    on either side (a legacy `repo_identity` predating this check) never
+    makes a previously-accepted checkpoint newly refused.
+
+    The root commit is used as the sole fallback only when *neither* side
+    has a remote (a repo with no `origin` configured on both ends); both
+    must resolve one and it must be equal. Every other combination -- one
+    side has a remote and the other does not, or neither side can resolve
+    any signal at all -- is refused. That refusal is deliberate: a fork, a
+    renamed remote or a migrated org all change the remote (and often keep
+    the same root commit), so accepting a root-commit match on its own
+    would silently accept exactly the cases the design calls for routing
+    through the reviewed, logged `relocate` command instead.
     """
     if recorded.get('remote') and current.get('remote'):
-        return recorded['remote'] == current['remote']
+        if recorded['remote'] != current['remote']:
+            return False
+        if recorded.get('shallow') is False and current.get('shallow') is False:
+            return bool(recorded.get('root_commit')) and recorded.get('root_commit') == current.get('root_commit')
+        return True
     if not recorded.get('remote') and not current.get('remote'):
         return bool(recorded.get('root_commit')) and recorded.get('root_commit') == current.get('root_commit')
     return False
@@ -1467,7 +1494,7 @@ class Run:
                     'CHECKPOINT_IDENTITY_UNRESOLVABLE: this repository has no remote and no resolvable root '
                     'commit, so a legacy checkpoint cannot be safely accepted here')
             state['repo_identity'] = current
-            state.pop('repo_path', None)
+            state['repo_path'] = str(self.root)  # never compared; kept only for an older reader (see CHANGELOG)
         require(allow_branch_change or state['branch'] == git(self.root, 'branch', '--show-current'), 'CHECKPOINT_BRANCH_MISMATCH')
         return state
 
@@ -1891,6 +1918,10 @@ class Run:
                 return state
             commands = resolve_commands(self.root, self.policy)
             state = {'schema_version': SCHEMA, 'run_id': uuid.uuid4().hex, 'repo_identity': repo_identity(self.root),
+                     # `repo_path` is never read or compared by this version; it is written only so an
+                     # older reader (pre-1.8.0) does not KeyError on a checkpoint this version writes.
+                     # Slated for removal once no supported release still needs it (see CHANGELOG).
+                     'repo_path': str(self.root),
                      'branch': git(self.root, 'branch', '--show-current'), 'feature': self.relative,
                      'issue': issue, 'policy_digest_version': POLICY_DIGEST_VERSION,
                      'policy_digest': delivery_digest(self.policy),

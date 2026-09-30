@@ -106,7 +106,7 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(w.normalize_remote_url('/srv/git/App.git'), '/srv/git/App')
         self.assertEqual(w.normalize_remote_url('../App'), '../App')
 
-    def test_identity_matches_remote_is_authoritative_over_shared_root_commit(self):
+    def test_identity_matches_remote_is_authoritative_over_shared_root_commit_when_shallow_or_unknown(self):
         # A fork shares root-commit history but has a different remote --
         # exactly the case `relocate` exists for, so an automatic match here
         # would defeat it.
@@ -114,12 +114,32 @@ class HelperTests(unittest.TestCase):
         forked = {'remote': 'github.com/acme/app-fork', 'root_commit': 'a' * 40}
         self.assertFalse(w.identity_matches(recorded, forked))
 
-    def test_identity_matches_same_remote_regardless_of_root_commit(self):
+    def test_identity_matches_same_remote_regardless_of_root_commit_when_shallow(self):
         # A shallow CI clone only sees a truncated (shallow-boundary) root
         # commit, not the true root; the remote alone must still match.
-        recorded = {'remote': 'github.com/acme/app', 'root_commit': 'a' * 40}
-        shallow = {'remote': 'github.com/acme/app', 'root_commit': 'b' * 40}
+        recorded = {'remote': 'github.com/acme/app', 'root_commit': 'a' * 40, 'shallow': False}
+        shallow = {'remote': 'github.com/acme/app', 'root_commit': 'b' * 40, 'shallow': True}
         self.assertTrue(w.identity_matches(recorded, shallow))
+
+    def test_identity_matches_requires_root_commit_too_when_neither_side_is_shallow(self):
+        # Round 1, finding 4: a shared remote is still just local Git
+        # config, spoofable by whoever controls the clone; when we can tell
+        # neither side's history was truncated by a shallow clone, also
+        # require the root commit to match, catching a remote simply
+        # copied into an unrelated clone.
+        recorded = {'remote': 'github.com/acme/app', 'root_commit': 'a' * 40, 'shallow': False}
+        unrelated = {'remote': 'github.com/acme/app', 'root_commit': 'b' * 40, 'shallow': False}
+        same = {'remote': 'github.com/acme/app', 'root_commit': 'a' * 40, 'shallow': False}
+        self.assertFalse(w.identity_matches(recorded, unrelated))
+        self.assertTrue(w.identity_matches(recorded, same))
+
+    def test_identity_matches_stricter_root_commit_check_never_refuses_a_legacy_identity(self):
+        # `shallow` absent (a repo_identity recorded before this check
+        # existed) must stay lenient, not newly refuse a previously-accepted
+        # checkpoint.
+        recorded = {'remote': 'github.com/acme/app', 'root_commit': 'a' * 40}
+        unrelated = {'remote': 'github.com/acme/app', 'root_commit': 'b' * 40}
+        self.assertTrue(w.identity_matches(recorded, unrelated))
 
     def test_identity_matches_falls_back_to_root_commit_without_a_remote(self):
         no_remote = {'remote': None, 'root_commit': 'c' * 40}
@@ -142,6 +162,7 @@ class HelperTests(unittest.TestCase):
             no_remote = w.repo_identity(root)
             self.assertIsNone(no_remote['remote'])
             self.assertRegex(no_remote['root_commit'], r'^[0-9a-f]{40}$')
+            self.assertFalse(no_remote['shallow'])
             git(root, 'remote', 'add', 'origin', 'git@github.com:acme/app.git')
             with_remote = w.repo_identity(root)
             self.assertEqual(with_remote['remote'], 'github.com/acme/app')
@@ -187,6 +208,7 @@ class LegacyUpgradeTests(Harness):
         fixture.WorkflowTests.configure(self, superspec=True)  # so `migrate`'s doctor check passes
         git(root, 'switch', '-qc', fixture_008.BRANCH)
         original = fixture_008.materialise(root)  # repo_path is a foreign machine's path
+        self.assertEqual(original['issue'].split('#')[0], 'acme/app')  # matches this repo's own remote
         self.commit_all(root, 'Materialise the anonymised 1.3.0 checkpoint')
         run = w.Run(root, fixture_008.FEATURE)
 
@@ -194,20 +216,25 @@ class LegacyUpgradeTests(Harness):
         # writes nothing until a real mutating command saves.
         raw_before = run.path.read_bytes()
         state = run.load()
-        self.assertNotIn('repo_path', state)
         self.assertIn('repo_identity', state)
         self.assertTrue(state['repo_identity']['remote'] or state['repo_identity']['root_commit'])
         self.assertEqual(run.path.read_bytes(), raw_before)
 
         # The next real write persists the upgrade and touches no receipt.
+        # `repo_path` is refreshed, not dropped: 1.8.0+ never reads it, but
+        # an older reader must not KeyError on a checkpoint this version writes
+        # (round 1, finding 5).
         result = run.migrate('promote to 1.8.0 identity')
         self.assertEqual(result['migration']['invalidated'], [])
         saved = run.load()
-        self.assertNotIn('repo_path', saved)
+        self.assertEqual(saved['repo_path'], str(root))
         self.assertEqual(saved['repo_identity'], state['repo_identity'])
         self.assertEqual(saved['receipts'], original['receipts'])
 
     def test_legacy_checkpoint_upgrades_on_a_repository_with_no_remote(self):
+        # Round 1, finding 5: root-commit-only identity for a repository
+        # with no GitHub remote at all still upgrades cleanly (the stricter
+        # mandatory-GitHub-remote check lands in a later commit, finding 1).
         root = self.make_repo(remote=None)
         git(root, 'switch', '-qc', fixture_008.BRANCH)
         fixture_008.materialise(root)
@@ -265,6 +292,32 @@ class SecurityTests(Harness):
         run_b = w.Run(repo_b, 'specs/001-example')
         with self.assertRaisesRegex(w.WorkflowError, 'CHECKPOINT_IDENTITY_MISMATCH'):
             run_b.load(allow_branch_change=True)
+
+    def test_checkpoint_with_a_copied_remote_and_unrelated_history_is_refused_when_not_shallow(self):
+        """Round 1, finding 4: two non-shallow local repositories, one with
+        the other's `origin` URL simply copied into it, must not match on
+        the remote alone -- the underlying histories are unrelated."""
+        repo_a = self.make_repo(remote='https://github.com/acme/app.git', seed='repo-a')
+        state = w.Run(repo_a, 'specs/001-example').start('acme/app#10')
+
+        repo_c = self.make_repo(remote='git@github.com:acme/app.git', seed='repo-c-unrelated')
+        w.write(repo_c / 'specs/001-example/workflow/checkpoint.json', state)
+        run_c = w.Run(repo_c, 'specs/001-example')
+        with self.assertRaisesRegex(w.WorkflowError, 'CHECKPOINT_IDENTITY_MISMATCH'):
+            run_c.load()
+
+
+class CompatibilityTests(Harness):
+    """Round 1, finding 5: `repo_path` is still written for an older reader."""
+
+    def test_repo_path_is_still_written_by_start(self):
+        root = self.make_repo(remote='https://github.com/acme/app.git')
+        state = w.Run(root, 'specs/001-example').start('acme/app#10')
+        self.assertIn('repo_path', state)
+        self.assertEqual(state['repo_path'], str(root))
+        # The exact condition a pre-1.8.0 Run.load() checked still holds,
+        # so a checkpoint this version writes does not KeyError there.
+        self.assertTrue(state['repo_path'] == str(root) and state['feature'] == 'specs/001-example')
 
 
 class RelocateTests(Harness):

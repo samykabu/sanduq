@@ -339,16 +339,26 @@ remote URL when one is configured, and/or the repository's root commit SHA
 authoritative whenever both the checkpoint and the current repository have
 one, so a shallow CI checkout of the same origin (whose visible root-commit
 history is truncated at the shallow boundary, not the true root) still
-matches; the root commit is used only when neither side has a remote. A
-checkpoint whose repository never had a remote configured is fully supported
-this way.
+matches — unless neither clone is shallow, in which case the root commit
+must also match even though the remote does, catching a remote that was
+simply copied into an unrelated clone. The root commit is used on its own
+only when neither side has a remote.
 
-A checkpoint from before 1.8.0 recorded only `repo_path` and is accepted once
-this repository's own portable identity can be established at all, then
-upgraded to compare portably on its next write; the absolute path itself is
-never read again. A checkpoint copied from a genuinely different repository
-is still refused, on purpose: this is the security property the design
-protects.
+`Run.load()` also requires the checkpoint's bound issue to name this
+repository's own GitHub remote — the same binding `start` and the scope
+extension's `bound_claim` already require. Without a GitHub remote to check
+that against at all, the checkpoint is refused and pointed at `relocate`
+rather than trusted: a repository with no remote configured cannot load an
+existing checkpoint, though `workflow.py`'s lower-level identity primitives
+still support one for other purposes.
+
+A checkpoint from before 1.8.0 recorded only `repo_path` (never read or
+compared by 1.8.0+, but still written by `start`, the legacy-upgrade path
+and `relocate` so a pre-1.8.0 reader does not `KeyError`; it will be removed
+once no supported release still needs it) and is accepted once both checks
+above pass, then upgraded to `repo_identity` on its next write. A checkpoint
+copied from a genuinely different repository is still refused, whether
+legacy or new: this is the security property the design protects.
 
 Moving a repository legitimately — a fork, a renamed remote, a migrated
 GitHub org — changes that identity and is refused the same way, since it is
