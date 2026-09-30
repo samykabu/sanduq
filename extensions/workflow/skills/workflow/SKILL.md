@@ -93,5 +93,4 @@ The `speckit-superpowers-bridge` legacy overlays instead point to
 
 ## Updates
 
-Package, upgrade and host-switch procedures:
-[updates](references/dispatcher-operations.md#updates).
+See [updates](references/dispatcher-operations.md#updates).

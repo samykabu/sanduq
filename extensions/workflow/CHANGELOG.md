@@ -1,5 +1,42 @@
 # Changelog
 
+## Unreleased
+
+- **B13 — five new utility skills.** Five new entry points, none a claimed
+  stage, each shipped as a command plus a runtime script with unit tests:
+  - `speckit-workflow-verify-affected` (`verify_affected.py`): runs a
+    feature's affected lanes locally, reusing the existing
+    `ci.gate.affected_command` classify contract and a new optional
+    `ci.gate.verify_command` (a project-local runner read
+    `{"lanes": [...], "results_path": "<path>"}` on stdin), into the same
+    results.json shape the project's own CI tier writes.
+  - `speckit-workflow-ci-report` (`ci_report.py`): summarizes the last N
+    runs of a CI workflow into a leg/lane/critical-path table, fixed vs
+    test time (from `--fixed-job`) and cancelled-run counts, reading only
+    through the GitHub REST API (`ci_evidence.GhClient`).
+  - `speckit-workflow-gate-explain` (`gate_explain.py`): explains a
+    `STALE_RECEIPT` gate failure with the exact `recovery_recipe` the gate
+    itself would print, and offers `--auto-fix` only for drift the existing
+    `explicit-drift` classification already confines to a receipt's own
+    `evidence` paths -- never a dependency or a source/lane finding. The
+    fix runs `Run.amend` (a checked re-hash); nothing is re-stamped
+    without a check (standing rule 4), and `--reason` is never fabricated.
+  - `speckit-workflow-worker-brief` (`worker_brief.py`): generates a 3-5 KB
+    brief for one task -- its exact line, owned paths, verbatim requirement
+    lines, a contract excerpt, the turn budget (T0) and forbidden-commands
+    paragraph (S6) and the ten-line result template (T7) -- reading the
+    last three live from `execution-assign.md`/`execution-report.md`
+    instead of a copy that could drift from them.
+  - `speckit-workflow-apply-pending` (`apply_pending.py`): applies
+    `workflow/pending-artifact-updates.md` (F15) to the contracts,
+    data-model and research files it targets, marking each entry `applied`
+    or `rejected`, and reports which already-passed receipts the touched
+    paths stale, with their recovery recipe.
+
+  New optional policy key `ci.gate.verify_command`, validated by
+  `sanduq_ci.py` and settable with `workflow.py ci --verify-command`, the
+  same way as `affected_command`.
+
 ## 1.7.0
 
 - **B7 — quiet output.** `task_issues.py` and `progress.py` gain `--summary`

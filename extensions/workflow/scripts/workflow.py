@@ -244,8 +244,8 @@ def default_policy(qa, manual):
 def select_gate(ci, mode=None, scope=None, rules=(), keys=None):
     """Apply explicit gate choices while preserving unmentioned project settings.
 
-    `keys` sets optional gate keys (`affected_command`, `verification_check`);
-    None leaves one unchanged and "none" removes it.
+    `keys` sets optional gate keys (`affected_command`, `verification_check`,
+    `verify_command`); None leaves one unchanged and "none" removes it.
     """
     keys = {name: value for name, value in (keys or {}).items() if value is not None}
     if mode is None and scope is None and not rules and not keys:
@@ -1927,6 +1927,9 @@ def main():
                            help='Affected-lane hook for source drift (JSON paths on stdin), or "none" to remove')
     ci_parser.add_argument('--verification-check', metavar='CHECK',
                            help='CI job accepted as Verify evidence by revalidate --check-run, or "none" to remove')
+    ci_parser.add_argument('--verify-command', metavar='COMMAND',
+                           help='Local runner speckit-workflow-verify-affected uses to run affected lanes '
+                                '(JSON {lanes, results_path} on stdin), or "none" to remove')
     decisions_parser = sub.add_parser('decisions', help='Show or update decision authority and field policy')
     decisions_parser.add_argument('--show', action='store_true')
     decisions_parser.add_argument('--owner', action='append', default=[], metavar='GITHUB_LOGIN')
@@ -2019,7 +2022,8 @@ def main():
                     if value: ci['capabilities'][key] = value
                 select_gate(ci, args.gate_mode, args.gate_scope, args.gate_rule,
                             {'affected_command': args.affected_command,
-                             'verification_check': args.verification_check})
+                             'verification_check': args.verification_check,
+                             'verify_command': args.verify_command})
                 write(root / '.specify/workflow/backups' / (uuid.uuid4().hex + '.json'), load_policy(root))
                 (root / '.specify/workflow.yml').write_text(
                     yaml.safe_dump(validate_policy(policy), sort_keys=False), encoding='utf-8')
