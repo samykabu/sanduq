@@ -3,11 +3,21 @@
   "$id": "https://sanduq.local/schemas/checkpoint-v1.schema.json",
   "title": "Sanduq feature checkpoint v1",
   "type": "object",
-  "required": ["schema_version", "run_id", "repo_path", "branch", "feature", "issue", "policy_digest", "dependency_digest", "policy", "commands", "receipts", "generation", "active", "status"],
+  "required": ["schema_version", "run_id", "branch", "feature", "issue", "policy_digest", "dependency_digest", "policy", "commands", "receipts", "generation", "active", "status"],
   "properties": {
     "schema_version": {"const": 1},
     "run_id": {"type": "string", "minLength": 1},
-    "repo_path": {"type": "string", "minLength": 1},
+    "repo_path": {"type": "string", "minLength": 1, "description": "The absolute root at the time of the last write. 1.8.0+ never reads or compares it; it is written only so a pre-1.8.0 reader does not KeyError on a checkpoint this version writes, and is slated for removal once no supported release still needs it."},
+    "repo_identity": {
+      "description": "Portable repository identity (1.8.0+): the normalised origin remote and/or the root commit SHA, and whether this clone was shallow when recorded. Absent on a checkpoint the current repository has not yet upgraded (see repo_path).",
+      "type": "object",
+      "required": ["remote", "root_commit"],
+      "properties": {
+        "remote": {"type": ["string", "null"], "minLength": 1},
+        "root_commit": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$"},
+        "shallow": {"type": ["boolean", "null"]}
+      }
+    },
     "branch": {"type": "string", "minLength": 1},
     "target_branch": {"type": ["string", "null"]},
     "feature": {"type": "string", "pattern": "^specs/[^/]+$"},
@@ -37,6 +47,18 @@
         "at": {"type": "string", "format": "date-time"}, "policy_from": {"type": "string"}, "policy_to": {"type": "string"},
         "invalidated": {"type": "array", "items": {"type": "string"}},
         "preserved_as_historical": {"type": "array", "items": {"type": "string"}}
+      }}
+    },
+    "relocations": {
+      "description": "Explicit, reviewed workflow.py relocate entries: a repo identity that legitimately moved (a fork, a renamed remote, a migrated org). Never invalidates a receipt.",
+      "type": "array",
+      "items": {"type": "object", "required": ["actor", "at", "reason", "old_identity", "new_identity"], "properties": {
+        "actor": {"type": "string", "minLength": 1}, "at": {"type": "string", "format": "date-time"},
+        "reason": {"type": "string", "minLength": 1},
+        "old_identity": {"type": "object"}, "new_identity": {"type": "object"},
+        "branch_rebound": {"type": "boolean"}, "history_changed": {"type": "boolean"}, "branch_from": {"type": "string"}, "branch_to": {"type": "string"},
+        "repository_renamed": {"type": "boolean"}, "old_repository": {"type": "string"}, "new_repository": {"type": "string"},
+        "new_issue": {"type": "string", "pattern": "^[^/]+/[^#]+#[1-9][0-9]*$"}
       }}
     },
     "updated_at": {"type": "string", "format": "date-time"},
