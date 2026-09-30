@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-30T02:40:15.031978+00:00",
+  "updated_at": "2026-09-30T22:35:12.351560+00:00",
   "catalog_url": "https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json",
   "extensions": {
     "project": {
@@ -297,7 +297,7 @@
     "workflow": {
       "name": "Sanduq Workflow",
       "id": "workflow",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "description": "GitHub issue decisions and resumable Scope-to-PR orchestration with optional model-aware delegation, QA, User Manual, and workflow evidence CI.",
       "author": "Samy K. Abushanab",
       "license": "PolyForm-Noncommercial-1.0.0",
@@ -305,7 +305,7 @@
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/workflow",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v1.7.0/workflow.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v1.8.0/workflow.zip",
       "requires": {
         "speckit_version": ">=1.0.0,<1.1.0",
         "tools": [
@@ -325,7 +325,7 @@
         ]
       },
       "provides": {
-        "commands": 8,
+        "commands": 13,
         "hooks": 0
       },
       "tags": [
@@ -339,13 +339,13 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "f3c3ec2d4f23409cf9c17b7e9b4ca6d37df304cd3bc0ed4377c8a09032f567a6",
-      "updated_at": "2026-09-30T02:40:15.004784+00:00"
+      "sha256": "d54673c559d8af1c2fd1cd61eaabf8808a0a506f740d80e39fab4028fa8c5403",
+      "updated_at": "2026-09-30T22:35:12.338733+00:00"
     },
     "scope": {
       "name": "Speckit Scope",
       "id": "scope",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "description": "Analyze GitHub issue scope, enforce prerequisites, review user-selected decomposition before publishing, and maintain parent progress.",
       "author": "Samy K. Abushanab",
       "license": "MIT",
@@ -353,9 +353,16 @@
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/scope",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/scope/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/scope/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/scope-v1.4.0/scope.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/scope-v1.5.0/scope.zip",
       "requires": {
         "speckit_version": ">=1.0.0",
+        "extensions": [
+          {
+            "id": "workflow",
+            "version": ">=1.8.0,<2.0.0",
+            "required": true
+          }
+        ],
         "tools": [
           {
             "name": "gh",
@@ -381,8 +388,8 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "bc60c9c146841e82a5414213df4cadc280153c1b3c3158852ccd7e7b558bc422",
-      "updated_at": "2026-09-19T22:24:12.236786+00:00"
+      "sha256": "79809d6fb9a09fed997613e8fe78324da8d4de8ba5d876a7266e576cd90104a2",
+      "updated_at": "2026-09-30T22:35:12.351497+00:00"
     }
   }
 }
