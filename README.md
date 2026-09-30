@@ -19,7 +19,7 @@ for a bounded task, or install the managed workflow to take a GitHub issue throu
 implementation, verification, documentation, and a pull request. Implementation uses a dedicated
 orchestrator and workers, with an HTML report that follows progress through an authorized PR merge.
 
-Workflow 1.7.0 defaults coordination to `high`, splits `qa` into `qa_author`
+Workflow 1.8.0 stops gating every command on the absolute path a checkpoint was started from: a checkpoint now records a portable repository identity (the normalised `origin` remote and root commit), so it works from any clone, worktree, delegated worker or CI runner of the same repository, and the new `workflow.py relocate` command is the explicit, logged rebind for a renamed remote, a migrated organisation or a fork. It also adds five utility skills (`speckit-workflow-verify-affected`, `-ci-report`, `-gate-explain`, `-apply-pending` and `-worker-brief`) and pins Scope 1.5.0, whose `bound_claim` shares the same identity gate and whose Project board calls fall back to the REST API when GraphQL is exhausted. Workflow 1.7.0 defaults coordination to `high`, splits `qa` into `qa_author`
 and light-eligible `qa_collect`, requires `--owned` for a light-tier or
 `qa_collect` start, and tightens the Ready/complete gates to require a
 successful dispatcher-recorded attempt for every checked task (mid-feature
@@ -988,8 +988,8 @@ The first command previews the operation; the second applies the same version wi
 rollback protection:
 
 ```bash
-python .specify/extensions/workflow/scripts/upgrade.py --version 1.7.0 --packages /absolute/path/to/sanduq-packages
-python .specify/extensions/workflow/scripts/upgrade.py --version 1.7.0 --packages /absolute/path/to/sanduq-packages --apply
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.8.0 --packages /absolute/path/to/sanduq-packages
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.8.0 --packages /absolute/path/to/sanduq-packages --apply
 python .specify/extensions/workflow/scripts/workflow.py doctor --project
 ```
 

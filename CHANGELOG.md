@@ -4,6 +4,30 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## Portable checkpoint identity and B13 skills — workflow 1.8.0, scope 1.5.0 — 2026-09-30
+
+- Workflow 1.8.0 (minor: a new command, five new skills and a changed
+  checkpoint schema). A checkpoint no longer hard-gates on the absolute
+  `repo_path` it was started from; it records a portable `repo_identity`
+  (normalised `origin` remote and root commit) and requires its bound issue
+  to name this repository, so it loads from any clone, worktree, delegated
+  worker or CI runner. A legacy checkpoint is adopted once its history is
+  verified. New `workflow.py relocate` rebinds a checkpoint after a renamed
+  remote, migrated organisation or fork, logged in `relocations[]`. Five new
+  utility skills: `verify-affected`, `ci-report`, `gate-explain`,
+  `apply-pending` and `worker-brief`, plus the optional
+  `ci.gate.verify_command` policy key. `repo_path` is still written so a
+  pre-1.8.0 reader does not fail.
+- Scope 1.5.0 (minor): `bound_claim` stops comparing `repo_path` and runs
+  workflow's checkpoint identity gate instead (needs workflow 1.8.0 beside
+  it); Project board reads and writes fall back to the REST Projects API when
+  the GraphQL budget is exhausted and name the transport used.
+- Scope 1.5.0 declares `requires.extensions: workflow >=1.8.0,<2.0.0`; the
+  workflow installer enforces it (`WORKFLOW_VERSION_UNSUPPORTED`).
+- Workflow's `dependencies.json` pins Scope 1.5.0. Assure 2.3.0, User Manual
+  1.4.0, PR 4.2.0, Project 2.2.0 and Illustrate 2.1.2 are unchanged since
+  their last release tags and keep their existing pins.
+
 ## Sprint 4 (B7-B12) — workflow 1.7.0, assure 2.3.0, user-manual 1.4.0, pr 4.2.0, project 2.2.0 — 2026-09-30
 
 - Workflow 1.7.0 (minor: new commands and flags, a default tier change and

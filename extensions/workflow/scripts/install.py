@@ -484,6 +484,26 @@ def install_aliases(root, package_root, baseline=None, generated=None, replace_u
     return inventory
 
 
+def workflow_version():
+    """Version of the workflow package this installer belongs to."""
+    doc = yaml.safe_load((PACKAGE / 'extension.yml').read_text(encoding='utf-8-sig'))
+    return str(doc['extension']['version'])
+
+
+def check_workflow_requirement(name, doc, version=None):
+    """Enforce a sibling's `requires.extensions` entry naming `workflow`.
+
+    Spec Kit only validates that `requires` is a mapping; it never enforces
+    `requires.extensions`, so the workflow installer does it for the packages
+    it installs or finds installed (e.g. scope 1.5.0 needs workflow >= 1.8.0)."""
+    version = version or workflow_version()
+    for item in ((doc or {}).get('requires') or {}).get('extensions') or []:
+        if item.get('id') != 'workflow' or item.get('required', True) is False: continue
+        spec = str(item.get('version') or '')
+        require(Version(version) in SpecifierSet(spec),
+                f'WORKFLOW_VERSION_UNSUPPORTED: {name} requires workflow {spec}; this installer is workflow {version}')
+
+
 def install(root, apply=False, packages=None, package_root=PACKAGE, runner=command, upgrade_owner=None, preserve_ci=False,
             replace_unrecognized_aliases=False):
     root = root.resolve(); policy = load_policy(root)
@@ -497,7 +517,9 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
     for name in sorted(selected, key=lambda key: order.index(key)):
         version = selected[name]
         manifest = root / '.specify/extensions' / name / 'extension.yml'
-        meta = (yaml.safe_load(manifest.read_text(encoding='utf-8-sig')) or {}).get('extension', {}) if manifest.exists() else {}
+        installed_doc = (yaml.safe_load(manifest.read_text(encoding='utf-8-sig')) or {}) if manifest.exists() else {}
+        meta = installed_doc.get('extension', {})
+        check_workflow_requirement(name, installed_doc)
         if name in existing:
             require(meta.get('repository', '').rstrip('/') == lock['repository'], 'EXISTING_EXTENSION_SOURCE_CONFLICT: ' + name)
             if existing[name].get('version') == version and existing[name].get('enabled') is True: continue
@@ -509,7 +531,9 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                 continue
         if packages:
             source = packages.resolve() / name
-            candidate = yaml.safe_load((source / 'extension.yml').read_text(encoding='utf-8-sig'))['extension']
+            candidate_doc = yaml.safe_load((source / 'extension.yml').read_text(encoding='utf-8-sig'))
+            check_workflow_requirement(name, candidate_doc)
+            candidate = candidate_doc['extension']
             require((candidate['id'], str(candidate['version']), candidate['repository']) == (name, version, lock['repository']), 'STAGED_PACKAGE_IDENTITY_MISMATCH: ' + name)
             args = ['specify', 'extension', 'add', '--dev', str(source), '--force']
         else:

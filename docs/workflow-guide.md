@@ -4,7 +4,7 @@ For installation in new or existing repositories, non-Spec Kit bug fixes,
 GitHub issue decisions, CI mode/rule choices, and later QA/User Manual
 opt-in or opt-out, see the [Sanduq Delivery usage guide](sanduq-delivery-usage.md).
 
-Workflow 1.7.0 defaults coordination to `high`, splits `qa` into `qa_author`
+Workflow 1.8.0 stops gating every command on the absolute path a checkpoint was started from: a checkpoint now records a portable repository identity (the normalised `origin` remote and root commit), so it works from any clone, worktree, delegated worker or CI runner of the same repository, and the new `workflow.py relocate` command is the explicit, logged rebind for a renamed remote, a migrated organisation or a fork. It also adds five utility skills (`speckit-workflow-verify-affected`, `-ci-report`, `-gate-explain`, `-apply-pending` and `-worker-brief`) and pins Scope 1.5.0, whose `bound_claim` shares the same identity gate and whose Project board calls fall back to the REST API when GraphQL is exhausted. Workflow 1.7.0 defaults coordination to `high`, splits `qa` into `qa_author`
 and light-eligible `qa_collect`, requires `--owned` for a light-tier or
 `qa_collect` start, and tightens the Ready/complete gates to require a
 successful dispatcher-recorded attempt for every checked task (mid-feature
