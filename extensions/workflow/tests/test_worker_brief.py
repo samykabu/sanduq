@@ -158,6 +158,55 @@ class WorkerBriefTests(unittest.TestCase):
         self.assertGreater(size, wb.MIN_BYTES // 2)
         self.assertLessEqual(size, wb.MAX_BYTES)
 
+    def _oversize_fixture(self):
+        huge_id = ' '.join(f'EXEC-{i:02d}' for i in range(1, 60))
+        (self.directory / 'tasks.md').write_text(f'- [ ] T004 Implement {huge_id}\n', encoding='utf-8')
+        (self.directory / 'spec.md').write_text(
+            '\n'.join(f'EXEC-{i:02d}: {"padding " * 40}requirement line.' for i in range(1, 60)),
+            encoding='utf-8')
+
+    def _run_cli(self, *extra):
+        import contextlib
+        import io
+        import json
+        from unittest.mock import patch
+        output_path = self.root / 'oversized-brief.md'
+        with patch.object(sys, 'argv', ['worker_brief.py', '--root', str(self.root), '--feature', self.feature,
+                                        '--task', 'T004', '--output', str(output_path), *extra]), \
+             contextlib.redirect_stdout(io.StringIO()) as out:
+            code = wb.main()
+        return code, json.loads(out.getvalue()), output_path
+
+    def test_cli_refuses_to_write_an_oversized_brief(self):
+        # Round 3, finding 6: fail before writing, exit non-zero.
+        self._oversize_fixture()
+        code, result, output_path = self._run_cli()
+        self.assertEqual(code, 1)
+        self.assertFalse(result['ok'])
+        self.assertIn('WORKER_BRIEF_OVERSIZED', result['error'])
+        self.assertFalse(output_path.exists())
+
+    def test_cli_writes_an_oversized_brief_only_with_the_flag(self):
+        self._oversize_fixture()
+        code, result, output_path = self._run_cli('--allow-oversized')
+        self.assertEqual(code, 0)
+        self.assertTrue(result['oversized'])
+        self.assertTrue(output_path.is_file())
+
+    def test_collect_brief_with_every_rule_stays_under_budget(self):
+        # The heaviest fixed text (qa_collect adds QA_COLLECT_ADDENDUM) must fit
+        # with every mandatory rule present, including the S6 git half.
+        (self.directory / 'tasks.md').write_text(
+            '- [ ] T003 [Collect] Run the existing smoke suite and report its result\n', encoding='utf-8')
+        brief, context, oversized = wb.build(self.root, self.feature, 'T003')
+        self.assertEqual(context['work_type'], 'qa_collect')
+        self.assertFalse(oversized)
+        self.assertLessEqual(len(brief.encode('utf-8')), wb.MAX_BYTES)
+        for rule in ('git stash', 'git add -A', 'git add .', 'Spawn and wait rules (F1, F2)',
+                     'Report only on state change (F3)', 'Read summaries before raw output (T8)',
+                     'Result template (T7)', 'Turn budget (T0)'):
+            self.assertIn(rule, brief)
+
     def test_cli_output_is_valid_json_even_with_backslashes_in_path(self):
         # Finding 10: json.dumps, not hand-built JSON, so a Windows path in
         # --output (backslashes) doesn't break parsing.

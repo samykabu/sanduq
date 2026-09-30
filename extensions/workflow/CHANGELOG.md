@@ -38,6 +38,20 @@
   `sanduq_ci.py` and settable with `workflow.py ci --verify-command`, the
   same way as `affected_command`.
 
+  Review round 3 fixes: `apply_pending.py` judges the lexical target and
+  refuses any symlink or junction on the path (a symlinked `contracts`
+  directory or `data-model.md` fooled the resolved comparison), accumulates
+  replacements per file and writes each once, atomically, marking an entry
+  applied only after its write succeeded; `gate_explain.py --auto-fix`
+  rechecks eligibility against the live receipt and `Run.amend` gains an
+  `evidence_only` guard evaluated under its lock; `verify_affected.py`
+  validates its results (every requested lane present and passed, else
+  `ok: false` with `missing_lanes`/`failed_lanes`, exit 1) and kills the
+  process tree once output passes `HARD_OUTPUT_LIMIT` (10x `OUTPUT_CAP`)
+  while it runs; `worker_brief.py` refuses to write an oversized brief unless
+  `--allow-oversized` is passed, and its fixed text was trimmed so the
+  heaviest (`[Collect]`) brief keeps every mandatory rule inside 5 KB.
+
   Review round 1 fixes: `gate-explain --auto-fix` now also excludes any
   drifted path that is a declared input or a required core artifact, not
   only checking it is listed as `evidence` (a path can be both, and

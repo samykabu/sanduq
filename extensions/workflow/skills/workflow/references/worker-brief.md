@@ -10,8 +10,12 @@ Run:
 ```text
 python .specify/extensions/workflow/scripts/worker_brief.py --root <repo> \
   --feature specs/<feature> --task T### [--class implementation|qa_author|documentation|review] \
-  [--output <path>]
+  [--output <path>] [--allow-oversized]
 ```
+
+An oversized brief (still over 5 KB after the contract excerpt is dropped) is
+refused before anything is written and exits 1 (`WORKER_BRIEF_OVERSIZED`);
+`--allow-oversized` writes it anyway and reports `oversized: true`.
 
 Without `--class`, the work type is classified from the task's own
 description the same way delegation routing already does

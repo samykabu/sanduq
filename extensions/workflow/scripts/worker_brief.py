@@ -110,9 +110,8 @@ def turn_budget_row(work_type):
 
 
 GIT_S6_RULE = (
-    'Never run `git stash`, and never `git add -A` or `git add .`: a stash can hide another '
-    "agent's uncommitted change and a wildcard add can stage paths outside your owned scope. "
-    'The orchestration agent stages your owned paths by explicit name.\n'
+    "Never run `git stash`, `git add -A` or `git add .` (they hide or stage other agents' changes); "
+    'the orchestration agent stages your owned paths by name.\n'
 )
 
 
@@ -201,8 +200,8 @@ def render_brief(feature, task_id, context, requirements, contract, owned, budge
     lines.append(forbidden)
     lines.append('')
     lines.append('## Consumers checklist')
-    lines.append('Before returning: e2e/integration specs, the lane registry, QA capture specs, manual/'
-                 'User-Manual pages, contract docs (via pending-artifact-updates.md), PR image pins.')
+    lines.append('Check before returning: e2e specs, lane registry, QA captures, manual pages, contract docs '
+                 '(via pending-artifact-updates.md), PR image pins.')
     lines.append('')
     lines.append('## Result template (T7)')
     lines += ['```text', template or 'Task / Status / Files touched / Tests / Evidence / Diff / '
@@ -247,11 +246,18 @@ def main():
                         help='qa_collect is never a CLI choice (finding 10): it is only ever '
                              'detected automatically from a [Collect] task marker.')
     parser.add_argument('--output')
+    parser.add_argument('--allow-oversized', action='store_true',
+                        help='Write the brief even when it exceeds the 5 KB budget (round 3, finding 6).')
     args = parser.parse_args()
     try:
         brief, context, oversized = build(args.root, args.feature, args.task, args.work_type)
     except WorkflowError as exc:
         print(json.dumps({'ok': False, 'error': str(exc)}))
+        return 1
+    if oversized and not args.allow_oversized:
+        print(json.dumps({'ok': False, 'oversized': True, 'bytes': len(brief.encode('utf-8')),
+                          'error': 'WORKER_BRIEF_OVERSIZED: over ' + str(MAX_BYTES) + ' bytes; nothing written '
+                                   '(pass --allow-oversized to write it anyway)'}))
         return 1
     output = Path(args.output) if args.output else args.root / args.feature / 'workflow/briefs' / (args.task + '.md')
     output.parent.mkdir(parents=True, exist_ok=True)
