@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+- **Checkpoint identity design fix.** A checkpoint no longer hard-gates every
+  command on the absolute `repo_path` it was started from, which failed
+  `CHECKPOINT_IDENTITY_MISMATCH` on any other clone, worktree, instance,
+  delegated worker or CI runner, with no supported fix. It now records a
+  portable `repo_identity`: the normalised `origin` remote and/or the
+  repository's root commit, chosen so a shallow CI checkout of the same
+  origin still matches and a repository with no remote is fully supported.
+  `Run.load()` compares this portable identity; a legacy (pre-1.8.0)
+  checkpoint that only has `repo_path` is accepted once this repository's own
+  identity can be established, and upgraded on its next write. A checkpoint
+  copied from a genuinely different repository is still refused.
+- **New `workflow.py relocate --feature <f> [--preview] --reason "<why>"`.**
+  The explicit, logged rebind for a checkpoint whose identity legitimately
+  moved (a fork, a renamed remote, a migrated org). Preview reports the old
+  and new identity without writing; applying appends a `relocations[]` entry
+  with actor, time, reason and both identities. Every receipt is preserved
+  and no stage is invalidated. Refuses a branch mismatch unless
+  `--allow-branch-rebind` is also passed (logged either way), refuses inside
+  a delegated worker or orchestrator context, and reaches the checkpoint
+  directly, bypassing the identity gate it exists to get past.
+- `schemas/checkpoint-v1.schema.json`: `repo_path` is no longer required
+  (kept, optional, for a legacy checkpoint); adds optional `repo_identity`
+  (`remote`, `root_commit`) and `relocations[]`.
+
 ## 1.7.0
 
 - **B7 — quiet output.** `task_issues.py` and `progress.py` gain `--summary`

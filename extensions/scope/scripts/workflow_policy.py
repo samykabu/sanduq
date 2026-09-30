@@ -70,6 +70,11 @@ def bound_claim(root, repo, issue, stages):
     if not isinstance(active, dict): return None
     if (source.get('repo'), source.get('issue')) != (repo, issue): return None
     if state.get('schema_version') != 1 or state.get('issue') != f'{repo}#{issue}': return None
-    if state.get('feature') != feature.relative_to(root).as_posix() or state.get('repo_path') != str(root): return None
+    # `repo_path`, when present, is a pre-1.8.0 checkpoint's absolute path
+    # (machine- and clone-specific -- the same checkpoint-identity design bug
+    # workflow.py's `Run.load()` fixes) and is never compared: the `issue`
+    # check just above already binds this claim to the real, portable GitHub
+    # repo string, not a local path.
+    if state.get('feature') != feature.relative_to(root).as_posix(): return None
     if active.get('stage') not in stages or not active.get('token') or active.get('mode') != 'revalidate': return None
     return {'feature': feature.relative_to(root).as_posix(), 'stage': active['stage'], 'state': state}

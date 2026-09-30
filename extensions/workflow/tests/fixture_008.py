@@ -48,13 +48,21 @@ def paths(state):
 
 
 def materialise(root, branch=BRANCH):
-    """Write the fixture's files and its checkpoint, bound to `root` and `branch`."""
+    """Write the fixture's files and its checkpoint, bound to `root` and `branch`.
+
+    `repo_path` is deliberately left as the *original* machine's absolute
+    path -- never `root` -- because this is a real anonymised 1.3.0
+    checkpoint, and 1.3.0 checkpoints only ever recorded the path of the
+    machine that ran `start`. Leaving it foreign proves the checkpoint loads
+    here on its portable identity (established for `root`, which has its
+    own remote and history, not by any resemblance to the original path).
+    """
     state = load()
     for relative in paths(state):
         target = Path(root) / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(content(relative))
-    state['repo_path'] = str(Path(root))
+    state['repo_path'] = '/Users/original-author/workspace/acme-app'
     state['branch'] = branch
     checkpoint = Path(root) / FEATURE / 'workflow/checkpoint.json'
     checkpoint.parent.mkdir(parents=True, exist_ok=True)

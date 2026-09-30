@@ -327,6 +327,51 @@ A migration backs up the checkpoint, preserves still-current historical evidence
 the applying `migrate` returns the saved `migrations[]` entry. Both load the
 checkpoint through the bound-branch check, so run them on the feature's branch.
 
+### Checkpoint identity and relocating a repository (1.8.0)
+
+A checkpoint no longer identifies its repository by the absolute path it was
+started from (that path was the checkpoint-identity design bug: every clone,
+worktree, second machine, delegated worker or CI runner other than the one
+that ran `start` failed `CHECKPOINT_IDENTITY_MISMATCH`, with no supported
+fix). It now records a portable `repo_identity`: the normalised `origin`
+remote URL when one is configured, and/or the repository's root commit SHA
+(`git rev-list --max-parents=0 HEAD`) when it is not. The remote is
+authoritative whenever both the checkpoint and the current repository have
+one, so a shallow CI checkout of the same origin (whose visible root-commit
+history is truncated at the shallow boundary, not the true root) still
+matches; the root commit is used only when neither side has a remote. A
+checkpoint whose repository never had a remote configured is fully supported
+this way.
+
+A checkpoint from before 1.8.0 recorded only `repo_path` and is accepted once
+this repository's own portable identity can be established at all, then
+upgraded to compare portably on its next write; the absolute path itself is
+never read again. A checkpoint copied from a genuinely different repository
+is still refused, on purpose: this is the security property the design
+protects.
+
+Moving a repository legitimately — a fork, a renamed remote, a migrated
+GitHub org — changes that identity and is refused the same way, since it is
+indistinguishable from a checkpoint that does not belong here without a human
+saying so. Run:
+
+```
+workflow.py relocate --feature specs/<feature> --preview --reason "<why>"
+workflow.py relocate --feature specs/<feature> --reason "<why>"
+```
+
+The preview reports the old and new identity and the current branch binding
+without changing anything; the applying call rebinds the checkpoint and
+appends a `relocations[]` entry (`actor`, `at`, `reason`, `old_identity`,
+`new_identity`). No receipt is touched and no stage is invalidated — relocate
+never revisits what evidence means. A branch mismatch is refused unless
+`--allow-branch-rebind` is also passed, in which case the rebind is logged in
+the same entry. Relocate is refused inside any delegated worker or
+orchestrator context (`DELEGATION_WORKER_CONTEXT`) and while a claim is
+active; it reaches the checkpoint directly, bypassing the identity and
+branch checks `load` enforces everywhere else, because that gate is exactly
+what it exists to get past.
+
 ### Receipt contract (1.6.0)
 
 Receipts stay backward-compatible: `inputs` is still a list of paths, and every

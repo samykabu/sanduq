@@ -157,6 +157,99 @@ def previous_branch(root):
     return value if result.returncode == 0 and value and value != '@' else None
 
 
+def normalize_remote_url(url):
+    """Fold scheme, credential and case differences that name the same remote.
+
+    ``https://user:pass@Github.com/Acme/App.git``, ``git@github.com:Acme/App.git``
+    and ``ssh://git@github.com/Acme/App/`` all normalise to ``github.com/acme/app``:
+    the scheme and any embedded credentials carry no identity, the host is
+    case-insensitive by DNS convention (so it is lowered), and a trailing
+    ``.git``/``/`` is cosmetic. The repository *path* keeps its case: some
+    Git hosts (self-hosted GitLab, Bitbucket Server) treat paths case
+    sensitively, so lowering it could fold two distinct repositories into
+    one identity, which would be a security regression, not a convenience.
+    """
+    match = re.fullmatch(r'(?:[\w+.-]+://)?(?:[^@/]*@)?([^/:]+)[:/](.+)', url.strip())
+    if not match:
+        return url.strip().lower()
+    host, path = match.groups()
+    path = path.rstrip('/')
+    if path.endswith('.git'):
+        path = path[:-4]
+    return host.lower() + '/' + path
+
+
+def normalized_remote(root):
+    """The normalised `origin` URL, or None when no remote is configured.
+
+    Never raises: a repository with no remote (a fresh `git init`, a
+    tarball checkout, a throwaway CI scratch clone) is a supported, if
+    less strongly identified, state -- see `repo_identity`.
+    """
+    result = subprocess.run(['git', 'config', '--get', 'remote.origin.url'], cwd=root,
+                            capture_output=True, text=True, encoding='utf-8')
+    url = result.stdout.strip()
+    return normalize_remote_url(url) if result.returncode == 0 and url else None
+
+
+def root_commit_sha(root):
+    """The repository's earliest commit reachable from HEAD, or None when it
+    cannot be resolved (no commits yet).
+
+    Caveat, by design not worked around: a *shallow* clone's shallow boundary
+    commit has no parents Git can see locally, so it is indistinguishable
+    from a genuine root commit here. This is why `repo_identity` treats the
+    root commit as a fallback used only when neither side has a remote --
+    a shallow CI checkout of a repository that has a remote is identified by
+    that remote instead, so the truncated history never matters there.
+    """
+    result = subprocess.run(['git', 'rev-list', '--max-parents=0', '--reverse', 'HEAD'], cwd=root,
+                            capture_output=True, text=True, encoding='utf-8')
+    if result.returncode != 0:
+        return None
+    shas = [line for line in result.stdout.split() if line]
+    # Reverse chronological order puts the true earliest root first; with
+    # more than one root (unrelated histories merged -- rare), that first
+    # entry is still a deterministic, reproducible choice.
+    return shas[0] if shas else None
+
+
+def repo_identity(root):
+    """This repository's portable identity: the normalised `origin` remote
+    and/or the root commit SHA -- never an absolute path, which is the
+    checkpoint-identity design bug this replaces (a path is machine- and
+    clone-specific; a remote URL and a commit SHA are not).
+    """
+    return {'remote': normalized_remote(root), 'root_commit': root_commit_sha(root)}
+
+
+def identity_matches(recorded, current):
+    """Whether `current` may be treated as the same repository as `recorded`.
+
+    The remote is authoritative whenever both sides have one: two unrelated
+    repositories are not expected to share a normalised remote, and relying
+    on it alone (rather than also requiring the root commit to match) is
+    what lets a shallow CI checkout -- whose visible root-commit history is
+    truncated at the shallow boundary, not the repository's true root --
+    match its own origin without a spurious CHECKPOINT_IDENTITY_MISMATCH.
+
+    The root commit is used only as a fallback, and only when *neither*
+    side has a remote (a repo with no `origin` configured on both ends);
+    both must resolve one and it must be equal. Every other combination --
+    one side has a remote and the other does not, or neither side can
+    resolve any signal at all -- is refused. That refusal is deliberate:
+    a fork, a renamed remote or a migrated org all change the remote (and
+    often keep the same root commit), so accepting a root-commit match on
+    its own would silently accept exactly the cases the design calls for
+    routing through the reviewed, logged `relocate` command instead.
+    """
+    if recorded.get('remote') and current.get('remote'):
+        return recorded['remote'] == current['remote']
+    if not recorded.get('remote') and not current.get('remote'):
+        return bool(recorded.get('root_commit')) and recorded.get('root_commit') == current.get('root_commit')
+    return False
+
+
 def issue_identity(root, issue, gh=None):
     """Derive a stable safe initial path and branch from the bound GitHub issue."""
     require(re.fullmatch(r'[1-9]\d*', str(issue)), 'ISSUE_NUMBER_REQUIRED')
@@ -1236,6 +1329,27 @@ def default_actor(root):
     return name or os.environ.get('USER') or os.environ.get('USERNAME') or 'unknown'
 
 
+def require_not_delegated_context(command):
+    """Refuse a command inside any delegated process tree, worker or
+    orchestrator alike.
+
+    Mirrors `delegate_dispatch.require_not_worker_context`'s unconditional
+    `SANDUQ_DELEGATED_RUN` refusal, duplicated here rather than imported --
+    `delegate_dispatch` imports `workflow`, so the reverse import would be a
+    cycle. Unlike that check, this one also refuses the delegated
+    orchestrator (`SANDUQ_DELEGATED_ROLE=orchestrator`): that role-aware
+    exception exists there to scope a worker-dispatching command to its own
+    feature's tasks, which has no analogue for a repo-identity operation.
+    `relocate` bypasses the identity gate by design, so it must never be
+    reachable from a sandboxed process that inherited a stale or unrelated
+    delegation environment; only an ordinary, undelegated invocation may
+    call it. Defence in depth only, not a security boundary on its own.
+    """
+    require(not os.environ.get('SANDUQ_DELEGATED_RUN') and not os.environ.get('SANDUQ_DELEGATED_ROLE'),
+            'DELEGATION_WORKER_CONTEXT: ' + command + ' is not callable from a delegated worker or orchestrator '
+            'context; run it directly, outside any delegated process tree')
+
+
 def ensure_local_excludes(root):
     """Keep runtime/backup files local, including preserved consumer credentials."""
     value = git(root, 'rev-parse', '--git-path', 'info/exclude')
@@ -1279,9 +1393,87 @@ class Run:
     def load(self, allow_branch_change=False):
         state = read(self.path)
         require(state and state.get('schema_version') == SCHEMA, 'WORKFLOW_START_REQUIRED')
-        require(state['repo_path'] == str(self.root) and state['feature'] == self.relative, 'CHECKPOINT_IDENTITY_MISMATCH')
+        require(state['feature'] == self.relative, 'CHECKPOINT_IDENTITY_MISMATCH')
+        if 'repo_identity' in state:
+            require(identity_matches(state['repo_identity'], repo_identity(self.root)),
+                    'CHECKPOINT_IDENTITY_MISMATCH: this checkpoint belongs to a different repository. If this is '
+                    'the same project relocated (a fork, a renamed remote, a migrated org), run: workflow.py '
+                    'relocate --feature ' + self.relative + ' --reason "<why>"')
+        else:
+            # A pre-1.8.0 checkpoint recorded only the absolute `repo_path` it
+            # was started from, which is machine- and clone-specific and is
+            # never compared (that comparison was the checkpoint-identity
+            # design bug). There is no portable signal on file to check
+            # against, so it is accepted once this repository's own identity
+            # can be established at all, and upgraded to compare portably
+            # from here on. The upgrade is recorded on `state` in memory only
+            # -- every mutating command loads through here and then calls
+            # `save`, which persists whatever `state` it was handed -- so a
+            # read-only `load` (e.g. `next`) never writes anything itself.
+            current = repo_identity(self.root)
+            require(current['remote'] or current['root_commit'],
+                    'CHECKPOINT_IDENTITY_UNRESOLVABLE: this repository has no remote and no resolvable root '
+                    'commit, so a legacy checkpoint cannot be safely accepted here')
+            state['repo_identity'] = current
+            state.pop('repo_path', None)
         require(allow_branch_change or state['branch'] == git(self.root, 'branch', '--show-current'), 'CHECKPOINT_BRANCH_MISMATCH')
         return state
+
+    def relocate(self, reason, preview=False, allow_branch_rebind=False, actor=None):
+        """Explicit, logged rebind of a checkpoint whose recorded identity no
+        longer matches this repository but is legitimately the same project:
+        a fork, a renamed remote, or a migrated org (`identity_matches`
+        refuses all three on purpose). This is the reviewed escape hatch for
+        exactly that refusal, so it must reach the checkpoint despite the
+        identity gate -- it reads and writes the file directly rather than
+        through `load`/`save`'s identity check, by design.
+
+        Every receipt is preserved untouched and no stage is invalidated:
+        relocating never revisits what evidence means, only who owns the
+        machine-independent identity it is filed under. A branch mismatch is
+        refused unless `allow_branch_rebind` says to rebind that too, and
+        either way the whole decision is appended to `relocations[]` with
+        its actor, reason and both identities, never silently.
+        """
+        require_not_delegated_context('relocate')
+        require(isinstance(reason, str) and reason.strip(), 'RELOCATE_REASON_REQUIRED')
+        state = read(self.path)
+        require(state and state.get('schema_version') == SCHEMA, 'WORKFLOW_START_REQUIRED')
+        require(state['feature'] == self.relative, 'RELOCATE_FEATURE_MISMATCH')
+        old_identity = state.get('repo_identity') or {'remote': None, 'root_commit': None,
+                                                       'legacy_repo_path': state.get('repo_path')}
+        new_identity = repo_identity(self.root)
+        current_branch = git(self.root, 'branch', '--show-current')
+        branch_matches = state['branch'] == current_branch
+        blockers = []
+        if state['active']:
+            blockers.append('ACTIVE_CLAIM_MUST_BE_RESOLVED_BEFORE_RELOCATE')
+        if not branch_matches and not allow_branch_rebind:
+            blockers.append('CHECKPOINT_BRANCH_MISMATCH: pass --allow-branch-rebind to also rebind the branch '
+                            '(from ' + state['branch'] + ' to ' + current_branch + ')')
+        if preview:
+            return {'preview': True, 'feature': self.relative, 'old_identity': old_identity,
+                    'new_identity': new_identity, 'branch_from': state['branch'], 'branch_to': current_branch,
+                    'branch_matches': branch_matches, 'allow_branch_rebind': allow_branch_rebind,
+                    'blockers': blockers, 'can_apply': not blockers}
+        require(not blockers, '; '.join(blockers))
+        with locked(self.lock):
+            state = read(self.path)
+            require(state and state.get('schema_version') == SCHEMA, 'WORKFLOW_START_REQUIRED')
+            require(state['feature'] == self.relative, 'RELOCATE_FEATURE_MISMATCH')
+            require(not state['active'], 'ACTIVE_CLAIM_MUST_BE_RESOLVED_BEFORE_RELOCATE')
+            entry = {'actor': actor or default_actor(self.root), 'at': now(), 'reason': reason.strip(),
+                     'old_identity': old_identity, 'new_identity': new_identity, 'branch_rebound': False}
+            if not branch_matches:
+                require(allow_branch_rebind, 'CHECKPOINT_BRANCH_MISMATCH: pass --allow-branch-rebind to also '
+                                             'rebind the branch (from ' + state['branch'] + ' to ' + current_branch + ')')
+                entry.update(branch_rebound=True, branch_from=state['branch'], branch_to=current_branch)
+                state['branch'] = current_branch
+            state.pop('repo_path', None)
+            state['repo_identity'] = new_identity
+            state.setdefault('relocations', []).append(entry)
+            self.save(state)
+            return {'relocated': True, 'feature': self.relative, 'relocation': copy.deepcopy(entry)}
 
     def bind(self, token):
         with locked(self.lock):
@@ -1646,7 +1838,7 @@ class Run:
                 require(state['issue'] == issue, 'ISSUE_BINDING_CONFLICT')
                 return state
             commands = resolve_commands(self.root, self.policy)
-            state = {'schema_version': SCHEMA, 'run_id': uuid.uuid4().hex, 'repo_path': str(self.root),
+            state = {'schema_version': SCHEMA, 'run_id': uuid.uuid4().hex, 'repo_identity': repo_identity(self.root),
                      'branch': git(self.root, 'branch', '--show-current'), 'feature': self.relative,
                      'issue': issue, 'policy_digest_version': POLICY_DIGEST_VERSION,
                      'policy_digest': delivery_digest(self.policy),
@@ -1944,6 +2136,15 @@ def main():
     identity_parser.add_argument('--issue', required=True)
     prepare_parser = sub.add_parser('prepare', help='Prepare an issue-bound feature and its branch')
     prepare_parser.add_argument('--issue', required=True)
+    relocate_parser = sub.add_parser('relocate', help='Rebind a checkpoint whose repository identity legitimately '
+                                                       'moved (a fork, a renamed remote, a migrated org)')
+    relocate_parser.add_argument('--feature', required=True)
+    relocate_parser.add_argument('--preview', action='store_true',
+                                 help='Report the old and new identity without changing anything')
+    relocate_parser.add_argument('--reason', required=True)
+    relocate_parser.add_argument('--allow-branch-rebind', action='store_true',
+                                 help='Also rebind the checkpoint to the current branch if it differs; logged either way')
+    relocate_parser.add_argument('--actor', help='Defaults to the Git user name')
     for name in ('start', 'next', 'claim', 'complete', 'pause', 'recover', 'bind', 'migrate', 'refresh', 'amend',
                  'revalidate'):
         cmd = sub.add_parser(name)
@@ -2060,6 +2261,9 @@ def main():
             elif args.action == 'claim': result = run.claim(read(args.usage), args.finalize)
             elif args.action == 'complete': result = run.complete(args.token, read(args.receipt, {}))
             elif args.action == 'bind': result = run.bind(args.token)
+            elif args.action == 'relocate':
+                result = run.relocate(args.reason, args.preview, args.allow_branch_rebind, args.actor)
+                if args.preview and not result['can_apply']: result['ok'] = False
             elif args.action == 'migrate' and args.preview: result = run.preview_migration(args.invalidate_from)
             elif args.action == 'migrate': result = run.migrate(args.reason, args.invalidate_from)
             elif args.action == 'amend':

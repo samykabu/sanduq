@@ -1,0 +1,313 @@
+"""Workflow 1.8.0 checkpoint-identity design fix.
+
+A checkpoint used to hard-gate every command on the absolute `repo_path` it
+was started from, which is machine- and clone-specific and failed
+`CHECKPOINT_IDENTITY_MISMATCH` on any other clone, worktree, instance,
+delegated worker or CI runner (the checkpoint-identity design bug). These
+tests cover the portable replacement: `repo_identity` (a normalised remote
+and/or a root-commit SHA), the legacy-checkpoint upgrade path, the security
+property that a checkpoint from a different repository is still refused, and
+the explicit `relocate` command for a repository that legitimately moved.
+"""
+import copy
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import workflow as w  # noqa: E402
+import fixture_008  # noqa: E402
+import test_workflow as fixture  # noqa: E402
+
+
+def git(root, *args, check=True):
+    return subprocess.run(['git', *args], cwd=root, check=check, capture_output=True, text=True, encoding='utf-8')
+
+
+class HelperTests(unittest.TestCase):
+    """Unit coverage of the identity primitives, independent of a checkpoint."""
+
+    def test_normalize_remote_url_folds_scheme_credentials_and_case(self):
+        forms = [
+            'https://github.com/Acme/App.git',
+            'https://x-access-token:ghs_secret@Github.com/Acme/App.git',
+            'git@github.com:Acme/App.git',
+            'ssh://git@GITHUB.COM/Acme/App/',
+            'https://github.com/Acme/App',
+        ]
+        normalised = {w.normalize_remote_url(url) for url in forms}
+        self.assertEqual(normalised, {'github.com/Acme/App'})
+
+    def test_normalize_remote_url_keeps_path_case(self):
+        # The host folds by DNS convention; the path does not, because some
+        # hosts (self-hosted GitLab/Bitbucket) are case sensitive there.
+        self.assertNotEqual(w.normalize_remote_url('https://example.com/Acme/App.git'),
+                            w.normalize_remote_url('https://example.com/acme/app.git'))
+
+    def test_identity_matches_remote_is_authoritative_over_shared_root_commit(self):
+        # A fork shares root-commit history but has a different remote --
+        # exactly the case `relocate` exists for, so an automatic match here
+        # would defeat it.
+        recorded = {'remote': 'github.com/acme/app', 'root_commit': 'a' * 40}
+        forked = {'remote': 'github.com/acme/app-fork', 'root_commit': 'a' * 40}
+        self.assertFalse(w.identity_matches(recorded, forked))
+
+    def test_identity_matches_same_remote_regardless_of_root_commit(self):
+        # A shallow CI clone only sees a truncated (shallow-boundary) root
+        # commit, not the true root; the remote alone must still match.
+        recorded = {'remote': 'github.com/acme/app', 'root_commit': 'a' * 40}
+        shallow = {'remote': 'github.com/acme/app', 'root_commit': 'b' * 40}
+        self.assertTrue(w.identity_matches(recorded, shallow))
+
+    def test_identity_matches_falls_back_to_root_commit_without_a_remote(self):
+        no_remote = {'remote': None, 'root_commit': 'c' * 40}
+        self.assertTrue(w.identity_matches(no_remote, {'remote': None, 'root_commit': 'c' * 40}))
+        self.assertFalse(w.identity_matches(no_remote, {'remote': None, 'root_commit': 'd' * 40}))
+
+    def test_identity_matches_refuses_when_only_one_side_has_a_remote(self):
+        self.assertFalse(w.identity_matches({'remote': 'github.com/acme/app', 'root_commit': 'a' * 40},
+                                            {'remote': None, 'root_commit': 'a' * 40}))
+        self.assertFalse(w.identity_matches({'remote': None, 'root_commit': 'a' * 40},
+                                            {'remote': 'github.com/acme/app', 'root_commit': 'a' * 40}))
+
+    def test_repo_identity_reads_a_real_repository(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            git(root, 'init', '-q')
+            git(root, 'config', 'user.name', 'Test')
+            git(root, 'config', 'user.email', 'test@example.invalid')
+            git(root, 'commit', '--allow-empty', '-qm', 'init')
+            no_remote = w.repo_identity(root)
+            self.assertIsNone(no_remote['remote'])
+            self.assertRegex(no_remote['root_commit'], r'^[0-9a-f]{40}$')
+            git(root, 'remote', 'add', 'origin', 'git@github.com:acme/app.git')
+            with_remote = w.repo_identity(root)
+            self.assertEqual(with_remote['remote'], 'github.com/acme/app')
+            self.assertEqual(with_remote['root_commit'], no_remote['root_commit'])
+
+
+class Harness(unittest.TestCase):
+    """A fresh repo, ready for `Run`, without the full LegacyCheckpointTests scaffolding."""
+
+    def make_repo(self, remote='https://github.com/acme/app.git', seed=None):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name).resolve()
+        git(root, 'init', '-q')
+        git(root, 'config', 'user.name', 'Test')
+        git(root, 'config', 'user.email', 'test@example.invalid')
+        # A distinct seed file guarantees a distinct root-commit tree, so two
+        # repos built back to back (same author/message/second) never
+        # collide on identical commit bytes -> identical SHA.
+        if seed:
+            (root / '.seed').write_text(seed, encoding='utf-8')
+            git(root, 'add', '.seed')
+        git(root, 'commit', '--allow-empty', '-qm', 'init: ' + (seed or 'root'))
+        if remote:
+            git(root, 'remote', 'add', 'origin', remote)
+        policy_path = root / '.specify/workflow.yml'
+        policy_path.parent.mkdir(parents=True, exist_ok=True)
+        policy_path.write_text(yaml.safe_dump(w.default_policy(True, True)), encoding='utf-8')
+        return root
+
+    def commit_all(self, root, message='fixture'):
+        git(root, 'add', '-A')
+        git(root, 'commit', '-qm', message)
+
+
+class LegacyUpgradeTests(Harness):
+    """A legacy (pre-1.8.0) checkpoint, which only ever recorded `repo_path`."""
+
+    def test_legacy_checkpoint_from_another_path_loads_and_upgrades(self):
+        root = self.make_repo()
+        self.policy = copy.deepcopy(fixture_008.load()['policy'])
+        self.root = root
+        fixture.WorkflowTests.configure(self, superspec=True)  # so `migrate`'s doctor check passes
+        git(root, 'switch', '-qc', fixture_008.BRANCH)
+        original = fixture_008.materialise(root)  # repo_path is a foreign machine's path
+        self.commit_all(root, 'Materialise the anonymised 1.3.0 checkpoint')
+        run = w.Run(root, fixture_008.FEATURE)
+
+        # `load` is a pure read here: it accepts and upgrades in memory, but
+        # writes nothing until a real mutating command saves.
+        raw_before = run.path.read_bytes()
+        state = run.load()
+        self.assertNotIn('repo_path', state)
+        self.assertIn('repo_identity', state)
+        self.assertTrue(state['repo_identity']['remote'] or state['repo_identity']['root_commit'])
+        self.assertEqual(run.path.read_bytes(), raw_before)
+
+        # The next real write persists the upgrade and touches no receipt.
+        result = run.migrate('promote to 1.8.0 identity')
+        self.assertEqual(result['migration']['invalidated'], [])
+        saved = run.load()
+        self.assertNotIn('repo_path', saved)
+        self.assertEqual(saved['repo_identity'], state['repo_identity'])
+        self.assertEqual(saved['receipts'], original['receipts'])
+
+    def test_legacy_checkpoint_upgrades_on_a_repository_with_no_remote(self):
+        root = self.make_repo(remote=None)
+        git(root, 'switch', '-qc', fixture_008.BRANCH)
+        fixture_008.materialise(root)
+        self.commit_all(root)
+        run = w.Run(root, fixture_008.FEATURE)
+        state = run.load()
+        self.assertIsNone(state['repo_identity']['remote'])
+        self.assertIsNotNone(state['repo_identity']['root_commit'])
+
+    def test_legacy_checkpoint_windows_and_posix_repo_path_forms_both_load(self):
+        for repo_path in (r'C:\Users\dev\workspace\acme-app', '/home/dev/workspace/acme-app'):
+            root = self.make_repo()
+            git(root, 'switch', '-qc', fixture_008.BRANCH)
+            fixture_008.materialise(root)
+            path = root / fixture_008.FEATURE / 'workflow/checkpoint.json'
+            state = json.loads(path.read_text(encoding='utf-8'))
+            state['repo_path'] = repo_path
+            w.write(path, state)
+            self.commit_all(root)
+            run = w.Run(root, fixture_008.FEATURE)
+            loaded = run.load()  # must not raise, regardless of the path's OS form
+            self.assertIn('repo_identity', loaded)
+
+
+class SecurityTests(Harness):
+    """A checkpoint from a different repository must still be refused."""
+
+    def test_checkpoint_from_a_different_repository_is_refused(self):
+        repo_a = self.make_repo(remote='https://github.com/acme/app.git', seed='repo-a')
+        state = w.Run(repo_a, 'specs/001-example').start('acme/app#10')
+
+        repo_b = self.make_repo(remote='https://github.com/other-org/other-app.git', seed='repo-b')
+        w.write(repo_b / 'specs/001-example/workflow/checkpoint.json', state)
+        run_b = w.Run(repo_b, 'specs/001-example')
+        with self.assertRaisesRegex(w.WorkflowError, 'CHECKPOINT_IDENTITY_MISMATCH'):
+            run_b.load()
+
+    def test_checkpoint_from_a_repo_with_no_remote_and_unrelated_history_is_refused(self):
+        # `start` itself requires a GitHub-style origin to bind an issue (an
+        # existing, unrelated constraint), so a no-remote checkpoint is built
+        # directly here rather than through `start`.
+        repo_a = self.make_repo(remote=None, seed='repo-a')
+        identity_a = w.repo_identity(repo_a)
+        self.assertIsNone(identity_a['remote'])
+        self.assertIsNotNone(identity_a['root_commit'])
+        state = {'schema_version': w.SCHEMA, 'run_id': 'r' * 8, 'repo_identity': identity_a,
+                 'branch': 'whatever', 'feature': 'specs/001-example', 'issue': 'acme/app#10',
+                 'policy_digest': 'a' * 64, 'dependency_digest': 'b' * 64,
+                 'policy': w.default_policy(True, True), 'commands': {}, 'receipts': {},
+                 'generation': 0, 'active': None, 'status': 'in-progress'}
+
+        repo_b = self.make_repo(remote=None, seed='repo-b')  # its own, unrelated history/root commit
+        self.assertNotEqual(identity_a['root_commit'], w.repo_identity(repo_b)['root_commit'])
+        w.write(repo_b / 'specs/001-example/workflow/checkpoint.json', state)
+        run_b = w.Run(repo_b, 'specs/001-example')
+        with self.assertRaisesRegex(w.WorkflowError, 'CHECKPOINT_IDENTITY_MISMATCH'):
+            run_b.load(allow_branch_change=True)
+
+
+class RelocateTests(Harness):
+    """The explicit, logged rebind for a repository that legitimately moved."""
+
+    def setUp(self):
+        super().setUp()
+        self.policy = copy.deepcopy(fixture_008.load()['policy'])
+        self.root = self.make_repo(remote='https://github.com/acme/app.git')
+        fixture.WorkflowTests.configure(self, superspec=True)
+        git(self.root, 'switch', '-qc', fixture_008.BRANCH)
+        self.original = fixture_008.materialise(self.root)
+        self.feature = fixture_008.FEATURE
+        self.commit_all(self.root, 'Materialise the anonymised 1.3.0 checkpoint')
+        self.run = w.Run(self.root, self.feature)
+        self.run.migrate('promote to 1.8.0 identity')  # records repo_identity for github.com/acme/app
+
+    def rename_remote(self, url='https://github.com/acme-renamed/app.git'):
+        git(self.root, 'remote', 'set-url', 'origin', url)
+        return w.Run(self.root, self.feature)
+
+    def test_a_renamed_remote_is_refused_until_relocate(self):
+        run = self.rename_remote()
+        with self.assertRaisesRegex(w.WorkflowError, 'CHECKPOINT_IDENTITY_MISMATCH'):
+            run.load()
+
+    def test_relocate_preview_and_apply_preserve_receipts_byte_for_byte(self):
+        before = self.run.load()
+        before_hash = hashlib.sha256(json.dumps(before['receipts'], sort_keys=True).encode()).hexdigest()
+
+        run = self.rename_remote()
+        raw_before = run.path.read_bytes()
+        preview = run.relocate('Org renamed acme -> acme-renamed', preview=True)
+        self.assertTrue(preview['preview'])
+        self.assertTrue(preview['can_apply'])
+        self.assertEqual(preview['old_identity']['remote'], 'github.com/acme/app')
+        self.assertEqual(preview['new_identity']['remote'], 'github.com/acme-renamed/app')
+        self.assertEqual(run.path.read_bytes(), raw_before)  # preview never writes
+
+        result = run.relocate('Org renamed acme -> acme-renamed')
+        self.assertTrue(result['relocated'])
+        relocation = result['relocation']
+        self.assertEqual(relocation['reason'], 'Org renamed acme -> acme-renamed')
+        self.assertEqual(relocation['old_identity']['remote'], 'github.com/acme/app')
+        self.assertEqual(relocation['new_identity']['remote'], 'github.com/acme-renamed/app')
+        self.assertFalse(relocation['branch_rebound'])
+
+        after = run.load()  # now accepted under the new identity
+        self.assertEqual(after['repo_identity']['remote'], 'github.com/acme-renamed/app')
+        self.assertEqual(after['relocations'][-1], relocation)
+        after_hash = hashlib.sha256(json.dumps(after['receipts'], sort_keys=True).encode()).hexdigest()
+        self.assertEqual(before_hash, after_hash)
+        self.assertEqual(after['receipts'], self.original['receipts'])
+
+    def test_relocate_refused_on_a_branch_mismatch_unless_allowed(self):
+        run = self.rename_remote()
+        git(self.root, 'switch', '-qc', 'a-different-branch')
+        run = w.Run(self.root, self.feature)
+
+        preview = run.relocate('Org renamed', preview=True)
+        self.assertFalse(preview['can_apply'])
+        self.assertFalse(preview['branch_matches'])
+        self.assertTrue(any('CHECKPOINT_BRANCH_MISMATCH' in b for b in preview['blockers']))
+
+        with self.assertRaisesRegex(w.WorkflowError, 'CHECKPOINT_BRANCH_MISMATCH'):
+            run.relocate('Org renamed')
+
+        result = run.relocate('Org renamed', allow_branch_rebind=True)
+        self.assertTrue(result['relocation']['branch_rebound'])
+        self.assertEqual(result['relocation']['branch_to'], 'a-different-branch')
+        self.assertEqual(run.load()['branch'], 'a-different-branch')
+
+    def test_relocate_requires_a_reason(self):
+        run = self.rename_remote()
+        with self.assertRaisesRegex(w.WorkflowError, 'RELOCATE_REASON_REQUIRED'):
+            run.relocate('   ')
+
+    def test_relocate_refused_inside_a_delegated_worker_context(self):
+        run = self.rename_remote()
+        os.environ['SANDUQ_DELEGATED_RUN'] = 'run-1'
+        try:
+            with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_WORKER_CONTEXT'):
+                run.relocate('Org renamed', preview=True)
+        finally:
+            os.environ.pop('SANDUQ_DELEGATED_RUN', None)
+
+    def test_relocate_refused_inside_a_delegated_orchestrator_context(self):
+        run = self.rename_remote()
+        os.environ['SANDUQ_DELEGATED_ROLE'] = 'orchestrator'
+        os.environ['SANDUQ_DELEGATED_FEATURE'] = self.feature
+        try:
+            with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_WORKER_CONTEXT'):
+                run.relocate('Org renamed', preview=True)
+        finally:
+            os.environ.pop('SANDUQ_DELEGATED_ROLE', None)
+            os.environ.pop('SANDUQ_DELEGATED_FEATURE', None)
+
+
+if __name__ == '__main__':
+    unittest.main()

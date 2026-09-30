@@ -42,6 +42,19 @@ class ScopeRevalidationTests(unittest.TestCase):
         self.assertEqual(self.gh.writes, before)
         self.assertEqual(self.gh.statuses[1], 'In progress')
 
+    def test_bound_claim_ignores_a_foreign_repo_path(self):
+        """A checkpoint's absolute `repo_path` (pre-1.8.0, or copied from
+        elsewhere) never gates the claim; the GitHub issue binding above it
+        already establishes portable identity (the checkpoint-identity
+        design fix applies here too, not only to workflow.py's own load)."""
+        feature = self.prepare()
+        checkpoint = feature / 'workflow/checkpoint.json'
+        state = sm.read_json(checkpoint)
+        state['repo_path'] = '/some/other/machine/workspace'
+        sm.write_json(checkpoint, state)
+        self.gh.statuses[1] = 'In progress'; self.app._board = None
+        self.assertEqual(self.app.gate('1')['issue'], 1)
+
     def test_revalidation_still_rejects_changed_requirements(self):
         self.prepare()
         self.gh.issues[1]['body'] += '\nNew unreviewed requirement\n'

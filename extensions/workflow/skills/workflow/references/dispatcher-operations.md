@@ -65,7 +65,9 @@ checks alone do not establish project readiness; claims enforce the board checks
 **continue**: read checkpoint.json, handoff.md and the resume prompt. Verify repository,
 branch, issue, policy and current files. Inspect an active claim before `recover --token`
 with a concrete reason; never assume a missing response means its remote write failed.
-Resume the earliest unfinished or invalid stage.
+Resume the earliest unfinished or invalid stage. `CHECKPOINT_IDENTITY_MISMATCH` on a repo
+that is genuinely the same project relocated (a fork, a renamed remote, a migrated org) is
+`relocate`'s error, not `recover`'s or `migrate`'s; see `relocate` under Updates below.
 
 ## status
 
@@ -158,6 +160,23 @@ branch: it writes nothing and returns the exact `invalidated` and
 Review them, then migrate; the applying call returns the saved `migrations[]`
 entry. Confirm it matches the preview, then prove continuation with the next
 permitted `claim`.
+
+Checkpoints since 1.8.0 identify their repository portably (the normalised `origin`
+remote and/or the root commit), never by the absolute path a pre-1.8.0 checkpoint
+recorded (that path was the checkpoint-identity design bug: every other clone,
+worktree, instance or CI runner failed `CHECKPOINT_IDENTITY_MISMATCH`). A legacy
+checkpoint upgrades automatically on its next write once this repository's own
+identity can be established. A mismatch after that is refused on purpose: use
+`workflow.py relocate --feature ... --preview --reason "<why>"` to inspect the old
+and new identity without changing anything, then the same command without
+`--preview` to record the rebind. Only use it when the mismatch is genuinely the
+same project relocated -- a fork, a renamed remote, a migrated org -- never to
+paper over a checkpoint that belongs to an unrelated repository. It refuses a
+branch mismatch unless `--allow-branch-rebind` is also passed, refuses inside any
+delegated worker or orchestrator context, requires an active claim be resolved
+first, and never invalidates a receipt: every `relocations[]` entry records the
+actor, reason and both identities. It is reachable specifically because it does
+not load the checkpoint through the identity check it exists to bypass.
 To change the default host (Codex or Claude), never run a bare `specify integration
 use`: it rewrites the managed aliases with upstream content. Run `workflow.py host
 --use codex|claude --preview`, review its blockers, delegation findings and
