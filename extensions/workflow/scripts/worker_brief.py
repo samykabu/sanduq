@@ -5,20 +5,34 @@ Cuts a worker's orientation reading (retrospective T1: ~44K tokens of spec/plan/
 tasks/contracts read by every worker) down to the few thousand it actually
 needs: the task's own line, the verbatim requirement lines it implements, a
 matching contract excerpt, its owned paths and the execution protocol's fixed
-rules -- turn budget (T0), forbidden commands (S6) and the structured result
-template (T7). The protocol text is never copied by hand into this script: it
-is read out of `skills/workflow/references/execution-assign.md` and
-`execution-report.md` at brief-generation time, so a rule change there is
-never silently missed here.
+rules -- turn budget (T0), the F1/F2 spawn/blocking-wait rules, the F3
+report-on-state-change rule, the T8 read-summary-first rule, forbidden
+commands (S6, the same constants `delegate_dispatch.py` uses for its own
+delegated briefs) and the structured result template (T7). The protocol text
+is never copied by hand into this script: it is read out of
+`skills/workflow/references/execution-assign.md` and `execution-report.md` at
+brief-generation time, so a rule change there is never silently missed here.
+
+Review round 1, finding 10: `--class` no longer accepts `qa_collect` -- that
+route is light-tier eligible only when the task line itself carries a
+`[Collect]` marker (or an explicit per-task override), never by an ad hoc CLI
+flag (standing rule 5); the brief's work type still comes out `qa_collect`
+automatically when `delegation.task_type` detects that marker. The brief is
+targeted at 3-5 KB: when the full brief (with its contract excerpt) is over
+budget, the excerpt is dropped first; if it is still over, the result is
+returned with `oversized: true` rather than silently truncating requirement
+lines a worker needs.
 """
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import delegate_dispatch as dd
 from delegation import task_lines, task_type
 from task_issues import parse_tasks
 from workflow import WorkflowError, require
@@ -27,6 +41,9 @@ REFERENCES = Path(__file__).resolve().parents[1] / 'skills/workflow/references'
 REQUIREMENT_ID = re.compile(r'\b[A-Z]{2,10}-\d{2,4}\b')
 SPEC_ARTIFACTS = ('spec.md', 'plan.md', 'data-model.md', 'research.md')
 PATH_TOKEN = re.compile(r'`([\w./-]+\.[A-Za-z0-9]{1,5})`')
+# CLI-selectable classes; qa_collect is never one of them (finding 10).
+CLI_WORK_TYPES = ('implementation', 'qa_author', 'documentation', 'review')
+MIN_BYTES, MAX_BYTES = 3 * 1024, 5 * 1024
 
 
 def read_text(path):
@@ -92,13 +109,47 @@ def turn_budget_row(work_type):
     return None
 
 
-def forbidden_commands_paragraph():
-    """The S6 paragraph (git stash / git add -A / delegate_dispatch ledger commands), verbatim."""
+def forbidden_commands_text(work_type):
+    """The S6 rule, reusing `delegate_dispatch`'s own constants (finding 10) rather than
+    scraping execution-assign.md's prose paragraph -- one source of truth for both the
+    delegated brief `delegate_dispatch.task_brief` writes and this one."""
+    text = dd.NO_DISPATCHER_COMMANDS
+    return text + dd.QA_COLLECT_ADDENDUM if work_type == 'qa_collect' else text
+
+
+def section_body(text, heading):
+    """Everything after `## <heading>` up to the next `## ` heading, or None."""
+    match = re.search(r'^## ' + re.escape(heading) + r'\s*\n\n(.*?)(?=\n## |\Z)', text, re.M | re.S)
+    return match.group(1).strip() if match else None
+
+
+def section_paragraph(text, heading, index):
+    """The `index`-th paragraph (0-based, split on a blank line) of that section's body."""
+    body = section_body(text, heading)
+    if body is None:
+        return None
+    paragraphs = [p.strip() for p in body.split('\n\n')]
+    return paragraphs[index] if index < len(paragraphs) else None
+
+
+def spawn_and_wait_rules():
+    """F1 (route results straight to the spawner, blocking not backgrounded) and F2 (never end
+    a turn owning running background work), the first two paragraphs of their shared section."""
     text = read_text(REFERENCES / 'execution-assign.md')
-    for paragraph in text.split('\n\n'):
-        if '`git stash`' in paragraph:
-            return paragraph.strip()
-    return None
+    heading = 'Spawn pattern, blocking waits and turn budgets (F1, F2, T0)'
+    return section_paragraph(text, heading, 0), section_paragraph(text, heading, 1)
+
+
+def report_on_state_change_rule():
+    """F3: no message beyond the minimum unless something actually changed."""
+    text = read_text(REFERENCES / 'execution-report.md')
+    return section_body(text, 'Report only on state change (F3)')
+
+
+def read_summary_first_rule():
+    """T8: read a verification summary before opening any raw reporter output."""
+    text = read_text(REFERENCES / 'execution-report.md')
+    return section_body(text, 'Read verification summaries before raw output (T8)')
 
 
 def t7_template():
@@ -108,7 +159,8 @@ def t7_template():
     return match.group(1).strip() if match else None
 
 
-def render_brief(feature, task_id, context, requirements, contract, owned, budget_row, forbidden, template):
+def render_brief(feature, task_id, context, requirements, contract, owned, budget_row, forbidden, spawn_rules,
+                 f3_rule, t8_rule, template):
     lines = [f'# Worker brief: {task_id}', '', f'Feature: {feature}', f'Task line: {context["line"]}',
               f'Work type: {context["work_type"]}', '']
     lines.append('## Owned paths')
@@ -125,9 +177,19 @@ def render_brief(feature, task_id, context, requirements, contract, owned, budge
     lines.append('## Turn budget (T0)')
     lines.append(budget_row or f'No turn-budget row found for `{context["work_type"]}`; use the implementation default.')
     lines.append('')
+    lines.append('## Spawn and wait rules (F1, F2)')
+    f1, f2 = spawn_rules
+    lines.append(f1 or 'Route results straight to whoever spawned you; never through the dispatcher for relay.')
+    lines.append(f2 or 'Never end your turn while you still own running background work; block and report once.')
+    lines.append('')
+    lines.append('## Report only on state change (F3)')
+    lines.append(f3_rule or 'Report a state change only (task accepted, commit pushed, blocker, decision needed).')
+    lines.append('')
+    lines.append('## Read summaries before raw output (T8)')
+    lines.append(t8_rule or 'Read a verification summary first; open raw reporter output only for a failed lane.')
+    lines.append('')
     lines.append('## Forbidden commands (S6)')
-    lines.append(forbidden or 'Never `git stash`, `git add -A`/`git add .`, or the ledger-trust '
-                              'delegate_dispatch.py commands (accept/reassign/trust-reset/adopt).')
+    lines.append(forbidden)
     lines.append('')
     lines.append('## Consumers checklist')
     lines.append('Before returning: e2e/integration specs, the lane registry, QA capture specs, manual/'
@@ -148,10 +210,23 @@ def build(root, feature, task_id, work_type=None):
     contract = contract_excerpt(root, feature, context['description'])
     owned = owned_paths(context['description'])
     budget_row = turn_budget_row(context['work_type'])
-    forbidden = forbidden_commands_paragraph()
+    forbidden = forbidden_commands_text(context['work_type'])
+    spawn_rules = spawn_and_wait_rules()
+    f3_rule = report_on_state_change_rule()
+    t8_rule = read_summary_first_rule()
     template = t7_template()
-    brief = render_brief(feature, task_id, context, requirements, contract, owned, budget_row, forbidden, template)
-    return brief, context
+    args = (feature, task_id, context, requirements, contract, owned, budget_row, forbidden, spawn_rules,
+            f3_rule, t8_rule, template)
+    brief = render_brief(*args)
+    # Finding 10: enforce the 3-5 KB target. Drop the contract excerpt first
+    # (the one section that is a nice-to-have, never a fixed protocol rule);
+    # if it is still over budget, warn rather than silently cut a
+    # requirement line or a protocol rule a worker actually needs.
+    if len(brief.encode('utf-8')) > MAX_BYTES and contract is not None:
+        brief = render_brief(feature, task_id, context, requirements, None, owned, budget_row, forbidden,
+                             spawn_rules, f3_rule, t8_rule, template)
+    oversized = len(brief.encode('utf-8')) > MAX_BYTES
+    return brief, context, oversized
 
 
 def main():
@@ -159,20 +234,23 @@ def main():
     parser.add_argument('--root', type=Path, default=Path.cwd())
     parser.add_argument('--feature', required=True)
     parser.add_argument('--task', required=True)
-    parser.add_argument('--class', dest='work_type', choices=('implementation', 'qa_author', 'qa_collect',
-                        'documentation', 'review'))
+    parser.add_argument('--class', dest='work_type', choices=CLI_WORK_TYPES,
+                        help='qa_collect is never a CLI choice (finding 10): it is only ever '
+                             'detected automatically from a [Collect] task marker.')
     parser.add_argument('--output')
     args = parser.parse_args()
     try:
-        brief, context = build(args.root, args.feature, args.task, args.work_type)
+        brief, context, oversized = build(args.root, args.feature, args.task, args.work_type)
     except WorkflowError as exc:
-        print('{"ok": false, "error": "' + str(exc) + '"}')
+        print(json.dumps({'ok': False, 'error': str(exc)}))
         return 1
     output = Path(args.output) if args.output else args.root / args.feature / 'workflow/briefs' / (args.task + '.md')
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(brief, encoding='utf-8')
-    print(f'{{"ok": true, "path": "{output}", "bytes": {len(brief.encode("utf-8"))}, '
-          f'"work_type": "{context["work_type"]}"}}')
+    # json.dumps, not manual string formatting (finding 10): a Windows path
+    # like the default --output has backslashes, which break hand-built JSON.
+    print(json.dumps({'ok': True, 'path': str(output), 'bytes': len(brief.encode('utf-8')),
+                      'work_type': context['work_type'], 'oversized': oversized}))
     return 0
 
 

@@ -9,15 +9,21 @@ Run:
 
 ```text
 python .specify/extensions/workflow/scripts/worker_brief.py --root <repo> \
-  --feature specs/<feature> --task T### [--class implementation|qa_author|qa_collect|documentation|review] \
+  --feature specs/<feature> --task T### [--class implementation|qa_author|documentation|review] \
   [--output <path>]
 ```
 
 Without `--class`, the work type is classified from the task's own
 description the same way delegation routing already does
 (`delegation.task_type`), so the brief and the delegated route never
-disagree. The brief (default `specs/<feature>/workflow/briefs/T###.md`,
-targeted at 3-5 KB) carries:
+disagree. `--class` never accepts `qa_collect` (review round 1, finding 10):
+that route is light-tier eligible only behind an explicit `[Collect]` task
+marker (standing rule 5), never an ad hoc CLI override; the brief's work
+type still comes out `qa_collect` automatically when the marker is present.
+The brief (default `specs/<feature>/workflow/briefs/T###.md`, targeted at
+3-5 KB -- the contract excerpt is dropped first if that would push it over,
+and the result carries `oversized: true` if it is still over without one)
+carries:
 
 - The task's exact line from `tasks.md`.
 - Owned paths extracted from backtick-quoted file paths in the task's own
@@ -31,9 +37,14 @@ targeted at 3-5 KB) carries:
   task's description (best-effort; omitted, not guessed, when nothing matches).
 - The turn budget (T0) for the task's class, read live from
   `execution-assign.md`'s table -- never a copy that could drift from it.
-- The forbidden-commands paragraph (S6: `git stash`, `git add -A`/`git add .`,
-  the ledger-trust `delegate_dispatch.py` commands), read live from the same
-  file.
+- The F1/F2 spawn-and-wait rules (route results straight to whoever spawned
+  you; never end a turn owning running background work), the F3
+  report-only-on-state-change rule and the T8 read-summary-first rule, all
+  read live from the same two reference files.
+- The forbidden-commands rule (S6), reusing `delegate_dispatch.py`'s own
+  `NO_DISPATCHER_COMMANDS` (plus `QA_COLLECT_ADDENDUM` for a `qa_collect`
+  task) rather than a second, hand-scraped copy -- the same text a real
+  delegated worker's own brief already carries.
 - The consumers checklist (F11) as a pointer, and the exact ten-line
   structured result template (T7), read live from `execution-report.md`.
 
