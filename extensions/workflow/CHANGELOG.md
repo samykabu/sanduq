@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Delegation guard, round 11 corrections (B12; consensus, two LOW).
+  `require_not_worker_context` now checks `SANDUQ_DELEGATED_RUN` first, so
+  it always wins and gives `DELEGATION_WORKER_CONTEXT` even when
+  `SANDUQ_DELEGATED_ROLE`/`SANDUQ_DELEGATED_FEATURE` also happen to be set
+  (that combination should not occur, but was previously read as the
+  orchestrator role regardless). `recover` and `abandon` now also call
+  `require_not_worker_context(feature, <intent identity>)`, matching
+  `start`/`collect`/`accept`/`reassign`/`adopt`: a plain worker is refused
+  outright, and the delegated Execute orchestrator is allowed only for a
+  `T###` intent of its own feature. The Execute stage brief's allowed-
+  command list now includes `recover` and `abandon`.
+
 - Delegation guard, round 10 corrections (B12; blocking fix, one HIGH and
   two LOW). Round 9's `SANDUQ_DELEGATED_RUN` guard wrongly barred the
   delegated Execute orchestrator from dispatching and resolving its own

@@ -391,11 +391,11 @@ NO_DISPATCHER_COMMANDS = (
 # require_not_worker_context's role-aware check both grant that narrower
 # scope, so its brief states the narrower rule instead of the blanket one.
 EXECUTE_ORCHESTRATOR_DISPATCHER_COMMANDS = (
-    'As the Execute orchestrator you may run delegate_dispatch.py start, collect, accept, reassign '
-    'or adopt for this feature\'s own T### tasks only -- that is how you dispatch and resolve bounded '
-    'workers. Never trust-reset, and never a stage:* identity or another feature\'s tasks; the '
-    'dispatcher enforces this scope itself (DELEGATION_ORCHESTRATOR_SCOPE) and refuses anything '
-    'outside it.\n'
+    'As the Execute orchestrator you may run delegate_dispatch.py start, collect, recover, abandon, '
+    'accept, reassign or adopt for this feature\'s own T### tasks only -- that is how you dispatch and '
+    'resolve bounded workers. Never trust-reset, and never a stage:* identity or another feature\'s '
+    'tasks; the dispatcher enforces this scope itself (DELEGATION_ORCHESTRATOR_SCOPE) and refuses '
+    'anything outside it.\n'
 )
 
 
@@ -502,31 +502,36 @@ def require_not_worker_context(feature=None, task_identity=None):
     since round 10, finding 1).
 
     A plain worker (``SANDUQ_DELEGATED_RUN`` set) is refused outright and
-    unconditionally: ``DELEGATION_WORKER_CONTEXT``. The delegated Execute
-    orchestrator (``SANDUQ_DELEGATED_ROLE=orchestrator`` plus
-    ``SANDUQ_DELEGATED_FEATURE``) is allowed through, but only for a
-    ``T###`` ``task_identity`` belonging to that same feature;
-    ``trust-reset`` (which has no task to name, so always passes
-    ``task_identity=None``), any ``stage:*`` identity, and any other
-    feature all refuse with ``DELEGATION_ORCHESTRATOR_SCOPE``. Called by
-    ``start``, ``collect``, ``accept``, ``reassign``, ``adopt`` and
-    ``trust-reset`` once ``feature`` and the identity in question, if any,
-    are known. With neither variable set -- an ordinary, undelegated
-    orchestrator call -- both checks pass silently.
+    unconditionally: ``DELEGATION_WORKER_CONTEXT``. This is checked first
+    and always wins (round 11, finding 1) -- ``SANDUQ_DELEGATED_RUN`` set
+    at all means a real worker process tree exists underneath this one,
+    whatever ``SANDUQ_DELEGATED_ROLE``/``SANDUQ_DELEGATED_FEATURE`` also
+    happen to read, so that combination is never treated as the
+    orchestrator. The delegated Execute orchestrator
+    (``SANDUQ_DELEGATED_ROLE=orchestrator`` plus
+    ``SANDUQ_DELEGATED_FEATURE``, with no ``SANDUQ_DELEGATED_RUN``) is
+    allowed through, but only for a ``T###`` ``task_identity`` belonging to
+    that same feature; ``trust-reset`` (which has no task to name, so
+    always passes ``task_identity=None``), any ``stage:*`` identity, and
+    any other feature all refuse with ``DELEGATION_ORCHESTRATOR_SCOPE``.
+    Called by ``start``, ``collect``, ``recover``, ``abandon``, ``accept``,
+    ``reassign``, ``adopt`` and ``trust-reset`` once ``feature`` and the
+    identity in question, if any, are known. With neither variable set --
+    an ordinary, undelegated orchestrator call -- both checks pass
+    silently.
     """
+    delegation.require(not os.environ.get('SANDUQ_DELEGATED_RUN'),
+                       'DELEGATION_WORKER_CONTEXT: this process is running inside a delegated worker '
+                       '(SANDUQ_DELEGATED_RUN is set); only the orchestrator may run this command')
     if os.environ.get('SANDUQ_DELEGATED_ROLE') == 'orchestrator':
         role_feature = os.environ.get('SANDUQ_DELEGATED_FEATURE')
         allowed = (task_identity is not None and re.fullmatch(r'T\d{3,}', task_identity) is not None and
                   feature is not None and feature == role_feature)
         delegation.require(allowed,
                            'DELEGATION_ORCHESTRATOR_SCOPE: a delegated Execute orchestrator may only '
-                           'start, collect, accept, reassign or adopt a T### task of its own feature (' +
-                           str(role_feature) + '); never trust-reset, a stage:* identity, or another '
-                           'feature')
-        return
-    delegation.require(not os.environ.get('SANDUQ_DELEGATED_RUN'),
-                       'DELEGATION_WORKER_CONTEXT: this process is running inside a delegated worker '
-                       '(SANDUQ_DELEGATED_RUN is set); only the orchestrator may run this command')
+                           'start, collect, recover, abandon, accept, reassign or adopt a T### task of '
+                           'its own feature (' + str(role_feature) + '); never trust-reset, a stage:* '
+                           'identity, or another feature')
 
 
 class StartFailed(delegation.DelegationError):
@@ -1849,6 +1854,7 @@ def recover_intent(root, feature, intent_id):
     with edit_ledger(root, feature) as ledger:
         intent = find_intent(ledger, intent_id)
         delegation.require(intent is not None, 'DELEGATION_INTENT_UNKNOWN')
+        require_not_worker_context(feature, intent['identity'].removeprefix(feature + '/'))
         if intent.get('run_id'):
             return {'found': True, 'run_id': intent['run_id'], 'status': intent['status']}
         delegation.require(intent['status'] == 'starting', 'DELEGATION_INTENT_NOT_STARTING')
@@ -1883,6 +1889,7 @@ def abandon_intent(root, feature, intent_id, reason):
     with edit_ledger(root, feature) as ledger:
         intent = find_intent(ledger, intent_id)
         delegation.require(intent is not None, 'DELEGATION_INTENT_UNKNOWN')
+        require_not_worker_context(feature, intent['identity'].removeprefix(feature + '/'))
         delegation.require(intent.get('status') == 'starting' and not intent.get('run_id'),
                            'DELEGATION_INTENT_NOT_STARTING')
         delegation.require(not intent_runs(root, intent_id, dismissed_runs(intent)),

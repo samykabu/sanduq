@@ -1033,6 +1033,55 @@ class DelegationTests(unittest.TestCase):
             with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_WORKER_CONTEXT'):
                 dispatch.collect(self.root, self.feature, run_id)
 
+    def test_worker_context_wins_even_with_orchestrator_role_also_set(self):
+        """Round 11, finding 1: SANDUQ_DELEGATED_RUN is checked first and
+        always wins. Set alongside SANDUQ_DELEGATED_ROLE=orchestrator and a
+        matching SANDUQ_DELEGATED_FEATURE, it must still refuse with
+        DELEGATION_WORKER_CONTEXT rather than falling through to the
+        orchestrator's (still scoped, but wider) allowance."""
+        run_id = self._unverified_run()
+        with patch.dict(os.environ, {'SANDUQ_DELEGATED_RUN': run_id,
+                                     'SANDUQ_DELEGATED_ROLE': 'orchestrator',
+                                     'SANDUQ_DELEGATED_FEATURE': self.feature}):
+            with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_WORKER_CONTEXT'):
+                dispatch.accept(self.root, self.feature, run_id, 'pytest -q', 'counts')
+
+    def test_recover_and_abandon_refuse_a_worker_context(self):
+        """Round 11, finding 2: recover and abandon must refuse a plain
+        worker context outright, exactly like every other dispatcher
+        command."""
+        self.tasks()
+        self.enable()
+        ledger = dispatch.load_ledger(self.root, self.feature)
+        ledger['attempts'].append({'intent_id': 'intent-1', 'identity': self.feature + '/T001',
+                                   'status': 'starting', 'started_at': dispatch.stamp(),
+                                   'route_candidates': []})
+        w.write(delegation.ledger_path(self.root, self.feature), ledger)
+        with patch.dict(os.environ, {'SANDUQ_DELEGATED_RUN': 'codex-1'}):
+            with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_WORKER_CONTEXT'):
+                dispatch.recover_intent(self.root, self.feature, 'intent-1')
+            with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_WORKER_CONTEXT'):
+                dispatch.abandon_intent(self.root, self.feature, 'intent-1', 'reason')
+
+    def test_recover_and_abandon_allow_the_execute_orchestrator_for_its_own_task(self):
+        """Round 11, finding 2: recover and abandon must allow the
+        delegated Execute orchestrator for a T### intent of its own
+        feature, exactly like start, collect, accept, reassign and adopt."""
+        self.tasks()
+        self.enable()
+        ledger = dispatch.load_ledger(self.root, self.feature)
+        ledger['attempts'].append({'intent_id': 'intent-1', 'identity': self.feature + '/T001',
+                                   'status': 'starting', 'started_at': dispatch.stamp(),
+                                   'route_candidates': []})
+        w.write(delegation.ledger_path(self.root, self.feature), ledger)
+        with patch.dict(os.environ, {'SANDUQ_DELEGATED_ROLE': 'orchestrator',
+                                     'SANDUQ_DELEGATED_FEATURE': self.feature}):
+            self.assertFalse(dispatch.recover_intent(self.root, self.feature, 'intent-1')['found'])
+            with patch.object(dispatch, 'ABANDON_GRACE_SECONDS', 0):
+                result = dispatch.abandon_intent(self.root, self.feature, 'intent-1',
+                                                 'no driver run ever appeared')
+        self.assertEqual(result['status'], 'intent-abandoned')
+
     def test_ready_task_gate_warns_on_adopted_and_accepted_tasks(self):
         """Round 9, finding 1b: reviewers must see every task Ready accepted
         because the orchestrator ran and judged its own check, not because a
