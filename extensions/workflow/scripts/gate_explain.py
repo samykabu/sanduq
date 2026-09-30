@@ -95,13 +95,20 @@ def auto_fix(root, feature, explanation, reason, assessment):
     state = run.load()
     receipt = state.get('receipts', {}).get(stage) or {}
     paths = explanation['evidence_only_paths']
+    # Recompute eligibility from the receipt as it is now, never trusting the
+    # earlier explanation: a path that has since become a declared input (or
+    # stopped being evidence) is refused. `amend(evidence_only=True)` repeats
+    # the check under its own lock immediately before each write.
+    non_amendable = set(receipt.get('inputs') or []) | set(required_inputs(root, feature, stage))
     for path in paths:
+        require(path in set(receipt.get('evidence') or []) and path not in non_amendable,
+                'GATE_EXPLAIN_NO_LONGER_EVIDENCE_ONLY: ' + path)
         inside(root, path)
         new_hash = fingerprint_files(root, [path])[path]
         require(new_hash is not None, 'EVIDENCE_MISSING: ' + path)
         old_hash = (receipt.get('fingerprints') or {}).get(path)
         require(old_hash is not None and new_hash != old_hash, 'AMENDMENT_NOT_NEEDED: ' + path)
-    amendments = [run.amend(stage, path, reason, assessment) for path in paths]
+    amendments = [run.amend(stage, path, reason, assessment, evidence_only=True) for path in paths]
     return {'ok': True, 'stage': stage, 'amendments': amendments}
 
 

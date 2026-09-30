@@ -169,6 +169,34 @@ class GateExplainTests(unittest.TestCase):
         self.assertFalse(after['ok'])
         self.assertEqual(after.get('recovery'), explanation.get('recovery'))
 
+    def _make_path_a_declared_input(self, run, path):
+        state = run.load()
+        state['receipts']['plan']['inputs'].append(path)
+        run.save(state)
+
+    def test_auto_fix_recomputes_eligibility_from_the_receipt_as_it_is_now(self):
+        # Round 3, finding 3: the receipt changes between explain and fix.
+        run = self.ready()
+        evidence_path = self.make_evidence_only(run)
+        (self.root / evidence_path).write_text('a clarification', encoding='utf-8')
+        explanation = ge.explain(self.root, self.feature, None)
+        self.assertTrue(explanation['evidence_only_eligible'])
+        self._make_path_a_declared_input(run, evidence_path)  # now a dependency
+        with self.assertRaises(w.WorkflowError) as ctx:
+            ge.auto_fix(self.root, self.feature, explanation, reason='ok', assessment='unchanged')
+        self.assertIn('GATE_EXPLAIN_NO_LONGER_EVIDENCE_ONLY', str(ctx.exception))
+        self.assertEqual(run.load()['receipts']['plan'].get('amendments'), None)
+
+    def test_amend_evidence_only_rechecks_under_its_own_lock(self):
+        # Even if a change lands after the pre-check, amend itself refuses.
+        run = self.ready()
+        evidence_path = self.make_evidence_only(run)
+        (self.root / evidence_path).write_text('a clarification', encoding='utf-8')
+        self._make_path_a_declared_input(run, evidence_path)
+        with self.assertRaises(w.WorkflowError) as ctx:
+            run.amend('plan', evidence_path, 'ok', 'unchanged', evidence_only=True)
+        self.assertIn('AMEND_PATH_IS_A_DEPENDENCY', str(ctx.exception))
+
     def test_auto_fix_requires_an_explicit_assessment_via_cli(self):
         # Finding 2: --assessment has no default; omitting it with --auto-fix
         # is refused rather than silently treated as "unchanged".

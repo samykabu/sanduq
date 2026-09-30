@@ -1393,7 +1393,7 @@ class Run:
                 self.save(state)
             return {'refreshed': list(affected), 'next': self.next(state)}
 
-    def amend(self, stage, evidence, reason, assessment, actor=None):
+    def amend(self, stage, evidence, reason, assessment, actor=None, evidence_only=False):
         """Re-hash one evidence entry of a completed receipt under a recorded assessment.
 
         Every other fingerprint keeps its hash. `unchanged` asserts the stage's
@@ -1413,6 +1413,13 @@ class Run:
             require(receipt, 'RECEIPT_MISSING: ' + stage)
             require(evidence in receipt.get('evidence', []) and evidence in receipt.get('fingerprints', {}),
                     'AMEND_PATH_NOT_EVIDENCE: ' + str(evidence) + ' is not listed as evidence of ' + stage)
+            if evidence_only:
+                # A caller that classified this path as evidence-only earlier
+                # (gate-explain --auto-fix) is re-checked against the receipt
+                # as it is now, under this lock, immediately before the write.
+                require(evidence not in set(receipt.get('inputs') or []) | set(required_inputs(
+                        self.root, self.relative, stage)),
+                        'AMEND_PATH_IS_A_DEPENDENCY: ' + str(evidence) + ' is a declared input of ' + stage)
             inside(self.root, evidence)
             new_hash = fingerprint_files(self.root, [evidence])[evidence]
             require(new_hash is not None, 'EVIDENCE_MISSING: ' + evidence)
