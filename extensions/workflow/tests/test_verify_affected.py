@@ -29,6 +29,11 @@ RUN_LANES_OK = textwrap.dedent('''\
         json.dump({"lanes": {lane: {"outcome": "passed"} for lane in payload["lanes"]}}, handle)
 ''')
 RUN_LANES_FAIL = 'import sys\nsys.exit(3)\n'
+RUN_LANES_HANGS = textwrap.dedent('''\
+    import sys, time
+    sys.stdin.read()
+    time.sleep(60)
+''')
 
 
 class VerifyAffectedTests(unittest.TestCase):
@@ -42,6 +47,12 @@ class VerifyAffectedTests(unittest.TestCase):
         self.feature = 'specs/001-example'
         self.policy = w.default_policy(False, False)
         self._write_policy()
+        # Commit the baseline policy so a "no diff" test starts from a clean
+        # tree: an untracked .specify/workflow.yml would otherwise itself
+        # count as a diffed path once diffed_paths() includes the working
+        # tree and untracked files (finding 6).
+        subprocess.run(['git', 'add', '.specify/workflow.yml'], cwd=self.root, check=True, capture_output=True)
+        subprocess.run(['git', 'commit', '-qm', 'policy'], cwd=self.root, check=True, capture_output=True)
 
     def _write_policy(self):
         (self.root / '.specify').mkdir(exist_ok=True)
@@ -121,6 +132,56 @@ class VerifyAffectedTests(unittest.TestCase):
         with self.assertRaises(w.WorkflowError) as ctx:
             va.run(self.root, self.feature, base)
         self.assertIn('VERIFY_COMMAND_FAILED', str(ctx.exception))
+
+    def test_uncommitted_edit_is_diffed_without_a_commit(self):
+        # Review round 1, finding 6: base_ref..HEAD alone gives a false
+        # green for a real, uncommitted change.
+        base = self._base_ref()
+        (self.root / 'uncommitted.py').write_text('y = 2\n', encoding='utf-8')  # untracked, never committed
+        self.policy['ci']['gate']['affected_command'] = self._script('classify.py', CLASSIFY_LANE_A)
+        self._write_policy()
+        paths = va.diffed_paths(self.root, base)
+        self.assertIn('uncommitted.py', paths)
+        lanes = va.affected_lane_set(self.root, self.policy, paths)
+        self.assertEqual(lanes, {'laneA'})
+
+    def test_staged_edit_is_also_diffed(self):
+        base = self._base_ref()
+        (self.root / 'staged.py').write_text('z = 3\n', encoding='utf-8')
+        subprocess.run(['git', 'add', 'staged.py'], cwd=self.root, check=True, capture_output=True)
+        paths = va.diffed_paths(self.root, base)
+        self.assertIn('staged.py', paths)
+
+    def test_results_are_stamped_local_and_not_ci_grade(self):
+        base = self._base_ref()
+        self._commit_change()
+        self.policy['ci']['gate']['affected_command'] = self._script('classify.py', CLASSIFY_LANE_A)
+        self.policy['ci']['gate']['verify_command'] = self._script('run_lanes.py', RUN_LANES_OK)
+        self._write_policy()
+        result = va.run(self.root, self.feature, base, results_path='out/results.json')
+        self.assertEqual(result['source'], 'local')
+        self.assertIs(result['ci_grade'], False)
+        on_disk = json.loads((self.root / 'out/results.json').read_text(encoding='utf-8'))
+        self.assertEqual(on_disk['source'], 'local')
+        self.assertIs(on_disk['ci_grade'], False)
+
+    def test_results_path_outside_repo_is_rejected(self):
+        base = self._base_ref()
+        self.policy['ci']['gate']['verify_command'] = self._script('run_lanes.py', RUN_LANES_OK)
+        self._write_policy()
+        with self.assertRaises(w.WorkflowError) as ctx:
+            va.run(self.root, self.feature, base, extra_lanes=['always'], results_path='../outside-results.json')
+        self.assertIn('PATH_OUTSIDE_PROJECT', str(ctx.exception))
+
+    def test_verify_command_timeout_kills_the_process(self):
+        base = self._base_ref()
+        self._commit_change()
+        self.policy['ci']['gate']['affected_command'] = self._script('classify.py', CLASSIFY_LANE_A)
+        self.policy['ci']['gate']['verify_command'] = self._script('run_lanes.py', RUN_LANES_HANGS)
+        self._write_policy()
+        with self.assertRaises(w.WorkflowError) as ctx:
+            va.run(self.root, self.feature, base, results_path='out/results.json', timeout=1)
+        self.assertIn('VERIFY_COMMAND_TIMEOUT', str(ctx.exception))
 
     def test_cli_prints_json_and_exits_zero_on_success(self):
         base = self._base_ref()
