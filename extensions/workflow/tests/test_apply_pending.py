@@ -114,8 +114,69 @@ class ApplyPendingTests(unittest.TestCase):
         self.pending.write_text(entry, encoding='utf-8')
         result = ap.apply(self.root, self.feature, apply_changes=True)
         self.assertEqual(len(result['rejected']), 1)
-        self.assertIn('PENDING_TARGET_NOT_ALLOWED', result['rejected'][0]['reason'])
+        self.assertIn('PENDING_TARGET_SYMLINK_REFUSED', result['rejected'][0]['reason'])
         self.assertEqual(victim.read_text(encoding='utf-8'), '# Victim\n\n## Sec\n\nOriginal.\n')
+
+    def _symlink_or_skip(self, link, target, directory=False):
+        try:
+            link.symlink_to(target, target_is_directory=directory)
+        except OSError as exc:
+            self.skipTest('cannot create symlinks on this host: ' + str(exc))
+
+    def test_symlinked_contracts_directory_is_rejected(self):
+        # Round 3, finding 1: resolving both sides is fooled when `contracts`
+        # itself is a symlink to another in-repo directory.
+        other = self.directory / 'elsewhere'
+        other.mkdir()
+        (other / 'api.md').write_text('# API\n\n## Response shape\n\nOriginal elsewhere.\n', encoding='utf-8')
+        real = self.directory / 'contracts'
+        (real / 'api.md').unlink()
+        real.rmdir()
+        self._symlink_or_skip(real, other, directory=True)
+        self.pending.write_text(ENTRY, encoding='utf-8')
+        result = ap.apply(self.root, self.feature, apply_changes=True)
+        self.assertEqual(len(result['rejected']), 1)
+        self.assertIn('PENDING_TARGET_SYMLINK_REFUSED', result['rejected'][0]['reason'])
+        self.assertIn('Original elsewhere.', (other / 'api.md').read_text(encoding='utf-8'))
+
+    def test_symlinked_exact_file_is_rejected(self):
+        real = self.directory / 'real-model.md'
+        real.write_text('# Model\n\n## Sec\n\nOriginal.\n', encoding='utf-8')
+        self._symlink_or_skip(self.directory / 'data-model.md', real)
+        entry = '## specs/001-example/data-model.md#Sec\nStatus: pending\n```markdown\nPwned.\n```\n'
+        self.pending.write_text(entry, encoding='utf-8')
+        result = ap.apply(self.root, self.feature, apply_changes=True)
+        self.assertIn('PENDING_TARGET_SYMLINK_REFUSED', result['rejected'][0]['reason'])
+        self.assertIn('Original.', real.read_text(encoding='utf-8'))
+
+    def test_two_headings_in_one_contract_both_land(self):
+        # Round 3, finding 2: each entry used to re-read the original and
+        # write at once, so the last one silently erased the earlier change.
+        contract = self.directory / 'contracts/api.md'
+        contract.write_text('# API\n\n## One\n\nold one\n\n## Two\n\nold two\n', encoding='utf-8')
+        entries = ''.join(f'## specs/001-example/contracts/api.md#{h}\nStatus: pending\n```markdown\nnew {h}\n```\n'
+                          for h in ('One', 'Two'))
+        self.pending.write_text(entries, encoding='utf-8')
+        result = ap.apply(self.root, self.feature, apply_changes=True)
+        self.assertEqual(len(result['applied']), 2)
+        text = contract.read_text(encoding='utf-8')
+        self.assertIn('new One', text)
+        self.assertIn('new Two', text)
+        self.assertNotIn('old', text)
+
+    def test_entry_is_not_marked_applied_when_its_write_fails(self):
+        self.pending.write_text(ENTRY, encoding='utf-8')
+        real_write = ap.write_text
+
+        def failing(path, text):
+            if path.name == 'api.md':
+                raise OSError('disk full')
+            return real_write(path, text)
+        with patch.object(ap, 'write_text', failing):
+            result = ap.apply(self.root, self.feature, apply_changes=True)
+        self.assertEqual(result['applied'], [])
+        self.assertIn('WRITE_FAILED', result['rejected'][0]['reason'])
+        self.assertIn('Status: rejected', self.pending.read_text(encoding='utf-8'))
 
     def test_pending_file_itself_must_stay_inside_the_repo(self):
         outside = self.root.parent / 'outside-pending.md'

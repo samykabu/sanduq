@@ -37,7 +37,9 @@ import argparse
 import json
 import re
 import sys
-from pathlib import Path
+import os
+import tempfile
+from pathlib import Path, PurePosixPath
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from delegate_dispatch import require_not_worker_context
@@ -60,22 +62,30 @@ def resolve_target(root, feature, relative):
     """The allowed absolute path for a pending entry's target, or raises.
 
     Only `<feature>/contracts/**`, `<feature>/data-model.md` and
-    `<feature>/research.md` are writable targets. An absolute path is
-    refused before any resolution; `inside()` then resolves the path (which
-    follows every symlink on the way) and requires the *result* stay inside
-    the repository, catching `..` and a symlink escape identically. The
-    allow-list check below runs on that fully-resolved path too, so a
-    symlink that stays inside the repo but points at, say, another
-    feature's spec.md is still refused.
+    `<feature>/research.md` are writable targets, judged on the *lexical*
+    (unresolved) path: resolving both sides is fooled by a symlinked
+    `contracts` directory or a symlinked `data-model.md`, whose resolved
+    target would equal itself. So an absolute path, a `..` segment, a target
+    outside the allow-list and any symlink (or junction) on the way from the
+    repository root to the target are all refused before anything is read or
+    written; `inside()` then still requires the resolved path to stay in the
+    repository.
     """
     require(relative and not Path(relative).is_absolute(), 'PENDING_TARGET_ABSOLUTE_REFUSED: ' + str(relative))
-    resolved = inside(root, relative)
-    feature_dir = inside(root, feature)
-    contracts_dir = (feature_dir / 'contracts').resolve()
-    allowed_exact = {(feature_dir / 'data-model.md').resolve(), (feature_dir / 'research.md').resolve()}
-    require(resolved.is_relative_to(contracts_dir) or resolved in allowed_exact,
-            'PENDING_TARGET_NOT_ALLOWED: ' + str(relative))
-    return resolved
+    parts = PurePosixPath(str(relative).replace('\\', '/')).parts
+    require('..' not in parts, 'PENDING_TARGET_NOT_ALLOWED: parent traversal: ' + str(relative))
+    lexical = PurePosixPath(*parts) if parts else PurePosixPath('.')
+    base = PurePosixPath(PurePosixPath(str(feature).replace('\\', '/')).as_posix())
+    allowed = (lexical == base / 'data-model.md' or lexical == base / 'research.md'
+               or (len(lexical.parts) > len(base.parts) + 1 and lexical.parts[:len(base.parts) + 1] ==
+                   (*base.parts, 'contracts')))
+    require(allowed, 'PENDING_TARGET_NOT_ALLOWED: ' + str(relative))
+    node = Path(root)
+    for part in lexical.parts:
+        node = node / part
+        require(not (node.is_symlink() or getattr(node, 'is_junction', lambda: False)()),
+                'PENDING_TARGET_SYMLINK_REFUSED: ' + str(relative))
+    return inside(root, relative)
 
 
 def replace_section(text, anchor, new_body):
@@ -139,6 +149,11 @@ def apply(root, feature, pending_path=None, apply_changes=False, actor=None):
     entries = parse_entries(text)
     require(entries, 'PENDING_FILE_NO_ENTRIES: ' + str(pending_path))
     decided, touched = [], set()
+    # Replacements accumulate per target so several headings of one file all
+    # land (each entry re-reading the original and writing at once would
+    # keep only the last one); each file is then written once, atomically,
+    # and an entry is marked applied only after its file's write succeeded.
+    working, by_target = {}, {}
     for entry in entries:
         if entry['status'] != 'pending':
             continue
@@ -147,18 +162,28 @@ def apply(root, feature, pending_path=None, apply_changes=False, actor=None):
         except WorkflowError as exc:
             decided.append({**entry, 'outcome': 'rejected', 'reason': str(exc)})
             continue
-        target_text = read_text(target)
-        if not target_text:
+        if target not in working:
+            working[target] = read_text(target)
+        if not working[target]:
             decided.append({**entry, 'outcome': 'rejected', 'reason': 'TARGET_FILE_MISSING: ' + entry['target']})
             continue
-        replaced, found = replace_section(target_text, entry['anchor'], entry['body'])
+        replaced, found = replace_section(working[target], entry['anchor'], entry['body'])
         if not found:
             decided.append({**entry, 'outcome': 'rejected', 'reason': 'ANCHOR_NOT_FOUND: ' + entry['anchor']})
             continue
-        decided.append({**entry, 'outcome': 'applied', 'target': entry['target']})
-        touched.add(entry['target'])
-        if apply_changes:
-            write_text(target, replaced)
+        working[target] = replaced
+        item = {**entry, 'outcome': 'applied', 'target': entry['target']}
+        decided.append(item)
+        by_target.setdefault(target, []).append(item)
+    if apply_changes:
+        for target, items in by_target.items():
+            try:
+                write_text(target, working[target])
+            except OSError as exc:
+                for item in items:
+                    item['outcome'] = 'rejected'
+                    item['reason'] = 'WRITE_FAILED: ' + str(exc)
+    touched = {item['target'] for item in decided if item['outcome'] == 'applied'}
     if apply_changes:
         write_text(pending_path, rewrite_pending(text, entries, decided, root, actor))
     result = {'ok': True, 'entries': len(entries),
@@ -209,8 +234,19 @@ def read_text(path):
 
 
 def write_text(path, text):
+    """Write atomically: a temp file in the same directory, then `os.replace`."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding='utf-8')
+    descriptor, temp = tempfile.mkstemp(dir=str(path.parent), prefix='.pending-', suffix='.tmp')
+    try:
+        with os.fdopen(descriptor, 'w', encoding='utf-8', newline='') as handle:
+            handle.write(text)
+        os.replace(temp, path)
+    except BaseException:
+        try:
+            os.unlink(temp)
+        except OSError:
+            pass
+        raise
 
 
 def main():
