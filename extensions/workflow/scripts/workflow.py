@@ -1736,6 +1736,13 @@ class Run:
                 resolved_issue = new_repo + '#' + old_number
         history_changed = root_history_changed(self.root, state, new_identity)
         blockers = []
+        if new_repo is None:
+            # `load` requires a resolvable GitHub remote, so a relocate that
+            # succeeded without one would write a checkpoint nothing can read
+            # (Codex round 1, finding 3), whatever `--issue` claims.
+            blockers.append('RELOCATE_GITHUB_REMOTE_REQUIRED: this repository has no resolvable GitHub '
+                            'remote (origin), so a relocated checkpoint could not be loaded here; configure '
+                            'origin first')
         if history_changed and not allow_history_change:
             blockers.append('HISTORY_CHANGED: this checkpoint records a root history that is not the history of this '
                             'repository (a recreated or unrelated repository sharing the remote); pass '

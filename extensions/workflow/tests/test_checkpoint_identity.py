@@ -758,6 +758,25 @@ class RelocateTests(Harness):
         result = run.relocate('renamed', allow_repository_rename=True, keep_issue_number=True)
         self.assertIs(result['relocation']['history_changed'], False)
 
+    def test_relocate_without_a_github_remote_is_refused_even_with_an_issue(self):
+        """Codex round 1, finding 3: with no resolvable GitHub repository
+        `--issue` alone let relocate write a success that `load` then
+        refuses. Applying now requires a resolved GitHub repo."""
+        git(self.root, 'remote', 'remove', 'origin')
+        run = w.Run(self.root, self.feature)
+        preview = run.relocate('no remote', preview=True, allow_repository_rename=True, new_issue='acme/app#10')
+        self.assertFalse(preview['can_apply'])
+        self.assertTrue(any('RELOCATE_GITHUB_REMOTE_REQUIRED' in b for b in preview['blockers']))
+        raw_before = run.path.read_bytes()
+        with self.assertRaisesRegex(w.WorkflowError, 'RELOCATE_GITHUB_REMOTE_REQUIRED'):
+            run.relocate('no remote', allow_repository_rename=True, new_issue='acme/app#10')
+        self.assertEqual(run.path.read_bytes(), raw_before)
+
+    def test_relocate_issue_must_name_the_resolved_repository(self):
+        run = self.rename_remote()
+        with self.assertRaisesRegex(w.WorkflowError, 'RELOCATE_ISSUE_REPOSITORY_MISMATCH'):
+            run.relocate('renamed', allow_repository_rename=True, new_issue='acme/app#10')
+
     def test_relocate_requires_a_reason(self):
         run = self.rename_remote()
         with self.assertRaisesRegex(w.WorkflowError, 'RELOCATE_REASON_REQUIRED'):
