@@ -8,23 +8,51 @@
   delegated worker or CI runner, with no supported fix. It now records a
   portable `repo_identity`: the normalised `origin` remote and/or the
   repository's root commit, chosen so a shallow CI checkout of the same
-  origin still matches and a repository with no remote is fully supported.
-  `Run.load()` compares this portable identity; a legacy (pre-1.8.0)
-  checkpoint that only has `repo_path` is accepted once this repository's own
-  identity can be established, and upgraded on its next write. A checkpoint
-  copied from a genuinely different repository is still refused.
+  origin still matches. `Run.load()` compares this portable identity *and*
+  requires the checkpoint's bound issue to name this repository's own
+  GitHub remote (the same binding `start` and the scope extension's
+  `bound_claim` already require) -- without a GitHub remote to check that
+  against, it is refused and pointed at `relocate`. A legacy (pre-1.8.0)
+  checkpoint that only has `repo_path` is accepted once both of those
+  checks pass, and upgraded to `repo_identity` on its next write. A
+  checkpoint copied from a genuinely different repository is still
+  refused, whether legacy or new. When neither repository being compared
+  is a shallow clone, the root commit must also match even when the
+  remote does (a shared remote is still just local Git config, and this
+  catches one simply copied into an unrelated clone); see the README's
+  threat model for what this identity check does and does not defend
+  against.
 - **New `workflow.py relocate --feature <f> [--preview] --reason "<why>"`.**
   The explicit, logged rebind for a checkpoint whose identity legitimately
   moved (a fork, a renamed remote, a migrated org). Preview reports the old
   and new identity without writing; applying appends a `relocations[]` entry
   with actor, time, reason and both identities. Every receipt is preserved
   and no stage is invalidated. Refuses a branch mismatch unless
-  `--allow-branch-rebind` is also passed (logged either way), refuses inside
-  a delegated worker or orchestrator context, and reaches the checkpoint
-  directly, bypassing the identity gate it exists to get past.
+  `--allow-branch-rebind` is also passed (logged either way); refuses when
+  the checkpoint's bound issue names a different GitHub repository than
+  this one now resolves to, unless `--allow-repository-rename` is also
+  passed (logged either way) -- this is the check that stops `relocate`
+  itself from laundering a foreign checkpoint into an unrelated repository;
+  refuses inside a delegated worker or orchestrator context; and reaches
+  the checkpoint directly, bypassing the identity gate it exists to get
+  past, recomputing everything from a fresh read taken under the lock
+  rather than trusting values read before it.
+- `repo_path` is still written (by `start`, the legacy-upgrade path and
+  `relocate`) as the current absolute root, purely so a pre-1.8.0 reader
+  does not `KeyError` on a checkpoint this version writes; nothing in this
+  version reads or compares it. It will be removed once no supported
+  release still needs it.
+- `normalize_remote_url` now parses a scheme URL with `urllib.parse`
+  instead of an ad-hoc regex, fixing a real collision (an SSH URL's
+  explicit port, e.g. `ssh://host:22/team/app`, no longer folds into the
+  same identity as an unrelated path that happens to start with a numeric
+  segment, e.g. `https://host/22/team/app`) and a URL-confusion risk (a
+  malformed remote, e.g. a non-numeric port, now falls back to an opaque,
+  unfolded identity instead of risking a misparse). A local-path remote
+  (a bare path, `file://`, or a Windows drive path) is never case-folded.
 - `schemas/checkpoint-v1.schema.json`: `repo_path` is no longer required
-  (kept, optional, for a legacy checkpoint); adds optional `repo_identity`
-  (`remote`, `root_commit`) and `relocations[]`.
+  (kept, optional); adds optional `repo_identity` (`remote`, `root_commit`,
+  `shallow`) and `relocations[]`.
 
 ## 1.7.0
 

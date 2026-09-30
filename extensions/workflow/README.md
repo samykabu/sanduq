@@ -370,17 +370,44 @@ workflow.py relocate --feature specs/<feature> --preview --reason "<why>"
 workflow.py relocate --feature specs/<feature> --reason "<why>"
 ```
 
-The preview reports the old and new identity and the current branch binding
-without changing anything; the applying call rebinds the checkpoint and
-appends a `relocations[]` entry (`actor`, `at`, `reason`, `old_identity`,
-`new_identity`). No receipt is touched and no stage is invalidated — relocate
-never revisits what evidence means. A branch mismatch is refused unless
-`--allow-branch-rebind` is also passed, in which case the rebind is logged in
-the same entry. Relocate is refused inside any delegated worker or
+The preview reports the old and new identity, the old and new GitHub
+repository, and the current branch binding, without changing anything; the
+applying call rebinds the checkpoint and appends a `relocations[]` entry
+(`actor`, `at`, `reason`, `old_identity`, `new_identity`, and — only when the
+GitHub repository itself changed — `repository_renamed`, `old_repository`,
+`new_repository`). No receipt is touched and no stage is invalidated —
+relocate never revisits what evidence means. A branch mismatch is refused
+unless `--allow-branch-rebind` is also passed; a checkpoint whose bound issue
+names a different GitHub repository than this one now resolves to is refused
+unless `--allow-repository-rename` is also passed — this is the check that
+stops `relocate` itself from being used to launder a foreign checkpoint into
+an unrelated repository, and either flag's effect is logged in the same
+entry regardless. When a repository rename is confirmed, `issue` is rebound
+to the new repository (the same issue number) so the checkpoint's next
+`load` accepts what was just confirmed instead of refusing it again.
+Relocate is refused inside any delegated worker or
 orchestrator context (`DELEGATION_WORKER_CONTEXT`) and while a claim is
 active; it reaches the checkpoint directly, bypassing the identity and
 branch checks `load` enforces everywhere else, because that gate is exactly
-what it exists to get past.
+what it exists to get past, and every decision it makes is recomputed from a
+fresh read taken under the per-feature lock rather than trusted from before
+it.
+
+**Threat model.** This identity check defends against an *accidental*
+cross-repository mix-up: the same feature directory name reused in an
+unrelated project, a checkpoint file copied by habit instead of by intent, a
+CI runner that resolved the wrong checkout. It is not a defence against an
+*adversarial* process running inside this repository's own working tree: a
+remote URL, a root commit, and the branch a checkpoint claims to be on are
+all read from local Git state that a delegated worker (or anything else with
+filesystem access here) could edit before this runtime ever reads it, the
+same way it could edit `.git/config` directly. Nothing in this design is
+meant to resist that; a process already trusted to run commands in this
+working tree is already trusted with everything in it. What actually
+protects the integrity of recorded work is the receipt contract itself: each
+stage's evidence is bound by byte-exact SHA-256 fingerprints
+(`fingerprints`, `source_fingerprints`), checked again on every later load,
+independent of which repository or machine is asking.
 
 ### Receipt contract (1.6.0)
 

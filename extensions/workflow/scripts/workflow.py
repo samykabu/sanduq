@@ -329,6 +329,40 @@ def identity_matches(recorded, current):
     return False
 
 
+def require_issue_repository_binding(root, state, relative):
+    """The checkpoint's bound issue must name *this* repository's own GitHub
+    remote -- the same binding `start` (see below) and the scope
+    extension's `bound_claim` (`workflow_policy.py`) already require, and
+    for the same reason: `repo_identity`'s remote/root-commit match is only
+    ever as strong as this repository's own, locally-editable Git config
+    (round 1, finding 1). A *legacy* checkpoint has no portable
+    `repo_identity` at all to check against, so without this, a legacy
+    checkpoint bound to some other repository's issue was accepted by
+    almost any repository whose own identity happened to resolve at all --
+    then silently rebound to it on the next write. Applies to a new-style
+    checkpoint too, for the same defence in depth.
+
+    Fails closed when there is no GitHub remote to check against at all
+    (a repo with no `origin`, or one on a non-GitHub host): the binding
+    cannot be verified, so it is refused rather than trusted, and pointed
+    at `relocate` -- which raises its own, explicit, logged version of
+    this same check (`_relocate_repository_binding`) rather than silently
+    trusting a caller who supplies `--allow-repository-rename`.
+    """
+    try:
+        current_repo = github_repository(root)
+    except WorkflowError:
+        raise WorkflowError(
+            'CHECKPOINT_IDENTITY_MISMATCH: this repository has no GitHub remote, so the checkpoint\'s bound '
+            'issue (' + state['issue'] + ') cannot be verified against it. If this is the same project '
+            'relocated (a fork, a renamed remote, a migrated org), run: workflow.py relocate --feature ' +
+            relative + ' --reason "<why>"')
+    require(state['issue'].split('#')[0] == current_repo,
+            'CHECKPOINT_IDENTITY_MISMATCH: this checkpoint is bound to ' + state['issue'].split('#')[0] +
+            ', not this repository (' + current_repo + '). If this is the same project relocated (a fork, a '
+            'renamed remote, a migrated org), run: workflow.py relocate --feature ' + relative + ' --reason "<why>"')
+
+
 def issue_identity(root, issue, gh=None):
     """Derive a stable safe initial path and branch from the bound GitHub issue."""
     require(re.fullmatch(r'[1-9]\d*', str(issue)), 'ISSUE_NUMBER_REQUIRED')
@@ -1412,19 +1446,25 @@ def require_not_delegated_context(command):
     """Refuse a command inside any delegated process tree, worker or
     orchestrator alike.
 
-    Mirrors `delegate_dispatch.require_not_worker_context`'s unconditional
-    `SANDUQ_DELEGATED_RUN` refusal, duplicated here rather than imported --
-    `delegate_dispatch` imports `workflow`, so the reverse import would be a
-    cycle. Unlike that check, this one also refuses the delegated
-    orchestrator (`SANDUQ_DELEGATED_ROLE=orchestrator`): that role-aware
-    exception exists there to scope a worker-dispatching command to its own
+    Reads the same two environment variables `delegate_dispatch`'s
+    `require_not_worker_context` does, through the shared
+    `delegation.delegated_run_id`/`delegated_role` (round 1, finding 7):
+    `workflow.py` cannot import `delegate_dispatch` itself (that module
+    imports `workflow`, so the reverse would be a cycle), but `delegation`
+    imports neither, so both sides read the same fact and can never drift
+    on what the variables currently hold, even though each then applies
+    its own policy on top. Unlike `require_not_worker_context`, this one
+    also refuses the delegated orchestrator (`SANDUQ_DELEGATED_ROLE` set
+    at all, not just when misread as a worker): that role-aware exception
+    exists there to scope a worker-dispatching command to its own
     feature's tasks, which has no analogue for a repo-identity operation.
     `relocate` bypasses the identity gate by design, so it must never be
     reachable from a sandboxed process that inherited a stale or unrelated
     delegation environment; only an ordinary, undelegated invocation may
     call it. Defence in depth only, not a security boundary on its own.
     """
-    require(not os.environ.get('SANDUQ_DELEGATED_RUN') and not os.environ.get('SANDUQ_DELEGATED_ROLE'),
+    from delegation import delegated_run_id, delegated_role
+    require(not delegated_run_id() and not delegated_role(),
             'DELEGATION_WORKER_CONTEXT: ' + command + ' is not callable from a delegated worker or orchestrator '
             'context; run it directly, outside any delegated process tree')
 
@@ -1473,6 +1513,7 @@ class Run:
         state = read(self.path)
         require(state and state.get('schema_version') == SCHEMA, 'WORKFLOW_START_REQUIRED')
         require(state['feature'] == self.relative, 'CHECKPOINT_IDENTITY_MISMATCH')
+        require_issue_repository_binding(self.root, state, self.relative)
         if 'repo_identity' in state:
             require(identity_matches(state['repo_identity'], repo_identity(self.root)),
                     'CHECKPOINT_IDENTITY_MISMATCH: this checkpoint belongs to a different repository. If this is '
@@ -1498,7 +1539,43 @@ class Run:
         require(allow_branch_change or state['branch'] == git(self.root, 'branch', '--show-current'), 'CHECKPOINT_BRANCH_MISMATCH')
         return state
 
-    def relocate(self, reason, preview=False, allow_branch_rebind=False, actor=None):
+    def _relocate_plan(self, state, allow_branch_rebind, allow_repository_rename):
+        """Everything a `relocate` decision needs, computed fresh from the
+        given `state` -- never from values a caller cached before acquiring
+        the lock (round 1, finding 2: `old_identity` and `branch_matches`
+        used to be computed once, before the lock, so a concurrent write
+        between that read and the lock could make the recorded entry
+        describe a `state` that was no longer current by the time it was
+        applied). The apply path in `relocate` always calls this on a
+        `state` it just read *inside* the lock.
+        """
+        old_identity = state.get('repo_identity') or {'remote': None, 'root_commit': None,
+                                                       'legacy_repo_path': state.get('repo_path')}
+        new_identity = repo_identity(self.root)
+        current_branch = git(self.root, 'branch', '--show-current')
+        branch_matches = state['branch'] == current_branch
+        old_repo = state['issue'].split('#')[0]
+        try:
+            new_repo = github_repository(self.root)
+        except WorkflowError:
+            new_repo = None
+        repository_renamed = new_repo != old_repo
+        blockers = []
+        if state['active']:
+            blockers.append('ACTIVE_CLAIM_MUST_BE_RESOLVED_BEFORE_RELOCATE')
+        if not branch_matches and not allow_branch_rebind:
+            blockers.append('CHECKPOINT_BRANCH_MISMATCH: pass --allow-branch-rebind to also rebind the branch '
+                            '(from ' + state['branch'] + ' to ' + current_branch + ')')
+        if repository_renamed and not allow_repository_rename:
+            blockers.append('REPOSITORY_CHANGED: this checkpoint is bound to issue repository ' + old_repo +
+                            ', this repository resolves to ' + (new_repo or '<no GitHub remote>') +
+                            '; pass --allow-repository-rename to confirm this is the same project legitimately '
+                            'renamed or moved, not a foreign checkpoint')
+        return {'old_identity': old_identity, 'new_identity': new_identity, 'current_branch': current_branch,
+                'branch_matches': branch_matches, 'old_repo': old_repo, 'new_repo': new_repo,
+                'repository_renamed': repository_renamed, 'blockers': blockers}
+
+    def relocate(self, reason, preview=False, allow_branch_rebind=False, allow_repository_rename=False, actor=None):
         """Explicit, logged rebind of a checkpoint whose recorded identity no
         longer matches this repository but is legitimately the same project:
         a fork, a renamed remote, or a migrated org (`identity_matches`
@@ -1510,46 +1587,56 @@ class Run:
         Every receipt is preserved untouched and no stage is invalidated:
         relocating never revisits what evidence means, only who owns the
         machine-independent identity it is filed under. A branch mismatch is
-        refused unless `allow_branch_rebind` says to rebind that too, and
-        either way the whole decision is appended to `relocations[]` with
-        its actor, reason and both identities, never silently.
+        refused unless `allow_branch_rebind` says to rebind that too. A
+        checkpoint whose bound issue names a different GitHub repository
+        than this one now resolves to is refused the same way unless
+        `allow_repository_rename` says this is a real rename or move, not a
+        foreign checkpoint being laundered into this repository (round 1,
+        finding 2). When allowed, `issue` is rebound to the new repository
+        (same issue number) so the next `load` accepts what this call just
+        confirmed, instead of refusing it again immediately -- either way,
+        the whole decision is appended to `relocations[]` with its actor,
+        reason and both identities/repositories, never silently.
         """
         require_not_delegated_context('relocate')
         require(isinstance(reason, str) and reason.strip(), 'RELOCATE_REASON_REQUIRED')
-        state = read(self.path)
-        require(state and state.get('schema_version') == SCHEMA, 'WORKFLOW_START_REQUIRED')
-        require(state['feature'] == self.relative, 'RELOCATE_FEATURE_MISMATCH')
-        old_identity = state.get('repo_identity') or {'remote': None, 'root_commit': None,
-                                                       'legacy_repo_path': state.get('repo_path')}
-        new_identity = repo_identity(self.root)
-        current_branch = git(self.root, 'branch', '--show-current')
-        branch_matches = state['branch'] == current_branch
-        blockers = []
-        if state['active']:
-            blockers.append('ACTIVE_CLAIM_MUST_BE_RESOLVED_BEFORE_RELOCATE')
-        if not branch_matches and not allow_branch_rebind:
-            blockers.append('CHECKPOINT_BRANCH_MISMATCH: pass --allow-branch-rebind to also rebind the branch '
-                            '(from ' + state['branch'] + ' to ' + current_branch + ')')
         if preview:
-            return {'preview': True, 'feature': self.relative, 'old_identity': old_identity,
-                    'new_identity': new_identity, 'branch_from': state['branch'], 'branch_to': current_branch,
-                    'branch_matches': branch_matches, 'allow_branch_rebind': allow_branch_rebind,
-                    'blockers': blockers, 'can_apply': not blockers}
-        require(not blockers, '; '.join(blockers))
+            state = read(self.path)
+            require(state and state.get('schema_version') == SCHEMA, 'WORKFLOW_START_REQUIRED')
+            require(state['feature'] == self.relative, 'RELOCATE_FEATURE_MISMATCH')
+            plan = self._relocate_plan(state, allow_branch_rebind, allow_repository_rename)
+            return {'preview': True, 'feature': self.relative, 'old_identity': plan['old_identity'],
+                    'new_identity': plan['new_identity'], 'branch_from': state['branch'],
+                    'branch_to': plan['current_branch'], 'branch_matches': plan['branch_matches'],
+                    'allow_branch_rebind': allow_branch_rebind, 'old_repository': plan['old_repo'],
+                    'new_repository': plan['new_repo'], 'repository_renamed': plan['repository_renamed'],
+                    'allow_repository_rename': allow_repository_rename,
+                    'blockers': plan['blockers'], 'can_apply': not plan['blockers']}
         with locked(self.lock):
             state = read(self.path)
             require(state and state.get('schema_version') == SCHEMA, 'WORKFLOW_START_REQUIRED')
             require(state['feature'] == self.relative, 'RELOCATE_FEATURE_MISMATCH')
             require(not state['active'], 'ACTIVE_CLAIM_MUST_BE_RESOLVED_BEFORE_RELOCATE')
+            plan = self._relocate_plan(state, allow_branch_rebind, allow_repository_rename)
+            require(not plan['blockers'], '; '.join(plan['blockers']))
             entry = {'actor': actor or default_actor(self.root), 'at': now(), 'reason': reason.strip(),
-                     'old_identity': old_identity, 'new_identity': new_identity, 'branch_rebound': False}
-            if not branch_matches:
-                require(allow_branch_rebind, 'CHECKPOINT_BRANCH_MISMATCH: pass --allow-branch-rebind to also '
-                                             'rebind the branch (from ' + state['branch'] + ' to ' + current_branch + ')')
-                entry.update(branch_rebound=True, branch_from=state['branch'], branch_to=current_branch)
-                state['branch'] = current_branch
-            state.pop('repo_path', None)
-            state['repo_identity'] = new_identity
+                     'old_identity': plan['old_identity'], 'new_identity': plan['new_identity'],
+                     'branch_rebound': False}
+            if not plan['branch_matches']:
+                entry.update(branch_rebound=True, branch_from=state['branch'], branch_to=plan['current_branch'])
+                state['branch'] = plan['current_branch']
+            if plan['repository_renamed']:
+                # The issue moved with the project: rebind its repository so
+                # a later `load` (which requires the issue to name this
+                # repository's own GitHub remote) accepts what was just
+                # confirmed here, instead of refusing it again immediately.
+                require(plan['new_repo'], 'RELOCATE_REPOSITORY_RENAME_NEEDS_GITHUB_REMOTE: this repository has no '
+                                         'GitHub remote to rebind the issue to')
+                entry.update(repository_renamed=True, old_repository=plan['old_repo'],
+                            new_repository=plan['new_repo'])
+                state['issue'] = plan['new_repo'] + '#' + state['issue'].split('#')[1]
+            state['repo_path'] = str(self.root)  # never compared; kept only for an older reader (see CHANGELOG)
+            state['repo_identity'] = plan['new_identity']
             state.setdefault('relocations', []).append(entry)
             self.save(state)
             return {'relocated': True, 'feature': self.relative, 'relocation': copy.deepcopy(entry)}
@@ -2227,6 +2314,9 @@ def main():
     relocate_parser.add_argument('--reason', required=True)
     relocate_parser.add_argument('--allow-branch-rebind', action='store_true',
                                  help='Also rebind the checkpoint to the current branch if it differs; logged either way')
+    relocate_parser.add_argument('--allow-repository-rename', action='store_true',
+                                 help='Confirm the checkpoint\'s bound issue naming a different GitHub repository '
+                                      'than this one is a real rename or move, not a foreign checkpoint; logged either way')
     relocate_parser.add_argument('--actor', help='Defaults to the Git user name')
     for name in ('start', 'next', 'claim', 'complete', 'pause', 'recover', 'bind', 'migrate', 'refresh', 'amend',
                  'revalidate'):
@@ -2345,7 +2435,8 @@ def main():
             elif args.action == 'complete': result = run.complete(args.token, read(args.receipt, {}))
             elif args.action == 'bind': result = run.bind(args.token)
             elif args.action == 'relocate':
-                result = run.relocate(args.reason, args.preview, args.allow_branch_rebind, args.actor)
+                result = run.relocate(args.reason, args.preview, args.allow_branch_rebind,
+                                      args.allow_repository_rename, args.actor)
                 if args.preview and not result['can_apply']: result['ok'] = False
             elif args.action == 'migrate' and args.preview: result = run.preview_migration(args.invalidate_from)
             elif args.action == 'migrate': result = run.migrate(args.reason, args.invalidate_from)

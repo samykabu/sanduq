@@ -1,4 +1,4 @@
-"""Workflow 1.8.0 checkpoint-identity design fix.
+"""Workflow 1.8.0 checkpoint-identity design fix, plus round-1 review fixes.
 
 A checkpoint used to hard-gate every command on the absolute `repo_path` it
 was started from, which is machine- and clone-specific and failed
@@ -8,6 +8,17 @@ tests cover the portable replacement: `repo_identity` (a normalised remote
 and/or a root-commit SHA), the legacy-checkpoint upgrade path, the security
 property that a checkpoint from a different repository is still refused, and
 the explicit `relocate` command for a repository that legitimately moved.
+
+Round 1 review additionally requires (and is tested here): the checkpoint's
+bound issue must name this repository's own GitHub remote, for legacy and
+new checkpoints alike, refusing when there is no GitHub remote to check
+(finding 1); `relocate` itself refuses a foreign checkpoint's repository
+change unless explicitly allowed (finding 2); `normalize_remote_url` parses
+a real URL with `urllib.parse` rather than an ad-hoc regex (finding 3); the
+root commit is also required to match when neither clone is shallow, even
+when the remote does (finding 4); `repo_path` is still written for an older
+reader (finding 5); and the delegated-context env read is shared with
+`delegate_dispatch` (finding 7).
 """
 import copy
 import hashlib
@@ -169,6 +180,35 @@ class HelperTests(unittest.TestCase):
             self.assertEqual(with_remote['root_commit'], no_remote['root_commit'])
 
 
+class DelegatedContextSharedReaderTests(unittest.TestCase):
+    """Round 1, finding 7: workflow.py and delegate_dispatch.py must never
+    disagree about what SANDUQ_DELEGATED_RUN/SANDUQ_DELEGATED_ROLE mean."""
+
+    def test_both_call_sites_read_delegated_run_through_the_same_function(self):
+        import delegation
+        import delegate_dispatch as dd
+        original = delegation.delegated_run_id
+        delegation.delegated_run_id = lambda: 'spoofed'
+        try:
+            with self.assertRaises(delegation.DelegationError):
+                dd.require_not_worker_context()
+            with self.assertRaises(w.WorkflowError):
+                w.require_not_delegated_context('relocate')
+        finally:
+            delegation.delegated_run_id = original
+
+    def test_real_env_var_refuses_both(self):
+        import delegate_dispatch as dd
+        os.environ['SANDUQ_DELEGATED_RUN'] = 'run-1'
+        try:
+            with self.assertRaisesRegex(Exception, 'DELEGATION_WORKER_CONTEXT'):
+                dd.require_not_worker_context()
+            with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_WORKER_CONTEXT'):
+                w.require_not_delegated_context('relocate')
+        finally:
+            os.environ.pop('SANDUQ_DELEGATED_RUN', None)
+
+
 class Harness(unittest.TestCase):
     """A fresh repo, ready for `Run`, without the full LegacyCheckpointTests scaffolding."""
 
@@ -231,18 +271,20 @@ class LegacyUpgradeTests(Harness):
         self.assertEqual(saved['repo_identity'], state['repo_identity'])
         self.assertEqual(saved['receipts'], original['receipts'])
 
-    def test_legacy_checkpoint_upgrades_on_a_repository_with_no_remote(self):
-        # Round 1, finding 5: root-commit-only identity for a repository
-        # with no GitHub remote at all still upgrades cleanly (the stricter
-        # mandatory-GitHub-remote check lands in a later commit, finding 1).
+    def test_legacy_checkpoint_with_no_remote_is_refused_pointing_to_relocate(self):
+        # Round 1, finding 1: a GitHub remote is required to verify the
+        # checkpoint's bound issue against this repository, for a legacy
+        # checkpoint exactly as for a new one; a repository with none
+        # configured cannot load an existing checkpoint at all.
         root = self.make_repo(remote=None)
         git(root, 'switch', '-qc', fixture_008.BRANCH)
         fixture_008.materialise(root)
         self.commit_all(root)
         run = w.Run(root, fixture_008.FEATURE)
-        state = run.load()
-        self.assertIsNone(state['repo_identity']['remote'])
-        self.assertIsNotNone(state['repo_identity']['root_commit'])
+        raw_before = run.path.read_bytes()
+        with self.assertRaisesRegex(w.WorkflowError, 'CHECKPOINT_IDENTITY_MISMATCH.*relocate'):
+            run.load()
+        self.assertEqual(run.path.read_bytes(), raw_before)  # never silently upgraded
 
     def test_legacy_checkpoint_windows_and_posix_repo_path_forms_both_load(self):
         for repo_path in (r'C:\Users\dev\workspace\acme-app', '/home/dev/workspace/acme-app'):
@@ -275,7 +317,10 @@ class SecurityTests(Harness):
     def test_checkpoint_from_a_repo_with_no_remote_and_unrelated_history_is_refused(self):
         # `start` itself requires a GitHub-style origin to bind an issue (an
         # existing, unrelated constraint), so a no-remote checkpoint is built
-        # directly here rather than through `start`.
+        # directly here rather than through `start`. With round 1, finding
+        # 1's mandatory GitHub-remote check, this is refused before the
+        # repo_identity comparison is even reached (both, independently,
+        # require a remote here).
         repo_a = self.make_repo(remote=None, seed='repo-a')
         identity_a = w.repo_identity(repo_a)
         self.assertIsNone(identity_a['remote'])
@@ -292,6 +337,26 @@ class SecurityTests(Harness):
         run_b = w.Run(repo_b, 'specs/001-example')
         with self.assertRaisesRegex(w.WorkflowError, 'CHECKPOINT_IDENTITY_MISMATCH'):
             run_b.load(allow_branch_change=True)
+
+    def test_foreign_legacy_checkpoint_bound_to_a_different_repo_is_refused(self):
+        """Round 1, finding 1: a probe found this legacy checkpoint (bound
+        to acme/app#10 by `fixture_008`) was accepted, and then re-saved,
+        inside an unrelated repository (evil/other) whose own identity
+        simply happened to resolve -- silently laundering it. The issue's
+        repository must now be verified against this repository's own
+        GitHub remote, closing that gap.
+        """
+        root = self.make_repo(remote='https://github.com/evil/other.git', seed='evil')
+        git(root, 'switch', '-qc', fixture_008.BRANCH)
+        original = fixture_008.materialise(root)
+        self.assertEqual(original['issue'], fixture_008.ISSUE)
+        self.assertEqual(original['issue'].split('#')[0], 'acme/app')
+        self.commit_all(root, 'Materialise a foreign checkpoint')
+        run = w.Run(root, fixture_008.FEATURE)
+        raw_before = run.path.read_bytes()
+        with self.assertRaisesRegex(w.WorkflowError, 'CHECKPOINT_IDENTITY_MISMATCH'):
+            run.load()
+        self.assertEqual(run.path.read_bytes(), raw_before)  # never silently upgraded/rebound
 
     def test_checkpoint_with_a_copied_remote_and_unrelated_history_is_refused_when_not_shallow(self):
         """Round 1, finding 4: two non-shallow local repositories, one with
@@ -348,25 +413,36 @@ class RelocateTests(Harness):
         before = self.run.load()
         before_hash = hashlib.sha256(json.dumps(before['receipts'], sort_keys=True).encode()).hexdigest()
 
+        # Renaming the org also changes the GitHub owner/repo the issue was
+        # bound to, so this exercises --allow-repository-rename as well as
+        # the identity rebind (see the branch-mismatch and repository-
+        # rename tests below for each blocker in isolation).
         run = self.rename_remote()
         raw_before = run.path.read_bytes()
-        preview = run.relocate('Org renamed acme -> acme-renamed', preview=True)
+        preview = run.relocate('Org renamed acme -> acme-renamed', preview=True, allow_repository_rename=True)
         self.assertTrue(preview['preview'])
         self.assertTrue(preview['can_apply'])
         self.assertEqual(preview['old_identity']['remote'], 'github.com/acme/app')
         self.assertEqual(preview['new_identity']['remote'], 'github.com/acme-renamed/app')
+        self.assertTrue(preview['repository_renamed'])
+        self.assertEqual(preview['old_repository'], 'acme/app')
+        self.assertEqual(preview['new_repository'], 'acme-renamed/app')
         self.assertEqual(run.path.read_bytes(), raw_before)  # preview never writes
 
-        result = run.relocate('Org renamed acme -> acme-renamed')
+        result = run.relocate('Org renamed acme -> acme-renamed', allow_repository_rename=True)
         self.assertTrue(result['relocated'])
         relocation = result['relocation']
         self.assertEqual(relocation['reason'], 'Org renamed acme -> acme-renamed')
         self.assertEqual(relocation['old_identity']['remote'], 'github.com/acme/app')
         self.assertEqual(relocation['new_identity']['remote'], 'github.com/acme-renamed/app')
         self.assertFalse(relocation['branch_rebound'])
+        self.assertTrue(relocation['repository_renamed'])
+        self.assertEqual(relocation['old_repository'], 'acme/app')
+        self.assertEqual(relocation['new_repository'], 'acme-renamed/app')
 
         after = run.load()  # now accepted under the new identity
         self.assertEqual(after['repo_identity']['remote'], 'github.com/acme-renamed/app')
+        self.assertEqual(after['repo_path'], str(self.root))  # refreshed, still written (finding 5)
         self.assertEqual(after['relocations'][-1], relocation)
         after_hash = hashlib.sha256(json.dumps(after['receipts'], sort_keys=True).encode()).hexdigest()
         self.assertEqual(before_hash, after_hash)
@@ -377,18 +453,63 @@ class RelocateTests(Harness):
         git(self.root, 'switch', '-qc', 'a-different-branch')
         run = w.Run(self.root, self.feature)
 
-        preview = run.relocate('Org renamed', preview=True)
+        preview = run.relocate('Org renamed', preview=True, allow_repository_rename=True)
         self.assertFalse(preview['can_apply'])
         self.assertFalse(preview['branch_matches'])
         self.assertTrue(any('CHECKPOINT_BRANCH_MISMATCH' in b for b in preview['blockers']))
 
         with self.assertRaisesRegex(w.WorkflowError, 'CHECKPOINT_BRANCH_MISMATCH'):
-            run.relocate('Org renamed')
+            run.relocate('Org renamed', allow_repository_rename=True)
 
-        result = run.relocate('Org renamed', allow_branch_rebind=True)
+        result = run.relocate('Org renamed', allow_branch_rebind=True, allow_repository_rename=True)
         self.assertTrue(result['relocation']['branch_rebound'])
         self.assertEqual(result['relocation']['branch_to'], 'a-different-branch')
         self.assertEqual(run.load()['branch'], 'a-different-branch')
+
+    def test_relocate_refused_when_the_bound_repository_changed_unless_allowed(self):
+        """Round 1, finding 2: a probe used `relocate` itself to launder a
+        checkpoint bound to acme/app#10 into an unrelated repository
+        (evil/other) -- preview reported `can_apply: True`. `relocate` must
+        block that the same way `load` would, unless the caller explicitly
+        confirms the rename with `--allow-repository-rename`.
+        """
+        run = self.rename_remote('https://github.com/evil/other.git')
+
+        preview = run.relocate('claiming this checkpoint', preview=True)
+        self.assertFalse(preview['can_apply'])
+        self.assertTrue(preview['repository_renamed'])
+        self.assertEqual(preview['old_repository'], 'acme/app')
+        self.assertEqual(preview['new_repository'], 'evil/other')
+        self.assertTrue(any('REPOSITORY_CHANGED' in b for b in preview['blockers']))
+
+        raw_before = run.path.read_bytes()
+        with self.assertRaisesRegex(w.WorkflowError, 'REPOSITORY_CHANGED'):
+            run.relocate('claiming this checkpoint')
+        self.assertEqual(run.path.read_bytes(), raw_before)  # refused apply never writes
+
+        result = run.relocate('claiming this checkpoint', allow_repository_rename=True)
+        self.assertTrue(result['relocation']['repository_renamed'])
+        self.assertEqual(result['relocation']['old_repository'], 'acme/app')
+        self.assertEqual(result['relocation']['new_repository'], 'evil/other')
+        self.assertEqual(run.load()['repo_identity']['remote'], 'github.com/evil/other')
+
+    def test_relocate_apply_recomputes_from_a_fresh_read_under_the_lock(self):
+        """Round 1, finding 2: `old_identity`/`branch_matches` used to be
+        computed once before the lock was acquired. Relocating twice in a
+        row on the same `Run` proves each apply re-reads the checkpoint
+        fresh: the second call's `old_identity` must be the *first* call's
+        `new_identity`, not anything cached from before either call.
+        """
+        run = self.rename_remote('https://github.com/acme-renamed-once/app.git')
+        first = run.relocate('first move', allow_repository_rename=True)['relocation']
+        self.assertEqual(first['old_identity']['remote'], 'github.com/acme/app')
+        self.assertEqual(first['new_identity']['remote'], 'github.com/acme-renamed-once/app')
+
+        git(self.root, 'remote', 'set-url', 'origin', 'https://github.com/acme-renamed-twice/app.git')
+        run2 = w.Run(self.root, self.feature)
+        second = run2.relocate('second move', allow_repository_rename=True)['relocation']
+        self.assertEqual(second['old_identity']['remote'], first['new_identity']['remote'])
+        self.assertEqual(second['new_identity']['remote'], 'github.com/acme-renamed-twice/app')
 
     def test_relocate_requires_a_reason(self):
         run = self.rename_remote()

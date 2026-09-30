@@ -56,7 +56,8 @@
         "actor": {"type": "string", "minLength": 1}, "at": {"type": "string", "format": "date-time"},
         "reason": {"type": "string", "minLength": 1},
         "old_identity": {"type": "object"}, "new_identity": {"type": "object"},
-        "branch_rebound": {"type": "boolean"}, "branch_from": {"type": "string"}, "branch_to": {"type": "string"}
+        "branch_rebound": {"type": "boolean"}, "branch_from": {"type": "string"}, "branch_to": {"type": "string"},
+        "repository_renamed": {"type": "boolean"}, "old_repository": {"type": "string"}, "new_repository": {"type": "string"}
       }}
     },
     "updated_at": {"type": "string", "format": "date-time"},
