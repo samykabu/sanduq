@@ -179,6 +179,38 @@ class HelperTests(unittest.TestCase):
         self.assertFalse(w.identity_matches({'remote': None, 'root_commit': 'a' * 40},
                                             {'remote': 'github.com/acme/app', 'root_commit': 'a' * 40}))
 
+    def test_identity_matches_refuses_a_malformed_recorded_root_commit(self):
+        """Round 3: the recorded root commit comes from an editable file and
+        must be a full hex object id before it reaches git. `HEAD` or a
+        branch name would be "reachable" from any unrelated clone, a short
+        sha is ambiguous, and `--foo` would be read as an option."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            git(root, 'init', '-q')
+            git(root, 'config', 'user.name', 'Test')
+            git(root, 'config', 'user.email', 'test@example.invalid')
+            git(root, 'commit', '--allow-empty', '-qm', 'root')
+            head = w.root_commit_sha(root)
+            branch = git(root, 'branch', '--show-current').stdout.strip()
+            current = {'remote': None, 'root_commit': 'f' * 40}
+            for bad in ('HEAD', branch, '--foo', head[:12], head.upper(), 'HEAD~0', '', None):
+                self.assertFalse(w.root_commit_still_reachable(root, bad), repr(bad))
+                self.assertFalse(w.identity_matches({'remote': None, 'root_commit': bad}, current, current_root=root),
+                                 repr(bad))
+            self.assertTrue(w.root_commit_still_reachable(root, head))
+
+    def test_identity_matches_compares_github_remotes_case_insensitively(self):
+        """Round 3, LOW: GitHub owner/repo names are not case sensitive."""
+        recorded = {'remote': 'github.com/acme/app', 'root_commit': 'a' * 40}
+        self.assertTrue(w.identity_matches(recorded, {'remote': 'github.com/Acme/App', 'root_commit': 'a' * 40}))
+        self.assertTrue(w.identity_matches({'remote': 'github.com:2222/acme/app'},
+                                           {'remote': 'github.com:2222/ACME/app'}))
+        # Other hosts may be case sensitive: still exact.
+        self.assertFalse(w.identity_matches({'remote': 'git.example.com/acme/app'},
+                                            {'remote': 'git.example.com/Acme/App'}))
+        self.assertFalse(w.identity_matches({'remote': 'github.com.evil.io/acme/app'},
+                                            {'remote': 'github.com.evil.io/Acme/app'}))
+
     def test_identity_matches_accepts_a_still_reachable_older_root_commit(self):
         """Round 2, finding N4: without a live repository to check ancestry
         against, a differing root commit is still refused (unchanged,
@@ -407,6 +439,21 @@ class SecurityTests(Harness):
         run_c = w.Run(repo_c, 'specs/001-example')
         with self.assertRaisesRegex(w.WorkflowError, 'CHECKPOINT_IDENTITY_MISMATCH'):
             run_c.load()
+
+
+    def test_a_tampered_root_commit_cannot_make_an_unrelated_clone_match(self):
+        """Round 3: editing the recorded root commit to `HEAD` (or a branch
+        name) must not get an unrelated clone with a copied origin accepted."""
+        repo_a = self.make_repo(remote='https://github.com/acme/app.git', seed='repo-a')
+        state = w.Run(repo_a, 'specs/001-example').start('acme/app#10')
+        repo_c = self.make_repo(remote='git@github.com:acme/app.git', seed='repo-c-unrelated')
+        branch = git(repo_c, 'branch', '--show-current').stdout.strip()
+        for bad in ('HEAD', branch, '--foo'):
+            tampered = copy.deepcopy(state)
+            tampered['repo_identity']['root_commit'] = bad
+            w.write(repo_c / 'specs/001-example/workflow/checkpoint.json', tampered)
+            with self.assertRaisesRegex(w.WorkflowError, 'CHECKPOINT_IDENTITY_MISMATCH'):
+                w.Run(repo_c, 'specs/001-example').load()
 
 
 class CompatibilityTests(Harness):

@@ -340,9 +340,25 @@ def root_commit_still_reachable(root, commit_sha):
     never shared this history at all -- an unrelated commit is never an
     ancestor of this HEAD.
     """
-    result = subprocess.run(['git', 'merge-base', '--is-ancestor', commit_sha, 'HEAD'], cwd=root,
+    # The value comes from a checkpoint file anyone can edit: only a full hex
+    # object id is ever handed to git, never `HEAD`, a branch name (either
+    # would be "reachable" from an unrelated clone) or a dash-prefixed value
+    # (read as an option). `^{commit}` additionally refuses a non-commit object.
+    if not isinstance(commit_sha, str) or not re.fullmatch(r'[0-9a-f]{40,64}', commit_sha):
+        return False
+    result = subprocess.run(['git', 'merge-base', '--is-ancestor', commit_sha + '^{commit}', 'HEAD'], cwd=root,
                             capture_output=True, text=True, encoding='utf-8')
     return result.returncode == 0
+
+
+def same_remote(a, b):
+    """Equality of two normalised remotes. GitHub owner/repo names are not case
+    sensitive, so for github.com the comparison ignores case (a stored
+    `github.com/acme/app` matches an origin now written `github.com/Acme/App`);
+    every other host compares exactly, since some hosts are case sensitive."""
+    if a == b:
+        return True
+    return bool(a) and bool(b) and a.lower().startswith(('github.com/', 'github.com:')) and a.lower() == b.lower()
 
 
 def identity_matches(recorded, current, current_root=None):
@@ -389,7 +405,7 @@ def identity_matches(recorded, current, current_root=None):
         return current_root is not None and root_commit_still_reachable(current_root, recorded_root)
 
     if recorded.get('remote') and current.get('remote'):
-        if recorded['remote'] != current['remote']:
+        if not same_remote(recorded['remote'], current['remote']):
             return False
         if recorded.get('shallow') is False and current.get('shallow') is False:
             return root_commit_matches(recorded.get('root_commit'))

@@ -419,6 +419,10 @@ protects the integrity of recorded work is the receipt contract itself: each
 stage's evidence is bound by byte-exact SHA-256 fingerprints
 (`fingerprints`, `source_fingerprints`), checked again on every later load,
 independent of which repository or machine is asking.
+Likewise, merging a foreign history into HEAD in a clone whose `origin` was
+copied from the recorded one is accepted (the recorded root commit is then
+still an ancestor of HEAD); that is by design, since the merge is a
+deliberate act inside the working tree, not an accidental mix-up.
 
 ### Receipt contract (1.6.0)
 
