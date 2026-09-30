@@ -28,8 +28,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -98,28 +100,38 @@ def affected_lane_set(root, policy, paths):
 def run_lanes(root, command, lanes, results_path, timeout=3600):
     """Run the project's local verifier over exactly `lanes`, writing `results_path`.
 
-    A timeout kills the whole process tree (finding 8: a shell wrapper or a
-    test runner that forks workers would otherwise survive and keep writing
-    to `results_path`), reusing `delegate_dispatch.kill_process_tree` rather
-    than a second implementation. Each output stream is capped at
-    `OUTPUT_CAP` bytes before it is ever put in an error message.
+    Mirrors `delegate_dispatch.run_capped` (which has no stdin): the child
+    starts in its own session on POSIX (`start_new_session=True`), so
+    `kill_process_tree`'s `killpg` on a timeout kills only the verifier's own
+    tree and never this process's group (round 2, blocker 1: without it the
+    group was the test runner's own and a timeout SIGKILLed the runner).
+    stdin is a temp file and stdout/stderr spool to temp files of which only
+    `OUTPUT_CAP` bytes are ever read back, so a runaway command cannot exhaust
+    memory while being buffered.
     """
-    payload = json.dumps({'lanes': sorted(lanes), 'results_path': results_path})
-    try:
-        proc = subprocess.Popen(command, cwd=root, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE, text=True, encoding='utf-8')
-    except OSError as exc:
-        raise VerifyAffectedError('VERIFY_COMMAND_FAILED: ' + str(exc)) from exc
-    try:
-        stdout, stderr = proc.communicate(input=payload, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        dd.kill_process_tree(proc)
+    payload = json.dumps({'lanes': sorted(lanes), 'results_path': results_path}).encode('utf-8')
+    popen_kwargs = {} if os.name == 'nt' else {'start_new_session': True}
+    with tempfile.TemporaryFile() as in_file, tempfile.TemporaryFile() as out_file,             tempfile.TemporaryFile() as err_file:
+        in_file.write(payload)
+        in_file.seek(0)
         try:
-            proc.communicate(timeout=5)
-        except (subprocess.TimeoutExpired, ValueError):
-            pass
-        raise VerifyAffectedError('VERIFY_COMMAND_TIMEOUT: exceeded ' + str(timeout) + 's') from None
-    stdout, stderr = (stdout or '')[:OUTPUT_CAP], (stderr or '')[:OUTPUT_CAP]
+            proc = subprocess.Popen(command, cwd=root, stdin=in_file, stdout=out_file, stderr=err_file,
+                                    **popen_kwargs)
+        except OSError as exc:
+            raise VerifyAffectedError('VERIFY_COMMAND_FAILED: ' + str(exc)) from exc
+        try:
+            proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            dd.kill_process_tree(proc)
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                pass
+            raise VerifyAffectedError('VERIFY_COMMAND_TIMEOUT: exceeded ' + str(timeout) + 's') from None
+        out_file.seek(0)
+        err_file.seek(0)
+        stdout = out_file.read(OUTPUT_CAP).decode('utf-8', errors='replace')
+        stderr = err_file.read(OUTPUT_CAP).decode('utf-8', errors='replace')
     require(proc.returncode == 0, 'VERIFY_COMMAND_FAILED: exit ' + str(proc.returncode) + ': ' +
             (stderr or stdout).strip()[:500])
     return stdout
@@ -164,12 +176,12 @@ def run(root, feature, base_ref, extra_lanes=None, results_path=None, timeout=36
     (root / results_path).parent.mkdir(parents=True, exist_ok=True)
     run_lanes(root, command, lanes, results_path, timeout)
     results = read_results(root, results_path)
-    if isinstance(results, dict):
-        # Finding 7: this run is never CI evidence -- stamp both the file and
-        # the returned summary so nothing downstream can mistake one for the
-        # other, or record it as a Verify receipt's `ci_evidence`.
-        results = {**results, 'source': 'local', 'ci_grade': False}
-        (root / results_path).write_text(json.dumps(results, indent=2), encoding='utf-8')
+    # Finding 7: this run is never CI evidence -- stamp both the file and the
+    # returned summary so nothing downstream can mistake one for the other.
+    # A results file that is not a JSON object is wrapped, never left unstamped.
+    results = ({**results, 'source': 'local', 'ci_grade': False} if isinstance(results, dict)
+               else {'results': results, 'source': 'local', 'ci_grade': False})
+    (root / results_path).write_text(json.dumps(results, indent=2), encoding='utf-8')
     return {'ok': True, 'status': 'ran', 'diffed_paths': paths, 'lanes': sorted(lanes),
             'results_path': results_path, 'source': 'local', 'ci_grade': False,
             'results_summary': summarize(results)}

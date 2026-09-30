@@ -1,5 +1,6 @@
 """B13: speckit-workflow-verify-affected runs a project's own hooks, never Sanduq-invented ones."""
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -29,6 +30,24 @@ RUN_LANES_OK = textwrap.dedent('''\
         json.dump({"lanes": {lane: {"outcome": "passed"} for lane in payload["lanes"]}}, handle)
 ''')
 RUN_LANES_FAIL = 'import sys\nsys.exit(3)\n'
+RUN_LANES_REPORTS_PGID = textwrap.dedent('''\
+    import json, os, sys
+    payload = json.loads(sys.stdin.read())
+    with open(payload["results_path"], "w", encoding="utf-8") as handle:
+        json.dump({"lanes": {}, "child_pgid": os.getpgid(0) if hasattr(os, "getpgid") else None}, handle)
+''')
+RUN_LANES_LIST_RESULT = textwrap.dedent('''\
+    import json, sys
+    payload = json.loads(sys.stdin.read())
+    with open(payload["results_path"], "w", encoding="utf-8") as handle:
+        json.dump([1, 2, 3], handle)
+''')
+RUN_LANES_NOISY = textwrap.dedent('''\
+    import json, sys
+    payload = json.loads(sys.stdin.read())
+    sys.stderr.write("E" * 5_000_000)
+    sys.exit(2)
+''')
 RUN_LANES_HANGS = textwrap.dedent('''\
     import sys, time
     sys.stdin.read()
@@ -182,6 +201,42 @@ class VerifyAffectedTests(unittest.TestCase):
         with self.assertRaises(w.WorkflowError) as ctx:
             va.run(self.root, self.feature, base, results_path='out/results.json', timeout=1)
         self.assertIn('VERIFY_COMMAND_TIMEOUT', str(ctx.exception))
+
+    @unittest.skipIf(os.name == 'nt', 'process groups are a POSIX concept')
+    def test_verify_command_runs_in_its_own_process_group(self):
+        # Round 2, blocker 1: without start_new_session the child shares the
+        # caller's group, so kill_process_tree's killpg on a timeout would
+        # SIGKILL the caller (the test runner itself) too.
+        base = self._base_ref()
+        self._commit_change()
+        self.policy['ci']['gate']['affected_command'] = self._script('classify.py', CLASSIFY_LANE_A)
+        self.policy['ci']['gate']['verify_command'] = self._script('run_lanes.py', RUN_LANES_REPORTS_PGID)
+        self._write_policy()
+        va.run(self.root, self.feature, base, results_path='out/results.json')
+        child_pgid = json.loads((self.root / 'out/results.json').read_text(encoding='utf-8'))['child_pgid']
+        self.assertNotEqual(child_pgid, os.getpgid(0))
+
+    def test_non_object_results_are_wrapped_and_stamped(self):
+        base = self._base_ref()
+        self._commit_change()
+        self.policy['ci']['gate']['affected_command'] = self._script('classify.py', CLASSIFY_LANE_A)
+        self.policy['ci']['gate']['verify_command'] = self._script('run_lanes.py', RUN_LANES_LIST_RESULT)
+        self._write_policy()
+        result = va.run(self.root, self.feature, base, results_path='out/results.json')
+        self.assertEqual(result['source'], 'local')
+        on_disk = json.loads((self.root / 'out/results.json').read_text(encoding='utf-8'))
+        self.assertEqual(on_disk, {'results': [1, 2, 3], 'source': 'local', 'ci_grade': False})
+
+    def test_runaway_output_is_capped_in_the_error(self):
+        base = self._base_ref()
+        self._commit_change()
+        self.policy['ci']['gate']['affected_command'] = self._script('classify.py', CLASSIFY_LANE_A)
+        self.policy['ci']['gate']['verify_command'] = self._script('run_lanes.py', RUN_LANES_NOISY)
+        self._write_policy()
+        with self.assertRaises(w.WorkflowError) as ctx:
+            va.run(self.root, self.feature, base)
+        self.assertIn('VERIFY_COMMAND_FAILED', str(ctx.exception))
+        self.assertLess(len(str(ctx.exception)), 1000)
 
     def test_cli_prints_json_and_exits_zero_on_success(self):
         base = self._base_ref()
