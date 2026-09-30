@@ -1,4 +1,5 @@
 """Existing-feature revalidation keeps identity without bypassing lifecycle evidence."""
+import subprocess
 import unittest
 import test_scope as scope_fixture
 import test_clarification as clarify_fixture
@@ -6,8 +7,26 @@ import test_clarification as clarify_fixture
 sm = scope_fixture.m
 
 
-def claim(root, stage, issue=1, receipts=None):
+def git(root, *args):
+    return subprocess.run(['git', *args], cwd=root, check=True, capture_output=True, text=True).stdout.strip()
+
+
+def repository(root, remote='https://github.com/acme/app.git'):
+    """A real repository whose origin is the GitHub repo the claim names; the
+    claim's identity is now verified against it, not just the issue string."""
+    if not (root / '.git').exists():
+        git(root, 'init', '-q')
+        git(root, 'config', 'user.name', 'Test')
+        git(root, 'config', 'user.email', 'test@example.invalid')
+        git(root, 'commit', '--allow-empty', '-qm', 'init')
+        git(root, 'remote', 'add', 'origin', remote)
+    workflow = sm.workflow_policy._workflow_module()
+    return workflow.repo_identity(root)
+
+
+def claim(root, stage, issue=1, receipts=None, identity=True):
     root = root.resolve()
+    recorded = repository(root)
     feature = root / 'specs/001-example'
     feature.mkdir(parents=True, exist_ok=True)
     if not (feature / 'spec.md').exists():
@@ -17,6 +36,7 @@ def claim(root, stage, issue=1, receipts=None):
     sm.write_json(root / '.specify/feature.json', {'feature_directory': 'specs/001-example'})
     sm.write_json(feature / 'workflow/checkpoint.json', {
         'schema_version': 1, 'repo_path': str(root), 'feature': 'specs/001-example',
+        **({'repo_identity': recorded} if identity else {'head': git(root, 'rev-parse', 'HEAD')}),
         'issue': f'acme/app#{issue}', 'active': {'stage': stage, 'token': 'owned', 'mode': 'revalidate'},
         'receipts': receipts or {},
     })
@@ -54,6 +74,31 @@ class ScopeRevalidationTests(unittest.TestCase):
         sm.write_json(checkpoint, state)
         self.gh.statuses[1] = 'In progress'; self.app._board = None
         self.assertEqual(self.app.gate('1')['issue'], 1)
+
+    def test_bound_claim_refuses_a_foreign_repo_identity(self):
+        """Codex round 1, finding 5: `bound_claim` accepted a checkpoint
+        whose `repo_identity` belongs to another repository as long as the
+        issue string matched; it now applies workflow's own identity gate."""
+        feature = self.prepare()
+        checkpoint = feature / 'workflow/checkpoint.json'
+        state = sm.read_json(checkpoint)
+        state['repo_identity'] = {'remote': 'github.com/evil/other', 'root_commit': 'b' * 40, 'shallow': False}
+        sm.write_json(checkpoint, state)
+        self.gh.statuses[1] = 'In progress'; self.app._board = None
+        with self.assertRaisesRegex(sm.ScopeError, 'SPECIFY_STATE'): self.app.gate('1')
+
+    def test_bound_claim_accepts_a_legacy_checkpoint_only_with_reachable_history(self):
+        feature = self.prepare()
+        checkpoint = feature / 'workflow/checkpoint.json'
+        state = sm.read_json(checkpoint)
+        del state['repo_identity']
+        state['head'] = git(self.root, 'rev-parse', 'HEAD')
+        sm.write_json(checkpoint, state)
+        self.gh.statuses[1] = 'In progress'; self.app._board = None
+        self.assertEqual(self.app.gate('1')['issue'], 1)
+        state['head'] = 'c' * 40  # a commit this repository never had
+        sm.write_json(checkpoint, state)
+        with self.assertRaisesRegex(sm.ScopeError, 'SPECIFY_STATE'): self.app.gate('1')
 
     def test_revalidation_still_rejects_changed_requirements(self):
         self.prepare()

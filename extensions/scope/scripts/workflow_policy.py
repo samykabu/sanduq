@@ -53,6 +53,25 @@ def statuses(root):
     return mapping
 
 
+def _workflow_module():
+    """The sibling workflow extension's `workflow.py`, loaded by path. Scope
+    declares `workflow` as a dependency, and both ship side by side under
+    `.specify/extensions/` (and `extensions/` in the source tree), so the
+    checkpoint-identity gate is shared with workflow itself rather than
+    copied. None when it cannot be loaded, which refuses the claim."""
+    import importlib.util
+    path = Path(__file__).resolve().parents[2] / 'workflow/scripts/workflow.py'
+    if not path.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location('sanduq_workflow_for_scope', path)
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        return None
+    return module
+
+
 def bound_claim(root, repo, issue, stages):
     """Recognize the managed owner's existing-feature claim, never policy alone."""
     root = Path(root).resolve()
@@ -76,5 +95,17 @@ def bound_claim(root, repo, issue, stages):
     # check just above already binds this claim to the real, portable GitHub
     # repo string, not a local path.
     if state.get('feature') != feature.relative_to(root).as_posix(): return None
+    # Codex round 1, finding 5: the issue match above is only as strong as
+    # this repository's own origin, so the claim also passes the exact
+    # identity gate `workflow.py` applies on load (`repo_identity` match, or a
+    # legacy checkpoint's verifiable history, and the issue naming this
+    # repository's GitHub remote). Anything else, or no workflow module to
+    # ask, is not a claim.
+    workflow = _workflow_module()
+    if workflow is None: return None
+    try:
+        workflow.verify_checkpoint_identity(root, state, feature.relative_to(root).as_posix())
+    except Exception:
+        return None
     if active.get('stage') not in stages or not active.get('token') or active.get('mode') != 'revalidate': return None
     return {'feature': feature.relative_to(root).as_posix(), 'stage': active['stage'], 'state': state}
