@@ -419,27 +419,24 @@ def legacy_history_signal(root, state):
     """Whether a pre-1.8.0 checkpoint records a commit still reachable from
     HEAD (Codex round 1, finding 1). A legacy checkpoint has no portable
     identity, only the `head` every `save()` recorded (plus any receipt
-    `head`/`source_key`/`ci_evidence` shas a 1.6.0+ receipt carries), and
+    `head` a 1.6.0+ receipt carries), and
     a full-hex commit id that is an ancestor of this repository's HEAD is
     the one verifiable proof on file that this history is the one the
     checkpoint was written in. Matching the issue to `origin` alone proves
     nothing: origin is local Git config, so a recreated or unrelated clone
     that copies it would otherwise adopt any checkpoint for that issue.
     """
-    found = set()
-
-    def walk(value):
-        if isinstance(value, str):
-            if re.fullmatch(r'[0-9a-f]{40,64}', value):
-                found.add(value)
-        elif isinstance(value, dict):
-            for item in value.values():
-                walk(item)
-        elif isinstance(value, list):
-            for item in value:
-                walk(item)
-    walk(state)
-    return any(root_commit_still_reachable(root, sha) for sha in sorted(found))
+    # Only the fields 1.7.0 defines as a commit id are read, never a
+    # recursive scan: an unrelated hex string (a fingerprint, a policy digest)
+    # that happens to name a reachable commit is not a history signal. They
+    # are the top-level `head` (written by every `save()`) and each receipt's
+    # `head` (`receipt['head']`, recorded by the verify/review/ready stages).
+    candidates = [state.get('head')]
+    receipts = state.get('receipts')
+    if isinstance(receipts, dict):
+        candidates.extend(r.get('head') for r in receipts.values() if isinstance(r, dict))
+    return any(root_commit_still_reachable(root, sha) for sha in dict.fromkeys(candidates)
+               if isinstance(sha, str))
 
 
 def verify_checkpoint_identity(root, state, relative):

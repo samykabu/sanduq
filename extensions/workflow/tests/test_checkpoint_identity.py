@@ -379,6 +379,28 @@ class LegacyUpgradeTests(Harness):
             run.load()
         self.assertEqual(run.path.read_bytes(), raw_before)
 
+    def test_a_reachable_sha_in_an_unrelated_field_is_not_a_history_signal(self):
+        # Codex round 2: the proof was a recursive scan for any hex string, so
+        # an unreachable `head` plus a reachable sha in some other field (a
+        # fingerprint, a policy digest) was accepted. Only `head` and each
+        # receipt's `head` count.
+        root = self.make_repo()
+        git(root, 'switch', '-qc', fixture_008.BRANCH)
+        fixture_008.materialise(root)
+        path = root / fixture_008.FEATURE / 'workflow/checkpoint.json'
+        state = json.loads(path.read_text(encoding='utf-8'))
+        reachable = git(root, 'rev-parse', 'HEAD').stdout.strip()
+        state['head'] = '0' * 40
+        state['policy_fingerprint'] = reachable
+        first = next(iter(state['receipts'].values()))
+        first['fingerprints'] = {**first.get('fingerprints', {}), 'x': reachable}
+        first['unrelated'] = {'nested': [reachable]}
+        w.write(path, state)
+        self.commit_all(root)
+        self.assertFalse(w.legacy_history_signal(root, state))
+        with self.assertRaisesRegex(w.WorkflowError, r'CHECKPOINT_IDENTITY_MISMATCH.*--allow-history-change'):
+            w.Run(root, fixture_008.FEATURE).load()
+
     def test_legacy_checkpoint_with_a_reachable_receipt_head_upgrades(self):
         root = self.make_repo()
         git(root, 'switch', '-qc', fixture_008.BRANCH)
