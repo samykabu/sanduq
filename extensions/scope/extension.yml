@@ -2,7 +2,7 @@ schema_version: "1.0"
 extension:
   id: scope
   name: Speckit Scope
-  version: "1.4.0"
+  version: "1.5.0"
   description: "Analyze GitHub issue scope, enforce prerequisites, review user-selected decomposition before publishing, and maintain parent progress."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"

@@ -1,87 +1,6 @@
 # Changelog
 
-## Unreleased
-
-- **B13 — five new utility skills.** Five new entry points, none a claimed
-  stage, each shipped as a command plus a runtime script with unit tests:
-  - `speckit-workflow-verify-affected` (`verify_affected.py`): runs a
-    feature's affected lanes locally, reusing the existing
-    `ci.gate.affected_command` classify contract and a new optional
-    `ci.gate.verify_command` (a project-local runner read
-    `{"lanes": [...], "results_path": "<path>"}` on stdin), into the same
-    results.json shape the project's own CI tier writes.
-  - `speckit-workflow-ci-report` (`ci_report.py`): summarizes the last N
-    runs of a CI workflow into a leg/lane/wall-clock-span table, fixed vs
-    test time (from `--fixed-job`) and cancelled-run counts, reading only
-    through the GitHub REST API (`ci_evidence.GhClient`), paginated past
-    GitHub's 100-per-page cap with `--branch` URL-encoded.
-  - `speckit-workflow-gate-explain` (`gate_explain.py`): explains a
-    `STALE_RECEIPT` gate failure with the exact `recovery_recipe` the gate
-    itself would print, and offers `--auto-fix` only for drift the existing
-    `explicit-drift` classification already confines to a receipt's own
-    `evidence` paths -- never a dependency or a source/lane finding. The
-    fix runs `Run.amend` (a checked re-hash); nothing is re-stamped
-    without a check (standing rule 4), and `--reason` is never fabricated.
-  - `speckit-workflow-worker-brief` (`worker_brief.py`): generates a 3-5 KB
-    brief for one task -- its exact line, owned paths, verbatim requirement
-    lines, a contract excerpt, the turn budget (T0) and forbidden-commands
-    paragraph (S6) and the ten-line result template (T7) -- reading the
-    last three live from `execution-assign.md`/`execution-report.md`
-    instead of a copy that could drift from them.
-  - `speckit-workflow-apply-pending` (`apply_pending.py`): applies
-    `workflow/pending-artifact-updates.md` (F15) to the contracts,
-    data-model and research files it targets, marking each entry `applied`
-    or `rejected`, and reports which already-passed receipts the touched
-    paths stale, with their recovery recipe.
-
-  New optional policy key `ci.gate.verify_command`, validated by
-  `sanduq_ci.py` and settable with `workflow.py ci --verify-command`, the
-  same way as `affected_command`.
-
-  Review round 3 fixes: `apply_pending.py` judges the lexical target and
-  refuses any symlink or junction on the path (a symlinked `contracts`
-  directory or `data-model.md` fooled the resolved comparison), accumulates
-  replacements per file and writes each once, atomically, marking an entry
-  applied only after its write succeeded; `gate_explain.py --auto-fix`
-  rechecks eligibility against the live receipt and `Run.amend` gains an
-  `evidence_only` guard evaluated under its lock; `verify_affected.py`
-  validates its results (every requested lane present and passed, else
-  `ok: false` with `missing_lanes`/`failed_lanes`, exit 1) and kills the
-  process tree once output passes `HARD_OUTPUT_LIMIT` (10x `OUTPUT_CAP`)
-  while it runs; `worker_brief.py` refuses to write an oversized brief unless
-  `--allow-oversized` is passed, and its fixed text was trimmed so the
-  heaviest (`[Collect]`) brief keeps every mandatory rule inside 5 KB.
-
-  Review round 1 fixes: `gate-explain --auto-fix` now also excludes any
-  drifted path that is a declared input or a required core artifact, not
-  only checking it is listed as `evidence` (a path can be both, and
-  amending it under `unchanged` would launder a real change); `--assessment`
-  is required with `--auto-fix` (no default); every eligible path is
-  re-validated before any is amended (all-or-nothing). `apply_pending.py`
-  confines every target to `<feature>/contracts/**`, `data-model.md` or
-  `research.md`, resolving and containing the path (absolute paths, `..`
-  and symlink escapes are rejected) and containing the pending file itself;
-  a staleness-check failure is reported as `stale: null` + `stale_error`,
-  never folded into an empty `[]`. `gate_explain.py --auto-fix`,
-  `apply_pending.py --apply` and `Run.amend` all refuse inside a delegated
-  worker or orchestrator process (`SANDUQ_DELEGATED_RUN`/
-  `SANDUQ_DELEGATED_ROLE`, reusing `delegate_dispatch.require_not_worker_context`);
-  `apply_pending.py --apply` also refuses while a claim is active.
-  `verify_affected.py` now diffs the actual working tree (including staged,
-  unstaged and untracked paths), not only `base_ref..HEAD`; its results are
-  stamped `source: "local"`/`ci_grade: false` and must never be recorded as
-  Verify `ci_evidence`; `--results` is confined inside the repository, a
-  timed-out verify command has its whole process tree killed, and output is
-  capped. `ci_report.py` paginates past GitHub's 100-per-page cap for both
-  runs and jobs (with a constant `per_page` across a page sequence) and
-  URL-encodes `--branch`; the wall-clock span field is named
-  `wall_clock_span_seconds`, not "critical path". `worker_brief.py` reuses
-  `delegate_dispatch.NO_DISPATCHER_COMMANDS`/`QA_COLLECT_ADDENDUM` instead of
-  a second, hand-scraped S6 paragraph; includes the F1/F2/F3/T8 rules; drops
-  `qa_collect` from `--class` (light-tier only behind a `[Collect]` task
-  marker); enforces its 3-5 KB target (drops the contract excerpt first,
-  then reports `oversized: true`); and builds its CLI JSON with `json.dumps`
-  instead of hand-built strings (a Windows path's backslashes broke it).
+## 1.8.0
 
 - **Checkpoint identity design fix.** A checkpoint no longer hard-gates every
   command on the absolute `repo_path` it was started from, which failed
@@ -96,54 +15,61 @@
   checkpoint's bound issue to name this repository's own GitHub remote
   (the same binding `start` and the scope extension's `bound_claim`
   already require), resolved from any remote form (any scheme, an
-  embedded token, with or without `.git`) and compared case-insensitively
-  -- without a GitHub remote to check that against, it is refused and
-  pointed at `relocate`. A legacy (pre-1.8.0) checkpoint that only has
-  `repo_path` is accepted once both of those checks pass, and upgraded to
-  `repo_identity` on its next write. A checkpoint copied from a genuinely
-  different repository is still refused, whether legacy or new. When
-  neither repository being compared is a shallow clone, the root commit
-  must also match even when the remote does (a shared remote is still
-  just local Git config, and this catches one simply copied into an
-  unrelated clone); see the README's threat model for what this identity
-  check does and does not defend against.
-- A legacy (pre-1.8.0) checkpoint is adopted only when it records a full-hex
-  commit id (`head`, or a receipt `head`) reachable from this repository's
-  HEAD; otherwise it is refused with an error naming
-  `relocate --allow-history-change`. `relocate` likewise blocks a checkpoint
-  whose recorded root history is not this repository's unless
-  `--allow-history-change` is passed (recorded as `history_changed` in the
-  `relocations[]` entry), requires a resolved GitHub remote to apply,
-  refuses `--issue`/`--keep-issue-number` when the repository did not change
-  (`RELOCATE_ISSUE_NOT_APPLICABLE`), and restores `scope-source.json` if the
-  checkpoint write fails. The scope extension's `bound_claim` now runs the
-  same identity gate (`verify_checkpoint_identity`).
+  embedded token, with or without `.git`) and compared case-insensitively;
+  without a GitHub remote to check that against, it is refused and pointed
+  at `relocate`. When neither repository being compared is a shallow
+  clone, the root commit must also match even when the remote does (a
+  shared remote is still just local Git config, and this catches one
+  simply copied into an unrelated clone); see the README's threat model
+  for what this identity check does and does not defend against. A
+  checkpoint copied from a genuinely different repository is still
+  refused, whether legacy or new.
+  - A legacy (pre-1.8.0) checkpoint that only has `repo_path` is adopted
+    once both of those checks pass, only when it records a full-hex commit
+    id (`head`, or a receipt `head`) reachable from this repository's HEAD
+    (otherwise it is refused with an error naming `relocate
+    --allow-history-change`), and is upgraded to `repo_identity` on its
+    next write.
+  - `repo_path` is still written (by `start`, the legacy-upgrade path and
+    `relocate`) as the current absolute root, purely so a pre-1.8.0 reader
+    does not `KeyError` on a checkpoint this version writes; nothing in
+    this version reads or compares it. It will be removed once no
+    supported release still needs it.
+  - `schemas/checkpoint-v1.schema.json`: `repo_path` is no longer required
+    (kept, optional); adds optional `repo_identity` (`remote`,
+    `root_commit`, `shallow`) and `relocations[]`.
+  - The scope extension's `bound_claim` runs the same identity gate
+    (`verify_checkpoint_identity`) and no longer compares `repo_path`;
+    this needs scope 1.5.0 (pinned in `dependencies.json`).
 - **New `workflow.py relocate --feature <f> [--preview] --reason "<why>"`.**
   The explicit, logged rebind for a checkpoint whose identity legitimately
   moved (a renamed remote, a migrated org, or a fork). Preview reports the
   old and new identity without writing; applying appends a `relocations[]`
   entry with actor, time, reason and both identities. Every receipt is
-  preserved and no stage is invalidated. Refuses a branch mismatch unless
-  `--allow-branch-rebind` is also passed (logged either way); refuses when
-  the checkpoint's bound issue names a different GitHub repository than
-  this one now resolves to, unless `--allow-repository-rename` is also
-  passed (logged either way) -- this is the check that stops `relocate`
-  itself from laundering a foreign checkpoint into an unrelated repository.
-  A repository change never rebinds the issue automatically: it stays
-  blocked until `--keep-issue-number` (a rename/transfer only, never a
-  fork) or `--issue <owner/repo#n>` (naming the exact new issue) says
-  which; `scope-source.json` is rebound in the same locked write as the
-  checkpoint, so a later `start` for the rebound issue does not fail
-  `FEATURE_BINDING_MISMATCH` against a source file still naming the old
-  repository. Refuses inside a delegated worker or orchestrator context,
-  and reaches the checkpoint directly, bypassing the identity gate it
-  exists to get past, recomputing everything from a fresh read taken
-  under the lock rather than trusting values read before it.
-- `repo_path` is still written (by `start`, the legacy-upgrade path and
-  `relocate`) as the current absolute root, purely so a pre-1.8.0 reader
-  does not `KeyError` on a checkpoint this version writes; nothing in this
-  version reads or compares it. It will be removed once no supported
-  release still needs it.
+  preserved and no stage is invalidated.
+  - Refuses a branch mismatch unless `--allow-branch-rebind` is also
+    passed (logged either way); refuses when the checkpoint's bound issue
+    names a different GitHub repository than this one now resolves to,
+    unless `--allow-repository-rename` is also passed (logged either way).
+    This is the check that stops `relocate` itself from laundering a
+    foreign checkpoint into an unrelated repository.
+  - Blocks a checkpoint whose recorded root history is not this
+    repository's unless `--allow-history-change` is passed (recorded as
+    `history_changed` in the `relocations[]` entry), and requires a
+    resolved GitHub remote to apply.
+  - A repository change never rebinds the issue automatically: it stays
+    blocked until `--keep-issue-number` (a rename/transfer only, never a
+    fork) or `--issue <owner/repo#n>` (naming the exact new issue) says
+    which; both are refused when the repository did not change
+    (`RELOCATE_ISSUE_NOT_APPLICABLE`). `scope-source.json` is rebound in
+    the same locked write as the checkpoint (and restored if the
+    checkpoint write fails), so a later `start` for the rebound issue does
+    not fail `FEATURE_BINDING_MISMATCH` against a source file still naming
+    the old repository.
+  - Refuses inside a delegated worker or orchestrator context, and reaches
+    the checkpoint directly, bypassing the identity gate it exists to get
+    past, recomputing everything from a fresh read taken under the lock
+    rather than trusting values read before it.
 - `normalize_remote_url` (and `github_repository`, built on it) now parses
   a scheme URL with `urllib.parse` instead of an ad-hoc regex, fixing a
   real collision (an SSH URL's explicit port, e.g. `ssh://host:22/team/app`,
@@ -157,9 +83,79 @@
   local-path remote (a bare path, `file://`, or a Windows drive path) is
   never case-folded, except a Windows drive letter itself (`C:`/`c:`),
   which genuinely is case-insensitive.
-- `schemas/checkpoint-v1.schema.json`: `repo_path` is no longer required
-  (kept, optional); adds optional `repo_identity` (`remote`, `root_commit`,
-  `shallow`) and `relocations[]`.
+- **B13 — five new utility skills.** Five new entry points, none a claimed
+  stage, each shipped as a command plus a runtime script with unit tests:
+  - `speckit-workflow-verify-affected` (`verify_affected.py`): runs a
+    feature's affected lanes locally, reusing the existing
+    `ci.gate.affected_command` classify contract and a new optional
+    `ci.gate.verify_command` (a project-local runner read
+    `{"lanes": [...], "results_path": "<path>"}` on stdin), into the same
+    results.json shape the project's own CI tier writes. It diffs the
+    actual working tree (staged, unstaged and untracked paths, not only
+    `base_ref..HEAD`); validates its results (every requested lane present
+    and passed, else `ok: false` with `missing_lanes`/`failed_lanes`, exit
+    1); stamps them `source: "local"`/`ci_grade: false`, so they must
+    never be recorded as Verify `ci_evidence`; confines `--results` inside
+    the repository; and kills the whole process tree of a timed-out verify
+    command or of one whose output passes `HARD_OUTPUT_LIMIT` (10x
+    `OUTPUT_CAP`) while it runs, with output capped.
+  - `speckit-workflow-ci-report` (`ci_report.py`): summarizes the last N
+    runs of a CI workflow into a leg/lane/wall-clock-span table, fixed vs
+    test time (from `--fixed-job`) and cancelled-run counts, reading only
+    through the GitHub REST API (`ci_evidence.GhClient`). It paginates past
+    GitHub's 100-per-page cap for both runs and jobs (with a constant
+    `per_page` across a page sequence) and URL-encodes `--branch`; the
+    span field is named `wall_clock_span_seconds`, not "critical path".
+  - `speckit-workflow-gate-explain` (`gate_explain.py`): explains a
+    `STALE_RECEIPT` gate failure with the exact `recovery_recipe` the gate
+    itself would print, and offers `--auto-fix` only for drift the existing
+    `explicit-drift` classification already confines to a receipt's own
+    `evidence` paths, never a dependency or a source/lane finding. The fix
+    runs `Run.amend` (a checked re-hash); nothing is re-stamped without a
+    check (standing rule 4), and `--reason` is never fabricated.
+    `--auto-fix` requires `--assessment` (no default), excludes any
+    drifted path that is a declared input or a required core artifact (a
+    path can be both evidence and input, and amending it under `unchanged`
+    would launder a real change), rechecks eligibility against the live
+    receipt, and re-validates every eligible path before amending any
+    (all-or-nothing). `Run.amend` gains an `evidence_only` guard evaluated
+    under its lock.
+  - `speckit-workflow-worker-brief` (`worker_brief.py`): generates a 3-5 KB
+    brief for one task: its exact line, owned paths, verbatim requirement
+    lines, a contract excerpt, the turn budget (T0) and forbidden-commands
+    paragraph (S6) and the ten-line result template (T7), reading the
+    last three live from `execution-assign.md`/`execution-report.md`
+    instead of a copy that could drift from them. It reuses
+    `delegate_dispatch.NO_DISPATCHER_COMMANDS`/`QA_COLLECT_ADDENDUM`
+    rather than a second S6 paragraph, includes the F1/F2/F3/T8 rules,
+    drops `qa_collect` from `--class` (light-tier only behind a `[Collect]`
+    task marker), enforces its target (drops the contract excerpt first,
+    then reports `oversized: true`), refuses to write an oversized brief
+    unless `--allow-oversized` is passed (its fixed text is trimmed so the
+    heaviest `[Collect]` brief keeps every mandatory rule inside 5 KB), and
+    builds its CLI JSON with `json.dumps` (a Windows path's backslashes
+    broke hand-built strings).
+  - `speckit-workflow-apply-pending` (`apply_pending.py`): applies
+    `workflow/pending-artifact-updates.md` (F15) to the contracts,
+    data-model and research files it targets, marking each entry `applied`
+    or `rejected`, and reports which already-passed receipts the touched
+    paths stale, with their recovery recipe. Every target is confined to
+    `<feature>/contracts/**`, `data-model.md` or `research.md`: the lexical
+    path is judged, absolute paths, `..` and any symlink or junction on the
+    path are refused, and the pending file itself is contained. It
+    accumulates replacements per file and writes each once, atomically,
+    marking an entry applied only after its write succeeded, and a
+    staleness-check failure is reported as `stale: null` + `stale_error`,
+    never folded into an empty `[]`. `--apply` also refuses while a claim
+    is active.
+  - `gate_explain.py --auto-fix`, `apply_pending.py --apply` and
+    `Run.amend` all refuse inside a delegated worker or orchestrator
+    process (`SANDUQ_DELEGATED_RUN`/`SANDUQ_DELEGATED_ROLE`, reusing
+    `delegate_dispatch.require_not_worker_context`).
+
+  New optional policy key `ci.gate.verify_command`, validated by
+  `sanduq_ci.py` and settable with `workflow.py ci --verify-command`, the
+  same way as `affected_command`.
 
 ## 1.7.0
 

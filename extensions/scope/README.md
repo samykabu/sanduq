@@ -1,7 +1,7 @@
 # Sanduq Scope
 
 Canonical source migrated from Bunyan's `tools/speckit-scope` package. Existing MIT
-notices remain intact. Version 1.4.0 is a pending local release.
+notices remain intact. Version 1.5.0 is a pending local release.
 
 Build with `python extensions/scripts/package.py scope`; the archive bundles the
 scope-gate and scope-brainstorm presets. Install the extracted package through
