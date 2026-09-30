@@ -145,6 +145,11 @@ def run_lanes(root, command, lanes, results_path, timeout=3600):
                 except subprocess.TimeoutExpired:
                     pass
                 raise VerifyAffectedError(failure)
+        # A command that wrote past the limit and exited before the next poll
+        # never hit the in-loop check; check once more now that it has exited.
+        if max(os.fstat(out_file.fileno()).st_size, os.fstat(err_file.fileno()).st_size) > HARD_OUTPUT_LIMIT:
+            raise VerifyAffectedError('VERIFY_COMMAND_OUTPUT_LIMIT: output exceeded ' + str(HARD_OUTPUT_LIMIT) +
+                                      ' bytes')
         out_file.seek(0)
         err_file.seek(0)
         stdout = out_file.read(OUTPUT_CAP).decode('utf-8', errors='replace')

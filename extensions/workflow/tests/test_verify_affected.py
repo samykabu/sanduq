@@ -45,7 +45,7 @@ RUN_LANES_LIST_RESULT = textwrap.dedent('''\
 RUN_LANES_NOISY = textwrap.dedent('''\
     import json, sys
     payload = json.loads(sys.stdin.read())
-    sys.stderr.write("E" * 5_000_000)
+    sys.stderr.write("E" * 1_500_000)
     sys.exit(2)
 ''')
 RUN_LANES_EMPTY = textwrap.dedent('''    import json, sys
@@ -294,6 +294,32 @@ class VerifyAffectedTests(unittest.TestCase):
                                '--lane', 'laneB', '--results', 'out/results.json'], capture_output=True, text=True)
         self.assertEqual(proc.returncode, 1)
         self.assertFalse(json.loads(proc.stdout)['ok'])
+
+    def test_a_fast_over_limit_command_is_a_failure_too(self):
+        # Round 4, item 3: it writes past the limit and exits before the next
+        # poll, so only the post-wait check can catch it (even exit 0).
+        from unittest.mock import patch
+        base = self._base_ref()
+        script = ("import sys\nsys.stdin.read()\nsys.stdout.write('F' * 400_000)\n")
+        self.policy['ci']['gate']['verify_command'] = self._script('run_lanes.py', script)
+        self._write_policy()
+        with patch.object(va, 'HARD_OUTPUT_LIMIT', 300_000), patch.object(va, 'POLL_SECONDS', 30):
+            with self.assertRaises(w.WorkflowError) as ctx:
+                va.run(self.root, self.feature, base, extra_lanes=['laneA'], results_path='out/results.json')
+        self.assertIn('VERIFY_COMMAND_OUTPUT_LIMIT', str(ctx.exception))
+
+    def test_cli_reports_a_fast_over_limit_command_as_not_ok(self):
+        base = self._base_ref()
+        script = ("import sys\nsys.stdin.read()\nsys.stdout.write('F' * 2_500_000)\n")
+        self.policy['ci']['gate']['verify_command'] = self._script('run_lanes.py', script)
+        self._write_policy()
+        proc = subprocess.run([sys.executable, str(Path(__file__).resolve().parents[1] / 'scripts/verify_affected.py'),
+                               '--root', str(self.root), '--feature', self.feature, '--base-ref', base,
+                               '--lane', 'laneA', '--results', 'out/results.json'], capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 1)
+        payload = json.loads(proc.stdout)
+        self.assertFalse(payload['ok'])
+        self.assertIn('VERIFY_COMMAND_OUTPUT_LIMIT', payload['error'])
 
     def test_sustained_output_is_stopped_while_the_command_runs(self):
         # Round 3, finding 5: the cap is enforced during the run, not only
