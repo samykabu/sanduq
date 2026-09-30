@@ -22,8 +22,8 @@ PowerShell `$ErrorActionPreference = 'Stop'`) is caught and reported as one
 known, `line=<n>`), and a real success prints
 `ok issue=<n> status=<status> created=<n> closed=<n>`.
 """
+import functools
 import os
-import re
 import shutil
 import subprocess
 import tempfile
@@ -86,25 +86,76 @@ function global:gh {
 """
 
 
-def bash_path_candidates(path):
-    """POSIX form first; on a Windows host whose `bash` on PATH is actually a
-    WSL launcher (rather than Git-Bash/MSYS), that process needs the drive
-    mounted under /mnt/<letter> instead of a bare drive-letter path."""
-    posix = path.as_posix()
-    candidates = [posix]
-    match = re.match(r'^([A-Za-z]):(/.*)$', posix)
-    if match:
-        candidates.append(f'/mnt/{match.group(1).lower()}{match.group(2)}')
+def _git_bash_candidates():
+    """Windows-only Git-Bash locations to try, ahead of a bare 'bash' lookup.
+
+    A bare `['bash', ...]` subprocess call on Windows is resolved by
+    CreateProcess's own search order (the calling process's directory,
+    the current directory, the Windows system directory, the Windows
+    directory, and only then PATH) rather than by walking PATH the way a
+    shell would. `C:\\Windows\\System32\\bash.exe` -- the WSL launcher --
+    sits in that system directory, so it wins over Git Bash even when Git
+    Bash is earlier on PATH from a shell's own point of view. Passing an
+    *absolute* path instead of a bare name sidesteps that search entirely.
+    """
+    candidates = [r'C:\Program Files\Git\bin\bash.exe']
+    exec_path = subprocess.run(['git', '--exec-path'], capture_output=True, text=True)
+    if exec_path.returncode == 0 and exec_path.stdout.strip():
+        # git --exec-path is typically .../mingw64/libexec/git-core; the
+        # matching bash.exe is two levels up, under bin/.
+        sibling = Path(exec_path.stdout.strip()) / '..' / '..' / 'bin' / 'bash.exe'
+        candidates.append(str(sibling))
     return candidates
 
 
+def _is_system32_bash(path):
+    """True when `path` resolves to the WSL launcher shim, which must never
+    be picked even if it happens to run (e.g. a real distro is installed):
+    it is a different OS userland, not the Windows POSIX environment
+    (jq/PATH/filesystem) these tests set up and depend on."""
+    system_root = os.environ.get('SystemRoot', r'C:\Windows')
+    system32_bash = os.path.normcase(os.path.join(system_root, 'System32', 'bash.exe'))
+    try:
+        return os.path.normcase(os.path.abspath(path)) == system32_bash
+    except (OSError, ValueError):
+        return False
+
+
+@functools.lru_cache(maxsize=1)
+def find_bash():
+    """A real, working POSIX bash -- never `C:\\Windows\\System32\\bash.exe`.
+
+    Candidates are resolved to absolute paths and verified by actually
+    running `<bash> -c 'echo ok'`, not merely by name: a WSL distro being
+    installed would make the System32 launcher "work", but it would still
+    be the wrong bash for these tests (see `_is_system32_bash`). Returns
+    None, with no candidate found or working, so callers can skip with a
+    clear reason instead of failing on the wrong shell.
+    """
+    candidates = list(_git_bash_candidates()) if os.name == 'nt' else []
+    candidates.append('bash')  # last resort: POSIX hosts, or whatever PATH gives
+    seen = set()
+    for candidate in candidates:
+        resolved = candidate if os.path.isabs(candidate) else shutil.which(candidate)
+        if not resolved or os.path.normcase(resolved) in seen:
+            continue
+        seen.add(os.path.normcase(resolved))
+        if not os.path.isfile(resolved) or _is_system32_bash(resolved):
+            continue
+        try:
+            probe = subprocess.run([resolved, '-c', 'echo ok'], capture_output=True, text=True, timeout=10)
+        except OSError:
+            continue
+        if probe.returncode == 0 and probe.stdout.strip() == 'ok':
+            return resolved
+    return None
+
+
 def run_bash_script(script, args, cwd, env=None):
-    result = None
-    for candidate in bash_path_candidates(script):
-        result = subprocess.run(['bash', candidate, *args], cwd=cwd, text=True, capture_output=True, env=env)
-        if not (result.returncode == 127 and 'No such file or directory' in result.stderr):
-            return result
-    return result
+    bash = find_bash()
+    if bash is None:
+        return None
+    return subprocess.run([bash, script.as_posix(), *args], cwd=cwd, text=True, capture_output=True, env=env)
 
 
 def write_script(path, text):
@@ -129,10 +180,13 @@ def prepend_path(fakebin):
 
 
 def bash_has(cwd, tool):
-    """Whether the *bash actually used to run the script* (which, depending
-    on the host, may resolve a different PATH than this Python process) sees
-    `tool` on its own PATH."""
-    result = subprocess.run(['bash', '-lc', f'command -v {tool}'], cwd=cwd, text=True, capture_output=True)
+    """Whether the *bash actually used to run the script* (the one `find_bash`
+    resolves, which, depending on the host, may see a different PATH than
+    this Python process) sees `tool` on its own PATH."""
+    bash = find_bash()
+    if bash is None:
+        return False
+    result = subprocess.run([bash, '-lc', f'command -v {tool}'], cwd=cwd, text=True, capture_output=True)
     return result.returncode == 0
 
 
@@ -146,8 +200,8 @@ class ProjectSyncSummaryTests(unittest.TestCase):
     # -- flag conflict -----------------------------------------------------
 
     def test_bash_summary_and_json_together_is_rejected(self):
-        if not shutil.which('bash'):
-            self.skipTest('bash not available')
+        if not find_bash():
+            self.skipTest('no working POSIX bash found (Git Bash absent; never the WSL System32 launcher)')
         result = run_bash_script(SH, ['--phase', 'open', '--summary', '--json'], self.root)
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertEqual(result.stdout.strip(), 'error exit=2 reason=--summary and --json cannot be combined')
@@ -165,8 +219,8 @@ class ProjectSyncSummaryTests(unittest.TestCase):
     def test_bash_unknown_arg_warning_goes_to_stderr(self):
         # F11: an unrecognised flag is a diagnostic, not summary output, so it
         # must never land on stdout regardless of --summary/--json/neither.
-        if not shutil.which('bash'):
-            self.skipTest('bash not available')
+        if not find_bash():
+            self.skipTest('no working POSIX bash found (Git Bash absent; never the WSL System32 launcher)')
         result = run_bash_script(SH, ['--phase', 'open', '--bogus-flag', '--summary'], self.root)
         self.assertNotIn('unknown arg', result.stdout)
         self.assertIn('unknown arg: --bogus-flag', result.stderr)
@@ -174,8 +228,8 @@ class ProjectSyncSummaryTests(unittest.TestCase):
     # -- graceful skip: exactly one stdout line, never "ok" -----------------
 
     def test_bash_summary_skip_is_one_line_and_never_ok(self):
-        if not shutil.which('bash'):
-            self.skipTest('bash not available')
+        if not find_bash():
+            self.skipTest('no working POSIX bash found (Git Bash absent; never the WSL System32 launcher)')
         result = run_bash_script(SH, ['--phase', 'open', '--summary'], self.root)
         self.assertEqual(result.returncode, 0, result.stderr)
         lines = result.stdout.splitlines()
@@ -217,8 +271,8 @@ class ProjectSyncSummaryTests(unittest.TestCase):
         # A broken (but present) jq fails on the first real config read, a
         # raw command failure with no preceding warn(): reason falls back to
         # "unknown" and the ERR trap still knows the failing line.
-        if not shutil.which('bash'):
-            self.skipTest('bash not available')
+        if not find_bash():
+            self.skipTest('no working POSIX bash found (Git Bash absent; never the WSL System32 launcher)')
         subprocess.run(['git', 'remote', 'add', 'origin', 'https://github.com/acme/app.git'],
                         cwd=self.root, check=True, capture_output=True)
         config = self.root / '.specify/extensions/project/config.json'
@@ -242,8 +296,8 @@ class ProjectSyncSummaryTests(unittest.TestCase):
         # Reaching this branch needs config.json parsed for real (managed
         # mode is checked only after PROJ_NUM/PROJ_ID/... are read), so this
         # needs a genuine jq like the success-path tests above.
-        if not shutil.which('bash'):
-            self.skipTest('bash not available')
+        if not find_bash():
+            self.skipTest('no working POSIX bash found (Git Bash absent; never the WSL System32 launcher)')
         if not bash_has(self.root, 'jq'):
             self.skipTest('a real jq is required to reach the managed-mode check')
         self.configure_repo()
@@ -291,8 +345,8 @@ class ProjectSyncSummaryTests(unittest.TestCase):
         config.write_text(CONFIG_JSON, encoding='utf-8')
 
     def test_bash_summary_success_reports_counts(self):
-        if not shutil.which('bash'):
-            self.skipTest('bash not available')
+        if not find_bash():
+            self.skipTest('no working POSIX bash found (Git Bash absent; never the WSL System32 launcher)')
         if not bash_has(self.root, 'jq'):
             self.skipTest('a real jq is required to drive a full (fake-gh-backed) success run; '
                            'the flag-conflict, skip and mid-run-failure paths above do not need one')
@@ -337,8 +391,8 @@ class ProjectSyncSummaryTests(unittest.TestCase):
         # same fixture; this confirms the bash --json branch still reports
         # the same real run, unchanged by this session's --summary/error-trap
         # work (--json's own output format was never touched).
-        if not shutil.which('bash'):
-            self.skipTest('bash not available')
+        if not find_bash():
+            self.skipTest('no working POSIX bash found (Git Bash absent; never the WSL System32 launcher)')
         if not bash_has(self.root, 'jq'):
             self.skipTest('a real jq is required to drive a full (fake-gh-backed) success run')
         self.configure_repo()
