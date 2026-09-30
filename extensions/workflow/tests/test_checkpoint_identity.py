@@ -76,12 +76,27 @@ class HelperTests(unittest.TestCase):
     def test_normalize_remote_url_keeps_an_explicit_port_distinct_from_a_numeric_path_segment(self):
         # Round 1, finding 3: the original regex read an SSH URL's explicit
         # port as the first path segment, so this pair collided into one
-        # identity even though they name unrelated things.
-        port_form = w.normalize_remote_url('ssh://git@git.example.com:22/team/app.git')
-        path_form = w.normalize_remote_url('https://git.example.com/22/team/app')
-        self.assertEqual(port_form, 'git.example.com:22/team/app')
-        self.assertEqual(path_form, 'git.example.com/22/team/app')
+        # identity even though they name unrelated things. A non-default
+        # port (2222, not ssh's default 22) so it is kept, not folded away.
+        port_form = w.normalize_remote_url('ssh://git@git.example.com:2222/team/app.git')
+        path_form = w.normalize_remote_url('https://git.example.com/2222/team/app')
+        self.assertEqual(port_form, 'git.example.com:2222/team/app')
+        self.assertEqual(path_form, 'git.example.com/2222/team/app')
         self.assertNotEqual(port_form, path_form)
+
+    def test_normalize_remote_url_folds_a_default_port(self):
+        # Round 2, LOW (optional): a port equal to its scheme's well-known
+        # default carries no identity.
+        self.assertEqual(w.normalize_remote_url('ssh://git@github.com:22/acme/app.git'),
+                         w.normalize_remote_url('ssh://git@github.com/acme/app.git'))
+        self.assertEqual(w.normalize_remote_url('https://github.com:443/acme/app.git'),
+                         w.normalize_remote_url('https://github.com/acme/app.git'))
+
+    def test_normalize_remote_url_folds_windows_drive_letter_case(self):
+        # Round 2, LOW (optional): unlike the rest of the path, a Windows
+        # drive letter genuinely is case-insensitive.
+        self.assertEqual(w.normalize_remote_url('C:/repos/App.git'), w.normalize_remote_url('c:/repos/App.git'))
+        self.assertEqual(w.normalize_remote_url('c:/repos/App.git'), 'c:/repos/App')
 
     def test_normalize_remote_url_drops_query_and_fragment(self):
         self.assertEqual(w.normalize_remote_url('https://github.com/Acme/App?x=1'), 'github.com/Acme/App')
@@ -106,11 +121,12 @@ class HelperTests(unittest.TestCase):
     def test_normalize_remote_url_windows_drive_paths_collide_by_separator_only(self):
         forward = w.normalize_remote_url('C:/repos/App.git')
         back = w.normalize_remote_url('C:\\repos\\App.git')
-        self.assertEqual(forward, 'C:/repos/App')
+        self.assertEqual(forward, 'c:/repos/App')  # drive letter folded to lower case (round 2, LOW)
         self.assertEqual(forward, back)
         # A single-letter "host" is a drive letter, never SCP shorthand;
-        # the path keeps its case (a lowercase drive letter is a different string).
-        self.assertNotEqual(forward, w.normalize_remote_url('c:/repos/App.git'))
+        # the rest of the path still keeps its case.
+        self.assertEqual(forward, w.normalize_remote_url('c:/repos/App.git'))
+        self.assertNotEqual(w.normalize_remote_url('C:/Repos/App.git'), w.normalize_remote_url('C:/repos/App.git'))
 
     def test_normalize_remote_url_file_uri_and_bare_path_are_not_case_folded(self):
         self.assertEqual(w.normalize_remote_url('file:///srv/git/App.git'), '/srv/git/App')

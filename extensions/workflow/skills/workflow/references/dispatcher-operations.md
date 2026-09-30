@@ -172,16 +172,20 @@ mismatch after that is refused on purpose: use
 `workflow.py relocate --feature ... --preview --reason "<why>"` to inspect the old
 and new identity and repository without changing anything, then the same command
 without `--preview` to record the rebind. Only use it when the mismatch is genuinely
-the same project relocated -- a fork, a renamed remote, a migrated org -- never to
+the same project relocated -- a renamed remote, a migrated org, or a fork -- never to
 paper over a checkpoint that belongs to an unrelated repository. It refuses a
 branch mismatch unless `--allow-branch-rebind` is also passed, refuses when the
 checkpoint's bound issue names a different GitHub repository than this one now
 resolves to unless `--allow-repository-rename` is also passed (the check that
-stops `relocate` itself from laundering a foreign checkpoint), refuses inside any
+stops `relocate` itself from laundering a foreign checkpoint). A repository change
+also never rebinds the issue automatically: pass `--keep-issue-number` (a rename or
+transfer only -- never a fork, whose issue numbering is independent) or
+`--issue <owner/repo#n>` naming the exact new issue; `scope-source.json` is rebound
+in the same locked write as the checkpoint. It refuses inside any
 delegated worker or orchestrator context, requires an active claim be resolved
 first, and never invalidates a receipt: every `relocations[]` entry records the
-actor, reason, both identities and, when it applies, both repositories. It is
-reachable specifically because it does not load the checkpoint through the
+actor, reason, both identities and, when it applies, both repositories and the
+rebound issue. It is reachable specifically because it does not load the checkpoint through the
 identity check it exists to bypass, recomputing everything from a fresh read
 under the lock rather than trusting values read before it.
 To change the default host (Codex or Claude), never run a bare `specify integration

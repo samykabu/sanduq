@@ -193,12 +193,20 @@ def _normalize_path_remote(path):
     """A local-filesystem remote (a bare path, `file://`, a Windows drive path):
     fold separator style only, never case -- these are real filesystem paths,
     and folding case could merge two distinct case-sensitive paths into one
-    identity (round 1, finding 3).
+    identity (round 1, finding 3). The one exception is a leading Windows
+    drive letter (`C:`/`c:`), which is folded to lower case: unlike the rest
+    of the path, a drive letter genuinely is case-insensitive on Windows,
+    so `C:/repos/App` and `c:/repos/App` name the same location (round 2,
+    LOW, optional).
     """
     path = path.replace('\\', '/')
     while len(path) > 1 and path.endswith('/'):
         path = path[:-1]
-    return _strip_dotgit(path)
+    path = _strip_dotgit(path)
+    drive = re.match(r'[A-Za-z]:(?=/|$)', path)
+    if drive:
+        path = drive.group().lower() + path[drive.end():]
+    return path
 
 
 def normalize_remote_url(url):
@@ -243,7 +251,10 @@ def normalize_remote_url(url):
                 raise ValueError('no host')
             host = host.rstrip('.').lower()
             port = parts.port
-            if port:
+            # A port equal to its scheme's well-known default carries no
+            # identity (round 2, LOW, optional): ssh://host:22/... and
+            # ssh://host/... (or https://host:443/...) name the same thing.
+            if port and port != {'ssh': 22, 'https': 443, 'http': 80}.get(parts.scheme):
                 host += ':' + str(port)
             return host + '/' + _strip_dotgit(parts.path.strip('/'))
         except ValueError:
