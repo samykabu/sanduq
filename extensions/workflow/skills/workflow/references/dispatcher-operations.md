@@ -167,7 +167,9 @@ recorded (that path was the checkpoint-identity design bug: every other clone,
 worktree, instance or CI runner failed `CHECKPOINT_IDENTITY_MISMATCH`). `load` also
 requires the checkpoint's bound issue to name this repository's own GitHub remote;
 with no GitHub remote to check that against, it is refused, not silently trusted. A
-legacy checkpoint upgrades automatically on its next write once both checks pass. A
+legacy checkpoint upgrades automatically on its next write once both checks pass and
+it records a commit (`head`) reachable from HEAD; with none, use
+`relocate --allow-history-change`. A
 mismatch after that is refused on purpose: use
 `workflow.py relocate --feature ... --preview --reason "<why>"` to inspect the old
 and new identity and repository without changing anything, then the same command
@@ -177,7 +179,9 @@ paper over a checkpoint that belongs to an unrelated repository. It refuses a
 branch mismatch unless `--allow-branch-rebind` is also passed, refuses when the
 checkpoint's bound issue names a different GitHub repository than this one now
 resolves to unless `--allow-repository-rename` is also passed (the check that
-stops `relocate` itself from laundering a foreign checkpoint). A repository change
+stops `relocate` itself from laundering a foreign checkpoint). A changed root history
+also needs `--allow-history-change` (logged as `history_changed`); `--issue` and
+`--keep-issue-number` are refused unless the repository changed. A repository change
 also never rebinds the issue automatically: pass `--keep-issue-number` (a rename or
 transfer only -- never a fork, whose issue numbering is independent) or
 `--issue <owner/repo#n>` naming the exact new issue; `scope-source.json` is rebound

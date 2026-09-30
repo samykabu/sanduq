@@ -359,7 +359,12 @@ A checkpoint from before 1.8.0 recorded only `repo_path` (never read or
 compared by 1.8.0+, but still written by `start`, the legacy-upgrade path
 and `relocate` so a pre-1.8.0 reader does not `KeyError`; it will be removed
 once no supported release still needs it) and is accepted once both checks
-above pass, then upgraded to `repo_identity` on its next write. A checkpoint
+above pass *and* it records a full-hex commit id (its `head`, or a receipt's
+`head`) that is reachable from this repository's HEAD — the one verifiable
+history signal such a checkpoint carries, since origin is only local Git
+config. Without one (recreated or rewritten history) it is refused, naming
+`relocate --allow-history-change`. It is then upgraded to `repo_identity` on
+its next write. A checkpoint
 copied from a genuinely different repository is still refused, whether
 legacy or new: this is the security property the design protects.
 
@@ -386,15 +391,22 @@ checkpoint whose bound issue names a different GitHub repository than this
 one now resolves to is refused unless `--allow-repository-rename` is also
 passed — this is the check that stops `relocate` itself from being used to
 launder a foreign checkpoint into an unrelated repository, and either
-flag's effect is logged in the same entry regardless.
+flag's effect is logged in the same entry regardless. A checkpoint whose
+recorded root history is not this repository's (the root commit is neither
+equal nor reachable on a non-shallow clone, or a legacy checkpoint records
+no reachable commit) is also blocked unless `--allow-history-change` is
+passed, and `history_changed` is recorded in the entry. Relocate also needs
+a resolved GitHub remote to apply (otherwise `load` would refuse the result),
+and `--issue`/`--keep-issue-number` are refused with
+`RELOCATE_ISSUE_NOT_APPLICABLE` when the repository did not change.
 
 A repository change never rebinds the issue automatically: pass
 `--keep-issue-number` to assume the number carries over (a GitHub rename or
 transfer only — never a fork) or `--issue <owner/repo#n>` (which must name
 the repository this one now resolves to) to bind the exact new issue
 instead; passing neither leaves the repository change blocked, and passing
-both is refused. `scope-source.json` is rebound in the same locked write as
-the checkpoint, so a later `start` for the same issue does not fail
+both is refused. `scope-source.json` is rebound together with
+the checkpoint (restored to its original bytes if the checkpoint write fails), so a later `start` for the same issue does not fail
 `FEATURE_BINDING_MISMATCH` against a source file still naming the old
 repository. Relocate is refused inside any delegated worker or
 orchestrator context (`DELEGATION_WORKER_CONTEXT`) and while a claim is

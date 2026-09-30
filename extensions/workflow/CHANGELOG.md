@@ -26,6 +26,17 @@
   just local Git config, and this catches one simply copied into an
   unrelated clone); see the README's threat model for what this identity
   check does and does not defend against.
+- A legacy (pre-1.8.0) checkpoint is adopted only when it records a full-hex
+  commit id (`head`, or a receipt `head`) reachable from this repository's
+  HEAD; otherwise it is refused with an error naming
+  `relocate --allow-history-change`. `relocate` likewise blocks a checkpoint
+  whose recorded root history is not this repository's unless
+  `--allow-history-change` is passed (recorded as `history_changed` in the
+  `relocations[]` entry), requires a resolved GitHub remote to apply,
+  refuses `--issue`/`--keep-issue-number` when the repository did not change
+  (`RELOCATE_ISSUE_NOT_APPLICABLE`), and restores `scope-source.json` if the
+  checkpoint write fails. The scope extension's `bound_claim` now runs the
+  same identity gate (`verify_checkpoint_identity`).
 - **New `workflow.py relocate --feature <f> [--preview] --reason "<why>"`.**
   The explicit, logged rebind for a checkpoint whose identity legitimately
   moved (a renamed remote, a migrated org, or a fork). Preview reports the
