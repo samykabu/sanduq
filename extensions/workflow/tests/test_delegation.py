@@ -792,11 +792,13 @@ class DelegationTests(unittest.TestCase):
         even one merely started, never mind unverified or failed -- already
         has its own resolution path (accept or reassign); adopt must never
         offer a second, easier one."""
-        self.tasks('- [ ] T001 [Collect] Run smoke suite\n')
+        path = self.tasks('- [ ] T001 [Collect] Run smoke suite\n')
         self.enable()
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
              patch.object(dispatch, 'launch', return_value={'run_id': 'codex-1', 'state': 'running'}):
             dispatch.start(self.root, self.feature, 'T001', owned=['.'])
+        path.write_text(path.read_text(encoding='utf-8').replace('- [ ] T001', '- [x] T001'),
+                        encoding='utf-8')
         with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_ADOPT_HAS_ATTEMPT'):
             dispatch.adopt(self.root, self.feature, 'T001', 'pytest -q', 'counts')
 
@@ -839,6 +841,337 @@ class DelegationTests(unittest.TestCase):
         with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_TASK_UNVERIFIED'):
             w.ready_checks(self.root, self.feature, self.policy, state, rules={
                 'tasks': True, 'task_links': False, 'documentation': False})
+
+    def test_adopt_refuses_an_unknown_task_id(self):
+        """Round 8, finding 1: Codex recorded a successful adoption for an
+        absent T999; adopt must refuse before running anything when the
+        task id names nothing in tasks.md."""
+        self.tasks('- [x] T001 [Collect] Run smoke suite\n')
+        self.enable()
+        with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_ADOPT_TASK_UNKNOWN'):
+            dispatch.adopt(self.root, self.feature, 'T999', 'pytest -q', 'counts')
+
+    def test_adopt_refuses_an_unchecked_task(self):
+        """Round 8, finding 1: adopting is for work already done; an
+        unchecked task has no completed work to bind the check to."""
+        self.tasks('- [ ] T001 [Collect] Run smoke suite\n')
+        self.enable()
+        with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_ADOPT_TASK_NOT_CHECKED'):
+            dispatch.adopt(self.root, self.feature, 'T001', 'pytest -q', 'counts')
+
+    def test_ready_task_gate_rejects_an_adopted_task_edited_after_adoption(self):
+        """Round 8, finding 1: Codex adopted T999 while absent, then a
+        different, later T999 added under the same id rode the earlier
+        adoption to Ready. The adopted attempt's bound sha256 of the task
+        line's content must catch that: editing the line (even leaving it
+        checked) after adoption fails Ready, not passes it."""
+        path = self.tasks('- [x] T001 [Collect] Run smoke suite\n')
+        self.enable()
+        with patch.object(dispatch, 'run_capped',
+                          return_value=self.fake_run_capped(0, '{"total": 3, "passed": 3, "failed": 0}')):
+            dispatch.adopt(self.root, self.feature, 'T001', 'pytest -q', 'counts')
+        path.write_text('- [x] T001 [Collect] Run a completely different check\n', encoding='utf-8')
+        run = w.Run(self.root, self.feature)
+        run.start('acme/app#10')
+        state = run.load()
+        with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_ADOPT_TASK_CHANGED'):
+            w.ready_checks(self.root, self.feature, self.policy, state, rules={
+                'tasks': True, 'task_links': False, 'documentation': False})
+
+    def test_reassign_on_an_adopted_attempt_gives_a_structured_error(self):
+        """Round 8, finding 2: reassign used to crash with a bare KeyError
+        on 'retry_count' for an adopted attempt, which has no dispatcher
+        route, task file or retry count to escalate from. It must refuse
+        cleanly instead, pointing at adopt's own recovery."""
+        self.tasks('- [x] T001 [Collect] Run smoke suite\n')
+        self.enable()
+        with patch.object(dispatch, 'run_capped', return_value=self.fake_run_capped(1, '')):
+            result = dispatch.adopt(self.root, self.feature, 'T001', 'pytest -q', 'counts')
+        self.assertEqual(result['status'], 'unverified')
+        with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_REASSIGN_ADOPTED_UNSUPPORTED'):
+            dispatch.reassign(self.root, self.feature, result['run_id'], 'Escalating a failed adoption')
+
+    def test_readopt_after_a_failed_adoption_succeeds(self):
+        """Round 8, finding 2: a task whose only attempts are unverified
+        adoptions may be re-adopted with a corrected check -- the
+        supported recovery, since reassign cannot act on an adopted
+        attempt."""
+        self.tasks('- [x] T001 [Collect] Run smoke suite\n')
+        self.enable()
+        with patch.object(dispatch, 'run_capped', return_value=self.fake_run_capped(1, '')):
+            first = dispatch.adopt(self.root, self.feature, 'T001', 'pytest -q', 'counts')
+        self.assertEqual(first['status'], 'unverified')
+        with patch.object(dispatch, 'run_capped',
+                          return_value=self.fake_run_capped(0, '{"total": 3, "passed": 3, "failed": 0}')):
+            second = dispatch.adopt(self.root, self.feature, 'T001', 'pytest -q', 'counts')
+        self.assertEqual(second['status'], 'successful')
+        self.assertEqual(delegation.latest_attempt(self.root, self.feature, 'T001')['status'], 'successful')
+
+    def test_dispatcher_commands_refuse_inside_a_delegated_worker_context(self):
+        """Round 9, finding 1a: adopt, accept, trust-reset and reassign must
+        all refuse when SANDUQ_DELEGATED_RUN is set, marking this process as
+        itself running inside a delegated worker's own process tree --
+        defence in depth against a worker self-certifying its own
+        unattempted or unverified work."""
+        self.tasks('- [x] T001 [Collect] Run smoke suite\n')
+        self.enable()
+        with patch.dict(os.environ, {'SANDUQ_DELEGATED_RUN': 'codex-1'}):
+            with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_WORKER_CONTEXT'):
+                dispatch.adopt(self.root, self.feature, 'T001', 'pytest -q', 'counts')
+            with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_WORKER_CONTEXT'):
+                dispatch.trust_reset(self.root, self.feature, 'attempted reset from inside a worker')
+        # accept and reassign now need a real run to reach their (identity-
+        # aware, round 10) guard call at all -- it runs after the ledger
+        # lookup, not before it.
+        run_id = self._unverified_run()
+        with patch.dict(os.environ, {'SANDUQ_DELEGATED_RUN': run_id}):
+            with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_WORKER_CONTEXT'):
+                dispatch.accept(self.root, self.feature, run_id, 'pytest -q', 'counts')
+            with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_WORKER_CONTEXT'):
+                dispatch.reassign(self.root, self.feature, run_id,
+                                  'attempted reassign from inside a worker')
+
+    def test_launch_sets_sanduq_delegated_run_from_the_intent_id(self):
+        """Round 9, finding 1a: launch's own driver subprocess -- and,
+        through it, the worker it spawns -- inherits SANDUQ_DELEGATED_RUN
+        set to this dispatch's own intent id; the driver assigns the
+        eventual run_id itself, only after the worker is already spawned,
+        so no run_id exists yet at launch time to use instead. An ordinary
+        driver call with no run context (collect querying status) leaves
+        it unset."""
+        self.assertNotIn('SANDUQ_DELEGATED_RUN', dispatch.driver_env(self.root))
+        captured = {}
+        payload = {'run_id': 'codex-1', 'state': 'running'}
+        def fake_run(args, cwd, env, **kwargs):
+            captured['env'] = env
+            captured['args'] = args
+            return subprocess.CompletedProcess(args, 0, json.dumps(payload), '')
+        candidate = {'harness': 'codex', 'requested_model': None, 'read_only': False,
+                    'allow_commit': False}
+        with patch.object(dispatch.shutil, 'which', return_value='node'), \
+             patch.object(dispatch.subprocess, 'run', side_effect=fake_run):
+            dispatch.launch(self.root, 'driver.mjs', candidate, self.root, 'task text', 1800, 'intent-xyz')
+        self.assertEqual(captured['env']['SANDUQ_DELEGATED_RUN'], 'intent-xyz')
+        # Round 10, finding 2: --keep-env for all three names, so a future
+        # --clean-env launch does not silently drop whichever this call set.
+        for name in ('SANDUQ_DELEGATED_RUN', 'SANDUQ_DELEGATED_ROLE', 'SANDUQ_DELEGATED_FEATURE'):
+            self.assertIn(name, captured['args'])
+        self.assertEqual(captured['args'].count('--keep-env'), 3)
+
+    def test_launch_sets_orchestrator_role_for_the_execute_stage(self):
+        """Round 10, finding 1: launching the execute stage itself sets
+        SANDUQ_DELEGATED_ROLE=orchestrator plus SANDUQ_DELEGATED_FEATURE,
+        never SANDUQ_DELEGATED_RUN -- its own environment differs from
+        every task or other-stage launch, because its own brief expects
+        it to dispatch and resolve bounded task workers itself."""
+        captured = {}
+        payload = {'run_id': 'codex-exec', 'state': 'running'}
+        def fake_run(args, cwd, env, **kwargs):
+            captured['env'] = env
+            return subprocess.CompletedProcess(args, 0, json.dumps(payload), '')
+        candidate = {'harness': 'codex', 'requested_model': None, 'read_only': False,
+                    'allow_commit': True}
+        with patch.object(dispatch.shutil, 'which', return_value='node'), \
+             patch.object(dispatch.subprocess, 'run', side_effect=fake_run):
+            dispatch.launch(self.root, 'driver.mjs', candidate, self.root, 'task text', 7200,
+                            'intent-exec', orchestrator_feature=self.feature)
+        self.assertEqual(captured['env']['SANDUQ_DELEGATED_ROLE'], 'orchestrator')
+        self.assertEqual(captured['env']['SANDUQ_DELEGATED_FEATURE'], self.feature)
+        self.assertNotIn('SANDUQ_DELEGATED_RUN', captured['env'])
+
+    def test_task_worker_launch_from_orchestrator_env_does_not_carry_role(self):
+        """Round 10, finding 1: a task worker the Execute orchestrator
+        itself launches must not inherit SANDUQ_DELEGATED_ROLE or
+        SANDUQ_DELEGATED_FEATURE from its own ambient environment -- only
+        its own SANDUQ_DELEGATED_RUN."""
+        with patch.dict(os.environ, {'SANDUQ_DELEGATED_ROLE': 'orchestrator',
+                                     'SANDUQ_DELEGATED_FEATURE': self.feature}):
+            env = dispatch.driver_env(self.root, run_context='intent-task-1')
+        self.assertEqual(env['SANDUQ_DELEGATED_RUN'], 'intent-task-1')
+        self.assertNotIn('SANDUQ_DELEGATED_ROLE', env)
+        self.assertNotIn('SANDUQ_DELEGATED_FEATURE', env)
+
+    def test_execute_orchestrator_context_can_accept_its_own_feature_task(self):
+        """Round 10, finding 1: the delegated Execute orchestrator's own
+        environment must still let it resolve its own task workers --
+        that is its whole job. accept in particular was one of the
+        commands round 9's blanket worker refusal wrongly barred it from."""
+        run_id = self._unverified_run()
+        with patch.dict(os.environ, {'SANDUQ_DELEGATED_ROLE': 'orchestrator',
+                                     'SANDUQ_DELEGATED_FEATURE': self.feature}):
+            with patch.object(dispatch, 'run_capped',
+                              return_value=self.fake_run_capped(0, '{"total": 1, "passed": 1, "failed": 0}')):
+                result = dispatch.accept(self.root, self.feature, run_id, 'pytest -q', 'counts')
+        self.assertTrue(result['accepted'])
+
+    def test_execute_orchestrator_context_is_scoped_to_its_own_feature_tasks(self):
+        """Round 10, finding 1: trust-reset, any stage:* identity and any
+        other feature must all refuse with DELEGATION_ORCHESTRATOR_SCOPE,
+        even under the orchestrator role -- its scope is exactly its own
+        feature's T### tasks, nothing broader."""
+        self.tasks('- [ ] T001 [P] Implement parser\n')
+        self.enable()
+        with patch.dict(os.environ, {'SANDUQ_DELEGATED_ROLE': 'orchestrator',
+                                     'SANDUQ_DELEGATED_FEATURE': self.feature}):
+            with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_ORCHESTRATOR_SCOPE'):
+                dispatch.trust_reset(self.root, self.feature, 'attempted reset from the orchestrator role')
+            with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_ORCHESTRATOR_SCOPE'):
+                dispatch.start(self.root, self.feature, 'stage:tasks')
+            with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_ORCHESTRATOR_SCOPE'):
+                dispatch.start(self.root, 'specs/002-other', 'T001')
+
+    def test_task_worker_context_refuses_start_and_collect_too(self):
+        """Round 10, finding 1: a plain task worker (SANDUQ_DELEGATED_RUN
+        set, no orchestrator role) is refused every dispatcher command
+        outright, including start and collect, which now also carry the
+        guard (previously unguarded, since round 9 only covered adopt,
+        accept, reassign and trust-reset)."""
+        run_id = self._unverified_run()
+        with patch.dict(os.environ, {'SANDUQ_DELEGATED_RUN': run_id}):
+            with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_WORKER_CONTEXT'):
+                dispatch.start(self.root, self.feature, 'T002')
+            with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_WORKER_CONTEXT'):
+                dispatch.collect(self.root, self.feature, run_id)
+
+    def test_worker_context_wins_even_with_orchestrator_role_also_set(self):
+        """Round 11, finding 1: SANDUQ_DELEGATED_RUN is checked first and
+        always wins. Set alongside SANDUQ_DELEGATED_ROLE=orchestrator and a
+        matching SANDUQ_DELEGATED_FEATURE, it must still refuse with
+        DELEGATION_WORKER_CONTEXT rather than falling through to the
+        orchestrator's (still scoped, but wider) allowance."""
+        run_id = self._unverified_run()
+        with patch.dict(os.environ, {'SANDUQ_DELEGATED_RUN': run_id,
+                                     'SANDUQ_DELEGATED_ROLE': 'orchestrator',
+                                     'SANDUQ_DELEGATED_FEATURE': self.feature}):
+            with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_WORKER_CONTEXT'):
+                dispatch.accept(self.root, self.feature, run_id, 'pytest -q', 'counts')
+
+    def test_recover_and_abandon_refuse_a_worker_context(self):
+        """Round 11, finding 2: recover and abandon must refuse a plain
+        worker context outright, exactly like every other dispatcher
+        command."""
+        self.tasks()
+        self.enable()
+        ledger = dispatch.load_ledger(self.root, self.feature)
+        ledger['attempts'].append({'intent_id': 'intent-1', 'identity': self.feature + '/T001',
+                                   'status': 'starting', 'started_at': dispatch.stamp(),
+                                   'route_candidates': []})
+        w.write(delegation.ledger_path(self.root, self.feature), ledger)
+        with patch.dict(os.environ, {'SANDUQ_DELEGATED_RUN': 'codex-1'}):
+            with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_WORKER_CONTEXT'):
+                dispatch.recover_intent(self.root, self.feature, 'intent-1')
+            with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_WORKER_CONTEXT'):
+                dispatch.abandon_intent(self.root, self.feature, 'intent-1', 'reason')
+
+    def test_recover_and_abandon_allow_the_execute_orchestrator_for_its_own_task(self):
+        """Round 11, finding 2: recover and abandon must allow the
+        delegated Execute orchestrator for a T### intent of its own
+        feature, exactly like start, collect, accept, reassign and adopt."""
+        self.tasks()
+        self.enable()
+        ledger = dispatch.load_ledger(self.root, self.feature)
+        ledger['attempts'].append({'intent_id': 'intent-1', 'identity': self.feature + '/T001',
+                                   'status': 'starting', 'started_at': dispatch.stamp(),
+                                   'route_candidates': []})
+        w.write(delegation.ledger_path(self.root, self.feature), ledger)
+        with patch.dict(os.environ, {'SANDUQ_DELEGATED_ROLE': 'orchestrator',
+                                     'SANDUQ_DELEGATED_FEATURE': self.feature}):
+            self.assertFalse(dispatch.recover_intent(self.root, self.feature, 'intent-1')['found'])
+            with patch.object(dispatch, 'ABANDON_GRACE_SECONDS', 0):
+                result = dispatch.abandon_intent(self.root, self.feature, 'intent-1',
+                                                 'no driver run ever appeared')
+        self.assertEqual(result['status'], 'intent-abandoned')
+
+    def test_ready_task_gate_warns_on_adopted_and_accepted_tasks(self):
+        """Round 9, finding 1b: reviewers must see every task Ready accepted
+        because the orchestrator ran and judged its own check, not because a
+        worker's own delegated attempt succeeded -- adopt (no attempt at
+        all) and accept (an unverified light-tier result) alike."""
+        self.tasks('- [x] T001 [Collect] Run smoke suite\n- [ ] T002 [Collect] Run lint\n')
+        self.enable()
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch.object(dispatch, 'launch', return_value={'run_id': 'codex-2', 'state': 'running'}):
+            dispatch.start(self.root, self.feature, 'T002', owned=['.'])
+        payload = {'run_id': 'codex-2', 'status': 'successful', 'summary': 'not evidence',
+                   'harness': 'codex', 'model': 'gpt-6-terra', 'model_reported': False,
+                   'actual_model': None, 'model_observed': False,
+                   'status_provenance': {'primary': 'harness_telemetry'},
+                   'dirty_paths_changed': [], 'artifacts': {'dir': str(self.root / '.delegate/runs/codex-2')}}
+        with patch.object(delegation, 'inspect_skill', return_value=self.fake_doctor()), \
+             patch.object(dispatch.shutil, 'which', return_value='node'), \
+             patch.object(dispatch.subprocess, 'run',
+                         return_value=subprocess.CompletedProcess([], 0, json.dumps(payload), '')):
+            dispatch.collect(self.root, self.feature, 'codex-2')
+        with patch.object(dispatch, 'run_capped',
+                          return_value=self.fake_run_capped(0, '{"total": 2, "passed": 2, "failed": 0}')):
+            dispatch.accept(self.root, self.feature, 'codex-2', 'pytest -q', 'counts')
+        path = self.root / self.feature / 'tasks.md'
+        path.write_text(path.read_text(encoding='utf-8').replace('- [ ] T002', '- [x] T002'),
+                        encoding='utf-8')
+        with patch.object(dispatch, 'run_capped',
+                          return_value=self.fake_run_capped(0, '{"total": 3, "passed": 3, "failed": 0}')):
+            dispatch.adopt(self.root, self.feature, 'T001', 'pytest -qq', 'counts')
+        run = w.Run(self.root, self.feature)
+        run.start('acme/app#10')
+        state = run.load()
+        warnings = []
+        ran = w.ready_checks(self.root, self.feature, self.policy, state, rules={
+            'tasks': True, 'task_links': False, 'documentation': False}, warnings=warnings)
+        self.assertIn('tasks', ran)
+        adopted = [item for item in warnings if item.startswith('DELEGATION_TASK_ADOPTED: T001')]
+        accepted = [item for item in warnings if item.startswith('DELEGATION_TASK_ACCEPTED: T002')]
+        self.assertEqual(len(adopted), 1)
+        self.assertIn('pytest -qq', adopted[0])
+        self.assertIn('counts', adopted[0])
+        self.assertEqual(len(accepted), 1)
+        self.assertIn('pytest -q', accepted[0])
+
+    def test_adopt_runs_from_the_repo_root_not_the_feature_directory(self):
+        """Round 9, finding 2: adopt's acceptance command runs with cwd at
+        the repo root -- a repo-root-relative command can now find its own
+        files -- rather than pinned to the feature directory as before; the
+        feature directory remains only the *default* owned root for
+        --expect files, unchanged in effect."""
+        self.tasks('- [x] T001 [Collect] Run smoke suite\n')
+        self.enable()
+        (self.root / 'repo-root-marker.txt').write_text('present', encoding='utf-8')
+        (self.root / 'check_repo_root.py').write_text(
+            "import json, pathlib\n"
+            "ok = pathlib.Path('repo-root-marker.txt').is_file()\n"
+            "print(json.dumps({'total': 1, 'passed': 1 if ok else 0, 'failed': 0 if ok else 1}))\n",
+            encoding='utf-8')
+        command = '"' + sys.executable + '" check_repo_root.py'
+        result = dispatch.adopt(self.root, self.feature, 'T001', command, 'counts')
+        self.assertTrue(result['adopted'])
+        self.assertEqual(result['status'], 'successful')
+
+    def test_ready_task_gate_passes_an_adopted_task_after_annotate_relocates_its_inline_marker(self):
+        """Round 9, finding 3: an inline "<!-- sanduq-delegation ... -->"
+        marker on the same line as a checked task is later moved onto its
+        own line by annotate_tasks -- a repair it runs on every claim or
+        complete while delegation is enabled, even for an already checked
+        task. task_line_content_sha256 must strip that marker before
+        hashing, so this relocation -- pure formatting, no substantive
+        change -- does not itself fail an already-adopted task at Ready."""
+        path = self.tasks('- [x] T001 [Collect] Run smoke suite')
+        original = path.read_bytes()
+        marker = (b'  <!-- sanduq-delegation {"task_id": "T001", "task_type": "qa_collect", '
+                  b'"preferred_harness": "codex", "preferred_model": "haiku", "rule": "default"} -->\n')
+        path.write_bytes(original + marker)
+        self.enable()
+        with patch.object(dispatch, 'run_capped',
+                          return_value=self.fake_run_capped(0, '{"total": 3, "passed": 3, "failed": 0}')):
+            dispatch.adopt(self.root, self.feature, 'T001', 'pytest -q', 'counts')
+        delegation.annotate_tasks(self.root, self.feature, self.policy['delegation'], 'codex')
+        lines = path.read_text(encoding='utf-8').splitlines()
+        self.assertEqual(lines[0], '- [x] T001 [Collect] Run smoke suite')
+        self.assertTrue(lines[1].startswith('  <!-- sanduq-delegation '))
+        run = w.Run(self.root, self.feature)
+        run.start('acme/app#10')
+        state = run.load()
+        ran = w.ready_checks(self.root, self.feature, self.policy, state, rules={
+            'tasks': True, 'task_links': False, 'documentation': False})
+        self.assertIn('tasks', ran)
 
     def test_trust_reset_refuses_the_probe_hand_edit_with_marker_deleted(self):
         """Finding 1, round 4, the exact probe: hand-edit the ledger, delete
@@ -935,7 +1268,7 @@ class DelegationTests(unittest.TestCase):
         self.tasks()
         self.enable()
         ids = iter(('codex-1', 'codex-2'))
-        def launch(*args):
+        def launch(*args, **kwargs):
             return {'run_id': next(ids), 'state': 'running'}
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
              patch.object(dispatch, 'launch', side_effect=launch):
@@ -965,7 +1298,7 @@ class DelegationTests(unittest.TestCase):
         self.enable()
         ids = iter(('codex-1', 'codex-2'))
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
-             patch.object(dispatch, 'launch', side_effect=lambda *args: {'run_id': next(ids), 'state': 'running'}):
+             patch.object(dispatch, 'launch', side_effect=lambda *args, **kwargs: {'run_id': next(ids), 'state': 'running'}):
             dispatch.start(self.root, self.feature, 'T001')
         payload = {'run_id': 'codex-1', 'status': 'failed', 'status_reason': 'task failed',
                    'status_provenance': {'primary': 'harness_telemetry'},
@@ -976,7 +1309,7 @@ class DelegationTests(unittest.TestCase):
              patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
              patch.object(dispatch.shutil, 'which', return_value='node'), \
              patch.object(dispatch.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, json.dumps(payload), '')), \
-             patch.object(dispatch, 'launch', side_effect=lambda *args: {'run_id': next(ids), 'state': 'running'}):
+             patch.object(dispatch, 'launch', side_effect=lambda *args, **kwargs: {'run_id': next(ids), 'state': 'running'}):
             result = dispatch.collect(self.root, self.feature, 'codex-1')
         self.assertEqual(result['replacement']['route']['requested_model'], 'gpt-6-astra')
         self.assertEqual(dispatch.load_ledger(self.root, self.feature)['attempts'][1]['retry_count'], 1)
@@ -1704,7 +2037,7 @@ class DelegationTests(unittest.TestCase):
                                               status_reason='' if rejected else 'task failed',
                                               artifacts={'stderr': str(stderr),
                                                          'dir': str(self.root / '.delegate/runs' / run_id)})
-                result = self.collect_with(payload, lambda *args: {'run_id': replacement_id,
+                result = self.collect_with(payload, lambda *args, **kwargs: {'run_id': replacement_id,
                                                                     'state': 'running'}, run_id=run_id)
                 self.assertEqual(result['replacement']['route']['requested_model'], model)
                 attempt = dispatch.find_run(dispatch.load_ledger(self.root, self.feature), run_id)
@@ -1819,7 +2152,7 @@ class DelegationTests(unittest.TestCase):
             with self.subTest(label):
                 payload = self.failed_payload(run_id, dirty_paths_changed=[ledger],
                                               repo_root=str(self.root), **fields)
-                result = self.collect_with(payload, lambda *args: {'run_id': replacement_id,
+                result = self.collect_with(payload, lambda *args, **kwargs: {'run_id': replacement_id,
                                                                     'state': 'running'}, run_id=run_id)
                 self.assertEqual(result['replacement']['route']['requested_model'], model)
                 attempt = dispatch.find_run(dispatch.load_ledger(self.root, self.feature), run_id)
@@ -1895,7 +2228,7 @@ class DelegationTests(unittest.TestCase):
         """An upgrade that starts after a reservation sees it and refuses; the start still lands."""
         self.tasks()
         self.enable()
-        def launch(*args):
+        def launch(*args, **kwargs):
             self.hold_maintenance_lock()
             with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_ATTEMPTS_ACTIVE'):
                 dispatch.maintenance_preflight(self.root)
@@ -2074,7 +2407,7 @@ class DelegationTests(unittest.TestCase):
                               capture_output=True, text=True)
         self.assertEqual(made.returncode, 0, made.stderr or made.stdout)
         self.addCleanup(lambda: delegation.is_link(link) and os.rmdir(link))
-        with patch.object(delegation, 'hasattr', lambda *args: False, create=True):
+        with patch.object(delegation, 'hasattr', lambda *args, **kwargs: False, create=True):
             self.assertTrue(delegation.is_junction(link))
             self.assertTrue(delegation.is_link(link))
             self.assertFalse(delegation.is_junction(target))
@@ -2085,7 +2418,7 @@ class DelegationTests(unittest.TestCase):
         self.enable()
         ids = iter(('codex-1', 'codex-2'))
         lock = threading.Lock()
-        def launch(*args):
+        def launch(*args, **kwargs):
             time.sleep(0.3)
             with lock:
                 return {'run_id': next(ids), 'state': 'running'}
@@ -2115,7 +2448,7 @@ class DelegationTests(unittest.TestCase):
                 dispatch.start(self.root, self.feature, 'T001')
             except delegation.DelegationError as error:
                 errors.append(str(error))
-        def launch(*args):
+        def launch(*args, **kwargs):
             time.sleep(0.3)
             return {'run_id': 'codex-1', 'state': 'running'}
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
@@ -2185,7 +2518,7 @@ class DelegationTests(unittest.TestCase):
         self.tasks()
         self.enable()
         self.start_one()
-        def launch(*args):
+        def launch(*args, **kwargs):
             time.sleep(0.3)
             return {'run_id': 'codex-2', 'state': 'running'}
         results, errors = [], []
@@ -2237,7 +2570,7 @@ class DelegationTests(unittest.TestCase):
         payload = self.failed_payload(status_reason='',
                                       artifacts={'stderr': str(stderr),
                                                  'dir': str(self.root / '.delegate/runs/codex-1')})
-        result = self.collect_with(payload, lambda *args: {'run_id': 'codex-2', 'state': 'running'})
+        result = self.collect_with(payload, lambda *args, **kwargs: {'run_id': 'codex-2', 'state': 'running'})
         self.assertIsNone(result['replacement']['route']['requested_model'])
         ledger = dispatch.load_ledger(self.root, self.feature)
         self.assertEqual(ledger['attempts'][1]['retry_count'], 0)
@@ -2331,7 +2664,7 @@ class DelegationTests(unittest.TestCase):
         self.enable()
         outcomes = iter((dispatch.StartFailed('DELEGATE_START_FAILED: codex not found'),
                          {'run_id': 'codex-1', 'state': 'running'}))
-        def launch(*args):
+        def launch(*args, **kwargs):
             outcome = next(outcomes)
             if isinstance(outcome, Exception):
                 raise outcome
@@ -2359,7 +2692,7 @@ class DelegationTests(unittest.TestCase):
     def test_failed_start_with_driver_meta_stays_recoverable(self):
         self.tasks()
         self.enable()
-        def launch(root, driver, candidate, cwd, task, timeout, intent_id):
+        def launch(root, driver, candidate, cwd, task, timeout, intent_id, **kwargs):
             w.write(self.root / '.delegate/runs/codex-1/meta.json',
                     {'run_id': 'codex-1', 'constraint': ['Sanduq delegation intent: ' + intent_id],
                      'harness': 'codex', 'model': candidate['requested_model'], 'permission': 'bypass'})
@@ -2721,7 +3054,7 @@ class DelegationTests(unittest.TestCase):
         self.tasks('- [ ] T001 Implement parser\n- [ ] T002 [Review] Check parser\n')
         self.enable()
         launched = []
-        def launch(root, driver, candidate, *args):
+        def launch(root, driver, candidate, *args, **kwargs):
             launched.append(candidate)
             return {'run_id': 'codex-' + str(len(launched)), 'state': 'running'}
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
@@ -2842,7 +3175,7 @@ class DelegationTests(unittest.TestCase):
         self.enable()
         dead = self.dead_pid()
         calls = []
-        def launch(root, driver, candidate, cwd, task, timeout, intent_id):
+        def launch(root, driver, candidate, cwd, task, timeout, intent_id, **kwargs):
             calls.append(candidate)
             if len(calls) == 1:
                 self.driver_start_failure(intent_id, candidate, 'codex-dead', dead)
@@ -2889,7 +3222,7 @@ class DelegationTests(unittest.TestCase):
             with self.subTest(case=name):
                 self.tasks(''.join('- [ ] T00' + str(n) + ' Implement part ' + str(n) + '\n'
                                    for n in range(1, len(cases) + 1)))
-                def launch(root, driver, candidate, cwd, task, timeout, intent_id):
+                def launch(root, driver, candidate, cwd, task, timeout, intent_id, **kwargs):
                     directory = self.driver_start_failure(intent_id, candidate, 'codex-' + str(number),
                                                           case['supervisor'], case['journal'])
                     if case.get('result') is False:

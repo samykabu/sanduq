@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import copy
+import hashlib
 import json
 import os
 import re
@@ -73,6 +74,39 @@ class DelegationError(ValueError):
 def require(condition, message):
     if not condition:
         raise DelegationError(message)
+
+
+def task_line_content_sha256(line):
+    """sha256 of a task line's content, minus its checkbox state and with
+    whitespace normalised (round 8, finding 1): the binding an adopted
+    attempt records at ``adopt`` time and the Ready gate checks at
+    completion time. Re-checking, unchecking or reformatting the line does
+    not itself change this digest, but editing its substantive text --
+    including swapping in a different task under the same id -- does, so a
+    stale adoption is caught rather than silently carried over to new work.
+    """
+    match = TASK_LINE.match(line)
+    require(match is not None, 'DELEGATION_TASK_LINE_INVALID')
+    content = re.sub(r'^\s*-\s*\[[ xX]\]\s*', '', match.group(1))
+    # annotate_tasks relocates an inline "<!-- sanduq-delegation ... -->"
+    # marker onto its own line on the very next run, even for an already
+    # checked task (round 9, finding 3): stripping it here means that
+    # relocation -- pure formatting, no substantive change to the task --
+    # does not itself invalidate an adoption made while the marker was
+    # still inline.
+    content = INLINE_MARKER.sub('', content)
+    return hashlib.sha256(re.sub(r'\s+', ' ', content).strip().encode('utf-8')).hexdigest()
+
+
+def task_lines(text):
+    """Map of task id -> its exact current line (stripped), read once for
+    checking every adopted attempt's binding at Ready (round 8, finding 1)."""
+    lines = {}
+    for line in text.splitlines():
+        match = TASK_LINE.match(line)
+        if match:
+            lines[match.group(3)] = match.group(1).strip()
+    return lines
 
 
 def feature_identity(root, feature):

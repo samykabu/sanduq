@@ -108,6 +108,87 @@
   asserts every rule above is present in the installed reference files,
   including an exact-text check of the B12 section, following
   `test_skill_split.py`'s style. No version bump; no script behavior changed.
+- Delegation guard, round 11 corrections (B12; consensus, two LOW).
+  `require_not_worker_context` now checks `SANDUQ_DELEGATED_RUN` first, so
+  it always wins and gives `DELEGATION_WORKER_CONTEXT` even when
+  `SANDUQ_DELEGATED_ROLE`/`SANDUQ_DELEGATED_FEATURE` also happen to be set
+  (that combination should not occur, but was previously read as the
+  orchestrator role regardless). `recover` and `abandon` now also call
+  `require_not_worker_context(feature, <intent identity>)`, matching
+  `start`/`collect`/`accept`/`reassign`/`adopt`: a plain worker is refused
+  outright, and the delegated Execute orchestrator is allowed only for a
+  `T###` intent of its own feature. The Execute stage brief's allowed-
+  command list now includes `recover` and `abandon`.
+
+- Delegation guard, round 10 corrections (B12; blocking fix, one HIGH and
+  two LOW). Round 9's `SANDUQ_DELEGATED_RUN` guard wrongly barred the
+  delegated Execute orchestrator from dispatching and resolving its own
+  task workers, even though its own brief and `references/execution*.md`
+  tell it to. `driver_env` now sets a different, role-aware environment for
+  the `stage:execute` launch specifically:
+  `SANDUQ_DELEGATED_ROLE=orchestrator` plus `SANDUQ_DELEGATED_FEATURE`,
+  never `SANDUQ_DELEGATED_RUN`. `require_not_worker_context` (now also
+  called by `start` and `collect`, not only `adopt`/`accept`/`reassign`/
+  `trust-reset`) is role-aware: under the orchestrator role it allows
+  `start`, `collect`, `accept`, `reassign` and `adopt` for a `T###` task of
+  that same feature only, refusing `trust-reset`, any `stage:*` identity
+  and any other feature with `DELEGATION_ORCHESTRATOR_SCOPE`. A task worker
+  the orchestrator itself launches gets an ordinary worker environment from
+  its own `launch()` call, with `SANDUQ_DELEGATED_ROLE`/`FEATURE` explicitly
+  stripped so it never inherits the orchestrator's scope. The Execute stage
+  brief now states this narrower rule in place of the blanket
+  `NO_DISPATCHER_COMMANDS`; task briefs are unchanged. `launch()` also now
+  passes `--keep-env` for all three `SANDUQ_DELEGATED_*` names, so a future
+  `--clean-env` launch does not silently drop whichever was actually set
+  (the Node-level fake-harness/`FAKE_REPORT_ENV` isolation test for this
+  lives in `skills/agent-tools/skills/delegate-task/test/run.mjs`, out of
+  this extension's scope; covered here instead by asserting the constructed
+  argv). The README now says plainly that a reviewer must read the
+  `DELEGATION_TASK_ADOPTED`/`DELEGATION_TASK_ACCEPTED` warning lines,
+  because an orchestrator-context `adopt` or `accept` trusts the
+  orchestrator's own choice of command with nothing independent to
+  cross-check it against.
+
+- Delegation guard, round 9 corrections (B12; final Opus verification, one
+  MEDIUM and two LOW). `driver_env` now sets `SANDUQ_DELEGATED_RUN` (this
+  dispatch's own intent id) for every driver subprocess and, through it,
+  every worker it spawns; `adopt`, `accept`, `reassign` and `trust-reset`
+  all refuse with `DELEGATION_WORKER_CONTEXT` when that variable is set --
+  defence in depth against a worker self-certifying its own unattempted or
+  unverified work with a fabricated command, not a security boundary (a
+  worker could unset it; the worker brief's own prohibition remains
+  primary). `ready_checks` now appends a Ready-gate warning for every task
+  the orchestrator itself resolved rather than a worker's own attempt --
+  `DELEGATION_TASK_ADOPTED: <task> via "<command>" (<expect>, exit <code>)`
+  for an adoption, `DELEGATION_TASK_ACCEPTED: ...` for an `accept` -- which
+  `ci_gate.py`'s existing warning forwarding already surfaces to stderr and
+  `$GITHUB_STEP_SUMMARY`. `adopt`'s acceptance command now runs from the
+  repo root instead of being pinned to the feature directory, which
+  remains only the *default* owned root for `--expect files`. Fixed
+  `task_line_content_sha256` to strip an inline
+  `<!-- sanduq-delegation ... -->` marker before hashing: `annotate_tasks`
+  relocates such a marker onto its own line on its very next run, even for
+  an already checked task, which had been failing an otherwise-valid
+  adoption's binding at Ready.
+
+- Delegation guard, round 8 corrections (B12). `delegate_dispatch.py
+  adopt` now requires `--id <task>` to exist in `tasks.md` and be checked
+  before running anything (`DELEGATION_ADOPT_TASK_UNKNOWN` /
+  `DELEGATION_ADOPT_TASK_NOT_CHECKED`), and records a sha256 binding of the
+  task line's content (checkbox state removed, whitespace normalised;
+  `delegation.task_line_content_sha256`) on the new attempt. `ready_checks`
+  re-hashes the live line at completion and refuses with
+  `DELEGATION_ADOPT_TASK_CHANGED` on a mismatch, closing the gap where
+  adopting an absent task id and later adding a different checked task
+  under that same id let the earlier adoption ride to Ready. `reassign` no
+  longer crashes with a bare `KeyError` on `retry_count` for an adopted
+  attempt (it has no dispatcher route, task file or retry count to escalate
+  from); it now refuses cleanly with `DELEGATION_REASSIGN_ADOPTED_UNSUPPORTED`,
+  pointing at a corrected `adopt` or a normal `start`. `adopt` itself now
+  accepts a task whose only attempts are unverified adoptions, so re-adoption
+  with a corrected check is the supported recovery; any other existing
+  attempt still refuses with `DELEGATION_ADOPT_HAS_ATTEMPT`.
+
 - Delegation guard, round 7 corrections (B12). Round 6's two exemptions for
   a checked task with no delegation attempt were both reviewed as bypasses
   and removed outright: the stage-wide `delegation_enabled_for_execute`

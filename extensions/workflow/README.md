@@ -1009,26 +1009,110 @@ that used to read it.
 The only way a checked task without its own dispatcher attempt now earns
 Ready is `delegate_dispatch.py adopt --feature <f> --id <task> --command
 "<acceptance check>" --expect counts|files [--owned <path>]` — evidence,
-not an assertion. It is for a task genuinely done before delegation existed
-for this feature (or otherwise never dispatched) and refuses outright with
-`DELEGATION_ADOPT_HAS_ATTEMPT` the moment *any* attempt already exists for
-that task, whatever its status: a task once started, accepted, or left
-unverified already has its own resolution path (`accept` or `reassign`), and
-`adopt` must never open a second, easier one next to it. Otherwise it runs
-`--command` with exactly `accept`'s own machinery — no shell
-(`build_command_argv`), the BatBadBut shim refusal, a bounded timeout, a
-hard output cap with the process tree killed on timeout (`run_capped`), and
-the same `counts`/`files` schema, owned-path containment and per-file
+not an assertion. Before running anything it requires `<task>` to actually
+exist in `tasks.md` and be currently checked (`DELEGATION_ADOPT_TASK_UNKNOWN`
+or `DELEGATION_ADOPT_TASK_NOT_CHECKED` otherwise) — round 8 closed the gap
+where adopting an absent id, then later adding a different checked task
+under that same id, let the earlier adoption ride to Ready for work it
+never checked at all — and it records on the new attempt a binding to that
+task's current content: a sha256 of the task line with its checkbox state
+removed and whitespace normalised (`delegation.task_line_content_sha256`).
+The Ready gate re-hashes the live line at completion time and refuses with
+`DELEGATION_ADOPT_TASK_CHANGED` on a mismatch, so editing the task (or
+swapping in different work under the same id) after adoption cannot ride
+the earlier check through.
+
+It refuses outright with `DELEGATION_ADOPT_HAS_ATTEMPT` unless *every*
+existing attempt for the task is itself an unverified adoption: a fresh task
+has none at all, and a task whose only history is a failed `adopt` may be
+re-adopted with a corrected check — the supported recovery, since `reassign`
+cannot act on an adopted attempt (below). Any other existing attempt —
+started, accepted, or a successful adoption already on record — already has
+its own resolution path (`accept` for an unverified dispatched result,
+`reassign` for a stuck one, and a fresh `adopt` call is pointless once one
+has already succeeded), and `adopt` must never open a second, easier route
+around it.
+
+Otherwise it runs `--command` with exactly `accept`'s own machinery — no
+shell (`build_command_argv`), the BatBadBut shim refusal, a bounded timeout,
+a hard output cap with the process tree killed on timeout (`run_capped`),
+and the same `counts`/`files` schema, owned-path containment and per-file
 sha256 evidence — and only a passing check records a new attempt with
 `status: 'successful'` and `adopted: true`; a failing command, a timeout, or
 an exit-zero run with no parsable or in-bounds evidence records
 `'unverified'` instead, exactly like `accept`. Either way the attempt lands
 in `delegations.json` like any other and `latest_attempt` reads it like any
-other: the Ready gate never special-cases an adopted attempt, because it
-does not need to. Like `trust-reset`, `adopt` is orchestrator-only — every
-worker brief forbids `delegate_dispatch.py` entirely, `adopt` included — a
-worker must never be the one judging whether its own unattempted work now
-counts as verified.
+other: the Ready gate never special-cases an adopted attempt beyond the
+content binding above. The command runs from the repo root (round 9,
+finding 2), not pinned to the feature directory as an earlier release had
+it — an aggregate, repo-root-relative check can now run at all — while the
+feature directory remains the *default* owned root `--expect files`
+validates against when `--owned` is not given, unchanged in effect. Like
+`trust-reset`, `adopt` is orchestrator-only — every *task* worker brief
+forbids `delegate_dispatch.py` entirely, `adopt` included, and a worker must
+never be the one judging whether its own unattempted work now counts as
+verified. The delegated Execute stage's own brief is the one exception (see
+below): it names `adopt` among the commands it may run for its own
+feature's tasks, because for it that self-judgement *is* the job.
+
+**Defence in depth: a worker cannot call back into the dispatcher.**
+`driver_env` sets one of two, mutually exclusive environment shapes for
+every driver subprocess it launches (round 9, finding 1a; refined role-aware
+in round 10, finding 1). A plain worker -- any task, and any stage other
+than `execute` -- inherits `SANDUQ_DELEGATED_RUN` (this dispatch's own
+intent id); `adopt`, `accept`, `reassign`, `trust-reset`, `start` and
+`collect` all refuse it outright with `DELEGATION_WORKER_CONTEXT` (a worker
+running `delegate_dispatch.py adopt` on its own checked-but-unattempted
+task, or `accept` on its own unverified result, would otherwise be able to
+self-certify its own work with a fabricated command).
+
+**The delegated Execute stage is the one exception.** Its own brief tells
+it to dispatch and resolve bounded task workers with exactly those
+commands (`references/execution*.md`), so it needs a different scope, not
+a blanket refusal: launching `stage:execute` sets
+`SANDUQ_DELEGATED_ROLE=orchestrator` plus `SANDUQ_DELEGATED_FEATURE`
+instead, never `SANDUQ_DELEGATED_RUN`. Under that role,
+`require_not_worker_context` allows `start`, `collect`, `accept`,
+`reassign` and `adopt` only for a `T###` identity of that same feature;
+`trust-reset`, any `stage:*` identity, and any other feature all still
+refuse, now with `DELEGATION_ORCHESTRATOR_SCOPE`. The task workers *it*
+launches get an ordinary worker environment from their own `launch()` call
+-- `SANDUQ_DELEGATED_RUN` only, with `SANDUQ_DELEGATED_ROLE` and
+`SANDUQ_DELEGATED_FEATURE` explicitly stripped from the child environment
+so a task worker never inherits its orchestrator's own scope. Either
+shape is defence in depth, not a security boundary: a worker or
+orchestrator could unset its variables before invoking the dispatcher, so
+each brief's own instruction (the Execute brief states the narrower rule in
+place of the blanket one; every other brief keeps the blanket one) remains
+the primary control. All three `SANDUQ_DELEGATED_*` names are passed to the
+driver as `--keep-env` on every launch, so a future `--clean-env` launch
+does not silently drop whichever of them was actually set.
+
+**Visibility: every orchestrator-run check is a Ready-gate warning.**
+Whenever the Ready gate accepts a task because the orchestrator itself ran
+and judged a check — `adopt` for a task with no dispatcher attempt at all,
+`accept` for an unverified light-tier result — it appends a warning a
+reviewer will actually see, not only a passing check silently indistinguishable
+from a worker's own verified attempt (round 9, finding 1b): `DELEGATION_TASK_ADOPTED:
+<task> via "<command>" (<expect>, exit <code>)` or `DELEGATION_TASK_ACCEPTED:
+<task> via "<command>" (<expect>, exit <code>)`. `ci_gate.py` already prints
+every warning here to stderr and appends it to `$GITHUB_STEP_SUMMARY` when
+the runner sets that variable, exactly as it does for
+`DELEGATION_LEDGER_TRUST_UNVERIFIED_LOCAL`, so this needed no separate gate
+change. **A reviewer must actually read these two lines when they appear**
+(round 10, finding 3): unlike a worker's own delegated attempt, an
+orchestrator-context `adopt` or `accept` trusts the orchestrator's own
+choice of acceptance command outright, with no independent dispatch to
+cross-check it against -- the warning is the only place that trust is
+visible, and skipping it defeats the whole point of surfacing it.
+
+**`reassign` and an adopted attempt.** An adopted attempt has no dispatcher
+route, task file or retry count to escalate from — it was never dispatched
+in the first place — so `reassign` refuses it outright with
+`DELEGATION_REASSIGN_ADOPTED_UNSUPPORTED` (round 8, finding 2; it used to
+crash with a bare `KeyError` on `retry_count` instead) and points at the two
+real recoveries: re-run `adopt` with a corrected acceptance check, or `start`
+the task normally to create a real dispatched attempt `reassign` can act on.
 
 A project that enables delegation mid-feature adopts each already-checked
 task with its own acceptance check, once, rather than relying on any

@@ -383,6 +383,22 @@ NO_DISPATCHER_COMMANDS = (
 )
 
 
+# The delegated Execute stage is the one exception (round 10, finding 1):
+# its own job is to dispatch and resolve bounded task workers with exactly
+# the commands every other brief forbids outright. Its environment
+# (SANDUQ_DELEGATED_ROLE=orchestrator plus SANDUQ_DELEGATED_FEATURE, never
+# SANDUQ_DELEGATED_RUN; set by driver_env for this launch alone) and
+# require_not_worker_context's role-aware check both grant that narrower
+# scope, so its brief states the narrower rule instead of the blanket one.
+EXECUTE_ORCHESTRATOR_DISPATCHER_COMMANDS = (
+    'As the Execute orchestrator you may run delegate_dispatch.py start, collect, recover, abandon, '
+    'accept, reassign or adopt for this feature\'s own T### tasks only -- that is how you dispatch and '
+    'resolve bounded workers. Never trust-reset, and never a stage:* identity or another feature\'s '
+    'tasks; the dispatcher enforces this scope itself (DELEGATION_ORCHESTRATOR_SCOPE) and refuses '
+    'anything outside it.\n'
+)
+
+
 def stage_brief(root, feature, stage, token, work_type=None):
     state = workflow.read(root / feature / 'workflow/checkpoint.json', {})
     active = state.get('active') or {}
@@ -412,7 +428,8 @@ def stage_brief(root, feature, stage, token, work_type=None):
         'report the pending decision to the dispatcher.\n'
         'Return the concrete input paths, evidence paths, checks executed and any blocker. '
         'The dispatcher will inspect them and complete the receipt; your own success claim is '
-        'not a passed Sanduq stage. ' + ownership + NO_DISPATCHER_COMMANDS
+        'not a passed Sanduq stage. ' + ownership +
+        (EXECUTE_ORCHESTRATOR_DISPATCHER_COMMANDS if stage == 'execute' else NO_DISPATCHER_COMMANDS)
     )
     return text + QA_COLLECT_ADDENDUM if work_type == 'qa_collect' else text
 
@@ -439,10 +456,82 @@ def brief_file(root, text):
     return path
 
 
-def driver_env(root):
+def driver_env(root, run_context=None, role=None, feature=None):
+    """Environment for the driver subprocess and, through it, every worker it
+    spawns underneath.
+
+    Two, mutually exclusive shapes (round 10, finding 1 refines round 9's
+    single ``SANDUQ_DELEGATED_RUN``): a plain worker -- any task, and any
+    stage other than ``execute`` -- gets ``SANDUQ_DELEGATED_RUN`` set to
+    this dispatch's own intent id (``run_context``; the driver, outside
+    this project's scope, assigns the eventual ``run_id`` itself, only
+    after the worker is already spawned, so the intent id is the
+    identifying token available at spawn time). The delegated Execute
+    stage is different: its own brief tells it to dispatch and resolve
+    bounded task workers with the dispatcher's own commands, so it gets
+    ``SANDUQ_DELEGATED_ROLE=orchestrator`` and ``SANDUQ_DELEGATED_FEATURE``
+    instead, never ``SANDUQ_DELEGATED_RUN``. Either variant strips the
+    other's variables from the *returned* environment (never mutates
+    ``os.environ`` itself): a task worker the Execute orchestrator launches
+    inherits the orchestrator's own ambient environment via
+    ``os.environ.copy()`` below, and must not carry its role forward.
+
+    ``require_not_worker_context`` reads these to refuse a worker outright
+    (``DELEGATION_WORKER_CONTEXT``) and to scope the orchestrator to its
+    own feature's tasks (``DELEGATION_ORCHESTRATOR_SCOPE``). Defence in
+    depth only, not a security boundary: either process could unset its
+    variables before invoking the dispatcher, so each brief's own
+    instruction remains the primary control.
+    """
     env = os.environ.copy()
     env['DELEGATE_RUNS_DIR'] = str(root / '.delegate/runs')
+    if role == 'orchestrator':
+        env['SANDUQ_DELEGATED_ROLE'] = 'orchestrator'
+        env['SANDUQ_DELEGATED_FEATURE'] = feature
+        env.pop('SANDUQ_DELEGATED_RUN', None)
+    elif run_context:
+        env['SANDUQ_DELEGATED_RUN'] = run_context
+        env.pop('SANDUQ_DELEGATED_ROLE', None)
+        env.pop('SANDUQ_DELEGATED_FEATURE', None)
     return env
+
+
+def require_not_worker_context(feature=None, task_identity=None):
+    """Refuse when this process is itself running inside a delegated
+    process tree, worker or orchestrator (round 9, finding 1a; role-aware
+    since round 10, finding 1).
+
+    A plain worker (``SANDUQ_DELEGATED_RUN`` set) is refused outright and
+    unconditionally: ``DELEGATION_WORKER_CONTEXT``. This is checked first
+    and always wins (round 11, finding 1) -- ``SANDUQ_DELEGATED_RUN`` set
+    at all means a real worker process tree exists underneath this one,
+    whatever ``SANDUQ_DELEGATED_ROLE``/``SANDUQ_DELEGATED_FEATURE`` also
+    happen to read, so that combination is never treated as the
+    orchestrator. The delegated Execute orchestrator
+    (``SANDUQ_DELEGATED_ROLE=orchestrator`` plus
+    ``SANDUQ_DELEGATED_FEATURE``, with no ``SANDUQ_DELEGATED_RUN``) is
+    allowed through, but only for a ``T###`` ``task_identity`` belonging to
+    that same feature; ``trust-reset`` (which has no task to name, so
+    always passes ``task_identity=None``), any ``stage:*`` identity, and
+    any other feature all refuse with ``DELEGATION_ORCHESTRATOR_SCOPE``.
+    Called by ``start``, ``collect``, ``recover``, ``abandon``, ``accept``,
+    ``reassign``, ``adopt`` and ``trust-reset`` once ``feature`` and the
+    identity in question, if any, are known. With neither variable set --
+    an ordinary, undelegated orchestrator call -- both checks pass
+    silently.
+    """
+    delegation.require(not os.environ.get('SANDUQ_DELEGATED_RUN'),
+                       'DELEGATION_WORKER_CONTEXT: this process is running inside a delegated worker '
+                       '(SANDUQ_DELEGATED_RUN is set); only the orchestrator may run this command')
+    if os.environ.get('SANDUQ_DELEGATED_ROLE') == 'orchestrator':
+        role_feature = os.environ.get('SANDUQ_DELEGATED_FEATURE')
+        allowed = (task_identity is not None and re.fullmatch(r'T\d{3,}', task_identity) is not None and
+                  feature is not None and feature == role_feature)
+        delegation.require(allowed,
+                           'DELEGATION_ORCHESTRATOR_SCOPE: a delegated Execute orchestrator may only '
+                           'start, collect, recover, abandon, accept, reassign or adopt a T### task of '
+                           'its own feature (' + str(role_feature) + '); never trust-reset, a stage:* '
+                           'identity, or another feature')
 
 
 class StartFailed(delegation.DelegationError):
@@ -457,12 +546,25 @@ class StartFailed(delegation.DelegationError):
 SUPERVISOR_START_FAILED = 5
 
 
-def launch(root, driver, candidate, cwd, task, timeout, intent_id=None):
+def launch(root, driver, candidate, cwd, task, timeout, intent_id=None, orchestrator_feature=None):
+    """Start one worker through the driver.
+
+    ``orchestrator_feature``, given only for the ``stage:execute`` launch
+    itself (round 10, finding 1), selects the orchestrator environment
+    shape from ``driver_env`` in place of the ordinary worker one; every
+    other launch -- any task, any other stage -- is unaffected. ``--keep-
+    env`` is passed for all three ``SANDUQ_DELEGATED_*`` names regardless
+    (round 10, finding 2), so a future ``--clean-env`` launch does not
+    silently drop whichever of them this call actually set; it has no
+    effect at all without ``--clean-env``, which nothing here passes.
+    """
     node = shutil.which('node')
     if node is None:
         raise StartFailed('NODE_MISSING')
     args = [node, driver, 'start', '--harness', candidate['harness'], '--cwd', str(cwd),
-            '--timeout', str(timeout), '--task', task]
+            '--timeout', str(timeout), '--task', task,
+            '--keep-env', 'SANDUQ_DELEGATED_RUN', '--keep-env', 'SANDUQ_DELEGATED_ROLE',
+            '--keep-env', 'SANDUQ_DELEGATED_FEATURE']
     if candidate['requested_model']:
         args += ['--model', candidate['requested_model']]
     if candidate.get('read_only'):
@@ -471,8 +573,11 @@ def launch(root, driver, candidate, cwd, task, timeout, intent_id=None):
         args.append('--allow-commit')
     if intent_id:
         args += ['--constraint', 'Sanduq delegation intent: ' + intent_id]
+    env = driver_env(root, run_context=intent_id,
+                     role='orchestrator' if orchestrator_feature else None,
+                     feature=orchestrator_feature)
     try:
-        result = subprocess.run(args, cwd=root, env=driver_env(root),
+        result = subprocess.run(args, cwd=root, env=env,
                                 capture_output=True, text=True, encoding='utf-8')
     except OSError as exc:
         raise StartFailed('DELEGATE_START_FAILED: ' + str(exc)[:500]) from exc
@@ -531,7 +636,8 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
         selected['read_only'] = False
         selected['allow_commit'] = identity.endswith('/stage:execute')
         try:
-            started = launch(root, status['driver'], selected, cwd, task, timeout, intent_id)
+            started = launch(root, status['driver'], selected, cwd, task, timeout, intent_id,
+                             orchestrator_feature=feature if identity.endswith('/stage:execute') else None)
         except delegation.DelegationError as error:
             # The driver writes meta.json before it spawns a worker. An exited
             # driver with no run for this intent proves nothing started, and so
@@ -606,6 +712,7 @@ def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
           token=None, timeout=None, owned=None):
     root = root.resolve()
     feature = feature_identity(root, feature)
+    require_not_worker_context(feature, identity)
     policy = workflow.load_policy(root)
     config = policy['delegation']
     claimed_route = None
@@ -1466,6 +1573,7 @@ def collect(root, feature, run_id, auto_retry=True):
     with edit_ledger(root, feature) as ledger:
         attempt = find_run(ledger, run_id)
         delegation.require(attempt is not None, 'DELEGATION_RUN_UNKNOWN: ' + run_id)
+        require_not_worker_context(feature, attempt['identity'].removeprefix(feature + '/'))
         linked = replacement_link(ledger, attempt)
         # Already fully processed (finding 3d, round 2): a repeated collect on
         # a terminal run -- especially one accept already resolved -- must
@@ -1600,6 +1708,15 @@ def reassign(root, feature, run_id, reason, task_file=None):
     # exactly the case a standard-tier reassignment is meant to resolve.
     delegation.require(prior is not None and prior.get('status') in TERMINAL_STATUSES,
                        'DELEGATION_PRIOR_RUN_NOT_TERMINAL')
+    require_not_worker_context(feature, prior['identity'].removeprefix(feature + '/'))
+    # An adopted attempt has no dispatcher route, task file or retry count to
+    # escalate from (round 8, finding 2: reassign crashed with a bare
+    # KeyError on 'retry_count' trying); adopt is its own, supported recovery.
+    delegation.require(not prior.get('adopted'),
+                       'DELEGATION_REASSIGN_ADOPTED_UNSUPPORTED: an adopted attempt has no dispatcher '
+                       'route to escalate; re-run "delegate_dispatch.py adopt" with a corrected '
+                       'acceptance check, or "start" the task normally to create a real dispatched '
+                       'attempt reassign can act on')
     delegation.require(prior['retry_count'] < config['stronger_retry'],
                        'DELEGATION_RETRY_LIMIT_REACHED')
     delegation.require(not prior.get('replacement_run_id') and not live_children(ledger, run_id) and
@@ -1671,6 +1788,7 @@ def accept(root, feature, run_id, command, expect, timeout=None, owned=None):
     ledger = read_ledger(root, feature)
     attempt = find_run(ledger, run_id)
     delegation.require(attempt is not None, 'DELEGATION_RUN_UNKNOWN: ' + run_id)
+    require_not_worker_context(feature, attempt['identity'].removeprefix(feature + '/'))
     delegation.require(attempt.get('status') == 'unverified',
                        'DELEGATION_RUN_NOT_UNVERIFIED: only an unverified light-tier result can be accepted')
     cwd = (root / attempt['cwd']).resolve()
@@ -1736,6 +1854,7 @@ def recover_intent(root, feature, intent_id):
     with edit_ledger(root, feature) as ledger:
         intent = find_intent(ledger, intent_id)
         delegation.require(intent is not None, 'DELEGATION_INTENT_UNKNOWN')
+        require_not_worker_context(feature, intent['identity'].removeprefix(feature + '/'))
         if intent.get('run_id'):
             return {'found': True, 'run_id': intent['run_id'], 'status': intent['status']}
         delegation.require(intent['status'] == 'starting', 'DELEGATION_INTENT_NOT_STARTING')
@@ -1770,6 +1889,7 @@ def abandon_intent(root, feature, intent_id, reason):
     with edit_ledger(root, feature) as ledger:
         intent = find_intent(ledger, intent_id)
         delegation.require(intent is not None, 'DELEGATION_INTENT_UNKNOWN')
+        require_not_worker_context(feature, intent['identity'].removeprefix(feature + '/'))
         delegation.require(intent.get('status') == 'starting' and not intent.get('run_id'),
                            'DELEGATION_INTENT_NOT_STARTING')
         delegation.require(not intent_runs(root, intent_id, dismissed_runs(intent)),
@@ -1815,6 +1935,7 @@ def trust_reset(root, feature, reason):
     """
     root = root.resolve()
     feature = feature_identity(root, feature)
+    require_not_worker_context(feature, None)
     delegation.require(isinstance(reason, str) and reason.strip(),
                        'DELEGATION_TRUST_RESET_REASON_REQUIRED')
     delegation.require_no_maintenance(root)
@@ -1858,11 +1979,30 @@ def adopt(root, feature, task_id, command, expect, timeout=None, owned=None):
 
     Adoption is for work legitimately done before delegation was enabled for
     this feature -- a task that has never been started, accepted or
-    reassigned through the dispatcher. It refuses outright with
-    ``DELEGATION_ADOPT_HAS_ATTEMPT`` the moment any attempt already exists
-    for the task, whatever its status: that one already has its own
-    evidence path (``accept`` for an unverified result, ``reassign`` for a
-    stuck one), and adopt must never offer a second, easier route around it.
+    reassigned through the dispatcher. Before running anything it requires
+    ``task_id`` to name a task that actually exists in ``tasks.md`` and is
+    currently checked (round 8, finding 1: Codex adopted an absent task,
+    then a different, later task added under the same id rode the earlier
+    adoption to Ready) -- ``DELEGATION_ADOPT_TASK_UNKNOWN`` or
+    ``DELEGATION_ADOPT_TASK_NOT_CHECKED`` otherwise -- and it records on the
+    attempt a binding to that task's current content: a sha256 of the task
+    line's text with the checkbox state removed and whitespace normalised
+    (``delegation.task_line_content_sha256``). The Ready gate re-hashes the
+    live line at completion time and refuses with
+    ``DELEGATION_ADOPT_TASK_CHANGED`` on a mismatch, so editing the task
+    (including swapping in different work under the same id) after adoption
+    cannot ride the earlier check to Ready.
+
+    It refuses outright with ``DELEGATION_ADOPT_HAS_ATTEMPT`` unless every
+    existing attempt for the task is itself an unverified adoption (round 8,
+    finding 2: a fresh task has none at all; a task whose only history is a
+    failed ``adopt`` may be re-adopted with a corrected check, since that is
+    the supported recovery reassign cannot offer an adopted attempt). Any
+    other existing attempt -- started, accepted, or a successful adoption
+    already on record -- already has its own resolution path (``accept`` for
+    an unverified dispatched result, ``reassign`` for a stuck one, a fresh
+    ``adopt`` call is pointless once one has already succeeded), and adopt
+    must never offer a second, easier route around it.
 
     Runs ``command`` with exactly ``accept``'s own machinery: no shell
     (``build_command_argv``), the BatBadBut shim refusal
@@ -1875,19 +2015,42 @@ def adopt(root, feature, task_id, command, expect, timeout=None, owned=None):
     command, a timeout, or an exit-zero run with no parsable or in-bounds
     evidence records ``unverified`` instead -- the Ready gate then treats
     the result exactly like any other attempt, never as an exemption.
+
+    Runs from the repo root, never the feature directory (round 9, finding
+    2): the acceptance command is the orchestrator's own, already-trusted
+    check, and pinning its cwd to a subdirectory the task happens to live
+    under serves no purpose an attacker could exploit that running from
+    root does not already close off just as well -- while a repo-root
+    check (for example an aggregate test command) previously had no way to
+    run at all. The feature directory remains the *default* owned root for
+    ``--expect files``, unchanged in effect from before.
     """
     root = root.resolve()
     feature = feature_identity(root, feature)
     delegation.require(re.fullmatch(r'T\d{3,}', task_id) is not None, 'DELEGATION_IDENTITY_INVALID')
+    require_not_worker_context(feature, task_id)
     delegation.require(expect in ACCEPT_EXPECTS, 'DELEGATION_ACCEPT_EXPECT_INVALID')
     delegation.require(isinstance(command, str) and command.strip(),
                        'DELEGATION_ACCEPT_COMMAND_REQUIRED')
     timeout = timeout if timeout is not None else ACCEPT_TIMEOUT_DEFAULT
     delegation.require(type(timeout) is int and 0 < timeout <= 28800, 'DELEGATION_TIMEOUT_INVALID')
     delegation.require_no_maintenance(root)
+    tasks_path = root / feature / 'tasks.md'
+    delegation.require(tasks_path.is_file(), 'DELEGATION_TASKS_MISSING')
+    matches = [line.strip() for line in tasks_path.read_text(encoding='utf-8-sig').splitlines()
+              if (found := delegation.TASK_LINE.match(line)) and found[3] == task_id]
+    delegation.require(len(matches) == 1,
+                       'DELEGATION_ADOPT_TASK_UNKNOWN: ' + task_id + ' is not a task in ' +
+                       relative(root, tasks_path))
+    task_line = matches[0]
+    delegation.require(task_line[:5].lower() == '- [x]',
+                       'DELEGATION_ADOPT_TASK_NOT_CHECKED: ' + task_id + ' must be checked off in '
+                       'tasks.md before it can be adopted')
+    task_line_sha256 = delegation.task_line_content_sha256(task_line)
     full_identity = feature + '/' + task_id
     ledger = read_ledger(root, feature)
-    delegation.require(not any(a.get('identity') == full_identity for a in ledger.get('attempts', [])),
+    existing = [a for a in ledger.get('attempts', []) if a.get('identity') == full_identity]
+    delegation.require(all(a.get('adopted') and a.get('status') == 'unverified' for a in existing),
                        'DELEGATION_ADOPT_HAS_ATTEMPT: an attempt already exists for ' + task_id +
                        '; resolve it with accept or reassign instead of adopting it')
     delegation.require(not command_targets_windows_shim(command),
@@ -1896,10 +2059,9 @@ def adopt(root, feature, task_id, command, expect, timeout=None, owned=None):
                        'uses a shell, reopening the class of injection shell=False is meant to close. '
                        'Run the underlying executable directly instead (for example "node <script>.js" '
                        'rather than an npx.cmd shim)')
-    cwd = (root / feature).resolve()
-    delegation.require(cwd.is_dir(), 'DELEGATION_ADOPT_CWD_INVALID')
+    cwd = root
     args = build_command_argv(command)
-    owned_paths = list(owned) if owned else ['.']
+    owned_paths = list(owned) if owned else [feature]
     run = run_capped(args, cwd, timeout)
     text = run['output']
     evidence = None
@@ -1915,7 +2077,8 @@ def adopt(root, feature, task_id, command, expect, timeout=None, owned=None):
                 evidence = {'expect': 'files', 'source': 'adopt', 'files': valid}
     run_id = 'adopt-' + uuid.uuid4().hex
     with edit_ledger(root, feature) as ledger:
-        delegation.require(not any(a.get('identity') == full_identity for a in ledger.get('attempts', [])),
+        existing = [a for a in ledger.get('attempts', []) if a.get('identity') == full_identity]
+        delegation.require(all(a.get('adopted') and a.get('status') == 'unverified' for a in existing),
                            'DELEGATION_ADOPT_HAS_ATTEMPT: an attempt already exists for ' + task_id +
                            '; resolve it with accept or reassign instead of adopting it')
         attempt = {'identity': full_identity, 'task_type': 'adopted', 'run_id': run_id,
@@ -1924,7 +2087,7 @@ def adopt(root, feature, task_id, command, expect, timeout=None, owned=None):
                   'timeout': timeout, 'owned_paths': owned_paths, 'command': command, 'expect': expect,
                   'exit_code': run['exit_code'], 'timed_out': run.get('timed_out', False),
                   'output_truncated': run.get('truncated', False),
-                  'output': text[:ACCEPT_LEDGER_OUTPUT_CAP]}
+                  'output': text[:ACCEPT_LEDGER_OUTPUT_CAP], 'task_line_sha256': task_line_sha256}
         if evidence:
             attempt['accepted_evidence'] = evidence
             attempt['accepted_at'] = stamp()
@@ -1935,7 +2098,7 @@ def adopt(root, feature, task_id, command, expect, timeout=None, owned=None):
     return {'run_id': run_id, 'task_id': task_id, 'status': result['status'],
            'adopted': evidence is not None, 'expect': expect, 'exit_code': run['exit_code'],
            'timed_out': run.get('timed_out', False), 'output_truncated': run.get('truncated', False),
-           'evidence': evidence}
+           'evidence': evidence, 'task_line_sha256': task_line_sha256}
 
 
 def main(argv=None):
@@ -1988,8 +2151,8 @@ def main(argv=None):
     adopt_cmd.add_argument('--expect', choices=ACCEPT_EXPECTS, required=True)
     adopt_cmd.add_argument('--timeout', type=int)
     adopt_cmd.add_argument('--owned', action='append',
-                           help='A path (repeatable) to check "files" evidence against; defaults to '
-                                'the whole feature directory when omitted')
+                           help='A path (repeatable), relative to the repo root, to check "files" '
+                                'evidence against; defaults to the feature directory when omitted')
     args = parser.parse_args(argv)
     try:
         if args.action == 'start':
