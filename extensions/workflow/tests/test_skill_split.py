@@ -1,22 +1,29 @@
 """B8 (Sprint 4, Stream B): prove the SKILL.md/execution.md/preset-overlay split moved
 every rule instead of dropping any of them.
 
-Compares the pre-split originals (read from git history at BASE_COMMIT, the commit the
+Compares the pre-split originals (read from the frozen fixture copies in
+fixtures/pre-split/, taken byte-for-byte from BASE_COMMIT, the commit the
 `feat/b8-dispatcher-core` branch forked from) against the current core SKILL.md and
 `references/*.md`. Every whitespace-normalised sentence-ish unit from an original file
 must appear verbatim somewhere in the new file set, unless it is explicitly listed in
 REWORD_EXCEPTIONS with a reason (all of those are pointer text whose target moved, never
 a dropped rule).
+
+The fixtures are read from disk rather than `git show BASE_COMMIT:<path>` because CI
+checks out the repository shallow, so git history beyond the tip commit is unavailable
+there and `git show` would exit 128.
 """
 import re
-import subprocess
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 # origin/main HEAD when the feat/b8-dispatcher-core worktree was created, i.e. the last
-# commit before this package's SKILL.md/execution.md/preset-overlay split.
+# commit before this package's SKILL.md/execution.md/preset-overlay split. The fixture
+# files under fixtures/pre-split/ are frozen, byte-exact copies of ORIGINAL_PATHS as they
+# existed at this commit; see fixtures/pre-split/README.md.
 BASE_COMMIT = '5c96254'
+FIXTURE_ROOT = Path(__file__).resolve().parent / 'fixtures' / 'pre-split'
 
 ORIGINAL_PATHS = [
     'extensions/workflow/skills/workflow/SKILL.md',
@@ -229,9 +236,10 @@ def sentences(text):
 
 
 def git_show(path):
-    result = subprocess.run(['git', 'show', f'{BASE_COMMIT}:{path}'], cwd=ROOT,
-                             capture_output=True, text=True, encoding='utf-8', check=True)
-    return result.stdout
+    """Read the pre-split original from its frozen fixture copy (see FIXTURE_ROOT),
+    rather than `git show BASE_COMMIT:path`, so the test does not depend on git history
+    being available (CI checks out shallow)."""
+    return (FIXTURE_ROOT / path).read_text(encoding='utf-8')
 
 
 class SkillSplitCompletenessTests(unittest.TestCase):
