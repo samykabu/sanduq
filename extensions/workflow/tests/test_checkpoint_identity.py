@@ -355,6 +355,43 @@ class LegacyUpgradeTests(Harness):
             run.load()
         self.assertEqual(run.path.read_bytes(), raw_before)  # never silently upgraded
 
+    def test_legacy_checkpoint_without_a_reachable_commit_is_refused(self):
+        # Codex round 1, finding 1: matching the issue to `origin` is not
+        # proof of history. A recreated/unrelated clone that copied origin
+        # must not adopt a legacy checkpoint whose recorded commits it does
+        # not contain; only `relocate --allow-history-change` may.
+        original = self.make_repo(seed='original-history')
+        git(original, 'switch', '-qc', fixture_008.BRANCH)
+        fixture_008.materialise(original)
+        recorded = json.loads((original / fixture_008.FEATURE / 'workflow/checkpoint.json').read_text(encoding='utf-8'))
+        self.assertRegex(recorded['head'], r'^[0-9a-f]{40}$')
+        recreated = self.make_repo(seed='recreated-unrelated-history')  # same origin, unrelated commits
+        git(recreated, 'switch', '-qc', fixture_008.BRANCH)
+        fixture_008.materialise(recreated)
+        path = recreated / fixture_008.FEATURE / 'workflow/checkpoint.json'
+        state = json.loads(path.read_text(encoding='utf-8'))
+        state['head'] = recorded['head']  # a commit only `original` has
+        w.write(path, state)
+        self.commit_all(recreated)
+        run = w.Run(recreated, fixture_008.FEATURE)
+        raw_before = run.path.read_bytes()
+        with self.assertRaisesRegex(w.WorkflowError, r'CHECKPOINT_IDENTITY_MISMATCH.*--allow-history-change'):
+            run.load()
+        self.assertEqual(run.path.read_bytes(), raw_before)
+
+    def test_legacy_checkpoint_with_a_reachable_receipt_head_upgrades(self):
+        root = self.make_repo()
+        git(root, 'switch', '-qc', fixture_008.BRANCH)
+        fixture_008.materialise(root)
+        path = root / fixture_008.FEATURE / 'workflow/checkpoint.json'
+        state = json.loads(path.read_text(encoding='utf-8'))
+        state['head'] = '0' * 40  # unreachable
+        first = next(iter(state['receipts'].values()))
+        first['head'] = git(root, 'rev-parse', 'HEAD').stdout.strip()  # but a receipt's recorded head is reachable
+        w.write(path, state)
+        self.commit_all(root)
+        self.assertIn('repo_identity', w.Run(root, fixture_008.FEATURE).load())
+
     def test_legacy_checkpoint_windows_and_posix_repo_path_forms_both_load(self):
         for repo_path in (r'C:\Users\dev\workspace\acme-app', '/home/dev/workspace/acme-app'):
             root = self.make_repo()

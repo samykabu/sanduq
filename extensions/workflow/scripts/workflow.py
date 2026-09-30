@@ -415,6 +415,66 @@ def identity_matches(recorded, current, current_root=None):
     return False
 
 
+def legacy_history_signal(root, state):
+    """Whether a pre-1.8.0 checkpoint records a commit still reachable from
+    HEAD (Codex round 1, finding 1). A legacy checkpoint has no portable
+    identity, only the `head` every `save()` recorded (plus any receipt
+    `head`/`source_key`/`ci_evidence` shas a 1.6.0+ receipt carries), and
+    a full-hex commit id that is an ancestor of this repository's HEAD is
+    the one verifiable proof on file that this history is the one the
+    checkpoint was written in. Matching the issue to `origin` alone proves
+    nothing: origin is local Git config, so a recreated or unrelated clone
+    that copies it would otherwise adopt any checkpoint for that issue.
+    """
+    found = set()
+
+    def walk(value):
+        if isinstance(value, str):
+            if re.fullmatch(r'[0-9a-f]{40,64}', value):
+                found.add(value)
+        elif isinstance(value, dict):
+            for item in value.values():
+                walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+    walk(state)
+    return any(root_commit_still_reachable(root, sha) for sha in sorted(found))
+
+
+def verify_checkpoint_identity(root, state, relative):
+    """The single identity gate for a checkpoint, shared by `Run.load` and
+    the scope extension's `bound_claim` so both refuse the same things.
+    Raises `WorkflowError` on any refusal. Returns the `repo_identity` to
+    adopt for a legacy checkpoint (which the caller records), else None.
+    """
+    require_issue_repository_binding(root, state, relative)
+    if 'repo_identity' in state:
+        recorded = state['repo_identity']
+        require(isinstance(recorded, dict) and identity_matches(recorded, repo_identity(root), current_root=root),
+                'CHECKPOINT_IDENTITY_MISMATCH: this checkpoint belongs to a different repository. If this is '
+                'the same project relocated (a fork, a renamed remote, a migrated org), run: workflow.py '
+                'relocate --feature ' + relative + ' --reason "<why>"')
+        return None
+    # A pre-1.8.0 checkpoint recorded only the absolute `repo_path` it was
+    # started from, which is machine- and clone-specific and is never
+    # compared (that comparison was the checkpoint-identity design bug). It
+    # is accepted once this repository's own identity can be established
+    # AND the checkpoint's recorded history is verifiably this repository's
+    # (`legacy_history_signal`); otherwise only an explicit, logged
+    # `relocate --allow-history-change` may adopt it.
+    current = repo_identity(root)
+    require(current['remote'] or current['root_commit'],
+            'CHECKPOINT_IDENTITY_UNRESOLVABLE: this repository has no remote and no resolvable root '
+            'commit, so a legacy checkpoint cannot be safely accepted here')
+    require(legacy_history_signal(root, state),
+            'CHECKPOINT_IDENTITY_MISMATCH: this legacy checkpoint records no commit that is reachable from '
+            'this repository HEAD, so it cannot be verified as belonging to this history. If it is the same '
+            'project with rewritten or recreated history, run: workflow.py relocate --feature ' + relative +
+            ' --allow-history-change --reason "<why>"')
+    return current
+
+
 def require_issue_repository_binding(root, state, relative):
     """The checkpoint's bound issue must name *this* repository's own GitHub
     remote -- the same binding `start` (see below) and the scope
@@ -1599,28 +1659,13 @@ class Run:
         state = read(self.path)
         require(state and state.get('schema_version') == SCHEMA, 'WORKFLOW_START_REQUIRED')
         require(state['feature'] == self.relative, 'CHECKPOINT_IDENTITY_MISMATCH')
-        require_issue_repository_binding(self.root, state, self.relative)
-        if 'repo_identity' in state:
-            require(identity_matches(state['repo_identity'], repo_identity(self.root), current_root=self.root),
-                    'CHECKPOINT_IDENTITY_MISMATCH: this checkpoint belongs to a different repository. If this is '
-                    'the same project relocated (a fork, a renamed remote, a migrated org), run: workflow.py '
-                    'relocate --feature ' + self.relative + ' --reason "<why>"')
-        else:
-            # A pre-1.8.0 checkpoint recorded only the absolute `repo_path` it
-            # was started from, which is machine- and clone-specific and is
-            # never compared (that comparison was the checkpoint-identity
-            # design bug). There is no portable signal on file to check
-            # against, so it is accepted once this repository's own identity
-            # can be established at all, and upgraded to compare portably
-            # from here on. The upgrade is recorded on `state` in memory only
-            # -- every mutating command loads through here and then calls
-            # `save`, which persists whatever `state` it was handed -- so a
+        adopted = verify_checkpoint_identity(self.root, state, self.relative)
+        if adopted is not None:
+            # A pre-1.8.0 checkpoint is upgraded in memory only -- every
+            # mutating command loads through here and then calls `save`,
+            # which persists whatever `state` it was handed -- so a
             # read-only `load` (e.g. `next`) never writes anything itself.
-            current = repo_identity(self.root)
-            require(current['remote'] or current['root_commit'],
-                    'CHECKPOINT_IDENTITY_UNRESOLVABLE: this repository has no remote and no resolvable root '
-                    'commit, so a legacy checkpoint cannot be safely accepted here')
-            state['repo_identity'] = current
+            state['repo_identity'] = adopted
             state['repo_path'] = str(self.root)  # never compared; kept only for an older reader (see CHANGELOG)
         require(allow_branch_change or state['branch'] == git(self.root, 'branch', '--show-current'), 'CHECKPOINT_BRANCH_MISMATCH')
         return state

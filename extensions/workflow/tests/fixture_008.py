@@ -11,6 +11,7 @@ content `content()` writes, so a materialised fixture passes the gate exactly
 as the original did before its last evidence edit.
 """
 import json
+import subprocess
 from pathlib import Path
 
 FIXTURE = Path(__file__).resolve().parent / 'fixtures/checkpoint-008-anonymised.json'
@@ -63,6 +64,14 @@ def materialise(root, branch=BRANCH):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(content(relative))
     state['repo_path'] = '/Users/original-author/workspace/acme-app'
+    # The original recorded `head` is a commit that exists only in the
+    # original repository. A legacy checkpoint is adopted only when it records
+    # a commit reachable from this repository's HEAD (Codex round 1, finding
+    # 1), which is exactly what a real feature branch satisfies, so the
+    # fixture records the commit `root` is on now.
+    head = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=root, capture_output=True, text=True)
+    if head.returncode == 0 and head.stdout.strip():
+        state['head'] = head.stdout.strip()
     state['branch'] = branch
     checkpoint = Path(root) / FEATURE / 'workflow/checkpoint.json'
     checkpoint.parent.mkdir(parents=True, exist_ok=True)
