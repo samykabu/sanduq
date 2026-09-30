@@ -385,6 +385,50 @@ class CompatibilityTests(Harness):
         self.assertTrue(state['repo_path'] == str(root) and state['feature'] == 'specs/001-example')
 
 
+class GithubRepositoryFormsTests(Harness):
+    """Round 2, finding N1: `github_repository` must accept every valid
+    GitHub remote form (any scheme, an embedded token, with or without
+    `.git`), and every comparison against an issue's bound repository
+    must be case-insensitive -- not just refuse cleanly, but actually
+    accept these as the same repository."""
+
+    def test_load_accepts_an_ssh_scheme_remote(self):
+        root = self.make_repo(remote='ssh://git@github.com/acme/app.git')
+        w.Run(root, 'specs/001-example').start('acme/app#10')
+        loaded = w.Run(root, 'specs/001-example').load()
+        self.assertEqual(loaded['issue'], 'acme/app#10')
+
+    def test_load_accepts_a_token_userinfo_remote(self):
+        root = self.make_repo(remote='https://x-access-token:ghs_secret@github.com/acme/app.git')
+        w.Run(root, 'specs/001-example').start('acme/app#10')
+        loaded = w.Run(root, 'specs/001-example').load()
+        self.assertEqual(loaded['issue'], 'acme/app#10')
+
+    def test_load_accepts_a_case_different_owner_repo(self):
+        root = self.make_repo(remote='https://github.com/Acme/App.git')
+        w.Run(root, 'specs/001-example').start('acme/app#10')
+        loaded = w.Run(root, 'specs/001-example').load()
+        self.assertEqual(loaded['issue'], 'acme/app#10')
+
+    def test_relocate_does_not_treat_an_ssh_or_token_form_as_a_repository_rename(self):
+        root = self.make_repo(remote='https://github.com/acme/app.git')
+        w.Run(root, 'specs/001-example').start('acme/app#10')
+        git(root, 'remote', 'set-url', 'origin', 'ssh://git@github.com/acme/app.git')
+        run = w.Run(root, 'specs/001-example')
+        preview = run.relocate('same repo, different URL form', preview=True)
+        self.assertFalse(preview['repository_renamed'])
+        self.assertTrue(preview['can_apply'])
+
+    def test_relocate_does_not_treat_a_case_difference_as_a_repository_rename(self):
+        root = self.make_repo(remote='https://github.com/acme/app.git')
+        w.Run(root, 'specs/001-example').start('acme/app#10')
+        git(root, 'remote', 'set-url', 'origin', 'https://github.com/Acme/App.git')
+        run = w.Run(root, 'specs/001-example')
+        preview = run.relocate('same repo, different case', preview=True)
+        self.assertFalse(preview['repository_renamed'])
+        self.assertTrue(preview['can_apply'])
+
+
 class RelocateTests(Harness):
     """The explicit, logged rebind for a repository that legitimately moved."""
 

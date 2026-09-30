@@ -138,10 +138,36 @@ def git(root, *args):
 
 
 def github_repository(root):
+    """The bound GitHub repository (`owner/repo`) of this repository's own
+    `origin` remote, in whatever form it is written -- any scheme, an
+    embedded token or other userinfo, the bare `git@host:path` shorthand,
+    with or without a trailing `.git` -- because it is derived from the
+    same `normalize_remote_url` the portable identity uses (round 2,
+    finding N1: the previous ad-hoc regex accepted only two literal forms
+    and rejected, for example, `ssh://git@github.com/acme/app` and a
+    token URL like `https://x-access-token:TOKEN@github.com/acme/app`).
+
+    Case is preserved, not folded here: GitHub repository names are not
+    case sensitive, so compare the result with `same_github_repository`,
+    never `==`.
+    """
     remote = git(root, 'config', '--get', 'remote.origin.url')
-    match = re.fullmatch(r'(?:https://github\.com/|git@github\.com:)([\w.-]+/[\w.-]+?)(?:\.git)?/?', remote)
+    normalized = normalize_remote_url(remote)
+    match = re.fullmatch(r'github\.com(?::\d+)?/([^/]+/[^/]+)', normalized)
     require(match, 'GITHUB_REMOTE_REQUIRED')
     return match[1]
+
+
+def same_github_repository(a, b):
+    """Case-insensitive equality for two `owner/repo` strings, either of
+    which may be `None` (no GitHub remote resolved at all). GitHub
+    repository names are not case sensitive, but a checkpoint's `issue`
+    field and this repository's own remote may disagree only in case
+    (round 2, finding N1) -- comparing them with `==` would treat that as
+    a different repository and refuse, or (in `relocate`) treat it as a
+    rename that needs an explicit new issue.
+    """
+    return a is not None and b is not None and a.lower() == b.lower()
 
 
 def previous_branch(root):
@@ -357,7 +383,7 @@ def require_issue_repository_binding(root, state, relative):
             'issue (' + state['issue'] + ') cannot be verified against it. If this is the same project '
             'relocated (a fork, a renamed remote, a migrated org), run: workflow.py relocate --feature ' +
             relative + ' --reason "<why>"')
-    require(state['issue'].split('#')[0] == current_repo,
+    require(same_github_repository(state['issue'].split('#')[0], current_repo),
             'CHECKPOINT_IDENTITY_MISMATCH: this checkpoint is bound to ' + state['issue'].split('#')[0] +
             ', not this repository (' + current_repo + '). If this is the same project relocated (a fork, a '
             'renamed remote, a migrated org), run: workflow.py relocate --feature ' + relative + ' --reason "<why>"')
@@ -1559,7 +1585,7 @@ class Run:
             new_repo = github_repository(self.root)
         except WorkflowError:
             new_repo = None
-        repository_renamed = new_repo != old_repo
+        repository_renamed = not same_github_repository(new_repo, old_repo)
         blockers = []
         if state['active']:
             blockers.append('ACTIVE_CLAIM_MUST_BE_RESOLVED_BEFORE_RELOCATE')
@@ -1995,7 +2021,7 @@ class Run:
 
     def start(self, issue):
         require(re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[1-9]\d*', issue), 'EXPLICIT_ISSUE_REQUIRED')
-        require(github_repository(self.root) == issue.split('#')[0], 'ISSUE_REPOSITORY_MISMATCH')
+        require(same_github_repository(github_repository(self.root), issue.split('#')[0]), 'ISSUE_REPOSITORY_MISMATCH')
         source = read(self.feature / 'scope-source.json', {})
         require(not source or f"{source.get('repo')}#{source.get('issue')}" == issue, 'FEATURE_BINDING_MISMATCH')
         with locked(self.lock):
