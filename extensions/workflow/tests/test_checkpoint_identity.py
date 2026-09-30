@@ -726,6 +726,38 @@ class RelocateTests(Harness):
         self.assertEqual(second['old_identity']['remote'], first['new_identity']['remote'])
         self.assertEqual(second['new_identity']['remote'], 'github.com/acme-renamed-twice/app')
 
+    def test_relocate_needs_an_acknowledgement_when_the_root_history_changed(self):
+        """Codex round 1, finding 2: origin and issue still match but the
+        recorded root commit is not this repository's (recreated history).
+        `relocate` used to rebind that silently; it now needs
+        `--allow-history-change`, and the record says so."""
+        path = self.run.path
+        state = json.loads(path.read_text(encoding='utf-8'))
+        self.assertIs(state['repo_identity']['shallow'], False)
+        state['repo_identity']['root_commit'] = 'b' * 40  # a history this repository never had
+        w.write(path, state)
+        run = w.Run(self.root, self.feature)
+        with self.assertRaisesRegex(w.WorkflowError, 'CHECKPOINT_IDENTITY_MISMATCH'):
+            run.load()
+
+        preview = run.relocate('history recreated', preview=True)
+        self.assertFalse(preview['can_apply'])
+        self.assertTrue(preview['history_changed'])
+        self.assertTrue(any('--allow-history-change' in b for b in preview['blockers']))
+        raw_before = path.read_bytes()
+        with self.assertRaisesRegex(w.WorkflowError, 'HISTORY_CHANGED.*--allow-history-change'):
+            run.relocate('history recreated')
+        self.assertEqual(path.read_bytes(), raw_before)
+
+        result = run.relocate('history recreated', allow_history_change=True)
+        self.assertTrue(result['relocation']['history_changed'])
+        self.assertEqual(run.load()['relocations'][-1]['history_changed'], True)
+
+    def test_relocate_records_history_unchanged_for_a_plain_rename(self):
+        run = self.rename_remote()
+        result = run.relocate('renamed', allow_repository_rename=True, keep_issue_number=True)
+        self.assertIs(result['relocation']['history_changed'], False)
+
     def test_relocate_requires_a_reason(self):
         run = self.rename_remote()
         with self.assertRaisesRegex(w.WorkflowError, 'RELOCATE_REASON_REQUIRED'):

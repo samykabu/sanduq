@@ -475,6 +475,25 @@ def verify_checkpoint_identity(root, state, relative):
     return current
 
 
+def root_history_changed(root, state, current):
+    """Whether the checkpoint's recorded history is no longer this
+    repository's (Codex round 1, finding 2). `identity_matches` ignores the
+    root commit unless both sides are confidently non-shallow, and accepts
+    one that is still reachable; when the recorded root is neither equal nor
+    reachable on a non-shallow clone, or a legacy checkpoint records no
+    reachable commit, the history is a different one -- a recreated or
+    unrelated repository that merely shares the remote and issue. `relocate`
+    must not rebind such a checkpoint without an explicit acknowledgement.
+    """
+    recorded = state.get('repo_identity')
+    if isinstance(recorded, dict):
+        old_root, new_root = recorded.get('root_commit'), current.get('root_commit')
+        if recorded.get('shallow') is False and current.get('shallow') is False and old_root and new_root:
+            return not (old_root == new_root or root_commit_still_reachable(root, old_root))
+        return False
+    return not legacy_history_signal(root, state)
+
+
 def require_issue_repository_binding(root, state, relative):
     """The checkpoint's bound issue must name *this* repository's own GitHub
     remote -- the same binding `start` (see below) and the scope
@@ -1670,7 +1689,8 @@ class Run:
         require(allow_branch_change or state['branch'] == git(self.root, 'branch', '--show-current'), 'CHECKPOINT_BRANCH_MISMATCH')
         return state
 
-    def _relocate_plan(self, state, allow_branch_rebind, allow_repository_rename, new_issue, keep_issue_number):
+    def _relocate_plan(self, state, allow_branch_rebind, allow_repository_rename, new_issue, keep_issue_number,
+                       allow_history_change=False):
         """Everything a `relocate` decision needs, computed fresh from the
         given `state` -- never from values a caller cached before acquiring
         the lock (round 1, finding 2: `old_identity` and `branch_matches`
@@ -1714,7 +1734,13 @@ class Run:
                 require(new_repo, 'RELOCATE_REPOSITORY_RENAME_NEEDS_GITHUB_REMOTE: this repository has no '
                                   'GitHub remote to rebind the issue to')
                 resolved_issue = new_repo + '#' + old_number
+        history_changed = root_history_changed(self.root, state, new_identity)
         blockers = []
+        if history_changed and not allow_history_change:
+            blockers.append('HISTORY_CHANGED: this checkpoint records a root history that is not the history of this '
+                            'repository (a recreated or unrelated repository sharing the remote); pass '
+                            '--allow-history-change to confirm it is the same project with rewritten or '
+                            'recreated history, not a foreign checkpoint; recorded in the relocation log')
         if state['active']:
             blockers.append('ACTIVE_CLAIM_MUST_BE_RESOLVED_BEFORE_RELOCATE')
         if not branch_matches and not allow_branch_rebind:
@@ -1733,10 +1759,11 @@ class Run:
                             'to name the exact new issue directly')
         return {'old_identity': old_identity, 'new_identity': new_identity, 'current_branch': current_branch,
                 'branch_matches': branch_matches, 'old_repo': old_repo, 'new_repo': new_repo,
-                'repository_renamed': repository_renamed, 'new_issue': resolved_issue, 'blockers': blockers}
+                'repository_renamed': repository_renamed, 'new_issue': resolved_issue,
+                'history_changed': history_changed, 'blockers': blockers}
 
     def relocate(self, reason, preview=False, allow_branch_rebind=False, allow_repository_rename=False,
-                new_issue=None, keep_issue_number=False, actor=None):
+                new_issue=None, keep_issue_number=False, actor=None, allow_history_change=False):
         """Explicit, logged rebind of a checkpoint whose recorded identity no
         longer matches this repository but is legitimately the same project:
         a fork, a renamed remote, or a migrated org (`identity_matches`
@@ -1769,6 +1796,11 @@ class Run:
         a source file still naming the old repository -- either both are
         written or neither is, since the checkpoint write happens last.
 
+        A checkpoint whose recorded root history is not this repository's
+        (Codex round 1, finding 2) is also a blocker unless
+        `allow_history_change` acknowledges it; `history_changed` is
+        recorded on the relocation entry either way.
+
         Either way, the whole decision is appended to `relocations[]` with
         its actor, reason and both identities/repositories, never silently.
         """
@@ -1780,24 +1812,27 @@ class Run:
             state = read(self.path)
             require(state and state.get('schema_version') == SCHEMA, 'WORKFLOW_START_REQUIRED')
             require(state['feature'] == self.relative, 'RELOCATE_FEATURE_MISMATCH')
-            plan = self._relocate_plan(state, allow_branch_rebind, allow_repository_rename, new_issue, keep_issue_number)
+            plan = self._relocate_plan(state, allow_branch_rebind, allow_repository_rename, new_issue, keep_issue_number,
+                                       allow_history_change)
             return {'preview': True, 'feature': self.relative, 'old_identity': plan['old_identity'],
                     'new_identity': plan['new_identity'], 'branch_from': state['branch'],
                     'branch_to': plan['current_branch'], 'branch_matches': plan['branch_matches'],
                     'allow_branch_rebind': allow_branch_rebind, 'old_repository': plan['old_repo'],
                     'new_repository': plan['new_repo'], 'repository_renamed': plan['repository_renamed'],
                     'allow_repository_rename': allow_repository_rename, 'new_issue': plan['new_issue'],
+                    'history_changed': plan['history_changed'], 'allow_history_change': allow_history_change,
                     'blockers': plan['blockers'], 'can_apply': not plan['blockers']}
         with locked(self.lock):
             state = read(self.path)
             require(state and state.get('schema_version') == SCHEMA, 'WORKFLOW_START_REQUIRED')
             require(state['feature'] == self.relative, 'RELOCATE_FEATURE_MISMATCH')
             require(not state['active'], 'ACTIVE_CLAIM_MUST_BE_RESOLVED_BEFORE_RELOCATE')
-            plan = self._relocate_plan(state, allow_branch_rebind, allow_repository_rename, new_issue, keep_issue_number)
+            plan = self._relocate_plan(state, allow_branch_rebind, allow_repository_rename, new_issue, keep_issue_number,
+                                       allow_history_change)
             require(not plan['blockers'], '; '.join(plan['blockers']))
             entry = {'actor': actor or default_actor(self.root), 'at': now(), 'reason': reason.strip(),
                      'old_identity': plan['old_identity'], 'new_identity': plan['new_identity'],
-                     'branch_rebound': False}
+                     'branch_rebound': False, 'history_changed': plan['history_changed']}
             if not plan['branch_matches']:
                 entry.update(branch_rebound=True, branch_from=state['branch'], branch_to=plan['current_branch'])
                 state['branch'] = plan['current_branch']
@@ -2505,6 +2540,10 @@ def main():
     relocate_parser.add_argument('--keep-issue-number', action='store_true',
                                  help='Keep the same issue number under the new repository when it changed; only '
                                       'valid for a GitHub rename or transfer, never a fork')
+    relocate_parser.add_argument('--allow-history-change', action='store_true',
+                                 help='Confirm a checkpoint whose recorded root history is not the history of this repository '
+                                      '(recreated or rewritten history sharing the remote) is the same project; '
+                                      'logged in the relocation record')
     relocate_parser.add_argument('--actor', help='Defaults to the Git user name')
     for name in ('start', 'next', 'claim', 'complete', 'pause', 'recover', 'bind', 'migrate', 'refresh', 'amend',
                  'revalidate'):
@@ -2624,7 +2663,8 @@ def main():
             elif args.action == 'bind': result = run.bind(args.token)
             elif args.action == 'relocate':
                 result = run.relocate(args.reason, args.preview, args.allow_branch_rebind,
-                                      args.allow_repository_rename, args.issue, args.keep_issue_number, args.actor)
+                                      args.allow_repository_rename, args.issue, args.keep_issue_number, args.actor,
+                                      args.allow_history_change)
                 if args.preview and not result['can_apply']: result['ok'] = False
             elif args.action == 'migrate' and args.preview: result = run.preview_migration(args.invalidate_from)
             elif args.action == 'migrate': result = run.migrate(args.reason, args.invalidate_from)
