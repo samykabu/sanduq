@@ -612,8 +612,8 @@ def default_policy(qa, manual):
 def select_gate(ci, mode=None, scope=None, rules=(), keys=None):
     """Apply explicit gate choices while preserving unmentioned project settings.
 
-    `keys` sets optional gate keys (`affected_command`, `verification_check`);
-    None leaves one unchanged and "none" removes it.
+    `keys` sets optional gate keys (`affected_command`, `verification_check`,
+    `verify_command`); None leaves one unchanged and "none" removes it.
     """
     keys = {name: value for name, value in (keys or {}).items() if value is not None}
     if mode is None and scope is None and not rules and not keys:
@@ -1992,7 +1992,7 @@ class Run:
                 self.save(state)
             return {'refreshed': list(affected), 'next': self.next(state)}
 
-    def amend(self, stage, evidence, reason, assessment, actor=None):
+    def amend(self, stage, evidence, reason, assessment, actor=None, evidence_only=False):
         """Re-hash one evidence entry of a completed receipt under a recorded assessment.
 
         Every other fingerprint keeps its hash. `unchanged` asserts the stage's
@@ -2003,6 +2003,8 @@ class Run:
         require(stage in BASE_STAGES, 'INVALID_AMEND_STAGE: ' + str(stage))
         require(assessment in AMENDMENT_ASSESSMENTS, 'AMENDMENT_ASSESSMENT_INVALID: expected unchanged or changed')
         require(isinstance(reason, str) and reason.strip(), 'AMENDMENT_REASON_REQUIRED')
+        from delegate_dispatch import require_not_worker_context
+        require_not_worker_context(self.relative)
         with locked(self.lock):
             state = self.load()
             require(not state['active'], 'ACTIVE_CLAIM_MUST_BE_RESOLVED_BEFORE_AMEND')
@@ -2010,6 +2012,13 @@ class Run:
             require(receipt, 'RECEIPT_MISSING: ' + stage)
             require(evidence in receipt.get('evidence', []) and evidence in receipt.get('fingerprints', {}),
                     'AMEND_PATH_NOT_EVIDENCE: ' + str(evidence) + ' is not listed as evidence of ' + stage)
+            if evidence_only:
+                # A caller that classified this path as evidence-only earlier
+                # (gate-explain --auto-fix) is re-checked against the receipt
+                # as it is now, under this lock, immediately before the write.
+                require(evidence not in set(receipt.get('inputs') or []) | set(required_inputs(
+                        self.root, self.relative, stage)),
+                        'AMEND_PATH_IS_A_DEPENDENCY: ' + str(evidence) + ' is a declared input of ' + stage)
             inside(self.root, evidence)
             new_hash = fingerprint_files(self.root, [evidence])[evidence]
             require(new_hash is not None, 'EVIDENCE_MISSING: ' + evidence)
@@ -2530,6 +2539,9 @@ def main():
                            help='Affected-lane hook for source drift (JSON paths on stdin), or "none" to remove')
     ci_parser.add_argument('--verification-check', metavar='CHECK',
                            help='CI job accepted as Verify evidence by revalidate --check-run, or "none" to remove')
+    ci_parser.add_argument('--verify-command', metavar='COMMAND',
+                           help='Local runner speckit-workflow-verify-affected uses to run affected lanes '
+                                '(JSON {lanes, results_path} on stdin), or "none" to remove')
     decisions_parser = sub.add_parser('decisions', help='Show or update decision authority and field policy')
     decisions_parser.add_argument('--show', action='store_true')
     decisions_parser.add_argument('--owner', action='append', default=[], metavar='GITHUB_LOGIN')
@@ -2644,7 +2656,8 @@ def main():
                     if value: ci['capabilities'][key] = value
                 select_gate(ci, args.gate_mode, args.gate_scope, args.gate_rule,
                             {'affected_command': args.affected_command,
-                             'verification_check': args.verification_check})
+                             'verification_check': args.verification_check,
+                             'verify_command': args.verify_command})
                 write(root / '.specify/workflow/backups' / (uuid.uuid4().hex + '.json'), load_policy(root))
                 (root / '.specify/workflow.yml').write_text(
                     yaml.safe_dump(validate_policy(policy), sort_keys=False), encoding='utf-8')

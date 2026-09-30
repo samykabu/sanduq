@@ -7,6 +7,12 @@ Project Sync/task-issue sync, interruption/GitHub behavior and package updates.
 (`references/stage-scope.md`, `references/stage-clarify.md`,
 `references/stage-pr.md`).
 
+Five more entry points (B13) are utilities, not stages, each with its own
+reference: `verify-affected` (`verify-affected.md`), `ci-report`
+(`ci-report.md`), `gate-explain` (`gate-explain.md`), `worker-brief`
+(`worker-brief.md`) and `apply-pending` (`apply-pending.md`). Their commands
+point at those files directly.
+
 ## init
 
 **init**: read existing project instructions, constitution, Scope and manual configuration.

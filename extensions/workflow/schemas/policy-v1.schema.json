@@ -263,6 +263,13 @@
                   "artifact_prefix": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"}
                 }}
               ]
+            },
+            "verify_command": {
+              "description": "Optional local affected-lane runner (1.7.x, B13) read only by speckit-workflow-verify-affected, never by the gate. Reads {\"lanes\": [...], \"results_path\": \"<path>\"} on stdin and must exit 0 having written that project-relative results.json.",
+              "oneOf": [
+                {"type": "string", "minLength": 1},
+                {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+              ]
             }
           }
         },
