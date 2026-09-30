@@ -46,6 +46,21 @@ provides:
   - name: speckit.workflow.reconcile
     file: commands/reconcile.md
     description: Install managed hooks and presets without changing unrelated integrations.
+  - name: speckit.workflow.verify-affected
+    file: commands/verify-affected.md
+    description: Run this feature's affected lanes locally with the project's affected-lane hook, into the same results.json.
+  - name: speckit.workflow.ci-report
+    file: commands/ci-report.md
+    description: Summarize the last N CI runs of a workflow into a leg/lane/critical-path table.
+  - name: speckit.workflow.gate-explain
+    file: commands/gate-explain.md
+    description: Explain a gate failure's recovery recipe and, only for evidence-only drift, offer to fix it.
+  - name: speckit.workflow.worker-brief
+    file: commands/worker-brief.md
+    description: Generate a 3-5 KB worker brief for one task from verbatim requirements, owned paths and the execution protocol.
+  - name: speckit.workflow.apply-pending
+    file: commands/apply-pending.md
+    description: Apply workflow/pending-artifact-updates.md to the contracts/data-model/research it targets.
 tags:
 - workflow
 - qa

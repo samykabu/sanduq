@@ -94,6 +94,8 @@ def validate_gate(gate):
         affected_command(gate)
     if 'verification_check' in gate:
         verification_check(gate)
+    if 'verify_command' in gate:
+        verify_command(gate)
     return gate
 
 
@@ -116,6 +118,27 @@ def affected_command(gate):
             raise CIPolicyError('CI_AFFECTED_COMMAND_INVALID: ' + str(exc)) from exc
     _require(isinstance(value, list) and value and all(isinstance(part, str) and part for part in value),
              'CI_AFFECTED_COMMAND_INVALID: expected a command string or a non-empty argv list')
+    return list(value)
+
+
+def verify_command(gate):
+    """The optional local affected-lane runner (1.7.x, B13) as an argv list, or None.
+
+    Read by `speckit-workflow-verify-affected` only; the gate itself never
+    calls it. It receives `{"lanes": [...], "results_path": "<path>"}` on
+    stdin and must exit 0 having written that project-relative results.json.
+    """
+    import shlex
+    value = (gate or {}).get('verify_command')
+    if value is None:
+        return None
+    if isinstance(value, str):
+        try:
+            value = shlex.split(value)
+        except ValueError as exc:
+            raise CIPolicyError('CI_VERIFY_COMMAND_INVALID: ' + str(exc)) from exc
+    _require(isinstance(value, list) and value and all(isinstance(part, str) and part for part in value),
+             'CI_VERIFY_COMMAND_INVALID: expected a command string or a non-empty argv list')
     return list(value)
 
 

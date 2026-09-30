@@ -2,6 +2,87 @@
 
 ## Unreleased
 
+- **B13 — five new utility skills.** Five new entry points, none a claimed
+  stage, each shipped as a command plus a runtime script with unit tests:
+  - `speckit-workflow-verify-affected` (`verify_affected.py`): runs a
+    feature's affected lanes locally, reusing the existing
+    `ci.gate.affected_command` classify contract and a new optional
+    `ci.gate.verify_command` (a project-local runner read
+    `{"lanes": [...], "results_path": "<path>"}` on stdin), into the same
+    results.json shape the project's own CI tier writes.
+  - `speckit-workflow-ci-report` (`ci_report.py`): summarizes the last N
+    runs of a CI workflow into a leg/lane/wall-clock-span table, fixed vs
+    test time (from `--fixed-job`) and cancelled-run counts, reading only
+    through the GitHub REST API (`ci_evidence.GhClient`), paginated past
+    GitHub's 100-per-page cap with `--branch` URL-encoded.
+  - `speckit-workflow-gate-explain` (`gate_explain.py`): explains a
+    `STALE_RECEIPT` gate failure with the exact `recovery_recipe` the gate
+    itself would print, and offers `--auto-fix` only for drift the existing
+    `explicit-drift` classification already confines to a receipt's own
+    `evidence` paths -- never a dependency or a source/lane finding. The
+    fix runs `Run.amend` (a checked re-hash); nothing is re-stamped
+    without a check (standing rule 4), and `--reason` is never fabricated.
+  - `speckit-workflow-worker-brief` (`worker_brief.py`): generates a 3-5 KB
+    brief for one task -- its exact line, owned paths, verbatim requirement
+    lines, a contract excerpt, the turn budget (T0) and forbidden-commands
+    paragraph (S6) and the ten-line result template (T7) -- reading the
+    last three live from `execution-assign.md`/`execution-report.md`
+    instead of a copy that could drift from them.
+  - `speckit-workflow-apply-pending` (`apply_pending.py`): applies
+    `workflow/pending-artifact-updates.md` (F15) to the contracts,
+    data-model and research files it targets, marking each entry `applied`
+    or `rejected`, and reports which already-passed receipts the touched
+    paths stale, with their recovery recipe.
+
+  New optional policy key `ci.gate.verify_command`, validated by
+  `sanduq_ci.py` and settable with `workflow.py ci --verify-command`, the
+  same way as `affected_command`.
+
+  Review round 3 fixes: `apply_pending.py` judges the lexical target and
+  refuses any symlink or junction on the path (a symlinked `contracts`
+  directory or `data-model.md` fooled the resolved comparison), accumulates
+  replacements per file and writes each once, atomically, marking an entry
+  applied only after its write succeeded; `gate_explain.py --auto-fix`
+  rechecks eligibility against the live receipt and `Run.amend` gains an
+  `evidence_only` guard evaluated under its lock; `verify_affected.py`
+  validates its results (every requested lane present and passed, else
+  `ok: false` with `missing_lanes`/`failed_lanes`, exit 1) and kills the
+  process tree once output passes `HARD_OUTPUT_LIMIT` (10x `OUTPUT_CAP`)
+  while it runs; `worker_brief.py` refuses to write an oversized brief unless
+  `--allow-oversized` is passed, and its fixed text was trimmed so the
+  heaviest (`[Collect]`) brief keeps every mandatory rule inside 5 KB.
+
+  Review round 1 fixes: `gate-explain --auto-fix` now also excludes any
+  drifted path that is a declared input or a required core artifact, not
+  only checking it is listed as `evidence` (a path can be both, and
+  amending it under `unchanged` would launder a real change); `--assessment`
+  is required with `--auto-fix` (no default); every eligible path is
+  re-validated before any is amended (all-or-nothing). `apply_pending.py`
+  confines every target to `<feature>/contracts/**`, `data-model.md` or
+  `research.md`, resolving and containing the path (absolute paths, `..`
+  and symlink escapes are rejected) and containing the pending file itself;
+  a staleness-check failure is reported as `stale: null` + `stale_error`,
+  never folded into an empty `[]`. `gate_explain.py --auto-fix`,
+  `apply_pending.py --apply` and `Run.amend` all refuse inside a delegated
+  worker or orchestrator process (`SANDUQ_DELEGATED_RUN`/
+  `SANDUQ_DELEGATED_ROLE`, reusing `delegate_dispatch.require_not_worker_context`);
+  `apply_pending.py --apply` also refuses while a claim is active.
+  `verify_affected.py` now diffs the actual working tree (including staged,
+  unstaged and untracked paths), not only `base_ref..HEAD`; its results are
+  stamped `source: "local"`/`ci_grade: false` and must never be recorded as
+  Verify `ci_evidence`; `--results` is confined inside the repository, a
+  timed-out verify command has its whole process tree killed, and output is
+  capped. `ci_report.py` paginates past GitHub's 100-per-page cap for both
+  runs and jobs (with a constant `per_page` across a page sequence) and
+  URL-encodes `--branch`; the wall-clock span field is named
+  `wall_clock_span_seconds`, not "critical path". `worker_brief.py` reuses
+  `delegate_dispatch.NO_DISPATCHER_COMMANDS`/`QA_COLLECT_ADDENDUM` instead of
+  a second, hand-scraped S6 paragraph; includes the F1/F2/F3/T8 rules; drops
+  `qa_collect` from `--class` (light-tier only behind a `[Collect]` task
+  marker); enforces its 3-5 KB target (drops the contract excerpt first,
+  then reports `oversized: true`); and builds its CLI JSON with `json.dumps`
+  instead of hand-built strings (a Windows path's backslashes broke it).
+
 - **Checkpoint identity design fix.** A checkpoint no longer hard-gates every
   command on the absolute `repo_path` it was started from, which failed
   `CHECKPOINT_IDENTITY_MISMATCH` on any other clone, worktree, instance,
