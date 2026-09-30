@@ -163,6 +163,27 @@ class HelperTests(unittest.TestCase):
         self.assertFalse(w.identity_matches({'remote': None, 'root_commit': 'a' * 40},
                                             {'remote': 'github.com/acme/app', 'root_commit': 'a' * 40}))
 
+    def test_identity_matches_accepts_a_still_reachable_older_root_commit(self):
+        """Round 2, finding N4: without a live repository to check ancestry
+        against, a differing root commit is still refused (unchanged,
+        pure-dict behaviour); with one, the recorded root is accepted if
+        it is still an ancestor of HEAD there, even though it is no longer
+        what `root_commit_sha` itself would currently pick."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            git(root, 'init', '-q')
+            git(root, 'config', 'user.name', 'Test')
+            git(root, 'config', 'user.email', 'test@example.invalid')
+            git(root, 'commit', '--allow-empty', '-qm', 'root')
+            recorded_root = w.root_commit_sha(root)
+            git(root, 'commit', '--allow-empty', '-qm', 'second')
+            recorded = {'remote': None, 'root_commit': recorded_root}
+            current = {'remote': None, 'root_commit': 'f' * 40}  # e.g. a differently-picked root after a merge
+            self.assertFalse(w.identity_matches(recorded, current))
+            self.assertTrue(w.identity_matches(recorded, current, current_root=root))
+            # An unrelated commit (not actually in this repo's history at all) is still refused.
+            self.assertFalse(w.identity_matches({'remote': None, 'root_commit': 'e' * 40}, current, current_root=root))
+
     def test_repo_identity_reads_a_real_repository(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()
@@ -383,6 +404,38 @@ class CompatibilityTests(Harness):
         # The exact condition a pre-1.8.0 Run.load() checked still holds,
         # so a checkpoint this version writes does not KeyError there.
         self.assertTrue(state['repo_path'] == str(root) and state['feature'] == 'specs/001-example')
+
+
+class MergedUnrelatedHistoryTests(Harness):
+    """Round 2, finding N4: merging in an unrelated history must not make
+    `load` refuse a checkpoint whose original history is still fully
+    present and reachable."""
+
+    def test_checkpoint_survives_merging_in_an_older_unrelated_history(self):
+        root = self.make_repo(remote='https://github.com/acme/app.git', seed='repo-a')
+        state = w.Run(root, 'specs/001-example').start('acme/app#10')
+        original_root_commit = state['repo_identity']['root_commit']
+
+        # An unrelated repo whose one commit is dated well before repo_a's.
+        unrelated = self.make_repo(remote=None, seed='unrelated')
+        env = os.environ.copy()
+        env['GIT_AUTHOR_DATE'] = env['GIT_COMMITTER_DATE'] = '2000-01-01T00:00:00'
+        subprocess.run(['git', 'commit', '--amend', '--no-edit'], cwd=unrelated, env=env,
+                       check=True, capture_output=True)
+        older_root_commit = w.repo_identity(unrelated)['root_commit']
+        self.assertNotEqual(older_root_commit, original_root_commit)
+
+        subprocess.run(['git', 'fetch', '-q', str(unrelated)], cwd=root, check=True, capture_output=True)
+        subprocess.run(['git', 'merge', '-q', '--allow-unrelated-histories', '-X', 'ours',
+                        '-m', 'merge unrelated', 'FETCH_HEAD'], cwd=root, check=True, capture_output=True)
+
+        # Confirm the drift this finding is about actually happened: the
+        # repository's own root-commit pick changed to the older one.
+        self.assertEqual(w.root_commit_sha(root), older_root_commit)
+
+        loaded = w.Run(root, 'specs/001-example').load()  # must not raise
+        self.assertEqual(loaded['issue'], 'acme/app#10')
+        self.assertEqual(loaded['repo_identity']['root_commit'], original_root_commit)  # unchanged, never rewritten
 
 
 class GithubRepositoryFormsTests(Harness):

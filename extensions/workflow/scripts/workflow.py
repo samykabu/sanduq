@@ -315,7 +315,26 @@ def repo_identity(root):
     return {'remote': normalized_remote(root), 'root_commit': root_commit_sha(root), 'shallow': is_shallow_clone(root)}
 
 
-def identity_matches(recorded, current):
+def root_commit_still_reachable(root, commit_sha):
+    """Whether `commit_sha` (a previously recorded root commit) is still an
+    ancestor of (or equal to) the current HEAD in the repository at `root`
+    (round 2, finding N4). Merging in an unrelated history
+    (`git merge --allow-unrelated-histories`) adds another root commit
+    reachable from HEAD, often older, which can change which one
+    `root_commit_sha`'s deterministic pick returns even though this is
+    still, genuinely, the same repository: its original history is still
+    fully present and reachable, just no longer the sole root. Checking
+    ancestry instead of re-deriving a single "the" root commit accepts
+    exactly that case without weakening the refusal of a repository that
+    never shared this history at all -- an unrelated commit is never an
+    ancestor of this HEAD.
+    """
+    result = subprocess.run(['git', 'merge-base', '--is-ancestor', commit_sha, 'HEAD'], cwd=root,
+                            capture_output=True, text=True, encoding='utf-8')
+    return result.returncode == 0
+
+
+def identity_matches(recorded, current, current_root=None):
     """Whether `current` may be treated as the same repository as `recorded`.
 
     The remote is authoritative whenever both sides have one: two unrelated
@@ -332,26 +351,40 @@ def identity_matches(recorded, current):
     stays lenient), the root commit is also required to match, catching a
     remote that was simply copied into an unrelated clone. `shallow` absent
     on either side (a legacy `repo_identity` predating this check) never
-    makes a previously-accepted checkpoint newly refused.
+    makes a previously-accepted checkpoint newly refused. When the root
+    commits differ and `current_root` (the live repository to check
+    against) is given, the recorded one is also accepted if it is still
+    reachable there (`root_commit_still_reachable`, round 2, finding N4)
+    rather than refusing outright -- `current_root` is omitted by pure
+    dict-level callers (e.g. unit tests with no real repository to check
+    against), which keeps this exact-match-only, as before.
 
     The root commit is used as the sole fallback only when *neither* side
     has a remote (a repo with no `origin` configured on both ends); both
-    must resolve one and it must be equal. Every other combination -- one
-    side has a remote and the other does not, or neither side can resolve
-    any signal at all -- is refused. That refusal is deliberate: a fork, a
-    renamed remote or a migrated org all change the remote (and often keep
-    the same root commit), so accepting a root-commit match on its own
-    would silently accept exactly the cases the design calls for routing
-    through the reviewed, logged `relocate` command instead.
+    must resolve one and it must be equal or (with `current_root`) still
+    reachable. Every other combination -- one side has a remote and the
+    other does not, or neither side can resolve any signal at all -- is
+    refused. That refusal is deliberate: a fork, a renamed remote or a
+    migrated org all change the remote (and often keep the same root
+    commit), so accepting a root-commit match on its own would silently
+    accept exactly the cases the design calls for routing through the
+    reviewed, logged `relocate` command instead.
     """
+    def root_commit_matches(recorded_root):
+        if not recorded_root:
+            return False
+        if recorded_root == current.get('root_commit'):
+            return True
+        return current_root is not None and root_commit_still_reachable(current_root, recorded_root)
+
     if recorded.get('remote') and current.get('remote'):
         if recorded['remote'] != current['remote']:
             return False
         if recorded.get('shallow') is False and current.get('shallow') is False:
-            return bool(recorded.get('root_commit')) and recorded.get('root_commit') == current.get('root_commit')
+            return root_commit_matches(recorded.get('root_commit'))
         return True
     if not recorded.get('remote') and not current.get('remote'):
-        return bool(recorded.get('root_commit')) and recorded.get('root_commit') == current.get('root_commit')
+        return root_commit_matches(recorded.get('root_commit'))
     return False
 
 
@@ -1541,7 +1574,7 @@ class Run:
         require(state['feature'] == self.relative, 'CHECKPOINT_IDENTITY_MISMATCH')
         require_issue_repository_binding(self.root, state, self.relative)
         if 'repo_identity' in state:
-            require(identity_matches(state['repo_identity'], repo_identity(self.root)),
+            require(identity_matches(state['repo_identity'], repo_identity(self.root), current_root=self.root),
                     'CHECKPOINT_IDENTITY_MISMATCH: this checkpoint belongs to a different repository. If this is '
                     'the same project relocated (a fork, a renamed remote, a migrated org), run: workflow.py '
                     'relocate --feature ' + self.relative + ' --reason "<why>"')
