@@ -11,9 +11,10 @@
     `{"lanes": [...], "results_path": "<path>"}` on stdin), into the same
     results.json shape the project's own CI tier writes.
   - `speckit-workflow-ci-report` (`ci_report.py`): summarizes the last N
-    runs of a CI workflow into a leg/lane/critical-path table, fixed vs
+    runs of a CI workflow into a leg/lane/wall-clock-span table, fixed vs
     test time (from `--fixed-job`) and cancelled-run counts, reading only
-    through the GitHub REST API (`ci_evidence.GhClient`).
+    through the GitHub REST API (`ci_evidence.GhClient`), paginated past
+    GitHub's 100-per-page cap with `--branch` URL-encoded.
   - `speckit-workflow-gate-explain` (`gate_explain.py`): explains a
     `STALE_RECEIPT` gate failure with the exact `recovery_recipe` the gate
     itself would print, and offers `--auto-fix` only for drift the existing
@@ -36,6 +37,37 @@
   New optional policy key `ci.gate.verify_command`, validated by
   `sanduq_ci.py` and settable with `workflow.py ci --verify-command`, the
   same way as `affected_command`.
+
+  Review round 1 fixes: `gate-explain --auto-fix` now also excludes any
+  drifted path that is a declared input or a required core artifact, not
+  only checking it is listed as `evidence` (a path can be both, and
+  amending it under `unchanged` would launder a real change); `--assessment`
+  is required with `--auto-fix` (no default); every eligible path is
+  re-validated before any is amended (all-or-nothing). `apply_pending.py`
+  confines every target to `<feature>/contracts/**`, `data-model.md` or
+  `research.md`, resolving and containing the path (absolute paths, `..`
+  and symlink escapes are rejected) and containing the pending file itself;
+  a staleness-check failure is reported as `stale: null` + `stale_error`,
+  never folded into an empty `[]`. `gate_explain.py --auto-fix`,
+  `apply_pending.py --apply` and `Run.amend` all refuse inside a delegated
+  worker or orchestrator process (`SANDUQ_DELEGATED_RUN`/
+  `SANDUQ_DELEGATED_ROLE`, reusing `delegate_dispatch.require_not_worker_context`);
+  `apply_pending.py --apply` also refuses while a claim is active.
+  `verify_affected.py` now diffs the actual working tree (including staged,
+  unstaged and untracked paths), not only `base_ref..HEAD`; its results are
+  stamped `source: "local"`/`ci_grade: false` and must never be recorded as
+  Verify `ci_evidence`; `--results` is confined inside the repository, a
+  timed-out verify command has its whole process tree killed, and output is
+  capped. `ci_report.py` paginates past GitHub's 100-per-page cap for both
+  runs and jobs (with a constant `per_page` across a page sequence) and
+  URL-encodes `--branch`; the wall-clock span field is named
+  `wall_clock_span_seconds`, not "critical path". `worker_brief.py` reuses
+  `delegate_dispatch.NO_DISPATCHER_COMMANDS`/`QA_COLLECT_ADDENDUM` instead of
+  a second, hand-scraped S6 paragraph; includes the F1/F2/F3/T8 rules; drops
+  `qa_collect` from `--class` (light-tier only behind a `[Collect]` task
+  marker); enforces its 3-5 KB target (drops the contract excerpt first,
+  then reports `oversized: true`); and builds its CLI JSON with `json.dumps`
+  instead of hand-built strings (a Windows path's backslashes broke it).
 
 ## 1.7.0
 

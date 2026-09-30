@@ -140,60 +140,85 @@ runtime script, listed alongside `init`/`continue`/`status`/`doctor`/
 
 - **`verify-affected`** (`scripts/verify_affected.py`) runs a feature's
   affected lanes locally instead of a full merge-tier run. It classifies the
-  diff against `--base-ref` through the existing `ci.gate.affected_command`
-  hook, unions the result with any `--lane` names the feature always needs,
-  and -- only when at least one lane is affected -- runs the project's new,
-  optional `ci.gate.verify_command` (an argv list or command string, read
-  `{"lanes": [...], "results_path": "<path>"}` on stdin) into the same
-  results.json shape CI itself would produce. No diff, or a diff every
+  diff against `--base-ref` -- the actual working tree, including staged,
+  unstaged and untracked paths, never only `base_ref..HEAD` -- through the
+  existing `ci.gate.affected_command` hook, unions the result with any
+  `--lane` names the feature always needs, and -- only when at least one
+  lane is affected -- runs the project's new, optional `ci.gate.verify_command`
+  (an argv list or command string, read `{"lanes": [...], "results_path":
+  "<path>"}` on stdin, its whole process tree killed on timeout) into the
+  same results.json shape CI itself would produce. No diff, or a diff every
   drifted path maps to no lane, reports `no_affected_lanes` and runs
   nothing, matching the gate's own lane-free-drift rule; a hook or a
   results file that fails is a clear, distinct error
   (`AFFECTED_COMMAND_UNSET`, `VERIFY_COMMAND_UNSET`, `VERIFY_COMMAND_FAILED`,
-  `VERIFY_RESULTS_MISSING`/`_INVALID`), never a silent pass.
+  `VERIFY_RESULTS_MISSING`/`_INVALID`), never a silent pass. This is never CI
+  evidence: both the summary and results.json are stamped `"source":
+  "local"`/`"ci_grade": false` and must never be recorded as a Verify
+  receipt's `ci_evidence`.
 - **`ci-report`** (`scripts/ci_report.py`) summarizes the last N runs of a
-  workflow into a leg/lane/critical-path table (critical path: earliest job
-  start to latest job completion), fixed vs test time (fixed is the
+  workflow into a leg/lane/wall-clock-span table (`wall_clock_span_seconds`:
+  earliest job start to latest job completion -- a span, not a computed
+  dependency-aware critical path), fixed vs test time (fixed is the
   duration of jobs named by `--fixed-job`, repeatable; everything else
   counts as test time, and is zero without it, never guessed) and cancelled
-  runs. It reads only through `ci_evidence.GhClient` (`gh api`), the same
-  client Verify evidence already uses.
+  runs. Runs and jobs are both paginated past GitHub's 100-per-page cap and
+  `--branch` is URL-encoded. It reads only through `ci_evidence.GhClient`
+  (`gh api`), the same client Verify evidence already uses.
 - **`gate-explain`** (`scripts/gate_explain.py`) runs the same check
   `ci_gate.py` runs and turns a `STALE_RECEIPT` failure into the failing
   stage, the gate's own `recovery_recipe`, and `evidence_only_eligible`:
   true only when every drifted path of that stage is already listed as
-  that receipt's own `evidence` (the `explicit-drift` case `recovery_recipe`
-  already resolves to `amend`-only, with no dependency and no re-record
-  fallback). `--auto-fix --reason "<why>" [--assessment unchanged|changed]`
-  runs `Run.amend` for exactly those paths and refuses
-  (`GATE_EXPLAIN_NOT_EVIDENCE_ONLY`) for anything else; `amend` itself
-  re-hashes the real file, so a path that is eligible by classification but
-  missing on disk still refuses (`EVIDENCE_MISSING`) rather than being
-  silently accepted. `--reason` is never invented by the script.
+  that receipt's own `evidence` *and* is not also a declared input or a
+  required core artifact (a path can be both, and amending it under
+  `unchanged` would launder a real change). `--auto-fix --reason "<why>"
+  --assessment unchanged|changed` (both required, no default) re-validates
+  every eligible path against one loaded state snapshot before amending any
+  of them (all-or-nothing), then runs `Run.amend` for exactly those paths
+  and refuses (`GATE_EXPLAIN_NOT_EVIDENCE_ONLY`) for anything else; `amend`
+  itself re-hashes the real file, so a path that is eligible by
+  classification but missing on disk still refuses (`EVIDENCE_MISSING`)
+  rather than being silently accepted. `--reason` is never invented by the
+  script, and `--auto-fix` refuses outright inside a delegated worker or
+  orchestrator process, matching `Run.amend`'s own guard.
 - **`worker-brief`** (`scripts/worker_brief.py`) generates one task's brief
-  (default `specs/<feature>/workflow/briefs/T###.md`, targeted at 3-5 KB):
-  the task's exact `tasks.md` line, owned paths (backtick-quoted file paths
-  in its description), verbatim lines from `spec.md`/`plan.md`/
+  (default `specs/<feature>/workflow/briefs/T###.md`, targeted at 3-5 KB --
+  the contract excerpt is dropped first if that would push it over, and the
+  result carries `oversized: true` if it is still over without one): the
+  task's exact `tasks.md` line, owned paths (backtick-quoted file paths in
+  its description), verbatim lines from `spec.md`/`plan.md`/
   `data-model.md`/`research.md` naming a requirement id
   (`[A-Z]{2,10}-\d+`, e.g. `EXEC-06`) the task references, a best-effort
-  contract excerpt, and three sections read live (never copied) from
+  contract excerpt, and sections read live (never copied) from
   `execution-assign.md`/`execution-report.md`: the T0 turn-budget row for
-  the task's class, the S6 forbidden-commands paragraph, and the T7
-  ten-line result template. The work type, when `--class` is omitted, is
-  classified the same way delegation routing already does
-  (`delegation.task_type`), so the brief and the delegated route agree.
+  the task's class, the F1/F2 spawn-and-wait rules, the F3
+  report-on-state-change rule, the T8 read-summary-first rule, the S6
+  forbidden-commands rule (reusing `delegate_dispatch.py`'s own
+  `NO_DISPATCHER_COMMANDS`/`QA_COLLECT_ADDENDUM`), and the T7 ten-line
+  result template. The work type, when `--class` is omitted, is classified
+  the same way delegation routing already does (`delegation.task_type`), so
+  the brief and the delegated route agree; `--class` never accepts
+  `qa_collect`, which is light-tier eligible only behind an explicit
+  `[Collect]` task marker.
 - **`apply-pending`** (`scripts/apply_pending.py`) applies
   `workflow/pending-artifact-updates.md` (F15): workers append a proposed
   wording change for a contract/data-model/research heading instead of
   editing it mid-Execute; a dry run (default) reports what would apply,
   `--apply` locates the named heading in the target file, replaces its body
   up to the next same-or-shallower heading, and marks the entry `applied`
-  or `rejected` (`ANCHOR_NOT_FOUND`, `TARGET_FILE_MISSING`) so re-running is
-  safe. Judging whether the proposed wording still matches shipped code is
-  the calling agent's job, never the script's. When an applied change
+  or `rejected` (`ANCHOR_NOT_FOUND`, `TARGET_FILE_MISSING`,
+  `PENDING_TARGET_ABSOLUTE_REFUSED`, `PENDING_TARGET_NOT_ALLOWED`) so
+  re-running is safe. Every target is confined and resolved (contained;
+  absolute paths, `..` and symlink escapes refused) to
+  `<feature>/contracts/**`, `data-model.md` or `research.md`, and the
+  pending file itself is contained the same way. Judging whether the
+  proposed wording still matches shipped code is the calling agent's job,
+  never the script's. `--apply` refuses inside a delegated worker or
+  orchestrator process and while a claim is active. When an applied change
   touches a path an already-passed receipt fingerprinted, the result's
-  `stale` list names the stage and its `recovery_recipe`; this script never
-  re-validates a stage itself.
+  `stale` list names the stage and its `recovery_recipe` (or, if the check
+  itself fails, `stale: null` with a `stale_error`, never a bare `[]`);
+  this script never re-validates a stage itself.
 
 ## Switching hosts
 
