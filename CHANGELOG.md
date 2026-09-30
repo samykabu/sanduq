@@ -4,6 +4,40 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## Sprint 4 (B7-B12) — workflow 1.7.0, assure 2.3.0, user-manual 1.4.0, pr 4.2.0, project 2.2.0 — 2026-09-30
+
+- Workflow 1.7.0 (minor: new commands and flags, a default tier change and
+  stricter Ready/complete gates). The delegation guard splits `qa` into
+  `qa_author` (standard tier) and `qa_collect` (light-eligible, explicit
+  `[Collect]` marker only); coordination now defaults to `high`, never
+  light; a light-tier or `qa_collect` start requires `--owned`; and
+  `complete`/the Ready gate now require the dispatcher's own ledger to show
+  a successful attempt for every checked task, with `delegate_dispatch.py
+  adopt` as the evidence-based way for a project enabling delegation
+  mid-feature to adopt already-checked tasks. `doctor --project` reports a
+  per-host `skill_inventory` block (the home-override variable is renamed
+  `SANDUQ_SKILLS_HOME`, was `SANDUQ_HOME`); `skills/workflow/SKILL.md` is
+  split into a core dispatcher plus one reference file per stage; and
+  `references/execution-assign.md`/`execution-report.md` state the
+  execution protocol as checkable rules. `task_issues.py` and `progress.py`
+  gain `--summary`/`--json`. **Upgrade notes:** legacy `qa` routes map to
+  `qa_author` automatically; a stage attempt recorded before this release
+  has no `claim_token` and must be re-delegated once.
+- Assure 2.3.0 and User Manual 1.4.0: `assure_state.py`/`manual_state.py`
+  gain `--summary`/`--json`, and both packages' analyze/update commands
+  ensure the `illustrate` dependency through the new shared
+  `scripts/deps.py ensure illustrate` instead of duplicated prose.
+- PR 4.2.0: `speckit.pr.generate` also ensures `illustrate` through
+  `scripts/deps.py`, moves the mandatory image-embedding rules into a
+  loaded-on-demand reference file, and now requires Python on the host
+  (declared in `extension.yml`) to run `deps.py`.
+- Project 2.2.0: `project-sync` (Bash and PowerShell) gains
+  `-Summary`/`--summary` and falls back to the GitHub REST API when the
+  GraphQL budget is exhausted, reporting the transport used.
+- Workflow's `dependencies.json` pins the released project 2.2.0, pr 4.2.0,
+  assure 2.3.0 and user-manual 1.4.0. Scope and illustrate are unchanged
+  since 1.4.0/2.1.2 and keep their existing pins.
+
 ## Preview artifact retention — workflow 1.6.4, user-manual 1.3.3 — 2026-09-28
 
 - User Manual 1.3.3: the `user-manual-preview.yml` template's private preview
