@@ -55,20 +55,32 @@ gh_run() { if [ "$DRYRUN" = 1 ]; then log "DRYRUN gh $*"; return 0; fi; gh "$@";
 # Past this point `set -e` can abort the script on any unguarded failure
 # (a real gh/jq/git error, not a graceful skip). Under --summary that must
 # still surface as one `error exit=<rc> reason=<msg>[ line=<n>]` line rather
-# than silence or a raw shell trace; SUMMARY_DONE keeps the EXIT trap from
-# firing after our own controlled ok/skipped line has already been printed.
+# than silence or a raw shell trace; SUMMARY_DONE keeps this trap from firing
+# after our own controlled ok/skipped line has already been printed.
 # FAIL_LINE comes from the ERR trap, which only fires for a command that
 # actually failed; a plain `warn ...; exit 1` site has no such command, so
 # FAIL_LINE stays unknown there and the line clause is omitted, while
 # LAST_WARN (set immediately before it, by warn()) still supplies the reason.
-if [ "$SUMMARY" = 1 ]; then
-  trap 'FAIL_LINE=$LINENO' ERR
-  trap 'rc=$?; if [ "$rc" -ne 0 ] && [ "$SUMMARY_DONE" != 1 ]; then
+#
+# on_exit is installed once, here, as the script's only EXIT trap: bash keeps
+# a single handler per signal, so a later, unconditional `trap ... EXIT`
+# elsewhere (there was one, for removing REST_MARK) would silently replace
+# this one instead of running alongside it, discarding the whole --summary
+# error line. REST_MARK itself is declared here (rather than where it is
+# first used, further down) so on_exit can always reference it, including on
+# an early skip/exit before TRANSPORT/REST_MARK's own section runs.
+REST_MARK="${TMPDIR:-/tmp}/project-sync-rest.$$"
+on_exit() {
+  local rc=$?
+  rm -f "$REST_MARK"
+  if [ "$SUMMARY" = 1 ] && [ "$rc" -ne 0 ] && [ "$SUMMARY_DONE" != 1 ]; then
     msg="error exit=$rc reason=${LAST_WARN:-unknown}"
     [ -n "${FAIL_LINE:-}" ] && msg="$msg line=$FAIL_LINE"
     echo "$msg"
-  fi' EXIT
-fi
+  fi
+}
+trap on_exit EXIT
+[ "$SUMMARY" = 1 ] && trap 'FAIL_LINE=$LINENO' ERR
 
 command -v gh >/dev/null 2>&1 || skip "gh CLI not installed"
 command -v jq >/dev/null 2>&1 || skip "jq not installed"
@@ -108,9 +120,9 @@ REST_BASE="$OWNER_PATH/$OWNER/projectsV2/$PROJ_NUM"
 # exhausted the REST API (a separate budget) serves the same operation. `gh project` can report
 # exhaustion as an unrelated error ("unknown owner type"), so the real budget is checked.
 TRANSPORT="graphql"
-# Shared with command substitutions (subshells), which cannot set TRANSPORT in this shell.
-REST_MARK="${TMPDIR:-/tmp}/project-sync-rest.$$"
-trap 'rm -f "$REST_MARK"' EXIT
+# REST_MARK is declared near the top of the script now (see on_exit), shared
+# with command substitutions (subshells), which cannot set TRANSPORT in this
+# shell.
 graphql_exhausted() {
   local out
   if out="$(gh api graphql -f query='{rateLimit{remaining}}' --jq '.data.rateLimit.remaining' 2>&1)"; then
@@ -177,7 +189,17 @@ sget() { echo "$ST" | jq -r ".\"$SLUG\".$1 // empty"; }
 ISSUE="$(sget issue)"; NODE="$(sget issueNodeId)"; ITEM="$(sget itemId)"; CURRENT="$(sget status)"
 [ -z "$ISSUE" ] && ISSUE=0
 save_state() { [ "$DRYRUN" = 1 ] && return 0; echo "$ST" > "$STATE_FILE"; }
-st_set() { ST="$(echo "$ST" | jq --arg s "$SLUG" ".[\$s].$1 = $2")"; }
+# $2 is always a plain value, never jq source text: it is passed through
+# --arg (a real jq string, safely escaped) so a value that itself contains a
+# `"`, `{`/`}` or any other jq-significant character can never break the
+# program. (Previously callers built $2 by hand-wrapping the value in
+# literal quotes, e.g. `st_set issueNodeId "\"$NODE\""`; that raw text was
+# spliced straight into the filter, so a value shaped like a JSON object --
+# e.g. `gh issue view --json id -q .id` falling back to its unfiltered
+# `{"id":"..."}` output -- produced a syntactically invalid program instead
+# of a stored string.) st_set_num is for the one integer field (issue #).
+st_set() { ST="$(echo "$ST" | jq --arg s "$SLUG" --arg v "$2" ".[\$s].$1 = \$v")"; }
+st_set_num() { ST="$(echo "$ST" | jq --arg s "$SLUG" --argjson v "$2" ".[\$s].$1 = \$v")"; }
 [ "$(echo "$ST" | jq -r --arg s "$SLUG" 'has($s)')" = "true" ] || ST="$(echo "$ST" | jq --arg s "$SLUG" '.[$s]={issue:0,issueNodeId:"",itemId:"",status:"",subIssues:{}}')"
 
 ensure_parent() {
@@ -190,7 +212,7 @@ ensure_parent() {
     [ "$ISSUE" = 0 ] || [ "$ISSUE" = "$bound_issue" ] || { warn 'Project state conflicts with Scope parent binding'; exit 1; }
     ISSUE="$bound_issue"
     NODE="$(issue_node "$ISSUE")"
-    st_set issue "$ISSUE"; st_set issueNodeId "\"$NODE\""; return
+    st_set_num issue "$ISSUE"; st_set issueNodeId "$NODE"; return
   fi
   if [ "${ISSUE:-0}" -gt 0 ] 2>/dev/null; then return; fi
   local found n
@@ -202,7 +224,7 @@ ensure_parent() {
   n="$(echo "$found" | jq -r --arg s "$SLUG" 'map(select(.title|test($s;"i")))[0].number // empty')"
   if [ -n "$n" ]; then
     ISSUE="$n"; NODE="$(echo "$found" | jq -r --arg s "$SLUG" 'map(select(.title|test($s;"i")))[0].id')"
-    log "found existing parent issue #$ISSUE"; st_set issue "$ISSUE"; st_set issueNodeId "\"$NODE\""; return
+    log "found existing parent issue #$ISSUE"; st_set_num issue "$ISSUE"; st_set issueNodeId "$NODE"; return
   fi
   if [ "$DRYRUN" = 1 ]; then log "DRYRUN create parent issue for $SLUG"; ISSUE=-1; return; fi
   gh label create spec-feature --repo "$REPO" --color BFD4F2 --force >/dev/null 2>&1 || true
@@ -210,7 +232,7 @@ ensure_parent() {
   url="$(create_issue "[$SLUG] $TITLE" "Tracking issue for Spec Kit feature \`$SLUG\` (branch \`$BRANCH\`). Managed by the sanduq project extension." spec-feature)"
   ISSUE="$(echo "$url" | sed -E 's#.*/issues/([0-9]+).*#\1#')"
   NODE="$(issue_node "$ISSUE")"
-  st_set issue "$ISSUE"; st_set issueNodeId "\"$NODE\""; log "created parent issue #$ISSUE"
+  st_set_num issue "$ISSUE"; st_set issueNodeId "$NODE"; log "created parent issue #$ISSUE"
 }
 
 ensure_in_project() {
@@ -231,7 +253,7 @@ ensure_in_project() {
         | jq -r --argjson n "$ISSUE" '.items[] | select(.content.number==$n) | .id' | head -1)"
     fi
   fi
-  [ -n "$ITEM" ] && { st_set itemId "\"$ITEM\""; log "issue #$ISSUE on Project #$PROJ_NUM"; }
+  [ -n "$ITEM" ] && { st_set itemId "$ITEM"; log "issue #$ISSUE on Project #$PROJ_NUM"; }
 }
 
 set_status() {
@@ -244,7 +266,7 @@ set_status() {
     use_rest || { warn "could not set status '$s'"; exit 1; }
     rest_set_single_select "$ITEM" "$STATUS_FIELD" "$opt"
   fi
-  CURRENT="$s"; st_set status "\"$s\""; log "status -> $s"
+  CURRENT="$s"; st_set status "$s"; log "status -> $s"
 }
 
 parse_tasks() {
