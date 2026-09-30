@@ -76,6 +76,24 @@ def require(condition, message):
         raise DelegationError(message)
 
 
+def delegated_run_id():
+    """`SANDUQ_DELEGATED_RUN`, or None. Set means a real delegated worker
+    process tree exists underneath this one. Read through this one place
+    so `delegate_dispatch.require_not_worker_context` and `workflow.py`'s
+    `require_not_delegated_context` (round 1, finding 7) can never read a
+    different answer for the same environment -- each still applies its
+    own policy on top (the orchestrator role gets a narrow exception in
+    one, none in the other), but the underlying fact they start from is
+    shared, not duplicated.
+    """
+    return os.environ.get('SANDUQ_DELEGATED_RUN')
+
+
+def delegated_role():
+    """`SANDUQ_DELEGATED_ROLE`, or None. See `delegated_run_id`."""
+    return os.environ.get('SANDUQ_DELEGATED_ROLE')
+
+
 def task_line_content_sha256(line):
     """sha256 of a task line's content, minus its checkbox state and with
     whitespace normalised (round 8, finding 1): the binding an adopted

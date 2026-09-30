@@ -520,10 +520,10 @@ def require_not_worker_context(feature=None, task_identity=None):
     an ordinary, undelegated orchestrator call -- both checks pass
     silently.
     """
-    delegation.require(not os.environ.get('SANDUQ_DELEGATED_RUN'),
+    delegation.require(not delegation.delegated_run_id(),
                        'DELEGATION_WORKER_CONTEXT: this process is running inside a delegated worker '
                        '(SANDUQ_DELEGATED_RUN is set); only the orchestrator may run this command')
-    if os.environ.get('SANDUQ_DELEGATED_ROLE') == 'orchestrator':
+    if delegation.delegated_role() == 'orchestrator':
         role_feature = os.environ.get('SANDUQ_DELEGATED_FEATURE')
         allowed = (task_identity is not None and re.fullmatch(r'T\d{3,}', task_identity) is not None and
                   feature is not None and feature == role_feature)
