@@ -58,3 +58,22 @@ never re-validates a stage itself. When a touched path is fingerprinted but
 the staleness check itself fails, the result reports `stale: null` with a
 `stale_error` message, never silently folding that failure into an empty
 `[]` that would look identical to "confirmed nothing is stale" (finding 5).
+
+## Residual race (time of check to time of use)
+
+The threat model is accident prevention in a local tool, not a hostile local
+user, and full directory-handle protection is not practical across
+platforms. Within that: every target is validated lexically with no symlink
+or junction (`delegation.is_link`, so a Windows junction is caught on Python
+before 3.12 too) anywhere on its path; that whole chain is re-validated
+immediately before the temp file is created and again immediately before
+`os.replace`; the old file is moved aside, and after the replace the written
+file's real path must still be the one validated. If it is not, the moved
+aside content is put back and `PENDING_WRITE_LANDED_ELSEWHERE` is reported.
+
+What remains: a parent swapped for a link in the few instructions between
+the last re-validation and the backup move is caught only by that final
+check, and one swapped between the backup move and the replace lands the new
+text in the wrong file with nothing to restore (recover it from git, since
+every allowed target is a tracked repository file). Do not run `--apply`
+while something else is rewriting the feature directory.

@@ -149,6 +149,79 @@ class ApplyPendingTests(unittest.TestCase):
         self.assertIn('PENDING_TARGET_SYMLINK_REFUSED', result['rejected'][0]['reason'])
         self.assertIn('Original.', real.read_text(encoding='utf-8'))
 
+    def test_uses_the_shared_link_test_not_a_copy(self):
+        import delegation
+        self.assertIs(ap.is_link, delegation.is_link)
+
+    @unittest.skipUnless(os.name == 'nt', 'directory junctions are Windows-only')
+    def test_junctioned_contracts_directory_is_rejected(self):
+        # Round 4, item 1: a junction is not reported by is_symlink (and
+        # Path.is_junction is missing before Python 3.12).
+        import _winapi
+        other = self.directory / 'elsewhere'
+        other.mkdir()
+        (other / 'api.md').write_text('# API\n\n## Response shape\n\nOriginal elsewhere.\n', encoding='utf-8')
+        real = self.directory / 'contracts'
+        (real / 'api.md').unlink()
+        real.rmdir()
+        _winapi.CreateJunction(str(other), str(real))
+        self.pending.write_text(ENTRY, encoding='utf-8')
+        result = ap.apply(self.root, self.feature, apply_changes=True)
+        self.assertIn('PENDING_TARGET_SYMLINK_REFUSED', result['rejected'][0]['reason'])
+        self.assertIn('Original elsewhere.', (other / 'api.md').read_text(encoding='utf-8'))
+
+    def _swap_contracts_for_a_link(self):
+        """Replace contracts/ with a symlink to a directory holding its own api.md."""
+        other = self.directory / 'elsewhere'
+        other.mkdir(exist_ok=True)
+        (other / 'api.md').write_text('# API\n\n## Response shape\n\nOriginal elsewhere.\n', encoding='utf-8')
+        moved = self.directory / 'contracts-real'
+        (self.directory / 'contracts').rename(moved)
+        self._symlink_or_skip(self.directory / 'contracts', other, directory=True)
+        return other
+
+    def test_a_parent_swapped_after_validation_is_refused_before_the_temp_file(self):
+        # Round 4, item 2(a): re-validation right before the temp file is created.
+        self.pending.write_text(ENTRY, encoding='utf-8')
+        real_mkstemp = ap.tempfile.mkstemp
+        holder = {}
+
+        def swapping(*args, **kwargs):
+            if 'other' not in holder:
+                holder['other'] = self._swap_contracts_for_a_link()
+            return real_mkstemp(*args, **kwargs)
+        # The swap fires on the first mkstemp, i.e. after the pre-temp validation
+        # passed; the second validation (before os.replace) must refuse.
+        with patch.object(ap.tempfile, 'mkstemp', swapping):
+            result = ap.apply(self.root, self.feature, apply_changes=True)
+        self.assertEqual(result['applied'], [])
+        self.assertIn('PENDING_TARGET_SYMLINK_REFUSED', result['rejected'][0]['reason'])
+        self.assertIn('Original elsewhere.', (holder['other'] / 'api.md').read_text(encoding='utf-8'))
+        self.assertEqual([p.name for p in holder['other'].glob('.pending-*')], [])
+
+    def test_a_write_that_lands_elsewhere_is_detected_and_restored(self):
+        # Round 4, item 2(b): the swap happens after the last validation, at
+        # the moment of the replace; the landed file is put back afterwards.
+        self.pending.write_text(ENTRY, encoding='utf-8')
+        real_replace = ap.os.replace
+        state = {'swapped': False}
+        holder = {}
+
+        def swapping(src, dst):
+            if not state['swapped'] and str(dst).endswith('.pending-backup'):
+                state['swapped'] = True
+                holder['other'] = self._swap_contracts_for_a_link()
+                import shutil  # keep the temp file reachable through the swapped path
+                for temp in (self.directory / 'contracts-real').glob('.pending-*.tmp'):
+                    shutil.move(str(temp), str(holder['other'] / temp.name))
+            return real_replace(src, dst)
+        with patch.object(ap.os, 'replace', swapping):
+            result = ap.apply(self.root, self.feature, apply_changes=True)
+        self.assertEqual(result['applied'], [])
+        self.assertIn('PENDING_WRITE_LANDED_ELSEWHERE', result['rejected'][0]['reason'])
+        self.assertIn('Original elsewhere.', (holder['other'] / 'api.md').read_text(encoding='utf-8'))
+        self.assertNotIn('deprecated', (holder['other'] / 'api.md').read_text(encoding='utf-8'))
+
     def test_two_headings_in_one_contract_both_land(self):
         # Round 3, finding 2: each entry used to re-read the original and
         # write at once, so the last one silently erased the earlier change.
@@ -168,10 +241,10 @@ class ApplyPendingTests(unittest.TestCase):
         self.pending.write_text(ENTRY, encoding='utf-8')
         real_write = ap.write_text
 
-        def failing(path, text):
+        def failing(path, text, **kwargs):
             if path.name == 'api.md':
                 raise OSError('disk full')
-            return real_write(path, text)
+            return real_write(path, text, **kwargs)
         with patch.object(ap, 'write_text', failing):
             result = ap.apply(self.root, self.feature, apply_changes=True)
         self.assertEqual(result['applied'], [])

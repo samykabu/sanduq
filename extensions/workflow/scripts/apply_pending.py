@@ -43,6 +43,7 @@ from pathlib import Path, PurePosixPath
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from delegate_dispatch import require_not_worker_context
+from delegation import is_link
 from workflow import Run, WorkflowError, default_actor, inside, now, receipt_status, recovery_recipe, require, stages
 
 ENTRY = re.compile(
@@ -83,8 +84,9 @@ def resolve_target(root, feature, relative):
     node = Path(root)
     for part in lexical.parts:
         node = node / part
-        require(not (node.is_symlink() or getattr(node, 'is_junction', lambda: False)()),
-                'PENDING_TARGET_SYMLINK_REFUSED: ' + str(relative))
+        # `is_link` is the repo's one symlink-or-junction test; its
+        # `is_junction` falls back to the reparse tag on Windows Python < 3.12.
+        require(not is_link(node), 'PENDING_TARGET_SYMLINK_REFUSED: ' + str(relative))
     return inside(root, relative)
 
 
@@ -177,15 +179,21 @@ def apply(root, feature, pending_path=None, apply_changes=False, actor=None):
         by_target.setdefault(target, []).append(item)
     if apply_changes:
         for target, items in by_target.items():
+            relative = items[0]['target']
             try:
-                write_text(target, working[target])
-            except OSError as exc:
+                # The whole chain is re-validated immediately before the temp
+                # file is created and again immediately before it replaces
+                # the target (see write_text).
+                write_text(target, working[target], expected=target,
+                           revalidate=lambda relative=relative: resolve_target(root, feature, relative))
+            except (OSError, WorkflowError) as exc:
                 for item in items:
                     item['outcome'] = 'rejected'
                     item['reason'] = 'WRITE_FAILED: ' + str(exc)
     touched = {item['target'] for item in decided if item['outcome'] == 'applied'}
     if apply_changes:
-        write_text(pending_path, rewrite_pending(text, entries, decided, root, actor))
+        write_text(pending_path, rewrite_pending(text, entries, decided, root, actor), expected=pending_path,
+                   revalidate=lambda: inside(root, pending_relative))
     result = {'ok': True, 'entries': len(entries),
               'applied': [item['target'] + '#' + item['anchor'] for item in decided if item['outcome'] == 'applied'],
               'rejected': [{'entry': item['target'] + '#' + item['anchor'], 'reason': item.get('reason')}
@@ -220,7 +228,10 @@ def rewrite_pending(text, entries, decided, root, actor):
                 block = re.sub(r'Status: pending[^\n]*', 'Status: applied  Applied: ' + now() +
                                '  Actor: ' + resolved_actor, block)
             else:
-                block = re.sub(r'Status: pending[^\n]*', 'Status: rejected  Reason: ' + item['reason'], block)
+                # A callable replacement is literal; a string would be parsed for
+                # backslash escapes and a Windows path in the reason would raise.
+                block = re.sub(r'Status: pending[^\n]*', lambda _m: 'Status: rejected  Reason: ' + item['reason'],
+                               block)
             out.append(block)
         else:
             out.append(text[start:end])
@@ -233,19 +244,58 @@ def read_text(path):
     return path.read_text(encoding='utf-8') if path.is_file() else ''
 
 
-def write_text(path, text):
-    """Write atomically: a temp file in the same directory, then `os.replace`."""
+def _same_file(a, b):
+    # `b` is the real path captured at validation time; it is compared as the
+    # string it was, never re-resolved (re-resolving would follow a swapped link too).
+    return os.path.normcase(os.path.realpath(a)) == os.path.normcase(str(b))
+
+
+def write_text(path, text, expected=None, revalidate=None):
+    """Write atomically: a temp file in the same directory, then `os.replace`.
+
+    `revalidate` (raises if the path chain is no longer acceptable) runs
+    immediately before the temp file is created and again immediately before
+    it replaces the target, so a parent swapped for a symlink or junction
+    after the first validation is refused. `expected` is the real path the
+    caller validated; after the replace the written file's real path must
+    still be it, else the previous content is put back and an error raised.
+    This narrows the race, it does not close it: a swap between the last
+    `revalidate` and the replace itself (a few instructions) is detected
+    afterwards only, and a swap between the backup and the replace cannot be
+    undone (see the reference doc's "Residual race").
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
+    if revalidate:
+        revalidate()
     descriptor, temp = tempfile.mkstemp(dir=str(path.parent), prefix='.pending-', suffix='.tmp')
+    backup = None
     try:
         with os.fdopen(descriptor, 'w', encoding='utf-8', newline='') as handle:
             handle.write(text)
+        if revalidate:
+            revalidate()
+        if os.path.exists(path):
+            backup = str(path) + '.pending-backup'
+            os.replace(path, backup)
         os.replace(temp, path)
+        if expected is not None and not _same_file(path, expected):
+            landed = os.path.realpath(path)
+            if backup:
+                os.replace(backup, path)  # put the landed file's own content back
+                backup = None
+            raise WorkflowError('PENDING_WRITE_LANDED_ELSEWHERE: wrote through a swapped path to ' + landed +
+                                '; the previous content was restored')
+        if backup:
+            os.unlink(backup)
+            backup = None
     except BaseException:
-        try:
-            os.unlink(temp)
-        except OSError:
-            pass
+        if backup and os.path.exists(backup) and not os.path.exists(path):
+            os.replace(backup, path)
+        for leftover in (temp,):
+            try:
+                os.unlink(leftover)
+            except OSError:
+                pass
         raise
 
 
