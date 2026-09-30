@@ -1721,6 +1721,12 @@ class Run:
         except WorkflowError:
             new_repo = None
         repository_renamed = not same_github_repository(new_repo, old_repo)
+        # Codex round 1, finding 6: an issue choice only means something when
+        # the repository changed; silently ignoring it would let a caller
+        # believe an issue was rebound when nothing was.
+        require(repository_renamed or not (new_issue or keep_issue_number),
+                'RELOCATE_ISSUE_NOT_APPLICABLE: the repository has not changed (still ' + old_repo +
+                '), so --issue and --keep-issue-number do not apply; omit them')
         resolved_issue = None
         if repository_renamed:
             if new_issue is not None:

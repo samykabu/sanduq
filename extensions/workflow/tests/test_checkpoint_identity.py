@@ -777,6 +777,24 @@ class RelocateTests(Harness):
         with self.assertRaisesRegex(w.WorkflowError, 'RELOCATE_ISSUE_REPOSITORY_MISMATCH'):
             run.relocate('renamed', allow_repository_rename=True, new_issue='acme/app#10')
 
+    def test_relocate_rejects_issue_options_when_the_repository_did_not_change(self):
+        """Codex round 1, finding 6: `--issue` used to be silently ignored
+        when nothing about the repository changed."""
+        path = self.run.path
+        state = json.loads(path.read_text(encoding='utf-8'))
+        state['repo_identity']['root_commit'] = 'b' * 40  # only the history changed
+        w.write(path, state)
+        run = w.Run(self.root, self.feature)
+        raw_before = path.read_bytes()
+        for kwargs in ({'new_issue': 'acme/app#99'}, {'keep_issue_number': True}):
+            with self.assertRaisesRegex(w.WorkflowError, 'RELOCATE_ISSUE_NOT_APPLICABLE'):
+                run.relocate('same repo', allow_history_change=True, **kwargs)
+            with self.assertRaisesRegex(w.WorkflowError, 'RELOCATE_ISSUE_NOT_APPLICABLE'):
+                run.relocate('same repo', preview=True, allow_history_change=True, **kwargs)
+        self.assertEqual(path.read_bytes(), raw_before)
+        run.relocate('same repo', allow_history_change=True)  # without them it applies
+        self.assertEqual(run.load()['issue'], 'acme/app#10')
+
     def test_relocate_requires_a_reason(self):
         run = self.rename_remote()
         with self.assertRaisesRegex(w.WorkflowError, 'RELOCATE_REASON_REQUIRED'):
