@@ -898,22 +898,45 @@ finding 2), not pinned to the feature directory as an earlier release had
 it — an aggregate, repo-root-relative check can now run at all — while the
 feature directory remains the *default* owned root `--expect files`
 validates against when `--owned` is not given, unchanged in effect. Like
-`trust-reset`, `adopt` is orchestrator-only — every worker brief forbids
-`delegate_dispatch.py` entirely, `adopt` included — a worker must never be
-the one judging whether its own unattempted work now counts as verified.
+`trust-reset`, `adopt` is orchestrator-only — every *task* worker brief
+forbids `delegate_dispatch.py` entirely, `adopt` included, and a worker must
+never be the one judging whether its own unattempted work now counts as
+verified. The delegated Execute stage's own brief is the one exception (see
+below): it names `adopt` among the commands it may run for its own
+feature's tasks, because for it that self-judgement *is* the job.
 
 **Defence in depth: a worker cannot call back into the dispatcher.**
-`driver_env` sets `SANDUQ_DELEGATED_RUN` (to this dispatch's own intent id)
-in the environment of every driver subprocess it launches, so a delegated
-worker's own process tree inherits it (round 9, finding 1a: a worker
+`driver_env` sets one of two, mutually exclusive environment shapes for
+every driver subprocess it launches (round 9, finding 1a; refined role-aware
+in round 10, finding 1). A plain worker -- any task, and any stage other
+than `execute` -- inherits `SANDUQ_DELEGATED_RUN` (this dispatch's own
+intent id); `adopt`, `accept`, `reassign`, `trust-reset`, `start` and
+`collect` all refuse it outright with `DELEGATION_WORKER_CONTEXT` (a worker
 running `delegate_dispatch.py adopt` on its own checked-but-unattempted
 task, or `accept` on its own unverified result, would otherwise be able to
-self-certify its own work with a fabricated command). `adopt`, `accept`,
-`reassign` and `trust-reset` all refuse with `DELEGATION_WORKER_CONTEXT`
-the moment that variable is set. This is defence in depth, not a security
-boundary: a worker could unset the variable before invoking the dispatcher,
-so the worker brief's own instruction never to run these commands (above)
-remains the primary control.
+self-certify its own work with a fabricated command).
+
+**The delegated Execute stage is the one exception.** Its own brief tells
+it to dispatch and resolve bounded task workers with exactly those
+commands (`references/execution*.md`), so it needs a different scope, not
+a blanket refusal: launching `stage:execute` sets
+`SANDUQ_DELEGATED_ROLE=orchestrator` plus `SANDUQ_DELEGATED_FEATURE`
+instead, never `SANDUQ_DELEGATED_RUN`. Under that role,
+`require_not_worker_context` allows `start`, `collect`, `accept`,
+`reassign` and `adopt` only for a `T###` identity of that same feature;
+`trust-reset`, any `stage:*` identity, and any other feature all still
+refuse, now with `DELEGATION_ORCHESTRATOR_SCOPE`. The task workers *it*
+launches get an ordinary worker environment from their own `launch()` call
+-- `SANDUQ_DELEGATED_RUN` only, with `SANDUQ_DELEGATED_ROLE` and
+`SANDUQ_DELEGATED_FEATURE` explicitly stripped from the child environment
+so a task worker never inherits its orchestrator's own scope. Either
+shape is defence in depth, not a security boundary: a worker or
+orchestrator could unset its variables before invoking the dispatcher, so
+each brief's own instruction (the Execute brief states the narrower rule in
+place of the blanket one; every other brief keeps the blanket one) remains
+the primary control. All three `SANDUQ_DELEGATED_*` names are passed to the
+driver as `--keep-env` on every launch, so a future `--clean-env` launch
+does not silently drop whichever of them was actually set.
 
 **Visibility: every orchestrator-run check is a Ready-gate warning.**
 Whenever the Ready gate accepts a task because the orchestrator itself ran
@@ -926,7 +949,12 @@ from a worker's own verified attempt (round 9, finding 1b): `DELEGATION_TASK_ADO
 every warning here to stderr and appends it to `$GITHUB_STEP_SUMMARY` when
 the runner sets that variable, exactly as it does for
 `DELEGATION_LEDGER_TRUST_UNVERIFIED_LOCAL`, so this needed no separate gate
-change.
+change. **A reviewer must actually read these two lines when they appear**
+(round 10, finding 3): unlike a worker's own delegated attempt, an
+orchestrator-context `adopt` or `accept` trusts the orchestrator's own
+choice of acceptance command outright, with no independent dispatch to
+cross-check it against -- the warning is the only place that trust is
+visible, and skipping it defeats the whole point of surfacing it.
 
 **`reassign` and an adopted attempt.** An adopted attempt has no dispatcher
 route, task file or retry count to escalate from — it was never dispatched

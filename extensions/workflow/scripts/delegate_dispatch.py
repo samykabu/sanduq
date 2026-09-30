@@ -383,6 +383,22 @@ NO_DISPATCHER_COMMANDS = (
 )
 
 
+# The delegated Execute stage is the one exception (round 10, finding 1):
+# its own job is to dispatch and resolve bounded task workers with exactly
+# the commands every other brief forbids outright. Its environment
+# (SANDUQ_DELEGATED_ROLE=orchestrator plus SANDUQ_DELEGATED_FEATURE, never
+# SANDUQ_DELEGATED_RUN; set by driver_env for this launch alone) and
+# require_not_worker_context's role-aware check both grant that narrower
+# scope, so its brief states the narrower rule instead of the blanket one.
+EXECUTE_ORCHESTRATOR_DISPATCHER_COMMANDS = (
+    'As the Execute orchestrator you may run delegate_dispatch.py start, collect, accept, reassign '
+    'or adopt for this feature\'s own T### tasks only -- that is how you dispatch and resolve bounded '
+    'workers. Never trust-reset, and never a stage:* identity or another feature\'s tasks; the '
+    'dispatcher enforces this scope itself (DELEGATION_ORCHESTRATOR_SCOPE) and refuses anything '
+    'outside it.\n'
+)
+
+
 def stage_brief(root, feature, stage, token, work_type=None):
     state = workflow.read(root / feature / 'workflow/checkpoint.json', {})
     active = state.get('active') or {}
@@ -412,7 +428,8 @@ def stage_brief(root, feature, stage, token, work_type=None):
         'report the pending decision to the dispatcher.\n'
         'Return the concrete input paths, evidence paths, checks executed and any blocker. '
         'The dispatcher will inspect them and complete the receipt; your own success claim is '
-        'not a passed Sanduq stage. ' + ownership + NO_DISPATCHER_COMMANDS
+        'not a passed Sanduq stage. ' + ownership +
+        (EXECUTE_ORCHESTRATOR_DISPATCHER_COMMANDS if stage == 'execute' else NO_DISPATCHER_COMMANDS)
     )
     return text + QA_COLLECT_ADDENDUM if work_type == 'qa_collect' else text
 
@@ -439,40 +456,74 @@ def brief_file(root, text):
     return path
 
 
-def driver_env(root, run_context=None):
+def driver_env(root, run_context=None, role=None, feature=None):
     """Environment for the driver subprocess and, through it, every worker it
     spawns underneath.
 
-    ``run_context``, when given, is set as ``SANDUQ_DELEGATED_RUN`` (round 9,
-    finding 1a): a delegated worker process tree inherits it, so
-    ``adopt``, ``accept``, ``reassign`` and ``trust-reset`` refuse with
-    ``DELEGATION_WORKER_CONTEXT`` when run from inside that tree -- a worker
-    must never certify its own unattempted or unverified work. This is
-    defence in depth only, not a security boundary: a worker could unset the
-    variable before invoking the dispatcher, so the worker brief's own
-    instruction never to run these commands remains the primary control. The
-    value is this dispatch's own intent id, recorded on the ledger as
-    ``intent_id`` -- the driver (``delegate.mjs``, outside this project's
-    scope) assigns the eventual ``run_id`` itself, only after the worker is
-    already spawned, so the intent id is the identifying token available at
-    spawn time.
+    Two, mutually exclusive shapes (round 10, finding 1 refines round 9's
+    single ``SANDUQ_DELEGATED_RUN``): a plain worker -- any task, and any
+    stage other than ``execute`` -- gets ``SANDUQ_DELEGATED_RUN`` set to
+    this dispatch's own intent id (``run_context``; the driver, outside
+    this project's scope, assigns the eventual ``run_id`` itself, only
+    after the worker is already spawned, so the intent id is the
+    identifying token available at spawn time). The delegated Execute
+    stage is different: its own brief tells it to dispatch and resolve
+    bounded task workers with the dispatcher's own commands, so it gets
+    ``SANDUQ_DELEGATED_ROLE=orchestrator`` and ``SANDUQ_DELEGATED_FEATURE``
+    instead, never ``SANDUQ_DELEGATED_RUN``. Either variant strips the
+    other's variables from the *returned* environment (never mutates
+    ``os.environ`` itself): a task worker the Execute orchestrator launches
+    inherits the orchestrator's own ambient environment via
+    ``os.environ.copy()`` below, and must not carry its role forward.
+
+    ``require_not_worker_context`` reads these to refuse a worker outright
+    (``DELEGATION_WORKER_CONTEXT``) and to scope the orchestrator to its
+    own feature's tasks (``DELEGATION_ORCHESTRATOR_SCOPE``). Defence in
+    depth only, not a security boundary: either process could unset its
+    variables before invoking the dispatcher, so each brief's own
+    instruction remains the primary control.
     """
     env = os.environ.copy()
     env['DELEGATE_RUNS_DIR'] = str(root / '.delegate/runs')
-    if run_context:
+    if role == 'orchestrator':
+        env['SANDUQ_DELEGATED_ROLE'] = 'orchestrator'
+        env['SANDUQ_DELEGATED_FEATURE'] = feature
+        env.pop('SANDUQ_DELEGATED_RUN', None)
+    elif run_context:
         env['SANDUQ_DELEGATED_RUN'] = run_context
+        env.pop('SANDUQ_DELEGATED_ROLE', None)
+        env.pop('SANDUQ_DELEGATED_FEATURE', None)
     return env
 
 
-def require_not_worker_context():
+def require_not_worker_context(feature=None, task_identity=None):
     """Refuse when this process is itself running inside a delegated
-    worker's process tree (round 9, finding 1a): ``SANDUQ_DELEGATED_RUN``,
-    set by ``driver_env`` for every worker at spawn time, must never let
-    that worker call back into the dispatcher to certify its own
-    unattempted or unverified work. Called first by ``adopt``, ``accept``,
-    ``reassign`` and ``trust-reset``. Defence in depth only -- see
-    ``driver_env``'s own docstring for why this is not a security boundary.
+    process tree, worker or orchestrator (round 9, finding 1a; role-aware
+    since round 10, finding 1).
+
+    A plain worker (``SANDUQ_DELEGATED_RUN`` set) is refused outright and
+    unconditionally: ``DELEGATION_WORKER_CONTEXT``. The delegated Execute
+    orchestrator (``SANDUQ_DELEGATED_ROLE=orchestrator`` plus
+    ``SANDUQ_DELEGATED_FEATURE``) is allowed through, but only for a
+    ``T###`` ``task_identity`` belonging to that same feature;
+    ``trust-reset`` (which has no task to name, so always passes
+    ``task_identity=None``), any ``stage:*`` identity, and any other
+    feature all refuse with ``DELEGATION_ORCHESTRATOR_SCOPE``. Called by
+    ``start``, ``collect``, ``accept``, ``reassign``, ``adopt`` and
+    ``trust-reset`` once ``feature`` and the identity in question, if any,
+    are known. With neither variable set -- an ordinary, undelegated
+    orchestrator call -- both checks pass silently.
     """
+    if os.environ.get('SANDUQ_DELEGATED_ROLE') == 'orchestrator':
+        role_feature = os.environ.get('SANDUQ_DELEGATED_FEATURE')
+        allowed = (task_identity is not None and re.fullmatch(r'T\d{3,}', task_identity) is not None and
+                  feature is not None and feature == role_feature)
+        delegation.require(allowed,
+                           'DELEGATION_ORCHESTRATOR_SCOPE: a delegated Execute orchestrator may only '
+                           'start, collect, accept, reassign or adopt a T### task of its own feature (' +
+                           str(role_feature) + '); never trust-reset, a stage:* identity, or another '
+                           'feature')
+        return
     delegation.require(not os.environ.get('SANDUQ_DELEGATED_RUN'),
                        'DELEGATION_WORKER_CONTEXT: this process is running inside a delegated worker '
                        '(SANDUQ_DELEGATED_RUN is set); only the orchestrator may run this command')
@@ -490,12 +541,25 @@ class StartFailed(delegation.DelegationError):
 SUPERVISOR_START_FAILED = 5
 
 
-def launch(root, driver, candidate, cwd, task, timeout, intent_id=None):
+def launch(root, driver, candidate, cwd, task, timeout, intent_id=None, orchestrator_feature=None):
+    """Start one worker through the driver.
+
+    ``orchestrator_feature``, given only for the ``stage:execute`` launch
+    itself (round 10, finding 1), selects the orchestrator environment
+    shape from ``driver_env`` in place of the ordinary worker one; every
+    other launch -- any task, any other stage -- is unaffected. ``--keep-
+    env`` is passed for all three ``SANDUQ_DELEGATED_*`` names regardless
+    (round 10, finding 2), so a future ``--clean-env`` launch does not
+    silently drop whichever of them this call actually set; it has no
+    effect at all without ``--clean-env``, which nothing here passes.
+    """
     node = shutil.which('node')
     if node is None:
         raise StartFailed('NODE_MISSING')
     args = [node, driver, 'start', '--harness', candidate['harness'], '--cwd', str(cwd),
-            '--timeout', str(timeout), '--task', task]
+            '--timeout', str(timeout), '--task', task,
+            '--keep-env', 'SANDUQ_DELEGATED_RUN', '--keep-env', 'SANDUQ_DELEGATED_ROLE',
+            '--keep-env', 'SANDUQ_DELEGATED_FEATURE']
     if candidate['requested_model']:
         args += ['--model', candidate['requested_model']]
     if candidate.get('read_only'):
@@ -504,8 +568,11 @@ def launch(root, driver, candidate, cwd, task, timeout, intent_id=None):
         args.append('--allow-commit')
     if intent_id:
         args += ['--constraint', 'Sanduq delegation intent: ' + intent_id]
+    env = driver_env(root, run_context=intent_id,
+                     role='orchestrator' if orchestrator_feature else None,
+                     feature=orchestrator_feature)
     try:
-        result = subprocess.run(args, cwd=root, env=driver_env(root, intent_id),
+        result = subprocess.run(args, cwd=root, env=env,
                                 capture_output=True, text=True, encoding='utf-8')
     except OSError as exc:
         raise StartFailed('DELEGATE_START_FAILED: ' + str(exc)[:500]) from exc
@@ -564,7 +631,8 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
         selected['read_only'] = False
         selected['allow_commit'] = identity.endswith('/stage:execute')
         try:
-            started = launch(root, status['driver'], selected, cwd, task, timeout, intent_id)
+            started = launch(root, status['driver'], selected, cwd, task, timeout, intent_id,
+                             orchestrator_feature=feature if identity.endswith('/stage:execute') else None)
         except delegation.DelegationError as error:
             # The driver writes meta.json before it spawns a worker. An exited
             # driver with no run for this intent proves nothing started, and so
@@ -639,6 +707,7 @@ def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
           token=None, timeout=None, owned=None):
     root = root.resolve()
     feature = feature_identity(root, feature)
+    require_not_worker_context(feature, identity)
     policy = workflow.load_policy(root)
     config = policy['delegation']
     claimed_route = None
@@ -1499,6 +1568,7 @@ def collect(root, feature, run_id, auto_retry=True):
     with edit_ledger(root, feature) as ledger:
         attempt = find_run(ledger, run_id)
         delegation.require(attempt is not None, 'DELEGATION_RUN_UNKNOWN: ' + run_id)
+        require_not_worker_context(feature, attempt['identity'].removeprefix(feature + '/'))
         linked = replacement_link(ledger, attempt)
         # Already fully processed (finding 3d, round 2): a repeated collect on
         # a terminal run -- especially one accept already resolved -- must
@@ -1619,7 +1689,6 @@ def attempt_to_candidate(attempt):
 
 def reassign(root, feature, run_id, reason, task_file=None):
     """Let the orchestrator escalate complex or partly changed terminal work."""
-    require_not_worker_context()
     root = root.resolve()
     feature = feature_identity(root, feature)
     delegation.require(isinstance(reason, str) and reason.strip(),
@@ -1634,6 +1703,7 @@ def reassign(root, feature, run_id, reason, task_file=None):
     # exactly the case a standard-tier reassignment is meant to resolve.
     delegation.require(prior is not None and prior.get('status') in TERMINAL_STATUSES,
                        'DELEGATION_PRIOR_RUN_NOT_TERMINAL')
+    require_not_worker_context(feature, prior['identity'].removeprefix(feature + '/'))
     # An adopted attempt has no dispatcher route, task file or retry count to
     # escalate from (round 8, finding 2: reassign crashed with a bare
     # KeyError on 'retry_count' trying); adopt is its own, supported recovery.
@@ -1702,7 +1772,6 @@ def accept(root, feature, run_id, command, expect, timeout=None, owned=None):
     failed command or a timeout all leave the attempt ``unverified``; every
     attempt is recorded in the ledger regardless of outcome.
     """
-    require_not_worker_context()
     root = root.resolve()
     feature = feature_identity(root, feature)
     delegation.require(expect in ACCEPT_EXPECTS, 'DELEGATION_ACCEPT_EXPECT_INVALID')
@@ -1714,6 +1783,7 @@ def accept(root, feature, run_id, command, expect, timeout=None, owned=None):
     ledger = read_ledger(root, feature)
     attempt = find_run(ledger, run_id)
     delegation.require(attempt is not None, 'DELEGATION_RUN_UNKNOWN: ' + run_id)
+    require_not_worker_context(feature, attempt['identity'].removeprefix(feature + '/'))
     delegation.require(attempt.get('status') == 'unverified',
                        'DELEGATION_RUN_NOT_UNVERIFIED: only an unverified light-tier result can be accepted')
     cwd = (root / attempt['cwd']).resolve()
@@ -1856,9 +1926,9 @@ def trust_reset(root, feature, reason):
     ``starting`` or ``running``, so a reset can never race a live dispatch
     that might still change the very bytes being reviewed.
     """
-    require_not_worker_context()
     root = root.resolve()
     feature = feature_identity(root, feature)
+    require_not_worker_context(feature, None)
     delegation.require(isinstance(reason, str) and reason.strip(),
                        'DELEGATION_TRUST_RESET_REASON_REQUIRED')
     delegation.require_no_maintenance(root)
@@ -1948,10 +2018,10 @@ def adopt(root, feature, task_id, command, expect, timeout=None, owned=None):
     run at all. The feature directory remains the *default* owned root for
     ``--expect files``, unchanged in effect from before.
     """
-    require_not_worker_context()
     root = root.resolve()
     feature = feature_identity(root, feature)
     delegation.require(re.fullmatch(r'T\d{3,}', task_id) is not None, 'DELEGATION_IDENTITY_INVALID')
+    require_not_worker_context(feature, task_id)
     delegation.require(expect in ACCEPT_EXPECTS, 'DELEGATION_ACCEPT_EXPECT_INVALID')
     delegation.require(isinstance(command, str) and command.strip(),
                        'DELEGATION_ACCEPT_COMMAND_REQUIRED')

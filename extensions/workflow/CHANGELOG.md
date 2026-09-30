@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+- Delegation guard, round 10 corrections (B12; blocking fix, one HIGH and
+  two LOW). Round 9's `SANDUQ_DELEGATED_RUN` guard wrongly barred the
+  delegated Execute orchestrator from dispatching and resolving its own
+  task workers, even though its own brief and `references/execution*.md`
+  tell it to. `driver_env` now sets a different, role-aware environment for
+  the `stage:execute` launch specifically:
+  `SANDUQ_DELEGATED_ROLE=orchestrator` plus `SANDUQ_DELEGATED_FEATURE`,
+  never `SANDUQ_DELEGATED_RUN`. `require_not_worker_context` (now also
+  called by `start` and `collect`, not only `adopt`/`accept`/`reassign`/
+  `trust-reset`) is role-aware: under the orchestrator role it allows
+  `start`, `collect`, `accept`, `reassign` and `adopt` for a `T###` task of
+  that same feature only, refusing `trust-reset`, any `stage:*` identity
+  and any other feature with `DELEGATION_ORCHESTRATOR_SCOPE`. A task worker
+  the orchestrator itself launches gets an ordinary worker environment from
+  its own `launch()` call, with `SANDUQ_DELEGATED_ROLE`/`FEATURE` explicitly
+  stripped so it never inherits the orchestrator's scope. The Execute stage
+  brief now states this narrower rule in place of the blanket
+  `NO_DISPATCHER_COMMANDS`; task briefs are unchanged. `launch()` also now
+  passes `--keep-env` for all three `SANDUQ_DELEGATED_*` names, so a future
+  `--clean-env` launch does not silently drop whichever was actually set
+  (the Node-level fake-harness/`FAKE_REPORT_ENV` isolation test for this
+  lives in `skills/agent-tools/skills/delegate-task/test/run.mjs`, out of
+  this extension's scope; covered here instead by asserting the constructed
+  argv). The README now says plainly that a reviewer must read the
+  `DELEGATION_TASK_ADOPTED`/`DELEGATION_TASK_ACCEPTED` warning lines,
+  because an orchestrator-context `adopt` or `accept` trusts the
+  orchestrator's own choice of command with nothing independent to
+  cross-check it against.
+
 - Delegation guard, round 9 corrections (B12; final Opus verification, one
   MEDIUM and two LOW). `driver_env` now sets `SANDUQ_DELEGATED_RUN` (this
   dispatch's own intent id) for every driver subprocess and, through it,
