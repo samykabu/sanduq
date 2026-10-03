@@ -120,7 +120,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        suite: [workflow, scope, user-manual]
+        suite: [workflow, scope, user-manual, memory]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -129,6 +129,26 @@ jobs:
           python-version: '3.13'
       - run: python -m pip install -r extensions/workflow/test-requirements.txt
       - run: python -m unittest discover -s extensions/${{ matrix.suite }}/tests -q
+
+  memory-installation:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install 'git+https://github.com/github/spec-kit.git@8147943512404afb9d99c6252cb9bf84369fd0b0'
+      - run: python extensions/scripts/smoke_memory_install.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: memory-installation-${{ matrix.os }}
+          path: dist/memory-install-tests/
+          if-no-files-found: ignore
 
   installation:
     strategy:

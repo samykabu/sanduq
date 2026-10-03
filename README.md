@@ -7,7 +7,7 @@
   </picture>
 </p>
 
-[![Spec Kit extensions](https://img.shields.io/badge/Spec_Kit-7_extensions-233C32)](#spec-kit-extensions)
+[![Spec Kit extensions](https://img.shields.io/badge/Spec_Kit-8_extensions-233C32)](#spec-kit-extensions)
 [![Portable agent skills](https://img.shields.io/badge/Agent_skills-7-C65B36)](#portable-skills)
 [![MkDocs Material](https://img.shields.io/badge/MkDocs-Material-526cfe)](https://squidfunk.github.io/mkdocs-material/)
 [![English and Arabic](https://img.shields.io/badge/i18n-English_%2B_Arabic-00843d)](#language-audience-and-security-rules)
@@ -64,6 +64,7 @@ skill, extension command, Sanduq overlay, and stage in the managed lifecycle.
 | Create a diagram in any workflow | Install the `illustrate` skill or extension | Both package the same visual vocabulary and exporters. |
 | Keep a Spec Kit feature synchronized with GitHub Projects | Install the `project` extension | It maintains the parent issue, task sub-issues, and lifecycle status. |
 | Run a task on a different agent CLI, or get a second opinion | Install the `delegate-task` skill | It dispatches in the background and measures the outcome instead of relaying the harness's own claim. |
+| Consolidate completed feature knowledge and remove old specifications | Install the `memory` extension | It maintains current project memory with verified, recoverable archive commits. |
 | Drive a whole feature from GitHub issue to pull request | Install the `workflow` extension | One resumable dispatcher sequences every stage, and resumes the earliest unfinished one after a break. |
 
 ## Skills, plugins, and extensions
@@ -401,12 +402,33 @@ checks run when the feature reaches that stage.
 | [`user-manual`](extensions/user-manual/) | 4 | Audience-specific application documentation and release editions. |
 | [`scope`](extensions/scope/) | 7 | Issue scope, decomposition, and GitHub clarification. |
 | [`workflow`](extensions/workflow/) | 8 | Resumable dispatch from an issue through verification and a PR. |
+| [`memory`](extensions/memory/) | 7 | Current project memory and recoverable archiving of verified feature specs. |
 
 The [catalog](catalog.json) records published versions and immutable download URLs. Source manifests
 record the version in this checkout; [pending releases](extensions/pending-releases.json) identify
 changes waiting for publication. A merged source change is available through the catalog only after
 its release assets are published, downloaded, verified, and promoted. Build unreleased changes
 locally using [the development procedure](#development-and-release).
+
+### Archive completed specifications with Sanduq Memory
+
+[Sanduq Memory](extensions/memory/README.md) reconciles completed specifications into
+`specs/project-memory.md`, retaining current behavior, decisions, constraints and
+open follow-ups. Required test fixtures are migrated before feature folders are
+removed through two scoped commits. Independent review, source coverage and
+verification gates precede deletion; interrupted operations can resume or explicitly
+roll back. Memory is consulted during specification and impact analysis.
+
+Install `memory` from this catalog, then run
+`/speckit-memory-init` (Claude Code), `$speckit-memory-init` (Codex), or
+`/speckit.memory.init` (Copilot). Configure the project's merge branch and actual
+verification checks. Use `run` for explicit selection, or review and `enable` the
+automatic policy once to queue after implementation and archive in the next local
+session after merge. See the [full setup and usage guide](extensions/memory/README.md).
+
+The existing `engage-archive` implementation and registrations in Engage are
+preserved. The Sanduq release does not migrate or remove them. Cutover requires the
+owner's separate confirmation after verifying the release.
 
 ### Using an extension
 

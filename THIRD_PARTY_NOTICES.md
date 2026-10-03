@@ -71,3 +71,7 @@ and illustration and does not imply endorsement, sponsorship, or affiliation.
 `41fa4322368ac0c3e71d497a39939a751dd61247`). Their existing MIT terms remain in
 [extensions/scope/LICENSE](extensions/scope/LICENSE). The migration does not
 relicense upstream Spec Kit, SuperSpec, or other separately installed skills.
+
+## Memory script integrations
+
+Sanduq Memory includes MIT-licensed Spec Kit context fragments and development fixtures. See [the included notice](extensions/memory/THIRD_PARTY_NOTICES.md).

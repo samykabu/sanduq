@@ -1,0 +1,70 @@
+{
+  ".specify/scripts/bash/create-new-feature.sh": [
+    {
+      "before": "# Function to get highest number from specs directory\nget_highest_from_specs() {\n    local specs_dir=\"$1\"\n    local highest=0\n\n    if [ -d \"$specs_dir\" ]; then\n        for dir in \"$specs_dir\"/*; do\n",
+      "after": "# Function to get highest number from specs directory\narchive_python() {\n    if command -v python >/dev/null 2>&1; then python \"$@\"\n    elif command -v python3 >/dev/null 2>&1; then python3 \"$@\"\n    else echo \"ERROR: Python is required for archived feature number protection\" >&2; return 1\n    fi\n}\n\nget_highest_from_specs() {\n    local specs_dir=\"$1\"\n    local highest=0\n    if [ -f \"$specs_dir/.archive-index.json\" ]; then\n        highest=$(archive_python \"$specs_dir/../.specify/extensions/memory/scripts/numbering.py\" \"$specs_dir\") || return 1\n    fi\n\n    if [ -d \"$specs_dir\" ]; then\n        for dir in \"$specs_dir\"/*; do\n"
+    },
+    {
+      "before": "cd \"$REPO_ROOT\"\n\nSPECS_DIR=\"$REPO_ROOT/specs\"\nif [ \"$DRY_RUN\" != true ]; then\n",
+      "after": "cd \"$REPO_ROOT\"\n\n# Sanduq memory transaction gate: stop before branch creation or broad auto-commits.\nif [ -f \"$REPO_ROOT/.specify/extensions/memory/scripts/archive.py\" ]; then\n    archive_python \"$REPO_ROOT/.specify/extensions/memory/scripts/archive.py\" --root \"$REPO_ROOT\" pending --gate >/dev/null || exit 1\nfi\n\nSPECS_DIR=\"$REPO_ROOT/specs\"\nif [ \"$DRY_RUN\" != true ]; then\n"
+    },
+    {
+      "before": "\n    # Force base-10 interpretation to prevent octal conversion (e.g., 010 \u2192 8 in octal, but should be 10 in decimal)\n    FEATURE_NUM=$(printf \"%03d\" \"$((10#$BRANCH_NUMBER))\")\n",
+      "after": "\n    # Force base-10 interpretation to prevent octal conversion (e.g., 010 \u2192 8 in octal, but should be 10 in decimal)\n    FEATURE_NUM=$(printf \"%03d\" \"$((10#$BRANCH_NUMBER))\")\n    if [ -f \"$SPECS_DIR/.archive-index.json\" ]; then\n        archive_python \"$SPECS_DIR/../.specify/extensions/memory/scripts/numbering.py\" \"$SPECS_DIR\" --number \"$((10#$FEATURE_NUM))\" >/dev/null || exit 1\n    fi\n"
+    }
+  ],
+  ".specify/scripts/powershell/create-new-feature.ps1": [
+    {
+      "before": "    param([string]$SpecsDir)\n\n    [long]$highest = 0\n    if (Test-Path $SpecsDir) {\n        Get-ChildItem -Path $SpecsDir -Directory | ForEach-Object {\n            # Match sequential prefixes (>=3 digits), but skip timestamp dirs.\n",
+      "after": "    param([string]$SpecsDir)\n\n    [long]$highest = 0\n    if (Test-Path -LiteralPath (Join-Path $SpecsDir '.archive-index.json')) {\n        $archiveFloor = & python (Join-Path $SpecsDir '../.specify/extensions/memory/scripts/numbering.py') $SpecsDir\n        if ($LASTEXITCODE -ne 0) { throw 'Cannot read archived feature reservations.' }\n        $highest = [long]$archiveFloor\n    }\n    if (Test-Path $SpecsDir) {\n        Get-ChildItem -Path $SpecsDir -Directory | ForEach-Object {\n            # Match sequential prefixes (>=3 digits), but skip timestamp dirs.\n"
+    },
+    {
+      "before": "$repoRoot = Get-RepoRoot\n\nSet-Location $repoRoot\n\n$specsDir = Join-Path $repoRoot 'specs'\nif (-not $DryRun) {\n",
+      "after": "$repoRoot = Get-RepoRoot\n\nSet-Location $repoRoot\n\n# Sanduq memory transaction gate: stop before branch creation or broad auto-commits.\n$archiveGate = Join-Path $repoRoot '.specify/extensions/memory/scripts/archive.py'\nif (Test-Path $archiveGate) {\n    & python $archiveGate --root $repoRoot pending --gate | Out-Null\n    if ($LASTEXITCODE -ne 0) { throw 'Archive recovery or number guard blocks feature creation' }\n}\n\n$specsDir = Join-Path $repoRoot 'specs'\nif (-not $DryRun) {\n"
+    },
+    {
+      "before": "    }\n\n    $featureNum = ('{0:000}' -f $resolvedNumber)\n\n    # Treat an explicit number as a preference when its prefix is already used\n    # by a feature directory. Auto-detected numbers are already conflict-free.\n",
+      "after": "    }\n\n    $featureNum = ('{0:000}' -f $resolvedNumber)\n    if (Test-Path -LiteralPath (Join-Path $specsDir '.archive-index.json')) {\n        & python (Join-Path $specsDir '../.specify/extensions/memory/scripts/numbering.py') $specsDir --number $resolvedNumber | Out-Null\n        if ($LASTEXITCODE -ne 0) { throw 'The requested feature number was already archived.' }\n    }\n\n    # Treat an explicit number as a preference when its prefix is already used\n    # by a feature directory. Auto-detected numbers are already conflict-free.\n"
+    }
+  ],
+  ".specify/extensions/git/scripts/bash/create-new-feature.sh": [
+    {
+      "before": "fi\n\n# Function to get highest number from specs directory\nget_highest_from_specs() {\n    local specs_dir=\"$1\"\n    local highest=0\n\n    if [ -d \"$specs_dir\" ]; then\n        for dir in \"$specs_dir\"/*; do\n",
+      "after": "fi\n\n# Function to get highest number from specs directory\narchive_python() {\n    if command -v python >/dev/null 2>&1; then python \"$@\"\n    elif command -v python3 >/dev/null 2>&1; then python3 \"$@\"\n    else echo \"ERROR: Python is required for archived feature number protection\" >&2; return 1\n    fi\n}\n\nget_highest_from_specs() {\n    local specs_dir=\"$1\"\n    local highest=0\n    if [ -f \"$specs_dir/.archive-index.json\" ]; then\n        highest=$(archive_python \"$specs_dir/../.specify/extensions/memory/scripts/numbering.py\" \"$specs_dir\") || return 1\n    fi\n\n    if [ -d \"$specs_dir\" ]; then\n        for dir in \"$specs_dir\"/*; do\n"
+    },
+    {
+      "before": "\ncd \"$REPO_ROOT\"\n\nSPECS_DIR=\"$REPO_ROOT/specs\"\n\n# Function to generate branch name with stop word filtering\n",
+      "after": "\ncd \"$REPO_ROOT\"\n\n# Sanduq memory transaction gate: stop before branch creation or broad auto-commits.\nif [ -f \"$REPO_ROOT/.specify/extensions/memory/scripts/archive.py\" ]; then\n    archive_python \"$REPO_ROOT/.specify/extensions/memory/scripts/archive.py\" --root \"$REPO_ROOT\" pending --gate >/dev/null || exit 1\nfi\n\nSPECS_DIR=\"$REPO_ROOT/specs\"\n\n# Function to generate branch name with stop word filtering\n"
+    },
+    {
+      "before": "        fi\n\n        FEATURE_NUM=$(printf \"%03d\" \"$((10#$BRANCH_NUMBER))\")\n        BRANCH_NAME=\"${FEATURE_NUM}-${BRANCH_SUFFIX}\"\n    fi\nfi\n\n# GitHub enforces a 244-byte limit on branch names\n",
+      "after": "        fi\n\n        FEATURE_NUM=$(printf \"%03d\" \"$((10#$BRANCH_NUMBER))\")\n        if [ -f \"$SPECS_DIR/.archive-index.json\" ]; then\n            archive_python \"$SPECS_DIR/../.specify/extensions/memory/scripts/numbering.py\" \"$SPECS_DIR\" --number \"$((10#$FEATURE_NUM))\" >/dev/null || exit 1\n        fi\n        BRANCH_NAME=\"${FEATURE_NUM}-${BRANCH_SUFFIX}\"\n    fi\nfi\n\nif [[ \"$FEATURE_NUM\" =~ ^[0-9]{3,}$ ]] && [ -f \"$SPECS_DIR/.archive-index.json\" ]; then\n    archive_python \"$SPECS_DIR/../.specify/extensions/memory/scripts/numbering.py\" \"$SPECS_DIR\" --number \"$((10#$FEATURE_NUM))\" >/dev/null || exit 1\nfi\n\n# GitHub enforces a 244-byte limit on branch names\n"
+    }
+  ],
+  ".specify/extensions/git/scripts/powershell/create-new-feature.ps1": [
+    {
+      "before": "    param([string]$SpecsDir)\n\n    [long]$highest = 0\n    if (Test-Path $SpecsDir) {\n        Get-ChildItem -Path $SpecsDir -Directory | ForEach-Object {\n            if ($_.Name -match '^(\\d{3,})-' -and $_.Name -notmatch '^\\d{8}-\\d{6}-') {\n",
+      "after": "    param([string]$SpecsDir)\n\n    [long]$highest = 0\n    if (Test-Path -LiteralPath (Join-Path $SpecsDir '.archive-index.json')) {\n        $archiveFloor = & python (Join-Path $SpecsDir '../.specify/extensions/memory/scripts/numbering.py') $SpecsDir\n        if ($LASTEXITCODE -ne 0) { throw 'Cannot read archived feature reservations.' }\n        $highest = [long]$archiveFloor\n    }\n    if (Test-Path $SpecsDir) {\n        Get-ChildItem -Path $SpecsDir -Directory | ForEach-Object {\n            if ($_.Name -match '^(\\d{3,})-' -and $_.Name -notmatch '^\\d{8}-\\d{6}-') {\n"
+    },
+    {
+      "before": "\nSet-Location $repoRoot\n\n$specsDir = Join-Path $repoRoot 'specs'\n\nfunction Get-BranchName {\n",
+      "after": "\nSet-Location $repoRoot\n\n# Sanduq memory transaction gate: stop before branch creation or broad auto-commits.\n$archiveGate = Join-Path $repoRoot '.specify/extensions/memory/scripts/archive.py'\nif (Test-Path $archiveGate) {\n    & python $archiveGate --root $repoRoot pending --gate | Out-Null\n    if ($LASTEXITCODE -ne 0) { throw 'Archive recovery or number guard blocks feature creation' }\n}\n\n$specsDir = Join-Path $repoRoot 'specs'\n\nfunction Get-BranchName {\n"
+    },
+    {
+      "before": "        $featureNum = ('{0:000}' -f $Number)\n        $branchName = \"$featureNum-$branchSuffix\"\n    }\n}\n\n$maxBranchLength = 244\n",
+      "after": "        $featureNum = ('{0:000}' -f $Number)\n        $branchName = \"$featureNum-$branchSuffix\"\n    }\n}\n\nif ($featureNum -match '^\\d{3,}$' -and (Test-Path -LiteralPath (Join-Path $specsDir '.archive-index.json'))) {\n    & python (Join-Path $specsDir '../.specify/extensions/memory/scripts/numbering.py') $specsDir --number $featureNum | Out-Null\n    if ($LASTEXITCODE -ne 0) { throw 'The requested feature number was already archived.' }\n}\n\n$maxBranchLength = 244\n"
+    }
+  ],
+  ".specify/extensions/git/scripts/bash/auto-commit.sh": [
+    {
+      "before": "    _commit_msg=\"[Spec Kit] Auto-commit ${_phase} ${_command_name}\"\nfi\n\n# Stage and commit\n_git_out=$(git add . 2>&1) || { echo \"[specify] Error: git add failed: $_git_out\" >&2; exit 1; }\n_git_out=$(git commit -q -m \"$_commit_msg\" 2>&1) || { echo \"[specify] Error: git commit failed: $_git_out\" >&2; exit 1; }\n",
+      "after": "    _commit_msg=\"[Spec Kit] Auto-commit ${_phase} ${_command_name}\"\nfi\n\n# Sanduq memory transaction gate: never sweep a partial archive into another commit.\nif [ -f \"$REPO_ROOT/.specify/extensions/memory/scripts/archive.py\" ]; then\n    if command -v python >/dev/null 2>&1; then archive_python=python\n    elif command -v python3 >/dev/null 2>&1; then archive_python=python3\n    else echo \"ERROR: Python is required to inspect archive recovery\" >&2; exit 1\n    fi\n    \"$archive_python\" \"$REPO_ROOT/.specify/extensions/memory/scripts/archive.py\" --root \"$REPO_ROOT\" pending --gate >/dev/null || exit 1\nfi\n\n# Stage and commit\n_git_out=$(git add . 2>&1) || { echo \"[specify] Error: git add failed: $_git_out\" >&2; exit 1; }\n_git_out=$(git commit -q -m \"$_commit_msg\" 2>&1) || { echo \"[specify] Error: git commit failed: $_git_out\" >&2; exit 1; }\n"
+    }
+  ],
+  ".specify/extensions/git/scripts/powershell/auto-commit.ps1": [
+    {
+      "before": "    $commitMsg = \"[Spec Kit] Auto-commit $phase $commandName\"\n}\n\n# Stage and commit\n# Relax ErrorActionPreference so CRLF warnings on stderr do not terminate,\n# while still allowing redirected error output to be captured for diagnostics.\n",
+      "after": "    $commitMsg = \"[Spec Kit] Auto-commit $phase $commandName\"\n}\n\n# Sanduq memory transaction gate: never sweep a partial archive into another commit.\n$archiveGate = Join-Path $repoRoot '.specify/extensions/memory/scripts/archive.py'\nif (Test-Path $archiveGate) {\n    & python $archiveGate --root $repoRoot pending --gate | Out-Null\n    if ($LASTEXITCODE -ne 0) { throw 'Archive recovery or number guard blocks auto-commit' }\n}\n\n# Stage and commit\n# Relax ErrorActionPreference so CRLF warnings on stderr do not terminate,\n# while still allowing redirected error output to be captured for diagnostics.\n"
+    }
+  ]
+}
