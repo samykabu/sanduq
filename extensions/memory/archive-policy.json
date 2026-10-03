@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "target_branch": "main",
+  "memory_path": "specs/project-memory.md",
+  "fixture_root": "tests/Fixtures/spec-memory",
+  "automatic_execution": "next-local-agent-session",
+  "product_prefixes": [
+    "src/",
+    "tests/",
+    "scripts/",
+    "e2e/",
+    "app/",
+    "lib/",
+    "packages/"
+  ],
+  "product_files": [
+    "Directory.Build.props",
+    "global.json",
+    "package.json",
+    "package-lock.json"
+  ],
+  "default_checks": [],
+  "checks": {}
+}

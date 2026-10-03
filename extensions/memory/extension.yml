@@ -1,0 +1,63 @@
+schema_version: '1.0'
+extension:
+  id: memory
+  name: Sanduq Memory
+  version: 1.0.0
+  description: Reconcile verified feature specifications into current project memory,
+    migrate required fixtures, and archive through scoped recoverable Git commits.
+  author: Samy K. Abushanab
+  license: PolyForm-Noncommercial-1.0.0
+  repository: https://github.com/samykabu/sanduq
+  homepage: https://github.com/samykabu/sanduq/tree/main/extensions/memory
+  category: process
+requires:
+  speckit_version: '>=1.0.0,<2.0.0'
+  tools:
+  - name: python
+    required: true
+    version: '>=3.11'
+  - name: git
+    required: true
+provides:
+  commands:
+  - name: speckit.memory.init
+    file: commands/init.md
+    description: Configure project policy, checks and lifecycle integrations
+  - name: speckit.memory.prepare
+    file: commands/prepare.md
+    description: Queue implemented work for archival after merge
+  - name: speckit.memory.run
+    file: commands/run.md
+    description: Archive selected verified specs through checkpoint, reconciliation
+      and final commit
+  - name: speckit.memory.session
+    file: commands/session.md
+    description: Process approved pending archives in the next local session
+  - name: speckit.memory.enable
+    file: commands/enable.md
+    description: Review and enable automatic archiving for the current policy and
+      implementation
+  - name: speckit.memory.impact
+    file: commands/impact.md
+    description: Consult relevant current product knowledge during specification and
+      impact analysis
+  - name: speckit.memory.status
+    file: commands/status.md
+    description: Inspect policy approval, pending work and an interrupted archive
+hooks:
+  after_implement:
+    command: speckit.memory.prepare
+    optional: false
+    description: Queue archive work without deleting feature files
+  before_specify:
+    command: speckit.memory.session
+    optional: false
+    description: Process merged pending work before creating another specification
+  before_analyze:
+    command: speckit.memory.impact
+    optional: false
+    description: Consult current product knowledge for impact analysis
+tags:
+- archive
+- memory
+- workflow

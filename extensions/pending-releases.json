@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Workflow 1.8.1 widens requires.speckit_version from >=1.0.0,<1.1.0 to >=1.0.0,<2.0.0 so it installs on spec-kit 1.1.x (specify 1.1.1.dev0 rejected 1.8.0 with a Compatibility Error). No behaviour change; dependencies.json pins are unchanged. Publish only after main CI and downloaded asset verification pass."
+  "versions": {
+    "memory": "1.0.0"
+  },
+  "status": "ready",
+  "note": "Sanduq Memory 1.0.0: project-configurable archive extension. Validated with 49 local tests, packaged installs for three hosts and two script types, optional Git guards, package inventory and release regressions. Keep Engage unchanged until owner-confirmed cutover. Promote catalogs only after successful CI and downloaded asset verification."
 }

@@ -17,6 +17,7 @@ compatibility with the Resal Marketplace layout.
 | [assure](assure/) | 2.1.0 (unreleased) | Assure |
 | [user-manual](user-manual/) | 1.1.0 (unreleased) | User Manual |
 | [illustrate](illustrate/) | 2.1.2 | Illustrate |
+| [memory](memory/) | 1.0.0 | Current project memory and verified spec archival |
 
 Published install versions remain authoritative in the two catalogs. Source versions
 marked unreleased are exercised with staged archives, not assumed live URLs.
@@ -43,6 +44,7 @@ specify extension add pr
 specify extension add assure
 specify extension add user-manual
 specify extension add illustrate
+specify extension add memory
 ```
 
 For an existing standalone `pr-review` installation, migrate to the consolidated extension:
@@ -99,6 +101,18 @@ The other commands are manual or optional lifecycle-hook prompts:
 `pr`, `assure`, and `user-manual` check the Spec Kit registry for their compatible `illustrate` version
 when invoked. The default dependency policy asks before install/update; projects may opt into
 automatic or manual behavior through `.specify/extension-dependencies.yml`.
+
+## Project memory and spec archiving
+
+Use [Sanduq Memory](memory/README.md) to consolidate verified completed specifications.
+Initialize it with `/speckit-memory-init`, `$speckit-memory-init`, or
+`/speckit.memory.init`, depending on the agent. Configure `.specify/memory-policy.json`
+with the merge branch and real named verification commands. Manual `run` selects
+exact verified feature folders; `enable` records the owner's one-time approval for
+queueing after implementation and processing after merge in the next local session.
+`impact` consults the relevant current memory; `status` reports recovery state.
+
+Engage's existing local extension remains unchanged until owner-confirmed cutover.
 
 ## Publishing
 
