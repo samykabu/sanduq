@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Pinned upstream fixture retains its declaration style.
-# shellcheck disable=SC2155
+# Optional default arguments trigger SC2120 in older ShellCheck versions.
+# shellcheck disable=SC2155,SC2120
 # Common functions and variables for all scripts
 
 # Find repository root by searching upward for .specify directory
