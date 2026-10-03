@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Portable checkpoint identity and relocate (#52) and the five B13 utility skills (#53): workflow records a portable repo_identity in place of the absolute repo_path gate, adds workflow.py relocate, and adds verify-affected, ci-report, gate-explain, apply-pending and worker-brief. Scope 1.5.0 shares the identity gate in bound_claim and serves Project board calls from the REST API when GraphQL is exhausted. Workflow's dependencies.json pins Scope 1.5.0 and keeps project 2.2.0, pr 4.2.0, illustrate 2.1.2, assure 2.3.0 and user-manual 1.4.0, all unchanged since their release tags. Publish only after main CI and downloaded asset verification pass."
+  "versions": {
+    "workflow": "1.8.1"
+  },
+  "status": "ready",
+  "note": "Workflow 1.8.1 widens requires.speckit_version from >=1.0.0,<1.1.0 to >=1.0.0,<2.0.0 so it installs on spec-kit 1.1.x (specify 1.1.1.dev0 rejected 1.8.0 with a Compatibility Error). No behaviour change; dependencies.json pins are unchanged. Publish only after main CI and downloaded asset verification pass."
 }

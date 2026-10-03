@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.1
+
+- **spec-kit 1.1 compatibility.** `requires.speckit_version` widens from
+  `>=1.0.0,<1.1.0` to `>=1.0.0,<2.0.0`. The `<1.1.0` cap blocked
+  `specify extension add workflow` on spec-kit 1.1.x with a Compatibility
+  Error, although nothing in the extension depends on 1.0-only behaviour.
+  Verified by installing 1.8.1 with `specify` 1.1.1.dev0.
+
 ## 1.8.0
 
 - **Checkpoint identity design fix.** A checkpoint no longer hard-gates every
