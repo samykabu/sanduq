@@ -1,8 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "workflow": "1.8.1"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Workflow 1.8.1 widens requires.speckit_version from >=1.0.0,<1.1.0 to >=1.0.0,<2.0.0 so it installs on spec-kit 1.1.x (specify 1.1.1.dev0 rejected 1.8.0 with a Compatibility Error). No behaviour change; dependencies.json pins are unchanged. Publish only after main CI and downloaded asset verification pass."
 }
