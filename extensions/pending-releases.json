@@ -1,8 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "workflow": "1.8.2"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Workflow 1.8.2: the bundled workflow preset (1.1.1) widens requires.speckit_version from >=1.0.0,<1.1.0 to >=1.0.0,<2.0.0, completing the spec-kit 1.1 fix that 1.8.1 applied only to the extension manifest (install.py --apply rolled back on specify preset add). Adds test_speckit_compat.py. No behaviour change; dependencies.json pins are unchanged. Publish only after main CI and downloaded asset verification pass."
 }
