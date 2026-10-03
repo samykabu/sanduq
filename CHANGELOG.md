@@ -4,6 +4,14 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## spec-kit 1.1 compatibility, bundled preset — workflow 1.8.2 — 2026-10-04
+
+- Workflow 1.8.2 (patch): the bundled `workflow` preset (1.1.1) widens
+  `requires.speckit_version` from `>=1.0.0,<1.1.0` to `>=1.0.0,<2.0.0`. Workflow 1.8.1
+  fixed only the extension manifest, so the installer still rolled back on spec-kit
+  1.1.x when it added the preset. `test_speckit_compat.py` now fails if any bundled
+  preset accepts fewer spec-kit versions than the extension.
+
 ## spec-kit 1.1 compatibility — workflow 1.8.1 — 2026-10-03
 
 - Workflow 1.8.1 (patch): `requires.speckit_version` widens from

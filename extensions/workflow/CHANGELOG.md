@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.2
+
+- **spec-kit 1.1 compatibility, bundled preset.** The `workflow` preset (now 1.1.1)
+  widens `requires.speckit_version` from `>=1.0.0,<1.1.0` to `>=1.0.0,<2.0.0`. 1.8.1
+  widened only the extension manifest, so `install.py --apply` still failed on spec-kit
+  1.1.x with `INSTALL_ROLLED_BACK: INSTALL_COMMAND_FAILED: specify preset add ...`.
+  A new test keeps every bundled preset's range at least as wide as the extension's.
+
 ## 1.8.1
 
 - **spec-kit 1.1 compatibility.** `requires.speckit_version` widens from
