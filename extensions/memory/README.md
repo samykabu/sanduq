@@ -75,10 +75,6 @@ python .specify/extensions/memory/scripts/archive.py pending --gate
 
 `finalize --run <id>` resumes unchanged transactions. `abandon --run <id>` retires unpublished stale proposals. Explicit `rollback --run <id>` restores recorded original bytes and scoped index after permanent publication/check failure, preserves the checkpoint and removes the failed queue entry. It refuses unexpected edits or an already-created final commit; interrupted rollback is resumable. Active archives gate new feature/branch/broad auto-commit workflows. Read-only state reports busy/stale writers without taking their lock; confirm the recorded process has exited before removing only a stale lock. No reset, clean, silent rollback or journal discard occurs. Coverage/provenance validation cannot prove semantic synthesis; a separate reviewer is essential.
 
-## Engage cutover
-
-This is a separate renamed port. Engage's existing `engage-archive` source, commands, policy and registrations remain unchanged. Initialization refuses to run alongside that extension. After verifying the Sanduq release, obtain the owner's explicit confirmation before migration/removal. Inspect any old active journal and approval first; retain memory/provenance and review the new policy. Publishing this release does not uninstall Engage's copy.
-
 ## Development checks
 
 ```bash

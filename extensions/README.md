@@ -17,7 +17,7 @@ compatibility with the Resal Marketplace layout.
 | [assure](assure/) | 2.1.0 (unreleased) | Assure |
 | [user-manual](user-manual/) | 1.1.0 (unreleased) | User Manual |
 | [illustrate](illustrate/) | 2.1.2 | Illustrate |
-| [memory](memory/) | 1.0.0 | Current project memory and verified spec archival |
+| [memory](memory/) | 1.0.1 | Current project memory and verified spec archival |
 
 Published install versions remain authoritative in the two catalogs. Source versions
 marked unreleased are exercised with staged archives, not assumed live URLs.
@@ -111,8 +111,6 @@ with the merge branch and real named verification commands. Manual `run` selects
 exact verified feature folders; `enable` records the owner's one-time approval for
 queueing after implementation and processing after merge in the next local session.
 `impact` consults the relevant current memory; `status` reports recovery state.
-
-Engage's existing local extension remains unchanged until owner-confirmed cutover.
 
 ## Publishing
 

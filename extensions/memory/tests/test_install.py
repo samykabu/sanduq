@@ -72,8 +72,9 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(1, text.count("command: speckit.memory.session"))
         self.assertEqual(1, (self.root / "AGENTS.md").read_text().count("SANDUQ MEMORY SESSION START"))
 
-    def test_coexisting_engage_refuses_without_changes(self):
-        (self.root / ".specify/extensions/engage-archive").mkdir()
+    def test_coexisting_archive_tooling_refuses_without_changes(self):
+        self.write(".specify/extensions/legacy-archive/scripts/archive.py", "# Local archive helper\n")
+        self.write(".specify/extensions/legacy-archive/archive-policy.json", "{}\n")
         before = self.snapshot()
         with self.assertRaisesRegex(ArchiveError, "owner confirms cutover"):
             install(self.root)

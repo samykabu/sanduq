@@ -390,47 +390,6 @@
       "verified": false,
       "sha256": "79809d6fb9a09fed997613e8fe78324da8d4de8ba5d876a7266e576cd90104a2",
       "updated_at": "2026-09-30T22:35:12.351497+00:00"
-    },
-    "memory": {
-      "name": "Sanduq Memory",
-      "id": "memory",
-      "version": "1.0.0",
-      "description": "Reconcile verified feature specifications into current project memory, migrate required fixtures, and archive through scoped recoverable Git commits.",
-      "author": "Samy K. Abushanab",
-      "license": "PolyForm-Noncommercial-1.0.0",
-      "repository": "https://github.com/samykabu/sanduq",
-      "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/memory",
-      "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/memory/README.md",
-      "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/memory/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/memory-v1.0.0/memory.zip",
-      "requires": {
-        "speckit_version": ">=1.0.0,<2.0.0",
-        "tools": [
-          {
-            "name": "python",
-            "required": true,
-            "version": ">=3.11"
-          },
-          {
-            "name": "git",
-            "required": true
-          }
-        ]
-      },
-      "provides": {
-        "commands": 7,
-        "hooks": 3
-      },
-      "tags": [
-        "archive",
-        "memory",
-        "workflow"
-      ],
-      "category": "process",
-      "effect": "read-write",
-      "verified": false,
-      "sha256": "fdd35f89c0d154bb342e4ae136ba482ae72779484e3e58b73ccad883310d2b64",
-      "updated_at": "2026-10-03T20:18:00.343673+00:00"
     }
   }
 }
