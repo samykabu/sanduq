@@ -18,7 +18,7 @@ class InstallTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="sanduq-memory-init-")
         self.addCleanup(temporary.cleanup)
-        self.root = Path(temporary.name)
+        self.root = Path(temporary.name).resolve()
         subprocess.run(["git", "init", "-b", "main"], cwd=self.root, check=True, capture_output=True)
         shutil.copytree(SOURCE, self.root / EXTENSION, ignore=shutil.ignore_patterns("tests", "__pycache__"))
         shutil.copytree(SOURCE / "tests/fixtures/entry-points/.specify/scripts", self.root / ".specify/scripts")
