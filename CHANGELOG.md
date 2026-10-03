@@ -4,6 +4,14 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## spec-kit 1.1 compatibility — workflow 1.8.1 — 2026-10-03
+
+- Workflow 1.8.1 (patch): `requires.speckit_version` widens from
+  `>=1.0.0,<1.1.0` to `>=1.0.0,<2.0.0`, so `specify extension add workflow`
+  installs on spec-kit 1.1.x instead of failing with a Compatibility Error.
+  No behaviour change. Scope 1.5.0's `workflow >=1.8.0,<2.0.0` requirement
+  still holds.
+
 ## Portable checkpoint identity and B13 skills — workflow 1.8.0, scope 1.5.0 — 2026-09-30
 
 - Workflow 1.8.0 (minor: a new command, five new skills and a changed
