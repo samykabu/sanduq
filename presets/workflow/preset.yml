@@ -2,14 +2,14 @@ schema_version: '1.0'
 preset:
   id: workflow
   name: Sanduq managed workflow
-  version: 1.1.0
+  version: 1.1.1
   description: One dispatcher owns automatic transitions, GitHub clarification, and
     native task sub-issues.
   author: Samy K. Abushanab
   repository: https://github.com/samykabu/sanduq
   license: PolyForm-Noncommercial-1.0.0
 requires:
-  speckit_version: '>=1.0.0,<1.1.0'
+  speckit_version: '>=1.0.0,<2.0.0'
 provides:
   templates:
   - type: command
