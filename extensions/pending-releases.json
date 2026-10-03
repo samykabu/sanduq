@@ -1,8 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "memory": "1.0.1"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Memory 1.0.1 removes project-specific references from public documentation and package messages. Replace the retired initial package after CI and downloaded asset verification."
 }
