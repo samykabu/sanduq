@@ -22,6 +22,6 @@ upstream versions stop initialization before guard writes. Preserve them and ada
 the guard explicitly; do not overwrite scripts. Git-extension guards are installed
 when that extension exists. Re-run initialization after installing/upgrading it.
 
-If the Engage archive extension is present, initialization stops. Preserve it until
-the owner approves cutover after the Sanduq release is verified; never uninstall it
-as a side effect of initializing Memory.
+If another specification archive extension is already installed, initialization
+stops. Review its active transactions and obtain the owner's approval before
+replacing existing tooling. Never uninstall another extension during initialization.

@@ -426,9 +426,6 @@ verification checks. Use `run` for explicit selection, or review and `enable` th
 automatic policy once to queue after implementation and archive in the next local
 session after merge. See the [full setup and usage guide](extensions/memory/README.md).
 
-The existing `engage-archive` implementation and registrations in Engage are
-preserved. The Sanduq release does not migrate or remove them. Cutover requires the
-owner's separate confirmation after verifying the release.
 
 ### Using an extension
 

@@ -85,8 +85,11 @@ def prepare_guards(repo: Repository) -> dict:
 def install(root: Path, target_branch: str | None = None) -> dict:
     repo = Repository(root)
     extension = repo.path(".specify/extensions/memory")
-    if repo.path(".specify/extensions/engage-archive").exists():
-        raise ArchiveError("The Engage extension remains installed. Do not migrate this project until the owner confirms cutover.")
+    for installed in sorted(repo.path(".specify/extensions").iterdir()):
+        if installed.name == "memory" or not installed.is_dir():
+            continue
+        if (installed / "scripts/archive.py").is_file() and (installed / "archive-policy.json").is_file():
+            raise ArchiveError("Existing specification archive tooling remains installed. Do not replace it until the owner confirms cutover.")
     guards = prepare_guards(repo)
     policy_path = repo.path(".specify/memory-policy.json")
     if policy_path.exists():
@@ -160,7 +163,7 @@ def install(root: Path, target_branch: str | None = None) -> dict:
     atomic_write(config, text.encode())
     registry["extensions"]["memory"] = {
         **registry["extensions"].get("memory", {}),
-        "version": "1.0.0", "enabled": True, "priority": 5,
+        "version": "1.0.1", "enabled": True, "priority": 5,
         "manifest_hash": "sha256:" + hashlib.sha256((extension / "extension.yml").read_bytes()).hexdigest(),
         "registered_commands": {host: ["speckit.memory." + n for n in COMMANDS] for host in ("codex", "claude", "copilot")},
         "registered_skills": ["speckit-memory-" + n for n in COMMANDS],
