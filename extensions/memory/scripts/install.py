@@ -163,7 +163,7 @@ def install(root: Path, target_branch: str | None = None) -> dict:
     atomic_write(config, text.encode())
     registry["extensions"]["memory"] = {
         **registry["extensions"].get("memory", {}),
-        "version": "1.0.1", "enabled": True, "priority": 5,
+        "version": "1.1.0", "enabled": True, "priority": 5,
         "manifest_hash": "sha256:" + hashlib.sha256((extension / "extension.yml").read_bytes()).hexdigest(),
         "registered_commands": {host: ["speckit.memory." + n for n in COMMANDS] for host in ("codex", "claude", "copilot")},
         "registered_skills": ["speckit-memory-" + n for n in COMMANDS],

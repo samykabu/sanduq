@@ -7,7 +7,7 @@ description: Archive selected verified specifications into current product memor
 User arguments: `$ARGUMENTS`.
 
 Operate only in the configured project checkout. No push, PR creation, stash, reset,
-clean, broad staging, automatic rollback or verification bypass. JSON helper
+clean, broad staging, automatic rollback or implicit verification bypass. JSON helper
 results report `success`; a nonzero exit is a blocker, never a successful no-op.
 Use the command spelling registered by this agent: Codex/Claude skill names use
 hyphens; Copilot commands use `speckit.memory.<command>`.
@@ -35,7 +35,42 @@ Run `python .specify/extensions/memory/scripts/archive.py prepare --spec <path>
 processing approved ready queue entries. The helper creates a real checkpoint
 commit before inventorying content and returns a run ID and candidate/journal
 paths. `--all-completed` selects only fresh verified features and reports skipped
-ones. An unfinished explicitly retired feature requires a reason and named checks.
+ones. An unfinished explicitly retired feature requires a reason and named checks
+unless the owner uses the separate explicit verification override below.
+
+## Explicit manual verification override
+
+Only when the owner explicitly requests it, accept `--skip-verification "<reason>"`
+for exact manually selected feature folders. The reason must be nonempty, printable, single-line
+and at most 500 characters. It is permanently recorded in Git; use a concise factual
+reason suitable for the repository's audience. Do not infer this override from a
+failed check or unavailable infrastructure.
+
+In this mode omit `verify` and `--check`, and run:
+`python .specify/extensions/memory/scripts/archive.py prepare --spec <path>
+--skip-verification "<reason>"`. Repeat `--spec` for explicit selections. Enumerated
+`--related` files remain explicit unverified checkpoint inputs; never describe them
+as verified. The helper still requires the configured target branch and completed
+tasks/completion boundary, unless the owner separately retires unfinished work with
+`--retire-reason`. Do not mark unfinished tasks complete just to use this override.
+Automatic mode and `--all-completed` reject it.
+
+Both fresh verification evidence and external post-deletion check commands are
+skipped. Checkpointing, source/provenance validation, independent critique, exact-byte
+fixture migrations, consumer/reference repairs, scoped final commit and recovery
+remain required. Inspect the skipped status/reason in the journal. Review runtime
+consumer repairs line by line because those repairs will not be executed by checks.
+Retain meaningful unresolved limits/follow-ups in memory; do not add an archive log
+or claim unrun verification passed.
+
+The reviewer must add `"verification_override": "<exact journal reason>"` to
+`review.json` alongside the existing candidate hash and critique fields. `passed`
+means the critique passed; verification remains explicitly `skipped`. Checkpoint and
+final commit messages and the committed archive index retain the same reason.
+The checkpoint marker prevents adding a skip to an existing journal during recovery.
+For an existing failed transaction, explicitly abandon an unpublished proposal or
+roll back a published one first, then prepare and review a new override transaction.
+Do not edit its journal to bypass verification. `finalize` accepts no skip flag.
 
 ## Reconcile the candidate
 
@@ -95,7 +130,8 @@ is an additional requirement.
 
 Run `python .specify/extensions/memory/scripts/archive.py validate --run <id>`.
 Then run `... archive.py finalize --run <id>`. It writes memory and fixture repairs,
-deletes every selected folder, verifies and makes the scoped final commit. Under
+deletes every selected folder, runs required checks (or records the explicit manual
+override) and makes the scoped final commit. Under
 approved automatic policy there is no extra human prompt. Explicit manual `run`
 authorizes the selected archive; do not silently expand its scope.
 

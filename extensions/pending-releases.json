@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Memory 1.0.1 removes project-specific references from public documentation and package messages. Replace the retired initial package after CI and downloaded asset verification."
+  "versions": {
+    "memory": "1.1.0"
+  },
+  "status": "ready",
+  "note": "Memory 1.1.0 adds a reasoned manual verification override while retaining automatic verification, independent review and recoverable scoped commits. Release after successful CI and downloaded asset verification."
 }

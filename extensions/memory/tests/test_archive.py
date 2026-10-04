@@ -80,8 +80,206 @@ class ArchiveIntegrationTests(unittest.TestCase):
     def save_candidate(self, prepared, candidate):
         directory = self.archive.run_path(prepared["run_id"])
         write_json(directory / "candidate.json", candidate)
-        write_json(directory / "review.json", {"candidate_sha256": digest((directory / "candidate.json").read_bytes()),
+        override = self.archive.journal(prepared["run_id"]).get("skip_verification")
+        write_json(directory / "review.json", {"verification_override": override,
+            "candidate_sha256": digest((directory / "candidate.json").read_bytes()),
             "reviewer": "independent test reviewer", "passed": True, "summary": "Inputs and repairs independently reviewed", "findings": []})
+
+    def test_manual_override_archives_despite_failing_checks_and_records_reason(self):
+        self.write("tests/consumer.py", (self.root / "tests/consumer.py").read_text() + "raise SystemExit(17)\n")
+        self.git("add", "tests/consumer.py")
+        self.git("commit", "-m", "Known verification failure")
+        with self.assertRaisesRegex(ArchiveError, "failed"):
+            self.archive.verify(FEATURE, ["consumer"])
+        with self.assertRaisesRegex(ArchiveError, "verified completion"):
+            self.archive.prepare([FEATURE], [], [])
+        reason = "Verification environment is unavailable; follow up separately"
+        initial = self.git("rev-parse", "HEAD")
+        with patch.object(self.archive, "run_checks", side_effect=AssertionError("Checks must be skipped")):
+            prepared = self.archive.prepare([FEATURE], [], [], skip_verification=reason)
+            self.candidate(prepared)
+            result = self.archive.finalize(prepared["run_id"])
+            self.assertEqual(result, self.archive.finalize(prepared["run_id"]))
+        self.assertEqual({"status": "skipped", "reason": reason}, result["verification"])
+        self.assertEqual(result["verification"], prepared["verification"])
+        run = self.archive.journal(prepared["run_id"])
+        self.assertEqual([], run["checks"])
+        self.assertIsNone(run["final_checks"])
+        registry = json.loads((self.root / REGISTRY).read_text())
+        self.assertEqual(result["verification"], registry["archived"][FEATURE]["verification"])
+        self.assertFalse((self.root / FEATURE).exists())
+        self.assertEqual(b'{"currency":"EUR"}\n', (self.root / FIXTURE).read_bytes())
+        self.assertEqual("2", self.git("rev-list", "--count", initial + "..HEAD"))
+        for commit in (prepared["checkpoint"], result["final_commit"]):
+            self.assertIn("Verification-Skipped: " + reason, self.git("show", "-s", "--format=%B", commit))
+        executed = subprocess.run([sys.executable, "tests/consumer.py"], cwd=self.root, capture_output=True)
+        self.assertEqual(17, executed.returncode)  # The failure is preserved, not reported as repaired/passed.
+
+    def test_override_rejects_automatic_checks_and_invalid_reasons_before_checkpoint(self):
+        initial = self.git("rev-parse", "HEAD")
+        for reason in ("", "   ", "line\nbreak", "line\x85break", "line\u2028break",
+                       "line\u2029break", "x" * 501, True):
+            with self.subTest(reason=reason), self.assertRaisesRegex(ArchiveError, "nonempty single-line"):
+                self.archive.prepare([FEATURE], [], [], skip_verification=reason)
+        with self.assertRaisesRegex(ArchiveError, "manual selection"):
+            self.archive.prepare([FEATURE], [], [], automatic=True, skip_verification="Known failure")
+        with self.assertRaisesRegex(ArchiveError, "cannot combine with --check"):
+            self.archive.prepare([FEATURE], [], ["consumer"], skip_verification="Known failure")
+        self.assertEqual(initial, self.git("rev-parse", "HEAD"))
+        self.assertIsNone(self.archive.active_id())
+
+    def test_override_unfinished_feature_still_requires_explicit_retirement(self):
+        self.write(FEATURE + "/tasks.md", "- [ ] T001 Unbuilt\n")
+        self.git("add", FEATURE + "/tasks.md")
+        self.git("commit", "-m", "Unfinished work")
+        with self.assertRaisesRegex(ArchiveError, "unfinished"):
+            self.archive.prepare([FEATURE], [], [], skip_verification="Known check failure")
+        prepared = self.archive.prepare([FEATURE], [], [], retire="Cancelled proposal",
+                                        skip_verification="Verification unavailable")
+        self.candidate(prepared)
+        result = self.archive.finalize(prepared["run_id"])
+        self.assertEqual("skipped", result["verification"]["status"])
+        self.assertTrue(json.loads((self.root / REGISTRY).read_text())["archived"][FEATURE]["retired"])
+
+    def test_override_requires_review_acknowledgment_and_source_coverage(self):
+        prepared = self.archive.prepare([FEATURE], [], [], skip_verification="Known failure")
+        candidate = self.candidate(prepared)
+        directory = self.archive.run_path(prepared["run_id"])
+        review = json.loads((directory / "review.json").read_text())
+        review.pop("verification_override")
+        write_json(directory / "review.json", review)
+        with self.assertRaisesRegex(ArchiveError, "acknowledge the exact"):
+            self.archive.finalize(prepared["run_id"])
+        self.assertTrue((self.root / FEATURE).exists())
+        candidate["coverage"].pop(next(iter(candidate["coverage"])))
+        self.save_candidate(prepared, candidate)
+        with self.assertRaisesRegex(ArchiveError, "Every inventoried"):
+            self.archive.finalize(prepared["run_id"])
+        self.assertTrue((self.root / FEATURE).exists())
+
+    def test_override_still_requires_all_consumer_repairs(self):
+        prepared = self.archive.prepare([FEATURE], [], [], skip_verification="Known failure")
+        candidate = self.candidate(prepared)
+        candidate["repairs"] = [repair for repair in candidate["repairs"] if repair["path"] != "tests/consumer.py"]
+        self.save_candidate(prepared, candidate)
+        with self.assertRaisesRegex(ArchiveError, "All preflight references"):
+            self.archive.finalize(prepared["run_id"])
+        self.assertTrue((self.root / FEATURE).exists())
+
+    def test_override_reason_change_invalidates_review(self):
+        prepared = self.archive.prepare([FEATURE], [], [], skip_verification="Original reason")
+        self.candidate(prepared)
+        run = self.archive.journal(prepared["run_id"])
+        run["skip_verification"] = "Different reason"
+        self.archive.save(run)
+        with self.assertRaisesRegex(ArchiveError, "checkpoint verification marker"):
+            self.archive.finalize(prepared["run_id"])
+        self.assertTrue((self.root / FEATURE).exists())
+
+    def test_override_resumes_final_commit_failure_without_running_checks(self):
+        prepared = self.archive.prepare([FEATURE], [], [], skip_verification="Known check failure")
+        self.candidate(prepared)
+        with patch.object(self.archive.repo, "commit", side_effect=ArchiveError("Commit unavailable")):
+            with self.assertRaisesRegex(ArchiveError, "Commit unavailable"):
+                self.archive.finalize(prepared["run_id"])
+        self.assertEqual("committing", self.archive.journal(prepared["run_id"])["phase"])
+        with patch.object(self.archive, "run_checks", side_effect=AssertionError("Checks must stay skipped")):
+            result = self.archive.finalize(prepared["run_id"])
+        self.assertEqual("done", result["phase"])
+        self.assertEqual("skipped", result["verification"]["status"])
+
+    def test_old_journal_without_override_field_keeps_verification_required(self):
+        prepared = self.prepare()
+        self.candidate(prepared)
+        run = self.archive.journal(prepared["run_id"])
+        run.pop("skip_verification")
+        self.archive.save(run)
+        with patch.object(self.archive, "run_checks", side_effect=ArchiveError("Verification still required")):
+            with self.assertRaisesRegex(ArchiveError, "Verification still required"):
+                self.archive.finalize(prepared["run_id"])
+        self.assertEqual("checking", self.archive.journal(prepared["run_id"])["phase"])
+
+    def test_failed_normal_run_cannot_be_changed_into_override_during_recovery(self):
+        prepared = self.prepare()
+        self.candidate(prepared)
+        with patch.object(self.archive, "run_checks", side_effect=ArchiveError("Known failure")):
+            with self.assertRaisesRegex(ArchiveError, "Known failure"):
+                self.archive.finalize(prepared["run_id"])
+        run = self.archive.journal(prepared["run_id"])
+        run["skip_verification"] = "Injected override"
+        self.archive.save(run)
+        with self.assertRaisesRegex(ArchiveError, "checkpoint verification marker"):
+            self.archive.finalize(prepared["run_id"])
+        self.archive.rollback(prepared["run_id"])
+        fresh = self.archive.prepare([FEATURE], [], [], skip_verification="Owner requested skip")
+        self.candidate(fresh)
+        self.assertEqual("skipped", self.archive.finalize(fresh["run_id"])["verification"]["status"])
+
+    def test_cli_override_works_without_configured_checks(self):
+        policy = json.loads((self.root / POLICY).read_text())
+        policy["checks"] = {}
+        policy["default_checks"] = []
+        self.write(POLICY, json.dumps(policy))
+        self.git("add", POLICY)
+        self.git("commit", "-m", "No verification commands configured")
+        self.archive = Archive(self.root)
+        executed = subprocess.run([sys.executable, str(SCRIPTS / "archive.py"), "--root", str(self.root),
+                                   "prepare", "--spec", FEATURE, "--skip-verification", "Missing test infrastructure"],
+                                  cwd=self.root, capture_output=True)
+        self.assertEqual(0, executed.returncode, executed.stderr.decode(errors="replace"))
+        prepared = json.loads(executed.stdout)["data"]
+        self.assertEqual("skipped", prepared["verification"]["status"])
+        self.candidate(prepared)
+        self.assertEqual("done", self.archive.finalize(prepared["run_id"])["phase"])
+
+    def test_override_explicit_batch_and_related_scope_preserve_unrelated_work(self):
+        second = "specs/008-notifications"
+        self.write(second + "/spec.md", "Notification routing is configured.\n")
+        self.write(second + "/tasks.md", "- [x] T001 Complete\n")
+        self.git("add", second)
+        self.git("commit", "-m", "Second completed feature")
+        self.write("src/app.py", "CURRENCY = 'EUR'\nMAX_ITEMS = 100\n")
+        self.write("unrelated.txt", "Staged owner work\n")
+        self.git("add", "unrelated.txt")
+        self.write("unrelated.txt", "Unstaged owner work\n")
+        owner_index = self.git("show", ":unrelated.txt")
+        prepared = self.archive.prepare([FEATURE, second], ["src/app.py"], [],
+                                        skip_verification="Explicitly archive these unverified inputs")
+        self.candidate(prepared)
+        result = self.archive.finalize(prepared["run_id"])
+        self.assertIn("MAX_ITEMS", self.git("show", prepared["checkpoint"] + ":src/app.py"))
+        self.assertEqual(owner_index, self.git("show", ":unrelated.txt"))
+        self.assertEqual("Unstaged owner work\n", (self.root / "unrelated.txt").read_text())
+        registry = json.loads((self.root / REGISTRY).read_text())
+        for spec in (FEATURE, second):
+            self.assertFalse((self.root / spec).exists())
+            self.assertEqual(result["verification"], registry["archived"][spec]["verification"])
+
+    def test_override_checkpoint_marker_cannot_be_removed_from_journal(self):
+        prepared = self.archive.prepare([FEATURE], [], [], skip_verification="Recorded reason")
+        self.candidate(prepared)
+        run = self.archive.journal(prepared["run_id"])
+        run.pop("skip_verification")
+        self.archive.save(run)
+        with self.assertRaisesRegex(ArchiveError, "checkpoint verification marker"):
+            self.archive.finalize(prepared["run_id"])
+        self.assertTrue((self.root / FEATURE).exists())
+
+    def test_cli_override_rejects_all_completed_automatic_and_empty_reason(self):
+        initial = self.git("rev-parse", "HEAD")
+        commands = [
+            ["prepare", "--all-completed", "--skip-verification", "Known failure"],
+            ["prepare", "--spec", FEATURE, "--automatic", "--skip-verification", "Known failure"],
+            ["prepare", "--spec", FEATURE, "--skip-verification", "   "],
+        ]
+        for args in commands:
+            with self.subTest(args=args):
+                executed = subprocess.run([sys.executable, str(SCRIPTS / "archive.py"), "--root", str(self.root), *args],
+                                          cwd=self.root, capture_output=True)
+                self.assertEqual(1, executed.returncode, executed.stderr.decode(errors="replace"))
+                self.assertFalse(json.loads(executed.stdout)["success"])
+        self.assertEqual(initial, self.git("rev-parse", "HEAD"))
+        self.assertIsNone(self.archive.active_id())
 
     def test_two_commits_fixture_relocation_and_unrelated_index(self):
         self.write("unrelated.txt", "staged owner change\n")
