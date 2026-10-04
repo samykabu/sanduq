@@ -47,7 +47,13 @@ loaded only at that point, never eagerly.
 
 ## Builds
 
-Material for MkDocs is pinned for reproducible HTML builds. The content contract remains portable
-and a Zensical compatibility build is supported because Material is in maintenance mode. Generated
+Material for MkDocs is the default theme and is pinned for reproducible HTML builds. Set
+`renderer.theme` in `User-Manual/manual.yml` to `readthedocs`, `mkdocs` or any other installed MkDocs
+theme, with optional `renderer.theme_options` passed to the theme. Right-to-left editions
+(`languages.rtl`) get `rtl-<theme>.css`, or `rtl-generic.css` when no theme-specific file exists, and
+`theme-<theme>.css` applies to every language of that theme; a file of the same name in
+`User-Manual/theme/` overrides the shipped copy. Navigation follows the `manual.yml` module order and
+names each module in the edition's language. The content contract remains portable and a Zensical
+compatibility build is supported for the Material theme because Material is in maintenance mode. Generated
 HTML, ZIP, and PDF files are CI/release artifacts; Markdown, configuration, approved screenshots,
 and diagrams are committed.

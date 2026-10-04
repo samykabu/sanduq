@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.8.3
+
+- `dependencies.json` pins User Manual 1.5.0 (selectable MkDocs theme, RTL
+  styling for non-Material themes, localized navigation). No workflow
+  behaviour change.
+
 ## 1.8.2
 
 - **spec-kit 1.1 compatibility, bundled preset.** The `workflow` preset (now 1.1.1)

@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.5.0
+
+- **Selectable MkDocs theme.** `renderer.theme` in `manual.yml` picks the
+  HTML theme: `material` (default, unchanged), `readthedocs`, `mkdocs`, or
+  any installed MkDocs theme. `renderer.theme_options` is merged into the
+  theme block. An uninstalled theme fails the build with the list of
+  installed ones; `--renderer zensical` stays a Material-only check.
+- **RTL for non-Material themes.** The built-in themes ship no Arabic locale,
+  so pages always say `lang="en"`. RTL editions (`languages.rtl`) now get
+  `rtl-readthedocs.css` (mirrored sidebar, menu, breadcrumbs, footer buttons
+  and mobile slide-in, code kept LTR) or `rtl-generic.css` for other themes.
+  `theme-readthedocs.css` lets wide tables wrap and scroll in every language.
+  Project files in `User-Manual/theme/` override the shipped copies, so
+  existing manuals work without re-running init.
+- **Localized navigation.** The build generates `nav` in `manual.yml` module
+  order, naming each module with its translation for the edition's language
+  (Arabic editions no longer show English folder slugs), and localizes the
+  Arabic edition names. Material editions keep their tabs.
+- `init_manual.py` records `renderer.theme: material` and copies the new
+  stylesheets.
+
 ## 1.4.0
 
 - **B7 — quiet output.** `manual_state.py` gains `--summary` (one line:

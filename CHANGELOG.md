@@ -4,6 +4,16 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## Selectable manual theme — user-manual 1.5.0, workflow 1.8.3 — 2026-10-04
+
+- User Manual 1.5.0 (minor): `renderer.theme` selects Material (default),
+  ReadTheDocs, MkDocs or any installed MkDocs theme, with
+  `renderer.theme_options` passed through. Right-to-left editions get
+  theme-specific RTL styling (`rtl-readthedocs.css`, `rtl-generic.css`), wide
+  tables wrap under ReadTheDocs, and the generated navigation follows the
+  `manual.yml` module order with module names in the edition's language.
+- Workflow 1.8.3 (patch): `dependencies.json` pins User Manual 1.5.0.
+
 ## spec-kit 1.1 compatibility, bundled preset — workflow 1.8.2 — 2026-10-04
 
 - Workflow 1.8.2 (patch): the bundled `workflow` preset (1.1.1) widens
