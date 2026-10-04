@@ -1,9 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "user-manual": "1.5.0",
-    "workflow": "1.8.3"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "User Manual 1.5.0: renderer.theme selects Material (default), ReadTheDocs, MkDocs or any installed MkDocs theme with renderer.theme_options; RTL editions get rtl-readthedocs.css / rtl-generic.css, ReadTheDocs tables wrap, and the generated nav follows manual.yml module order with translated module names. Verified by building a real 89-page bilingual manual in all six editions with ReadTheDocs and Material and checking EN/AR desktop and mobile screenshots. Workflow 1.8.3 pins User Manual 1.5.0. Publish only after main CI and downloaded asset verification pass."
 }
