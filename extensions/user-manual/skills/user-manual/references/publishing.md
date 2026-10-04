@@ -1,7 +1,9 @@
 # Publishing and theming
 
-Keep content compatible with MkDocs-style Markdown. Pin Material 9.7.6 with MkDocs 1.x for the
-primary build and keep renderer-specific behavior behind scripts. Run a Zensical compatibility check
+Keep content compatible with MkDocs-style Markdown. The theme is `renderer.theme` in `manual.yml`:
+Material 9.7.6 with MkDocs 1.x by default, or `readthedocs`, `mkdocs` or any installed MkDocs theme.
+Theme-specific RTL and layout fixes live in `theme/rtl-<theme>.css` and `theme/theme-<theme>.css`;
+verify RTL editions visually after changing theme. Pin the primary build and keep renderer-specific behavior behind scripts. Run a Zensical compatibility check
 when available. Do not use Material's deprecated projects or typeset plugins.
 
 Theme priority: explicit `User-Manual/theme/` tokens, detected project design-system tokens, then the
