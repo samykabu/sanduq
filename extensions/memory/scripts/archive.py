@@ -43,6 +43,18 @@ def load(path: Path, default=None):
         raise ArchiveError(f"Cannot read JSON at {path}: {error}") from error
 
 
+def verification_report(run: dict) -> dict:
+    """Report an explicit manual override without turning a skip into a pass."""
+    reason = run.get("skip_verification")
+    if reason is None:
+        return {"status": "passed" if run.get("phase") == "done" else "required"}
+    if (run.get("automatic") or not isinstance(reason, str) or not reason.strip()
+            or len(reason.strip()) > 500
+            or not reason.isprintable()):
+        raise ArchiveError("Skipping verification requires a nonempty single-line reason of at most 500 characters and manual selection.")
+    return {"status": "skipped", "reason": reason.strip()}
+
+
 class Archive:
     def __init__(self, root: str | Path):
         self.repo = Repository(root)
@@ -376,9 +388,17 @@ class Archive:
     def save(self, run: dict) -> None:
         write_json(self.run_path(run["run_id"]) / "journal.json", run)
 
-    def prepare(self, specs: list[str], related: list[str], checks: list[str], *, automatic=False, retire="") -> dict:
+    def prepare(self, specs: list[str], related: list[str], checks: list[str], *, automatic=False, retire="",
+                skip_verification: str | None = None) -> dict:
         if self.active_id():
             raise ArchiveError("An archive is unfinished. Inspect/resume it before preparing another.")
+        verification = verification_report({"skip_verification": skip_verification, "automatic": automatic})
+        skip_verification = verification.get("reason")
+        if skip_verification is not None and checks:
+            raise ArchiveError("--skip-verification cannot combine with --check.")
+        if (skip_verification is not None
+                and self.repo.git("branch", "--show-current").decode().strip() != self.policy["target_branch"]):
+            raise ArchiveError("Prepare a verification override on the configured target branch.")
         specs = sorted({self.spec(s) for s in specs})
         if not specs or (retire and (automatic or len(specs) != 1)):
             raise ArchiveError("Retirement selects exactly one explicit feature and never runs automatically.")
@@ -386,7 +406,10 @@ class Archive:
             ready = self.pending()["ready"]
             if related or retire or any(spec not in ready for spec in specs):
                 raise ArchiveError("Automatic mode accepts only ready queued features and committed scope.")
-        evidence = [self.eligibility(s) for s in specs] if not retire else []
+        if skip_verification is not None and not retire:
+            for spec in specs:
+                self.complete(spec)
+        evidence = [self.eligibility(s) for s in specs] if not retire and skip_verification is None else []
         references = self.references(specs)
         # Repairs are enumerated before checkpointing. Their current edits cannot be silently attributed to archival.
         self.repo.check_scope(references + [MEMORY, REGISTRY], clean=True)
@@ -404,12 +427,14 @@ class Archive:
         if outside_product:
             raise ArchiveError(f"Uncommitted implementation evidence needs explicit related scope: {outside_product}")
         all_checks = checks or sorted({c["name"] for e in evidence for c in e["checks"]})
-        self.require_checks(all_checks, references)
-        if not retire:
-            self.require_checks(all_checks, sorted({p for spec in specs for p in self.verification_paths(spec)}))
+        if skip_verification is None:
+            self.require_checks(all_checks, references)
+            if not retire:
+                self.require_checks(all_checks, sorted({p for spec in specs for p in self.verification_paths(spec)}))
         run_id = uuid.uuid4().hex
         run = {"schema_version": 1, "run_id": run_id, "root": str(self.repo.root), "specs": specs,
-               "retire": retire, "automatic": automatic, "checks": all_checks, "scope": scopes,
+               "retire": retire, "automatic": automatic, "skip_verification": skip_verification,
+               "checks": all_checks, "scope": scopes,
                "references": references, "original_files": files, "memory_hash": self.repo.file_hash(MEMORY),
                "registry_hash": self.repo.file_hash(REGISTRY), "previous_entries": read_memory(self.repo.path(MEMORY)),
                "product": self.product_state(), "policy_hash": self.policy_hash(), "phase": "checkpoint",
@@ -421,15 +446,19 @@ class Archive:
         run["checkpoint_tree"] = self.repo.expected_tree(scopes)
         self.save(run)
         write_json(self.repo.state / "active.json", {"run_id": run_id})
-        checkpoint = self.repo.commit(scopes, "[Spec Kit Archive] Checkpoint " + ", ".join(Path(s).name for s in specs),
-                                      run["checkpoint_tree"])
+        message = "[Spec Kit Archive] Checkpoint " + ", ".join(Path(s).name for s in specs)
+        if skip_verification is not None:
+            message += "\n\nVerification-Skipped: " + skip_verification
+        checkpoint = self.repo.commit(scopes, message, run["checkpoint_tree"])
         run.update(checkpoint=checkpoint, phase="synthesis")
+        self.verification_guard(run)
         run["units"] = inventory(self.repo, checkpoint, list(files))
         self.save(run)
         candidate = {"entries": run["previous_entries"], "coverage": {}, "removed": {}, "migrations": [], "repairs": []}
         write_json(self.run_path(run_id) / "candidate.json", candidate)
         return {"run_id": run_id, "checkpoint": checkpoint, "units": str(self.run_path(run_id) / "journal.json"),
-                "candidate": str(self.run_path(run_id) / "candidate.json"), "references": references, "phase": run["phase"]}
+                "candidate": str(self.run_path(run_id) / "candidate.json"), "references": references,
+                "phase": run["phase"], "verification": verification}
 
     def require_checks(self, names: list[str], paths: list[str]) -> None:
         if not names or any(name not in self.policy.get("checks", {}) for name in names):
@@ -443,7 +472,19 @@ class Archive:
         path = self.run_path(run["run_id"]) / "candidate.json"
         return load(path), path.read_bytes()
 
+    def verification_guard(self, run: dict) -> dict:
+        verification = verification_report(run)
+        if run.get("checkpoint"):
+            message = self.repo.git("show", "-s", "--format=%B", run["checkpoint"]).decode("utf-8")
+            markers = [line.removeprefix("Verification-Skipped: ") for line in message.splitlines()
+                       if line.startswith("Verification-Skipped: ")]
+            expected = [verification["reason"]] if verification["status"] == "skipped" else []
+            if markers != expected:
+                raise ArchiveError("Journal override differs from checkpoint verification marker; use explicit recovery, not journal edits.")
+        return verification
+
     def validate(self, run: dict) -> dict[str, bytes | None]:
+        verification = self.verification_guard(run)
         candidate, raw = self.candidate(run)
         memory = validate_knowledge(self.repo, run, candidate)
         review = load(self.run_path(run["run_id"]) / "review.json", {})
@@ -451,6 +492,9 @@ class Archive:
                 or not review.get("reviewer", "").strip() or not review.get("summary", "").strip()
                 or review.get("findings") != []):
             raise ArchiveError("Independent critique must pass for the exact candidate hash with no unresolved findings.")
+        if (verification["status"] == "skipped"
+                and review.get("verification_override") != verification["reason"]):
+            raise ArchiveError("Independent critique must acknowledge the exact verification override reason.")
         outputs = {MEMORY: memory, **{p: None for p in run["original_files"]}}
         for migration in candidate.get("migrations", []):
             source, destination = migration["source"], migration["destination"]
@@ -477,12 +521,15 @@ class Archive:
             repaired.add(path)
         if repaired != set(run["references"]):
             raise ArchiveError("All preflight references need explicit repairs.")
-        self.require_checks(run["checks"], list(repaired))
+        if verification["status"] != "skipped":
+            self.require_checks(run["checks"], list(repaired))
         registry = load(self.repo.path(REGISTRY), {"schema_version": 1, "archived": {}, "high_water": 0})
         for spec in run["specs"]:
             if spec in registry["archived"]:
                 raise ArchiveError("Feature ID is already reserved in archive registry.")
             registry["archived"][spec] = {"checkpoint": run["checkpoint"], "retired": bool(run["retire"])}
+            if verification["status"] == "skipped":
+                registry["archived"][spec]["verification"] = verification
             match = re.match(r"specs/(\d{3,})-", spec)
             if match and not re.match(r"specs/\d{8}-\d{6}-", spec):
                 registry["high_water"] = max(registry["high_water"], int(match.group(1)))
@@ -571,9 +618,11 @@ class Archive:
 
     def finalize(self, run_id: str) -> dict:
         run = self.journal(run_id)
+        self.verification_guard(run)
         if run["phase"] == "done":
             self.cleanup_terminal(run)
-            return {"run_id": run_id, "phase": "done", "checkpoint": run["checkpoint"], "final_commit": run["final_commit"]}
+            return {"run_id": run_id, "phase": "done", "checkpoint": run["checkpoint"], "final_commit": run["final_commit"],
+                    "verification": verification_report(run)}
         if self.active_id() != run_id:
             raise ArchiveError("This is not the active archive run.")
         if run["automatic"]:
@@ -646,7 +695,7 @@ class Archive:
             remaining = self.references(run["specs"])
             if remaining:
                 raise ArchiveError(f"References still require deleted feature folders: {remaining}")
-            run["final_checks"] = self.run_checks(run["checks"])
+            run["final_checks"] = None if run.get("skip_verification") is not None else self.run_checks(run["checks"])
             self.publishing_guard(run)
             for path, expected in run["after"].items():
                 if self.repo.file_hash(path) != expected:
@@ -666,8 +715,10 @@ class Archive:
                     raise ArchiveError("Unexpected commit during archive. Inspect Git without resetting.")
                 final = self.repo.head()
             else:
-                final = self.repo.commit(run["scope"], "[Spec Kit Archive] Finalize " + ", ".join(Path(s).name for s in run["specs"]),
-                                         run["final_tree"])
+                message = "[Spec Kit Archive] Finalize " + ", ".join(Path(s).name for s in run["specs"])
+                if run.get("skip_verification") is not None:
+                    message += "\n\nVerification-Skipped: " + run["skip_verification"]
+                final = self.repo.commit(run["scope"], message, run["final_tree"])
             self.publishing_guard(run)
             pointer = ".specify/feature.json"
             if run.get("local_pointer_hash") and self.repo.file_hash(pointer) == run["local_pointer_hash"]:
@@ -675,7 +726,8 @@ class Archive:
             run.update(phase="done", final_commit=final, finalized_at=now())
             self.save(run)
             self.cleanup_terminal(run)
-        return {"run_id": run_id, "phase": run["phase"], "checkpoint": run["checkpoint"], "final_commit": run.get("final_commit")}
+        return {"run_id": run_id, "phase": run["phase"], "checkpoint": run["checkpoint"], "final_commit": run.get("final_commit"),
+                "verification": verification_report(run)}
 
     def status(self) -> dict:
         run_id = self.active_id()
@@ -710,6 +762,8 @@ def main() -> int:
     prepare.add_argument("--check", action="append", default=[])
     prepare.add_argument("--automatic", action="store_true")
     prepare.add_argument("--retire-reason", default="")
+    prepare.add_argument("--skip-verification", metavar="REASON",
+                         help="Manually archive explicit specs without verification commands; record why checks are skipped.")
     for verb in ("validate", "finalize", "abandon", "rollback"):
         command = sub.add_parser(verb)
         command.add_argument("--run", required=True)
@@ -737,6 +791,8 @@ def main() -> int:
                 result = archive.verify(args.spec, args.check, args.related)
             elif args.verb == "prepare":
                 specs = args.spec
+                if args.skip_verification is not None and (args.automatic or args.all_completed):
+                    raise ArchiveError("--skip-verification requires explicit manual --spec selection.")
                 if args.all_completed:
                     if specs or args.retire_reason:
                         raise ArchiveError("--all-completed cannot combine with explicit selection or retirement.")
@@ -756,7 +812,8 @@ def main() -> int:
                         result = archive.prepare(specs, args.related, args.check, automatic=args.automatic)
                         result["skipped"] = skipped
                 else:
-                    result = archive.prepare(specs, args.related, args.check, automatic=args.automatic, retire=args.retire_reason)
+                    result = archive.prepare(specs, args.related, args.check, automatic=args.automatic,
+                                             retire=args.retire_reason, skip_verification=args.skip_verification)
             elif args.verb == "validate":
                 run = archive.journal(args.run)
                 archive.source_guard(run)

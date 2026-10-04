@@ -84,3 +84,32 @@ python extensions/scripts/release.py prepare --development
 ```
 
 Tests run in disposable Git repositories with real PowerShell/Bash entry points, scoped commits, fixture consumers, reconciliation and interrupted recovery.
+
+## Archive when verification is failing
+
+Verification is required by default. For an explicitly selected manual archive,
+ask the agent's archive/run command to use `--skip-verification "<reason>"`, for
+example `specs/007-invoice --skip-verification "Test service unavailable"`.
+The underlying preparation command is:
+
+```bash
+python .specify/extensions/memory/scripts/archive.py prepare --spec specs/007-invoice --skip-verification "Test service unavailable"
+```
+
+This skips fresh passing verification evidence and external post-deletion checks.
+It records `verification.status: skipped` and the reason in the archive index and
+both Git commits; it never reports the checks as passed. Use a nonempty printable single-line
+reason of at most 500 characters suitable for permanent repository history.
+The normal candidate synthesis, independent review, fixture migration/reference
+repair, scoped checkpoint/final commits and recovery still apply. The reviewer must
+acknowledge the exact reason via `verification_override` in `review.json`.
+
+Only explicit manual selections support this option. Automatic archiving and
+`--all-completed` still require verification. Unfinished tasks still require a
+separate explicit retirement decision. Named checks cannot be combined with the
+skip; explicit related implementation files may be checkpointed, but remain
+unverified. Consumer repairs will not be tested, so review their exact changes and
+retain meaningful unresolved limitations in memory. Existing transactions keep
+their original verification mode: abandon before publication or explicitly roll
+back after publication, then prepare a new override; do not edit a journal.
+Updating this extension invalidates any previous automatic-policy approval.

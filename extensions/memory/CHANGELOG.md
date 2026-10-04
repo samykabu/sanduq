@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.0
+
+- Allow explicit manual archives to skip verification with a recorded reason.
+- Keep automatic verification required and preserve review, fixture/reference validation and recoverable scoped commits.
+- Bind the override to the checkpoint and reviewer acknowledgment; record skipped status in the archive index and CLI results.
+
 ## 1.0.1
 
 - Remove project-specific references from documentation, examples and installer messages.
