@@ -1,0 +1,29 @@
+/* Right-to-left fallback for MkDocs themes the extension ships no specific
+ * stylesheet for. The build adds it only to right-to-left editions
+ * (languages.rtl in manual.yml), so the rules are not scoped by language.
+ * Layout chrome such as sidebars may still need a theme-specific
+ * `rtl-<theme>.css` in User-Manual/theme/.
+ */
+
+body {
+  direction: rtl;
+  text-align: right;
+}
+
+table,
+th,
+td {
+  direction: rtl;
+  text-align: right;
+}
+
+pre,
+code,
+kbd,
+samp,
+.highlight,
+[dir="ltr"] {
+  direction: ltr;
+  text-align: left;
+  unicode-bidi: isolate;
+}

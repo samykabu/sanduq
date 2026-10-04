@@ -94,6 +94,129 @@ def copy_pages(source: Path, target: Path, audience: str, module: str | None) ->
     return len(selected)
 
 
+# Themes whose look the extension ships configuration and RTL styling for. Any
+# other installed MkDocs theme is accepted with `renderer.theme_options` passed
+# through untouched, and gets the generic RTL stylesheet.
+BUILT_IN_THEMES = {"mkdocs", "readthedocs"}
+DEFAULT_THEME = "material"
+
+
+def installed_themes() -> set[str]:
+    from importlib.metadata import entry_points
+    return {entry.name for entry in entry_points(group="mkdocs.themes")}
+
+
+def theme_locales(name: str) -> set[str] | None:
+    """Locales a built-in MkDocs theme ships, or None when it does not say."""
+    if name not in BUILT_IN_THEMES:
+        return None
+    import mkdocs.themes
+    folder = Path(mkdocs.themes.__file__).parent / name / "locales"
+    return {"en"} | ({entry.name for entry in folder.iterdir() if entry.is_dir()} if folder.is_dir() else set())
+
+
+def theme_config(name: str, language: str, options: dict | None = None) -> dict:
+    """The MkDocs `theme` block for one edition.
+
+    Material keeps the extension's established features and light/dark palette.
+    The built-in MkDocs themes take a `locale`, which is only set when the theme
+    ships that language; otherwise the theme falls back to English chrome and the
+    build adds RTL styling itself. `options` from manual.yml override defaults.
+    """
+    if name == "material":
+        config = {
+            "name": "material",
+            "language": language,
+            "features": ["navigation.tabs", "navigation.sections", "navigation.indexes", "content.code.copy"],
+            "palette": [
+                {"media": "(prefers-color-scheme: light)", "scheme": "default", "toggle": {"icon": "material/brightness-7", "name": "Dark mode"}},
+                {"media": "(prefers-color-scheme: dark)", "scheme": "slate", "toggle": {"icon": "material/brightness-4", "name": "Light mode"}},
+            ],
+        }
+    else:
+        config = {"name": name}
+        locales = theme_locales(name)
+        if locales is not None and language in locales:
+            config["locale"] = language
+        if name == "readthedocs":
+            config.update({"navigation_depth": 4, "collapse_navigation": False, "sticky_navigation": True})
+    config.update(options or {})
+    config["name"] = name
+    return config
+
+
+SCAFFOLD_THEME = Path(__file__).resolve().parents[1] / "assets" / "scaffold" / "theme"
+
+
+def stylesheet_source(theme_dir: Path, name: str) -> Path | None:
+    """A project override of a manual stylesheet, else the copy this extension ships."""
+    for folder in (theme_dir, SCAFFOLD_THEME):
+        if (folder / name).is_file():
+            return folder / name
+    return None
+
+
+def rtl_stylesheet(theme_dir: Path, name: str) -> str | None:
+    """The extra RTL stylesheet for a right-to-left edition.
+
+    Material mirrors its own layout from the page language, so it needs none.
+    Other themes get `rtl-<theme>.css` when one exists, else `rtl-generic.css`.
+    """
+    if name == "material":
+        return None
+    specific = f"rtl-{name}.css"
+    return specific if stylesheet_source(theme_dir, specific) else "rtl-generic.css"
+
+
+PAGE_ORDER = ("index.md", "user-guide.md", "admin-guide.md", "technical.md")
+MODULES_TITLE = {"en": "Modules", "ar": "الوحدات"}
+AUDIENCE_TITLE = {
+    "ar": {"end-user": "دليل المستخدم", "administrator": "دليل الإدارة", "technical": "المرجع التقني"},
+}
+
+
+def build_nav(docs: Path, manual: dict, language: str) -> list:
+    """Navigation in manual.yml module order, with each module named in the edition's language.
+
+    Without an explicit nav MkDocs titles sections from folder names, so an Arabic
+    edition shows English slugs. Pages keep their own front-matter titles; only the
+    module sections are named here. Modules missing from manual.yml keep their slug.
+    """
+    def ordered(folder: Path) -> list[str]:
+        pages = sorted(p for p in folder.glob("*.md"))
+        rank = {name: i for i, name in enumerate(PAGE_ORDER)}
+        return [p.relative_to(docs).as_posix() for p in sorted(pages, key=lambda p: (rank.get(p.name, len(rank)), p.name))]
+
+    nav: list = ordered(docs)
+    modules_root = docs / "modules"
+    if modules_root.is_dir():
+        names = {}
+        for module in manual.get("modules") or []:
+            translated = ((module.get("translations") or {}).get(language) or {}).get("name")
+            names[str(module.get("id"))] = str(translated or module.get("name") or module.get("id"))
+        known = [str(m.get("id")) for m in manual.get("modules") or []]
+        folders = sorted((f for f in modules_root.iterdir() if f.is_dir()),
+                         key=lambda f: (known.index(f.name) if f.name in known else len(known), f.name))
+        sections = [{names.get(f.name, f.name.replace("-", " ").capitalize()): ordered(f)} for f in folders if ordered(f)]
+        if sections:
+            nav.append({MODULES_TITLE.get(language, MODULES_TITLE["en"]): sections})
+    return nav
+
+
+def resolve_theme(manual: dict, renderer: str) -> tuple[str, dict]:
+    settings = manual.get("renderer") or {}
+    name = str(settings.get("theme") or DEFAULT_THEME)
+    options = settings.get("theme_options") or {}
+    if not isinstance(options, dict):
+        raise SystemExit("renderer.theme_options must be a mapping")
+    if renderer == "zensical" and name != "material":
+        raise SystemExit(f"Zensical is a Material compatibility check; theme {name!r} builds with --renderer material")
+    available = installed_themes()
+    if name not in available:
+        raise SystemExit(f"MkDocs theme {name!r} is not installed (available: {', '.join(sorted(available))})")
+    return name, options
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=Path("User-Manual"))
@@ -118,6 +241,7 @@ def main() -> None:
     pdf_path = root / "pdf" / args.version / f"{edition}.pdf"
     product = manual.get("product_name", root.parent.name)
 
+    theme_name, theme_options = resolve_theme(manual, args.renderer)
     if args.pdf and args.renderer == "zensical":
         raise SystemExit("PDF builds use the Material renderer; Zensical is an HTML compatibility check")
     if args.pdf:
@@ -144,30 +268,33 @@ def main() -> None:
             raise SystemExit(f"no {args.audience}/{args.language} pages selected")
         styles = staged_docs / "assets" / "stylesheets"
         styles.mkdir(parents=True, exist_ok=True)
-        for css in ("extra.css", "rtl.css", "print.css"):
-            shutil.copy2(root / "theme" / css, styles / css)
+        stylesheets = ["extra.css", "rtl.css", "print.css"]
+        rtl_languages = {str(code) for code in (manual.get("languages") or {}).get("rtl", [])}
+        if stylesheet_source(root / "theme", f"theme-{theme_name}.css"):
+            stylesheets.append(f"theme-{theme_name}.css")
+        extra_rtl = rtl_stylesheet(root / "theme", theme_name) if args.language in rtl_languages else None
+        if extra_rtl:
+            stylesheets.append(extra_rtl)
+        for css in stylesheets:
+            found = stylesheet_source(root / "theme", css)
+            if found is None:
+                raise SystemExit(f"missing manual stylesheet: {root / 'theme' / css}")
+            shutil.copy2(found, styles / css)
 
         plugins: list[object] = ["search"]
         if args.pdf:
             pdf_path.parent.mkdir(parents=True, exist_ok=True)
             plugins.append({"to-pdf": {"output_path": staged_pdf.name, "cover": True, "toc_title": "Contents"}})
         config = {
-            "site_name": f"{product} - {args.audience}",
+            "site_name": f"{product} - {AUDIENCE_TITLE.get(args.language, {}).get(args.audience, args.audience)}",
+            "nav": build_nav(staged_docs, manual, args.language),
             "docs_dir": "docs",
             "site_dir": "site",
             "use_directory_urls": False,
-            "theme": {
-                "name": "material",
-                "language": args.language,
-                "features": ["navigation.tabs", "navigation.sections", "navigation.indexes", "content.code.copy"],
-                "palette": [
-                    {"media": "(prefers-color-scheme: light)", "scheme": "default", "toggle": {"icon": "material/brightness-7", "name": "Dark mode"}},
-                    {"media": "(prefers-color-scheme: dark)", "scheme": "slate", "toggle": {"icon": "material/brightness-4", "name": "Light mode"}},
-                ],
-            },
+            "theme": theme_config(theme_name, args.language, theme_options),
             "plugins": plugins,
             "markdown_extensions": ["admonition", "attr_list", "tables", "toc", "pymdownx.details", "pymdownx.superfences", "pymdownx.tabbed"],
-            "extra_css": ["assets/stylesheets/extra.css", "assets/stylesheets/rtl.css", "assets/stylesheets/print.css"],
+            "extra_css": [f"assets/stylesheets/{css}" for css in stylesheets],
             "extra": {"audience": args.audience, "language": args.language, "version": args.version},
         }
         config_path = temp / "mkdocs.yml"

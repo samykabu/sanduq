@@ -87,3 +87,86 @@ class CopyPagesTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ThemeTests(unittest.TestCase):
+    """The renderer.theme selection: config per theme, locales and RTL styling."""
+
+    def test_material_keeps_its_features_and_palette(self):
+        config = builder.theme_config('material', 'ar')
+        self.assertEqual('material', config['name'])
+        self.assertEqual('ar', config['language'])
+        self.assertIn('navigation.tabs', config['features'])
+        self.assertEqual(2, len(config['palette']))
+
+    def test_readthedocs_sets_only_a_locale_the_theme_ships(self):
+        self.assertEqual('fr', builder.theme_config('readthedocs', 'fr').get('locale'))
+        self.assertNotIn('locale', builder.theme_config('readthedocs', 'ar'))
+        self.assertEqual('readthedocs', builder.theme_config('readthedocs', 'en')['name'])
+
+    def test_theme_options_override_defaults_but_not_the_name(self):
+        config = builder.theme_config('readthedocs', 'en', {'navigation_depth': 2, 'name': 'other'})
+        self.assertEqual(2, config['navigation_depth'])
+        self.assertEqual('readthedocs', config['name'])
+
+    def test_unknown_theme_options_pass_through_for_other_themes(self):
+        config = builder.theme_config('mkdocs', 'en', {'color_mode': 'dark'})
+        self.assertEqual({'name': 'mkdocs', 'locale': 'en', 'color_mode': 'dark'}, config)
+
+    def test_rtl_stylesheet_per_theme(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            theme_dir = Path(tmp)
+            self.assertIsNone(builder.rtl_stylesheet(theme_dir, 'material'))
+            self.assertEqual('rtl-readthedocs.css', builder.rtl_stylesheet(theme_dir, 'readthedocs'))
+            self.assertEqual('rtl-generic.css', builder.rtl_stylesheet(theme_dir, 'mkdocs'))
+            (theme_dir / 'rtl-mkdocs.css').write_text('body{}', encoding='utf-8')
+            self.assertEqual('rtl-mkdocs.css', builder.rtl_stylesheet(theme_dir, 'mkdocs'))
+
+    def test_project_stylesheet_overrides_the_shipped_copy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            theme_dir = Path(tmp)
+            self.assertEqual(builder.SCAFFOLD_THEME / 'rtl-generic.css',
+                             builder.stylesheet_source(theme_dir, 'rtl-generic.css'))
+            (theme_dir / 'rtl-generic.css').write_text('body{}', encoding='utf-8')
+            self.assertEqual(theme_dir / 'rtl-generic.css', builder.stylesheet_source(theme_dir, 'rtl-generic.css'))
+
+    def test_resolve_theme_defaults_to_material(self):
+        self.assertEqual(('material', {}), builder.resolve_theme({}, 'material'))
+
+    def test_resolve_theme_refuses_an_uninstalled_theme(self):
+        with self.assertRaises(SystemExit):
+            builder.resolve_theme({'renderer': {'theme': 'no-such-theme'}}, 'material')
+
+    def test_zensical_only_checks_material(self):
+        with self.assertRaises(SystemExit):
+            builder.resolve_theme({'renderer': {'theme': 'readthedocs'}}, 'zensical')
+
+    def test_theme_options_must_be_a_mapping(self):
+        with self.assertRaises(SystemExit):
+            builder.resolve_theme({'renderer': {'theme': 'readthedocs', 'theme_options': ['x']}}, 'material')
+
+
+class NavTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.docs = Path(self.tmp.name)
+        for rel in ('index.md', 'modules/payments/technical.md', 'modules/payments/index.md',
+                    'modules/payments/user-guide.md', 'modules/accounts/index.md', 'modules/extra/index.md'):
+            (self.docs / rel).parent.mkdir(parents=True, exist_ok=True)
+            (self.docs / rel).write_text('# x\n', encoding='utf-8')
+        self.manual = {'modules': [
+            {'id': 'payments', 'name': 'Payments', 'translations': {'ar': {'name': 'المدفوعات'}}},
+            {'id': 'accounts', 'name': 'Accounts'},
+        ]}
+
+    def test_modules_follow_manual_order_with_translated_names(self):
+        nav = builder.build_nav(self.docs, self.manual, 'ar')
+        self.assertEqual('index.md', nav[0])
+        sections = nav[1]['الوحدات']
+        self.assertEqual(['المدفوعات', 'Accounts', 'Extra'], [next(iter(s)) for s in sections])
+
+    def test_pages_inside_a_module_are_in_reading_order(self):
+        sections = builder.build_nav(self.docs, self.manual, 'en')[1]['Modules']
+        self.assertEqual(['modules/payments/index.md', 'modules/payments/user-guide.md',
+                          'modules/payments/technical.md'], sections[0]['Payments'])

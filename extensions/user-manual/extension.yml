@@ -3,8 +3,8 @@ schema_version: "1.0"
 extension:
   id: user-manual
   name: "User Manual"
-  version: "1.4.0"
-  description: "Create and incrementally maintain bilingual-ready, audience-aware application manuals in Markdown, Material HTML, and PDF, including modules, interfaces, tutorials, screenshots, APIs, releases, migrations, infrastructure, architecture, and complete data dictionaries."
+  version: "1.5.0"
+  description: "Create and incrementally maintain bilingual-ready, audience-aware application manuals in Markdown, themeable MkDocs HTML (Material, ReadTheDocs, or any installed theme), and PDF, including modules, interfaces, tutorials, screenshots, APIs, releases, migrations, infrastructure, architecture, and complete data dictionaries."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
   category: "documentation"

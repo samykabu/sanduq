@@ -76,6 +76,9 @@ def manual_yaml(product: str, modules: list[dict[str, object]], arabic: bool, pr
         '  material_version: "9.7.6"',
         '  mkdocs_constraint: ">=1.6,<2"',
         "  compatibility: zensical",
+        "  # material (default), readthedocs, mkdocs, or any installed MkDocs theme.",
+        "  theme: material",
+        "  theme_options: {}",
         "modules:",
     ]
     for module in modules:
@@ -181,6 +184,8 @@ def main() -> None:
 
     for name in ("mkdocs.yml", "requirements.lock"):
         copy_if_missing(extension_root / "assets" / "scaffold" / name, manual_root / name)
+    for name in ("rtl-readthedocs.css", "rtl-generic.css", "theme-readthedocs.css"):
+        copy_if_missing(extension_root / "assets" / "scaffold" / "theme" / name, manual_root / "theme" / name)
     for name in ("extra.css", "rtl.css", "print.css"):
         copy_if_missing(extension_root / "assets" / "scaffold" / "theme" / name, manual_root / "theme" / name)
         for language in (["en", "ar"] if args.enable_arabic else ["en"]):
