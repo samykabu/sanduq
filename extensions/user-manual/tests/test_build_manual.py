@@ -2,6 +2,7 @@
 import importlib.util
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 SPEC = importlib.util.spec_from_file_location(
@@ -90,7 +91,19 @@ if __name__ == '__main__':
 
 
 class ThemeTests(unittest.TestCase):
-    """The renderer.theme selection: config per theme, locales and RTL styling."""
+    """The renderer.theme selection: config per theme, locales and RTL styling.
+
+    The MkDocs lookups are stubbed so the suite runs where MkDocs is not
+    installed (the CI regression job installs only the test requirements).
+    """
+
+    def setUp(self):
+        locales = {'readthedocs': {'en', 'fr'}, 'mkdocs': {'en', 'fr'}}
+        for name, value in (('installed_themes', lambda: {'material', 'readthedocs', 'mkdocs'}),
+                            ('theme_locales', lambda theme: locales.get(theme))):
+            patcher = mock.patch.object(builder, name, side_effect=value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def test_material_keeps_its_features_and_palette(self):
         config = builder.theme_config('material', 'ar')
