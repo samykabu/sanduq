@@ -2,6 +2,13 @@
   "schema_version": 1,
   "target_branch": "main",
   "memory_path": "specs/project-memory.md",
+  "memory_root": "specs/memory",
+  "memory_budgets": {
+    "index": 3000,
+    "catalog_page": 1500,
+    "entry": 1024
+  },
+  "tokenizer": "chars/4",
   "fixture_root": "tests/Fixtures/spec-memory",
   "automatic_execution": "next-local-agent-session",
   "product_prefixes": [

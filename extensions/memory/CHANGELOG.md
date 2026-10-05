@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.0.0
+
+Breaking: project memory moves from the single `specs/project-memory.md` to an atomic store under `specs/memory/`.
+Finish any 1.x run, add the new policy keys and run `archive.py migrate` once; migration is lossless and proves a
+byte-exact export.
+
+- One entry per file, a governed taxonomy, append-only per-run provenance ledgers, and generated INDEX and catalog
+  pages within token budgets (`memory_budgets`, `tokenizer`).
+- `memory query/show/provenance/catalog/check/index/export`: budgeted, ranked retrieval with match reasons and a
+  continuation cursor; `impact` is query-first.
+- Delta candidates validated as one materialized result; review binds the base and result memory roots and the
+  exact outputs; finalize and rollback cover entry files and ledgers.
+- Parallel drafting (`packets`, `fragment-check`, `merge`) with entry ownership, proposals and conflict classes, and
+  partitioned review (`review-packets`) in parts of at most 40k tokens plus an integration packet.
+- Reviewed corrections may carry a `reason` instead of a source unit in the run.
+- Pathspecs go to Git on stdin, so large archives no longer exceed the Windows command-line limit.
+
 ## 1.1.0
 
 - Allow explicit manual archives to skip verification with a recorded reason.

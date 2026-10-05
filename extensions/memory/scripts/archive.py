@@ -13,13 +13,26 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 import uuid
 from contextlib import nullcontext
 
 from git_state import ArchiveError, Repository, atomic_write, digest, write_json
 from memory import MEMORY, REGISTRY, inventory, read_memory, validate_knowledge
+import memory_delta
+import memory_query
+import memory_store
+import orchestration
 
 EXTENSION = ".specify/extensions/memory"
+STUB = """# Project memory
+
+Project memory moved to [`specs/memory/`](memory/INDEX.md): one file per entry, a domain catalog for browsing, and
+provenance kept out of the reading path. Start at `specs/memory/INDEX.md`.
+
+For the full single-document view, run
+`python .specify/extensions/memory/scripts/archive.py memory export`.
+"""
 POLICY = ".specify/memory-policy.json"
 PRODUCT_PREFIXES = ("src/", "tests/", "scripts/", "e2e/")
 PRODUCT_FILES = ("Directory.Build.props", "global.json", "package.json", "package-lock.json")
@@ -61,7 +74,9 @@ class Archive:
         self.policy = load(self.repo.path(POLICY))
         if self.policy.get("schema_version") != 1:
             raise ArchiveError("Unsupported memory policy. Run the memory init command first.")
-        if self.policy.get("memory_path", MEMORY) != MEMORY or self.policy.get("fixture_root", "tests/Fixtures/spec-memory") != "tests/Fixtures/spec-memory":
+        if (self.policy.get("memory_path", MEMORY) != MEMORY
+                or self.policy.get("memory_root", memory_store.MEMORY_DIR) != memory_store.MEMORY_DIR
+                or self.policy.get("fixture_root", "tests/Fixtures/spec-memory") != "tests/Fixtures/spec-memory"):
             raise ArchiveError("Memory and fixture locations are fixed for this extension version.")
         branch = self.policy.get("target_branch", "")
         if not isinstance(branch, str) or not branch or branch.startswith("-"):
@@ -126,7 +141,7 @@ class Archive:
 
     def spec(self, name: str) -> str:
         path = self.repo.path(name)
-        if path.parent != self.repo.root / "specs" or not re.fullmatch(r"\d{3,}(?:-[a-zA-Z0-9]+)+", path.name):
+        if path.parent != self.repo.root / "specs" or not re.fullmatch(r"\d{3,}[a-z]?(?:-[a-zA-Z0-9]+)+", path.name):
             raise ArchiveError("Select a full feature directory directly under specs/.")
         if not path.is_dir():
             raise ArchiveError(f"Feature directory does not exist: {name}")
@@ -239,15 +254,21 @@ class Archive:
     def verification_paths(self, spec: str) -> list[str]:
         queued = load(self.repo.state / "pending.json", {}).get(spec, {})
         base = queued.get("base")
-        if not base:
-            introduced = self.repo.git("log", "--reverse", "--diff-filter=A", "--format=%H", "--", spec + "/spec.md").decode().splitlines()
-            if introduced:
-                parents = self.repo.git("rev-list", "--parents", "-n", "1", introduced[0]).decode().split()
-                base = parents[1] if len(parents) > 1 else None
-        if base:
-            changed = set(self.repo.names("diff", "--name-only", "-z", base, "HEAD")) | self.repo.dirty()
+        # Unqueued features: only what their own mainline merges brought in, not all later history.
+        merges = [] if base else self.repo.git("log", "--first-parent", "--merges", "--diff-merges=first-parent",
+                                               "--no-patch", "--format=%H", "HEAD", "--", *self.repo.pathspec([spec])).decode().split()
+        if merges:
+            changed = {p for m in merges for p in self.repo.names("diff", "--name-only", "-z", m + "^1", m)} | self.repo.dirty()
         else:
-            changed = set(self.product_state())
+            if not base:
+                introduced = self.repo.git("log", "--reverse", "--diff-filter=A", "--format=%H", "--", spec + "/spec.md").decode().splitlines()
+                if introduced:
+                    parents = self.repo.git("rev-list", "--parents", "-n", "1", introduced[0]).decode().split()
+                    base = parents[1] if len(parents) > 1 else None
+            if base:
+                changed = set(self.repo.names("diff", "--name-only", "-z", base, "HEAD")) | self.repo.dirty()
+            else:
+                changed = set(self.product_state())
         links = {p for p, details in self.repo.index().items() if details.startswith("160000 ")}
         return sorted(p for p in changed if p.startswith(self.product_prefixes) or p in self.product_files or p in links)
 
@@ -286,6 +307,7 @@ class Archive:
         result = []
         for path in self.repo.tracked():
             if (self.repo.within(path, specs) or path in (MEMORY, REGISTRY)
+                    or self.repo.within(path, [memory_store.MEMORY_DIR])
                     or path.startswith((".specify/extensions/", "tests/Fixtures/spec-memory/"))):
                 continue
             target = self.repo.path(path)
@@ -392,6 +414,8 @@ class Archive:
                 skip_verification: str | None = None) -> dict:
         if self.active_id():
             raise ArchiveError("An archive is unfinished. Inspect/resume it before preparing another.")
+        v2 = self.memory_format() == 2
+        memory_paths = [MEMORY, REGISTRY] + ([memory_store.MEMORY_DIR] if v2 else [])
         verification = verification_report({"skip_verification": skip_verification, "automatic": automatic})
         skip_verification = verification.get("reason")
         if skip_verification is not None and checks:
@@ -412,7 +436,7 @@ class Archive:
         evidence = [self.eligibility(s) for s in specs] if not retire and skip_verification is None else []
         references = self.references(specs)
         # Repairs are enumerated before checkpointing. Their current edits cannot be silently attributed to archival.
-        self.repo.check_scope(references + [MEMORY, REGISTRY], clean=True)
+        self.repo.check_scope(references + memory_paths, clean=True)
         files = self.spec_files(specs)
         for path in related:
             self.repo.path(path)
@@ -420,7 +444,7 @@ class Archive:
                 raise ArchiveError(f"Related scope must enumerate existing or tracked files: {path}")
             if path.startswith(".specify/") or path in (MEMORY, REGISTRY) or self.repo.path(path).is_dir():
                 raise ArchiveError("Related changes must be explicit implementation files, not directories or archive configuration.")
-        scopes = sorted(set(specs + references + related + [p for p in (MEMORY, REGISTRY) if self.repo.path(p).exists()]))
+        scopes = sorted(set(specs + references + related + [p for p in memory_paths if self.repo.path(p).exists()]))
         self.repo.check_scope(scopes, clean=automatic)
         # Other product edits make implementation evidence ambiguous even if the selected spec is untouched.
         outside_product = [p for p in self.repo.dirty() if p.startswith(self.product_prefixes) and p not in related]
@@ -434,11 +458,15 @@ class Archive:
         run_id = uuid.uuid4().hex
         run = {"schema_version": 1, "run_id": run_id, "root": str(self.repo.root), "specs": specs,
                "retire": retire, "automatic": automatic, "skip_verification": skip_verification,
-               "checks": all_checks, "scope": scopes,
-               "references": references, "original_files": files, "memory_hash": self.repo.file_hash(MEMORY),
-               "registry_hash": self.repo.file_hash(REGISTRY), "previous_entries": read_memory(self.repo.path(MEMORY)),
-               "product": self.product_state(), "policy_hash": self.policy_hash(), "phase": "checkpoint",
-               "created_at": now(), "input_head": self.repo.head(), "input_index": self.repo.scoped_index(scopes)}
+               "checks": all_checks, "scope": scopes, "references": references, "original_files": files}
+        if v2:
+            run.update(memory_format=2, base_memory_root=memory_store.memory_root(self.repo.root),
+                       registry_hash=self.repo.file_hash(REGISTRY))
+        else:
+            run.update(memory_hash=self.repo.file_hash(MEMORY), registry_hash=self.repo.file_hash(REGISTRY),
+                       previous_entries=read_memory(self.repo.path(MEMORY)))
+        run.update(product=self.product_state(), policy_hash=self.policy_hash(), phase="checkpoint",
+                   created_at=now(), input_head=self.repo.head(), input_index=self.repo.scoped_index(scopes))
         run["source_hashes"] = {p: self.repo.file_hash(p) for p in set(references + related)}
         pointer = self.repo.path(".specify/feature.json")
         run["local_pointer_hash"] = (self.repo.file_hash(".specify/feature.json")
@@ -454,7 +482,8 @@ class Archive:
         self.verification_guard(run)
         run["units"] = inventory(self.repo, checkpoint, list(files))
         self.save(run)
-        candidate = {"entries": run["previous_entries"], "coverage": {}, "removed": {}, "migrations": [], "repairs": []}
+        candidate = (memory_delta.empty_candidate(run["base_memory_root"], checkpoint) if v2 else
+                     {"entries": run["previous_entries"], "coverage": {}, "removed": {}, "migrations": [], "repairs": []})
         write_json(self.run_path(run_id) / "candidate.json", candidate)
         return {"run_id": run_id, "checkpoint": checkpoint, "units": str(self.run_path(run_id) / "journal.json"),
                 "candidate": str(self.run_path(run_id) / "candidate.json"), "references": references,
@@ -470,7 +499,11 @@ class Archive:
 
     def candidate(self, run: dict) -> tuple[dict, bytes]:
         path = self.run_path(run["run_id"]) / "candidate.json"
-        return load(path), path.read_bytes()
+        try:
+            raw = path.read_bytes()
+            return json.loads(raw.decode("utf-8-sig")), raw
+        except (OSError, ValueError) as error:
+            raise ArchiveError(f"Cannot read JSON at {path}: {error}") from error
 
     def verification_guard(self, run: dict) -> dict:
         verification = verification_report(run)
@@ -483,19 +516,90 @@ class Archive:
                 raise ArchiveError("Journal override differs from checkpoint verification marker; use explicit recovery, not journal edits.")
         return verification
 
-    def validate(self, run: dict) -> dict[str, bytes | None]:
+    def validate(self, run: dict) -> tuple[dict[str, bytes | None], dict | None]:
+        outputs, report = self.materialize(run)
+        if report and report["review"]["status"] != "passed":
+            raise ArchiveError("Independent critique must pass and bind this exact result: "
+                               + "; ".join(report["review"]["problems"]))
+        return outputs, report
+
+    def memory_result_guard(self, run: dict) -> None:
+        """Format 2 commits all of specs/memory, so it must be exactly the reviewed result plus nothing unreviewed."""
+        if run.get("memory_format") != 2:
+            return
+        if memory_store.memory_root(self.repo.root) != run.get("result_memory_root"):
+            raise ArchiveError("Project memory differs from the reviewed result; preserve edits and inspect.")
+        scope = self.repo.pathspec([memory_store.MEMORY_DIR])
+        changed = (set(self.repo.names("ls-files", "--others", "--exclude-standard", "-z", "--", *scope))
+                   | set(self.repo.names("diff", "--name-only", "--no-renames", "-z", run["final_parent"], "--", *scope)))
+        stray = sorted(changed - set(run["outputs"]))
+        if stray:
+            raise ArchiveError(f"Unreviewed project memory files would be committed; preserve edits and inspect: {stray}")
+
+    @staticmethod
+    def review_v2(review_path: Path, raw: bytes, run: dict, verification: dict, m) -> dict:
+        """Report whether review.json binds the exact candidate and materialized result; never raises."""
+        if not review_path.exists():
+            return {"status": "missing", "problems": ["review.json does not exist yet."]}
+        try:
+            review = load(review_path)
+        except ArchiveError as error:
+            return {"status": "mismatch", "problems": [str(error)]}
+        if not isinstance(review, dict):
+            return {"status": "mismatch", "problems": ["review.json must be an object."]}
+        expected = {"candidate_sha256": digest(raw), "base_memory_root": run["base_memory_root"],
+                    "result_memory_root": m.result_root, "outputs_sha256": m.outputs_sha256}
+        if verification["status"] == "skipped":
+            expected["verification_override"] = verification["reason"]
+        problems = [f"{key} must be {value}." for key, value in expected.items() if review.get(key) != value]
+        if review.get("passed") is not True or review.get("findings") != []:
+            problems.append("passed must be true with findings: [].")
+        if not all(isinstance(review.get(k), str) and review[k].strip() for k in ("reviewer", "summary")):
+            problems.append("reviewer and summary must be nonempty.")
+        return {"status": "mismatch" if problems else "passed", "problems": problems}
+
+    def materialize(self, run: dict) -> tuple[dict[str, bytes | None], dict | None]:
+        """Outputs map plus, for format 2, the bindings and review status (the review is not enforced here)."""
         verification = self.verification_guard(run)
         candidate, raw = self.candidate(run)
-        memory = validate_knowledge(self.repo, run, candidate)
-        review = load(self.run_path(run["run_id"]) / "review.json", {})
-        if (review.get("candidate_sha256") != digest(raw) or review.get("passed") is not True
-                or not review.get("reviewer", "").strip() or not review.get("summary", "").strip()
-                or review.get("findings") != []):
-            raise ArchiveError("Independent critique must pass for the exact candidate hash with no unresolved findings.")
-        if (verification["status"] == "skipped"
-                and review.get("verification_override") != verification["reason"]):
-            raise ArchiveError("Independent critique must acknowledge the exact verification override reason.")
-        outputs = {MEMORY: memory, **{p: None for p in run["original_files"]}}
+        registry = load(self.repo.path(REGISTRY), {"schema_version": 1, "archived": {}, "high_water": 0})
+        report = None
+        if run.get("memory_format") == 2:
+            m = memory_delta.validate(self.repo, run, candidate, self.budgets(),
+                                      set(registry.get("retired_memory_ids", {})))
+            run_dir = self.run_path(run["run_id"])
+            review = self.review_v2(run_dir / "review.json", raw, run, verification, m)
+            # A run that made packets must pass partition and integration review, even if merge.json is deleted.
+            packeted = (run_dir / "merge.json").exists() or any((run_dir / "packets").glob("*.json"))
+            if packeted and review["status"] != "missing":
+                try:
+                    approval = load(run_dir / "review.json")
+                    if isinstance(approval, dict):
+                        review["problems"] += orchestration.approval_problems(
+                            run_dir, approval, orchestration.current_hashes(self.repo, run, run_dir, m, raw))
+                except ArchiveError as error:
+                    review["problems"].append(str(error))
+                review["status"] = "mismatch" if review["problems"] else "passed"
+            self.materialized = m  # review-packets needs the result, not just its roots
+            report = {"candidate_sha256": digest(raw), "base_memory_root": run["base_memory_root"],
+                      "result_memory_root": m.result_root, "outputs_sha256": m.outputs_sha256, "summary": m.summary,
+                      "review": review}
+            outputs = dict(m.outputs)
+            retired = {r["id"]: {"reason": r["reason"], "replacement": r["replacement"]}
+                       for r in candidate.get("removals", [])}
+        else:
+            outputs = {MEMORY: validate_knowledge(self.repo, run, candidate)}
+            review = load(self.run_path(run["run_id"]) / "review.json", {})
+            if (review.get("candidate_sha256") != digest(raw) or review.get("passed") is not True
+                    or not review.get("reviewer", "").strip() or not review.get("summary", "").strip()
+                    or review.get("findings") != []):
+                raise ArchiveError("Independent critique must pass for the exact candidate hash with no unresolved findings.")
+            if (verification["status"] == "skipped"
+                    and review.get("verification_override") != verification["reason"]):
+                raise ArchiveError("Independent critique must acknowledge the exact verification override reason.")
+            retired = {identifier: {"replacement": info.get("replacement")}
+                       for identifier, info in candidate.get("removed", {}).items()}
+        outputs.update({p: None for p in run["original_files"]})
         for migration in candidate.get("migrations", []):
             source, destination = migration["source"], migration["destination"]
             if source not in run["original_files"]:
@@ -523,7 +627,6 @@ class Archive:
             raise ArchiveError("All preflight references need explicit repairs.")
         if verification["status"] != "skipped":
             self.require_checks(run["checks"], list(repaired))
-        registry = load(self.repo.path(REGISTRY), {"schema_version": 1, "archived": {}, "high_water": 0})
         for spec in run["specs"]:
             if spec in registry["archived"]:
                 raise ArchiveError("Feature ID is already reserved in archive registry.")
@@ -533,13 +636,14 @@ class Archive:
             match = re.match(r"specs/(\d{3,})-", spec)
             if match and not re.match(r"specs/\d{8}-\d{6}-", spec):
                 registry["high_water"] = max(registry["high_water"], int(match.group(1)))
-        registry.setdefault("retired_memory_ids", {}).update(
-            {identifier: {"replacement": info.get("replacement")} for identifier, info in candidate.get("removed", {}).items()})
+        registry.setdefault("retired_memory_ids", {}).update(retired)
         outputs[REGISTRY] = (json.dumps(registry, indent=2) + "\n").encode()
-        for path, content in outputs.items():
-            if content is not None and self.repo.git("check-ignore", "--no-index", "--", path, ok=(0, 1)):
-                raise ArchiveError(f"Archive output would be ignored and unrecoverable from Git: {path}")
-        return outputs
+        written = [p for p, content in outputs.items() if content is not None]
+        ignored = self.repo.names("check-ignore", "--no-index", "--stdin", "-z", ok=(0, 1),
+                                  stdin=b"\0".join(p.encode("utf-8") for p in written))
+        if ignored:
+            raise ArchiveError(f"Archive output would be ignored and unrecoverable from Git: {ignored[0]}")
+        return outputs, report
 
     def source_guard(self, run: dict) -> None:
         if run["policy_hash"] != self.policy_hash():
@@ -547,13 +651,18 @@ class Archive:
         if self.repo.git("branch", "--show-current").decode().strip() != self.policy["target_branch"]:
             raise ArchiveError("Deletion requires the locally merged configured target branch.")
         self.repo.git("merge-base", "--is-ancestor", run["checkpoint"], "HEAD")
-        if self.repo.file_hash(MEMORY) != run["memory_hash"] or self.repo.file_hash(REGISTRY) != run["registry_hash"]:
+        memory_changed = (memory_store.memory_root(self.repo.root) != run["base_memory_root"]
+                          if run.get("memory_format") == 2 else self.repo.file_hash(MEMORY) != run["memory_hash"])
+        if memory_changed or self.repo.file_hash(REGISTRY) != run["registry_hash"]:
             raise ArchiveError("Project memory/registry changed. Reconcile a new candidate; do not apply the stale proposal.")
         if self.spec_files(run["specs"]) != run["original_files"] or self.product_state() != run["product"]:
             raise ArchiveError("Feature artifacts or implementation evidence changed since preparation.")
         if any(self.repo.file_hash(p) != h for p, h in run["source_hashes"].items()):
             raise ArchiveError("A repair/related input changed since checkpointing.")
-        if self.repo.git("diff", "--name-only", run["checkpoint"], "HEAD", "--", *self.repo.pathspec(run["scope"])):
+        # git diff has no --pathspec-from-file; chunk to stay under the Windows command-line limit.
+        scope = run["scope"]
+        if any(self.repo.git("diff", "--name-only", run["checkpoint"], "HEAD", "--", *self.repo.pathspec(scope[i:i + 100]))
+               for i in range(0, len(scope), 100)):
             raise ArchiveError("Merged history changed archive scope since checkpointing.")
         if self.repo.scoped_index(run["scope"]) != run["input_index"]:
             raise ArchiveError("Unrelated index changed during this archive. Resolve before resuming.")
@@ -601,7 +710,7 @@ class Archive:
                 atomic_write(target, base64.b64decode(encoded))
         indexed = [p for p in self.repo.index() if p in run["outputs"]]
         if indexed:
-            self.repo.git("restore", "--source=" + run["final_parent"], "--staged", "--", *self.repo.pathspec(indexed))
+            self.repo.git_paths("restore", "--source=" + run["final_parent"], "--staged", paths=indexed)
         run.update(phase="rolled-back", rolled_back_at=now())
         self.save(run)
         self.cleanup_terminal(run)
@@ -635,10 +744,15 @@ class Archive:
             run.update(checkpoint=self.repo.head(), phase="synthesis")
             run["units"] = inventory(self.repo, run["checkpoint"], list(run["original_files"]))
             self.save(run)
+            candidate = self.run_path(run_id) / "candidate.json"
+            if run.get("memory_format") == 2 and not candidate.exists():
+                write_json(candidate, memory_delta.empty_candidate(run["base_memory_root"], run["checkpoint"]))
             raise ArchiveError("Checkpoint recovered. Create/review candidate.json before finalizing.")
         if run["phase"] == "synthesis":
             self.source_guard(run)
-            outputs = self.validate(run)
+            outputs, report = self.validate(run)
+            if report:
+                run["result_memory_root"] = report["result_memory_root"]
             scope = sorted(set(run["scope"] + list(outputs)))
             self.repo.check_scope(scope)
             run["outputs"] = {p: None if data is None else base64.b64encode(data).decode() for p, data in outputs.items()}
@@ -687,6 +801,7 @@ class Archive:
                     for subdir in sorted((p for p in directory.rglob("*") if p.is_dir()), key=lambda p: len(p.parts), reverse=True):
                         subdir.rmdir()
                     directory.rmdir()
+            self.memory_result_guard(run)
             run["phase"] = "checking"
             self.save(run)
         if run["phase"] == "checking":
@@ -700,6 +815,7 @@ class Archive:
             for path, expected in run["after"].items():
                 if self.repo.file_hash(path) != expected:
                     raise ArchiveError(f"Verification changed archive outputs: {path}")
+            self.memory_result_guard(run)
             run["final_tree"] = self.repo.expected_tree(run["scope"])
             run["phase"] = "committing"
             self.save(run)
@@ -708,6 +824,7 @@ class Archive:
                 raise ArchiveError("Unrelated index changed before final commit; preserving user work.")
             if any(self.repo.file_hash(p) != expected for p, expected in run["after"].items()):
                 raise ArchiveError("Archive outputs changed after verification; preserve edits and inspect before recovery.")
+            self.memory_result_guard(run)
             if self.repo.head() != run["final_parent"]:
                 # Recover a successful final commit whose journal update was interrupted.
                 if (self.repo.git("rev-parse", "HEAD^{tree}").decode().strip() != run["final_tree"]
@@ -729,10 +846,115 @@ class Archive:
         return {"run_id": run_id, "phase": run["phase"], "checkpoint": run["checkpoint"], "final_commit": run.get("final_commit"),
                 "verification": verification_report(run)}
 
+    def memory_format(self) -> int:
+        return load(self.repo.path(REGISTRY), {}).get("memory_format", 1)
+
+    def budgets(self) -> dict:
+        return {**memory_store.DEFAULT_BUDGETS, **self.policy.get("memory_budgets", {})}
+
+    def memory_check(self) -> dict:
+        store = memory_store.Store(self.repo.root)
+        retired = set(load(self.repo.path(REGISTRY), {}).get("retired_memory_ids", {}))
+        problems = memory_store.check(store, self.budgets(), retired)
+        if problems:
+            raise ArchiveError(f"{len(problems)} memory problem(s): " + "; ".join(problems[:20]))
+        return {"entries": len(store.entries), "domains": len(store.domains), "ledgers": len(store.ledgers),
+                "memory_root": memory_store.memory_root(self.repo.root), "problems": []}
+
+    def memory_index(self) -> dict:
+        store = memory_store.Store(self.repo.root)
+        outputs = memory_store.generated(store, self.budgets())
+        catalogs = self.repo.root / memory_store.CATALOGS
+        stale = [p for p in catalogs.rglob("*") if p.is_file()
+                 and p.relative_to(self.repo.root).as_posix() not in outputs]
+        for path in stale:
+            path.unlink()
+        for path, data in outputs.items():
+            if self.repo.file_hash(path) != digest(data):
+                atomic_write(self.repo.path(path), data)
+        return {"written": sorted(outputs), "removed": sorted(p.relative_to(self.repo.root).as_posix() for p in stale)}
+
+    def migrate(self) -> dict:
+        """Mechanical, lossless conversion of specs/project-memory.md to format 2, proven by byte-exact export."""
+        if self.active_id():
+            raise ArchiveError("Finish or roll back the active archive run before migrating memory.")
+        if self.memory_format() == 2:
+            raise ArchiveError("Project memory is already format 2.")
+        if self.repo.path(memory_store.MEMORY_DIR).exists():
+            raise ArchiveError(f"{memory_store.MEMORY_DIR} already exists; inspect or remove it before migrating.")
+        scopes = [memory_store.MEMORY_DIR, MEMORY, REGISTRY]
+        self.repo.check_scope(scopes, clean=True)
+        original = self.repo.path(MEMORY).read_bytes()
+        legacy_sha = digest(original)
+        outputs = memory_store.migration_outputs(read_memory(self.repo.path(MEMORY)), legacy_sha)
+        self.repo.state.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="memory-migrate-", dir=self.repo.state) as temp:
+            for path, data in outputs.items():
+                atomic_write(Path(temp) / path, data)
+            outputs.update(memory_store.generated(memory_store.Store(Path(temp)), self.budgets()))
+            for path, data in outputs.items():
+                atomic_write(Path(temp) / path, data)
+            store = memory_store.Store(Path(temp))
+            if memory_store.export(store) != original:
+                raise ArchiveError("Migration is not lossless: the export differs from the original. Nothing was written.")
+            problems = memory_store.check(store, self.budgets())
+            if problems:
+                raise ArchiveError(f"Migrated memory fails checks; nothing was written: {problems[:10]}")
+        for path, data in outputs.items():
+            atomic_write(self.repo.path(path), data)
+        atomic_write(self.repo.path(MEMORY), STUB.encode("utf-8"))
+        registry = load(self.repo.path(REGISTRY), {"schema_version": 1, "archived": {}, "high_water": 0})
+        registry.update(memory_format=2, legacy_memory_sha256=legacy_sha)
+        write_json(self.repo.path(REGISTRY), registry)
+        message = ("[Spec Kit Archive] Migrate project memory to format 2\n\n"
+                   f"Legacy-Memory-SHA256: {legacy_sha}\nEntries: {len(store.entries)}\n"
+                   "Proof: archive.py memory export reproduces the legacy document byte for byte.")
+        commit = self.repo.commit(scopes, message, self.repo.expected_tree(scopes))
+        return {"commit": commit, "entries": len(store.entries), "domains": len(store.domains),
+                "files": len(outputs), "legacy_memory_sha256": legacy_sha,
+                "memory_root": memory_store.memory_root(self.repo.root)}
+
     def status(self) -> dict:
         run_id = self.active_id()
         return {"policy_hash": self.policy_hash(), "pending": self.pending(),
                 "active": self.journal(run_id) if run_id else None}
+
+
+def memory_cli_read(archive: Archive, args) -> str | None:
+    """Read-only memory verbs print Markdown (agents read it directly) or the JSON envelope."""
+    store = memory_store.Store(archive.repo.root)
+    if args.memory_verb == "query":
+        result = memory_query.query(store, archive.repo.root, budget=args.budget, cursor=args.cursor, ids=args.id,
+                                    routes=args.route, paths=args.path, error_codes=args.error_code,
+                                    domains=args.domain, text=args.text)
+        if args.format == "md":
+            return memory_query.to_markdown(result)
+        for item in result["entries"]:
+            item.pop("markdown")
+            item["text"] = store.entries[item["id"]]["text"]
+        return json.dumps({"success": True, "data": result}, ensure_ascii=False) + "\n"
+    if args.memory_verb == "show":
+        missing = [i for i in args.id if i not in store.entries]
+        if missing:
+            raise ArchiveError(f"Unknown memory id(s): {missing}")
+        blocks = []
+        for eid in args.id:
+            relations = store.entries[eid].get("relations", [])
+            blocks.append(memory_query.render_entry(store, eid)
+                          + (f"\nRelated: {', '.join(relations)}\n" if relations else ""))
+        return "\n".join(blocks)
+    if args.memory_verb == "provenance":
+        if args.id not in store.entries and args.id not in store.retired:
+            raise ArchiveError(f"Unknown memory id: {args.id}")
+        records = [{"ledger": name, "record_hash": memory_store.record_hash(r), "record": r}
+                   for name, _, rs in store.ledgers for r in rs if r.get("entry") == args.id]
+        folded = store.provenance.get(args.id, {"sources": [], "evidence": []})
+        return json.dumps({"success": True, "data": {"id": args.id, "folded": folded, "records": records}},
+                          ensure_ascii=False) + "\n"
+    page = archive.repo.root / memory_store.CATALOGS / args.domain / f"{args.page:02d}.md"
+    if args.domain not in store.domains or not page.is_file():
+        raise ArchiveError(f"No catalog page {args.page} for domain {args.domain!r}; see specs/memory/INDEX.md.")
+    return page.read_text(encoding="utf-8")
 
 
 def main() -> int:
@@ -764,14 +986,67 @@ def main() -> int:
     prepare.add_argument("--retire-reason", default="")
     prepare.add_argument("--skip-verification", metavar="REASON",
                          help="Manually archive explicit specs without verification commands; record why checks are skipped.")
-    for verb in ("validate", "finalize", "abandon", "rollback"):
+    sub.add_parser("migrate")
+    memory_cli = sub.add_parser("memory")
+    memory_verbs = memory_cli.add_subparsers(dest="memory_verb", required=True)
+    memory_export = memory_verbs.add_parser("export")
+    memory_export.add_argument("--out", help="Write the legacy single document to this file instead of stdout.")
+    memory_verbs.add_parser("check")
+    memory_verbs.add_parser("index")
+    memory_verbs.add_parser("root")
+    memory_query_cli = memory_verbs.add_parser("query", help="Budgeted retrieval: whole entries, ranked, with a cursor.")
+    memory_query_cli.add_argument("--id", action="append", default=[])
+    memory_query_cli.add_argument("--route", action="append", default=[], help='e.g. "POST /api/v1/orders"')
+    memory_query_cli.add_argument("--path", action="append", default=[], help="Code file or directory prefix.")
+    memory_query_cli.add_argument("--error-code", action="append", default=[])
+    memory_query_cli.add_argument("--domain", action="append", default=[])
+    memory_query_cli.add_argument("--text", default="")
+    memory_query_cli.add_argument("--budget", type=int, default=8000)
+    memory_query_cli.add_argument("--cursor")
+    memory_query_cli.add_argument("--format", choices=("md", "json"), default="md")
+    memory_show = memory_verbs.add_parser("show")
+    memory_show.add_argument("--id", action="append", required=True)
+    memory_provenance = memory_verbs.add_parser("provenance")
+    memory_provenance.add_argument("--id", required=True)
+    memory_catalog = memory_verbs.add_parser("catalog")
+    memory_catalog.add_argument("--domain", required=True)
+    memory_catalog.add_argument("--page", type=int, default=1)
+    for verb in ("validate", "finalize", "abandon", "rollback", "packets", "fragment-check", "merge", "review-packets"):
         command = sub.add_parser(verb)
         command.add_argument("--run", required=True)
+        if verb == "packets":
+            command.add_argument("--by", choices=("domain", "spec"), default="domain")
+            command.add_argument("--max-units", type=int, default=2500)
+        elif verb == "fragment-check":
+            command.add_argument("--fragment", required=True)
     args = parser.parse_args()
     try:
         archive = Archive(args.root)
-        with nullcontext() if args.verb in ("status", "pending", "policy") else archive.repo.lock():
-            if args.verb == "status":
+        read_only = args.verb in ("status", "pending", "policy", "fragment-check") or (
+            args.verb == "memory" and args.memory_verb != "index")
+        with nullcontext() if read_only else archive.repo.lock():
+            if args.verb == "memory" and args.memory_verb == "export":
+                data = memory_store.export(memory_store.Store(archive.repo.root))
+                if not args.out:
+                    sys.stdout.buffer.write(data)
+                    return 0
+                atomic_write(Path(args.out).resolve(), data)
+                result = {"out": args.out, "bytes": len(data)}
+            elif args.verb == "memory" and args.memory_verb in ("query", "show", "provenance", "catalog"):
+                text = memory_cli_read(archive, args)
+                if text is not None:
+                    sys.stdout.buffer.write(text.encode("utf-8"))
+                    return 0
+                result = None
+            elif args.verb == "memory" and args.memory_verb == "check":
+                result = archive.memory_check()
+            elif args.verb == "memory" and args.memory_verb == "index":
+                result = archive.memory_index()
+            elif args.verb == "memory":
+                result = {"memory_root": memory_store.memory_root(archive.repo.root)}
+            elif args.verb == "migrate":
+                result = archive.migrate()
+            elif args.verb == "status":
                 result = archive.status()
             elif args.verb == "pending":
                 result = archive.pending()
@@ -817,7 +1092,30 @@ def main() -> int:
             elif args.verb == "validate":
                 run = archive.journal(args.run)
                 archive.source_guard(run)
-                result = {"valid": True, "paths": sorted(archive.validate(run))}
+                if run.get("memory_format") == 2:
+                    # Exit 0 on a mechanically valid result even without review, so the reviewer can bind its roots.
+                    outputs, report = archive.materialize(run)
+                    result = {"valid": True, **report, "paths": sorted(outputs)}
+                else:
+                    result = {"valid": True, "paths": sorted(archive.validate(run)[0])}
+            elif args.verb in ("packets", "fragment-check", "merge", "review-packets"):
+                run, run_dir = archive.journal(args.run), archive.run_path(args.run)
+                retired = set(load(archive.repo.path(REGISTRY), {}).get("retired_memory_ids", {}))
+                if args.verb == "packets":
+                    result = orchestration.packets(archive.repo, run, run_dir, by=args.by, max_units=args.max_units)
+                elif args.verb == "fragment-check":
+                    result = orchestration.fragment_check(archive.repo, run, run_dir, Path(args.fragment).resolve(), retired)
+                    if not result["valid"]:
+                        print(json.dumps({"success": False, "error": f"Fragment has {len(result['problems'])} problem(s).",
+                                          "data": result}, ensure_ascii=False))
+                        return 1
+                elif args.verb == "merge":
+                    result = orchestration.merge(archive.repo, run, run_dir, retired)
+                else:
+                    archive.source_guard(run)
+                    archive.materialize(run)
+                    result = orchestration.review_packets(archive.repo, run, run_dir,
+                                                          getattr(archive, "materialized", None), archive.candidate(run)[1])
             elif args.verb == "abandon":
                 result = archive.abandon(args.run)
             elif args.verb == "rollback":
