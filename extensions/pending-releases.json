@@ -1,8 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "memory": "2.0.0"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Memory 2.0.0 replaces the single project-memory document with an atomic, budgeted store under specs/memory/, delta candidates, parallel drafting and partitioned review. Breaking: run migrate once. Release after successful CI and downloaded asset verification."
 }
