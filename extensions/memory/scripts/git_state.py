@@ -40,17 +40,23 @@ def write_json(path: Path, value: object) -> None:
 class Repository:
     def __init__(self, root: str | Path):
         self.root = Path(root).resolve()
+        self._exists: dict[tuple[str, str], bool] = {}
         top = self.git("rev-parse", "--show-toplevel").decode().strip()
         if Path(top).resolve() != self.root:
             raise ArchiveError("Run from the repository root or pass --root explicitly.")
         common = Path(self.git("rev-parse", "--git-common-dir").decode().strip())
         self.state = (common if common.is_absolute() else self.root / common).resolve() / "sanduq-memory"
 
-    def git(self, *args: str, env: dict | None = None, ok: tuple[int, ...] = (0,)) -> bytes:
-        run = subprocess.run(["git", *args], cwd=self.root, env=env, capture_output=True)
+    def git(self, *args: str, env: dict | None = None, ok: tuple[int, ...] = (0,), stdin: bytes | None = None) -> bytes:
+        run = subprocess.run(["git", *args], cwd=self.root, env=env, capture_output=True, input=stdin)
         if run.returncode not in ok:
             raise ArchiveError(f"git {args[0]} failed: {run.stderr.decode(errors='replace').strip()}")
         return run.stdout
+
+    def git_paths(self, *args: str, paths: list[str], env: dict | None = None) -> bytes:
+        # Large archives exceed Windows' 32,767-character command line (WinError 206), so pathspecs go on stdin.
+        return self.git(*args, "--pathspec-from-file=-", "--pathspec-file-nul", env=env,
+                        stdin=b"\0".join(p.encode("utf-8") for p in self.pathspec(paths)))
 
     def path(self, name: str) -> Path:
         part = PurePosixPath(name)
@@ -72,8 +78,8 @@ class Repository:
     def pathspec(paths: list[str]) -> list[str]:
         return [f":(literal){p}" for p in paths]
 
-    def names(self, *args: str) -> list[str]:
-        return [p.decode("utf-8") for p in self.git(*args).split(b"\0") if p]
+    def names(self, *args: str, **options) -> list[str]:
+        return [p.decode("utf-8") for p in self.git(*args, **options).split(b"\0") if p]
 
     def tracked(self) -> list[str]:
         return self.names("ls-files", "-z")
@@ -115,6 +121,22 @@ class Repository:
         if not __import__("re").fullmatch(r"[0-9a-f]{40,64}", commit):
             raise ArchiveError("Provenance must use a full immutable commit SHA.")
         return self.git("show", f"{commit}:{path}")
+
+    def exists_at(self, commit: str, paths: list[str]) -> dict[str, bool]:
+        """Which paths are files at commit: one batched `cat-file --batch-check` over stdin, cached per (commit, path)."""
+        cache = self._exists
+        # A newline would desynchronize the batch protocol; such a path cannot be a valid repository file anyway.
+        for path in paths:
+            if "\n" in path:
+                cache[(commit, path)] = False
+        missing = sorted({p for p in paths if (commit, p) not in cache})
+        if missing:
+            lines = self.git("cat-file", "--batch-check=%(objecttype)",
+                             stdin="".join(f"{commit}:{p}\n" for p in missing).encode("utf-8")).decode("utf-8").splitlines()
+            if len(lines) != len(missing):
+                raise ArchiveError("git cat-file returned an unexpected batch result.")
+            cache.update({(commit, p): line == "blob" for p, line in zip(missing, lines)})
+        return {p: cache[(commit, p)] for p in paths}
 
     def file_hash(self, path: str) -> str | None:
         target = self.path(path)
@@ -167,7 +189,7 @@ class Repository:
         env = dict(os.environ, GIT_INDEX_FILE=name)
         try:
             self.git("read-tree", "HEAD", env=env)
-            self.git("add", "-A", "--", *self.pathspec(scopes), env=env)
+            self.git_paths("add", "-A", paths=scopes, env=env)
             return self.git("write-tree", env=env).decode().strip()
         finally:
             for index_path in (name, name + ".lock"):
@@ -180,8 +202,8 @@ class Repository:
         new = [p for p in self.names("ls-files", "--others", "--exclude-standard", "-z")
                if self.within(p, scopes)]
         if new:
-            self.git("add", "--intent-to-add", "--", *self.pathspec(new))
-        self.git("commit", "--only", "--allow-empty", "-m", message, "--", *self.pathspec(scopes))
+            self.git_paths("add", "--intent-to-add", paths=new)
+        self.git_paths("commit", "--only", "--allow-empty", "-m", message, paths=scopes)
         head = self.head()
         tree = self.git("rev-parse", "HEAD^{tree}").decode().strip()
         parent = self.git("rev-parse", "HEAD^").decode().strip()

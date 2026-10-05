@@ -5,7 +5,7 @@ description: Process pending merged archives in the next local agent session
 # Pending archive session
 
 Run `python .specify/extensions/memory/scripts/archive.py pending` from the root.
-Do not load `specs/project-memory.md` for this check. Disabled mode stops cleanly.
+Do not load project memory (`specs/memory/`) for this check. Disabled mode stops cleanly.
 This instruction runs at the start of a local agent session and before specifying.
 It is not a background service or a remote merge hook.
 

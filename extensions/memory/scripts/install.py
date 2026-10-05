@@ -28,8 +28,8 @@ Before a new specification, branch or broad staging/commit workflow, run
 `python .specify/extensions/memory/scripts/archive.py pending --gate`.
 A nonzero exit stops that workflow until archive recovery, a writer or number guards are resolved.
 For specification creation or impact analysis, follow
-`.specify/extensions/memory/commands/impact.md` to read relevant central-memory entries.
-Do not load the central product-memory document into ordinary implementation tasks.
+`.specify/extensions/memory/commands/impact.md` to read relevant entries from `specs/memory/`.
+Do not load project memory into ordinary implementation tasks.
 <!-- SANDUQ MEMORY SESSION END -->
 """
 
@@ -163,7 +163,7 @@ def install(root: Path, target_branch: str | None = None) -> dict:
     atomic_write(config, text.encode())
     registry["extensions"]["memory"] = {
         **registry["extensions"].get("memory", {}),
-        "version": "1.1.0", "enabled": True, "priority": 5,
+        "version": "2.0.0", "enabled": True, "priority": 5,
         "manifest_hash": "sha256:" + hashlib.sha256((extension / "extension.yml").read_bytes()).hexdigest(),
         "registered_commands": {host: ["speckit.memory." + n for n in COMMANDS] for host in ("codex", "claude", "copilot")},
         "registered_skills": ["speckit-memory-" + n for n in COMMANDS],
