@@ -4,32 +4,19 @@ For installation in new or existing repositories, non-Spec Kit bug fixes,
 GitHub issue decisions, CI mode/rule choices, and later QA/User Manual
 opt-in or opt-out, see the [Sanduq Delivery usage guide](sanduq-delivery-usage.md).
 
-Workflow 1.8.0 stops gating every command on the absolute path a checkpoint was started from: a checkpoint now records a portable repository identity (the normalised `origin` remote and root commit), so it works from any clone, worktree, delegated worker or CI runner of the same repository, and the new `workflow.py relocate` command is the explicit, logged rebind for a renamed remote, a migrated organisation or a fork. It also adds five utility skills (`speckit-workflow-verify-affected`, `-ci-report`, `-gate-explain`, `-apply-pending` and `-worker-brief`) and pins Scope 1.5.0, whose `bound_claim` shares the same identity gate and whose Project board calls fall back to the REST API when GraphQL is exhausted. Workflow 1.7.0 defaults coordination to `high`, splits `qa` into `qa_author`
-and light-eligible `qa_collect`, requires `--owned` for a light-tier or
-`qa_collect` start, and tightens the Ready/complete gates to require a
-successful dispatcher-recorded attempt for every checked task (mid-feature
-adoption goes through the new `delegate_dispatch.py adopt`); `doctor
---project` also reports a per-host skill inventory (`SANDUQ_SKILLS_HOME`
-replaces `SANDUQ_HOME`). Workflow 1.6.4 pins the released User Manual 1.3.3, whose private preview artifact now keeps `retention-days: 2` instead of 14 so the Cloudflare preview workflow's single read is not blocked by a filled artifact quota; Workflow itself is unchanged. Workflow 1.6.3 stops judging a managed alias by its frontmatter: an alias
-is replaced silently only when its whole content hash is the packaged alias, an
-accepted legacy or install-lock hash, or exactly what Spec Kit renders for that
-command; any other content is refused with `ALIAS_HAS_LOCAL_EDITS` unless
-`--replace-unrecognized-aliases` backs it up first. Workflow 1.6.2 makes host switching lossless: installs and upgrades keep every
-installed host's skills and managed aliases instead of Spec Kit's registration
-wiping the non-default host, and a new `workflow.py host [--use codex|claude]
-[--preview]` reports host status or switches the default, re-registering
-incomplete hosts and restoring aliases with rollback on failure. Workflow 1.6.1
-closes evidence-gate gaps: a Verify receipt's CI evidence must be the
-complete record `revalidate` writes and a diff review is bound to a hashed diff, long
-GitHub issue titles are shortened instead of rejected, and `ci_gate.py --check-index`
-flags evidence paths Git ignores and cross-feature fingerprints. Workflow 1.6.0 hardened
-the evidence gate: input roles and assessed amendments on receipts, source-drift
-classification through an affected-lanes hook, and CI runs accepted as Verify evidence
-through `revalidate --check-run`. Workflow 1.5.0 added opt-in model-aware delegation with editable
-routes and preserved run history. Workflow 1.4.0 added token usage per task, phase and
-feature to the progress report and made `--preserve-ci` work on any checkout.
-Workflow 1.3.0 added issue decisions and an optional evidence CI gate. Check
-the repository catalog for the currently published version.
+Use the [state, evidence, and runner reference](workflow-operations.md) for report usage, claim states, context telemetry, and runner configuration. Published versions live in the [catalog](../catalog.json); source changes awaiting release live in [pending releases](../extensions/pending-releases.json).
+
+## Table of contents
+
+- [One-time setup](#one-time-setup)
+- [Daily entry points](#daily-entry-points)
+- [Scope preferences and GitHub answers](#scope-preferences-and-github-answers)
+- [Provider and task ownership](#provider-and-task-ownership)
+- [Fresh-session continuation](#fresh-session-continuation)
+- [Updates and releases](#updates-and-releases)
+- [Evidence and private PRs](#evidence-and-private-prs)
+- [Host, identity, and interrupted claims](#host-identity-and-interrupted-claims)
+- [Optional model-aware delegation](#optional-model-aware-delegation)
 
 ## One-time setup
 
@@ -179,7 +166,7 @@ replacement and leave a backup for explicit reconciliation. After success, curre
 runs detect package drift and require a reviewed migration:
 
 ```text
-python .specify/extensions/workflow/scripts/workflow.py migrate --feature specs/001-example --reason "Reviewed adapter compatibility and upgrade evidence"
+python .specify/extensions/workflow/scripts/workflow.py migrate --feature specs/412-refund-approval --reason "Reviewed adapter compatibility and upgrade evidence"
 ```
 
 Migration preserves still-current historical evidence with its original package
@@ -201,7 +188,7 @@ ran. The project-selected evidence gate checks only its enabled rules. A
 managed-only gate reports `not_applicable` successfully for an ordinary PR with
 no managed feature. Source-only changes that belong to a managed feature need
 explicit feature identity: include a changed
-`.specify/workflow/pr-features.json` with `{"features": ["specs/001-example"]}`,
+`.specify/workflow/pr-features.json` with `{"features": ["specs/412-refund-approval"]}`,
 or supply `--feature` to the gate CLI. Multi-feature changes validate all changed
 specifications even when an explicit feature is supplied. Verification also inventories
 source additions/deletions; omitting a changed code file from an agent receipt cannot
@@ -220,3 +207,46 @@ verifies actual image loading in an authenticated private-repository view. A Mar
 link or successful asset upload alone is insufficient. Never publish private assets
 to a public host or place credentials in image URLs. Local, CI, remote PR, release and
 human acceptance evidence remain distinct.
+
+## Host, identity, and interrupted claims
+
+Moving to another clone or worktree of the same repository does not require rewriting a checkpoint.
+Workflow validates the normalized remote and root-commit identity. A renamed remote, repository
+migration, fork, or deliberate history change requires reviewed relocation, not a copied hash.
+
+```bash
+python .specify/extensions/workflow/scripts/workflow.py host
+python .specify/extensions/workflow/scripts/workflow.py host --use claude --preview
+python .specify/extensions/workflow/scripts/workflow.py next --feature specs/412-refund-approval
+python .specify/extensions/workflow/scripts/workflow.py migrate --feature specs/412-refund-approval --preview
+```
+
+Apply a host switch by omitting `--preview` after inspecting its plan. It preserves registrations
+for the other installed host. Customized managed aliases require explicit backup/replacement;
+matching frontmatter alone does not establish ownership.
+
+For a legitimate repository rename, inspect `workflow.py relocate --help`, preview with the
+explicit allowances needed by that change, then apply the same reviewed operation. Supply a real
+reason and the new issue binding when needed. Relocation logs the old/new identities; it does not
+certify stale evidence.
+
+For an interrupted active claim, inspect its recorded token and possible local/remote effects
+before `recover --feature specs/412-refund-approval --token <recorded-token> --reason <actual-reason>`.
+Do not recover a live owner or run another executor concurrently. Use Workflow Continue afterward.
+
+## Optional model-aware delegation
+
+In `.specify/workflow.yml`, `delegation.enabled` selects external harness routing. Native worker
+orchestration is a separate implementation contract. To opt in, review the existing routes,
+enable the selection, run `doctor --project`, and use `delegation.py install` to resolve the matching
+driver. Project/global copies are reused only when their contract matches; replacements are backed up.
+
+Coordination defaults to `high`. `qa_author` and explicitly marked `[Collect]` tasks have different
+routes; light-tier and `qa_collect` starts require owned paths. Every checked task needs its successful
+dispatcher-recorded attempt. Existing work is adopted through the documented `delegate_dispatch.py adopt`
+path with real evidence, not by fabricating a worker attempt.
+
+The attempt ledger preserves requested and reported models separately and retains usage history
+across upgrades. Changing routes alone does not invalidate completed stage receipts. The
+[package delegation contract](../extensions/workflow/README.md#optional-model-aware-delegation)
+owns the exact flags and routing policy.

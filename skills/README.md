@@ -1,51 +1,27 @@
-<img src="../docs/assets/sanduq-icon-128.png" alt="" width="56" align="left">
+# Portable skill source index
 
-# skills/
+Seven portable skills work without Spec Kit. Use [Getting started](../docs/getting-started.md)
+for installation and host namespaces, and [the skill guide](../docs/skills.md) for when to use each,
+consistent refund examples, expected outputs, and prerequisites.
 
-Portable skills and skill-first Claude Code plugin bundles that remain independent from Spec Kit.
+| Skill | Source |
+| --- | --- |
+| Illustrate | [illustrate](illustration-tools/skills/illustrate/SKILL.md) |
+| User Manual | [user-manual](dev-tools/skills/user-manual/SKILL.md) |
+| API documentation | [user-manual-api-docs](dev-tools/skills/user-manual-api-docs/SKILL.md) |
+| Release documentation | [user-manual-release-docs](dev-tools/skills/user-manual-release-docs/SKILL.md) |
+| UI screenshots | [user-manual-ui-screenshots](dev-tools/skills/user-manual-ui-screenshots/SKILL.md) |
+| Preview publishing | [user-manual-preview-publishing](dev-tools/skills/user-manual-preview-publishing/SKILL.md) |
+| Delegate Task | [delegate-task](agent-tools/skills/delegate-task/SKILL.md) |
 
-A skill is loaded by the agent when your request matches it — you describe the task rather than
-running a command. See [Using a skill once it is installed](../README.md#using-a-skill-once-it-is-installed)
-for invocation syntax and the two things worth knowing about installed skills.
+## Claude Code bundles
 
-## Portable skills
+| Bundle | Version | Skills |
+| --- | --- | --- |
+| [illustration-tools](illustration-tools/README.md) | 3.1.0 | Illustrate |
+| [dev-tools](dev-tools/README.md) | 1.0.0 | Five manual skills |
+| [agent-tools](agent-tools/README.md) | 1.1.1 | Delegate Task |
 
-| Skill | Version | Includes |
-| --- | ---: | --- |
-| [`illustrate`](illustration-tools/skills/illustrate/) | 3.1.0 | Twenty-seven diagram types, tracked project light/dark color and font themes, icons, exports, hand-drawn variants, and technical-color architecture/process packs. |
-| [`user-manual`](dev-tools/skills/user-manual/) | 1.0.0 | Self-contained manual discovery, audience editions, Markdown, Material HTML, PDF, English/Arabic, RTL, audit, and build automation. |
-| [`user-manual-api-docs`](dev-tools/skills/user-manual-api-docs/) | 1.0.0 | Safe, filtered API reference documentation. |
-| [`user-manual-release-docs`](dev-tools/skills/user-manual-release-docs/) | 1.0.0 | Release notes and migration guides. |
-| [`user-manual-ui-screenshots`](dev-tools/skills/user-manual-ui-screenshots/) | 1.0.0 | Deterministic, synthetic-data UI screenshot workflows. |
-| [`user-manual-preview-publishing`](dev-tools/skills/user-manual-preview-publishing/) | 1.0.0 | Private PR artifacts, approved hosted previews, and versioned releases. |
-| [`delegate-task`](agent-tools/skills/delegate-task/) | 1.0.0 | One task handed to Claude Code, Codex, OpenCode, Copilot, or Pi, run in the background, returned as a measured result. |
-
-The same capability is packaged as the versioned [`illustrate`](../extensions/illustrate/) Spec Kit
-extension so consuming extensions can install and update it through the `specify` CLI.
-
-## Published plugin bundles
-
-| Bundle | Version | Includes |
-| --- | ---: | --- |
-| [`illustration-tools`](illustration-tools/) | 3.1.0 | One unified `illustrate` skill with project-level theme initialization. |
-| [`dev-tools`](dev-tools/) | 1.0.0 | Five modular standalone User Manual skills. |
-| [`agent-tools`](agent-tools/) | 1.0.0 | One `delegate-task` skill for running a task on another agent CLI and measuring the outcome. |
-
-Install them through the sanduq marketplace:
-
-```text
-/plugin marketplace add samykabu/sanduq
-/plugin install illustration-tools@sanduq
-/plugin install dev-tools@sanduq
-/plugin install agent-tools@sanduq
-```
-
-Install a portable skill directly with `npx skills`, for example:
-
-```bash
-npx skills add samykabu/sanduq --skill user-manual
-```
-
-When publishing a skill as a Claude Code plugin, include a `.claude-plugin/plugin.json`, register it
-in [`../.claude-plugin/marketplace.json`](../.claude-plugin/marketplace.json), and bump the plugin
-version.
+The [marketplace](../.claude-plugin/marketplace.json) and each plugin manifest own bundle versions.
+Extension versions are independent. Contribute through the [owning source](../CONTRIBUTING.md#find-the-owning-source),
+not an installed copy. Internal extension skills are listed [separately](../docs/extensions.md#internal-skills-and-overlays).

@@ -1,5 +1,9 @@
 # Illustrate Extension
 
+For setup and a consistent worked example, see [Getting started](https://github.com/samykabu/sanduq/blob/main/docs/getting-started.md)
+and [illustrate usage](https://github.com/samykabu/sanduq/blob/main/docs/extensions.md#illustrate).
+
+
 Install the unified Illustrate skill through Spec Kit and expose it consistently to Claude, Codex,
 and other supported integrations. It combines the former Diagram Design, architecture-diagram, and
 process-flow-diagram skills.
@@ -82,8 +86,8 @@ projects can choose automatic or manual handling in `.specify/extension-dependen
 ## Use
 
 ```text
-/speckit-illustrate-generate create a sequence diagram for the checkout flow
-/speckit-illustrate-export docs/checkout-sequence.html --svg-only
+/speckit-illustrate-generate create a sequence diagram for refund approval
+/speckit-illustrate-export docs/refund-approval.html --svg-only
 /speckit-illustrate-theme set cobalt dark
 ```
 

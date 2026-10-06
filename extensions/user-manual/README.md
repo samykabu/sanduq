@@ -1,5 +1,9 @@
 # User Manual Extension
 
+For setup and a consistent worked example, see [Getting started](https://github.com/samykabu/sanduq/blob/main/docs/getting-started.md)
+and [user-manual usage](https://github.com/samykabu/sanduq/blob/main/docs/extensions.md#user-manual).
+
+
 Create a complete application manual from scratch, then update only the affected modules as each
 Spec Kit feature is implemented.
 

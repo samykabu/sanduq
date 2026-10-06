@@ -1,5 +1,9 @@
 # Assure Extension
 
+For setup and a consistent worked example, see [Getting started](https://github.com/samykabu/sanduq/blob/main/docs/getting-started.md)
+and [assure usage](https://github.com/samykabu/sanduq/blob/main/docs/extensions.md#assure).
+
+
 Assure makes feature-level QA analysis and test documentation part of the Spec Kit lifecycle.
 
 This extension immediately replaces the former `qa` extension (itself a rename of `how-to-test`);
@@ -19,8 +23,8 @@ the sanduq PR workflow to generate QA documentation when feature evidence is mis
 
 ```text
 /speckit-assure-init
-/speckit-assure-analyze --feature specs/006-user-management
-/speckit-assure-document --feature specs/006-user-management
+/speckit-assure-analyze --feature specs/412-refund-approval
+/speckit-assure-document --feature specs/412-refund-approval
 ```
 
 ## Scope

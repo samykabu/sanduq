@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.1.1] - 2026-10-06
+
+- Link setup and complete usage examples from the package README; links work in installed copies.
+
 ## 2.1.0
 
 - Typed links: entries may list `constrains` (live entries whose behavior this entry limits) and `supersedes`

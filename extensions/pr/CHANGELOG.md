@@ -1,5 +1,9 @@
 # Changelog
 
+## [4.2.1] - 2026-10-06
+
+- Link setup and complete usage examples from the package README; links work in installed copies.
+
 All notable changes to the Pull Request Workflow extension.
 
 ## [4.2.0] - 2026-09-30
