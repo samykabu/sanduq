@@ -22,6 +22,7 @@ Every token is referred to by **semantic role**, not by its hex value. Type refe
 | `paper` | Page background, default node fill | `#f6f8fc` | `#101827` |
 | `paper-2` | Diagram container bg, secondary fill | `#ffffff` | `#17233a` |
 | `ink` | Primary text, primary stroke | `#15233c` | `#f5f7fb` |
+| `ink-strong` | High-contrast text on accent fills; when a theme omits it, the resolver derives `#111111` or `#ffffff` (higher contrast vs. accent at 0.85 over paper); an explicit value must reach 4.5:1 there | `#111111` | `#111111` |
 | `muted` | Secondary text, default arrow stroke | `#4f6078` | `#b6c2d4` |
 | `soft` | Sublabels, boundary labels | `#6b7a90` | `#8796ac` |
 | `rule` | Hairline borders | `rgba(21,35,60,0.12)` | `rgba(245,247,251,0.12)` |
@@ -107,7 +108,7 @@ stacks include Arabic fallbacks. Respect `font_loading`: import `remote_css_url`
 | `radius-sm` | `4` | Small tags |
 | `radius-md` | `6` | Node boxes |
 | `radius-lg` | `8` | Containers, rings |
-| `grid` | `4` | Every coord, size, and gap is divisible by 4 (hard rule) |
+| `grid` | `4` | Structural geometry (node origins, sizes, gaps, padding) is divisible by 4 (hard rule); type sizes follow the role ramp in [`output-spec.md`](output-spec.md) |
 
 ---
 

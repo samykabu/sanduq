@@ -103,6 +103,12 @@ def write_png(source: Path, destination: Path, scale: int) -> None:
             locator = page.locator("svg").first
             if locator.count() == 0:
                 raise ExportError("No SVG diagram was found after rendering the source HTML.")
+            # Release every clipping ancestor (local scroller, overflow:hidden chrome) so an SVG
+            # wider than its frame (min-width = viewBox width) is captured whole.
+            locator.evaluate(
+                "el => { for (let a = el.parentElement; a; a = a.parentElement)"
+                " a.style.setProperty('overflow', 'visible', 'important'); }"
+            )
             locator.screenshot(path=str(destination), omit_background=True)
         finally:
             browser.close()

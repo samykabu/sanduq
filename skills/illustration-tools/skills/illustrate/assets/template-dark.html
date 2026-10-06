@@ -50,7 +50,15 @@
       margin-bottom: 1.5rem;
     }
 
-    svg { width: 100%; min-width: 900px; display: block; }
+    svg { width: 100%; min-width: 1000px; display: block; }
+    /* min-width == viewBox width keeps the type ramp; this wrapper scrolls the diagram, not the page. */
+    .diagram-container { width: 100%; overflow-x: auto; }
+    /* Paper has no scrollbar, so the local scroller would clip instead of
+       scroll. Let the diagram scale down to the sheet. Must follow the svg rule. */
+    @media print {
+      .diagram-container { overflow-x: visible; }
+      svg { min-width: 0; }
+    }
   </style>
 </head>
 <body>
@@ -58,7 +66,10 @@
     <p class="eyebrow">[Type] · Illustrate</p>
     <h1>[Diagram title]</h1>
 
-    <svg viewBox="0 0 1000 600" xmlns="http://www.w3.org/2000/svg">
+    <div class="diagram-container">
+    <svg viewBox="0 0 1000 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="[diagram-slug]-title [diagram-slug]-desc">
+      <title id="[diagram-slug]-title">[Diagram title]</title>
+      <desc id="[diagram-slug]-desc">[One sentence describing what the diagram shows]</desc>
       <defs>
         <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#b6c2d4"/></marker>
         <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#6ea0ff"/></marker>
@@ -77,6 +88,7 @@
       <!-- Draw arrows first, then nodes. Replace with your content. -->
 
     </svg>
+    </div>
   </div>
 </body>
 </html>

@@ -36,7 +36,41 @@ const TYPES = [
   'radar',
   'scatter',
   'datalake',
-  'high-level-vertical'
+  'high-level-vertical',
+  'architecture-delta',
+  'deployment',
+  'dependency',
+  'db-schema',
+  'uml-class',
+  'treemap',
+  'marimekko',
+  'polar',
+  'journey',
+  'kanban',
+  'story-map',
+  'fishbone',
+  'sankey',
+  'wardley',
+  'heatmap',
+  'waterfall',
+  'slopegraph',
+  'ridgeline',
+  'streamgraph',
+  'bump',
+  'bubble',
+  'beeswarm',
+  'sequence-oauth',
+  'state-lifecycle',
+  'tree-block-decomposition',
+  'exploded',
+  'exploded-phone',
+  'exploded-unboxing',
+  'exploded-ai-stack',
+  'exploded-keyboard',
+  'axonometric-plan',
+  'axonometric-plan-campus',
+  'axonometric-plan-coffee-shop',
+  'axonometric-plan-warehouse',
 ];
 
 const PAPER = '#f5f5f5';
@@ -479,11 +513,14 @@ function convertNode(doc, node, generator, seedRef) {
     return clone;
   }
 
-  if (tag === 'text' || tag === 'title' || tag === 'desc') {
+  // Nested <svg> is an inline icon whose paths inherit stroke from it; a rough
+  // redraw of them paints nothing, so icons stay crisp. The root svg is handled
+  // by convertFile.
+  if (tag === 'text' || tag === 'title' || tag === 'desc' || tag === 'svg') {
     return el.cloneNode(true);
   }
 
-  if (tag === 'g' || tag === 'a' || tag === 'svg') {
+  if (tag === 'g' || tag === 'a') {
     const clone = el.cloneNode(false);
     for (const child of Array.from(el.childNodes)) {
       clone.appendChild(convertNode(doc, child, generator, seedRef));

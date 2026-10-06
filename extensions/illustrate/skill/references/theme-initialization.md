@@ -115,8 +115,8 @@ light:
   soft: "#748198"
   rule: "rgba(23,32,51,0.12)"
   rule-solid: "#cbd4e2"
-  accent: "#175cd3"
-  accent-tint: "rgba(23,92,211,0.09)"
+  accent: "#1557c9"
+  accent-tint: "rgba(21,87,201,0.09)"
   link: "#0b63ce"
 dark:
   paper: "#111827"
@@ -174,6 +174,29 @@ Apply every resolved role, including literal fills/strokes inside SVG, marker co
 HTML background, and all font-family declarations. Examples and templates may contain historical
 literal values; they do not override the project selection.
 
+## Apply the theme to a diagram
+
+`apply` does that rewrite deterministically. Copy an example or template, edit it, then:
+
+```bash
+python scripts/illustration_theme.py --project-root . apply my-diagram.html            # in place
+python scripts/illustration_theme.py --project-root . apply draft.html -o final.html --mode dark
+```
+
+- Maps the default literal palette (light and dark tables, including every `rgba(r,g,b,a)` alpha
+  form of a role, which keeps its alpha) to the resolved roles; `#111111` becomes `ink-strong`.
+- Replaces Geist, Geist Mono, and Instrument Serif font stacks with the resolved sans, mono, and
+  serif stacks, and swaps the Google Fonts `<link>` for the theme's `remote_css_url` (removed under
+  `local`/`system` font loading or when the theme has no URL).
+- Mode: `--mode`, else inferred from the file (`-dark` suffix or a default paper literal), else the
+  active mode.
+- Stamps `<meta name="illustration-theme" content="theme/mode/font_loading">`. Re-running with the
+  same selection is a no-op; a different selection is refused, so re-apply from the unthemed source.
+- Refuses technical-color and terminal-skin files, which keep their fixed palettes.
+- Never creates `.github/illustration-theme.yml`; without one it uses the `cobalt` default.
+
+Series-palette and other non-role literals are left as they are.
+
 ## Validation
 
 ```bash
@@ -186,6 +209,9 @@ Validation requires:
 - sans, serif, and mono stacks;
 - valid hex/rgba values;
 - WCAG AA contrast for `ink` and `muted` on `paper`;
+- an optional `ink-strong` (text on accent fills) of at least 4.5:1 against `accent` composited at
+  0.85 over `paper`. When a palette omits it, the resolver derives it as `#111111` or `#ffffff`,
+  whichever contrasts more with that backdrop;
 - a known preset or valid project custom theme;
 - `remote`, `local`, or `system` font loading.
 

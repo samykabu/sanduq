@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.8.5] - 2026-10-06
+
+- `dependencies.json` pins Illustrate 2.2.0 (44 diagram types, import, theme apply). No workflow
+  behaviour change.
+
 ## [1.8.4] - 2026-10-06
 
 - Link setup and complete usage examples from the package README; links work in installed copies.

@@ -3,8 +3,8 @@ schema_version: "1.0"
 extension:
   id: illustrate
   name: "Illustrate"
-  version: "2.1.3"
-  description: "Generate and export twenty-seven technical, product, architecture, and process illustration types with tracked project-level light/dark color and font themes."
+  version: "2.2.0"
+  description: "Generate, import, and export forty-four technical, product, architecture, process, and quantitative illustration types with tracked project-level light/dark color and font themes."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
   category: "documentation"
@@ -20,13 +20,16 @@ provides:
   commands:
     - name: speckit.illustrate.generate
       file: commands/speckit.illustrate.generate.md
-      description: "Select and generate the right illustration from twenty-seven technical, product, data, process, and quantitative visual types"
+      description: "Select and generate the right illustration from forty-four technical, product, data, process, and quantitative visual types"
     - name: speckit.illustrate.export
       file: commands/speckit.illustrate.export.md
       description: "Export an Illustrate HTML source to standalone SVG and/or transparent PNG"
     - name: speckit.illustrate.theme
       file: commands/speckit.illustrate.theme.md
       description: "Initialize, select, validate, or create a tracked project color and font theme"
+    - name: speckit.illustrate.import
+      file: commands/speckit.illustrate.import.md
+      description: "Redraw an existing draw.io, Mermaid, or Excalidraw source as an Illustrate diagram in the active project theme"
 
 tags:
   - "diagram"
@@ -50,3 +53,12 @@ tags:
   - "documentation"
   - "project-theme"
   - "custom-fonts"
+  - "sankey"
+  - "waterfall"
+  - "heatmap"
+  - "deployment"
+  - "uml"
+  - "mermaid"
+  - "drawio"
+  - "excalidraw"
+  - "animation"

@@ -1,5 +1,33 @@
 # Changelog
 
+## [2.2.0] - 2026-10-06
+
+### Added
+
+- Seventeen diagram types ported from upstream diagram-design 2.6.59: architecture delta,
+  deployment, dependency graph, database schema, UML class, fishbone, Sankey, Wardley map,
+  heatmap, waterfall, treemap (with marimekko), polar, user journey, kanban, story map,
+  exploded axonometric, and axonometric plan (44 types total).
+- Variants in existing types: slopegraph, ridgeline, streamgraph, bump, bubble, beeswarm,
+  dumbbell, lifecycle phase map, traceable block decomposition, and OAuth sequence.
+- Semantic patterns (`references/semantic-patterns.md`) chosen before the visual type.
+- draw.io, Mermaid, and Excalidraw import with extractors, adversarial fixtures, and the
+  `speckit.illustrate.import` command; redraws use the active project theme.
+- Optional motion layer (`references/animation.md`, light and dark motion templates).
+- `illustration_theme.py apply`: deterministic mapping of default literals and fonts to the
+  active project theme; optional `ink-strong` role derived by contrast when omitted.
+- Verification: `self_check.py`, `verify-geometry.py`, `lint-render.py`, per-type verifiers, and
+  a theme-matrix test across every built-in preset and mode.
+- Output spec (size presets, type ramp, detail and audience dials), connector rule 6, the
+  accessible SVG contract, and a confirm-before-drawing step.
+
+### Changed
+
+- SKILL.md is a router; long-form primitives and budgets moved to `references/primitives-core.md`
+  and `references/layout-budget.md`.
+- Theme files, presets, custom themes, hand-drawn, terminal, consultant, and technical-color
+  variants are unchanged.
+
 ## [2.1.3] - 2026-10-06
 
 - Link setup and complete usage examples from the package README; links work in installed copies.

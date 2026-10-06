@@ -9,3 +9,9 @@
 # Byte-pinned test fixtures: autocrlf must never rewrite them (their SHA-256 is asserted).
 extensions/workflow/tests/fixtures/source-key.fixtures.json -text
 extensions/workflow/tests/fixtures/ci-runs/** -text
+# Illustrate fixtures, baselines and generator: parsed byte-for-byte on every OS.
+extensions/illustrate/tests/fixtures/** text eol=lf
+extensions/illustrate/skill/scripts/*.txt text eol=lf
+extensions/illustrate/skill/scripts/*.cjs text eol=lf
+skills/illustration-tools/skills/illustrate/scripts/*.txt text eol=lf
+skills/illustration-tools/skills/illustrate/scripts/*.cjs text eol=lf

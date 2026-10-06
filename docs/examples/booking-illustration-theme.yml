@@ -14,8 +14,8 @@ light:
   soft: "#748198"
   rule: "rgba(23,32,51,0.12)"
   rule-solid: "#cbd4e2"
-  accent: "#875d09"
-  accent-tint: "rgba(135,93,9,0.09)"
+  accent: "#7a5408"
+  accent-tint: "rgba(122,84,8,0.09)"
   link: "#6f4c07"
 dark:
   paper: "#111827"

@@ -201,6 +201,7 @@ copy under `.specify/extensions/illustrate/skill/`. It does not depend on a glob
 | `$speckit-illustrate-theme` | Configure: `set cobalt light` or `validate` for the tracked project theme. |
 | `$speckit-illustrate-generate` | Explain: `Create a state diagram of refund request, approval/rejection, and settlement from the real implementation.` |
 | `$speckit-illustrate-export` | Embed: `docs/refund-approval.html --svg-only` |
+| `$speckit-illustrate-import` | Redraw: `docs/legacy/order-flow.mmd --size doc-wide --detail balanced` in the active project theme with a fidelity ledger. |
 
 Expected result: self-contained editable HTML and explicitly requested SVG/PNG exports. Preserve
 sources alongside exports, use the project's theme, and review rendering. Legacy Diagram Design

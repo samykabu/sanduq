@@ -26,7 +26,7 @@ editable process diagrams, and a complete custom color file. The operator decide
 access and records the outcome; Payments settles approvals only.
 
 Use `illustrate` when a relationship is clearer as a diagram: components, time-ordered messages,
-workflow states, data, ownership, or measured quantities. It supports 27 diagram types. Use a table
+workflow states, data, ownership, or measured quantities. It supports 44 diagram types. Use a table
 when the content is simply a list. [Source](../skills/illustration-tools/skills/illustrate/SKILL.md).
 
 ```text

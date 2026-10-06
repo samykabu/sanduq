@@ -16,6 +16,10 @@ STYLE_GUIDE = SKILL_ROOT / "references/style-guide.md"
 ASSET_DIR = SKILL_ROOT / "assets"
 BASELINE = SKILL_ROOT / "scripts/lint-skin-baseline.txt"
 
+sys.path.insert(0, str(SKILL_ROOT / "scripts"))
+import illustration_theme  # noqa: E402
+import self_check  # noqa: E402
+
 HEX_RE = re.compile(
     r"(?<![\w-])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?![0-9a-fA-F])"
 )
@@ -82,7 +86,14 @@ def table_hexes(markdown, heading):
     return colors
 
 
-def allowed_colors():
+def project_themes(project_root):
+    """Built-in plus project custom themes from ``<project_root>/.github/illustration-theme.yml``."""
+    path = illustration_theme.project_config(project_root)
+    config = illustration_theme.load_yaml(path) if path.is_file() else illustration_theme.default_config()
+    return illustration_theme.all_themes(config)
+
+
+def allowed_colors(project_root="."):
     markdown = STYLE_GUIDE.read_text(encoding="utf-8")
     colors = table_hexes(markdown, "### Semantic roles")
     colors.update(table_hexes(markdown, "### Series palette"))
@@ -98,7 +109,20 @@ def allowed_colors():
             for match in HEX_RE.finditer(theme_registry.read_text(encoding="utf-8"))
         )
 
+    # Upstream default literals (incl. ink-strong #111111) stay legal in structural samples, and
+    # every resolved theme value (custom themes included) is legal in applied output.
+    values = [v for table in illustration_theme.DEFAULT_LITERALS.values() for v in table.values()]
+    for theme in project_themes(project_root).values():
+        for mode in ("light", "dark"):
+            values += [str(v) for v in (theme.get(mode) or {}).values()]
     rgb_triplets = set()
+    for value in values:
+        match = RGBA_RE.fullmatch(value.strip())
+        if match:
+            rgb_triplets.add(tuple(int(match.group(index)) for index in (1, 2, 3)))
+        elif HEX_RE.fullmatch(value.strip()):
+            colors.add(normalize_hex(value.strip()))
+
     for color in colors:
         expanded = normalize_hex(color)
         if len(expanded) == 7:
@@ -119,19 +143,36 @@ def display_path(path):
         return str(path)
 
 
-def named_families(value):
+def allowed_fonts(project_root="."):
+    fonts = set(ALLOWED_FONTS)
+    for theme in project_themes(project_root).values():
+        for key in ("sans", "serif", "mono"):
+            stack = str((theme.get("typography") or {}).get(key, ""))
+            fonts.update(f.strip().strip("'\"").strip().casefold() for f in stack.split(",") if f.strip())
+    return fonts
+
+
+def canonical_motion_script(text):
+    """True when the file's only script is the pinned motion controller (template-motion.html)."""
+    parser = self_check.parsed_document(text)
+    errors = []
+    self_check.check_scripts(parser, errors)
+    return len(parser.scripts) == 1 and not errors
+
+
+def named_families(value, fonts=ALLOWED_FONTS):
     families = []
     for raw_family in value.split(","):
         family = raw_family.strip().strip("'\"").strip()
         lowered = family.casefold()
         if not family or lowered in CSS_FONT_KEYWORDS or lowered.startswith("var("):
             continue
-        if lowered not in ALLOWED_FONTS:
+        if lowered not in fonts:
             families.append(family)
     return families
 
 
-def lint_text(text, colors, rgb_triplets):
+def lint_text(text, colors, rgb_triplets, fonts=ALLOWED_FONTS):
     findings = []
 
     def add(offset, category, message):
@@ -157,8 +198,9 @@ def lint_text(text, colors, rgb_triplets):
     for match in BLACK_RGB_RE.finditer(text):
         add(match.start(), "pure-black", "pure black rgb(0,0,0) is not allowed")
 
-    for match in SCRIPT_RE.finditer(text):
-        add(match.start(), "script", "<script> tags are not allowed")
+    if not canonical_motion_script(text):
+        for match in SCRIPT_RE.finditer(text):
+            add(match.start(), "script", "<script> tags are not allowed (except the pinned motion controller)")
 
     for match in SRC_HTTP_RE.finditer(text):
         add(match.start(), "external-asset", "external HTTP(S) src is not allowed")
@@ -185,7 +227,7 @@ def lint_text(text, colors, rgb_triplets):
             add(href_offset, "external-asset", "external HTTP(S) <link> is not allowed")
 
     for match in FONT_CSS_RE.finditer(text):
-        unsupported = named_families(match.group(1))
+        unsupported = named_families(match.group(1), fonts)
         if unsupported:
             add(
                 match.start(),
@@ -194,7 +236,7 @@ def lint_text(text, colors, rgb_triplets):
             )
 
     for match in FONT_ATTR_RE.finditer(text):
-        unsupported = named_families(match.group(2))
+        unsupported = named_families(match.group(2), fonts)
         if unsupported:
             add(
                 match.start(),
@@ -234,6 +276,11 @@ def parse_args():
     parser.add_argument(
         "--quiet", action="store_true", help="print only the summary line"
     )
+    parser.add_argument(
+        "--project-root",
+        default=".",
+        help="project whose .github/illustration-theme.yml custom themes are also allowed (default: .)",
+    )
     args = parser.parse_args()
     if args.all == bool(args.files):
         parser.error("provide either file arguments or --all")
@@ -242,7 +289,8 @@ def parse_args():
 
 def main():
     args = parse_args()
-    colors, rgb_triplets = allowed_colors()
+    colors, rgb_triplets = allowed_colors(args.project_root)
+    fonts = allowed_fonts(args.project_root)
 
     skipped = 0
     if args.all:
@@ -264,7 +312,7 @@ def main():
     for path in paths:
         try:
             text = path.read_text(encoding="utf-8")
-            findings = lint_text(text, colors, rgb_triplets)
+            findings = lint_text(text, colors, rgb_triplets, fonts)
         except OSError as error:
             findings = [(0, 0, "read-error", str(error))]
 

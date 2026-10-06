@@ -1,6 +1,6 @@
 # Illustration Tools
 
-Generate polished technical and product illustrations as **self-contained HTML files** with inline SVG and embedded CSS. The unified `illustrate` skill supports twenty-seven diagram types, tracked project-level color and font themes, editorial and technical-color families, light/dark/full/hand variants, and SVG/PNG/PDF export paths.
+Generate polished technical and product illustrations as **self-contained HTML files** with inline SVG and embedded CSS. The unified `illustrate` skill supports forty-four diagram types, tracked project-level color and font themes, editorial and technical-color families, light/dark/full/hand variants, and SVG/PNG/PDF export paths.
 
 ## Included Skill
 
