@@ -3,7 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Illustrate · Gallery</title>
+    <title>Illustrate · Catalog</title>
+    <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap"
       rel="stylesheet"
@@ -19,459 +22,1191 @@
       :root {
         --paper: #f5f4ed;
         --paper-2: #efeee5;
+        --card: #fbfaf5;
         --ink: #0b0d0b;
         --muted: #52534e;
-        --soft: #65655c;
+        --soft: #6d6e66;
         --rule: rgba(11, 13, 11, 0.12);
-        --rule-strong: rgba(11, 13, 11, 0.25);
+        --rule-strong: rgba(11, 13, 11, 0.24);
         --accent: #f7591f;
+        --accent-tint: rgba(247, 89, 31, 0.08);
         --sans: "Geist", system-ui, sans-serif;
-        --serif: "Instrument Serif", serif;
+        --serif: "Instrument Serif", Georgia, serif;
         --mono: "Geist Mono", ui-monospace, monospace;
+        --topbar-h: 132px;
+        --ease: cubic-bezier(0.22, 1, 0.36, 1);
       }
-      html,
-      body {
-        height: 100%;
+      html {
+        scroll-behavior: smooth;
       }
       body {
         font-family: var(--sans);
         background: var(--paper);
         color: var(--ink);
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+        min-height: 100dvh;
+      }
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+        border-radius: 3px;
+      }
+      [hidden] {
+        display: none !important;
       }
 
+      /* ---------- Topbar ---------- */
       .topbar {
-        padding: 1rem 1.25rem 0.625rem;
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        background: color-mix(in srgb, var(--paper) 86%, transparent);
+        backdrop-filter: saturate(1.4) blur(10px);
         border-bottom: 1px solid var(--rule);
-        flex: 0 0 auto;
+        padding: 0.9rem clamp(1rem, 4vw, 2.75rem) 0;
       }
-      .title-row {
+      .brand-row {
         display: flex;
         align-items: baseline;
         justify-content: space-between;
-        margin-bottom: 0.75rem;
-        gap: 1rem;
+        gap: 1.25rem;
+        flex-wrap: wrap;
       }
-      .title-row h1 {
+      .brand {
+        display: flex;
+        align-items: baseline;
+        gap: 0.5rem;
+      }
+      .brand h1 {
         font-family: var(--serif);
-        font-size: 1.5rem;
         font-weight: 400;
+        font-size: 1.6rem;
         letter-spacing: -0.01em;
         line-height: 1;
       }
-      .title-row .meta {
+      .brand .sub {
         font-family: var(--mono);
-        font-size: 0.66rem;
-        letter-spacing: 0.18em;
-        text-transform: uppercase;
+        font-size: 0.68rem;
+        letter-spacing: 0.02em;
         color: var(--muted);
       }
-      .title-row .open-raw {
+      .brand-meta {
+        display: flex;
+        align-items: center;
+        gap: 1.25rem;
         font-family: var(--mono);
-        font-size: 0.66rem;
-        letter-spacing: 0.06em;
-        color: var(--muted);
-        text-decoration: none;
-        padding: 0.3rem 0.625rem;
-        border: 1px solid var(--rule);
-        border-radius: 4px;
-        transition:
-          color 0.15s,
-          border-color 0.15s;
+        font-size: 0.64rem;
+        letter-spacing: 0.04em;
+        color: var(--soft);
       }
-      .open-raw:hover {
+      .brand-meta .count strong {
+        color: var(--ink);
+        font-weight: 500;
+      }
+      .brand-meta a {
+        color: var(--muted);
+        border-bottom: 1px solid transparent;
+        transition: color 0.15s, border-color 0.15s;
+      }
+      .brand-meta a:hover {
         color: var(--accent);
         border-color: var(--accent);
       }
 
-      .tabs {
+      /* ---------- Catalog controls ---------- */
+      .controls {
         display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem 1.5rem;
         flex-wrap: wrap;
+        padding: 0.85rem 0 0.9rem;
+      }
+      .families {
+        display: flex;
         gap: 0.375rem;
-        margin-bottom: 0.5rem;
+        flex-wrap: wrap;
       }
-      .tabs.variants {
-        margin-bottom: 0;
-        padding-top: 0.5rem;
-        border-top: 1px solid var(--rule);
-      }
-      .tabs.families {
-        margin-bottom: 0.625rem;
-      }
-      .control-group[hidden] {
-        display: none;
-      }
-      .tab {
-        font-family: var(--sans);
-        font-size: 0.8125rem;
-        font-weight: 500;
-        padding: 0.375rem 0.75rem;
-        background: transparent;
-        color: var(--muted);
-        border: 1px solid var(--rule);
-        border-radius: 4px;
-        cursor: pointer;
-        transition: all 0.12s;
+      .fam {
+        font: 500 0.82rem/1 var(--sans);
         letter-spacing: -0.005em;
+        color: var(--muted);
+        padding: 0.5rem 0.85rem;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        cursor: pointer;
+        background: transparent;
+        transition: color 0.14s, border-color 0.14s, background 0.14s;
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.4rem;
       }
-      .tab:hover {
+      .fam .fam-n {
+        font-family: var(--mono);
+        font-size: 0.58rem;
+        letter-spacing: 0.08em;
+        color: inherit;
+        opacity: 0.55;
+      }
+      .fam:hover {
         color: var(--ink);
         border-color: var(--rule-strong);
       }
-      .tab.active {
+      .fam[aria-selected="true"] {
         background: var(--ink);
         color: var(--paper);
         border-color: var(--ink);
       }
-      .tab .eyebrow {
-        display: inline-block;
-        margin-right: 0.25rem;
-        font-family: var(--mono);
-        font-size: 0.56rem;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: inherit;
-        opacity: 0.5;
-      }
-      .tab.new::after {
-        content: "NEW";
-        display: inline-block;
-        margin-left: 0.35rem;
-        font-family: var(--mono);
-        font-size: 0.54rem;
-        letter-spacing: 0.12em;
-        color: var(--accent);
-        vertical-align: 1px;
-      }
-      .tab.active.new::after {
-        color: var(--paper);
+      .fam[aria-selected="true"] .fam-n {
+        opacity: 0.65;
       }
 
-      main {
-        flex: 1 1 auto;
+      .search {
         position: relative;
-        background: var(--paper-2);
-        overflow: hidden;
+        flex: 0 1 300px;
       }
-      iframe {
+      .search input {
+        width: 100%;
+        font: 400 0.85rem/1 var(--sans);
+        color: var(--ink);
+        background: var(--card);
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        padding: 0.55rem 2rem 0.55rem 0.8rem;
+        transition: border-color 0.14s, background 0.14s;
+      }
+      .search input::placeholder {
+        color: var(--soft);
+      }
+      .search input:focus {
+        outline: none;
+        border-color: var(--accent);
+        background: #fff;
+      }
+      .search .clear {
+        position: absolute;
+        right: 0.5rem;
+        top: 50%;
+        transform: translateY(-50%);
+        border: 0;
+        background: transparent;
+        color: var(--soft);
+        font-family: var(--mono);
+        font-size: 0.9rem;
+        cursor: pointer;
+        line-height: 1;
+        padding: 0.2rem;
+      }
+      .search .clear:hover {
+        color: var(--accent);
+      }
+      .search[data-empty="true"] .clear {
+        display: none;
+      }
+
+      /* ---------- Layout ---------- */
+      main {
+        padding: 1.5rem clamp(1rem, 4vw, 2.75rem) 4rem;
+      }
+      .intent {
+        margin-top: 2.75rem;
+        animation: rise 0.5s var(--ease) both;
+      }
+      .intent:first-child {
+        margin-top: 0.5rem;
+      }
+      .intent-head {
+        display: flex;
+        align-items: baseline;
+        gap: 0.75rem;
+        padding-bottom: 1rem;
+        margin-bottom: 1.5rem;
+        border-bottom: 1px solid var(--rule);
+      }
+      .intent-head h2 {
+        font-family: var(--serif);
+        font-weight: 400;
+        font-size: 1.4rem;
+        letter-spacing: -0.005em;
+        line-height: 1;
+      }
+      .intent-head .hint {
+        font-family: var(--mono);
+        font-size: 0.66rem;
+        letter-spacing: 0.02em;
+        color: var(--soft);
+      }
+      .intent-head .n {
+        margin-left: auto;
+        font-family: var(--mono);
+        font-size: 0.64rem;
+        color: var(--muted);
+        letter-spacing: 0.04em;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+        gap: clamp(1rem, 1.8vw, 1.5rem);
+      }
+
+      /* ---------- Card ---------- */
+      .card {
+        display: flex;
+        flex-direction: column;
+        background: var(--card);
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+        overflow: hidden;
+        transition: transform 0.18s var(--ease), border-color 0.18s,
+          background 0.18s;
+        will-change: transform;
+      }
+      .card:hover,
+      .card:focus-visible {
+        transform: translateY(-3px);
+        border-color: var(--accent);
+        background: #fff;
+      }
+      .thumb {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        overflow: hidden;
+        background: var(--paper-2);
+        border-bottom: 1px solid var(--rule);
+      }
+      .thumb iframe {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 1000px;
+        height: 750px;
+        border: 0;
+        background: #fff;
+        transform: scale(var(--k, 0.27));
+        transform-origin: top left;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.5s ease;
+      }
+      .thumb iframe.ready {
+        opacity: 1;
+      }
+      .shimmer {
         position: absolute;
         inset: 0;
+        background: linear-gradient(
+          100deg,
+          var(--paper-2) 30%,
+          rgba(255, 255, 255, 0.55) 50%,
+          var(--paper-2) 70%
+        );
+        background-size: 220% 100%;
+        animation: sweep 1.4s ease-in-out infinite;
+      }
+      .thumb.loaded .shimmer {
+        display: none;
+      }
+      .thumb .fail {
+        position: absolute;
+        inset: 0;
+        display: none;
+        place-items: center;
+        font-family: var(--mono);
+        font-size: 0.66rem;
+        color: var(--soft);
+        letter-spacing: 0.04em;
+      }
+      .thumb.error .shimmer {
+        display: none;
+      }
+      .thumb.error .fail {
+        display: grid;
+      }
+      .thumb .badge {
+        position: absolute;
+        top: 0.55rem;
+        left: 0.55rem;
+        z-index: 2;
+        font-family: var(--mono);
+        font-size: 0.56rem;
+        letter-spacing: 0.1em;
+        color: var(--muted);
+        background: color-mix(in srgb, var(--paper) 80%, transparent);
+        border: 1px solid var(--rule);
+        border-radius: 4px;
+        padding: 0.15rem 0.35rem;
+      }
+      .card-body {
+        display: flex;
+        flex-direction: column;
+        gap: 0.3rem;
+        padding: 0.85rem 0.95rem 1rem;
+        flex: 1;
+      }
+      .card-title {
+        display: flex;
+        align-items: baseline;
+        gap: 0.5rem;
+      }
+      .card-title h3 {
+        font-size: 0.95rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .card-title .arrow {
+        margin-left: auto;
+        color: var(--soft);
+        font-family: var(--mono);
+        font-size: 0.85rem;
+        opacity: 0;
+        transform: translateX(-4px);
+        transition: opacity 0.16s, transform 0.16s, color 0.16s;
+      }
+      .card:hover .arrow,
+      .card:focus-visible .arrow {
+        opacity: 1;
+        transform: translateX(0);
+        color: var(--accent);
+      }
+      .card-body p {
+        font-size: 0.8rem;
+        color: var(--muted);
+        line-height: 1.4;
+        max-width: 34ch;
+      }
+      .card-foot {
+        margin-top: auto;
+        padding-top: 0.7rem;
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        font-family: var(--mono);
+        font-size: 0.58rem;
+        letter-spacing: 0.05em;
+        color: var(--soft);
+      }
+      .dots {
+        display: inline-flex;
+        gap: 4px;
+      }
+      .dots i {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: var(--rule-strong);
+      }
+
+      .empty {
+        text-align: center;
+        padding: 5rem 1rem;
+        color: var(--muted);
+      }
+      .empty p {
+        font-family: var(--serif);
+        font-size: 1.5rem;
+      }
+      .empty span {
+        color: var(--accent);
+        font-style: italic;
+      }
+      .empty button {
+        margin-top: 1.25rem;
+        font: 500 0.82rem/1 var(--sans);
+        color: var(--ink);
+        background: transparent;
+        border: 1px solid var(--rule-strong);
+        border-radius: 6px;
+        padding: 0.55rem 1rem;
+        cursor: pointer;
+      }
+      .empty button:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      /* ---------- Detail ---------- */
+      .detail-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.85rem 0 0.9rem;
+      }
+      .back {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        font: 500 0.82rem/1 var(--sans);
+        color: var(--muted);
+        padding: 0.5rem 0.85rem 0.5rem 0.7rem;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        transition: color 0.14s, border-color 0.14s;
+      }
+      .back:hover {
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+      .pager {
+        display: flex;
+        gap: 0.375rem;
+      }
+      .pager a {
+        display: inline-grid;
+        place-items: center;
+        width: 2.15rem;
+        height: 2.15rem;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        color: var(--muted);
+        font-family: var(--mono);
+        transition: color 0.14s, border-color 0.14s;
+      }
+      .pager a:hover {
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+
+      .detail {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 340px;
+        gap: clamp(1.25rem, 2.5vw, 2.25rem);
+        align-items: start;
+      }
+      .stage {
+        position: relative;
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        overflow: hidden;
+        background: #fff;
+        height: min(78vh, 780px);
+      }
+      .stage iframe {
         width: 100%;
         height: 100%;
         border: 0;
-        background: var(--paper);
         display: block;
+      }
+      .stage.anim iframe {
+        animation: stageIn 0.55s var(--ease) both;
+      }
+      .stage .stage-shimmer {
+        position: absolute;
+        inset: 0;
+        background: var(--paper-2);
+        display: grid;
+        place-items: center;
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        color: var(--soft);
+        letter-spacing: 0.06em;
+      }
+      .stage.loaded .stage-shimmer {
+        display: none;
+      }
+
+      .aside {
+        position: sticky;
+        top: calc(var(--topbar-h) + 1.5rem);
+        display: flex;
+        flex-direction: column;
+        gap: 1.15rem;
+      }
+      .aside .eyebrow {
+        font-family: var(--mono);
+        font-size: 0.62rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+      .aside h2 {
+        font-family: var(--serif);
+        font-weight: 400;
+        font-size: 2.1rem;
+        line-height: 1.05;
+        letter-spacing: -0.01em;
+        margin-top: 0.25rem;
+      }
+      .aside .lede {
+        font-size: 0.92rem;
+        color: var(--muted);
+        line-height: 1.55;
+        max-width: 42ch;
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.55rem;
+      }
+      .field > label {
+        font-family: var(--mono);
+        font-size: 0.6rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--soft);
+      }
+      .variants {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+      }
+      .variants a {
+        font: 500 0.78rem/1 var(--sans);
+        color: var(--muted);
+        padding: 0.45rem 0.7rem;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        transition: color 0.14s, border-color 0.14s, background 0.14s;
+      }
+      .variants a:hover {
+        color: var(--ink);
+        border-color: var(--rule-strong);
+      }
+      .variants a[aria-current="true"] {
+        color: var(--accent);
+        border-color: var(--accent);
+        background: var(--accent-tint);
+      }
+      .cmd {
+        display: flex;
+        align-items: stretch;
+        border: 1px solid var(--rule);
+        border-radius: 7px;
+        overflow: hidden;
+        background: var(--card);
+      }
+      .cmd code {
+        flex: 1;
+        min-width: 0;
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        color: var(--ink);
+        padding: 0.65rem 0.75rem;
+        overflow-x: auto;
+        white-space: nowrap;
+        scrollbar-width: none;
+      }
+      .cmd code::-webkit-scrollbar {
+        display: none;
+      }
+      .cmd button {
+        flex: 0 0 auto;
+        border: 0;
+        border-left: 1px solid var(--rule);
+        background: transparent;
+        color: var(--muted);
+        font: 500 0.68rem/1 var(--mono);
+        letter-spacing: 0.06em;
+        padding: 0 0.85rem;
+        cursor: pointer;
+        transition: color 0.14s, background 0.14s;
+      }
+      .cmd button:hover {
+        color: var(--accent);
+        background: var(--accent-tint);
+      }
+      .cmd button.copied {
+        color: var(--accent);
+      }
+      .aside .raw {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        align-self: flex-start;
+        font: 500 0.82rem/1 var(--sans);
+        color: var(--ink);
+        border-bottom: 1px solid var(--rule-strong);
+        padding-bottom: 0.2rem;
+        transition: color 0.14s, border-color 0.14s;
+      }
+      .aside .raw:hover {
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+
+      /* ---------- Motion keyframes ---------- */
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      @keyframes sweep {
+        from {
+          background-position: 180% 0;
+        }
+        to {
+          background-position: -80% 0;
+        }
+      }
+      @keyframes stageIn {
+        from {
+          opacity: 0;
+          transform: scale(0.985);
+          filter: blur(6px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+          filter: none;
+        }
+      }
+
+      /* ---------- Responsive ---------- */
+      @media (max-width: 860px) {
+        :root {
+          --topbar-h: 118px;
+        }
+        .detail {
+          grid-template-columns: 1fr;
+        }
+        .stage {
+          height: 62vh;
+        }
+        .aside {
+          position: static;
+        }
+        .aside h2 {
+          font-size: 1.75rem;
+        }
+      }
+      @media (max-width: 520px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        .brand-meta .count {
+          display: none;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.001ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.001ms !important;
+        }
+        .thumb iframe {
+          opacity: 1;
+        }
       }
     </style>
   </head>
   <body>
     <header class="topbar">
-      <div class="title-row">
-        <h1>
-          Illustrate
-          <span
-            class="meta"
-            style="
-              font-family: var(--mono);
-              font-size: 0.66rem;
-              margin-left: 0.5rem;
-            "
-            >· gallery</span
+      <div class="brand-row">
+        <a class="brand" href="#" aria-label="Illustrate catalog home">
+          <h1>Illustrate</h1>
+          <span class="sub">· catalog</span>
+        </a>
+        <div class="brand-meta">
+          <span class="count"
+            ><strong>29</strong> editorial types ·
+            <strong>7</strong> technical · 4 variants each</span
           >
-        </h1>
-        <div style="display: flex; gap: 0.5rem">
-          <a class="open-raw" href="icons.html" target="_blank" rel="noopener"
-            >icon library ↗</a
+          <a href="icons.html" target="_blank" rel="noopener">icon library ↗</a>
+        </div>
+      </div>
+
+      <!-- Catalog controls -->
+      <div class="controls" id="catalog-controls">
+        <div class="families" role="tablist" aria-label="Diagram family">
+          <button class="fam" role="tab" data-family="editorial">
+            <span class="fam-n">29</span>Editorial
+          </button>
+          <button class="fam" role="tab" data-family="technical-architecture">
+            <span class="fam-n">03</span>Architecture · technical
+          </button>
+          <button class="fam" role="tab" data-family="technical-process-flow">
+            <span class="fam-n">04</span>Process flow · technical
+          </button>
+        </div>
+        <div class="search" id="search" data-empty="true">
+          <input
+            id="search-input"
+            type="search"
+            placeholder="Filter by name or purpose…"
+            aria-label="Filter diagrams"
+            autocomplete="off"
+          />
+          <button class="clear" id="search-clear" aria-label="Clear filter">
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <!-- Detail controls -->
+      <div class="detail-bar" id="detail-controls" hidden>
+        <a class="back" id="back" href="#">← catalog</a>
+        <div class="pager">
+          <a id="prev" href="#" aria-label="Previous diagram" title="Previous"
+            >←</a
           >
-          <a
-            class="open-raw"
-            id="open-raw"
-            href="#"
-            target="_blank"
-            rel="noopener"
-            >open in new tab ↗</a
-          >
+          <a id="next" href="#" aria-label="Next diagram" title="Next">→</a>
         </div>
       </div>
-
-      <div
-        class="tabs families"
-        id="family-tabs"
-        role="tablist"
-        aria-label="Illustration family"
-      >
-        <button class="tab active" data-family="editorial">Editorial</button>
-        <button class="tab new" data-family="technical-architecture">
-          Architecture · technical color
-        </button>
-        <button class="tab new" data-family="technical-process-flow">
-          Process flow · technical color
-        </button>
-      </div>
-
-      <section class="control-group" id="editorial-controls">
-      <div class="tabs" id="type-tabs" role="tablist" aria-label="Diagram type">
-        <button class="tab active" data-type="architecture">
-          <span class="eyebrow">01</span>Architecture
-        </button>
-        <button class="tab" data-type="flowchart">
-          <span class="eyebrow">02</span>Flowchart
-        </button>
-        <button class="tab" data-type="sequence">
-          <span class="eyebrow">03</span>Sequence
-        </button>
-        <button class="tab" data-type="state">
-          <span class="eyebrow">04</span>State
-        </button>
-        <button class="tab" data-type="er">
-          <span class="eyebrow">05</span>ER
-        </button>
-        <button class="tab" data-type="timeline">
-          <span class="eyebrow">06</span>Timeline
-        </button>
-        <button class="tab" data-type="swimlane">
-          <span class="eyebrow">07</span>Swimlane
-        </button>
-        <button class="tab" data-type="quadrant">
-          <span class="eyebrow">08</span>Quadrant
-        </button>
-        <button class="tab new" data-type="nested">
-          <span class="eyebrow">09</span>Nested
-        </button>
-        <button class="tab new" data-type="tree">
-          <span class="eyebrow">10</span>Tree
-        </button>
-        <button class="tab new" data-type="org-chart">
-          <span class="eyebrow">11</span>Org chart
-        </button>
-        <button class="tab new" data-type="layers">
-          <span class="eyebrow">12</span>Layers
-        </button>
-        <button class="tab new" data-type="venn">
-          <span class="eyebrow">13</span>Venn
-        </button>
-        <button class="tab new" data-type="pyramid">
-          <span class="eyebrow">14</span>Pyramid
-        </button>
-        <button class="tab new" data-type="radar">
-          <span class="eyebrow">15</span>Radar
-        </button>
-        <button class="tab new" data-type="loop">
-          <span class="eyebrow">16</span>Loop
-        </button>
-        <button class="tab new" data-type="datalake">
-          <span class="eyebrow">17</span>Data lake
-        </button>
-        <button class="tab new" data-type="bar">
-          <span class="eyebrow">18</span>Bar
-        </button>
-        <button class="tab new" data-type="line">
-          <span class="eyebrow">19</span>Line
-        </button>
-        <button class="tab new" data-type="gantt">
-          <span class="eyebrow">20</span>Gantt
-        </button>
-        <button class="tab new" data-type="scatter">
-          <span class="eyebrow">21</span>Scatter
-        </button>
-        <button class="tab new" data-type="medallion">
-          <span class="eyebrow">22</span>Medallion
-        </button>
-        <button class="tab new" data-type="high-level">
-          <span class="eyebrow">23</span>High-Level
-        </button>
-        <button class="tab new" data-type="process">
-          <span class="eyebrow">24</span>Process
-        </button>
-        <button class="tab new" data-type="data-flow">
-          <span class="eyebrow">26</span>Data flow
-        </button>
-        <button class="tab new" data-type="dp-integration">
-          <span class="eyebrow">27</span>DP integration
-        </button>
-        <button class="tab new" data-type="high-level-vertical">
-          <span class="eyebrow">28</span>High-Level / Parametric
-        </button>
-        <button class="tab new" data-type="dp-security-matrix">
-          <span class="eyebrow">32</span>DP security matrix
-        </button>
-        <button class="tab new" data-type="it-state">
-          <span class="eyebrow">33</span>IT current-state
-        </button>
-      </div>
-
-      <div
-        class="tabs variants"
-        id="variant-tabs"
-        role="tablist"
-        aria-label="Variant"
-      >
-        <button class="tab active" data-variant="">Minimal light</button>
-        <button class="tab" data-variant="-dark">Minimal dark</button>
-        <button class="tab" data-variant="-full">Full editorial</button>
-        <button class="tab" data-variant="-hand">Hand-drawn</button>
-      </div>
-      </section>
-
-      <section
-        class="control-group"
-        id="technical-architecture-controls"
-        hidden
-      >
-        <div
-          class="tabs"
-          id="technical-architecture-example-tabs"
-          role="tablist"
-          aria-label="Technical-color architecture example"
-        >
-          <button class="tab active" data-item="aws-serverless">
-            AWS serverless
-          </button>
-          <button class="tab" data-item="microservices">Microservices</button>
-          <button class="tab" data-item="web-app">Web application</button>
-        </div>
-        <div
-          class="tabs variants"
-          id="technical-architecture-variant-tabs"
-          role="tablist"
-          aria-label="Technical-color architecture variant"
-        >
-          <button class="tab active" data-variant="-light">Light</button>
-          <button class="tab" data-variant="">Dark</button>
-        </div>
-      </section>
-
-      <section
-        class="control-group"
-        id="technical-process-flow-controls"
-        hidden
-      >
-        <div
-          class="tabs"
-          id="technical-process-flow-example-tabs"
-          role="tablist"
-          aria-label="Technical-color process-flow example"
-        >
-          <button class="tab active" data-item="ai-governance-workflow">
-            AI governance
-          </button>
-          <button class="tab" data-item="inventory-control">
-            Inventory control
-          </button>
-          <button class="tab" data-item="it-change-management">
-            IT change management
-          </button>
-          <button class="tab" data-item="sprint-report-flow">
-            Sprint report
-          </button>
-        </div>
-        <div
-          class="tabs variants"
-          id="technical-process-flow-variant-tabs"
-          role="tablist"
-          aria-label="Technical-color process-flow variant"
-        >
-          <button class="tab active" data-variant="-light">Light</button>
-          <button class="tab" data-variant="">Dark</button>
-        </div>
-      </section>
     </header>
 
-    <main>
-      <iframe
-        id="preview"
-        src="example-architecture.html"
-        title="Preview"
-      ></iframe>
+    <!-- Catalog view -->
+    <main class="view" id="catalog">
+      <div id="grid-root"></div>
+      <div class="empty" id="empty" hidden>
+        <p>No diagram matches <span id="empty-q"></span></p>
+        <button id="empty-clear">Clear filter</button>
+      </div>
     </main>
 
+    <!-- Detail view -->
+    <section class="view" id="detail" hidden aria-live="polite">
+      <div class="detail" style="padding: 1.5rem clamp(1rem, 4vw, 2.75rem) 4rem">
+        <div class="stage" id="stage">
+          <div class="stage-shimmer">rendering preview…</div>
+          <iframe id="stage-frame" title="Diagram preview"></iframe>
+        </div>
+        <aside class="aside">
+          <div>
+            <p class="eyebrow" id="d-eyebrow"></p>
+            <h2 id="d-name"></h2>
+          </div>
+          <p class="lede" id="d-lede"></p>
+          <div class="field">
+            <label>Variant</label>
+            <div class="variants" id="d-variants"></div>
+          </div>
+          <div class="field">
+            <label>Generate it</label>
+            <div class="cmd">
+              <code id="d-cmd"></code>
+              <button id="d-copy" type="button">COPY</button>
+            </div>
+          </div>
+          <a class="raw" id="d-raw" href="#" target="_blank" rel="noopener"
+            >Open raw file ↗</a
+          >
+        </aside>
+      </div>
+    </section>
+
     <script>
-      const galleries = {
+      "use strict";
+
+      /* -------- Data: single source of truth -------- */
+      const INTENTS = [
+        {
+          id: "systems",
+          label: "Systems & architecture",
+          hint: "Topology, platforms, infrastructure",
+        },
+        {
+          id: "flows",
+          label: "Flows & process",
+          hint: "Steps, sequences, state",
+        },
+        {
+          id: "data",
+          label: "Data & quantity",
+          hint: "Charts, metrics, comparison",
+        },
+        {
+          id: "structure",
+          label: "Structure & relationships",
+          hint: "Hierarchy, sets, entities, time",
+        },
+      ];
+
+      const EDITORIAL_VARIANTS = [
+        { v: "", label: "Minimal light" },
+        { v: "-dark", label: "Minimal dark" },
+        { v: "-full", label: "Full editorial" },
+        { v: "-hand", label: "Hand-drawn" },
+      ];
+      const TECHNICAL_VARIANTS = [
+        { v: "-light", label: "Light" },
+        { v: "", label: "Dark" },
+      ];
+
+      const FAMILIES = {
         editorial: {
-          controls: "editorial-controls",
-          base: "",
-          prefix: "example-",
-          defaultItem: "architecture",
+          label: "Editorial",
+          base: "example-",
+          suffix: ".html",
+          variants: EDITORIAL_VARIANTS,
           defaultVariant: "",
         },
         "technical-architecture": {
-          controls: "technical-architecture-controls",
+          label: "Architecture · technical color",
           base: "technical-color/architecture/examples/",
-          prefix: "",
-          defaultItem: "aws-serverless",
+          suffix: ".html",
+          variants: TECHNICAL_VARIANTS,
           defaultVariant: "-light",
         },
         "technical-process-flow": {
-          controls: "technical-process-flow-controls",
+          label: "Process flow · technical color",
           base: "technical-color/process-flow/examples/",
-          prefix: "",
-          defaultItem: "ai-governance-workflow",
+          suffix: ".html",
+          variants: TECHNICAL_VARIANTS,
           defaultVariant: "-light",
         },
       };
-      const state = {
-        family: "editorial",
-        selections: Object.fromEntries(
-          Object.entries(galleries).map(([name, gallery]) => [
-            name,
-            {
-              item: gallery.defaultItem,
-              variant: gallery.defaultVariant,
-            },
-          ]),
-        ),
-      };
-      const iframe = document.getElementById("preview");
-      const openRaw = document.getElementById("open-raw");
 
-      function update() {
-        const gallery = galleries[state.family];
-        const selection = state.selections[state.family];
-        const src = `${gallery.base}${gallery.prefix}${selection.item}${selection.variant}.html`;
-        iframe.src = src;
-        openRaw.href = src;
-      }
+      // n = catalog id, gen = noun phrase for the generate command.
+      const TYPES = [
+        // -- Editorial · systems --
+        { key: "architecture", n: "01", family: "editorial", intent: "systems", name: "Architecture", purpose: "Components and connections in a system.", gen: "an architecture diagram" },
+        { key: "high-level", n: "23", family: "editorial", intent: "systems", name: "High-Level", purpose: "End-to-end data stack on a container cluster.", gen: "a high-level architecture" },
+        { key: "high-level-vertical", n: "28", family: "editorial", intent: "systems", name: "High-Level / Parametric", purpose: "Vertical end-to-end stack with a parametric layout.", gen: "a vertical high-level architecture" },
+        { key: "medallion", n: "22", family: "editorial", intent: "systems", name: "Medallion", purpose: "Multi-tier storage with quality levels and access policy.", gen: "a medallion architecture" },
+        { key: "datalake", n: "17", family: "editorial", intent: "systems", name: "Data lake", purpose: "Zoned lake storage: raw, refined, curated.", gen: "a data lake diagram" },
+        { key: "dp-integration", n: "27", family: "editorial", intent: "systems", name: "DP integration", purpose: "Platform topology from sources to core to consumers.", gen: "a data-platform integration diagram" },
+        { key: "it-state", n: "33", family: "editorial", intent: "systems", name: "IT current-state", purpose: "A legacy landscape grouped by phase — the before state.", gen: "an IT current-state diagram" },
+        { key: "nested", n: "09", family: "editorial", intent: "systems", name: "Nested", purpose: "Hierarchy expressed through containment and scope.", gen: "a nested containment diagram" },
+        { key: "layers", n: "12", family: "editorial", intent: "systems", name: "Layer stack", purpose: "Stacked abstraction levels.", gen: "a layer-stack diagram" },
 
-      function bindTabs(containerId, key, dataKey = key) {
-        const container = document.getElementById(containerId);
-        container.addEventListener("click", (e) => {
-          const btn = e.target.closest(".tab");
-          if (!btn) return;
-          container
-            .querySelectorAll(".tab")
-            .forEach((t) => t.classList.remove("active"));
-          btn.classList.add("active");
-          state.selections[state.family][key] = btn.dataset[dataKey];
-          update();
+        // -- Editorial · flows --
+        { key: "flowchart", n: "02", family: "editorial", intent: "flows", name: "Flowchart", purpose: "Decision logic with branches.", gen: "a flowchart" },
+        { key: "sequence", n: "03", family: "editorial", intent: "flows", name: "Sequence", purpose: "Time-ordered messages between actors.", gen: "a sequence diagram" },
+        { key: "state", n: "04", family: "editorial", intent: "flows", name: "State machine", purpose: "States, transitions, and guards.", gen: "a state-machine diagram" },
+        { key: "swimlane", n: "07", family: "editorial", intent: "flows", name: "Swimlane", purpose: "A cross-functional process with handoffs.", gen: "a swimlane diagram" },
+        { key: "process", n: "24", family: "editorial", intent: "flows", name: "Process", purpose: "Multi-actor process with data handoffs.", gen: "a multi-actor process diagram" },
+        { key: "data-flow", n: "26", family: "editorial", intent: "flows", name: "Data flow", purpose: "Who does what at each pipeline step.", gen: "a data-flow diagram" },
+        { key: "loop", n: "16", family: "editorial", intent: "flows", name: "Loop", purpose: "A reinforcing cycle where the last step feeds the first.", gen: "a loop / flywheel diagram" },
+
+        // -- Editorial · data --
+        { key: "bar", n: "18", family: "editorial", intent: "data", name: "Bar chart", purpose: "Quantitative comparison across categories.", gen: "a bar chart" },
+        { key: "line", n: "19", family: "editorial", intent: "data", name: "Line chart", purpose: "Continuous trends over time.", gen: "a line chart" },
+        { key: "scatter", n: "21", family: "editorial", intent: "data", name: "Scatter plot", purpose: "Distribution and correlation between two variables.", gen: "a scatter plot" },
+        { key: "radar", n: "15", family: "editorial", intent: "data", name: "Radar", purpose: "Entities scored across three to five criteria.", gen: "a radar chart" },
+        { key: "gantt", n: "20", family: "editorial", intent: "data", name: "Gantt", purpose: "Tasks and phases on a timeline.", gen: "a Gantt chart" },
+        { key: "quadrant", n: "08", family: "editorial", intent: "data", name: "Quadrant", purpose: "Two-axis positioning and prioritization.", gen: "a quadrant matrix" },
+
+        // -- Editorial · structure --
+        { key: "er", n: "05", family: "editorial", intent: "structure", name: "ER / data model", purpose: "Entities, fields, and relationships.", gen: "an ER data model" },
+        { key: "tree", n: "10", family: "editorial", intent: "structure", name: "Tree", purpose: "Parent-to-children relationships.", gen: "a tree diagram" },
+        { key: "org-chart", n: "11", family: "editorial", intent: "structure", name: "Org chart", purpose: "Ownership, reporting, routing, and escalation.", gen: "an org chart" },
+        { key: "venn", n: "13", family: "editorial", intent: "structure", name: "Venn", purpose: "Overlap between sets.", gen: "a Venn diagram" },
+        { key: "pyramid", n: "14", family: "editorial", intent: "structure", name: "Pyramid / funnel", purpose: "Ranked hierarchy or conversion drop-off.", gen: "a pyramid / funnel" },
+        { key: "timeline", n: "06", family: "editorial", intent: "structure", name: "Timeline", purpose: "Events positioned in time.", gen: "a timeline" },
+        { key: "dp-security-matrix", n: "32", family: "editorial", intent: "structure", name: "DP security matrix", purpose: "Per-role, per-component access permissions.", gen: "a DP security matrix" },
+
+        // -- Technical color · architecture --
+        { key: "aws-serverless", family: "technical-architecture", name: "AWS serverless", purpose: "A serverless topology on AWS.", gen: "an AWS serverless architecture" },
+        { key: "microservices", family: "technical-architecture", name: "Microservices", purpose: "Service mesh and boundaries.", gen: "a microservices architecture" },
+        { key: "web-app", family: "technical-architecture", name: "Web application", purpose: "Classic web application tiers.", gen: "a web application architecture" },
+
+        // -- Technical color · process flow --
+        { key: "ai-governance-workflow", family: "technical-process-flow", name: "AI governance", purpose: "An AI model governance approval flow.", gen: "an AI governance workflow" },
+        { key: "inventory-control", family: "technical-process-flow", name: "Inventory control", purpose: "An inventory replenishment flow.", gen: "an inventory-control process" },
+        { key: "it-change-management", family: "technical-process-flow", name: "IT change management", purpose: "A change-request lifecycle.", gen: "an IT change-management process" },
+        { key: "sprint-report-flow", family: "technical-process-flow", name: "Sprint report", purpose: "A sprint-reporting automation.", gen: "a sprint-report process" },
+      ];
+
+      const byKey = Object.fromEntries(TYPES.map((t) => [t.key, t]));
+      const src = (t, v) =>
+        FAMILIES[t.family].base + t.key + v + FAMILIES[t.family].suffix;
+
+      /* -------- Elements -------- */
+      const gridRoot = document.getElementById("grid-root");
+      const emptyEl = document.getElementById("empty");
+      const catalogView = document.getElementById("catalog");
+      const detailView = document.getElementById("detail");
+      const catalogControls = document.getElementById("catalog-controls");
+      const detailControls = document.getElementById("detail-controls");
+      const searchWrap = document.getElementById("search");
+      const searchInput = document.getElementById("search-input");
+
+      let currentFamily = "editorial";
+      let scaleFrame = null;
+
+      /* -------- Lazy preview loading -------- */
+      const io = new IntersectionObserver(
+        (entries) => {
+          for (const e of entries) {
+            if (!e.isIntersecting) continue;
+            const frame = e.target;
+            io.unobserve(frame);
+            frame.addEventListener("load", () => {
+              frame.classList.add("ready");
+              frame.closest(".thumb").classList.add("loaded");
+            });
+            frame.addEventListener("error", () =>
+              frame.closest(".thumb").classList.add("error"),
+            );
+            frame.src = frame.dataset.src;
+          }
+        },
+        { rootMargin: "300px 0px" },
+      );
+
+      /* -------- Preview scale (fit 1000px logical canvas into card) -------- */
+      function scaleThumbs() {
+        document.querySelectorAll(".thumb").forEach((th) => {
+          const w = th.clientWidth;
+          if (w) th.style.setProperty("--k", (w / 1000).toFixed(4));
         });
       }
+      function scheduleScale() {
+        cancelAnimationFrame(scaleFrame);
+        scaleFrame = requestAnimationFrame(scaleThumbs);
+      }
+      window.addEventListener("resize", scheduleScale);
 
-      document.getElementById("family-tabs").addEventListener("click", (e) => {
-        const btn = e.target.closest(".tab");
-        if (!btn) return;
+      /* -------- Card markup -------- */
+      function cardHTML(t) {
+        const f = FAMILIES[t.family];
+        const preview = src(t, f.defaultVariant);
+        const badge = t.n ? `<span class="badge">${t.n}</span>` : "";
+        const foot =
+          t.family === "editorial"
+            ? `<span class="dots" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>4 variants</span>`
+            : `<span>Light · Dark</span>`;
+        return `
+          <a class="card" href="#type=${t.key}" data-name="${t.name.toLowerCase()}" data-purpose="${t.purpose.toLowerCase()}">
+            <span class="thumb">
+              ${badge}
+              <span class="shimmer" aria-hidden="true"></span>
+              <span class="fail">preview unavailable</span>
+              <iframe data-src="${preview}" title="${t.name} preview" tabindex="-1" loading="lazy" scrolling="no"></iframe>
+            </span>
+            <span class="card-body">
+              <span class="card-title">
+                <h3>${t.name}</h3>
+                <span class="arrow" aria-hidden="true">→</span>
+              </span>
+              <p>${t.purpose}</p>
+              <span class="card-foot">${foot}</span>
+            </span>
+          </a>`;
+      }
 
-        document
-          .querySelectorAll("#family-tabs .tab")
-          .forEach((tab) => tab.classList.remove("active"));
-        btn.classList.add("active");
+      /* -------- Render a family into the grid -------- */
+      function renderFamily(family) {
+        currentFamily = family;
+        const list = TYPES.filter((t) => t.family === family);
+        let html = "";
+        if (family === "editorial") {
+          for (const intent of INTENTS) {
+            const items = list.filter((t) => t.intent === intent.id);
+            html += `
+              <section class="intent" data-intent="${intent.id}">
+                <div class="intent-head">
+                  <h2>${intent.label}</h2>
+                  <span class="hint">${intent.hint}</span>
+                  <span class="n">${items.length}</span>
+                </div>
+                <div class="grid">${items.map(cardHTML).join("")}</div>
+              </section>`;
+          }
+        } else {
+          html = `<section class="intent"><div class="grid">${list
+            .map(cardHTML)
+            .join("")}</div></section>`;
+        }
+        gridRoot.innerHTML = html;
 
-        state.family = btn.dataset.family;
-        const gallery = galleries[state.family];
-        document
-          .querySelectorAll(".control-group")
-          .forEach((group) => (group.hidden = group.id !== gallery.controls));
-        update();
-      });
+        // family tab state + search visibility
+        document.querySelectorAll(".fam").forEach((b) =>
+          b.setAttribute(
+            "aria-selected",
+            b.dataset.family === family ? "true" : "false",
+          ),
+        );
+        searchWrap.style.display = family === "editorial" ? "" : "none";
+        if (family !== "editorial") clearSearch(false);
 
-      bindTabs("type-tabs", "item", "type");
-      bindTabs("variant-tabs", "variant");
-      bindTabs("technical-architecture-example-tabs", "item");
-      bindTabs("technical-architecture-variant-tabs", "variant");
-      bindTabs("technical-process-flow-example-tabs", "item");
-      bindTabs("technical-process-flow-variant-tabs", "variant");
-      update();
+        scaleThumbs();
+        gridRoot
+          .querySelectorAll("iframe[data-src]")
+          .forEach((f) => io.observe(f));
+        applyFilter();
+      }
+
+      /* -------- Search / filter (editorial only) -------- */
+      function applyFilter() {
+        if (currentFamily !== "editorial") {
+          emptyEl.hidden = true;
+          return;
+        }
+        const q = searchInput.value.trim().toLowerCase();
+        searchWrap.dataset.empty = q ? "false" : "true";
+        let shown = 0;
+        gridRoot.querySelectorAll(".card").forEach((c) => {
+          const hit =
+            !q ||
+            c.dataset.name.includes(q) ||
+            c.dataset.purpose.includes(q);
+          c.style.display = hit ? "" : "none";
+          if (hit) shown++;
+        });
+        // hide empty intent sections; keep the count truthful to what's shown
+        gridRoot.querySelectorAll(".intent").forEach((sec) => {
+          const vis = [...sec.querySelectorAll(".card")].filter(
+            (c) => c.style.display !== "none",
+          ).length;
+          sec.style.display = vis ? "" : "none";
+          const n = sec.querySelector(".intent-head .n");
+          if (n) n.textContent = vis;
+        });
+        emptyEl.hidden = shown !== 0;
+        if (shown === 0)
+          document.getElementById("empty-q").textContent = `“${q}”`;
+        scheduleScale();
+      }
+      function clearSearch(refocus = true) {
+        searchInput.value = "";
+        applyFilter();
+        if (refocus) searchInput.focus();
+      }
+      searchInput.addEventListener("input", applyFilter);
+      document
+        .getElementById("search-clear")
+        .addEventListener("click", () => clearSearch());
+      document
+        .getElementById("empty-clear")
+        .addEventListener("click", () => clearSearch());
+
+      document.querySelectorAll(".fam").forEach((btn) =>
+        btn.addEventListener("click", () => {
+          location.hash = `family=${btn.dataset.family}`;
+        }),
+      );
+
+      /* -------- Detail view -------- */
+      const stage = document.getElementById("stage");
+      const stageFrame = document.getElementById("stage-frame");
+
+      function siblings(t) {
+        const list = TYPES.filter((x) => x.family === t.family);
+        const i = list.findIndex((x) => x.key === t.key);
+        return {
+          prev: list[(i - 1 + list.length) % list.length],
+          next: list[(i + 1) % list.length],
+        };
+      }
+
+      function renderDetail(key, variant) {
+        const t = byKey[key];
+        if (!t) {
+          location.hash = "";
+          return;
+        }
+        const f = FAMILIES[t.family];
+        const v = f.variants.some((x) => x.v === variant)
+          ? variant
+          : f.defaultVariant;
+        const file = src(t, v);
+
+        // stage
+        stage.classList.remove("loaded", "anim");
+        void stage.offsetWidth; // restart animation
+        stage.classList.add("anim");
+        stageFrame.addEventListener(
+          "load",
+          () => stage.classList.add("loaded"),
+          { once: true },
+        );
+        stageFrame.src = file;
+
+        // meta
+        document.getElementById("d-eyebrow").textContent = t.n
+          ? `${f.label} · ${t.n}`
+          : f.label;
+        document.getElementById("d-name").textContent = t.name;
+        document.getElementById("d-lede").textContent = t.purpose;
+        document.getElementById("d-raw").href = file;
+
+        // command
+        const cmd = `/speckit-illustrate-generate create ${t.gen}`;
+        document.getElementById("d-cmd").textContent = cmd;
+        const copyBtn = document.getElementById("d-copy");
+        copyBtn.textContent = "COPY";
+        copyBtn.classList.remove("copied");
+        copyBtn.onclick = () => {
+          navigator.clipboard?.writeText(cmd).then(() => {
+            copyBtn.textContent = "COPIED";
+            copyBtn.classList.add("copied");
+            setTimeout(() => {
+              copyBtn.textContent = "COPY";
+              copyBtn.classList.remove("copied");
+            }, 1600);
+          });
+        };
+
+        // variants
+        const vwrap = document.getElementById("d-variants");
+        vwrap.innerHTML = f.variants
+          .map(
+            (x) =>
+              `<a href="#type=${t.key}${
+                x.v ? "&v=" + x.v : ""
+              }" aria-current="${x.v === v ? "true" : "false"}">${x.label}</a>`,
+          )
+          .join("");
+
+        // pager
+        const sib = siblings(t);
+        document.getElementById("prev").href = `#type=${sib.prev.key}`;
+        document.getElementById("next").href = `#type=${sib.next.key}`;
+        document.getElementById("prev").title = sib.prev.name;
+        document.getElementById("next").title = sib.next.name;
+        document.getElementById("back").href = `#family=${t.family}`;
+      }
+
+      /* -------- Router -------- */
+      function parseHash() {
+        const h = location.hash.replace(/^#/, "");
+        return Object.fromEntries(
+          h
+            .split("&")
+            .filter(Boolean)
+            .map((p) => {
+              const [k, val] = p.split("=");
+              return [k, decodeURIComponent(val ?? "")];
+            }),
+        );
+      }
+
+      function route() {
+        const q = parseHash();
+        if (q.type) {
+          // ensure the underlying family grid matches (for back nav)
+          const t = byKey[q.type];
+          if (t && t.family !== currentFamily) renderFamily(t.family);
+          catalogView.hidden = true;
+          catalogControls.hidden = true;
+          detailView.hidden = false;
+          detailControls.hidden = false;
+          renderDetail(q.type, q.v || "");
+          window.scrollTo({ top: 0, behavior: "auto" });
+        } else {
+          const fam = FAMILIES[q.family] ? q.family : "editorial";
+          if (fam !== currentFamily || !gridRoot.children.length)
+            renderFamily(fam);
+          detailView.hidden = true;
+          detailControls.hidden = true;
+          catalogView.hidden = false;
+          catalogControls.hidden = false;
+          scheduleScale();
+        }
+      }
+
+      window.addEventListener("hashchange", route);
+      window.addEventListener("load", scheduleScale);
+      route();
     </script>
   </body>
 </html>
