@@ -103,6 +103,9 @@ See the [worked lifecycle](docs/skill-guide.md) and [operating guide](docs/workf
 
 ## Documentation
 
+See the [visual examples](docs/README.md#learn-and-use) for process themes, a bounded Claude/Codex
+debate, real manual screenshots, and extension workflows with user and automated actions.
+
 The [documentation index](docs/README.md) routes setup, examples, command reference, and operations.
 All examples use the same synthetic booking application and refund feature.
 

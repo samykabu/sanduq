@@ -1,0 +1,16 @@
+html[lang="ar"] body {
+  direction: rtl;
+  text-align: right;
+}
+
+html[lang="ar"] pre,
+html[lang="ar"] code,
+html[lang="ar"] .highlight,
+html[lang="ar"] [dir="ltr"] {
+  direction: ltr;
+  text-align: left;
+}
+
+html[lang="ar"] table {
+  direction: rtl;
+}

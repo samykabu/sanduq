@@ -19,6 +19,12 @@ Each section names the source contract so you can check its prerequisites and de
 
 ## Illustrate
 
+![Example refund process across operator, API, and Payments](diagrams/refund-process-cobalt-light.svg)
+
+See the [process and theme gallery](illustrate-examples.md) for all three light/dark presets,
+editable process diagrams, and a complete custom color file. The operator decides; the API checks
+access and records the outcome; Payments settles approvals only.
+
 Use `illustrate` when a relationship is clearer as a diagram: components, time-ordered messages,
 workflow states, data, ownership, or measured quantities. It supports 27 diagram types. Use a table
 when the content is simply a list. [Source](../skills/illustration-tools/skills/illustrate/SKILL.md).
@@ -43,6 +49,11 @@ SVG export uses Python; PNG needs Playwright and Chromium. Technical-color templ
 browser export controls. [Workflow interaction example](diagrams/dispatcher-sequence.html).
 
 ## User Manual
+
+![Actual sample manual with an Illustrate refund diagram](assets/manual-gallery/material-light.png)
+
+The [manual theme guide](user-manual-examples.md) compares actual Material light/dark,
+ReadTheDocs, MkDocs, and custom CSS builds, and shows how to install an authored theme.
 
 Use `user-manual` for a new manual, a cross-module update, or a coverage audit. It discovers modules,
 asks for approval, and maintains one Markdown source with End User, Administrator/Operator, and
@@ -137,6 +148,12 @@ the artifact fallback when credentials are unavailable. Inspect the provider's c
 documentation before changing an adapter; pin dependencies under the project's supply-chain policy.
 
 ## Delegate Task
+
+![Claude and Codex debate with a three-pair limit](diagrams/delegate-consensus.svg)
+
+The [delegation examples](delegate-examples.md) show a capped Claude/Codex debate, independent
+parallel work, and a separate-process report. Agreement refers to the same candidate; unresolved
+objections or the cap stop the debate.
 
 Use `delegate-task` for one bounded task on another agent CLI or an independent second opinion.
 Node 18+ runs its dependency-free driver. Claude Code, Codex, and OpenCode are verified harnesses;

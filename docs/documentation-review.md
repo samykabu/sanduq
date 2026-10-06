@@ -68,7 +68,11 @@ Cleanup removed 16 obsolete overview/source/export and theme-preview files after
 documentation, scripts, tests, manifests, and templates for references. Brand masters, active
 diagram sources/exports, the progress-report screenshot, and historical evidence remain. Two
 Illustrate diagrams now explain dispatcher interactions and checkpoint state; their editable
-HTML and SVG exports are linked from the guides.
+HTML and SVG exports are linked from the guides. The visual expansion adds 17 editable diagrams
+and five actual manual screenshots: preset/custom process themes, bounded delegation, all eight
+extension workflows, and independent QA/manual paths. A checked-in synthetic manual and gallery
+runner reproduce the screenshots through the real audit/build scripts. The standalone builder's
+Material/CSS support is distinguished from the extension's configurable installed themes.
 
 ## Keep it maintainable
 
