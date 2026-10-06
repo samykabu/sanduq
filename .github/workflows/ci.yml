@@ -165,7 +165,7 @@ jobs:
         working-directory: extensions/illustrate/skill
         run: |
           python scripts/lint-render.py --self-test
-          python scripts/lint-render.py --all --quiet
+          python scripts/lint-render.py --all
 
   memory-installation:
     strategy:
