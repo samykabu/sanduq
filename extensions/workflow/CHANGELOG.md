@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.8.4] - 2026-10-06
+
+- Link setup and complete usage examples from the package README; links work in installed copies.
+- Pin the documentation patch releases of managed dependencies. Runtime behavior is unchanged.
+
 ## 1.8.3
 
 - `dependencies.json` pins User Manual 1.5.0 (selectable MkDocs theme, RTL

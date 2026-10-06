@@ -430,7 +430,8 @@ class SwitchTests(HostTests):
             self.assertEqual(alias.read_bytes(), edited)
             upgrade.upgrade(self.root, '1.1.1', apply=True, packages=packages, runner=self.specify,
                             replace_unrecognized_aliases=True)
-        [install] = [c for c in self.specify.calls[-12:] if c[0] == sys.executable][-1:]
+        installer_command = [sys.executable, str(self.root / '.specify/extensions/workflow/scripts/install.py')]
+        [install] = [c for c in self.specify.calls if c[:2] == installer_command][-1:]
         self.assertIn('--replace-unrecognized-aliases', install)
         saved = list((self.root / '.specify/workflow/backups/installs').rglob('SKILL.md'))
         self.assertEqual([p.read_bytes() for p in saved], [edited])

@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.5.1] - 2026-10-06
+
+- Link setup and complete usage examples from the package README; links work in installed copies.
+
 ## 1.5.0
 
 - `extension.yml` now declares `requires.extensions: workflow >=1.8.0,<2.0.0`

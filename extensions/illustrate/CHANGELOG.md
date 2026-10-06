@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.1.3] - 2026-10-06
+
+- Link setup and complete usage examples from the package README; links work in installed copies.
+
 All notable changes to the Illustrate extension.
 
 ## [2.1.0] - 2026-07-18

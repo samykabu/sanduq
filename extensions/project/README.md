@@ -1,5 +1,9 @@
 # `project` — GitHub Project lifecycle sync (Spec Kit extension)
 
+For setup and a consistent worked example, see [Getting started](https://github.com/samykabu/sanduq/blob/main/docs/getting-started.md)
+and [project usage](https://github.com/samykabu/sanduq/blob/main/docs/extensions.md#project).
+
+
 Mirrors every Spec Kit feature onto a **GitHub Project (v2)**:
 
 - one **parent feature issue** per feature, whose **Status** column advances through the

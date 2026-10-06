@@ -1,5 +1,9 @@
 # Pull Request Workflow Extension
 
+For setup and a consistent worked example, see [Getting started](https://github.com/samykabu/sanduq/blob/main/docs/getting-started.md)
+and [pr usage](https://github.com/samykabu/sanduq/blob/main/docs/extensions.md#pr).
+
+
 One Spec Kit extension for the complete pull-request workflow: generate a reviewer-friendly PR, then
 process review feedback through an explicit approval gate.
 

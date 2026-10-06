@@ -1,5 +1,9 @@
 # Sanduq Scope
 
+For setup and a consistent worked example, see [Getting started](https://github.com/samykabu/sanduq/blob/main/docs/getting-started.md)
+and [scope usage](https://github.com/samykabu/sanduq/blob/main/docs/extensions.md#scope).
+
+
 Canonical source migrated from Bunyan's `tools/speckit-scope` package. Existing MIT
 notices remain intact. Version 1.5.0 is a pending local release.
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.2.1] - 2026-10-06
+
+- Link setup and complete usage examples from the package README; links work in installed copies.
+
 ## 2.2.0
 
 - **B7 — quiet output.** `project-sync` (Bash and PowerShell) gains

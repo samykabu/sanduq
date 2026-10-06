@@ -1,34 +1,14 @@
 # Sanduq Workflow
 
-Workflow 1.8.0 stops gating every command on the absolute path a checkpoint was started from: a checkpoint now records a portable repository identity (the normalised `origin` remote and root commit), so it works from any clone, worktree, delegated worker or CI runner of the same repository, and the new `workflow.py relocate` command is the explicit, logged rebind for a renamed remote, a migrated organisation or a fork. It also adds five utility skills (`speckit-workflow-verify-affected`, `-ci-report`, `-gate-explain`, `-apply-pending` and `-worker-brief`) and pins Scope 1.5.0, whose `bound_claim` shares the same identity gate and whose Project board calls fall back to the REST API when GraphQL is exhausted. Workflow 1.7.0 defaults coordination to `high`, splits `qa` into `qa_author`
-and light-eligible `qa_collect`, requires `--owned` for a light-tier or
-`qa_collect` start, and tightens the Ready/complete gates to require a
-successful dispatcher-recorded attempt for every checked task (mid-feature
-adoption goes through the new `delegate_dispatch.py adopt`); `doctor
---project` also reports a per-host skill inventory (`SANDUQ_SKILLS_HOME`
-replaces `SANDUQ_HOME`). Workflow 1.6.4 pins the released User Manual 1.3.3, whose private preview artifact now keeps `retention-days: 2` instead of 14 so the Cloudflare preview workflow's single read is not blocked by a filled artifact quota; Workflow itself is unchanged. Workflow 1.6.3 stops judging a managed alias by its frontmatter: an alias
-is replaced silently only when its whole content hash is the packaged alias, an
-accepted legacy or install-lock hash, or exactly what Spec Kit renders for that
-command; any other content is refused with `ALIAS_HAS_LOCAL_EDITS` unless
-`--replace-unrecognized-aliases` backs it up first. Workflow 1.6.2 makes host switching lossless: installs and upgrades keep every
-installed host's skills and managed aliases instead of Spec Kit's registration
-wiping the non-default host, and a new `workflow.py host [--use codex|claude]
-[--preview]` reports host status or switches the default, re-registering
-incomplete hosts and restoring aliases with rollback on failure. Workflow 1.6.1
-closes evidence-gate gaps: a Verify receipt's CI evidence must be the
-complete record `revalidate` writes and a diff review is bound to a hashed diff, long
-GitHub issue titles are shortened instead of rejected, and `ci_gate.py --check-index`
-flags evidence paths Git ignores and cross-feature fingerprints. Workflow 1.6.0 hardened
-the evidence gate: input roles and assessed amendments on receipts, source-drift
-classification through an affected-lanes hook, and CI runs accepted as Verify evidence
-through `revalidate --check-run`. Workflow 1.5.0 added optional model-aware delegation. Workflow 1.4.0
-added token usage per task, phase and feature to the progress
-report and makes `--preserve-ci` work on any checkout. Workflow 1.3.0 added issue
-decisions and an optional evidence CI gate. Check
-the repository catalog for the currently published version. See the
-[Delivery implementation plan](../../docs/sanduq-delivery-implementation-plan.md),
-[usage guide](../../docs/sanduq-delivery-usage.md), and
-[native prototype result](../../docs/native-workflow-prototype-results.md).
+Run one issue-bound, resumable dispatcher from Scope through a verified PR handoff. It owns
+stage claims, receipts, source freshness, decisions, and interrupted-session recovery; installed
+agent commands perform the semantic work.
+
+Start with [setup](https://github.com/samykabu/sanduq/blob/main/docs/getting-started.md), [all 13 public command examples](https://github.com/samykabu/sanduq/blob/main/docs/extensions.md#workflow),
+and the [worked lifecycle](https://github.com/samykabu/sanduq/blob/main/docs/skill-guide.md). Use this file for package internals and
+the [operating guide](https://github.com/samykabu/sanduq/blob/main/docs/workflow-guide.md) for upgrades and evidence recovery.
+Release changes are recorded in [CHANGELOG.md](CHANGELOG.md); published versions live in
+the [catalog](https://github.com/samykabu/sanduq/blob/main/catalog.json).
 
 Choose QA Assure and User Manual independently during project initialization.
 Daily entry points are `speckit.workflow.scope`, `.clarify`, `.continue`, and
@@ -70,7 +50,7 @@ For a managed project run `workflow.py init --qa on|off --manual on|off --delega
 on|off`, configure
 GitHub Project status mappings, run `install.py` preview/apply and run doctor. Only explicit
 selections enable processes. The dependency lock records exact intended versions;
-those pending releases cannot yet be installed from public release URLs.
+unpublished versions require a staged package until the catalog is promoted.
 
 Scope's community catalog name is ambiguous. Always use the Sanduq archive URL or
 verified staged package, never a bare `specify extension add scope` command.
@@ -662,8 +642,8 @@ then commit the checkpoint (an operational path, so the source key is unchanged)
 
 Use `upgrade.py --version X.Y.Z` preview, then `--apply`, to update the workflow
 package and its integrations with outer rollback. Local staged testing supports
-`--packages <extracted-packages>`. See the [operating guide](../../docs/workflow-guide.md)
-and [compatibility contract](../../docs/workflow-compatibility.md) for tested limits.
+`--packages <extracted-packages>`. See the [operating guide](https://github.com/samykabu/sanduq/blob/main/docs/workflow-guide.md)
+and [compatibility contract](https://github.com/samykabu/sanduq/blob/main/docs/workflow-compatibility.md) for tested limits.
 
 `task_issues.py` is dry-run by default. The core Tasks-to-Issues preset invokes it
 with `--apply` within authorized issue work. Native sub-issues are identified by
@@ -719,7 +699,7 @@ adopting this changed contract; do not relabel old evidence.
 The dispatcher ends at PR publication. Its `pr_open` state is not post-merge
 certification. Follow the skill's post-merge protocol and retain an external-state
 report of exact SHAs, checks and rollout observations. See the
-[Review Home pilot findings](../../docs/workflow-pilot-review.md).
+[Review Home pilot findings](https://github.com/samykabu/sanduq/blob/main/docs/workflow-pilot-review.md).
 
 ## Optional model-aware delegation
 

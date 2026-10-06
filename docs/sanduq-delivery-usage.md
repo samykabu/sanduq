@@ -4,9 +4,7 @@ This guide covers the Sanduq-managed, GitHub-issue-bound workflow. Ordinary
 Spec Kit `speckit.specify` without a GitHub issue remains available. The native
 Spec Kit workflow in `prototypes/sanduq-delivery/` is an isolated experiment;
 Sanduq's receipt-based dispatcher is the production scheduler.
-The choices below require workflow 1.3.0. Check the repository catalog for the
-currently published version. Before the 1.3.0 release asset is published, use
-the local package procedure in the root README for a disposable preview.
+For prerequisites and current installation, see [Getting started](getting-started.md). Published versions live in the [catalog](../catalog.json); local package testing is in [Contributing](../CONTRIBUTING.md#test-a-local-package).
 
 ## Choose processes and gate policy
 
@@ -52,7 +50,7 @@ retain the prior required, all-PR evidence behavior until deliberately changed.
    specify extension add workflow
    ```
 
-3. In the agent session, invoke `/speckit-workflow-init`. It records the three
+3. In the agent session, invoke `$speckit-workflow-init`. It records the three
    selections, runner labels and capabilities, and any explicit decision-reviewer
    GitHub logins. The equivalent policy command is:
 
@@ -79,11 +77,11 @@ retain the prior required, all-PR evidence behavior until deliberately changed.
    column; Sanduq uses a separate single-select Decision field with `None`,
    `Waiting`, `Needs review`, and `Applied` options.
 
-5. For an issue-bound feature, invoke `/speckit-workflow-scope <issue-number>`.
+5. For an issue-bound feature, invoke `$speckit-workflow-scope <issue-number>`.
    The initial spec folder and branch derive from the issue number and title,
-   for example `specs/42-fix-checkout-timeout` and `42-fix-checkout-timeout`.
+   for example `specs/412-refund-approval` and `412-refund-approval`.
    The Git extension hook creates that branch when installed; otherwise Sanduq
-   creates it during `workflow.py prepare --issue 42`.
+   creates it during `workflow.py prepare --issue 412`.
    An existing feature retains its saved identity after an issue title edit.
 
 ## Existing codebase without Spec Kit
@@ -105,8 +103,8 @@ Inspect active feature checkpoints and outstanding GitHub writes before an
 upgrade. Resolve active claims, then use the transactional upgrade path:
 
 ```powershell
-python .specify/extensions/workflow/scripts/upgrade.py --version 1.4.0 --preserve-ci
-python .specify/extensions/workflow/scripts/upgrade.py --version 1.4.0 --preserve-ci --apply
+python .specify/extensions/workflow/scripts/upgrade.py --version <published-version> --preserve-ci
+python .specify/extensions/workflow/scripts/upgrade.py --version <published-version> --preserve-ci --apply
 python .specify/extensions/workflow/scripts/workflow.py doctor --project
 ```
 
@@ -170,8 +168,8 @@ python .specify/extensions/workflow/scripts/install.py
 python .specify/extensions/workflow/scripts/install.py --apply
 ```
 
-Run `/speckit-assure-init` only after QA is selected and no valid QA configuration
-exists. Run `/speckit-user-manual-init` only after the manual is selected and no
+Run `$speckit-assure-init` only after QA is selected and no valid QA configuration
+exists. Run `$speckit-user-manual-init` only after the manual is selected and no
 approved module map exists; its audience/language interview remains a human
 decision. Each selection can be reversed independently. Opting out removes its
 future workflow stages and selected checks; historical artifacts are preserved,
