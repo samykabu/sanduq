@@ -70,7 +70,7 @@ Memory lives in `specs/memory/` so agents can read it within a token budget:
 | --- | --- |
 | `INDEX.md` | Generated map of domains and catalog pages (≤ 3k tokens) |
 | `catalogs/<domain>/NN.md` | Generated `id · kind · title` pages (≤ 1.5k tokens each) |
-| `entries/PM-*.md` | Canonical: one entry per file, with a TOML header (id, domain, kind, title, relations, selectors) and the prose (≤ 1k tokens) |
+| `entries/PM-*.md` | Canonical: one entry per file, with a TOML header (id, domain, kind, title, relations, optional `constrains` and `supersedes` links, selectors) and the prose (≤ 1k tokens) |
 | `taxonomy.json` | Canonical: governed domain ids and labels |
 | `provenance/*.jsonl` | Canonical: append-only ledgers of archived sources and code evidence, one per run |
 

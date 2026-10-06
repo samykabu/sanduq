@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Memory 2.0.0 replaces the single project-memory document with an atomic, budgeted store under specs/memory/, delta candidates, parallel drafting and partitioned review. Breaking: run migrate once. Release after successful CI and downloaded asset verification."
+  "versions": {
+    "memory": "2.1.0"
+  },
+  "status": "ready",
+  "note": "Memory 2.1.0 adds typed constrains and supersedes links between memory entries, with query ranking that keeps constraining rules beside the entries they limit. Backward compatible. Release after successful CI and downloaded asset verification."
 }

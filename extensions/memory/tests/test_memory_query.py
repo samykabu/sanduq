@@ -84,6 +84,36 @@ class MemoryQueryTests(unittest.TestCase):
         self.assertEqual(["PM-upload-size-limit"], self.ids(only))
         self.assertEqual(["PM-upload-route"], only["unreturned_relations"])
 
+    def link(self, eid, **links):
+        path = self.root / ms.ENTRIES / f"{eid}.md"
+        path.write_bytes(ms.emit_entry({**ms.parse_entry(path.read_bytes(), path.name), **links}))
+        self.store = ms.Store(self.root)
+
+    def test_constraining_entries_follow_their_hit_and_superseded_entries_drop(self):
+        self.link("PM-scope-rule", constrains=["PM-upload-route"])
+        # Incoming typed links count as related entries when they are not on the page.
+        small = mq.query(self.store, self.root, ids=["PM-upload-route"], budget=1)
+        self.assertEqual(["PM-upload-route"], self.ids(small))
+        self.assertIn("PM-scope-rule", small["unreturned_relations"])
+        # A constraining rule in another domain is returned even under a domain filter.
+        filtered = mq.query(self.store, self.root, ids=["PM-upload-route"], domains=["uploads"])
+        self.assertIn("PM-scope-rule", self.ids(filtered))
+        self.link("PM-upload-size-limit", relations=[], supersedes=["PM-upload-route"])
+        result = mq.query(self.store, self.root, routes=["POST /api/v1/admin/uploads"])
+        by = {e["id"]: e for e in result["entries"]}
+        self.assertIn({"by": "constrains", "value": "PM-upload-route", "confidence": "declared"},
+                      by["PM-scope-rule"]["reasons"])
+        self.assertNotIn("relation", [r["by"] for r in by["PM-scope-rule"]["reasons"]])
+        self.assertIn({"by": "superseded-by", "value": "PM-upload-size-limit", "confidence": "declared"},
+                      by["PM-upload-route"]["reasons"])
+        self.assertIn({"by": "supersedes", "value": "PM-upload-route", "confidence": "declared"},
+                      by["PM-upload-size-limit"]["reasons"])
+        # The replacement leads, the superseded hit follows, and its constraining rule sits just below it.
+        self.assertEqual(["PM-upload-size-limit", "PM-upload-route", "PM-scope-rule"], self.ids(result)[:3])
+        self.assertIn("Constrained by: PM-scope-rule.", by["PM-upload-route"]["markdown"])
+        self.assertIn("Superseded by: PM-upload-size-limit.", by["PM-upload-route"]["markdown"])
+        self.assertIn("Constrains: PM-upload-route.", mq.render_entry(self.store, "PM-scope-rule"))
+
     def test_path_and_error_code_hints_are_inferred_and_never_exclude(self):
         result = mq.query(self.store, self.root, paths=["src/Api/Features/Members/Services/MemberOtpService.cs"])
         self.assertEqual("PM-member-otp", self.ids(result)[0])

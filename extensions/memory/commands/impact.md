@@ -18,7 +18,9 @@ Provenance is kept out of the reading path. Retrieve within a budget:
    `python .specify/extensions/memory/scripts/archive.py memory query --route "<METHOD /path>" --path <code file or directory> --error-code <code> --text "<key terms>" --budget 8000`
    Repeat `--route`, `--path` and `--error-code` as needed. The output is whole entries,
    ranked, with the reason each one matched. `inferred` means the match came from entry
-   text or archived code evidence, not from a reviewed selector.
+   text or archived code evidence, not from a reviewed selector. A `constrains` reason marks
+   a rule that limits a matched entry; treat it as part of that entry. An entry marked
+   `superseded-by` describes an older state; read the superseding entry before relying on it.
 2. **Continue when told to.** If the output says more matches remain, rerun with the given
    `--cursor`. Also open the related entries it lists when they constrain the change:
    `memory show --id PM-…`.

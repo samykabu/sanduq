@@ -17,7 +17,7 @@ compatibility with the Resal Marketplace layout.
 | [assure](assure/) | 2.1.0 (unreleased) | Assure |
 | [user-manual](user-manual/) | 1.1.0 (unreleased) | User Manual |
 | [illustrate](illustrate/) | 2.1.2 | Illustrate |
-| [memory](memory/) | 2.0.0 | Atomic project memory with budgeted retrieval, verified archival and parallel drafting |
+| [memory](memory/) | 2.1.0 | Atomic project memory with typed links, budgeted retrieval, verified archival and parallel drafting |
 
 Published install versions remain authoritative in the two catalogs. Source versions
 marked unreleased are exercised with staged archives, not assumed live URLs.

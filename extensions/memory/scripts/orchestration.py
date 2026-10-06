@@ -433,8 +433,14 @@ def _check(repo, run, run_dir, path, fragment, packet, retired_ids, problems, wa
     # 7. References of additions, updates and proposals.
     known = set(base.entries) | retired | added
     for label, entry in entries:
-        for ref in dict.fromkeys(ms.inline_refs(entry) + entry["relations"]):
+        for ref in dict.fromkeys(ms.inline_refs(entry) + ms.links(entry)):
             resolve(ref, known, label, "reference")
+        for ref in entry.get("constrains", []):
+            if ref in known and ref not in live:
+                problems.append(f"{label}: constrains {ref}, which is not a live entry.")
+        linked = ms.links(entry)
+        if entry["id"] in linked or len(linked) != len(set(linked)):
+            problems.append(f"{label}: links cannot point to the entry itself or repeat an id across lists.")
     return {**{key: len(lists[key]) for key in (*LISTS, "proposals")}, "units": len(units), "covered": len(covered)}
 
 
@@ -548,7 +554,8 @@ def merge(repo, run: dict, run_dir: Path, retired_ids: set[str]) -> dict:
     resolvable = result | retired | removed
     for pkt, fragment in fragments.items():
         for entry in [*fragment["additions"], *(u["entry"] for u in fragment["updates"])]:
-            broken = [r for r in dict.fromkeys(ms.inline_refs(entry) + entry["relations"]) if r not in resolvable]
+            broken = [r for r in dict.fromkeys(ms.inline_refs(entry) + ms.links(entry)) if r not in resolvable]
+            broken += [r for r in entry.get("constrains", []) if r in resolvable and r not in result]
             if broken:
                 conflict("broken-reference", f"{entry['id']} references {', '.join(broken)}, which resolve to nothing.",
                          [pkt])
@@ -619,7 +626,7 @@ def _review_contents(repo, run: dict, run_dir: Path, m, candidate_raw: bytes) ->
     for eid in sorted(entries):
         for s in entries[eid]["selectors"]:
             selectors.setdefault((s["kind"], s["value"]), []).append(eid)
-        for t in dict.fromkeys(entries[eid]["relations"]):
+        for t in dict.fromkeys(ms.links(entries[eid])):
             relations.setdefault(t, []).append(eid)
     words = {eid: _words(e["title"]) for eid, e in entries.items()}
     pairs: dict[tuple, float] = {}

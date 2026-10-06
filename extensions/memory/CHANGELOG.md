@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.1.0
+
+- Typed links: entries may list `constrains` (live entries whose behavior this entry limits) and `supersedes`
+  (entries describing an older state) beside the untyped `relations` (see also). Both are optional, so existing
+  entry files are unchanged.
+- `memory query` ranks a constraining entry just below the entry it constrains (reason `constrains`), even outside
+  a `--domain` filter. A superseded hit drops below its replacement, which joins the results (reasons
+  `superseded-by` and `supersedes`). Rendered entries list `Constrains`, `Constrained by`, `Supersedes` and
+  `Superseded by`, and linked entries not returned include incoming typed links.
+- `memory check`, delta validation, `fragment-check` and `merge` resolve typed links. A link may not point to its
+  own entry or repeat an id across the three lists, and `constrains` targets must be live.
+
 ## 2.0.0
 
 Breaking: project memory moves from the single `specs/project-memory.md` to an atomic store under `specs/memory/`.

@@ -262,6 +262,12 @@ class MemoryDeltaTests(unittest.TestCase):
         candidate = self.full()
         candidate["updates"].append({**correction, "reason": "Reviewer removed stale narrative."})
         self.validate(candidate)
+        # Typed links are optional entry keys; they must be string lists that resolve.
+        self.reject(lambda c: c["additions"][0].update(constrains=[1]), "wrong types")
+        self.reject(lambda c: c["additions"][0].update(supersedes=[]), "drop an empty summary, constrains or supersedes")
+        candidate = self.full()
+        candidate["additions"][0]["constrains"] = ["PM-invoice-currency"]
+        self.validate(candidate)
         # A coverage target is an anchor too (the coverage provenance check then fails on its own terms).
         self.reject(lambda c: c["provenance"].pop(), "(?s)^(?!.*update of).*PM-invoice-currency lacks provenance")
         for did in ("con", "lpt9", "com1"):

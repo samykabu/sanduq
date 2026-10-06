@@ -473,6 +473,20 @@ class OrchestrationTests(unittest.TestCase):
                 "valid": True, "packet": Path(path).stem, "problems": [], "warnings": [], "summary": {}}):
             self.assertEqual(["broken-reference"], self.conflicts(a, self.frag_b())[0])
 
+    def test_constrains_must_target_a_live_entry(self):
+        self.packets()
+        b = self.frag_b()
+        b["additions"][0]["constrains"] = [ROUND]
+        self.assert_valid(b)
+        # p01 removes the entry p02's new rule constrains: each fragment is valid alone, the composition is not.
+        a = self.fragment("p01", removals=[self.removal(ROUND, VSPEC + ":L5")])
+        self.assert_valid(a)
+        classes, report = self.conflicts(a, b)
+        self.assertEqual(["broken-reference"], classes)
+        self.assertIn(ROUND, report["conflicts"][0]["detail"])
+        b["additions"][0]["constrains"] = ["PM-fx-rates"]
+        self.assertIn("links cannot point to the entry itself", "\n".join(self.check(b)["problems"]))
+
     def test_merge_broken_replacement(self):
         self.packets()
         a = self.fragment("p01", removals=[self.removal(ROUND, VSPEC + ":L5", replacement=TENANT)])

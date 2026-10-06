@@ -25,7 +25,7 @@ CODE_IN_TEXT = re.compile(r"`([a-z][a-z0-9]*(?:_[a-z0-9]+)+)`")
 FILE_IN_TEXT = re.compile(r"`((?:src|tests|e2e|scripts|app|lib|packages)/[^`\s]+)`")
 WORD = re.compile(r"[a-z0-9][a-z0-9_-]+")
 SCORES = {"id": 100, "declared": 60, "route": 30, "route-prefix": 10, "error_code": 25, "path": 30,
-          "path-dir": 15, "path-slice": 5, "relation": 0.4, "text": 6}
+          "path-dir": 15, "path-slice": 5, "relation": 0.4, "constrains": 0.9, "superseded": 0.5, "text": 6}
 NOTE = ("No entry matched. That does not prove the change has no impact: widen the search (catalogs, --text) "
         "and inspect the code.")
 
@@ -54,6 +54,7 @@ class Index:
         self.codes: dict[str, set[str]] = {}
         self.files: dict[str, set[str]] = {}
         self.incoming: dict[str, set[str]] = {}
+        self.typed: dict[str, dict[str, set[str]]] = {key: {} for key in ms.TYPED_LINKS}  # target -> sources
         self.words: dict[str, Counter] = {}
         self.df: Counter = Counter()
         for eid, entry in store.entries.items():
@@ -62,8 +63,11 @@ class Index:
             self.codes[eid] = set(CODE_IN_TEXT.findall(body))
             evidence = {e["path"] for e in store.provenance.get(eid, {}).get("evidence", [])}
             self.files[eid] = evidence | set(FILE_IN_TEXT.findall(body))
-            for ref in entry.get("relations", []):
+            for ref in ms.links(entry):
                 self.incoming.setdefault(ref, set()).add(eid)
+            for key in ms.TYPED_LINKS:
+                for ref in entry.get(key, []):
+                    self.typed[key].setdefault(ref, set()).add(eid)
             words = Counter(WORD.findall(body.lower()))
             words.update({w: 2 for w in WORD.findall(entry["title"].lower())})  # title words count triple
             self.words[eid] = words
@@ -149,9 +153,22 @@ def rank(store: ms.Store, *, ids=(), routes=(), paths=(), error_codes=(), domain
     if not structured and not terms and domains:
         for eid in candidates:
             add(eid, "domain", ",".join(domains), "declared", 1)
+    # A superseded hit drops below its replacement, which joins the results. This runs before propagation, so
+    # neighbours inherit the demoted score.
+    for eid in list(hits):
+        newer = sorted(s for s in index.typed["supersedes"].get(eid, ()) if s in store.entries)
+        if newer:
+            score = hits[eid]["score"]
+            hits[eid]["score"] = score * SCORES["superseded"]
+            hits[eid]["reasons"].append({"by": "superseded-by", "value": ",".join(newer), "confidence": "declared"})
+            for other in newer:
+                hit = hits.setdefault(other, {"score": 0.0, "reasons": []})
+                hit["score"] = max(hit["score"], score)
+                hit["reasons"].append({"by": "supersedes", "value": eid, "confidence": "declared"})
     direct = sorted(hits, key=lambda e: -hits[e]["score"])[:25]
+    constrainers = {eid: index.typed["constrains"].get(eid, set()) for eid in direct}
     for eid in direct:
-        neighbours = set(store.entries[eid].get("relations", [])) | index.incoming.get(eid, set())
+        neighbours = (set(ms.links(store.entries[eid])) | index.incoming.get(eid, set())) - constrainers[eid]
         for other in neighbours:
             if other in store.entries and other not in hits and other in candidates:
                 hits.setdefault(other, {"score": 0.0, "reasons": [], "via": True})
@@ -159,6 +176,15 @@ def rank(store: ms.Store, *, ids=(), routes=(), paths=(), error_codes=(), domain
                 hits[other]["score"] = max(hits[other]["score"], hits[eid]["score"] * SCORES["relation"])
                 if not any(r["by"] == "relation" and r["value"] == eid for r in hits[other]["reasons"]):
                     hits[other]["reasons"].append({"by": "relation", "value": eid, "confidence": "declared"})
+    # A rule that constrains a direct hit ranks just below it, so a budgeted page keeps them together. It is
+    # returned even outside a --domain filter: cross-domain rules are the ones a reader would otherwise miss.
+    for eid in direct:
+        for other in sorted(constrainers[eid]):
+            if other in store.entries:
+                hit = hits.setdefault(other, {"score": 0.0, "reasons": []})
+                hit["score"] = max(hit["score"], hits[eid]["score"] * SCORES["constrains"])
+                if not any(r["by"] == "constrains" and r["value"] == eid for r in hit["reasons"]):
+                    hit["reasons"].append({"by": "constrains", "value": eid, "confidence": "declared"})
     ordered = sorted(hits, key=lambda e: (-round(hits[e]["score"], 6), e))
     return [{"id": eid, "score": round(hits[eid]["score"], 2), "reasons": hits[eid]["reasons"]} for eid in ordered]
 
@@ -179,10 +205,19 @@ def _offset(cursor: str | None, root: str) -> int:
     return int(data["offset"])
 
 
+def typed_incoming(store: ms.Store, eid: str) -> dict[str, list[str]]:
+    # ponytail: scans the store per call (O(entries) per rendered entry); build the map once if memory grows 10x.
+    return {key: sorted(o for o, e in store.entries.items() if eid in e.get(key, [])) for key in ms.TYPED_LINKS}
+
+
 def render_entry(store: ms.Store, eid: str) -> str:
     entry = store.entries[eid]
     head = f"## {eid} · {entry['kind']} · {store.label(entry['domain'])}\n\n**{entry['title']}**\n\n"
-    return head + entry["text"] + "\n"
+    incoming = typed_incoming(store, eid)
+    lines = [f"{label}: {', '.join(ids)}." for label, ids in (
+        ("Constrains", entry.get("constrains", [])), ("Constrained by", incoming["constrains"]),
+        ("Supersedes", entry.get("supersedes", [])), ("Superseded by", incoming["supersedes"])) if ids]
+    return head + entry["text"] + "\n" + ("\n" + "\n".join(lines) + "\n" if lines else "")
 
 
 def evidence_status(store: ms.Store, eid: str, repo_root: Path) -> dict:
@@ -207,7 +242,9 @@ def query(store: ms.Store, repo_root: Path, *, budget: int = 8000, cursor: str |
         used += cost
     end = offset + len(page)
     returned = {p["id"] for p in page}
-    unreturned = sorted({r for p in page for r in store.entries[p["id"]].get("relations", [])} - returned)
+    linked = {r for p in page for r in ms.links(store.entries[p["id"]])}
+    linked |= {o for p in page for ids in typed_incoming(store, p["id"]).values() for o in ids}
+    unreturned = sorted({r for r in linked if r in store.entries} - returned)
     result = {"memory_root": root, "criteria": {k: v for k, v in criteria.items() if v},
               "matched": len(ranked), "offset": offset, "returned": len(page), "remaining": len(ranked) - end,
               "truncated": end < len(ranked), "cursor": _cursor(root, end) if end < len(ranked) else None,
