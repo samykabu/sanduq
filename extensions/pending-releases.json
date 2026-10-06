@@ -1,8 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "memory": "2.1.0"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Memory 2.1.0 adds typed constrains and supersedes links between memory entries, with query ranking that keeps constraining rules beside the entries they limit. Backward compatible. Release after successful CI and downloaded asset verification."
 }
