@@ -39,6 +39,14 @@ Both formats are **diagram-only** — just the `<svg>` node. Editorial wrappers 
 
 If the user explicitly asks for "a screenshot of the whole page including the cards", that's a different request — fall back to a normal full-page screenshot via the user's OS or browser.
 
+## Theme first
+
+Export the **applied** file, never a raw template or example copy. Run
+`python scripts/illustration_theme.py --project-root . apply <diagram.html>` first so the SVG and
+PNG carry the project's resolved colors and fonts (see
+[`theme-initialization.md`](theme-initialization.md#apply-the-theme-to-a-diagram)); `apply` is
+idempotent, so running it again before every export is safe.
+
 ## SVG export procedure
 
 1. Read the source HTML file.
@@ -99,9 +107,18 @@ with sync_playwright() as p:
     page = browser.new_page(device_scale_factor=scale)
     page.goto(f"file://{pathlib.Path(src).resolve()}")
     page.wait_for_load_state("networkidle")
-    page.locator("svg").first.screenshot(path=out, omit_background=True)
+    svg = page.locator("svg").first
+    # Release every clipping ancestor (local scroller, overflow:hidden chrome)
+    # so an SVG wider than its frame is captured whole.
+    svg.evaluate("el => { for (let a = el.parentElement; a; a = a.parentElement) a.style.setProperty('overflow', 'visible', 'important'); }")
+    svg.screenshot(path=out, omit_background=True)
     browser.close()
 ```
+
+The overflow release matters for the wide presets in [`output-spec.md`](output-spec.md): `min-width`
+equals the viewBox width, so a 1280-wide SVG inside a 1200px frame is clipped on screen by its
+scroller, and without the release the PNG comes out full size with a blank right edge.
+`scripts/lint-render.py --self-test` runs this snippet against a wide fixture to keep it honest.
 
 Default `device_scale_factor=2` for crisp output. Accept `1` for compact assets or `3` for print/retina hero use, passed as a third CLI arg.
 

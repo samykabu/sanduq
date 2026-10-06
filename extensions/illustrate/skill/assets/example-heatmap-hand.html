@@ -1,0 +1,223 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CI failure rate by service and sprint · Heatmap · Hand-drawn</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:  #f5f5f5;
+      --color-ink:    #2d3142;
+      --color-muted:  #4f5d75;
+      --color-accent: #eb6c36;
+      --font-sans:    'Geist', system-ui, sans-serif;
+      --font-serif:   'Instrument Serif', serif;
+      --font-mono:    'Geist Mono', ui-monospace, monospace;
+    }
+    body { font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1200px; width: 100%; }
+    .eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem; }
+    h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 1.5rem; }
+    svg { display: block; width: 100%; height: auto; max-width: 100%; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Heatmap · Diagram Design · Hand</p>
+    <h1>The week payments went dark</h1>
+
+    <svg viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="heatmap-title heatmap-desc">
+      <title id="heatmap-title">The week payments went dark</title>
+      <desc id="heatmap-desc">Heatmap of CI failure rate by service and sprint; payments service spiked to 47% in sprint 4 due to a deploy regression, recovered to 4% by sprint 6; billing carries the highest baseline failure rate at 9% in sprint 3.</desc>
+      <defs>
+        <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"></circle>
+        </pattern>
+      </defs>
+
+      <rect width="100%" height="100%" fill="#f5f5f5"></rect>
+      <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"></rect>
+
+      <!-- Cell grid: 6 columns (x=160,280,400,520,640,760), 5 rows (y=64,124,184,244,304).
+           Cell size 116×56, gap 4px (col step=120, row step=60).
+           Fill: single ink ramp for non-focal cells — opacity = max(0.07, value/9·0.65).
+           Focal cell (payments·S4) uses the accent fill and carries data-focal="true".
+           scripts/verify-heatmap.py enforces monotone opacity against data-value for every
+           non-focal cell, complete 5×6 coverage, and at most one data-focal cell. -->
+
+      <!-- SERVICE axis label (rotated) -->
+      <text transform="rotate(-90 24 212)" x="24" y="212" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" letter-spacing="0.14em" text-anchor="middle">SERVICE</text>
+
+      <!-- SPRINT axis label -->
+      <text x="518" y="36" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" letter-spacing="0.14em" text-anchor="middle">SPRINT</text>
+
+      <!-- Column headers -->
+      <text data-axis="0" data-col="S1" x="218" y="52" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.14em" text-anchor="middle">S1</text>
+      <text data-axis="1" data-col="S2" x="338" y="52" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.14em" text-anchor="middle">S2</text>
+      <text data-axis="2" data-col="S3" x="458" y="52" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.14em" text-anchor="middle">S3</text>
+      <text data-axis="3" data-col="S4" x="578" y="52" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.14em" text-anchor="middle">S4</text>
+      <text data-axis="4" data-col="S5" x="698" y="52" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.14em" text-anchor="middle">S5</text>
+      <text data-axis="5" data-col="S6" x="818" y="52" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.14em" text-anchor="middle">S6</text>
+
+      <!-- Row labels -->
+      <text data-row-label="auth" x="148" y="96" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">auth</text>
+      <text data-row-label="payments" x="148" y="156" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">payments</text>
+      <text data-row-label="api-gateway" x="148" y="216" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">api-gateway</text>
+      <text data-row-label="billing" x="148" y="276" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">billing</text>
+      <text data-row-label="notifications" x="148" y="336" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">notifications</text>
+
+      <!-- Row: auth (y=64) — values 4,5,6,3,2,2 -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M162 64.723 L199.333 66.166 L236.667 65.566 L274 66.76 L273.256 92 L273.775 118 L236.667 116.806 L199.333 117.192 L162 118.351 L162.847 92 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M162 64.723 L199.333 66.827 L236.667 65.133 L274 66.192 L273.416 92 L272.998 118 L236.667 119.045 L199.333 118.706 L162 117.086 L162.539 92 Z" fill="rgba(45,49,66,0.29)" stroke="none"></path></g>
+      <text x="218" y="96" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">4%</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M282 64.723 L319.333 64.688 L356.667 64.7 L394 65.624 L393.576 92 L395.02 118 L356.667 118.484 L319.333 117.42 L282 118.62 L282.23 92 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M282 64.724 L319.333 65.35 L356.667 67.066 L394 65.056 L393.735 92 L394.243 118 L356.667 117.924 L319.333 118.934 L282 117.355 L281.922 92 Z" fill="rgba(45,49,66,0.36)" stroke="none"></path></g>
+      <text x="338" y="96" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">5%</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M402 64.724 L439.333 66.011 L476.667 66.633 L514 67.287 L513.895 92 L513.465 118 L476.667 117.363 L439.333 117.648 L402 118.889 L401.613 92 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M402 64.724 L439.333 66.672 L476.667 66.2 L514 66.719 L514.055 92 L512.688 118 L476.667 116.802 L439.333 119.162 L402 117.624 L401.304 92 Z" fill="rgba(45,49,66,0.43)" stroke="none"></path></g>
+      <text x="458" y="96" fill="#f5f5f5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">6%</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M522 64.725 L559.333 67.333 L596.667 65.767 L634 66.151 L634.215 92 L634.71 118 L596.667 119.042 L559.333 117.876 L522 119.158 L520.996 92 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M522 64.725 L559.333 65.194 L596.667 65.334 L634 65.583 L634.374 92 L633.933 118 L596.667 118.481 L559.333 119.39 L522 117.893 L520.687 92 Z" fill="rgba(45,49,66,0.22)" stroke="none"></path></g>
+      <text x="578" y="96" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">3%</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M642 64.726 L679.333 65.856 L716.667 64.9 L754 65.014 L754.534 92 L753.155 118 L716.667 117.92 L679.333 118.104 L642 116.627 L643.179 92 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M642 64.726 L679.333 66.517 L716.667 67.267 L754 67.246 L754.694 92 L755.177 118 L716.667 117.36 L679.333 116.818 L642 118.162 L642.87 92 Z" fill="rgba(45,49,66,0.14)" stroke="none"></path></g>
+      <text x="698" y="96" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">2%</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M762 64.726 L799.333 67.178 L836.667 66.834 L874 66.678 L874.854 92 L874.4 118 L836.667 116.799 L799.333 118.332 L762 116.896 L762.561 92 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M762 64.727 L799.333 65.039 L836.667 66.401 L874 66.11 L875.013 92 L873.622 118 L836.667 119.038 L799.333 117.046 L762 118.431 L762.253 92 Z" fill="rgba(45,49,66,0.14)" stroke="none"></path></g>
+      <text x="818" y="96" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">2%</text>
+
+      <!-- Row: payments (y=124) — values 3,4,5,47(focal),6,4 -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M162 124.727 L199.333 125.7 L236.667 125.968 L274 125.541 L275.173 152 L272.845 178 L236.667 178.478 L199.333 178.56 L162 177.166 L161.944 152 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M162 124.727 L199.333 126.362 L236.667 125.534 L274 124.973 L275.333 152 L274.867 178 L236.667 177.917 L199.333 177.274 L162 178.7 L161.635 152 Z" fill="rgba(45,49,66,0.22)" stroke="none"></path></g>
+      <text x="218" y="156" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">3%</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M282 124.728 L319.333 127.023 L356.667 125.101 L394 127.205 L392.692 152 L394.09 178 L356.667 177.356 L319.333 178.788 L282 177.435 L281.327 152 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M282 124.728 L319.333 124.884 L356.667 124.668 L394 126.636 L392.852 152 L393.312 178 L356.667 176.796 L319.333 177.502 L282 178.969 L281.018 152 Z" fill="rgba(45,49,66,0.29)" stroke="none"></path></g>
+      <text x="338" y="156" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">4%</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M402 124.729 L439.333 125.545 L476.667 127.035 L514 126.068 L513.012 152 L515.335 178 L476.667 179.035 L439.333 179.016 L402 177.704 L400.71 152 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M402 124.729 L439.333 126.206 L476.667 126.602 L514 125.5 L513.172 152 L514.557 178 L476.667 178.474 L439.333 177.73 L402 179.238 L403.201 152 Z" fill="rgba(45,49,66,0.36)" stroke="none"></path></g>
+      <text x="458" y="156" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">5%</text>
+
+      <!-- FOCAL CELL: payments·S4 = 47% deploy regression -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M522 124.729 L559.333 126.868 L596.667 126.169 L634 124.932 L633.331 152 L633.78 178 L596.667 177.914 L559.333 179.243 L522 177.973 L522.892 152 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M522 124.73 L559.333 124.729 L596.667 125.735 L634 127.163 L633.491 152 L633.002 178 L596.667 177.353 L559.333 177.957 L522 176.707 L522.584 152 Z" fill="rgba(235,108,54,0.85)" stroke="none"></path><path class="rough-generated" d="M522.6289276666939 126.76739898249507 L635.5162840195001 125.34590528532863 L638.3940280981362 177.13032513186334 L519.32444017604 177.65173762366175" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M520 124 C546.8133705697953 127.36453244691714, 573.2212050549687 128.3407224178873, 636 124 M636 124 C634.2927222151682 135.86590629741548, 637.084045090191 147.8973816089332, 636 180 M636 180 C609.7959421895445 183.6786908551492, 588.1621421568096 182.0022189303674, 520 180 M520 180 C521.6880154522136 164.72388980314136, 519.628312173672 151.57966677471995, 520 124" stroke="#eb6c36" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="578" y="149" fill="#111111" font-size="10" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">47%</text>
+      <text x="578" y="163" fill="#111111" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">REGRESSION</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M642 124.73 L679.333 125.39 L716.667 125.302 L754 126.595 L753.651 152 L755.025 178 L716.667 176.792 L679.333 176.671 L642 178.242 L642.275 152 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M642 124.73 L679.333 126.051 L716.667 124.869 L754 126.027 L753.81 152 L754.247 178 L716.667 179.032 L679.333 178.185 L642 176.976 L641.967 152 Z" fill="rgba(45,49,66,0.43)" stroke="none"></path></g>
+      <text x="698" y="156" fill="#f5f5f5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">6%</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M762 124.731 L799.333 126.712 L836.667 127.236 L874 125.459 L873.97 152 L873.469 178 L836.667 178.471 L799.333 176.899 L762 178.511 L761.658 152 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M762 124.731 L799.333 127.374 L836.667 126.803 L874 124.89 L874.13 152 L872.692 178 L836.667 177.91 L799.333 178.413 L762 177.245 L761.349 152 Z" fill="rgba(45,49,66,0.29)" stroke="none"></path></g>
+      <text x="818" y="156" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">4%</text>
+
+      <!-- Row: api-gateway (y=184) — values 2,3,4,2,1,1 -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M162 184.731 L199.333 185.235 L236.667 186.369 L274 187.122 L274.29 212 L274.714 238 L236.667 237.35 L199.333 237.127 L162 238.78 L161.041 212 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M162 184.732 L199.333 185.896 L236.667 185.936 L274 186.554 L274.449 212 L273.937 238 L236.667 236.789 L199.333 238.641 L162 237.514 L160.732 212 Z" fill="rgba(45,49,66,0.14)" stroke="none"></path></g>
+      <text x="218" y="216" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">2%</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M282 184.732 L319.333 186.557 L356.667 185.503 L394 185.986 L394.609 212 L393.159 238 L356.667 239.028 L319.333 237.355 L282 239.049 L283.223 212 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M282 184.733 L319.333 187.218 L356.667 185.07 L394 185.417 L394.769 212 L395.182 238 L356.667 238.468 L319.333 238.869 L282 237.783 L282.915 212 Z" fill="rgba(45,49,66,0.22)" stroke="none"></path></g>
+      <text x="338" y="216" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">3%</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M402 184.733 L439.333 185.08 L476.667 184.637 L514 184.849 L514.928 212 L514.404 238 L476.667 237.907 L439.333 237.583 L402 239.318 L402.606 212 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M402 184.733 L439.333 185.741 L476.667 187.003 L514 187.081 L515.088 212 L513.627 238 L476.667 237.346 L439.333 239.097 L402 238.052 L402.298 212 Z" fill="rgba(45,49,66,0.29)" stroke="none"></path></g>
+      <text x="458" y="216" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">4%</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M522 184.734 L559.333 186.402 L596.667 186.57 L634 186.513 L635.248 212 L632.849 238 L596.667 236.785 L559.333 237.811 L522 236.787 L521.989 212 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M522 184.734 L559.333 187.063 L596.667 186.137 L634 185.944 L632.608 212 L634.872 238 L596.667 239.025 L559.333 239.325 L522 238.321 L521.68 212 Z" fill="rgba(45,49,66,0.14)" stroke="none"></path></g>
+      <text x="578" y="216" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">2%</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M642 184.734 L679.333 184.924 L716.667 185.704 L754 185.376 L752.767 212 L754.094 238 L716.667 238.464 L679.333 238.039 L642 237.056 L641.372 212 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M642 184.735 L679.333 185.586 L716.667 185.271 L754 184.808 L752.927 212 L753.316 238 L716.667 237.903 L679.333 236.753 L642 238.59 L641.063 212 Z" fill="rgba(45,49,66,0.07)" stroke="none"></path></g>
+      <text x="698" y="216" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">1%</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M762 184.735 L799.333 186.247 L836.667 184.838 L874 187.04 L873.087 212 L875.339 238 L836.667 237.343 L799.333 238.267 L762 237.325 L760.754 212 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M762 184.736 L799.333 186.908 L836.667 187.204 L874 186.471 L873.247 212 L874.561 238 L836.667 236.782 L799.333 236.981 L762 238.859 L763.246 212 Z" fill="rgba(45,49,66,0.07)" stroke="none"></path></g>
+      <text x="818" y="216" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">1%</text>
+
+      <!-- Row: billing (y=244) — values 5,7,9,6,4,3 -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M162 244.736 L199.333 244.769 L236.667 246.771 L274 245.903 L273.406 272 L273.784 298 L236.667 299.021 L199.333 298.495 L162 297.594 L162.937 272 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M162 244.736 L199.333 245.43 L236.667 246.338 L274 245.335 L273.566 272 L273.006 298 L236.667 298.461 L199.333 297.209 L162 299.128 L162.629 272 Z" fill="rgba(45,49,66,0.36)" stroke="none"></path></g>
+      <text x="218" y="276" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">5%</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M282 244.737 L319.333 246.092 L356.667 245.905 L394 244.767 L393.726 272 L395.029 298 L356.667 297.9 L319.333 298.723 L282 297.863 L282.32 272 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M282 244.737 L319.333 246.753 L356.667 245.472 L394 246.998 L393.885 272 L394.251 298 L356.667 297.339 L319.333 297.437 L282 299.397 L282.011 272 Z" fill="rgba(45,49,66,0.51)" stroke="none"></path></g>
+      <text x="338" y="276" fill="#f5f5f5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">7%</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M402 244.737 L439.333 244.614 L476.667 245.038 L514 246.43 L514.045 272 L513.474 298 L476.667 296.779 L439.333 298.951 L402 298.132 L401.703 272 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M402 244.738 L439.333 245.275 L476.667 244.605 L514 245.862 L514.205 272 L512.696 298 L476.667 299.018 L439.333 297.665 L402 296.866 L401.394 272 Z" fill="rgba(45,49,66,0.65)" stroke="none"></path></g>
+      <text x="458" y="276" fill="#f5f5f5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">9%</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M522 244.738 L559.333 245.936 L596.667 246.972 L634 245.294 L634.365 272 L634.719 298 L596.667 298.457 L559.333 299.179 L522 298.401 L521.086 272 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M522 244.739 L559.333 246.598 L596.667 246.539 L634 244.725 L634.524 272 L633.941 298 L596.667 297.897 L559.333 297.892 L522 297.135 L520.777 272 Z" fill="rgba(45,49,66,0.43)" stroke="none"></path></g>
+      <text x="578" y="276" fill="#f5f5f5" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">6%</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M642 244.739 L679.333 247.259 L716.667 246.106 L754 246.957 L754.684 272 L753.163 298 L716.667 297.336 L679.333 296.606 L642 298.67 L643.268 272 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M642 244.739 L679.333 245.12 L716.667 245.672 L754 246.389 L754.844 272 L755.186 298 L716.667 296.775 L679.333 298.12 L642 297.404 L642.96 272 Z" fill="rgba(45,49,66,0.29)" stroke="none"></path></g>
+      <text x="698" y="276" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">4%</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M762 244.74 L799.333 245.781 L836.667 245.239 L874 245.821 L875.003 272 L874.408 298 L836.667 299.015 L799.333 296.834 L762 298.939 L762.651 272 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M762 244.74 L799.333 246.442 L836.667 244.806 L874 245.252 L875.163 272 L873.631 298 L836.667 298.454 L799.333 298.348 L762 297.673 L762.342 272 Z" fill="rgba(45,49,66,0.22)" stroke="none"></path></g>
+      <text x="818" y="276" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">3%</text>
+
+      <!-- Row: notifications (y=304) — values 1,2,2,2,1,1 -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M162 304.74 L199.333 307.104 L236.667 307.173 L274 304.684 L275.323 332 L272.853 358 L236.667 357.893 L199.333 357.062 L162 359.208 L162.034 332 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M162 304.741 L199.333 304.965 L236.667 306.74 L274 306.916 L272.683 332 L274.876 358 L236.667 357.333 L199.333 358.576 L162 357.942 L161.725 332 Z" fill="rgba(45,49,66,0.07)" stroke="none"></path></g>
+      <text x="218" y="336" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">1%</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M282 304.741 L319.333 305.626 L356.667 306.307 L394 306.348 L392.842 332 L394.098 358 L356.667 356.772 L319.333 357.29 L282 356.677 L281.417 332 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M282 304.742 L319.333 306.287 L356.667 305.873 L394 305.779 L393.002 332 L393.321 358 L356.667 359.011 L319.333 358.804 L282 358.211 L281.108 332 Z" fill="rgba(45,49,66,0.14)" stroke="none"></path></g>
+      <text x="338" y="336" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">2%</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M402 304.742 L439.333 306.948 L476.667 305.44 L514 305.211 L513.162 332 L515.343 358 L476.667 358.451 L439.333 357.518 L402 356.946 L400.799 332 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M402 304.742 L439.333 304.81 L476.667 305.007 L514 304.643 L513.321 332 L514.566 358 L476.667 357.89 L439.333 359.032 L402 358.48 L403.291 332 Z" fill="rgba(45,49,66,0.14)" stroke="none"></path></g>
+      <text x="458" y="336" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">2%</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M522 304.743 L559.333 305.471 L596.667 307.374 L634 306.875 L633.481 332 L633.788 358 L596.667 357.329 L559.333 357.746 L522 357.215 L522.982 332 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M522 304.743 L559.333 306.132 L596.667 306.941 L634 306.306 L633.641 332 L633.011 358 L596.667 356.769 L559.333 359.26 L522 358.749 L522.673 332 Z" fill="rgba(45,49,66,0.14)" stroke="none"></path></g>
+      <text x="578" y="336" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">2%</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M642 304.743 L679.333 306.793 L716.667 306.507 L754 305.738 L753.801 332 L755.033 358 L716.667 359.008 L679.333 357.974 L642 357.484 L642.365 332 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M642 304.744 L679.333 304.654 L716.667 306.074 L754 305.17 L753.96 332 L754.255 358 L716.667 358.447 L679.333 356.688 L642 359.018 L642.056 332 Z" fill="rgba(45,49,66,0.07)" stroke="none"></path></g>
+      <text x="698" y="336" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">1%</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M762 304.744 L799.333 305.316 L836.667 305.641 L874 304.602 L874.12 332 L873.478 358 L836.667 357.887 L799.333 358.202 L762 357.753 L761.748 332 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M762 304.745 L799.333 305.977 L836.667 305.208 L874 306.833 L874.28 332 L872.7 358 L836.667 357.326 L799.333 356.916 L762 359.287 L761.439 332 Z" fill="rgba(45,49,66,0.07)" stroke="none"></path></g>
+      <text x="818" y="336" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">1%</text>
+
+      <!-- Legend -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M40 382 C250.76118328992277 385.27649487025104, 461.4218285878375 385.03053962833246, 960 382" stroke="rgba(45,49,66,0.10)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="40" y="398" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+      <text x="960" y="398" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em" text-anchor="end">ILLUSTRATIVE CI FAILURE RATES · NOT A MEASURED REGISTRY</text>
+
+      <!-- Ink ramp strip: 8 steps low→high -->
+      <rect x="120" y="386" width="20" height="12" fill="#f5f5f5"></rect><g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M122 387.426 L130 388.594 L138 388.522 L137.861 392 L138.274 396 L130 395.975 L122 396.459 L121.609 392 Z" fill="rgba(45,49,66,0.07)" stroke="none"></path></g>
+      <rect x="142" y="386" width="20" height="12" fill="#f5f5f5"></rect><g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M144 387.427 L152 387.616 L160 388.324 L159.602 392 L160.347 396 L152 395.62 L144 396.203 L144.301 392 Z" fill="rgba(45,49,66,0.14)" stroke="none"></path></g>
+      <rect x="164" y="386" width="20" height="12" fill="#f5f5f5"></rect><g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M166 387.427 L174 387.918 L182 388.126 L182.622 392 L182.42 396 L174 396.544 L166 395.947 L165.713 392 Z" fill="rgba(45,49,66,0.22)" stroke="none"></path></g>
+      <rect x="186" y="386" width="20" height="12" fill="#f5f5f5"></rect><g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M188 387.427 L196 388.221 L204 387.928 L204.362 392 L204.493 396 L196 396.189 L188 395.69 L188.405 392 Z" fill="rgba(45,49,66,0.29)" stroke="none"></path></g>
+      <rect x="208" y="386" width="20" height="12" fill="#f5f5f5"></rect><g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M210 387.427 L218 388.523 L226 387.73 L226.102 392 L226.566 396 L218 395.833 L210 395.434 L209.817 392 Z" fill="rgba(45,49,66,0.36)" stroke="none"></path></g>
+      <rect x="230" y="386" width="20" height="12" fill="#f5f5f5"></rect><g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M232 387.427 L240 387.545 L248 387.532 L247.843 392 L248.639 396 L240 395.478 L232 396.458 L232.509 392 Z" fill="rgba(45,49,66,0.43)" stroke="none"></path></g>
+      <rect x="252" y="386" width="20" height="12" fill="#f5f5f5"></rect><g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M254 387.427 L262 387.847 L270 388.614 L269.583 392 L269.432 396 L262 396.402 L254 396.201 L253.921 392 Z" fill="rgba(45,49,66,0.51)" stroke="none"></path></g>
+      <rect x="274" y="386" width="20" height="12" fill="#f5f5f5"></rect><g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M276 387.428 L284 388.15 L292 388.416 L292.603 392 L291.505 396 L284 396.047 L276 395.945 L276.613 392 Z" fill="rgba(45,49,66,0.65)" stroke="none"></path></g>
+      <text x="116" y="396" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="end">LOW</text>
+      <text x="298" y="396" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace">HIGH</text>
+
+      <!-- Focal accent swatch -->
+      <rect x="360" y="386" width="20" height="12" fill="#f5f5f5"></rect><g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M362 387.428 L370 388.452 L378 388.218 L378.343 392 L377.578 396 L370 395.691 L362 395.689 L362.025 392 Z" fill="rgba(235,108,54,0.85)" stroke="none"></path><path class="rough-generated" d="M359.32207920830695 385.68546418566257 L381.44170611780135 384.39601238984613 L378.1140702633187 399.08568065781145 L358.0910332171246 400.6644238235429" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M360 386 C366.1707571322098 386.8057176204631, 370.2849917219952 384.0025440844008, 380 386 M380 386 C380.66504202643875 387.58674267228696, 380.9735104862833 389.23147132378074, 380 398 M380 398 C371.83302755448966 398.4863878326258, 368.62416197229174 400.4302130834898, 360 398 M360 398 C360.3890409360593 395.8148764559254, 360.20260197860654 392.8833565918729, 360 386" stroke="#eb6c36" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="388" y="396" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">payments · S4 · 47% — deploy regression (now fixed)</text>
+
+      <!-- Scale note -->
+      <text x="40" y="418" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">NON-FOCAL SCALE: 1–9% · SINGLE INK RAMP · ACCENT IS EDITORIAL, NOT A DATA RANGE</text>
+    </svg>
+  </div>
+
+
+</body></html>

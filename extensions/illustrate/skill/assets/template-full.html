@@ -80,7 +80,7 @@
       /* padding: 1.5rem; */
     }
 
-    svg { width: 100%; min-width: 900px; display: block; }
+    svg { width: 100%; min-width: 1000px; display: block; }
 
     /* ── Info cards ───────────────────────────────────────────────── */
     .cards {
@@ -161,6 +161,12 @@
       flex-wrap: wrap;
       gap: 0.5rem;
     }
+    /* Paper has no scrollbar, so the local scroller would clip instead of
+       scroll. Let the diagram scale down to the sheet. Must follow the svg rule. */
+    @media print {
+      .diagram-container { overflow-x: visible; }
+      svg { min-width: 0; }
+    }
   </style>
 </head>
 <body>
@@ -175,7 +181,9 @@
 
     <!-- Main Diagram -->
     <div class="diagram-container">
-      <svg viewBox="0 0 1000 700" xmlns="http://www.w3.org/2000/svg">
+      <svg viewBox="0 0 1000 700" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="[diagram-slug]-title [diagram-slug]-desc">
+        <title id="[diagram-slug]-title">[Diagram title]</title>
+        <desc id="[diagram-slug]-desc">[One sentence describing what the diagram shows]</desc>
         <defs>
 
           <!-- OPTIONAL: dot-pattern background. Uncomment the <pattern> below and the second <rect> in the bg section to enable. -->

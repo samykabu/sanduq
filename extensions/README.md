@@ -9,7 +9,7 @@ the [extension guide](../docs/extensions.md) for every public command and its pr
 | Extension | Source version | Commands |
 | --- | --- | ---: |
 | [assure](assure/README.md) | 2.3.1 | 3 |
-| [illustrate](illustrate/README.md) | 2.1.3 | 3 |
+| [illustrate](illustrate/README.md) | 2.2.0 | 4 |
 | [memory](memory/README.md) | 2.1.1 | 7 |
 | [pr](pr/README.md) | 4.2.1 | 2 |
 | [project](project/README.md) | 2.2.1 | 2 |

@@ -1,0 +1,128 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloud budget bridge · Waterfall chart · Hand-drawn</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:  #f5f5f5;
+      --color-ink:    #2d3142;
+      --color-muted:  #4f5d75;
+      --color-accent: #eb6c36;
+      --font-sans:    'Geist', system-ui, sans-serif;
+      --font-serif:   'Instrument Serif', serif;
+      --font-mono:    'Geist Mono', ui-monospace, monospace;
+    }
+    body { font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1200px; width: 100%; }
+    .eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem; }
+    h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 1.5rem; }
+    .diagram-container { width: 100%; overflow-x: auto; }
+    svg { width: 100%; min-width: 760px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Waterfall · Diagram Design · Hand</p>
+    <h1>Cloud budget bridge · FY25 → FY26</h1>
+
+    <div class="diagram-container">
+    <svg viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="waterfall-title waterfall-desc">
+      <title id="waterfall-title">Cloud budget bridge · FY25 → FY26</title>
+      <desc id="waterfall-desc">Waterfall chart bridging the FY25 cloud budget of 240 thousand dollars a month to the FY26 plan of 236, through headcount growth, reserved-instance savings, new ML workloads, and storage tiering — the largest saving.</desc>
+      <defs>
+        <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"></circle>
+        </pattern>
+      </defs>
+
+      <rect width="100%" height="100%" fill="#f5f5f5"></rect>
+      <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"></rect>
+
+      <!-- Y-axis rotated label -->
+      <text transform="rotate(-90 24 230)" x="24" y="230" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" letter-spacing="0.14em" text-anchor="middle">CLOUD SPEND · $K / MO</text>
+
+      <!-- Horizontal gridlines (drawn before bars). Domain 0–400, y = 420 − 0.95·v -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M80 325 C276.9015130818635 323.3766342151538, 475.73479713864623 323.6269778263942, 960 325" stroke="rgba(45,49,66,0.08)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M80 230 C277.30138466086237 226.92042112303898, 476.1965324049816 226.8157298262231, 960 230" stroke="rgba(45,49,66,0.08)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M80 135 C277.70125623986127 140.9042080309242, 476.6582676713169 140.44448182605208, 960 135" stroke="rgba(45,49,66,0.08)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M80 40 C278.1011278188601 42.12799493880942, 477.1200029376522 43.633233825881035, 960 40" stroke="rgba(45,49,66,0.06)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+      <!-- Y-axis line and X-axis baseline (the domain floor: totals anchor here) -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M80 40 C82.26505290338875 126.20165170328933, 83.4766543024108 210.06496315183747, 80 420" stroke="rgba(45,49,66,0.25)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M80 420 C278.90087097685785 416.89556875457987, 475.7234734703228 417.690737825539, 960 420" stroke="rgba(45,49,66,0.25)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+      <!-- Y-axis tick labels -->
+      <text x="72" y="329" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end">100</text>
+      <text x="72" y="234" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end">200</text>
+      <text x="72" y="139" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end">300</text>
+      <text x="72" y="44" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end">400</text>
+
+      <!-- ─── CARRIES (drawn before bars; each transports the running total across a gap at its own level) ─── -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M208 192 C221.05546769201757 193.35653903633357, 228.07024444639683 188.65687444359065, 256 192" stroke="rgba(45,49,66,0.55)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M352 131 C360.0906800773926 131.36900922765022, 372.8956494879909 131.58175736476667, 400 131" stroke="rgba(45,49,66,0.55)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M496 167 C504.92589246276765 164.64147941896692, 517.7210545295849 169.7666402859427, 544 167" stroke="rgba(45,49,66,0.55)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M640 146 C649.7611048481427 146.7139496102836, 662.5464595711791 145.15152320711874, 688 146" stroke="rgba(45,49,66,0.55)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M784 196 C794.5963172335178 193.98641980160028, 807.371864612773 197.33640612829478, 832 196" stroke="rgba(45,49,66,0.55)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+      <!-- ─── BARS (width=96, pitch=144). Running total: 240 → 304 → 266 → 288 → 236 → 236 ─── -->
+      <!-- FY25 base: total 240, anchored at the floor. y(240)=192, h=228 -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M114 192.729 L144.667 193.838 L175.333 195.286 L206 195.016 L206.48 231.333 L205.944 268.667 L206.343 306 L206.629 343.333 L205.336 380.667 L207.384 418 L175.333 419.378 L144.667 417.071 L114 416.813 L113.395 380.667 L113.592 343.333 L114.384 306 L113.603 268.667 L113.343 231.333 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M114 192.729 L144.667 194.499 L175.333 194.853 L206 194.448 L206.64 231.333 L205.167 268.667 L205.782 306 L205.343 343.333 L206.871 380.667 L207.075 418 L175.333 418.033 L144.667 419.395 L114 417.167 L115.041 380.667 L113.337 343.333 L114.398 306 L114.75 268.667 L113.709 231.333 Z" fill="rgba(45,49,66,0.08)" stroke="none"></path><path class="rough-generated" d="M111.51919033993036 194.4368987781927 L209.74092213977127 191.8526088995859 L209.8841919111088 422.02774113249035 L112.29220644105226 419.4971160335466" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M112 192 C135.1109766824171 192.49158129520714, 152.9111440522596 194.06639308162033, 208 192 M208 192 C211.55036341562618 264.497601277874, 213.0417515880293 336.92811715672974, 208 420 M208 420 C173.8681861801073 419.0377109828591, 135.3186521572992 423.1664562943578, 112 420 M112 420 C111.95584620758927 355.92493852303284, 109.82898269091564 293.1011915133189, 112 192" stroke="#2d3142" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="160" y="184" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">240</text>
+
+      <!-- Headcount: +64 rises 240 → 304. y(304)=131, h=61 -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M258 131.73 L288.667 134.161 L319.333 133.42 L350 132.879 L350.799 161.5 L351.189 190 L319.333 189.221 L288.667 190.857 L258 189.605 L258.767 161.5 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M258 131.73 L288.667 132.022 L319.333 132.986 L350 132.311 L350.959 161.5 L350.411 190 L319.333 188.661 L288.667 189.571 L258 191.14 L258.458 161.5 Z" fill="rgba(79,93,117,0.15)" stroke="none"></path><path class="rough-generated" d="M258.17091640159487 128.9056213863194 L354.04993902370336 129.80661318376661 L351.62499359771607 191.86595535352825 L258.33087016269565 191.23362348154188" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M256 131 C274.98873825147746 131.06194441765547, 298.5766277320683 130.86158166378738, 352 131 M352 131 C353.71260829725765 151.50030701309444, 354.20930136003994 178.18323855623606, 352 192 M352 192 C317.42339227274056 191.91400688529015, 281.2285783059895 194.09956408381464, 256 192 M256 192 C255.84750568515156 176.15709326267242, 254.8169595206389 163.0375865213573, 256 131" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="304" y="123" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">+64</text>
+
+      <!-- Reserved instances: −38 falls 304 → 266. Hollow = decrease. y=131, h=36 -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M402 131.73 L432.667 132.683 L463.333 132.553 L494 131.743 L495.119 149 L493.634 165 L463.333 165.9 L432.667 166.085 L402 164.874 L402.149 149 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M402 131.731 L432.667 133.344 L463.333 132.12 L494 133.975 L495.278 149 L492.856 165 L463.333 165.339 L432.667 164.799 L402 163.609 L401.841 149 Z" fill="#f5f5f5" stroke="none"></path><path class="rough-generated" d="M399.0226424632594 130.1743439944461 L498.3589559076354 128.7606174679473 L493.3657952843234 164.70416957456618 L398.569533884339 165.9701309295371" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M400 131 C420.66649982053787 134.11230754010379, 444.242111411877 132.1367702459544, 496 131 M496 131 C494.4546833758755 140.57038430664687, 493.70028808764647 145.184636114724, 496 167 M496 167 C460.9785983653739 165.47030278772115, 427.1385044546798 165.71267187327146, 400 167 M400 167 C399.2312047414528 151.60211334768684, 399.6626174442517 140.18459144998343, 400 131" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="448" y="179" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">−38</text>
+
+      <!-- ML workloads: +22 rises 266 → 288. y(288)=146, h=21 -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M546 146.767 L576.667 148.977 L607.333 146.724 L638 148.395 L636.677 156.5 L638.854 165 L607.333 164.785 L576.667 166.275 L546 165.139 L545.545 156.5 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M546 146.768 L576.667 146.899 L607.333 149.024 L638 147.843 L636.832 156.5 L638.098 165 L607.333 164.24 L576.667 165.026 L546 163.91 L545.246 156.5 Z" fill="rgba(79,93,117,0.15)" stroke="none"></path><path class="rough-generated" d="M545.6743685249239 146.4430666025728 L642.6679727915674 148.514621752128 L640.9065969709307 168.34238379560412 L544.6081976059825 165.70663837753236" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M544 146 C566.3442613895983 142.8826706625521, 589.9075950916856 144.93195882812142, 640 146 M640 146 C640.5907550331693 151.2480968259275, 638.5852713939291 157.80130412466826, 640 167 M640 167 C604.5338044580072 166.34659869015215, 573.0484306033701 164.6457796627283, 544 167 M544 167 C542.5638976074266 158.70228701531886, 544.4572691775369 149.8419035438448, 544 146" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="592" y="138" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">+22</text>
+
+      <!-- Storage tiering FOCAL: −52 falls 288 → 236 — the largest saving, the story. y=146, h=50 -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M690 146.732 L720.667 147.528 L751.333 148.621 L782 147.27 L780.958 171 L781.324 194 L751.333 192.657 L720.667 192.74 L690 194.412 L688.915 171 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M690 146.732 L720.667 148.189 L751.333 148.187 L782 146.701 L781.117 171 L783.346 194 L751.333 194.896 L720.667 194.254 L690 193.147 L688.606 171 Z" fill="rgba(235,108,54,0.12)" stroke="none"></path><path class="rough-generated" d="M686.5260945865884 147.7117892106995 L781.1769896754995 147.4686260363087 L782.647398657538 195.18059801664202 L690.6468613276259 194.4431458255276" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M688 146 C712.0220229586587 145.93303378500045, 729.7730787714943 146.20714741028846, 784 146 M784 146 C785.618354103819 159.02220437098293, 782.3617821135674 179.61076218616216, 784 196 M784 196 C748.0890105506405 199.7028945925832, 713.1583567520604 196.05888745218516, 688 196 M688 196 C685.8808999813045 179.86482759956272, 689.2362304187263 164.4239494709298, 688 146" stroke="#eb6c36" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="736" y="208" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">−52</text>
+
+      <!-- FY26 plan: total 236 = 240 + 64 − 38 + 22 − 52, anchored at the floor. y(236)=196, h=224 -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M834 196.733 L864.667 198.85 L895.333 197.754 L926 198.933 L925.277 242 L926.569 286 L926.336 330 L924.968 374 L926.681 418 L895.333 419.098 L864.667 417.125 L834 417.913 L833.553 374 L833.052 330 L833.84 286 L834.521 242 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M834 196.733 L864.667 196.711 L895.333 197.321 L926 198.365 L925.437 242 L925.791 286 L925.775 330 L926.482 374 L925.416 418 L895.333 418.789 L864.667 418.58 L834 417.438 L833.907 374 L834.697 330 L833.585 286 L834.535 242 Z" fill="rgba(45,49,66,0.08)" stroke="none"></path><path class="rough-generated" d="M833.1778206482529 193.1805118188262 L925.4860065594315 196.42263032048942 L930.1882003441453 422.81881223767994 L830.8855250492692 418.17965327352283" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M832 196 C851.899784527719 195.50339690744877, 875.438562451303 194.0023359924555, 928 196 M928 196 C926.1800893727901 276.7033698800117, 927.2914637429861 354.3345769916062, 928 420 M928 420 C891.6442166432738 418.7791904950142, 859.0682829007507 418.991995241642, 832 420 M832 420 C829.7773785476926 359.02932340064353, 833.9201066849155 299.73667259066883, 832 196" stroke="#2d3142" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="880" y="188" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">236</text>
+
+      <!-- X-axis category labels -->
+      <text x="160" y="440" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">FY25 base</text>
+      <text x="304" y="440" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Headcount</text>
+      <text x="448" y="440" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Reserved inst.</text>
+      <text x="592" y="440" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">ML workloads</text>
+      <text x="736" y="440" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Storage tiering</text>
+      <text x="880" y="440" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">FY26 plan</text>
+
+      <!-- Legend -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M40 462 C248.2090486228839 458.0837484898325, 457.5356867124513 459.4482892157789, 960 462" stroke="rgba(45,49,66,0.10)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="40" y="478" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M42 489.566 L48 490.012 L54 490.43 L53.735 493 L53.916 496 L48 496.355 L42 495.538 L42.243 493 Z" fill="rgba(45,49,66,0.08)" stroke="none"></path><path class="rough-generated" d="M42 488 C44.602684963457286 488.15413634556813, 48.37474228944629 486.1883950724034, 54 488 M54 488 C52.52269603305807 489.3268784126267, 56.347855902649464 489.0189434588577, 56 490 M56 490 C56.42068858163664 492.1934810545109, 56.4773199935467 493.93313140286136, 56 496 M56 496 C58.21036101784557 496.870025756893, 55.81331098483255 496.0012155184522, 54 498 M54 498 C50.642949442081154 499.80647831622974, 45.73083315756172 496.98649796072857, 42 498 M42 498 C39.11590109361956 495.7950234433636, 39.37663460467011 497.2623353640859, 40 496 M40 496 C40.08359944114229 493.48454289769757, 39.9067691487982 492.2135646472685, 40 490 M40 490 C41.20503745879978 488.82984039081884, 40.825505214991665 487.6955661961809, 42 488 M42 488 C42 488, 42 488, 42 488" stroke="#2d3142" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="64" y="497" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Start / end total</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M202 489.566 L208 490.238 L214 490.282 L213.541 493 L213.971 496 L208 496.089 L202 496.306 L201.803 493 Z" fill="rgba(79,93,117,0.15)" stroke="none"></path><path class="rough-generated" d="M202 488 C205.10252845497803 487.0881694808905, 208.86741743499414 488.0698758456414, 214 488 M214 488 C213.21564731712763 490.1783117347397, 217.08574761962518 489.9900135937768, 216 490 M216 490 C216.30113212533644 491.5347874494735, 215.05103032686165 492.4735322795529, 216 496 M216 496 C213.7695027493872 500.20054900165024, 213.30085865988707 495.41503807520496, 214 498 M214 498 C209.58033472524957 496.30826937676176, 203.98269315147772 499.2779272681545, 202 498 M202 498 C199.75026239768292 498.8495318853296, 201.75363674676046 496.13273620738954, 200 496 M200 496 C200.0980278231355 494.9369126178417, 199.09820153163398 492.9896920507867, 200 490 M200 490 C202.69732986027375 487.2763519407871, 200.58453373347098 490.5611817113124, 202 488 M202 488 C202 488, 202 488, 202 488" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="224" y="497" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Cost added</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M342 489.566 L348 490.465 L354 490.133 L354.306 493 L354.026 496 L348 495.822 L342 496.114 L342.322 493 Z" fill="#f5f5f5" stroke="none"></path><path class="rough-generated" d="M342 488 C345.60237194649875 489.06720261621285, 345.88009258054194 489.51635661887934, 354 488 M354 488 C353.9085986011972 485.2297450568527, 357.8236393366009 490.96108372869594, 356 490 M356 490 C356.3990756690362 492.0760938444361, 355.5822406601766 495.1539331562445, 356 496 M356 496 C355.12864448092876 497.73107224640745, 356.58840633494157 500.62886063195765, 354 498 M354 498 C350.917720008418 496.7250604372937, 347.0345531453937 498.52435657558027, 342 498 M342 498 C340.3846237017463 496.10404032729565, 338.3306388888508 495.0031370506932, 340 496 M340 496 C340.32995620512867 494.64928233798594, 340.2471339144697 493.7658194543049, 340 490 M340 490 C338.3896222617477 491.52286349075536, 340.34356225195035 487.6267972264439, 342 488 M342 488 C342 488, 342 488, 342 488" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="364" y="497" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Cost removed</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M482 489.566 L488 489.732 L494 489.985 L494.111 493 L494.081 496 L488 495.555 L482 495.922 L481.881 493 Z" fill="rgba(235,108,54,0.12)" stroke="none"></path><path class="rough-generated" d="M482 488 C486.10221543801947 487.5662357515353, 486.37276772608976 487.4828373921174, 494 488 M494 488 C494.60154988526676 486.0811783789657, 498.56153105357663 486.1321538636151, 496 490 M496 490 C496.27951921273603 491.4174002393987, 495.89595099349157 493.694334032936, 496 496 M496 496 C496.4877862124704 495.26159549116466, 494.0759540099961 500.0426831887104, 494 498 M494 498 C489.85510529158637 496.7068514978257, 485.28641313930973 497.33578588300617, 482 498 M482 498 C481.0189850058096 499.1585487692617, 480.70764103094115 499.67353789399687, 480 496 M480 496 C480.3443845871219 494.3616520581302, 479.43856629730556 492.80194685782305, 480 490 M480 490 C479.88191466322166 489.96937504072366, 480.10259077042963 490.4924127415754, 482 488 M482 488 C482 488, 482 488, 482 488" stroke="#eb6c36" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="504" y="497" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Storage tiering · largest saving</text>
+    </svg>
+    </div>
+  </div>
+
+
+</body></html>

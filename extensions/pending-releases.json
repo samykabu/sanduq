@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Documentation patch releases: concise setup, full command and skill examples, contribution guides, and installed-package README links. Publish after successful main CI and downloaded asset verification."
+  "versions": {
+    "illustrate": "2.2.0"
+  },
+  "status": "ready",
+  "note": "Illustrate 2.2.0 adds 17 diagram types, variants, semantic patterns, draw.io/Mermaid/Excalidraw import, optional motion, deterministic theme apply, and render/geometry/self-check verification, ported from diagram-design 2.6.59. Theme files and existing variants are unchanged. Publish after successful main CI and downloaded asset verification."
 }

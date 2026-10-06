@@ -1,0 +1,149 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Checkout p99 latency · Root-cause fishbone · Hand-drawn</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f5f5f5;
+      --color-ink:     #2d3142;
+      --color-muted:   #4f5d75;
+      --color-accent:  #eb6c36;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+
+    .frame { max-width: 1320px; width: 100%; }
+
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+
+    svg { width: 100%; min-width: 1080px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Fishbone · Diagram Design · Hand</p>
+    <h1>Checkout p99 latency · Root-cause fishbone</h1>
+
+    <svg viewBox="-40 0 1480 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="fishbone-title fishbone-desc">
+      <title id="fishbone-title">Checkout p99 latency · Root-cause fishbone</title>
+      <desc id="fishbone-desc">Fishbone diagram tracing a checkout latency incident to five candidate cause categories, with a missing database index under Data confirmed as the root cause.</desc>
+      <defs>
+        
+      </defs>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M-38 0.716 L5.412 2.569 L48.824 1.71 L92.235 2.842 L135.647 2.857 L179.059 0.81 L222.471 2.893 L265.882 2.043 L309.294 2.836 L352.706 2.254 L396.118 1.559 L439.529 1.141 L482.941 3.332 L526.353 2.985 L569.765 2.724 L613.176 2.236 L656.588 2.585 L700 2.604 L743.412 3.079 L786.824 2.08 L830.235 0.833 L873.647 1.554 L917.059 0.873 L960.471 0.82 L1003.882 1.655 L1047.294 3.194 L1090.706 1.726 L1134.118 2.217 L1177.529 1.218 L1220.941 2.272 L1264.353 2.523 L1307.765 1.343 L1351.176 0.919 L1394.588 0.711 L1438 0.984 L1436.686 44.571 L1436.671 87.143 L1438.434 129.714 L1438.271 172.286 L1437.373 214.857 L1438.248 257.429 L1438.584 300 L1437.022 342.571 L1437.997 385.143 L1439.069 427.714 L1437.82 470.286 L1438.605 512.857 L1437.205 555.429 L1437.616 598 L1394.588 597.104 L1351.176 599.374 L1307.765 598.625 L1264.353 598.249 L1220.941 599.35 L1177.529 597.027 L1134.118 598.438 L1090.706 597.133 L1047.294 598.571 L1003.882 598.845 L960.471 597.509 L917.059 598.589 L873.647 597.78 L830.235 598.471 L786.824 597.623 L743.412 597.58 L700 598.4 L656.588 598.387 L613.176 599.082 L569.765 598.63 L526.353 596.765 L482.941 597.272 L439.529 598.638 L396.118 597.96 L352.706 597.105 L309.294 598.935 L265.882 597.871 L222.471 598.96 L179.059 599.104 L135.647 598.417 L92.235 598.313 L48.824 597.512 L5.412 596.761 L-38 599.188 L-38.728 555.429 L-38.955 512.857 L-37.566 470.286 L-36.904 427.714 L-37.429 385.143 L-39.028 342.571 L-37.556 300 L-38.37 257.429 L-39.019 214.857 L-37.945 172.286 L-37.427 129.714 L-38.281 87.143 L-38.29 44.571 Z" fill="#f5f5f5" stroke="none"></path></g>
+
+      <!-- Spine -->
+      <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M120 320 C361.32207518246025 314.2107537504751, 602.9905715794489 313.8092449745256, 1200 320" stroke="#2d3142" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M1198.2007541339844 317.8028015632182 L1187.4342581074684 326.6731056112796 L1187.4809620779006 316.5204623479396" stroke="none" stroke-width="0" fill="#2d3142" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M1200 320 C1198.5177539274755 320.18338367205234, 1195.7014594438162 322.76332496318594, 1189.6 324.2 M1189.6 324.2 C1189.3363033634414 322.3166243437156, 1189.6708543332804 317.8414981032535, 1189.6 315.8 M1189.6 315.8 C1190.7639597653201 317.3020534191285, 1193.266038203038 319.4904334891296, 1200 320" stroke="#2d3142" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+      <!-- Bones -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M880 320 C859.9515926943346 278.88298742294313, 839.8540212736651 245.2703253042698, 784 152" stroke="#2d3142" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M720 320 C703.348814445422 358.1727687188983, 677.430430483506 392.9279645444453, 624 488" stroke="#eb6c36" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M560 320 C536.463188255122 281.5259807920456, 516.3239917519595 246.11246533900496, 464 152" stroke="#2d3142" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M400 320 C378.5340476362733 360.8671196761727, 358.3740385918645 393.87281975552435, 304 488" stroke="#2d3142" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M240 320 C218.7747838159092 284.16897416114807, 198.59396223025396 246.95460537374024, 144 152" stroke="#2d3142" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+      <!-- Sub-cause ticks + labels · Deploy -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M848 264 C840.5207168855704 261.371100073047, 834.6373684325256 260.8418045123294, 816 264" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="812" y="260" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">canary skipped</text>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M816 208 C809.3498152723536 209.08905131451783, 803.4505454769358 207.67216848365962, 784 208" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="780" y="204" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">config drift</text>
+
+      <!-- Sub-cause ticks + labels · Data (root cause) -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M688 376 C682.1789136591367 375.0070025559887, 676.263722521346 378.5025324549899, 656 376" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="652" y="388" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">index missing on orders.created_at</text>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M656 432 C651.0080120459199 434.7249537974596, 639.2768995657563 431.53289642632006, 624 432" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="620" y="444" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">table 3x forecast</text>
+
+      <!-- Sub-cause ticks + labels · Runtime -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M528 264 C518.0371104327031 263.4829050389305, 512.0900766101666 265.2032603976503, 496 264" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="492" y="260" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">connection pool cap 20</text>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M496 208 C486.8662088194862 205.40085628040137, 480.9032536545768 206.23362436898054, 464 208" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="460" y="204" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">GC pauses</text>
+
+      <!-- Sub-cause ticks + labels · Observability -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M368 376 C359.6953072062693 377.1188075218722, 353.7164306989871 377.06398834031074, 336 376" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="332" y="388" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">no p99 alert</text>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M336 432 C328.5244055930525 431.0367587633431, 322.5296077433974 430.09435231164093, 304 432" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="300" y="444" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">dashboard sampled at 5m</text>
+
+      <!-- Sub-cause tick + label · People -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M192 236 C185.35350397983564 238.75471000481397, 179.34278478780763 236.92471628297122, 160 236" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="156" y="232" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">on-call handover mid-incident</text>
+
+      <!-- Category tag boxes -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M726 116.722 L764.667 117.949 L803.333 119.179 L842 118.149 L842.612 130 L842.37 142 L803.333 142.322 L764.667 141.067 L726 142.188 L726.916 130 Z" fill="#f5f5f5" stroke="none"></path><path class="rough-generated" d="M728 116 C754.4977919099853 117.01490923410282, 780.7863409189507 114.2973282421194, 840 116 M840 116 C843.4328709312404 114.84605523962527, 845.132471951656 117.88691172221054, 844 120 M844 120 C845.9494494686137 126.14974993076176, 841.5452666471015 131.85622753631324, 844 140 M844 140 C844.3199766041711 142.8573266097034, 841.4127769929046 146.29155783336608, 840 144 M840 144 C810.9382612226531 141.1243754014559, 788.321188303642 140.72591271849348, 728 144 M728 144 C725.4675616312152 144.73416705150157, 724.9777430323884 144.70058308659742, 724 140 M724 140 C722.1112478868804 134.95246674176306, 721.6625664310297 126.07094139289111, 724 120 M724 120 C721.1322200002148 115.32496370555212, 726.323030706433 115.08189689200371, 728 116 M728 116 C728 116, 728 116, 728 116" stroke="#2d3142" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="784" y="134" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">DEPLOY</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M566 496.722 L604.667 498.61 L643.333 498.746 L682 497.581 L682.772 510 L681.592 522 L643.333 521.762 L604.667 522.581 L566 520.923 L566.608 510 Z" fill="rgba(235,108,54,0.08)" stroke="none"></path><path class="rough-generated" d="M568 496 C595.3378954942339 493.77099458529614, 615.8215283582919 495.9658263231721, 680 496 M680 496 C684.12582221531 495.6974885617383, 685.8703636686317 498.8579818571297, 684 500 M684 500 C686.275927947613 503.9541045806371, 683.3159677581513 512.7908971252851, 684 520 M684 520 C685.6791183357127 520.3878498544606, 684.7003246679591 525.7053803901188, 680 524 M680 524 C640.1936296279542 523.2826819174458, 607.4604074935429 526.7336163126398, 568 524 M568 524 C566.1019229352785 521.9886754934676, 561.5547451744787 523.570983929901, 564 520 M564 520 C562.1593424935244 513.9936991422437, 564.7673410404823 508.6580327379517, 564 500 M564 500 C562.6245124016889 499.5714752555204, 566.0820592249123 497.9475124071352, 568 496 M568 496 C568 496, 568 496, 568 496" stroke="#eb6c36" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="624" y="514" fill="#eb6c36" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">DATA</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M406 116.723 L444.667 119.271 L483.333 118.313 L522 117.013 L522.932 130 L520.815 142 L483.333 141.201 L444.667 141.295 L406 142.457 L406.299 130 Z" fill="#f5f5f5" stroke="none"></path><path class="rough-generated" d="M408 116 C430.3779990784824 116.32707993648947, 456.6567157976329 117.63432440422476, 520 116 M520 116 C524.8187734993795 116.54892188385129, 526.6082553856074 119.82905199204882, 524 120 M524 120 C525.8774064266123 127.55845923051238, 524.3616688692011 127.925566714257, 524 140 M524 140 C521.2382600672543 143.7183730992178, 522.1878723430136 145.11920294687152, 520 144 M520 144 C491.8489980332553 141.38098843343556, 465.5996266834438 142.8813199067861, 408 144 M408 144 C406.7362842393418 145.04318393543363, 403.9317473165691 142.4413847732047, 404 140 M404 140 C402.93243710016833 133.03493154272437, 402.7971156499349 125.44512408301235, 404 120 M404 120 C404.11680480316284 118.01798680548866, 405.8410877433916 115.01312792226672, 408 116 M408 116 C408 116, 408 116, 408 116" stroke="#2d3142" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="464" y="134" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">RUNTIME</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M246 496.723 L284.667 497.132 L323.333 497.88 L362 499.245 L363.091 510 L362.837 522 L323.333 520.64 L284.667 522.809 L246 521.192 L245.99 510 Z" fill="#f5f5f5" stroke="none"></path><path class="rough-generated" d="M248 496 C271.2181026627309 493.0831652876828, 297.491903236974 493.5028224852774, 360 496 M360 496 C365.51172478344915 497.4003552059643, 361.5461471025832 495.00012212696794, 364 500 M364 500 C366.20388490561163 505.3628138803877, 366.132369980251 508.8602363032289, 364 520 M364 520 C362.5974017987959 521.2488963439749, 365.47542001806823 524.5330255036242, 360 524 M360 524 C321.1043664385565 523.5392949494254, 284.7388458733447 523.0890235009324, 248 524 M248 524 C247.37064554340517 522.2976923773997, 246.30874945865943 521.3117856165084, 244 520 M244 520 C242.98053170681234 512.0761639432051, 245.90189025938744 508.03221542807296, 244 500 M244 500 C245.60909720463678 496.4644983554569, 245.6001162618709 497.8787434373982, 248 496 M248 496 C248 496, 248 496, 248 496" stroke="#2d3142" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="304" y="514" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">OBSERVABILITY</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M86 116.723 L124.667 117.793 L163.333 117.447 L202 118.676 L203.251 130 L202.06 142 L163.333 142.88 L124.667 141.523 L86 142.727 L85.682 130 Z" fill="#f5f5f5" stroke="none"></path><path class="rough-generated" d="M88 116 C112.05820624697955 119.69925063887611, 138.32709067631515 119.23132056633011, 200 116 M200 116 C200.4046760675187 118.2517885280773, 202.28403881955893 115.97119226188708, 204 120 M204 120 C205.80536338461098 127.16716853026301, 201.3780710913008 137.79490589220077, 204 140 M204 140 C203.9565435303375 144.5794195887322, 202.96296769312272 143.94684806037694, 200 144 M200 144 C172.7597348438576 141.63760146541523, 148.67806506324558 145.03672709507867, 88 144 M88 144 C88.00500684746851 145.3522008193657, 82.88575160074978 140.18218645981202, 84 140 M84 140 C83.02862631345633 136.91739634368568, 83.20666486884001 130.6193067731336, 84 120 M84 120 C81.30138960611075 114.9110099054252, 85.35914478035022 114.94435895252973, 88 116 M88 116 C88 116, 88 116, 88 116" stroke="#2d3142" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="144" y="134" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">PEOPLE</text>
+
+      <!-- Effect box -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M1202 272.724 L1241.2 274.455 L1280.4 273.013 L1319.6 274.108 L1358.8 272.611 L1398 273.282 L1398.319 304.667 L1399.037 335.333 L1397.461 366 L1358.8 365.373 L1319.6 365.308 L1280.4 366.35 L1241.2 366.365 L1202 365.144 L1202.964 335.333 L1202.524 304.667 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M1202 272.724 L1241.2 275.116 L1280.4 275.38 L1319.6 273.54 L1358.8 272.77 L1398 275.304 L1397.758 304.667 L1397.75 335.333 L1398.996 366 L1358.8 365.064 L1319.6 366.762 L1280.4 365.874 L1241.2 366.719 L1202 366.789 L1202.709 335.333 L1202.538 304.667 Z" fill="rgba(235,108,54,0.08)" stroke="none"></path><path class="rough-generated" d="M1206 272 C1248.8285021331162 269.0800324600656, 1292.1776429902761 272.63692784723827, 1394 272 M1394 272 C1397.1239119689913 270.1546551723033, 1399.7598222535103 274.57999919839204, 1400 278 M1400 278 C1401.8780169890913 306.97048325203355, 1400.3391699598822 332.65345591418446, 1400 362 M1400 362 C1402.6748269934208 368.77379941157994, 1399.0713963765652 366.7744931738824, 1394 368 M1394 368 C1350.7408257182688 371.1481807343941, 1311.8972115706654 370.6461005203705, 1206 368 M1206 368 C1200.1403961222618 369.6612177032977, 1197.8397558849306 367.0563214797527, 1200 362 M1200 362 C1198.6155483722594 329.61966993771495, 1199.1069469332604 303.03310704939065, 1200 278 M1200 278 C1200.2859744090588 274.2706996720284, 1201.5438684839755 270.87558998279275, 1206 272 M1206 272 C1206 272, 1206 272, 1206 272" stroke="#eb6c36" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-generated" d="M1210 280 C1221.2821880904028 280.43372405773727, 1232.2399951756934 277.3030321747693, 1254 280 M1254 280 C1255.150196586394 279.0060884944163, 1256.497713970486 282.21773599997783, 1256 282 M1256 282 C1256.5339195286435 284.5520929919556, 1256.4960697697802 285.5995658636466, 1256 290 M1256 290 C1254.2339687249623 291.63765598967046, 1253.8922773849529 290.18831573063505, 1254 292 M1254 292 C1238.7060840954073 292.3674036623281, 1228.456210704241 289.914720526461, 1210 292 M1210 292 C1207.441424092992 290.91572614526376, 1208.216758027021 291.2600556563896, 1208 290 M1208 290 C1207.6691640533552 288.3364374180511, 1206.768395478879 283.83223232332614, 1208 282 M1208 282 C1209.7782668105326 279.3838778886634, 1207.9695636691215 281.7412054979242, 1210 280 M1210 280 C1210 280, 1210 280, 1210 280" stroke="rgba(235,108,54,0.40)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="1232" y="289" fill="#eb6c36" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">EFFECT</text>
+      <text x="1300" y="324" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Checkout p99 latency</text>
+      <text x="1300" y="340" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">4x for 90 minutes</text>
+
+      <!-- Legend -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M40 560 C346.91695915780963 549.6908158181981, 651.046158021912 550.4035041569546, 1400 560" stroke="rgba(45,49,66,0.10)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="40" y="576" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M40 588 C41.39970299296081 589.7525093729329, 45.82786961518228 590.4678162343334, 56 588" stroke="#2d3142" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="64" y="592" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Category (bone)</text>
+
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M260 588 C262.0661609816551 587.7512202200294, 266.484769809246 587.7564572653174, 276 588" stroke="#eb6c36" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="284" y="592" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Confirmed root cause</text>
+
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M480 588 C482.73261897034945 585.7499310671258, 487.14167000330986 589.6850982963014, 496 588" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="504" y="592" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Sub-cause</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M702 585.682 L708 585.871 L714 585.695 L713.733 588 L713.932 590 L708 589.86 L702 589.799 L702.109 588 Z" fill="rgba(235,108,54,0.08)" stroke="none"></path><path class="rough-generated" d="M701.8477832769975 585.946563946642 L718.5882683550939 584.5017687374726 L716.0787265395745 593.2087918037548 L701.5891590511426 591.4965577060357" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M700 584 C703.3990769590437 584.3886419142224, 707.7985701973737 582.9737393272854, 716 584 M716 584 C716.1157307584118 585.6653550613672, 716.8471217043232 586.5829795435816, 716 592 M716 592 C709.0987853170932 591.6376736869477, 704.7072569854557 590.3312777223251, 700 592 M700 592 C700.2880219710338 589.1874880868942, 701.1148014820087 587.3295579377561, 700 584" stroke="#eb6c36" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="724" y="592" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Observed effect</text>
+    </svg>
+  </div>
+
+
+</body></html>

@@ -3,876 +3,1210 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Illustrate - Atlas gallery</title>
+    <title>Illustrate · Catalog</title>
+    <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
     <style>
       *,
       *::before,
       *::after {
         box-sizing: border-box;
-      }
-
-      :root {
-        color-scheme: light dark;
-        --canvas: #f4f6fb;
-        --panel: rgba(255, 255, 255, 0.88);
-        --surface: #ffffff;
-        --surface-soft: #eef1f7;
-        --ink: #151923;
-        --muted: #697184;
-        --line: rgba(21, 25, 35, 0.11);
-        --accent: #3f6df6;
-        --accent-soft: rgba(63, 109, 246, 0.12);
-        --shadow: 0 24px 64px rgba(29, 39, 68, 0.13);
-        --sans: "Segoe UI Variable", "Aptos", "Segoe UI", sans-serif;
-        --mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
-      }
-
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --canvas: #10131a;
-          --panel: rgba(20, 24, 33, 0.9);
-          --surface: #181d27;
-          --surface-soft: #202631;
-          --ink: #f1f4fb;
-          --muted: #9ca6ba;
-          --line: rgba(239, 243, 251, 0.11);
-          --accent: #7d9cff;
-          --accent-soft: rgba(125, 156, 255, 0.16);
-          --shadow: 0 30px 72px rgba(0, 0, 0, 0.34);
-        }
-      }
-
-      html,
-      body {
-        width: 100%;
-        min-height: 100%;
         margin: 0;
+        padding: 0;
       }
-
+      :root {
+        --paper: #f5f4ed;
+        --paper-2: #efeee5;
+        --card: #fbfaf5;
+        --ink: #0b0d0b;
+        --muted: #52534e;
+        --soft: #6d6e66;
+        --rule: rgba(11, 13, 11, 0.12);
+        --rule-strong: rgba(11, 13, 11, 0.24);
+        --accent: #f7591f;
+        --accent-tint: rgba(247, 89, 31, 0.08);
+        --sans: "Geist", system-ui, sans-serif;
+        --serif: "Instrument Serif", Georgia, serif;
+        --mono: "Geist Mono", ui-monospace, monospace;
+        --topbar-h: 132px;
+        --ease: cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      html {
+        scroll-behavior: smooth;
+      }
       body {
-        height: 100dvh;
-        overflow: hidden;
-        display: grid;
-        grid-template-columns: minmax(284px, 324px) minmax(0, 1fr);
-        background:
-          radial-gradient(circle at 78% 12%, var(--accent-soft), transparent 30rem),
-          var(--canvas);
-        color: var(--ink);
         font-family: var(--sans);
+        background: var(--paper);
+        color: var(--ink);
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+        min-height: 100dvh;
       }
-
-      button,
-      input,
       a {
-        font: inherit;
+        color: inherit;
+        text-decoration: none;
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+        border-radius: 3px;
+      }
+      [hidden] {
+        display: none !important;
       }
 
-      button,
-      a {
-        -webkit-tap-highlight-color: transparent;
+      /* ---------- Topbar ---------- */
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        background: color-mix(in srgb, var(--paper) 86%, transparent);
+        backdrop-filter: saturate(1.4) blur(10px);
+        border-bottom: 1px solid var(--rule);
+        padding: 0.9rem clamp(1rem, 4vw, 2.75rem) 0;
       }
-
-      button:focus-visible,
-      input:focus-visible,
-      a:focus-visible {
-        outline: 3px solid var(--accent-soft);
-        outline-offset: 2px;
-      }
-
-      .sidebar {
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-        border-right: 1px solid var(--line);
-        background: var(--panel);
-        backdrop-filter: blur(20px) saturate(135%);
-        -webkit-backdrop-filter: blur(20px) saturate(135%);
-      }
-
-      .brand {
-        padding: 1.35rem 1.25rem 1rem;
-      }
-
       .brand-row {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1.25rem;
+        flex-wrap: wrap;
+      }
+      .brand {
+        display: flex;
+        align-items: baseline;
+        gap: 0.5rem;
+      }
+      .brand h1 {
+        font-family: var(--serif);
+        font-weight: 400;
+        font-size: 1.6rem;
+        letter-spacing: -0.01em;
+        line-height: 1;
+      }
+      .brand .sub {
+        font-family: var(--mono);
+        font-size: 0.68rem;
+        letter-spacing: 0.02em;
+        color: var(--muted);
+      }
+      .brand-meta {
+        display: flex;
+        align-items: center;
+        gap: 1.25rem;
+        font-family: var(--mono);
+        font-size: 0.64rem;
+        letter-spacing: 0.04em;
+        color: var(--soft);
+      }
+      .brand-meta .count strong {
+        color: var(--ink);
+        font-weight: 500;
+      }
+      .brand-meta a {
+        color: var(--muted);
+        border-bottom: 1px solid transparent;
+        transition: color 0.15s, border-color 0.15s;
+      }
+      .brand-meta a:hover {
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+
+      /* ---------- Catalog controls ---------- */
+      .controls {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 1rem;
+        gap: 1rem 1.5rem;
+        flex-wrap: wrap;
+        padding: 0.85rem 0 0.9rem;
       }
-
-      .brand h1 {
-        margin: 0;
-        font-size: 1.15rem;
-        line-height: 1.1;
-        letter-spacing: -0.035em;
-        font-weight: 720;
+      .families {
+        display: flex;
+        gap: 0.375rem;
+        flex-wrap: wrap;
       }
-
-      .brand p {
-        margin: 0.45rem 0 0;
+      .fam {
+        font: 500 0.82rem/1 var(--sans);
+        letter-spacing: -0.005em;
         color: var(--muted);
-        font-size: 0.78rem;
-        line-height: 1.45;
-      }
-
-      .asset-count {
-        flex: 0 0 auto;
-        padding: 0.28rem 0.5rem;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        color: var(--muted);
-        font-family: var(--mono);
-        font-size: 0.68rem;
-      }
-
-      .family-nav {
-        display: grid;
-        gap: 0.35rem;
-        padding: 0 0.8rem 0.9rem;
-      }
-
-      .family-button {
-        width: 100%;
-        display: grid;
-        grid-template-columns: 8px minmax(0, 1fr);
-        gap: 0.7rem;
-        align-items: center;
-        padding: 0.7rem 0.75rem;
-        border: 1px solid transparent;
-        border-radius: 10px;
-        background: transparent;
-        color: var(--muted);
-        text-align: left;
+        padding: 0.5rem 0.85rem;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
         cursor: pointer;
-        transition:
-          color 180ms ease,
-          background 180ms ease,
-          border-color 180ms ease,
-          transform 180ms ease;
+        background: transparent;
+        transition: color 0.14s, border-color 0.14s, background 0.14s;
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.4rem;
       }
-
-      .family-button::before {
-        content: "";
-        width: 7px;
-        height: 7px;
-        border-radius: 2px;
-        background: currentColor;
-        opacity: 0.28;
-        transition:
-          opacity 180ms ease,
-          transform 180ms ease;
+      .fam .fam-n {
+        font-family: var(--mono);
+        font-size: 0.58rem;
+        letter-spacing: 0.08em;
+        color: inherit;
+        opacity: 0.55;
       }
-
-      .family-button:hover {
+      .fam:hover {
         color: var(--ink);
-        background: var(--surface-soft);
+        border-color: var(--rule-strong);
       }
-
-      .family-button:active {
-        transform: scale(0.985);
+      .fam[aria-selected="true"] {
+        background: var(--ink);
+        color: var(--paper);
+        border-color: var(--ink);
       }
-
-      .family-button.active {
-        color: var(--accent);
-        border-color: color-mix(in srgb, var(--accent) 28%, transparent);
-        background: var(--accent-soft);
-      }
-
-      .family-button.active::before {
-        opacity: 1;
-        transform: rotate(45deg);
-      }
-
-      .family-name {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        font-size: 0.82rem;
-        font-weight: 650;
-      }
-
-      .search-wrap {
-        padding: 0 0.8rem 0.75rem;
+      .fam[aria-selected="true"] .fam-n {
+        opacity: 0.65;
       }
 
       .search {
+        position: relative;
+        flex: 0 1 300px;
+      }
+      .search input {
         width: 100%;
-        height: 2.55rem;
-        padding: 0 0.8rem;
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        background: var(--surface);
+        font: 400 0.85rem/1 var(--sans);
         color: var(--ink);
-        font-size: 0.8rem;
-        transition:
-          border-color 180ms ease,
-          box-shadow 180ms ease;
+        background: var(--card);
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        padding: 0.55rem 2rem 0.55rem 0.8rem;
+        transition: border-color 0.14s, background 0.14s;
       }
-
-      .search::placeholder {
-        color: var(--muted);
+      .search input::placeholder {
+        color: var(--soft);
       }
-
-      .search:focus {
-        border-color: var(--accent);
-        box-shadow: 0 0 0 4px var(--accent-soft);
+      .search input:focus {
         outline: none;
+        border-color: var(--accent);
+        background: #fff;
       }
-
-      .item-nav {
-        min-height: 0;
-        overflow-y: auto;
-        padding: 0 0.8rem 1rem;
-        scrollbar-width: thin;
-        scrollbar-color: var(--line) transparent;
-      }
-
-      .item-button {
-        width: 100%;
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        gap: 0.8rem;
-        align-items: center;
-        padding: 0.68rem 0.75rem;
+      .search .clear {
+        position: absolute;
+        right: 0.5rem;
+        top: 50%;
+        transform: translateY(-50%);
         border: 0;
-        border-radius: 10px;
         background: transparent;
-        color: var(--muted);
-        text-align: left;
-        cursor: pointer;
-        transition:
-          color 160ms ease,
-          background 160ms ease,
-          transform 160ms ease;
-      }
-
-      .item-button:hover {
-        color: var(--ink);
-        background: var(--surface-soft);
-        transform: translateX(3px);
-      }
-
-      .item-button.active {
-        color: var(--ink);
-        background: var(--surface);
-        box-shadow: inset 3px 0 0 var(--accent);
-      }
-
-      .item-label {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        font-size: 0.82rem;
-        font-weight: 590;
-      }
-
-      .item-kind {
-        color: var(--muted);
+        color: var(--soft);
         font-family: var(--mono);
-        font-size: 0.62rem;
-        opacity: 0.75;
+        font-size: 0.9rem;
+        cursor: pointer;
+        line-height: 1;
+        padding: 0.2rem;
+      }
+      .search .clear:hover {
+        color: var(--accent);
+      }
+      .search[data-empty="true"] .clear {
+        display: none;
+      }
+
+      /* ---------- Layout ---------- */
+      main {
+        padding: 1.5rem clamp(1rem, 4vw, 2.75rem) 4rem;
+      }
+      .intent {
+        margin-top: 2.75rem;
+        animation: rise 0.5s var(--ease) both;
+      }
+      .intent:first-child {
+        margin-top: 0.5rem;
+      }
+      .intent-head {
+        display: flex;
+        align-items: baseline;
+        gap: 0.75rem;
+        padding-bottom: 1rem;
+        margin-bottom: 1.5rem;
+        border-bottom: 1px solid var(--rule);
+      }
+      .intent-head h2 {
+        font-family: var(--serif);
+        font-weight: 400;
+        font-size: 1.4rem;
+        letter-spacing: -0.005em;
+        line-height: 1;
+      }
+      .intent-head .hint {
+        font-family: var(--mono);
+        font-size: 0.66rem;
+        letter-spacing: 0.02em;
+        color: var(--soft);
+      }
+      .intent-head .n {
+        margin-left: auto;
+        font-family: var(--mono);
+        font-size: 0.64rem;
+        color: var(--muted);
+        letter-spacing: 0.04em;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+        gap: clamp(1rem, 1.8vw, 1.5rem);
+      }
+
+      /* ---------- Card ---------- */
+      .card {
+        display: flex;
+        flex-direction: column;
+        background: var(--card);
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+        overflow: hidden;
+        transition: transform 0.18s var(--ease), border-color 0.18s,
+          background 0.18s;
+        will-change: transform;
+      }
+      .card:hover,
+      .card:focus-visible {
+        transform: translateY(-3px);
+        border-color: var(--accent);
+        background: #fff;
+      }
+      .thumb {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        overflow: hidden;
+        background: var(--paper-2);
+        border-bottom: 1px solid var(--rule);
+      }
+      .thumb iframe {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 1000px;
+        height: 750px;
+        border: 0;
+        background: #fff;
+        transform: scale(var(--k, 0.27));
+        transform-origin: top left;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.5s ease;
+      }
+      .thumb iframe.ready {
+        opacity: 1;
+      }
+      .shimmer {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          100deg,
+          var(--paper-2) 30%,
+          rgba(255, 255, 255, 0.55) 50%,
+          var(--paper-2) 70%
+        );
+        background-size: 220% 100%;
+        animation: sweep 1.4s ease-in-out infinite;
+      }
+      .thumb.loaded .shimmer {
+        display: none;
+      }
+      .thumb .fail {
+        position: absolute;
+        inset: 0;
+        display: none;
+        place-items: center;
+        font-family: var(--mono);
+        font-size: 0.66rem;
+        color: var(--soft);
+        letter-spacing: 0.04em;
+      }
+      .thumb.error .shimmer {
+        display: none;
+      }
+      .thumb.error .fail {
+        display: grid;
+      }
+      .thumb .badge {
+        position: absolute;
+        top: 0.55rem;
+        left: 0.55rem;
+        z-index: 2;
+        font-family: var(--mono);
+        font-size: 0.56rem;
+        letter-spacing: 0.1em;
+        color: var(--muted);
+        background: color-mix(in srgb, var(--paper) 80%, transparent);
+        border: 1px solid var(--rule);
+        border-radius: 4px;
+        padding: 0.15rem 0.35rem;
+      }
+      .card-body {
+        display: flex;
+        flex-direction: column;
+        gap: 0.3rem;
+        padding: 0.85rem 0.95rem 1rem;
+        flex: 1;
+      }
+      .card-title {
+        display: flex;
+        align-items: baseline;
+        gap: 0.5rem;
+      }
+      .card-title h3 {
+        font-size: 0.95rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .card-title .arrow {
+        margin-left: auto;
+        color: var(--soft);
+        font-family: var(--mono);
+        font-size: 0.85rem;
+        opacity: 0;
+        transform: translateX(-4px);
+        transition: opacity 0.16s, transform 0.16s, color 0.16s;
+      }
+      .card:hover .arrow,
+      .card:focus-visible .arrow {
+        opacity: 1;
+        transform: translateX(0);
+        color: var(--accent);
+      }
+      .card-body p {
+        font-size: 0.8rem;
+        color: var(--muted);
+        line-height: 1.4;
+        max-width: 34ch;
+      }
+      .card-foot {
+        margin-top: auto;
+        padding-top: 0.7rem;
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        font-family: var(--mono);
+        font-size: 0.58rem;
+        letter-spacing: 0.05em;
+        color: var(--soft);
+      }
+      .dots {
+        display: inline-flex;
+        gap: 4px;
+      }
+      .dots i {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: var(--rule-strong);
       }
 
       .empty {
-        margin: 1rem 0.4rem;
+        text-align: center;
+        padding: 5rem 1rem;
         color: var(--muted);
-        font-size: 0.78rem;
-        line-height: 1.5;
       }
-
-      .variant-panel {
-        padding: 0.85rem 0.8rem 1rem;
-        border-top: 1px solid var(--line);
+      .empty p {
+        font-family: var(--serif);
+        font-size: 1.5rem;
       }
-
-      .variant-label {
-        display: block;
-        margin: 0 0.15rem 0.55rem;
-        color: var(--muted);
-        font-size: 0.7rem;
-        font-weight: 650;
-      }
-
-      .variant-list {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 0.4rem;
-      }
-
-      .variant-button {
-        min-width: 0;
-        padding: 0.58rem 0.45rem;
-        border: 1px solid var(--line);
-        border-radius: 9px;
-        background: transparent;
-        color: var(--muted);
-        font-size: 0.72rem;
-        cursor: pointer;
-        transition:
-          color 160ms ease,
-          background 160ms ease,
-          border-color 160ms ease,
-          transform 160ms ease;
-      }
-
-      .variant-button:hover {
-        color: var(--ink);
-        border-color: color-mix(in srgb, var(--ink) 25%, transparent);
-      }
-
-      .variant-button:active {
-        transform: scale(0.97);
-      }
-
-      .variant-button.active {
+      .empty span {
         color: var(--accent);
-        border-color: color-mix(in srgb, var(--accent) 32%, transparent);
-        background: var(--accent-soft);
+        font-style: italic;
+      }
+      .empty button {
+        margin-top: 1.25rem;
+        font: 500 0.82rem/1 var(--sans);
+        color: var(--ink);
+        background: transparent;
+        border: 1px solid var(--rule-strong);
+        border-radius: 6px;
+        padding: 0.55rem 1rem;
+        cursor: pointer;
+      }
+      .empty button:hover {
+        border-color: var(--accent);
+        color: var(--accent);
       }
 
-      .workspace {
-        min-width: 0;
-        min-height: 0;
-        display: grid;
-        grid-template-rows: auto minmax(0, 1fr);
-        padding: 1rem;
-      }
-
-      .toolbar {
-        min-width: 0;
+      /* ---------- Detail ---------- */
+      .detail-bar {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 1rem;
-        padding: 0.2rem 0.2rem 0.85rem;
+        padding: 0.85rem 0 0.9rem;
       }
-
-      .selection {
-        min-width: 0;
-      }
-
-      .selection h2 {
-        overflow: hidden;
-        margin: 0;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        font-size: 1rem;
-        letter-spacing: -0.025em;
-      }
-
-      .selection p {
-        overflow: hidden;
-        margin: 0.3rem 0 0;
-        color: var(--muted);
-        font-family: var(--mono);
-        font-size: 0.67rem;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      .open-source {
-        flex: 0 0 auto;
+      .back {
         display: inline-flex;
         align-items: center;
-        min-height: 2.45rem;
-        padding: 0 0.85rem;
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        background: var(--surface);
-        color: var(--ink);
-        text-decoration: none;
-        font-size: 0.76rem;
-        font-weight: 650;
-        transition:
-          color 160ms ease,
-          border-color 160ms ease,
-          transform 160ms ease;
+        gap: 0.45rem;
+        font: 500 0.82rem/1 var(--sans);
+        color: var(--muted);
+        padding: 0.5rem 0.85rem 0.5rem 0.7rem;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        transition: color 0.14s, border-color 0.14s;
       }
-
-      .open-source:hover {
+      .back:hover {
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+      .pager {
+        display: flex;
+        gap: 0.375rem;
+      }
+      .pager a {
+        display: inline-grid;
+        place-items: center;
+        width: 2.15rem;
+        height: 2.15rem;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        color: var(--muted);
+        font-family: var(--mono);
+        transition: color 0.14s, border-color 0.14s;
+      }
+      .pager a:hover {
         color: var(--accent);
         border-color: var(--accent);
       }
 
-      .open-source:active {
-        transform: scale(0.97);
+      .detail {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 340px;
+        gap: clamp(1.25rem, 2.5vw, 2.25rem);
+        align-items: start;
       }
-
-      .preview-shell {
-        min-width: 0;
-        min-height: 0;
+      .stage {
         position: relative;
+        border: 1px solid var(--rule);
+        border-radius: 12px;
         overflow: hidden;
-        border: 1px solid var(--line);
-        border-radius: 18px;
-        background: var(--surface);
-        box-shadow: var(--shadow);
+        background: #fff;
+        height: min(78vh, 780px);
       }
-
-      .preview-shell::before {
-        content: "";
-        position: absolute;
-        inset: 0 0 auto;
-        z-index: 2;
-        height: 1px;
-        background: linear-gradient(90deg, transparent, var(--accent), transparent);
-        opacity: 0.48;
-        pointer-events: none;
-      }
-
-      iframe {
+      .stage iframe {
         width: 100%;
         height: 100%;
         border: 0;
-        background: var(--surface);
-        opacity: 1;
-        transform: translateY(0);
-        transition:
-          opacity 220ms ease,
-          transform 220ms ease;
+        display: block;
       }
-
-      iframe.loading {
-        opacity: 0;
-        transform: translateY(8px);
+      .stage.anim iframe {
+        animation: stageIn 0.55s var(--ease) both;
       }
-
-      .load-state {
+      .stage .stage-shimmer {
         position: absolute;
         inset: 0;
+        background: var(--paper-2);
         display: grid;
         place-items: center;
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        color: var(--soft);
+        letter-spacing: 0.06em;
+      }
+      .stage.loaded .stage-shimmer {
+        display: none;
+      }
+
+      .aside {
+        position: sticky;
+        top: calc(var(--topbar-h) + 1.5rem);
+        display: flex;
+        flex-direction: column;
+        gap: 1.15rem;
+      }
+      .aside .eyebrow {
+        font-family: var(--mono);
+        font-size: 0.62rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+      .aside h2 {
+        font-family: var(--serif);
+        font-weight: 400;
+        font-size: 2.1rem;
+        line-height: 1.05;
+        letter-spacing: -0.01em;
+        margin-top: 0.25rem;
+      }
+      .aside .lede {
+        font-size: 0.92rem;
         color: var(--muted);
+        line-height: 1.55;
+        max-width: 42ch;
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.55rem;
+      }
+      .field > label {
+        font-family: var(--mono);
+        font-size: 0.6rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--soft);
+      }
+      .variants {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+      }
+      .variants a {
+        font: 500 0.78rem/1 var(--sans);
+        color: var(--muted);
+        padding: 0.45rem 0.7rem;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        transition: color 0.14s, border-color 0.14s, background 0.14s;
+      }
+      .variants a:hover {
+        color: var(--ink);
+        border-color: var(--rule-strong);
+      }
+      .variants a[aria-current="true"] {
+        color: var(--accent);
+        border-color: var(--accent);
+        background: var(--accent-tint);
+      }
+      .cmd {
+        display: flex;
+        align-items: stretch;
+        border: 1px solid var(--rule);
+        border-radius: 7px;
+        overflow: hidden;
+        background: var(--card);
+      }
+      .cmd code {
+        flex: 1;
+        min-width: 0;
         font-family: var(--mono);
         font-size: 0.72rem;
-        pointer-events: none;
-        opacity: 0;
-        transition: opacity 160ms ease;
+        color: var(--ink);
+        padding: 0.65rem 0.75rem;
+        overflow-x: auto;
+        white-space: nowrap;
+        scrollbar-width: none;
+      }
+      .cmd code::-webkit-scrollbar {
+        display: none;
+      }
+      .cmd button {
+        flex: 0 0 auto;
+        border: 0;
+        border-left: 1px solid var(--rule);
+        background: transparent;
+        color: var(--muted);
+        font: 500 0.68rem/1 var(--mono);
+        letter-spacing: 0.06em;
+        padding: 0 0.85rem;
+        cursor: pointer;
+        transition: color 0.14s, background 0.14s;
+      }
+      .cmd button:hover {
+        color: var(--accent);
+        background: var(--accent-tint);
+      }
+      .cmd button.copied {
+        color: var(--accent);
+      }
+      .aside .raw {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        align-self: flex-start;
+        font: 500 0.82rem/1 var(--sans);
+        color: var(--ink);
+        border-bottom: 1px solid var(--rule-strong);
+        padding-bottom: 0.2rem;
+        transition: color 0.14s, border-color 0.14s;
+      }
+      .aside .raw:hover {
+        color: var(--accent);
+        border-color: var(--accent);
       }
 
-      .load-state.visible {
-        opacity: 1;
+      /* ---------- Motion keyframes ---------- */
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      @keyframes sweep {
+        from {
+          background-position: 180% 0;
+        }
+        to {
+          background-position: -80% 0;
+        }
+      }
+      @keyframes stageIn {
+        from {
+          opacity: 0;
+          transform: scale(0.985);
+          filter: blur(6px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+          filter: none;
+        }
       }
 
+      /* ---------- Responsive ---------- */
       @media (max-width: 860px) {
-        body {
-          width: 100%;
-          max-width: 100vw;
-          height: auto;
-          min-height: 100dvh;
-          overflow: auto;
-          overflow-x: hidden;
+        :root {
+          --topbar-h: 118px;
+        }
+        .detail {
           grid-template-columns: 1fr;
         }
-
-        .sidebar,
-        .workspace {
-          width: 100%;
-          max-width: 100vw;
+        .stage {
+          height: 62vh;
         }
-
-        .sidebar {
-          max-height: 52dvh;
-          border-right: 0;
-          border-bottom: 1px solid var(--line);
+        .aside {
+          position: static;
         }
-
-        .family-nav {
-          grid-template-columns: repeat(3, minmax(0, 1fr));
+        .aside h2 {
+          font-size: 1.75rem;
         }
-
-        .family-button {
+      }
+      @media (max-width: 520px) {
+        .grid {
           grid-template-columns: 1fr;
-          gap: 0.35rem;
         }
-
-        .family-button::before {
+        .brand-meta .count {
           display: none;
         }
-
-        .family-name {
-          text-align: center;
-          white-space: normal;
-        }
-
-        .item-nav {
-          display: flex;
-          gap: 0.4rem;
-          overflow-x: auto;
-          overflow-y: hidden;
-          padding-bottom: 0.8rem;
-        }
-
-        .item-button {
-          flex: 0 0 auto;
-          width: auto;
-          min-width: 9rem;
-        }
-
-        .variant-panel {
-          padding-bottom: 0.8rem;
-        }
-
-        .variant-list {
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-        }
-
-        .workspace {
-          min-height: 70dvh;
-          padding: 0.75rem;
-        }
       }
-
-      @media (max-width: 560px) {
-        .family-nav {
-          grid-template-columns: 1fr;
-        }
-
-        .variant-list {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-
-        .toolbar {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr);
-          align-items: flex-start;
-          gap: 0.55rem;
-        }
-
-        .open-source {
-          width: auto;
-          justify-self: start;
-          padding-inline: 0.65rem;
-        }
-      }
-
       @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
         *,
         *::before,
         *::after {
-          scroll-behavior: auto !important;
-          transition-duration: 0.01ms !important;
-          animation-duration: 0.01ms !important;
+          animation-duration: 0.001ms !important;
           animation-iteration-count: 1 !important;
+          transition-duration: 0.001ms !important;
         }
-      }
-
-      @media (prefers-reduced-transparency: reduce) {
-        .sidebar {
-          background: var(--surface);
-          backdrop-filter: none;
-          -webkit-backdrop-filter: none;
+        .thumb iframe {
+          opacity: 1;
         }
       }
     </style>
   </head>
   <body>
-    <aside class="sidebar">
-      <header class="brand">
-        <div class="brand-row">
+    <header class="topbar">
+      <div class="brand-row">
+        <a class="brand" href="#" aria-label="Illustrate catalog home">
           <h1>Illustrate</h1>
-          <span class="asset-count" id="asset-count">29 assets</span>
+          <span class="sub">· catalog</span>
+        </a>
+        <div class="brand-meta">
+          <span class="count"
+            ><strong>29</strong> editorial types ·
+            <strong>7</strong> technical · 4 variants each</span
+          >
+          <a href="icons.html" target="_blank" rel="noopener">icon library ↗</a>
         </div>
-        <p>Browse every diagram family without losing the canvas.</p>
-      </header>
-
-      <nav class="family-nav" id="family-nav" aria-label="Illustration family"></nav>
-
-      <div class="search-wrap">
-        <input
-          class="search"
-          id="search"
-          type="search"
-          placeholder="Filter diagrams, press /"
-          autocomplete="off"
-          aria-label="Filter diagram types"
-        />
       </div>
 
-      <nav class="item-nav" id="item-nav" aria-label="Diagram type"></nav>
-
-      <footer class="variant-panel">
-        <span class="variant-label">Presentation</span>
-        <div class="variant-list" id="variant-list"></div>
-      </footer>
-    </aside>
-
-    <main class="workspace">
-      <header class="toolbar">
-        <div class="selection">
-          <h2 id="selection-title">Architecture</h2>
-          <p id="selection-path">example-architecture.html</p>
+      <!-- Catalog controls -->
+      <div class="controls" id="catalog-controls">
+        <div class="families" role="tablist" aria-label="Diagram family">
+          <button class="fam" role="tab" data-family="editorial">
+            <span class="fam-n">29</span>Editorial
+          </button>
+          <button class="fam" role="tab" data-family="technical-architecture">
+            <span class="fam-n">03</span>Architecture · technical
+          </button>
+          <button class="fam" role="tab" data-family="technical-process-flow">
+            <span class="fam-n">04</span>Process flow · technical
+          </button>
         </div>
-        <a
-          class="open-source"
-          id="open-source"
-          href="example-architecture.html"
-          target="_blank"
-          rel="noopener"
-          >Open source</a
-        >
-      </header>
+        <div class="search" id="search" data-empty="true">
+          <input
+            id="search-input"
+            type="search"
+            placeholder="Filter by name or purpose…"
+            aria-label="Filter diagrams"
+            autocomplete="off"
+          />
+          <button class="clear" id="search-clear" aria-label="Clear filter">
+            ✕
+          </button>
+        </div>
+      </div>
 
-      <section class="preview-shell" aria-label="Diagram preview">
-        <div class="load-state" id="load-state">Loading preview</div>
-        <iframe
-          id="preview"
-          src="example-architecture.html"
-          title="Architecture preview"
-        ></iframe>
-      </section>
+      <!-- Detail controls -->
+      <div class="detail-bar" id="detail-controls" hidden>
+        <a class="back" id="back" href="#">← catalog</a>
+        <div class="pager">
+          <a id="prev" href="#" aria-label="Previous diagram" title="Previous"
+            >←</a
+          >
+          <a id="next" href="#" aria-label="Next diagram" title="Next">→</a>
+        </div>
+      </div>
+    </header>
+
+    <!-- Catalog view -->
+    <main class="view" id="catalog">
+      <div id="grid-root"></div>
+      <div class="empty" id="empty" hidden>
+        <p>No diagram matches <span id="empty-q"></span></p>
+        <button id="empty-clear">Clear filter</button>
+      </div>
     </main>
 
+    <!-- Detail view -->
+    <section class="view" id="detail" hidden aria-live="polite">
+      <div class="detail" style="padding: 1.5rem clamp(1rem, 4vw, 2.75rem) 4rem">
+        <div class="stage" id="stage">
+          <div class="stage-shimmer">rendering preview…</div>
+          <iframe id="stage-frame" title="Diagram preview"></iframe>
+        </div>
+        <aside class="aside">
+          <div>
+            <p class="eyebrow" id="d-eyebrow"></p>
+            <h2 id="d-name"></h2>
+          </div>
+          <p class="lede" id="d-lede"></p>
+          <div class="field">
+            <label>Variant</label>
+            <div class="variants" id="d-variants"></div>
+          </div>
+          <div class="field">
+            <label>Generate it</label>
+            <div class="cmd">
+              <code id="d-cmd"></code>
+              <button id="d-copy" type="button">COPY</button>
+            </div>
+          </div>
+          <a class="raw" id="d-raw" href="#" target="_blank" rel="noopener"
+            >Open raw file ↗</a
+          >
+        </aside>
+      </div>
+    </section>
+
     <script>
-      const families = {
+      "use strict";
+
+      /* -------- Data: single source of truth -------- */
+      const INTENTS = [
+        {
+          id: "systems",
+          label: "Systems & architecture",
+          hint: "Topology, platforms, infrastructure",
+        },
+        {
+          id: "flows",
+          label: "Flows & process",
+          hint: "Steps, sequences, state",
+        },
+        {
+          id: "data",
+          label: "Data & quantity",
+          hint: "Charts, metrics, comparison",
+        },
+        {
+          id: "structure",
+          label: "Structure & relationships",
+          hint: "Hierarchy, sets, entities, time",
+        },
+      ];
+
+      const EDITORIAL_VARIANTS = [
+        { v: "", label: "Minimal light" },
+        { v: "-dark", label: "Minimal dark" },
+        { v: "-full", label: "Full editorial" },
+        { v: "-hand", label: "Hand-drawn" },
+      ];
+      const TECHNICAL_VARIANTS = [
+        { v: "-light", label: "Light" },
+        { v: "", label: "Dark" },
+      ];
+
+      const FAMILIES = {
         editorial: {
           label: "Editorial",
-          kind: "Core",
-          base: "",
-          prefix: "example-",
-          defaultItem: "architecture",
+          base: "example-",
+          suffix: ".html",
+          variants: EDITORIAL_VARIANTS,
           defaultVariant: "",
-          variants: [
-            ["", "Light"],
-            ["-dark", "Dark"],
-            ["-full", "Full"],
-            ["-hand", "Hand"],
-          ],
-          items: [
-            ["architecture", "Architecture"],
-            ["flowchart", "Flowchart"],
-            ["sequence", "Sequence"],
-            ["state", "State machine"],
-            ["er", "ER model"],
-            ["timeline", "Timeline"],
-            ["swimlane", "Swimlane"],
-            ["quadrant", "Quadrant"],
-            ["nested", "Nested"],
-            ["tree", "Tree"],
-            ["org-chart", "Org chart"],
-            ["layers", "Layers"],
-            ["venn", "Venn"],
-            ["pyramid", "Pyramid"],
-            ["radar", "Radar"],
-            ["loop", "Loop"],
-            ["datalake", "Data lake"],
-            ["bar", "Bar chart"],
-            ["line", "Line chart"],
-            ["gantt", "Gantt"],
-            ["scatter", "Scatter"],
-            ["medallion", "Medallion"],
-            ["high-level", "High level"],
-            ["process", "Process"],
-            ["data-flow", "Data flow"],
-            ["dp-integration", "DP integration"],
-            ["high-level-vertical", "Parametric stack"],
-            ["dp-security-matrix", "DP security matrix"],
-            ["it-state", "IT current state"],
-          ],
         },
-        architecture: {
-          label: "Technical architecture",
-          kind: "Color",
+        "technical-architecture": {
+          label: "Architecture · technical color",
           base: "technical-color/architecture/examples/",
-          prefix: "",
-          defaultItem: "aws-serverless",
+          suffix: ".html",
+          variants: TECHNICAL_VARIANTS,
           defaultVariant: "-light",
-          variants: [
-            ["-light", "Light"],
-            ["", "Dark"],
-          ],
-          items: [
-            ["aws-serverless", "AWS serverless"],
-            ["microservices", "Microservices"],
-            ["web-app", "Web application"],
-          ],
         },
-        process: {
-          label: "Technical process flow",
-          kind: "Color",
+        "technical-process-flow": {
+          label: "Process flow · technical color",
           base: "technical-color/process-flow/examples/",
-          prefix: "",
-          defaultItem: "ai-governance-workflow",
+          suffix: ".html",
+          variants: TECHNICAL_VARIANTS,
           defaultVariant: "-light",
-          variants: [
-            ["-light", "Light"],
-            ["", "Dark"],
-          ],
-          items: [
-            ["ai-governance-workflow", "AI governance"],
-            ["inventory-control", "Inventory control"],
-            ["it-change-management", "IT change management"],
-            ["sprint-report-flow", "Sprint report"],
-          ],
         },
       };
 
-      const state = {
-        family: "editorial",
-        search: "",
-        selections: Object.fromEntries(
-          Object.entries(families).map(([key, family]) => [
-            key,
-            {
-              item: family.defaultItem,
-              variant: family.defaultVariant,
-            },
-          ]),
-        ),
-      };
+      // n = catalog id, gen = noun phrase for the generate command.
+      const TYPES = [
+        // -- Editorial · systems --
+        { key: "architecture", n: "01", family: "editorial", intent: "systems", name: "Architecture", purpose: "Components and connections in a system.", gen: "an architecture diagram" },
+        { key: "high-level", n: "23", family: "editorial", intent: "systems", name: "High-Level", purpose: "End-to-end data stack on a container cluster.", gen: "a high-level architecture" },
+        { key: "high-level-vertical", n: "28", family: "editorial", intent: "systems", name: "High-Level / Parametric", purpose: "Vertical end-to-end stack with a parametric layout.", gen: "a vertical high-level architecture" },
+        { key: "medallion", n: "22", family: "editorial", intent: "systems", name: "Medallion", purpose: "Multi-tier storage with quality levels and access policy.", gen: "a medallion architecture" },
+        { key: "datalake", n: "17", family: "editorial", intent: "systems", name: "Data lake", purpose: "Zoned lake storage: raw, refined, curated.", gen: "a data lake diagram" },
+        { key: "dp-integration", n: "27", family: "editorial", intent: "systems", name: "DP integration", purpose: "Platform topology from sources to core to consumers.", gen: "a data-platform integration diagram" },
+        { key: "it-state", n: "33", family: "editorial", intent: "systems", name: "IT current-state", purpose: "A legacy landscape grouped by phase — the before state.", gen: "an IT current-state diagram" },
+        { key: "nested", n: "09", family: "editorial", intent: "systems", name: "Nested", purpose: "Hierarchy expressed through containment and scope.", gen: "a nested containment diagram" },
+        { key: "layers", n: "12", family: "editorial", intent: "systems", name: "Layer stack", purpose: "Stacked abstraction levels.", gen: "a layer-stack diagram" },
 
-      const familyNav = document.getElementById("family-nav");
-      const itemNav = document.getElementById("item-nav");
-      const variantList = document.getElementById("variant-list");
-      const search = document.getElementById("search");
-      const preview = document.getElementById("preview");
-      const loadState = document.getElementById("load-state");
-      const selectionTitle = document.getElementById("selection-title");
-      const selectionPath = document.getElementById("selection-path");
-      const openSource = document.getElementById("open-source");
-      const assetCount = document.getElementById("asset-count");
+        // -- Editorial · flows --
+        { key: "flowchart", n: "02", family: "editorial", intent: "flows", name: "Flowchart", purpose: "Decision logic with branches.", gen: "a flowchart" },
+        { key: "sequence", n: "03", family: "editorial", intent: "flows", name: "Sequence", purpose: "Time-ordered messages between actors.", gen: "a sequence diagram" },
+        { key: "state", n: "04", family: "editorial", intent: "flows", name: "State machine", purpose: "States, transitions, and guards.", gen: "a state-machine diagram" },
+        { key: "swimlane", n: "07", family: "editorial", intent: "flows", name: "Swimlane", purpose: "A cross-functional process with handoffs.", gen: "a swimlane diagram" },
+        { key: "process", n: "24", family: "editorial", intent: "flows", name: "Process", purpose: "Multi-actor process with data handoffs.", gen: "a multi-actor process diagram" },
+        { key: "data-flow", n: "26", family: "editorial", intent: "flows", name: "Data flow", purpose: "Who does what at each pipeline step.", gen: "a data-flow diagram" },
+        { key: "loop", n: "16", family: "editorial", intent: "flows", name: "Loop", purpose: "A reinforcing cycle where the last step feeds the first.", gen: "a loop / flywheel diagram" },
 
-      function selectedFamily() {
-        return families[state.family];
-      }
+        // -- Editorial · data --
+        { key: "bar", n: "18", family: "editorial", intent: "data", name: "Bar chart", purpose: "Quantitative comparison across categories.", gen: "a bar chart" },
+        { key: "line", n: "19", family: "editorial", intent: "data", name: "Line chart", purpose: "Continuous trends over time.", gen: "a line chart" },
+        { key: "scatter", n: "21", family: "editorial", intent: "data", name: "Scatter plot", purpose: "Distribution and correlation between two variables.", gen: "a scatter plot" },
+        { key: "radar", n: "15", family: "editorial", intent: "data", name: "Radar", purpose: "Entities scored across three to five criteria.", gen: "a radar chart" },
+        { key: "gantt", n: "20", family: "editorial", intent: "data", name: "Gantt", purpose: "Tasks and phases on a timeline.", gen: "a Gantt chart" },
+        { key: "quadrant", n: "08", family: "editorial", intent: "data", name: "Quadrant", purpose: "Two-axis positioning and prioritization.", gen: "a quadrant matrix" },
 
-      function selectedState() {
-        return state.selections[state.family];
-      }
+        // -- Editorial · structure --
+        { key: "er", n: "05", family: "editorial", intent: "structure", name: "ER / data model", purpose: "Entities, fields, and relationships.", gen: "an ER data model" },
+        { key: "tree", n: "10", family: "editorial", intent: "structure", name: "Tree", purpose: "Parent-to-children relationships.", gen: "a tree diagram" },
+        { key: "org-chart", n: "11", family: "editorial", intent: "structure", name: "Org chart", purpose: "Ownership, reporting, routing, and escalation.", gen: "an org chart" },
+        { key: "venn", n: "13", family: "editorial", intent: "structure", name: "Venn", purpose: "Overlap between sets.", gen: "a Venn diagram" },
+        { key: "pyramid", n: "14", family: "editorial", intent: "structure", name: "Pyramid / funnel", purpose: "Ranked hierarchy or conversion drop-off.", gen: "a pyramid / funnel" },
+        { key: "timeline", n: "06", family: "editorial", intent: "structure", name: "Timeline", purpose: "Events positioned in time.", gen: "a timeline" },
+        { key: "dp-security-matrix", n: "32", family: "editorial", intent: "structure", name: "DP security matrix", purpose: "Per-role, per-component access permissions.", gen: "a DP security matrix" },
 
-      function sourcePath() {
-        const family = selectedFamily();
-        const selection = selectedState();
-        return `${family.base}${family.prefix}${selection.item}${selection.variant}.html`;
-      }
+        // -- Technical color · architecture --
+        { key: "aws-serverless", family: "technical-architecture", name: "AWS serverless", purpose: "A serverless topology on AWS.", gen: "an AWS serverless architecture" },
+        { key: "microservices", family: "technical-architecture", name: "Microservices", purpose: "Service mesh and boundaries.", gen: "a microservices architecture" },
+        { key: "web-app", family: "technical-architecture", name: "Web application", purpose: "Classic web application tiers.", gen: "a web application architecture" },
 
-      function itemLabel(itemKey) {
-        return selectedFamily().items.find(([key]) => key === itemKey)?.[1] ?? itemKey;
-      }
+        // -- Technical color · process flow --
+        { key: "ai-governance-workflow", family: "technical-process-flow", name: "AI governance", purpose: "An AI model governance approval flow.", gen: "an AI governance workflow" },
+        { key: "inventory-control", family: "technical-process-flow", name: "Inventory control", purpose: "An inventory replenishment flow.", gen: "an inventory-control process" },
+        { key: "it-change-management", family: "technical-process-flow", name: "IT change management", purpose: "A change-request lifecycle.", gen: "an IT change-management process" },
+        { key: "sprint-report-flow", family: "technical-process-flow", name: "Sprint report", purpose: "A sprint-reporting automation.", gen: "a sprint-report process" },
+      ];
 
-      function renderFamilies() {
-        familyNav.innerHTML = "";
-        Object.entries(families).forEach(([key, family]) => {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.className = `family-button${key === state.family ? " active" : ""}`;
-          button.dataset.family = key;
-          button.setAttribute("aria-pressed", String(key === state.family));
-          button.innerHTML = `<span class="family-name">${family.label}</span>`;
-          button.addEventListener("click", () => {
-            state.family = key;
-            state.search = "";
-            search.value = "";
-            render();
-            loadPreview();
-          });
-          familyNav.appendChild(button);
+      const byKey = Object.fromEntries(TYPES.map((t) => [t.key, t]));
+      const src = (t, v) =>
+        FAMILIES[t.family].base + t.key + v + FAMILIES[t.family].suffix;
+
+      /* -------- Elements -------- */
+      const gridRoot = document.getElementById("grid-root");
+      const emptyEl = document.getElementById("empty");
+      const catalogView = document.getElementById("catalog");
+      const detailView = document.getElementById("detail");
+      const catalogControls = document.getElementById("catalog-controls");
+      const detailControls = document.getElementById("detail-controls");
+      const searchWrap = document.getElementById("search");
+      const searchInput = document.getElementById("search-input");
+
+      let currentFamily = "editorial";
+      let scaleFrame = null;
+
+      /* -------- Lazy preview loading -------- */
+      const io = new IntersectionObserver(
+        (entries) => {
+          for (const e of entries) {
+            if (!e.isIntersecting) continue;
+            const frame = e.target;
+            io.unobserve(frame);
+            frame.addEventListener("load", () => {
+              frame.classList.add("ready");
+              frame.closest(".thumb").classList.add("loaded");
+            });
+            frame.addEventListener("error", () =>
+              frame.closest(".thumb").classList.add("error"),
+            );
+            frame.src = frame.dataset.src;
+          }
+        },
+        { rootMargin: "300px 0px" },
+      );
+
+      /* -------- Preview scale (fit 1000px logical canvas into card) -------- */
+      function scaleThumbs() {
+        document.querySelectorAll(".thumb").forEach((th) => {
+          const w = th.clientWidth;
+          if (w) th.style.setProperty("--k", (w / 1000).toFixed(4));
         });
       }
+      function scheduleScale() {
+        cancelAnimationFrame(scaleFrame);
+        scaleFrame = requestAnimationFrame(scaleThumbs);
+      }
+      window.addEventListener("resize", scheduleScale);
 
-      function renderItems() {
-        const family = selectedFamily();
-        const selection = selectedState();
-        const query = state.search.trim().toLowerCase();
-        const items = family.items.filter(([, label]) =>
-          label.toLowerCase().includes(query),
+      /* -------- Card markup -------- */
+      function cardHTML(t) {
+        const f = FAMILIES[t.family];
+        const preview = src(t, f.defaultVariant);
+        const badge = t.n ? `<span class="badge">${t.n}</span>` : "";
+        const foot =
+          t.family === "editorial"
+            ? `<span class="dots" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>4 variants</span>`
+            : `<span>Light · Dark</span>`;
+        return `
+          <a class="card" href="#type=${t.key}" data-name="${t.name.toLowerCase()}" data-purpose="${t.purpose.toLowerCase()}">
+            <span class="thumb">
+              ${badge}
+              <span class="shimmer" aria-hidden="true"></span>
+              <span class="fail">preview unavailable</span>
+              <iframe data-src="${preview}" title="${t.name} preview" tabindex="-1" loading="lazy" scrolling="no"></iframe>
+            </span>
+            <span class="card-body">
+              <span class="card-title">
+                <h3>${t.name}</h3>
+                <span class="arrow" aria-hidden="true">→</span>
+              </span>
+              <p>${t.purpose}</p>
+              <span class="card-foot">${foot}</span>
+            </span>
+          </a>`;
+      }
+
+      /* -------- Render a family into the grid -------- */
+      function renderFamily(family) {
+        currentFamily = family;
+        const list = TYPES.filter((t) => t.family === family);
+        let html = "";
+        if (family === "editorial") {
+          for (const intent of INTENTS) {
+            const items = list.filter((t) => t.intent === intent.id);
+            html += `
+              <section class="intent" data-intent="${intent.id}">
+                <div class="intent-head">
+                  <h2>${intent.label}</h2>
+                  <span class="hint">${intent.hint}</span>
+                  <span class="n">${items.length}</span>
+                </div>
+                <div class="grid">${items.map(cardHTML).join("")}</div>
+              </section>`;
+          }
+        } else {
+          html = `<section class="intent"><div class="grid">${list
+            .map(cardHTML)
+            .join("")}</div></section>`;
+        }
+        gridRoot.innerHTML = html;
+
+        // family tab state + search visibility
+        document.querySelectorAll(".fam").forEach((b) =>
+          b.setAttribute(
+            "aria-selected",
+            b.dataset.family === family ? "true" : "false",
+          ),
         );
+        searchWrap.style.display = family === "editorial" ? "" : "none";
+        if (family !== "editorial") clearSearch(false);
 
-        itemNav.innerHTML = "";
-        if (!items.length) {
-          itemNav.innerHTML = '<p class="empty">No diagrams match this filter.</p>';
+        scaleThumbs();
+        gridRoot
+          .querySelectorAll("iframe[data-src]")
+          .forEach((f) => io.observe(f));
+        applyFilter();
+      }
+
+      /* -------- Search / filter (editorial only) -------- */
+      function applyFilter() {
+        if (currentFamily !== "editorial") {
+          emptyEl.hidden = true;
           return;
         }
-
-        items.forEach(([key, label]) => {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.className = `item-button${key === selection.item ? " active" : ""}`;
-          button.setAttribute("aria-pressed", String(key === selection.item));
-          button.innerHTML = `<span class="item-label">${label}</span><span class="item-kind">${family.kind}</span>`;
-          button.addEventListener("click", () => {
-            selection.item = key;
-            renderItems();
-            renderSelection();
-            loadPreview();
-          });
-          itemNav.appendChild(button);
+        const q = searchInput.value.trim().toLowerCase();
+        searchWrap.dataset.empty = q ? "false" : "true";
+        let shown = 0;
+        gridRoot.querySelectorAll(".card").forEach((c) => {
+          const hit =
+            !q ||
+            c.dataset.name.includes(q) ||
+            c.dataset.purpose.includes(q);
+          c.style.display = hit ? "" : "none";
+          if (hit) shown++;
         });
-      }
-
-      function renderVariants() {
-        const family = selectedFamily();
-        const selection = selectedState();
-        variantList.innerHTML = "";
-        family.variants.forEach(([key, label]) => {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.className = `variant-button${key === selection.variant ? " active" : ""}`;
-          button.textContent = label;
-          button.setAttribute("aria-pressed", String(key === selection.variant));
-          button.addEventListener("click", () => {
-            selection.variant = key;
-            renderVariants();
-            renderSelection();
-            loadPreview();
-          });
-          variantList.appendChild(button);
+        // hide empty intent sections; keep the count truthful to what's shown
+        gridRoot.querySelectorAll(".intent").forEach((sec) => {
+          const vis = [...sec.querySelectorAll(".card")].filter(
+            (c) => c.style.display !== "none",
+          ).length;
+          sec.style.display = vis ? "" : "none";
+          const n = sec.querySelector(".intent-head .n");
+          if (n) n.textContent = vis;
         });
+        emptyEl.hidden = shown !== 0;
+        if (shown === 0)
+          document.getElementById("empty-q").textContent = `“${q}”`;
+        scheduleScale();
+      }
+      function clearSearch(refocus = true) {
+        searchInput.value = "";
+        applyFilter();
+        if (refocus) searchInput.focus();
+      }
+      searchInput.addEventListener("input", applyFilter);
+      document
+        .getElementById("search-clear")
+        .addEventListener("click", () => clearSearch());
+      document
+        .getElementById("empty-clear")
+        .addEventListener("click", () => clearSearch());
+
+      document.querySelectorAll(".fam").forEach((btn) =>
+        btn.addEventListener("click", () => {
+          location.hash = `family=${btn.dataset.family}`;
+        }),
+      );
+
+      /* -------- Detail view -------- */
+      const stage = document.getElementById("stage");
+      const stageFrame = document.getElementById("stage-frame");
+
+      function siblings(t) {
+        const list = TYPES.filter((x) => x.family === t.family);
+        const i = list.findIndex((x) => x.key === t.key);
+        return {
+          prev: list[(i - 1 + list.length) % list.length],
+          next: list[(i + 1) % list.length],
+        };
       }
 
-      function renderSelection() {
-        const path = sourcePath();
-        const label = itemLabel(selectedState().item);
-        selectionTitle.textContent = `${label} - ${selectedFamily().label}`;
-        selectionPath.textContent = path;
-        openSource.href = path;
-        preview.title = `${label} preview`;
-      }
+      function renderDetail(key, variant) {
+        const t = byKey[key];
+        if (!t) {
+          location.hash = "";
+          return;
+        }
+        const f = FAMILIES[t.family];
+        const v = f.variants.some((x) => x.v === variant)
+          ? variant
+          : f.defaultVariant;
+        const file = src(t, v);
 
-      function loadPreview() {
-        preview.classList.add("loading");
-        loadState.classList.add("visible");
-        window.setTimeout(() => {
-          preview.src = sourcePath();
-        }, 90);
-      }
-
-      function render() {
-        const total = Object.values(families).reduce(
-          (sum, family) => sum + family.items.length,
-          0,
+        // stage
+        stage.classList.remove("loaded", "anim");
+        void stage.offsetWidth; // restart animation
+        stage.classList.add("anim");
+        stageFrame.addEventListener(
+          "load",
+          () => stage.classList.add("loaded"),
+          { once: true },
         );
-        assetCount.textContent = `${total} assets`;
-        renderFamilies();
-        renderItems();
-        renderVariants();
-        renderSelection();
+        stageFrame.src = file;
+
+        // meta
+        document.getElementById("d-eyebrow").textContent = t.n
+          ? `${f.label} · ${t.n}`
+          : f.label;
+        document.getElementById("d-name").textContent = t.name;
+        document.getElementById("d-lede").textContent = t.purpose;
+        document.getElementById("d-raw").href = file;
+
+        // command
+        const cmd = `/speckit-illustrate-generate create ${t.gen}`;
+        document.getElementById("d-cmd").textContent = cmd;
+        const copyBtn = document.getElementById("d-copy");
+        copyBtn.textContent = "COPY";
+        copyBtn.classList.remove("copied");
+        copyBtn.onclick = () => {
+          navigator.clipboard?.writeText(cmd).then(() => {
+            copyBtn.textContent = "COPIED";
+            copyBtn.classList.add("copied");
+            setTimeout(() => {
+              copyBtn.textContent = "COPY";
+              copyBtn.classList.remove("copied");
+            }, 1600);
+          });
+        };
+
+        // variants
+        const vwrap = document.getElementById("d-variants");
+        vwrap.innerHTML = f.variants
+          .map(
+            (x) =>
+              `<a href="#type=${t.key}${
+                x.v ? "&v=" + x.v : ""
+              }" aria-current="${x.v === v ? "true" : "false"}">${x.label}</a>`,
+          )
+          .join("");
+
+        // pager
+        const sib = siblings(t);
+        document.getElementById("prev").href = `#type=${sib.prev.key}`;
+        document.getElementById("next").href = `#type=${sib.next.key}`;
+        document.getElementById("prev").title = sib.prev.name;
+        document.getElementById("next").title = sib.next.name;
+        document.getElementById("back").href = `#family=${t.family}`;
       }
 
-      preview.addEventListener("load", () => {
-        preview.classList.remove("loading");
-        loadState.classList.remove("visible");
-      });
+      /* -------- Router -------- */
+      function parseHash() {
+        const h = location.hash.replace(/^#/, "");
+        return Object.fromEntries(
+          h
+            .split("&")
+            .filter(Boolean)
+            .map((p) => {
+              const [k, val] = p.split("=");
+              return [k, decodeURIComponent(val ?? "")];
+            }),
+        );
+      }
 
-      search.addEventListener("input", () => {
-        state.search = search.value;
-        renderItems();
-      });
-
-      document.addEventListener("keydown", (event) => {
-        if (event.key === "/" && document.activeElement !== search) {
-          event.preventDefault();
-          search.focus();
+      function route() {
+        const q = parseHash();
+        if (q.type) {
+          // ensure the underlying family grid matches (for back nav)
+          const t = byKey[q.type];
+          if (t && t.family !== currentFamily) renderFamily(t.family);
+          catalogView.hidden = true;
+          catalogControls.hidden = true;
+          detailView.hidden = false;
+          detailControls.hidden = false;
+          renderDetail(q.type, q.v || "");
+          window.scrollTo({ top: 0, behavior: "auto" });
+        } else {
+          const fam = FAMILIES[q.family] ? q.family : "editorial";
+          if (fam !== currentFamily || !gridRoot.children.length)
+            renderFamily(fam);
+          detailView.hidden = true;
+          detailControls.hidden = true;
+          catalogView.hidden = false;
+          catalogControls.hidden = false;
+          scheduleScale();
         }
-        if (event.key === "Escape" && document.activeElement === search) {
-          search.value = "";
-          state.search = "";
-          renderItems();
-          search.blur();
-        }
-      });
+      }
 
-      render();
+      window.addEventListener("hashchange", route);
+      window.addEventListener("load", scheduleScale);
+      route();
     </script>
   </body>
 </html>

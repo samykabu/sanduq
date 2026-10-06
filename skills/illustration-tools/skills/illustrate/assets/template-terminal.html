@@ -109,10 +109,18 @@
 
       svg {
         width: 100%;
-        min-width: 900px;
+        min-width: 1000px;
         display: block;
       }
-    </style>
+      /* min-width == viewBox width keeps the type ramp; this wrapper scrolls the diagram, not the page. */
+    .diagram-container { width: 100%; overflow-x: auto; }
+    /* Paper has no scrollbar, so the local scroller would clip instead of
+       scroll. Let the diagram scale down to the sheet. Must follow the svg rule. */
+    @media print {
+      .diagram-container { overflow-x: visible; }
+      svg { min-width: 0; }
+    }
+  </style>
   </head>
   <body>
     <div class="terminal">
@@ -128,7 +136,10 @@
         </p>
         <h1>[Diagram title]</h1>
 
-        <svg viewBox="0 0 1000 600" xmlns="http://www.w3.org/2000/svg">
+        <div class="diagram-container">
+        <svg viewBox="0 0 1000 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="[diagram-slug]-title [diagram-slug]-desc">
+          <title id="[diagram-slug]-title">[Diagram title]</title>
+          <desc id="[diagram-slug]-desc">[One sentence describing what the diagram shows]</desc>
           <defs>
             <marker
               id="arrow"
@@ -164,6 +175,7 @@
              Text sizes run ~1-2px above the default scale: node-name 14px,
              sublabel/arrow-label 9-10px, hub label 18px. See primitive-terminal.md. -->
         </svg>
+        </div>
       </main>
     </div>
   </body>

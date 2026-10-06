@@ -1,0 +1,106 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>World population · Treemap · Hand-drawn</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:  #f5f5f5;
+      --color-ink:    #2d3142;
+      --color-muted:  #4f5d75;
+      --color-accent: #eb6c36;
+      --font-sans:    'Geist', system-ui, sans-serif;
+      --font-serif:   'Instrument Serif', serif;
+      --font-mono:    'Geist Mono', ui-monospace, monospace;
+    }
+    body { font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1200px; width: 100%; }
+    .eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem; }
+    h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 1.5rem; }
+    svg { width: 100%; min-width: 760px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Treemap · Diagram Design · Hand</p>
+    <h1>World population · six continents</h1>
+
+    <svg viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="treemap-title treemap-desc">
+      <title id="treemap-title">World population · six continents</title>
+      <desc id="treemap-desc">Treemap of world population by continent in mid-2023, where cell area is population; Asia holds about 59 percent of the world total and Oceania, at under one percent, is too small to label.</desc>
+      <defs>
+        <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"></circle>
+        </pattern>
+      </defs>
+
+      <rect width="100%" height="100%" fill="#f5f5f5"></rect>
+      <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"></rect>
+
+      <!-- ─── CELLS ─── Squarified layout on a 4px grid. Area is the only
+           encoding: every cell is within 2.7% of its true share, measured as
+           RELATIVE error, because a 0.1pp slip is nothing on Asia and a third
+           of Oceania. Verified by scripts/verify-treemap.py. The non-focal
+           cells run a rank-ordered ink ramp, so their order survives greyscale;
+           the focal cell is marked by its accent stroke, not by tone. ─── -->
+
+      <!-- Asia FOCAL: 532×380 -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M42 40.703 L86 43.376 L130 41.999 L174 43.004 L218 43.257 L262 41.68 L306 41.468 L350 40.946 L394 41.006 L438 41.067 L482 43.233 L526 41.795 L570 41.75 L571.123 83.778 L569.61 125.556 L570.241 167.333 L571.379 209.111 L568.742 250.889 L570.099 292.667 L568.662 334.444 L568.843 376.222 L569.039 418 L526 417.097 L482 417.255 L438 418.279 L394 418.301 L350 418.48 L306 417.447 L262 416.95 L218 418.492 L174 416.691 L130 417.646 L86 416.789 L42 417.374 L40.8 376.222 L40.938 334.444 L42.41 292.667 L41.357 250.889 L40.679 209.111 L43.067 167.333 L43.073 125.556 L41.392 83.778 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M42 40.703 L86 41.237 L130 41.566 L174 42.436 L218 40.617 L262 40.903 L306 40.907 L350 42.46 L394 42.541 L438 40.759 L482 41.887 L526 41.319 L570 42.104 L569.969 83.778 L569.355 125.556 L570.255 167.333 L569.726 209.111 L569.108 250.889 L568.75 292.667 L569.044 334.444 L569.115 376.222 L570.929 418 L526 417.133 L482 416.744 L438 419.356 L394 418.183 L350 417.258 L306 417.774 L262 417.152 L218 418.268 L174 418.022 L130 417.526 L86 418.081 L42 416.833 L42.238 376.222 L42.562 334.444 L41.724 292.667 L40.962 250.889 L43.052 209.111 L40.857 167.333 L40.832 125.556 L43.362 83.778 Z" fill="rgba(235,108,54,0.16)" stroke="none"></path><path class="rough-generated" d="M42 40 C158.93058013845237 40.234089298795915, 274.3365686883405 39.38735430414602, 570 40 M570 40 C572.485946092972 38.37052051378414, 569.1957208742388 41.508987045815836, 572 42 M572 42 C576.4184288362258 177.82755844600374, 575.7352067972232 309.9444951974659, 572 418 M572 418 C574.1069747890346 422.1133748213139, 572.1159996465159 418.8856036354788, 570 420 M570 420 C376.3731682668999 420.10505942598354, 181.87188926357777 421.38730060473455, 42 420 M42 420 C41.42530185875172 418.8793571378104, 42.04839924769476 419.2134188071204, 40 418 M40 418 C38.94755760135203 305.3289750719812, 38.518320010537586 192.46307187025957, 40 42 M40 42 C41.04611660791561 42.961447361080594, 37.82556672149027 38.264546390343455, 42 40 M42 40 C42 40, 42 40, 42 40" stroke="#eb6c36" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="56" y="68" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist', sans-serif">Asia</text>
+      <text x="56" y="88" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">4.78B · 59% of world</text>
+
+      <!-- Africa: 252×252 -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M578 40.703 L619.333 41.898 L660.667 41.133 L702 41.867 L743.333 40.777 L784.667 42.925 L826 43.146 L825.174 83.333 L825.275 124.667 L827.25 166 L827.342 207.333 L824.844 248.667 L826.458 290 L784.667 288.815 L743.333 289.1 L702 290.268 L660.667 290.873 L619.333 289.475 L578 290.201 L577.426 248.667 L577.388 207.333 L578.019 166 L577.168 124.667 L579.033 83.333 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M578 40.704 L619.333 42.56 L660.667 40.7 L702 41.299 L743.333 40.936 L784.667 42.148 L826 42.586 L826.688 83.333 L826.81 124.667 L826.941 166 L825.997 207.333 L827.168 248.667 L826.812 290 L784.667 290.46 L743.333 288.845 L702 290.282 L660.667 289.219 L619.333 289.841 L578 288.851 L577.807 248.667 L577.66 207.333 L577.11 166 L577.203 124.667 L578.522 83.333 Z" fill="rgba(45,49,66,0.16)" stroke="none"></path><path class="rough-generated" d="M578 40 C635.0903770631311 37.85516280378935, 687.6696872630865 34.66383904291609, 826 40 M826 40 C829.8718486611111 40.073387158010156, 826.6715043081902 43.451127315654105, 828 42 M828 42 C825.5161120029264 111.9989440741201, 826.9610287776243 180.96063932525314, 828 290 M828 290 C827.0252582521177 289.17442131082834, 828.8910949966249 289.7132487489842, 826 292 M826 292 C737.6707958307409 291.08516567420617, 643.8239038841473 290.51479383635615, 578 292 M578 292 C578.6940244668784 291.1883740217425, 577.0024035318754 288.95422049372763, 576 290 M576 290 C572.830896755688 236.2753404605298, 572.5076391406246 180.16293442524875, 576 42 M576 42 C574.2307014108635 39.85447046101714, 579.1436237584488 38.19577742060646, 578 40 M578 40 C578 40, 578 40, 578 40" stroke="rgba(45,49,66,0.30)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="592" y="68" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist', sans-serif">Africa</text>
+      <text x="592" y="88" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">1.48B · 18%</text>
+
+      <!-- Europe: 124×252 -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M834 40.704 L874 43.221 L914 43.066 L954 40.731 L953.096 83.333 L953.37 124.667 L954.025 166 L953.402 207.333 L953.544 248.667 L954.633 290 L914 288.651 L874 290.692 L834 291.166 L833.306 248.667 L835.389 207.333 L834.296 166 L834.366 124.667 L834.207 83.333 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M834 40.704 L874 41.082 L914 42.633 L954 42.963 L953.256 83.333 L955.393 124.667 L953.464 166 L954.916 207.333 L955.079 248.667 L954.324 290 L914 290.106 L874 290.216 L834 288.72 L834.952 248.667 L835.134 207.333 L834.309 166 L832.713 124.667 L834.574 83.333 Z" fill="rgba(45,49,66,0.13)" stroke="none"></path><path class="rough-generated" d="M834 40 C859.2409047828056 42.837247678055434, 888.8902516775764 42.97006111086812, 954 40 M954 40 C953.4577512292502 41.77625380223617, 956.1472877421417 39.59326758549238, 956 42 M956 42 C954.2645013039621 96.00732925987724, 953.3220375295963 143.44420320886354, 956 290 M956 290 C957.743541715201 290.03546780034276, 957.666190346734 294.3408938624896, 954 292 M954 292 C913.4781684339978 291.20078612233044, 867.4841482096351 292.40397738183384, 834 292 M834 292 C830.1627470750051 291.49739090567454, 831.9564078160562 292.49502218033496, 832 290 M832 290 C833.8991930844174 202.3675405270034, 833.8328805210961 114.97881811071873, 832 42 M832 42 C833.2152862138115 42.54749356095368, 834.6616807954075 38.12700845086947, 834 40 M834 40 C834 40, 834 40, 834 40" stroke="rgba(45,49,66,0.30)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="848" y="68" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist', sans-serif">Europe</text>
+      <text x="848" y="88" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">0.75B · 9%</text>
+
+      <!-- North America: 208×124 -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M578 296.705 L618.8 297.743 L659.6 298.2 L700.4 298.394 L741.2 297.415 L782 298.615 L780.904 338 L781.629 378 L781.813 418 L741.2 418.015 L700.4 416.761 L659.6 417.741 L618.8 417.074 L578 417.797 L578.879 378 L578.323 338 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M578 296.705 L618.8 298.404 L659.6 297.767 L700.4 297.826 L741.2 297.575 L782 297.838 L783.143 338 L783.143 378 L783.348 418 L741.2 417.707 L700.4 418.216 L659.6 417.265 L618.8 417.428 L578 416.643 L578.624 378 L578.337 338 Z" fill="rgba(45,49,66,0.10)" stroke="none"></path><path class="rough-generated" d="M578 296 C623.4433007055131 291.7964078279146, 666.1337895466727 295.5104549225574, 782 296 M782 296 C782.8436537973894 293.6791204464622, 785.623071176093 297.5354078553307, 784 298 M784 298 C783.5419601863948 337.98871626062316, 785.2810139692156 380.616286106687, 784 418 M784 418 C782.6618251782842 418.8965142898572, 780.641285696843 421.16853897599503, 782 420 M782 420 C712.4523828755265 418.76269473606425, 639.1392775778722 416.3525399615138, 578 420 M578 420 C575.4314696831318 419.8064077896066, 574.9104121002368 418.23582386694227, 576 418 M576 418 C576.4389974381077 386.52508805943654, 576.6714852686273 352.75668126521634, 576 298 M576 298 C574.3998710167594 295.44051666089024, 578.1797378323662 294.0582394811325, 578 296 M578 296 C578 296, 578 296, 578 296" stroke="rgba(45,49,66,0.30)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="592" y="324" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif">North America</text>
+      <text x="592" y="344" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">0.61B · 8%</text>
+
+      <!-- South America: 148×124 -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M790 296.706 L826 299.066 L862 297.334 L898 297.258 L934 297.735 L933.06 338 L934.582 378 L933.857 418 L898 418.082 L862 417.398 L826 416.87 L790 416.789 L789.782 378 L790.288 338 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M790 296.706 L826 296.927 L862 296.901 L898 296.69 L934 297.895 L935.083 338 L934.022 378 L935.371 418 L898 416.817 L862 417.09 L826 418.325 L790 419.113 L790.136 378 L789.134 338 Z" fill="rgba(45,49,66,0.07)" stroke="none"></path><path class="rough-generated" d="M790 296 C823.9114064258523 295.9715435867291, 853.0511760470457 298.35400793897924, 934 296 M934 296 C936.2295563655285 295.3819870906882, 933.2988546100445 299.47754812516894, 936 298 M936 298 C935.9018245936604 331.9938578476198, 934.7293236405822 361.8784898591228, 936 418 M936 418 C937.3801086413674 419.7575607793716, 933.4163810469521 419.99618408950045, 934 420 M934 420 C881.2179590565153 419.3061748311762, 831.2776589718648 418.50695440330543, 790 420 M790 420 C788.7001922912585 420.11542467353866, 785.8644163844176 421.77662555354954, 788 418 M788 418 C791.6110218253685 392.0619865809567, 792.1568696615053 367.0397313964553, 788 298 M788 298 C789.3844558197073 298.1335397608268, 789.6977948693248 293.9894705113955, 790 296 M790 296 C790 296, 790 296, 790 296" stroke="rgba(45,49,66,0.30)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="804" y="324" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif">South America</text>
+      <text x="804" y="344" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">0.43B · 5%</text>
+
+      <!-- Oceania: 16×124. Too narrow for a label, so it carries the info mark
+           rather than sideways text — the only rotated glyph in the figure would
+           read as a mistake. The cell keeps its honest area and is named in the
+           legend: a treemap must not silently omit a part of the whole it claims
+           to show, but it need not label what it cannot label well. -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M942 297.113 L948 297.718 L954 298.869 L954.632 338 L954.037 378 L954.209 418 L948 417.63 L942 418.059 L942.241 378 L941.164 338 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M942 297.113 L948 298.171 L954 298.572 L954.242 338 L954.147 378 L953.676 418 L948 417.246 L942 417.177 L941.373 378 L942.872 338 Z" fill="rgba(45,49,66,0.04)" stroke="none"></path><path class="rough-generated" d="M942 296 C943.4128415480443 295.78473695839983, 947.9086773383059 296.14911084558116, 954 296 M954 296 C957.6154589336676 297.0848537349142, 954.774638043996 295.61968839500724, 956 298 M956 298 C956.261689000926 344.19899943461644, 957.9776333119488 391.1406936115585, 956 418 M956 418 C954.2983921044506 420.618607268886, 954.1914763970611 418.82382920300586, 954 420 M954 420 C948.5228739373572 421.46178446241424, 945.5049712451735 418.6415286994795, 942 420 M942 420 C941.9689148993851 420.4244415574707, 942.6184206685982 419.51742724015685, 940 418 M940 418 C942.4330462126294 379.3988851024769, 943.2922540543834 339.1227815276943, 940 298 M940 298 C938.5690406226553 295.02656286076336, 941.2158519062834 293.9207015416585, 942 296 M942 296 C942 296, 942 296, 942 296" stroke="rgba(45,49,66,0.30)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M950.677 320 L951.023 320.656 L950.787 321.166 L950.568 321.919 L949.967 322.534 L949.203 322.632 L948.734 323.235 L948 323.101 L947.269 323.007 L946.622 322.803 L946.237 322.213 L945.748 321.671 L945.475 321.18 L945.121 320.699 L944.658 320 L944.913 319.276 L945.229 318.559 L945.801 318.313 L946.04 317.612 L946.79 317.354 L947.367 316.923 L948 316.895 L948.741 317.269 L949.392 317.257 L949.972 317.522 L950.543 318.053 L950.39 318.708 L951.08 319.298 Z" fill="#2d3142" stroke="none"></path></g>
+      <text x="948" y="323" fill="#f5f5f5" font-size="7" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">i</text>
+
+      <!-- Legend -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M40 462 C243.5775355412439 467.16874710935167, 448.53438479397454 466.7015932180267, 960 462" stroke="rgba(45,49,66,0.10)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="40" y="478" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+      <text x="960" y="478" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em" text-anchor="end">AREA = POPULATION · OUR WORLD IN DATA CONTINENTS (UN WPP) · MID-2023 · 8.09B TOTAL · PARTS ROUNDED, MAY NOT SUM</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M42 489.557 L48 489.806 L54 489.84 L53.537 493 L54.238 496 L48 495.998 L42 496.006 L42.186 493 Z" fill="rgba(235,108,54,0.16)" stroke="none"></path><path class="rough-generated" d="M42 488 C44.912372022606434 487.196836364367, 45.906702774949366 489.44355316529516, 54 488 M54 488 C53.894312785876295 485.8391537012532, 56.9883131949231 490.5328987997646, 56 490 M56 490 C55.852989666003275 492.0251548159309, 55.92757332815556 493.8464823148586, 56 496 M56 496 C58.37581729907542 497.0101770031576, 52.454119422224665 500.865296873264, 54 498 M54 498 C50.13502978686243 496.36215764401015, 49.86055122692138 496.9908166217571, 42 498 M42 498 C38.07199881157527 495.9879668833688, 38.14942709486932 499.9286297700678, 40 496 M40 496 C40.668570573378815 495.12123291121793, 40.19734492843272 492.5741331089474, 40 490 M40 490 C37.24591782707721 488.1660975106682, 40.4929374617214 488.717548087053, 42 488 M42 488 C42 488, 42 488, 42 488" stroke="#eb6c36" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="64" y="497" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Asia · the focal share</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M242 489.557 L248 490.032 L254 489.692 L254.302 493 L254.292 496 L248 495.732 L242 495.814 L241.745 493 Z" fill="rgba(45,49,66,0.16)" stroke="none"></path><path class="rough-generated" d="M242 488 C245.41221551412715 489.17586949968944, 246.39937792049722 487.41003393853316, 254 488 M254 488 C254.58726406994586 486.6905870233662, 257.72620491189883 491.50396893468377, 256 490 M256 490 C255.9509332097031 491.3664612108935, 256.45878366147053 492.38688319155017, 256 496 M256 496 C253.93495903061702 494.5407002479148, 255.7416670972792 500.27911943001675, 254 498 M254 498 C249.07241507003084 496.77894870454213, 244.63241122083738 499.717245929183, 242 498 M242 498 C238.7063601156386 499.0424753253348, 240.52642923695967 498.7990306133715, 240 496 M240 496 C240.90049895537203 493.6336026313621, 239.60627731126849 490.9502605124656, 240 490 M240 490 C238.73821022855117 486.61260906063643, 240.2519659802007 485.7831636021845, 242 488 M242 488 C242 488, 242 488, 242 488" stroke="rgba(45,49,66,0.30)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="264" y="497" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Other continents · stronger contrast is larger</text>
+
+      <g class="rough-shape" data-source-tag="circle"><path class="rough-fill-mask" d="M518.677 493 L518.6 493.685 L518.931 494.436 L518.13 494.99 L518.051 495.293 L517.227 495.834 L516.657 495.792 L516 496.115 L515.325 495.682 L514.6 495.516 L514.067 495.597 L513.721 494.789 L513.135 494.433 L512.948 493.616 L513.156 493 L512.98 492.303 L513.326 491.794 L513.772 491.173 L514.032 490.921 L514.671 490.453 L515.398 490.05 L516 489.735 L516.632 490.308 L517.378 490.156 L517.774 490.699 L518.609 491.278 L518.496 491.801 L518.691 492.404 Z" fill="#2d3142" stroke="none"></path></g>
+      <text x="516" y="496" fill="#f5f5f5" font-size="7" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">i</text>
+      <text x="532" y="497" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Oceania · 0.05B, 0.6% — too small to label</text>
+    </svg>
+  </div>
+
+
+</body></html>

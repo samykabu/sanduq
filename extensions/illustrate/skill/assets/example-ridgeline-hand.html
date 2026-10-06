@@ -1,0 +1,103 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Request latency by service · Ridgeline · Hand-drawn</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:  #f5f5f5;
+      --color-ink:    #2d3142;
+      --color-muted:  #4f5d75;
+      --color-accent: #eb6c36;
+      --font-sans:    'Geist', system-ui, sans-serif;
+      --font-serif:   'Instrument Serif', serif;
+      --font-mono:    'Geist Mono', ui-monospace, monospace;
+    }
+    body { font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1200px; width: 100%; }
+    .eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem; }
+    h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 1.5rem; }
+    svg { width: 100%; min-width: 760px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Ridgeline · Illustrate · Hand</p>
+    <h1>Checkout is slow in two different ways</h1>
+
+    <svg viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="ridgeline-title ridgeline-desc">
+      <title id="ridgeline-title">Checkout is slow in two different ways</title>
+      <desc id="ridgeline-desc">Ridgeline chart of request-latency distributions for five services over one week; each ridge is the share of that service's requests falling in 40-millisecond bins, drawn on one shared amplitude scale, and checkout-api carries a second peak past 300 milliseconds that none of the other four show.</desc>
+      <defs>
+        <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"></circle>
+        </pattern>
+      </defs>
+
+      <rect width="100%" height="100%" fill="#f5f5f5"></rect>
+      <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"></rect>
+
+      <!-- ONE amplitude on every ridge: y = baseline - 2.4 x (share in %). Per-ridge
+           normalisation would let a rare, flat distribution wear the same silhouette
+           as a tight one, which is the single lie this type is built to tell.
+           scripts/verify-ridgeline.py derives the amplitude from the figure and then
+           holds every vertex of every ridge to it. -->
+      <text transform="rotate(-90 24 264)" x="24" y="264" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" letter-spacing="0.14em" text-anchor="middle">SHARE OF REQUESTS · 1% = 2.4PX ON EVERY RIDGE</text>
+
+      <!-- One baseline per ridge, 56px pitch. The baseline is where a bin of zero
+           requests sits, so it can never be moved to give a ridge more room. -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M320 152 C400.65498771258626 157.3526587260726, 481.68273058757865 154.3109106291558, 680 152" stroke="rgba(45,49,66,0.25)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M320 208 C401.2091058711071 210.03113324557177, 482.255827740422 210.1003473566967, 680 208" stroke="rgba(45,49,66,0.25)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M320 264 C401.7632240296279 262.7096077650709, 482.8289248932653 262.21672528423755, 680 264" stroke="rgba(45,49,66,0.25)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M320 320 C402.3173421881487 319.0611410845701, 483.4020220461086 318.00616201177843, 680 320" stroke="rgba(45,49,66,0.25)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M320 376 C402.87146034666955 371.7396156040693, 483.9751191989519 373.79559873931936, 680 376" stroke="rgba(45,49,66,0.25)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+      <!-- Shared x-scale: every ridge is sampled at the same 13 bins, 40ms wide,
+           labelled at the lower edge. Straight segments between bins - no smoothing,
+           because a spline through 13 bins invents extrema the sample never had. -->
+      <g class="rough-shape" data-source-tag="path"><path class="rough-fill-mask" d="M320,152 L350,89.6 L380,70.4 L410,101.6 L440,125.6 L470,140 L500,147.2 L530,149.6 L560,152 L590,152 L620,152 L650,152 L680,152 Z" fill="rgba(45,49,66,0.12)" stroke="none"></path><path class="rough-generated" d="M320 152 C324.41146424851655 140.79412890497014, 336.45797432075534 123.23228480446502, 350 89.6 M350 89.6 C356.9257861809134 84.09785919627757, 369.662567564778 76.27133263787837, 380 70.4 M380 70.4 C386.7117607774935 77.42064943290664, 395.53327161863217 86.87864779039634, 410 101.6 M410 101.6 C417.47779639067596 107.52568702633143, 422.99667377306616 111.85422832230688, 440 125.6 M440 125.6 C450.612258117103 128.786600203173, 455.83329842129444 131.9538160492049, 470 140 M470 140 C477.2041626095004 140.12126069432708, 487.39102904919304 143.80290456368238, 500 147.2 M500 147.2 C506.587128767367 148.56164397149695, 519.6110419260297 148.1305701781006, 530 149.6 M530 149.6 C537.2956423362014 152.09723646769882, 544.6012285384578 150.98228704842387, 560 152 M560 152 C565.0343497580849 152.1383031690435, 571.3825516724028 150.17858810368344, 590 152 M590 152 C598.2258236714639 153.97726645088406, 603.0483151755295 153.3139550021908, 620 152 M620 152 C633.312682417687 153.01987411751762, 645.1701693111099 154.232656324649, 650 152 M650 152 C660.4740245678462 153.43061336065296, 667.8354289344512 149.09986292804243, 680 152 M680 152 C555.8489988035044 151.3546694980166, 429.0413791299258 151.02868293955854, 320 152" stroke="rgba(45,49,66,0.80)" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text data-ridge="static-cdn" data-role="name" x="304" y="155.5" fill="#2d3142" font-size="11" font-weight="500" font-family="'Geist', sans-serif" text-anchor="end">static-cdn</text>
+      <text data-ridge="static-cdn" data-role="range" x="696" y="155.5" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">40–280 ms</text>
+      <g class="rough-shape" data-source-tag="path"><path class="rough-fill-mask" d="M320,208 L350,193.6 L380,140.8 L410,121.6 L440,164.8 L470,191.2 L500,200.8 L530,205.6 L560,205.6 L590,208 L620,208 L650,208 L680,208 Z" fill="rgba(45,49,66,0.12)" stroke="none"></path><path class="rough-generated" d="M320 208 C324.76006126291117 205.07287691037868, 330.9953883416858 203.2844901175401, 350 193.6 M350 193.6 C358.2520215214584 175.81885877095394, 368.1801048857514 158.9823079698556, 380 140.8 M380 140.8 C389.5511943899393 134.0824867540947, 399.2059016209394 130.6275260883919, 410 121.6 M410 121.6 C413.06166824837214 130.46901818543904, 421.6051346058864 138.9950823438191, 440 164.8 M440 164.8 C445.69674438240475 168.31917267363286, 451.6314721007133 175.67021149720762, 470 191.2 M470 191.2 C483.27218131675943 193.2333942718082, 494.58285981483385 195.8492345095449, 500 200.8 M500 200.8 C510.43540671720916 201.90845015842234, 518.8879070743154 206.08315930831947, 530 205.6 M530 205.6 C538.737805105187 204.18144824221963, 541.9284990122542 206.22569548204774, 560 205.6 M560 205.6 C569.5756464508726 204.57841200824595, 581.5252365396722 206.38506923567272, 590 208 M590 208 C597.2328913757577 208.21293618582422, 608.081674956344 206.20801483892137, 620 208 M620 208 C626.2086673041806 210.55201321992791, 636.9031822839752 206.59800064120208, 650 208 M650 208 C656.2400971302762 209.57809184879298, 666.3321125200018 210.79577315539356, 680 208 M680 208 C540.5343710028307 208.28338267816983, 399.3134041062651 208.85697289312708, 320 208" stroke="rgba(45,49,66,0.74)" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text data-ridge="auth-api" data-role="name" x="304" y="211.5" fill="#2d3142" font-size="11" font-weight="500" font-family="'Geist', sans-serif" text-anchor="end">auth-api</text>
+      <text data-ridge="auth-api" data-role="range" x="696" y="211.5" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">40–320 ms</text>
+      <g class="rough-shape" data-source-tag="path"><path class="rough-fill-mask" d="M320,264 L350,261.6 L380,242.4 L410,211.2 L440,199.2 L470,218.4 L500,237.6 L530,249.6 L560,256.8 L590,261.6 L620,261.6 L650,264 L680,264 Z" fill="rgba(45,49,66,0.12)" stroke="none"></path><path class="rough-generated" d="M320 264 C325.7727845217264 261.2068502921996, 331.9969286070368 261.2471461834398, 350 261.6 M350 261.6 C360.0972747653127 252.75655208611747, 373.0166601100341 248.12667078280705, 380 242.4 M380 242.4 C391.2254568512435 234.4450430156302, 395.913360472105 223.6903422670823, 410 211.2 M410 211.2 C421.1034858267498 207.41424411667393, 432.8715411593882 203.45222590958582, 440 199.2 M440 199.2 C452.47416683057696 209.01224651765193, 465.1225819630027 213.82010969232883, 470 218.4 M470 218.4 C477.44601995738594 223.42830866770703, 483.8805105138421 230.77362609224278, 500 237.6 M500 237.6 C508.6783873834205 240.77798483081276, 518.3594749389705 244.99370540946836, 530 249.6 M530 249.6 C534.3846209902172 251.0188093853544, 539.2604226020951 252.4629026528995, 560 256.8 M560 256.8 C568.0252281941483 255.2114823872235, 573.7762064574296 260.2899734472123, 590 261.6 M590 261.6 C596.0399590800516 260.0486059207644, 601.1150347371586 262.50207467565195, 620 261.6 M620 261.6 C630.9283764277347 260.61904099032404, 640.659919493901 263.8331222937268, 650 264 M650 264 C657.8061696927064 265.725570336933, 664.8287961055524 266.69168338274466, 680 264 M680 264 C597.219743202157 268.8851546583231, 513.5854290826045 266.68526284669565, 320 264" stroke="rgba(45,49,66,0.68)" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text data-ridge="search-api" data-role="name" x="304" y="267.5" fill="#2d3142" font-size="11" font-weight="500" font-family="'Geist', sans-serif" text-anchor="end">search-api</text>
+      <text data-ridge="search-api" data-role="range" x="696" y="267.5" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">40–400 ms</text>
+
+      <!-- checkout-api FOCAL - and it is the ridge whose SHAPE is the story,
+           not the slowest service. Drawn last so its second peak reads over the
+           ridge below it rather than under. -->
+      <g class="rough-shape" data-source-tag="path"><path class="rough-fill-mask" d="M320,320 L350,317.6 L380,305.6 L410,279.2 L440,269.6 L470,286.4 L500,300.8 L530,305.6 L560,303.2 L590,298.4 L620,303.2 L650,310.4 L680,320 Z" fill="rgba(235,108,54,0.16)" stroke="none"></path><path class="rough-generated" d="M320 320 C326.5678582658823 320.42437029984313, 332.78081935772855 319.576895500985, 350 317.6 M350 317.6 C362.2502571175713 315.5032018723665, 372.3609444427211 309.28894653792963, 380 305.6 M380 305.6 C388.05414350542617 300.2125917838188, 399.375243516149 292.85064345907887, 410 279.2 M410 279.2 C423.2496032524928 276.0781272737263, 432.2422475602552 274.0341839269875, 440 269.6 M440 269.6 C447.46408210369015 275.88498012479863, 460.826184650233 281.0168274137052, 470 286.4 M470 286.4 C483.6240147293098 292.92724258627277, 491.1823173441477 297.70605672027455, 500 300.8 M500 300.8 C506.6821652968861 301.1346792421909, 517.5918400508799 301.56607098859274, 530 305.6 M530 305.6 C541.7964693854693 306.0657018635748, 554.357378702158 303.1191724939225, 560 303.2 M560 303.2 C572.5769188291393 302.79911950108135, 578.1292852669023 302.3915111285122, 590 298.4 M590 298.4 C600.9169171056412 302.271919284421, 606.2182848392688 298.97142176981544, 620 303.2 M620 303.2 C629.8348153018784 305.65837359767875, 644.4033864544165 305.6128536201687, 650 310.4 M650 310.4 C659.5120064075068 314.3944677124498, 663.4652438434734 317.2304313848494, 680 320 M680 320 C581.9051154014833 317.5494855384763, 483.8574540589438 316.2491705002642, 320 320" stroke="#eb6c36" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text data-ridge="checkout-api" data-role="name" x="304" y="323.5" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="end">checkout-api</text>
+      <text data-ridge="checkout-api" data-role="range" x="696" y="323.5" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">40–440 ms</text>
+      <g class="rough-shape" data-source-tag="path"><path class="rough-fill-mask" d="M320,376 L350,376 L380,373.6 L410,368.8 L440,359.2 L470,347.2 L500,335.2 L530,330.4 L560,337.6 L590,347.2 L620,354.4 L650,366.4 L680,376 Z" fill="rgba(45,49,66,0.12)" stroke="none"></path><path class="rough-generated" d="M320 376 C327.41835088757796 375.4732312421955, 333.62012898596004 374.2818266879476, 350 376 M350 376 C363.7537193220048 376.1237199530483, 371.055708627583 375.3989588819177, 380 373.6 M380 373.6 C390.48283845014964 369.7349676033936, 396.8371348507339 370.52059875384793, 410 368.8 M410 368.8 C419.2189810923729 366.5137225133285, 431.23621437525935 359.6720661094889, 440 359.2 M440 359.2 C448.1825775398244 356.12841163460973, 456.4583675004844 354.66744094041053, 470 347.2 M470 347.2 C478.2424270397122 345.6872842909128, 486.72454171293185 339.4482029204548, 500 335.2 M500 335.2 C504.85320222307837 332.2133566828898, 516.9914641755158 334.1824026263586, 530 330.4 M530 330.4 C543.3181561106774 330.98627913192956, 551.764173132177 335.2353119152144, 560 337.6 M560 337.6 C565.197246832164 340.02650776450406, 570.3510014444087 340.4850511089422, 590 347.2 M590 347.2 C599.8234899202766 350.6278286155045, 611.1511497304249 353.1059607988328, 620 354.4 M620 354.4 C628.4919281940604 358.4809277636639, 636.0975274329702 359.15902806387163, 650 366.4 M650 366.4 C655.1839023581724 369.3011011363671, 661.8677508172598 371.7321514837549, 680 376 M680 376 C566.5904876008096 374.4781987186295, 454.1294790352831 374.0774604538327, 320 376" stroke="rgba(45,49,66,0.62)" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text data-ridge="report-export" data-role="name" x="304" y="379.5" fill="#2d3142" font-size="11" font-weight="500" font-family="'Geist', sans-serif" text-anchor="end">report-export</text>
+      <text data-ridge="report-export" data-role="range" x="696" y="379.5" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">80–440 ms</text>
+
+      <!-- Bin ticks on the shared latency scale. data-bin binds the printed number,
+           so a caption cannot be edited without its binding. -->
+      <text data-tick="0" data-bin="0" x="320" y="400" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.14em" text-anchor="middle">0</text>
+      <text data-tick="1" data-bin="120" x="410" y="400" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.14em" text-anchor="middle">120</text>
+      <text data-tick="2" data-bin="240" x="500" y="400" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.14em" text-anchor="middle">240</text>
+      <text data-tick="3" data-bin="360" x="590" y="400" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.14em" text-anchor="middle">360</text>
+      <text data-tick="4" data-bin="480" x="680" y="400" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.14em" text-anchor="middle">480</text>
+      <text x="500" y="424" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" letter-spacing="0.18em" text-anchor="middle">REQUEST LATENCY (MS), BIN LOWER EDGE</text>
+
+      <!-- Legend -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M40 462 C249.12342256478968 465.8943882981129, 457.4222081222386 465.0627915683575, 960 462" stroke="rgba(45,49,66,0.10)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="40" y="478" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+      <text x="960" y="478" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em" text-anchor="end">SHARE OF EACH SERVICE'S OWN REQUESTS PER 40 MS BIN · 1% = 2.4PX ON EVERY RIDGE · UNSMOOTHED · ILLUSTRATIVE FIGURES</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M42 487.566 L52 487.532 L62 488.088 L62.01 491 L61.799 494 L52 494.201 L42 493.64 L42.341 491 Z" fill="rgba(235,108,54,0.16)" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M40 486 C42.758883108198646 483.5756690572947, 53.36613423973322 485.52150269262495, 64 486" stroke="#eb6c36" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="72" y="496" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">checkout-api · focal, second peak past 300 ms</text>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M362 487.566 L372 487.986 L382 487.791 L381.62 491 L381.908 494 L372 493.668 L362 494.216 L362.419 491 Z" fill="rgba(45,49,66,0.12)" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M360 486 C364.42563947979363 485.1778980700206, 369.20960752461104 485.3485571650695, 384 486" stroke="rgba(45,49,66,0.80)" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="392" y="496" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Other services · strongest tone is the fastest median</text>
+    </svg>
+  </div>
+
+
+</body></html>

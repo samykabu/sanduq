@@ -1,0 +1,179 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payments domain · UML class diagram · Hand-drawn</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f5f5f5;
+      --color-ink:     #2d3142;
+      --color-muted:   #4f5d75;
+      --color-accent:  #eb6c36;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+
+    .frame { max-width: 1240px; width: 100%; }
+
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+
+    svg { width: 100%; min-width: 900px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">UML class · Diagram Design · Hand</p>
+    <h1>Payments domain · class diagram</h1>
+
+    <svg viewBox="0 0 980 664" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="uml-class-title uml-class-desc">
+      <title id="uml-class-title">Payments domain · UML class diagram</title>
+      <desc id="uml-class-desc">Class diagram showing Card and BankTransfer realizing a PaymentMethod interface, PaymentService depending on PaymentMethod, and Order composed of OrderLine while associated with Customer.</desc>
+      <defs>
+        
+        
+        
+        
+      </defs>
+
+      <rect width="100%" height="100%" fill="#f5f5f5"></rect>
+
+      <!-- Relationships (drawn before boxes) -->
+      <!-- Card realizes PaymentMethod -->
+      <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M480 240 C479.60999867027857 215.46292673097923, 481.1993791521178 197.84717972734944, 480 140" stroke="#eb6c36" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4"></path><path class="rough-generated" d="M480.988546422869 141.52437830790876 L482.6653010644019 149.14767974242568 L478.848846630007 148.67567706927656" stroke="none" stroke-width="0" fill="#eb6c36" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M480 140 C481.0997010819143 143.28360430407048, 481.6930634850324 143.7426940295351, 484 150 M484 150 C481.89893780440093 150.18222138572486, 479.6318811807036 151.03642147231847, 476 150 M476 150 C476.7854411715233 147.4699767378234, 478.27497649126497 144.54960257308926, 480 140" stroke="#eb6c36" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4"></path></g>
+      <!-- BankTransfer realizes PaymentMethod -->
+      <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M760 240 C758.8264180091676 218.91504305414855, 760.4023227480706 194.60406628213823, 760 140" stroke="#eb6c36" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4"></path><path class="rough-generated" d="M760.4023689796217 138.55301531804724 L766.0024174590595 151.69316626144573 L753.2286062468775 149.05214302195236" stroke="none" stroke-width="0" fill="#eb6c36" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M760 140 C761.7093193875944 141.99183605787132, 762.2957305809813 145.09710524825576, 764 150 M764 150 C762.0962068834529 149.78970904423392, 760.5477736146375 149.1467507977644, 756 150 M756 150 C758.1661945014805 148.19508627518863, 757.0142264364398 146.34050506699964, 760 140" stroke="#eb6c36" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4"></path></g>
+      <!-- PaymentService depends on PaymentMethod -->
+      <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M320 100 C343.2147872236557 96.92662803489948, 366.7934870787896 99.5366923536756, 420 100" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4,3"></path><path class="rough-generated" d="M419.8161915363744 101.38165232818574 L409.53953385371716 102.43865278046579 L407.4083658637479 95.42860897462815" stroke="none" stroke-width="0" fill="#4f5d75" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M420 100 C418.88799571979024 99.34269869075257, 416.32242837702563 100.62288290373881, 410 104 M410 104 C410.3646893093828 101.27163081385196, 409.37567354180845 99.29072008796037, 410 96 M410 96 C411.5134112217813 97.73315745586174, 415.1759604596294 96.6425091426685, 420 100" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4,3"></path></g>
+      <!-- Order composed of OrderLine -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M260 480 C288.4587563795969 483.4368048407603, 310.6364056615159 479.3592818893958, 380 480" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <!-- Order associates Customer (routed below to clear OrderLine) -->
+      <g class="rough-shape" data-source-tag="path" data-rough-arrowhead="true"><path class="rough-generated" d="M160 540 C162.5851013964787 546.7530457531102, 158.32057890657336 554.638033405412, 160 572 M160 572 C161.16157957119867 579.3408146644322, 165.19800013803567 581.3979964529165, 168 580 M168 580 C337.6815426952019 575.7663569292891, 505.65255136597904 575.0549559686053, 752 580 M752 580 C758.5134206766573 582.196149591636, 757.9369378571398 577.2606353313041, 760 572 M760 572 C760.8334065379947 560.1764681582339, 763.1302054020018 552.5809219663031, 760 540" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M758.6438366498799 541.2389263484627 L764.4137666430324 547.7296258185058 L753.7678850974887 550.1815408799797" stroke="none" stroke-width="0" fill="#4f5d75" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M760 540 C759.6897787164974 541.2399269074119, 760.2553362806899 542.9135477281418, 764 550 M764 550 C760.3680141206086 550.9321720197611, 758.6554509164393 550.4377387741022, 756 550 M756 550 C756.4991633150761 545.3920192991462, 757.5928718601025 541.6114213724547, 760 540" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+      <!-- Dependency label -->
+      <rect x="352" y="80" width="32" height="12" rx="2" fill="#f5f5f5"></rect>
+      <text x="368" y="89" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">USES</text>
+
+      <!-- Composition multiplicities -->
+      <rect x="288" y="474" width="12" height="12" rx="2" fill="#f5f5f5"></rect>
+      <text x="294" y="484" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">1</text>
+      <rect x="348" y="474" width="24" height="12" rx="2" fill="#f5f5f5"></rect>
+      <text x="360" y="484" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">1..*</text>
+
+      <!-- Association multiplicities -->
+      <rect x="164" y="548" width="28" height="12" rx="2" fill="#f5f5f5"></rect>
+      <text x="178" y="557" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">0..*</text>
+      <rect x="752" y="548" width="16" height="12" rx="2" fill="#f5f5f5"></rect>
+      <text x="760" y="557" fill="#2d3142" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">1</text>
+
+      <!-- Class: PaymentMethod (interface, focal) -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M422 40.702 L461.556 43.083 L501.111 41.748 L540.667 42.056 L580.222 41.789 L619.778 43.071 L659.333 42.16 L698.889 41.333 L738.444 41.374 L778 41.193 L778.852 74 L776.925 106 L776.923 138 L738.444 137.575 L698.889 138.015 L659.333 136.91 L619.778 137.312 L580.222 139.197 L540.667 137.722 L501.111 139.268 L461.556 137.74 L422 137.071 L422.711 106 L421.572 74 Z" fill="rgba(235,108,54,0.04)" stroke="none"></path><path class="rough-generated" d="M426 40 C501.3200301959991 37.24868406425752, 579.0107453491872 37.2142574464142, 774 40 M774 40 C779.8545308552682 42.85891465321183, 777.4692251883447 44.36906658783555, 780 46 M780 46 C781.0915485469625 65.92790720686318, 780.2323637811467 90.2120421729982, 780 134 M780 134 C782.5392290748656 137.7266728363931, 779.2244855321944 139.3411245547235, 774 140 M774 140 C638.584015550861 137.3102981539446, 500.9428594647871 137.19751560172293, 426 140 M426 140 C421.1860514841974 139.09119369164108, 422.2106892071664 135.97871913090347, 420 134 M420 134 C416.4290690850094 111.13270763382316, 421.04674512851983 89.7763566814363, 420 46 M420 46 C418.8316666521132 44.58096415624023, 423.72078587189316 42.254822155088185, 426 40 M426 40 C426 40, 426 40, 426 40" stroke="#eb6c36" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M422 40.703 L461.556 40.944 L501.111 41.315 L540.667 41.488 L580.222 41.949 L619.778 42.294 L659.333 41.6 L698.889 42.847 L738.444 42.908 L778 40.884 L777.506 60 L779.25 78 L738.444 77.277 L698.889 79.22 L659.333 77.76 L619.778 76.924 L580.222 78.458 L540.667 76.763 L501.111 79.173 L461.556 76.849 L422 78.012 L422.961 60 Z" fill="rgba(235,108,54,0.10)" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M422 73.676 L461.556 73.901 L501.111 73.72 L540.667 73.73 L580.222 74.027 L619.778 73.879 L659.333 73.76 L698.889 73.89 L738.444 73.911 L778 74.344 L778.24 76 L778.193 78 L738.444 77.908 L698.889 78.016 L659.333 77.876 L619.778 77.734 L580.222 77.701 L540.667 77.782 L501.111 77.956 L461.556 77.808 L422 78.071 L422.013 76 Z" fill="rgba(235,108,54,0.10)" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M420 80 C499.66922887852763 82.94446761721808, 580.0311423466036 81.2248052576488, 780 80" stroke="rgba(235,108,54,0.40)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="600" y="56" fill="#eb6c36" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">«interface»</text>
+      <text x="600" y="72" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">PaymentMethod</text>
+      <text x="436" y="100" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ authorize(amount: Money): AuthResult</text>
+      <text x="436" y="120" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ capture(ref: String): void</text>
+
+      <!-- Class: Card -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M382 240.704 L421.2 242.928 L460.4 242.815 L499.6 242.583 L538.8 242.428 L578 242.761 L578.718 280.667 L577.788 319.333 L577.912 358 L538.8 358.758 L499.6 359.071 L460.4 357.822 L421.2 358.339 L382 358.557 L380.994 319.333 L380.965 280.667 Z" fill="#ffffff" stroke="none"></path><path class="rough-generated" d="M386 240 C428.71048876009877 239.4987905723322, 471.6697520475835 241.6957440001238, 574 240 M574 240 C576.8263359915466 240.46464794166386, 580.4207920562476 242.4533471275121, 580 246 M580 246 C581.5253089258727 276.55867519043386, 580.643014688259 309.5774192970246, 580 354 M580 354 C582.175796001032 359.44876581542195, 580.7746762324125 362.79641478173437, 574 360 M574 360 C503.87396269105375 356.6620687095355, 432.8557415168732 354.4870185820293, 386 360 M386 360 C383.72349670045077 359.7092274595052, 380.11869777552783 357.2603225041181, 380 354 M380 354 C377.9660547656659 319.7545662101358, 377.41045082041063 287.63858001045884, 380 246 M380 246 C379.0008362580091 244.1670103561133, 382.75689994581046 242.1172842156142, 386 240 M386 240 C386 240, 386 240, 386 240" stroke="#2d3142" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M380 280 C426.0005497964206 275.98456386619296, 466.24464521362324 277.16295936455873, 580 280" stroke="rgba(45,49,66,0.22)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="480" y="264" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Card</text>
+      <text x="396" y="300" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">- number: String</text>
+      <text x="396" y="320" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">- expiry: Date</text>
+      <text x="396" y="340" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">- cvv: String</text>
+
+      <!-- Class: BankTransfer -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M662 240.705 L701.2 241.45 L740.4 241.949 L779.6 241.447 L818.8 242.747 L858 241.206 L857.596 274 L858.016 306 L858.181 338 L818.8 338.141 L779.6 339.18 L740.4 336.871 L701.2 339.046 L662 339.048 L663.284 306 L660.993 274 Z" fill="#ffffff" stroke="none"></path><path class="rough-generated" d="M666 240 C710.4023125259206 237.5845472794259, 747.5633601209148 238.0063261669362, 854 240 M854 240 C858.2122385596856 242.16751458588988, 861.896575490199 244.39548739735037, 860 246 M860 246 C861.7565106174629 266.85075697209686, 857.9626616439502 289.2135034387931, 860 334 M860 334 C859.0940794641152 340.3098123049364, 855.7497715825215 341.6240598952398, 854 340 M854 340 C785.1587400002405 343.3968939345842, 710.8822608938441 343.1206379633909, 666 340 M666 340 C659.1922193085775 340.01824434343723, 659.0727020597085 340.8011241907254, 660 334 M660 334 C660.4983404797782 314.5871468266472, 660.25609654014 294.71299433168025, 660 246 M660 246 C661.985421060957 241.06003345604987, 662.274956982769 242.0485152458772, 666 240 M666 240 C666 240, 666 240, 666 240" stroke="#2d3142" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M660 280 C702.3080065242887 280.6123313241134, 747.7782654979044 280.1931158907641, 860 280" stroke="rgba(45,49,66,0.22)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="760" y="264" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">BankTransfer</text>
+      <text x="676" y="300" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">- iban: String</text>
+      <text x="676" y="320" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">- accountHolder: String</text>
+
+      <!-- Class: PaymentService -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M42 60.705 L81.429 62.773 L120.857 61.083 L160.286 63.11 L199.714 63.067 L239.143 62.451 L278.571 63.275 L318 62.244 L318.45 100 L317.524 138 L278.571 139.289 L239.143 138.719 L199.714 136.954 L160.286 136.74 L120.857 138.773 L81.429 137.02 L42 138.085 L43.328 100 Z" fill="#ffffff" stroke="none"></path><path class="rough-generated" d="M46 60 C104.24207757595902 62.170765494251754, 164.58343545012443 61.10614170647946, 314 60 M314 60 C319.59814112782476 58.07038123011589, 317.5723589241505 60.537627667188644, 320 66 M320 66 C321.8149493293464 87.90426583886146, 320.9095456199348 116.17244175076485, 320 134 M320 134 C321.8123629271984 135.37085879445075, 316.5248669326305 140.4517050087452, 314 140 M314 140 C216.3229333905027 143.40522334972587, 115.35911987800003 144.68156315834764, 46 140 M46 140 C40.46094191670418 140.32726122736932, 38.02670634388924 138.5419258773327, 40 134 M40 134 C39.6252921243012 112.83795395493507, 39.6964081902802 88.62386167645454, 40 66 M40 66 C39.170005863904954 63.753056555986404, 41.79301401972771 61.97974627614021, 46 60 M46 60 C46 60, 46 60, 46 60" stroke="#2d3142" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M40 100 C101.57809574090462 98.62105175008783, 164.5542761229245 96.90304701189608, 320 100" stroke="rgba(45,49,66,0.22)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="180" y="84" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">PaymentService</text>
+      <text x="56" y="120" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">+ charge(order: Order): Receipt</text>
+
+      <!-- Class: Order -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M62 420.706 L101.2 421.295 L140.4 423.016 L179.6 421.974 L218.8 423.386 L258 420.896 L258.153 460.667 L258.472 499.333 L258.719 538 L218.8 536.907 L179.6 539.399 L140.4 537.768 L101.2 537.662 L62 537.231 L62.263 499.333 L61.048 460.667 Z" fill="#ffffff" stroke="none"></path><path class="rough-generated" d="M66 420 C107.98596005756409 414.77106069361326, 150.95057626757773 417.44249050056095, 254 420 M254 420 C255.1840436959639 419.7732478743419, 259.0481423581019 422.4797679370269, 260 426 M260 426 C262.44941546593327 457.03938432801516, 258.63245702062267 487.69459930751475, 260 534 M260 534 C258.7306463902816 536.2319052839651, 257.29996228273956 539.2793501222507, 254 540 M254 540 C187.728294618614 543.2365443846817, 118.5352996477857 540.9578767261143, 66 540 M66 540 C61.72966452483088 540.6362781113014, 62.78071062806994 536.2827275639399, 60 534 M60 534 C58.80582726481836 503.68166563529525, 59.19030333641451 473.52053812537343, 60 426 M60 426 C62.15459066685289 420.64607965592296, 61.311071056686345 421.9109773064032, 66 420 M66 420 C66 420, 66 420, 66 420" stroke="#2d3142" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M60 460 C105.36261838002477 463.3430547399544, 150.8455060664667 464.9484666431748, 260 460" stroke="rgba(45,49,66,0.22)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="160" y="444" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Order</text>
+      <text x="76" y="480" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">- id: String</text>
+      <text x="76" y="500" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">- placedAt: Date</text>
+      <text x="76" y="520" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">- total: Money</text>
+
+      <!-- Class: OrderLine -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M382 420.707 L421.2 422.618 L460.4 422.15 L499.6 420.837 L538.8 420.906 L578 422.141 L577.032 460.667 L578.7 499.333 L578.988 538 L538.8 539.089 L499.6 536.708 L460.4 536.816 L421.2 538.37 L382 537.722 L381.753 499.333 L381.075 460.667 Z" fill="#ffffff" stroke="none"></path><path class="rough-generated" d="M386 420 C429.6777838233859 419.6718174007069, 466.8441843409091 420.5680726673733, 574 420 M574 420 C576.569946264103 421.4761145185679, 580.5239257920533 424.42190820686517, 580 426 M580 426 C582.7574509792868 446.13295404054224, 581.8289377980772 470.7336593110114, 580 534 M580 534 C581.4489298533648 537.0929517734796, 578.0750576328486 538.106995235756, 574 540 M574 540 C509.0130719278008 543.1563696097303, 436.5618190247566 542.7764961074759, 386 540 M386 540 C382.9983871329576 540.9452949952334, 381.73471491225064 539.8235292505473, 380 534 M380 534 C381.69575143120255 492.52403211034834, 382.3935875084158 448.6145241636783, 380 426 M380 426 C379.3391754698008 423.33910275585947, 380.82912809364495 421.8422083366662, 386 420 M386 420 C386 420, 386 420, 386 420" stroke="#2d3142" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M380 460 C421.67007510789284 461.4460106978749, 467.1592771507478 461.4538116693802, 580 460" stroke="rgba(45,49,66,0.22)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="480" y="444" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">OrderLine</text>
+      <text x="396" y="480" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">- sku: String</text>
+      <text x="396" y="500" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">- qty: Int</text>
+      <text x="396" y="520" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">- price: Money</text>
+
+      <!-- Class: Customer -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M662 420.707 L701.2 421.14 L740.4 421.283 L779.6 422.501 L818.8 421.225 L858 423.385 L858.711 460.667 L858.928 499.333 L859.257 538 L818.8 538.472 L779.6 536.818 L740.4 538.664 L701.2 539.078 L662 538.213 L661.242 499.333 L661.102 460.667 Z" fill="#ffffff" stroke="none"></path><path class="rough-generated" d="M666 420 C705.5696075892075 417.7575741078006, 748.5377924142405 416.87865483418574, 854 420 M854 420 C857.9558488322422 417.37898116279393, 861.9997092260048 420.5640484767035, 860 426 M860 426 C859.1504864926403 462.62652375306936, 861.1104185755319 496.97271931450814, 860 534 M860 534 C858.367213316448 537.953998262994, 858.8501529829576 542.7346403492614, 854 540 M854 540 C784.4978492369876 537.2761948347791, 720.3883384017273 538.7951154888375, 666 540 M666 540 C664.2671097410843 541.2543118791655, 660.6887191964313 537.5643309371546, 660 534 M660 534 C660.6706755975866 497.1663985854015, 661.6818716804171 466.9085102019831, 660 426 M660 426 C662.3237602727488 420.232125855796, 660.3471851306036 421.7734393669292, 666 420 M666 420 C666 420, 666 420, 666 420" stroke="#2d3142" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M660 460 C703.1973810357609 459.5489666557954, 748.692897435029 457.95915669558553, 860 460" stroke="rgba(45,49,66,0.22)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="760" y="444" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Customer</text>
+      <text x="676" y="480" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">- id: String</text>
+      <text x="676" y="500" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">- name: String</text>
+      <text x="676" y="520" fill="#2d3142" font-size="9" font-family="'Geist Mono', monospace">- email: String</text>
+
+      <!-- Legend: relationship vocabulary -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M40 604 C239.29244577258828 608.3044214234128, 439.2683066561819 607.2427838978543, 940 604" stroke="rgba(45,49,66,0.10)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="40" y="620" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND · RELATIONSHIPS</text>
+
+      <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M40 636 C46.63674991959706 634.2713346971456, 54.13701788755134 636.5296536131087, 68 636" stroke="#2d3142" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M67.69264267142862 635.9543925309554 L60.48186174686998 637.1483831608668 L59.00355820115656 633.1579280281439" stroke="none" stroke-width="0" fill="#2d3142" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M68 636 C66.4456264971128 638.4179067376637, 63.719635964649136 639.5147842528119, 58 640 M58 640 C56.8718170666229 637.3403127687425, 57.83844789500348 634.9530558832735, 58 632 M58 632 C61.99178320934304 633.4423044030675, 64.47081926826017 634.962333607134, 68 636" stroke="#2d3142" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="76" y="640" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Inheritance</text>
+
+      <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M188 636 C195.47043380532415 637.5051751510008, 202.95936592984944 633.0759067968233, 216 636" stroke="#2d3142" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4"></path><path class="rough-generated" d="M215.10646522818132 638.7830295410938 L206.0189781415276 639.6938696798868 L207.18331781802698 633.5343939808197" stroke="none" stroke-width="0" fill="#2d3142" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M216 636 C214.95726737419966 636.8761391253473, 212.22325568225102 637.4953419673827, 206 640 M206 640 C205.21767345448492 636.719746866487, 204.77408661266324 634.9641726730392, 206 632 M206 632 C208.2504144558383 634.0779856474622, 214.3183495615745 633.5021718156952, 216 636" stroke="#2d3142" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4"></path></g>
+      <text x="224" y="640" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Realization</text>
+
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M336 636 C344.3041176910512 634.939015604856, 345.9817139721476 635.4221599805379, 364 636" stroke="#2d3142" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="372" y="640" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Composition · owns</text>
+
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M484 636 C487.3378015767783 639.1878560587112, 494.80406201444566 638.7834131642525, 512 636" stroke="#2d3142" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="520" y="640" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Aggregation · has</text>
+
+      <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M632 636 C636.1714854625054 636.6216965125664, 643.6264100567438 635.329666347967, 660 636" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M657.3479328984395 635.6689405715093 L648.4303273255006 641.530329236947 L651.7225966686383 634.6637918388471" stroke="none" stroke-width="0" fill="#4f5d75" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M660 636 C657.2237944173221 636.4617318765355, 654.4657192469186 638.7713062873713, 650 640 M650 640 C650.5452426180709 638.7780491597205, 650.5110027656425 635.8775230423361, 650 632 M650 632 C652.8380993716003 633.2241337925086, 657.1791492652416 635.7309776176548, 660 636" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="668" y="640" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Association</text>
+
+      <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M780 636 C785.0051693482325 634.0555369664216, 792.4487580990419 637.6759195316815, 808 636" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4,3"></path><path class="rough-generated" d="M810.5617554551922 638.4975775816478 L799.7674437201582 638.2758157559671 L799.9023562855087 629.2402577915229" stroke="none" stroke-width="0" fill="#4f5d75" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M808 636 C805.590435294409 638.0433598523571, 802.8243389645206 636.7518640019422, 798 640 M798 640 C798.891099005933 638.1574832574651, 797.4466414833023 635.8886398321018, 798 632 M798 632 C802.2201262062334 633.8598150369033, 803.9032839704179 634.2708158262159, 808 636" stroke="#4f5d75" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4,3"></path></g>
+      <text x="816" y="640" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Dependency · uses</text>
+    </svg>
+  </div>
+
+
+</body></html>

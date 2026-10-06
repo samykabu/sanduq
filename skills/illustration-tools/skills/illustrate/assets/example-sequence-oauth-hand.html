@@ -1,0 +1,215 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bearer call with refresh · Sequence · Hand-drawn</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f5f5f5;
+      --color-ink:     #2d3142;
+      --color-muted:   #4f5d75;
+      --color-accent:  #eb6c36;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+
+    .frame { max-width: 1100px; width: 100%; }
+
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+
+    svg { width: 100%; min-width: 840px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Sequence · Illustrate · Special · Hand</p>
+    <h1>Bearer call with refresh</h1>
+
+    <svg viewBox="0 0 960 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="sequence-oauth-title sequence-oauth-desc">
+      <title id="sequence-oauth-title">Bearer call with refresh</title>
+      <desc id="sequence-oauth-desc">Client calls API with a bearer token. An ALT fragment shows either a valid 200 response or a 401 path that refreshes via Auth and retries.</desc>
+      <defs>
+        <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"></circle>
+        </pattern>
+
+        
+        
+        
+        <!-- Open arrowhead for async / fire-and-forget -->
+        
+      </defs>
+
+      <!-- Background: paper + optional dots -->
+      <rect width="100%" height="100%" fill="#f5f5f5"></rect>
+      <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"></rect>
+
+      <!-- =================================================================
+           LIFELINES — Client 160 · API 480 · Auth 800
+           ================================================================= -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M160 128 C155.77452053140732 240.3494128569965, 156.52842056574562 354.31057737388267, 160 624" stroke="rgba(45,49,66,0.22)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3,3"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M480 128 C479.3699169480387 241.79406173676188, 480.11833772912826 355.4322389957739, 480 624" stroke="rgba(45,49,66,0.22)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3,3"></path></g>
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M800 128 C802.96531336467 240.8804236565272, 803.7082548925108 354.19561365766504, 800 624" stroke="rgba(45,49,66,0.22)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3,3"></path></g>
+
+      <!-- =================================================================
+           ACTIVATION BARS
+           ================================================================= -->
+      <!-- API holds control for the initial call -->
+      <!-- First API activation brackets M1 call through M2 success return -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M478 181.685 L480 182.035 L482 181.937 L482.176 215.333 L482.267 248.667 L482.004 282 L480 281.989 L478 281.899 L477.749 248.667 L478.143 215.333 Z" fill="rgba(45,49,66,0.06)" stroke="none"></path><path class="rough-generated" d="M477.7855502858758 182.2978495106101 L484.2937266603112 177.47961988300085 L483.53137233406306 282.8739375576377 L477.43984472900627 285.3449138626456" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M476 180 C477.77219083964826 181.04654569558798, 480.32497724950315 180.7512151711434, 484 180 M484 180 C485.6568435252458 202.1701133593917, 484.07806769020857 220.17715551704168, 484 284 M484 284 C481.5665320557356 285.2087395901233, 479.23574939191343 282.92934107251466, 476 284 M476 284 C479.38523309163753 247.37596851438283, 479.90229313306514 203.69950392097235, 476 180" stroke="#4f5d75" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <!-- Client activation during refresh region -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M158 361.685 L160 362.2 L162 361.829 L162.034 401.2 L162.307 440.4 L161.81 479.6 L161.849 518.8 L162.278 558 L160 558.132 L158 558.066 L157.994 518.8 L158.06 479.6 L158.129 440.4 L158.079 401.2 Z" fill="rgba(45,49,66,0.06)" stroke="none"></path><path class="rough-generated" d="M156.21141331670805 357.13221081467344 L161.54823510227726 359.8566220250912 L162.4017731773667 557.7930446681567 L158.459176589828 558.3131675866432" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M156 360 C158.1054198339954 360.04590111913626, 160.65342734653504 359.3955356866354, 164 360 M164 360 C161.59985657437434 405.1434817850134, 162.22595047720606 449.3577856692742, 164 560 M164 560 C162.55453696791082 559.5006468010462, 160.6116620089486 560.3126106608427, 156 560 M156 560 C154.27322276985498 485.6299891398877, 158.00635044840365 415.91828804684917, 156 360" stroke="#4f5d75" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <!-- Auth activation for refresh -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M798 401.686 L800 401.666 L802 401.72 L801.892 432 L802.347 462 L800 462.315 L798 461.709 L797.956 432 Z" fill="rgba(45,49,66,0.06)" stroke="none"></path><path class="rough-generated" d="M794.6372763475404 397.7665721187368 L804.6027435442433 402.2336241671816 L801.2721740206704 466.5121517786756 L793.6785084506497 465.08142131064085" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M796 400 C798.4386488283425 399.0452565426845, 798.6618774435668 400.3598562021274, 804 400 M804 400 C802.7130922799184 415.0449395367875, 805.68322809387 432.1880508432165, 804 464 M804 464 C801.222541880086 463.82255401196886, 799.6675746259839 463.0858802491706, 796 464 M796 464 C798.1139715814963 439.70803229901935, 794.2929904902354 421.2205962488428, 796 400" stroke="#4f5d75" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <!-- API activation for retry -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M478 497.686 L480 497.831 L482 498.312 L481.75 528 L481.687 558 L480 558.121 L478 558.269 L478.335 528 Z" fill="rgba(45,49,66,0.06)" stroke="none"></path><path class="rough-generated" d="M478.8631393783726 494.40093342280016 L481.8572519862093 494.8106263092719 L485.942574863974 561.4312588891946 L474.6978403114714 558.0496750346385" stroke="none" stroke-width="0" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M476 496 C478.7718778226897 496.6546119662328, 478.99032754059886 495.2941767176194, 484 496 M484 496 C484.0247357436828 511.5006940177642, 483.4693273821287 532.2301812908612, 484 560 M484 560 C482.2105467922613 560.4344612228917, 481.04348724301906 560.4691498374985, 476 560 M476 560 C473.72800329646094 537.1814248940907, 473.53800163885575 520.7958638182841, 476 496" stroke="#4f5d75" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+
+      <!-- =================================================================
+           M1: Client → API  GET /resource (before ALT frame)
+           ================================================================= -->
+      <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M160 176 C230.42941356119715 177.02155994794668, 303.9477755942099 178.08950000156992, 476 176" stroke="#2e5aa8" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M474.6811518599279 174.6814305807464 L466.13556320862847 181.77164370371028 L466.41322179930285 172.4294741476886" stroke="none" stroke-width="0" fill="#2e5aa8" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M476 176 C472.7433054041423 175.7043980266997, 470.0963982482378 176.46505883998637, 465.6 180.2 M465.6 180.2 C466.54774385758515 177.6973442609105, 465.8326633184182 175.86025688472577, 465.6 171.8 M465.6 171.8 C466.9645512074333 173.02715404724577, 471.2474279922193 174.00498793898745, 476 176" stroke="#2e5aa8" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <rect x="248" y="160" width="128" height="12" rx="2" fill="#f5f5f5"></rect>
+      <text x="312" y="170" fill="#2e5aa8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">GET /RESOURCE + BEARER</text>
+
+      <!-- =================================================================
+           ALT COMBINED FRAGMENT — spans Client · API · Auth
+           Frame: x=88 y=208 w=752 h=360
+           ================================================================= -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M90 208.743 L134 210.647 L178 210.382 L222 210.664 L266 209.067 L310 208.928 L354 209.954 L398 208.767 L442 211.068 L486 209.028 L530 210.195 L574 211.135 L618 209.131 L662 211.297 L706 209.791 L750 208.937 L794 210.371 L838 209.483 L836.613 249.556 L839.066 289.111 L838.527 328.667 L838.69 368.222 L838.144 407.778 L837.532 447.333 L838.131 486.889 L836.618 526.444 L836.831 566 L794 564.64 L750 567.321 L706 567.349 L662 566.999 L618 566.634 L574 565.7 L530 565.239 L486 564.687 L442 565.549 L398 567.192 L354 567.117 L310 565.777 L266 566.99 L222 566.409 L178 567.256 L134 565.463 L90 567.214 L89.511 526.444 L88.81 486.889 L89.621 447.333 L89.848 407.778 L89.811 368.222 L89.678 328.667 L90.868 289.111 L89.873 249.556 Z" fill="rgba(45,49,66,0.02)" stroke="none"></path><path class="rough-generated" d="M92 208 C261.51089351881296 208.8974888733197, 432.4323431495205 206.82698380859384, 836 208 M836 208 C839.2580181058186 205.52531930198893, 841.4880263076163 210.65122828374928, 840 212 M840 212 C837.9867942010949 339.7353570328003, 840.6054530883706 464.16441663179694, 840 564 M840 564 C838.0942817955278 569.5432185884255, 840.7044818857374 567.3784397647717, 836 568 M836 568 C610.2922978927568 561.9602539880556, 385.3405873009935 562.4964489431661, 92 568 M92 568 C89.00298936426019 566.1662688701414, 85.76463059345261 566.350043217248, 88 564 M88 564 C88.12564503003168 468.48534549527125, 87.35865502498152 372.3101117660759, 88 212 M88 212 C87.81369596710428 212.0513614243207, 89.46731338392321 208.3510220245458, 92 208 M92 208 C92 208, 92 208, 92 208" stroke="rgba(45,49,66,0.22)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <!-- Operator tab: ALT -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M90 209.138 L108 210.897 L126 209.965 L126.066 216 L125.47 222 L108 222.652 L90 221.584 L90.193 216 Z" fill="#f5f5f5" stroke="none"></path><path class="rough-generated" d="M90 208 C97.29084259029477 207.7984096617205, 107.26305573116989 207.53455972976516, 126 208 M126 208 C128.6176360565548 206.37675262410193, 130.2259180245921 210.95563175200172, 128 210 M128 210 C126.93613972236868 214.30113746467975, 126.75253065278288 218.72993295449763, 128 222 M128 222 C127.45342352706939 223.74040849984934, 126.85869622745861 222.79226232152433, 126 224 M126 224 C109.74305046405642 222.67162316129077, 96.00456209611148 222.06150762722362, 90 224 M90 224 C88.97068400165688 225.22077731210737, 88.14163273554296 221.8871107272183, 88 222 M88 222 C89.06239048945253 219.2574520901218, 86.704707361334 215.12472769338638, 88 210 M88 210 C89.30598836857826 209.8312063076223, 88.55967523573588 205.4166375396773, 90 208 M90 208 C90 208, 90 208, 90 208" stroke="rgba(45,49,66,0.22)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="108" y="220" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.12em">ALT</text>
+
+      <!-- Region 1 guard -->
+      <text x="100" y="244" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.04em">[token valid]</text>
+
+      <!-- M2: API → Client  200 (coral headline success) -->
+      <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M476 272 C405.4000930451556 274.0223075023199, 336.1222844931634 277.3690849148738, 168 272" stroke="#eb6c36" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M170.72261953018605 273.3673416111618 L177.7469123926014 265.2081032607705 L180.15250064991415 278.1588720057159" stroke="none" stroke-width="0" fill="#eb6c36" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M168 272 C171.069320600203 272.20542120001596, 173.33634498967797 269.3982137974261, 178.8 267.6 M178.8 267.6 C178.46087119480038 271.5721793148667, 178.16202088971997 272.71804108531774, 178.8 276.4 M178.8 276.4 C175.47155269120194 274.4484701271759, 172.60217065669306 273.2089797478339, 168 272" stroke="#eb6c36" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <rect x="256" y="256" width="88" height="12" rx="2" fill="#f5f5f5"></rect>
+      <text x="300" y="266" fill="#eb6c36" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">200 · BODY</text>
+
+      <!-- alt region divider -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M96 312 C264.84713877528907 315.9559266093969, 434.0908099874854 315.1403168205023, 832 312" stroke="rgba(45,49,66,0.20)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4,3"></path></g>
+
+      <!-- Region 2 guard -->
+      <text x="100" y="336" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.04em">[else · 401]</text>
+
+      <!-- M3: API → Client  401 (return: dashed + filled) -->
+      <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M476 368 C406.5503714074006 366.36831218844617, 333.0303154052628 368.43703564904894, 168 368" stroke="#4f5d75" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4"></path><path class="rough-generated" d="M169.5502646436915 369.2246156314388 L178.22114518191665 366.49907629881056 L180.11201988365502 374.71180391106753" stroke="none" stroke-width="0" fill="#4f5d75" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M168 368 C171.9055924712178 365.4117025715643, 174.07543138796416 364.97572857873695, 178.4 363.8 M178.4 363.8 C178.98138555264518 367.0913050095551, 178.17066224491643 370.31448350196706, 178.4 372.2 M178.4 372.2 C174.78553690637435 371.6790943140773, 173.10584194290186 369.42820798821145, 168 368" stroke="#4f5d75" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4"></path></g>
+      <rect x="272" y="352" width="56" height="12" rx="2" fill="#f5f5f5"></rect>
+      <text x="300" y="362" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">401</text>
+
+      <!-- M4: Client → Auth  refresh (link-blue) -->
+      <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M164 416 C309.7905300018936 415.83413714094087, 452.98157665736977 414.3084575359337, 796 416" stroke="#2e5aa8" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M796.9640872004442 414.25325264157726 L782.9582615765743 419.6445628178306 L787.4917795005255 414.68826986374336" stroke="none" stroke-width="0" fill="#2e5aa8" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M796 416 C792.2341346724686 417.33928569891276, 789.5371151756142 418.36796019658135, 785.6 420.2 M785.6 420.2 C786.5951391011158 417.903779076701, 786.7396872396746 416.8542926602494, 785.6 411.8 M785.6 411.8 C788.3391601370914 414.12357442957, 789.0255591289884 415.0159958238442, 796 416" stroke="#2e5aa8" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <rect x="408" y="400" width="128" height="12" rx="2" fill="#f5f5f5"></rect>
+      <text x="472" y="410" fill="#2e5aa8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">POST /TOKEN · REFRESH</text>
+
+      <!-- M5: Auth → Client  access (return dashed, filled marker) -->
+      <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M796 456 C650.9929379387572 459.11948044078514, 507.6883846394345 459.5587659277217, 168 456" stroke="#4f5d75" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4"></path><path class="rough-generated" d="M168.3779097571969 457.08188965171576 L179.09537797123195 453.79004933685064 L180.47153911739588 457.6647358164191" stroke="none" stroke-width="0" fill="#4f5d75" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M168 456 C169.60376898242149 454.2480643765175, 171.76008306478568 452.81592521373585, 178.4 451.8 M178.4 451.8 C177.14598496479914 452.9109843094647, 178.24580454964564 456.58356414976714, 178.4 460.2 M178.4 460.2 C174.2229546884063 458.15125403837845, 173.62650067380284 458.0862236152003, 168 456" stroke="#4f5d75" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4"></path></g>
+      <rect x="424" y="440" width="96" height="12" rx="2" fill="#f5f5f5"></rect>
+      <text x="472" y="450" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">200 · NEW ACCESS</text>
+
+      <!-- M6: Client → API  retry -->
+      <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M164 504 C234.29586321085483 505.8356749077727, 307.02494667308 505.98591315180005, 476 504" stroke="#2e5aa8" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M475.79173231394964 502.11052666185424 L463.8324943658896 506.9355358558707 L467.8512987342663 497.64120176909495" stroke="none" stroke-width="0" fill="#2e5aa8" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M476 504 C473.14863022028806 506.1355815896504, 470.43490660978375 506.1693748570691, 465.6 508.2 M465.6 508.2 C464.885437515626 507.0365906819645, 464.5045285467601 504.8776379187573, 465.6 499.8 M465.6 499.8 C467.81464398860015 500.5719429735901, 469.47065529962214 500.35167441033127, 476 504" stroke="#2e5aa8" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <rect x="248" y="488" width="112" height="12" rx="2" fill="#f5f5f5"></rect>
+      <text x="304" y="498" fill="#2e5aa8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">GET /RESOURCE · RETRY</text>
+
+      <!-- M7: API → Client  200 retry success (return dashed; coral already used on M2) -->
+      <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M476 544 C404.67516245189046 543.0986704946986, 335.1979085894614 542.6112860513991, 168 544" stroke="#4f5d75" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4"></path><path class="rough-generated" d="M167.20555487070231 544.9391636719927 L179.96961076054723 541.0810223748907 L180.83105835113676 546.4176677217707" stroke="none" stroke-width="0" fill="#4f5d75" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M168 544 C170.40235286875708 542.7074261814706, 172.5451421167391 543.5317792238666, 178.4 539.8 M178.4 539.8 C178.05108437695307 542.8466636093742, 178.62544685437484 543.7766447975673, 178.4 548.2 M178.4 548.2 C177.06527984557016 547.4990711378115, 174.29940940470382 546.3672392421892, 168 544" stroke="#4f5d75" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4"></path></g>
+      <rect x="256" y="528" width="88" height="12" rx="2" fill="#f5f5f5"></rect>
+      <text x="300" y="538" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">200 · BODY</text>
+
+      <!-- =================================================================
+           M8: Client → Auth  async audit (open arrow, outside fragment)
+           ================================================================= -->
+      <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M164 600 C308.9942027353496 599.4148707812466, 454.67689055763185 598.7890515440143, 796 600" stroke="#4f5d75" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4"></path><path class="rough-generated" d="M794.619377427455 597.9678006821312 L784.7067271552049 602.2265088939108 L788.2108179680072 594.3941336744465" stroke="none" stroke-width="0" fill="#4f5d75" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M796 600 C794.0631257681074 599.3022201052562, 791.3326980439531 601.5937895175567, 785.6 604.2 M785.6 604.2 C785.6117359301362 601.733402287228, 784.7053698538456 598.4649831772651, 785.6 595.8 M785.6 595.8 C787.1378778401088 597.8959688927422, 789.7635014702558 596.5630103719502, 796 600" stroke="#4f5d75" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4"></path></g>
+      <rect x="424" y="584" width="96" height="12" rx="2" fill="#f5f5f5"></rect>
+      <text x="472" y="594" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">AUDIT · ASYNC</text>
+
+      <!-- =================================================================
+           ACTOR BOXES — drawn after arrows
+           ================================================================= -->
+      <!-- Client (input / soft) -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M90 72.747 L125 72.859 L160 72.85 L195 74.582 L230 74.664 L229.553 100 L229.947 126 L195 125.907 L160 125.613 L125 124.742 L90 126.742 L89.177 100 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M90 72.747 L125 73.52 L160 75.217 L195 74.014 L230 74.824 L228.775 100 L229.387 126 L195 124.621 L160 127.147 L125 127.233 L90 125.397 L88.702 100 Z" fill="rgba(79,93,117,0.10)" stroke="none"></path><path class="rough-generated" d="M94 72 C125.87874688506126 69.71584496542812, 151.9886670291424 72.1761223320663, 226 72 M226 72 C232.41381556391715 73.09108584523202, 230.00483519434928 74.39966643452644, 232 78 M232 78 C235.00351189598442 91.25221461653709, 231.7397231005132 111.5767955005169, 232 122 M232 122 C233.44484084248543 124.91230761408806, 227.6008396446705 126.73048788905143, 226 128 M226 128 C176.40702614188194 132.08529088690875, 129.81733724474907 129.36914613440632, 94 128 M94 128 C90.84763037562371 130.76586173176764, 88.71165415644646 124.85778582692146, 88 122 M88 122 C85.84922370687127 110.8858373105526, 89.28655185475945 96.10097925066948, 88 78 M88 78 C86.82891238331794 71.22965514063836, 87.48329375386238 74.87279269099236, 94 72 M94 72 C94 72, 94 72, 94 72" stroke="#7a8399" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-generated" d="M98 80 C106.83040004530922 77.88229761936469, 109.04695362048223 79.45498771586223, 126 80 M126 80 C124.64010018132005 81.94251916734501, 126.74272691132501 82.03740323611225, 128 82 M128 82 C129.01726512250957 85.36658543590457, 128.2894386571413 86.7325014944747, 128 90 M128 90 C130.80398257402703 93.5761641921786, 128.22172065305833 90.14431044580415, 126 92 M126 92 C118.47681932831183 94.65541482175934, 108.7854059969075 89.98866714741337, 98 92 M98 92 C98.14865834635373 92.02037017373368, 93.28865629853681 89.06152000355844, 96 90 M96 90 C95.17987659553532 87.71305728886277, 95.45747985581401 85.75968704719097, 96 82 M96 82 C96.32120478479192 82.14283335727329, 93.90898893900837 79.93840820612385, 98 80 M98 80 C98 80, 98 80, 98 80" stroke="rgba(122,131,153,0.40)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="112" y="89" fill="#7a8399" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">APP</text>
+      <text x="160" y="104" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Client</text>
+      <text x="160" y="119" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">SPA · SDK</text>
+
+      <!-- API (focal) -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M410 72.748 L445 74.842 L480 74.35 L515 72.877 L550 75.143 L550.02 100 L551.065 126 L515 124.849 L480 124.616 L445 126.616 L410 125.506 L410.55 100 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M410 72.748 L445 72.704 L480 73.917 L515 75.109 L550 75.303 L549.243 100 L550.505 126 L515 126.363 L480 126.151 L445 126.307 L410 126.961 L410.074 100 Z" fill="rgba(235,108,54,0.08)" stroke="none"></path><path class="rough-generated" d="M414 72 C442.6036431367509 70.08499023139244, 474.50340034505354 69.88250578760868, 546 72 M546 72 C548.6926694161259 69.84538581157103, 552.2185103452764 71.51287683928385, 552 78 M552 78 C554.2534340147186 87.79999418957159, 549.5223131153989 97.45023551424966, 552 122 M552 122 C551.7222660371102 123.30387734835968, 551.663482669834 130.77195555930956, 546 128 M546 128 C511.1207789230161 124.14476787951077, 475.33028994491326 127.17681436147774, 414 128 M414 128 C412.75071428781376 128.32938705766574, 410.04266058271753 127.26898835683241, 408 122 M408 122 C407.1298081894335 107.69313065139576, 408.13717634574743 91.62944556465372, 408 78 M408 78 C405.50578958773986 72.36918979054317, 412.56037930930034 71.86963923638686, 414 72 M414 72 C414 72, 414 72, 414 72" stroke="#eb6c36" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-generated" d="M418 80 C423.5314517024905 81.78381898093038, 431.51399774737655 80.69374726700596, 446 80 M446 80 C446.71895403352875 78.69681913368404, 448.95640206225215 79.15061364086966, 448 82 M448 82 C449.1190392973088 82.73181101575494, 447.80427999040114 85.53410500124097, 448 90 M448 90 C449.08140776865184 91.96773392645021, 446.4843636782219 94.18577811606228, 446 92 M446 92 C436.42280477024616 90.30619310227223, 426.5628240186721 91.38763666239568, 418 92 M418 92 C414.2517422585438 89.58389549963177, 414.6196627248079 91.4727225334694, 416 90 M416 90 C415.5275901235081 87.28253616943955, 417.1532093871571 85.6641966612637, 416 82 M416 82 C414.9980819892138 83.2823680071781, 418.9860744944463 82.73525475151837, 418 80 M418 80 C418 80, 418 80, 418 80" stroke="rgba(235,108,54,0.50)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="432" y="89" fill="#eb6c36" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">API</text>
+      <text x="480" y="104" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Resource API</text>
+      <text x="480" y="119" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Bearer gate</text>
+
+      <!-- Auth (backend) -->
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M730 72.749 L765 74.026 L800 73.051 L835 73.972 L870 72.822 L870.488 100 L869.383 126 L835 126.591 L800 126.42 L765 125.69 L730 127.07 L729.123 100 Z" fill="#f5f5f5" stroke="none"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M730 72.75 L765 74.687 L800 72.618 L835 73.404 L870 72.982 L869.71 100 L868.823 126 L835 125.305 L800 125.154 L765 125.381 L730 125.725 L728.647 100 Z" fill="#ffffff" stroke="none"></path><path class="rough-generated" d="M734 72 C765.1285393884406 70.45413549735676, 797.0181336609647 73.38888924315106, 866 72 M866 72 C870.7715232683346 72.39968577791005, 874.4321854962036 74.42608724404127, 872 78 M872 78 C875.0983561334526 93.14777376260608, 874.6999031302845 106.72367552798241, 872 122 M872 122 C869.999691231735 127.49544708263129, 869.9261256949976 129.0134232295677, 866 128 M866 128 C819.4345317041501 126.78924487211275, 768.0432426450774 129.76948258854912, 734 128 M734 128 C728.8537982000038 125.89291238356381, 725.5736670089885 123.88019088674336, 728 122 M728 122 C726.8153926719958 113.30042399223895, 725.3928008367354 98.95791187863797, 728 78 M728 78 C729.9826667921618 73.50872444044799, 731.8374648647383 74.66648578178138, 734 72 M734 72 C734 72, 734 72, 734 72" stroke="#2d3142" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-generated" d="M738 80 C746.9531829024666 80.89835996724665, 750.0224009598605 77.1455264429003, 770 80 M770 80 C772.7978078857375 81.25111910002306, 769.3700772131793 82.06382404562707, 772 82 M772 82 C772.9308134721081 84.0170365956053, 771.029121323661 87.53570850800723, 772 90 M772 90 C771.3588329632767 90.35930366072182, 768.7470067033855 92.42724578632041, 770 92 M770 92 C762.9368796641938 91.81500083740801, 751.6764209444634 92.84463563200086, 738 92 M738 92 C736.1548261707338 92.94742082552985, 735.950669151079 93.88392506338035, 736 90 M736 90 C735.5853036514809 88.45201505001634, 736.2389389185001 86.44870627533645, 736 82 M736 82 C733.6749591936357 78.62190265708293, 738.2631600498843 79.73210129691287, 738 80 M738 80 C738 80, 738 80, 738 80" stroke="rgba(45,49,66,0.30)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="754" y="89" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">AUTH</text>
+      <text x="800" y="104" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Auth</text>
+      <text x="800" y="119" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">token · refresh</text>
+
+      <!-- =================================================================
+           LEGEND
+           ================================================================= -->
+      <g class="rough-shape" data-source-tag="line"><path class="rough-generated" d="M56 648 C252.2165876761079 644.5248092424572, 445.74158152252437 644.9886409246624, 904 648" stroke="rgba(45,49,66,0.10)" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="56" y="664" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M58 681.572 L63 681.956 L68 682.041 L68.171 685 L67.815 688 L63 688.061 L58 687.98 L58.359 685 Z" fill="rgba(235,108,54,0.08)" stroke="none"></path><path class="rough-generated" d="M58 680 C59.02864462290891 680.8505391053681, 62.070287094125526 680.9865350730543, 68 680 M68 680 C72.1837104538766 677.1539857442491, 68.84586064713076 678.2059643154653, 70 682 M70 682 C70.67649719148059 683.9353902366292, 70.11676165937561 684.9725831343885, 70 688 M70 688 C72.07711642635986 689.2203501502363, 67.52210205349449 689.2548908998258, 68 690 M68 690 C66.2452811260242 690.1526080043229, 63.02037543938495 688.7168224797758, 58 690 M58 690 C57.423548778860514 691.2564377094619, 54.90467343525961 689.6247267499876, 56 688 M56 688 C55.93533450259711 686.8037507278007, 56.5195689545467 684.4887845135387, 56 682 M56 682 C56.65954399658367 681.3149257570194, 57.7812170868429 679.6633323271759, 58 680 M58 680 C58 680, 58 680, 58 680" stroke="#eb6c36" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="76" y="688" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Focal / success</text>
+
+      <g class="rough-shape" data-source-tag="rect"><path class="rough-fill-mask" d="M202 677.001 L214 678.426 L226 677.748 L225.945 685 L225.697 692 L214 691.52 L202 691.504 L201.808 685 Z" fill="rgba(45,49,66,0.02)" stroke="none"></path><path class="rough-generated" d="M202 676 C205.8119583742693 675.9706642368343, 212.804892715998 675.3550689020659, 226 676 M226 676 C225.07666173794618 674.005419066362, 227.5837523641065 675.1770344503844, 228 678 M228 678 C229.2995283820876 683.7789588070475, 229.00443464961137 687.1302960258537, 228 692 M228 692 C225.63625815790147 690.7508733949935, 228.80964972854903 692.6687134565785, 226 694 M226 694 C219.31715668905528 694.2338087197486, 210.3224221320823 695.2116347488109, 202 694 M202 694 C202.05791008292385 692.5109461514279, 201.28167557734997 692.4951275932914, 200 692 M200 692 C199.88278006404406 688.5376143785379, 199.32566978722576 685.6181278064661, 200 678 M200 678 C202.15183639805764 675.7614373069877, 201.5402456053222 678.5289478423074, 202 676 M202 676 C202 676, 202 676, 202 676" stroke="rgba(45,49,66,0.22)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="208" y="688" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace">ALT</text>
+      <text x="236" y="688" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Fragment</text>
+
+      <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M320 684 C325.56723890257996 681.4507021579169, 333.47043404346334 685.747519553008, 348 684" stroke="#2e5aa8" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M350.5990706652403 683.9400818139314 L339.48924028575425 690.3178336411715 L336.7476929873228 677.4881910592317" stroke="none" stroke-width="0" fill="#2e5aa8" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M348 684 C345.57815707866985 686.0978147074851, 342.7391526157908 685.1753134982928, 337.6 688.2 M337.6 688.2 C338.0696756244526 685.4946777214408, 337.4018383499012 684.4647273575664, 337.6 679.8 M337.6 679.8 C342.30688393761324 682.7151652418347, 346.80967289180876 683.1213654349074, 348 684" stroke="#2e5aa8" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="356" y="688" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">HTTP call</text>
+
+      <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M448 684 C454.40092278830707 684.6845426117721, 462.2927820857615 682.2937727367225, 476 684" stroke="#4f5d75" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4"></path><path class="rough-generated" d="M478.012893221993 686.76871882407 L465.0263566804119 687.0633201601916 L464.92745260419326 677.8646570119075" stroke="none" stroke-width="0" fill="#4f5d75" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M476 684 C474.11152985257957 684.4926339652881, 471.2641733328755 686.3253495161025, 465.6 688.2 M465.6 688.2 C466.4328248317077 687.2790835240726, 466.7202590034439 684.4763999868203, 465.6 679.8 M465.6 679.8 C468.34217217580164 680.1245208262789, 473.32976728955964 681.600704728151, 476 684" stroke="#4f5d75" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4"></path></g>
+      <text x="484" y="688" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Return</text>
+
+      <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M560 684 C567.2346066740342 682.1183830656274, 575.1151301280595 684.6400259204372, 588 684" stroke="#4f5d75" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4"></path><path class="rough-generated" d="M589.4267157787457 683.7973558342085 L580.3634730750695 689.6088066792116 L577.1072122210637 678.2411229645833" stroke="none" stroke-width="0" fill="#4f5d75" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M588 684 C586.4926526264893 686.5171105982228, 583.6369440499602 684.5997281587804, 577.6 688.2 M577.6 688.2 C576.3599740389627 686.6274893267043, 577.6026796569867 684.4880726160743, 577.6 679.8 M577.6 679.8 C581.6301177891219 681.1635337858548, 587.1025190624425 683.7097013965264, 588 684" stroke="#4f5d75" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4"></path></g>
+      <text x="596" y="688" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Async open</text>
+
+      <g class="rough-shape" data-source-tag="line" data-rough-arrowhead="true"><path class="rough-generated" d="M696 684 C704.0682905597613 686.3672235194826, 706.1374781703577 682.2012791041517, 724 684" stroke="#eb6c36" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M724.8405383354984 686.6259928443469 L713.5005894697272 686.5542931982316 L712.8869718379342 678.4175889172592" stroke="none" stroke-width="0" fill="#eb6c36" stroke-linecap="round" stroke-linejoin="round"></path><path class="rough-generated" d="M724 684 C722.9905208083902 685.3478912704721, 720.0157650653362 686.2268023608916, 713.2 688.4 M713.2 688.4 C712.2813672103235 686.06998537359, 712.032009849126 681.9715426379629, 713.2 679.6 M713.2 679.6 C718.7236472102719 681.7188358053609, 721.530483660262 682.1096497854592, 724 684" stroke="#eb6c36" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></g>
+      <text x="732" y="688" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Headline</text>
+    </svg>
+  </div>
+
+
+</body></html>
