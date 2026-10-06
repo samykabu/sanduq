@@ -112,8 +112,12 @@ Write only changes, never a full document. Shape (`prepare` writes the skeleton;
 - **Top level.** Only the keys shown above; unknown top-level keys are rejected.
 - **Entries.** Exactly the keys `id` (`PM-<slug>`), `domain`, `kind` (`behavior`,
   `decision`, `limit`, `follow-up`, `dependency`, `lesson`), `title` (one line, the
-  claim), `text`, `relations`, `selectors`, and optional `summary`. Selector kinds:
-  `route`, `path`, `error_code`, `config_key`. An update carries the complete new
+  claim), `text`, `relations`, `selectors`, and optional `summary`, `constrains` and
+  `supersedes`. Selector kinds: `route`, `path`, `error_code`, `config_key`. Links:
+  `relations` means see also; `constrains` lists live entries whose behavior this entry
+  limits (a rule anyone changing them must respect); `supersedes` lists entries, live or
+  retired, that describe an older state this entry replaces. An id appears in at most one
+  of the three lists, never the entry's own id; omit a list rather than leave it empty. An update carries the complete new
   entry, not a patch. New ids must not exist or be retired. Every updated id must be
   anchored: it appears in a `provenance` record with `units` from this run, or in a
   coverage group's `memory_ids`. An evidence-only record does not anchor an update. A
@@ -144,7 +148,8 @@ Write only changes, never a full document. Shape (`prepare` writes the skeleton;
   needs a reason, an inventoried `source_unit` that justifies it, and a `replacement`
   that is live in the result, or `null`. Do not update and remove the same id, or
   update one twice. Prefer pointing `PM-` references at the replacement; references to
-  retired ids remain valid.
+  retired ids remain valid. A removed id cannot stay in another entry's `constrains`:
+  update that entry to point at the `replacement` or drop the link.
 - **Taxonomy.** `op: add` creates a governed domain (unique kebab-case `id`, unique
   nonempty `label`, optional `definition`); `op: update` relabels or redefines one.
   Ids must not be Windows-reserved names (`con`, `prn`, `aux`, `nul`, `com1`-`com9`,

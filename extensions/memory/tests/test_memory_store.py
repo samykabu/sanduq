@@ -43,6 +43,16 @@ class MemoryFormatTests(unittest.TestCase):
         data = ms.emit_entry(entry)
         self.assertEqual(entry, ms.parse_entry(data, "PM-x.md"))
 
+    def test_typed_links_round_trip_and_empty_lists_are_not_canonical(self):
+        entry = {"id": "PM-x", "domain": "billing", "kind": "decision", "title": "T", "text": "Body.",
+                 "relations": ["PM-y"], "constrains": ["PM-z"], "supersedes": ["PM-old"], "selectors": []}
+        data = ms.emit_entry(entry)
+        self.assertIn(b'relations = ["PM-y"]\nconstrains = ["PM-z"]\nsupersedes = ["PM-old"]\n', data)
+        self.assertEqual(entry, ms.parse_entry(data, "PM-x.md"))
+        self.assertEqual(["PM-y", "PM-z", "PM-old"], ms.links(entry))
+        with self.assertRaisesRegex(ArchiveError, "canonical"):
+            ms.parse_entry(data.replace(b'supersedes = ["PM-old"]', b"supersedes = []"), "PM-x.md")
+
     def test_noncanonical_or_unknown_header_is_rejected(self):
         good = ms.emit_entry({"id": "PM-x", "domain": "d", "kind": "limit", "title": "T", "text": "Body."})
         with self.assertRaisesRegex(ArchiveError, "canonical"):
@@ -149,6 +159,20 @@ class MemoryStoreRepositoryTests(unittest.TestCase):
         for expected in ("PM-missing-entry does not resolve", "unknown domain 'nowhere'", "entry budget is 1024",
                          "behavior needs implementation evidence", "generated view is stale"):
             self.assertIn(expected, problems)
+
+    def test_check_rejects_self_duplicate_and_dead_typed_links(self):
+        self.archive.migrate()
+        entries = self.root / ms.ENTRIES
+        currency = ms.parse_entry((entries / "PM-invoice-currency.md").read_bytes(), "x")
+        currency.update(constrains=["PM-invoice-currency", "PM-gone"], supersedes=["PM-invoice-rounding"])
+        (entries / "PM-invoice-currency.md").write_bytes(ms.emit_entry(currency))
+        problems = "\n".join(ms.check(ms.Store(self.root), None, {"PM-gone"}))
+        for expected in ("PM-invoice-currency: links cannot point to the entry itself or repeat an id",
+                         "constrains PM-gone, which is not a live entry"):
+            self.assertIn(expected, problems)
+        currency.update(constrains=["PM-tenant-scope"], supersedes=["PM-gone"])  # a retired id may be superseded
+        (entries / "PM-invoice-currency.md").write_bytes(ms.emit_entry(currency))
+        self.assertFalse([p for p in ms.check(ms.Store(self.root), None, {"PM-gone"}) if "link" in p or "constrains" in p])
 
     def test_memory_root_is_order_stable_and_ignores_reported_strays(self):
         self.archive.migrate()

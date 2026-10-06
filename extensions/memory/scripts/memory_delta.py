@@ -82,11 +82,12 @@ def expand_coverage(candidate: dict, units: list[dict]) -> dict[str, dict]:
 
 
 def _entry_problems(entry, label: str, problems: list[str]) -> bool:
-    if not _shape(entry, ENTRY_KEYS, {"summary"}, label, problems):
+    if not _shape(entry, ENTRY_KEYS, {"summary", *ms.TYPED_LINKS}, label, problems):
         return False
     if not all(isinstance(entry[k], str) for k in ("id", "domain", "kind", "title", "text")) \
             or not isinstance(entry.get("summary", ""), str) \
-            or not isinstance(entry["relations"], list) or not all(isinstance(r, str) for r in entry["relations"]) \
+            or not all(isinstance(entry.get(k, []), list) and all(isinstance(r, str) for r in entry.get(k, []))
+                       for k in ("relations", *ms.TYPED_LINKS)) \
             or not isinstance(entry["selectors"], list) or not all(
                 isinstance(s, dict) and set(s) == {"kind", "value"} and all(isinstance(v, str) for v in s.values())
                 for s in entry["selectors"]):
@@ -94,7 +95,7 @@ def _entry_problems(entry, label: str, problems: list[str]) -> bool:
         return False
     try:
         if ms.parse_entry(ms.emit_entry(entry), entry["id"]) != entry:
-            problems.append(f"{label}: entry does not round-trip; trim the text and drop an empty summary.")
+            problems.append(f"{label}: entry does not round-trip; trim the text and drop an empty summary, constrains or supersedes.")
             return False
     except ArchiveError as error:
         problems.append(f"{label}: {error}")
