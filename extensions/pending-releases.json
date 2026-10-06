@@ -1,15 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "assure": "2.3.1",
-    "illustrate": "2.1.3",
-    "memory": "2.1.1",
-    "pr": "4.2.1",
-    "project": "2.2.1",
-    "scope": "1.5.1",
-    "user-manual": "1.5.1",
-    "workflow": "1.8.4"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Documentation patch releases: concise setup, full command and skill examples, contribution guides, and installed-package README links. Publish after successful main CI and downloaded asset verification."
 }
