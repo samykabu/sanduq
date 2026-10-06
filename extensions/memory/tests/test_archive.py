@@ -717,6 +717,50 @@ class ArchiveIntegrationTests(unittest.TestCase):
         with self.assertRaisesRegex(ArchiveError, "No selected verification"):
             self.archive.queue(FEATURE, ["docs"])
 
+    def add_many_feature_files(self):
+        # ~600 paths x ~70 chars of pathspec exceeds Windows' 32,767-character command line (WinError 206).
+        for i in range(600):
+            self.write(f"{FEATURE}/notes/{i:04d}-{'n' * 32}.md", f"Note {i}\n")
+        self.git("add", "-A")
+        self.git("commit", "-m", "Many feature artifacts")
+
+    def test_large_archive_finalizes_past_command_line_limit(self):
+        self.add_many_feature_files()
+        prepared = self.prepare()
+        self.candidate(prepared)
+        self.assertEqual("done", self.archive.finalize(prepared["run_id"])["phase"])
+        self.assertFalse((self.root / FEATURE).exists())
+        self.assertEqual("", self.git("status", "--short", "--", FEATURE))
+
+    def test_large_archive_rolls_back_past_command_line_limit(self):
+        self.add_many_feature_files()
+        prepared = self.prepare()
+        self.candidate(prepared)
+        with patch.object(self.archive, "run_checks", side_effect=ArchiveError("permanent check failure")):
+            with self.assertRaises(ArchiveError):
+                self.archive.finalize(prepared["run_id"])
+        self.assertEqual("rolled-back", self.archive.rollback(prepared["run_id"])["phase"])
+        self.assertEqual("", self.git("status", "--short", "--", FEATURE))
+
+    def test_manual_verify_covers_only_the_features_own_merges(self):
+        feature = "specs/008a-report"
+        self.git("checkout", "-b", "008a-report")
+        self.write(feature + "/spec.md", "# Report\n")
+        self.write(feature + "/tasks.md", "- [x] T001 Done\n")
+        self.write("src/report.py", "REPORT = True\n")
+        self.git("add", "-A")
+        self.git("commit", "-m", "Implement report")
+        self.git("checkout", "develop")
+        self.git("merge", "--no-ff", "-m", "Merge 008a-report", "008a-report")
+        self.git("checkout", "-b", "later")
+        self.write("scripts/later.ps1", "exit 0\n")
+        self.git("add", "-A")
+        self.git("commit", "-m", "Later uncovered work")
+        self.git("checkout", "develop")
+        self.git("merge", "--no-ff", "-m", "Merge later", "later")
+        self.assertEqual(["src/report.py"], self.archive.verification_paths(feature))
+        self.assertTrue(self.archive.verify(feature, ["consumer"])["completed"])
+
     def test_number_guard_loss_and_passive_slug_references(self):
         self.write(REGISTRY, json.dumps({"schema_version": 1, "high_water": 6, "archived": {}}))
         self.assertEqual(2, len(self.archive.pending()["guard_blockers"]))
