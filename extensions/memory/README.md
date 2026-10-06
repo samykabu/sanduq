@@ -1,5 +1,9 @@
 # Sanduq Memory
 
+For setup and a consistent worked example, see [Getting started](https://github.com/samykabu/sanduq/blob/main/docs/getting-started.md)
+and [memory usage](https://github.com/samykabu/sanduq/blob/main/docs/extensions.md#memory).
+
+
 Spec Kit extension `memory`, part of Sanduq Spec Kit Extensions. It reconciles verified completed features into project memory under `specs/memory/`: one file per entry, organized by capability, that agents read through a budgeted query. Keep current behavior, decisions, constraints, lessons and useful open follow-ups; replace obsolete rules and remove resolved concerns. Git holds archive history and recoverable artifacts. Read relevant memory during specification and impact analysis; ordinary implementation tasks only check the small pending queue.
 
 ## Install and configure
@@ -52,7 +56,7 @@ Feature-number and transaction guards use context-checked patches to core featur
 
 ### Manual use
 
-For example, ask Codex: `$speckit-memory-run specs/007-invoice`. The agent verifies actual completion, including downstream QA/review/documentation, executes approved checks, then makes a real scoped checkpoint. It inventories every committed source unit and reconciles a local candidate with current memory. A separate reviewer critiques the exact candidate, source dispositions and fixture repairs before deterministic validation, publication, complete folder deletion, repeated checks and the final scoped commit.
+For example, ask Codex: `$speckit-memory-run specs/412-refund-approval`. The agent verifies actual completion, including downstream QA/review/documentation, executes approved checks, then makes a real scoped checkpoint. It inventories every committed source unit and reconciles a local candidate with current memory. A separate reviewer critiques the exact candidate, source dispositions and fixture repairs before deterministic validation, publication, complete folder deletion, repeated checks and the final scoped commit.
 
 Select several exact folders or `--all-completed` for freshly verified features. Unfinished work requires separate explicit `--retire-reason`; automatic mode never retires it. Unrelated staged/unstaged work is preserved. Enumerate related uncommitted implementation files explicitly for manual checkpointing.
 
@@ -144,11 +148,11 @@ Tests run in disposable Git repositories with real PowerShell/Bash entry points,
 
 Verification is required by default. For an explicitly selected manual archive,
 ask the agent's archive/run command to use `--skip-verification "<reason>"`, for
-example `specs/007-invoice --skip-verification "Test service unavailable"`.
+example `specs/412-refund-approval --skip-verification "Test service unavailable"`.
 The underlying preparation command is:
 
 ```bash
-python .specify/extensions/memory/scripts/archive.py prepare --spec specs/007-invoice --skip-verification "Test service unavailable"
+python .specify/extensions/memory/scripts/archive.py prepare --spec specs/412-refund-approval --skip-verification "Test service unavailable"
 ```
 
 This skips fresh passing verification evidence and external post-deletion checks.

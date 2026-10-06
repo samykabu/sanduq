@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise an actual published PR 4.0.2 -> staged 4.2.0 upgrade and failure rollback."""
+"""Exercise a published PR 4.0.2 -> current staged package upgrade and failure rollback."""
 import hashlib
 import json
 import subprocess
@@ -19,6 +19,7 @@ def main():
         for name, previous in progress_before.items():
             assert (report / name).read_bytes() == previous, 'Upgrade changed progress: ' + name
     source = workspace / 'packages/workflow'
+    staged_pr_version = str(yaml.safe_load((workspace / 'packages/pr/extension.yml').read_text(encoding='utf-8'))['extension']['version'])
     sys.path.insert(0, str(root / '.specify/extensions/workflow/scripts'))
     import install as installer
     from reconcile import reconcile
@@ -51,7 +52,7 @@ def main():
     verify_progress()
     result = installer.install(root,apply=True,packages=workspace/'packages',package_root=source)
     verify_progress()
-    assert registry(root)['pr']['version'] == '4.2.0'
+    assert registry(root)['pr']['version'] == staged_pr_version
     assert json.loads(config.read_text()) == {'custom_project_setting':'preserve-me'}
     assert json.loads((root/'.specify/workflow/install-receipt.json').read_text())['applied']
     # A synthetic future workflow package tests the outer transaction without publishing it.
@@ -90,7 +91,7 @@ def main():
         package_relative = relative[len(WORKFLOW_PACKAGE_PREFIX):]
         assert (root / relative).read_bytes() == (source / package_relative).read_bytes(), relative
     assert json.loads(config.read_text()) == {'custom_project_setting':'preserve-me'}
-    receipt = {'ok':True,'from':'pr 4.0.2 (downloaded published asset)','to':'pr 4.2.0 (staged)',
+    receipt = {'ok':True,'from':'pr 4.0.2 (downloaded published asset)','to':f'pr {staged_pr_version} (staged)',
                'published_archive_sha256':hashlib.sha256((downloads/'pr.zip').read_bytes()).hexdigest(),
                'verified':['real native CLI upgrade','injected post-upgrade failure','byte-exact managed rollback',
                            'retry succeeds','custom config retained','policy and preset registration retained',

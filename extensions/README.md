@@ -1,145 +1,36 @@
-<img src="../docs/assets/sanduq-icon-128.png" alt="" width="56" align="left">
+# Spec Kit extension source index
 
-# Spec Kit Extensions
+Eight extensions supply the managed workflow and independently usable documentation, QA, Project,
+PR, illustration, and Memory processes. Use [setup](../docs/getting-started.md) to install them and
+the [extension guide](../docs/extensions.md) for every public command and its practical example.
 
-This folder hosts sanduq extensions for the `specify` CLI. The public catalog is the root
-[`../catalog.json`](../catalog.json), mirrored here as [`catalog.json`](catalog.json) for
-compatibility with the Resal Marketplace layout.
+## Versions and command coverage
 
-## Extensions
+| Extension | Source version | Commands |
+| --- | --- | ---: |
+| [assure](assure/README.md) | 2.3.1 | 3 |
+| [illustrate](illustrate/README.md) | 2.1.3 | 3 |
+| [memory](memory/README.md) | 2.1.1 | 7 |
+| [pr](pr/README.md) | 4.2.1 | 2 |
+| [project](project/README.md) | 2.2.1 | 2 |
+| [scope](scope/README.md) | 1.5.1 | 7 |
+| [user-manual](user-manual/README.md) | 1.5.1 | 4 |
+| [workflow](workflow/README.md) | 1.8.4 | 13 |
 
-| Extension | Source version | Main purpose |
-| --- | --- | --- |
-| [workflow](workflow/) | 1.0.0 (unreleased) | Sanduq Workflow |
-| [scope](scope/) | 1.4.0 (unreleased) | Speckit Scope |
-| [project](project/) | 2.1.0 (unreleased) | GitHub Project Lifecycle Sync |
-| [pr](pr/) | 4.1.0 (unreleased) | Pull Request Workflow |
-| [assure](assure/) | 2.1.0 (unreleased) | Assure |
-| [user-manual](user-manual/) | 1.1.0 (unreleased) | User Manual |
-| [illustrate](illustrate/) | 2.1.2 | Illustrate |
-| [memory](memory/) | 2.1.0 | Atomic project memory with typed links, budgeted retrieval, verified archival and parallel drafting |
+Published versions live in the authoritative root [catalog](../catalog.json);
+[catalog.json](catalog.json) mirrors it.
+[Pending releases](pending-releases.json) identify staged versions. Check these sources when
+installing. The table describes source in this checkout; catalog promotion updates published
+versions independently.
 
-Published install versions remain authoritative in the two catalogs. Source versions
-marked unreleased are exercised with staged archives, not assumed live URLs.
+## Setup, usage, and contribution
 
-For what an extension *is* — and how it differs from a portable skill or a plugin bundle — see
-[Skills, plugins, and extensions](../README.md#skills-plugins-and-extensions). For the sequenced
-Scope-to-PR pipeline these extensions compose into, see
-[The managed Spec Kit workflow](../README.md#the-managed-spec-kit-workflow).
+- [Install and initialize](../docs/getting-started.md#managed-workflow)
+- [All commands, prerequisites, and expected outputs](../docs/extensions.md)
+- [Managed stages and overlays](../docs/skill-guide.md)
+- [Operating guide](../docs/workflow-guide.md)
+- [Local packages and release process](../CONTRIBUTING.md)
 
-## Install
-
-Add the catalog once:
-
-```bash
-specify extension catalog add --name sanduq --priority 10 --install-allowed \
-  https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
-```
-
-Install by id:
-
-```bash
-specify extension add project
-specify extension add pr
-specify extension add assure
-specify extension add user-manual
-specify extension add illustrate
-specify extension add memory
-```
-
-For an existing standalone `pr-review` installation, migrate to the consolidated extension:
-
-```bash
-specify extension remove pr-review
-specify extension add pr --force
-```
-
-Local development install:
-
-```bash
-specify extension add --dev /path/to/sanduq/extensions/project --force
-```
-
-Always point `--dev` at an external clone path, not a path inside the target project's
-`.specify/extensions/` directory.
-
-If a project keeps resolving an old version, clear the project cache:
-
-```powershell
-Remove-Item -Recurse -Force .specify\extensions\.cache
-specify extension add project
-```
-
-## Use
-
-`project` requires one-time configuration in each target repo:
-
-```text
-Claude Code: /speckit-project-init
-Codex:       $speckit-project-init
-```
-
-The initializer asks whether Project sync hooks should be required/automatic or
-optional/manual. Non-interactive runs can pass `--hooks-mode required|optional`.
-
-The other commands are manual or optional lifecycle-hook prompts:
-
-```text
-/speckit-pr-generate
-/speckit-pr-review-feedback owner/repo#123
-/speckit-assure-init
-/speckit-assure-analyze
-/speckit-assure-document
-/speckit-user-manual-init
-/speckit-user-manual-analyze
-/speckit-user-manual-update
-/speckit-user-manual-release
-/speckit-illustrate-generate
-/speckit-illustrate-export path/to/diagram.html --svg-only
-```
-
-`pr`, `assure`, and `user-manual` check the Spec Kit registry for their compatible `illustrate` version
-when invoked. The default dependency policy asks before install/update; projects may opt into
-automatic or manual behavior through `.specify/extension-dependencies.yml`.
-
-## Project memory and spec archiving
-
-Use [Sanduq Memory](memory/README.md) to consolidate verified completed specifications.
-Initialize it with `/speckit-memory-init`, `$speckit-memory-init`, or
-`/speckit.memory.init`, depending on the agent. Configure `.specify/memory-policy.json`
-with the merge branch and real named verification commands. Manual `run` selects
-exact verified feature folders; `enable` records the owner's one-time approval for
-queueing after implementation and processing after merge in the next local session.
-`impact` consults the relevant current memory; `status` reports recovery state.
-
-## Publishing
-
-Maintainers set source manifest versions and `extensions/pending-releases.json` in
-the reviewed change. Keep its status `implementation-in-progress` until validation
-is complete; set `ready` only for release-ready packages.
-
-While the status is anything other than `ready` or `released`, the Release extensions
-workflow **skips and succeeds** rather than failing: staged-but-unvalidated work is the
-expected state, not a broken pipeline. The run summary records the status it saw. Flipping
-the status to `ready` is what authorizes publication, so do it only when every staged
-package is genuinely release-ready — assets and tags are immutable once published.
-
-After successful push CI on the current main commit, Release extensions:
-
-1. Builds deterministic ZIPs including canonical presets and shared helpers.
-2. Creates immutable versioned release assets, or verifies identical assets on retry.
-3. Downloads every asset and checks SHA-256. A mismatch blocks publication; bump the
-   version instead of overwriting an existing asset.
-4. Promotes both catalogs only after every asset verifies, then clears released entries
-   from the pending map. A failed push cannot create a catalog URL for a missing asset.
-
-Local preparation without publication:
-
-```bash
-python extensions/scripts/release.py prepare --development
-python extensions/scripts/release.py publish
-```
-
-Development plans cannot be published or promoted. The second command is a dry run.
-See [the workflow guide](../docs/workflow-guide.md) for installation, resumption,
-version updates, rollback and the difference between local and live acceptance.
+Package READMEs linked above retain detailed runtime contracts. Commands register through the
+consumer's Spec Kit integration; read the [host naming table](../docs/getting-started.md#command-names).
+Scope's ID is ambiguous across catalogs; use Workflow's versioned Sanduq dependency installer.

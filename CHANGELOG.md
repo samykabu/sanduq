@@ -4,6 +4,15 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## Documentation reorganization — 2026-10-06
+
+- Short README with focused setup, skill, extension, operating and contribution guides.
+- Consistent booking/refund examples cover seven portable skills and all 41 extension commands.
+- Added editable dispatcher and feature-state diagrams; removed obsolete overview and theme assets.
+- Added documentation link and coverage checks in CI, including command-prefix regression checks.
+- Publish patch releases for all eight extension packages so installed README links reach the new guides.
+
+
 ## Selectable manual theme — user-manual 1.5.0, workflow 1.8.3 — 2026-10-04
 
 - User Manual 1.5.0 (minor): `renderer.theme` selects Material (default),

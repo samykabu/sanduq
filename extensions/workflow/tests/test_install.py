@@ -25,6 +25,8 @@ class InstallTests(unittest.TestCase):
         self.package = Path(temporary.name).resolve()
         source = Path(__file__).resolve().parents[1]
         shutil.copyfile(source / 'dependencies.json', self.package / 'dependencies.json')
+        major, minor, patch_version = map(int, w.read(self.package / 'dependencies.json')['required']['pr'].split('.'))
+        self.newer_pr = f'{major}.{minor}.{patch_version + 1}'
         shutil.copytree(source / 'skills', self.package / 'skills')
         shutil.copytree(source / 'assets', self.package / 'assets')
         for name in ('scope-gate', 'scope-brainstorm', 'workflow'):
@@ -207,7 +209,7 @@ class InstallTests(unittest.TestCase):
                                             w.load_policy(self.root)))
 
     def test_newer_compatible_package_is_retained_without_downgrade(self):
-        self.version('pr', '4.2.1')
+        self.version('pr', self.newer_pr)
         result = installer.install(self.root, package_root=self.package)
         self.assertEqual(result['retained_newer'][0]['extension'], 'pr')
         self.assertNotIn('pr', [op['extension'] for op in result['extensions']])
@@ -216,14 +218,13 @@ class InstallTests(unittest.TestCase):
         self.version('pr', '5.0.0')
         with self.assertRaisesRegex(w.WorkflowError, 'NEWER_DEPENDENCY_INCOMPATIBLE'):
             installer.install(self.root, package_root=self.package)
-        self.version('pr', '4.2.1', enabled=False)
+        self.version('pr', self.newer_pr, enabled=False)
         with self.assertRaisesRegex(w.WorkflowError, 'NEWER_DEPENDENCY_DISABLED'):
             installer.install(self.root, package_root=self.package)
 
-    def test_scope_1_5_0_declares_it_requires_workflow_1_8_0(self):
+    def test_scope_declares_it_requires_workflow_1_8_0(self):
         source = Path(__file__).resolve().parents[2] / 'scope/extension.yml'
         doc = yaml.safe_load(source.read_text(encoding='utf-8'))
-        self.assertEqual(doc['extension']['version'], '1.5.0')
         self.assertIn({'id': 'workflow', 'version': '>=1.8.0,<2.0.0', 'required': True},
                       doc['requires']['extensions'])
         installer.check_workflow_requirement('scope', doc, '1.8.0')
