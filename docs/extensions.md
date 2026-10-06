@@ -19,8 +19,14 @@ initialization are separate steps. Start with [Getting started](getting-started.
 The tables cover every command in the eight [source manifests](../extensions/README.md).
 Examples use [issue 412 in the synthetic booking application](README.md#example-conventions).
 They illustrate the command's purpose; guards still enforce issue binding and stage order.
+The [workflow gallery](extension-workflows.md) explains user commands, configured hooks, dispatcher stages,
+optional QA/manual paths, and blocked states.
 
 ## Workflow
+
+![Workflow commands and ownership](diagrams/extension-workflow.svg)
+
+[Trigger modes and paths](extension-workflows.md#managed-workflow) · [Editable diagram](diagrams/extension-workflow.html). Read top to bottom; lanes identify who acts.
 
 Workflow owns the resumable Scope-to-PR dispatcher. Initialize it once with QA/manual and evidence
 gate choices, then use Scope, Clarify, Continue, and Finalize for daily work. It selects one task
@@ -68,6 +74,10 @@ Merge and deployment require separate authorization. See [worked stages](skill-g
 
 ## Scope
 
+![Scope commands and ownership](diagrams/extension-scope.svg)
+
+[Trigger modes and paths](extension-workflows.md#scope) · [Editable diagram](diagrams/extension-scope.html). Read top to bottom; lanes identify who acts.
+
 Scope checks a GitHub issue before a specification exists. It verifies prerequisites, inventories
 requirements, assesses effort, and publishes only the approved decomposition or valid project-policy
 decision. Workflow installs its matching Sanduq version; do not select an ambiguous `scope` package
@@ -92,6 +102,10 @@ board move. Unmanaged Scope follows its own status and approval contract.
 
 ## Project
 
+![Project commands and ownership](diagrams/extension-project.svg)
+
+[Trigger modes and paths](extension-workflows.md#project) · [Editable diagram](diagrams/extension-project.html). Read top to bottom; lanes identify who acts.
+
 Project maps Spec Kit phases onto the actual GitHub Project columns. Initialize with authenticated
 `gh` and Project access. In managed Workflow, preserve dispatcher-owned hooks and task-issue ownership.
 [Package reference](../extensions/project/README.md).
@@ -107,6 +121,10 @@ adapter owns their creation/completion. A logged graceful skip is not a complete
 Use `--dry-run` or `-DryRun` on the package's Bash/PowerShell sync helper before diagnosis changes.
 
 ## Assure
+
+![Assure commands and ownership](diagrams/extension-assure.svg)
+
+[Trigger modes and paths](extension-workflows.md#assure) · [Editable diagram](diagrams/extension-assure.html). Read top to bottom; lanes identify who acts.
 
 Assure adds tester-readiness analysis and a QA walkthrough. It is distinct from application user
 documentation and does not itself prove tests passed. Initialize integrated or manual policy, or
@@ -124,6 +142,10 @@ An old walkthrough is insufficient after the implementation changes. Illustrate 
 applicable diagrams. Legacy `qa` and `how-to-test` extension aliases are retired.
 
 ## User Manual
+
+![User Manual commands and ownership](diagrams/extension-user-manual.svg)
+
+[Trigger modes and paths](extension-workflows.md#user-manual) · [Editable diagram](diagrams/extension-user-manual.html). Read top to bottom; lanes identify who acts.
 
 User Manual maintains canonical `User-Manual/` content and filtered End User,
 Administrator/Operator, and Technical editions. Approve the discovered module map before
@@ -145,6 +167,10 @@ access enforcement. Illustrate supplies useful visuals. See the [focused skill e
 
 ## PR
 
+![PR commands and ownership](diagrams/extension-pr.svg)
+
+[Trigger modes and paths](extension-workflows.md#pr) · [Editable diagram](diagrams/extension-pr.html). Read top to bottom; lanes identify who acts.
+
 PR builds feature explanations and creates or updates the current branch's PR after required QA
 and manual freshness checks. Git and authenticated `gh` are needed for remote operations.
 [Package reference](../extensions/pr/README.md).
@@ -162,6 +188,10 @@ document output and an accurate skipped-PR report. The old `pr-review` extension
 
 ## Illustrate
 
+![Illustrate commands and ownership](diagrams/extension-illustrate.svg)
+
+[Trigger modes and paths](extension-workflows.md#illustrate) · [Editable diagram](diagrams/extension-illustrate.html). Read top to bottom; lanes identify who acts.
+
 The extension packages the same visual vocabulary as the portable skill, with a version-matched
 copy under `.specify/extensions/illustrate/skill/`. It does not depend on a global skill install.
 [Package reference](../extensions/illustrate/README.md).
@@ -177,6 +207,10 @@ sources alongside exports, use the project's theme, and review rendering. Legacy
 installs migrate to `illustrate`; PNG rendering needs Playwright and Chromium.
 
 ## Memory
+
+![Memory commands and ownership](diagrams/extension-memory.svg)
+
+[Trigger modes and paths](extension-workflows.md#memory) · [Editable diagram](diagrams/extension-memory.html). Read top to bottom; lanes identify who acts.
 
 Memory reconciles completed feature knowledge into `specs/memory/`, migrates required fixtures,
 and removes selected spec folders only after verified, independently reviewed, recoverable commits.

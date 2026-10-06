@@ -46,6 +46,15 @@ Editable HTML and SVG exports live in `docs/diagrams/`:
 | [Implementation orchestration](../diagrams/implementation-orchestration.html) | [SVG](../diagrams/implementation-orchestration.svg) | Worker ownership and verified phase integration |
 | [Workflow lifecycle](../diagrams/workflow-lifecycle.html) | [SVG](../diagrams/workflow-lifecycle.svg) | The full managed feature lifecycle |
 
+The [extension workflow gallery](../extension-workflows.md) owns eight package diagrams plus the
+independent QA/manual decision flow. The [Illustrate gallery](../illustrate-examples.md) owns seven
+refund-process palette previews with editable sources. [Delegate examples](../delegate-examples.md)
+own the bounded consensus diagram and reuse the skill's existing parallel fan-out asset.
+
+Five PNGs in `manual-gallery/` show actual builds of the synthetic manual. Their
+[source and regeneration script](../examples/booking-manual/README.md) keep the screenshots reproducible.
+Site outputs stay under ignored `dist/`.
+
 [Progress token usage](progress-token-usage.png) illustrates the implementation report in the
 [operations reference](../workflow-operations.md). The `workflow-plan/` directory holds historical
 plan-delivery evidence, referenced by implementation records. Keep those records with their assets.

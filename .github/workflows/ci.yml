@@ -18,6 +18,7 @@ jobs:
         run: |
           python3 extensions/scripts/test_check_docs.py
           python3 extensions/scripts/check_docs.py
+          python3 extensions/user-manual/scripts/audit_manual.py --root docs/examples/booking-manual
 
       - name: Validate JSON (catalog + configs + marketplace)
         run: |

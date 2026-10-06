@@ -9,7 +9,11 @@ live in the guides that own them. Package READMEs hold the detailed integration 
 | --- | --- |
 | Install a skill, plugin, or managed workflow | [Getting started](getting-started.md) |
 | Pick a standalone skill and see its output | [Portable skills](skills.md) |
+| Draw a process and select preset or custom colors | [Illustrate examples](illustrate-examples.md) |
+| Bound a debate, run parallel reviews, or automate delegation | [Delegate Task examples](delegate-examples.md) |
+| Compare real manual themes and install your own | [User Manual theme gallery](user-manual-examples.md) |
 | Configure an extension and use every public command | [Spec Kit extensions](extensions.md) |
+| See user commands, hooks, states, and optional paths | [Extension workflow gallery](extension-workflows.md) |
 | Follow a feature through every recorded stage | [Worked lifecycle](skill-guide.md) |
 | Resume, upgrade, or diagnose evidence | [Workflow operating guide](workflow-guide.md) |
 | Inspect state, delegation usage, and runner policy | [Workflow operations reference](workflow-operations.md) |

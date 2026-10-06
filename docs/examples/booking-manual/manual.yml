@@ -1,0 +1,48 @@
+schema_version: "1.0"
+product_name: "Booking example"
+languages:
+  required: [en]
+  optional: []
+  rtl: [ar]
+audiences:
+  end-user:
+    visibility: approved-public
+  administrator:
+    visibility: authenticated-internal
+  technical:
+    visibility: private
+publishing:
+  preview: private-ci-artifact
+  preview_security:
+    private_repository: repository-read-permission
+    public_repository: age-encrypted
+    age_recipient_variable: USER_MANUAL_PREVIEW_AGE_RECIPIENT
+  ephemeral_provider: null
+  commit_build_outputs: false
+renderer:
+  primary: mkdocs-material
+  material_version: "9.7.6"
+  mkdocs_constraint: ">=1.6,<2"
+  compatibility: zensical
+  # material (default), readthedocs, mkdocs, or any installed MkDocs theme.
+  theme: material
+  theme_options: {}
+modules:
+  - id: "booking"
+    name: "Booking"
+    description: "Find a booking and request a refund."
+    status: approved
+    evidence:
+      - "README.md"
+  - id: "payments"
+    name: "Payments"
+    description: "Approve or reject refunds and reconcile settlement."
+    status: approved
+    evidence:
+      - "README.md"
+  - id: "operations"
+    name: "Operations"
+    description: "Assign operator access and inspect the refund history."
+    status: approved
+    evidence:
+      - "README.md"

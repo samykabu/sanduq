@@ -11,7 +11,10 @@ GUIDES = [ROOT / 'README.md', ROOT / 'CONTRIBUTING.md', ROOT / 'skills/README.md
           ROOT / 'extensions/README.md', ROOT / 'docs/assets/README.md']
 GUIDES += [ROOT / 'docs' / name for name in (
     'README.md', 'getting-started.md', 'skills.md', 'extensions.md', 'skill-guide.md',
-    'workflow-guide.md', 'workflow-operations.md', 'sanduq-delivery-usage.md', 'documentation-review.md')]
+    'workflow-guide.md', 'workflow-operations.md', 'sanduq-delivery-usage.md', 'documentation-review.md',
+    'illustrate-examples.md', 'delegate-examples.md', 'user-manual-examples.md', 'extension-workflows.md')]
+GUIDES += [ROOT / 'docs/examples/booking-manual/README.md']
+GUIDES += sorted(ROOT.glob('docs/examples/booking-manual/docs/**/*.md'))
 GUIDES += sorted(ROOT.glob('extensions/*/README.md'))
 
 
