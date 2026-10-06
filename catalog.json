@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-10-06T12:59:27.054434+00:00",
+  "updated_at": "2026-10-06T18:26:44.897939+00:00",
   "catalog_url": "https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json",
   "extensions": {
     "project": {
@@ -123,14 +123,14 @@
     "illustrate": {
       "name": "Illustrate",
       "id": "illustrate",
-      "version": "2.1.3",
-      "description": "Generate and export twenty-seven technical, product, architecture, and process illustration types with tracked project-level light/dark color and font themes.",
+      "version": "2.2.0",
+      "description": "Generate, import, and export forty-four technical, product, architecture, process, and quantitative illustration types with tracked project-level light/dark color and font themes.",
       "author": "Samy K. Abushanab",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/illustrate",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/illustrate/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/illustrate/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/illustrate-v2.1.3/illustrate.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/illustrate-v2.2.0/illustrate.zip",
       "license": "PolyForm-Noncommercial-1.0.0",
       "category": "documentation",
       "effect": "read-write",
@@ -144,7 +144,7 @@
         ]
       },
       "provides": {
-        "commands": 3,
+        "commands": 4,
         "hooks": 0
       },
       "tags": [
@@ -168,12 +168,21 @@
         "visualization",
         "documentation",
         "project-theme",
-        "custom-fonts"
+        "custom-fonts",
+        "sankey",
+        "waterfall",
+        "heatmap",
+        "deployment",
+        "uml",
+        "mermaid",
+        "drawio",
+        "excalidraw",
+        "animation"
       ],
       "verified": false,
       "created_at": "2026-07-18T15:47:12Z",
-      "updated_at": "2026-10-06T12:59:26.923131+00:00",
-      "sha256": "71cb5e773aab3c229dc38857cebdbf2f5974b7a0632fb2b3e28a01961f38ec57"
+      "updated_at": "2026-10-06T18:26:44.832839+00:00",
+      "sha256": "693f90d0752feceddd153be94e7c04135f9c4a18e6fc46d0f6802d71d7d5fea7"
     },
     "assure": {
       "name": "Assure",
@@ -298,7 +307,7 @@
     "workflow": {
       "name": "Sanduq Workflow",
       "id": "workflow",
-      "version": "1.8.4",
+      "version": "1.8.5",
       "description": "GitHub issue decisions and resumable Scope-to-PR orchestration with optional model-aware delegation, QA, User Manual, and workflow evidence CI.",
       "author": "Samy K. Abushanab",
       "license": "PolyForm-Noncommercial-1.0.0",
@@ -306,7 +315,7 @@
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/workflow",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v1.8.4/workflow.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v1.8.5/workflow.zip",
       "requires": {
         "speckit_version": ">=1.0.0,<2.0.0",
         "tools": [
@@ -340,8 +349,8 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "d5660c5b78c77834e467aa8fa5a1ee4d2e3f4045d39c41c40186177d35068d3e",
-      "updated_at": "2026-10-06T12:59:27.054385+00:00"
+      "sha256": "140b40bb0d14648a57a57b48293b5f5ee72a718162f5218dd6de39d01352c6e6",
+      "updated_at": "2026-10-06T18:26:44.897897+00:00"
     },
     "scope": {
       "name": "Speckit Scope",

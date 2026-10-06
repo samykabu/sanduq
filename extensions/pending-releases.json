@@ -1,9 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "illustrate": "2.2.0",
-    "workflow": "1.8.5"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Illustrate 2.2.0 adds 17 diagram types, variants, semantic patterns, draw.io/Mermaid/Excalidraw import, optional motion, deterministic theme apply, and render/geometry/self-check verification, ported from diagram-design 2.6.59. Theme files and existing variants are unchanged. Publish after successful main CI and downloaded asset verification. Workflow 1.8.5 pins Illustrate 2.2.0."
 }
