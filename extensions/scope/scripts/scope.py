@@ -184,6 +184,11 @@ def dependency_text(body):
     return '\n'.join(parts)
 
 
+def rate_limited(text):
+    """True when a GitHub message names a rate limit: "rate limit", "rate limited", "RATE_LIMIT", "rate-limit"."""
+    return 'rate limit' in re.sub(r'[\s_\-]+', ' ', (text or '').lower())
+
+
 class GitHub:
     """`gh` CLI client. `gh project` is GraphQL-only; while GraphQL is rate-limited, Project
     operations are served from the REST Projects API (a separate budget) and GraphQL is
@@ -195,6 +200,7 @@ class GitHub:
         self.transports = set()
         self._rest_until = 0.0
         self._rest = None
+        self._project_verified = False
 
     @property
     def project_transport(self):
@@ -208,9 +214,9 @@ class GitHub:
         if is_project and time.time() < self._rest_until:
             return self._project_rest(args)
         p = subprocess.run(['gh', *args], input=json.dumps(payload) if payload is not None else None,
-                           capture_output=True, text=True, encoding='utf-8')
+                           capture_output=True, text=True, encoding='utf-8', timeout=30)
         if p.returncode:
-            if is_project and self.graphql_exhausted(p.stderr):
+            if is_project and self.graphql_exhausted(p.stderr, args):
                 return self._project_rest(args)
             raise ScopeError(f'GitHub request failed ({" ".join(args[:3])}): {p.stderr.strip()[:700]}')
         if is_project:
@@ -223,24 +229,32 @@ class GitHub:
     def _project_rest(self, args):
         if self._rest is None:
             self._rest = ProjectRest(self, self.project_cfg)
+        self._rest.validate(args)
+        self.verify_project()
         self.transports.add('rest')
         return self._rest.run(args)
 
-    def graphql_exhausted(self, stderr=''):
-        """True when GraphQL is rate-limited. `gh project` can report this as an unrelated error
-        (for example "unknown owner type"), so the real budget is always checked."""
+    def graphql_exhausted(self, stderr='', args=None):
+        """True when GraphQL is rate-limited. The failed request's own message naming a rate limit is
+        enough, even while the cheap budget probe still reports points left (a costly query can be
+        refused first). `gh project` can also report exhaustion as an unrelated error (for example
+        "unknown owner type"), so the real budget is checked for every other failure; that masked owner error
+        is accepted only when `masked_owner_failure` verifies it."""
+        explicit = rate_limited(stderr)
         p = subprocess.run(['gh', 'api', 'graphql', '-f', 'query={rateLimit{remaining resetAt}}'],
-                           capture_output=True, text=True, encoding='utf-8')
+                           capture_output=True, text=True, encoding='utf-8', timeout=30)
         reset = None
         if p.returncode:
-            exhausted = 'rate limit' in ((p.stderr or '') + (p.stdout or '') + (stderr or '')).lower()
+            exhausted = explicit or rate_limited((p.stderr or '') + (p.stdout or ''))
         else:
             try:
                 limit = json.loads(p.stdout)['data']['rateLimit']
-                exhausted = limit['remaining'] <= 0
+                exhausted = explicit or limit['remaining'] <= 0
                 reset = datetime.fromisoformat(limit['resetAt'].replace('Z', '+00:00')).timestamp()
             except (ValueError, KeyError, TypeError, AttributeError):
-                exhausted = False
+                exhausted = explicit
+        if not exhausted and self.masked_owner_failure(stderr, args):
+            exhausted = True
         if exhausted:
             # Unknown reset: re-check GraphQL after a minute rather than before every operation.
             self._rest_until = max(reset or 0, time.time() + 60)
@@ -248,6 +262,44 @@ class GitHub:
             print(f'[scope] GraphQL rate-limited (resets {when}); using the REST Projects API for Project operations.',
                   file=sys.stderr)
         return exhausted
+
+    def masked_owner_failure(self, stderr, args=None):
+        """True when `gh project` reported "unknown owner type" for a block that is not the configured owner's
+        fault: the request itself targets the configured Project, and a direct owner query is rate-limited or
+        the REST Projects API resolves the same configured owner, type, number and node ID. A mismatched
+        request, a failed or mismatched REST lookup keeps the original error."""
+        cfg = self.project_cfg or {}
+        if 'unknown owner type' not in (stderr or '').lower() or not cfg.get('owner') or not cfg.get('projectNumber'):
+            return False
+        try:
+            ProjectRest(self, cfg).validate(args or [])
+        except ScopeError:
+            return False
+        direct = subprocess.run(['gh', 'api', 'graphql', '-f', 'query=query($login:String!){repositoryOwner(login:$login){login}}',
+                                 '-f', f'login={cfg["owner"]}'], capture_output=True, text=True, encoding='utf-8', timeout=30)
+        if direct.returncode and rate_limited((direct.stderr or '') + (direct.stdout or '')):
+            return True
+        try:
+            self.verify_project()
+        except ScopeError:
+            return False
+        return True
+
+    def verify_project(self):
+        """Require the live REST Project to be the configured one (owner, owner type, number, node ID)."""
+        if self._project_verified:
+            return
+        cfg = self.project_cfg
+        base = ProjectRest(self, cfg).base
+        project = self.api(base) or {}
+        owner = project.get('owner') or {}
+        kind = 'Organization' if cfg.get('ownerType', 'user') == 'org' else 'User'
+        require(str(project.get('number')) == str(cfg['projectNumber'])
+                and str(owner.get('login', '')).casefold() == str(cfg['owner']).casefold()
+                and owner.get('type', kind) == kind
+                and (not cfg.get('projectId') or project.get('node_id') == cfg['projectId']),
+                f'REST fallback: {base} is not the configured Project (owner, owner type, number or node ID differ).')
+        self._project_verified = True
 
     def api(self, endpoint, method='GET', payload=None, pages=False):
         args = ['api', endpoint, '-H', 'Accept: application/vnd.github+json']
@@ -277,18 +329,64 @@ class ProjectRest:
                       'reviewers', 'parent issue', 'sub-issues progress'}
 
     def __init__(self, gh, cfg):
-        self.gh = gh
+        self.gh, self.cfg = gh, cfg
         owner_path = 'orgs' if cfg.get('ownerType', 'user') == 'org' else 'users'
         self.base = f'{owner_path}/{cfg["owner"]}/projectsV2/{cfg["projectNumber"]}'
         self._fields = None
         self._item_ids = None
 
+    # Options each `gh project` subcommand may carry when served over REST; anything else is refused.
+    ALLOWED = {'field-list': {'--owner', '--format', '--limit'}, 'item-list': {'--owner', '--format', '--limit'},
+               'item-add': {'--owner', '--format', '--url'},
+               'field-create': {'--owner', '--format', '--name', '--data-type', '--single-select-options'},
+               'item-edit': {'--id', '--project-id', '--field-id', '--single-select-option-id', '--text'}}
+
+    def validate(self, args):
+        """Refuse a request that names another owner, Project number or Project ID, or carries unsupported
+        arguments, before any REST operation (a throttle must not retarget the request)."""
+        action = args[1] if len(args) > 1 else ''
+        allowed = self.ALLOWED.get(action)
+        require(allowed is not None, f'REST fallback does not support `gh project {action}`; retry after the GraphQL rate limit resets.')
+        rest = list(args[2:])
+        positional = []
+        while rest and not rest[0].startswith('--'):
+            positional.append(rest.pop(0))
+        require(len(rest) % 2 == 0 and all(rest[i].startswith('--') for i in range(0, len(rest), 2)),
+                f'REST fallback: malformed `gh project {action}` arguments.')
+        options = {}
+        for i in range(0, len(rest), 2):
+            require(rest[i] in allowed and rest[i] not in options,
+                    f'REST fallback: unsupported argument {rest[i]} for `gh project {action}`.')
+            options[rest[i]] = rest[i + 1]
+        if action == 'item-edit':
+            require(not positional and self.cfg.get('projectId') and options.get('--project-id') == self.cfg['projectId'],
+                    'REST fallback: request Project ID differs from the configured Project.')
+            require(('--single-select-option-id' in options) != ('--text' in options) and '--id' in options and '--field-id' in options,
+                    'REST fallback: item-edit needs --id, --field-id and exactly one value.')
+            return
+        require(positional == [str(self.cfg['projectNumber'])], 'REST fallback: request Project number differs from the configured Project.')
+        require(str(options.get('--owner', '')).casefold() == str(self.cfg['owner']).casefold(),
+                'REST fallback: request owner differs from the configured Project owner.')
+        require(options.get('--format', 'json') == 'json', 'REST fallback supports --format json only.')
+        if action == 'field-create':
+            require(options.get('--data-type') == 'SINGLE_SELECT' and '--name' in options and '--single-select-options' in options,
+                    'REST fallback does not support `gh project field-create` without SINGLE_SELECT, --name and options.')
+
     def run(self, args):
         options = {args[i]: args[i + 1] for i in range(2, len(args) - 1) if args[i].startswith('--')}
         action = args[1] if len(args) > 1 else ''
         if action == 'field-list':
+            self._fields = None  # field creation and verification must see current remote state
             fields = [self.field_row(f) for f in self.fields()]
             return {'fields': fields, 'totalCount': len(fields)}
+        if action == 'field-create':
+            require(options.get('--data-type') == 'SINGLE_SELECT', 'REST fallback does not support `gh project field-create` without SINGLE_SELECT.')
+            field = self.gh.api(f'{self.base}/fields', 'POST', {
+                'name': options['--name'], 'data_type': 'single_select',
+                'single_select_options': [{'name': name, 'color': 'GRAY', 'description': ''}
+                                          for name in options['--single-select-options'].split(',')]})
+            self._fields = None
+            return self.field_row(field)
         if action == 'item-list':
             items = [self.item_row(raw) for raw in self.raw_items()]
             return {'items': items, 'totalCount': len(items)}
@@ -296,7 +394,18 @@ class ProjectRest:
             match = re.search(r'github\.com/([^/]+/[^/]+)/issues/(\d+)', options.get('--url', ''))
             require(match, f'REST fallback: item-add needs an issue URL, got {options.get("--url")!r}.')
             issue = self.gh.api(f'repos/{match[1]}/issues/{match[2]}')
-            item = self.gh.api(f'{self.base}/items', 'POST', {'type': 'Issue', 'id': issue['id']})
+            existing = self.existing_issue_item(match[1], issue)
+            if existing:
+                return {'id': existing}
+            try:
+                item = self.gh.api(f'{self.base}/items', 'POST', {'type': 'Issue', 'id': issue['id']})
+            except ScopeError as error:
+                # `gh project item-add` is idempotent; REST answers 422 when the issue is already on the board.
+                # Accept it only if one fresh reread finds that exact issue; any other failure is raised.
+                existing = self.existing_issue_item(match[1], issue) if 'already exists' in str(error).lower() else None
+                if not existing:
+                    raise
+                return {'id': existing}
             if self._item_ids is not None:
                 self._item_ids[item['node_id']] = item['id']
             return {'id': item['node_id']}
@@ -324,6 +433,18 @@ class ProjectRest:
         rows = self.gh.api(f'{self.base}/items?per_page=100&fields={ids}', pages=True)
         self._item_ids = {raw['node_id']: raw['id'] for raw in rows}
         return rows
+
+    def existing_issue_item(self, repo, issue):
+        """Node ID of the configured board's item for exactly this issue (repository and number), from a fresh
+        paginated listing; None when the issue is not on the board."""
+        for raw in self.raw_items():
+            content = raw.get('content') or {}
+            repository = re.sub(r'^https://api\.github\.com/repos/', '', content.get('repository_url') or '')
+            if (raw.get('content_type') == 'Issue' and content.get('number') == issue['number']
+                    and repository.casefold() == repo.casefold()
+                    and content.get('id', issue['id']) == issue['id']):
+                return raw['node_id']
+        return None
 
     def item_database_id(self, node_id):
         if self._item_ids is None or node_id not in self._item_ids:
@@ -504,13 +625,15 @@ class Scope:
                                                      'note': 'Inspect PR files, merge state, code and tests; references alone do not prove implementation.'})
         return result
 
-    def gate(self, value, required_status='Backlog'):
+    def gate(self, value, required_status='Backlog', *, feature=None, token=None, session=None, analysis=None, analysis_path=None):
         require(re.fullmatch(r'#?[1-9]\d*', (value or '').strip()),
                 'SCOPE_REQUIRED: Specify requires a GitHub issue number and current effort score. Run /speckit-scope <issue> first.')
         initial = self.resolve(value)
         revalidation = workflow_policy.bound_claim(self.root, self.repo, initial['number'], {'scope', 'specify'})
+        fresh = workflow_policy.fresh_claim(self.root, self.repo, initial['number'], feature, token, session) if any((feature, token, session)) else None
+        fresh_continued = fresh and initial.get('state') == 'open' and self.status(initial) == 'Feature Specification'
         continued = revalidation and initial.get('state') == 'open' and self.status(initial) in {'Feature Specification', 'Need Clarifications', 'Ready', 'In progress', 'In review'}
-        require(self.status(initial) == required_status or continued,
+        require(self.status(initial) == required_status or continued or fresh_continued,
                 f'SPECIFY_STATE: Specify requires {required_status}; #{initial["number"]} is {self.status(initial)}.')
         snapshot = self.inspect(value)
         issue = snapshot['issue']
@@ -533,7 +656,43 @@ class Scope:
         require(f'effort:{receipt["score"]}' in labels and 'scope:parent' not in labels, 'SCOPE_REQUIRED: effort label is missing or inconsistent; run /speckit-scope first.')
         require(not snapshot['blocked'], rejection(snapshot['blocked']))
         require(receipt.get('prompt'), 'SCOPE_REQUIRED: missing Specify prompt; run /speckit-scope first.')
-        return {'issue': issue['number'], 'score': receipt['score'], 'prompt': receipt['prompt'], 'fingerprint': receipt['fingerprint']}
+        result = {'issue': issue['number'], 'score': receipt['score'], 'prompt': receipt['prompt'], 'fingerprint': receipt['fingerprint']}
+        if fresh:
+            require(initial.get('state') == 'open', 'SCOPE_FRESH_OPEN_ISSUE_REQUIRED')
+            require(version == 2 and analysis is not None, 'SCOPE_FRESH_ANALYSIS_REQUIRED')
+            nodes = self.validate_analysis(snapshot, analysis)
+            require(len(nodes) == 1 and analysis['tree']['score'] == score,
+                    'SCOPE_FRESH_APPROVED_LEAF_REQUIRED')
+            require(not self.gh.api(f'{self.base}/{issue["number"]}/sub_issues?per_page=100', pages=True),
+                    'SCOPE_PARENT: native children exist')
+            parent = self.gh.api(f'{self.base}/{issue["number"]}/parent')
+            parent_number = parent.get('number') if isinstance(parent, dict) else None
+            parent_receipt = metadata(self.issue(parent_number).get('body')) if parent_number else {}
+            require(parent_number and issue['number'] in parent_receipt.get('children', [])
+                    and parent_receipt.get('approval') == receipt['approval'],
+                    'SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH')
+            children = self.gh.api(f'{self.base}/{parent_number}/sub_issues?per_page=100', pages=True)
+            require(any(child.get('number') == issue['number'] for child in children), 'SCOPE_NATIVE_PARENT_MISMATCH')
+            # A local replacement inherits owner resolutions only when the exact consumed
+            # artifact was applied through Decisions and still matches its recorded bytes.
+            revised = analysis['tree']['specify_prompt'] != receipt['prompt']
+            artifact_sha = None
+            if revised:
+                require(analysis_path is not None, 'SCOPE_RESOLVED_ANALYSIS_EVIDENCE_REQUIRED')
+                artifact = (self.root / analysis_path).resolve()
+                require(artifact.is_relative_to((self.root / fresh['feature']).resolve())
+                        and artifact.is_file() and read_json(artifact) == analysis,
+                        'SCOPE_RESOLVED_ANALYSIS_EVIDENCE_MISMATCH')
+                artifact_sha = hashlib.sha256(artifact.read_bytes()).hexdigest()
+                require(fresh['decision_evidence'].get(artifact.relative_to(self.root).as_posix()) == artifact_sha,
+                        'SCOPE_RESOLVED_ANALYSIS_EVIDENCE_MISMATCH')
+            result.update(feature=fresh['feature'], decision_sha256=fresh['decision_sha256'],
+                          published_prompt=receipt['prompt'], prompt=analysis['tree']['specify_prompt'] if revised else receipt['prompt'],
+                          analysis_role='applied-resolution' if revised else 'consulted',
+                          applied_analysis_sha256=artifact_sha,
+                          analysis_sha256=hashlib.sha256(json.dumps(analysis, sort_keys=True).encode()).hexdigest(),
+                          approval=receipt['approval'], parent=parent_number, publication_required=False)
+        return result
 
     def validate_analysis(self, snapshot, analysis):
         require(not snapshot['blocked'], rejection(snapshot['blocked']))
@@ -943,9 +1102,13 @@ class Scope:
         (self.artifact_directory / 'DEPENDENCIES.md').write_text(report + '\n', encoding='utf-8')
         return graph
 
-    def bind(self, value, apply=False):
-        feature = read_json(self.root / '.specify/feature.json', {})
-        directory = feature.get('feature_directory')
+    def bind(self, value, apply=False, *, feature=None, token=None, session=None, analysis=None, analysis_path=None):
+        if any((feature, token, session)):
+            # Refuse wrong phase before even decision reconciliation can write a ledger.
+            workflow_policy.fresh_claim(self.root, self.repo, int(str(value).lstrip('#')),
+                                        feature, token, session, stages=('specify',))
+        selected = read_json(self.root / '.specify/feature.json', {}) if not feature else {}
+        directory = feature or selected.get('feature_directory')
         require(directory, 'Specify has not created a feature directory.')
         path = (self.root / directory).resolve()
         require(path.is_relative_to(self.root / 'specs') and (path / 'spec.md').is_file(), 'Feature must contain specs/<slug>/spec.md inside this checkout.')
@@ -953,7 +1116,9 @@ class Scope:
         resuming = (existing_source.get('issue') == int(str(value).lstrip('#')) and
                     existing_source.get('repo') == self.repo and
                     self.status(self.resolve(value)) == 'Feature Specification')
-        checked = self.gate(value, 'Feature Specification' if resuming else 'Backlog')
+        require(not existing_source or (existing_source.get('issue'), existing_source.get('repo')) == (int(str(value).lstrip('#')), self.repo), 'SCOPE_BINDING_MISMATCH')
+        checked = self.gate(value, 'Feature Specification' if resuming else 'Backlog',
+                            feature=feature, token=token, session=session, analysis=analysis, analysis_path=analysis_path)
         issue = self.issue(checked['issue'])
         state_path = self.root / self.cfg['stateFile']
         state = read_json(state_path, {})
@@ -968,7 +1133,7 @@ class Scope:
             write_json(state_path, state)
             write_json(path / 'scope-source.json', dict(checked, repo=self.repo))
             revalidation = workflow_policy.bound_claim(self.root, self.repo, issue['number'], {'specify'})
-            if not revalidation:
+            if not revalidation and self.status(issue) != 'Feature Specification':
                 self.set_status(issue, 'Feature Specification')
             current['status'] = self.actual_status(self.status(issue)) if revalidation else self.actual_status('Feature Specification')
             write_json(state_path, state)
@@ -1041,6 +1206,9 @@ def main(argv=None):
     parser.add_argument('--root', default='.')
     parser.add_argument('--analysis', type=Path)
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--feature')
+    parser.add_argument('--token')
+    parser.add_argument('--session')
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--child-count', type=int)
     parser.add_argument('--approved-by')
@@ -1052,6 +1220,10 @@ def main(argv=None):
         if args.command in {'inspect', 'gate', 'approve', 'publish', 'bind'}:
             require(args.issue and args.issue.strip(), 'SCOPE_ISSUE_REQUIRED: supply a GitHub issue number or exact title. Run /speckit-scope <issue> first.')
         app = Scope(args.root)
+        if args.command == 'bind' and any((args.feature, args.token, args.session)):
+            # Phase/ownership check precedes even the CLI's local mutation lock.
+            workflow_policy.fresh_claim(app.root, app.repo, int(args.issue.lstrip('#')),
+                                        args.feature, args.token, args.session, stages=('specify',))
         if args.apply:
             candidate = app.root / '.specify/scope/mutation.lock'
             candidate.parent.mkdir(parents=True, exist_ok=True)
@@ -1068,7 +1240,8 @@ def main(argv=None):
                 write_json(args.output, result)
             require(not result['blocked'], rejection(result['blocked']))
         elif args.command == 'gate':
-            result = app.gate(args.issue)
+            result = app.gate(args.issue, feature=args.feature, token=args.token, session=args.session,
+                              analysis=read_json(args.analysis) if args.analysis else None, analysis_path=args.analysis)
         elif args.command == 'approve':
             require(args.analysis and args.analysis.is_file(), '--analysis <analysis.json> is required.')
             result = app.approve(app.inspect(args.issue), read_json(args.analysis), args.child_count,
@@ -1077,7 +1250,8 @@ def main(argv=None):
             require(args.analysis and args.analysis.is_file(), '--analysis <analysis.json> is required.')
             result = app.publish(app.inspect(args.issue), read_json(args.analysis), args.apply)
         elif args.command == 'bind':
-            result = app.bind(args.issue, args.apply)
+            result = app.bind(args.issue, args.apply, feature=args.feature, token=args.token, session=args.session,
+                              analysis=read_json(args.analysis) if args.analysis else None, analysis_path=args.analysis)
         elif args.command == 'reconcile':
             result = app.reconcile(args.apply)
         else:
@@ -1087,7 +1261,7 @@ def main(argv=None):
             write_json(args.output, result)
         print(json.dumps(with_transport(result, app.gh), indent=2, ensure_ascii=True))
         return 0
-    except (ScopeError, OSError, ValueError, KeyError, TypeError) as exc:
+    except (ScopeError, OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as exc:
         print(str(exc), file=sys.stderr)
         return 2
     finally:

@@ -63,7 +63,10 @@ and saving `scope.statuses` where logical names differ. Preserve existing board
 identity, audience map, languages and publication settings. Managed Project sync is
 required and directly dispatched; Project/Assure Init preserve the reconciled hooks.
 Ensure each Scope lifecycle state has a distinct real column and every Project phase
-maps to an existing option. Finally run `doctor --project`. Package installation
+maps to an existing option. Decisions use the same saved `scope.statuses` and the policy's
+`clarification.resume_on_reinvoke` (written as `reread-answers` by default): a waiting decision
+parks the issue in the mapped Need Clarifications status and answers return it only under that
+policy. No extra setup question is needed. Finally run `doctor --project`. Package installation
 checks alone do not establish project readiness; claims enforce the board checks.
 
 ## continue
@@ -204,3 +207,15 @@ use`: it rewrites the managed aliases with upstream content. Run `workflow.py ho
 `checkpoints_to_migrate`, then run it without `--preview` and migrate each listed
 checkpoint on its branch. `workflow.py host --use <current default>` re-registers a
 host that lost its skills.
+
+
+Decision binding and publication: only a paused pre-Specify checkpoint may read on a
+changed branch. Bound/later or active work uses the checkpoint branch. Active decision
+commands require `SANDUQ_WORKFLOW_CLAIM_TOKEN` and `SANDUQ_WORKFLOW_SESSION_ID` from
+the current claim. The dispatcher passes its verified token/session when completing a stage.
+Marker semantics and canonical choices are protected by the recorded ledger; legacy
+conversion changes presentation only and retains real reply/application evidence.
+Pending decisions park mapped Backlog or Feature Specification. Answers return an owned
+park to Feature Specification; advanced states remain protected. Both Decision and Status
+writes are reread, and a durable pre-write intent recovers lost-response retries. The shared
+Scope transport falls back to REST on GraphQL exhaustion and records the served transport.

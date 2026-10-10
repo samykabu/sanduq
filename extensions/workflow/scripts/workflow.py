@@ -585,7 +585,7 @@ def default_policy(qa, manual):
             'issue_sync': {'taskstoissues': 'required', 'parent_link': 'native-subissue'},
             'clarification': {'transport': 'github-comments', 'resume_on_reinvoke': 'reread-answers'},
             'decisions': {'transport': 'github-issue', 'authorized_users': [],
-                          'project_field': 'Decision'},
+                          'project_field': 'Decision', 'lifecycle_status': True},
             'context': {'mode': 'measured-only', 'max_fraction': .60,
                         'checkpoint_fraction': .50, 'reserve_fraction': .10},
             'finalize': {'create_pr': True, 'merge': False}, 'updates': {'policy': 'reviewed'},
@@ -679,6 +679,7 @@ def validate_policy(policy):
                 and len({user.casefold() for user in users}) == len(users), 'DECISION_AUTHORITY_INVALID')
         require(isinstance(decisions.get('project_field'), str) and decisions['project_field'].strip(),
                 'DECISION_FIELD_INVALID')
+        require(type(decisions.get('lifecycle_status', True)) is bool, 'DECISION_LIFECYCLE_INVALID')
     # Optional and never filled in: an older policy keeps its digest.
     receipts = policy.get('receipts')
     if receipts is not None:
@@ -2424,7 +2425,8 @@ class Run:
             ledger_path = self.feature / 'workflow/decisions.json'
             if ledger_path.is_file():
                 from decisions import reconcile, verify_ledger
-                verify_ledger(self.root, self.relative, reconcile(self.root, self.relative))
+                verify_ledger(self.root, self.relative, reconcile(
+                    self.root, self.relative, claim_token=token, session_id=active.get('session_id')))
             if stage == 'taskstoissues':
                 require(receipt.get('parent_issue') == state['issue'] and receipt.get('native_links_verified') is True, 'TASK_PARENT_NOT_VERIFIED')
             if stage in SOURCE_STAGES:

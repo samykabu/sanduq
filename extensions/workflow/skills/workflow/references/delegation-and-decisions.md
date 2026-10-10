@@ -35,11 +35,27 @@ Scope still checks current approval, labels, prerequisites and requirement finge
 a claim is not permission to bypass stale scope or unresolved human questions.
 For a material choice during any stage, use `scripts/decisions.py --feature
 specs/<bound-feature> ask --question ... --option ... --option ...` to post a
-stable question on the bound GitHub issue. Do not request its answer in the IDE.
+stable question on the bound GitHub issue. It posts the options as an unticked task list. Add
+`--mode multiple` when several options may apply and `--recommended B` to mark
+a suggested option (it is never pre-ticked). Do not request its answer in the IDE.
 Pause the active claim with the question URL and token. On return, run
 `decisions.py ... sync --project-field`, inspect all authorized answers and
 conflicts, then apply the selected result to the actual artifacts. Record
 that application with `decisions.py ... apply --id SDn --evidence <path>`.
-Edited answers reopen the decision; an applied artifact that changed must be
+A ticked box records no author; never tick one for the reviewer. Run
+`decisions.py ... upgrade-questions` once to make questions from an earlier release
+selectable. Edited answers reopen the decision; an applied artifact that changed must be
 reviewed again. Reuse existing question IDs on retries. Never infer an
 answer from the Project field or an agent recommendation.
+
+
+Decision binding and publication: only a paused pre-Specify checkpoint may read on a
+changed branch. Bound/later or active work uses the checkpoint branch. Active decision
+commands require `SANDUQ_WORKFLOW_CLAIM_TOKEN` and `SANDUQ_WORKFLOW_SESSION_ID` from
+the current claim. The dispatcher passes its verified token/session when completing a stage.
+Marker semantics and canonical choices are protected by the recorded ledger; legacy
+conversion changes presentation only and retains real reply/application evidence.
+Pending decisions park mapped Backlog or Feature Specification. Answers return an owned
+park to Feature Specification; advanced states remain protected. Both Decision and Status
+writes are reread, and a durable pre-write intent recovers lost-response retries. The shared
+Scope transport falls back to REST on GraphQL exhaustion and records the served transport.
