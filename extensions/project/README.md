@@ -1,7 +1,8 @@
 # `project` — GitHub Project lifecycle sync (Spec Kit extension)
 
-For setup and a consistent worked example, see [Getting started](https://github.com/samykabu/sanduq/blob/main/docs/getting-started.md)
-and [project usage](https://github.com/samykabu/sanduq/blob/main/docs/extensions.md#project).
+For setup and a worked example, see [Install by host](https://github.com/samykabu/sanduq/blob/main/docs/start/install-by-host.md)
+and the [project page](https://github.com/samykabu/sanduq/blob/main/docs/extensions/project.md).
+Every command and its example is in the [command reference](https://github.com/samykabu/sanduq/blob/main/docs/reference/commands.md#project).
 
 
 Mirrors every Spec Kit feature onto a **GitHub Project (v2)**:
@@ -32,7 +33,7 @@ lifecycle onto whatever Status columns your board has.
 ```bash
 # via Spec Kit catalog (the installer wires hooks + renders the commands):
 specify extension add project
-# or copy this folder to .specify/extensions/project and run install.sh from the repo root
+# local or offline test: build the package, extract it, then `specify extension add --dev <extracted>`
 
 gh auth refresh -h github.com -s project,read:project   # one-time scope
 /speckit-project-init                                   # discover board + map columns -> config.json
