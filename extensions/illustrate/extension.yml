@@ -3,7 +3,7 @@ schema_version: "1.0"
 extension:
   id: illustrate
   name: "Illustrate"
-  version: "2.2.1"
+  version: "2.3.0"
   description: "Generate, import, and export forty-four technical, product, architecture, process, and quantitative illustration types with tracked project-level light/dark color and font themes."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"

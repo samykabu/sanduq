@@ -437,4 +437,4 @@ When the user asks to export, save, rasterize, or convert a generated diagram to
 load [`references/export.md`](references/export.md) and follow the procedure there. The portable
 command source is [`commands/export-diagram.md`](commands/export-diagram.md). Both formats deliver
 the diagram only (the `<svg>` node)—editorial wrappers like cards and headers are dropped by
-design. Export is **manual**—never produce export files unprompted. For a Traceable block decomposition, `--registry` emits a `.registry.json` sidecar of its `data-block-*` metadata: [`references/export-registry.md`](references/export-registry.md).
+design. `--animated` exports a motion figure as a self-playing `.animated.svg` for README images. Export is **manual**—never produce export files unprompted. For a Traceable block decomposition, `--registry` emits a `.registry.json` sidecar of its `data-block-*` metadata: [`references/export-registry.md`](references/export-registry.md).

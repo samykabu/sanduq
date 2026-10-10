@@ -118,7 +118,11 @@ The final-state capture contract is synchronous: `?motion=static`, `<html data-m
 
 ## Export and verification
 
-PNG and SVG exports are static final-state artifacts unless the user explicitly requests a named step. Before capture, open `?motion=static`, await `document.fonts.ready`, and assert `data-frame="static"`. SVG extraction omits HTML controls and scripts; source-visible semantic markup keeps the result complete.
+PNG and SVG exports are static final-state artifacts unless the user explicitly requests a named step, or asks for an animated SVG (`--animated`, below). Before capture, open `?motion=static`, await `document.fonts.ready`, and assert `data-frame="static"`. SVG extraction omits HTML controls and scripts; source-visible semantic markup keeps the result complete.
+
+For a README or other Markdown page, `python scripts/export_diagram.py <file> --animated` writes
+`<name>.animated.svg`: the reveal as CSS inside the SVG (opacity only, no script, no remote fonts,
+reduced-motion shows the complete figure). See [export.md](export.md#animated-svg-for-readmes).
 
 Run:
 

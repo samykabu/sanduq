@@ -4,6 +4,11 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## Animated SVG export — illustrate 2.3.0, workflow 1.9.1 — 2026-10-10
+
+- Illustrate 2.3.0 vendors illustration-tools 3.3.0: `export --animated` produces a self-playing SVG
+  for README images, and exported SVGs are valid XML. Workflow 1.9.1 pins it.
+
 ## Documentation restructure — assure 2.3.2, memory 2.1.2, pr 4.2.2, project 2.2.2 — 2026-10-10
 
 - Docs are organized by adoption level: `docs/start/` (prerequisites, Spec Kit setup, install by

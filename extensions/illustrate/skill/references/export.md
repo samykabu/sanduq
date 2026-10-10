@@ -33,6 +33,27 @@ before PNG export, and reports every written file. The procedure below is the be
 and fallback reference; do not rewrite it into a temporary script when the bundled exporter is
 available.
 
+## Animated SVG for READMEs
+
+`--animated` turns a motion figure (built from `assets/template-motion.html`, with
+`data-motion-item data-step="N"` groups) into `<name>.animated.svg`: one reveal, step by step,
+that plays where Markdown shows SVG images, including GitHub.
+
+```bash
+python scripts/export_diagram.py path/to/diagram-animated.html --animated
+```
+
+- Each step fades in once, in `data-step` order, on the figure's own `--motion-hold` and
+  `--motion-step` clock. Opacity only: nothing moves.
+- No script and no remote fonts: image sandboxes block both. Text uses the font stack's local fallbacks.
+- `prefers-reduced-motion: reduce` shows the complete figure with no animation, and the last
+  animated frame is that same complete figure.
+- Decorative overlays (`data-motion-decorative`) depend on the HTML page and are left out.
+- The exporter refuses a figure without steps, or one whose reveal is longer than 8 seconds.
+
+Embed it like any image, with alt text that describes the complete figure, and keep the HTML
+source beside it.
+
 ## Scope
 
 Both formats are **diagram-only** — just the `<svg>` node. Editorial wrappers (header, summary cards, footer in `-full` variants) are intentionally dropped: the export deliverable is the diagram itself, suitable for Figma, slides, social cards, or blog images.
