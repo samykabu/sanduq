@@ -208,7 +208,7 @@ class GitHub:
         if is_project and time.time() < self._rest_until:
             return self._project_rest(args)
         p = subprocess.run(['gh', *args], input=json.dumps(payload) if payload is not None else None,
-                           capture_output=True, text=True, encoding='utf-8')
+                           capture_output=True, text=True, encoding='utf-8', timeout=30)
         if p.returncode:
             if is_project and self.graphql_exhausted(p.stderr):
                 return self._project_rest(args)
@@ -230,7 +230,7 @@ class GitHub:
         """True when GraphQL is rate-limited. `gh project` can report this as an unrelated error
         (for example "unknown owner type"), so the real budget is always checked."""
         p = subprocess.run(['gh', 'api', 'graphql', '-f', 'query={rateLimit{remaining resetAt}}'],
-                           capture_output=True, text=True, encoding='utf-8')
+                           capture_output=True, text=True, encoding='utf-8', timeout=30)
         reset = None
         if p.returncode:
             exhausted = 'rate limit' in ((p.stderr or '') + (p.stdout or '') + (stderr or '')).lower()
@@ -287,8 +287,17 @@ class ProjectRest:
         options = {args[i]: args[i + 1] for i in range(2, len(args) - 1) if args[i].startswith('--')}
         action = args[1] if len(args) > 1 else ''
         if action == 'field-list':
+            self._fields = None  # field creation and verification must see current remote state
             fields = [self.field_row(f) for f in self.fields()]
             return {'fields': fields, 'totalCount': len(fields)}
+        if action == 'field-create':
+            require(options.get('--data-type') == 'SINGLE_SELECT', 'REST fallback does not support `gh project field-create` without SINGLE_SELECT.')
+            field = self.gh.api(f'{self.base}/fields', 'POST', {
+                'name': options['--name'], 'data_type': 'single_select',
+                'single_select_options': [{'name': name, 'color': 'GRAY', 'description': ''}
+                                          for name in options['--single-select-options'].split(',')]})
+            self._fields = None
+            return self.field_row(field)
         if action == 'item-list':
             items = [self.item_row(raw) for raw in self.raw_items()]
             return {'items': items, 'totalCount': len(items)}
@@ -504,13 +513,15 @@ class Scope:
                                                      'note': 'Inspect PR files, merge state, code and tests; references alone do not prove implementation.'})
         return result
 
-    def gate(self, value, required_status='Backlog'):
+    def gate(self, value, required_status='Backlog', *, feature=None, token=None, session=None, analysis=None, analysis_path=None):
         require(re.fullmatch(r'#?[1-9]\d*', (value or '').strip()),
                 'SCOPE_REQUIRED: Specify requires a GitHub issue number and current effort score. Run /speckit-scope <issue> first.')
         initial = self.resolve(value)
         revalidation = workflow_policy.bound_claim(self.root, self.repo, initial['number'], {'scope', 'specify'})
+        fresh = workflow_policy.fresh_claim(self.root, self.repo, initial['number'], feature, token, session) if any((feature, token, session)) else None
+        fresh_continued = fresh and initial.get('state') == 'open' and self.status(initial) == 'Feature Specification'
         continued = revalidation and initial.get('state') == 'open' and self.status(initial) in {'Feature Specification', 'Need Clarifications', 'Ready', 'In progress', 'In review'}
-        require(self.status(initial) == required_status or continued,
+        require(self.status(initial) == required_status or continued or fresh_continued,
                 f'SPECIFY_STATE: Specify requires {required_status}; #{initial["number"]} is {self.status(initial)}.')
         snapshot = self.inspect(value)
         issue = snapshot['issue']
@@ -533,7 +544,43 @@ class Scope:
         require(f'effort:{receipt["score"]}' in labels and 'scope:parent' not in labels, 'SCOPE_REQUIRED: effort label is missing or inconsistent; run /speckit-scope first.')
         require(not snapshot['blocked'], rejection(snapshot['blocked']))
         require(receipt.get('prompt'), 'SCOPE_REQUIRED: missing Specify prompt; run /speckit-scope first.')
-        return {'issue': issue['number'], 'score': receipt['score'], 'prompt': receipt['prompt'], 'fingerprint': receipt['fingerprint']}
+        result = {'issue': issue['number'], 'score': receipt['score'], 'prompt': receipt['prompt'], 'fingerprint': receipt['fingerprint']}
+        if fresh:
+            require(initial.get('state') == 'open', 'SCOPE_FRESH_OPEN_ISSUE_REQUIRED')
+            require(version == 2 and analysis is not None, 'SCOPE_FRESH_ANALYSIS_REQUIRED')
+            nodes = self.validate_analysis(snapshot, analysis)
+            require(len(nodes) == 1 and analysis['tree']['score'] == score,
+                    'SCOPE_FRESH_APPROVED_LEAF_REQUIRED')
+            require(not self.gh.api(f'{self.base}/{issue["number"]}/sub_issues?per_page=100', pages=True),
+                    'SCOPE_PARENT: native children exist')
+            parent = self.gh.api(f'{self.base}/{issue["number"]}/parent')
+            parent_number = parent.get('number') if isinstance(parent, dict) else None
+            parent_receipt = metadata(self.issue(parent_number).get('body')) if parent_number else {}
+            require(parent_number and issue['number'] in parent_receipt.get('children', [])
+                    and parent_receipt.get('approval') == receipt['approval'],
+                    'SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH')
+            children = self.gh.api(f'{self.base}/{parent_number}/sub_issues?per_page=100', pages=True)
+            require(any(child.get('number') == issue['number'] for child in children), 'SCOPE_NATIVE_PARENT_MISMATCH')
+            # A local replacement inherits owner resolutions only when the exact consumed
+            # artifact was applied through Decisions and still matches its recorded bytes.
+            revised = analysis['tree']['specify_prompt'] != receipt['prompt']
+            artifact_sha = None
+            if revised:
+                require(analysis_path is not None, 'SCOPE_RESOLVED_ANALYSIS_EVIDENCE_REQUIRED')
+                artifact = (self.root / analysis_path).resolve()
+                require(artifact.is_relative_to((self.root / fresh['feature']).resolve())
+                        and artifact.is_file() and read_json(artifact) == analysis,
+                        'SCOPE_RESOLVED_ANALYSIS_EVIDENCE_MISMATCH')
+                artifact_sha = hashlib.sha256(artifact.read_bytes()).hexdigest()
+                require(fresh['decision_evidence'].get(artifact.relative_to(self.root).as_posix()) == artifact_sha,
+                        'SCOPE_RESOLVED_ANALYSIS_EVIDENCE_MISMATCH')
+            result.update(feature=fresh['feature'], decision_sha256=fresh['decision_sha256'],
+                          published_prompt=receipt['prompt'], prompt=analysis['tree']['specify_prompt'] if revised else receipt['prompt'],
+                          analysis_role='applied-resolution' if revised else 'consulted',
+                          applied_analysis_sha256=artifact_sha,
+                          analysis_sha256=hashlib.sha256(json.dumps(analysis, sort_keys=True).encode()).hexdigest(),
+                          approval=receipt['approval'], parent=parent_number, publication_required=False)
+        return result
 
     def validate_analysis(self, snapshot, analysis):
         require(not snapshot['blocked'], rejection(snapshot['blocked']))
@@ -943,9 +990,13 @@ class Scope:
         (self.artifact_directory / 'DEPENDENCIES.md').write_text(report + '\n', encoding='utf-8')
         return graph
 
-    def bind(self, value, apply=False):
-        feature = read_json(self.root / '.specify/feature.json', {})
-        directory = feature.get('feature_directory')
+    def bind(self, value, apply=False, *, feature=None, token=None, session=None, analysis=None, analysis_path=None):
+        if any((feature, token, session)):
+            # Refuse wrong phase before even decision reconciliation can write a ledger.
+            workflow_policy.fresh_claim(self.root, self.repo, int(str(value).lstrip('#')),
+                                        feature, token, session, stages=('specify',))
+        selected = read_json(self.root / '.specify/feature.json', {}) if not feature else {}
+        directory = feature or selected.get('feature_directory')
         require(directory, 'Specify has not created a feature directory.')
         path = (self.root / directory).resolve()
         require(path.is_relative_to(self.root / 'specs') and (path / 'spec.md').is_file(), 'Feature must contain specs/<slug>/spec.md inside this checkout.')
@@ -953,7 +1004,9 @@ class Scope:
         resuming = (existing_source.get('issue') == int(str(value).lstrip('#')) and
                     existing_source.get('repo') == self.repo and
                     self.status(self.resolve(value)) == 'Feature Specification')
-        checked = self.gate(value, 'Feature Specification' if resuming else 'Backlog')
+        require(not existing_source or (existing_source.get('issue'), existing_source.get('repo')) == (int(str(value).lstrip('#')), self.repo), 'SCOPE_BINDING_MISMATCH')
+        checked = self.gate(value, 'Feature Specification' if resuming else 'Backlog',
+                            feature=feature, token=token, session=session, analysis=analysis, analysis_path=analysis_path)
         issue = self.issue(checked['issue'])
         state_path = self.root / self.cfg['stateFile']
         state = read_json(state_path, {})
@@ -968,7 +1021,7 @@ class Scope:
             write_json(state_path, state)
             write_json(path / 'scope-source.json', dict(checked, repo=self.repo))
             revalidation = workflow_policy.bound_claim(self.root, self.repo, issue['number'], {'specify'})
-            if not revalidation:
+            if not revalidation and self.status(issue) != 'Feature Specification':
                 self.set_status(issue, 'Feature Specification')
             current['status'] = self.actual_status(self.status(issue)) if revalidation else self.actual_status('Feature Specification')
             write_json(state_path, state)
@@ -1041,6 +1094,9 @@ def main(argv=None):
     parser.add_argument('--root', default='.')
     parser.add_argument('--analysis', type=Path)
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--feature')
+    parser.add_argument('--token')
+    parser.add_argument('--session')
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--child-count', type=int)
     parser.add_argument('--approved-by')
@@ -1052,6 +1108,10 @@ def main(argv=None):
         if args.command in {'inspect', 'gate', 'approve', 'publish', 'bind'}:
             require(args.issue and args.issue.strip(), 'SCOPE_ISSUE_REQUIRED: supply a GitHub issue number or exact title. Run /speckit-scope <issue> first.')
         app = Scope(args.root)
+        if args.command == 'bind' and any((args.feature, args.token, args.session)):
+            # Phase/ownership check precedes even the CLI's local mutation lock.
+            workflow_policy.fresh_claim(app.root, app.repo, int(args.issue.lstrip('#')),
+                                        args.feature, args.token, args.session, stages=('specify',))
         if args.apply:
             candidate = app.root / '.specify/scope/mutation.lock'
             candidate.parent.mkdir(parents=True, exist_ok=True)
@@ -1068,7 +1128,8 @@ def main(argv=None):
                 write_json(args.output, result)
             require(not result['blocked'], rejection(result['blocked']))
         elif args.command == 'gate':
-            result = app.gate(args.issue)
+            result = app.gate(args.issue, feature=args.feature, token=args.token, session=args.session,
+                              analysis=read_json(args.analysis) if args.analysis else None, analysis_path=args.analysis)
         elif args.command == 'approve':
             require(args.analysis and args.analysis.is_file(), '--analysis <analysis.json> is required.')
             result = app.approve(app.inspect(args.issue), read_json(args.analysis), args.child_count,
@@ -1077,7 +1138,8 @@ def main(argv=None):
             require(args.analysis and args.analysis.is_file(), '--analysis <analysis.json> is required.')
             result = app.publish(app.inspect(args.issue), read_json(args.analysis), args.apply)
         elif args.command == 'bind':
-            result = app.bind(args.issue, args.apply)
+            result = app.bind(args.issue, args.apply, feature=args.feature, token=args.token, session=args.session,
+                              analysis=read_json(args.analysis) if args.analysis else None, analysis_path=args.analysis)
         elif args.command == 'reconcile':
             result = app.reconcile(args.apply)
         else:
@@ -1087,7 +1149,7 @@ def main(argv=None):
             write_json(args.output, result)
         print(json.dumps(with_transport(result, app.gh), indent=2, ensure_ascii=True))
         return 0
-    except (ScopeError, OSError, ValueError, KeyError, TypeError) as exc:
+    except (ScopeError, OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as exc:
         print(str(exc), file=sys.stderr)
         return 2
     finally:

@@ -238,3 +238,24 @@ class ProjectRestFallbackTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class FieldCreationTests(unittest.TestCase):
+    def test_single_select_creation_and_fresh_field_discovery(self):
+        class Gh:
+            def __init__(self): self.calls = []; self.fields = []
+            def api(self, endpoint, method='GET', payload=None, pages=False):
+                self.calls.append((endpoint, method, payload))
+                if method == 'POST':
+                    self.fields.append({'id': 1, 'node_id': 'F', 'name': payload['name'],
+                                        'data_type': payload['data_type'], 'options': []})
+                    return self.fields[-1]
+                return self.fields
+        gh = Gh(); rest = m.ProjectRest(gh, CFG)
+        self.assertEqual(rest.run(['project', 'field-list'])['fields'], [])
+        rest.run(['project', 'field-create', '7', '--name', 'Decision', '--data-type', 'SINGLE_SELECT',
+                  '--single-select-options', 'None,Waiting,Needs review,Applied'])
+        self.assertEqual(rest.run(['project', 'field-list'])['fields'][0]['name'], 'Decision')
+        body = next(call[2] for call in gh.calls if call[1] == 'POST')
+        self.assertEqual([option['name'] for option in body['single_select_options']],
+                         ['None', 'Waiting', 'Needs review', 'Applied'])

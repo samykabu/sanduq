@@ -74,7 +74,7 @@ class DecisionTests(unittest.TestCase):
             def __init__(self, root, feature):
                 self.feature = Path(root) / feature
 
-            def load(self):
+            def load(self, allow_branch_change=False):
                 return {'issue': 'acme/app#12'}
 
         class FakeGitHub:
@@ -119,7 +119,7 @@ class DecisionTests(unittest.TestCase):
                                  'type': 'ProjectV2SingleSelectField',
                                  'options': [{'name': 'Waiting', 'id': 'WAIT'}]}]}
                     if args[1] == 'item-list':
-                        return {'totalCount': 1, 'items': [{'id': 'ITEM', 'content': {
+                        return {'totalCount': 1, 'items': [{'id': 'ITEM', 'decision': 'Waiting' if self.edit else None, 'content': {
                             'type': 'Issue', 'number': 12, 'repository': 'acme/app'}}]}
                     self.edit = args
                     return {}
@@ -139,7 +139,7 @@ class DecisionTests(unittest.TestCase):
             def __init__(self, root, feature):
                 self.feature = Path(root) / feature
 
-            def load(self):
+            def load(self, allow_branch_change=False):
                 return {'issue': 'acme/app#12'}
 
         class FakeGitHub:
@@ -183,7 +183,7 @@ class DecisionTests(unittest.TestCase):
             policy = {'decisions': {'authorized_users': []}}
             def __init__(self, root, feature):
                 self.feature = Path(root) / feature
-            def load(self):
+            def load(self, allow_branch_change=False):
                 return {'issue': 'acme/app#12'}
         class FakeGitHub:
             def __init__(self):

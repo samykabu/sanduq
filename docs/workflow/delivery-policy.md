@@ -123,14 +123,25 @@ against new policy or code.
 ## Issue decisions and Project status
 
 Material questions raised by Tasks, Analyze, or another managed stage are
-posted to the bound GitHub issue with stable IDs such as `SD1`. A reviewer
-answers in a new comment, e.g. `SD1: A`. The issue creator, an authorized
+posted to the bound GitHub issue with stable IDs such as `SD1`, as a task list
+with every box unticked. A reviewer ticks the box (one for a single-choice
+question, one or more for a multiple-choice one) or replies in a new comment,
+e.g. `SD1: A` or `SD1: A, C`. A ticked box records no author, because GitHub
+does not say who ticked it. The recommended option carries a `(Recommended)`
+suffix and is never pre-ticked. The issue creator, an authorized
 reviewer named in policy, or a repository owner/member/collaborator may answer.
 Conflicting answers, edits, missing application evidence, or a failed GitHub
 read block a passed stage. The agent applies the chosen answer to actual
 artifacts and records their hashes in `workflow/decisions.json`; future changes
 reopen the check. `decisions.py sync --project-field` refreshes the issue record
-and its separate Project Decision field. It does not move Project Status.
+and its separate Project Decision field. While a decision is pending or in
+conflict, an issue in mapped Backlog or Feature Specification status moves to the mapped
+Need Clarifications status. When nothing is pending it moves back only if
+Decisions moved it and `clarification.resume_on_reinvoke` is `reread-answers`.
+Any other status is never changed. Set `decisions.lifecycle_status: false` to
+turn this off. Questions posted by an earlier release can be made selectable
+with `decisions.py upgrade-questions`; it keeps IDs, options and replies and
+never ticks a box.
 
 Operators can update the reviewer list or field name in policy:
 

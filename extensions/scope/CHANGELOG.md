@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.6.1] - 2026-10-10
+
+- W01d restricts fresh bind to the owned initial Specify phase before writes. A changed
+  resolved prompt requires the exact supplied analysis artifact in verified applied
+  Decision evidence; otherwise the unchanged published prompt stays authoritative
+  and local analysis is consulted evidence only. No new approval is fabricated.
+
+- Fresh issue-bound Workflow Scope/Specify may revalidate a published approved native leaf
+  in mapped Feature Specification with explicit `--feature`, `--token`, `--session` and
+  `--analysis`. Checks repository, feature, issue, branch, executor, applied live decisions,
+  current scope fingerprint, prerequisites, native parent/child relationship and retained
+  parent approval. Returns analysis/decision hashes and original approval without publishing
+  or creating an approval receipt. Standalone Backlog gates remain unchanged.
+- The shared Project REST adapter supports single-select field creation and fresh field
+  discovery; GitHub subprocess calls have a 30-second bound.
+- This is a material binding change: focused independent review is required before installation.
+
 ## [1.6.0] - 2026-10-10
 
 - The implementation dependency plan and clarification diagrams use Sanduq Illustrate

@@ -109,3 +109,57 @@ def bound_claim(root, repo, issue, stages):
         return None
     if active.get('stage') not in stages or not active.get('token') or active.get('mode') != 'revalidate': return None
     return {'feature': feature.relative_to(root).as_posix(), 'stage': active['stage'], 'state': state}
+
+
+def fresh_claim(root, repo, issue, feature, token, session, stages=("scope", "specify")):
+    """Explicit initial issue-bound caller, never the historical global feature pointer."""
+    if not all((feature, token, session)):
+        raise ValueError('SCOPE_WORKFLOW_BINDING_REQUIRED: feature, token and session are required together.')
+    workflow = _workflow_module()
+    if workflow is None:
+        raise ValueError('SCOPE_WORKFLOW_UNAVAILABLE')
+    run = workflow.Run(Path(root).resolve(), feature)
+    try:
+        state = run.load()  # repository, feature, issue remote and current branch checks
+    except Exception as exc:
+        raise ValueError(str(exc)) from exc
+    active = state.get('active') or {}
+    if (state.get('issue') != f'{repo}#{issue}' or active.get('stage') not in stages
+            or active.get('mode') != 'initial' or active.get('token') != token
+            or active.get('session_id') != session or ((run.feature / 'scope-source.json').exists() and (active.get('stage') != 'specify' or
+                workflow.read(run.feature / 'scope-source.json', {}).get('repo') != repo or
+                workflow.read(run.feature / 'scope-source.json', {}).get('issue') != issue))
+            or any(stage != 'scope' for stage in state.get('receipts', {}))):
+        raise ValueError('SCOPE_WORKFLOW_BINDING_MISMATCH')
+    # Fresh live decisions are reread, including immutable question and applied evidence checks.
+    import os
+    decisions = _decisions_module()
+    previous = {key: os.environ.get(key) for key in
+                ('SANDUQ_WORKFLOW_CLAIM_TOKEN', 'SANDUQ_WORKFLOW_SESSION_ID')}
+    try:
+        os.environ['SANDUQ_WORKFLOW_CLAIM_TOKEN'] = token
+        os.environ['SANDUQ_WORKFLOW_SESSION_ID'] = session
+        try:
+            ledger = decisions.reconcile(run.root, run.relative, claim_token=token, session_id=session)
+            decisions.verify_ledger(run.root, run.relative, ledger)
+        except Exception as exc:
+            raise ValueError(str(exc)) from exc
+    finally:
+        for key, value in previous.items():
+            if value is None: os.environ.pop(key, None)
+            else: os.environ[key] = value
+    return {'feature': run.relative, 'stage': active['stage'],
+            'decision_sha256': workflow.digest(ledger), 'state': state,
+            'decision_evidence': {name: sha for item in ledger['decisions']
+                                  for name, sha in item.get('application', {}).get('evidence', {}).items()}}
+
+
+def _decisions_module():
+    import importlib.util
+    import sys
+    path = Path(__file__).resolve().parents[2] / 'workflow/scripts/decisions.py'
+    sys.path.insert(0, str(path.parent))
+    spec = importlib.util.spec_from_file_location('sanduq_scope_fresh_decisions', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module

@@ -92,7 +92,8 @@
       "properties": {
         "transport": {"const": "github-issue"},
         "authorized_users": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
-        "project_field": {"type": "string", "minLength": 1}
+        "project_field": {"type": "string", "minLength": 1},
+        "lifecycle_status": {"type": "boolean", "description": "Park a mapped Backlog or Feature Specification issue in the mapped Need Clarifications status while a decision waits (default true)."}
       }
     },
     "context": {

@@ -33,7 +33,7 @@ describe their shape.
 | `execution.checkpoints` | `required-only` or `every-phase`. |
 | `providers.clarification`, `providers.tasks` | `prefer-superspec`, `core` or `superspec`. |
 | `issue_sync` | Fixed: `{"taskstoissues": "required", "parent_link": "native-subissue"}`. |
-| `decisions` | Optional. Stage-neutral GitHub issue decisions: `transport` (`github-issue`), `authorized_users`, `project_field`. Omitted in older policies. |
+| `decisions` | Optional. Stage-neutral GitHub issue decisions: `transport` (`github-issue`), `authorized_users`, `project_field`, and optional `lifecycle_status` (boolean, default true). Omitted in older policies. |
 | `context` | `mode` (`strict`, `measured-only` or `measured-with-estimated-fallback`), `max_fraction`, `checkpoint_fraction`, `reserve_fraction`. See [Context](stages.md#context). |
 | `finalize` | Fixed: `{"create_pr": true, "merge": false}`. The dispatcher opens a PR and never merges. |
 | `delegation` | Optional. See below and [delegation](delegation.md). Absent legacy policies default to disabled. |
@@ -127,3 +127,7 @@ The rules behind these fields are in [Receipt contract](state-files.md#receipt-c
 - [CI evidence and runner policy](runner-policy.md)
 - [Delegation](delegation.md)
 - [Glossary](../reference/glossary.md)
+
+Decision lifecycle parks mapped Backlog or Feature Specification while questions wait,
+then returns an owned park to mapped Feature Specification under `reread-answers`.
+Advanced statuses remain protected. `lifecycle_status` defaults to true for new and legacy policies.
