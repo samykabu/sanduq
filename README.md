@@ -43,7 +43,7 @@ one pull request, with a checkpoint you can resume in a fresh session.
 Run installation commands in the repository that will use Sanduq. For a standalone manual in Codex:
 
 ```bash
-npx skills add samykabu/sanduq --skill user-manual -a codex
+npx skills add samykabu/sanduq-skills --skill user-manual -a codex
 ```
 
 Then ask your agent:
@@ -74,7 +74,7 @@ Claude Code plugins, upgrades, and troubleshooting. Installation alone does not 
 
 | Format | What it adds | Needs Spec Kit | Installation |
 | --- | --- | --- | --- |
-| Portable skill | Instructions and focused tooling for one task | No | `npx skills add samykabu/sanduq --skill <name>` |
+| Portable skill | Instructions and focused tooling for one task | No | `npx skills add samykabu/sanduq-skills --skill <name>` |
 | Claude Code plugin | A bundle of portable skills | No | `/plugin install <bundle>@sanduq` |
 | Spec Kit extension | Versioned commands and lifecycle hooks | Yes | `specify extension add <id>` |
 

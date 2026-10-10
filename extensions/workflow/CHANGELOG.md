@@ -7,7 +7,9 @@
   with the key version it declares. `source_key.source_keys()` returns a tree's key under every
   accepted version. Consumer CI that computes the key should move to the new version.
 - Neutral wording and synthetic repositories in documentation and test fixtures.
-- `dependencies.json` pins Scope 1.5.2 and Illustrate 2.2.1.
+- `dependencies.json` pins Scope 1.5.2, Illustrate 2.2.1 and User Manual 1.5.2.
+- The bundled Delegate Task driver is vendored from samykabu/sanduq-skills (agent-tools 1.1.2):
+  Claude runs now report the model that did the work, not a side call.
 
 ## [1.8.5] - 2026-10-06
 

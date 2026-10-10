@@ -13,5 +13,12 @@ extensions/workflow/tests/fixtures/ci-runs/** -text
 extensions/illustrate/tests/fixtures/** text eol=lf
 extensions/illustrate/skill/scripts/*.txt text eol=lf
 extensions/illustrate/skill/scripts/*.cjs text eol=lf
-skills/illustration-tools/skills/illustrate/scripts/*.txt text eol=lf
-skills/illustration-tools/skills/illustrate/scripts/*.cjs text eol=lf
+# Vendored from sanduq-skills (vendor.lock.json hashes exact bytes): never convert line endings.
+extensions/illustrate/skill/** -text
+extensions/workflow/assets/delegate-task/** -text
+extensions/user-manual/scripts/audit_manual.py -text
+extensions/user-manual/scripts/build_manual.py -text
+extensions/user-manual/assets/scaffold/** -text
+extensions/user-manual/assets/github/user-manual-*.yml -text
+extensions/user-manual/user-manual-config.template.yml -text
+extensions/user-manual/skills/*/references/** -text

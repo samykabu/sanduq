@@ -1,6 +1,8 @@
 ---
 name: illustrate
 description: "Draws diagrams, charts, and technical illustrations (44 types) as self-contained HTML with inline SVG, plus optional SVG/PNG/PDF export, in the project's tracked color and font theme. Use this skill whenever the user asks to draw, diagram, visualize, chart, map, sketch, or illustrate something, even without saying 'illustrate': architecture or system design, infrastructure, cloud or deployment topology, data flow, flowcharts, sequence, state machines, ER or database schema, UML class, dependency graphs, org charts, timelines, Gantt, swimlanes, process or workflow maps, user journeys, kanban, story maps, quadrants, Venn, pyramids, fishbone root-cause, Sankey, Wardley maps, bar, line, scatter, heatmap, waterfall, treemap, radar, or polar charts, and exploded or axonometric views. Also use to redraw .drawio, Mermaid (.mmd), or .excalidraw files, add a diagram to docs, a PR, or a spec, set up the illustration theme, or export a diagram. Not for photos or AI-generated raster images."
+metadata:
+  internal: true
 ---
 
 # Illustrate

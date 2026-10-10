@@ -7,7 +7,7 @@ from urllib.parse import unquote, urlsplit
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-GUIDES = [ROOT / 'README.md', ROOT / 'CONTRIBUTING.md', ROOT / 'skills/README.md',
+GUIDES = [ROOT / 'README.md', ROOT / 'CONTRIBUTING.md',
           ROOT / 'extensions/README.md', ROOT / 'docs/assets/README.md']
 GUIDES += [ROOT / 'docs' / name for name in (
     'README.md', 'getting-started.md', 'skills.md', 'extensions.md', 'skill-guide.md',
@@ -75,8 +75,8 @@ def check():
             name = '$' + item['name'].replace('.', '-')
             if item.get('type') == 'command' and not re.search(re.escape(name) + r'(?![\w-])', lifecycle):
                 errors.append(f'overlay missing from lifecycle guide: {item["name"]}')
-    skill_paths = sorted(ROOT.glob('skills/**/SKILL.md'))
-    skill_paths += [p for p in ROOT.glob('extensions/**/SKILL.md') if 'tests' not in p.parts]
+    skill_paths = sorted(p for pattern in ('SKILL.md', 'SKILL.ext.md') for p in ROOT.glob('extensions/**/' + pattern)
+                         if 'tests' not in p.parts)
     for path in skill_paths:
         if path.relative_to(ROOT).as_posix() not in all_text:
             errors.append(f'skill source not documented: {path.relative_to(ROOT)}')

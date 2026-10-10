@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.5.2] - 2026-10-10
+
+- Scripts, scaffold, CI templates and skill references are vendored from the portable User Manual
+  skills in samykabu/sanduq-skills (byte-identical; see `ADAPTER.md`). No behavior change.
+
 ## [1.5.1] - 2026-10-06
 
 - Link setup and complete usage examples from the package README; links work in installed copies.

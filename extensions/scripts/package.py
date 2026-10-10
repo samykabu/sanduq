@@ -24,14 +24,13 @@ def package(extension, output=None, root=ROOT):
         for path in directory.rglob('*'):
             relative = path.relative_to(directory)
             if path.is_file() and not any(part in EXCLUDE for part in relative.parts) and path.suffix not in ('.pyc', '.pyo'):
-                files[(Path(extension) / prefix / relative).as_posix()] = path.read_bytes()
+                name = (Path(extension) / prefix / relative).as_posix()
+                # Adapted and internal skill entrypoints are stored as SKILL.ext.md so `npx skills`
+                # cannot install them from this repository; the package restores the real name.
+                files[name[:-len('SKILL.ext.md')] + 'SKILL.md' if name.endswith('/SKILL.ext.md') else name] = path.read_bytes()
     include(source, Path())
     for preset in PRESETS.get(extension, ()):
         include(root / 'presets' / preset, Path('presets') / preset)
-    if extension == 'workflow':
-        # Install the matching delegate-task skill from the same immutable
-        # workflow archive; consumer setup never resolves a floating branch.
-        include(root / 'skills/agent-tools/skills/delegate-task', Path('assets/delegate-task'))
     shared = root / 'extensions/scripts/shared/sanduq_freshness.py'
     if extension in ('assure', 'user-manual') and shared.exists():
         files[extension + '/scripts/sanduq_freshness.py'] = shared.read_bytes()

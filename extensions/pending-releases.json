@@ -3,8 +3,9 @@
   "versions": {
     "illustrate": "2.2.1",
     "scope": "1.5.2",
+    "user-manual": "1.5.2",
     "workflow": "1.9.0"
   },
   "status": "implementation-in-progress",
-  "note": "Workflow 1.9.0 renames the canonical source key to sanduq-source-key/1 and keeps verifying evidence recorded under the previous key version. Scope 1.5.2 and Illustrate 2.2.1 are wording-only patches. Publish after successful main CI and downloaded asset verification."
+  "note": "Workflow 1.9.0 renames the canonical source key to sanduq-source-key/1 and keeps verifying evidence recorded under the previous key version. Scope 1.5.2 and Illustrate 2.2.1 are wording-only patches. Publish after successful main CI and downloaded asset verification. User Manual 1.5.2 vendors its portable sources unchanged."
 }

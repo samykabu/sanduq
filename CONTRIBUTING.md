@@ -29,7 +29,7 @@ Activate `.venv` with your shell, then install the pinned test requirements:
 python -m pip install -r extensions/workflow/test-requirements.txt
 ```
 
-Use Node 18+ for Delegate Task checks. Bash and PowerShell cover separate installation paths.
+Bash and PowerShell cover separate installation paths.
 Smoke installations need the Spec Kit revision pinned in [CI](.github/workflows/ci.yml), and some
 need authenticated GitHub access. Use a disposable consumer for installer work.
 
@@ -37,8 +37,10 @@ need authenticated GitHub access. Use a disposable consumer for installer work.
 
 | Change | Source |
 | --- | --- |
-| Portable skill instructions/scripts | `skills/<bundle>/skills/<name>/` |
-| Plugin packaging | Bundle `.claude-plugin/plugin.json` and root marketplace |
+| Portable skills (Illustrate, User Manual, Delegate Task) | [samykabu/sanduq-skills](https://github.com/samykabu/sanduq-skills); never edit their vendored copies here |
+| Vendored skill copies and their pins | `vendor.lock.json`, synced by `extensions/scripts/vendor.py` |
+| Claude Code marketplace entries | `.claude-plugin/marketplace.json` (pinned `git-subdir` sources); bundle versions live in sanduq-skills |
+| Extension-adapted skill entrypoints | `SKILL.ext.md`; `package.py` restores `SKILL.md` in the archive |
 | Extension metadata and commands | `extensions/<id>/extension.yml`, `commands/`, `skills/`, and references |
 | Managed command policy | Canonical `presets/`; bundled by package tooling |
 | Shared freshness/dependency helpers | `extensions/scripts/shared/`; injected at build time |
@@ -92,7 +94,7 @@ python -m unittest discover -s extensions/workflow/tests -q
 python -m unittest discover -s extensions/scope/tests -q
 python -m unittest discover -s extensions/user-manual/tests -q
 python -m unittest discover -s extensions/memory/tests -q
-node skills/agent-tools/skills/delegate-task/test/run.mjs
+python extensions/scripts/vendor.py check
 python extensions/scripts/test_check_docs.py
 python extensions/scripts/check_docs.py
 git diff --check
@@ -114,6 +116,20 @@ python extensions/scripts/smoke_memory_install.py
 CI exercises Linux/Windows regression, Codex/Claude and core/SuperSpec installs, transactional
 upgrades, Project initialization in Bash/PowerShell, and Memory registration. Report unavailable
 infrastructure and skipped checks accurately; package creation alone is not live acceptance.
+
+## Update a vendored skill
+
+Change and release the skill in sanduq-skills first (tag `<bundle>-vX.Y.Z`). Its release runs
+`vendor-update` here, or run it locally against a sanduq-skills clone:
+
+```bash
+python extensions/scripts/vendor.py sync --source ../sanduq-skills --input illustrate --ref illustration-tools-v3.2.2
+python extensions/scripts/vendor.py check
+```
+
+Then pin the marketplace entry to the same tag and commit, and record a patch release for each
+extension that ships the vendored files. `extensions/user-manual/ADAPTER.md` lists the User Manual
+files that are vendored, rewritten, or owned here.
 
 ## Update documentation and assets
 

@@ -43,9 +43,9 @@ automatically a tested combination; see [compatibility](workflow-compatibility.m
 In the booking application's repository:
 
 ```bash
-npx skills add samykabu/sanduq --list
-npx skills add samykabu/sanduq --skill user-manual -a codex
-npx skills add samykabu/sanduq --skill user-manual-api-docs --skill user-manual-ui-screenshots -a codex
+npx skills add samykabu/sanduq-skills --list
+npx skills add samykabu/sanduq-skills --skill user-manual -a codex
+npx skills add samykabu/sanduq-skills --skill user-manual-api-docs --skill user-manual-ui-screenshots -a codex
 ```
 
 Add `-g` for a user-wide installation or `-y` for non-interactive selection. Check the agent's
