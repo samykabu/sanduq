@@ -2,7 +2,9 @@ name: vendor-update
 
 # Daily (and on demand): if samykabu/sanduq-skills has a newer bundle release than vendor.lock.json,
 # vendor it into the extensions, pin the marketplace entry to that release, and open a pull request.
-# sanduq-skills is public, so this needs no cross-repository token.
+# sanduq-skills is public, so reading it needs no token. VENDOR_PR_TOKEN (fine-grained, this repository
+# only: contents and pull requests) pushes the branch and opens the PR so CI runs on it; without it the
+# built-in token is used and CI has to be started by hand.
 on:
   schedule:
     - cron: '17 5 * * *'
@@ -21,6 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.VENDOR_PR_TOKEN || github.token }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -44,7 +48,7 @@ jobs:
       - name: Open pull request
         if: steps.update.outputs.tags != ''
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.VENDOR_PR_TOKEN || github.token }}
           TAGS: ${{ steps.update.outputs.tags }}
         run: |
           branch="vendor/$(echo "$TAGS" | tr ' ' '+')"
@@ -57,4 +61,4 @@ jobs:
           git add -A
           git commit -m "chore(vendor): $TAGS from sanduq-skills"
           git push origin "$branch"
-          gh pr create --title "Vendor $TAGS from sanduq-skills" --body "Vendors $TAGS from samykabu/sanduq-skills and pins the marketplace entries to those releases. Extensions that ship the vendored files need a patch release recorded in extensions/pending-releases.json before merging. Pull requests opened by this workflow do not start CI on their own; push an empty commit or re-run CI from the Actions tab."
+          gh pr create --title "Vendor $TAGS from sanduq-skills" --body "Vendors $TAGS from samykabu/sanduq-skills and pins the marketplace entries to those releases. Extensions that ship the vendored files need a patch release recorded in extensions/pending-releases.json before merging. If CI did not start, VENDOR_PR_TOKEN is missing or expired: re-run CI from the Actions tab."

@@ -122,7 +122,9 @@ infrastructure and skipped checks accurately; package creation alone is not live
 
 Change and release the skill in sanduq-skills first (tag `<bundle>-vX.Y.Z`). Every day, the
 `vendor-update` workflow here vendors any newer release, pins its marketplace entry, and opens a
-pull request; run it from the Actions tab to skip the wait. To do the same locally:
+pull request; run it from the Actions tab to skip the wait. It opens the pull request with the
+`VENDOR_PR_TOKEN` secret (a fine-grained token for this repository with contents and pull-request
+write access) so CI starts on its own; renew that token before it expires. To do the same locally:
 
 ```bash
 python extensions/scripts/vendor.py update --source ../sanduq-skills
