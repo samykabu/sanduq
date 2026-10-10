@@ -520,8 +520,8 @@
       ],
       "internal": true,
       "exclusive": true,
-      "ref": "agent-tools-v1.1.2",
-      "sha": "cd56f57ab23f66d23980f0e180883360e95baaa7",
+      "ref": "agent-tools-v1.1.3",
+      "sha": "189300b3dce8b1ab584009ba623b018ec539c112",
       "files": {
         "extensions/workflow/assets/delegate-task/.gitignore": "247681cefffa8448d973f21147c92b38b63f492a98a50aca3b3c490bc97499e1",
         "extensions/workflow/assets/delegate-task/README.ar.md": "7c2cade9d85acab9c3da95d81c59d6bd44abbed9bdd465f92e6de81ed034ea12",
@@ -607,8 +607,8 @@
           ]
         ]
       },
-      "ref": "dev-tools-v1.1.0",
-      "sha": "80c479a402242d8ad198d661ae7cafe45d505083",
+      "ref": "dev-tools-v1.1.1",
+      "sha": "189300b3dce8b1ab584009ba623b018ec539c112",
       "files": {
         "extensions/user-manual/assets/github/user-manual-preview.yml": "bd9dcd2c83e00776f6a8e37c3f51b19e4530cc6a2680e468e34f8c65adcee636",
         "extensions/user-manual/assets/github/user-manual-release.yml": "7cf68e6694ee9a36304905f3bdb15a31f5e7e27df4e959c8e1f6ff1ec645490d",
