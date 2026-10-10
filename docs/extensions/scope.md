@@ -39,7 +39,7 @@ and an unchecked recommendation. Answer `C1Q1: A` or tick a box, then run `$spec
 
 ## How it runs
 
-![Scope approval and required issue-binding hooks](../diagrams/extension-scope.svg)
+![Scope sequence: scope.run on issue 412 and you approve the scope decision; scope.guard runs before Specify; scope.bind ties the specification to its issue; scope.after-specify starts Brainstorm or Clarify; you answer the questions on GitHub; scope.plan-guard stops Plan while questions are unresolved.](../diagrams/extension-scope.animated.svg)
 
 Mandatory hooks guard Specify, bind the specification to its issue, start Brainstorm or Clarify,
 and guard Plan. When the work is split, `scope.plan` accepts an [Illustrate](illustrate.md) dependency graph: it checks

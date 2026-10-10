@@ -28,7 +28,7 @@ $speckit-workflow-finalize Finish current checks and documentation; create or up
 
 ## How it runs
 
-![Workflow commands and ownership](../diagrams/extension-workflow.svg)
+![Workflow sequence: you run workflow.scope on an issue; the dispatcher then runs Scope, Specify and Clarify (pausing for questions), Plan and Tasks, Analysis and Implement, Verify and Review with recorded check evidence, and the selected QA and manual documents; you run workflow.finalize to hand off the PR, which is blocked if evidence is stale.](../diagrams/extension-workflow.animated.svg)
 
 You use four entry points: Scope, Clarify, Continue and Finalize. The dispatcher owns every stage
 between them. [Editable diagram](../diagrams/extension-workflow.html).

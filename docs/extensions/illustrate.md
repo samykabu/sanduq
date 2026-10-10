@@ -45,7 +45,7 @@ The [process and theme gallery](../illustrate-examples.md) shows the presets and
 
 ## How it runs
 
-![Explicit theme, generation, and export requests](../diagrams/extension-illustrate.svg)
+![Illustrate sequence: illustrate.theme picks a preset or custom light or dark theme and the agent resolves the project's colors and fonts; illustrate.generate draws the diagram from its purpose and evidence and inspects the HTML; illustrate.export writes the SVG or PNG you asked for, and you review and embed it while the editable source stays.](../diagrams/extension-illustrate.animated.svg)
 
 You choose the theme, ask for the diagram, and ask for exports. The agent resolves the theme tokens,
 applies the diagram type's rules, checks the HTML, and embeds the reviewed output.

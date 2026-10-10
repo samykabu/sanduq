@@ -39,7 +39,7 @@ there is evidence. Freshness records are kept under `.specify/extensions/assure/
 
 ## How it runs
 
-![QA analysis, actual project checks, and documented results](../diagrams/extension-assure.svg)
+![Assure sequence: assure.init sets the required or manual policy; assure.analyze checks readiness and adds missing tasks; you implement and run your project's tests; assure.document records steps and observed evidence; a freshness check flags changed code that needs an update.](../diagrams/extension-assure.animated.svg)
 
 Configured hooks or the managed dispatcher call Analyze and Document. In manual mode you run them
 yourself. Your project's checks supply the test results; Assure records them.

@@ -37,7 +37,7 @@ For a dry run, use the package's sync helper: `project-sync.ps1 -Phase auto -Dry
 
 ## How it runs
 
-![Project policy and phase synchronization](../diagrams/extension-project.svg)
+![Project sequence: project.init discovers and approves the board mapping and sync policy (required, optional or manual); when a Spec Kit phase completes, project.sync reconciles the actual board columns and records the result, and a skipped sync does not count as complete.](../diagrams/extension-project.animated.svg)
 
 Required sync runs automatically at each phase. Optional hooks ask first. In the managed Workflow,
 Workflow requires automatic sync and its own adapter creates and closes task sub-issues.
