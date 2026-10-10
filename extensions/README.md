@@ -11,7 +11,7 @@ the [extension guide](../docs/extensions.md) for every public command and its pr
 | [assure](assure/README.md) | 2.3.1 | 3 |
 | [illustrate](illustrate/README.md) | 2.2.1 | 4 |
 | [memory](memory/README.md) | 2.1.1 | 7 |
-| [pr](pr/README.md) | 4.2.1 | 2 |
+| [pr](pr/README.md) | 4.2.2 | 2 |
 | [project](project/README.md) | 2.2.1 | 2 |
 | [scope](scope/README.md) | 1.6.0 | 7 |
 | [user-manual](user-manual/README.md) | 1.5.1 | 4 |

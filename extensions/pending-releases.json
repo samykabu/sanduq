@@ -2,6 +2,7 @@
   "schema_version": 1,
   "versions": {
     "illustrate": "2.2.1",
+    "pr": "4.2.2",
     "scope": "1.6.0",
     "workflow": "1.9.0"
   },
