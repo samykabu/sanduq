@@ -31,6 +31,11 @@ def parse_args() -> argparse.Namespace:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--svg-only", action="store_true", help="Export only SVG")
     mode.add_argument("--png-only", action="store_true", help="Export only PNG")
+    mode.add_argument(
+        "--animated",
+        action="store_true",
+        help="Export <name>.animated.svg: the motion reveal as CSS inside the SVG (no script), for README images",
+    )
     parser.add_argument("--scale", type=int, choices=(1, 2, 3), default=2)
     parser.add_argument("--output", type=Path, help="Output base path; extension is appended")
     return parser.parse_args()
@@ -52,6 +57,19 @@ def read_source(source: Path) -> str:
     if not SVG_RE.search(html):
         raise ExportError(f"No <svg> diagram found in: {source}")
     return html
+
+
+TAG_RE = re.compile(r"<([a-zA-Z][\w:.-]*)((?:\s+[^\s=/>]+(?:\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s>]+))?)*)\s*(/?)>")
+EMPTY_VALUE = '=""'
+ATTRIBUTE_RE = re.compile(r"\s+([^\s=/>]+)(\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s>]+))?")
+
+
+def xml_attributes(svg: str) -> str:
+    """HTML allows valueless attributes (`data-motion-item`); a standalone .svg is XML and needs a value."""
+    def tag(match: re.Match) -> str:
+        attributes = ATTRIBUTE_RE.sub(lambda a: " " + a.group(1) + (a.group(2) or EMPTY_VALUE), match.group(2))
+        return f"<{match.group(1)}{attributes}{'/' if match.group(3) else ''}>"
+    return TAG_RE.sub(tag, svg)
 
 
 def standalone_svg(html: str) -> str:
@@ -76,7 +94,66 @@ def standalone_svg(html: str) -> str:
         opening_match = OPENING_SVG_RE.match(svg)
         assert opening_match is not None
         svg = svg[: opening_match.end()] + f"<defs>{FONT_STYLE}</defs>" + svg[opening_match.end() :]
-    return '<?xml version="1.0" encoding="UTF-8"?>\n' + svg + "\n"
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + xml_attributes(svg) + "\n"
+
+
+STEP_RE = re.compile(r"\bdata-step\s*=\s*\"(\d+)\"")
+DECORATIVE_RE = re.compile(
+    r"<(?P<tag>[a-zA-Z][\w:-]*)\b[^>]*\bdata-motion-decorative\b[^>]*?"
+    r"(?:/>|>.*?</(?P=tag)\s*>)",
+    re.DOTALL,
+)
+MOTION_MS_RE = r"--motion-{name}\s*:\s*(\d+)ms"
+MAX_TOTAL_MS = 8000
+
+
+def motion_ms(html: str, name: str, default: int) -> int:
+    match = re.search(MOTION_MS_RE.format(name=name), html)
+    return int(match.group(1)) if match else default
+
+
+def animated_svg(html: str) -> str:
+    """The standalone SVG plus the figure's reveal as scoped CSS: no script, no remote fonts.
+
+    GitHub and other Markdown hosts render an SVG image in a sandbox that runs CSS animation but
+    no script and no external fetches. Every step is revealed once, in data-step order, with the
+    figure's own --motion-hold/--motion-step clock, only under prefers-reduced-motion:
+    no-preference. The end state, and the reduced-motion state, is the complete static figure.
+    The reveal animates opacity only: a CSS transform would override the elements' own transform
+    attributes (axonometric and rotated parts) and move them.
+    Decorative overlays depend on the HTML page's CSS and are left out.
+    """
+    svg = standalone_svg(html).replace(FONT_STYLE, "")
+    svg = DECORATIVE_RE.sub("", svg)
+    if "data-motion-decorative" in svg:
+        raise ExportError("A decorative motion overlay could not be removed; keep it on one element.")
+    steps = sorted({int(step) for step in STEP_RE.findall(svg)})
+    if not steps or "data-motion-item" not in svg:
+        raise ExportError(
+            "No data-motion-item/data-step markup in the SVG; build the figure from "
+            "assets/template-motion.html first (references/animation.md)."
+        )
+    hold, step = motion_ms(html, "hold", 720), motion_ms(html, "step", 480)
+    total = (len(steps) - 1) * hold + step
+    if total > MAX_TOTAL_MS:
+        raise ExportError(f"The reveal takes {total}ms; the motion budget is {MAX_TOTAL_MS}ms.")
+    delays = "".join(
+        f'[data-step="{value}"]{{animation-delay:{index * hold}ms}}' for index, value in enumerate(steps)
+    )
+    style = (
+        "<style data-illustrate-animation=\"true\">"
+        "@keyframes illustrate-reveal{from{opacity:0}to{opacity:1}}"
+        "@media (prefers-reduced-motion: no-preference){"
+        f"[data-motion-item]{{animation:illustrate-reveal {step}ms cubic-bezier(.2,.8,.2,1) backwards}}"
+        f"{delays}}}"
+        "</style>"
+    )
+    defs_match = DEFS_RE.search(svg)
+    if defs_match:
+        return svg[: defs_match.end()] + style + svg[defs_match.end() :]
+    opening_match = OPENING_SVG_RE.search(svg)
+    assert opening_match is not None
+    return svg[: opening_match.end()] + f"<defs>{style}</defs>" + svg[opening_match.end() :]
 
 
 def write_svg(html: str, destination: Path) -> None:
@@ -121,11 +198,16 @@ def main() -> int:
         source = args.source.resolve()
         html = read_source(source)
         base = output_base(source, args.output)
-        if not args.png_only:
+        if args.animated:
+            animated_path = base.with_name(base.name + ".animated.svg")
+            animated_path.parent.mkdir(parents=True, exist_ok=True)
+            animated_path.write_text(animated_svg(html), encoding="utf-8", newline="\n")
+            outputs.append(animated_path)
+        elif not args.png_only:
             svg_path = base.with_suffix(".svg")
             write_svg(html, svg_path)
             outputs.append(svg_path)
-        if not args.svg_only:
+        if not (args.svg_only or args.animated):
             png_path = base.with_suffix(".png")
             write_png(source, png_path, args.scale)
             outputs.append(png_path)
