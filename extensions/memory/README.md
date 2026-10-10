@@ -1,7 +1,8 @@
 # Sanduq Memory
 
-For setup and a consistent worked example, see [Getting started](https://github.com/samykabu/sanduq/blob/main/docs/getting-started.md)
-and [memory usage](https://github.com/samykabu/sanduq/blob/main/docs/extensions.md#memory).
+For setup and a worked example, see [Install by host](https://github.com/samykabu/sanduq/blob/main/docs/start/install-by-host.md)
+and the [memory page](https://github.com/samykabu/sanduq/blob/main/docs/extensions/memory.md).
+Every command and its example is in the [command reference](https://github.com/samykabu/sanduq/blob/main/docs/reference/commands.md#memory).
 
 
 Spec Kit extension `memory`, part of Sanduq Spec Kit Extensions. It reconciles verified completed features into project memory under `specs/memory/`: one file per entry, organized by capability, that agents read through a budgeted query. Keep current behavior, decisions, constraints, lessons and useful open follow-ups; replace obsolete rules and remove resolved concerns. Git holds archive history and recoverable artifacts. Read relevant memory during specification and impact analysis; ordinary implementation tasks only check the small pending queue.

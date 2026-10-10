@@ -1,8 +1,39 @@
 # Changelog
 
+## [1.6.0] - 2026-10-10
+
+- The implementation dependency plan and clarification diagrams use Sanduq Illustrate
+  (replaces Archify). `extension.yml` now requires `illustrate >=2.2.1,<3.0.0`.
+- `accept_plan.py` accepts an Illustrate dependency-graph HTML whose wave nodes and edges
+  carry `data-plan-node` / `data-plan-from` / `data-plan-to`. It keeps the issue coverage,
+  reachability, freshness-hash, pending-marker, failed-render and receipt rules, runs
+  Illustrate's `self_check.py`, `verify-geometry.py` and `export_diagram.py` (SVG and PNG),
+  and renders the plan in headless Chromium at three desktop viewports, failing on script
+  errors and invisible, overlapping or out-of-bounds nodes. Screenshots and hashes go in the
+  receipt; managed projects still require `--review` before the marker clears.
+- New flags: `--html` (replaces `--spec`), optional `--illustrate <skill-dir>`, and
+  `--migrate-only`. `--spec` stays as an alias of `--html` and the previous renderer flag is
+  accepted and ignored with a warning until 1.7.0.
+- Pending plans from 1.5.x are converted, never dropped: the marker stays pending with the
+  original under `migrated_from`, an unreviewed receipt is kept as
+  `scope-plan-receipt.legacy.json`, and `PLAN_REGENERATION_REQUIRED` names the issue.
+- Clarification questions take `diagram_image` (a pushed Illustrate PNG) with a required
+  `diagram_text`. The image is embedded through a commit-pinned GitHub blob URL verified
+  with the contents API, so it loads in private repositories; otherwise the text version is
+  posted with the reason and listed under `image_fallbacks`. Managed Mermaid diagrams now
+  fail with `ILLUSTRATE_REQUIRED`; `raw.githubusercontent.com` images are rejected.
+- `references/illustrate-plan.md` replaces the previous plan reference.
+
+**Upgrade note.** Install Illustrate 2.2.1 or newer beside Scope (Workflow 1.9.0 installs
+it), and for plan acceptance `pip install playwright && playwright install chromium`. Run
+`python .specify/extensions/scope/scripts/accept_plan.py --migrate-only` if a plan was
+pending before the upgrade, then regenerate it with `/speckit-scope-plan`. Replace
+`--spec <file>` with `--html <file>` in your own scripts before 1.7.0.
+
 ## [1.5.2] - 2026-10-10
 
 - Documentation: neutral provenance wording; no behavior change.
+- README: version note and links to the new extension page, install-by-host page and command reference.
 
 ## [1.5.1] - 2026-10-06
 

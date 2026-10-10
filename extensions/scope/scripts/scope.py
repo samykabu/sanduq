@@ -832,7 +832,7 @@ class Scope:
         if analysis['tree'].get('children'):
             self.rewire(root_issue, [mapping[k] for k, n in nodes.items() if not n.get('children')], journal, journal_path)
             self.export_plan(journal, journal_path)
-            write_json(self.root / '.specify/scope/plan-pending.json', {'operation': operation, 'issue': root_issue['number'], 'required': 'Run Archify and plan-accept after reviewing the updated dependency graph.'})
+            write_json(self.root / '.specify/scope/plan-pending.json', {'operation': operation, 'issue': root_issue['number'], 'renderer': 'illustrate', 'required': 'Regenerate the dependency plan with Illustrate (/speckit-scope-plan), then run accept_plan.py.'})
         journal['published'] = True
         write_json(journal_path, journal)
         result = {'issue': root_issue['number'], 'nodes': mapping, 'journal': str(journal_path), 'plan_update_required': bool(analysis['tree'].get('children'))}

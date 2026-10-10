@@ -1,5 +1,10 @@
 # Changelog
 
+## [4.2.2] - 2026-10-10
+
+- README links point to the new extension page, install-by-host page and command reference.
+- `references/pr-image-embedding.md` names Illustrate as the diagram source. No behavior change.
+
 ## [4.2.1] - 2026-10-06
 
 - Link setup and complete usage examples from the package README; links work in installed copies.

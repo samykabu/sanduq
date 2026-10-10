@@ -1,7 +1,8 @@
 # User Manual Extension
 
-For setup and a consistent worked example, see [Getting started](https://github.com/samykabu/sanduq/blob/main/docs/getting-started.md)
-and [user-manual usage](https://github.com/samykabu/sanduq/blob/main/docs/extensions.md#user-manual).
+For setup and a worked example, see [Install by host](https://github.com/samykabu/sanduq/blob/main/docs/start/install-by-host.md)
+and the [user-manual page](https://github.com/samykabu/sanduq/blob/main/docs/extensions/user-manual.md).
+Every command and its example is in the [command reference](https://github.com/samykabu/sanduq/blob/main/docs/reference/commands.md#user-manual).
 
 
 Create a complete application manual from scratch, then update only the affected modules as each

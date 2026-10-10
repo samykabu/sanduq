@@ -1,11 +1,15 @@
 {
   "schema_version": 1,
   "versions": {
+    "assure": "2.3.2",
     "illustrate": "2.2.1",
-    "scope": "1.5.2",
+    "memory": "2.1.2",
+    "pr": "4.2.2",
+    "project": "2.2.2",
+    "scope": "1.6.0",
     "user-manual": "1.5.2",
     "workflow": "1.9.0"
   },
   "status": "implementation-in-progress",
-  "note": "Workflow 1.9.0 renames the canonical source key to sanduq-source-key/1 and keeps verifying evidence recorded under the previous key version. Scope 1.5.2 and Illustrate 2.2.1 are wording-only patches. Publish after successful main CI and downloaded asset verification. User Manual 1.5.2 vendors its portable sources unchanged."
+  "note": "Workflow 1.9.0 renames the canonical source key to sanduq-source-key/1 and keeps verifying evidence recorded under the previous key version. Scope 1.6.0 moves the dependency plan and clarification images to Illustrate and requires Illustrate 2.2.1; Illustrate 2.2.1 is a wording-only patch. Publish after successful main CI and downloaded asset verification. User Manual 1.5.2 vendors its portable sources unchanged. Assure 2.3.2, Memory 2.1.2, PR 4.2.2 and Project 2.2.2 are documentation-only patches: their packaged READMEs link to the restructured docs; the Workflow README is split into a guide and docs/workflow/ reference pages."
 }

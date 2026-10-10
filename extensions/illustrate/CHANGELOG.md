@@ -5,6 +5,8 @@
 - Neutral example footers in the process-flow templates; no behavior change.
 - The skill is vendored from samykabu/sanduq-skills (illustration-tools 3.2.1). Its SKILL.md is
   marked `metadata.internal` so it is not offered as a separate install from this repository.
+- README lists all four commands, including `import`, and all 44 diagram types, and links to the new
+  extension page and command reference.
 
 ## [2.2.0] - 2026-10-06
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.1.2] - 2026-10-10
+
+- README links point to the new extension page, install-by-host page and command reference.
+
 ## [2.1.1] - 2026-10-06
 
 - Link setup and complete usage examples from the package README; links work in installed copies.

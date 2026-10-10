@@ -5,7 +5,7 @@
 > may trigger context pauses; historical estimated-fallback references below are superseded.
 
 Date: 2026-09-18
-Status: Implementation in progress on `feat/reusable-workflow`. Canonical sources, orchestration, installers, rollback and release tooling are implemented locally. Actual native installation and upgrade tests pass within the scope recorded in [implementation progress](workflow-implementation-progress.md). Remote CI, semantic live acceptance, release and consumer adoption remain pending. See the [operating guide](workflow-guide.md) and [compatibility decisions](workflow-compatibility.md).
+Status: Implementation in progress on `feat/reusable-workflow`. Canonical sources, orchestration, installers, rollback and release tooling are implemented locally. Actual native installation and upgrade tests pass within the scope recorded in [implementation progress](workflow-implementation-progress.md). Remote CI, semantic live acceptance, release and consumer adoption remain pending. See the [operating guide](../workflow-guide.md) and [compatibility decisions](workflow-compatibility.md).
 Canonical repository: `samykabu/sanduq`.
 Extension ID: `workflow`; no matching entry in the official community catalog checked on 2026-09-18. The existing `scope` ID collides with an unrelated community extension, so Sanduq Scope must be installed from an explicit Sanduq package and provenance must be checked.
 

@@ -4,6 +4,7 @@
 
 - Scripts, scaffold, CI templates and skill references are vendored from the portable User Manual
   skills in samykabu/sanduq-skills (byte-identical; see `ADAPTER.md`). No behavior change.
+- README links point to the new extension page, install-by-host page and command reference.
 
 ## [1.5.1] - 2026-10-06
 

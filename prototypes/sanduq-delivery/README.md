@@ -17,4 +17,4 @@ The guard's static shell command expects this `prototypes/sanduq-delivery/`
 folder in the project checkout, so installing only `workflow.yml` is not an
 executable end-to-end package. It is intentionally separate from Sanduq's
 consumer installer. Run `test_native_probe.py` with the pinned Spec Kit
-checkout; see [the result](../../docs/native-workflow-prototype-results.md).
+checkout; see [the result](../../docs/internal/native-workflow-prototype-results.md).
