@@ -3,6 +3,7 @@
 ## [1.5.2] - 2026-10-10
 
 - Documentation: neutral provenance wording; no behavior change.
+- README: version note and links to the new extension page, install-by-host page and command reference.
 
 ## [1.5.1] - 2026-10-06
 

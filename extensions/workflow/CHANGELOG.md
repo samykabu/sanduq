@@ -10,6 +10,9 @@
 - `dependencies.json` pins Scope 1.5.2, Illustrate 2.2.1 and User Manual 1.5.2.
 - The bundled Delegate Task driver is vendored from samykabu/sanduq-skills (agent-tools 1.1.2):
   Claude runs now report the model that did the work, not a side call.
+- The 1,380-line README is split into a short guide and reference pages under `docs/workflow/`
+  (stages, state files, schemas, runner policy, utilities, delegation, development). No content removed.
+- `dependencies.json` pins Assure 2.3.2, PR 4.2.2 and Project 2.2.2 (documentation patches).
 
 ## [1.8.5] - 2026-10-06
 
