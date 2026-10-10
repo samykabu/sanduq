@@ -7,7 +7,9 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
+from urllib.parse import quote
 from pathlib import Path
 
 from scope import Scope, ScopeError, require, read_json, write_json, with_transport
@@ -53,6 +55,42 @@ def option_label(index):
         index, remainder = divmod(index - 1, 26)
         label = chr(65 + remainder) + label
     return label
+
+
+def host_image(root, repo, gh, path):
+    """Return (url, None) for an Illustrate PNG that GitHub can show in an issue comment, else (None, reason).
+
+    Same rule as the PR extension's image embedding: a commit-pinned github.com blob URL with
+    ?raw=true, verified through the contents API at that commit. It loads for any reader who can
+    see the repository, so private repositories work; raw.githubusercontent.com is never used.
+    """
+    root = Path(root).resolve()
+    image = (root / path).resolve()
+    if not image.is_relative_to(root) or image.suffix.lower() != '.png' or not image.is_file():
+        return None, f'{path} is not an exported PNG inside the project'
+    relative = image.relative_to(root).as_posix()
+    git = lambda *a: subprocess.run(['git', '-C', str(root), *a], capture_output=True, text=True, check=True).stdout.strip()
+    commit = 'HEAD'
+    try:
+        commit = git('rev-parse', 'HEAD')
+        blob = git('hash-object', relative)
+        remote = gh.api(f'repos/{repo}/contents/{quote(relative)}?ref={commit}')
+    except (OSError, subprocess.CalledProcessError, ScopeError) as exc:
+        detail = (getattr(exc, 'stderr', None) or str(exc)).strip()[:200]
+        return None, f'{relative} is not on GitHub at commit {commit[:12]}; commit and push it, then rerun ({detail})'
+    if not isinstance(remote, dict) or remote.get('sha') != blob:
+        return None, f'{relative} at commit {commit[:12]} on GitHub differs from the local export; push the current file'
+    return f'https://github.com/{repo}/blob/{commit}/{quote(relative)}?raw=true', None
+
+
+def diagram_section(root, repo, gh, question):
+    """Inline image when it can be hosted; otherwise the text version with the exact reason. Never blocks."""
+    image = question['diagram_image']
+    url, reason = host_image(root, repo, gh, image['path'])
+    text = question['diagram_text'].strip()
+    if url:
+        return f'\n![{image["alt"]}]({url})\n\n{text}\n', None
+    return f'\n_Diagram image not embedded: {reason}. Text version:_\n\n{text}\n', reason
 
 
 def choice_lines(options, recommended):
@@ -291,6 +329,12 @@ class Clarification:
                         'Keep each option on one line; the runtime adds the Recommended suffix.')
             if question.get('diagram'):
                 require('```' not in question['diagram'], 'Supply Mermaid source without code fences.')
+            if 'diagram_image' in question:
+                image = question['diagram_image']
+                require(isinstance(image, dict) and all(isinstance(image.get(k), str) and image[k].strip() for k in ('path', 'alt')),
+                        'diagram_image needs the project-relative path of an exported Illustrate PNG and its alt text.')
+                require(isinstance(question.get('diagram_text'), str) and question['diagram_text'].strip(),
+                        'diagram_image needs diagram_text: the text version (for example a dependency list) used when the image cannot be hosted.')
         followups = {qid for q in analysis['questions'] for qid in q.get('follows_up', [])}
         if unresolved and not snapshot['limit_reached'] and not snapshot['policy']['closed']:
             require(set(unresolved) <= followups, 'Every unresolved prior question needs a precise follow-up question.')
@@ -343,7 +387,7 @@ class Clarification:
         number, creator = snapshot['issue']['number'], snapshot['creator']
         round_number = snapshot['next_round']
         questions = analysis['questions'] if outcome == 'waiting' else []
-        prepared = []
+        prepared, image_fallbacks = [], {}
         for index, question in enumerate(questions, 1):
             qid = f'C{round_number}Q{index}'
             meta = {'version': 1, 'id': qid, 'key': question['key'], 'round': round_number, 'batch': batch,
@@ -362,12 +406,21 @@ class Clarification:
                 body += f'**AI recommendation: {question["recommendation"]}**\n\n**Why I recommend it:** {question["justification"]}\n\n'
                 body += f'**Answer:** Add a normal comment: `{qid}: your answer`.\n\n'
             body += f'**Optional feedback or another answer:** `{qid}: your choice — your feedback`. You can answer several questions in one comment, one question ID per line. No Quote reply is needed.\n\n'
-            body += '<details>\n<summary>More context' + (' and diagram' if question.get('diagram') else '') + '</summary>\n\n' + question['details'] + '\n'
+            has_diagram = any(question.get(k) for k in ('diagram', 'diagram_image', 'diagram_markdown'))
+            body += '<details>\n<summary>More context' + (' and diagram' if has_diagram else '') + '</summary>\n\n' + question['details'] + '\n'
             if question.get('diagram'):
-                require(not automatic_resume, 'ARCHIFY_REQUIRED: managed questions use diagram_markdown with verified inline Archify image URLs.')
+                require(not automatic_resume, 'ILLUSTRATE_REQUIRED: managed questions use diagram_image (an exported Illustrate PNG) with diagram_text, not Mermaid.')
                 body += '\n```mermaid\n' + question['diagram'].strip() + '\n```\n'
+            if question.get('diagram_image'):
+                section, reason = diagram_section(self.root, self.app.repo, self.gh, question)
+                body += section
+                if reason:
+                    image_fallbacks[qid] = reason
             if question.get('diagram_markdown'):
-                require(re.search(r'!\[[^\]]*\]\(https://[^\s)]+\)', question['diagram_markdown']), 'INLINE_ARCHIFY_IMAGE_REQUIRED')
+                # Pre-1.6.0 analyses: still rendered, but only with an https image that private readers can load.
+                require(re.search(r'!\[[^\]]*\]\(https://[^\s)]+\)', question['diagram_markdown'])
+                        and 'raw.githubusercontent.com' not in question['diagram_markdown'],
+                        'INLINE_IMAGE_REQUIRED: diagram_markdown needs an https image that is not a raw.githubusercontent.com URL; prefer diagram_image.')
                 body += '\n' + question['diagram_markdown'].strip() + '\n'
             body += '\n</details>\n\nAfter answering the questions, move this issue to **Feature Specification** and rerun Clarify or Brainstorm.\n'
             if automatic_resume:
@@ -406,6 +459,8 @@ class Clarification:
         require(len(summary_body) <= 65000, 'Round audit exceeds comment size; shorten explanations while preserving the answer references.')
         result = {'issue': number, 'outcome': outcome, 'round': round_number, 'questions': len(prepared),
                   'status': WAITING if outcome in {'waiting', 'limit'} else 'Ready', 'dry_run': not apply, 'batch': batch}
+        if image_fallbacks:
+            result['image_fallbacks'] = image_fallbacks
         if not apply:
             return dict(result, comment_previews=[body for _, body in prepared], summary_preview=summary_body)
         if not journal:

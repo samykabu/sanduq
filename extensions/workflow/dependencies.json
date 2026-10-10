@@ -2,7 +2,7 @@
   "schema_version": 1,
   "repository": "https://github.com/samykabu/sanduq",
   "required": {
-    "scope": "1.5.2",
+    "scope": "1.6.0",
     "project": "2.2.1",
     "pr": "4.2.1",
     "illustrate": "2.2.1"

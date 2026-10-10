@@ -30,6 +30,15 @@ Plan. Questions are individual comments, mentioning the creator, with stable IDs
 and unchecked recommendations. Project `scope.statuses` maps logical names such as
 Backlog, Feature Specification, Need Clarifications and Ready to actual board names.
 
+After a split, `/speckit-scope-plan` redraws the implementation dependency plan as an
+Illustrate dependency graph and `scripts/accept_plan.py` accepts it only after issue
+coverage, dependency reachability, Illustrate's own checks, SVG/PNG export and a headless
+Chromium render check pass. Scope requires Illustrate 2.2.1 or newer; PNG export and the
+render check need Playwright with Chromium. Clarification questions embed Illustrate PNGs
+through verified commit-pinned GitHub URLs, which work in private repositories, and post
+a text version with the reason when an image cannot be hosted. See
+[the Illustrate plan reference](https://github.com/samykabu/sanduq/blob/main/extensions/scope/references/illustrate-plan.md).
+
 Managed default artifacts are `.specify/scope/github/` and
 `docs/workflow/implementation-plan.html`; `scope.artifact_directory` and
 `scope.plan_file` can preserve existing project locations. Unmanaged projects retain
