@@ -40,6 +40,9 @@ jobs:
           python3 extensions/scripts/check_docs.py
           python3 extensions/user-manual/scripts/audit_manual.py --root docs/examples/booking-manual
 
+      - name: Documentation diagrams end their arrows straight
+        run: python3 extensions/illustrate/skill/scripts/verify-arrow-ends.py docs/diagrams/*.html docs/diagrams/*.svg
+
       - name: Validate JSON (catalog + configs + marketplace)
         run: |
           while IFS= read -r f; do

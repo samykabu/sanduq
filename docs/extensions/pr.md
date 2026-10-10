@@ -33,7 +33,7 @@ marked section of the PR description. Add `--no-pr` to write the documents only.
 
 ## How it runs
 
-![PR evidence gate, document-only alternative, and feedback approval](../diagrams/extension-pr.svg)
+![PR sequence: pr.generate, or managed Finalize, validates fresh QA and manual evidence and then updates the PR or writes documents only; pr.review-feedback inspects unresolved review comments, you approve a concrete plan, and only then are fixes applied, verified and pushed.](../diagrams/extension-pr.animated.svg)
 
 Before it touches the PR, Generate checks QA and manual freshness for the extensions you installed.
 Review Feedback shows a plan and waits for your approval before it edits, replies, commits, pushes

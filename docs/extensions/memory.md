@@ -41,7 +41,7 @@ python .specify/extensions/memory/scripts/archive.py memory check
 
 ## How it runs
 
-![Approved archive policy, post-merge local processing, and reviewed commits](../diagrams/extension-memory.svg)
+![Memory sequence: memory.init enables automatic mode; memory.impact runs as a required hook before Analyze; memory.prepare queues finished work after implementation; after the merge, the next session or memory.run checks eligibility and evidence, migrates knowledge with an independent review, and commits a recoverable checkpoint before the final archive.](../diagrams/extension-memory.animated.svg)
 
 Impact reads current knowledge before Analyze. Prepare queues finished work. After the merge, the
 next local session checks the approved policy and the real checks, then reconciles knowledge,

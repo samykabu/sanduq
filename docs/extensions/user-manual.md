@@ -46,7 +46,7 @@ The [theme gallery](../user-manual-examples.md) shows real builds.
 
 ## How it runs
 
-![Module approval, incremental updates, and application release](../diagrams/extension-user-manual.svg)
+![User Manual sequence: user-manual.init interviews you and proposes a module map you approve; user-manual.analyze runs before implementation; user-manual.update writes and audits pages after implementation; after a verified application release, user-manual.release builds the outputs for each audience and language.](../diagrams/extension-user-manual.animated.svg)
 
 Analysis runs before implementation. Update writes the affected pages, audits them, and builds a
 preview afterwards. Release uses verified application release evidence.
