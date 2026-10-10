@@ -46,7 +46,7 @@ Editable HTML and SVG exports live in `docs/diagrams/`:
 | [Implementation orchestration](../diagrams/implementation-orchestration.html) | [SVG](../diagrams/implementation-orchestration.svg) | Worker ownership and verified phase integration |
 | [Workflow lifecycle](../diagrams/workflow-lifecycle.html) | [SVG](../diagrams/workflow-lifecycle.svg) | The full managed feature lifecycle |
 
-The [extension workflow gallery](../extension-workflows.md) owns eight package diagrams plus the
+The [extension pages](../README.md#extensions) own eight package diagrams plus the
 independent QA/manual decision flow. The [Illustrate gallery](../illustrate-examples.md) owns seven
 refund-process palette previews with editable sources. [Delegate examples](../delegate-examples.md)
 own the bounded consensus diagram and reuse the skill's existing parallel fan-out asset.
@@ -56,8 +56,8 @@ Five PNGs in `manual-gallery/` show actual builds of the synthetic manual. Their
 Site outputs stay under ignored `dist/`.
 
 [Progress token usage](progress-token-usage.png) illustrates the implementation report in the
-[operations reference](../workflow-operations.md). The `workflow-plan/` directory holds historical
-plan-delivery evidence, referenced by implementation records. Keep those records with their assets.
+[operations reference](../workflow/operations.md). Historical plan-delivery evidence moved to `docs/internal/assets/workflow-plan/`
+with the implementation records that reference it.
 
 Logo masters and icon sizes are intentional reusable brand assets. Keep them even when only one
 size is embedded. Removed overview/theme-preview sets were unused after the README split; the

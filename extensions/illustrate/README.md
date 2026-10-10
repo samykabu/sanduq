@@ -1,7 +1,8 @@
 # Illustrate Extension
 
-For setup and a consistent worked example, see [Getting started](https://github.com/samykabu/sanduq/blob/main/docs/getting-started.md)
-and [illustrate usage](https://github.com/samykabu/sanduq/blob/main/docs/extensions.md#illustrate).
+For setup and a worked example, see [Install by host](https://github.com/samykabu/sanduq/blob/main/docs/start/install-by-host.md)
+and the [Illustrate page](https://github.com/samykabu/sanduq/blob/main/docs/extensions/illustrate.md).
+Every command and its example is in the [command reference](https://github.com/samykabu/sanduq/blob/main/docs/reference/commands.md#illustrate).
 
 
 Install the unified Illustrate skill through Spec Kit and expose it consistently to Claude, Codex,
@@ -15,36 +16,60 @@ process-flow-diagram skills.
 | `speckit.illustrate.generate` | `/speckit-illustrate-generate` | `$speckit-illustrate-generate` |
 | `speckit.illustrate.export` | `/speckit-illustrate-export` | `$speckit-illustrate-export` |
 | `speckit.illustrate.theme` | `/speckit-illustrate-theme` | `$speckit-illustrate-theme` |
+| `speckit.illustrate.import` | `/speckit-illustrate-import` | `$speckit-illustrate-import` |
+
+`import` redraws an existing draw.io, Mermaid or Excalidraw source as an Illustrate diagram in the
+active project theme, and records what it kept and changed in a fidelity ledger.
 
 ## Supported diagram types
 
+Illustrate supports 44 diagram types. The skill's selection guide in
+[`skill/SKILL.md`](skill/SKILL.md) says when to use each one.
+
 - Architecture
+- Architecture delta
 - IT current-state
 - Flowchart
 - Sequence
 - State machine
-- ER/data model
+- ER / data model
 - Timeline
 - Swimlane
 - Quadrant
-- Radar/spider
-- Loop/flywheel
-- Nested/containment
+- Radar / Spider
+- Polar chart
+- Loop
+- Nested
 - Tree
 - Org chart
 - Layer stack
+- Exploded axonometric
+- Axonometric plan
 - Venn
-- Pyramid/funnel
+- Pyramid / funnel
 - Bar chart
+- Waterfall
+- Treemap
+- Heatmap
 - Line chart
 - Gantt
 - Scatter plot
-- High-level architecture
-- Multi-actor process
-- Medallion architecture
+- High-Level
+- Process
+- Medallion
 - Data flow
 - DP integration
 - DP security matrix
+- Sankey
+- Fishbone
+- Wardley map
+- Kanban
+- User journey
+- Deployment
+- Dependency graph
+- UML class
+- Story map
+- Database schema
 
 The package includes minimal light, minimal dark, full editorial, and generated hand-drawn examples
 for every core type. It also carries data-lake and high-level-vertical hand examples, the quadrant
@@ -89,6 +114,7 @@ projects can choose automatic or manual handling in `.specify/extension-dependen
 /speckit-illustrate-generate create a sequence diagram for refund approval
 /speckit-illustrate-export docs/refund-approval.html --svg-only
 /speckit-illustrate-theme set cobalt dark
+/speckit-illustrate-import docs/legacy/order-flow.mmd --size doc-wide --detail balanced
 ```
 
 The command loads its version-matched skill package from

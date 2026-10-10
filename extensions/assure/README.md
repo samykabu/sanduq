@@ -1,7 +1,8 @@
 # Assure Extension
 
-For setup and a consistent worked example, see [Getting started](https://github.com/samykabu/sanduq/blob/main/docs/getting-started.md)
-and [assure usage](https://github.com/samykabu/sanduq/blob/main/docs/extensions.md#assure).
+For setup and a worked example, see [Install by host](https://github.com/samykabu/sanduq/blob/main/docs/start/install-by-host.md)
+and the [assure page](https://github.com/samykabu/sanduq/blob/main/docs/extensions/assure.md).
+Every command and its example is in the [command reference](https://github.com/samykabu/sanduq/blob/main/docs/reference/commands.md#assure).
 
 
 Assure makes feature-level QA analysis and test documentation part of the Spec Kit lifecycle.

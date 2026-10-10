@@ -2,7 +2,7 @@
 
 A process diagram makes responsibility visible. Use a swimlane when you need to show who acts,
 and a flowchart when the decision branches matter. The examples below use the same synthetic
-booking refund scenario as the [skill guide](skills.md#illustrate).
+booking refund scenario as the [skill guide](scenarios/skills-only.md#illustrate).
 
 ## Table of contents
 
@@ -109,5 +109,5 @@ python "$ILLUSTRATE/scripts/export_diagram.py" docs/refund-process.html --png-on
 ```
 
 PNG needs Playwright and Chromium. Keep HTML beside its exports, inspect narrow and desktop views,
-and provide a text explanation beside an embedded image. The [extension workflow gallery](extension-workflows.md)
-shows how the same approach explains commands, automation, and blocked states.
+and provide a text explanation beside an embedded image. The [extension pages](README.md#extensions)
+show how the same approach explains commands, automation, and blocked states.
