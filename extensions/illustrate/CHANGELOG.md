@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.4.0] - 2026-10-10
+
+- Vendors illustration-tools 3.4.0: `export --arrows=draw|flow|pulse|draw-flow|chevrons` animates arrows
+  in their direction (default `draw`), `export --gif` writes an animated GIF, and every arrow now ends
+  on a straight lead (65 shipped arrows fixed; `scripts/verify-arrow-ends.py` checks it).
+
 ## [2.3.0] - 2026-10-10
 
 - Vendors illustration-tools 3.3.0: `export --animated` writes a self-playing `<name>.animated.svg` from a

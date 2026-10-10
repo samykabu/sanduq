@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.9.2] - 2026-10-10
+
+- `dependencies.json` pins Illustrate 2.4.0 (animated arrows, GIF export). No workflow behaviour change.
+
 ## [1.9.1] - 2026-10-10
 
 - `dependencies.json` pins Illustrate 2.3.0 (animated SVG export). No workflow behaviour change.
