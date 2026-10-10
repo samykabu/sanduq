@@ -65,6 +65,11 @@ order.
 When you want one command to run the whole lifecycle from a GitHub issue, use the
 [managed Workflow](managed-workflow.md).
 
+![Lifecycle overlay: Specify, Clarify, Plan, Tasks, Analyze and Implement, with the mandatory and optional extension hooks before and after each phase, then the Memory archive and User Manual release commands you run after merge and at release.](../diagrams/lifecycle-overlay.animated.svg)
+
+Solid boxes are mandatory hooks; dashed boxes are optional hooks that ask first.
+[Editable source](../diagrams/lifecycle-overlay.html).
+
 ## Who enforces dependencies
 
 Spec Kit does not install `requires.extensions`. Assure, PR and User Manual run `deps.py ensure`
