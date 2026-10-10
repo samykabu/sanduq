@@ -20,6 +20,11 @@ available as portable agent skills in [sanduq-skills](https://github.com/samykab
 
 ## Products
 
+![Product map: eight Spec Kit extensions in this repository. Scope requires Workflow and Illustrate; Assure, PR and User Manual require Illustrate; PR uses Assure and User Manual when installed; Project and Memory stand alone. The sanduq-skills repository supplies the Illustrate, User Manual and Delegate Task skills, copied into extensions and listed by the sanduq marketplace.](docs/diagrams/product-map.animated.svg)
+
+The map shows each extension and what it requires; arrows point to the dependency.
+[Editable source](docs/diagrams/product-map.html) and [static version](docs/diagrams/product-map.svg).
+
 | Product | Purpose | Lifecycle phase | Standalone | Requires | Hosts | License |
 | --- | --- | --- | --- | --- | --- | --- |
 | [Workflow](docs/extensions/workflow.md) | Resumable issue-to-PR dispatcher | All, as 16 stages | Yes | Python 3.10+, Git, `gh`; installs the extensions it uses | Codex, Claude Code (install tested) | PolyForm NC |

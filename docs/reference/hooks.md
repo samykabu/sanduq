@@ -16,6 +16,15 @@ edit them by hand.
   those commands as dispatcher stages instead. It keeps a journal so the change can be reversed.
   Scope's guard, bind, plan-guard and reconcile hooks, Memory's hooks and unrelated hooks stay as they are.
 
+## Hooks at a glance
+
+![Lifecycle overlay: Specify, Clarify, Plan, Tasks, Analyze and Implement, with the mandatory and optional extension hooks before and after each phase, then the Memory archive and User Manual release commands you run after merge and at release.](../diagrams/lifecycle-overlay.animated.svg)
+
+Mandatory hooks (solid) run without asking: every Scope hook, and Memory's
+session, impact and prepare. Optional hooks (dashed) ask first: Project sync, Assure, User Manual
+and PR. Clarify has no hooks. The diagram shows manifest defaults, as in the first table below.
+[Editable source](../diagrams/lifecycle-overlay.html).
+
 <!-- generated:hooks:start -->
 ## Manifest defaults
 
