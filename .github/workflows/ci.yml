@@ -14,6 +14,9 @@ jobs:
       - name: Install validation dependencies
         run: python3 -m pip install --user pyyaml packaging
 
+      - name: Claude Code validates the marketplace
+        run: npx -y @anthropic-ai/claude-code plugin validate .
+
       - name: Vendored skills match vendor.lock.json
         run: python3 extensions/scripts/vendor.py check
 
