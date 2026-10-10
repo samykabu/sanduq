@@ -3,6 +3,7 @@ import io
 import json
 import subprocess
 import sys
+import time
 import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
@@ -127,6 +128,54 @@ class ProjectRestFallbackTests(unittest.TestCase):
         gh = self.client(fake)
         data, _ = self.run_quiet(gh.command, ['project', 'field-list', '7', '--owner', 'acme', '--format', 'json'])
         self.assertEqual([f['name'] for f in data['fields']], ['Status', 'Blocked by', 'Title'])
+
+    def test_explicit_rate_limit_with_positive_budget_uses_rest(self):
+        fake = FakeGh(project_ok=False, remaining=67,
+                      project_error='GraphQL: API rate limit exceeded for user ID 1.')
+        gh = self.client(fake)
+        data, err = self.run_quiet(gh.command, ['project', 'item-list', '7', '--owner', 'acme',
+                                                '--limit', '10000', '--format', 'json'])
+        self.assertEqual(data['totalCount'], 3)
+        self.assertIn('GraphQL rate-limited', err)
+        self.assertEqual(gh.project_transport, 'rest')
+        self.assertGreater(gh._rest_until, time.time())
+
+    def test_explicit_rate_limit_with_failed_probe_uses_rest(self):
+        fake = FakeGh(project_ok=False, remaining=None,
+                      project_error='GraphQL: API rate limit exceeded for user ID 1.')
+        gh = self.client(fake)
+        data, _ = self.run_quiet(gh.command, ['project', 'item-list', '7', '--owner', 'acme', '--format', 'json'])
+        self.assertEqual(data['totalCount'], 3)
+        self.assertEqual(gh.project_transport, 'rest')
+
+    def test_unrelated_failure_with_positive_budget_is_raised(self):
+        fake = FakeGh(project_ok=False, remaining=67, project_error='GraphQL: Could not resolve to a ProjectV2')
+        gh = self.client(fake)
+        with self.assertRaisesRegex(m.ScopeError, 'Could not resolve'):
+            gh.command(['project', 'item-list', '7', '--owner', 'acme', '--format', 'json'])
+        self.assertEqual(fake.rest_calls(), [])
+        self.assertIsNone(gh.project_transport)
+        self.assertEqual(gh._rest_until, 0.0)
+
+    def test_zero_budget_with_unrelated_message_uses_rest(self):
+        fake = FakeGh(project_ok=False, remaining=0, project_error='GraphQL: Could not resolve to a ProjectV2')
+        gh = self.client(fake)
+        data, _ = self.run_quiet(gh.command, ['project', 'item-list', '7', '--owner', 'acme', '--format', 'json'])
+        self.assertEqual(data['totalCount'], 3)
+        self.assertEqual(gh.project_transport, 'rest')
+
+    def test_graphql_is_used_again_after_reset(self):
+        fake = FakeGh(project_ok=False, remaining=67,
+                      project_error='GraphQL: API rate limit exceeded for user ID 1.')
+        gh = self.client(fake)
+        self.run_quiet(gh.command, ['project', 'item-list', '7', '--owner', 'acme', '--format', 'json'])
+        self.assertEqual(gh.project_transport, 'rest')
+        gh._rest_until = time.time() - 1
+        fake.project_ok = True
+        _, err = self.run_quiet(gh.command, ['project', 'item-list', '7', '--owner', 'acme', '--format', 'json'])
+        self.assertIn('GraphQL budget recovered', err)
+        self.assertEqual(gh._rest_until, 0.0)
+        self.assertEqual(gh.project_transport, 'graphql+rest')
 
     def test_rest_stays_selected_until_reset_without_retrying_graphql(self):
         fake = FakeGh(project_ok=False, remaining=0)

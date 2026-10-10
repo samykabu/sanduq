@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.2] - 2026-10-10
+
+- Project operations fall back to the REST Projects API when the failed `gh project` request itself
+  reports a GraphQL rate limit, even if the cheap budget probe still shows points left (a costly
+  item listing can be refused first). The reset backoff and later GraphQL probing are unchanged,
+  failures that do not name a rate limit are still raised, and the listing query is untouched.
+
 ## [1.6.1] - 2026-10-10
 
 - W01d restricts fresh bind to the owned initial Specify phase before writes. A changed

@@ -227,20 +227,23 @@ class GitHub:
         return self._rest.run(args)
 
     def graphql_exhausted(self, stderr=''):
-        """True when GraphQL is rate-limited. `gh project` can report this as an unrelated error
-        (for example "unknown owner type"), so the real budget is always checked."""
+        """True when GraphQL is rate-limited. The failed request's own message naming a rate limit is
+        enough, even while the cheap budget probe still reports points left (a costly query can be
+        refused first). `gh project` can also report exhaustion as an unrelated error (for example
+        "unknown owner type"), so the real budget is checked for every other failure."""
+        explicit = 'rate limit' in (stderr or '').lower()
         p = subprocess.run(['gh', 'api', 'graphql', '-f', 'query={rateLimit{remaining resetAt}}'],
                            capture_output=True, text=True, encoding='utf-8', timeout=30)
         reset = None
         if p.returncode:
-            exhausted = 'rate limit' in ((p.stderr or '') + (p.stdout or '') + (stderr or '')).lower()
+            exhausted = explicit or 'rate limit' in ((p.stderr or '') + (p.stdout or '')).lower()
         else:
             try:
                 limit = json.loads(p.stdout)['data']['rateLimit']
-                exhausted = limit['remaining'] <= 0
+                exhausted = explicit or limit['remaining'] <= 0
                 reset = datetime.fromisoformat(limit['resetAt'].replace('Z', '+00:00')).timestamp()
             except (ValueError, KeyError, TypeError, AttributeError):
-                exhausted = False
+                exhausted = explicit
         if exhausted:
             # Unknown reset: re-check GraphQL after a minute rather than before every operation.
             self._rest_until = max(reset or 0, time.time() + 60)
