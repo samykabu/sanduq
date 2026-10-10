@@ -7,6 +7,7 @@ hand edits: change the skill in sanduq-skills, release it, then sync here.
 
   python extensions/scripts/vendor.py check                      # CI: the tree matches the lock
   python extensions/scripts/vendor.py sync --source <checkout> --input illustrate --ref <tag>
+  python extensions/scripts/vendor.py update --source <checkout>  # newest release of every bundle
 
 `sync` reads from a local sanduq-skills clone at the tag's commit (`git show`), never its working tree.
 """
@@ -106,16 +107,55 @@ def check(lock):
     return errors
 
 
+BUNDLES = {'illustration-tools': 'illustrate', 'dev-tools': 'user-manual', 'agent-tools': 'delegate-task'}
+MARKETPLACE = ROOT / '.claude-plugin/marketplace.json'
+
+
+def newest_tag(source, bundle):
+    """The highest `<bundle>-vX.Y.Z` tag in the source clone, or None."""
+    tags = git(source, 'tag', '--list', bundle + '-v*').decode().split()
+    def version(tag):
+        try:
+            return tuple(int(part) for part in tag[len(bundle) + 2:].split('.'))
+        except ValueError:
+            return ()
+    tags = [tag for tag in tags if len(version(tag)) == 3]
+    return max(tags, key=version) if tags else None
+
+
+def update(lock, source):
+    """Vendor and pin every bundle whose newest release differs from the lock; return what changed."""
+    changed = []
+    market = json.loads(MARKETPLACE.read_text(encoding='utf-8'))
+    for bundle, name in BUNDLES.items():
+        tag = newest_tag(source, bundle)
+        if not tag or tag == lock['inputs'][name].get('ref'):
+            continue
+        sync(lock, source, name, tag)
+        for plugin in market['plugins']:
+            if plugin['name'] == bundle:
+                plugin['source'].update(ref=tag, sha=lock['inputs'][name]['sha'])
+        changed.append(tag)
+    if changed:
+        MARKETPLACE.write_text(json.dumps(market, indent=2, ensure_ascii=False) + '\n', encoding='utf-8', newline='\n')
+    return changed
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     sub = parser.add_subparsers(dest='command', required=True)
     sub.add_parser('check')
+    newest = sub.add_parser('update')
+    newest.add_argument('--source', type=Path, required=True)
     run = sub.add_parser('sync')
     run.add_argument('--source', type=Path, required=True)
     run.add_argument('--input', required=True)
     run.add_argument('--ref', required=True)
     args = parser.parse_args()
     lock = json.loads(LOCK.read_text(encoding='utf-8'))
+    if args.command == 'update':
+        print(' '.join(update(lock, args.source)) or 'every bundle is at its newest release')
+        return 0
     if args.command == 'sync':
         print(f'{args.input}: {sync(lock, args.source, args.input, args.ref)} files from {args.ref}')
         return 0
