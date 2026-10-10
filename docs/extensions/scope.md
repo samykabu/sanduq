@@ -9,7 +9,7 @@ exports the dependency plan as a diagram.
 | Lifecycle phase | Before and after `specify`, before `plan`, after `implement` |
 | Hooks | Five mandatory hooks ([hooks](../reference/hooks.md)) |
 | Commands | `run`, `guard`, `bind`, `reconcile`, `plan`, `after-specify`, `plan-guard` ([reference](../reference/commands.md#scope)) |
-| Requires | Workflow 1.8 or later (below 2.0) |
+| Requires | Workflow 1.8 or later (below 2.0); Illustrate 2.2.1 or later (below 3.0) |
 | Standalone | No |
 | License | MIT; the `scope-gate` and `scope-brainstorm` presets are MIT too |
 
