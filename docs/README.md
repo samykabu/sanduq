@@ -25,9 +25,7 @@ live in the guides that own them. Package READMEs hold the detailed integration 
 | Task | Guide |
 | --- | --- |
 | Find canonical source, test packages, and submit a change | [Contributing](../CONTRIBUTING.md) |
-| Understand provider and command ownership | [Source ownership](workflow-source-ownership.md) |
-| Check tested hosts and providers | [Compatibility](workflow-compatibility.md) |
-| Review documentation coverage and placement | [Documentation review](documentation-review.md) |
+| Check tested hosts and providers | [Compatibility](reference/compatibility.md) |
 | Find logos and editable illustrations | [Asset index](assets/README.md) |
 
 ## Example conventions
@@ -47,16 +45,4 @@ Replace angle-bracket placeholders before execution. Screenshots and payloads us
 
 ## Design and verification records
 
-These records explain prior decisions and tests. Their version statements describe the recorded
-experiment; use the catalog and current guides for installation.
-
-- [Delivery implementation plan](sanduq-delivery-implementation-plan.md)
-- [Delivery verification](sanduq-delivery-verification.md)
-- [Workflow implementation plan](workflow-extension-implementation-plan.md)
-- [Workflow acceptance audit](workflow-acceptance-audit.md)
-- [Workflow pilot review](workflow-pilot-review.md)
-- [Native prototype results](native-workflow-prototype-results.md)
-- [Native prototype illustration](sanduq-native-workflow-prototype.html)
-- [Orchestration task design](orchestration-tasks.md)
-- [Implementation progress record](workflow-implementation-progress.md)
-- [Fresh-session prompt](workflow-resume-prompt.md)
+Maintainer records moved to `docs/internal/`. See [Contributing](../CONTRIBUTING.md#maintainer-records).

@@ -12,6 +12,7 @@ usable example. Generated agent registrations and installed consumer copies are 
 - [Update documentation and assets](#update-documentation-and-assets)
 - [Prepare a release](#prepare-a-release)
 - [CI and runner policy](#ci-and-runner-policy)
+- [Maintainer records](#maintainer-records)
 
 ## Set up the checkout
 
@@ -50,7 +51,7 @@ need authenticated GitHub access. Use a disposable consumer for installer work.
 | Reviewed versions awaiting publication | `extensions/pending-releases.json` |
 | Human onboarding and examples | README and `docs/` |
 
-Consult [source ownership](docs/workflow-source-ownership.md) before editing a provider overlay.
+Consult [source ownership](docs/internal/workflow-source-ownership.md) before editing a provider overlay.
 Workflow's alias files are hash-owned; customizing an installed alias can block replacement.
 Preserve project-owned CI, manual maps, board IDs, and hooks during upgrades.
 
@@ -133,14 +134,18 @@ files that are vendored, rewritten, or owned here.
 
 ## Update documentation and assets
 
-Keep the README as the entry point. Update setup in `docs/getting-started.md`, skill examples in
-`docs/skills.md`, public command examples in `docs/extensions.md`, stages/overlays in
-`docs/skill-guide.md`, and operating rules in the owning workflow guide.
+Keep the README as the entry point. Follow the [style guide](docs/style-guide.md) and link new
+terms to the [glossary](docs/reference/glossary.md). Update setup in `docs/start/`, adoption paths in
+`docs/scenarios/`, per-extension pages in `docs/extensions/`, every command example in
+`docs/reference/commands.md`, and stages, state and operating rules in `docs/workflow/`.
+`docs/reference/hooks.md` is generated: run `python extensions/scripts/check_docs.py --write`
+after changing a manifest hook, a preset, or Workflow's stage or hook ownership rules.
+Package READMEs ship inside their archives, so they use absolute links for anything outside the package.
 
 Use the [shared booking/refund scenario](docs/README.md#example-conventions). Preserve exact
 identifiers in code, distinguish proposed behavior from verified behavior, and write for the
 declared audience. Use `my-voice` for concise instructional prose and `illustrate` for useful
-visuals. Do not add a summary that simply repeats a short section.
+visuals. Do not add a summary that repeats a short section.
 
 Illustration sources and exports stay together. Resolve the tracked theme, validate it, and
 inspect rendering at desktop and narrow widths. Explain the same flow in adjacent text so the
@@ -179,5 +184,19 @@ on Ubuntu. The repository records an exception because the organization-scoped h
 runners belong to another account. Verify current availability before changing `runs-on`.
 
 A consumer records its own runners and capabilities in `.specify/workflow.yml`; Sanduq renders
-managed workflows from that policy. See [runner configuration](docs/workflow-operations.md#where-your-ci-actually-runs).
+managed workflows from that policy. See [runner configuration](docs/workflow/operations.md#where-your-ci-actually-runs).
 Do not infer consumer runner policy from this repository's CI.
+
+## Maintainer records
+
+Design plans, audits, pilot reviews and recorded evidence live in [`docs/internal/`](docs/internal/).
+They explain earlier decisions; their version statements describe the recorded experiment, not the
+current release. User-facing pages do not link to them; `check_docs.py` enforces this.
+
+- [Documentation overhaul plan](docs/internal/documentation-overhaul-plan.md) and [documentation review](docs/internal/documentation-review.md)
+- [Source ownership](docs/internal/workflow-source-ownership.md) and [compatibility evidence](docs/internal/workflow-compatibility.md)
+- [Delivery implementation plan](docs/internal/sanduq-delivery-implementation-plan.md) and [verification](docs/internal/sanduq-delivery-verification.md)
+- [Workflow implementation plan](docs/internal/workflow-extension-implementation-plan.md), [acceptance audit](docs/internal/workflow-acceptance-audit.md), [progress record](docs/internal/workflow-implementation-progress.md) and [fresh-session prompt](docs/internal/workflow-resume-prompt.md)
+- [Workflow pilot review](docs/internal/workflow-pilot-review.md) and [orchestration task design](docs/internal/orchestration-tasks.md)
+- [Native prototype results](docs/internal/native-workflow-prototype-results.md) and [illustration](docs/internal/sanduq-native-workflow-prototype.html)
+- Recorded evidence: `docs/internal/evidence/`, `docs/internal/workflow-evidence/`, `docs/internal/assets/workflow-plan/`
