@@ -1,6 +1,6 @@
 {
-  "algorithm": "bunyan-source-key/1",
-  "description": "Shared fixtures for the canonical source key (plan A9a). Bunyan eng/ci/source-key.mjs and Sanduq source_key.py must reproduce every key. Entries are git ls-tree -r -z --full-tree records; paths are UTF-8.",
+  "algorithm": "sanduq-source-key/1",
+  "description": "Fixtures for the canonical source key (plan A9a). A consumer's CI and Sanduq source_key.py must reproduce every key. Entries are git ls-tree -r -z --full-tree records; paths are UTF-8. `key` uses `algorithm`; `previousKey` uses the earlier accepted version, which recorded evidence may still carry.",
   "excludedPrefixes": [
     ".specify/",
     ".agents/",
@@ -36,7 +36,8 @@
           "path": "eng/ci/linux.sh"
         }
       ],
-      "key": "2fc91ee2c975a37060cd82f1b88f96d2821ec816c767fa61260a69d6e74a4b75"
+      "key": "56c6ba6e3daa61f8164fc36517918f185a9ae872cf8cc79b395f3581f561cf2b",
+      "previousKey": "2fc91ee2c975a37060cd82f1b88f96d2821ec816c767fa61260a69d6e74a4b75"
     },
     {
       "name": "markdown-and-excluded-only-change",
@@ -139,7 +140,8 @@
           "path": "artifacts/ci/x.json"
         }
       ],
-      "key": "2fc91ee2c975a37060cd82f1b88f96d2821ec816c767fa61260a69d6e74a4b75"
+      "key": "56c6ba6e3daa61f8164fc36517918f185a9ae872cf8cc79b395f3581f561cf2b",
+      "previousKey": "2fc91ee2c975a37060cd82f1b88f96d2821ec816c767fa61260a69d6e74a4b75"
     },
     {
       "name": "prefix-lookalikes-are-included",
@@ -200,7 +202,8 @@
           "path": "README.md.txt"
         }
       ],
-      "key": "de645d7a89fd206e40b35e584437dd977adf62f14d789d2dc2eaa079bd2dae91"
+      "key": "232bcd820c70212aa51cedab367ac67d647a6e9a597c63a7b7baa41eb73c06a2",
+      "previousKey": "de645d7a89fd206e40b35e584437dd977adf62f14d789d2dc2eaa079bd2dae91"
     },
     {
       "name": "source-change",
@@ -225,7 +228,8 @@
           "path": "eng/ci/linux.sh"
         }
       ],
-      "key": "4fc52ff413dea3f72d57bb1a817d5c2edfe479787b63033c146de1b07cce0aac"
+      "key": "9d7586bcfccebeb5498abdabd5cfade8722e5292f4e8abfa598a26bedacaf4e9",
+      "previousKey": "4fc52ff413dea3f72d57bb1a817d5c2edfe479787b63033c146de1b07cce0aac"
     },
     {
       "name": "mode-only-change",
@@ -250,7 +254,8 @@
           "path": "eng/ci/linux.sh"
         }
       ],
-      "key": "51caa298447955671d608b013303ce7bd980a0437d4698f962564b84b3a1dc25"
+      "key": "fa20f12e927b331723ac356a25e10547a6b37f07a047ce1c69a7b0a302f35c69",
+      "previousKey": "51caa298447955671d608b013303ce7bd980a0437d4698f962564b84b3a1dc25"
     },
     {
       "name": "symlink-and-submodule",
@@ -287,7 +292,8 @@
           "path": "vendor/lib"
         }
       ],
-      "key": "1c2ace7c32da152ca6765896eab79607927cdbd3e7323e6abe6ffdc04627481d"
+      "key": "db45000c44d0ae735d0af39aa72a657f783238237712fc1e8affbe49d8867797",
+      "previousKey": "1c2ace7c32da152ca6765896eab79607927cdbd3e7323e6abe6ffdc04627481d"
     },
     {
       "name": "unusual-names-and-byte-order",
@@ -330,7 +336,8 @@
           "path": "src/a b/c d.txt"
         }
       ],
-      "key": "1af243ded5e7481ff9172dcb32faf4618ab069e16b90d941a416ea310f27b8a3"
+      "key": "61bef9c895e05428e3d79a5e90747231348c25db7cf536f84bcce8e903645600",
+      "previousKey": "1af243ded5e7481ff9172dcb32faf4618ab069e16b90d941a416ea310f27b8a3"
     },
     {
       "name": "empty",
@@ -343,7 +350,12 @@
           "path": "docs/only.md"
         }
       ],
-      "key": "cbdd34bb407fd1da536d21c04bcd63da3c7792c0fdeca59c62431c340eddf6c9"
+      "key": "185ea5c2a114f9a66eddc4f42bdd6bdae380ae334a3229d202288e9606d5569d",
+      "previousKey": "cbdd34bb407fd1da536d21c04bcd63da3c7792c0fdeca59c62431c340eddf6c9"
     }
+  ],
+  "acceptedAlgorithms": [
+    "sanduq-source-key/1",
+    "bunyan-source-key/1"
   ]
 }

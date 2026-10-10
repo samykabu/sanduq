@@ -26,7 +26,7 @@ from test_receipt_contract import Harness, checkpoint_validator  # noqa: E402
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'scripts/workflow.py'
 HOOK = '.specify/hooks/affected.py'
-# The affected-lane rules of a Bunyan-like project, in the shape of `eng/ci/affected.mjs`: words and committed
+# The affected-lane rules of a typical consumer project, in the shape of `eng/ci/affected.mjs`: words and committed
 # artifacts reach no lane; verification inputs, tests and product source do.
 HOOK_SOURCE = '''import json, sys
 def lanes(path):

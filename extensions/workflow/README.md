@@ -365,17 +365,17 @@ project heavy on one host and light on the other gets exactly one warning, not
 zero or two by averaging. Frontmatter `description:` text is what a host loads
 into every session just to list what is available, before any skill is invoked,
 so its combined size approximates a fixed per-session token cost. Measured source
-for the defaults (`workflow.py doctor --project`, read-only, against Bunyan,
-2026-09-29): one project's own skill root is 86 skills / 10578 bytes on both
+for the defaults (`workflow.py doctor --project`, read-only, against a large pilot
+project, 2026-09-29): one project's own skill root is 86 skills / 10578 bytes on both
 hosts (`roots.claude_project` and `roots.agents_project`); 200 skills / 40 KiB is
 roughly double that count and four times the bytes, giving headroom for home and
-plugin skills before flagging. On that same measurement Bunyan's actual per-host
+plugin skills before flagging. On that same measurement the pilot project's actual per-host
 session load was already far past both — claude 379 skills / 144351 bytes, codex
 385 skills / 149763 bytes, driven by an unpruned `~/.claude/skills` and
 `~/.agents/skills` (273 and 272 skills) — which is exactly the kind of
 accumulation across marketplaces, plugins and a project's own skills/ that C4
 (skill pruning) exists to catch; a claim of "a few dozen skills" for a project's
-own root does not hold once a project the size of Bunyan is measured. Override
+own root does not hold once a project of that size is measured. Override
 either key under `policy['skills']['inventory_thresholds']` (`skill_count`,
 `description_bytes`; positive integers only) in `.specify/workflow.yml` — applied
 independently to each host's own combined total, not to a cross-host sum.
@@ -541,7 +541,8 @@ changed.
 Verify, Review and Ready receipts inventory the source tree
 (`source_fingerprints`), so before 1.6.0 any later commit to a source path
 staled all three, even a README edit. They now also record `head` and
-`source_key`: the canonical key `bunyan-source-key/1` of HEAD's tree, computed
+`source_key`: the canonical key `sanduq-source-key/1` of HEAD's tree (keys recorded under
+the previous key version are still accepted), computed
 by `scripts/source_key.py` from `git ls-tree -r -z --full-tree` on raw bytes
 (paths under `.specify/`, `.agents/`, `.claude/`, `.codex/`, `specs/`,
 `User-Manual/`, `docs/`, `graphify-out/`, `artifacts/` and every `*.md` are
@@ -566,7 +567,7 @@ case. When the source inventory drifted:
   `speckit-workflow-verify-affected` invokes to actually run the lanes
   `affected_command` classifies, into a results.json.
 - **A CI run as Verify evidence** (`ci.gate.verification_check`, optional: the
-  job name, or `{name, workflow, artifact_prefix}`; for Bunyan
+  job name, or `{name, workflow, artifact_prefix}`; for example
   `"Bootstrap required lanes"`). `workflow.py revalidate --feature
   specs/<feature> --stage verify --check-run <run id> [--attempt <n>]` reads the
   run, its jobs and its plan artifact `<prefix>-<run>-<attempt>`

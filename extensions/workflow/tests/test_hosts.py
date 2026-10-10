@@ -370,14 +370,14 @@ class SwitchTests(HostTests):
                             runner=self.specify)
         self.assertIn('ALIAS_HAS_LOCAL_EDITS: .claude/skills/speckit-superpowers-bridge/SKILL.md', ' '.join(plan['blockers']))
 
-    def bunyan_alias(self):
+    def customized_alias(self):
         """The review's scenario: upstream Bridge frontmatter, local instructions appended below it."""
         alias = self.root / '.claude/skills/speckit-superpowers-bridge/SKILL.md'
-        alias.write_bytes(UPSTREAM_BRIDGE + b'\n## Bunyan local instructions\n\nRun the Bunyan gates first.\n')
+        alias.write_bytes(UPSTREAM_BRIDGE + b'\n## Local instructions\n\nRun the project gates first.\n')
         return alias
 
     def test_body_edit_under_generated_frontmatter_is_refused(self):
-        alias = self.bunyan_alias()
+        alias = self.customized_alias()
         edited = alias.read_bytes()
         key = '.claude/skills/speckit-superpowers-bridge/SKILL.md'
         plan = hosts.switch(self.root, 'claude', preview=True, package_root=self.package, runner=self.specify)
@@ -394,7 +394,7 @@ class SwitchTests(HostTests):
         self.assertEqual(tree(self.root), before)
 
     def test_opt_in_backs_up_and_replaces_an_unrecognized_alias_on_switch(self):
-        edited = self.bunyan_alias().read_bytes()
+        edited = self.customized_alias().read_bytes()
         plan = hosts.switch(self.root, 'claude', preview=True, package_root=self.package, runner=self.specify,
                             replace_unrecognized_aliases=True)
         self.assertTrue(plan['can_apply'], plan['blockers'])
@@ -407,7 +407,7 @@ class SwitchTests(HostTests):
         self.assert_complete()
 
     def test_opt_in_backs_up_and_replaces_an_unrecognized_alias_on_install(self):
-        edited = self.bunyan_alias().read_bytes()
+        edited = self.customized_alias().read_bytes()
         with patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}):
             result = installer.install(self.root, apply=True, package_root=self.package, runner=self.specify,
                                        replace_unrecognized_aliases=True)
@@ -418,7 +418,7 @@ class SwitchTests(HostTests):
         self.assert_complete()
 
     def test_opt_in_passes_through_upgrade(self):
-        edited = self.bunyan_alias().read_bytes()
+        edited = self.customized_alias().read_bytes()
         packages = self.package / 'packages'
         (packages / 'workflow').mkdir(parents=True)
         (packages / 'workflow/extension.yml').write_text(yaml.safe_dump({'extension': {

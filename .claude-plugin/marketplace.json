@@ -13,9 +13,9 @@
       "name": "illustration-tools",
       "source": "./skills/illustration-tools",
       "description": "Generate, import, and export forty-four kinds of technical, product, architecture, process, and data illustrations through one unified skill.",
-      "version": "3.2.0",
+      "version": "3.2.1",
       "author": {
-        "name": "Resal Engineering"
+        "name": "Samy K. Abushanab"
       },
       "keywords": [
         "diagrams",

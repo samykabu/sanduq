@@ -46,11 +46,11 @@ Diagram evidence: both final artifacts pass 9/9 Archify showcase checks with zer
 ## 3. Historical starting point before implementation
 
 - Sanduq currently contains `assure` 2.0.1, `user-manual` 1.0.1, `pr` 4.0.2, `project`, and `illustrate`; catalogs are at `catalog.json` and `extensions/catalog.json`.
-- Bunyan's custom Scope source and two presets remain under `tools/speckit-scope/`. Installed Scope is 1.3.0. Move their canonical source to Sanduq with provenance and tests.
-- Bunyan has both SuperSpec 1.0.2 and a separate `speckit-superpowers-bridge` 1.2.0. They are different execution integrations, not aliases. Only one executor may own a feature at a time.
-- Bunyan has approved manual modules in `User-Manual/manual.yml`, but no Assure integrated-policy file. QA/manual lifecycle hooks are optional and competing operations have identical priorities.
+- The pilot project's custom Scope source and two presets remain under `tools/speckit-scope/`. Installed Scope is 1.3.0. Move their canonical source to Sanduq with provenance and tests.
+- The pilot project has both SuperSpec 1.0.2 and a separate `speckit-superpowers-bridge` 1.2.0. They are different execution integrations, not aliases. Only one executor may own a feature at a time.
+- The pilot project has approved manual modules in `User-Manual/manual.yml`, but no Assure integrated-policy file. QA/manual lifecycle hooks are optional and competing operations have identical priorities.
 - Direct SuperSpec Execute does not explicitly run QA/manual preflights. The separate Bridge Execute does dispatch implementation hooks; indiscriminate wrapping could execute stages twice or recurse.
-- Assure Init parses a particular YAML indentation using regular expressions. Its dry run against Bunyan returned `hooks_changed=0` despite the optional QA gate. Fix upstream and verify parsed postconditions.
+- Assure Init parses a particular YAML indentation using regular expressions. Its dry run against the pilot project returned `hooks_changed=0` despite the optional QA gate. Fix upstream and verify parsed postconditions.
 - PR currently enforces User Manual based on installation. That conflicts with choosing documentation off while keeping its commands installed for occasional use.
 - Status helpers emit JSON with `current: false` without necessarily exiting nonzero. CI must parse this contract or use a new explicit check operation.
 - Sanduq's existing release workflow runs automatically for extension changes on `main`, bumps versions, and updates catalogs. Coordinated release sequencing needs explicit tests and gating.
@@ -158,7 +158,7 @@ Executor `auto` selects compatible, enabled SuperSpec when available, otherwise 
 
 Provider selection is per capability, not only per executor: Brainstorm, Tasks, Execute, and Review are resolved separately from the installed registry and validated command availability. Do not run core Tasks then SuperSpec Tasks as duplicate generators. Retain the same lifecycle events and downstream stages for either choice.
 
-## 5a. Reusable Bunyan preset contract
+## 5a. Reusable pilot-project preset contract
 
 Migrate the existing `scope-gate`, `scope-brainstorm`, `scope-analyst`, and shared `github-clarification` behavior into versioned Sanduq distributions, with tests and preserved provenance. Do not merely copy the generated consumer SKILL.md files.
 
@@ -166,7 +166,7 @@ Migrate the existing `scope-gate`, `scope-brainstorm`, `scope-analyst`, and shar
 | --- | --- |
 | Issue-bound scoping | Require explicit issue identity; bind generated specifications back to that issue. |
 | Issue enrichment | Update only managed issue sections, effort/scope labels, dependencies, status and enriched `spec-prompt`; preserve unrelated user content and labels. |
-| Project-specific board | Resolve field IDs/status names from project configuration; never hard-code Bunyan, its organization or Project #2. |
+| Project-specific board | Resolve field IDs/status names from project configuration; never hard-code the pilot project, its organization or Project #2. |
 | GitHub questions | Post one useful question per issue comment with stable question ID, mention the issue creator, explain alternatives and the recommendation; leave all choices unchecked. |
 | Answer collection | On re-invocation read current issue and all paginated comments, including edited question checkboxes, free-text replies, IDs and quoted/linked answers; reconcile conflicts and update the specification with cited answer evidence. |
 | No chat interrogation | Keep feature clarification discussion on GitHub; conversation reports links and progress. |
@@ -175,7 +175,7 @@ Migrate the existing `scope-gate`, `scope-brainstorm`, `scope-analyst`, and shar
 
 Explicitly replace conflicting legacy behaviors in the managed preset: Scope currently says not to call Specify, and shared clarification currently says not to call Tasks/Implement after Plan. The new chain supersedes those stops. Preserve those defaults for unmanaged legacy consumers unless they adopt the new policy.
 
-The current Bunyan clarification gate also requires manually moving a waiting issue back to Feature Specification. To reduce intervention, managed `resume_on_reinvoke: reread-answers` reads the waiting thread when Clarify is invoked, processes valid new answers and updates its own status. If unanswered, leave it waiting without duplicate posts. Keep a `manual-status` compatibility mode for teams that explicitly want the old gate. Closed/cancelled features and execution-owned contracts still need explicit handling; reinvocation is not permission to reopen arbitrary issues.
+The current pilot-project clarification gate also requires manually moving a waiting issue back to Feature Specification. To reduce intervention, managed `resume_on_reinvoke: reread-answers` reads the waiting thread when Clarify is invoked, processes valid new answers and updates its own status. If unanswered, leave it waiting without duplicate posts. Keep a `manual-status` compatibility mode for teams that explicitly want the old gate. Closed/cancelled features and execution-owned contracts still need explicit handling; reinvocation is not permission to reopen arbitrary issues.
 
 No extra `spec ready?` prompt is needed when the complete scan has no unresolved decision. Silence, recommendations, round limits and merely asking every question are not answers. A user decision that genuinely removes an ambiguity must be recorded; an unresolved waiver does not silently become an executable requirement.
 
@@ -267,7 +267,7 @@ extensions/scripts/         Packaging, compatibility, release tooling
 
 Package required resources with versioned releases. Do not resolve runtime code from a developer's local Sanduq checkout or a floating `main` URL. Where presets/agents require a separate supported installer, bundle/version their assets and have Init install them via that interface. Prove clean-install registration on each supported host; do not assume extension installation registers arbitrary agent files.
 
-Create an ownership inventory of Bunyan's custom reusable extensions, skills, agents and presets. Migrate project-authored source to Sanduq, including Scope. Keep third-party packages upstream with source/license provenance; do not copy all installed skills into Sanduq or redistribute them as original work. Classify project-specific instructions as consumer policy. Publish the inventory with remaining migrations explicitly listed.
+Create an ownership inventory of the pilot project's custom reusable extensions, skills, agents and presets. Migrate project-authored source to Sanduq, including Scope. Keep third-party packages upstream with source/license provenance; do not copy all installed skills into Sanduq or redistribute them as original work. Classify project-specific instructions as consumer policy. Publish the inventory with remaining migrations explicitly listed.
 
 Preserve existing MIT notices on migrated Scope code; new Sanduq-original work follows the repository license policy. Make any distribution-license decision explicit in notices and release documentation.
 
@@ -292,7 +292,7 @@ Proposed release targets, subject to rechecking versions immediately before impl
 | Package | Observed baseline | Proposed target | Reason |
 | --- | --- | --- | --- |
 | workflow | New | 1.0.0 after acceptance | Reusable orchestration, policy and continuation |
-| scope | Bunyan 1.3.0 | 1.4.0 if compatible | Sanduq distribution, configurable integration; use 2.0.0 if public behavior breaks |
+| scope | The pilot-project 1.3.0 | 1.4.0 if compatible | Sanduq distribution, configurable integration; use 2.0.0 if public behavior breaks |
 | assure | 2.0.1 | 2.1.0 | Parser fix, managed policy and machine-checkable integration contracts |
 | user-manual | 1.0.1 | 1.1.0 | Managed opt-in policy and resumable stage integration |
 | pr | 4.0.2 | 4.1.0 | Respect explicit managed policy while retaining legacy behavior elsewhere |
@@ -322,7 +322,7 @@ Acceptance: strict versus estimated capabilities are demonstrated; no unsupporte
 
 ### Phase 2: Move reusable source and repair foundations
 
-- Import/generalize Scope and presets with tests/provenance, removing hard-coded Bunyan repository/board assumptions.
+- Import/generalize Scope and presets with tests/provenance, removing hard-coded pilot-project repository/board assumptions.
 - Fix Assure YAML handling and add parsed postcondition validation.
 - Add compatible managed-policy handling to Assure, User Manual and PR.
 - Define deterministic freshness/check exit behavior without breaking legacy status consumers.
@@ -354,7 +354,7 @@ Acceptance: stale/incomplete evidence fails; disabled processes do not block; up
 
 - Update root README, extension count, quick start and lifecycle visual; fix lingering `qa` naming.
 - Update `extensions/README.md`, per-extension README/CHANGELOG and root CHANGELOG.
-- Add guides for the four commands, setup combinations, engine selection, fresh-session continuation, context limitations, direct entry points, upgrade/rollback and Bunyan migration.
+- Add guides for the four commands, setup combinations, engine selection, fresh-session continuation, context limitations, direct entry points, upgrade/rollback and pilot-project migration.
 - Include the Archify workflow diagrams, scope policy boundary examples, GitHub answer/re-invocation walkthrough and mandatory task-subissue mapping.
 - Document manual/QA distinction, privacy, state storage, CI requirements and meaningful evidence levels.
 - Synchronize both catalogs and release metadata via validated tooling. Add preset/agent packaging where required.
@@ -365,12 +365,12 @@ Acceptance: versions, assets, manifests, docs, catalogs and license/provenance a
 ### Phase 6: Pilot and consumer rollout
 
 - Validate one clean fixture for each process combination and both core/SuperSpec execution.
-- Back up Bunyan policy/hooks/state and install released Sanduq packages with the public CLI.
+- Back up pilot-project policy/hooks/state and install released Sanduq packages with the public CLI.
 - Adopt existing manual modules, scoped issues and feature progress without recreating them.
 - Remove duplicate local canonical tooling only after installed parity and rollback have been verified; preserve consumer configuration.
 - Demonstrate a fresh-session resume and Finalize using a suitable authorized feature. Keep local, CI, remote PR and release evidence separate.
 
-Acceptance: Bunyan uses Sanduq distributions; a second clean project follows the same commands without source edits; no unresolved custom-source migration is silently marked complete.
+Acceptance: the pilot project uses Sanduq distributions; a second clean project follows the same commands without source edits; no unresolved custom-source migration is silently marked complete.
 
 ## 12. Required test scenarios
 
@@ -397,7 +397,7 @@ Acceptance: Bunyan uses Sanduq distributions; a second clean project follows the
 - [Spec Kit extension development guide](https://github.com/github/spec-kit/blob/main/extensions/EXTENSION-DEVELOPMENT-GUIDE.md): manifests, hooks, preset-only composition, agent-neutral command references. Validate against the supported released CLI, not only current main.
 - [Spec Kit extension user guide](https://github.com/github/spec-kit/blob/main/extensions/EXTENSION-USER-GUIDE.md): installation, catalogs and updates.
 - Sanduq local evidence: `extensions/scripts/release.py`, `.github/workflows/ci.yml`, `.github/workflows/release-extensions.yml`, `extensions/{assure,user-manual,pr}/`.
-- Bunyan local evidence: `tools/speckit-scope/`, `.specify/extensions.yml`, `.specify/extensions/{superspec,speckit-superpowers-bridge}/`, `User-Manual/manual.yml`.
+- The pilot-project local evidence: `tools/speckit-scope/`, `.specify/extensions.yml`, `.specify/extensions/{superspec,speckit-superpowers-bridge}/`, `User-Manual/manual.yml`.
 
 ## 14. Decisions to carry into implementation
 
@@ -406,7 +406,7 @@ Acceptance: Bunyan uses Sanduq distributions; a second clean project follows the
 - Use measured context protection where possible and the user-approved, explicitly labelled estimated fallback with smaller work batches otherwise. A supported telemetry/enforcement adapter is a prerequisite for claiming a hard cap; strict-only mode remains available.
 - Default automatic chaining to safe stage transitions; preserve required approvals and explicit Finalize.
 - Apply project scope preferences without redundant questions; always publish the final implementation tasks as native sub-issues before execution.
-- Reuse Bunyan's issue/label/spec-prompt and GitHub clarification presets from Sanduq, including re-reading answers on invocation; all required answers must be resolved before Plan.
+- Reuse the pilot project's issue/label/spec-prompt and GitHub clarification presets from Sanduq, including re-reading answers on invocation; all required answers must be resolved before Plan.
 - Prefer installed compatible SuperSpec Brainstorm, Tasks and Execute per capability, with core alternatives; make routine phase continuation automatic through the managed preset.
 - Embed all reviewer-facing diagrams/screenshots in the PR description and verify private-repository visibility separately from Markdown structure.
 - Keep shared custom source in Sanduq and upgrade consumers through versioned packages, with audited migration of existing custom assets.

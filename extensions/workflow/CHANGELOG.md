@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.9.0] - 2026-10-10
+
+- The canonical source key is now `sanduq-source-key/1`. New receipts and CI plans use it;
+  evidence recorded under the previous key version is still verified, and a plan is recomputed
+  with the key version it declares. `source_key.source_keys()` returns a tree's key under every
+  accepted version. Consumer CI that computes the key should move to the new version.
+- Neutral wording and synthetic repositories in documentation and test fixtures.
+- `dependencies.json` pins Scope 1.5.2 and Illustrate 2.2.1.
+
 ## [1.8.5] - 2026-10-06
 
 - `dependencies.json` pins Illustrate 2.2.0 (44 diagram types, import, theme apply). No workflow
@@ -341,7 +350,7 @@
   to 2: the Cloudflare preview workflow reads it once, right after the run, and
   14 days of ~20 MB copies per push had filled the org's artifact storage and
   was blocking every Bootstrap run. Workflow itself is unchanged; a project on
-  1.6.3 that already carried the 2-day retention as a local edit (as Bunyan did)
+  1.6.3 that already carried the 2-day retention as a local edit (as the pilot project did)
   saw its installed workflow file marked `CI_WORKFLOW_STALE` because the
   template still rendered 14 days. Upgrading to 1.6.4 clears that.
 
@@ -429,7 +438,7 @@
   a new attempt that reuses the earlier plan job, so no plan artifact exists
   for the new attempt; `collect()` now takes that earlier attempt's plan and
   `validate()` requires `runAttempt` to name it. A run with no plan at any
-  attempt still fails. Same rule as Bunyan's `plan-evidence.mjs`.
+  attempt still fails. Same rule as the consumer-side plan validator.
 - `task_issues.py` no longer rejects a task whose title (`T### : description`)
   would exceed GitHub's 256-character issue title limit. The title is
   shortened to the headline (truncated to fit, with a trailing `...`) while
@@ -499,7 +508,7 @@
   `head`, `source_key`, `ci_evidence`, `diff_reviewed` or `revalidations`
   fields.
 - Canonical source key (B3). New `scripts/source_key.py` computes
-  `bunyan-source-key/1` from `git ls-tree -r -z --full-tree <tree>` on raw bytes
+  the canonical source key from `git ls-tree -r -z --full-tree <tree>` on raw bytes
   (words and workflow-state paths left out), reproducing every case of the
   shared `tests/fixtures/source-key.fixtures.json` (byte-identical to the
   consumer's copy, pinned by SHA-256 and marked `-text`), also through real
@@ -539,7 +548,7 @@
   integration test) to a passing gate through `revalidate`, show that a narrower
   check leaves Verify stale, that Review revalidation without a diff review is
   refused, the 008 shape (legacy receipts) against a fake plan artifact, and a
-  real recorded Bunyan plan artifact validated against its run metadata.
+  real recorded plan artifact validated against its run metadata.
 
 ## 1.5.0
 

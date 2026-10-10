@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.5.2] - 2026-10-10
+
+- Documentation: neutral provenance wording; no behavior change.
+
 ## [1.5.1] - 2026-10-06
 
 - Link setup and complete usage examples from the package README; links work in installed copies.
@@ -32,7 +36,7 @@
 
 ## 1.4.0
 
-- Move canonical source from Bunyan; add managed effort policy, automatic clarification reread and configurable board/artifact mappings.
+- Move canonical source into Sanduq; add managed effort policy, automatic clarification reread and configurable board/artifact mappings.
 - Revalidate open progressed features under matching workflow claims without resetting
   their board status; retain current approval and unresolved-question guards.
 

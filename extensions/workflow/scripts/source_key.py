@@ -1,21 +1,24 @@
 #!/usr/bin/env python3
-"""The canonical source key `bunyan-source-key/1` (workflow 1.6.0, B3).
+"""The canonical source key `sanduq-source-key/1` (workflow 1.6.0, B3; renamed in 1.9.0).
 
 A SHA-256 over the `git ls-tree -r -z --full-tree` records of one explicit
-tree, without the paths that carry only words or workflow state. The consumer
-contract is Bunyan's `docs/development/verification-plan-contract.md`; its
-`eng/ci/source-key.mjs` computes the same value, and both reproduce every case
-of the shared `source-key.fixtures.json`.
+tree, without the paths that carry only words or workflow state. A consumer's
+CI computes the same value for its verification plan; both sides reproduce
+every case of the shared `source-key.fixtures.json`.
 
 1. Drop a record whose path starts with an excluded prefix (byte prefix,
    trailing slash included, case-sensitive) or ends in `.md` in any ASCII case.
 2. Sort the rest by path bytes (unsigned lexicographic).
 3. Serialise each as `<mode> <type> <object> <path>\\n`.
-4. Prefix `bunyan-source-key/1\\n`; the key is the lowercase hex SHA-256.
+4. Prefix `<key version>\\n`; the key is the lowercase hex SHA-256.
 
 Paths stay bytes from git to the hash: nothing is decoded, so any file name is
 safe. The key is distinct from a receipt's `source_fingerprints` (a working-tree
 inventory): it binds a receipt, or a CI run, to the source of one commit.
+
+New keys use `KEY_VERSION`. Evidence recorded under an earlier key version is
+still verified: `ACCEPTED_KEY_VERSIONS` lists every version a plan or receipt
+may carry, and `source_keys` gives the key of a tree under each of them.
 """
 from __future__ import annotations
 
@@ -25,7 +28,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-KEY_VERSION = 'bunyan-source-key/1'
+KEY_VERSION = 'sanduq-source-key/1'
+# ponytail: the previous version stays verifiable for recorded evidence; drop it in the next major.
+ACCEPTED_KEY_VERSIONS = (KEY_VERSION, 'bunyan-source-key/1')
 EXCLUDED_PREFIXES = ('.specify/', '.agents/', '.claude/', '.codex/', 'specs/', 'User-Manual/', 'docs/',
                      'graphify-out/', 'artifacts/')
 _EXCLUDED = tuple(prefix.encode('utf-8') for prefix in EXCLUDED_PREFIXES)
@@ -53,12 +58,14 @@ def _field(entry, name, index):
     return _bytes(entry[name] if isinstance(entry, dict) else entry[index])
 
 
-def key_from_entries(entries):
+def key_from_entries(entries, version=KEY_VERSION):
     """The key of `{mode, type, object, path}` entries (dicts or 4-tuples; str or bytes fields)."""
+    if version not in ACCEPTED_KEY_VERSIONS:
+        raise SourceKeyError('Unknown source key version: ' + repr(version))
     rows = [(_field(e, 'mode', 0), _field(e, 'type', 1), _field(e, 'object', 2), _field(e, 'path', 3))
             for e in entries]
     rows = sorted((row for row in rows if is_source_path(row[3])), key=lambda row: row[3])
-    digest = hashlib.sha256((KEY_VERSION + '\n').encode('ascii'))
+    digest = hashlib.sha256((version + '\n').encode('ascii'))
     for mode, kind, obj, path in rows:
         digest.update(mode + b' ' + kind + b' ' + obj + b' ' + path + b'\n')
     return digest.hexdigest()
@@ -92,10 +99,19 @@ def tree_of(root, treeish):
     return _git(root, 'rev-parse', '--verify', str(treeish) + '^{tree}').decode('ascii').strip()
 
 
-def source_key(root, treeish='HEAD'):
+def _entries(root, treeish):
+    return parse_ls_tree(_git(root, 'ls-tree', '-r', '-z', '--full-tree', tree_of(root, treeish)))
+
+
+def source_key(root, treeish='HEAD', version=KEY_VERSION):
     """The key of an explicit tree: never the working tree or the index."""
-    tree = tree_of(root, treeish)
-    return key_from_entries(parse_ls_tree(_git(root, 'ls-tree', '-r', '-z', '--full-tree', tree)))
+    return key_from_entries(_entries(root, treeish), version)
+
+
+def source_keys(root, treeish='HEAD'):
+    """The key of an explicit tree under every accepted version, newest first."""
+    entries = _entries(root, treeish)
+    return {version: key_from_entries(entries, version) for version in ACCEPTED_KEY_VERSIONS}
 
 
 def dirty_source_paths(root):

@@ -54,4 +54,4 @@ Resolve `<scope-artifact-directory>` and `<scope-plan-file>` from
 `scripts/workflow_policy.py paths(root)`: managed defaults are
 `.specify/scope/github` and `docs/workflow/implementation-plan.html`. Project policy
 may override both. Unmanaged defaults retain Design/UI-Spec paths. Never copy a
-Bunyan-specific path into another project's configuration.
+project-specific path into another project's configuration.

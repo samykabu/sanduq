@@ -1,7 +1,7 @@
 # Workflow implementation progress
 
 Updated 2026-09-18. Branch: `feat/reusable-workflow`. **Local implementation and
-validation remain in progress. No release or Bunyan adoption has occurred.**
+validation remain in progress. No release or pilot-project adoption has occurred.**
 
 Review: [draft PR #3](https://github.com/samykabu/sanduq/pull/3). Both diagrams in
 its description loaded at 1440x900 in the authenticated browser. Sanduq is public;
@@ -84,7 +84,7 @@ failed run remains [available](https://github.com/samykabu/sanduq/actions/runs/3
 3. Publish the reviewed coordinated versions only after the required acceptance and
    CI results, then verify clean release downloads before promoting catalogs. Pending
    metadata remains `implementation-in-progress`; no pending URL is claimed live.
-4. Obtain the pending Bunyan QA/manual selection, back up its existing installation,
+4. Obtain the pending pilot-project QA/manual selection, back up its existing installation,
    adopt released Sanduq packages and verify existing feature/manual continuity.
    Remove obsolete canonical tooling only after parity and rollback checks. Complete
    a second project with different board names and the scoped ownership audit.

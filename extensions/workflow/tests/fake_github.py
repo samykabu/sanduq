@@ -4,6 +4,8 @@ import json
 import zipfile
 from pathlib import Path
 
+from source_key import KEY_VERSION
+
 RECORDED = Path(__file__).resolve().parent / 'fixtures/ci-runs'
 WORKFLOW = 'Bootstrap verification'
 CHECK = 'Bootstrap required lanes'
@@ -49,7 +51,7 @@ class FakeGitHub:
 
 
 def recorded(run_id):
-    """The recorded responses of one real Bunyan verification run."""
+    """The recorded responses of one real verification run (repository renamed to the sample application)."""
     folder = RECORDED / str(run_id)
     load = lambda name: json.loads((folder / name).read_text(encoding='utf-8'))  # noqa: E731
     run = load('run.json')
@@ -71,7 +73,7 @@ def fake_run(repository, run_id, head, tree, key, lanes, *, attempt=1, event='pu
              tier='pr', conclusion='success', status='completed', check_conclusion='success', plan_overrides=None,
              artifact=True, client=None):
     """Responses for one verification run whose plan artifact follows the A9a contract."""
-    plan = {'schemaVersion': 1, 'keyVersion': 'bunyan-source-key/1', 'repository': repository, 'workflow': WORKFLOW,
+    plan = {'schemaVersion': 1, 'keyVersion': KEY_VERSION, 'repository': repository, 'workflow': WORKFLOW,
             'event': event, 'pullRequest': pull_request if event == 'pull_request' else None, 'runId': run_id,
             'runAttempt': attempt, 'headSha': head, 'headTreeSha': tree, 'sourceKey': key, 'tier': tier,
             'lanes': sorted(set(lanes)), 'legs': ['unit']}
