@@ -68,7 +68,9 @@ jobs:
           name: user-manual-preview-pr-${{ github.event.pull_request.number }}
           path: User-Manual/preview-artifact/
           if-no-files-found: error
-          retention-days: 14
+          # The Cloudflare preview workflow reads this once, right after the run; 14 days of ~20 MB copies per push filled
+          # the account's artifact storage and blocked every Bootstrap run (2026-09-28).
+          retention-days: 2
       - name: Add preview link to pull request
         uses: actions/github-script@v7
         env:

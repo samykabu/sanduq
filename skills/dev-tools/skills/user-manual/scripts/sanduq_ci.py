@@ -2,9 +2,9 @@
 """Project-selected continuous integration policy and workflow asset rendering.
 
 Sanduq ships CI workflow assets, but it does not decide where a consumer project
-runs them. The project records that decision once in `.specify/workflow.yml`
-under `ci:`, and every shipped asset is rendered from that decision instead of
-being copied with a hard-coded runner.
+runs them. The project records that decision once in a YAML policy file under
+`ci:`, and every shipped asset is rendered from that decision instead of being
+copied with a hard-coded runner.
 
 The module carries no third-party dependency so that `workflow`, `assure` and
 `user-manual` can all vendor it.
@@ -189,19 +189,18 @@ def render(template, ci):
     return newline.join(TOKEN.sub(substitute, line) for line in kept).encode('utf-8')
 
 
-def load_ci(root):
-    """This project's recorded CI selection, or the shipped default.
+def load_ci(policy_path=None):
+    """The `ci:` selection recorded in a YAML policy file, or the shipped default.
 
-    Assure and User Manual can be installed without the workflow extension, so a
-    missing or CI-less policy is normal and yields the default rather than an error.
+    No file, a file without `ci:`, or no PyYAML yields the default rather than an error.
     """
     from pathlib import Path
-    path = Path(root) / '.specify/workflow.yml'
-    if not path.is_file():
+    path = Path(policy_path) if policy_path else None
+    if path is None or not path.is_file():
         return default_ci()
     try:
         import yaml
-    except ImportError:  # the consumer has not installed the workflow toolchain
+    except ImportError:  # the consumer has not installed PyYAML
         return default_ci()
     policy = yaml.safe_load(path.read_text(encoding='utf-8-sig')) or {}
     ci = policy.get('ci') if isinstance(policy, dict) else None

@@ -9,7 +9,7 @@ Read [release-notes.md](references/release-notes.md) for any visible change. Rea
 [migration-guides.md](references/migration-guides.md) when readers must take action.
 
 Ground each item in delivered changes. Separate end-user improvements, administrator actions, and
-technical compatibility details. State who is affected, what changed, when action is required, and
+technical compatibility details. Use plain language and state who is affected, what changed, when action is required, and
 how to verify success. Never invent versions, dates, issue numbers, support windows, or guarantees.
 
 For a renamed API field, write a short user-facing release note, an operator deployment checklist,

@@ -37,7 +37,7 @@
       "name": "dev-tools",
       "source": "./skills/dev-tools",
       "description": "Standalone modular application-manual tooling for MkDocs Material, PDF, APIs, releases, screenshots, previews, English, Arabic, and RTL.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Samy K. Abushanab"
       },

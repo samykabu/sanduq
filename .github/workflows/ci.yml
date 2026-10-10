@@ -141,6 +141,9 @@ jobs:
           python -m pip install playwright==1.63.0
           python -m playwright install --with-deps chromium
       - run: python -m unittest discover -s extensions/${{ matrix.suite }}/tests -q
+      - name: Portable User Manual skill
+        if: matrix.suite == 'user-manual'
+        run: python -m unittest discover -s skills/dev-tools/skills/user-manual/tests -q
       - name: Illustrate builders and verifiers
         if: matrix.suite == 'illustrate'
         shell: bash
