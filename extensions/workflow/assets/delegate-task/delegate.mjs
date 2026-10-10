@@ -1130,6 +1130,7 @@ async function cmdStart(o) {
   try {
     if (!fs.statSync(o.cwd).isDirectory()) die(`--cwd is not a directory: ${o.cwd}`);
   } catch { die(`--cwd does not exist: ${o.cwd}`); }
+  if (o.resume && !stateOf(o.resume)) die(`no such run to resume: ${o.resume}`);
 
   const bin = resolveBin(h.bin, o.harness);
   if (bin.state === 'missing') die(`${h.label}: "${h.bin}" not found on PATH`);
@@ -1507,6 +1508,11 @@ async function cmdSupervise(id) {
     child.on('close', (c, s) => res({ code: c, signal: s }));
     child.on('error', () => res({ code: null, signal: null }));
   });
+  // A relay signal owns the result. Its own 'close' listener defers via
+  // setImmediate, so without this the normal path (a microtask) finalizes first
+  // and publishes the SIGKILL that killTree sent as a harness signal death.
+  // POSIX only in practice: native Windows never runs those handlers.
+  if (aborting) return;
   clearTimeout(timer); clearInterval(beat);
   if (lineBuf.trim()) scan('\n');
   flushTails();

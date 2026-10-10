@@ -74,7 +74,7 @@
         "url": "https://github.com/samykabu/sanduq-skills.git",
         "path": "skills/agent-tools",
         "ref": "agent-tools-v1.1.2",
-        "sha": "80c479a402242d8ad198d661ae7cafe45d505083"
+        "sha": "cd56f57ab23f66d23980f0e180883360e95baaa7"
       },
       "description": "Delegate one task to an external agent CLI and get back a measured result: status with provenance, git-measured file changes, and normalised token usage.",
       "author": {

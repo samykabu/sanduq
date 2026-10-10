@@ -492,7 +492,7 @@ class WorkflowTests(unittest.TestCase):
 
     def test_core_skill_stays_under_the_six_kilobyte_budget(self):
         package_root = Path(__file__).resolve().parents[1]
-        core = package_root / 'skills/workflow/SKILL.md'
+        core = package_root / 'skills/workflow/SKILL.ext.md'
         self.assertLessEqual(core.stat().st_size, 6144, 'Core SKILL.md over the 6 KB budget')
 
 
