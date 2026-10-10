@@ -419,6 +419,7 @@ def apply_answer(root, feature, qid, evidence, gh=None):
 
 
 def _apply_answer(root, feature, qid, evidence, gh=None):
+    root = Path(root).resolve()  # inside() resolves; an unresolved 8.3 root never matches
     ledger = reconcile(root, feature, gh)
     item = next((item for item in ledger['decisions'] if item['id'] == qid), None)
     require(item and item['status'] in ('answered', 'applied'), 'DECISION_NOT_ANSWERED: ' + qid)

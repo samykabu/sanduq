@@ -35,7 +35,7 @@ Scope still checks current approval, labels, prerequisites and requirement finge
 a claim is not permission to bypass stale scope or unresolved human questions.
 For a material choice during any stage, use `scripts/decisions.py --feature
 specs/<bound-feature> ask --question ... --option ... --option ...` to post a
-stable question on the bound GitHub issue as an unticked task list. Add
+stable question on the bound GitHub issue. It posts the options as an unticked task list. Add
 `--mode multiple` when several options may apply and `--recommended B` to mark
 a suggested option (it is never pre-ticked). Do not request its answer in the IDE.
 Pause the active claim with the question URL and token. On return, run
