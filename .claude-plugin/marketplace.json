@@ -15,8 +15,8 @@
         "source": "git-subdir",
         "url": "https://github.com/samykabu/sanduq-skills.git",
         "path": "skills/illustration-tools",
-        "ref": "illustration-tools-v3.4.0",
-        "sha": "574df781938943f6e5b44c891161709d926429af"
+        "ref": "illustration-tools-v3.4.1",
+        "sha": "2cd4029bf90d8d43b6c25b08b6d6e3df4eef65ea"
       },
       "description": "Generate, import, and export forty-four kinds of technical, product, architecture, process, and data illustrations through one unified skill.",
       "author": {
