@@ -229,7 +229,7 @@ Five styles, bound to topology. Don't let user override style on focal-touching,
 
 ### 3.2 Routing
 
-- Orthogonal elbows with at most two bends; Q-bezier `r=8` at every corner.
+- Orthogonal elbows with at most two bends; Q-bezier `r=8` at every corner. Finish the last corner at least one arrowhead length + 4px (about 12px) before the tip; when space is tight, shrink that corner to `r=4` rather than moving the trunk onto a zone border (SKILL.md §6 rule 7).
 - **Fan-out staggering:** when one node fans out to N targets on the same side, stagger the exit y by ±4 px per index so arrows don't overlap (e.g., Trino → 4 consumers exits at y=124, 132, 140, 148). The vertical segments run in the corridor between the zone edge and the consumer column, also y-staggered.
 - **Z-order:** all connectors drawn **before** any rect (so node fills mask the line ends).
 - **Markers:** exactly one `marker-end` per `<line>` / `<path>`. Never `marker-start`.

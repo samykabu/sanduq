@@ -1,6 +1,6 @@
 ---
 description: Export an Illustrate HTML file to .svg and .png next to the source
-argument-hint: <html-file> [--svg-only|--png-only|--animated] [--scale=N] [--output=<path>]
+argument-hint: <html-file> [--svg-only|--png-only|--animated|--gif] [--arrows=STYLE] [--theme=light|dark] [--fps=N] [--scale=N] [--output=<path>]
 allowed-tools:
   - Read
   - Write
@@ -24,7 +24,10 @@ Full argument string: `$ARGUMENTS`
 
 - `--svg-only` — emit only the SVG. Skip Playwright entirely.
 - `--png-only` — emit only the PNG.
-- `--animated` — emit only `<name>.animated.svg` from a motion figure: its reveal as CSS inside the SVG, for a README or other Markdown image. See the reference's "Animated SVG" section.
+- `--animated` — emit only `<name>.animated.svg`: steps and arrows animated with CSS inside the SVG, for README images.
+- `--gif` — emit only `<name>.gif` with the same animation (needs Playwright and Pillow).
+- `--arrows=draw|flow|pulse|draw-flow|chevrons` — arrow animation for `--animated`/`--gif`. Default `draw`.
+- `--theme=light|dark`, `--fps=N` (1–30) — GIF colour scheme and frame rate.
 - `--scale=1` / `--scale=2` / `--scale=3` — override the PNG device scale factor. Default `2`.
 - `--output=<path>` — override the output base path; the format extension is appended. Applies to both formats when both are produced.
 

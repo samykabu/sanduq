@@ -8,7 +8,8 @@ Ships inside the skill so an installed agent can verify its own output:
 Checks the accessible-SVG contract, the single-file safety rules (no remote
 assets beyond the approved Google Fonts stylesheet, no executable attributes,
 no scripts other than the one canonical motion controller), and — when motion
-markup is present — the structural motion contract. This is a distilled
+markup is present — the structural motion contract, plus straight arrow
+ends (`verify-arrow-ends.py`, shipped beside this script). This is a distilled
 subset of the repository gates (`lint-skin.py`, `verify-motion.py`), which
 remain the authority for contributions to the repository itself.
 """
@@ -16,6 +17,7 @@ remain the authority for contributions to the repository itself.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import re
 import sys
 from collections import Counter
@@ -417,6 +419,16 @@ def check_motion(parser: DiagramParser, source: str, errors: list[str]) -> None:
             errors.append("motion file needs a <noscript> explanation of the complete static frame")
 
 
+def arrow_end_errors(source: str) -> list[str]:
+    script = Path(__file__).resolve().parent / "verify-arrow-ends.py"
+    spec = importlib.util.spec_from_file_location("verify_arrow_ends", script)
+    if spec is None or spec.loader is None:
+        return [f"cannot load {script.name}; run self_check.py from its shipped location inside the skill"]
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.check_source(source, "arrow")
+
+
 def verify(path: Path) -> list[str]:
     source = path.read_text(encoding="utf-8")
     parser = parsed_document(source)
@@ -430,6 +442,7 @@ def verify(path: Path) -> list[str]:
     check_svgs(parser, errors)
     check_scripts(parser, errors)
     check_motion(parser, source, errors)
+    errors.extend(arrow_end_errors(source))
     return errors
 
 

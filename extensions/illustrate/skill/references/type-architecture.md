@@ -19,7 +19,7 @@
       fill="none" stroke="…" stroke-width="1.2" marker-end="url(#arrow)"/>
 ```
 
-Flip the vertical signs for right+up. Use a plain `<line>` only when endpoints share the same x or y. Arrow labels sit on the vertical segment, centered horizontally on `mid` and vertically between the two corners.
+Flip the vertical signs for right+up. Finish the last corner at least one arrowhead length + 4px (about 12px) before the tip; when space is tight, shrink that corner to `r=4` rather than moving the trunk onto a zone border (SKILL.md §6 rule 7). Use a plain `<line>` only when endpoints share the same x or y. Arrow labels sit on the vertical segment, centered horizontally on `mid` and vertically between the two corners.
 
 **Port selection — use top/bottom for vertical connectors.** When the destination is noticeably above or below the source, exit the source's top/bottom edge and enter the destination's top/bottom edge. Use a single-bend L-path (horizontal → corner → vertical into the node), not a left/right side port:
 

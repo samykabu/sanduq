@@ -124,10 +124,10 @@
            ═══════════════════════════════════════════ -->
 
       <!-- Sources → NiFi (staggered entry on NiFi left edge x=212; entry_y = 132,152,172,188) -->
-      <path d="M 184,92  H 196 Q 200,92  200,96  V 128 Q 200,132 204,132 H 212" fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
-      <path d="M 184,172 H 196 Q 200,172 200,168 V 156 Q 200,152 204,152 H 212" fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
-      <path d="M 184,252 H 196 Q 200,252 200,248 V 176 Q 200,172 204,172 H 212" fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
-      <path d="M 184,332 H 196 Q 200,332 200,328 V 192 Q 200,188 204,188 H 212" fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+      <path d="M 184,92  H 186 Q 190,92  190,96  V 128 Q 190,132 194,132 H 212" fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+      <path d="M 184,172 H 186 Q 190,172 190,168 V 156 Q 190,152 194,152 H 212" fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+      <path d="M 184,252 H 186 Q 190,252 190,248 V 176 Q 190,172 194,172 H 212" fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+      <path d="M 184,332 H 186 Q 190,332 190,328 V 192 Q 190,188 194,188 H 212" fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
 
       <!-- Airflow bar → NiFi, Trino, Notebooks (trigger drops at each node's cx, from bar.bottom=96 to node.top=120) -->
       <line x1="288" y1="96" x2="288" y2="120" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow-sm)"/>
@@ -137,13 +137,13 @@
       <!-- NiFi → Trino (secondary, straight at cy=164) -->
       <line x1="364" y1="164" x2="404" y2="164" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
       <!-- NiFi → MinIO (PRIMARY accent — trunk at boundary x=388, drop to MinIO cy=256) -->
-      <path d="M 364,156 H 384 Q 388,156 388,164 V 248 Q 388,256 396,256 H 404" fill="none" stroke="#eb6c36" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+      <path d="M 364,156 H 384 Q 388,156 388,164 V 252 Q 388,256 392,256 H 404" fill="none" stroke="#eb6c36" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
 
       <!-- Trino ↔ MinIO (query read-back, dashed) -->
       <line x1="480" y1="200" x2="480" y2="216" stroke="rgba(45,49,66,0.30)" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow-dim)"/>
 
       <!-- MinIO → Notebooks (PRIMARY accent — trunk at boundary x=580, rise to Notebooks cy=160) -->
-      <path d="M 556,256 H 576 Q 580,256 580,248 V 168 Q 580,160 588,160 H 596" fill="none" stroke="#eb6c36" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+      <path d="M 556,256 H 576 Q 580,256 580,248 V 164 Q 580,160 584,160 H 596" fill="none" stroke="#eb6c36" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
 
       <!-- Notebooks → Superset (secondary, straight at cy=160) -->
       <line x1="748" y1="160" x2="790" y2="160" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>

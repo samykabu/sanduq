@@ -159,19 +159,19 @@ Four canonical styles, picked per tier via `tiers[i].style`. Default mapping if 
 Each promotion is a **cubic Bézier arc** anchored at the **top-center** of each adjacent tier — `(tier_cx(i), tier_y)` to `(tier_cx(i+1), tier_y)`. The arc rises into the 80-px `arc_band` above the cards, peaking at y ≈ 20. Both the connector and its label remain fully visible — no paper masks, no overlap with card content.
 
 ```svg
-<path d="M {tier_cx(i)},{tier_y} C {tier_cx(i)},0 {tier_cx(i+1)},0 {tier_cx(i+1)},{tier_y}"
+<path d="M {tier_cx(i)},{tier_y} V {tier_y-16} C {tier_cx(i)},5 {tier_cx(i+1)},5 {tier_cx(i+1)},{tier_y-16} V {tier_y}"
       fill="none" stroke="…" stroke-width="…" marker-end="…"/>
 ```
 
 Concrete for the canonical 5-tier shape (`tier_y = 80`, tier centers at x = 102, 290, 478, 666, 854):
-- 0→1: `M 102,80 C 102,0 290,0 290,80`
-- 1→2: `M 290,80 C 290,0 478,0 478,80`
-- 2→3: `M 478,80 C 478,0 666,0 666,80`  (focal — accent)
-- 3→4: `M 666,80 C 666,0 854,0 854,80`  (lifecycle — dashed)
+- 0→1: `M 102,80 V 64 C 102,5 290,5 290,64 V 80`
+- 1→2: `M 290,80 V 64 C 290,5 478,5 478,64 V 80`
+- 2→3: `M 478,80 V 64 C 478,5 666,5 666,64 V 80`  (focal — accent)
+- 3→4: `M 666,80 V 64 C 666,5 854,5 854,64 V 80`  (lifecycle — dashed)
 
-The cubic geometry: anchor y = 80 (tier top), control y = 0 (top of viewBox). Curve peak at t=0.5 sits at y ≈ 20 (computed from `0.125·80 + 0.375·0 + 0.375·0 + 0.125·80 = 20`). Each arc spans one full tier-stride (188 px on the canonical layout), giving the connector a clearly visible vertical excursion.
+The cubic geometry: a 16-px straight lead at each anchor (tier top y = 80 to y = 64), control y = 5. Curve peak at t=0.5 sits at y ≈ 20 (computed from `0.125·64 + 0.375·5 + 0.375·5 + 0.125·64 = 19.75`). Each arc spans one full tier-stride (188 px on the canonical layout), giving the connector a clearly visible vertical excursion.
 
-**Marker orientation:** `marker-end` with `orient="auto"` rotates the arrow to match the path tangent at the endpoint. The control point sits directly above the anchor so the tangent at landing is straight **down** — the arrowhead enters the top-center of tier *i+1* cleanly, pointing into the header band.
+**Marker orientation:** `marker-end` with `orient="auto"` rotates the arrow to match the path tangent at the endpoint. The curve ends 16 px above the anchor with its control point directly above it, then a straight `V` lead lands — so the tangent *and* the last 16 px the eye follows are straight **down** (SKILL.md §6 rule 7), and the arrowhead enters the top-center of tier *i+1* cleanly, pointing into the header band.
 
 **Chained anchors:** consecutive arcs share their meeting points (arc 0→1 ends at the same `(tier_cx(1), 80)` where arc 1→2 begins). Visually each tier's top-center acts as a "joint" — data arrives at the top of the card, gets transformed inside, and leaves out the top toward the next tier. The arrow-head plunge plus the next arc's straight-up emergence read as a single payload-handoff motion.
 

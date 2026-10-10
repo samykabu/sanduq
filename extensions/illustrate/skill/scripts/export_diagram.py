@@ -8,6 +8,8 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import animate_export  # noqa: E402
 
 SVG_RE = re.compile(r"<svg\b[^>]*>.*?</svg>", re.IGNORECASE | re.DOTALL)
 OPENING_SVG_RE = re.compile(r"<svg\b[^>]*>", re.IGNORECASE | re.DOTALL)
@@ -34,8 +36,14 @@ def parse_args() -> argparse.Namespace:
     mode.add_argument(
         "--animated",
         action="store_true",
-        help="Export <name>.animated.svg: the motion reveal as CSS inside the SVG (no script), for README images",
+        help="Export <name>.animated.svg: steps and arrows animated with CSS inside the SVG (no script), for README images",
     )
+    mode.add_argument("--gif", action="store_true", help="Export <name>.gif: the same animation as an animated GIF")
+    parser.add_argument("--arrows", choices=animate_export.ARROW_STYLES, default="draw",
+                        help="Arrow animation for --animated/--gif (default: draw)")
+    parser.add_argument("--theme", choices=("light", "dark"), default="light",
+                        help="Colour scheme the GIF is rendered in (default: light)")
+    parser.add_argument("--fps", type=int, default=15, help="GIF frames per second (default: 15)")
     parser.add_argument("--scale", type=int, choices=(1, 2, 3), default=2)
     parser.add_argument("--output", type=Path, help="Output base path; extension is appended")
     return parser.parse_args()
@@ -112,7 +120,7 @@ def motion_ms(html: str, name: str, default: int) -> int:
     return int(match.group(1)) if match else default
 
 
-def animated_svg(html: str) -> str:
+def animated_svg(html: str, arrows: str = "draw") -> str:
     """The standalone SVG plus the figure's reveal as scoped CSS: no script, no remote fonts.
 
     GitHub and other Markdown hosts render an SVG image in a sandbox that runs CSS animation but
@@ -123,31 +131,42 @@ def animated_svg(html: str) -> str:
     attributes (axonometric and rotated parts) and move them.
     Decorative overlays depend on the HTML page's CSS and are left out.
     """
+    return animated_figure(html, arrows)[0]
+
+
+def animated_figure(html: str, arrows: str = "draw") -> tuple[str, int]:
+    """(animated SVG text, intro length in ms): the step reveal plus the chosen arrow animation."""
     svg = standalone_svg(html).replace(FONT_STYLE, "")
     svg = DECORATIVE_RE.sub("", svg)
     if "data-motion-decorative" in svg:
         raise ExportError("A decorative motion overlay could not be removed; keep it on one element.")
-    steps = sorted({int(step) for step in STEP_RE.findall(svg)})
-    if not steps or "data-motion-item" not in svg:
-        raise ExportError(
-            "No data-motion-item/data-step markup in the SVG; build the figure from "
-            "assets/template-motion.html first (references/animation.md)."
-        )
+    steps = sorted({int(step) for step in STEP_RE.findall(svg)}) if "data-motion-item" in svg else []
     hold, step = motion_ms(html, "hold", 720), motion_ms(html, "step", 480)
-    total = (len(steps) - 1) * hold + step
-    if total > MAX_TOTAL_MS:
-        raise ExportError(f"The reveal takes {total}ms; the motion budget is {MAX_TOTAL_MS}ms.")
-    delays = "".join(
-        f'[data-step="{value}"]{{animation-delay:{index * hold}ms}}' for index, value in enumerate(steps)
-    )
-    style = (
-        "<style data-illustrate-animation=\"true\">"
+    reveal_ms = (len(steps) - 1) * hold + step if steps else 0
+    if reveal_ms > MAX_TOTAL_MS:
+        raise ExportError(f"The reveal takes {reveal_ms}ms; the motion budget is {MAX_TOTAL_MS}ms.")
+    step_delay = {value: index * hold for index, value in enumerate(steps)}
+    try:
+        svg, arrow_css, arrows_ms = animate_export.animate_arrows(svg, html, arrows, step_delay)
+    except ValueError as exc:
+        raise ExportError(str(exc)) from exc
+    if not steps and not arrow_css:
+        raise ExportError(
+            "Nothing to animate: no data-motion-item/data-step steps and no arrows with markers. Build "
+            "the figure from assets/template-motion.html (references/animation.md) or draw marked connectors."
+        )
+    delays = "".join(f'[data-step="{value}"]{{animation-delay:{delay}ms}}' for value, delay in step_delay.items())
+    reveal = (
         "@keyframes illustrate-reveal{from{opacity:0}to{opacity:1}}"
         "@media (prefers-reduced-motion: no-preference){"
         f"[data-motion-item]{{animation:illustrate-reveal {step}ms cubic-bezier(.2,.8,.2,1) backwards}}"
         f"{delays}}}"
-        "</style>"
-    )
+    ) if steps else ""
+    style = f'<style data-illustrate-animation="true">{reveal}{arrow_css}</style>'
+    return insert_style(svg, style), max(reveal_ms, arrows_ms)
+
+
+def insert_style(svg: str, style: str) -> str:
     defs_match = DEFS_RE.search(svg)
     if defs_match:
         return svg[: defs_match.end()] + style + svg[defs_match.end() :]
@@ -201,13 +220,24 @@ def main() -> int:
         if args.animated:
             animated_path = base.with_name(base.name + ".animated.svg")
             animated_path.parent.mkdir(parents=True, exist_ok=True)
-            animated_path.write_text(animated_svg(html), encoding="utf-8", newline="\n")
+            animated_path.write_text(animated_svg(html, args.arrows), encoding="utf-8", newline="\n")
             outputs.append(animated_path)
+        elif args.gif:
+            if not 1 <= args.fps <= 30:
+                raise ExportError("--fps must be between 1 and 30.")
+            figure, intro_ms = animated_figure(html, args.arrows)
+            total_ms, hold_ms = animate_export.timeline(args.arrows, intro_ms)
+            gif_path = base.with_suffix(".gif")
+            try:
+                animate_export.render_gif(figure, gif_path, total_ms, hold_ms, args.fps, args.scale, args.theme)
+            except RuntimeError as exc:
+                raise ExportError(str(exc)) from exc
+            outputs.append(gif_path)
         elif not args.png_only:
             svg_path = base.with_suffix(".svg")
             write_svg(html, svg_path)
             outputs.append(svg_path)
-        if not (args.svg_only or args.animated):
+        if not (args.svg_only or args.animated or args.gif):
             png_path = base.with_suffix(".png")
             write_png(source, png_path, args.scale)
             outputs.append(png_path)
