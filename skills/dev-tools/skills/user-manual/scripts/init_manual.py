@@ -71,6 +71,9 @@ def manual_yaml(product: str, modules: list[dict[str, object]], arabic: bool, pr
         '  material_version: "9.7.6"',
         '  mkdocs_constraint: ">=1.6,<2"',
         "  compatibility: zensical",
+        "  # material (default), readthedocs, mkdocs, or any installed MkDocs theme.",
+        "  theme: material",
+        "  theme_options: {}",
         "modules:",
     ]
     for module in modules:
@@ -113,16 +116,16 @@ status: draft
 '''
 
 
-def render_if_missing(source: Path, target: Path, ci: dict) -> None:
-    target.parent.mkdir(parents=True, exist_ok=True)
-    if not target.exists():
-        target.write_bytes(sanduq_ci.render(source.read_bytes(), ci))
-
-
 def copy_if_missing(source: Path, target: Path) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     if not target.exists():
         shutil.copy2(source, target)
+
+
+def render_if_missing(source: Path, target: Path, ci: dict) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if not target.exists():
+        target.write_bytes(sanduq_ci.render(source.read_bytes(), ci))
 
 
 def main() -> None:
@@ -132,6 +135,8 @@ def main() -> None:
     parser.add_argument("--product-name")
     parser.add_argument("--enable-arabic", action="store_true")
     parser.add_argument("--provider")
+    parser.add_argument("--ci-policy", type=Path,
+                        help="YAML file whose `ci:` mapping selects where the CI workflows run")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -176,6 +181,8 @@ def main() -> None:
 
     for name in ("mkdocs.yml", "requirements.lock"):
         copy_if_missing(skill_root / "assets" / "scaffold" / name, manual_root / name)
+    for name in ("rtl-readthedocs.css", "rtl-generic.css", "theme-readthedocs.css"):
+        copy_if_missing(skill_root / "assets" / "scaffold" / "theme" / name, manual_root / "theme" / name)
     for name in ("extra.css", "rtl.css", "print.css"):
         copy_if_missing(skill_root / "assets" / "scaffold" / "theme" / name, manual_root / "theme" / name)
         for language in (["en", "ar"] if args.enable_arabic else ["en"]):
@@ -186,7 +193,7 @@ def main() -> None:
     for name in ("audit_manual.py", "build_manual.py", "manual_state.py"):
         copy_if_missing(skill_root / "scripts" / name, manual_root / "tools" / name)
     # CI assets are templates: render the project's recorded runner selection.
-    ci = sanduq_ci.load_ci(root)
+    ci = sanduq_ci.load_ci(args.ci_policy)
     for name in ("user-manual-preview.yml", "user-manual-release.yml"):
         render_if_missing(skill_root / "assets" / "github" / name, root / ".github" / "workflows" / name, ci)
     (manual_root / ".state").mkdir(exist_ok=True)

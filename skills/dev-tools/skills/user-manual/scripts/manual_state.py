@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Record or verify User Manual freshness for an active feature."""
+"""Record or verify content and output freshness; noncurrent status exits 1."""
 
 from __future__ import annotations
 
@@ -7,106 +7,125 @@ import argparse
 import hashlib
 import json
 import subprocess
-from datetime import datetime, timezone
+import sys
 from pathlib import Path
+
+EXCLUDED = {".git", "node_modules", "bin", "obj", "dist", "build", "coverage", "__pycache__"}
+OUTPUT_SKIP = {".state", "site", "pdf", "__pycache__"}
 
 
 def git(root: Path, *args: str) -> str:
-    result = subprocess.run(["git", *args], cwd=root, text=True, capture_output=True, check=False)
-    return result.stdout.strip() if result.returncode == 0 else ""
+    result = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, encoding="utf-8")
+    if result.returncode:
+        raise ValueError("Git freshness input unavailable: " + result.stderr.strip())
+    return result.stdout
 
 
-def git_raw(root: Path, *args: str) -> str:
-    result = subprocess.run(["git", *args], cwd=root, text=True, capture_output=True, check=False)
-    return result.stdout if result.returncode == 0 else ""
+def relative(root: Path, value) -> str:
+    path = (root / value).resolve()
+    if not path.is_relative_to(root):
+        raise ValueError("Path outside project: " + str(value))
+    return path.relative_to(root).as_posix()
 
 
-def working_paths(root: Path) -> set[Path]:
-    paths: set[Path] = set()
-    fields = git_raw(root, "status", "--porcelain=v1", "-z").split("\0")
-    index = 0
-    while index < len(fields):
-        field = fields[index]
-        if not field:
-            index += 1
-            continue
-        status = field[:2]
-        relative = field[3:] if len(field) > 3 else ""
-        path = root / relative
-        if path.is_file():
-            paths.add(path)
-        index += 2 if "R" in status or "C" in status else 1
-    return paths
+def fingerprints(root: Path, paths) -> dict:
+    """SHA-256 per file, None when missing. CRLF is normalized so a Windows
+    checkout and a Linux CI checkout of the same commit agree."""
+    result = {}
+    for key in sorted({relative(root, value) for value in paths}):
+        path = root / key
+        result[key] = hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest() if path.is_file() else None
+    return result
 
 
-def comparison_base(root: Path) -> str:
-    remote_head = git(root, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD")
-    for candidate in (remote_head, "origin/main", "origin/master", "HEAD^"):
-        if candidate and git(root, "rev-parse", "--verify", candidate):
-            return git(root, "merge-base", "HEAD", candidate) or candidate
-    return ""
-
-
-def digest_inputs(root: Path, feature: Path) -> str:
-    digest = hashlib.sha256()
-    files = {path for path in feature.rglob("*") if path.is_file()} if feature.is_dir() else set()
-    files.update(working_paths(root))
-    base = comparison_base(root)
-    if base:
-        for relative in git_raw(root, "diff", "--name-only", "-z", f"{base}..HEAD").split("\0"):
-            path = root / relative
-            if relative and path.is_file():
-                files.add(path)
-    for path in sorted(files, key=lambda value: value.as_posix().lower()):
+def base_ref(root: Path, explicit: str | None) -> str:
+    """The merge-base with the target branch. No `HEAD^` fallback: it would hide
+    earlier commits on a longer branch."""
+    if explicit:
+        return git(root, "merge-base", "HEAD", explicit).strip()
+    for candidate in ("refs/remotes/origin/HEAD", "origin/main", "origin/master"):
         try:
-            relative = path.resolve().relative_to(root)
+            return git(root, "merge-base", "HEAD", candidate).strip()
         except ValueError:
             continue
-        posix = relative.as_posix()
-        if posix.startswith(("User-Manual/site/", "User-Manual/pdf/", "User-Manual/.state/")):
-            continue
-        if posix.startswith(f"docs/{feature.name}/"):
-            continue
-        if any(part in {".git", "node_modules", "bin", "obj", "dist", "build", "coverage"} for part in relative.parts):
-            continue
-        digest.update(posix.encode())
-        digest.update(b"\0")
-        digest.update(path.read_bytes().replace(b"\r\n", b"\n"))
-    return digest.hexdigest()
+    raise ValueError("Default remote branch unknown; supply --base-ref explicitly.")
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
+def inputs(root: Path, feature: str, base: str | None) -> dict:
+    paths = {relative(root, p) for p in (root / feature).rglob("*") if p.is_file()}
+    comparison = base_ref(root, base)
+    # name-only includes deleted files; diffing against the working tree includes
+    # staged and unstaged edits; ls-files adds untracked files.
+    paths.update(filter(None, git(root, "diff", "--name-only", "-z", comparison).split("\0")))
+    paths.update(filter(None, git(root, "ls-files", "--others", "--exclude-standard", "-z").split("\0")))
+
+    def included(value: str) -> bool:
+        # The manual is the output, so it is never its own input.
+        return not (any(part in EXCLUDED for part in Path(value).parts)
+                    or value.startswith(("User-Manual/", "docs/" + Path(feature).name + "/")))
+
+    return {"base_commit": comparison, "files": fingerprints(root, [p for p in paths if included(p)])}
+
+
+def record_or_status(root: Path, feature: Path, state_path: Path, action: str, outputs: list, base: str | None) -> dict:
+    feature = relative(root, feature)
+    saved = json.loads(state_path.read_text(encoding="utf-8-sig")) if state_path.is_file() else None
+    # Pin the recorded merge-base so local and CI comparisons repeat, unless the
+    # caller names a new target branch.
+    comparison = base or (saved or {}).get("inputs", {}).get("base_commit")
+    current = inputs(root, feature, comparison)
+    if action == "record":
+        if not outputs:
+            raise ValueError("At least one actual output file is required.")
+        output_hashes = fingerprints(root, outputs)
+        if any(value is None for value in output_hashes.values()):
+            raise ValueError("A declared output is missing.")
+        payload = {"schemaVersion": 2, "feature": feature, "kind": "manual", "inputs": current,
+                   "outputs": output_hashes, "gitHead": git(root, "rev-parse", "HEAD").strip()}
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        return {"current": True, "recorded": True, "state": relative(root, state_path)}
+    if not saved:
+        return {"current": False, "reason": "missing"}
+    if saved.get("schemaVersion") != 2:
+        return {"current": False, "reason": "legacy-state-regenerate"}
+    matches = (saved.get("feature") == feature and saved.get("inputs") == current
+               and bool(saved.get("outputs")) and fingerprints(root, saved["outputs"]) == saved["outputs"])
+    return {"current": matches, "reason": "current" if matches else "stale-input-or-output"}
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("record", "status"))
-    parser.add_argument("--feature", type=Path, required=True)
+    parser.add_argument("--feature", required=True, type=Path)
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
+    parser.add_argument("--base-ref", help="Target branch to compare against (default: origin HEAD)")
+    parser.add_argument("--output", action="append", default=[], help="Manual output file; repeatable")
+    parser.add_argument("--summary", action="store_true", help="Print one line (ok/error, counts) instead of JSON")
+    parser.add_argument("--json", action="store_true", help="Print the full JSON result (the default output)")
     args = parser.parse_args()
+    if args.summary and args.json:
+        parser.error("--summary and --json cannot be combined")
     root = args.repo_root.resolve()
     feature = args.feature if args.feature.is_absolute() else root / args.feature
-    state = root / "User-Manual" / ".state" / "features" / f"{feature.name}.json"
-    current = digest_inputs(root, feature)
-    if args.action == "record":
-        state.parent.mkdir(parents=True, exist_ok=True)
-        state.write_text(json.dumps({
-            "schemaVersion": 1,
-            "feature": feature.resolve().relative_to(root).as_posix(),
-            "fingerprint": current,
-            "gitHead": git(root, "rev-parse", "HEAD"),
-            "updatedAt": datetime.now(timezone.utc).isoformat(),
-        }, indent=2) + "\n", encoding="utf-8")
-        print(json.dumps({"current": True, "recorded": True, "state": str(state)}))
-        return
-    if not state.is_file():
-        print(json.dumps({"current": False, "reason": "missing", "state": str(state)}))
-        return
+    state = root / "User-Manual/.state/features" / f"{feature.name}.json"
+    manual = root / "User-Manual"
+    outputs = args.output or [p.relative_to(root).as_posix() for p in manual.rglob("*")
+                              if p.is_file() and not any(part in OUTPUT_SKIP for part in p.relative_to(manual).parts)]
     try:
-        saved = json.loads(state.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        print(json.dumps({"current": False, "reason": "invalid", "state": str(state)}))
-        return
-    matches = saved.get("fingerprint") == current
-    print(json.dumps({"current": matches, "reason": "current" if matches else "stale", "state": str(state)}))
+        result = record_or_status(root, feature, state, args.action, outputs, args.base_ref)
+    except (ValueError, OSError) as exc:
+        result = {"current": False, "reason": str(exc)}
+    if args.summary:
+        word = "ok" if result["current"] else "error"
+        # An exception message can carry newlines; a summary is always one line.
+        reason = " ".join(str(result.get("reason", "n/a")).split())
+        detail = " recorded=1" if result.get("recorded") else f" reason={reason}"
+        print(f"{word} action={args.action} kind=manual outputs={len(outputs)}{detail}")
+    else:
+        print(json.dumps(result))
+    return 0 if result["current"] else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

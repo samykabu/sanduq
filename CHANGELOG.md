@@ -4,6 +4,25 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## Dev tools plugin 1.1.0 — portable User Manual catches up — 2026-10-10
+
+- The portable `user-manual` skills gain everything User Manual 1.3.0–1.5.1
+  shipped: selectable `renderer.theme` (Material default, ReadTheDocs, MkDocs
+  or any installed MkDocs theme) with `theme_options`, theme-specific RTL and
+  table stylesheets, localized module navigation, and edition staging that
+  copies only the assets an edition's pages reach and rejects cross-audience
+  page links and missing assets.
+- `manual_state.py` records inputs and manual outputs (state schema 2), takes
+  `--base-ref`, `--output`, `--summary` and `--json`, drops the `HEAD^`
+  fallback, and exits 1 when status is not current. Re-record existing state.
+- The preview artifact keeps `retention-days: 2`.
+- `init_manual.py` no longer reads a Spec Kit policy path; pass `--ci-policy`
+  with a YAML file whose `ci:` mapping selects the runners (default: hosted).
+- Guidance from the extension skills (code-formatted identifiers, screenshot
+  coverage metadata, provider descriptors and unlisted-URL rule) is ported.
+- New unittest suite in `skills/dev-tools/skills/user-manual/tests`, run in CI.
+  `skills/dev-tools/ADAPTER.md` lists what still differs from the extension.
+
 ## Documentation reorganization — 2026-10-06
 
 - Short README with focused setup, skill, extension, operating and contribution guides.

@@ -14,9 +14,10 @@ description: Generate, filter, validate, and integrate audience-safe standalone 
 4. Document purpose, caller, authentication concept, permissions, method/path or channel,
    parameters, request/response schemas, statuses/errors, evidenced limits, versioning, and safe
    synthetic examples.
-5. Explain each operation in plain language before presenting technical reference.
-6. If no reliable contract exists, mark the generated reference as a draft and record the missing
-   contract as documentation debt.
+5. Explain each operation in plain language before presenting technical reference. Keep exact
+   identifiers in code formatting.
+6. If no reliable contract exists, generate a clearly marked draft from implementation and tests,
+   and record the missing or incorrect contract as documentation debt.
 
 For a retailer integration API, publish order-submission examples to technical partners, keep
 refund administration endpoints in the authenticated edition, and exclude internal health or debug

@@ -33,3 +33,6 @@ renderer:
   material_version: 9.7.6
   mkdocs_constraint: ">=1.6,<2"
   compatibility: zensical
+  # material (default), readthedocs, mkdocs, or any installed MkDocs theme.
+  theme: material
+  theme_options: {}
