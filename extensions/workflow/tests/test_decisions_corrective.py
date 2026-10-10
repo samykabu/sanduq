@@ -100,6 +100,8 @@ class CorrectiveTests(unittest.TestCase):
         def run(args, **kwargs):
             if args[1] == 'project': return subprocess.CompletedProcess(args, 1, '', 'API rate limit exceeded')
             if args[2] == 'graphql': return subprocess.CompletedProcess(args, 1, '', 'API rate limit exceeded')
+            if args[2].endswith('projectsV2/7'):
+                return subprocess.CompletedProcess(args, 0, json.dumps({'number': 7, 'owner': {'login': 'acme', 'type': 'Organization'}}), '')
             return subprocess.CompletedProcess(args, 0, json.dumps([fields]), '')
         with patch.object(module.subprocess, 'run', run):
             result = client.command(['project', 'field-list', '7', '--owner', 'acme'])

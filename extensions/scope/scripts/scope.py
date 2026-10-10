@@ -184,6 +184,11 @@ def dependency_text(body):
     return '\n'.join(parts)
 
 
+def rate_limited(text):
+    """True when a GitHub message names a rate limit: "rate limit", "rate limited", "RATE_LIMIT", "rate-limit"."""
+    return 'rate limit' in re.sub(r'[\s_\-]+', ' ', (text or '').lower())
+
+
 class GitHub:
     """`gh` CLI client. `gh project` is GraphQL-only; while GraphQL is rate-limited, Project
     operations are served from the REST Projects API (a separate budget) and GraphQL is
@@ -195,6 +200,7 @@ class GitHub:
         self.transports = set()
         self._rest_until = 0.0
         self._rest = None
+        self._project_verified = False
 
     @property
     def project_transport(self):
@@ -210,7 +216,7 @@ class GitHub:
         p = subprocess.run(['gh', *args], input=json.dumps(payload) if payload is not None else None,
                            capture_output=True, text=True, encoding='utf-8', timeout=30)
         if p.returncode:
-            if is_project and self.graphql_exhausted(p.stderr):
+            if is_project and self.graphql_exhausted(p.stderr, args):
                 return self._project_rest(args)
             raise ScopeError(f'GitHub request failed ({" ".join(args[:3])}): {p.stderr.strip()[:700]}')
         if is_project:
@@ -223,20 +229,23 @@ class GitHub:
     def _project_rest(self, args):
         if self._rest is None:
             self._rest = ProjectRest(self, self.project_cfg)
+        self._rest.validate(args)
+        self.verify_project()
         self.transports.add('rest')
         return self._rest.run(args)
 
-    def graphql_exhausted(self, stderr=''):
+    def graphql_exhausted(self, stderr='', args=None):
         """True when GraphQL is rate-limited. The failed request's own message naming a rate limit is
         enough, even while the cheap budget probe still reports points left (a costly query can be
         refused first). `gh project` can also report exhaustion as an unrelated error (for example
-        "unknown owner type"), so the real budget is checked for every other failure."""
-        explicit = 'rate limit' in (stderr or '').lower()
+        "unknown owner type"), so the real budget is checked for every other failure; that masked owner error
+        is accepted only when `masked_owner_failure` verifies it."""
+        explicit = rate_limited(stderr)
         p = subprocess.run(['gh', 'api', 'graphql', '-f', 'query={rateLimit{remaining resetAt}}'],
                            capture_output=True, text=True, encoding='utf-8', timeout=30)
         reset = None
         if p.returncode:
-            exhausted = explicit or 'rate limit' in ((p.stderr or '') + (p.stdout or '')).lower()
+            exhausted = explicit or rate_limited((p.stderr or '') + (p.stdout or ''))
         else:
             try:
                 limit = json.loads(p.stdout)['data']['rateLimit']
@@ -244,6 +253,8 @@ class GitHub:
                 reset = datetime.fromisoformat(limit['resetAt'].replace('Z', '+00:00')).timestamp()
             except (ValueError, KeyError, TypeError, AttributeError):
                 exhausted = explicit
+        if not exhausted and self.masked_owner_failure(stderr, args):
+            exhausted = True
         if exhausted:
             # Unknown reset: re-check GraphQL after a minute rather than before every operation.
             self._rest_until = max(reset or 0, time.time() + 60)
@@ -251,6 +262,44 @@ class GitHub:
             print(f'[scope] GraphQL rate-limited (resets {when}); using the REST Projects API for Project operations.',
                   file=sys.stderr)
         return exhausted
+
+    def masked_owner_failure(self, stderr, args=None):
+        """True when `gh project` reported "unknown owner type" for a block that is not the configured owner's
+        fault: the request itself targets the configured Project, and a direct owner query is rate-limited or
+        the REST Projects API resolves the same configured owner, type, number and node ID. A mismatched
+        request, a failed or mismatched REST lookup keeps the original error."""
+        cfg = self.project_cfg or {}
+        if 'unknown owner type' not in (stderr or '').lower() or not cfg.get('owner') or not cfg.get('projectNumber'):
+            return False
+        try:
+            ProjectRest(self, cfg).validate(args or [])
+        except ScopeError:
+            return False
+        direct = subprocess.run(['gh', 'api', 'graphql', '-f', 'query=query($login:String!){repositoryOwner(login:$login){login}}',
+                                 '-f', f'login={cfg["owner"]}'], capture_output=True, text=True, encoding='utf-8', timeout=30)
+        if direct.returncode and rate_limited((direct.stderr or '') + (direct.stdout or '')):
+            return True
+        try:
+            self.verify_project()
+        except ScopeError:
+            return False
+        return True
+
+    def verify_project(self):
+        """Require the live REST Project to be the configured one (owner, owner type, number, node ID)."""
+        if self._project_verified:
+            return
+        cfg = self.project_cfg
+        base = ProjectRest(self, cfg).base
+        project = self.api(base) or {}
+        owner = project.get('owner') or {}
+        kind = 'Organization' if cfg.get('ownerType', 'user') == 'org' else 'User'
+        require(str(project.get('number')) == str(cfg['projectNumber'])
+                and str(owner.get('login', '')).casefold() == str(cfg['owner']).casefold()
+                and owner.get('type', kind) == kind
+                and (not cfg.get('projectId') or project.get('node_id') == cfg['projectId']),
+                f'REST fallback: {base} is not the configured Project (owner, owner type, number or node ID differ).')
+        self._project_verified = True
 
     def api(self, endpoint, method='GET', payload=None, pages=False):
         args = ['api', endpoint, '-H', 'Accept: application/vnd.github+json']
@@ -280,11 +329,48 @@ class ProjectRest:
                       'reviewers', 'parent issue', 'sub-issues progress'}
 
     def __init__(self, gh, cfg):
-        self.gh = gh
+        self.gh, self.cfg = gh, cfg
         owner_path = 'orgs' if cfg.get('ownerType', 'user') == 'org' else 'users'
         self.base = f'{owner_path}/{cfg["owner"]}/projectsV2/{cfg["projectNumber"]}'
         self._fields = None
         self._item_ids = None
+
+    # Options each `gh project` subcommand may carry when served over REST; anything else is refused.
+    ALLOWED = {'field-list': {'--owner', '--format', '--limit'}, 'item-list': {'--owner', '--format', '--limit'},
+               'item-add': {'--owner', '--format', '--url'},
+               'field-create': {'--owner', '--format', '--name', '--data-type', '--single-select-options'},
+               'item-edit': {'--id', '--project-id', '--field-id', '--single-select-option-id', '--text'}}
+
+    def validate(self, args):
+        """Refuse a request that names another owner, Project number or Project ID, or carries unsupported
+        arguments, before any REST operation (a throttle must not retarget the request)."""
+        action = args[1] if len(args) > 1 else ''
+        allowed = self.ALLOWED.get(action)
+        require(allowed is not None, f'REST fallback does not support `gh project {action}`; retry after the GraphQL rate limit resets.')
+        rest = list(args[2:])
+        positional = []
+        while rest and not rest[0].startswith('--'):
+            positional.append(rest.pop(0))
+        require(len(rest) % 2 == 0 and all(rest[i].startswith('--') for i in range(0, len(rest), 2)),
+                f'REST fallback: malformed `gh project {action}` arguments.')
+        options = {}
+        for i in range(0, len(rest), 2):
+            require(rest[i] in allowed and rest[i] not in options,
+                    f'REST fallback: unsupported argument {rest[i]} for `gh project {action}`.')
+            options[rest[i]] = rest[i + 1]
+        if action == 'item-edit':
+            require(not positional and self.cfg.get('projectId') and options.get('--project-id') == self.cfg['projectId'],
+                    'REST fallback: request Project ID differs from the configured Project.')
+            require(('--single-select-option-id' in options) != ('--text' in options) and '--id' in options and '--field-id' in options,
+                    'REST fallback: item-edit needs --id, --field-id and exactly one value.')
+            return
+        require(positional == [str(self.cfg['projectNumber'])], 'REST fallback: request Project number differs from the configured Project.')
+        require(str(options.get('--owner', '')).casefold() == str(self.cfg['owner']).casefold(),
+                'REST fallback: request owner differs from the configured Project owner.')
+        require(options.get('--format', 'json') == 'json', 'REST fallback supports --format json only.')
+        if action == 'field-create':
+            require(options.get('--data-type') == 'SINGLE_SELECT' and '--name' in options and '--single-select-options' in options,
+                    'REST fallback does not support `gh project field-create` without SINGLE_SELECT, --name and options.')
 
     def run(self, args):
         options = {args[i]: args[i + 1] for i in range(2, len(args) - 1) if args[i].startswith('--')}

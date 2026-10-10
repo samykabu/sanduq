@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.9.3] - 2026-10-10
+
+- Pins Scope 1.6.3, which verifies a masked "unknown owner type" Project failure against a
+  rate-limited owner query or the same REST Project before using the REST Projects API.
+  No Workflow behavior changed.
+
 ## [1.9.2] - 2026-10-10
 
 - `dependencies.json` pins Illustrate 2.4.0 (animated arrows, GIF export). No workflow behaviour change.

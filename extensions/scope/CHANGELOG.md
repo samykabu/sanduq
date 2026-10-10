@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.3] - 2026-10-10
+
+- `gh project` can report a blocked GraphQL API as "unknown owner type" while the cheap budget
+  probe still shows points. That masked failure now switches Project operations to the REST
+  Projects API only when a direct owner query is itself rate-limited, or when the REST Projects
+  API resolves the same configured owner, `ownerType` and project number. A wrong owner, owner
+  Before any REST operation the request must name the configured owner, Project number and
+  Project ID, carry only supported arguments, and match the live Project's node ID, owner and
+  owner type. An isolated `RATE_LIMIT` token counts as a rate limit like the spaced wording.
+  type or project number, a missing or inaccessible Project, and every other error are still
+  raised unchanged. The reported transport is `rest`.
+
 ## [1.6.2] - 2026-10-10
 
 - Project operations fall back to the REST Projects API when the failed `gh project` request itself
