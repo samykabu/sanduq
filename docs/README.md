@@ -24,6 +24,13 @@ to use. Then install, and use the reference when you need an exact command or ho
 
 ## Extensions
 
+![Product map: Scope requires Workflow and Illustrate; Assure, PR and User Manual require Illustrate; PR uses Assure and User Manual when installed; Project and Memory stand alone. Portable skills from sanduq-skills are copied into the Illustrate, User Manual and Workflow extensions and listed by the sanduq marketplace.](diagrams/product-map.animated.svg)
+
+Scope requires Workflow and Illustrate. Assure, PR and User Manual require Illustrate, and PR uses
+Assure and User Manual when they are installed. Project and Memory need no other extension. The
+portable skills come from [sanduq-skills](https://github.com/samykabu/sanduq-skills) and are copied
+into the extensions. [Editable source](diagrams/product-map.html).
+
 One page per extension: purpose, lifecycle phase, hooks, dependencies, setup, an example and limits.
 
 | Extension | Purpose |
