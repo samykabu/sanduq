@@ -14,6 +14,26 @@ jobs:
       - name: Install validation dependencies
         run: python3 -m pip install --user pyyaml packaging
 
+      - name: Claude Code validates the marketplace
+        run: npx -y @anthropic-ai/claude-code plugin validate .
+
+      - name: Vendored skills match vendor.lock.json
+        run: python3 extensions/scripts/vendor.py check
+
+      - name: No installable skills are listed from this repository
+        run: |
+          npx -y skills@1.7.2 add . --list > skills-list.txt 2>&1 || true
+          cat skills-list.txt
+          if grep -Eq 'illustrate|user-manual|delegate-task|scope-analyst|workflow' skills-list.txt; then
+            echo "a skill is discoverable here; skills live in samykabu/sanduq-skills"; exit 1
+          fi
+          # Named installs reach only byte-identical vendored copies, which must still work (R2).
+          mkdir -p /tmp/named && cd /tmp/named && git init -q
+          npx -y skills@1.7.2 add "$GITHUB_WORKSPACE" --skill delegate-task -a codex -y
+          node .agents/skills/delegate-task/delegate.mjs contract > /dev/null
+          npx -y skills@1.7.2 add "$GITHUB_WORKSPACE" --skill illustrate -a codex -y
+          test -f .agents/skills/illustrate/scripts/export_diagram.py
+
       - name: Check documentation links and command coverage
         run: |
           python3 extensions/scripts/test_check_docs.py
@@ -27,7 +47,7 @@ jobs:
           done < <(
             {
               printf '%s\n' catalog.json .claude-plugin/marketplace.json
-              find extensions skills plugins -path '*/node_modules/*' -prune -o -name '*.json' -print
+              find extensions -path '*/node_modules/*' -prune -o -name '*.json' -print
             } | sort -u
           )
 
@@ -93,13 +113,14 @@ jobs:
           marketplace = json.loads((root / ".claude-plugin/marketplace.json").read_text(encoding="utf-8"))
           for plugin in marketplace.get("plugins", []):
               source = plugin.get("source")
-              if isinstance(source, str) and source.startswith("./"):
-                  manifest = root / source[2:] / ".claude-plugin/plugin.json"
-                  if not manifest.is_file():
-                      sys.exit(f"marketplace plugin {plugin.get('name')} missing {manifest}")
-                  plugin_meta = json.loads(manifest.read_text(encoding="utf-8"))
-                  if plugin_meta.get("name") != plugin.get("name"):
-                      sys.exit(f"{manifest}: plugin name does not match marketplace entry")
+              # Bundles install from samykabu/sanduq-skills at a pinned commit; plugin.json owns the version.
+              if not (isinstance(source, dict) and source.get("source") == "git-subdir"
+                      and source.get("url", "").startswith("https://github.com/samykabu/sanduq-skills")
+                      and source.get("path") == f"skills/{plugin.get('name')}" and source.get("ref")
+                      and len(source.get("sha", "")) == 40):
+                  sys.exit(f"marketplace plugin {plugin.get('name')}: expected a pinned git-subdir source")
+              if "version" in plugin:
+                  sys.exit(f"marketplace plugin {plugin.get('name')}: version belongs in plugin.json")
 
           print("extension/catalog/plugin manifest validation ok")
           PY

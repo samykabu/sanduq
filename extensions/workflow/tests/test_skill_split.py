@@ -239,13 +239,14 @@ def git_show(path):
     """Read the pre-split original from its frozen fixture copy (see FIXTURE_ROOT),
     rather than `git show BASE_COMMIT:path`, so the test does not depend on git history
     being available (CI checks out shallow)."""
-    return (FIXTURE_ROOT / path).read_text(encoding='utf-8')
+    # Stored entrypoints are SKILL.ext.md (see extensions/scripts/package.py).
+    return (FIXTURE_ROOT / path.replace('/SKILL.md', '/SKILL.ext.md')).read_text(encoding='utf-8')
 
 
 class SkillSplitCompletenessTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        core = ROOT / 'extensions/workflow/skills/workflow/SKILL.md'
+        core = ROOT / 'extensions/workflow/skills/workflow/SKILL.ext.md'
         references = sorted((ROOT / 'extensions/workflow/skills/workflow/references').glob('*.md'))
         # The current (post-split) overlay pointer files are also searched: a few of them
         # inline a short, verbatim-preserved original sentence (e.g. the legacy guard's
@@ -286,7 +287,7 @@ class SkillSplitCompletenessTests(unittest.TestCase):
         # Every reference file must be named at least once by core SKILL.md or by another
         # reference file, so nothing under references/ is an orphan the dispatcher would
         # never be told to load.
-        core = ROOT / 'extensions/workflow/skills/workflow/SKILL.md'
+        core = ROOT / 'extensions/workflow/skills/workflow/SKILL.ext.md'
         reference_dir = ROOT / 'extensions/workflow/skills/workflow/references'
         files = {core: core.read_text(encoding='utf-8')}
         files.update({p: p.read_text(encoding='utf-8') for p in reference_dir.glob('*.md')})
@@ -305,7 +306,7 @@ class SkillSplitCompletenessTests(unittest.TestCase):
         # only on drift/STALE_RECEIPT), because the passed-receipt rules (no pass on
         # failed/skipped/pending work, pending decisions block, decision ledger in inputs,
         # no checkpoint files in the manifest) live only in that reference.
-        core = (ROOT / 'extensions/workflow/skills/workflow/SKILL.md').read_text(encoding='utf-8')
+        core = (ROOT / 'extensions/workflow/skills/workflow/SKILL.ext.md').read_text(encoding='utf-8')
         self.assertIn('Before writing any receipt, read', core)
         self.assertIn('receipt-rules.md', core)
         rules = normalize(self.read_reference('receipt-rules.md'))
@@ -326,7 +327,7 @@ class SkillSplitCompletenessTests(unittest.TestCase):
         # work is GitHub discussions (clarify) and GitHub issue/task identity
         # (taskstoissues), not just sitting unlinked in dispatcher-operations.md.
         anchor = 'dispatcher-operations.md#interruption-and-github-behavior'
-        core = (ROOT / 'extensions/workflow/skills/workflow/SKILL.md').read_text(encoding='utf-8')
+        core = (ROOT / 'extensions/workflow/skills/workflow/SKILL.ext.md').read_text(encoding='utf-8')
         self.assertIn(anchor, core)
         for name in ('stage-clarify.md', 'stage-taskstoissues.md'):
             self.assertIn(anchor, self.read_reference(name), name)

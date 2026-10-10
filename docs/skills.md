@@ -27,7 +27,7 @@ access and records the outcome; Payments settles approvals only.
 
 Use `illustrate` when a relationship is clearer as a diagram: components, time-ordered messages,
 workflow states, data, ownership, or measured quantities. It supports 44 diagram types. Use a table
-when the content is simply a list. [Source](../skills/illustration-tools/skills/illustrate/SKILL.md).
+when the content is simply a list. [Source](https://github.com/samykabu/sanduq-skills/blob/main/skills/illustration-tools/skills/illustrate/SKILL.md).
 
 ```text
 $illustrate Create a sequence diagram for refund approval from specs/412-refund-approval/plan.md
@@ -58,7 +58,7 @@ ReadTheDocs, MkDocs, and custom CSS builds, and shows how to install an authored
 Use `user-manual` for a new manual, a cross-module update, or a coverage audit. It discovers modules,
 asks for approval, and maintains one Markdown source with End User, Administrator/Operator, and
 Technical Reference editions. English is required; Arabic is optional with RTL support.
-[Source](../skills/dev-tools/skills/user-manual/SKILL.md).
+[Source](https://github.com/samykabu/sanduq-skills/blob/main/skills/dev-tools/skills/user-manual/SKILL.md).
 
 ```text
 $user-manual Inspect our booking application and interview me about its audiences. Propose
@@ -86,7 +86,7 @@ skill's `scripts/` directory. Install its pinned build requirements before rende
 
 Use this module when a contract or API reference is the main task. It inventories callers and
 audiences before rendering; an `/api/` route does not establish public access.
-[Source](../skills/dev-tools/skills/user-manual-api-docs/SKILL.md).
+[Source](https://github.com/samykabu/sanduq-skills/blob/main/skills/dev-tools/skills/user-manual-api-docs/SKILL.md).
 
 ```text
 $user-manual-api-docs Document refund requests and approval from our checked-in contracts and
@@ -102,7 +102,7 @@ Supported surfaces include OpenAPI, AsyncAPI, GraphQL, RPC, webhooks, and code A
 ## user-manual-release-docs
 
 Use this module for release-visible changes or an upgrade requiring action.
-[Source](../skills/dev-tools/skills/user-manual-release-docs/SKILL.md).
+[Source](https://github.com/samykabu/sanduq-skills/blob/main/skills/dev-tools/skills/user-manual-release-docs/SKILL.md).
 
 ```text
 $user-manual-release-docs Compare the booking application's actual v2.4.0 and v3.0.0 tags.
@@ -118,7 +118,7 @@ than inventing release dates, compatibility promises, or migration steps.
 ## user-manual-ui-screenshots
 
 Use this module when a manual needs repeatable UI evidence.
-[Source](../skills/dev-tools/skills/user-manual-ui-screenshots/SKILL.md).
+[Source](https://github.com/samykabu/sanduq-skills/blob/main/skills/dev-tools/skills/user-manual-ui-screenshots/SKILL.md).
 
 ```text
 $user-manual-ui-screenshots Use our existing UI runner to capture refund requested, approved,
@@ -134,7 +134,7 @@ existing mobile runner for native apps. A missing runnable application is an evi
 ## user-manual-preview-publishing
 
 Use this module to configure or repair preview and release delivery.
-[Source](../skills/dev-tools/skills/user-manual-preview-publishing/SKILL.md).
+[Source](https://github.com/samykabu/sanduq-skills/blob/main/skills/dev-tools/skills/user-manual-preview-publishing/SKILL.md).
 
 ```text
 $user-manual-preview-publishing Prepare private CI preview artifacts for the refund manual PR.
@@ -157,7 +157,7 @@ objections or the cap stop the debate.
 
 Use `delegate-task` for one bounded task on another agent CLI or an independent second opinion.
 Node 18+ runs its dependency-free driver. Claude Code, Codex, and OpenCode are verified harnesses;
-Copilot and Pi are experimental. [Source](../skills/agent-tools/skills/delegate-task/SKILL.md).
+Copilot and Pi are experimental. [Source](https://github.com/samykabu/sanduq-skills/blob/main/skills/agent-tools/skills/delegate-task/SKILL.md).
 
 ```text
 $delegate-task Ask Claude to review refund approval for duplicate settlement and permission

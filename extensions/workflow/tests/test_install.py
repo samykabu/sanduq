@@ -28,6 +28,8 @@ class InstallTests(unittest.TestCase):
         major, minor, patch_version = map(int, w.read(self.package / 'dependencies.json')['required']['pr'].split('.'))
         self.newer_pr = f'{major}.{minor}.{patch_version + 1}'
         shutil.copytree(source / 'skills', self.package / 'skills')
+        for stored in (self.package / 'skills').rglob('SKILL.ext.md'):  # as package.py restores it
+            stored.rename(stored.with_name('SKILL.md'))
         shutil.copytree(source / 'assets', self.package / 'assets')
         for name in ('scope-gate', 'scope-brainstorm', 'workflow'):
             p = self.package / 'presets' / name / 'preset.yml'

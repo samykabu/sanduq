@@ -259,18 +259,19 @@ These skills ship inside extensions; they are not additional `npx skills` instal
 
 | Skill source | Owner and use in the refund example |
 | --- | --- |
-| [assure](../extensions/assure/skills/assure/SKILL.md) | Assure Analyze/Document route QA analysis and test walkthroughs. |
-| [scope-analyst](../extensions/scope/skills/scope-analyst/SKILL.md) | Scope Run owns issue evidence, prerequisite checks, effort, and decomposition. |
-| [github-clarification](../extensions/scope/skills/github-clarification/SKILL.md) | Clarify/Brainstorm reread issue 412's human answers and preserve binding. |
-| [sanduq-workflow](../extensions/workflow/skills/workflow/SKILL.md) | Workflow commands claim stages, invoke their references, and validate receipts. |
-| [speckit-scope alias](../extensions/workflow/skills/speckit-scope/SKILL.md) | The short entry routes issue 412 into the managed dispatcher. |
-| [Bridge alias](../extensions/workflow/skills/speckit-superpowers-bridge/SKILL.md) | Routes continuation to its current owner and prevents a competing executor. |
-| [user-manual](../extensions/user-manual/skills/user-manual/SKILL.md) | Manual commands own module discovery and incremental refund documentation. |
-| [api-docs](../extensions/user-manual/skills/api-docs/SKILL.md) | Manual Update loads safe refund contracts only when API work is needed. |
-| [release-docs](../extensions/user-manual/skills/release-docs/SKILL.md) | Manual Release loads actual application release/migration evidence. |
-| [ui-screenshots](../extensions/user-manual/skills/ui-screenshots/SKILL.md) | Capture deterministic approved/refused refund states. |
-| [preview-publishing](../extensions/user-manual/skills/preview-publishing/SKILL.md) | Use the approved provider for the private manual preview. |
+| [assure](../extensions/assure/skills/assure/SKILL.ext.md) | Assure Analyze/Document route QA analysis and test walkthroughs. |
+| [scope-analyst](../extensions/scope/skills/scope-analyst/SKILL.ext.md) | Scope Run owns issue evidence, prerequisite checks, effort, and decomposition. |
+| [github-clarification](../extensions/scope/skills/github-clarification/SKILL.ext.md) | Clarify/Brainstorm reread issue 412's human answers and preserve binding. |
+| [sanduq-workflow](../extensions/workflow/skills/workflow/SKILL.ext.md) | Workflow commands claim stages, invoke their references, and validate receipts. |
+| [speckit-scope alias](../extensions/workflow/skills/speckit-scope/SKILL.ext.md) | The short entry routes issue 412 into the managed dispatcher. |
+| [Bridge alias](../extensions/workflow/skills/speckit-superpowers-bridge/SKILL.ext.md) | Routes continuation to its current owner and prevents a competing executor. |
+| [user-manual](../extensions/user-manual/skills/user-manual/SKILL.ext.md) | Manual commands own module discovery and incremental refund documentation. |
+| [api-docs](../extensions/user-manual/skills/api-docs/SKILL.ext.md) | Manual Update loads safe refund contracts only when API work is needed. |
+| [release-docs](../extensions/user-manual/skills/release-docs/SKILL.ext.md) | Manual Release loads actual application release/migration evidence. |
+| [ui-screenshots](../extensions/user-manual/skills/ui-screenshots/SKILL.ext.md) | Capture deterministic approved/refused refund states. |
+| [preview-publishing](../extensions/user-manual/skills/preview-publishing/SKILL.ext.md) | Use the approved provider for the private manual preview. |
 | [Illustrate package skill](../extensions/illustrate/skill/SKILL.md) | Generate/export useful refund diagrams through extension commands. |
+| [Delegate Task (vendored)](../extensions/workflow/assets/delegate-task/SKILL.md) | Workflow dispatches bounded worker tasks through this driver, vendored from [sanduq-skills](https://github.com/samykabu/sanduq-skills). |
 
 Canonical [Workflow](../presets/workflow/preset.yml), [Scope Gate](../presets/scope-gate/preset.yml),
 and [Scope Brainstorm](../presets/scope-brainstorm/preset.yml) presets prepend policy to provider

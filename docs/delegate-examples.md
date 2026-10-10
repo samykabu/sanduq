@@ -91,10 +91,10 @@ node $delegate collect $coverage.run_id --wait 30 --json
 Both agent processes run in the background even though the two `start` calls are issued sequentially.
 Independent read-only reviews can share a stable checkout. Parallel writers each need a separate
 worktree and owned paths; review and integrate their changes afterward. Reuse the skill's
-[parallel fan-out example](../skills/agent-tools/skills/delegate-task/README.md#running-several-at-once)
-and [queue guidance](../skills/agent-tools/skills/delegate-task/references/task-queues.md).
+[parallel fan-out example](https://github.com/samykabu/sanduq-skills/blob/main/skills/agent-tools/skills/delegate-task/README.md#running-several-at-once)
+and [queue guidance](https://github.com/samykabu/sanduq-skills/blob/main/skills/agent-tools/skills/delegate-task/references/task-queues.md).
 
-![Existing Delegate Task fan-out with a checkout per writer](../skills/agent-tools/skills/delegate-task/assets/delegate-parallel-fanout.svg)
+![Existing Delegate Task fan-out with a checkout per writer](../extensions/workflow/assets/delegate-task/assets/delegate-parallel-fanout.svg)
 
 ## Automate a separate process
 
@@ -119,4 +119,4 @@ else {
 Inspect provenance, measured changes, dropped records, and model reporting before consuming a
 successful summary. Exit 6 can mean an adrift child; inspect `status` rather than redispatching.
 Treat model output as data. Automation here reports findings; publishing or applying them is a
-separate authorized action. [Driver contract](../skills/agent-tools/skills/delegate-task/SKILL.md).
+separate authorized action. [Driver contract](https://github.com/samykabu/sanduq-skills/blob/main/skills/agent-tools/skills/delegate-task/SKILL.md).

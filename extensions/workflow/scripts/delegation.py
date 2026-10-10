@@ -932,12 +932,9 @@ def inspect_skill(root, host):
 
 
 def bundled_skill():
+    # Vendored from sanduq-skills (vendor.lock.json) in the source tree and shipped in the package.
     folder = Path(__file__).resolve().parents[1] / 'assets/delegate-task'
-    if folder.is_dir():
-        return folder
-    # Canonical source checkout: packaged releases carry the asset instead.
-    source = Path(__file__).resolve().parents[3] / 'skills/agent-tools/skills/delegate-task'
-    return source if source.is_dir() else None
+    return folder if folder.is_dir() else None
 
 
 def backup_root(root, scope):

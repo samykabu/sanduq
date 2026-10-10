@@ -1,0 +1,69 @@
+name: vendor-update
+
+# Triggered by a samykabu/sanduq-skills release (or by hand): vendor the released bundle into the
+# extensions, pin the marketplace entry to the release commit, and open a pull request.
+on:
+  workflow_dispatch:
+    inputs:
+      bundle:
+        description: illustration-tools, dev-tools or agent-tools
+        required: true
+      ref:
+        description: Release tag in sanduq-skills, e.g. illustration-tools-v3.2.2
+        required: true
+      sha:
+        description: The tag's 40-character commit
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: samykabu/sanduq-skills
+          ref: ${{ inputs.sha }}
+          fetch-depth: 0
+          path: .skills-source
+      - name: Vendor and pin
+        env:
+          BUNDLE: ${{ inputs.bundle }}
+          REF: ${{ inputs.ref }}
+          SHA: ${{ inputs.sha }}
+        run: |
+          case "$BUNDLE" in
+            illustration-tools) input=illustrate ;;
+            dev-tools) input=user-manual ;;
+            agent-tools) input=delegate-task ;;
+            *) echo "unknown bundle $BUNDLE"; exit 1 ;;
+          esac
+          test "$(git -C .skills-source rev-parse "$REF^{commit}")" = "$SHA"
+          python3 extensions/scripts/vendor.py sync --source .skills-source --input "$input" --ref "$REF"
+          python3 - <<'PY'
+          import json, os, pathlib
+          path = pathlib.Path('.claude-plugin/marketplace.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          for plugin in data['plugins']:
+              if plugin['name'] == os.environ['BUNDLE']:
+                  plugin['source'].update(ref=os.environ['REF'], sha=os.environ['SHA'])
+          path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+          PY
+          rm -rf .skills-source
+          python3 extensions/scripts/vendor.py check
+      - name: Open pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch="vendor/${{ inputs.ref }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add -A
+          git commit -m "chore(vendor): ${{ inputs.ref }} from sanduq-skills"
+          git push origin "$branch"
+          gh pr create --title "Vendor ${{ inputs.ref }}" --body "Vendors ${{ inputs.ref }} (${{ inputs.sha }}) from samykabu/sanduq-skills and pins the marketplace entry. Extensions that ship the vendored files need a patch release recorded in extensions/pending-releases.json."
