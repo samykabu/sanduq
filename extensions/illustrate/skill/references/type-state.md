@@ -11,7 +11,7 @@
 ## Layout conventions
 - States are rounded rectangles (`rx=8`), labeled in the resolved sans.
 - **Start**: filled ink dot (`r=6`). **End**: ringed dot (outer `r=8` outline, inner filled `r=5`).
-- Transitions: curved arrows labeled in resolved mono as `event [guard] / action` (omit sections you don't need).
+- Transitions: curved arrows labeled in resolved mono as `event [guard] / action` (omit sections you don't need). A curve ends on a straight lead into each headed tip, its last control point on that lead (`M 420 160 V 144 C 420 101, 200 101, 200 144 V 160`; SKILL.md §6 rule 7).
 - Self-loops curve above the state.
 - Orient along the dominant flow direction (left→right or top→down); rearrange before crossing transitions.
 - Accent on the state the reader should notice — typically the error state, or "happy completion".

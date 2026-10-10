@@ -1,6 +1,6 @@
 # Core SVG primitives
 
-Routed from SKILL.md §6. SKILL.md keeps the six connector rules as one line each, the arrow roles, and a one-line node box summary. This file holds the markup and the long form of every rule. The copied template already carries the background rect and all three arrow markers, so load this file when you need exact markup or a rule's edge cases.
+Routed from SKILL.md §6. SKILL.md keeps the seven connector rules as one line each, the arrow roles, and a one-line node box summary. This file holds the markup and the long form of every rule. The copied template already carries the background rect and all three arrow markers, so load this file when you need exact markup or a rule's edge cases.
 
 Literal colors and fonts below are the Cobalt Porcelain light values, shown as samples only. On every generation, substitute the active values from `python scripts/illustration_theme.py --project-root . resolve` (SKILL.md §0): `paper`, `ink`, `muted`, `soft`, `accent`, `link`, and the resolved `sans` / `mono` / `serif` stacks. Project tokens always win.
 
@@ -53,7 +53,7 @@ Don't use the dot pattern when the diagram sits inside a product page, slide, or
 
 ## Mandatory connector rules
 
-These six rules are **non-negotiable**. Run the pre-output checklist (SKILL.md §9) to verify before producing any diagram.
+These seven rules are **non-negotiable**. Run the pre-output checklist (SKILL.md §9) to verify before producing any diagram.
 
 1. **Rounded right-angle (orthogonal) connectors are mandatory.** Never use diagonal `<line>` or straight slanted paths between nodes that don't share an x or y axis. Every bend must be a quarter-arc with `r=8` (or `r=6` minimum for tight layouts). See `references/type-architecture.md` for the elbow-path formula. Reserve plain straight `<line>` only for connections whose endpoints share the same x or y coordinate. Diagonal connectors are an automatic fail.
 
@@ -76,6 +76,8 @@ These six rules are **non-negotiable**. Run the pre-output checklist (SKILL.md �
    When in doubt, reroute. The exception exists for the narrow case where rerouting is geometrically impossible, not as a shortcut to avoid layout work.
 
 6. **A label mask must not overlap a node drawn after it.** Rule 2 keeps the label off its own connector; this one keeps it off the boxes. Because nodes are painted after labels, a mask that lands partly inside a node is covered by the node fill and the text renders as a fragment sitting on the node border. Place the label on a segment of the connector that runs through open canvas — for a connector leaving a node's right edge, that means clearing the node's `x + width` before the mask starts. A mask fully *inside* a node is a badge chip and is fine; a mask overlapping a zone container is fine too, since zones are painted first. From the skill directory, verify with `python scripts/verify-geometry.py <file>`.
+
+7. **Every arrow is straight for at least its arrowhead's length before each tip.** A marker with `orient="auto"` (or `auto-start-reverse`) follows the exact end tangent, but the eye follows the line arriving at the head, so a path still bending at the tip makes the head look like it points the wrong way. Keep a straight lead of the arrowhead's length + 4px (10px minimum) before each headed tip — both tips of a two-headed arrow. The head length is the marker's `markerWidth` (on the longer side of `refX`, through its `viewBox`) times the stroke width unless `markerUnits="userSpaceOnUse"`: about 12px for the default 8x6 marker at stroke 1-1.4. A routed connector finishes its last `r=8` corner at least that far from the tip (`... Q 300,120 308,120 H 324`, never `... Q 300,120 308,120` ending on the node); when space is tight, shrink that last corner to `r=4` rather than moving the trunk onto a zone border or a label. A curve puts its last control point on the straight lead and ends the curve there (`M 420 160 V 144 C 420 101, 200 101, 200 144 V 160`). From the skill directory, verify with `python scripts/verify-arrow-ends.py <file>` (fails a tip that bends more than 3° within its lead; `self_check.py` runs it too).
 
 ## Node box — full pattern
 

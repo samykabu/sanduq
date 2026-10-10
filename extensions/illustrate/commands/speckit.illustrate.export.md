@@ -19,7 +19,9 @@ $ARGUMENTS
 4. Translate the requested options to the exporter CLI:
    - default: SVG and PNG;
    - `--svg-only` or `--png-only`;
-   - `--animated` for a self-playing `<name>.animated.svg` of a motion figure (README images);
+   - `--animated` for a self-playing `<name>.animated.svg` (README images), or `--gif` for the same as
+     an animated GIF (`--theme light|dark`, `--fps`);
+   - `--arrows=draw|flow|pulse|draw-flow|chevrons` for the arrow animation (default `draw`);
    - `--scale=1|2|3` for PNG;
    - `--output=<path>` for an alternate output base.
 5. Run the bundled exporter once. Do not recreate its implementation in a temporary script and do

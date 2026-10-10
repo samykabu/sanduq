@@ -177,7 +177,7 @@ These mark "AI slop" schematics of any type:
 | Shadow on any element | Shadows are out. Borders are in. |
 | `rounded-2xl` on boxes | Max radius 6–10px or none |
 | Coral on every "important" node | Coral is 1–2 editorial accents, not a signaling system |
-| Any breach of the six §6 connector rules | Automatic fail: diagonal slants, labels touching their stroke, masks clipped by a later node, overlapping paths, shared attach points, transit behind a non-endpoint box |
+| Any breach of the seven §6 connector rules | Automatic fail: diagonal slants, labels touching their stroke, masks clipped by a later node, overlapping paths, shared attach points, transit behind a non-endpoint box, arrowheads on a bend |
 
 Type-specific anti-patterns live in each `references/type-*.md`.
 
@@ -258,6 +258,7 @@ Non-negotiable, and §9 checks each one. Full text and edge cases: [primitives-c
 4. **Fan attach points.** Connectors on one box edge each get their own point at `L * k / (N + 1)`, 12px or more apart (8px on very small boxes).
 5. **No transit behind a non-endpoint box.** Reroute. Only when the box is geometrically unavoidable: dashed stroke (`4,3`), label at the visible end, no marker on the intervening box.
 6. **Mask before node.** A label mask must not overlap a node drawn after it; badge masks fully inside a node and masks over earlier zones are fine. Verify with `python scripts/verify-geometry.py <file>`.
+7. **Straight arrow ends.** Every arrow runs straight for at least its arrowhead's length + 4px (10px minimum) before each tip, both tips when two-headed: finish the last corner there (shrink it to `r=4` when space is tight, rather than moving the trunk onto a zone border), and put a curve's last control point on that straight lead. Verify with `python scripts/verify-arrow-ends.py <file>`.
 
 ---
 
@@ -324,6 +325,7 @@ Run before producing any diagram.
 - [ ] **§6 rule 4:** a distinct attach point per connector on a shared edge, 12px or more apart, none hiding another?
 - [ ] **§6 rule 5:** no transit behind a non-endpoint box, except the unavoidable case (dashed, label at the visible end)?
 - [ ] **§6 rule 6:** no label mask overlapping a node drawn after it? (`python scripts/verify-geometry.py <file>`)
+- [ ] **§6 rule 7:** every arrow straight for its arrowhead's length + 4px before each tip? (`python scripts/verify-arrow-ends.py <file>`)
 - [ ] Every arrow label has an opaque rect filled with the resolved `paper` token behind it?
 - [ ] Legend is a horizontal bottom strip, not floating?
 - [ ] No vertical `writing-mode` text?
@@ -331,7 +333,7 @@ Run before producing any diagram.
 - [ ] `min-width` equals the viewBox width, inside a local `overflow-x: auto` wrapper? ([output-spec.md](references/output-spec.md))
 - [ ] Node origins, dimensions, gaps, padding on the 4px grid; type sizes on the role ramp?
 - [ ] Ran `python scripts/illustration_theme.py --project-root . apply <file>` so no default literals or Geist stacks remain?
-- [ ] Did `python scripts/self_check.py <file>` pass? (Accessible-SVG contract, single-file safety, motion basics.) Run the type's `scripts/verify-<type>.py` when one exists.
+- [ ] Did `python scripts/self_check.py <file>` pass? (Accessible-SVG contract, single-file safety, motion basics, straight arrow ends.) Run the type's `scripts/verify-<type>.py` when one exists.
 - [ ] If animated: complete static/no-JS frame, reduced motion hides/disables playback, controller copied verbatim from `assets/template-motion.html` (or `-dark`), and `python scripts/verify-motion.py <file>` passes after apply?
 
 **Typography:**
@@ -437,4 +439,4 @@ When the user asks to export, save, rasterize, or convert a generated diagram to
 load [`references/export.md`](references/export.md) and follow the procedure there. The portable
 command source is [`commands/export-diagram.md`](commands/export-diagram.md). Both formats deliver
 the diagram only (the `<svg>` node)—editorial wrappers like cards and headers are dropped by
-design. `--animated` exports a motion figure as a self-playing `.animated.svg` for README images. Export is **manual**—never produce export files unprompted. For a Traceable block decomposition, `--registry` emits a `.registry.json` sidecar of its `data-block-*` metadata: [`references/export-registry.md`](references/export-registry.md).
+design. `--animated` (self-playing `.animated.svg`) and `--gif` animate the steps and arrows for README images; `--arrows` picks the arrow motion (default `draw`). Export is **manual**—never produce export files unprompted. For a Traceable block decomposition, `--registry` emits a `.registry.json` sidecar of its `data-block-*` metadata: [`references/export-registry.md`](references/export-registry.md).

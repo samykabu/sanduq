@@ -273,7 +273,7 @@ These are non-negotiable. Pick the style **automatically** from the topology —
 ### 3.2 Routing
 
 - Orthogonal elbows, **at most two bends** per path.
-- Use a Q-bezier 8-px corner radius at every bend.
+- Use a Q-bezier 8-px corner radius at every bend. Finish the last corner at least one arrowhead length + 4px (about 12px) before the tip; when space is tight, shrink that corner to `r=4` rather than moving the trunk onto a zone border (SKILL.md §6 rule 7).
 - Z-order: draw **all connectors before any node rectangle** (so node fills mask the line ends).
 - Exactly one `marker-end` per `<path>` / `<line>`. Never both `marker-start` and `marker-end`.
 - Labels: every `primary` and `secondary` connector gets a label (small mono, opaque paper-filled rect mask behind). `trigger` and `query` connectors are unlabelled.

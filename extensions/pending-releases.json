@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Illustrate 2.3.0 vendors illustration-tools 3.3.0 (animated SVG export; exported SVGs are valid XML). Workflow 1.9.1 pins it. Publish after successful main CI and downloaded asset verification."
+  "versions": {
+    "illustrate": "2.4.0",
+    "workflow": "1.9.2"
+  },
+  "status": "ready",
+  "note": "Illustrate 2.4.0 vendors illustration-tools 3.4.0 (arrow animation styles, GIF export, straight arrow ends). Workflow 1.9.2 pins it. Publish after successful main CI and downloaded asset verification."
 }

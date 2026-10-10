@@ -191,7 +191,7 @@ Three styles, bound to topology. Connectors drawn **before** all node rects (z-o
 
 - Source-side: exit at `(node_x + 100, lane_y_mid(src_lane))` — node's right edge, vertical center.
 - Destination-side: enter at `(step_cx(dst_step), node_y(dst_lane))` for downward, or `(step_cx(dst_step), node_y(dst_lane) + 64)` for upward.
-- Corner radius: 8-px Q-bezier at the bend.
+- Corner radius: 8-px Q-bezier at the bend. Finish the last corner at least one arrowhead length + 4px (about 12px) before the tip; when space is tight, shrink that corner to `r=4` rather than moving the trunk onto a zone border (SKILL.md §6 rule 7).
 - Same-lane edges (rare — same lane, adjacent steps): horizontal `<line>` from src right to dst left.
 - **No diagonals.** **No left-side entry.** **No exit from the top/bottom of a node.**
 

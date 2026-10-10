@@ -4,6 +4,11 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## Animated arrows and GIF — illustrate 2.4.0, workflow 1.9.2 — 2026-10-10
+
+- Illustrate 2.4.0 vendors illustration-tools 3.4.0: arrow animation styles, GIF export, and
+  straight arrow ends. Workflow 1.9.2 pins it.
+
 ## Animated SVG export — illustrate 2.3.0, workflow 1.9.1 — 2026-10-10
 
 - Illustrate 2.3.0 vendors illustration-tools 3.3.0: `export --animated` produces a self-playing SVG

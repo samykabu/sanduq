@@ -114,6 +114,7 @@ projects can choose automatic or manual handling in `.specify/extension-dependen
 /speckit-illustrate-generate create a sequence diagram for refund approval
 /speckit-illustrate-export docs/refund-approval.html --svg-only
 /speckit-illustrate-export docs/refund-approval-animated.html --animated
+/speckit-illustrate-export docs/refund-approval.html --gif --arrows pulse
 /speckit-illustrate-theme set cobalt dark
 /speckit-illustrate-import docs/legacy/order-flow.mmd --size doc-wide --detail balanced
 ```

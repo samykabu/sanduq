@@ -33,25 +33,45 @@ before PNG export, and reports every written file. The procedure below is the be
 and fallback reference; do not rewrite it into a temporary script when the bundled exporter is
 available.
 
-## Animated SVG for READMEs
+## Animated SVG and GIF for READMEs
 
-`--animated` turns a motion figure (built from `assets/template-motion.html`, with
-`data-motion-item data-step="N"` groups) into `<name>.animated.svg`: one reveal, step by step,
-that plays where Markdown shows SVG images, including GitHub.
+`--animated` writes `<name>.animated.svg`; `--gif` writes `<name>.gif` with the same animation.
+Both work for any diagram whose connectors carry arrowheads (markers), and for motion figures
+(built from `assets/template-motion.html`, with `data-motion-item data-step="N"` groups).
 
 ```bash
-python scripts/export_diagram.py path/to/diagram-animated.html --animated
+python scripts/export_diagram.py path/to/diagram.html --animated                    # arrows draw on
+python scripts/export_diagram.py path/to/diagram.html --animated --arrows pulse
+python scripts/export_diagram.py path/to/diagram.html --gif --arrows chevrons --theme dark
 ```
 
-- Each step fades in once, in `data-step` order, on the figure's own `--motion-hold` and
-  `--motion-step` clock. Opacity only: nothing moves.
-- No script and no remote fonts: image sandboxes block both. Text uses the font stack's local fallbacks.
-- `prefers-reduced-motion: reduce` shows the complete figure with no animation, and the last
+Arrow styles (`--arrows`, default `draw`), each moving in the arrow's direction: start to tip,
+tip-to-start for start-only heads, and from the middle out for two-headed arrows.
+
+| Style | What moves | Ends |
+| --- | --- | --- |
+| `draw` | Each arrow draws from its source to its tip, then its arrowhead appears | On the complete figure |
+| `flow` | The arrow becomes dashes that keep moving toward the tip | Loops |
+| `pulse` | A dot travels along each arrow | Loops |
+| `draw-flow` | Draws on like `draw`, then a slow accent dash flow continues | Loops after the draw |
+| `chevrons` | Small chevrons slide along each arrow | Loops |
+
+- Motion figures reveal each step once, in `data-step` order, on the figure's own
+  `--motion-hold` and `--motion-step` clock (opacity only), and their arrows animate with their step.
+  Other diagrams draw their arrows one after another.
+- The `.animated.svg` has no script and no remote fonts: image sandboxes block both. Text uses the
+  font stack's local fallbacks.
+- `prefers-reduced-motion: reduce` shows the complete figure with no animation. With `draw`, the last
   animated frame is that same complete figure.
 - Decorative overlays (`data-motion-decorative`) depend on the HTML page and are left out.
-- The exporter refuses a figure without steps, or one whose reveal is longer than 8 seconds.
+- The exporter refuses a figure with neither steps nor arrows, or a reveal longer than 8 seconds.
+- `--gif` renders the animation frame by frame in Chromium (Playwright) and needs Pillow
+  (`pip install pillow`). `--theme light|dark` picks the colour scheme, `--fps` (1–30, default 15)
+  the frame rate, `--scale` the pixel density. A `draw` GIF holds its final frame for 2.5 seconds
+  before repeating; looping styles loop seamlessly. A GIF cannot follow the reader's reduced-motion
+  setting, so prefer the `.animated.svg` where SVG images are allowed.
 
-Embed it like any image, with alt text that describes the complete figure, and keep the HTML
+Embed either like any image, with alt text that describes the complete figure, and keep the HTML
 source beside it.
 
 ## Scope

@@ -13,7 +13,7 @@
   - Leaf with no outgoing edges → `ink @ 0.05` fill + `muted` stroke.
 - **The cycle.** At most one back-edge points upward against rank order. It is the editorial point of the diagram: `accent` stroke, dashed `5,4`, `marker-end="url(#arrow-accent)"`, routed **around the outside** of the node stack — never straight through the middle, and never behind a node it doesn't connect to — with a masked resolved mono 8px `CYCLE` label at its visible end. The two nodes the cycle touches stay in their normal node treatment (§5) — no accent stroke or fill on the nodes themselves, or the 2-accent budget is blown on the wrong elements.
 - **Focal rule:** the 2 accent elements permitted per diagram are the back-edge and its `CYCLE` label. Nothing else in a dependency graph is accent.
-- All six §6 Mandatory connector rules apply in full, no exemptions: rounded right-angle elbows (`r=8`) between off-axis nodes, 6–10px label-margin, no overlapping connectors (bridge/hop at crossings), fanned attach points (≥12px apart) where multiple edges share a box edge, no connector passing behind a non-endpoint box, no label mask clipped by a later-painted node.
+- All seven §6 Mandatory connector rules apply in full, no exemptions: rounded right-angle elbows (`r=8`) between off-axis nodes, 6–10px label-margin, no overlapping connectors (bridge/hop at crossings), fanned attach points (≥12px apart) where multiple edges share a box edge, no connector passing behind a non-endpoint box, no label mask clipped by a later-painted node, a straight lead before every arrowhead.
 
 ## Complexity budget
 

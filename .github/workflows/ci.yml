@@ -181,6 +181,7 @@ jobs:
           python scripts/verify-motion.py --shipped
           python scripts/verify-semantic-motion.py
           python scripts/verify-geometry.py --all --baseline
+          python scripts/verify-arrow-ends.py --all
           python scripts/lint-skin.py --all --baseline
           for v in architecture-delta treemap marimekko sankey heatmap waterfall slopegraph ridgeline streamgraph bump bubble beeswarm; do python scripts/verify-$v.py --all; done
           python scripts/verify-polar.py

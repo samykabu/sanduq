@@ -222,6 +222,7 @@ Reused verbatim from `type-process.md` §3.1. No diagonals — ever.
 
 - Use `{src_cy + 8}` and `V {dst_top}` when destination lies BELOW source.
 - Use `{src_cy − 8}` and `V {dst_bottom}` when destination lies ABOVE source.
+- Finish the last corner at least one arrowhead length + 4px (about 12px) before the tip; when space is tight, shrink that corner to `r=4` rather than moving the trunk onto a zone border (SKILL.md §6 rule 7).
 
 ### 3.2 Exit / entry sides (configurable; defaults below)
 
