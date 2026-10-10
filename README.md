@@ -23,7 +23,7 @@ available as portable agent skills in [sanduq-skills](https://github.com/samykab
 | Product | Purpose | Lifecycle phase | Standalone | Requires | Hosts | License |
 | --- | --- | --- | --- | --- | --- | --- |
 | [Workflow](docs/extensions/workflow.md) | Resumable issue-to-PR dispatcher | All, as 16 stages | Yes | Python 3.10+, Git, `gh`; installs the extensions it uses | Codex, Claude Code (install tested) | PolyForm NC |
-| [Scope](docs/extensions/scope.md) | Issue scope, prerequisites and decomposition | Before and after Specify, before Plan | No | Workflow | Through Workflow | MIT |
+| [Scope](docs/extensions/scope.md) | Issue scope, prerequisites and decomposition | Before and after Specify, before Plan | No | Workflow, Illustrate | Through Workflow | MIT |
 | [Project](docs/extensions/project.md) | GitHub Project board sync | Specify to Implement | Yes | `gh` (optional) | Codex, Claude Code (unverified) | PolyForm NC |
 | [Assure](docs/extensions/assure.md) | QA readiness analysis and walkthrough | After Tasks, around Implement | Yes | Illustrate | Codex, Claude Code (unverified) | PolyForm NC |
 | [User Manual](docs/extensions/user-manual.md) | Audience-aware application manual | After Tasks and Implement; release | Yes | Illustrate | Codex, Claude Code (unverified) | PolyForm NC |

@@ -5,7 +5,7 @@ and the [scope page](https://github.com/samykabu/sanduq/blob/main/docs/extension
 Every command and its example is in the [command reference](https://github.com/samykabu/sanduq/blob/main/docs/reference/commands.md#scope).
 
 
-This README describes Scope 1.5.2. The [catalog](https://github.com/samykabu/sanduq/blob/main/catalog.json)
+This README describes Scope 1.6.0. The [catalog](https://github.com/samykabu/sanduq/blob/main/catalog.json)
 lists the published version. Scope is MIT licensed; see [LICENSE](https://github.com/samykabu/sanduq/blob/main/extensions/scope/LICENSE).
 
 Build with `python extensions/scripts/package.py scope`; the archive bundles the
