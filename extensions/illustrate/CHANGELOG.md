@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.0] - 2026-10-10
+
+- Vendors illustration-tools 3.3.0: `export --animated` writes a self-playing `<name>.animated.svg` from a
+  motion figure (opacity-only reveal as CSS inside the SVG; no script or remote fonts; reduced motion
+  shows the complete figure).
+- Exported SVGs are now valid XML (valueless HTML attributes get an empty value).
+
 ## [2.2.1] - 2026-10-10
 
 - Neutral example footers in the process-flow templates; no behavior change.

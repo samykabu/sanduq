@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.9.1] - 2026-10-10
+
+- `dependencies.json` pins Illustrate 2.3.0 (animated SVG export). No workflow behaviour change.
+
 ## [1.9.0] - 2026-10-10
 
 - The canonical source key is now `sanduq-source-key/1`. New receipts and CI plans use it;

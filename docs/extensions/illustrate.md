@@ -1,7 +1,7 @@
 # Illustrate
 
 **Purpose:** draw diagrams and charts as editable HTML with inline SVG, in your project's tracked
-color and font theme. It supports 44 diagram types and exports SVG and PNG on request.
+color and font theme. It supports 44 diagram types and exports SVG and PNG on request, and an animated SVG of a motion figure for README images.
 
 | | |
 | --- | --- |
@@ -36,6 +36,7 @@ dark modes.
 ```text
 $speckit-illustrate-generate Create a state diagram of refund request, approval, rejection and settlement from the real implementation.
 $speckit-illustrate-export docs/refund-approval.html --svg-only
+$speckit-illustrate-export docs/refund-approval-animated.html --animated
 $speckit-illustrate-import docs/legacy/order-flow.mmd --size doc-wide --detail balanced
 ```
 
@@ -51,7 +52,9 @@ applies the diagram type's rules, checks the HTML, and embeds the reviewed outpu
 
 ## Limits
 
-- PNG export needs Playwright and Chromium. SVG export needs Python.
+- PNG export needs Playwright and Chromium. SVG and animated SVG export need Python.
+- An animated SVG fades each step in once (opacity only), has no script or remote fonts, and
+  shows the complete figure to readers who prefer reduced motion.
 - The hand-drawn generator needs Node.js and an `npm install` in the skill directory.
 - Keep the editable HTML beside every export. Review the rendering before you embed it.
 - Old Diagram Design installs must migrate: `specify extension remove diagram-design`, then add `illustrate`.
