@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.1] - 2026-10-11
+
+- Vendors illustration-tools 3.4.1. Exports carry the page's CSS (theme tokens, classes and
+  `prefers-color-scheme` blocks) into the SVG, so shapes styled outside the `<svg>` no longer fall
+  back to black (29 shipped examples). Diagrams with nested icon SVGs are exported whole, and HTML
+  comments are stripped so the SVG stays valid XML. Fonts, page motion and `@import` stay out.
+
 ## [2.4.0] - 2026-10-10
 
 - Vendors illustration-tools 3.4.0: `export --arrows=draw|flow|pulse|draw-flow|chevrons` animates arrows

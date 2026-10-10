@@ -10,7 +10,7 @@ PR, illustration, and Memory processes. Use [install by host](../docs/start/inst
 | Extension | Source version | Commands |
 | --- | --- | ---: |
 | [assure](assure/README.md) | 2.3.2 | 3 |
-| [illustrate](illustrate/README.md) | 2.4.0 | 4 |
+| [illustrate](illustrate/README.md) | 2.4.1 | 4 |
 | [memory](memory/README.md) | 2.1.2 | 7 |
 | [pr](pr/README.md) | 4.2.2 | 2 |
 | [project](project/README.md) | 2.2.2 | 2 |
