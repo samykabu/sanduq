@@ -4,6 +4,12 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## Export keeps page styles — illustrate 2.4.1, workflow 1.9.4 — 2026-10-11
+
+- Illustrate 2.4.1 vendors illustration-tools 3.4.1: exported SVG, animated SVG and GIF keep the
+  page's styles, so diagrams styled by page classes or theme tokens no longer render black.
+  Workflow 1.9.4 pins it.
+
 ## Animated arrows and GIF — illustrate 2.4.0, workflow 1.9.2 — 2026-10-10
 
 - Illustrate 2.4.0 vendors illustration-tools 3.4.0: arrow animation styles, GIF export, and

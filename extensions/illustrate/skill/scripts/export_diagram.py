@@ -80,11 +80,141 @@ def xml_attributes(svg: str) -> str:
     return TAG_RE.sub(tag, svg)
 
 
+STYLE_RE = re.compile(r"<style\b[^>]*>(.*?)</style\s*>", re.IGNORECASE | re.DOTALL)
+CSS_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
+# A compound that stands for the page itself (the html/body ancestors or the diagram's own <svg>).
+ROOT_COMPOUND_RE = re.compile(r"^(?:html|body|:root|svg)(?![\w-])", re.IGNORECASE)
+# What a page-level rule may pass down to the figure: tokens and inherited text/paint properties, not layout.
+INHERITED_RE = re.compile(
+    r"^(?:--|color$|color-scheme$|font|letter-spacing$|word-spacing$|line-height$|text-|fill|stroke|paint-order$"
+    r"|dominant-baseline$|shape-rendering$|-webkit-font-smoothing$)", re.IGNORECASE)
+# The exporter owns motion: page animations and the page's motion runtime hooks stay behind.
+MOTION_PROPERTY_RE = re.compile(r"^(?:animation|transition)", re.IGNORECASE)
+BLOCK_AT_RULES = ("@media", "@supports", "@layer")
+
+
+def split_top(text: str, separator: str) -> list[str]:
+    """Split CSS text at `separator` outside quotes, parentheses and brackets."""
+    parts, depth, quote, start = [], 0, "", 0
+    for index, char in enumerate(text):
+        if quote:
+            quote = "" if char == quote else quote
+        elif char in "\"'":
+            quote = char
+        elif char in "([":
+            depth += 1
+        elif char in ")]":
+            depth -= 1
+        elif char == separator and depth == 0:
+            parts.append(text[start:index])
+            start = index + 1
+    parts.append(text[start:])
+    return [part.strip() for part in parts if part.strip()]
+
+
+def css_blocks(css: str) -> list[tuple[str, str]]:
+    """Top-level (prelude, body) pairs; statement at-rules such as @import come back with body None."""
+    blocks, index, length = [], 0, len(css)
+    while index < length:
+        brace, semicolon = css.find("{", index), css.find(";", index)
+        if brace == -1:
+            break
+        if css[index:].lstrip().startswith("@") and semicolon != -1 and semicolon < brace:
+            blocks.append((css[index:semicolon].strip(), None))
+            index = semicolon + 1
+            continue
+        depth, end, quote = 0, brace, ""
+        for end in range(brace, length):
+            char = css[end]
+            if quote:
+                quote = "" if char == quote else quote
+            elif char in "\"'":
+                quote = char
+            elif char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+        blocks.append((css[index:brace].strip(), css[brace + 1 : end]))
+        index = end + 1
+    return blocks
+
+
+def figure_rules(css: str) -> str:
+    """The page CSS that styles the figure, rewritten for a standalone SVG document.
+
+    html/body rules move to :root (the <svg> in its own file) keeping only tokens and inherited
+    text and paint properties; @import, @font-face, @keyframes and motion runtime rules are dropped.
+    """
+    out = []
+    for prelude, body in css_blocks(css):
+        if body is None:
+            continue
+        lowered = prelude.lower()
+        if lowered.startswith(BLOCK_AT_RULES):
+            inner = figure_rules(body)
+            if inner:
+                out.append(f"{prelude}{{{inner}}}")
+            continue
+        if lowered.startswith("@"):
+            continue
+        declarations = [d for d in split_top(body, ";") if not MOTION_PROPERTY_RE.match(d.split(":", 1)[0].strip())]
+        root, other = [], []
+        for selector in split_top(prelude, ","):
+            if "data-motion" in selector or "motion-ready" in selector:
+                continue
+            selector = re.sub(r"^(?:html|body)(?![\w-])", ":root", selector, flags=re.IGNORECASE)
+            group = root if ROOT_COMPOUND_RE.match(selector) and not re.search(r"[\s>+~]", selector) else other
+            if selector not in group:
+                group.append(selector)
+        inherited = [d for d in declarations if INHERITED_RE.match(d.split(":", 1)[0].strip())]
+        if root and inherited:
+            out.append(f"{','.join(root)}{{{';'.join(inherited)}}}")
+        if other and declarations:
+            out.append(f"{','.join(other)}{{{';'.join(declarations)}}}")
+    return "".join(out)
+
+
+def page_style(html: str, svg_span: tuple[int, int]) -> str:
+    """The page's own <style> rules (outside the figure) as a <style> element for the standalone SVG.
+
+    Shapes styled by page classes or custom properties otherwise fall back to the SVG default
+    (black fill) once the figure leaves its page.
+    """
+    outside = html[: svg_span[0]] + html[svg_span[1] :]
+    css = CSS_COMMENT_RE.sub("", "".join(STYLE_RE.findall(outside)))
+    rules = figure_rules(css)
+    if not rules:
+        return ""
+    rules = rules.replace("&", "&amp;").replace("<", "&lt;")
+    return f'<style data-illustrate-export-page="true">{rules}</style>'
+
+
+SVG_TAG_RE = re.compile(r"<(/?)svg\b[^>]*?(/?)>", re.IGNORECASE)
+COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+
+
+def figure_span(html: str) -> tuple[int, int]:
+    """Start and end of the first top-level <svg>, nested <svg> icons included."""
+    depth, start = 0, None
+    for tag in SVG_TAG_RE.finditer(html):
+        if tag.group(1):
+            depth -= 1
+            if depth == 0 and start is not None:
+                return start, tag.end()
+        elif not tag.group(2):
+            if depth == 0:
+                start = tag.start()
+            depth += 1
+    raise ExportError("No <svg> diagram found in the source HTML.")
+
+
 def standalone_svg(html: str) -> str:
-    match = SVG_RE.search(html)
-    if match is None:
-        raise ExportError("No <svg> diagram found in the source HTML.")
-    svg = match.group(0)
+    span = figure_span(html)
+    # HTML comments may hold "--", which XML forbids; an export has no use for them.
+    svg = COMMENT_RE.sub("", html[span[0] : span[1]])
+    figure_style = FONT_STYLE + page_style(html, span)
     opening_match = OPENING_SVG_RE.match(svg)
     if opening_match is None:
         raise ExportError("The first SVG has an invalid opening tag.")
@@ -97,11 +227,11 @@ def standalone_svg(html: str) -> str:
 
     defs_match = DEFS_RE.search(svg)
     if defs_match:
-        svg = svg[: defs_match.end()] + FONT_STYLE + svg[defs_match.end() :]
+        svg = svg[: defs_match.end()] + figure_style + svg[defs_match.end() :]
     else:
         opening_match = OPENING_SVG_RE.match(svg)
         assert opening_match is not None
-        svg = svg[: opening_match.end()] + f"<defs>{FONT_STYLE}</defs>" + svg[opening_match.end() :]
+        svg = svg[: opening_match.end()] + f"<defs>{figure_style}</defs>" + svg[opening_match.end() :]
     return '<?xml version="1.0" encoding="UTF-8"?>\n' + xml_attributes(svg) + "\n"
 
 

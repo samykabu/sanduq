@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Workflow 1.9.3 makes issue decisions selectable (native task lists), upgrades legacy questions, maps the decision lifecycle to Need Clarifications, and pins Scope 1.6.1 (fresh issue-bound gate, verified REST fallback and idempotent existing-issue Project binding). Publish after successful main CI and downloaded asset verification."
+  "versions": {
+    "illustrate": "2.4.1",
+    "workflow": "1.9.4"
+  },
+  "status": "ready",
+  "note": "Illustrate 2.4.1 vendors illustration-tools 3.4.1 (exports keep page styles; no black fills, whole figures, valid XML). Workflow 1.9.4 pins it. Publish after successful main CI and downloaded asset verification."
 }

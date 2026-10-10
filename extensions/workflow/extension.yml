@@ -2,7 +2,7 @@ schema_version: '1.0'
 extension:
   id: workflow
   name: Sanduq Workflow
-  version: "1.9.3"
+  version: "1.9.4"
   description: GitHub issue decisions and resumable Scope-to-PR orchestration with
     optional model-aware delegation, QA, User Manual, and workflow evidence CI.
   author: Samy K. Abushanab

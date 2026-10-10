@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.9.4] - 2026-10-11
+
+- `dependencies.json` pins Illustrate 2.4.1 (exports keep page styles, so diagrams no longer render
+  black). No workflow behaviour change.
+
 ## [1.9.3] - 2026-10-10
 
 - Issue decisions are selectable. `decisions.py ask` posts a native GitHub task list, every box
