@@ -1,37 +1,30 @@
 # Changelog
 
-## [1.6.3] - 2026-10-10
-
-- `gh project` can report a blocked GraphQL API as "unknown owner type" while the cheap budget
-  probe still shows points. That masked failure now switches Project operations to the REST
-  Projects API only when a direct owner query is itself rate-limited, or when the REST Projects
-  API resolves the same configured owner, `ownerType` and project number. A wrong owner, owner
-  Before any REST operation the request must name the configured owner, Project number and
-  Project ID, carry only supported arguments, and match the live Project's node ID, owner and
-  owner type. An isolated `RATE_LIMIT` token counts as a rate limit like the spaced wording.
-  type or project number, a missing or inaccessible Project, and every other error are still
-  raised unchanged. The reported transport is `rest`.
-
-## [1.6.2] - 2026-10-10
-
-- Project operations fall back to the REST Projects API when the failed `gh project` request itself
-  reports a GraphQL rate limit, even if the cheap budget probe still shows points left (a costly
-  item listing can be refused first). The reset backoff and later GraphQL probing are unchanged,
-  failures that do not name a rate limit are still raised, and the listing query is untouched.
-
 ## [1.6.1] - 2026-10-10
 
-- W01d restricts fresh bind to the owned initial Specify phase before writes. A changed
-  resolved prompt requires the exact supplied analysis artifact in verified applied
-  Decision evidence; otherwise the unchanged published prompt stays authoritative
-  and local analysis is consulted evidence only. No new approval is fabricated.
-
-- Fresh issue-bound Workflow Scope/Specify may revalidate a published approved native leaf
-  in mapped Feature Specification with explicit `--feature`, `--token`, `--session` and
-  `--analysis`. Checks repository, feature, issue, branch, executor, applied live decisions,
-  current scope fingerprint, prerequisites, native parent/child relationship and retained
-  parent approval. Returns analysis/decision hashes and original approval without publishing
-  or creating an approval receipt. Standalone Backlog gates remain unchanged.
+- Fresh bind is restricted to the owned initial Specify phase, before any write. A changed
+  resolved prompt requires the exact supplied analysis artifact in verified, applied Decision
+  evidence; otherwise the unchanged published prompt stays authoritative and local analysis is
+  consulted evidence only. No new approval is fabricated.
+- Fresh issue-bound Workflow Scope/Specify may revalidate a published, approved native leaf in
+  the mapped Feature Specification status with explicit `--feature`, `--token`, `--session` and
+  `--analysis`. It checks the repository, feature, issue, branch, executor, applied live
+  decisions, current scope fingerprint, prerequisites, native parent/child relationship and
+  retained parent approval, and returns the analysis and decision hashes and the original
+  approval without publishing or creating an approval receipt. Standalone Backlog gates are
+  unchanged.
+- Project operations fall back to the REST Projects API when the failed `gh project` request
+  itself reports a GraphQL rate limit, even if the cheap budget probe still shows points left
+  (a costly item listing can be refused first). An isolated `RATE_LIMIT` token counts like the
+  spaced wording. The reset backoff, later GraphQL probing and the listing query are unchanged.
+- `gh project` can report a blocked GraphQL API as "unknown owner type" while the budget probe
+  still shows points. That masked failure switches to REST only when a direct owner query is
+  itself rate-limited, or when the REST Projects API resolves the same configured owner,
+  `ownerType` and project number. A wrong owner, owner type or project number, a missing or
+  inaccessible Project, and every other error are still raised unchanged.
+- Before any REST operation the request must name the configured owner, Project number and
+  Project ID, carry only supported arguments, and match the live Project's node ID, owner and
+  owner type. The reported transport is `rest`.
 - The shared Project REST adapter supports single-select field creation and fresh field
   discovery; GitHub subprocess calls have a 30-second bound.
 - This is a material binding change: focused independent review is required before installation.

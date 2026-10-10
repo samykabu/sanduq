@@ -14,9 +14,9 @@ PR, illustration, and Memory processes. Use [install by host](../docs/start/inst
 | [memory](memory/README.md) | 2.1.2 | 7 |
 | [pr](pr/README.md) | 4.2.2 | 2 |
 | [project](project/README.md) | 2.2.2 | 2 |
-| [scope](scope/README.md) | 1.6.0 | 7 |
+| [scope](scope/README.md) | 1.6.1 | 7 |
 | [user-manual](user-manual/README.md) | 1.5.2 | 4 |
-| [workflow](workflow/README.md) | 1.9.2 | 13 |
+| [workflow](workflow/README.md) | 1.9.3 | 13 |
 
 Published versions live in the authoritative root [catalog](../catalog.json);
 [catalog.json](catalog.json) mirrors it.

@@ -2,9 +2,30 @@
 
 ## [1.9.3] - 2026-10-10
 
-- Pins Scope 1.6.3, which verifies a masked "unknown owner type" Project failure against a
-  rate-limited owner query or the same REST Project before using the REST Projects API.
-  No Workflow behavior changed.
+- Issue decisions are selectable. `decisions.py ask` posts a native GitHub task list, every box
+  unticked, with an optional `(Recommended)` suffix (`--recommended B`). `--mode single` (default)
+  needs exactly one tick; `--mode multiple` accepts one or more. A tick is read without a new
+  comment and records no author, because GitHub does not say who edited the box. Typed replies
+  (`SD1: B`, or `SD1: A, C` for multiple) still work, and a tick that disagrees with a reply is a
+  conflict. Any other edit to a question (choice text, markers, recommendation) fails closed.
+- `decisions.py upgrade-questions` rewrites legacy `- A.` question comments into the selectable
+  format. It keeps IDs, options, request digests and every real reply, never ticks a box, and is
+  safe to repeat. Legacy v1 questions and replies are still read unchanged.
+- A pending or conflicting decision parks a mapped Backlog or Feature Specification issue in the
+  mapped Need Clarifications status. Once nothing is pending, the issue returns to the mapped
+  Feature Specification only if Decisions parked it and the project's
+  `clarification.resume_on_reinvoke` is `reread-answers`. Any other status is left alone, so an
+  advanced issue never regresses. `decisions.lifecycle_status: false` opts out. The Decision
+  field is still synced as before.
+- Decision commands bind a pre-Specify checkpoint to its issue without a `scope-source.json` or an
+  active claim. Only valid paused pre-Specify work may read across branches; active or bound work
+  requires its checkpoint branch and current executor token and session. Foreign issue or feature
+  ledgers fail closed. The dispatcher passes verified ownership on completion.
+- Decision and lifecycle Project writes are reread remotely, with durable pre-write parking
+  intents for interruption recovery, and use the shared Scope REST transport when GraphQL is
+  exhausted.
+- Pins Scope 1.6.1 (fresh issue-bound gate and verified REST fallback for Project operations);
+  review it before installing.
 
 ## [1.9.2] - 2026-10-10
 
