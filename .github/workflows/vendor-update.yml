@@ -1,69 +1,60 @@
 name: vendor-update
 
-# Triggered by a samykabu/sanduq-skills release (or by hand): vendor the released bundle into the
-# extensions, pin the marketplace entry to the release commit, and open a pull request.
+# Daily (and on demand): if samykabu/sanduq-skills has a newer bundle release than vendor.lock.json,
+# vendor it into the extensions, pin the marketplace entry to that release, and open a pull request.
+# sanduq-skills is public, so this needs no cross-repository token.
 on:
+  schedule:
+    - cron: '17 5 * * *'
   workflow_dispatch:
-    inputs:
-      bundle:
-        description: illustration-tools, dev-tools or agent-tools
-        required: true
-      ref:
-        description: Release tag in sanduq-skills, e.g. illustration-tools-v3.2.2
-        required: true
-      sha:
-        description: The tag's 40-character commit
-        required: true
 
 permissions:
   contents: write
   pull-requests: write
+
+concurrency:
+  group: vendor-update
+  cancel-in-progress: false
 
 jobs:
   vendor:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          repository: samykabu/sanduq-skills
-          ref: ${{ inputs.sha }}
-          fetch-depth: 0
-          path: .skills-source
-      - name: Vendor and pin
-        env:
-          BUNDLE: ${{ inputs.bundle }}
-          REF: ${{ inputs.ref }}
-          SHA: ${{ inputs.sha }}
+          python-version: '3.13'
+      - name: Fetch sanduq-skills releases
+        run: git clone --quiet --filter=blob:none https://github.com/samykabu/sanduq-skills.git "$RUNNER_TEMP/skills"
+      - name: Vendor newer releases
+        id: update
         run: |
-          case "$BUNDLE" in
-            illustration-tools) input=illustrate ;;
-            dev-tools) input=user-manual ;;
-            agent-tools) input=delegate-task ;;
-            *) echo "unknown bundle $BUNDLE"; exit 1 ;;
+          changed=$(python3 extensions/scripts/vendor.py update --source "$RUNNER_TEMP/skills")
+          echo "$changed"
+          case "$changed" in
+            "every bundle is at its newest release") echo "tags=" >> "$GITHUB_OUTPUT" ;;
+            *) echo "tags=$changed" >> "$GITHUB_OUTPUT" ;;
           esac
-          test "$(git -C .skills-source rev-parse "$REF^{commit}")" = "$SHA"
-          python3 extensions/scripts/vendor.py sync --source .skills-source --input "$input" --ref "$REF"
-          python3 - <<'PY'
-          import json, os, pathlib
-          path = pathlib.Path('.claude-plugin/marketplace.json')
-          data = json.loads(path.read_text(encoding='utf-8'))
-          for plugin in data['plugins']:
-              if plugin['name'] == os.environ['BUNDLE']:
-                  plugin['source'].update(ref=os.environ['REF'], sha=os.environ['SHA'])
-          path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
-          PY
-          rm -rf .skills-source
+      - name: Check the vendored tree and documentation
+        if: steps.update.outputs.tags != ''
+        run: |
+          python3 -m pip install --quiet pyyaml
           python3 extensions/scripts/vendor.py check
+          python3 extensions/scripts/check_docs.py
       - name: Open pull request
+        if: steps.update.outputs.tags != ''
         env:
           GH_TOKEN: ${{ github.token }}
+          TAGS: ${{ steps.update.outputs.tags }}
         run: |
-          branch="vendor/${{ inputs.ref }}"
+          branch="vendor/$(echo "$TAGS" | tr ' ' '+')"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            echo "A pull request branch for $TAGS already exists."; exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$branch"
           git add -A
-          git commit -m "chore(vendor): ${{ inputs.ref }} from sanduq-skills"
+          git commit -m "chore(vendor): $TAGS from sanduq-skills"
           git push origin "$branch"
-          gh pr create --title "Vendor ${{ inputs.ref }}" --body "Vendors ${{ inputs.ref }} (${{ inputs.sha }}) from samykabu/sanduq-skills and pins the marketplace entry. Extensions that ship the vendored files need a patch release recorded in extensions/pending-releases.json."
+          gh pr create --title "Vendor $TAGS from sanduq-skills" --body "Vendors $TAGS from samykabu/sanduq-skills and pins the marketplace entries to those releases. Extensions that ship the vendored files need a patch release recorded in extensions/pending-releases.json before merging. Pull requests opened by this workflow do not start CI on their own; push an empty commit or re-run CI from the Actions tab."
