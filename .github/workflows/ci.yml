@@ -148,6 +148,14 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         suite: [workflow, scope, user-manual, memory, illustrate]
     runs-on: ${{ matrix.os }}
+    # Tests create and delete many temporary repositories; a detached `git gc --auto` or background
+    # maintenance writing into one while it is removed fails cleanup (Errno 39) on Linux.
+    env:
+      GIT_CONFIG_COUNT: '2'
+      GIT_CONFIG_KEY_0: gc.auto
+      GIT_CONFIG_VALUE_0: '0'
+      GIT_CONFIG_KEY_1: maintenance.auto
+      GIT_CONFIG_VALUE_1: 'false'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

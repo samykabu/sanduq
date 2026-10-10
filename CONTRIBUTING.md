@@ -120,16 +120,16 @@ infrastructure and skipped checks accurately; package creation alone is not live
 
 ## Update a vendored skill
 
-Change and release the skill in sanduq-skills first (tag `<bundle>-vX.Y.Z`). Its release runs
-`vendor-update` here, or run it locally against a sanduq-skills clone:
+Change and release the skill in sanduq-skills first (tag `<bundle>-vX.Y.Z`). Every day, the
+`vendor-update` workflow here vendors any newer release, pins its marketplace entry, and opens a
+pull request; run it from the Actions tab to skip the wait. To do the same locally:
 
 ```bash
-python extensions/scripts/vendor.py sync --source ../sanduq-skills --input illustrate --ref illustration-tools-v3.2.2
+python extensions/scripts/vendor.py update --source ../sanduq-skills
 python extensions/scripts/vendor.py check
 ```
 
-Then pin the marketplace entry to the same tag and commit, and record a patch release for each
-extension that ships the vendored files. `extensions/user-manual/ADAPTER.md` lists the User Manual
+Record a patch release for each extension that ships the vendored files. `extensions/user-manual/ADAPTER.md` lists the User Manual
 files that are vendored, rewritten, or owned here.
 
 ## Update documentation and assets
