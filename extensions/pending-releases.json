@@ -1,9 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "illustrate": "2.4.1",
-    "workflow": "1.9.4"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Illustrate 2.4.1 vendors illustration-tools 3.4.1 (exports keep page styles; no black fills, whole figures, valid XML). Workflow 1.9.4 pins it. Publish after successful main CI and downloaded asset verification."
 }

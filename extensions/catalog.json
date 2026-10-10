@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-10-10T22:49:09.912283+00:00",
+  "updated_at": "2026-10-10T23:33:48.639538+00:00",
   "catalog_url": "https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json",
   "extensions": {
     "project": {
@@ -123,14 +123,14 @@
     "illustrate": {
       "name": "Illustrate",
       "id": "illustrate",
-      "version": "2.4.0",
+      "version": "2.4.1",
       "description": "Generate, import, and export forty-four technical, product, architecture, process, and quantitative illustration types with tracked project-level light/dark color and font themes.",
       "author": "Samy K. Abushanab",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/illustrate",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/illustrate/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/illustrate/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/illustrate-v2.4.0/illustrate.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/illustrate-v2.4.1/illustrate.zip",
       "license": "PolyForm-Noncommercial-1.0.0",
       "category": "documentation",
       "effect": "read-write",
@@ -181,8 +181,8 @@
       ],
       "verified": false,
       "created_at": "2026-07-18T15:47:12Z",
-      "updated_at": "2026-10-10T20:11:14.705687+00:00",
-      "sha256": "e166570403a08dd6bc87a2aa65248cff0075a917220cec4a76996393faa1dca7"
+      "updated_at": "2026-10-10T23:33:48.601945+00:00",
+      "sha256": "51399bbdd89d5513e7b9a9b1ad2a9a08329491235a2010309c969a809772d0e4"
     },
     "assure": {
       "name": "Assure",
@@ -307,7 +307,7 @@
     "workflow": {
       "name": "Sanduq Workflow",
       "id": "workflow",
-      "version": "1.9.3",
+      "version": "1.9.4",
       "description": "GitHub issue decisions and resumable Scope-to-PR orchestration with optional model-aware delegation, QA, User Manual, and workflow evidence CI.",
       "author": "Samy K. Abushanab",
       "license": "PolyForm-Noncommercial-1.0.0",
@@ -315,7 +315,7 @@
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/workflow",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v1.9.3/workflow.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v1.9.4/workflow.zip",
       "requires": {
         "speckit_version": ">=1.0.0,<2.0.0",
         "tools": [
@@ -349,8 +349,8 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "5a99a29a5befc14505a3b83ed6bef65a83642f144b0048ba60f2cc5c6d20ec50",
-      "updated_at": "2026-10-10T22:49:09.898192+00:00"
+      "sha256": "2cbda46270e4b4df75963ead08d6ddeb9ecf861d182f980fdaa9f3d55e34d478",
+      "updated_at": "2026-10-10T23:33:48.639493+00:00"
     },
     "scope": {
       "name": "Speckit Scope",
