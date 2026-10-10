@@ -1,8 +1,8 @@
 # Workflow pilot review: Review Home
 
 Reviewed 2026-09-20. The pilot exercised the managed lifecycle on
-[Bunyan issue #10](https://github.com/abushanab-net/Bunyan/issues/10) through
-[PR #368](https://github.com/abushanab-net/Bunyan/pull/368). It demonstrated a usable
+The pilot project issue #10 through
+PR #368. It demonstrated a usable
 Scope-to-PR workflow, with operational defects now addressed in the reusable
 source. It did **not** establish an enforced, fully green merge-to-live workflow.
 
@@ -17,13 +17,13 @@ Issue #10 is closed as completed. See the timestamped
 The final head added a merge of `develop` after the earlier verified revision
 `564399416a977fe88441d7938b2d8232f618393a`. That merge changed 12 files, including
 CI configuration, verification adapters and tooling tests. The final-head
-[workflow check](https://github.com/abushanab-net/Bunyan/actions/runs/35470990632)
+workflow check
 failed with `STALE_RECEIPT: verify`. This is correct rejection of changed build/test
 inputs, not evidence that the freshness gate should be relaxed.
 
 The merge SHA also became the head of the separate promotion
-[PR #319](https://github.com/abushanab-net/Bunyan/pull/319). Its
-[workflow run](https://github.com/abushanab-net/Bunyan/actions/runs/35471000822)
+PR #319. Its
+workflow run
 failed with `CHECKPOINT_MISSING_OR_WRONG_FEATURE`; the comparison against
 `8f13e043b1b998049959aa63bd2c87a1cf43b89a` includes legacy feature directories
 outside the managed pilot. This was a `pull_request` event, not a push invocation
@@ -76,7 +76,7 @@ revision, not tests rerun against the later merge by this workflow review.
 
 ## Adoption and release boundary
 
-Reusable changes are in Sanduq, not edits to Bunyan's installed distributions.
+Reusable changes are in Sanduq, not edits to the pilot project's installed distributions.
 Workflow 1.0.0 and coordinated dependency versions remain pending releases.
 Publishing archives and adopting them in consumers is separate from this source PR.
 

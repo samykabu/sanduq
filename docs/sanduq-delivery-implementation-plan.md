@@ -5,7 +5,7 @@ Source: [design report](sanduq-native-workflow-prototype.html).
 The [isolated native prototype result](native-workflow-prototype-results.md) is
 currently no-go for production scheduling; the existing dispatcher is retained.
 Target: a reusable Sanduq workflow for a new project, with tested installation paths
-for an existing repository without Spec Kit and an older Sanduq installation. Bunyan
+for an existing repository without Spec Kit and an older Sanduq installation. The pilot project
 is a consumer example, not an implementation target.
 
 ## Decisions already made

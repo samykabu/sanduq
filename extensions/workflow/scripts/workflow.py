@@ -1350,8 +1350,12 @@ def ci_evidence_current(root, receipt):
                                   cwd=root, capture_output=True)
         if ancestor.returncode != 0:
             return False
-    _, key = current_source_key(root)
-    return key is not None and evidence['source_key'] == key == receipt.get('source_key')
+    head, _ = current_source_key(root)
+    if head is None:
+        return False
+    # Either key may predate the current key version; each version keys the same tree.
+    keys = set(sk.source_keys(root, 'HEAD').values())
+    return evidence['source_key'] in keys and receipt.get('source_key') in keys
 
 
 def receipt_status(root, feature, stage, receipt, policy=None):
@@ -2172,7 +2176,8 @@ class Run:
         local = None
         if isinstance(plan.get('headSha'), str) and ci_evidence.SHA.match(plan['headSha']):
             try:
-                local = {'tree': sk.tree_of(self.root, plan['headSha']), 'key': sk.source_key(self.root, plan['headSha'])}
+                local = {'tree': sk.tree_of(self.root, plan['headSha']),
+                         'key': sk.source_key(self.root, plan['headSha'], ci_evidence.plan_key_version(plan))}
             except sk.SourceKeyError:
                 local = {'tree': 'unavailable (fetch ' + plan['headSha'] + ')', 'key': 'unavailable'}
         errors = ci_evidence.validate(evidence, repository, int(run_id), check['name'], check['workflow'],
@@ -2182,7 +2187,7 @@ class Run:
                                       capture_output=True)
             if ancestor.returncode != 0:
                 errors.append(f'Run head {plan["headSha"]} is not a commit of this branch (an ancestor of {head}).')
-        if not errors and plan['sourceKey'] != key:
+        if not errors and plan['sourceKey'] != sk.source_key(self.root, head, ci_evidence.plan_key_version(plan)):
             errors.append(f'Run {run_id} verified source key {plan["sourceKey"]}, not the current {key}: the source '
                           f'changed after {plan["headSha"]}; use a run on a commit with the current source.')
         require(not errors, 'CHECK_RUN_REJECTED: run ' + str(run_id) + ': ' + ' '.join(errors))

@@ -9,9 +9,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ci_evidence as ce  # noqa: E402
 import fake_github  # noqa: E402
 
-REPOSITORY = 'abushanab-net/Bunyan'
+REPOSITORY = 'example-org/booking-app'
 PUSH_RUN, PR_RUN = 36334869932, 36333797874
-# Recomputed by source_key.py from the Bunyan repository for tree 7d58f42 (the tree of both runs' heads), matching
+# Recomputed by source_key.py from the recorded repository for tree 7d58f42 (the tree of both runs' heads), matching
 # the artifacts' sourceKey; recorded so the tests need neither the repository nor the network.
 TREE = '7d58f42d5a14cc94ca4f234bd7cd626090f94c57'
 HEAD = '270dfb5e43e2a66a95ba3b5e12dc3d1c46b22891'
@@ -39,7 +39,7 @@ class RecordedRunTests(unittest.TestCase):
         self.assertEqual(len(plan['lanes']), 45)
         self.assertEqual(plan['lanes'], sorted(set(plan['lanes'])))
         # Everything came through the REST endpoints of the contract, the artifact through its zip.
-        self.assertIn('repos/abushanab-net/Bunyan/actions/artifacts/10936644522/zip', client.calls)
+        self.assertIn('repos/example-org/booking-app/actions/artifacts/10936644522/zip', client.calls)
 
     def test_pull_request_run_shares_the_tree_and_key_of_its_merge(self):
         evidence, errors = self.check(fake_github.recorded(PR_RUN), PR_RUN)

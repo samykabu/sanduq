@@ -72,7 +72,7 @@ def recheck_ci_evidence(root, feature, stage, receipt, policy, github=None):
     local = None
     if isinstance(head, str) and ci_evidence.SHA.match(head):
         try:
-            local = {'tree': sk.tree_of(root, head), 'key': sk.source_key(root, head)}
+            local = {'tree': sk.tree_of(root, head), 'key': sk.source_key(root, head, ci_evidence.plan_key_version(plan))}
         except sk.SourceKeyError:
             local = {'tree': 'unavailable (fetch ' + head + ')', 'key': 'unavailable'}
     errors = ci_evidence.validate(evidence, repository, int(recorded['run_id']), check['name'], check['workflow'],

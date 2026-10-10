@@ -1,0 +1,650 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sanduq Documentation Overhaul</title>
+<style>
+:root{--bg:#fbfaf7;--fg:#1f2421;--muted:#5b625e;--line:#e2ddd3;--accent:#233C32;--accent2:#C65B36;--code:#f1eee8;--quote:#fff4ec}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141816;--fg:#e7e9e6;--muted:#a3aaa6;--line:#2c332f;--accent:#8fc3a8;--accent2:#e48a64;--code:#1d2320;--quote:#2a1f19}}
+:root[data-theme="dark"]{--bg:#141816;--fg:#e7e9e6;--muted:#a3aaa6;--line:#2c332f;--accent:#8fc3a8;--accent2:#e48a64;--code:#1d2320;--quote:#2a1f19}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1080px;margin:0 auto;padding:40px 16px 80px}
+h1{font-size:2rem;line-height:1.2;color:var(--accent);margin:0 0 .5rem}
+h2{margin-top:2.6rem;padding-bottom:.3rem;border-bottom:2px solid var(--line);color:var(--accent)}
+h3{margin-top:1.8rem}
+a{color:var(--accent2)}
+table{border-collapse:collapse;width:100%;margin:1rem 0;font-size:.92rem;display:block;overflow-x:auto}
+th,td{border:1px solid var(--line);padding:.45rem .6rem;text-align:left;vertical-align:top}
+th{background:var(--code)}
+tr:nth-child(even) td{background:color-mix(in srgb,var(--code) 45%,transparent)}
+code{background:var(--code);padding:.1em .35em;border-radius:4px;font-size:.88em}
+pre{background:var(--code);padding:1rem;border-radius:8px;overflow-x:auto;line-height:1.35}
+pre code{background:none;padding:0}
+blockquote{margin:1rem 0;padding:.6rem 1rem;border-left:4px solid var(--accent2);background:var(--quote);border-radius:0 6px 6px 0}
+</style></head><body><main>
+<h1>Sanduq documentation overhaul and repository split: plan</h1>
+<p>Status: <strong>final draft for owner approval</strong> (v2, after three-round review) · Date: 2026-10-10 · Owner: Samy K. Abushanab</p>
+<p>This plan fixes the gaps in Sanduq&#39;s README and documentation and splits the repository so that
+portable-skill users and Spec Kit users each get a clear starting point. Two independent reviewers,
+Claude Fable 5.1 and Codex GPT-6 Astra, checked the findings and the plan against the repository.
+Section 9 records how they reached consensus.</p>
+<h2>1. Decisions</h2>
+<table>
+<thead>
+<tr>
+<th>Topic</th>
+<th>Decision</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Repository layout</td>
+<td><strong>Two repositories.</strong> New <code>samykabu/sanduq-skills</code> for portable skills. <code>samykabu/sanduq</code> (URL unchanged) for the 8 Spec Kit extensions and presets.</td>
+</tr>
+<tr>
+<td>Licenses</td>
+<td><code>sanduq-skills</code> is <strong>MIT</strong>. In <code>sanduq</code>, Scope, scope-gate and scope-brainstorm stay <strong>MIT</strong>; everything else stays <strong>PolyForm Noncommercial 1.0.0</strong>.</td>
+</tr>
+<tr>
+<td>Canonical sources</td>
+<td><strong>Illustrate, the User Manual skills and Delegate Task</strong> live in <code>sanduq-skills</code>. The extensions repo vendors pinned releases of them.</td>
+</tr>
+<tr>
+<td>Claude plugin marketplace</td>
+<td><strong>Needs your confirmation (R1).</strong> Recommended: keep the single <code>sanduq</code> marketplace at <code>samykabu/sanduq</code>, with entries pointing into <code>sanduq-skills</code>. See section 4.3.</td>
+</tr>
+<tr>
+<td>Documentation home</td>
+<td>Repository Markdown only, rendered by GitHub</td>
+</tr>
+<tr>
+<td>Language</td>
+<td>Plain English, a style guide and a glossary. Arabic is deferred.</td>
+</tr>
+<tr>
+<td>Motion</td>
+<td>Rich, delivered in stages. Motion never blocks a text release.</td>
+</tr>
+<tr>
+<td>Hosts</td>
+<td>Codex, Claude Code, Claude Desktop. opencode is deferred; Copilot is outside this plan&#39;s supported hosts.</td>
+</tr>
+<tr>
+<td>Scope</td>
+<td>Stays Workflow-only. Its Archify dependency is replaced by Illustrate in a <strong>separate track (S)</strong>.</td>
+</tr>
+<tr>
+<td>&quot;Superbrain&quot;</td>
+<td>Means Superpowers (obra/superpowers)</td>
+</tr>
+</tbody></table>
+<h2>2. Findings (corrected after review)</h2>
+<p>Several original findings overstated the gap: the information exists, but it is scattered across pages.
+The table marks these <strong>Consolidate</strong>. Findings with no existing coverage are marked <strong>Missing</strong>.</p>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Sev.</th>
+<th>Kind</th>
+<th>Finding</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>A1</td>
+<td>High</td>
+<td>Missing</td>
+<td>The README groups content by packaging format (skill, plugin, extension), not by product. There is no product catalog with purpose, version, standalone status and dependencies.</td>
+</tr>
+<tr>
+<td>A2</td>
+<td>High</td>
+<td>Consolidate</td>
+<td>Dependencies are stated in several places (<code>getting-started.md</code>, <code>extensions.md</code>) but there is no single graph. The README&#39;s &quot;use separately&quot; framing contradicts Scope&#39;s hard dependency on Workflow.</td>
+</tr>
+<tr>
+<td>A3</td>
+<td>High</td>
+<td>Missing</td>
+<td>Ten internal design and progress records, evidence JSON and <code>prototypes/</code> sit in the user path.</td>
+</tr>
+<tr>
+<td>A4</td>
+<td>Medium</td>
+<td>Missing</td>
+<td>Skills are duplicated across <code>skills/</code> and <code>extensions/</code>. Illustrate has three version schemes: extension 2.2.0, plugin 3.2.0, READMEs 3.1.0. <code>plugins/README.md</code> and <code>skills/README.md</code> are stale.</td>
+</tr>
+<tr>
+<td>A5</td>
+<td>Low</td>
+<td>Missing</td>
+<td>Authorship is inconsistent (illustration-tools is credited to &quot;Resal Engineering&quot;).</td>
+</tr>
+<tr>
+<td>B1</td>
+<td>High</td>
+<td>Consolidate</td>
+<td>Phase hooks are documented per package, but no page shows the whole lifecycle.</td>
+</tr>
+<tr>
+<td>B2</td>
+<td>High</td>
+<td>Consolidate</td>
+<td>Install paths exist. End-to-end scenarios per adoption level do not.</td>
+</tr>
+<tr>
+<td>B3</td>
+<td>Medium</td>
+<td>Consolidate</td>
+<td>Hook optionality is explained thinly. Init-time changes are not explained at all: Project and Assure can make hooks required, and Workflow reconciles hooks.</td>
+</tr>
+<tr>
+<td>C1</td>
+<td>High</td>
+<td>Missing</td>
+<td>No Claude Desktop guidance.</td>
+</tr>
+<tr>
+<td>C2</td>
+<td>High</td>
+<td>Missing</td>
+<td>No complete list of 8 install lines and no recipes for installing a set.</td>
+</tr>
+<tr>
+<td>C3</td>
+<td>Medium</td>
+<td>Consolidate</td>
+<td>Prerequisites are partly present (<code>gh</code> scopes, Node 18, the Spec Kit link). Missing: install commands, tested versions, per-OS notes, PDF libraries, and Node for Illustrate&#39;s hand-drawn generator.</td>
+</tr>
+<tr>
+<td>C4</td>
+<td>High</td>
+<td>Missing</td>
+<td>User docs give no source or install steps for SuperSpec (its source is only in <code>extensions/workflow/dependencies.json</code>), the Superpowers Bridge, or Superpowers. Versions come from upstream manifests: Bridge 1.3.0 requires Superpowers ≥5.1, per <code>lihan3238/speckit-superpowers-bridge</code> <code>extension.yml</code> as installed in a consumer.</td>
+</tr>
+<tr>
+<td>C5</td>
+<td>Medium</td>
+<td>Missing</td>
+<td>Compatibility is recorded as maintainer evidence, not as a user support matrix.</td>
+</tr>
+<tr>
+<td>D1</td>
+<td>High</td>
+<td>Missing</td>
+<td>No glossary. Terms such as claim, receipt, dispatcher and evidence gate are never defined.</td>
+</tr>
+<tr>
+<td>D2</td>
+<td>Medium</td>
+<td>Missing</td>
+<td>The prose is dense with caveats aimed at agents rather than people.</td>
+</tr>
+<tr>
+<td>D3</td>
+<td>Low</td>
+<td>Consolidate</td>
+<td>Claude syntax appears in only one table. Worked narratives use Codex only.</td>
+</tr>
+<tr>
+<td>D4</td>
+<td>Low</td>
+<td>Missing</td>
+<td>Arabic coverage is inconsistent.</td>
+</tr>
+<tr>
+<td>D5</td>
+<td>Medium</td>
+<td>Missing</td>
+<td>The Workflow README is 1,380 lines, with guide and reference mixed.</td>
+</tr>
+<tr>
+<td>E1</td>
+<td>High</td>
+<td>Missing</td>
+<td>There is no product map and no lifecycle overlay diagram.</td>
+</tr>
+<tr>
+<td>E2</td>
+<td>Medium</td>
+<td>Consolidate</td>
+<td>Output screenshots exist. Terminal and session recordings do not.</td>
+</tr>
+<tr>
+<td>F1</td>
+<td>Medium</td>
+<td>Consolidate</td>
+<td>The license is stated at the bottom of the README. It is not per package and not shown where users decide to install.</td>
+</tr>
+<tr>
+<td>F2</td>
+<td>Medium</td>
+<td>Missing</td>
+<td>One entry point serves three audiences.</td>
+</tr>
+<tr>
+<td>G1</td>
+<td>High</td>
+<td>Missing</td>
+<td>Package READMEs drift from their manifests: Illustrate lists 3 of 4 commands and about 27 of 44 types; Scope&#39;s README calls 1.5.0 pending while the catalog advertises 1.5.1. These READMEs ship inside the installed packages.</td>
+</tr>
+<tr>
+<td>G2</td>
+<td>High</td>
+<td>Missing</td>
+<td>The portable User Manual copy has diverged and is <strong>older</strong> than the extension copy: it lacks theme support and the newer asset and privacy protections. The docs promise features the portable copy lacks.</td>
+</tr>
+<tr>
+<td>G3</td>
+<td>Medium</td>
+<td>Missing</td>
+<td>Copilot is named as a host, but it is outside the supported hosts. Delegate Task&#39;s <strong>harness</strong> targets (codex, claude, opencode, copilot, pi) are not distinguished from <strong>host</strong> support.</td>
+</tr>
+<tr>
+<td>G4</td>
+<td>Low</td>
+<td>Missing</td>
+<td>Per-package Spec Kit minimums differ (≥0.2.0, ≥1.0.0, &lt;2.0.0) and are not explained.</td>
+</tr>
+<tr>
+<td>G5</td>
+<td>Medium</td>
+<td>Missing</td>
+<td><code>install.sh</code> and <code>install.ps1</code> are a third, undocumented install path, mentioned only in the Project README.</td>
+</tr>
+<tr>
+<td>G6</td>
+<td>Medium</td>
+<td>Missing</td>
+<td>Moved destination pages have no forwarding stubs. Packaged READMEs need absolute links to anything outside the package.</td>
+</tr>
+<tr>
+<td>G7</td>
+<td>Medium</td>
+<td>Missing</td>
+<td>The new structure has no home for troubleshooting, upgrades or changelogs.</td>
+</tr>
+<tr>
+<td>G8</td>
+<td>Medium</td>
+<td>Missing</td>
+<td>Delegate Task tests and the portable User Manual scripts are not run in CI.</td>
+</tr>
+<tr>
+<td>G9</td>
+<td>Medium</td>
+<td>Missing</td>
+<td>There is no per-package license table. The MIT packages (Scope and its presets) are not visible. <code>skills/illustration-tools/README.md</code> says PolyForm, and no <code>plugin.json</code> has a license field.</td>
+</tr>
+<tr>
+<td>G10</td>
+<td>Medium</td>
+<td>Missing</td>
+<td>Nowhere says who enforces <code>requires.extensions</code>. Spec Kit does not; Workflow&#39;s installer and <code>deps.py ensure</code> do.</td>
+</tr>
+</tbody></table>
+<p>Counts used in the plan: <strong>42 public commands</strong> (Illustrate has 4), <strong>7 portable skills</strong>, <strong>3 plugin bundles</strong>, <strong>8 extensions</strong>, <strong>3 presets</strong>.</p>
+<h2>3. Target repositories</h2>
+<h3>3.1 <code>sanduq-skills</code> (new, MIT)</h3>
+<p>The current layout is kept so that both <code>npx skills</code> and Claude plugins keep working.</p>
+<pre><code class="language-text">sanduq-skills/
+├── README.md              # product cards, install by host, 60-second start, license
+├── LICENSE (MIT)  THIRD_PARTY_NOTICES.md  CHANGELOG.md
+├── skills/
+│   ├── illustration-tools/.claude-plugin/plugin.json   + skills/illustrate/
+│   ├── dev-tools/.claude-plugin/plugin.json            + skills/user-manual*/  (5 skills)
+│   └── agent-tools/.claude-plugin/plugin.json          + skills/delegate-task/
+├── docs/   install/{codex,claude-code,claude-desktop}.md  skills/&lt;one page each&gt;
+│           glossary.md  style-guide.md  troubleshooting.md  media/
+├── internal/                                        # design records, not linked
+└── .github/workflows/  ci.yml (Illustrate verifiers + tests, delegate-task test/run.mjs,
+                        user-manual script tests, `npx skills add . --list`)  release.yml (per-bundle tags)
+</code></pre>
+<p>History is copied at a tag, not rewritten with <code>git filter-repo</code>. The README notes that history before
+tag <code>X</code> lives in <code>samykabu/sanduq</code>.</p>
+<h3>3.2 <code>sanduq</code> (existing URL)</h3>
+<pre><code class="language-text">sanduq/
+├── README.md               # product map, lifecycle map, adoption levels, install, license table
+├── catalog.json            # unchanged URL
+├── .claude-plugin/marketplace.json   # if R1 is confirmed: git-subdir entries → sanduq-skills
+├── extensions/&lt;8&gt;/         # illustrate/skill, user-manual/skills+scripts, workflow assets/delegate-task are VENDORED
+├── presets/
+├── vendor.lock.json        # tag + digest of each vendored input (post-transform tree)
+├── docs/  start/ (prerequisites, install-speckit, install-by-host, troubleshooting, upgrades)
+│          scenarios/ (4 levels)  extensions/&lt;one page each&gt;  workflow/ (guide)
+│          reference/ (commands.md — authoritative, hooks.md, compatibility.md, licenses.md, glossary.md)
+│          media/
+└── internal/               # plans, audits, pilot reviews, evidence; prototypes/ stays where CI expects it
+</code></pre>
+<h2>4. Workstreams</h2>
+<h3>4.1 Vendoring contract (A4, G2)</h3>
+<table>
+<thead>
+<tr>
+<th>Input</th>
+<th>Canonical in <code>sanduq-skills</code></th>
+<th>Vendored to</th>
+<th>Transform</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Illustrate</td>
+<td><code>skills/illustration-tools/skills/illustrate</code></td>
+<td><code>extensions/illustrate/skill/</code></td>
+<td>inject <code>metadata.internal: true</code></td>
+</tr>
+<tr>
+<td>User Manual (5 skills + scripts, assets, requirements, references)</td>
+<td><code>skills/dev-tools/skills/user-manual*</code></td>
+<td><code>extensions/user-manual/skills/</code> and <code>scripts/</code></td>
+<td>Extension adapter (paths, command integration) as a <strong><code>package.py</code> transform</strong>, never a hand edit; inject <code>internal</code></td>
+</tr>
+<tr>
+<td>Delegate Task</td>
+<td><code>skills/agent-tools/skills/delegate-task</code></td>
+<td>Workflow archive <code>assets/delegate-task</code></td>
+<td>none; version recorded in <code>extensions/workflow/dependencies.json</code></td>
+</tr>
+</tbody></table>
+<ul>
+<li><strong>Order:</strong> port the extension&#39;s newer User Manual code (themes, cross-audience link guard, asset privacy)
+into the portable copy <strong>before</strong> the split. After the port, the portable copy is canonical. The
+extension&#39;s own <code>scripts/</code> stop being a fourth copy.</li>
+<li><strong>Digests:</strong> <code>vendor.lock.json</code> records each tag and a digest of the <strong>post-transform</strong> tree, excluding
+<code>node_modules</code>, <code>__pycache__</code> and <code>*.pyc</code>. CI fails on any hand edit.</li>
+<li><strong>Versions:</strong> the bundle version in <code>sanduq-skills</code> is Illustrate&#39;s version authority. The extension
+version line stays independent and records the vendored skill version.</li>
+</ul>
+<h3>4.2 CI and build migration (runs before anything moves)</h3>
+<p><code>extensions/scripts/package.py</code> (the delegate-task path), <code>ci.yml</code> (Illustrate suite, <code>docs/examples/booking-manual</code>,
+<code>prototypes/sanduq-delivery</code>, the JSON <code>find</code> over <code>skills plugins</code>, and the install.sh and <code>*.ps1</code> lint steps),
+<code>check_docs.py</code> and <code>test_check_docs.py</code> (guide list), <code>.gitattributes</code> (<code>skills/illustration-tools</code> rules), and
+marketplace validation (replace the <code>./</code>-only check with <code>claude plugin validate .</code>).</p>
+<h3>4.3 Marketplace and old install paths (R1, R2)</h3>
+<p><strong>Recommended (R1, needs your confirmation).</strong> Keep one marketplace named <code>sanduq</code> at <code>samykabu/sanduq</code>.
+Each entry becomes:</p>
+<pre><code class="language-json">{ &quot;source&quot;: &quot;git-subdir&quot;, &quot;url&quot;: &quot;https://github.com/samykabu/sanduq-skills.git&quot;,
+  &quot;path&quot;: &quot;skills/illustration-tools&quot;, &quot;ref&quot;: &quot;illustration-tools-v3.3.0&quot;, &quot;sha&quot;: &quot;&lt;40-char sha&gt;&quot; }
+</code></pre>
+<p>Entries carry no <code>version</code> field; <code>plugin.json</code> is the source of truth. The skills release workflow opens
+a PR against <code>samykabu/sanduq</code> that bumps <code>ref</code>/<code>sha</code>. The plugin version in <code>plugin.json</code> must also change,
+or users receive nothing. Rollback means reverting that PR. <em>Why this deviates from your earlier answer:</em>
+Claude Code has no deprecation state for a moved marketplace, only <code>renames</code> and <code>forceRemoveDeletedPlugins</code>,
+which uninstall plugins on users&#39; machines. A user can also register only one marketplace per name. Moving
+the marketplace would break every existing <code>/plugin marketplace add samykabu/sanduq</code>.
+<em>Alternative:</em> move it to <code>sanduq-skills</code> and announce a breaking change (users run <code>/plugin marketplace remove sanduq</code>
+and then re-add it).</p>
+<p><strong>Old <code>npx skills add samykabu/sanduq</code> (R2).</strong> The documented command becomes <code>npx skills add samykabu/sanduq-skills</code>.</p>
+<ul>
+<li><code>metadata.internal: true</code> is injected into <strong>every</strong> SKILL.md in the extensions repo: vendored copies,
+the six internal skills, and test fixtures. With it, <code>--list</code> and default discovery from the old repo
+show nothing.</li>
+<li><strong>Functional rule (adopted from the round-3 dissent):</strong> CI tries a <em>named</em> install
+(<code>--skill &lt;name&gt;</code>) for every skill in the old repo.<ul>
+<li>A skill whose vendored bytes are unmodified apart from the flag (Illustrate, Delegate Task) must pass
+a functional smoke test after a named install.</li>
+<li>Extension-adapted entrypoints (User Manual) are stored under a non-<code>SKILL.md</code> filename and restored
+by <code>package.py</code>, so a named install of them is impossible rather than broken.</li>
+</ul>
+</li>
+<li>CI records the observed explicit-name behavior as a test expectation.</li>
+</ul>
+<h3>4.4 Track S: Scope moves from Archify to Illustrate (separate spec and release)</h3>
+<p>This track is a product change, not documentation. It gets its own Spec Kit feature and its own release:</p>
+<ol>
+<li>Inventory every active Archify reference with a search; do not assume a fixed count. Known sites:
+<code>clarification.py</code> (inline image contract), <code>scope.py</code>, <code>accept_plan.py</code>, <code>commands/plan.md</code>,
+<code>references/archify-plan.md</code>, both Scope SKILL.md files, the Workflow README, and PR <code>pr-image-embedding.md</code>.</li>
+<li><strong>First decision: image hosting</strong> for GitHub clarification comments. Private-repo raw URLs fail
+(<code>docs/workflow-compatibility.md</code>); reuse the PR extension&#39;s embedding approach.</li>
+<li>Redesign <code>accept_plan</code> around Illustrate&#39;s dependency-graph type with browser and visual checks.
+Preserve coverage, reachability, freshness hashes, pending markers, failed-render recovery and receipt semantics.</li>
+<li>Migrate existing pending Archify plans. Historical records keep their original evidence.</li>
+<li>New tests, replacing the Archify-specific validators. Add a <code>requires</code> entry for Illustrate, a
+<code>pending-releases.json</code> entry, a Scope minor bump, a Workflow dependency pin bump and a Workflow release,
+and a consumer upgrade note.</li>
+</ol>
+<p>The documentation plan documents Scope only after Track S ships.</p>
+<h3>4.5 Content</h3>
+<p><strong>Product catalog (A1, A2, G9).</strong> One table per README: product, purpose, lifecycle phase, standalone,
+requires, hosts, license. Columns are <em>standalone</em> (works without Workflow), <em>requires</em> (hard dependencies),
+<em>installed</em> and <em>enabled</em> (installing ≠ selecting a process); each is defined in the glossary. Host
+cells stay &quot;unverified&quot; until Phase 4.</p>
+<p><strong>Lifecycle (B1, B3).</strong> <code>check_docs.py</code> is extended (no new generator) to emit two views:</p>
+<ul>
+<li><strong>Manifest defaults</strong>, from <code>extension.yml</code> hooks.</li>
+<li><strong>Managed Workflow</strong>, derived from <code>presets/workflow</code>, <code>workflow.py</code> stage selection and <code>reconcile.py</code>
+hook suppression.</li>
+</ul>
+<p>Prose explains how init changes optionality (Project and Assure). CI fails on drift.</p>
+<p><strong>Scenarios (B2).</strong> Four levels: skills only; Spec Kit plus one extension; an à-la-carte set; managed
+Workflow. Each page covers goal, prerequisites, install, first prompt (per-host <code>&lt;details&gt;</code> blocks),
+what you will see (recording), next step, and who enforces dependencies (G10).</p>
+<p><strong>Install by host (C1, C2, D3, G3).</strong></p>
+<table>
+<thead>
+<tr>
+<th>Host</th>
+<th>Skills</th>
+<th>Extensions</th>
+<th>Verify in Phase 4</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Codex</td>
+<td><code>npx skills add samykabu/sanduq-skills --skill &lt;n&gt; -a codex</code></td>
+<td><code>specify init --integration codex</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Claude Code</td>
+<td><code>/plugin marketplace add …</code> or <code>npx skills … -a claude-code</code></td>
+<td><code>--integration claude</code></td>
+<td>plugin upgrade across split</td>
+</tr>
+<tr>
+<td>Claude Desktop</td>
+<td>marketplace install <strong>and</strong> zip upload (both tested)</td>
+<td>not supported</td>
+<td>each script: Illustrate HTML, SVG, PNG export; User Manual build; Delegate Task</td>
+</tr>
+</tbody></table>
+<p>Also: an install block for all 8 extensions in dependency order, three set recipes (QA, docs, managed),
+and the docs-pack preview prerequisites (encrypted preview for public repositories, access expectations).</p>
+<p><strong>Prerequisites (C3, C4, G4).</strong> One page with tool, needed by, tested version, and install command per OS.
+It covers Spec Kit (<code>uv tool install specify-cli --from git+https://github.com/github/spec-kit.git</code>),
+Python, Node (including Illustrate&#39;s hand-drawn generator), git, <code>gh</code> plus scopes, Playwright and Chromium,
+MkDocs Material and the named PDF libraries, SuperSpec (<code>WangX0111/superspec</code>), the Superpowers Bridge
+(<code>lihan3238/speckit-superpowers-bridge</code>) and Superpowers (<code>obra/superpowers</code>). Recipes pin versions instead
+of installing floating versions. Each package&#39;s Spec Kit minimum is listed as information, not as a defect.</p>
+<p><strong>Install scripts (G5).</strong> Retire <code>install.sh</code> and <code>install.ps1</code>. The Spec Kit catalog is the supported path,
+and the scripts only copy files. Update the Project README&#39;s fallback section and remove the CI lint steps.</p>
+<p><strong>Reference.</strong> <code>reference/commands.md</code> is the single authoritative command reference (42 commands), and
+<code>check_docs.py</code> coverage is retargeted to it. Packaged READMEs keep essential setup and recovery steps and
+link to the version-matched reference. Package READMEs are corrected against their manifests (G1).</p>
+<p><strong>Licenses (F1, G9).</strong> <code>reference/licenses.md</code> gives a per-package table. Both READMEs get a &quot;Can I use this?&quot;
+box. Every <code>plugin.json</code> gets a <code>license</code> field. <code>THIRD_PARTY_NOTICES</code> is split: the Lavery and icon notices
+move with Illustrate; the extensions repo adds the Illustrate MIT notice and keeps the Scope and Memory notices.
+Notices ship <strong>inside</strong> each bundle, skill and archive.</p>
+<p><strong>Moved paths (G6, G7).</strong> Forwarding stubs stay at old doc paths for one release cycle. Troubleshooting,
+upgrades and changelogs get a page each. The root changelog is split: plugin history moves to <code>sanduq-skills</code>.</p>
+<h3>4.6 Language (D1, D2, D5)</h3>
+<ul>
+<li><strong>Style guide</strong> (one page): second person, one idea per sentence, define each term on first use and link
+it to the glossary. Limits go in a &quot;Limits&quot; box. Packaged READMEs use absolute links for destinations
+outside the package.</li>
+<li><strong>Glossary</strong>: about 20 terms.</li>
+<li><strong>Enforcement</strong>: <code>check_docs.py</code> automates a banned-term list. First-use glossary links are checked in
+editorial review and automated only if misses recur. No Vale.</li>
+<li><strong>Workflow README</strong>: split into a guide of about 200 lines and a reference. This ships as a Workflow release.</li>
+<li>Agent-facing files (<code>SKILL.md</code>, <code>commands/</code>) are out of scope.</li>
+</ul>
+<h3>4.7 Motion: rich, staged (E1, E2)</h3>
+<table>
+<thead>
+<tr>
+<th>Wave</th>
+<th>When</th>
+<th>Output</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>A</td>
+<td>Now, parallel to text</td>
+<td>Hand-edit one existing <code>docs/diagrams/*.svg</code> with a CSS/SMIL reveal gated by <code>prefers-reduced-motion: no-preference</code>, and verify it on github.com. <strong>That asset becomes the product map.</strong> Start terminal and session recordings with one shared recording setup (about 4 GIFs, reused across pages).</td>
+</tr>
+<tr>
+<td>B</td>
+<td>After Phase 1</td>
+<td>Illustrate <strong>animated-SVG export flag</strong> (SVG-scoped <code>&lt;style&gt;</code>, no <code>@import</code>, no script) as a separately tested Illustrate release. Then the lifecycle overlay and per-product animations (8 extensions + 3 skills).</td>
+</tr>
+<tr>
+<td>C</td>
+<td>After the Phase 5 text has shipped once</td>
+<td>One narrated overview video (HyperFrames, captions, poster). The other two videos (à-la-carte, managed Workflow) follow.</td>
+</tr>
+</tbody></table>
+<p>Rules:</p>
+<ul>
+<li>Motion never blocks a text release.</li>
+<li>Acceptance: the asset animates on github.com web, and mobile shows the complete static frame.</li>
+<li>Editable sources sit beside each export. Size budgets: 300 KB or less per animated SVG, 2 MB or less per GIF.</li>
+<li>Videos go in release assets or <code>user-attachments</code>. No media in plugin directories and no LFS, because
+LFS files arrive as pointer files when plugins are cloned.</li>
+</ul>
+<h2>5. Phases</h2>
+<p>Work happens on a docs branch with a <code>docs-baseline</code> tag. There is no freeze on <code>main</code>, because release
+automation commits catalog updates there.</p>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Work</th>
+<th>Closes</th>
+<th>Done when (measurable)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>1. Reconcile and migrate build</strong></td>
+<td>User Manual port (4.1); CI and build migration (4.2); create <code>sanduq-skills</code> at a tag; per-bundle release workflow; vendoring and <code>vendor.lock.json</code>; marketplace switch (R1); <code>internal</code> injection and named-install tests (R2); notices and licenses split</td>
+<td>A4, F2, G2, G8, G9</td>
+<td>Scripted test on a machine with the pre-split marketplace: <code>claude plugin marketplace update sanduq</code> then <code>claude plugin update &lt;bundle&gt;@sanduq</code> installs a skill whose digest matches the tag. <code>npx skills add &lt;repo&gt; --list</code> gives the expected output for both repos. Named old-path installs behave per R2. CI is green in both repos.</td>
+</tr>
+<tr>
+<td><strong>2. Restructure</strong></td>
+<td>Move records and evidence to <code>internal/</code>; new docs trees; forwarding stubs; fix stale versions and authorship</td>
+<td>A3, A5, G6, G7</td>
+<td>No user page links to <code>internal/</code>; link check passes</td>
+</tr>
+<tr>
+<td><strong>3. Core content</strong></td>
+<td>Catalog, lifecycle views, scenarios, prerequisites, per-extension pages, single command reference, Workflow guide and reference split, G1 README fixes, install-script retirement</td>
+<td>A1, A2, B1–B3, C2–C4, D5, G1, G3–G5, G10</td>
+<td><code>check_docs.py</code> reports 42 of 42 commands and 7 of 7 skills, both lifecycle views without drift, and no banned terms</td>
+</tr>
+<tr>
+<td><strong>4. Hosts</strong></td>
+<td>Clean-machine runs for Codex, Claude Code and Claude Desktop (both Desktop install paths); consumer-state upgrade tests with project edits and active Workflow state</td>
+<td>C1, C5, D3</td>
+<td>Every matrix cell is Verified, Partial (with reason) or Unsupported, with version, OS and evidence</td>
+</tr>
+<tr>
+<td><strong>5. Language</strong></td>
+<td>Style guide, glossary, rewrite of READMEs and guides</td>
+<td>D1, D2</td>
+<td>Banned-term check passes; editorial checklist signed</td>
+</tr>
+<tr>
+<td><strong>6. Release docs wave</strong></td>
+<td>Package README changes batched into one <code>pending-releases.json</code> set; patch releases; catalog promotion</td>
+<td>—</td>
+<td>Released archives contain the updated READMEs</td>
+</tr>
+<tr>
+<td><strong>7. Motion</strong></td>
+<td>Waves B and C (wave A runs from Phase 1 onward)</td>
+<td>E1, E2</td>
+<td>Section 4.7 acceptance</td>
+</tr>
+<tr>
+<td><strong>8. Cold-read test</strong></td>
+<td>3 first-time testers × 3 tasks on prepared, authenticated environments: install a skill on a chosen host; choose and install extensions for scenario 3; take scenario 4 to a <code>doctor</code> pass. Extensions are tested on Codex or Claude Code.</td>
+<td>—</td>
+<td>Each task is done unaided in 15 minutes or less; findings are logged and fixed</td>
+</tr>
+</tbody></table>
+<p><strong>Track S</strong> (section 4.4) runs in parallel with its own spec. Its documentation lands in a later docs patch.</p>
+<h2>6. Risks</h2>
+<table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Existing plugin users break</td>
+<td>R1 keeps the marketplace registration; Phase 1 runs the scripted upgrade test</td>
+</tr>
+<tr>
+<td>Old <code>npx skills</code> path installs a broken skill</td>
+<td>R2: adapted entrypoints can&#39;t be installed; named installs of the others are smoke-tested</td>
+</tr>
+<tr>
+<td>Vendored code drifts</td>
+<td>Post-transform digest in <code>vendor.lock.json</code>; CI fails on mismatch</td>
+</tr>
+<tr>
+<td>Pin bumps forgotten</td>
+<td>The skills release workflow opens the pin PR automatically</td>
+</tr>
+<tr>
+<td>Doc edits ship without a release</td>
+<td>Phase 6 batches them into one release set</td>
+</tr>
+<tr>
+<td>Motion cost overruns</td>
+<td>Staged waves; text never waits on motion</td>
+</tr>
+<tr>
+<td>Claude Desktop limits misreported</td>
+<td>Phase 4 tests each script on a real install</td>
+</tr>
+</tbody></table>
+<h2>7. Open items for the owner</h2>
+<ol>
+<li><strong>Confirm R1</strong>: keep the marketplace at <code>samykabu/sanduq</code> (recommended), or move it to <code>sanduq-skills</code>
+as a breaking change.</li>
+<li>Approve <strong>Track S</strong> as a separate feature.</li>
+</ol>
+<h2>8. Out of scope</h2>
+<p>Arabic translation, opencode and Copilot host support, a docs website, and relicensing extensions other
+than those already MIT.</p>
+<h2>9. Review record</h2>
+<table>
+<thead>
+<tr>
+<th>Round</th>
+<th>Claude Fable 5.1</th>
+<th>Codex GPT-6 Astra</th>
+<th>Outcome</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>Corrected 41→42 commands, the Scope MIT license, hook optionality and stale READMEs. Found the delegate-task build input, the marketplace name collision, the broken <code>bundles/</code> layout and the scope of the Archify change.</td>
+<td>Re-graded overstated findings. Found the User Manual divergence, the release and CI sequencing gaps, the motion export limit and the README-only redirect flaw.</td>
+<td>17 positions synthesized</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Agreed to 11 and amended 6. Verified <code>git-subdir</code> and <code>metadata.internal</code>; flagged notices, LFS and Claude Desktop marketplace support.</td>
+<td>Agreed to 6 and amended 11. Flagged that R1 deviates from the owner&#39;s answer and that named installs bypass the flag.</td>
+<td>Disputes narrowed to R1–R4</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Agreed to all; consensus</td>
+<td>Agreed to R1, R3, R4 and R5; disagreed with R2 (named install of an adapted skill could be broken)</td>
+<td>R2 amended with the dissent&#39;s fix: functional test, adapted entrypoints can&#39;t be installed. <strong>Consensus reached.</strong></td>
+</tr>
+</tbody></table>
+</main></body></html>

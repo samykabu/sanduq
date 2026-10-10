@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.2.1] - 2026-10-10
+
+- Neutral example footers in the process-flow templates; no behavior change.
+
 ## [2.2.0] - 2026-10-06
 
 ### Added

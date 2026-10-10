@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """A CI verification run read as evidence (workflow 1.6.0, B4).
 
-The consumer contract is Bunyan's `docs/development/verification-plan-contract.md`
-(its validator twin is `eng/ci/plan-evidence.mjs`): every verification run
+The consumer contract: every verification run
 uploads the artifact `<prefix>-<run_id>-<run_attempt>` holding one
 `verification-plan.json` that names the run, its head commit and tree, the
 canonical source key of that tree (`source_key.py`), the tier and the lanes.
@@ -20,9 +19,15 @@ import re
 import subprocess
 import zipfile
 
-from source_key import KEY_VERSION
+from source_key import ACCEPTED_KEY_VERSIONS, KEY_VERSION
 
 PLAN_FILE = 'verification-plan.json'
+
+
+def plan_key_version(plan):
+    """The key version to recompute a plan's source key with: its own when accepted, else the current one."""
+    version = plan.get('keyVersion') if isinstance(plan, dict) else None
+    return version if version in ACCEPTED_KEY_VERSIONS else KEY_VERSION
 DEFAULT_ARTIFACT_PREFIX = 'bootstrap-plan'
 SHA = re.compile(r'^[0-9a-f]{40}$')
 KEY = re.compile(r'^[0-9a-f]{64}$')
@@ -154,7 +159,9 @@ def validate(evidence, repository, run_id, check, workflow=None, attempt=None, l
             errors.append(f'{key} is {json.dumps(actual)}, expected {json.dumps(wanted)}.')
 
     field('schemaVersion', plan.get('schemaVersion'), 1)
-    field('keyVersion', plan.get('keyVersion'), KEY_VERSION)
+    if plan.get('keyVersion') not in ACCEPTED_KEY_VERSIONS:
+        errors.append(f'keyVersion is {json.dumps(plan.get("keyVersion"))}, expected one of '
+                      f'{json.dumps(list(ACCEPTED_KEY_VERSIONS))}.')
     field('repository', plan.get('repository'), repository)
     if (run.get('repository') or {}).get('full_name'):
         field('repository (run)', plan.get('repository'), run['repository']['full_name'])

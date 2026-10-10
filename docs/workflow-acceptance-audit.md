@@ -2,7 +2,7 @@
 
 Updated 2026-09-18. This maps the implementation plan's 17 scenarios to evidence.
 Automated fixtures validate contracts and recovery; they do not prove that an agent
-performed a complete live feature lifecycle. No release or Bunyan adoption is claimed.
+performed a complete live feature lifecycle. No release or pilot-project adoption is claimed.
 
 | # | Scenario | Evidence available | Remaining acceptance |
 | --- | --- | --- | --- |

@@ -97,7 +97,7 @@ questions stop planning. Asking every question is not the same as answering them
 
 Use `scope.statuses` to map logical names to actual board columns, for example
 `Feature Specification: Discovery`. Managed artifact paths default to
-`.specify/scope/github` and `docs/workflow/implementation-plan.html`; existing Bunyan
+`.specify/scope/github` and `docs/workflow/implementation-plan.html`; existing project-specific
 locations can be preserved explicitly through scope policy.
 
 ## Provider and task ownership

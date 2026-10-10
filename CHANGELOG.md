@@ -4,6 +4,14 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## Neutral references — workflow 1.9.0, scope 1.5.2, illustrate 2.2.1, illustration-tools 3.2.1 — 2026-10-10
+
+- Workflow 1.9.0 (minor): the canonical source key is `sanduq-source-key/1`; evidence recorded
+  under the previous key version is still verified.
+- Documentation, fixtures, examples and plugin authorship no longer name external projects.
+  Scope 1.5.2 and Illustrate 2.2.1 are wording-only patches; the illustration-tools plugin 3.2.1
+  carries the same example change.
+
 ## Documentation reorganization — 2026-10-06
 
 - Short README with focused setup, skill, extension, operating and contribution guides.
@@ -167,7 +175,7 @@ independently via `<extension>-vX.Y.Z` tags.
 - Workflow 1.6.0: backward-compatible receipt contract (optional `input_roles`, `amendments`, `head`,
   `source_key`, `ci_evidence`, `diff_reviewed`); consulted inputs report advisory drift instead of
   staling a stage (B0, B1); `migrate --preview`; `amend --assessment unchanged|changed` for one evidence
-  entry (B2); canonical `bunyan-source-key/1` with shared fixtures and drift classification through
+  entry (B2); canonical source key with shared fixtures and drift classification through
   `ci.gate.affected_command` (B3); `revalidate --stage verify --check-run`, `--stage review
   --diff-reviewed` and `--stage ready`, with CI runs accepted as Verify evidence under
   `ci.gate.verification_check` and exact recovery recipes on gate failures (B4, G6); the gate job
@@ -338,7 +346,7 @@ independently via `<extension>-vX.Y.Z` tags.
 ### Added
 
 - Recorded the CI runner exception in the README. All 14 jobs run on GitHub-hosted runners because
-  the home-office `homek8-general` scale set is registered at organisation scope on `abushanab-net`
+  the home-office `homek8-general` scale set is registered at organisation scope on another account
   while this repository is owned by a personal account, and GitHub does not share self-hosted
   runners across that boundary. The entry names the workflows, the jobs, the reason, and what would
   remove it.
@@ -526,7 +534,7 @@ independently via `<extension>-vX.Y.Z` tags.
 ## sanduq — 0.2.0 — 2026-07-09
 
 ### Added
-- Resal-style automated extension release pipeline on `main`, with catalog/version commits and
+- Automated extension release pipeline on `main`, with catalog/version commits and
   release ZIP publication.
 - Marketplace registration for the `devtools` and `illustration-tools` Claude Code plugins.
 

@@ -4,8 +4,7 @@ For setup and a consistent worked example, see [Getting started](https://github.
 and [scope usage](https://github.com/samykabu/sanduq/blob/main/docs/extensions.md#scope).
 
 
-Canonical source migrated from Bunyan's `tools/speckit-scope` package. Existing MIT
-notices remain intact. Version 1.5.0 is a pending local release.
+Scope is MIT licensed; see [LICENSE](https://github.com/samykabu/sanduq/blob/main/extensions/scope/LICENSE).
 
 Build with `python extensions/scripts/package.py scope`; the archive bundles the
 scope-gate and scope-brainstorm presets. Install the extracted package through

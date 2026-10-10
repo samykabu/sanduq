@@ -1,4 +1,4 @@
-"""The canonical source key `bunyan-source-key/1` (workflow 1.6.0, B3)."""
+"""The canonical source key `sanduq-source-key/1` (workflow 1.6.0, B3; renamed in 1.9.0)."""
 import hashlib
 import json
 import os
@@ -12,8 +12,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import source_key as sk  # noqa: E402
 
 FIXTURES = Path(__file__).resolve().parent / 'fixtures/source-key.fixtures.json'
-# The shared fixture file is byte-identical in Bunyan (eng/ci/source-key.fixtures.json); both repositories pin it.
-FIXTURES_SHA256 = '3585a9b4125bb22284f899f676b4f013563c41442e8a2284411772efeb400312'
+# Consumers that reproduce the key pin the same fixture bytes.
+FIXTURES_SHA256 = '38c9ee2904be6b2ab63cb5a8cf21b5c6a3ae8c65ec43d40b36ae06c2b6b72dc7'
 
 
 def fixture_cases():
@@ -32,6 +32,7 @@ class SharedFixtureTests(unittest.TestCase):
     def test_contract_constants_match_the_fixture_file(self):
         data = json.loads(FIXTURES.read_bytes().decode('utf-8'))
         self.assertEqual(data['algorithm'], sk.KEY_VERSION)
+        self.assertEqual(tuple(data['acceptedAlgorithms']), sk.ACCEPTED_KEY_VERSIONS)
         self.assertEqual(tuple(data['excludedPrefixes']), sk.EXCLUDED_PREFIXES)
 
     def test_every_case_reproduces_from_entries(self):
@@ -42,6 +43,12 @@ class SharedFixtureTests(unittest.TestCase):
                 as_bytes = [tuple(entry[f].encode('utf-8') for f in ('mode', 'type', 'object', 'path'))
                             for entry in case['entries']]
                 self.assertEqual(sk.key_from_entries(as_bytes), case['key'])
+                # Evidence recorded under the previous key version stays verifiable.
+                self.assertEqual(sk.key_from_entries(case['entries'], sk.ACCEPTED_KEY_VERSIONS[1]), case['previousKey'])
+
+    def test_unknown_key_version_is_refused(self):
+        with self.assertRaises(sk.SourceKeyError):
+            sk.key_from_entries([], 'other-key/1')
 
     def test_every_case_reproduces_through_git_ls_tree(self):
         """Each case written as a real tree (objects need not exist) and keyed through git."""

@@ -28,12 +28,12 @@ semantic/live gaps. Run remote CI before release. CI covers Windows/Linux regres
 registration and actual upgrade rollback. Main release tooling refuses publication
 while pending status is implementation-in-progress. Public catalogs remain unchanged.
 
-No Bunyan feature was selected from its editor tabs. Two unanswered setup items
-remain: Bunyan's independent QA/manual selections, and an explicit issue URL for
+No pilot-project feature was selected from its editor tabs. Two unanswered setup items
+remain: the pilot project's independent QA/manual selections, and an explicit issue URL for
 the live pilot. Do not re-ask if answers have arrived; do not treat preselected
 options or elapsed time as answers. The live pilot must cover real GitHub answers,
 native task links, resume and private PR inline image loading. Released-package
-Bunyan adoption and a second project with different board names remain pending.
+Pilot-project adoption and a second project with different board names remain pending.
 
 Owner correction 2026-09-19: continue automatically without reliable context telemetry.
 Do not stop on estimates, stale readings or inability to estimate. Only reliable measured
