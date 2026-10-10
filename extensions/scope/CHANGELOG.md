@@ -25,6 +25,11 @@
 - Before any REST operation the request must name the configured owner, Project number and
   Project ID, carry only supported arguments, and match the live Project's node ID, owner and
   owner type. The reported transport is `rest`.
+- REST `item-add` is idempotent like `gh project item-add`. It first looks for the exact issue
+  (repository and number, plus issue ID when listed) in a fresh paginated listing of the configured
+  Project and returns that item's ID without writing. After a 422 "already exists" from a concurrent
+  add, it rereads once and returns the matching item; if none matches, or for any other 422, 403 or
+  404, the original error is raised. Nothing is removed, re-added or edited.
 - The shared Project REST adapter supports single-select field creation and fresh field
   discovery; GitHub subprocess calls have a 30-second bound.
 - This is a material binding change: focused independent review is required before installation.

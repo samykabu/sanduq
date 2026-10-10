@@ -394,7 +394,18 @@ class ProjectRest:
             match = re.search(r'github\.com/([^/]+/[^/]+)/issues/(\d+)', options.get('--url', ''))
             require(match, f'REST fallback: item-add needs an issue URL, got {options.get("--url")!r}.')
             issue = self.gh.api(f'repos/{match[1]}/issues/{match[2]}')
-            item = self.gh.api(f'{self.base}/items', 'POST', {'type': 'Issue', 'id': issue['id']})
+            existing = self.existing_issue_item(match[1], issue)
+            if existing:
+                return {'id': existing}
+            try:
+                item = self.gh.api(f'{self.base}/items', 'POST', {'type': 'Issue', 'id': issue['id']})
+            except ScopeError as error:
+                # `gh project item-add` is idempotent; REST answers 422 when the issue is already on the board.
+                # Accept it only if one fresh reread finds that exact issue; any other failure is raised.
+                existing = self.existing_issue_item(match[1], issue) if 'already exists' in str(error).lower() else None
+                if not existing:
+                    raise
+                return {'id': existing}
             if self._item_ids is not None:
                 self._item_ids[item['node_id']] = item['id']
             return {'id': item['node_id']}
@@ -422,6 +433,18 @@ class ProjectRest:
         rows = self.gh.api(f'{self.base}/items?per_page=100&fields={ids}', pages=True)
         self._item_ids = {raw['node_id']: raw['id'] for raw in rows}
         return rows
+
+    def existing_issue_item(self, repo, issue):
+        """Node ID of the configured board's item for exactly this issue (repository and number), from a fresh
+        paginated listing; None when the issue is not on the board."""
+        for raw in self.raw_items():
+            content = raw.get('content') or {}
+            repository = re.sub(r'^https://api\.github\.com/repos/', '', content.get('repository_url') or '')
+            if (raw.get('content_type') == 'Issue' and content.get('number') == issue['number']
+                    and repository.casefold() == repo.casefold()
+                    and content.get('id', issue['id']) == issue['id']):
+                return raw['node_id']
+        return None
 
     def item_database_id(self, node_id):
         if self._item_ids is None or node_id not in self._item_ids:

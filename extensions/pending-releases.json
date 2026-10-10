@@ -5,5 +5,5 @@
     "scope": "1.6.1"
   },
   "status": "ready",
-  "note": "Workflow 1.9.3 makes issue decisions selectable (native task lists), upgrades legacy questions, maps the decision lifecycle to Need Clarifications, and pins Scope 1.6.1 (fresh issue-bound gate, verified REST fallback for Project operations). Publish after successful main CI and downloaded asset verification."
+  "note": "Workflow 1.9.3 makes issue decisions selectable (native task lists), upgrades legacy questions, maps the decision lifecycle to Need Clarifications, and pins Scope 1.6.1 (fresh issue-bound gate, verified REST fallback and idempotent existing-issue Project binding). Publish after successful main CI and downloaded asset verification."
 }

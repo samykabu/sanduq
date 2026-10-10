@@ -46,7 +46,8 @@ class FakeGh:
     """Routes `gh` subprocess calls: `gh project` and GraphQL behave as configured, REST is served."""
 
     def __init__(self, project_ok=True, remaining=0, project_error='unknown owner type',
-                 owner_blocked=False, project_lookup='ok'):
+                 owner_blocked=False, project_lookup='ok', extra_items=(), post_error=None, race_items=()):
+        self.extra_items, self.post_error, self.race_items = list(extra_items), post_error, list(race_items)
         self.project_ok, self.remaining, self.project_error = project_ok, remaining, project_error
         self.owner_blocked, self.project_lookup = owner_blocked, project_lookup
         self.calls = []
@@ -89,7 +90,10 @@ class FakeGh:
         if path == f'{BASE}/fields':
             return done(json.dumps([FIELDS]))
         if path == f'{BASE}/items' and method == 'GET':
-            return done(json.dumps([ITEMS[:2], ITEMS[2:]]))
+            return done(json.dumps([ITEMS[:2], ITEMS[2:] + self.extra_items]))
+        if path == f'{BASE}/items' and method == 'POST' and self.post_error:
+            self.extra_items += self.race_items
+            return done(returncode=1, stderr=self.post_error)
         if path == f'{BASE}/items' and method == 'POST':
             return done(json.dumps({'id': 9010, 'node_id': 'PVTI_new'}))
         if path.startswith(f'{BASE}/items/') and method == 'PATCH':
@@ -408,6 +412,68 @@ class ProjectRestFallbackTests(unittest.TestCase):
             ('POST', f'{BASE}/items', {'type': 'Issue', 'id': 555012}),
             ('PATCH', f'{BASE}/items/9010', {'fields': [{'id': 101, 'value': 'opt-ready'}]}),
         ])
+
+    ADD = ['project', 'item-add', '7', '--owner', 'acme', '--url', 'https://github.com/acme/app/issues/12', '--format', 'json']
+    EXISTING = {'id': 9020, 'node_id': 'PVTI_old', 'content_type': 'Issue',
+                'content': {'number': 12, 'id': 555012, 'repository_url': 'https://api.github.com/repos/acme/app'}, 'fields': []}
+    DUPLICATE = 'HTTP 422: Content already exists in this project'
+
+    def listings(self, fake):
+        return [c for c in fake.rest_calls() if c[1].startswith(f'{BASE}/items') and '--method' not in c]
+
+    def test_item_add_returns_existing_item_without_writing(self):
+        fake = FakeGh(project_ok=False, remaining=0, extra_items=[self.EXISTING])  # on the second listing page
+        gh = self.client(fake)
+        added, _ = self.run_quiet(gh.command, self.ADD)
+        self.assertEqual(added, {'id': 'PVTI_old'})
+        self.assertEqual(fake.writes, [])
+        self.assertEqual(gh._rest._item_ids['PVTI_old'], 9020)
+
+    def test_item_add_same_number_in_other_repository_or_kind_is_added(self):
+        other = {**self.EXISTING, 'node_id': 'PVTI_x', 'content': {**self.EXISTING['content'], 'repository_url': 'https://api.github.com/repos/acme/other'}}
+        pull = {**self.EXISTING, 'node_id': 'PVTI_y', 'content_type': 'PullRequest'}
+        wrong_id = {**self.EXISTING, 'node_id': 'PVTI_z', 'content': {**self.EXISTING['content'], 'id': 1}}
+        fake = FakeGh(project_ok=False, remaining=0, extra_items=[other, pull, wrong_id])
+        gh = self.client(fake)
+        added, _ = self.run_quiet(gh.command, self.ADD)
+        self.assertEqual(added, {'id': 'PVTI_new'})
+        self.assertEqual([w[0] for w in fake.writes], ['POST'])
+
+    def test_item_add_duplicate_race_rereads_once_and_returns_the_item(self):
+        fake = FakeGh(project_ok=False, remaining=0, post_error=self.DUPLICATE, race_items=[self.EXISTING])
+        gh = self.client(fake)
+        added, _ = self.run_quiet(gh.command, self.ADD)
+        self.assertEqual(added, {'id': 'PVTI_old'})
+        self.assertEqual([w[0] for w in fake.writes], ['POST'])
+        self.assertEqual(len(self.listings(fake)), 2)
+
+    def test_item_add_duplicate_error_without_matching_item_is_raised(self):
+        fake = FakeGh(project_ok=False, remaining=0, post_error=self.DUPLICATE)
+        gh = self.client(fake)
+        with self.assertRaisesRegex(m.ScopeError, 'already exists'):
+            self.run_quiet(gh.command, self.ADD)
+        self.assertEqual([w[0] for w in fake.writes], ['POST'])
+        self.assertEqual(len(self.listings(fake)), 2)
+
+    def test_item_add_unrelated_errors_are_raised_without_a_reread(self):
+        for error in ('HTTP 422: Validation Failed', 'HTTP 404: Not Found', 'HTTP 403: Forbidden'):
+            with self.subTest(error=error):
+                fake = FakeGh(project_ok=False, remaining=0, post_error=error, race_items=[self.EXISTING])
+                gh = self.client(fake)
+                with self.assertRaisesRegex(m.ScopeError, error[:8]):
+                    self.run_quiet(gh.command, self.ADD)
+                self.assertEqual([w[0] for w in fake.writes], ['POST'])
+                self.assertEqual(len(self.listings(fake)), 1)
+                self.patcher.stop()
+
+    def test_item_add_rereads_board_instead_of_trusting_the_listing_cache(self):
+        fake = FakeGh(project_ok=False, remaining=0)
+        gh = self.client(fake)
+        self.run_quiet(gh.command, ['project', 'item-list', '7', '--owner', 'acme', '--format', 'json'])
+        fake.extra_items.append(self.EXISTING)  # added elsewhere after the cached listing
+        added, _ = self.run_quiet(gh.command, self.ADD)
+        self.assertEqual(added, {'id': 'PVTI_old'})
+        self.assertEqual(fake.writes, [])
 
     def test_user_owned_board_uses_users_path(self):
         rest = m.ProjectRest(None, {'owner': 'sam', 'ownerType': 'user', 'projectNumber': 3})
