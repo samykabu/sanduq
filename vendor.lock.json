@@ -521,7 +521,7 @@
       "internal": true,
       "exclusive": true,
       "ref": "agent-tools-v1.1.2",
-      "sha": "80c479a402242d8ad198d661ae7cafe45d505083",
+      "sha": "cd56f57ab23f66d23980f0e180883360e95baaa7",
       "files": {
         "extensions/workflow/assets/delegate-task/.gitignore": "247681cefffa8448d973f21147c92b38b63f492a98a50aca3b3c490bc97499e1",
         "extensions/workflow/assets/delegate-task/README.ar.md": "7c2cade9d85acab9c3da95d81c59d6bd44abbed9bdd465f92e6de81ed034ea12",
@@ -536,7 +536,7 @@
         "extensions/workflow/assets/delegate-task/contracts/git-fields.md": "2f5140eb4cd9a46fb9745e5e49ae1511ab05ef0aab487895bbf6aa183d80842c",
         "extensions/workflow/assets/delegate-task/contracts/result-schema-v2.md": "8fcfe106286cf7dde120bba29b9a237e8b0b0ffebd2c01da8487e50f18fdc7e1",
         "extensions/workflow/assets/delegate-task/contracts/status-precedence.md": "6cfb7706254100a8dca4b0a03c03e65b40bb9278d3950c03a39f92d050fa1d77",
-        "extensions/workflow/assets/delegate-task/delegate.mjs": "006c5afece39ba8cd6743474ec416949ec1be786748a28d664295c21dbe22426",
+        "extensions/workflow/assets/delegate-task/delegate.mjs": "00e646cacf53d30c64c8b99afa93755995cabf3122f60881501d73a16d8a412d",
         "extensions/workflow/assets/delegate-task/references/reviewing-the-result.md": "dfacbceff4256dea85f7e43502d3f1b99c673d46566ee994ed3b8469d0a7781a",
         "extensions/workflow/assets/delegate-task/references/task-queues.md": "762bd267ec14c52c04accb108d841d444625f3226cdb307dd30a9600eb7277af",
         "extensions/workflow/assets/delegate-task/references/writing-the-brief.md": "ba636b0246fac4bfd67e2b5d04607d9563fb33a47c3b02b0757b4d2bb52bab9a"

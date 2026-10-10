@@ -146,7 +146,11 @@ def skill_errors(report):
 
 
 def alias_sources(package_root):
-    return {name: (package_root / 'skills' / name / 'SKILL.md').read_bytes() for name in ALIASES}
+    # A package ships SKILL.md; a source checkout stores it as SKILL.ext.md (see package.py).
+    def source(name):
+        path = package_root / 'skills' / name / 'SKILL.md'
+        return path if path.is_file() else path.with_name('SKILL.ext.md')
+    return {name: source(name).read_bytes() for name in ALIASES}
 
 
 def alias_errors(root, package_root, hosts=None):

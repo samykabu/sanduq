@@ -345,11 +345,17 @@ ALIAS_HOSTS = {'.agents': 'codex', '.claude': 'claude'}
 RENDER_SKIP = ('.specify/workflow/backups', '.specify/workflow/runtime')
 
 
+def alias_source_path(package_root, name):
+    """A package ships SKILL.md; a source checkout stores it as SKILL.ext.md (see package.py)."""
+    path = package_root / 'skills' / name / 'SKILL.md'
+    return path if path.is_file() else path.with_name('SKILL.ext.md')
+
+
 def alias_targets(root, package_root):
     """(name, source, accepted hashes, destination) for every alias Sanduq manages here."""
     registered = registry(root)
     for name, accepted_file in ALIASES.items():
-        source = (package_root / 'skills' / name / 'SKILL.md').read_bytes()
+        source = alias_source_path(package_root, name).read_bytes()
         accepted = read(package_root / 'assets' / accepted_file, [])
         for agent in ALIAS_AGENTS:
             skills = root / agent / 'skills'
