@@ -417,6 +417,83 @@ class ClarificationTests(unittest.TestCase):
         with self.assertRaisesRegex(sm.ScopeError, 'STALE'):
             self.app.publish('1', review, True)
 
+    def illustrated(self):
+        image = self.root / 'docs/clarify/c1.png'
+        image.parent.mkdir(parents=True, exist_ok=True)
+        image.write_bytes(b'png bytes')
+        return dict(question(), diagram_image={'path': 'docs/clarify/c1.png', 'alt': 'Retry keeps the form'},
+                    diagram_text='- Submit -> fails -> Retry keeps entered data')
+
+    def git(self, head='a' * 40, blob='b' * 40):
+        def run(args, **kwargs):
+            if 'rev-parse' in args:
+                return subprocess.CompletedProcess(args, 0, head, '')
+            return subprocess.CompletedProcess(args, 0, blob, '')
+        return patch.object(subprocess, 'run', side_effect=run)
+
+    def test_private_repo_image_is_commit_pinned_blob_url_never_raw(self):
+        contents = []
+        original = self.gh.api
+        def api(endpoint, *args, **kwargs):
+            if '/contents/' in endpoint:
+                contents.append(endpoint)
+                return {'sha': 'b' * 40}
+            return original(endpoint, *args, **kwargs)
+        with self.git(), patch.object(self.gh, 'api', side_effect=api):
+            result = self.app.publish('1', self.analysis([self.illustrated()]))
+        body = result['comment_previews'][0]
+        self.assertIn(f'![Retry keeps the form](https://github.com/acme/app/blob/{"a" * 40}/docs/clarify/c1.png?raw=true)', body)
+        self.assertNotIn('raw.githubusercontent.com', body)
+        self.assertIn('Retry keeps entered data', body)
+        self.assertEqual(contents, [f'repos/acme/app/contents/docs/clarify/c1.png?ref={"a" * 40}'])
+        self.assertNotIn('image_fallbacks', result)
+
+    def test_unhosted_image_falls_back_to_text_with_reason(self):
+        original = self.gh.api
+        def missing(endpoint, *args, **kwargs):
+            if '/contents/' in endpoint:
+                raise sm.ScopeError('HTTP 404: Not Found')
+            return original(endpoint, *args, **kwargs)
+        with self.git(), patch.object(self.gh, 'api', side_effect=missing):
+            result = self.app.publish('1', self.analysis([self.illustrated()]))
+        body = result['comment_previews'][0]
+        self.assertNotIn('![', body)
+        self.assertIn('Diagram image not embedded', body)
+        self.assertIn('commit and push it', body)
+        self.assertIn('- Submit -> fails -> Retry keeps entered data', body)
+        self.assertIn('C1Q1', result['image_fallbacks'])
+        # A pushed file whose bytes differ is not embedded either.
+        def stale(endpoint, *args, **kwargs):
+            return {'sha': 'c' * 40} if '/contents/' in endpoint else original(endpoint, *args, **kwargs)
+        with self.git(), patch.object(self.gh, 'api', side_effect=stale):
+            body = self.app.publish('1', self.analysis([self.illustrated()]))['comment_previews'][0]
+        self.assertIn('differs from the local export', body)
+
+    def test_image_outside_project_or_not_png_is_not_hosted(self):
+        q = self.illustrated()
+        for path in ('../outside.png', 'docs/clarify/c1.html', 'docs/clarify/missing.png'):
+            q['diagram_image']['path'] = path
+            result = self.app.publish('1', self.analysis([q]))
+            self.assertIn('not an exported PNG inside the project', result['comment_previews'][0])
+
+    def test_image_requires_text_version_and_alt(self):
+        q = self.illustrated()
+        del q['diagram_text']
+        with self.assertRaisesRegex(sm.ScopeError, 'diagram_text'):
+            self.app.publish('1', self.analysis([q]))
+        q = self.illustrated()
+        q['diagram_image']['alt'] = ''
+        with self.assertRaisesRegex(sm.ScopeError, 'alt text'):
+            self.app.publish('1', self.analysis([q]))
+
+    def test_managed_questions_use_illustrate_not_mermaid_or_raw_urls(self):
+        (self.root / '.specify/workflow.yml').write_text('schema_version: 1\nclarification:\n  resume_on_reinvoke: reread-answers\n', encoding='utf-8')
+        with self.assertRaisesRegex(sm.ScopeError, 'ILLUSTRATE_REQUIRED'):
+            self.app.publish('1', self.analysis([dict(question(), diagram='graph TD; A-->B')]))
+        legacy = dict(question(), diagram_markdown='![x](https://raw.githubusercontent.com/acme/app/main/x.png)')
+        with self.assertRaisesRegex(sm.ScopeError, 'INLINE_IMAGE_REQUIRED'):
+            self.app.publish('1', self.analysis([legacy]))
+
     def test_plan_requires_ready(self):
         with self.assertRaisesRegex(sm.ScopeError, 'planning requires Ready'):
             self.app.plan_gate('1')

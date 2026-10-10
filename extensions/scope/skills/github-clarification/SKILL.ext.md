@@ -28,9 +28,11 @@ idempotent-publication rules below. Return the resolved outcome to the workflow 
 when it owns an active clarification claim; do not independently dispatch Plan twice.
 Without an active workflow claim, continue through the installed workflow entry point
 for the same bound feature. The legacy stop after Plan applies only to unmanaged projects.
-Use the installed Archify skill for useful clarification diagrams in managed projects;
-embed verified image exports in the question comment and link editable source, without
-exposing private assets. Do not run the legacy interactive chat loop after this override.
+Use the installed Illustrate skill for useful clarification diagrams in managed projects:
+export a PNG, commit and push it, and supply `diagram_image` with `diagram_text`. The
+runtime embeds it through a verified commit-pinned GitHub URL or posts the text version
+with the reason (see `references/illustrate-plan.md`). Never expose private assets.
+Do not run the legacy interactive chat loop after this override.
 
 ## State check first
 
@@ -87,8 +89,9 @@ exposing private assets. Do not run the legacy interactive chat loop after this 
    Each question is a standalone English interrogative, with its context, why the
    decision matters, useful alternatives and **AI recommendation** plus justification.
    Use everyday words; explain necessary technical terms. Do not force an arbitrary
-   number of options. Include a short Mermaid diagram when it helps someone choose,
-   with clear English labels and a short explanation. It must represent the actual
+   number of options. Include a short diagram when it helps someone choose, with clear
+   English labels and a short explanation: an Illustrate PNG (`diagram_image` plus a
+   `diagram_text` fallback), or Mermaid `diagram` source in unmanaged projects. It must represent the actual
    alternatives, not decoration. Diagrams and detail belong in the same question comment.
    For a choice question, supply single-line `options` and `recommended_option`, its
    1-based index. Align the recommendation text with that actual choice. The runtime
@@ -195,6 +198,9 @@ the analysis context; correlate them explicitly or ask a focused follow-up.
 Each question: unique stable lowercase `key`, `question`, `why`, `details`,
 `recommendation`, `justification`, optional string-list `options`, `recommended_option`
 (required 1-based index when options exist), optional raw Mermaid
-`diagram` (no code fences), and optional `follows_up` question IDs.
+`diagram` (no code fences; unmanaged projects only), optional `diagram_image`
+(`path` of a pushed, project-relative Illustrate PNG and `alt`) with the required
+`diagram_text` fallback, and optional `follows_up` question IDs. Publish results list
+questions whose image could not be hosted under `image_fallbacks`.
 
 Each spec edit: exact nonempty `before` and `after` strings. No arbitrary file paths.

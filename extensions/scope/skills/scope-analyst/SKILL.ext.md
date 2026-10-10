@@ -125,7 +125,7 @@ for a decomposition decision; it takes precedence over the legacy confirmation f
     consumer needs only that subset, and must update native links, issue dependency
     text, Project Blocked by/Blocks fields and the local catalogue together.
 16. Run `/speckit-scope-plan` after a split and `/speckit-scope-reconcile` after all
-    publications. The Archify plan step is mandatory, not an optional suggestion.
+    publications. The Illustrate plan step is mandatory, not an optional suggestion.
     Do not delete the pending marker or claim completion before validated delivery.
 17. Report issue links, scores and rationale, leaf readiness, parent aggregation,
     dependency edits and the checked implementation-plan path. For an approved executable

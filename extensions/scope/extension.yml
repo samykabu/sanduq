@@ -2,7 +2,7 @@ schema_version: "1.0"
 extension:
   id: scope
   name: Speckit Scope
-  version: "1.5.2"
+  version: "1.6.0"
   description: "Analyze GitHub issue scope, enforce prerequisites, review user-selected decomposition before publishing, and maintain parent progress."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
@@ -12,6 +12,9 @@ requires:
   extensions:
     - id: workflow
       version: ">=1.8.0,<2.0.0"
+      required: true
+    - id: illustrate
+      version: ">=2.2.1,<3.0.0"
       required: true
   tools:
     - name: gh
@@ -35,7 +38,7 @@ provides:
       description: "Refresh parent progress and close only all-Done scope parents."
     - name: speckit.scope.plan
       file: commands/plan.md
-      description: "Refresh the implementation dependency plan using Archify after scope decomposition."
+      description: "Refresh the implementation dependency plan using Illustrate after scope decomposition."
     - name: speckit.scope.after-specify
       file: commands/after-specify.md
       description: "Automatically dispatch Brainstorm when available, otherwise Clarify, after specification creation."

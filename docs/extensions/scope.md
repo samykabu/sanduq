@@ -42,15 +42,18 @@ and an unchecked recommendation. Answer `C1Q1: A` or tick a box, then run `$spec
 ![Scope approval and required issue-binding hooks](../diagrams/extension-scope.svg)
 
 Mandatory hooks guard Specify, bind the specification to its issue, start Brainstorm or Clarify,
-and guard Plan. When the work is split, `scope.plan` refreshes the dependency plan diagram.
-<!-- track-s -->
+and guard Plan. When the work is split, `scope.plan` accepts an [Illustrate](illustrate.md) dependency graph: it checks
+that every issue is covered and reachable, renders the graph in a browser, and exports SVG and PNG.
+Clarification questions embed that image when GitHub serves the pushed file, and fall back to a
+text list when it cannot.
 The managed Workflow runs these steps through its dispatcher.
 [Editable source](../diagrams/extension-scope.html).
 
 ## Limits
 
 - Scope does not work without Workflow.
-- The plan export needs its diagram tool. Scope stops when the export fails. <!-- track-s -->
+- Scope requires Illustrate. Plan acceptance needs Playwright with Chromium; without it, acceptance
+  stops with the install command and keeps the previous plan.
 - Policy approval is recorded as project policy, never as a human approval.
 
 Package details: [Scope README](../../extensions/scope/README.md).

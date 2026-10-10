@@ -8,7 +8,7 @@ below assumes an authenticated, authorized reviewer.
 
 **Mandatory inline visuals, including private repositories.** Build an inventory of every
 reviewer-facing diagram and screenshot in `<Feature>-Explained.md`. Embed each in the PR body
-as an image with descriptive alt text, including Illustrate/Archify exports and screenshots.
+as an image with descriptive alt text, including Illustrate exports and screenshots.
 A file link, HTML-source link, or link to the explanation document does not satisfy this rule.
 
 - Use a renderable image export for each diagram; link editable HTML/JSON sources in addition.

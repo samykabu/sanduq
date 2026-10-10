@@ -7,7 +7,8 @@
   with the key version it declares. `source_key.source_keys()` returns a tree's key under every
   accepted version. Consumer CI that computes the key should move to the new version.
 - Neutral wording and synthetic repositories in documentation and test fixtures.
-- `dependencies.json` pins Scope 1.5.2, Illustrate 2.2.1 and User Manual 1.5.2.
+- `dependencies.json` pins Scope 1.6.0, Illustrate 2.2.1 and User Manual 1.5.2. Scope 1.6.0 draws the
+  dependency plan and clarification diagrams with Illustrate and requires it.
 - The bundled Delegate Task driver is vendored from samykabu/sanduq-skills (agent-tools 1.1.2):
   Claude runs now report the model that did the work, not a side call.
 - The 1,380-line README is split into a short guide and reference pages under `docs/workflow/`

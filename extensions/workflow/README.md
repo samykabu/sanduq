@@ -22,6 +22,9 @@ Use Workflow when you want:
 Use the individual Spec Kit commands instead when you only need one stage, or when the work is not
 tied to a GitHub issue.
 
+Workflow and clarification illustrations use Illustrate, which Scope 1.6.0 and newer also requires
+for its dependency plan and clarification images.
+
 ## Install
 
 You need Spec Kit, Python 3.10 or later, Git and the GitHub CLI. See

@@ -110,7 +110,7 @@ edited to claim that a new package executed old work.
 | `specs/<feature>/workflow/progress/index.html` | Live implementation report through authorized PR merge |
 | `specs/<feature>/workflow/delegations.json` | Tracked delegation attempts, route decisions and usage |
 | `.specify/workflow/backups/installs/` | Backup ZIP and operation log for every install and upgrade |
-| `docs/workflow/implementation-plan.html` | The Archify dependency plan, regenerated after every decomposition | <!-- track-s -->
+| `docs/workflow/implementation-plan.html` | The Illustrate dependency plan, regenerated after every decomposition |
 
 Reusable source lives in this repository. Policy, issue bindings, feature progress, manual content,
 and evidence stay in **your** project. Never edit an installed upstream command; an upgrade replaces it.

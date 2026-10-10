@@ -14,9 +14,8 @@ pauses between every stage.
 Scope -> Specify -> Clarify/Brainstorm -> Plan -> one task generator -> selected
 QA/manual analysis -> Analyze -> core Tasks-to-Issues -> one executor -> verification
 and review -> selected QA/manual documentation -> explicit Finalize -> one PR.
-<!-- track-s -->
-All workflow and clarification illustrations use Archify. The existing PR, Assure
-and User Manual Illustrate dependency remains separately versioned.
+All workflow and clarification illustrations use Illustrate, which Scope (1.6.0 and newer)
+requires. PR, Assure and User Manual pin their own Illustrate versions.
 
 The dispatcher calls actual installed agent commands. The Python runtime manages
 claims, evidence, invalidation and handoffs; it does not implement semantic agent

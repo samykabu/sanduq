@@ -61,7 +61,7 @@ agent requests, not shell commands. Claude Desktop does not run extensions.
 | `$speckit-scope-guard` | Before Specify: `Validate issue 412's current approved scope and prerequisite status.` |
 | `$speckit-scope-bind` | After Specify: `Bind the refund spec to the explicit issue validated in this Specify invocation.` |
 | `$speckit-scope-reconcile` | After child changes: `Refresh the refund parent from its native children's actual state.` |
-| `$speckit-scope-plan` | After decomposition: `Regenerate and validate the refund dependency plan diagram.` | <!-- track-s -->
+| `$speckit-scope-plan` | After decomposition: `Regenerate and validate the refund dependency plan as an Illustrate diagram.` |
 | `$speckit-scope-after-specify` | Continue clarification: `Dispatch installed Brainstorm, or core Clarify, for the newly bound refund feature.` |
 | `$speckit-scope-plan-guard` | Before Plan: `Verify that unresolved GitHub questions do not block the refund plan.` |
 
