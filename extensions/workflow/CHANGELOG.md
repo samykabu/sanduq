@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.9.5] - 2026-10-11
+
+- Receipts that label files with Windows separators (`dir\file`) now read the real file on every
+  platform. Stored labels and hashes are kept as written; only the path read is made portable.
+  Labels that are absolute, drive-lettered, UNC, empty, contain `..` or resolve outside the project
+  are refused. A consulted label that is the backslash form of a required input stays a dependency.
+  New receipts store forward-slash inputs, evidence and input roles, and two role entries for one
+  file must match or the receipt is refused. The CI index check resolves the same labels
+  against Git's file names. Staleness, task lineage and claim checks are unchanged.
+
 ## [1.9.4] - 2026-10-11
 
 - `dependencies.json` pins Illustrate 2.4.1 (exports keep page styles, so diagrams no longer render

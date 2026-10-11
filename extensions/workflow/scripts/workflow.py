@@ -131,6 +131,27 @@ def inside(root, relative):
     return path
 
 
+def portable_label(label):
+    """A stored path label with Windows separators read as the forward-slash identifier. Used only to compare
+    labels; a stored label itself is never rewritten."""
+    return label.replace('\\', '/') if isinstance(label, str) else label
+
+
+def canonical_path(root, label):
+    """Forward-slash, root-relative path for a label that may carry Windows separators.
+
+    Refuses empty, NUL, absolute, drive-letter, UNC and `..` labels, and anything resolving outside the project,
+    so a legacy `dir\\file` label reads the same file on POSIX and Windows without widening what may be read."""
+    require(isinstance(label, str) and label and '\0' not in label, 'PATH_INVALID: ' + repr(label))
+    text = label.replace('\\', '/')
+    require(not text.startswith('/') and not re.match(r'^[A-Za-z]:', text), 'PATH_OUTSIDE_PROJECT: ' + label)
+    parts = [part for part in text.split('/') if part not in ('', '.')]
+    require(parts and '..' not in parts, 'PATH_OUTSIDE_PROJECT: ' + label)
+    canonical = '/'.join(parts)
+    inside(root, canonical)
+    return canonical
+
+
 def git(root, *args):
     result = subprocess.run(['git', *args], cwd=root, capture_output=True, text=True, encoding='utf-8')
     require(result.returncode == 0, 'GIT_ERROR: ' + result.stderr.strip())
@@ -1062,15 +1083,19 @@ def measured_context_gate(policy, usage):
 def fingerprint_files(root, paths):
     result = {}
     paths = sorted(set(paths))
-    for relative in paths:
-        inside(root, relative)
+    # Legacy labels with Windows separators keep their identity in the result but are read through the
+    # canonical path. Labels naming one file each keep their own entry (and the same hash); conflicting role
+    # data for such labels is refused when a receipt is ingested (`canonical_receipt`).
+    canonical = {relative: canonical_path(root, relative) for relative in paths}
+    contents = portable_files(root, sorted(set(canonical.values())))
     # Byte-sensitive files read as their committed blob when the working tree
     # differs only by checkout conversion, so a Windows autocrlf checkout and a
     # clean CI checkout of the same commit fingerprint identically.
-    for relative, content in portable_files(root, paths).items():
+    for relative in paths:
+        content = contents[canonical[relative]]
         if content is not None:
             # Checkbox bookkeeping must not invalidate task publication or planning.
-            if Path(relative).name == 'tasks.md':
+            if canonical[relative].rsplit('/', 1)[-1] == 'tasks.md':
                 content = re.sub(rb'(?m)^(\s*- )\[[ xX]\]', rb'\1[ ]', content)
                 # Routing comments are operational metadata. Route policy changes
                 # invalidate future dispatch, not earlier semantic task receipts.
@@ -1135,16 +1160,42 @@ def consulted_inputs(receipt):
             if isinstance(entry, dict) and entry.get('role') == 'consulted'}
 
 
+def without_required(paths, required):
+    """`paths` minus the required inputs, comparing legacy backslash labels as their forward-slash form."""
+    keep = {portable_label(path) for path in required}
+    return {path for path in paths if portable_label(path) not in keep}
+
+
+def canonical_receipt(root, receipt):
+    """A copy of a new receipt whose inputs, evidence and input_roles use canonical forward-slash paths.
+    Duplicates merge; two role entries for one file must be identical or the receipt is refused."""
+    receipt = copy.deepcopy(receipt)
+    for field in ('inputs', 'evidence'):
+        values = receipt.get(field)
+        if isinstance(values, list):
+            receipt[field] = list(dict.fromkeys(canonical_path(root, value) for value in values))
+    roles = receipt.get('input_roles')
+    if isinstance(roles, dict):
+        merged = {}
+        for path, entry in roles.items():
+            key = canonical_path(root, path)
+            require(key not in merged or merged[key] == entry, 'INPUT_ROLE_COLLISION: ' + key)
+            merged[key] = entry
+        receipt['input_roles'] = merged
+    return receipt
+
+
 def dependency_fingerprints(receipt, required=()):
     """The recorded hashes a receipt's conclusion rests on. Consulted inputs keep
     their hash for provenance but do not decide whether the receipt is current;
     a required input of the stage is always a dependency."""
-    consulted = consulted_inputs(receipt) - set(required)
+    consulted = without_required(consulted_inputs(receipt), required)
     return {path: value for path, value in receipt.get('fingerprints', {}).items() if path not in consulted}
 
 
 def role_exempt(feature, path):
     """Feature artifacts and project memory are dependencies without a declaration."""
+    path = portable_label(path)
     return path.startswith(feature + '/') or path.startswith('.specify/memory/')
 
 
@@ -1187,7 +1238,7 @@ def consulted_drift(root, feature, receipts):
     """Changed consulted inputs: reported as advisory drift, never as staleness."""
     drift = []
     for stage, receipt in receipts.items():
-        consulted = consulted_inputs(receipt) - set(required_inputs(root, feature, stage))
+        consulted = without_required(consulted_inputs(receipt), required_inputs(root, feature, stage))
         saved = {path: receipt['fingerprints'][path] for path in consulted
                  if path in receipt.get('fingerprints', {})}
         if not saved:
@@ -1375,7 +1426,7 @@ def receipt_status(root, feature, stage, receipt, policy=None):
         return {'current': False, 'reason': 'marked-stale', 'stale': receipt['stale']}
     saved = receipt.get('fingerprints', {})
     required = set(required_inputs(root, feature, stage))
-    if not saved or not required <= set(saved):
+    if not saved or not required <= {portable_label(path) for path in saved}:
         return {'current': False, 'reason': 'explicit-drift', 'paths': sorted(required - set(saved))}
     dependencies = dependency_fingerprints(receipt, required)
     now_hashes = fingerprint_files(root, dependencies)
@@ -1461,10 +1512,10 @@ def recovery_recipe(feature, stage, status, policy, receipt):
 
 def receipt_drift(root, feature, stage, receipt):
     """Explain staleness without printing source content or weakening the gate."""
-    saved = dependency_fingerprints(receipt, required_inputs(root, feature, stage))
+    saved = {portable_label(p): v for p, v in dependency_fingerprints(receipt, required_inputs(root, feature, stage)).items()}
     current = fingerprint_files(root, set(saved) | set(required_inputs(root, feature, stage)))
     changed = {p for p in set(saved) | set(current) if saved.get(p) != current.get(p)}
-    changed.update(set(required_inputs(root, feature, stage)) - set(receipt.get('fingerprints', {})))
+    changed.update(set(required_inputs(root, feature, stage)) - {portable_label(p) for p in receipt.get('fingerprints', {})})
     if stage in SOURCE_STAGES:
         old = receipt.get('source_fingerprints', {})
         new = source_fingerprints(root)
@@ -2383,6 +2434,7 @@ class Run:
             require(isinstance(receipt.get('inputs'), list) and receipt['inputs'], 'INPUT_MANIFEST_REQUIRED')
             require(not any(field in receipt for field in RUNTIME_RECEIPT_FIELDS),
                     'RECEIPT_FIELD_RESERVED: ' + ', '.join(f for f in RUNTIME_RECEIPT_FIELDS if f in receipt))
+            receipt = canonical_receipt(self.root, receipt)
             validate_input_roles(self.root, self.relative, stage, receipt, self.policy)
             for path in receipt['evidence']:
                 require(inside(self.root, path).is_file(), 'EVIDENCE_MISSING: ' + path)
@@ -2449,7 +2501,7 @@ class Run:
                 dependencies.update(dependency_fingerprints(prior, required_inputs(self.root, self.relative, name)))
             consulted = [p for p in changed if p not in dependencies]
             changed = [p for p in changed if p in dependencies]
-            unexpected = [p for p in changed if p not in [self.relative + '/' + f for f in permitted]]
+            unexpected = [p for p in changed if portable_label(p) not in [self.relative + '/' + f for f in permitted]]
             require(not unexpected, 'UPSTREAM_INPUT_CHANGED_DURING_STAGE: ' + ', '.join(unexpected))
             if consulted:
                 state.setdefault('lineage', []).append({'stage': stage, 'advisory': True, 'consulted': {

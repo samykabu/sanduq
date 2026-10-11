@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Illustrate 2.4.1 vendors illustration-tools 3.4.1 (exports keep page styles; no black fills, whole figures, valid XML). Workflow 1.9.4 pins it. Publish after successful main CI and downloaded asset verification."
+  "versions": {
+    "workflow": "1.9.5"
+  },
+  "status": "ready",
+  "note": "Workflow 1.9.5 reads legacy Windows-separator receipt labels portably and resolves them in the CI index check, with no Scope change. Publish after successful main CI and downloaded asset verification."
 }
