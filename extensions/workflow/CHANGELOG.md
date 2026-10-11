@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.9.6] - 2026-10-11
+
+- `delegate_dispatch.py start` accepts a paired `--harness` and `--model`. The pair must exactly
+  match a candidate of the route already resolved for the work (a task override, the configured
+  route or the claim's frozen stage snapshot). An unpaired, unknown, mismatched or unavailable
+  choice is refused before any ledger intent or driver launch, and there is no fallback after an
+  explicit choice: the attempt keeps only that candidate, is marked `pinned`, and neither an
+  automatic retry nor `reassign` leaves it. The ledger records an `explicit-pin` route decision
+  with the original candidate index. Without the pair the default first-candidate selection and
+  fallback order are unchanged. The choice never widens a role's model allowlist; it only picks
+  among candidates that were already eligible.
+- A stage start whose `--type` differs from the stage's real work type is refused
+  (`DELEGATION_STAGE_TYPE_MISMATCH`) instead of silently ignored; the identical type is accepted.
+
 ## [1.9.5] - 2026-10-11
 
 - Receipts that label files with Windows separators (`dir\file`) now read the real file on every

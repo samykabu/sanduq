@@ -595,11 +595,16 @@ def launch(root, driver, candidate, cwd, task, timeout, intent_id=None, orchestr
 
 def candidate_start(root, feature, identity, work_type, candidates, task_path, cwd,
                     timeout, parent_run_id=None, retry_count=0, decision=None, owned_paths=None,
-                    claim_token=None):
+                    claim_token=None, pinned=False):
     config = workflow.load_policy(root)['delegation']
     status = delegation.doctor(root, workflow.active_host(root), install=True,
                                scope=config['install_scope'])
     delegation.require(status['ok'], delegation.health_error(status))
+    # An explicit pin never falls back: an unavailable harness is refused
+    # before any ledger intent exists, not skipped to another candidate.
+    delegation.require(not pinned or status['harnesses'].get(candidates[0]['harness']),
+                       'DELEGATION_PINNED_ROUTE_UNAVAILABLE: ' + candidates[0]['harness'] +
+                       ' is not available; the explicit choice is not replaced by another route')
     task = task_path.read_text(encoding='utf-8')
     intent_id = uuid.uuid4().hex
     # The owned paths a light-tier result's evidence must resolve inside
@@ -620,7 +625,7 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
                                    'cwd': relative(root, cwd), 'timeout': timeout,
                                    'owned_paths': owned_paths, 'route_candidates': candidates,
                                    'driver': relative(root, status['driver']),
-                                   'claim_token': claim_token,
+                                   'claim_token': claim_token, 'pinned': bool(pinned),
                                    'parent_run_id': parent_run_id, 'retry_count': retry_count})
     for index, candidate in enumerate(candidates):
         if not status['harnesses'].get(candidate['harness']):
@@ -685,7 +690,7 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
                    'allow_commit': selected['allow_commit'],
                    'started_at': stamp(), 'task_file': relative(root, task_path),
                    'cwd': relative(root, cwd), 'timeout': timeout, 'owned_paths': owned_paths,
-                   'claim_token': claim_token,
+                   'claim_token': claim_token, 'pinned': bool(pinned),
                    'evidence_location': '.delegate/runs/' + started['run_id'] + '/result.json'}
         with edit_ledger(root, feature, ('intent_id', intent_id)) as ledger:
             find_intent(ledger, intent_id).update(attempt)
@@ -708,8 +713,27 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
     raise delegation.DelegationError('DELEGATION_ROUTES_UNAVAILABLE: ' + identity)
 
 
+def pin_candidate(candidates, harness, model):
+    """The one candidate an explicit ``--harness``/``--model`` pair names, exactly.
+
+    The pair is checked against the already resolved route (a task override,
+    the configured route or the frozen stage snapshot); it never adds a
+    candidate and never widens a role allowlist. Returns (candidate, index).
+    """
+    delegation.require(bool(harness) and bool(model),
+                       'DELEGATION_PIN_INCOMPLETE: --harness and --model must be given together')
+    for index, candidate in enumerate(candidates):
+        if candidate['harness'] == harness and candidate['requested_model'] == model:
+            return candidate, index
+    allowed = ', '.join(c['harness'] + '/' + str(c['requested_model']) for c in candidates)
+    raise delegation.DelegationError(
+        'DELEGATION_PIN_NOT_ELIGIBLE: ' + harness + '/' + model + ' is not an eligible candidate '
+        'for this work; eligible: ' + allowed + '. Choosing a model for one stage does not '
+        'authorise it for another; the role allowlist is unchanged')
+
+
 def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
-          token=None, timeout=None, owned=None):
+          token=None, timeout=None, owned=None, harness=None, model=None):
     root = root.resolve()
     feature = feature_identity(root, feature)
     require_not_worker_context(feature, identity)
@@ -735,8 +759,12 @@ def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
     if identity.startswith('stage:'):
         stage = identity.removeprefix('stage:')
         delegation.require(stage in delegation.STAGE_TYPES and token, 'DELEGATION_STAGE_INVALID')
-        work_type = delegation.stage_work_type(checkpoint.get('commands', {}), stage,
-                                               config.get('fixed_collection_commands'))
+        stage_type = delegation.stage_work_type(checkpoint.get('commands', {}), stage,
+                                                config.get('fixed_collection_commands'))
+        delegation.require(work_type in (None, stage_type),
+                           'DELEGATION_STAGE_TYPE_MISMATCH: ' + identity + ' is a ' + stage_type +
+                           ' stage; --type ' + str(work_type) + ' cannot change it')
+        work_type = stage_type
         text = stage_brief(root, feature, stage, token, work_type)
     else:
         description = task_description(root, feature, identity)
@@ -768,6 +796,10 @@ def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
     # whole working directory. Any candidate in the whole fallback chain
     # being light is enough (round 3, finding 6): a fallback beyond the
     # preferred candidate can still land the run on the light tier.
+    pinned = bool(harness or model)
+    if pinned:
+        chosen, original_index = pin_candidate(candidates, harness, model)
+        candidates = [chosen]
     requires_owned = work_type == 'qa_collect' or any(c.get('tier') == 'light' for c in candidates)
     delegation.require(not requires_owned or owned,
                        'DELEGATION_OWNED_PATHS_REQUIRED: a light-tier or qa_collect start must declare '
@@ -775,7 +807,13 @@ def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
                        'against a bounded owned-path set, never the whole working directory by default')
     return candidate_start(root, feature, full_identity, work_type, candidates,
                            task_path, cwd, timeout, owned_paths=owned,
-                           claim_token=token if identity.startswith('stage:') else None)
+                           claim_token=token if identity.startswith('stage:') else None,
+                           pinned=pinned,
+                           decision={'at': stamp(), 'identity': full_identity,
+                                     'requested': candidates[0], 'decision': 'explicit-pin',
+                                     'candidate_index': original_index,
+                                     'reason': 'Explicit --harness/--model pair matched an eligible '
+                                               'candidate; no fallback outside it'} if pinned else None)
 
 
 # Wording the supported agent CLIs and their provider APIs use when a
@@ -869,7 +907,7 @@ def measured_change(payload):
 
 def retry_plan(policy, attempt, payload, rejected, host):
     """Return (candidates, reason, decision, retry_count) for an automatic retry."""
-    if payload['status'] != 'failed':
+    if payload['status'] != 'failed' or attempt.get('pinned'):
         return None
     if rejected:
         # A rejected model did no work; keep the configured fallback order
@@ -1732,6 +1770,9 @@ def reassign(root, feature, run_id, reason, task_file=None):
                        'route to escalate; re-run "delegate_dispatch.py adopt" with a corrected '
                        'acceptance check, or "start" the task normally to create a real dispatched '
                        'attempt reassign can act on')
+    delegation.require(not prior.get('pinned'),
+                       'DELEGATION_PINNED_ROUTE_NO_ESCALATION: the run was started with an explicit '
+                       '--harness/--model pair; start again with another eligible pair instead')
     delegation.require(prior['retry_count'] < config['stronger_retry'],
                        'DELEGATION_RETRY_LIMIT_REACHED')
     delegation.require(not prior.get('replacement_run_id') and not live_children(ledger, run_id) and
@@ -2124,6 +2165,8 @@ def main(argv=None):
     start_cmd.add_argument('--feature', required=True)
     start_cmd.add_argument('--id', required=True)
     start_cmd.add_argument('--type', choices=delegation.TYPES)
+    start_cmd.add_argument('--harness', choices=('codex', 'claude'))
+    start_cmd.add_argument('--model')
     start_cmd.add_argument('--task-file', type=Path)
     start_cmd.add_argument('--cwd', type=Path)
     start_cmd.add_argument('--claim-token')
@@ -2172,7 +2215,8 @@ def main(argv=None):
     try:
         if args.action == 'start':
             result = start(args.root, args.feature, args.id, args.type, args.task_file,
-                           args.cwd, args.claim_token, args.timeout, args.owned)
+                           args.cwd, args.claim_token, args.timeout, args.owned,
+                           args.harness, args.model)
         elif args.action == 'collect':
             result = collect(args.root, args.feature, args.run_id, not args.no_auto_retry)
         elif args.action == 'recover':

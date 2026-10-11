@@ -499,6 +499,94 @@ class DelegationTests(unittest.TestCase):
             result = dispatch.start(self.root, self.feature, 'T001', owned=['.'])
         self.assertEqual(result['route']['tier'], 'standard')
 
+    def pin_route(self):
+        self.tasks()
+        self.enable()
+        self.policy['delegation']['overrides'][self.feature + '/T001'] = {
+            'preferred': {'harness': 'codex', 'model': 'gpt-6-sol'},
+            'fallbacks': [{'harness': 'claude', 'model': 'claude-opus-5-5'}]}
+        self.configure()
+
+    def pinned_start(self, doctor=None, **kwargs):
+        launch = patch.object(dispatch, 'launch', return_value={'run_id': 'claude-1', 'state': 'running'})
+        with patch.object(delegation, 'doctor', return_value=doctor or self.fake_doctor()), launch as mocked:
+            try:
+                return dispatch.start(self.root, self.feature, 'T001', **kwargs), mocked
+            except delegation.DelegationError as error:
+                return error, mocked
+
+    def test_explicit_pair_selects_an_allowed_fallback_and_never_retries_outside_it(self):
+        self.pin_route()
+        result, launch = self.pinned_start(harness='claude', model='claude-opus-5-5')
+        self.assertEqual(result['route']['requested_model'], 'claude-opus-5-5')
+        self.assertEqual(result['route']['choice'], 'fallback:1')
+        self.assertEqual(launch.call_args.args[2]['harness'], 'claude')
+        ledger = dispatch.load_ledger(self.root, self.feature)
+        attempt = ledger['attempts'][0]
+        self.assertTrue(attempt['pinned'])
+        self.assertEqual([c['requested_model'] for c in attempt['route_candidates']], ['claude-opus-5-5'])
+        self.assertEqual(ledger['route_decisions'][0]['decision'], 'explicit-pin')
+        self.assertEqual(ledger['route_decisions'][0]['candidate_index'], 1)
+        failed = {'status': 'failed'}
+        for rejected in (False, True):
+            self.assertIsNone(dispatch.retry_plan(self.policy, attempt, failed, rejected, 'codex'))
+
+    def test_default_start_still_selects_the_first_candidate(self):
+        self.pin_route()
+        result, launch = self.pinned_start()
+        self.assertEqual(result['route']['requested_model'], 'gpt-6-sol')
+        self.assertEqual(result['route']['choice'], 'preferred')
+        attempt = dispatch.load_ledger(self.root, self.feature)['attempts'][0]
+        self.assertFalse(attempt['pinned'])
+        self.assertEqual(len(attempt['route_candidates']), 2)
+
+    def test_unpaired_unknown_and_mismatched_pins_fail_before_any_intent(self):
+        self.pin_route()
+        for kwargs, code in (({'harness': 'claude'}, 'DELEGATION_PIN_INCOMPLETE'),
+                             ({'model': 'claude-opus-5-5'}, 'DELEGATION_PIN_INCOMPLETE'),
+                             ({'harness': 'claude', 'model': 'claude-sonnet-5-5'}, 'DELEGATION_PIN_NOT_ELIGIBLE'),
+                             ({'harness': 'codex', 'model': 'claude-opus-5-5'}, 'DELEGATION_PIN_NOT_ELIGIBLE')):
+            error, launch = self.pinned_start(**kwargs)
+            self.assertIsInstance(error, delegation.DelegationError)
+            self.assertIn(code, str(error))
+            launch.assert_not_called()
+        self.assertEqual(dispatch.load_ledger(self.root, self.feature)['attempts'], [])
+
+    def test_unavailable_pinned_harness_is_refused_without_intent_or_fallback(self):
+        self.pin_route()
+        doctor = self.fake_doctor()
+        doctor['harnesses'] = {'codex': True, 'claude': False}
+        error, launch = self.pinned_start(doctor=doctor, harness='claude', model='claude-opus-5-5')
+        self.assertIn('DELEGATION_PINNED_ROUTE_UNAVAILABLE', str(error))
+        launch.assert_not_called()
+        self.assertEqual(dispatch.load_ledger(self.root, self.feature)['attempts'], [])
+
+    def test_pinned_start_failure_does_not_fall_back(self):
+        self.pin_route()
+        failing = patch.object(dispatch, 'launch', side_effect=dispatch.StartFailed('DELEGATE_START_FAILED: x'))
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), failing as launch:
+            with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_ROUTES_UNAVAILABLE'):
+                dispatch.start(self.root, self.feature, 'T001', harness='codex', model='gpt-6-sol')
+        self.assertEqual(launch.call_count, 1)
+
+    def test_stage_type_must_match_and_pin_stays_inside_the_frozen_snapshot(self):
+        self.enable()
+        run = w.Run(self.root, self.feature)
+        run.start('acme/app#10')
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()),              patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}):
+            claim = run.claim({'session_id': 'test-session'})
+        launch = patch.object(dispatch, 'launch', return_value={'run_id': 'codex-scope', 'state': 'running'})
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), launch as mocked:
+            with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_STAGE_TYPE_MISMATCH'):
+                dispatch.start(self.root, self.feature, 'stage:scope', 'qa_author', token=claim['token'])
+            with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_PIN_NOT_ELIGIBLE'):
+                dispatch.start(self.root, self.feature, 'stage:scope', token=claim['token'],
+                               harness='claude', model='not-in-snapshot')
+            mocked.assert_not_called()
+            result = dispatch.start(self.root, self.feature, 'stage:scope', 'discovery',
+                                    token=claim['token'], harness='codex', model='gpt-6-sol')
+        self.assertEqual(result['route']['requested_model'], 'gpt-6-sol')
+
     def test_dispatch_records_unverified_actual_model_and_usage(self):
         self.tasks()
         self.enable()

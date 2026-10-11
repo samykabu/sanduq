@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "versions": {
-    "workflow": "1.9.5"
+    "workflow": "1.9.6"
   },
   "status": "ready",
-  "note": "Workflow 1.9.5 reads legacy Windows-separator receipt labels portably and resolves them in the CI index check, with no Scope change. Publish after successful main CI and downloaded asset verification."
+  "note": "Workflow 1.9.6 adds an explicit, validated harness and model choice to the supported delegated start and carries the 1.9.5 portable receipt-label fix, with no Scope change. Publish after successful main CI and downloaded asset verification."
 }
