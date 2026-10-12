@@ -25,6 +25,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import delegation
 import workflow
+import lean_policy
 
 
 def stamp():
@@ -456,6 +457,14 @@ def brief_file(root, text):
     return path
 
 
+def lean_enabled(root):
+    """True only when the project's policy opts in to lean execution."""
+    try:
+        return lean_policy.enabled(workflow.load_policy(root))
+    except workflow.WorkflowError:
+        return False
+
+
 def driver_env(root, run_context=None, role=None, feature=None):
     """Environment for the driver subprocess and, through it, every worker it
     spawns underneath.
@@ -485,6 +494,22 @@ def driver_env(root, run_context=None, role=None, feature=None):
     """
     env = os.environ.copy()
     env['DELEGATE_RUNS_DIR'] = str(root / '.delegate/runs')
+    if feature and lean_enabled(root):
+        # Lean only. Only the claim of exactly this feature, on its recorded branch, is
+        # passed on; anything inherited from another feature is dropped.
+        env.pop('SANDUQ_WORKFLOW_CLAIM_TOKEN', None)
+        env.pop('SANDUQ_WORKFLOW_SESSION_ID', None)
+        saved = workflow.read(root / feature / 'workflow/checkpoint.json', {}) or {}
+        active = saved.get('active') or {}
+        try:
+            branch = workflow.git(root, 'branch', '--show-current')
+        except workflow.WorkflowError:
+            branch = None
+        if (active.get('token') and active.get('session_id') and
+                saved.get('feature', feature) == feature and
+                saved.get('branch') and saved['branch'] == branch):
+            env['SANDUQ_WORKFLOW_CLAIM_TOKEN'] = active['token']
+            env['SANDUQ_WORKFLOW_SESSION_ID'] = active['session_id']
     if role == 'orchestrator':
         env['SANDUQ_DELEGATED_ROLE'] = 'orchestrator'
         env['SANDUQ_DELEGATED_FEATURE'] = feature
@@ -546,7 +571,7 @@ class StartFailed(delegation.DelegationError):
 SUPERVISOR_START_FAILED = 5
 
 
-def launch(root, driver, candidate, cwd, task, timeout, intent_id=None, orchestrator_feature=None):
+def launch(root, driver, candidate, cwd, task, timeout, intent_id=None, orchestrator_feature=None, feature=None):
     """Start one worker through the driver.
 
     ``orchestrator_feature``, given only for the ``stage:execute`` launch
@@ -565,6 +590,8 @@ def launch(root, driver, candidate, cwd, task, timeout, intent_id=None, orchestr
             '--timeout', str(timeout), '--task', task,
             '--keep-env', 'SANDUQ_DELEGATED_RUN', '--keep-env', 'SANDUQ_DELEGATED_ROLE',
             '--keep-env', 'SANDUQ_DELEGATED_FEATURE']
+    if lean_enabled(root):
+        args += ['--keep-env', 'SANDUQ_WORKFLOW_CLAIM_TOKEN', '--keep-env', 'SANDUQ_WORKFLOW_SESSION_ID']
     if candidate['requested_model']:
         args += ['--model', candidate['requested_model']]
     if candidate.get('read_only'):
@@ -575,7 +602,7 @@ def launch(root, driver, candidate, cwd, task, timeout, intent_id=None, orchestr
         args += ['--constraint', 'Sanduq delegation intent: ' + intent_id]
     env = driver_env(root, run_context=intent_id,
                      role='orchestrator' if orchestrator_feature else None,
-                     feature=orchestrator_feature)
+                     feature=orchestrator_feature or feature)
     try:
         result = subprocess.run(args, cwd=root, env=env,
                                 capture_output=True, text=True, encoding='utf-8')
@@ -595,8 +622,39 @@ def launch(root, driver, candidate, cwd, task, timeout, intent_id=None, orchestr
 
 def candidate_start(root, feature, identity, work_type, candidates, task_path, cwd,
                     timeout, parent_run_id=None, retry_count=0, decision=None, owned_paths=None,
-                    claim_token=None, pinned=False):
-    config = workflow.load_policy(root)['delegation']
+                    claim_token=None, pinned=False, deliverable=None, correction_plan=None, diagnosis=None):
+    policy = workflow.load_policy(root)
+    config = policy['delegation']
+    guidance = None
+    if lean_policy.enabled(policy):
+        # Alternate eligible routes remain explicitly selectable at start;
+        # a failed launch never silently substitutes a stronger candidate.
+        candidates = candidates[:1]
+        require_not_worker_context(feature, identity.removeprefix(feature + '/'))
+        checkpoint = workflow.read(root / feature / 'workflow/checkpoint.json', {})
+        stage = identity.rsplit('/stage:', 1)[-1] if '/stage:' in identity else None
+        if stage is None or (stage in workflow.BASE_STAGES and
+                             workflow.BASE_STAGES.index(stage) >= workflow.BASE_STAGES.index('execute')):
+            preflight = workflow.lean_preflight(root, policy)
+            delegation.require(not preflight or preflight['ok'],
+                               'LEAN_PREFLIGHT_FAILED: ' + json.dumps(preflight))
+        delegation.require(not stage or not lean_policy.coordinator_owned(policy, stage, checkpoint.get('commands', {})),
+                           'LEAN_COORDINATOR_OWNS_STAGE: ' + str(stage))
+        if work_type == 'review' and stage != 'analyze':
+            workflow.coding_review_checks(root, feature, policy, checkpoint)
+        elif re.fullmatch(r'T\d{3,}', identity.removeprefix(feature + '/')):
+            description = task_description(root, feature, identity.removeprefix(feature + '/'))
+            if delegation.task_type(description, True) == 'review':
+                workflow.coding_review_checks(root, feature, policy, checkpoint)
+        lean_policy.admit(policy, read_ledger(root, feature)['attempts'], identity, work_type,
+                          deliverable, correction_plan, diagnosis)
+        if diagnosis:
+            evidence = workflow.inside(root, diagnosis['evidence'])
+            delegation.require(evidence.is_file(), 'LEAN_DIAGNOSIS_EVIDENCE_MISSING')
+        guidance = lean_policy.timeout_guidance(policy, read_ledger(root, feature)['attempts'],
+                                               work_type, candidates)
+        delegation.require(lean_policy.settings(policy)['finalization_seconds'] < timeout <=
+                           lean_policy.settings(policy)['timeout_max_seconds'], 'LEAN_TIMEOUT_INVALID')
     status = delegation.doctor(root, workflow.active_host(root), install=True,
                                scope=config['install_scope'])
     delegation.require(status['ok'], delegation.health_error(status))
@@ -606,6 +664,13 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
                        'DELEGATION_PINNED_ROUTE_UNAVAILABLE: ' + candidates[0]['harness'] +
                        ' is not available; the explicit choice is not replaced by another route')
     task = task_path.read_text(encoding='utf-8')
+    if guidance:
+        task += '\nLean handoff: ' + guidance['next_action'] + '\nFinalization reserve: ' + str(
+            guidance['finalization_seconds']) + ' seconds. Deliverable: ' + deliverable + '\n'
+        if correction_plan:
+            task += 'Planned correction: ' + correction_plan + '\n'
+        if diagnosis:
+            task += 'Concrete diagnosis: ' + json.dumps(diagnosis) + '\n'
     intent_id = uuid.uuid4().hex
     # The owned paths a light-tier result's evidence must resolve inside
     # (finding 8a); recorded at start so accept and the summary-evidence guard
@@ -617,6 +682,10 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
         # The reservation and the route decision that justifies it are one
         # write, so a concurrent start or collect cannot launch the work twice.
         reserve(ledger, identity, parent_run_id)
+        admission = lean_policy.admit(policy, ledger['attempts'], identity, work_type,
+                                      deliverable, correction_plan, diagnosis)
+        if admission and diagnosis:
+            admission['diagnosis_evidence_sha256'] = file_sha256(evidence)
         if decision:
             ledger['route_decisions'].append(decision)
         ledger['attempts'].append({'intent_id': intent_id, 'identity': identity,
@@ -626,7 +695,8 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
                                    'owned_paths': owned_paths, 'route_candidates': candidates,
                                    'driver': relative(root, status['driver']),
                                    'claim_token': claim_token, 'pinned': bool(pinned),
-                                   'parent_run_id': parent_run_id, 'retry_count': retry_count})
+                                   'parent_run_id': parent_run_id, 'retry_count': retry_count,
+                                   **({'lean_admission': admission, 'timeout_guidance': guidance} if admission else {})})
     for index, candidate in enumerate(candidates):
         if not status['harnesses'].get(candidate['harness']):
             with edit_ledger(root, feature, ('intent_id', intent_id)) as ledger:
@@ -642,7 +712,8 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
         selected['allow_commit'] = identity.endswith('/stage:execute')
         try:
             started = launch(root, status['driver'], selected, cwd, task, timeout, intent_id,
-                             orchestrator_feature=feature if identity.endswith('/stage:execute') else None)
+                             orchestrator_feature=feature if identity.endswith('/stage:execute') else None,
+                             feature=feature)
         except delegation.DelegationError as error:
             # The driver writes meta.json before it spawns a worker. An exited
             # driver with no run for this intent proves nothing started, and so
@@ -660,6 +731,8 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
                 intent = find_intent(ledger, intent_id)
                 if confirmed:
                     failure = {'at': stamp(), 'candidate_index': index, 'reason': str(error)}
+                    if lean_policy.enabled(policy):
+                        failure['failure_category'] = 'harness-failure'
                     if not_launched:
                         failure.update(run_id=not_launched, evidence='driver exit 5; result says the '
                                        'harness never launched; supervisor never started and is gone')
@@ -691,7 +764,8 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
                    'started_at': stamp(), 'task_file': relative(root, task_path),
                    'cwd': relative(root, cwd), 'timeout': timeout, 'owned_paths': owned_paths,
                    'claim_token': claim_token, 'pinned': bool(pinned),
-                   'evidence_location': '.delegate/runs/' + started['run_id'] + '/result.json'}
+                   'evidence_location': '.delegate/runs/' + started['run_id'] + '/result.json',
+                   **({'lean_admission': admission, 'timeout_guidance': guidance} if admission else {})}
         with edit_ledger(root, feature, ('intent_id', intent_id)) as ledger:
             find_intent(ledger, intent_id).update(attempt)
             if index:
@@ -703,6 +777,8 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
         response = {'enabled': True, 'run_id': started['run_id'], 'state': started['state'],
                     'route': selected, 'evidence_location': attempt['evidence_location'],
                     'intent_id': intent_id}
+        if guidance:
+            response['timeout_guidance'] = guidance
         if status.get('notices'):
             # A replaced customised copy or moved legacy backup is reported, not hidden.
             response['notices'] = status['notices']
@@ -710,6 +786,8 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
     with edit_ledger(root, feature, ('intent_id', intent_id)) as ledger:
         find_intent(ledger, intent_id).update(status='blocked', ended_at=stamp(),
                                               result_summary='No configured route could start')
+        if lean_policy.enabled(policy):
+            find_intent(ledger, intent_id)['failure_category'] = 'harness-failure'
     raise delegation.DelegationError('DELEGATION_ROUTES_UNAVAILABLE: ' + identity)
 
 
@@ -733,12 +811,21 @@ def pin_candidate(candidates, harness, model):
 
 
 def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
-          token=None, timeout=None, owned=None, harness=None, model=None):
+          token=None, timeout=None, owned=None, harness=None, model=None,
+          deliverable=None, correction_plan=None, diagnosis=None):
     root = root.resolve()
     feature = feature_identity(root, feature)
     require_not_worker_context(feature, identity)
     policy = workflow.load_policy(root)
     config = policy['delegation']
+    if lean_policy.enabled(policy):
+        delegation.require(delegation.delegated_role() != 'orchestrator',
+                           'LEAN_NESTED_COORDINATOR_FORBIDDEN')
+        if identity.startswith('stage:'):
+            checkpoint = workflow.read(root / feature / 'workflow/checkpoint.json', {})
+            delegation.require(not lean_policy.coordinator_owned(policy, identity.removeprefix('stage:'),
+                                                                  checkpoint.get('commands', {})),
+                               'LEAN_COORDINATOR_OWNS_STAGE: ' + identity)
     claimed_route = None
     if identity.startswith('stage:'):
         checkpoint = workflow.read(root / feature / 'workflow/checkpoint.json', {})
@@ -750,7 +837,8 @@ def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
     delegation.require_no_maintenance(root)
     delegation.require(re.fullmatch(r'T\d{3,}|stage:[a-z_]+', identity) is not None,
                        'DELEGATION_IDENTITY_INVALID')
-    timeout = timeout if timeout is not None else (7200 if identity == 'stage:execute' else 1800)
+    timeout_selected = timeout is not None
+    timeout = timeout if timeout_selected else (7200 if identity == 'stage:execute' else 1800)
     delegation.require(type(timeout) is int and 0 < timeout <= 28800,
                        'DELEGATION_TIMEOUT_INVALID')
     feature_path = (root / feature).resolve()
@@ -768,7 +856,7 @@ def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
         text = stage_brief(root, feature, stage, token, work_type)
     else:
         description = task_description(root, feature, identity)
-        work_type = work_type or delegation.task_type(description)
+        work_type = work_type or delegation.task_type(description, lean_policy.enabled(policy))
         delegation.require(work_type in delegation.TYPES, 'DELEGATION_TASK_TYPE_INVALID')
         text = task_brief(root, feature, identity, work_type)
     if task_file:
@@ -800,6 +888,9 @@ def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
     if pinned:
         chosen, original_index = pin_candidate(candidates, harness, model)
         candidates = [chosen]
+    if lean_policy.enabled(policy) and not timeout_selected:
+        timeout = lean_policy.timeout_guidance(policy, read_ledger(root, feature)['attempts'],
+                                               work_type, candidates)['timeout_seconds']
     requires_owned = work_type == 'qa_collect' or any(c.get('tier') == 'light' for c in candidates)
     delegation.require(not requires_owned or owned,
                        'DELEGATION_OWNED_PATHS_REQUIRED: a light-tier or qa_collect start must declare '
@@ -809,6 +900,7 @@ def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
                            task_path, cwd, timeout, owned_paths=owned,
                            claim_token=token if identity.startswith('stage:') else None,
                            pinned=pinned,
+                           deliverable=deliverable, correction_plan=correction_plan, diagnosis=diagnosis,
                            decision={'at': stamp(), 'identity': full_identity,
                                      'requested': candidates[0], 'decision': 'explicit-pin',
                                      'candidate_index': original_index,
@@ -907,7 +999,7 @@ def measured_change(payload):
 
 def retry_plan(policy, attempt, payload, rejected, host):
     """Return (candidates, reason, decision, retry_count) for an automatic retry."""
-    if payload['status'] != 'failed' or attempt.get('pinned'):
+    if lean_policy.enabled(policy) or payload['status'] != 'failed' or attempt.get('pinned'):
         return None
     if rejected:
         # A rejected model did no work; keep the configured fallback order
@@ -1615,6 +1707,10 @@ def _recorded_response(attempt):
         response['unverified_reason'] = attempt['unverified_reason']
     if attempt.get('accepted_evidence'):
         response['accepted_evidence'] = attempt['accepted_evidence']
+    for key in ('failure_category', 'failure_domain', 'failure_attribution', 'status_provenance',
+                'timeout_guidance', 'lean_admission'):
+        if key in attempt:
+            response[key] = attempt[key]
     return response
 
 
@@ -1689,6 +1785,8 @@ def collect(root, feature, run_id, auto_retry=True):
         attempt['unattributed_bookkeeping_paths'] = [] if verified else internal
         attempt['worker_changed_paths'] = measured.get('dirty_paths_changed')
         attempt['model_rejected'] = rejected
+        if type(payload.get('duration_ms')) in (int, float) and payload['duration_ms'] >= 0:
+            attempt['actual_duration_seconds'] = payload['duration_ms'] / 1000
         # Light-tier guard (B12): a light-tier "successful" result is never
         # taken on trust. Only parsable evidence in the worker's own summary
         # keeps it successful; anything else stays unverified until accept or
@@ -1704,6 +1802,10 @@ def collect(root, feature, run_id, auto_retry=True):
                 attempt['unverified_reason'] = LIGHT_TIER_EVIDENCE_MISSING_REASON
         attempt['evidence_location'] = relative(root, Path((payload.get('artifacts') or {}).get('dir',
                                                         root / '.delegate/runs' / run_id)) / 'result.json')
+        if lean_policy.enabled(policy):
+            attempt['failure_category'] = lean_policy.failure_category(
+                {**payload, 'status': attempt['status']}, rejected)
+            attempt.setdefault('failure_domain', 'unknown')
         linked = replacement_link(ledger, attempt)
         attempt = copy.deepcopy(attempt)
     response = _recorded_response(attempt)
@@ -1745,7 +1847,25 @@ def attempt_to_candidate(attempt):
             'rule': attempt['rule'], 'choice': attempt['choice']}
 
 
-def reassign(root, feature, run_id, reason, task_file=None):
+def classify_failure(root, feature, run_id, attribution):
+    root = root.resolve()
+    feature = feature_identity(root, feature)
+    value = lean_policy.failure_attribution(attribution)
+    evidence = workflow.inside(root, attribution['evidence'])
+    delegation.require(evidence.is_file(), 'LEAN_FAILURE_ATTRIBUTION_EVIDENCE_MISSING')
+    with edit_ledger(root, feature) as ledger:
+        attempt = find_run(ledger, run_id)
+        delegation.require(attempt and attempt.get('status') in ('failed', 'abandoned', 'unverified'),
+                           'LEAN_FAILURE_ATTRIBUTION_REQUIRES_TERMINAL_FAILURE')
+        require_not_worker_context(feature, attempt['identity'].removeprefix(feature + '/'))
+        record = {**attribution, 'evidence_sha256': file_sha256(evidence), 'at': stamp()}
+        attempt.setdefault('failure_attribution_history', []).append(record)
+        attempt['failure_domain'] = value['domain']
+        attempt['failure_attribution'] = record
+        return _recorded_response(attempt)
+
+
+def reassign(root, feature, run_id, reason, task_file=None, diagnosis=None):
     """Let the orchestrator escalate complex or partly changed terminal work."""
     root = root.resolve()
     feature = feature_identity(root, feature)
@@ -1770,16 +1890,17 @@ def reassign(root, feature, run_id, reason, task_file=None):
                        'route to escalate; re-run "delegate_dispatch.py adopt" with a corrected '
                        'acceptance check, or "start" the task normally to create a real dispatched '
                        'attempt reassign can act on')
-    delegation.require(not prior.get('pinned'),
+    lean = lean_policy.enabled(policy)
+    delegation.require(lean or not prior.get('pinned'),
                        'DELEGATION_PINNED_ROUTE_NO_ESCALATION: the run was started with an explicit '
                        '--harness/--model pair; start again with another eligible pair instead')
-    delegation.require(prior['retry_count'] < config['stronger_retry'],
+    delegation.require(lean or prior['retry_count'] < config['stronger_retry'],
                        'DELEGATION_RETRY_LIMIT_REACHED')
     delegation.require(not prior.get('replacement_run_id') and not live_children(ledger, run_id) and
                        not any(a['identity'] == prior['identity'] and a['status'] in ACTIVE
                                for a in ledger['attempts']), 'DELEGATION_ALREADY_REASSIGNED')
-    stronger = delegation.stronger_candidate(config, attempt_to_candidate(prior),
-                                             workflow.active_host(root))
+    stronger = (attempt_to_candidate(prior) if lean else
+                delegation.stronger_candidate(config, attempt_to_candidate(prior), workflow.active_host(root)))
     delegation.require(stronger is not None, 'DELEGATION_STRONGER_ROUTE_UNAVAILABLE')
     original = (root / prior['task_file']).read_text(encoding='utf-8')
     text = original + '\nOrchestrator reassignment reason: ' + reason.strip() + '\n'
@@ -1793,6 +1914,9 @@ def reassign(root, feature, run_id, reason, task_file=None):
                                   [stronger], brief, root / prior['cwd'], prior['timeout'],
                                   parent_run_id=run_id, retry_count=prior['retry_count'] + 1,
                                   owned_paths=prior.get('owned_paths'), claim_token=prior.get('claim_token'),
+                                  pinned=prior.get('pinned', False) if lean else False,
+                                  deliverable=(prior.get('lean_admission') or {}).get('deliverable'),
+                                  correction_plan=reason, diagnosis=diagnosis,
                                   decision={'at': stamp(), 'identity': prior['identity'],
                                             'requested': attempt_to_candidate(prior),
                                             'decision': 'reassignment', 'reason': reason.strip(),
@@ -2167,6 +2291,9 @@ def main(argv=None):
     start_cmd.add_argument('--type', choices=delegation.TYPES)
     start_cmd.add_argument('--harness', choices=('codex', 'claude'))
     start_cmd.add_argument('--model')
+    start_cmd.add_argument('--deliverable', help='Concrete artifact and acceptance result (required in lean mode)')
+    start_cmd.add_argument('--correction-plan', help='One planned correction for an existing identity')
+    start_cmd.add_argument('--diagnosis', type=Path, help='JSON cause/evidence/change for further attempts')
     start_cmd.add_argument('--task-file', type=Path)
     start_cmd.add_argument('--cwd', type=Path)
     start_cmd.add_argument('--claim-token')
@@ -2178,6 +2305,11 @@ def main(argv=None):
     collect_cmd.add_argument('--feature', required=True)
     collect_cmd.add_argument('--run-id', required=True)
     collect_cmd.add_argument('--no-auto-retry', action='store_true')
+    classify_cmd = sub.add_parser('classify')
+    classify_cmd.add_argument('--feature', required=True)
+    classify_cmd.add_argument('--run-id', required=True)
+    classify_cmd.add_argument('--attribution', type=Path, required=True,
+                              help='JSON domain/actor/reason/evidence; does not alter technical provenance')
     recover_cmd = sub.add_parser('recover')
     recover_cmd.add_argument('--feature', required=True)
     recover_cmd.add_argument('--intent-id', required=True)
@@ -2190,6 +2322,7 @@ def main(argv=None):
     reassign_cmd.add_argument('--run-id', required=True)
     reassign_cmd.add_argument('--reason', required=True)
     reassign_cmd.add_argument('--task-file', type=Path)
+    reassign_cmd.add_argument('--diagnosis', type=Path)
     accept_cmd = sub.add_parser('accept')
     accept_cmd.add_argument('--feature', required=True)
     accept_cmd.add_argument('--run-id', required=True)
@@ -2216,9 +2349,14 @@ def main(argv=None):
         if args.action == 'start':
             result = start(args.root, args.feature, args.id, args.type, args.task_file,
                            args.cwd, args.claim_token, args.timeout, args.owned,
-                           args.harness, args.model)
+                           args.harness, args.model, args.deliverable, args.correction_plan,
+                           workflow.read(workflow.inside(args.root.resolve(), str(args.diagnosis)))
+                           if args.diagnosis else None)
         elif args.action == 'collect':
             result = collect(args.root, args.feature, args.run_id, not args.no_auto_retry)
+        elif args.action == 'classify':
+            result = classify_failure(args.root, args.feature, args.run_id,
+                                      workflow.read(workflow.inside(args.root.resolve(), str(args.attribution))))
         elif args.action == 'recover':
             result = recover_intent(args.root, args.feature, args.intent_id)
         elif args.action == 'abandon':
@@ -2232,7 +2370,9 @@ def main(argv=None):
             result = adopt(args.root, args.feature, args.id, args.command, args.expect,
                            args.timeout, args.owned)
         else:
-            result = reassign(args.root, args.feature, args.run_id, args.reason, args.task_file)
+            result = reassign(args.root, args.feature, args.run_id, args.reason, args.task_file,
+                              workflow.read(workflow.inside(args.root.resolve(), str(args.diagnosis)))
+                              if args.diagnosis else None)
         print(json.dumps(result, indent=2))
         return 0
     except (delegation.DelegationError, workflow.WorkflowError, OSError, ValueError) as error:

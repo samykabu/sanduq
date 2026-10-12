@@ -12,11 +12,11 @@ PR, illustration, and Memory processes. Use [install by host](../docs/start/inst
 | [assure](assure/README.md) | 2.3.2 | 3 |
 | [illustrate](illustrate/README.md) | 2.4.1 | 4 |
 | [memory](memory/README.md) | 2.1.2 | 7 |
-| [pr](pr/README.md) | 4.2.2 | 2 |
+| [pr](pr/README.md) | 4.2.3 | 2 |
 | [project](project/README.md) | 2.2.2 | 2 |
-| [scope](scope/README.md) | 1.6.1 | 7 |
+| [scope](scope/README.md) | 1.6.2 | 7 |
 | [user-manual](user-manual/README.md) | 1.5.2 | 4 |
-| [workflow](workflow/README.md) | 1.9.5 | 13 |
+| [workflow](workflow/README.md) | 1.10.0 | 13 |
 
 Published versions live in the authoritative root [catalog](../catalog.json);
 [catalog.json](catalog.json) mirrors it.

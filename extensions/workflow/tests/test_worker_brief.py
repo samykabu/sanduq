@@ -224,5 +224,59 @@ class WorkerBriefTests(unittest.TestCase):
         self.assertEqual(Path(parsed['path']), output_path)
 
 
+class WorkerBriefLeanTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name).resolve()
+        directory = self.root / 'specs/001-x'
+        directory.mkdir(parents=True)
+        (directory / 'tasks.md').write_text(
+            '- [ ] T001 Implement `src/a.py` for EXEC-06. Acceptance: exits 2 on bad input; prints JSON\n',
+            encoding='utf-8')
+        (directory / 'spec.md').write_text('EXEC-06: must fail closed.\n', encoding='utf-8')
+
+    def brief(self):
+        return wb.build(self.root, 'specs/001-x', 'T001')
+
+    def test_brief_carries_fingerprints_acceptance_and_detail_pointers(self):
+        text, context, _ = self.brief()
+        self.assertIn('- exits 2 on bad input', text)
+        self.assertIn('- prints JSON', text)
+        self.assertIn('`' + context['fingerprints']['policy'] + '`', text)
+        self.assertIn('`specs/001-x/spec.md`', text)
+        self.assertEqual(context['fallback_sections'], [])
+
+    def test_fingerprints_change_with_their_inputs_only(self):
+        _, first, _ = self.brief()
+        (self.root / 'specs/001-x/spec.md').write_text('EXEC-06: changed.\n', encoding='utf-8')
+        _, second, _ = self.brief()
+        self.assertEqual(first['fingerprints']['policy'], second['fingerprints']['policy'])
+        self.assertNotEqual(first['fingerprints']['source'], second['fingerprints']['source'])
+
+    def test_oversized_brief_keeps_requirements_and_reports_instead_of_truncating(self):
+        (self.root / 'specs/001-x/spec.md').write_text(
+            '\n'.join('EXEC-06: line %d %s' % (i, 'x' * 60) for i in range(120)), encoding='utf-8')
+        text, _, oversized = self.brief()
+        self.assertTrue(oversized)
+        self.assertIn('line 119', text)
+
+    def test_projection_keeps_counters_apart_and_unavailable_zeros_unknown(self):
+        placeholder = {f: 0 for f in wb.USAGE_FIELDS}
+        for tokens in ({**placeholder, 'fidelity': 'unavailable'}, None, {'total': 5}):
+            self.assertIsNone(wb.project_result({'run_id': 'r', 'tokens': tokens})['usage'])
+        exact = {'input_total': 354918, 'input_fresh': 12, 'cache_read': 307644, 'cache_write': 47262,
+                 'output_total': 2925, 'reasoning': 879, 'total': 357843, 'fidelity': 'exact'}
+        known = wb.project_result({'run_id': 'r', 'summary': 's' * 900, 'source_fingerprint': 'f', 'tokens': exact})
+        self.assertEqual(known['usage']['input_fresh'], 12)
+        self.assertEqual(known['usage']['cache_read'], 307644)
+        self.assertEqual(known['usage']['output_total'], 2925)
+        self.assertEqual(len(known['summary']), 300)
+        self.assertEqual(known['source_fingerprint'], 'f')
+        partial = wb.project_result({'run_id': 'r', 'tokens': {'fidelity': 'exact', 'total': 3, 'cache_read': -1}})
+        self.assertEqual((partial['usage']['total'], partial['usage']['cache_read'], partial['usage']['input_fresh']),
+                         (3, None, None))
+
+
 if __name__ == '__main__':
     unittest.main()

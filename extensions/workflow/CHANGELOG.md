@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.10.0] - Unreleased
+
+- Add opt-in lean execution: the coordinator owns lifecycle mechanics, coding review waits for completed implementation/testing, and retries require bounded correction evidence. Existing projects keep their current behavior until enabled.
+- Bind verification reuse to selected commands, source/fixture bytes, environment and passing evidence. Add aggregate preflight, bounded worker briefs and per-harness progress from normalized run records.
+- Expose initial/revalidation Scope commands and validate bound PR closing references. Preserve explicit model allowlists, claim ownership and unknown usage.
+
 ## [1.9.5] - 2026-10-11
 
 - Receipts that label files with Windows separators (`dir\file`) now read the real file on every

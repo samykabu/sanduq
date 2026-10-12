@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.6.2] - Unreleased
+
+- Document the verified initial and revalidation gate/bind command forms through Workflow's command helper. Revalidation does not use initial-claim flags. Existing binding, status and REST safeguards remain.
+
 ## [1.6.1] - 2026-10-10
 
 - Fresh bind is restricted to the owned initial Specify phase, before any write. A changed

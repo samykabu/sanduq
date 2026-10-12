@@ -2,6 +2,14 @@
 
 Loaded when `claim` returns `stage: review` (runtime `workflow:review`).
 
+In lean mode, claim, completion, revalidation and review-worker admission block
+until every feature implementation and authored/collected test task is complete
+and any selected delegation evidence is successful and trusted. Review and
+documentation tasks are excluded from this completion test. Specification and
+plan artifact analysis (`analyze`, or `[artifact-analysis]` tasks) can run before
+coding; it is not final coding review. Review remains independent after all
+coding/testing batches finish.
+
 Before the last Verify/Review/Ready pass, read the publication preflight in
 `references/stage-pr.md#publication-preflight-and-post-merge-verification` and
 prepare portable evidence there.
