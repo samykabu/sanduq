@@ -1,7 +1,14 @@
 # Changelog
 
-## [1.9.6] - 2026-10-11
+## [1.9.5] - 2026-10-11
 
+- Receipts that label files with Windows separators (`dir\file`) now read the real file on every
+  platform. Stored labels and hashes are kept as written; only the path read is made portable.
+  Labels that are absolute, drive-lettered, UNC, empty, contain `..` or resolve outside the project
+  are refused. A consulted label that is the backslash form of a required input stays a dependency.
+  New receipts store forward-slash inputs, evidence and input roles, and two role entries for one
+  file must match or the receipt is refused. The CI index check resolves the same labels
+  against Git's file names. Staleness, task lineage and claim checks are unchanged.
 - `delegate_dispatch.py start` accepts a paired `--harness` and `--model`. The pair must exactly
   match a candidate of the route already resolved for the work (a task override, the configured
   route or the claim's frozen stage snapshot). An unpaired, unknown, mismatched or unavailable
@@ -13,16 +20,6 @@
   among candidates that were already eligible.
 - A stage start whose `--type` differs from the stage's real work type is refused
   (`DELEGATION_STAGE_TYPE_MISMATCH`) instead of silently ignored; the identical type is accepted.
-
-## [1.9.5] - 2026-10-11
-
-- Receipts that label files with Windows separators (`dir\file`) now read the real file on every
-  platform. Stored labels and hashes are kept as written; only the path read is made portable.
-  Labels that are absolute, drive-lettered, UNC, empty, contain `..` or resolve outside the project
-  are refused. A consulted label that is the backslash form of a required input stays a dependency.
-  New receipts store forward-slash inputs, evidence and input roles, and two role entries for one
-  file must match or the receipt is refused. The CI index check resolves the same labels
-  against Git's file names. Staleness, task lineage and claim checks are unchanged.
 
 ## [1.9.4] - 2026-10-11
 
