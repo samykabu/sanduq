@@ -6,7 +6,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from workflow import (load_policy, stages, read, require, inside, git, digest, checkpoint_policy_digest, receipt_status,
+from workflow import (canonical_path, load_policy, stages, read, require, inside, git, digest, checkpoint_policy_digest, receipt_status,
                       receipt_drift, recovery_recipe, ready_checks, github_repository, verification_check, WorkflowError,
                       WORKFLOW_SCRIPT)
 import sanduq_ci
@@ -185,6 +185,9 @@ def check_index(root, feature):
             for p, value in receipt.get(key, {}).items():
                 if value is None:
                     continue
+                # A legacy label may use Windows separators; git lists forward-slash names. The stored label
+                # is untouched and the strict resolver refuses absolute, drive, UNC and escaping labels.
+                p = canonical_path(root, p)
                 paths.add(p)
                 parts = Path(p).parts
                 if own_feature and len(parts) > 1 and parts[0] == 'specs' and parts[1] != own_feature:

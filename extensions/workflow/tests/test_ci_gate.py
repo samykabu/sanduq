@@ -216,6 +216,39 @@ class CIGateTests(unittest.TestCase):
         self.assertIn('CROSS_FEATURE_EVIDENCE', result['warnings'][0])
         self.assertIn(other, result['warnings'][0])
 
+    def legacy_label_state(self, run):
+        """Store the verify evidence under its Windows-separator label, keeping the recorded hash."""
+        state = w.read(run.path)
+        fingerprints = state['receipts']['verify']['fingerprints']
+        posix = self.feature + '/evidence/verify.txt'
+        legacy = posix.replace('/', '\\')
+        fingerprints[legacy] = fingerprints.pop(posix)
+        run.save(state)
+        return legacy, fingerprints[legacy]
+
+    def test_index_preflight_resolves_legacy_windows_labels_and_still_refuses_unindexed_evidence(self):
+        run = self.ready()
+        legacy, recorded = self.legacy_label_state(run)
+        with self.assertRaisesRegex(w.WorkflowError, 'EVIDENCE_NOT_PORTABLE.*not_in_index'):
+            c.check_index(self.root, self.feature)
+        subprocess.run(['git', 'add', '.'], cwd=self.root, check=True)
+        self.assertGreater(c.check_index(self.root, self.feature)['indexed_paths'], 0)
+        self.assertEqual(w.read(run.path)['receipts']['verify']['fingerprints'][legacy], recorded)  # bytes kept
+        (run.feature / 'evidence/verify.txt').write_text('changed after staging')
+        with self.assertRaisesRegex(w.WorkflowError, 'unstaged.*verify.txt'):
+            c.check_index(self.root, self.feature)
+
+    def test_index_preflight_refuses_unsafe_labels(self):
+        run = self.ready()
+        subprocess.run(['git', 'add', '.'], cwd=self.root, check=True)
+        for label in ('..\\outside.txt', 'C:\\Windows\\win.ini', '/etc/passwd'):
+            with self.subTest(label=label):
+                state = w.read(run.path)
+                state['receipts']['verify']['fingerprints'][label] = 'x'
+                run.save(state)
+                with self.assertRaisesRegex(w.WorkflowError, 'PATH_OUTSIDE_PROJECT'):
+                    c.check_index(self.root, self.feature)
+
     def test_index_preflight_has_no_warnings_when_all_evidence_is_own(self):
         run = self.ready()
         subprocess.run(['git', 'add', '.'], cwd=self.root, check=True)

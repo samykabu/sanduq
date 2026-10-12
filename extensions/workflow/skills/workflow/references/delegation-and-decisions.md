@@ -26,6 +26,13 @@ exists or a start may still be in flight. On `DELEGATION_LEDGER_BUSY` or
 `DELEGATE_SKILL_INSTALL_BUSY`, retry the same command; a lock left by a dead
 dispatcher on this host is recovered automatically, so never delete a lock
 file whose named owner process is still running. An observation timeout is not a failed run.
+To choose one candidate yourself, add `--harness <codex|claude> --model <id>` to `start`, always
+together. The pair must match a candidate of the route already resolved for that task or frozen in
+the stage claim, so it selects among eligible routes and never adds one. Picking Opus for a
+discovery stage does not make it eligible for another stage; each stage keeps its own allowlist.
+A pair that is missing half, unknown, not in the route or whose harness is unavailable fails before
+any intent or launch. After an explicit choice there is no fallback, automatic retry or `reassign`:
+start again with another eligible pair. `--type` on a stage start must equal the stage's own type.
 Read its current instruction source rather than guessing from a name. Native semantic
 commands may pause for real decisions. The managed preset prevents duplicate chaining.
 With `mode: revalidate`, retain the bound issue, feature path and existing branch.
