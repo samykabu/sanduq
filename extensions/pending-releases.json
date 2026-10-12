@@ -1,8 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "workflow": "1.9.5"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Workflow 1.9.5 makes receipt and CI-index path labels portable (Windows separators) and adds an explicit, validated harness and model choice to the supported delegated start, with no Scope change. Publish after successful main CI and downloaded asset verification."
 }
