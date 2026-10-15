@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.1.0] - 2026-10-16
+
+- The Progress code, report page and reference docs are now vendored from the portable `progress-report` skill in
+  [sanduq-skills](https://github.com/samykabu/sanduq-skills) (`agent-tools-v1.2.0`, pinned in `vendor.lock.json`). Paths under
+  `.specify/extensions/progress/` are unchanged. Edit them in sanduq-skills, not here. The extension keeps its manifest,
+  commands, hook commands, `SKILL.ext.md` and README, and a reference copy of the skill's `SKILL.md` in `assets/skill/`.
+- Plan mode: `progress init --plan PATH` reports on any Markdown checklist outside Spec Kit, stored in `.progress/<name>/`.
+  Verbs target a report with `--plan NAME` or `--feature DIR`.
+- `progress hooks install|uninstall|status --host claude|codex [--scope project|user]` writes the host's native hook entries
+  without touching other settings.
+- Nested `.gitignore` files protect the disposable report folders, in addition to `.git/info/exclude`.
+- Review-cycle fixes from the skill: see the skill's changelog for the full list.
+- License: the vendored code is MIT in sanduq-skills. The extension wrapper keeps PolyForm Noncommercial 1.0.0, as
+  Illustrate does. The MIT notice is in `THIRD_PARTY_NOTICES.md`.
+
 ## [1.0.1] - 2026-10-15
 
 - Hooks run `scripts/hook.py`, a standard-library entry that exits before importing Progress for an unbound session

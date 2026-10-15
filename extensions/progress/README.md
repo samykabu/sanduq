@@ -8,7 +8,7 @@ feature files and the host's native hook payloads, so no agent is spent keeping 
 
 Contents: [Install](#install) · [Quick start](#quick-start) · [How it plugs in](#how-it-plugs-in) ·
 [What the report shows](#what-the-report-shows) · [What is measured](#what-is-measured-and-how-well) ·
-[Files](#files) · [Theming](#theming) · [Token cost](#token-cost) · [Workflow](#using-with-sanduq-workflow) ·
+[Files](#files) · [Theming](#theming) · [Token cost](#token-cost) · [Workflow](#using-with-sanduq-workflow) · [Plans outside Spec Kit](#plans-outside-spec-kit) ·
 [Upgrading](#upgrading-from-100) · [Troubleshooting](#troubleshooting) · [Limits](#limits)
 
 A **lane** is one unit of assignment: a worker, a delegated run or a host subagent that owns a list of tasks. A
@@ -247,6 +247,24 @@ config and theme.
 
 The full list of changes is in [the changelog](CHANGELOG.md).
 
+## Plans outside Spec Kit
+
+Progress also reports on any Markdown plan with `- [ ]` / `- [x]` items; no Spec Kit feature is needed. The code is the
+portable `progress-report` skill, vendored from [sanduq-skills](https://github.com/samykabu/sanduq-skills) at
+`agent-tools-v1.2.0` (see `vendor.lock.json`; edit it there, not here).
+
+```bash
+progress hooks install --host claude        # once: model, effort, context and child agents (or --host codex)
+progress init --plan docs/plan.md           # creates .progress/plan/ and prints bind=<nonce>
+progress status                             # one-line state
+```
+
+Open `.progress/plan/.view/index.html`. Check items off in the plan file; Progress never writes it. Items without an id get
+stable `P001`... ids. With several reports, target one with `--plan NAME` or `--feature DIR`. `progress hooks
+install|uninstall|status` edits only its own tagged entries in `.claude/settings.json` or `.codex/hooks.json` (`--scope user`
+for a user-wide install). Plan-mode flags, ids and the `.progress/` layout are in
+[the command reference](docs/commands.md) and [contracts](docs/contracts.md).
+
 ## Troubleshooting
 
 ### Report is not updating
@@ -334,4 +352,5 @@ Hooks and the status line never fail: they drop the event, log it and exit 0.
 
 ## License
 
-PolyForm Noncommercial 1.0.0. See [licenses](https://github.com/samykabu/sanduq/blob/main/docs/reference/licenses.md).
+The extension is PolyForm Noncommercial 1.0.0. The vendored `progress-report` code (`scripts/`, `assets/ui/`, `docs/`,
+`skills/progress/references/`) is MIT in sanduq-skills; the notice is in `THIRD_PARTY_NOTICES.md`. See [licenses](https://github.com/samykabu/sanduq/blob/main/docs/reference/licenses.md).
