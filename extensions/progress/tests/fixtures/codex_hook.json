@@ -1,0 +1,9 @@
+{
+  "session_id": "codex-sess-1",
+  "turn_id": "turn-1",
+  "transcript_path": "{ROLLOUT}",
+  "cwd": "{CWD}",
+  "hook_event_name": "Stop",
+  "model": "gpt-6.1-sol",
+  "tool_name": null
+}

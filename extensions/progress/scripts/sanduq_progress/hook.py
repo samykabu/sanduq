@@ -1,0 +1,65 @@
+"""`progress hook <event>`: the single entry the host's event dispatcher calls.
+
+Never prints, never raises, always exits 0. Observations attach only to a bound session (or a child whose
+parent is verified from the payload); everything else is dropped and logged."""
+import json
+import os
+from pathlib import Path
+
+from . import refresh as refreshlib, snapshot
+from .hosts import claude, codex, detect_host, normalise_event
+from .lock import Lock, LockBusy
+from .paths import Ctx, find_root
+from .util import diag, utcnow
+
+ROLLOUT_EVENTS = ('session_start', 'user_prompt_submit', 'stop', 'session_end')
+FORCE_EVENTS = ('stop', 'session_end')
+
+
+def handle(event_arg, raw, root=None, now=None, host=None):
+    """Process one hook invocation. Returns a short status string for tests; callers ignore it."""
+    root = Path(root) if root else find_root()
+    now = now or utcnow()
+    project_log = root / '.specify' / 'progress' / 'diagnostics.log'
+    try:
+        try:
+            payload = json.loads(raw) if raw and raw.strip() else None
+        except ValueError:
+            payload = None
+        if not isinstance(payload, dict):
+            diag(project_log, f'hook {event_arg}: empty or invalid payload', now)
+            return 'invalid'
+        host = host or detect_host(payload, os.environ)
+        event = normalise_event(event_arg or payload.get('hook_event_name'))
+        adapter = codex if host == 'codex' else claude
+        obs = adapter.parse_hook(payload, event, now)
+        if not obs['session_id']:
+            diag(project_log, f'hook {event}: payload without session_id dropped', now)
+            return 'dropped'
+        binding = snapshot.lookup(root, host, obs['session_id'])
+        if not binding and event == 'post_tool_use':
+            binding = snapshot.convert_pending(root, obs, now)
+        if not binding:
+            diag(project_log, f'hook {event}: unbound {host} session dropped', now)
+            return 'dropped'
+        if not snapshot.cwd_valid(binding, obs.get('cwd')):
+            diag(project_log, f'hook {event}: cwd outside the bound worktree dropped', now)
+            return 'dropped'
+        ctx = Ctx(root, binding['feature'])
+        if not ctx.dir.is_dir():
+            return 'uninitialised'
+        try:
+            with Lock(ctx.lock, retries=2, delay=0.05):
+                fields = dict(obs['fields'])
+                if host == 'codex' and not obs.get('child') and obs.get('transcript_path') and event in ROLLOUT_EVENTS:
+                    for name, value in codex.read_rollout(obs['transcript_path'], now).items():
+                        fields.setdefault(name, value)
+                snapshot.merge(ctx, host, obs['session_id'], now, fields=fields, child=obs.get('child'))
+                refreshed = refreshlib.after_update(ctx, now, force=event in FORCE_EVENTS)
+            return 'refreshed' if refreshed else 'dirty'
+        except LockBusy:
+            diag(ctx.diag, f'hook {event}: lock busy, observation dropped', now)
+            return 'busy'
+    except Exception as exc:  # the host must never be blocked by Progress
+        diag(project_log, f'hook {event_arg}: {type(exc).__name__}: {exc}', now)
+        return 'error'

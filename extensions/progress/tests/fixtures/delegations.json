@@ -1,0 +1,42 @@
+{
+  "attempts": [
+    {
+      "identity": "specs/001-demo/T002",
+      "task_type": "implement",
+      "run_id": "run-a1",
+      "requested_harness": "codex",
+      "requested_model": "gpt-6.1-sol",
+      "actual_model": "gpt-6.1-sol",
+      "actual_model_evidence": "driver-result",
+      "status": "failed",
+      "started_at": "2026-09-26T14:00:00Z",
+      "ended_at": "2026-09-26T14:10:00Z",
+      "retry_count": 0
+    },
+    {
+      "identity": "specs/001-demo/T002",
+      "task_type": "implement",
+      "run_id": "run-a2",
+      "parent_run_id": "run-a1",
+      "requested_harness": "claude",
+      "requested_model": "sonnet",
+      "actual_model": null,
+      "actual_model_evidence": "pending",
+      "status": "running",
+      "started_at": "2026-09-26T14:20:00Z",
+      "retry_count": 1
+    },
+    {
+      "identity": "stage:execute",
+      "task_type": "review",
+      "run_id": "run-b1",
+      "requested_harness": "codex",
+      "requested_model": "gpt-6-astra",
+      "actual_model": "gpt-6-astra",
+      "actual_model_evidence": "driver-result",
+      "status": "accepted",
+      "started_at": "2026-09-26T13:00:00Z",
+      "ended_at": "2026-09-26T13:30:00Z"
+    }
+  ]
+}

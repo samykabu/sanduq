@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "generation": 234,
+  "active": {
+    "stage": "execute",
+    "token": "x",
+    "claimed_at": "2026-09-26T15:00:00+00:00",
+    "session_id": "s",
+    "context": {},
+    "baseline": {}
+  },
+  "status": "in-progress",
+  "run_id": "a3159ee27b0ffb9774ba582f47102517",
+  "branch": "001-demo",
+  "feature": "specs/001-demo",
+  "issue": "acme/app#10",
+  "updated_at": "2026-09-26T16:55:23+00:00",
+  "branch_history": [
+    {
+      "from": "main",
+      "to": "001-demo",
+      "at": "2026-09-24T04:41:23+00:00"
+    }
+  ],
+  "pause": null
+}
