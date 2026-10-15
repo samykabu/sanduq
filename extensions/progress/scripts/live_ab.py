@@ -172,16 +172,29 @@ def check_new(data, want):
     if not isinstance(data, dict) or data.get("schema") != "sanduq.progress.v2":
         return ["projection unavailable: progress status --json did not return sanduq.progress.v2"]
     problems = []
-    held = {}
+    held, groups_by_owner = {}, {}
     for lane in data.get("lanes") or []:
         groups = lane.get("tasks") or {}
         ids = list(groups.get("active") or []) + list(groups.get("waiting") or []) + list(groups.get("done") or [])
         ids += [b.get("task") for b in groups.get("blocked") or []]
         held.setdefault(lane.get("owner"), set()).update(ids)
+        merged = groups_by_owner.setdefault(lane.get("owner"), {"open": set(), "blocked": set(), "done": set()})
+        merged["open"].update(list(groups.get("active") or []) + list(groups.get("waiting") or []))
+        merged["blocked"].update(b.get("task") for b in groups.get("blocked") or [])
+        merged["done"].update(groups.get("done") or [])
+    states = want["task_states"]
     for lid, lane in want["lanes"].items():
         if held.get(lane["owner"]) != set(lane["tasks"]):
             problems.append("lane %s (%s): tasks %s differ from expected %s" % (
                 lid, lane["owner"], sorted(held.get(lane["owner"], [])), lane["tasks"]))
+        got_groups = groups_by_owner.get(lane["owner"], {"open": set(), "blocked": set(), "done": set()})
+        expect = {"done": {t for t in lane["tasks"] if states.get(t) == "done"},
+                  "blocked": {t for t in lane["tasks"] if states.get(t) == "blocked"}}
+        expect["open"] = set(lane["tasks"]) - expect["done"] - expect["blocked"]
+        for group in ("done", "blocked", "open"):
+            if got_groups[group] != expect[group]:
+                problems.append("lane %s (%s): %s tasks %s differ from expected %s" % (
+                    lid, lane["owner"], group, sorted(got_groups[group]), sorted(expect[group])))
     got = sorted((b.get("target"), str((b.get("by") or {}).get("ref"))) for b in data.get("blockers") or [])
     wanted = sorted((t, by[4:].strip('"') if by.startswith("ext:") else by) for t, by in want["blockers"])
     if got != wanted:
@@ -197,9 +210,14 @@ def check_new(data, want):
     for task in want["retries"]:
         if task not in texts or "fail" not in texts:
             problems.append("attempt: no recorded failed attempt for %s" % task)
-    done = sum(1 for t in (data.get("tasks") or {}).values() if t.get("done"))
-    if done != want["done"]:
-        problems.append("%d tasks done in the projection, expected %d" % (done, want["done"]))
+    projected = data.get("tasks") or {}
+    for tid, state in states.items():
+        task = projected.get(tid)
+        if not isinstance(task, dict):
+            problems.append("task %s is missing from the projection" % tid)
+        elif bool(task.get("done")) != (state == "done"):
+            problems.append("task %s is %s in the projection, expected %s" % (
+                tid, "done" if task.get("done") else "not done", state))
     return problems
 
 

@@ -58,6 +58,29 @@ class Equivalence(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertTrue(result["problems"])
 
+    def test_swapping_which_tasks_are_done_with_the_same_count_is_reported(self):
+        state = final_state()
+        expected = live_ab.expected(model, TRACE)
+        data = good_projection(state)
+        lane = next(l for l in data["lanes"] if l["tasks"]["done"] and l["tasks"]["waiting"])
+        done, waiting = lane["tasks"]["done"].pop(), lane["tasks"]["waiting"].pop()
+        lane["tasks"]["done"].append(waiting)
+        lane["tasks"]["waiting"].append(done)
+        data["tasks"][done]["done"], data["tasks"][waiting]["done"] = False, True
+        problems = live_ab.check_new(data, expected)
+        self.assertTrue(any(done in p for p in problems), problems)
+        self.assertTrue(any(waiting in p for p in problems), problems)
+
+    def test_blocked_tasks_collapsed_into_waiting_are_reported(self):
+        cut = next(i for i, ev in enumerate(TRACE) if ev["kind"] == "block")
+        trace = TRACE[:cut + 1]
+        state = final_state(trace)
+        expected = live_ab.expected(model, trace)
+        blocked = [t for t, v in state["tasks"].items() if v["state"] == "blocked"]
+        self.assertTrue(blocked)
+        problems = live_ab.check_new(good_projection(state), expected)  # good_projection files them under waiting
+        self.assertTrue(any("blocked" in p for p in problems), problems)
+
     def test_missing_lane_blocker_decision_and_attempt_are_each_reported(self):
         expected = live_ab.expected(model, TRACE)
         data = good_projection(final_state())
