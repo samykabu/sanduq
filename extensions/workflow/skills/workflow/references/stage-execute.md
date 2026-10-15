@@ -2,6 +2,13 @@
 
 Loaded when `claim` returns `stage: execute`.
 
+With `lean_execution.enabled: true`, the existing lifecycle coordinator owns
+Execute and the following verification, documentation and publication work.
+Do not create the additional orchestration agent described by the legacy
+protocol below. Assign bounded workers directly, each with a concrete artifact
+and acceptance result; the coordinator keeps claims, integration and receipts.
+See `references/delegation-and-decisions.md#opt-in-lean-execution`.
+
 ## Required work and evidence
 
 Read `references/execution-assign.md`, then `references/execution-report.md`.

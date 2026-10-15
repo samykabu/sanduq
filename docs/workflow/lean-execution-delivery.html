@@ -1,0 +1,179 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lean execution delivery</title><style>body{max-width:1180px;margin:32px auto;padding:24px;font:16px/1.65 system-ui;color:#173340}h1,h2{color:#096764}table{border-collapse:collapse;width:100%;font-size:14px}th,td{border:1px solid #d4dfe3;padding:9px;text-align:left;vertical-align:top}code{overflow-wrap:anywhere;background:#edf2f4}pre{padding:16px;overflow:auto}a{color:#096764}</style></head><body><h1>Lean execution: first delivery package</h1>
+<p><strong>Implemented and locally accepted on 12 October 2026.</strong> The independent final review found three material defects; one repair batch closed them and the focused recheck passed. The corrected packages passed 123 targeted tests and an isolated Bunyan upgrade. Main Bunyan is unchanged. Publication and main-workspace adoption remain separate delivery steps.</p>
+<p>This implements the approved first package: <strong>P01-P06, P08 and P12</strong>. P07, P09-P11, P13 and optional P14 remain deferred. The changes preserve model allowlists, local functional acceptance, lightweight self-hosted PR checks, Project buckets and disabled deployment. They do not restore mandatory TDD.</p>
+<h2>What changed</h2>
+<table>
+<thead>
+<tr>
+<th>Proposal</th>
+<th>Delivered behavior</th>
+<th>Main source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P01</td>
+<td>One lifecycle coordinator; mechanical stages stay with it. Nested orchestration and launches without concrete deliverables are rejected. Claims and receipts remain required.</td>
+<td><code>workflow.py</code>, <code>lean_policy.py</code></td>
+</tr>
+<tr>
+<td>P02</td>
+<td>Coding review waits for all coding/testing tasks. Ready and CI still require every required task, including documentation and review.</td>
+<td><code>workflow.py</code>, stage references</td>
+</tr>
+<tr>
+<td>P03</td>
+<td>Opt-in aggregate preflight checks declared source/fixture identities, command arguments, encoding/newlines and runtime/browser status. Scope selects valid initial or revalidation command syntax.</td>
+<td><code>execution_tools.py</code>, Scope command references</td>
+</tr>
+<tr>
+<td>P04</td>
+<td>Bounded worker briefs retain ownership, acceptance, policy/source fingerprints and pointers to detail. Result projections preserve unknown usage honestly.</td>
+<td><code>worker_brief.py</code></td>
+</tr>
+<tr>
+<td>P05</td>
+<td>One planned corrective continuation; repeated failures require a concrete diagnosis. Comparable history informs bounded timeouts and a finalization reserve.</td>
+<td><code>delegation.py</code>, <code>delegate_dispatch.py</code>, <code>lean_policy.py</code></td>
+</tr>
+<tr>
+<td>P06</td>
+<td>Selected checks bind command, sources, fixtures, declared environment, executable identity and evidence. Only unchanged passing checks can be reused. The selected executable path remains the invocation path.</td>
+<td><code>verification_plan.py</code></td>
+</tr>
+<tr>
+<td>P08</td>
+<td>Scope regression coverage retains status/checkbox/REST/idempotency behavior. PR lint verifies the bound closing issue and prerequisites; the receipt recomputes body identity and lint.</td>
+<td><code>execution_tools.py</code>, <code>workflow.py</code>, PR instructions</td>
+</tr>
+<tr>
+<td>P12</td>
+<td>Progress collects normalized runs from explicit worktrees, deduplicates run IDs and reports elapsed time, last event and next action. Harness success and task acceptance remain separate.</td>
+<td><code>execution_tools.py</code>, native status integration</td>
+</tr>
+</tbody>
+</table>
+<p>Source paths above are under <code>extensions/workflow/scripts</code> unless otherwise indicated. This is an opt-in Workflow refactor, not a replacement lifecycle. No portable driver was modified; its canonical source remains <code>samykabu/sanduq-skills</code>.</p>
+<h2>Completed tasks</h2>
+<ul>
+<li>[x] Implement the two coherent author batches.</li>
+<li>[x] Integrate native preflight, claim, verification and PR receipt paths.</li>
+<li>[x] Run targeted tests, documentation checks, vendor identity checks and package builds.</li>
+<li>[x] Complete the independent review after coding and testing.</li>
+<li>[x] Repair the three material findings and rerun affected checks.</li>
+<li>[x] Rebuild and upgrade the isolated Bunyan consumer; verify protected files.</li>
+<li>[x] Complete the focused reviewer continuation and retain evidence.</li>
+</ul>
+<h2>Verification and review</h2>
+<p>The coordinator reran <strong>123 tests, all passing</strong>: lean policy 20; native integration 17; verification plans 11; execution tools 28; worker briefs 29; existing delegation launch 11 and claim 7. This run had no skips. The executable symlink regression ran on this Windows host; it does not establish Linux acceptance.</p>
+<p>Documentation validation passed for 68 guides, 42 commands, seven vendored skills and 13 skill sources. Vendor bytes match the lock. <code>git diff --check</code> and the three package builds passed. Earlier author evidence also includes 38 Scope REST tests and 20 task-issue tests; these are carried-forward author results, outside the coordinator's 123-test count.</p>
+<p>The final review raised three findings: Ready/CI had inherited the coding-only filter; executable resolution changed invocation semantics; claim propagation could choose another feature. Each was corrected with regression coverage. The reviewer then verified all 35 frozen source hashes and three archive hashes and returned <strong>PASS</strong>. Review inspected recorded execution evidence; it did not rerun tests.</p>
+<p>Two broad legacy Workflow/delegation suite runs timed out after 180 seconds and remain unverified. They are not counted as passes. No product code, application acceptance, E2E, release suite or deployment was run for this tooling-only change.</p>
+<h2>Packages and consumer acceptance</h2>
+<table>
+<thead>
+<tr>
+<th>Package</th>
+<th>Version</th>
+<th>SHA-256</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>workflow</td>
+<td>1.10.0</td>
+<td><code>a42d3ac4ba7adc3cdacc636f74979a59938150dd55857c1b0d48572e795baf59</code></td>
+</tr>
+<tr>
+<td>scope</td>
+<td>1.6.2</td>
+<td><code>b97e4fd4eafc050644fe34737e2f056fbd9d346e68b1f216b430e2f1f6fd1e71</code></td>
+</tr>
+<tr>
+<td>pr</td>
+<td>4.2.3</td>
+<td><code>7b1b237aac6e75522952f8bfbbb8ed316c726770a087de15306e36c010bc2d8f</code></td>
+</tr>
+</tbody>
+</table>
+<p>The supported upgrade installed these packages in <code>D:/Projects/abushanab-net/Bunyan/.claude/worktrees/lean-workflow-pilot</code>, branch <code>chore/workflow-lean-pilot</code>, using <code>--preserve-ci</code>. Workflow doctor passes with lean mode enabled. The installed progress CLI reconciles all 121 historical normalized runs. Five protected policy/CI file hashes match their baseline; all seven snapshot hashes in the original main checkout remain unchanged.</p>
+<p>The pilot explicitly enables lean execution with a 300-second minimum timeout, 7200-second maximum and 120-second finalization reserve. <code>.specify/lean-preflight.json</code> paths resolve relative to the manifest directory. Feature verification plans must still declare actual inputs and commands before evidence reuse. This pilot does not manufacture future product acceptance.</p>
+<p>The pilot includes copied pre-existing installed toolchain state from the main workspace, so its whole Git diff must not be staged as this change. Illustrate, Memory and portable-driver differences against its base are not all attributable to this package. The source worktree is the bounded, reviewable implementation.</p>
+<h2>Delegation and cost evidence</h2>
+<p>Seven actual invocations: two authors, one continuation for each, one repair worker, and one reviewer with one focused continuation. Six finished successfully; one author continuation timed out. No worker was launched solely to write a status report. There were no nested agents. Coding/testing completed before both review runs.</p>
+<table>
+<thead>
+<tr>
+<th>Run</th>
+<th>Purpose</th>
+<th>Requested model</th>
+<th>Outcome</th>
+<th>Elapsed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>codex-20261012162952-1e7e06</code></td>
+<td>A: lifecycle and verification</td>
+<td>gpt-6.1-sol</td>
+<td>successful</td>
+<td>22.86 min</td>
+</tr>
+<tr>
+<td><code>claude-20261012162953-7d61a5</code></td>
+<td>B: preflight, context and progress</td>
+<td>claude-sonnet-5-5</td>
+<td>successful</td>
+<td>4.98 min</td>
+</tr>
+<tr>
+<td><code>claude-20261012163728-0b3685</code></td>
+<td>B-C1: native Scope/PR/progress completion</td>
+<td>claude-sonnet-5-5</td>
+<td>successful</td>
+<td>4.83 min</td>
+</tr>
+<tr>
+<td><code>codex-20261012165455-bf4c76</code></td>
+<td>A-C1: native integration</td>
+<td>gpt-6.1-sol</td>
+<td>abandoned</td>
+<td>12.21 min</td>
+</tr>
+<tr>
+<td><code>codex-20261012171236-1b7c2e</code></td>
+<td>R: independent final review</td>
+<td>gpt-6-astra</td>
+<td>successful</td>
+<td>3.29 min</td>
+</tr>
+<tr>
+<td><code>claude-20261012171914-f5fd12</code></td>
+<td>F: three-finding repair</td>
+<td>claude-sonnet-5-5</td>
+<td>successful</td>
+<td>2.98 min</td>
+</tr>
+<tr>
+<td><code>codex-20261012173153-0ba48e</code></td>
+<td>R-C1: focused closure review</td>
+<td>gpt-6-astra</td>
+<td>successful</td>
+<td>1.58 min</td>
+</tr>
+</tbody>
+</table>
+<p>Claude reported Sonnet5.5 for all three of its invocations. Codex did not report actual serving-model identity; requested models are shown above without treating them as confirmed actual models. The timed-out continuation has no terminal usage record. Its zero placeholders are excluded. Exact reported usage and available cost estimates are retained separately by harness in the <a href="lean-execution-evidence.json">evidence file</a>; cross-harness token totals are not added together.</p>
+<p>This batch still incurred author integration continuations and one timeout. The changes provide controls and measurable evidence for the next feature; they do not demonstrate a percentage reduction in implementation time or tokens yet. Timeout/finalization guidance uses the existing watchdog. A new mid-run signal in the portable driver is not implemented.</p>
+<h2>Handoff</h2>
+<p>Source: <code>D:/Projects/Personal/sanduq-lean-execution</code>, branch <code>fix/workflow-lean-execution</code>, based on <code>35959c5</code>. It includes the retained PR77 prerequisites, verified open and unmerged through GitHub REST during this task. Do not drop that dependency when preparing publication. Workflow/Scope/PR release entries remain <code>pending-review</code>; the public catalog was not changed.</p>
+<p>There are no remaining implementation blockers within the approved package. No PR, remote release, merge or deployment was created by this work. Main-workspace adoption should use the supported package upgrade after its existing changes are reconciled, preserving CI and the approved Memory/Project/constitution files. Do not copy the pilot's entire dirty tree.</p>
+<p>To verify the retained pilot:</p>
+<pre><code class="language-powershell">Set-Location D:/Projects/abushanab-net/Bunyan/.claude/worktrees/lean-workflow-pilot
+python .specify/extensions/workflow/scripts/workflow.py doctor --project
+</code></pre>
+<p>The next product feature must enter through Sanduq Workflow with its actual issue and declared verification plan. Deferred proposal IDs remain in the original Bunyan retrospective decision report; they are not silently included in this delivery.</p>
+<p><a href="lean-execution-evidence.json">Machine-readable evidence</a> contains the selected test outputs, protected-file checks, package and source hashes, review outcomes and seven-run ledger. Raw prompts and harness logs remain ignored in <code>.delegate/</code>.</p>
+<h2>Changes after this evidence</h2>
+<p>The hashes and pilot results above describe the packages built before the 2026-10-15 merge review. That review rebased the work onto Workflow 1.9.5 and changed it: claim credentials reach workers only when lean mode is on, artifact-analysis routing and claim environment output are lean-gated, Scope became 1.6.2 requiring Workflow 1.10.0, and PR 4.2.3 runs the lint step only when <code>execution_tools.py</code> exists. The release packages will differ from the recorded hashes. Their own release checks replace this evidence.</p>
+</body></html>

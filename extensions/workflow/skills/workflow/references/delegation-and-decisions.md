@@ -3,6 +3,83 @@
 The stage loop's step 4 in full: how to invoke the claimed command, route it
 through delegation when enabled, and pause for a material decision.
 
+## Opt-in lean execution
+
+Select `lean_execution.enabled: true` in `.specify/workflow.yml` to use one
+lifecycle coordinator. That coordinator keeps claims, scheduling, integration,
+receipts and publication. Do not create or dispatch another coordinator. Claims
+for Execute, Tasks-to-Issues, Ready and PR return `execution_owner: coordinator`
+without a model route; invoke their mechanics in the selected host. An exact
+`delegation.fixed_collection_commands.verify` match also belongs to the
+coordinator. Semantic stages retain their delegation routes and successful
+attempt/claim-token checks. Every receipt still needs real inputs and evidence.
+Absent or disabled lean policy retains the legacy protocol below.
+
+```yaml
+lean_execution:
+  enabled: true
+  timeout_min_seconds: 300
+  timeout_max_seconds: 7200
+  finalization_seconds: 120
+  verification_plan: specs/42-booking-refund/verification-plan.json
+  preflight_manifest: specs/42-booking-refund/preflight.json
+  scope_analysis: specs/42-booking-refund/scope-analysis.json
+```
+
+Only `enabled` is required. Bounds must satisfy finalization < minimum <=
+maximum <= 28800 seconds. `verification_plan` is optional; absent selection
+retains the whole-source receipt freshness rule. See `verification-plan.md`.
+`preflight_manifest` selects aggregate deterministic checks for doctor and before
+Execute or later claims. Manifest paths are relative to the manifest directory;
+findings return together and block execution. `scope_analysis` is an explicit
+initial analysis path. Without one, Scope claim output contains `<analysis.json>`
+which must be replaced with the actual new analysis; it never guesses an existing
+analysis. Revalidation commands carry no initial flags. `claim.environment`
+contains the token/session for native commands and worker launch preserves them.
+
+Use `workflow.py status --feature specs/<feature> --runs <explicit-run-root>`
+(repeat `--runs` for worktrees) for compact elapsed/latest-event/next-action and
+per-harness usage. Current feature ledger status and independently accepted
+evidence appear separately from harness status. Missing acceptance or task verdict
+stays unknown; a successful harness is not silently converted to task acceptance.
+
+Failure domain is explicit attribution, separate from technical provenance:
+`delegate_dispatch.py classify --feature specs/<feature> --run-id <id>
+--attribution <JSON>` accepts `domain` (product, test, environment, workflow,
+owner-interruption or unknown), `actor`, concrete `reason` and existing `evidence`.
+It fingerprints the evidence and preserves the raw driver provenance and status.
+Arbitrary summary prose never supplies a domain.
+
+Deadline guidance and incremental handoffs are worker-context instructions:
+comparable elapsed samples select a bounded timeout, and the brief carries the
+finalization reserve, correction and diagnosis. The current driver receives its
+existing overall timeout. There is no new early deadline signal, cancellation
+callback or enforced incremental artifact checkpoint; the worker must write its
+partial handoff before the existing watchdog. P07 broad receipt amendment remains
+deferred; this package does not add it.
+
+Every lean launch requires `--deliverable "<artifact and acceptance result>"`.
+A second attempt for the same identity also needs `--correction-plan "<specific
+correction and check>"`. Further attempts require `--diagnosis <project-relative
+JSON>` with `cause`, `evidence` (an existing repository file), and `change`.
+Cause and change must describe concrete work; a generic retry reason is
+insufficient. Admission is checked under the ledger lock, so starting again
+with another model or run ID cannot reset the correction history.
+
+Lean launches try the selected candidate only; choose another eligible route
+explicitly when a provider or startup failure prevents it running. Lean
+collection never automatically escalates failed work. `reassign --reason
+"<specific correction>" [--diagnosis <JSON>]` keeps the prior candidate,
+including an explicit pin. Eligible configured routes remain unchanged.
+Failure categories distinguish provider rejection, harness failure, timeout,
+task failure, missing evidence, abandonment and unknown cause. Unknown cause
+stays unknown; a timeout observed while collecting is not a failed task.
+Start/collect expose bounded `timeout_guidance` from comparable successful runs
+of the same work type and candidate, or mark the estimate's usage unknown.
+Reserve `finalization_seconds` for an honest partial handoff listing changed
+files, executed checks and remaining work. Recover uncertain starts and collect
+live runs before admitting replacements.
+
 Invoke the selected command in this host using its installed skill/command registration.
 When `delegation.enabled` is true, instead use the claim's `delegation` route:
 run `delegate_dispatch.py start --feature specs/<feature> --id stage:<stage>

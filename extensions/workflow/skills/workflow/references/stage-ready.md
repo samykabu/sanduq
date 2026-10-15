@@ -2,6 +2,14 @@
 
 Loaded when `claim` returns `stage: ready` (runtime `workflow:gates`).
 
+In lean mode the lifecycle coordinator runs Ready without a delegated model.
+Only the final coding review is admitted on implementation and testing alone;
+Ready (and CI) require every required task, including review, docs and
+artifact-analysis tasks, to be checked with a verified delegated outcome.
+Review receipts, task issue mappings and
+the selected documentation freshness checks still apply, and document outputs
+must exist before their tasks can be marked complete.
+
 Before this pass, read the publication preflight in
 `references/stage-pr.md#publication-preflight-and-post-merge-verification` and
 prepare portable evidence there: it must run before the last Verify/Review/Ready pass.

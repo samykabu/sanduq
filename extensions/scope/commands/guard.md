@@ -25,6 +25,14 @@ This guard does not create a branch or a feature; ignore the core command's
 generic assumption that every before_specify hook returns branch metadata.
 
 
+Pick the command from the claim you hold, not from memory. For the initial claim, print it with
+`python .specify/extensions/workflow/scripts/execution_tools.py scope-command --mode initial --command gate --issue <number> --feature specs/<feature> --token <active-token> --session <active-session> --analysis <resolved-analysis.json>`.
+All four values are required: Scope refuses a partial set, and the fresh path needs the analysis file.
+To revalidate an existing claim, use `--mode revalidate` with the issue and nothing else. Scope finds
+that claim itself from the selected feature and its bound checkpoint, and any feature, token or
+session flag would push it onto the fresh path instead. The helper rejects them. It exits 2 on a
+missing or non-numeric issue. Run the printed command unchanged.
+
 Fresh managed clarification return (Scope 1.6.1): for the current initial Scope/Specify
 claim, pass the exact dispatcher feature, token and session to both native guard and bind:
 `scope.py gate <issue> --feature specs/<feature> --token <active-token> --session <active-session> --analysis <resolved-analysis.json>`;

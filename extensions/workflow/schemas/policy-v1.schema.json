@@ -14,6 +14,19 @@
     "updates"
   ],
   "properties": {
+    "lean_execution": {
+      "type": "object", "additionalProperties": false, "required": ["enabled"],
+      "description": "Opt-in lean execution. Absent keeps legacy delegation/readiness. One coordinator owns lifecycle mechanics; corrections retain the same model and require a diagnosis after one correction.",
+      "properties": {
+        "enabled": {"type": "boolean", "default": false},
+        "preflight_manifest": {"type": "string", "minLength": 1, "description": "Opt-in aggregate execution_tools preflight; paths inside the manifest are relative to that manifest."},
+        "scope_analysis": {"type": "string", "minLength": 1, "description": "Explicit initial Scope analysis file. Absent produces a required placeholder; revalidation never receives initial flags."},
+        "timeout_min_seconds": {"type": "integer", "minimum": 1, "maximum": 28800, "default": 300},
+        "timeout_max_seconds": {"type": "integer", "minimum": 1, "maximum": 28800, "default": 7200},
+        "finalization_seconds": {"type": "integer", "minimum": 1, "maximum": 28799, "default": 120},
+        "verification_plan": {"type": "string", "minLength": 1, "description": "Repository-relative selected verification manifest. Runtime validates finalization < minimum <= maximum; exact check inputs and passing evidence are bound by Verify."}
+      }
+    },
     "schema_version": {
       "const": 1
     },

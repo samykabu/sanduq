@@ -1,5 +1,9 @@
 # Changelog
 
+## [4.2.3] - Unreleased
+
+- Add the lean Workflow pre-publication check for closing references, binding the prepared body to its issue and prerequisites. Standalone PR use remains supported.
+
 ## [4.2.2] - 2026-10-10
 
 - README links point to the new extension page, install-by-host page and command reference.
