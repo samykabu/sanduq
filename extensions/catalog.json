@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-10-15T16:29:58.970311+00:00",
+  "updated_at": "2026-10-15T19:53:32.404835+00:00",
   "catalog_url": "https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json",
   "extensions": {
     "project": {
@@ -307,7 +307,7 @@
     "workflow": {
       "name": "Sanduq Workflow",
       "id": "workflow",
-      "version": "1.10.0",
+      "version": "1.10.1",
       "description": "GitHub issue decisions and resumable Scope-to-PR orchestration with optional model-aware delegation, QA, User Manual, and workflow evidence CI.",
       "author": "Samy K. Abushanab",
       "license": "PolyForm-Noncommercial-1.0.0",
@@ -315,7 +315,7 @@
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/workflow",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v1.10.0/workflow.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v1.10.1/workflow.zip",
       "requires": {
         "speckit_version": ">=1.0.0,<2.0.0",
         "tools": [
@@ -349,8 +349,8 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "bd895c272f8578b62864e28c68248074d4b630c7cc705d6b2acf96b0293fa4d8",
-      "updated_at": "2026-10-15T16:29:58.911465+00:00"
+      "sha256": "affa6fd3c102151b6799661a8d58c212336fdb9f8dae884b42e04652490e3035",
+      "updated_at": "2026-10-15T19:53:32.364361+00:00"
     },
     "scope": {
       "name": "Speckit Scope",
@@ -450,7 +450,7 @@
     "progress": {
       "name": "Sanduq Progress Report",
       "id": "progress",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "description": "A live, deterministic progress report for a Spec Kit feature: lanes, tasks, blockers and decisions, collected from the host's native hooks and the feature files with no agent spent on upkeep.",
       "author": "Samy K. Abushanab",
       "license": "PolyForm-Noncommercial-1.0.0",
@@ -458,7 +458,7 @@
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/progress",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/progress/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/progress/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/progress-v1.0.0/progress.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/progress-v1.0.1/progress.zip",
       "requires": {
         "speckit_version": ">=1.1.1.dev0,<2.0.0",
         "tools": [
@@ -485,8 +485,8 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "5e47cc3100d7f419b00393f1e6431c20469ce446aa619e946808384b964a5dba",
-      "updated_at": "2026-10-15T16:29:58.970278+00:00"
+      "sha256": "c8415628ccd020c05dc6fe29e7a13e337c253d44f87e05b6bfd50bb0b3d1a8c8",
+      "updated_at": "2026-10-15T19:53:32.404797+00:00"
     }
   }
 }
