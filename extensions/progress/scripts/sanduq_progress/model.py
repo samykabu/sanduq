@@ -5,9 +5,9 @@ from datetime import timedelta
 from pathlib import Path
 
 from . import SCHEMA, facts as factslib
-from .collect import hosts as hostscol, runs as runscol, tasks as taskscol, workflow as wf
+from .collect import hosts as hostscol, plan as plancol, runs as runscol, tasks as taskscol, workflow as wf
 from .hosts import unknown
-from .paths import current_branch
+from .paths import current_branch, plan_info
 from .util import clean, count_lines, diag, iso, parse_time
 
 DONE_STATES = ('accepted',)
@@ -127,11 +127,11 @@ def _child_numbers(child):
     return [n for n in [child.get('lane_no'), *(child.get('lane_aliases') or [])] if isinstance(n, int) and not isinstance(n, bool)]
 
 
-def build(ctx, now, rev=1, state=None):
+def build(ctx, now, rev=1, state=None, plan=None):
     state = {} if state is None else state
     cfg = ctx.config_data()
     stale_after = int(cfg.get('stale_after_seconds') or 600)
-    tk = taskscol.collect(ctx.feature_dir)
+    tk = (plan or plancol.collect(ctx)) if ctx.is_plan else taskscol.collect(ctx.feature_dir)
     cp = wf.checkpoint(ctx.feature_dir)
     attempts = wf.attempts(ctx.feature_dir)
     wf_decisions_exist, wf_decisions = wf.decisions(ctx.feature_dir)
@@ -436,10 +436,13 @@ def build(ctx, now, rev=1, state=None):
     if cp:
         value = cp['stage'] or (cp['status'] if cp['status'] not in (None, 'in-progress') else None)
         stage = {'value': value, 'source': 'workflow-checkpoint'} if value else None
-    title = tk['title'] or _heading(ctx.feature_dir / 'spec.md') or Path(ctx.feature).name
-    feature = {'id': Path(ctx.feature).name, 'title': title, 'dir': ctx.feature,
+    plan_name = plan_info(ctx.root, ctx.feature).get('name') or Path(ctx.feature).name if ctx.is_plan else None
+    title = tk['title'] or (plan_name if ctx.is_plan else _heading(ctx.feature_dir / 'spec.md')) or Path(ctx.feature).name
+    feature = {'id': plan_name if ctx.is_plan else Path(ctx.feature).name, 'title': title, 'dir': ctx.feature,
                'branch': (cp or {}).get('branch') or current_branch(ctx.root), 'issue': (cp or {}).get('issue'),
                'stage': stage, 'started_at': iso(started), 'workflow': workflow_mode}
+    if ctx.is_plan:
+        feature.update(mode='plan', source=plan_info(ctx.root, ctx.feature).get('source'))
     task_out = {t['id']: {'title': t['title'], 'phase': t['phase'], 'done': t['done'], 'parallel': t['parallel'],
                           'depends_on': t['depends_on'], 'lane': task_lane.get(t['id'])} for t in tk['tasks']}
     extra = {'overhead': overhead} if overhead else {}

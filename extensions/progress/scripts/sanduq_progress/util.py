@@ -57,10 +57,39 @@ def clean(value, cap=200):
     return text[:cap]
 
 
+LOCAL_DIRS = ('.host', '.view')  # directories that hold only local-only runtime files
+
+
+def ensure_local_dir(directory):
+    """Create a local-only directory with a nested `.gitignore` holding a single `*`. Git applies the closest .gitignore
+    first, so a parent rule that re-includes a file (`!claude-*.json`) cannot expose anything inside; the `*` also
+    ignores the .gitignore itself. Refuses a link at the directory or the file. Written atomically, only when missing or
+    different."""
+    directory = Path(directory)
+    refuse_link(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    target = directory / '.gitignore'
+    refuse_link(target)
+    try:
+        if target.read_text(encoding='utf-8').strip() == '*':
+            return
+    except OSError:
+        pass
+    _write_atomic(target, '*\n')
+
+
 def atomic_write(path, data):
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.parent.name in LOCAL_DIRS:
+        ensure_local_dir(path.parent)
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
     refuse_link(path)
+    _write_atomic(path, data)
+
+
+def _write_atomic(path, data):
+    path = Path(path)
     # tempfile.mkstemp would import shutil, random and more on every hook; an exclusive create is all that is needed
     name = str(path.parent / f'.{path.name}.{os.getpid()}.{os.urandom(4).hex()}.tmp')
     fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_BINARY', 0), 0o600)
@@ -95,7 +124,10 @@ def diag(path, message, now=None):
     """Append one line to a bounded diagnostics log (rotate at 256 KB, keep one). Never raises."""
     try:
         path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.parent.name in LOCAL_DIRS:
+            ensure_local_dir(path.parent)
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
         refuse_link(path)
         if path.exists() and path.stat().st_size > DIAG_LIMIT:
             os.replace(path, str(path) + '.1')

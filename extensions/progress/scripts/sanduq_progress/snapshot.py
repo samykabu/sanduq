@@ -1,7 +1,7 @@
 """Host snapshots (progress.host.v1) and the explicit binding handshake.
 
 Snapshots merge field by field under the feature lock: an update replaces only the fields it carries and never
-a newer observation. Bindings live in .specify/progress/bindings.json under their own small lock:
+a newer observation. Bindings live in <project dir>/bindings.json (.specify/progress, or .progress/.project without Spec Kit) under their own small lock:
 
     {"pending": [{feature, worktree, nonce, created_at}],
      "sessions": {"<host>:<session_id>": {session_id, host, feature, worktree, bound_at}}}
@@ -13,6 +13,7 @@ from pathlib import Path
 
 from .hosts import session_key
 from .lock import Lock
+from .paths import project_dir
 from .util import iso, parse_time, read_json, write_json
 
 MEASURED = ('model', 'effort', 'context', 'elapsed_ms', 'api_ms')
@@ -66,6 +67,12 @@ def migrate_host_dir(ctx):
         diag(ctx.diag, f'host snapshot migration pending: {type(exc).__name__}')
         return False
     from .paths import git_exclude
+    from .util import ensure_local_dir
+    try:
+        ensure_local_dir(ctx.host_dir)  # the moved directory keeps a nested .gitignore
+    except Exception as exc:
+        diag(ctx.diag, f'host snapshot migration pending: nested .gitignore not written ({type(exc).__name__})')
+        return False
     git_exclude(ctx.root)  # the new directory must be ignored even if `init` is not re-run after an upgrade
     return True
 
@@ -303,7 +310,7 @@ def _load(path):
 
 
 def lookup(root, host, session_id):
-    data = _load(Path(root) / '.specify' / 'progress' / 'bindings.json')
+    data = _load(project_dir(root) / 'bindings.json')
     return data['sessions'].get(f'{host}:{session_id}')
 
 
@@ -341,7 +348,7 @@ def cwd_valid(binding, cwd):
 
 def convert_pending(root, obs, now):
     """Turn a pending bind into a session binding when this tool call carries the nonce. Returns the binding or None."""
-    path = Path(root) / '.specify' / 'progress' / 'bindings.json'
+    path = project_dir(root) / 'bindings.json'
     if not path.is_file() or not obs.get('session_id'):
         return None
     sent, got = obs.get('tool_input_text', ''), obs.get('tool_response_text', '')

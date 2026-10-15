@@ -63,15 +63,17 @@ def collect(feature_dir):
 
 
 def expand(spec):
-    """`T001-T004,T009` -> ['T001','T002','T003','T004','T009']; raises ValueError on bad input."""
+    """`T001-T004,T009` -> ['T001','T002','T003','T004','T009']; raises ValueError on bad input. Any id prefix works
+    (`P001-P003`, `US1-3`); a range keeps one prefix and the width of its first number."""
     out = []
     for part in [p.strip() for p in str(spec).split(',') if p.strip()]:
-        match = re.fullmatch(r'(T)(\d+)(?:\s*-\s*T?(\d+))?', part, re.I)
+        match = re.fullmatch(r'([A-Za-z]{1,3}-?)(\d+)(?:\s*-\s*(?:\1)?(\d+))?', part, re.I)
         if not match:
             raise ValueError(part)
+        prefix = match.group(1).upper()
         low, high = int(match.group(2)), int(match.group(3) or match.group(2))
         if high < low or high - low > 500:
             raise ValueError(part)
         width = len(match.group(2))
-        out += [f'T{n:0{width}d}' for n in range(low, high + 1) if f'T{n:0{width}d}' not in out]
+        out += [f'{prefix}{n:0{width}d}' for n in range(low, high + 1) if f'{prefix}{n:0{width}d}' not in out]
     return out

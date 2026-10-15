@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.10.2] - 2026-10-16
+
+- Offer Progress 1.1.0 as the optional Progress version. It vendors the portable `progress-report` skill and adds plan mode; the Workflow bridge and the `progress.py` forwarding are unchanged. The vendored `delegate-task` is re-pinned to `agent-tools-v1.2.0` without file changes.
+
 ## [1.10.1] - 2026-10-15
 
 - `progress_bridge.py mode` detects the active host (`--host claude|codex`, else from the environment) without starting a Progress process. An unknown host selects `refresh`. A Progress that the registry disables selects `legacy`.

@@ -29,13 +29,13 @@ PolyForm Noncommercial is not an OSI-approved open-source license.
 | `workflow` | Preset | PolyForm Noncommercial 1.0.0 |
 | `scope-gate` | Preset | MIT ([LICENSE](../../presets/scope-gate/LICENSE)) |
 | `scope-brainstorm` | Preset | MIT ([LICENSE](../../presets/scope-brainstorm/LICENSE)) |
-| Illustrate, User Manual (5 skills), Delegate Task | Portable skills in [sanduq-skills](https://github.com/samykabu/sanduq-skills) | MIT |
+| Illustrate, User Manual (5 skills), Delegate Task, Progress Report | Portable skills in [sanduq-skills](https://github.com/samykabu/sanduq-skills) | MIT |
 
 Extensions without their own `LICENSE` file are covered by the root [LICENSE](../../LICENSE).
 
 ## Vendored skills
 
-Illustrate, User Manual and Workflow ship copies of portable skills, pinned in
+Illustrate, User Manual, Progress and Workflow ship copies of portable skills, pinned in
 [`vendor.lock.json`](../../vendor.lock.json). Those skills are MIT in sanduq-skills. If you need a
 skill under MIT terms, install it from sanduq-skills rather than taking it out of an extension package.
 

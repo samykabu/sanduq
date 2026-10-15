@@ -1,8 +1,33 @@
 # Hosts: how Progress is invoked and what it reads
 
+The skill reaches a host in two ways: native hook files written by [`progress hooks install`](commands.md#hooks)
+(any project, no Spec Kit), and Spec Kit's event dispatcher (the Sanduq extension, described first below). Both end in the
+same `scripts/hook.py`.
+
 Verified on 2026-10-15 against the installed spec-kit (`specify_cli` 1.1.1.dev0, `specify_cli/events/__init__.py`
 and `specify_cli/integrations/base.py`), https://code.claude.com/docs/en/hooks and `/statusline`. Items marked
 **unverified** were not confirmed against a running host.
+
+## Native hook files (`progress hooks install`)
+
+`progress hooks install --host claude|codex [--scope project|user]` writes the same five events (four for Codex) into the
+host's own hook file, each command ending in `--managed-by=progress-report` so `uninstall` removes exactly those entries.
+It reads the file as JSON, keeps everything else, and refuses a second registration when Spec Kit's `speckit.progress.hook-*`
+entries are present. The command reference lists the files, paths and exit codes.
+
+| Fact | Status |
+| --- | --- |
+| Claude Code reads `hooks` from `.claude/settings.json` and `~/.claude/settings.json`: `{"hooks": {"PostToolUse": [{"matcher": "...", "hooks": [{"type": "command", "command": "...", "timeout": N}]}]}}` | **Verified** from the Claude Code hooks documentation |
+| Claude event names `SessionStart`, `PreToolUse`, `PostToolUse`, `Stop`, `SessionEnd`; an omitted matcher matches every tool | **Verified** from the documentation |
+| `${CLAUDE_PROJECT_DIR}` is set for hook commands and rewritten in the command (only the braced form; the bare form is `$null` in PowerShell), so a project-scope command can be repo-relative | **Verified** from the documentation |
+| Codex reads `hooks.json` from `.codex/` (project) and `~/.codex/` or `$CODEX_HOME` (user) with the same shape | **Unverified** against a running Codex; written from the documented schema |
+| Codex hooks need the experimental `codex_hooks` feature turned on | **Unverified**; the installer does not edit Codex's config |
+| Codex has no session end event; `Stop` stands in for it | **Unverified**: none is documented |
+| Codex runs project hooks with the session's working directory, so a repo-relative command needs Codex started at the repository root | **Unverified** |
+| The Codex `PreToolUse` matcher `spawn_agent` matches the sub-agent launch tool | **Unverified**; the same matcher string is used for both hosts |
+
+An entry written by `install` is silent: `hook.py` prints nothing and exits 0 in every case, so a Claude or Codex
+session never shows a hook failure. Without a binding (`progress init` through the shell tool) the events are dropped.
 
 ## Spec Kit event dispatch (verified in source)
 
@@ -42,7 +67,7 @@ events:
 ```
 
 Each template contains `scripts:\n  py: scripts/hook.py <event>`, a standard-library entry that returns before importing Progress for an unbound
-session (about 30 ms, the interpreter start-up) and otherwise runs the same handler as `progress.py hook <event>`.
+session (interpreter start-up, roughly 30 to 100 ms by platform) and otherwise runs the same handler as `progress.py hook <event>`.
 
 ## Claude Code payloads (verified from docs)
 
@@ -88,14 +113,14 @@ or `.codex` transcript path) is separate and unchanged.
 
 `progress init` or `progress bind` prints `bind=<nonce>`. The `post_tool_use` payload of that shell call binds the
 session when the tool input mentions `progress` and (`bind`|`init`) with the nonce, or the tool response contains the
-nonce, within 120 s, with `cwd` inside the worktree. `.specify/progress/bindings.json` is added to
-`.git/info/exclude` because it holds local session ids. Unbound observations are dropped and logged in
-`.specify/progress/diagnostics.log`.
+nonce, within 120 s, with `cwd` inside the worktree. `bindings.json` in the project directory (`.specify/progress/`, or
+`.progress/.project/` without Spec Kit) is added to `.git/info/exclude` because it holds local session ids. Unbound
+observations are dropped and logged in `diagnostics.log` next to it.
 
 ## Statusline wrapper
 
 `progress.py statusline install` points `statusLine.command` at `python[3] "<script>" statusline` (padding kept),
-stores the previous object in `config.json` (`statusline.previous`, and `chained` when it was a command) and
+stores the previous object in the project `config.json` (`statusline.previous`, and `chained` when it was a command) and
 restores it exactly on `uninstall`. At run time the wrapper records the snapshot for bound sessions only, then runs
 the chained command with the same stdin and prints its stdout byte for byte.
 
@@ -106,7 +131,7 @@ Progress imports `sanduq_progress.theme` lazily and calls `resolve(project_root)
 `theme` (for example `["--preset", "cobalt"]`); the project root is passed through `SANDUQ_PROGRESS_ROOT`. After
 `cli` returns 0 the verb regenerates `.view/theme.css` from `resolve`/`render_css`. If the import fails the verb
 writes a minimal fallback `theme.css` and prints `progress: error PROGRESS_THEME_UNAVAILABLE` (exit 2).
-UI files are copied from `extensions/progress/assets/ui/` at `init`; when that directory is absent a diagnostic is
+UI files are copied from the skill's `assets/ui/` at `init`; when that directory is absent a diagnostic is
 logged and nothing is created.
 
 ## Projection details worth knowing

@@ -18,7 +18,7 @@ def _cell(text):
 def render(report):
     f, s = report['feature'], report['summary']
     out = [f"# {f['title']}", '',
-           f"Feature `{f['id']}`" + (f", branch `{f['branch']}`" if f.get('branch') else '')
+           f"{'Plan' if f.get('mode') == 'plan' else 'Feature'} `{f['id']}`" + (f", branch `{f['branch']}`" if f.get('branch') else '')
            + (f", stage {f['stage']['value']}" if f.get('stage') else '')
            + (f", issue #{f['issue']['number']}" if f.get('issue') else '') + '.', '',
            f"Tasks {s['tasks_done']}/{s['tasks_total']} done, {s['lanes_active']} active lanes, "

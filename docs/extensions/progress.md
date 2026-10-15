@@ -8,10 +8,10 @@ native hook payloads. No agent is spent keeping it current.
 | --- | --- |
 | Lifecycle phase | After `tasks` through `implement`; native hooks keep it fresh |
 | Hooks | Two optional lifecycle hooks and five native host events ([hooks](../reference/hooks.md)) |
-| Commands | `init`, `refresh`, `status`, `theme`, `export` ([reference](../reference/commands.md#progress)) and a CLI with 15 verbs ([full reference](../../extensions/progress/docs/commands.md)) |
+| Commands | `init`, `refresh`, `status`, `theme`, `export` ([reference](../reference/commands.md#progress)) and a CLI with 16 verbs ([full reference](../../extensions/progress/docs/commands.md)) |
 | Requires | Nothing; Python 3.11 or later. Workflow and Illustrate are optional |
 | Standalone | Yes |
-| License | PolyForm Noncommercial 1.0.0 |
+| License | PolyForm Noncommercial 1.0.0 (vendored skill code is MIT) |
 
 ## Setup
 
@@ -62,6 +62,20 @@ operations guide. Details:
   `--json` and `init --title` have no faithful mapping and fail with a compatibility error.
 - Legacy usage is stored as an attempt labelled `legacy`. It never overrides the delegation ledger.
 - Workflow's lean run status reads `progress runs --json` (schema `progress.runs.v1`).
+
+## Plans outside Spec Kit
+
+Progress also tracks a plain Markdown plan: `progress init --plan docs/plan.md` creates `.progress/plan/`, and
+`progress hooks install --host claude|codex` adds the native hooks without editing other settings. Target a report with
+`--plan NAME` or `--feature DIR`. The steps are in the
+[package README](../../extensions/progress/README.md#plans-outside-spec-kit).
+
+## Vendored code
+
+The scripts, report page and reference docs come from the MIT `progress-report` skill in
+[sanduq-skills](https://github.com/samykabu/sanduq-skills), pinned at `agent-tools-v1.2.0` in `vendor.lock.json`.
+`extensions/progress/assets/skill/SKILL.md` is a reference copy of that skill's entry point; this extension's own entry
+point stays `extensions/progress/skills/progress/SKILL.ext.md`.
 
 ## Limits
 

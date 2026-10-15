@@ -522,8 +522,8 @@
       ],
       "internal": true,
       "exclusive": true,
-      "ref": "agent-tools-v1.1.3",
-      "sha": "189300b3dce8b1ab584009ba623b018ec539c112",
+      "ref": "agent-tools-v1.2.0",
+      "sha": "c4fee78a98ca5160d8d6b90ba92d60098f678f7e",
       "files": {
         "extensions/workflow/assets/delegate-task/.gitignore": "247681cefffa8448d973f21147c92b38b63f492a98a50aca3b3c490bc97499e1",
         "extensions/workflow/assets/delegate-task/README.ar.md": "7c2cade9d85acab9c3da95d81c59d6bd44abbed9bdd465f92e6de81ed034ea12",
@@ -636,6 +636,74 @@
         "extensions/user-manual/skills/user-manual/references/incremental-update.md": "d66ef41177737e25365511719ffe7079e363a67ae42dc4c90338edcb3d33d0ed",
         "extensions/user-manual/skills/user-manual/references/publishing.md": "527fc14dc3d0ed36841b8746c562f6c04bdb4d66518ae96a72ecb2f8aa6d5ce3",
         "extensions/user-manual/user-manual-config.template.yml": "ff23127565985917a112aa3587eea98c4bcd64280099fc032b95cb2e56af67e3"
+      }
+    },
+    "progress-report": {
+      "map": [
+        [
+          "skills/agent-tools/skills/progress-report/scripts",
+          "extensions/progress/scripts"
+        ],
+        [
+          "skills/agent-tools/skills/progress-report/assets/ui",
+          "extensions/progress/assets/ui"
+        ],
+        [
+          "skills/agent-tools/skills/progress-report/docs",
+          "extensions/progress/docs"
+        ],
+        [
+          "skills/agent-tools/skills/progress-report/references",
+          "extensions/progress/skills/progress/references"
+        ],
+        [
+          "skills/agent-tools/skills/progress-report/SKILL.md",
+          "extensions/progress/assets/skill/SKILL.md"
+        ]
+      ],
+      "internal": true,
+      "exclusive": true,
+      "ref": "agent-tools-v1.2.0",
+      "sha": "c4fee78a98ca5160d8d6b90ba92d60098f678f7e",
+      "files": {
+        "extensions/progress/assets/skill/SKILL.md": "be773cc2df87bc4d554b5cccc13e2be1aa6eb77099b491c9700da48adbb5aa08",
+        "extensions/progress/assets/ui/base.css": "fcfe5f3b9c86b8779e5b6d28a9923e329d103514f028c057d56e174e063c7c08",
+        "extensions/progress/assets/ui/blocks.js": "78cf76b0d9f54483979fd892eedb99363539ebfb06239ba42ca6fc80ceda3f1c",
+        "extensions/progress/assets/ui/index.html": "6a108df64b2c75d252bca2739b86f1f08104779dd7465454c77a80793ad74380",
+        "extensions/progress/docs/assets/progress-dark.png": "7a1aa8cd8ee631b1ad50116133f61b4397ca3202bce1582c75bb1097b8963c5c",
+        "extensions/progress/docs/assets/progress-light.png": "02b013f4656138ca3cdf36f9d4fdc1738c43d266cb0dcfadbeea17e8b5da3f41",
+        "extensions/progress/docs/assets/progress-narrow.png": "990041f3c9a97c3392d299aa5e7072ab5c6d6f8065a5e703a1c543dd396c0aa1",
+        "extensions/progress/docs/commands.md": "55eb7294c833657c2fbc73e45f664a9bb281b4860ffe0dfd1b5b0938acceaf4f",
+        "extensions/progress/docs/contracts.md": "d28017a93bc6512238e8790efc15d9b810e6cd331236238d9e77420d0b65814b",
+        "extensions/progress/docs/hosts.md": "265673ebe910bcded5bf887f3113bb5e3c9a16b2725781770c8dfe1a5db426af",
+        "extensions/progress/docs/token-benchmark.md": "63668c0e9912a50f3ef550413e786175c8ce06c52ce84ad7a4908ac2aa07dc0a",
+        "extensions/progress/scripts/hook.py": "a585311d975cb325f41c77ea942e09d2d88310df29e3dbaa276a9e54a46fab44",
+        "extensions/progress/scripts/live_ab.py": "27cba704c4dca7602b8c6821e362dea40c3a704fd7d48078c6aa3375cef742c3",
+        "extensions/progress/scripts/progress.py": "d8d5b9e381b8c3d95314ef1a5e0dff32750322d5fe0a66ebdf1cd7a10ac13a88",
+        "extensions/progress/scripts/sanduq_progress/__init__.py": "f37aa6f82e7a376e3ec0f25b5ff9ee31747f0e75c8419bece96dd95ccd36ef2c",
+        "extensions/progress/scripts/sanduq_progress/collect/hosts.py": "0393a47c60a018a518da492438b8aef84645fda261038ea5c33345b763fad3cb",
+        "extensions/progress/scripts/sanduq_progress/collect/plan.py": "6ec0387ea3de40c75906e2f302b621dd493a6580532febbf1e6c4716beb34571",
+        "extensions/progress/scripts/sanduq_progress/collect/runs.py": "fbed25910be5a4633d17b015e2dd9956733467d4975ff6779b2d9f7075ec2e63",
+        "extensions/progress/scripts/sanduq_progress/collect/tasks.py": "7f585f22fd01d35bdef93c3c9b2195e1d10dd560fdc6f27ee90c579419a79249",
+        "extensions/progress/scripts/sanduq_progress/collect/workflow.py": "4c88af28cfbb3231ab89d60269430042edc8a06da1e944b40426d0b5c2490699",
+        "extensions/progress/scripts/sanduq_progress/facts.py": "7cfcc96439922f80f048a7c269cd5eac67b7af2659969640dcd4a1e70c335eaf",
+        "extensions/progress/scripts/sanduq_progress/hook.py": "6b8a0e954626c785528da0064a17abf4360d8c6732f3305eca5fb7e0cae3a423",
+        "extensions/progress/scripts/sanduq_progress/hooks_install.py": "d52e604474d2498cb5e7425f143cd7b0e1f9bc1b788898cfc868b77594fdf6f6",
+        "extensions/progress/scripts/sanduq_progress/hosts/__init__.py": "bf623572306ec99924223c86c7e9e3396950153dfa849223f74fa5c1689e8ead",
+        "extensions/progress/scripts/sanduq_progress/hosts/claude.py": "789d06edd5d7734f607e87996d22f3df8aba132ce41643ff003eefb8fd8aa7b1",
+        "extensions/progress/scripts/sanduq_progress/hosts/codex.py": "f3ec0b8b1d56d47b7de7713e17973fb23766a6848a815269cd9d01e4ee960972",
+        "extensions/progress/scripts/sanduq_progress/lock.py": "26e88b8a3c47e6bcbb28fa922c604488f9b7a20ea8f69f45d92f0d3053e441f4",
+        "extensions/progress/scripts/sanduq_progress/model.py": "b14d51de05ca716fdaa4004a9b5ee8a06e4d57e708d503a7d2d2928fd16ebc0a",
+        "extensions/progress/scripts/sanduq_progress/paths.py": "73fa4443d86101a880b5e3ef7a4b4e5609efc072c1f86c6b745862a85b538ce8",
+        "extensions/progress/scripts/sanduq_progress/refresh.py": "f86799561aa741d2eeeb0824cc51cea0f5688fb2f06092b14334b6b3039c48d7",
+        "extensions/progress/scripts/sanduq_progress/render_data.py": "0ca951e9530ccf6e01e86c5a6cf24f7d7bd4c0e8c1f8ac1d9b50bd3bdddf3aad",
+        "extensions/progress/scripts/sanduq_progress/render_md.py": "96e70500b00c8df0a5e4efa53029632c9f331fddd5b0798e706a39973af08667",
+        "extensions/progress/scripts/sanduq_progress/safelog.py": "b1c625cd95f512d742d03784d791912c203d04f49920fbf0a64b1cd43b3ecda3",
+        "extensions/progress/scripts/sanduq_progress/snapshot.py": "a0addd48acab9fb643f7bb4f5f5e90fda216b36478ae648147df56e61bb9e14f",
+        "extensions/progress/scripts/sanduq_progress/statusline.py": "5908def1fce82595d192e5e6073bb45ea585dc8572977c23e0fbffc0d1b77783",
+        "extensions/progress/scripts/sanduq_progress/theme.py": "ef2f8ecc95631306c03ff271266bf92bbae4df442fefa7690a841e76046135ac",
+        "extensions/progress/scripts/sanduq_progress/util.py": "4291a5c1055a1e5c2ad3c699229c7b1babf09b4e431cde6915669dcbe87fcd5b",
+        "extensions/progress/skills/progress/references/verbs.md": "4572d1c60546b8508422c53d37f18c066666df0a9441d9ee2c9e69959906cc83"
       }
     }
   }

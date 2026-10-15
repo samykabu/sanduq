@@ -9,6 +9,12 @@ import sys
 import tempfile
 from pathlib import Path
 
+try:
+    from .paths import PLAN_ROOT, project_dir, registry_dirs
+except ImportError:  # run as a script
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from sanduq_progress.paths import PLAN_ROOT, project_dir, registry_dirs
+
 BLOCKS = ("header", "orchestrator", "lanes", "boards", "decisions", "blockers", "events")
 TOKEN_KEYS = ("bg", "surface", "text", "muted", "line", "brand", "accent",
               "active", "waiting", "blocked", "done", "failed")
@@ -157,7 +163,7 @@ def resolve_doc(doc=None):
 
 
 def theme_path(project_root):
-    return Path(project_root) / ".specify" / "progress" / "theme.json"
+    return project_dir(project_root) / "theme.json"
 
 
 def resolve(project_root):
@@ -267,7 +273,10 @@ def _store(project_root, doc):
 
 
 def _refresh_views(project_root, resolved):
-    for view in Path(project_root).glob("specs/*/progress/.view"):
+    root = Path(project_root)
+    views = [*root.glob("specs/*/progress/.view"), *root.glob(PLAN_ROOT + "/*/.view"),
+             *(root / d / ".view" for d in registry_dirs(root))]
+    for view in views:
         if view.is_dir():
             write_assets(view, resolved)
 

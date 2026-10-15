@@ -1,7 +1,7 @@
 """Claude statusline wrapper plus install/uninstall.
 
 `progress.py statusline` reads the statusline JSON on stdin, records the host snapshot for a bound session, then
-runs the previously configured statusLine command (kept in .specify/progress/config.json) with the same stdin and
+runs the previously configured statusLine command (kept in <project dir>/config.json) with the same stdin and
 passes its stdout through byte for byte. With no previous command it prints one minimal line."""
 import json
 import os
@@ -11,7 +11,7 @@ from pathlib import Path
 from . import refresh as refreshlib, snapshot
 from .hosts import claude
 from .lock import Lock, LockBusy
-from .paths import Ctx
+from .paths import Ctx, project_dir
 from .util import atomic_write, diag, read_json, utcnow, write_json
 
 
@@ -34,7 +34,7 @@ def record(raw, root, now=None):
     except LockBusy:
         return None
     except Exception as exc:
-        diag(Path(root) / '.specify' / 'progress' / 'diagnostics.log', f'statusline: {type(exc).__name__}: {exc}', now)
+        diag(project_dir(root) / 'diagnostics.log', f'statusline: {type(exc).__name__}: {exc}', now)
         return None
 
 
@@ -51,7 +51,7 @@ def minimal_line(payload):
 def run(raw, root, now=None):
     """Return the bytes to print. Chained output is returned unchanged."""
     payload = record(raw, root, now)
-    config = read_json(Path(root) / '.specify' / 'progress' / 'config.json', {})
+    config = read_json(project_dir(root) / 'config.json', {})
     chained = (config.get('statusline') or {}).get('chained') if isinstance(config, dict) else None
     if chained:
         import subprocess
@@ -82,7 +82,7 @@ def _settings(root):
 def install(root):
     """Point Claude's statusLine at the wrapper; the previous one is kept for exact restoration."""
     root = Path(root)
-    cfg_path = root / '.specify' / 'progress' / 'config.json'
+    cfg_path = project_dir(root) / 'config.json'
     config = read_json(cfg_path, {})
     config = config if isinstance(config, dict) else {}
     path, settings = _settings(root)
@@ -104,7 +104,7 @@ def install(root):
 
 def uninstall(root):
     root = Path(root)
-    cfg_path = root / '.specify' / 'progress' / 'config.json'
+    cfg_path = project_dir(root) / 'config.json'
     config = read_json(cfg_path, {})
     config = config if isinstance(config, dict) else {}
     saved = config.get('statusline') if isinstance(config.get('statusline'), dict) else {}

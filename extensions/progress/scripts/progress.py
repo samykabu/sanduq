@@ -15,10 +15,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from sanduq_progress import facts as factslib, hook as hooklib, model, refresh as refreshlib, render_md  # noqa: E402
 from sanduq_progress import snapshot, statusline as statuslib  # noqa: E402
-from sanduq_progress.collect import runs as runscol, tasks as taskscol  # noqa: E402
+from sanduq_progress.collect import plan as plancol, runs as runscol, tasks as taskscol  # noqa: E402
 from sanduq_progress.lock import Lock, LockBusy  # noqa: E402
-from sanduq_progress.paths import ASSETS, Ctx, ProgressError, find_root, git_exclude, resolve_feature  # noqa: E402
-from sanduq_progress.util import atomic_write, diag, iso, parse_time, read_json, refuse_link, utcnow, write_json  # noqa: E402
+from sanduq_progress.paths import (ASSETS, NAME, PLAN_REGISTRY, PLAN_ROOT, RESERVED_ID, TASK_REF, Ctx, ProgressError, find_root, is_default_plan_dir,  # noqa: E402
+                                   default_excludes, git_exclude, list_plans, normalise_plan_dir, plan_info, resolve_feature, resolve_target, slugify)
+from sanduq_progress.util import atomic_write, diag, ensure_local_dir, iso, parse_time, read_json, refuse_link, utcnow, write_json  # noqa: E402
 
 FALLBACK_CSS = (':root{--bg:#f6f7f4;--surface:#fff;--text:#1b2a24;--muted:#4e5d56;--line:#d5dcd7;--brand:#233c32;'
                 '--accent:#c65b36;--active:#dcebf7;--waiting:#e9ece9;--blocked:#f8e0d6;--done:#dcefe2;--failed:#f4c7c0}\n')
@@ -48,7 +49,8 @@ def build_parser():
     p = Parser(prog='progress', description=__doc__)
     p.add_argument('--root', help=argparse.SUPPRESS)
     common = Parser(add_help=False)
-    common.add_argument('--feature', help='feature directory, e.g. specs/001-name')
+    common.add_argument('--feature', help='Spec Kit feature directory, e.g. specs/001-name')
+    common.add_argument('--plan', help='plan report by name or path (init: the Markdown checklist file to read)')
     common.add_argument('--actor', default=os.environ.get('SANDUQ_PROGRESS_ACTOR', 'agent:coordinator'))
     sub = p.add_subparsers(dest='verb', parser_class=Parser, required=True)
 
@@ -58,6 +60,9 @@ def build_parser():
     s = verb('init')
     s.add_argument('--statusline', choices=('yes', 'no'), default='no')
     s.add_argument('--theme')
+    s.add_argument('--name', help='plan mode: report name (default: the plan file name, slugified)')
+    s.add_argument('--dir', help='plan mode: report directory inside the repository (default .progress/<name>)')
+    s.add_argument('--rebind', action='store_true', help='plan mode: let an existing report follow a different plan file')
     s = verb('bind')
     s.add_argument('--session')
     s.add_argument('--host', choices=('claude', 'codex'), default='claude')
@@ -119,7 +124,18 @@ def build_parser():
     s.add_argument('--host', choices=('claude', 'codex'))
     s = verb('statusline')
     s.add_argument('action', nargs='?', choices=('run', 'install', 'uninstall'), default='run')
+    s = sub.add_parser('hooks')
+    s.add_argument('action', choices=('install', 'uninstall', 'status'))
+    s.add_argument('--host', choices=('claude', 'codex'))
+    s.add_argument('--scope', choices=('project', 'user'), default='project')
+    s.add_argument('--force-both', action='store_true', help='install even when this installer already registered the hooks in the other scope')
+    s.add_argument('--python', help='interpreter command written into the hook (default: python on Windows, python3 elsewhere)')
     return p
+
+
+def target_ctx(a, root):
+    """The report this invocation works on: --plan, --feature, or the one active report."""
+    return Ctx(root, resolve_target(root, a.plan, a.feature))
 
 
 def require_init(ctx):
@@ -173,13 +189,115 @@ def refresh_now(ctx):
 
 # ---- verbs ----------------------------------------------------------------------------------------------------
 
+def plan_source_ref(root, path):
+    """(reference stored in tracked files, absolute path or None). A plan inside the repository is stored repo-relative; any
+    other is `external:<file name>` and its absolute path stays in the git-ignored `.host/plan-source.json`."""
+    resolved = Path(os.path.realpath(str(path)))
+    try:
+        return resolved.relative_to(Path(os.path.realpath(str(root)))).as_posix(), None
+    except ValueError:
+        return 'external:' + resolved.name, str(resolved)
+
+
+def register_plan_dir(root, directory):
+    """Record a report directory outside .progress/ in the tracked registry so --plan NAME finds it."""
+    if is_default_plan_dir(directory):
+        return
+    registry = Path(root) / PLAN_REGISTRY
+    data = read_json(registry, {})
+    dirs = data.get('dirs') if isinstance(data, dict) and isinstance(data.get('dirs'), list) else []
+    if directory not in dirs:
+        write_json(registry, {'dirs': sorted([*dirs, directory])})
+
+
+def init_plan(a, root):
+    """Create (or refresh) the report of a Markdown checklist. The plan file is only ever read."""
+    wanted = Path(a.plan)
+    candidates = [wanted] if wanted.is_absolute() else [Path.cwd() / wanted, Path(root) / wanted]
+    path = next((c for c in candidates if c.is_file()), None)
+    if path is None:
+        known = plancol_find(root, a.plan)
+        if known and not (a.name or a.dir):
+            return Ctx(root, known), None, None
+        raise ProgressError('PROGRESS_PLAN_MISSING', f'plan file not found: {str(a.plan)[:80]}', 2)
+    source, absolute = plan_source_ref(root, path)
+    name = a.name if a.name else slugify(path.stem)
+    if not NAME.fullmatch(name):
+        raise ProgressError('PROGRESS_USAGE', '--name takes lowercase letters, digits, dot, dash and underscore (64 at most)', 2)
+    if a.dir is not None:
+        directory = normalise_plan_dir(root, a.dir)
+        if not directory or directory == PLAN_ROOT or directory.startswith(PLAN_ROOT + '/.'):
+            raise ProgressError('PROGRESS_USAGE', '--dir must be a directory inside the repository (not .git, nothing under specs/)', 2)
+    else:
+        directory = f'{PLAN_ROOT}/{name}'
+    ctx = Ctx(root, directory)
+    check_plan_dir(ctx)
+    existing = plan_info(root, directory)
+    if existing.get('source') and not a.rebind:
+        if existing['source'] != source or (absolute and known_external_identity(ctx) not in (None, source_identity(absolute))):
+            raise ProgressError('PROGRESS_PLAN_EXISTS', f"{directory} already reports {existing['source'][:60]}; pass --name or --dir, or --rebind to follow this plan", 3)
+    return ctx, {'schema': PLAN_SCHEMA, 'name': existing.get('name') or name, 'source': source,
+                 'ids': existing.get('ids') or [], 'next': existing.get('next') or 0}, absolute
+
+
+PLAN_SCHEMA = 'progress.plan.v1'
+
+
+def source_identity(absolute):
+    """Fingerprint of a resolved plan path: what tells two plan files with the same name apart."""
+    import hashlib
+    return hashlib.sha256(os.path.normcase(os.path.realpath(str(absolute))).encode('utf-8')).hexdigest()[:16]
+
+
+def known_external_identity(ctx):
+    data = read_json(ctx.plan_source_file, {})
+    if not isinstance(data, dict):
+        return None
+    return data.get('fingerprint') or (source_identity(data['path']) if isinstance(data.get('path'), str) else None)
+
+
+def check_plan_dir(ctx):
+    """Refuse, before any write, a report directory that holds something that is not a Progress plan report."""
+    if ctx.plan_file.exists() or ctx.plan_file.is_symlink():
+        data = read_json(ctx.plan_file, None)
+        if not (isinstance(data, dict) and data.get('schema') == PLAN_SCHEMA):
+            raise ProgressError('PROGRESS_DIR_CONFLICT', f'{ctx.feature}/plan.json is not a Progress plan report; pick another --dir', 3)
+    elif ctx.facts.exists() or ctx.dir.is_file():
+        raise ProgressError('PROGRESS_DIR_CONFLICT', f'{ctx.feature} already holds other files of its own; pick another --dir', 3)
+
+
+def plancol_find(root, value):
+    from sanduq_progress.paths import find_plan
+    return find_plan(root, value)
+
+
 def cmd_init(a, root):
     if a.theme:
         check_theme_preset(a.theme)  # before anything is created
-    feature = resolve_feature(root, a.feature)
-    ctx = Ctx(root, feature)
-    ctx.view.mkdir(parents=True, exist_ok=True)
+    if a.plan and a.feature:
+        raise ProgressError('PROGRESS_USAGE', 'give --plan or --feature, not both', 2)
+    if (a.name or a.dir) and not a.plan:
+        raise ProgressError('PROGRESS_USAGE', '--name and --dir belong to init --plan PATH', 2)
+    plan_doc = absolute = None
+    if a.plan:
+        ctx, plan_doc, absolute = init_plan(a, root)
+        feature = ctx.feature
+    else:
+        feature = resolve_target(root, None, a.feature, creating=True)
+        ctx = Ctx(root, feature)
+    rel = ctx.dir.relative_to(Path(root)).as_posix()
+    extra = (feature,) if plan_doc is not None and not is_default_plan_dir(feature) else ()  # `.progress/<name>` is covered by the wildcards
+    git_exclude(root, default_excludes(root, extra))
+    preflight_local_dirs(ctx, root, rel)  # before anything is registered or written
+    ctx.dir.mkdir(parents=True, exist_ok=True)
+    ensure_local_dir(ctx.view)
     ctx.cfg_dir.mkdir(parents=True, exist_ok=True)
+    if plan_doc is not None:
+        register_plan_dir(root, feature)
+        write_json(ctx.plan_file, plan_doc)
+        if absolute:
+            ensure_local_dir(ctx.host_dir)
+            write_json(ctx.plan_source_file, {'path': absolute, 'fingerprint': source_identity(absolute)})
     if not ctx.config.exists():
         write_json(ctx.config, ctx.config_data())
     if not ctx.facts.exists():
@@ -197,8 +315,40 @@ def cmd_init(a, root):
     if a.statusline == 'yes':
         statuslib.install(root)
     nonce = snapshot.create_pending(ctx, now())
-    print(f'progress: ready {feature}/progress/.view/index.html bind={nonce}')
+    print(f'progress: ready {ctx.feature}{"" if ctx.is_plan else "/progress"}/.view/index.html bind={nonce}')
     return 0
+
+
+def check_plan_excluded(root, directory):
+    from sanduq_progress.paths import check_excluded
+    check_excluded(root, directory)
+
+
+def preflight_local_dirs(ctx, root, directory):
+    """Create .host/ and .view/ with their nested `*` .gitignore, then check git ignores every local-only file, so the
+    check sees what git will really see (the nested file wins over parent re-include rules). A refused check removes
+    exactly what this call created: files, then directories, deepest first. Nothing is registered at this point."""
+    made = []
+    probe = ctx.dir
+    while not probe.exists() and probe != Path(root):
+        made.append(probe)
+        probe = probe.parent
+    for leaf in (ctx.host_dir, ctx.view):
+        if not leaf.exists():
+            made.append(leaf)
+        if not (leaf / '.gitignore').exists():
+            made.append(leaf / '.gitignore')
+    try:
+        ensure_local_dir(ctx.host_dir)
+        ensure_local_dir(ctx.view)
+        check_plan_excluded(root, directory)
+    except BaseException:
+        for item in sorted(set(made), key=lambda q: len(q.parts), reverse=True):
+            try:
+                item.unlink() if item.is_file() or item.is_symlink() else item.rmdir()
+            except OSError:
+                pass
+        raise
 
 
 def check_theme_preset(name):
@@ -238,7 +388,7 @@ def cmd_theme(a, root):
 
 
 def cmd_bind(a, root):
-    ctx = Ctx(root, resolve_feature(root, a.feature))
+    ctx = target_ctx(a, root)
     require_init(ctx)
     if a.session:
         snapshot.bind_session(ctx, a.host, a.session, now())
@@ -249,7 +399,7 @@ def cmd_bind(a, root):
 
 
 def cmd_refresh(a, root):
-    ctx = Ctx(root, resolve_feature(root, a.feature))
+    ctx = target_ctx(a, root)
     require_init(ctx)
     with locked(ctx):
         report = refresh_now(ctx)
@@ -265,7 +415,7 @@ def summary_line(report):
 
 
 def cmd_status(a, root):
-    ctx = Ctx(root, resolve_feature(root, a.feature))
+    ctx = target_ctx(a, root)
     require_init(ctx)
     state = refreshlib.read_state(ctx)
     report = model.build(ctx, now(), int(state.get('rev') or 0), state)
@@ -289,7 +439,7 @@ def mutate(ctx, a, make):
 
 
 def cmd_lane(a, root):
-    ctx = Ctx(root, resolve_feature(root, a.feature))
+    ctx = target_ctx(a, root)
 
     def make(loaded):
         current = {r['id']: r for r in loaded['current']}
@@ -321,19 +471,19 @@ def parse_by(text, root):
     ident = text.upper()
     if re.fullmatch(r'[LWC]\d+', ident):
         return {'type': 'lane', 'ref': ident}
-    if re.fullmatch(r'T\d+', ident):
-        return {'type': 'task', 'ref': ident}
     if re.fullmatch(r'(SD|D)\d+', ident):
         return {'type': 'decision', 'ref': ident}
-    raise ProgressError('PROGRESS_USAGE', '--by takes a lane (L2), task (T003), decision (SD2) or ext:"text"', 2)
+    if re.fullmatch(TASK_REF, ident) and not RESERVED_ID.fullmatch(ident):
+        return {'type': 'task', 'ref': ident}
+    raise ProgressError('PROGRESS_USAGE', '--by takes a lane (L2), task (T003 or P003), decision (SD2) or ext:"text"', 2)
 
 
 def cmd_block(a, root):
-    ctx = Ctx(root, resolve_feature(root, a.feature))
+    ctx = target_ctx(a, root)
     target = a.target.upper()
 
     def make(loaded):
-        if not re.fullmatch(r'[TLWC]\d+', target):
+        if not (re.fullmatch(r'[LWC]\d+', target) or (re.fullmatch(TASK_REF, target) and not RESERVED_ID.fullmatch(target))):
             raise ProgressError('PROGRESS_USAGE', 'block target is a task or lane id', 2)
         by = parse_by(a.by, ctx.root)
         for item in loaded['current']:
@@ -346,7 +496,7 @@ def cmd_block(a, root):
 
 
 def cmd_unblock(a, root):
-    ctx = Ctx(root, resolve_feature(root, a.feature))
+    ctx = target_ctx(a, root)
 
     def make(loaded):
         if bool(a.id) == bool(a.all_for):
@@ -363,7 +513,7 @@ def cmd_unblock(a, root):
 
 
 def cmd_decide(a, root):
-    ctx = Ctx(root, resolve_feature(root, a.feature))
+    ctx = target_ctx(a, root)
     if (ctx.feature_dir / 'workflow' / 'decisions.json').is_file():
         raise ProgressError('PROGRESS_DECISION_AUTHORITY', 'Workflow owns decisions for this feature', 3)
 
@@ -390,11 +540,11 @@ def cmd_decide(a, root):
 
 
 def cmd_note(a, root):
-    ctx = Ctx(root, resolve_feature(root, a.feature))
+    ctx = target_ctx(a, root)
 
     def make(loaded):
         target = a.target.upper() if a.target else None
-        if target and not re.fullmatch(r'[TLWC]\d+', target):
+        if target and not (re.fullmatch(r'[LWC]\d+', target) or (re.fullmatch(TASK_REF, target) and not RESERVED_ID.fullmatch(target))):
             raise ProgressError('PROGRESS_USAGE', 'note target is a task or lane id', 2)
         ident = factslib.next_id(loaded['all'], 'note')
         record = factslib.make('note', ident, a.actor, now=now(), text=factslib.sanitise(a.text, ctx.root), target=target)
@@ -449,7 +599,7 @@ def _usage_record(path, root):
 
 
 def cmd_attempt(a, root):
-    ctx = Ctx(root, resolve_feature(root, a.feature))
+    ctx = target_ctx(a, root)
 
     def make(loaded):
         lane = a.lane.upper() if a.lane else None
@@ -509,7 +659,7 @@ def cmd_runs(a, root):
 
 
 def cmd_export(a, root):
-    ctx = Ctx(root, resolve_feature(root, a.feature))
+    ctx = target_ctx(a, root)
     require_init(ctx)
     report = read_json(ctx.report)
     if not isinstance(report, dict):
@@ -529,6 +679,27 @@ def cmd_hook(a, root):
     return 0
 
 
+def cmd_hooks(a, root):
+    from sanduq_progress import hooks_install
+    line = hooks_install.execute(a, root)
+    if a.action == 'install':
+        line += pending_bind(root)
+    print(line)
+    return 0
+
+
+def pending_bind(root):
+    """When exactly one report exists already, open a bind for it: the hooks just installed complete it on the next tool call,
+    so installing hooks after `init` needs no separate `bind` step. Empty when there is nothing to bind."""
+    try:
+        ctx = Ctx(root, resolve_target(root))
+        if not ctx.dir.is_dir() or not ctx.facts.exists():
+            return ''
+        return f' bind={snapshot.create_pending(ctx, now())}'
+    except (ProgressError, OSError):
+        return ''
+
+
 def cmd_statusline(a, root):
     if a.action == 'install':
         statuslib.install(root)
@@ -543,7 +714,7 @@ def cmd_statusline(a, root):
 
 VERBS = {'init': cmd_init, 'bind': cmd_bind, 'refresh': cmd_refresh, 'status': cmd_status, 'lane': cmd_lane,
          'block': cmd_block, 'unblock': cmd_unblock, 'decide': cmd_decide, 'note': cmd_note, 'theme': cmd_theme,
-         'export': cmd_export, 'attempt': cmd_attempt, 'runs': cmd_runs, 'hook': cmd_hook, 'statusline': cmd_statusline}
+         'export': cmd_export, 'attempt': cmd_attempt, 'runs': cmd_runs, 'hook': cmd_hook, 'statusline': cmd_statusline, 'hooks': cmd_hooks}
 
 
 def main(argv=None):

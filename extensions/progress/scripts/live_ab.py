@@ -79,7 +79,7 @@ def describe(ev):
 def task_text(arm, trace, feature):
     steps = "\n".join("%d. %s" % (i, describe(ev)) for i, ev in enumerate(trace, 1) if ev["kind"] not in ("noop_refresh", "resume", "compaction"))
     if arm == "new":
-        how = ("Record each step with the Progress CLI exactly as .specify/extensions/progress/skills/progress/SKILL.md says. "
+        how = ("Record each step with the Progress CLI exactly as .claude/skills/progress-report/SKILL.md says. "
                "Record only facts the CLI cannot collect itself: lane assignments, blockers, decisions and notes. "
                "Task starts, completions and reopenings need no command beyond editing tasks.md checkboxes.")
     else:
@@ -103,11 +103,10 @@ def prepare(arm, model_mod, trace, root):
         (fdir / "progress").mkdir()
         (fdir / "progress" / "report.md").write_text(model_mod.render(state), encoding="utf-8")
     else:
-        target = root / ".specify" / "extensions" / "progress"
-        for name in ("scripts", "assets", "skills", "docs"):
+        target = root / ".claude" / "skills" / "progress-report"
+        for name in ("scripts", "assets", "references", "docs"):
             shutil.copytree(EXT / name, target / name, ignore=shutil.ignore_patterns("__pycache__", "*.png", "token-benchmark.md"))
-        skill = target / "skills" / "progress"
-        (skill / "SKILL.md").write_text((skill / "SKILL.ext.md").read_text(encoding="utf-8"), encoding="utf-8")
+        shutil.copyfile(EXT / "SKILL.md", target / "SKILL.md")
     git = ["git", "-c", "user.email=ab@example.invalid", "-c", "user.name=ab"]
     subprocess.run(["git", "init", "-q"], cwd=root, check=True)
     subprocess.run(git + ["add", "-A"], cwd=root, check=True)
@@ -288,7 +287,7 @@ def check_md(text, want):
 
 def status_new(root, feature):
     """`progress status --json` of the NEW arm's sandbox, or None when the CLI answers nothing usable."""
-    script = root / ".specify" / "extensions" / "progress" / "scripts" / "progress.py"
+    script = root / ".claude" / "skills" / "progress-report" / "scripts" / "progress.py"
     try:
         done = subprocess.run([sys.executable, str(script), "--root", str(root), "status", "--json", "--feature", feature],
                               capture_output=True, text=True, encoding="utf-8", timeout=60, cwd=root)
