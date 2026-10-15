@@ -176,9 +176,13 @@ spans/blocks or other prose are ignored.
 
 Host children and assigned lanes. A host child is merged into an assigned lane (facts or delegation lane) when that
 lane's `owner` equals, case-insensitively, the child's agent id, the `tool_use_id` it was launched with (the key in
-`children`), or its `description` label. A merged child contributes its observed model and effort, and its last
-observation time, to the lane; it does not change the lane's status or tasks, and it gets no `C<n>` lane. Only children
-that match no lane owner become `host-child` lanes (`C1`, `C2`, ... numbered over the unmatched children).
+`children`), or its `description` label. A merged child contributes its observed model and effort, and its last observation time, to the lane, and it gets no
+`C<n>` lane. Its terminal status also decides the lane's status: a failed child fails the lane and a finished child
+leaves the lane `waiting` while tasks are unchecked (the tasks.md checkbox stays the task's truth). An open blocker
+targeting the lane outranks that terminal evidence, so the lane reports `blocked`. A `description` match merges only
+when it identifies exactly one child; if several children share the label, none merges on that label and each stays a
+`host-child` lane. Agent id and `tool_use_id` matches are unique by construction. Only children that match no lane
+owner become `host-child` lanes (`C1`, `C2`, ... numbered over the unmatched children).
 
 Workflow decisions. `decisions[].selected` is the option text for a single-selection decision and a list of option texts
 for a multiple-selection decision (Workflow stores `selected: ["A","C"]` with `option: null` in that mode, and

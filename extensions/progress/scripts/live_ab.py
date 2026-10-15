@@ -178,8 +178,9 @@ def check_new(data, want):
         ids = list(groups.get("active") or []) + list(groups.get("waiting") or []) + list(groups.get("done") or [])
         ids += [b.get("task") for b in groups.get("blocked") or []]
         held.setdefault(lane.get("owner"), set()).update(ids)
-        merged = groups_by_owner.setdefault(lane.get("owner"), {"open": set(), "blocked": set(), "done": set()})
-        merged["open"].update(list(groups.get("active") or []) + list(groups.get("waiting") or []))
+        merged = groups_by_owner.setdefault(lane.get("owner"), {"active": set(), "waiting": set(), "blocked": set(), "done": set()})
+        merged["active"].update(groups.get("active") or [])
+        merged["waiting"].update(groups.get("waiting") or [])
         merged["blocked"].update(b.get("task") for b in groups.get("blocked") or [])
         merged["done"].update(groups.get("done") or [])
     states = want["task_states"]
@@ -187,11 +188,12 @@ def check_new(data, want):
         if held.get(lane["owner"]) != set(lane["tasks"]):
             problems.append("lane %s (%s): tasks %s differ from expected %s" % (
                 lid, lane["owner"], sorted(held.get(lane["owner"], [])), lane["tasks"]))
-        got_groups = groups_by_owner.get(lane["owner"], {"open": set(), "blocked": set(), "done": set()})
+        got_groups = groups_by_owner.get(lane["owner"], {"active": set(), "waiting": set(), "blocked": set(), "done": set()})
         expect = {"done": {t for t in lane["tasks"] if states.get(t) == "done"},
-                  "blocked": {t for t in lane["tasks"] if states.get(t) == "blocked"}}
-        expect["open"] = set(lane["tasks"]) - expect["done"] - expect["blocked"]
-        for group in ("done", "blocked", "open"):
+                  "blocked": {t for t in lane["tasks"] if states.get(t) == "blocked"},
+                  "active": {t for t in lane["tasks"] if states.get(t) == "active"}}
+        expect["waiting"] = set(lane["tasks"]) - expect["done"] - expect["blocked"] - expect["active"]
+        for group in ("done", "blocked", "active", "waiting"):
             if got_groups[group] != expect[group]:
                 problems.append("lane %s (%s): %s tasks %s differ from expected %s" % (
                     lid, lane["owner"], group, sorted(got_groups[group]), sorted(expect[group])))

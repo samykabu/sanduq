@@ -315,10 +315,12 @@ def build(ctx, now, rev=1, state=None):
             return 'active' if recent else ('pending' if not lane['tasks'] else 'waiting')
         if lane['closed']:
             return 'done'
+        if lane_blockers.get(lane['id']):  # an open blocker outranks terminal child evidence
+            return 'blocked'
         ended = None if lane['_derived'] else _child_end(lane)
         if ended:  # the delegated child finished: failed, or waiting for its unchecked tasks to be ticked
             return 'failed' if ended[0] == 'failed' else 'waiting'
-        if lane_blockers.get(lane['id']) or (lane['_derived'] and lane['_derived']['status'] == 'blocked'):
+        if lane['_derived'] and lane['_derived']['status'] == 'blocked':
             return 'blocked'
         if lane['_derived']:
             derived = lane['_derived']['status']

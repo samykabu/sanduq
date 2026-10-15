@@ -31,7 +31,8 @@ def good_projection(state):
     for i, (lid, lane) in enumerate(state["lanes"].items(), 1):
         groups = {"active": [], "waiting": [], "blocked": [], "done": []}
         for t in lane["tasks"]:
-            groups["done" if state["tasks"][t]["state"] == "done" else "waiting"].append(t)
+            st = state["tasks"][t]["state"]
+            groups[st if st in ("done", "active") else "waiting"].append(t)
         lanes.append({"id": "L%d" % i, "owner": lane["owner"], "tasks": groups, "attempts": []})
     blockers = [{"id": bid, "target": b["target"], "by": {"type": "task", "ref": b["by"]}} for bid, b in state["blockers"].items()]
     made = [{"id": d_id, "question": d["question"], "selected": d["selected"]} for d_id, d in state["decisions"].items() if d["status"] == "made"]
@@ -70,6 +71,18 @@ class Equivalence(unittest.TestCase):
         problems = live_ab.check_new(data, expected)
         self.assertTrue(any(done in p for p in problems), problems)
         self.assertTrue(any(waiting in p for p in problems), problems)
+
+    def test_active_task_moved_to_waiting_is_reported(self):
+        cut = next(i for i, ev in enumerate(TRACE) if ev["kind"] == "start_task")
+        trace = TRACE[:cut + 1]
+        state = final_state(trace)
+        expected = live_ab.expected(model, trace)
+        data = good_projection(state)
+        self.assertEqual(live_ab.check_new(data, expected), [])
+        lane = next(l for l in data["lanes"] if l["tasks"]["active"])
+        lane["tasks"]["waiting"].append(lane["tasks"]["active"].pop())
+        problems = live_ab.check_new(data, expected)
+        self.assertTrue(any("active" in p or "waiting" in p for p in problems), problems)
 
     def test_blocked_tasks_collapsed_into_waiting_are_reported(self):
         cut = next(i for i, ev in enumerate(TRACE) if ev["kind"] == "block")

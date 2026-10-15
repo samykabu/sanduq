@@ -150,10 +150,11 @@ def hooks_registered(root):
     # Claude: the local settings file overrides the shared one when it states the switch; Codex: either file may switch off.
     claude = [_globally_disabled(configs.get(n)) for n in ('.claude/settings.local.json', '.claude/settings.json')]
     claude_off = next((v for v in claude if v is not None), False)
+    codex_off = any(_globally_disabled(d) for n, d in configs.items() if n.startswith('.codex/'))
     for name, data in configs.items():
         if name.startswith('.claude/') and claude_off:
             continue
-        if name.startswith('.codex/') and _globally_disabled(data):
+        if name.startswith('.codex/') and codex_off:
             continue
         if _json_hooks(data):
             return True

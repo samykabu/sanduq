@@ -152,6 +152,12 @@ class F03ChildTerminalEvidence(Project):
         self.assertEqual(lane['status'], 'waiting')
         self.assertEqual(lane['tasks']['waiting'], ['T002'])
 
+    def test_open_lane_blocker_outranks_a_finished_child(self):
+        self.child_events('done')
+        self.cli('block', 'L1', '--by', 'ext:waiting-on-review')
+        report = model.build(self.ctx, NOW, 1, json.loads(self.ctx.state.read_text()))
+        self.assertEqual(self.lane(report)['status'], 'blocked')
+
     def test_running_child_keeps_the_lane_active(self):
         lane = self.lane(self.child_events('running', ended=None))
         self.assertEqual(lane['status'], 'active')
