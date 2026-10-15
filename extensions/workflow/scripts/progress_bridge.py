@@ -14,9 +14,15 @@ imports Progress code. It is the single place that decides the reporting mode:
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
+
+try:
+    import tomllib
+except ImportError:  # Python < 3.11: TOML host configs cannot be read
+    tomllib = None
 
 SCRIPT_ENV = 'SANDUQ_PROGRESS_SCRIPT'  # tests and source-tree use; normally the installed path is used
 RELATIVE = Path('.specify/extensions/progress/scripts/progress.py')
@@ -51,13 +57,75 @@ def script(root):
     return path if path.is_file() else None
 
 
+def _json_hooks(data):
+    """True when a parsed host config holds an enabled command entry that runs a Progress hook."""
+    if isinstance(data, dict):
+        command = data.get('command')
+        if isinstance(command, str) and any(m in command for m in HOOK_MARKERS):
+            if data.get('enabled') is not False and data.get('disabled') is not True:
+                return True
+        return any(_json_hooks(v) for v in data.values())
+    if isinstance(data, list):
+        return any(_json_hooks(v) for v in data)
+    return False
+
+
+def _yml_hooks(text):
+    """Enabled Progress hook entries in .specify/extensions.yml (small line parser; no YAML dependency)."""
+    blocks = []
+    for line in text.splitlines():
+        if re.match(r'\s*-\s+extension\s*:', line):
+            blocks.append([line])
+        elif blocks and line.strip() and not line.lstrip().startswith('#') and line[:1] in ' \t':
+            blocks[-1].append(line)
+        elif line.strip() and line[:1] not in ' \t-#':
+            blocks.append([])  # a new top-level key ends the current entry
+    for block in blocks:
+        if not block:
+            continue
+        body = '\n'.join(block)
+        if not re.search(r'extension\s*:\s*[\'"]?progress[\'"]?\s*$', block[0]):
+            continue
+        command = re.search(r'command\s*:\s*(\S+)', body)
+        if not command or 'speckit.progress.hook' not in command.group(1):
+            continue
+        enabled = re.search(r'\benabled\s*:\s*(\S+)', body)
+        if enabled and enabled.group(1).strip('\'"').lower() in ('false', 'no', 'off', '0'):
+            continue
+        return True
+    return False
+
+
+def extension_enabled(root):
+    """False only when the installed-extension registry says Progress is disabled."""
+    try:
+        data = json.loads((Path(root) / '.specify' / 'extensions' / '.registry').read_text(encoding='utf-8-sig'))
+        entry = (data.get('extensions') or {}).get('progress')
+    except (OSError, ValueError, AttributeError):
+        return True
+    return not (isinstance(entry, dict) and entry.get('enabled') is False)
+
+
 def hooks_registered(root):
+    """True when an enabled Progress hook is wired in a host config and the extension itself is enabled."""
+    if not extension_enabled(root):
+        return False
     for name in HOST_FILES:
         try:
             text = (Path(root) / name).read_text(encoding='utf-8-sig')
         except OSError:
             continue
-        if any(marker in text for marker in HOOK_MARKERS):
+        if name.endswith('.yml'):
+            if _yml_hooks(text):
+                return True
+            continue
+        try:
+            if name.endswith('.toml') and tomllib is None:
+                continue
+            data = tomllib.loads(text) if name.endswith('.toml') else json.loads(text)
+        except Exception:  # unreadable config is not evidence of collection
+            continue
+        if _json_hooks(data):
             return True
     return False
 
@@ -94,8 +162,7 @@ def mode(root, feature=None):
     if path is None:
         return {'mode': 'legacy', 'script': None, 'automatic': False, 'source': 'progress not installed'}
     report = status(root, feature)
-    if report and (report.get('collection') or {}).get('automatic') is True:
-        return {'mode': 'projection', 'script': str(path), 'automatic': True, 'source': 'status collection.automatic'}
+    # status collection.automatic only reflects stored snapshots (history), so it is not proof of current collection.
     if hooks_registered(root):
         return {'mode': 'projection', 'script': str(path), 'automatic': True, 'source': 'hooks registered'}
     return {'mode': 'refresh', 'script': str(path), 'automatic': False, 'source': 'no automatic collection'}

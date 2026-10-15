@@ -141,22 +141,6 @@ def run_one(spec, args, model_mod, trace, runs_dir):
                     verified=verify(spec["arm"], root, model_mod, trace))
 
 
-def verify(arm, root, model_mod, trace):
-    """Cheap end-state check so a cheap-but-wrong run is not counted as a win."""
-    expected = sum(1 for _ in model_mod_done(model_mod, trace))
-    feature = model_mod.FEATURE
-    tasks = (root / "specs" / feature / "tasks.md").read_text(encoding="utf-8")
-    checked = len(re.findall(r"- \[[xX]\]", tasks))
-    ok = checked == expected
-    if arm == "md":
-        report = root / "specs" / feature / "progress" / "report.md"
-        ok = ok and report.exists() and ("%d/24 tasks done" % expected) in report.read_text(encoding="utf-8")
-    else:
-        facts = root / "specs" / feature / "progress" / "facts.jsonl"
-        ok = ok and facts.exists() and facts.stat().st_size > 0
-    return dict(checked_tasks=checked, expected_tasks=expected, ok=ok)
-
-
 def model_mod_done(model_mod, trace):
     state = model_mod.new_state()
     for ev in trace:
@@ -164,17 +148,167 @@ def model_mod_done(model_mod, trace):
     return [t for t in state["tasks"].values() if t["state"] == "done"]
 
 
+def expected(model_mod, trace):
+    """The semantic end state both arms must reach: lanes, open blockers, decisions and failed attempts."""
+    state = model_mod.new_state()
+    for ev in trace:
+        model_mod.apply(state, ev)
+    return dict(
+        done=sum(1 for t in state["tasks"].values() if t["state"] == "done"),
+        task_states={tid: t["state"] for tid, t in state["tasks"].items()},
+        lanes={lid: dict(owner=lane["owner"], tasks=sorted(lane["tasks"])) for lid, lane in state["lanes"].items()},
+        blockers=sorted((b["target"], str(b["by"])) for b in state["blockers"].values()),
+        blocker_ids=sorted(state["blockers"]),
+        pending=sorted(d["question"] for d in state["decisions"].values() if d["status"] == "pending"),
+        made={d["question"]: d["selected"] for d in state["decisions"].values() if d["status"] == "made"},
+        decision_ids={did: d["status"] for did, d in state["decisions"].items()},
+        retries=sorted({ev["task"] for ev in trace if ev["kind"] == "fail_retry"}),
+        recent_events=list(state["events"]),
+    )
+
+
+def check_new(data, want):
+    """Problems found comparing a Progress `status --json` projection with the expected end state."""
+    if not isinstance(data, dict) or data.get("schema") != "sanduq.progress.v2":
+        return ["projection unavailable: progress status --json did not return sanduq.progress.v2"]
+    problems = []
+    held = {}
+    for lane in data.get("lanes") or []:
+        groups = lane.get("tasks") or {}
+        ids = list(groups.get("active") or []) + list(groups.get("waiting") or []) + list(groups.get("done") or [])
+        ids += [b.get("task") for b in groups.get("blocked") or []]
+        held.setdefault(lane.get("owner"), set()).update(ids)
+    for lid, lane in want["lanes"].items():
+        if held.get(lane["owner"]) != set(lane["tasks"]):
+            problems.append("lane %s (%s): tasks %s differ from expected %s" % (
+                lid, lane["owner"], sorted(held.get(lane["owner"], [])), lane["tasks"]))
+    got = sorted((b.get("target"), str((b.get("by") or {}).get("ref"))) for b in data.get("blockers") or [])
+    wanted = sorted((t, by[4:].strip('"') if by.startswith("ext:") else by) for t, by in want["blockers"])
+    if got != wanted:
+        problems.append("blockers %s differ from expected %s" % (got, wanted))
+    decisions = data.get("decisions") or {}
+    pending = sorted(d.get("question") for d in decisions.get("pending") or [])
+    made = {d.get("question"): d.get("selected") for d in decisions.get("made") or []}
+    if pending != want["pending"]:
+        problems.append("pending decisions %s differ from expected %s" % (pending, want["pending"]))
+    if made != want["made"]:
+        problems.append("made decisions %s differ from expected %s" % (made, want["made"]))
+    texts = " ".join(str(e.get("text")) for e in data.get("events") or [])
+    for task in want["retries"]:
+        if task not in texts or "fail" not in texts:
+            problems.append("attempt: no recorded failed attempt for %s" % task)
+    done = sum(1 for t in (data.get("tasks") or {}).values() if t.get("done"))
+    if done != want["done"]:
+        problems.append("%d tasks done in the projection, expected %d" % (done, want["done"]))
+    return problems
+
+
+def md_sections(text):
+    found, name = {}, None
+    for line in text.splitlines():
+        m = re.match(r"##\s+(\S.*?)\s*$", line)
+        if m:
+            name = m.group(1)
+            found[name] = []
+        elif name:
+            found[name].append(line)
+    return found
+
+
+def table_rows(lines):
+    rows = [[c.strip() for c in l.strip().strip("|").split("|")] for l in lines if l.strip().startswith("|")]
+    return rows[2:]  # header and separator
+
+
+def check_md(text, want):
+    """Problems found parsing the hand-edited Markdown report's six sections against the expected end state."""
+    sec = md_sections(text)
+    problems = ["missing section %s" % n for n in ("Summary", "Lanes", "Tasks", "Decisions", "Blockers", "Events") if n not in sec]
+    lanes = table_rows(sec.get("Lanes", []))
+    for lid, lane in want["lanes"].items():
+        row = next((r for r in lanes if r and r[0].split()[:1] == [lid]), None)
+        if row is None or len(row) < 5 or row[1] != lane["owner"] or not row[-1].endswith("/%d" % len(lane["tasks"])):
+            problems.append("lane %s (%s) missing or wrong in the Lanes table" % (lid, lane["owner"]))
+    tasks = {r[0]: r for r in table_rows(sec.get("Tasks", [])) if len(r) >= 3}
+    for tid, state in want["task_states"].items():
+        if tasks.get(tid, [None] * 3)[2] != state:
+            problems.append("task %s is not %s in the Tasks table" % (tid, state))
+    block = sec.get("Blockers", [])
+    ids = sorted(set(re.findall(r"\bB\d+\b", "\n".join(block))))
+    if ids != want["blocker_ids"] or any("resolved" in l for l in block):
+        problems.append("blockers %s differ from expected %s" % (ids, want["blocker_ids"]))
+    dec = "\n".join(sec.get("Decisions", []))
+    for did, status in want["decision_ids"].items():
+        m = re.search(r"\b%s\s+(pending|made)\b" % did, dec)
+        if not m or m.group(1) != status:
+            problems.append("decision %s should be %s" % (did, status))
+    for question, selected in want["made"].items():
+        if not re.search(r"->\s*%s\b" % re.escape(str(selected)), dec):
+            problems.append("decision %r lacks its selection %s" % (question, selected))
+    events = "\n".join(sec.get("Events", []))
+    for line in want["recent_events"]:
+        task = re.search(r"\bT\d{3}\b", line)
+        if "fail" in line and task and task.group(0) not in events:
+            problems.append("attempt: failed attempt for %s missing from Events" % task.group(0))
+    return problems
+
+
+def status_new(root, feature):
+    """`progress status --json` of the NEW arm's sandbox, or None when the CLI answers nothing usable."""
+    script = root / ".specify" / "extensions" / "progress" / "scripts" / "progress.py"
+    try:
+        done = subprocess.run([sys.executable, str(script), "--root", str(root), "status", "--json", "--feature", feature],
+                              capture_output=True, text=True, encoding="utf-8", timeout=60, cwd=root)
+        return json.loads(done.stdout) if done.returncode == 0 else None
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+
+
+def verify(arm, root, model_mod, trace):
+    """End-state check: checked tasks plus semantic equivalence of the arm's report, so a cheap-but-wrong
+    run is not counted as a win. `ok` is False on any problem; `problems` says why."""
+    want = expected(model_mod, trace)
+    feature = model_mod.FEATURE
+    tasks = (root / "specs" / feature / "tasks.md").read_text(encoding="utf-8")
+    checked = len(re.findall(r"- \[[xX]\]", tasks))
+    problems = [] if checked == want["done"] else ["%d tasks checked, expected %d" % (checked, want["done"])]
+    if arm == "md":
+        report = root / "specs" / feature / "progress" / "report.md"
+        problems += check_md(report.read_text(encoding="utf-8"), want) if report.exists() else ["report.md missing"]
+    else:
+        problems += check_new(status_new(root, feature), want)
+    return dict(checked_tasks=checked, expected_tasks=want["done"], ok=not problems, problems=problems)
+
+
+FIELDS = ("input_fresh", "output_total", "total")
+
+
 def summarize(results):
+    """Per (harness, model, arm): usage is summed over measured, successful, equivalent runs only. Unknown usage
+    stays null (never zero); failed and non-equivalent runs are counted apart, not folded into the cost."""
     groups = {}
     for r in results:
-        t = r.get("tokens") or {}
         key = (r["harness"], r["model"], r["arm"])
-        g = groups.setdefault(key, dict(runs=0, ok=0, input_fresh=0, output_total=0, total=0, fidelity=set()))
+        g = groups.setdefault(key, dict(runs=0, ok=0, measured=0, unknown=0, failed=0, invalid=0,
+                                        input_fresh=None, output_total=None, total=None))
         g["runs"] += 1
-        g["ok"] += bool((r.get("verified") or {}).get("ok"))
-        for field in ("input_fresh", "output_total", "total"):
-            g[field] += t.get(field) or 0
-        g["fidelity"].add(str(t.get("fidelity")))
+        tokens = r.get("tokens") or {}
+        total = tokens.get("total")
+        exact = tokens.get("fidelity") == "exact" and isinstance(total, int) and not isinstance(total, bool)
+        valid = bool((r.get("verified") or {}).get("ok"))
+        g["ok"] += valid
+        if r.get("status") != "successful":
+            g["failed"] += 1
+        elif not valid:
+            g["invalid"] += 1
+        elif not exact:
+            g["unknown"] += 1
+        else:
+            g["measured"] += 1
+            for field in FIELDS:
+                value = tokens.get(field)
+                if isinstance(value, int) and not isinstance(value, bool):
+                    g[field] = (g[field] or 0) + value
     return groups
 
 
@@ -182,14 +316,20 @@ def write_reports(out, args, planned, results):
     out.mkdir(parents=True, exist_ok=True)
     groups = summarize(results)
     payload = dict(args={k: str(v) for k, v in vars(args).items()}, planned=planned, results=results,
-                   summary=[dict(harness=k[0], model=k[1], arm=k[2], **{**v, "fidelity": sorted(v["fidelity"])}) for k, v in sorted(groups.items())])
+                   summary=[dict(harness=k[0], model=k[1], arm=k[2], **v) for k, v in sorted(groups.items())])
     (out / "live-ab.json").write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
     lines = ["# Live A/B report", "",
              "Real harness token usage from the delegate-task driver. `fidelity` is the driver's own flag; `unavailable` means unknown, not zero.",
              "No Claude tokenizer count is claimed here.", "",
-             "| Harness | Model | Arm | Runs | Verified | Input fresh | Output | Total | Fidelity |", "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |"]
+             "Cost columns sum only measured, successful, equivalent runs; `unknown` appears when no run was measured. Failed and invalid runs are counted apart, never summed as zero.", "",
+             "| Harness | Model | Arm | Runs | Measured | Unknown usage | Failed | Invalid | Input fresh | Output | Total |", "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"]
+    def num(v):
+        return "unknown" if v is None else str(v)
+
     for (h, m, a), g in sorted(groups.items()):
-        lines.append("| %s | %s | %s | %d | %d | %d | %d | %d | %s |" % (h, m, a, g["runs"], g["ok"], g["input_fresh"], g["output_total"], g["total"], ", ".join(sorted(g["fidelity"]))))
+        lines.append("| %s | %s | %s | %d | %d | %d | %d | %d | %s | %s | %s |" % (
+            h, m, a, g["runs"], g["measured"], g["unknown"], g["failed"], g["invalid"],
+            num(g["input_fresh"]), num(g["output_total"]), num(g["total"])))
     (out / "live-ab.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

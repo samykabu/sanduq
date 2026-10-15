@@ -92,6 +92,17 @@ class RunsViaProgress(unittest.TestCase):
         self.assertNotIn('via', report)
         self.assertEqual([r['run_id'] for r in report['runs']], ['deep'])
 
+    def test_mixed_root_keeps_legacy_recursive_discovery(self):
+        deep = self.runs / 'group' / 'inner'
+        deep.mkdir(parents=True)
+        (deep / 'result.json').write_text(json.dumps({'run_id': 'deep', 'status': 'successful'}), encoding='utf-8')
+        (self.runs / 'extra.result.json').write_text(json.dumps({'run_id': 'flat', 'status': 'successful'}), encoding='utf-8')
+        os.environ['SANDUQ_PROGRESS_SCRIPT'] = str(PROGRESS_SCRIPT)
+        report = tools.progress([str(self.runs)], NOW)
+        self.assertNotIn('via', report)
+        ids = {r['run_id'] for r in report['runs']}
+        self.assertTrue({'deep', 'flat', 'done', 'live'} <= ids)
+
     def test_a_worktree_root_resolves_to_its_runs_folder(self):
         os.environ['SANDUQ_PROGRESS_SCRIPT'] = str(PROGRESS_SCRIPT)
         report = tools.progress([str(self.root)], NOW)

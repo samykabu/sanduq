@@ -426,8 +426,21 @@ LIVE_NEXT_ACTION = {'finishing': 'wait for the driver to write result.json',
                     'active': 'wait; no action needed'}
 
 
+def fits_runs_shape(folder):
+    """True when every run file under folder sits exactly one level down with a name Progress reads."""
+    allowed = set(RESULT_NAMES) | {'meta.json'}
+    for path in folder.rglob('*'):
+        if not path.is_file():
+            continue
+        if path.name in allowed or path.name.endswith('.result.json'):
+            if path.parent.parent != folder or path.name not in allowed:
+                return False
+    return True
+
+
 def runs_dirs(roots):
-    """Roots that Progress can read directly (a runs folder, or a worktree holding .delegate/runs); else None."""
+    """Roots that Progress can read directly (a runs folder, or a worktree holding .delegate/runs) whose whole
+    tree fits that shape; else None so the legacy recursive discovery runs."""
     found = []
     for root in roots:
         root = Path(root)
@@ -435,12 +448,10 @@ def runs_dirs(roots):
             raise InputError(f'root is not a directory: {root}')
         nested = root / '.delegate' / 'runs'
         direct = any((child / name).is_file() for child in root.iterdir() if child.is_dir() for name in RESULT_NAMES + ('meta.json',))
-        if direct:
-            found.append(str(root))
-        elif nested.is_dir():
-            found.append(str(nested))
-        else:
+        folder = root if direct else nested if nested.is_dir() else None
+        if folder is None or not fits_runs_shape(folder):
             return None
+        found.append(str(folder))
     return found
 
 

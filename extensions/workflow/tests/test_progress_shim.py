@@ -106,16 +106,58 @@ class ReportingModes(Project):
         decision = self.mode()
         self.assertEqual((decision['mode'], decision['automatic'], decision['source']), ('projection', True, 'hooks registered'))
 
-    def test_status_reporting_automatic_collection_means_projection(self):
+    def test_historical_snapshot_alone_is_not_automatic_collection(self):
         self.init()
-        self.assertEqual(self.mode()['mode'], 'refresh')
         host = self.feature_dir / 'progress' / '.view' / 'host'
         host.mkdir(parents=True, exist_ok=True)
         (host / 'claude-s1.json').write_text(json.dumps({'v': 1, 'host': 'claude', 'session_id': 's1', 'bound_feature': FEATURE,
                                                          'first_seen': '2026-10-15T12:00:00Z',
                                                          'last_observed_at': '2026-10-15T12:00:00Z'}), encoding='utf-8')
-        decision = self.mode()
-        self.assertEqual((decision['mode'], decision['source']), ('projection', 'status collection.automatic'))
+        self.assertEqual(self.mode()['mode'], 'refresh')
+
+    def _claude(self, entry):
+        (self.root / '.claude').mkdir(exist_ok=True)
+        (self.root / '.claude' / 'settings.json').write_text(json.dumps({'hooks': {'Stop': [{'hooks': [entry]}]}}), encoding='utf-8')
+
+    def _yml(self, enabled):
+        (self.root / '.specify').mkdir(exist_ok=True)
+        (self.root / '.specify' / 'extensions.yml').write_text(
+            'hooks:\n  after_implement:\n  - extension: progress\n    command: speckit.progress.hook-stop\n'
+            f'    enabled: {enabled}\n    optional: false\n', encoding='utf-8')
+
+    def test_disabled_native_hook_entry_is_not_automatic(self):
+        self._claude({'type': 'command', 'enabled': False, 'command': 'python .specify/events.py speckit.progress.hook-stop stop'})
+        self.assertEqual(self.mode()['mode'], 'refresh')
+
+    def test_disabled_extensions_yml_hook_is_not_automatic(self):
+        self._yml('false')
+        self.assertEqual(self.mode()['mode'], 'refresh')
+
+    def test_enabled_extensions_yml_hook_is_automatic(self):
+        self._yml('true')
+        self.assertEqual(self.mode()['mode'], 'projection')
+
+    def test_other_extension_hook_in_extensions_yml_is_ignored(self):
+        (self.root / '.specify').mkdir(exist_ok=True)
+        (self.root / '.specify' / 'extensions.yml').write_text(
+            'hooks:\n  after_implement:\n  - extension: scope\n    command: speckit.scope.plan-guard\n    enabled: true\n',
+            encoding='utf-8')
+        self.assertEqual(self.mode()['mode'], 'refresh')
+
+    def test_disabled_extension_in_registry_is_not_automatic(self):
+        self._claude({'type': 'command', 'command': 'python .specify/events.py speckit.progress.hook-stop stop'})
+        reg = self.root / '.specify' / 'extensions' / '.registry'
+        reg.parent.mkdir(parents=True, exist_ok=True)
+        reg.write_text(json.dumps({'schema_version': '1.0', 'extensions': {'progress': {'enabled': False}}}), encoding='utf-8')
+        self.assertEqual(self.mode()['mode'], 'refresh')
+
+    def test_codex_toml_hook_is_detected_and_disabled_one_is_not(self):
+        (self.root / '.codex').mkdir(exist_ok=True)
+        cfg = self.root / '.codex' / 'config.toml'
+        cfg.write_text('[[hooks.Stop]]\ncommand = "python x.py speckit.progress.hook-stop"\n', encoding='utf-8')
+        self.assertEqual(self.mode()['mode'], 'projection')
+        cfg.write_text('[[hooks.Stop]]\nenabled = false\ncommand = "python x.py speckit.progress.hook-stop"\n', encoding='utf-8')
+        self.assertEqual(self.mode()['mode'], 'refresh')
 
     def test_mode_command_prints_one_line(self):
         done = subprocess.run([sys.executable, str(SCRIPTS / 'progress_bridge.py'), 'mode', '--root', str(self.root)],
@@ -169,6 +211,18 @@ class ShimMappings(Project):
         report = self.status()
         mine = next(l for l in report['lanes'] if l['owner'] == 'worker-1')
         self.assertEqual(mine['attempts'][0]['origin'], 'legacy')
+
+    def test_running_without_agent_never_forwards_an_invalid_lane(self):
+        self.init()
+        before = self.facts()
+        code, out, err = self.legacy('task', '--id', 'T002', '--status', 'running', '--summary')
+        if code == 0:  # mapped onto something Progress accepts
+            attempts = self.facts('attempt')
+            self.assertTrue(attempts, 'running must still record an attempt')
+            self.assertRegex(attempts[-1]['lane'] or 'L0', r'^L\d+$')
+        else:  # explicit compatibility error, before any mutation
+            self.assertIn('compatibility:', out + err)
+            self.assertEqual(self.facts(), before)
 
     def test_blocked_uses_note_as_external_blocker_unless_a_reference_is_given(self):
         self.init()
