@@ -65,22 +65,22 @@ hooks:
 
 events:
   session_start:
-    - command: speckit.progress.hook-session-start
-      timeout: 10
+    command: speckit.progress.hook-session-start
+    timeout: 10
   pre_tool_use:
-    - command: speckit.progress.hook-pre-tool-use
-      matcher: "Task|Agent|spawn_agent"
-      timeout: 10
+    command: speckit.progress.hook-pre-tool-use
+    matcher: "Task|Agent|spawn_agent"
+    timeout: 10
   post_tool_use:
-    - command: speckit.progress.hook-post-tool-use
-      matcher: "Bash|Task|Agent|apply_patch|shell|exec_command|spawn_agent"
-      timeout: 10
+    command: speckit.progress.hook-post-tool-use
+    matcher: "Bash|Task|Agent|apply_patch|shell|exec_command|spawn_agent"
+    timeout: 10
   stop:
-    - command: speckit.progress.hook-stop
-      timeout: 10
+    command: speckit.progress.hook-stop
+    timeout: 10
   session_end:
-    - command: speckit.progress.hook-session-end
-      timeout: 10
+    command: speckit.progress.hook-session-end
+    timeout: 10
 
 tags:
   - "progress"
