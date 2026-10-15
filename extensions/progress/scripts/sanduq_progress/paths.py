@@ -1,22 +1,13 @@
 """Project root, feature resolution and layout paths."""
 import os
 import re
-import subprocess
 from pathlib import Path
 
-from .util import read_json
+from .util import ProgressError, read_json
 
 ASSETS = Path(__file__).resolve().parent.parent.parent / 'assets' / 'ui'
-EXCLUDES = ('specs/*/progress/.view/', '.specify/progress/bindings.json')
-
-
-class ProgressError(Exception):
-    def __init__(self, code, message='', exit_code=2):
-        super().__init__(code)
-        self.code, self.message, self.exit_code = code, message, exit_code
-
-    def line(self):
-        return f'progress: error {self.code}' + (f' {self.message}' if self.message else '')
+EXCLUDES = ('specs/*/progress/.view/', '.specify/progress/bindings.json',
+            '.specify/progress/*.lock', '.specify/progress/diagnostics.log*')
 
 
 def find_root(start=None):
@@ -167,6 +158,7 @@ class Ctx:
 
 def git_exclude(root, patterns=EXCLUDES):
     """Add patterns to the repository's info/exclude (never to a tracked .gitignore)."""
+    import subprocess
     try:
         out = subprocess.run(['git', 'rev-parse', '--git-path', 'info/exclude'], cwd=str(root), capture_output=True,
                              text=True, timeout=10)

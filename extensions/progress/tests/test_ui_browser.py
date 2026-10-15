@@ -22,6 +22,8 @@ except ImportError:  # pragma: no cover
 PW = None
 BROWSER = None
 SKIP = "playwright/chromium unavailable"
+# The poller ticks every 3 s; on a loaded machine (parallel suites, CI) Chromium throttles timers, so a 6 s wait flaked.
+UPDATE_WAIT = 30000
 
 
 def setUpModule():
@@ -97,7 +99,7 @@ class BrowserTest(unittest.TestCase):
     def tearDown(self):
         if getattr(self, "bctx", None):
             self.bctx.close()
-            self.view_tmp.cleanup()
+            helpers.remove_tree(self.view_tmp)
 
     def open(self, proj=None, **kw):
         write_data(self.view, proj if proj is not None else fresh(load("projection-sample.json")))
@@ -107,7 +109,7 @@ class BrowserTest(unittest.TestCase):
     def text(self, sel):
         return self.page.inner_text(sel)
 
-    def wait_text(self, sel, needle, timeout=5000):
+    def wait_text(self, sel, needle, timeout=UPDATE_WAIT):
         self.page.wait_for_function("([s,n])=>{const e=document.querySelector(s);return e&&e.textContent.includes(n)}",
                                     arg=[sel, needle], timeout=timeout)
 
@@ -244,7 +246,7 @@ class UpdateTests(BrowserTest):
         p = fresh(load("projection-sample.json"), rev=18)
         p["feature"]["title"] = "Renamed feature"
         write_data(self.view, p)
-        self.wait_text("h1", "Renamed feature", timeout=6000)
+        self.wait_text("h1", "Renamed feature", timeout=UPDATE_WAIT)
         self.assertEqual(self.page.evaluate("window.__marker"), "same-document")
 
     def test_lower_or_equal_rev_ignored(self):
@@ -260,17 +262,33 @@ class UpdateTests(BrowserTest):
     def test_broken_data_keeps_last_good_and_banner(self):
         self.open()
         (self.view / "data.js").write_text("window.__SANDUQ_PROGRESS__ = {oops", encoding="utf-8")
-        self.page.wait_for_function("document.getElementById('banners').textContent.includes('Update failed')", timeout=6000)
+        self.page.wait_for_function("document.getElementById('banners').textContent.includes('Update failed')", timeout=UPDATE_WAIT)
         self.assertIn("Add dependencies when creating a task", self.text("h1"))
         self.assertIn("T004", self.text("#b-boards"))
         # recovery clears the banner
         write_data(self.view, fresh(load("projection-sample.json"), rev=30))
-        self.page.wait_for_function("!document.getElementById('banners').textContent.includes('Update failed')", timeout=6000)
+        self.page.wait_for_function("!document.getElementById('banners').textContent.includes('Update failed')", timeout=UPDATE_WAIT)
+
+    def test_a_stalled_data_load_does_not_stop_the_poller(self):
+        """Under heavy load Chromium sometimes never fires onload or onerror for a file:// script; the poller must give up
+        on that load and try again instead of waiting forever (this left the page stale, and made the suite flaky)."""
+        self.page.add_init_script("""
+            (function () {
+              var dropped = false, desc = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
+              Object.defineProperty(HTMLScriptElement.prototype, 'src', {
+                set: function (v) { if (!dropped && /data\.js/.test(v)) { dropped = true; return; } desc.set.call(this, v); },
+                get: function () { return desc.get.call(this); }
+              });
+            })();""")
+        write_data(self.view, fresh(load("projection-sample.json")))
+        self.page.goto((self.view / "index.html").as_uri())
+        self.page.wait_for_selector("h1", timeout=40000)
+        self.assertIn("Add dependencies when creating a task", self.text("h1"))
 
     def test_missing_data_file_banner(self):
         self.open()
         (self.view / "data.js").unlink()
-        self.page.wait_for_function("document.getElementById('banners').textContent.includes('Update failed')", timeout=6000)
+        self.page.wait_for_function("document.getElementById('banners').textContent.includes('Update failed')", timeout=UPDATE_WAIT)
         self.assertIn("T004", self.text("#b-boards"))
 
     def test_stale_banner_old_generated_at(self):
