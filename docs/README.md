@@ -43,6 +43,7 @@ One page per extension: purpose, lifecycle phase, hooks, dependencies, setup, an
 | [PR](extensions/pr.md) | Feature docs, PR description and review feedback |
 | [Illustrate](extensions/illustrate.md) | Themed diagrams and charts |
 | [Memory](extensions/memory.md) | Project memory and recoverable spec archiving |
+| [Progress](extensions/progress.md) | Live, deterministic feature progress report |
 
 ## Managed Workflow in depth
 

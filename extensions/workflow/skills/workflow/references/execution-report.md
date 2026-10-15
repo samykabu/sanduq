@@ -2,59 +2,19 @@
 
 The second half of the execution protocol; see
 [`execution-assign.md`](execution-assign.md) for the shared intro, starting a
-dedicated orchestration agent and assigning work. This half covers updating the
-report, finishing phases and continuing through delivery.
+dedicated orchestration agent and assigning work. This half covers finishing
+phases, continuing through delivery and the legacy reporter calls. The reporting
+mode is decided only in [`reporting.md`](reporting.md); no agent is spawned,
+retained, messaged or polled solely for reporting.
 
 ## Update the report and finish phases
 
-The orchestration agent is the sole report writer. Update it on assignment,
-completion, failure, recovery and each lifecycle transition. Use actual task IDs:
-
-```text
-python .specify/extensions/workflow/scripts/progress.py task --output specs/<feature>/workflow/progress --id T001 --status running --agent <worker-id> --note "Own src/example.py; depends on T000" --summary
-python .specify/extensions/workflow/scripts/progress.py task --output specs/<feature>/workflow/progress --id T001 --status done --agent <worker-id> --note "Acceptance check passed; evidence: evidence/T001.txt" --summary
-python .specify/extensions/workflow/scripts/progress.py event --output specs/<feature>/workflow/progress --message "Phase 1 tests passed; preparing phase commit" --summary
-python .specify/extensions/workflow/scripts/progress.py phase --output specs/<feature>/workflow/progress --name "Phase 1" --status complete --commit <sha> --summary
-```
-
-Record token usage from the worker's own harness log whenever a task reaches
-`done` or `blocked`. Pass the host agent ID the worker was spawned with:
-
-```text
-python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T001 --agent <worker-id> --collect claude --summary
-python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T002 --agent <worker-id> --collect codex --summary
-python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T003 --agent <run-id> --collect delegate --log .delegate/runs/<run-id>/result.json --summary
-python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --overhead orchestrator --agent <orchestrator-id> --collect claude --summary
-python .specify/extensions/workflow/scripts/progress.py sync --output specs/<feature>/workflow/progress --summary
-```
-
-`claude` finds `~/.claude/projects/*/*/subagents/agent-<id>.jsonl`, `codex` finds
-the rollout whose name ends with the thread ID, and `delegate` reads a
-delegate-task `result.json`. Pass `--log` for any other location, including the
-dispatcher's own session transcript. Only token counters are read. `sync`
-rebuilds the visible delegation history from the tracked feature ledger;
-run it after each collected attempt and before the final report review. It shows
-the actual model only when the harness reported it. Raw prompts and transcripts
-stay in ignored `.delegate/runs/` artifacts. Collecting the same agent again
-replaces its figure, so collect overhead at each phase commit and
-at Finalize. A worker reused across tasks is split by each task's `running` to
-`done` window, so mark a task `running` when assigning it. When no log exists,
-record the worker's self-reported counts with `--fresh-input`, `--cached-input`
-and `--output-tokens`; the report marks them. A log that cannot be found or read
-is recorded as unavailable and shown as a gap, never as zero. The report shows
-fresh input, cached input and output per task, the total of the filtered tasks,
-per phase, overhead and the feature; it covers implementation only.
-
-At every phase commit, the orchestration agent also records the dispatcher's own
-overhead, reading its session transcript path from the handoff:
-
-```text
-python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --overhead dispatcher --agent <dispatcher-session-id> --collect claude --log <dispatcher's own session transcript> --summary
-```
-
-Do this immediately after that phase's `progress.py phase --status complete`
-call, so dispatcher overhead is measured at the same cadence as the phase
-itself instead of reconstructed afterwards.
+The current coordinator is the sole writer and follows the mode in
+[`reporting.md`](reporting.md). In `projection` and `refresh` mode the report
+follows `tasks.md`, the delegation ledger and host hooks; the coordinator records
+only lanes, blockers and notes, and none of the legacy calls apply. In `legacy`
+mode make the [legacy reporter calls](#legacy-reporter-calls-mode-legacy-only)
+on assignment, completion, failure, recovery and each lifecycle transition.
 
 Use `pending`, `running`, `done` or `blocked` for task status. Mark task checkboxes
 done only after reviewing their implementation and required checks. Preserve
@@ -72,7 +32,7 @@ generated evidence: a human-review task's issue closes only on the human's own
 signal, never because its evidence file exists.
 
 Prefer `--summary` (a one-line result with counts) for routine protocol calls
-to `task_issues.py`, `progress.py`, `assure_state.py`, `manual_state.py` and
+to `task_issues.py`, `assure_state.py`, `manual_state.py` and
 `project-sync`: it prints `ok` or `error` plus counts, or `skipped
 reason=<why>` when the call had nothing to do. Reserve `--json` for a call
 whose result must be parsed programmatically.
@@ -220,8 +180,8 @@ this role.
 ## Continue through delivery
 
 The orchestration agent returns the Execute evidence to the dispatcher. It stays
-available to update the report and schedule fixes while the dispatcher runs
-Verify, Review, selected documentation and Ready. Never complete a claim or call
+available to schedule fixes while the dispatcher runs Verify, Review, selected
+documentation and Ready. Never complete a claim or call
 the next lifecycle stage from a worker or from an executor hook.
 
 When the user's request authorizes a PR, the dispatcher continues through Finalize
@@ -229,17 +189,91 @@ automatically once its prerequisites pass. When merge is also authorized, monito
 checks and reviews on the exact final head, delegate fixes, revalidate affected
 evidence, and merge through the normal protected path only when required checks
 are green and approvals are satisfied. Do not bypass branch protections. Without
-merge authorization, keep the report at the actual PR state and request only the
-missing authorization after the PR is concrete and reviewable.
+merge authorization, record the actual PR state and request only the missing
+authorization after the PR is concrete and reviewable. In `projection` and
+`refresh` mode a note records it:
 
 ```text
+python .specify/extensions/progress/scripts/progress.py note "PR open: <pr-url>"
+python .specify/extensions/progress/scripts/progress.py note "CI failure: <check>; fix assigned to <worker-id>"
+python .specify/extensions/progress/scripts/progress.py note "PR merged: <pr-url>"
+```
+
+Set `merged` only after reading GitHub's actual merged state and merge SHA. Record
+the final check results and post-merge verification in the handoff and report.
+PR creation, merge, deployment and live acceptance are separate facts. Report
+through all work in the user's authorized scope as `reporting.md` says; a progress
+page does not replace test receipts, review evidence or the workflow checkpoint.
+
+## Legacy reporter calls (mode legacy only)
+
+Used only when `reporting.md` selects `legacy` (Progress is not installed). They
+are unchanged. When Progress is installed the same script forwards them to the
+Progress CLI, and a request with no faithful mapping prints a compatibility error
+and exits non-zero.
+
+The `init` call is in `execution-assign.md`. The report is titled from the plan's `# Tasks: <feature>` heading. Pass
+`--title "<feature title>"` to name it explicitly; rerunning `init` with a new
+title renames an existing report without losing its evidence. The report shows
+the Sanduq logo and page icon, a Phase column, token usage, Status and Phase
+filters and a separate Activity tab; filters and the chosen tab survive the
+automatic refresh.
+
+The current coordinator is the sole writer. Update the report on assignment,
+completion, failure, recovery and each lifecycle transition. Use actual task IDs:
+
+```text
+python .specify/extensions/workflow/scripts/progress.py task --output specs/<feature>/workflow/progress --id T001 --status running --agent <worker-id> --note "Own src/example.py; depends on T000" --summary
+python .specify/extensions/workflow/scripts/progress.py task --output specs/<feature>/workflow/progress --id T001 --status done --agent <worker-id> --note "Acceptance check passed; evidence: evidence/T001.txt" --summary
+python .specify/extensions/workflow/scripts/progress.py event --output specs/<feature>/workflow/progress --message "Phase 1 tests passed; preparing phase commit" --summary
+python .specify/extensions/workflow/scripts/progress.py phase --output specs/<feature>/workflow/progress --name "Phase 1" --status complete --commit <sha> --summary
+```
+
+Record token usage from the worker's own harness log whenever a task reaches
+`done` or `blocked`. Pass the host agent ID the worker was spawned with:
+
+```text
+python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T001 --agent <worker-id> --collect claude --summary
+python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T002 --agent <worker-id> --collect codex --summary
+python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T003 --agent <run-id> --collect delegate --log .delegate/runs/<run-id>/result.json --summary
+python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --overhead orchestrator --agent <orchestrator-id> --collect claude --summary
+python .specify/extensions/workflow/scripts/progress.py sync --output specs/<feature>/workflow/progress --summary
+```
+
+`claude` finds `~/.claude/projects/*/*/subagents/agent-<id>.jsonl`, `codex` finds
+the rollout whose name ends with the thread ID, and `delegate` reads a
+delegate-task `result.json`. Pass `--log` for any other location, including the
+dispatcher's own session transcript. Only token counters are read. `sync`
+rebuilds the visible delegation history from the tracked feature ledger;
+run it after each collected attempt and before the final report review. It shows
+the actual model only when the harness reported it. Raw prompts and transcripts
+stay in ignored `.delegate/runs/` artifacts. Collecting the same agent again
+replaces its figure, so collect overhead at each phase commit and
+at Finalize. A worker reused across tasks is split by each task's `running` to
+`done` window, so mark a task `running` when assigning it. When no log exists,
+record the worker's self-reported counts with `--fresh-input`, `--cached-input`
+and `--output-tokens`; the report marks them. A log that cannot be found or read
+is recorded as unavailable and shown as a gap, never as zero. The report shows
+fresh input, cached input and output per task, the total of the filtered tasks,
+per phase, overhead and the feature; it covers implementation only.
+
+At every phase commit, the orchestration agent also records the dispatcher's own
+overhead, reading its session transcript path from the handoff:
+
+```text
+python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --overhead dispatcher --agent <dispatcher-session-id> --collect claude --log <dispatcher's own session transcript> --summary
+```
+
+Do this immediately after that phase's `progress.py phase --status complete`
+call, so dispatcher overhead is measured at the same cadence as the phase
+itself instead of reconstructed afterwards.
+
+Budget overruns and pull request state use the same script:
+
+```text
+python .specify/extensions/workflow/scripts/progress.py event --output specs/<feature>/workflow/progress --message "Budget overrun T###: <class> <figure>/<budget>: <reason>" --summary
 python .specify/extensions/workflow/scripts/progress.py pr --output specs/<feature>/workflow/progress --url <pr-url> --status open --summary
 python .specify/extensions/workflow/scripts/progress.py event --output specs/<feature>/workflow/progress --message "CI failure: <check>; fix assigned to <worker-id>" --summary
 python .specify/extensions/workflow/scripts/progress.py pr --output specs/<feature>/workflow/progress --url <pr-url> --status merged --summary
 ```
 
-Set `merged` only after reading GitHub's actual merged state and merge SHA. Record
-the final check results and post-merge verification in the handoff and report.
-PR creation, merge, deployment and live acceptance are separate facts. Keep the
-report current through all work in the user's authorized scope; a progress page
-does not replace test receipts, review evidence or the workflow checkpoint.

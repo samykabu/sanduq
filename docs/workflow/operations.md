@@ -21,11 +21,14 @@ each verified phase before continuing.
 
 ![Orchestrator assigns independent tasks to workers, verifies results, and records each phase](../diagrams/implementation-orchestration.svg)
 
-At implementation start, the workflow creates and opens
-`specs/<feature>/workflow/progress/index.html`. The report records the task queue, worker ownership,
-checks, phase commits and pushes, and PR status. Keep it updated after material events and through
-CI repairs and the verified merge when that work is authorized. Pending checks and failed checks
-remain visible; they never count as completion.
+At implementation start, the workflow creates the report once and opens it for you. With the optional
+[Progress extension](../extensions/progress.md) installed it is `specs/<feature>/progress/.view/index.html`,
+a projection that the host's hooks, `tasks.md` and the delegation ledger keep fresh; the coordinator records only
+lanes, blockers and notes. Without Progress it is `specs/<feature>/workflow/progress/index.html`, and the
+coordinator updates it after material events with the legacy `progress.py` calls. Either way, no agent is started,
+kept or polled only to maintain the report. The report records the task queue, worker ownership, checks, phase
+commits and pushes, and PR status, through CI repairs and the verified merge when that work is authorized.
+Pending checks and failed checks remain visible; they never count as completion.
 
 The report also shows token usage. Each task has fresh input, cached input and output columns, and
 the footer adds up whichever tasks the Status and Phase filters show. A Token usage section totals
@@ -33,8 +36,9 @@ each phase, the orchestration and review overhead, and the whole feature.
 
 ![Progress report with token usage per task, per phase and for the feature](../assets/progress-token-usage.png)
 
-The orchestrator records a task's usage when the task finishes, by reading the worker's own harness
-log. Nobody types the numbers in:
+With Progress installed, run usage comes from delegate results and host hooks, and nobody records it. Without
+Progress (legacy mode), the coordinator records a task's usage when the task finishes, by reading the worker's own
+harness log. Nobody types the numbers in:
 
 ```text
 python .specify/extensions/workflow/scripts/progress.py usage --output specs/<feature>/workflow/progress --id T001 --agent <worker-id> --collect claude
@@ -57,7 +61,7 @@ content. A few rules keep the figures honest:
 
 ```text
 $speckit-implement Keep implementing all approved phases. Delegate implementation to workers and
-run the maximum conflict-free ready tasks in parallel. Open and maintain the HTML progress report.
+run the maximum conflict-free ready tasks in parallel. Open the progress report once; do not start an agent to maintain it.
 Verify, commit, and push each completed phase. Continue through Finalize, fix CI and review findings,
 and merge this feature's PR when required checks and approvals pass.
 ```

@@ -41,6 +41,7 @@ install an extension, before any init command changes it. Lower priority runs fi
 | plan | before | scope | `speckit.scope.plan-guard` | mandatory | 1 |
 | plan | after | project | `speckit.project.sync` | optional |  |
 | tasks | after | assure | `speckit.assure.analyze` | optional |  |
+| tasks | after | progress | `speckit.progress.init` | optional |  |
 | tasks | after | project | `speckit.project.sync` | optional |  |
 | tasks | after | user-manual | `speckit.user-manual.analyze` | optional |  |
 | analyze | before | memory | `speckit.memory.impact` | mandatory |  |
@@ -50,6 +51,7 @@ install an extension, before any init command changes it. Lower priority runs fi
 | implement | after | assure | `speckit.assure.document` | optional |  |
 | implement | after | memory | `speckit.memory.prepare` | mandatory |  |
 | implement | after | pr | `speckit.pr.generate` | optional |  |
+| implement | after | progress | `speckit.progress.refresh` | optional |  |
 | implement | after | project | `speckit.project.sync` | optional |  |
 | implement | after | user-manual | `speckit.user-manual.update` | optional |  |
 | implement | after | scope | `speckit.scope.reconcile` | mandatory | 30 |
@@ -118,6 +120,7 @@ their manifest mode.
 | plan | before | scope | `speckit.scope.plan-guard` | kept |
 | plan | after | project | `speckit.project.sync` | disabled; the dispatcher owns this step |
 | tasks | after | assure | `speckit.assure.analyze` | disabled; runs as stage `qa_analyze` |
+| tasks | after | progress | `speckit.progress.init` | kept |
 | tasks | after | project | `speckit.project.sync` | disabled; the dispatcher owns this step |
 | tasks | after | user-manual | `speckit.user-manual.analyze` | disabled; runs as stage `manual_analyze` |
 | analyze | before | memory | `speckit.memory.impact` | kept |
@@ -127,6 +130,7 @@ their manifest mode.
 | implement | after | assure | `speckit.assure.document` | disabled; runs as stage `qa_document` |
 | implement | after | memory | `speckit.memory.prepare` | kept |
 | implement | after | pr | `speckit.pr.generate` | disabled; runs as stage `pr` |
+| implement | after | progress | `speckit.progress.refresh` | kept |
 | implement | after | project | `speckit.project.sync` | disabled; the dispatcher owns this step |
 | implement | after | user-manual | `speckit.user-manual.update` | disabled; runs as stage `manual_update` |
 | implement | after | scope | `speckit.scope.reconcile` | kept |

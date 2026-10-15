@@ -1,0 +1,14 @@
+{
+  "session_id": "claude-sess-1",
+  "transcript_path": "/t.jsonl",
+  "cwd": "{CWD}",
+  "agent_id": "agent-9f",
+  "agent_type": "Explore",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "a.py"
+  },
+  "tool_response": {},
+  "tool_use_id": "toolu_01R"
+}

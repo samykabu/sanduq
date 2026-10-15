@@ -94,10 +94,11 @@ prove that its checks passed. The next phase starts once its dependencies and re
 routine phase boundaries do not require another approval when continuation was already authorized.
 
 At implementation start, the workflow creates and opens
-`specs/<feature>/workflow/progress/index.html`. Keep it open during the run. The report follows tasks,
-worker assignments, phases, verification, commits and pushes, and PR status. Update it after each
-material event and while following CI. It must distinguish pending, running, blocked, failed,
-verified, and merged work. Record the last update time and the evidence behind completion.
+`specs/<feature>/workflow/progress/index.html`, or `specs/<feature>/progress/.view/index.html` when the Progress
+extension is installed. Keep it open during the run. The report follows tasks, worker assignments, phases,
+verification, commits and pushes, and PR status. Progress refreshes it from hooks; without Progress the coordinator
+updates it after each material event. No agent is kept only to maintain it. It must distinguish pending, running,
+blocked, failed, verified, and merged work. Record the last update time and the evidence behind completion.
 
 To resume after an interruption:
 

@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.6.2] - Unreleased
+## [1.6.2] - 2026-10-15
 
 - Document the verified initial and revalidation gate/bind command forms through Workflow's command helper. Revalidation does not use initial-claim flags. Existing binding, status and REST safeguards remain.
 

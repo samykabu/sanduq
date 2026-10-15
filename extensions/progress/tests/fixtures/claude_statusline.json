@@ -1,0 +1,30 @@
+{
+  "session_id": "claude-sess-1",
+  "transcript_path": "/t.jsonl",
+  "cwd": "{CWD}",
+  "model": {
+    "id": "claude-opus-5-5",
+    "display_name": "Opus 5.5"
+  },
+  "effort": {
+    "level": "xhigh"
+  },
+  "workspace": {
+    "project_dir": "{CWD}"
+  },
+  "cost": {
+    "total_duration_ms": 45000,
+    "total_api_duration_ms": 2300
+  },
+  "context_window": {
+    "total_input_tokens": 900000,
+    "context_window_size": 200000,
+    "used_percentage": 41.2,
+    "current_usage": {
+      "input_tokens": 2000,
+      "output_tokens": 50,
+      "cache_creation_input_tokens": 400,
+      "cache_read_input_tokens": 79600
+    }
+  }
+}

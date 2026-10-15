@@ -1,10 +1,14 @@
 # Changelog
 
-## [1.10.0] - Unreleased
+## [1.10.0] - 2026-10-15
 
 - Add opt-in lean execution: the coordinator owns lifecycle mechanics, coding review waits for completed implementation/testing, and retries require bounded correction evidence. Existing projects keep their current behavior until enabled.
 - Bind verification reuse to selected commands, source/fixture bytes, environment and passing evidence. Add aggregate preflight, bounded worker briefs and per-harness progress from normalized run records.
 - Expose initial/revalidation Scope commands and validate bound PR closing references. Preserve explicit model allowlists, claim ownership and unknown usage.
+- Make the optional Progress extension the preferred way to report. One reference, `references/reporting.md`, now decides the mode: `projection` (Progress collects automatically; the coordinator records only lanes, blockers and notes), `refresh` (Progress installed without automatic collection) or `legacy` (Progress absent, the existing `progress.py` calls unchanged). `scripts/progress_bridge.py mode` prints the mode. In every mode no agent is spawned, retained, messaged or polled solely for reporting; the rules to keep an orchestration agent alive after Execute to update the report, to reserve capacity for it and to re-verify the report page are removed. The orchestration agent stays where it does real scheduling and integration work.
+- `scripts/progress.py` forwards its subcommands to the Progress CLI when Progress is installed (`init`, `task`, `event`, `phase`, `usage`, `sync`, `pr`), writes no legacy state, and keeps the `--summary` line. Usage is recorded as a legacy attempt with its explicit log path, time window and reported counters. `--json` and `init --title` have no faithful mapping and fail with a compatibility error. Without Progress the legacy reporter runs as before.
+- Lean `execution_tools.py progress` and `workflow.py status --runs` read normalized runs from `progress runs --json` (schema `progress.runs.v1`) when Progress is installed, and use their own code otherwise. Elapsed time is wall time, a stalled run is a heuristic, and a harness's terminal status is not acceptance, as before.
+- `install.py --with progress` (and `upgrade.py --with progress`) installs Progress as an optional extension offered in `dependencies.json`; an installed Progress is kept in step. It is never required. `reconcile.py` leaves Progress hooks and events enabled.
 
 ## [1.9.5] - 2026-10-11
 

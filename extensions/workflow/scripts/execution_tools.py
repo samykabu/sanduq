@@ -11,7 +11,8 @@ or prompt.
                   arguments, browser paths, strict runtime-status).
   scope-command   Print the exact Scope gate/bind command for an initial or revalidation call.
   pr-lint         Reject PR closing keywords that name anything but the bound issue.
-  progress        Summarise normalized delegate-task result files from explicit roots.
+  progress        Summarise normalized delegate-task result files from explicit roots. With the optional
+                  Progress extension installed the runs come from its `runs --json` (progress.runs.v1).
 
 Public JSON contracts: PREFLIGHT_SCHEMA, PR_LINT_SCHEMA, PROGRESS_SCHEMA (see `contracts`).
 """
@@ -420,8 +421,72 @@ def conflicts(first, second):
     return [f for f in CONFLICT_FIELDS if first['usage' if f == 'usage' else f] != second['usage' if f == 'usage' else f]]
 
 
+LIVE_NEXT_ACTION = {'finishing': 'wait for the driver to write result.json',
+                    'stalled': 'check the supervisor, then collect or cancel the run',
+                    'active': 'wait; no action needed'}
+
+
+def fits_runs_shape(folder):
+    """True when every run file under folder sits exactly one level down with a name Progress reads."""
+    allowed = set(RESULT_NAMES) | {'meta.json'}
+    for path in folder.rglob('*'):
+        if not path.is_file():
+            continue
+        if path.name in allowed or path.name.endswith('.result.json'):
+            if path.parent.parent != folder or path.name not in allowed:
+                return False
+    return True
+
+
+def runs_dirs(roots):
+    """Roots that Progress can read directly (a runs folder, or a worktree holding .delegate/runs) whose whole
+    tree fits that shape; else None so the legacy recursive discovery runs."""
+    found = []
+    for root in roots:
+        root = Path(root)
+        if not root.is_dir():
+            raise InputError(f'root is not a directory: {root}')
+        nested = root / '.delegate' / 'runs'
+        direct = any((child / name).is_file() for child in root.iterdir() if child.is_dir() for name in RESULT_NAMES + ('meta.json',))
+        folder = root if direct else nested if nested.is_dir() else None
+        if folder is None or not fits_runs_shape(folder):
+            return None
+        found.append(str(folder))
+    return found
+
+
+def progress_from_cli(roots, now, stall_seconds):
+    """Normalized runs from the optional Progress extension's `runs --json` (schema progress.runs.v1), or None
+    when Progress is absent or a root is not a plain runs folder. The same totals and caveats are rendered."""
+    import progress_bridge
+    root = progress_bridge.find_root(roots[0])
+    if progress_bridge.script(root) is None:
+        return None
+    folders = runs_dirs(roots)
+    if not folders:
+        return None
+    data = progress_bridge.runs(root, folders, now.isoformat(), stall_seconds)
+    if data is None:
+        return None
+    runs = {}
+    for item in data.get('runs') or []:
+        run = {**item, 'next_action': item.get('next_action') or LIVE_NEXT_ACTION.get(item.get('phase'))}
+        run.setdefault('task_verdict', 'unknown')
+        run.setdefault('review_verdict', 'unknown')
+        runs[run['run_id']] = run
+    conflicting = {run_id: set(run['conflict']) for run_id, run in runs.items() if run.get('conflict')}
+    malformed = [{'path': m.get('source'), 'error': m.get('error')} for m in data.get('malformed') or []]
+    report = summarize(runs, list(data.get('duplicates') or []), conflicting, malformed, now)
+    report['via'] = data['schema']
+    return report
+
+
 def progress(roots, now=None, stall_seconds=DEFAULT_STALL_SECONDS):
     now = now or datetime.now(timezone.utc)
+    if roots:
+        via_progress = progress_from_cli(roots, now, stall_seconds)
+        if via_progress is not None:
+            return via_progress
     runs, duplicates, conflicting, malformed = {}, [], {}, []
     for kind, path in discover(roots):
         try:
@@ -440,6 +505,12 @@ def progress(roots, now=None, stall_seconds=DEFAULT_STALL_SECONDS):
         runs[run['run_id']] = run
     for run_id in conflicting:
         runs[run_id]['conflict'] = sorted(conflicting[run_id])
+    return summarize(runs, duplicates, conflicting, malformed, now)
+
+
+def summarize(runs, duplicates, conflicting, malformed, now):
+    """Per-harness totals and the next action. Caveats kept: elapsed is wall time and not active work, a stalled
+    phase is a heuristic, and a terminal harness status is not acceptance (the ledger decides that)."""
     ordered = sorted(runs.values(), key=lambda r: (r['harness'], r['run_id']))
     totals = {}
     for run in ordered:

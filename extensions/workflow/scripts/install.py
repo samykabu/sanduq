@@ -511,7 +511,7 @@ def check_workflow_requirement(name, doc, version=None):
 
 
 def install(root, apply=False, packages=None, package_root=PACKAGE, runner=command, upgrade_owner=None, preserve_ci=False,
-            replace_unrecognized_aliases=False):
+            replace_unrecognized_aliases=False, with_optional=()):
     root = root.resolve(); policy = load_policy(root)
     lock = read(package_root / 'dependencies.json')
     require(lock and lock.get('repository') == 'https://github.com/samykabu/sanduq', 'INVALID_DEPENDENCY_LOCK')
@@ -519,7 +519,14 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
     for process, enabled in policy['processes'].items():
         if enabled: selected.update(lock['selected'][process])
     existing = registry(root); operations = []; retained = []
-    order = ('illustrate', 'project', 'scope', 'pr', 'assure', 'user-manual')
+    # Optional extensions (Progress) are installed only when asked for with --with, or kept in step when already installed.
+    # They are never required, and the workflow works without them.
+    offered = lock.get('optional') or {}
+    unknown = sorted(set(with_optional) - set(offered))
+    require(not unknown, 'UNKNOWN_OPTIONAL_EXTENSION: ' + ', '.join(unknown) + '; offered: ' + ', '.join(sorted(offered)))
+    chosen = sorted(set(with_optional) | {name for name in offered if name in existing})
+    selected.update({name: offered[name] for name in chosen})
+    order = ('illustrate', 'project', 'scope', 'pr', 'assure', 'user-manual', 'progress')
     for name in sorted(selected, key=lambda key: order.index(key)):
         version = selected[name]
         manifest = root / '.specify/extensions' / name / 'extension.yml'
@@ -555,6 +562,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
     # every other installed host is re-registered after the packages change.
     default_host, hosts = active_host(root), installed_hosts(root)
     result = {'applied':False,'extensions':operations,'retained_newer':retained,'presets':preset_ops,'processes':policy['processes'],
+              'optional_extensions': chosen,
               'hosts': {'default': default_host, 'installed': hosts,
                         're_register': [['specify', 'integration', 'use', host] for host in hosts if host != default_host] +
                                        ([['specify', 'integration', 'use', default_host]] if len(hosts) > 1 else [])},
@@ -663,7 +671,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                 inventory[name]['distribution'] = 'local-development' if entry.get('source') == 'local' else 'release'
             write(root / '.specify/workflow/install-lock.json', {
                 'schema_version': 1, 'host': active_host(root), 'processes': policy['processes'],
-                'extensions': inventory, 'dependency_digest': package_digest(root),
+                'optional_extensions': chosen, 'extensions': inventory, 'dependency_digest': package_digest(root),
                 'aliases': alias_hashes,
                 # Tracked, unlike the receipt, so fresh clones and worktrees
                 # still treat a preserved CI file as project-owned.
@@ -692,10 +700,12 @@ if __name__ == '__main__':
     parser.add_argument('--preserve-ci', action='store_true', help='Keep the existing project workflow-gates CI file byte-for-byte')
     parser.add_argument('--replace-unrecognized-aliases', action='store_true',
                         help='Back up, then replace, a managed alias file whose content Sanduq does not recognise')
+    parser.add_argument('--with', dest='with_optional', action='append', default=[], metavar='EXTENSION',
+                        help='Also install an optional extension offered in dependencies.json (for example: progress)')
     parser.add_argument('--upgrade-owner', type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
     try:
         print(json.dumps(install(args.root,args.apply,args.packages,upgrade_owner=args.upgrade_owner,preserve_ci=args.preserve_ci,
-                                 replace_unrecognized_aliases=args.replace_unrecognized_aliases),indent=2))
+                                 replace_unrecognized_aliases=args.replace_unrecognized_aliases,with_optional=args.with_optional),indent=2))
     except (WorkflowError, ValueError, OSError, KeyError) as exc:
         print(json.dumps({'ok':False,'error':str(exc)})); sys.exit(1)

@@ -1,0 +1,206 @@
+{
+ "schema": "sanduq.progress.v2",
+ "rev": 5,
+ "generated_at": "2026-10-15T09:30:00Z",
+ "stale_after_seconds": 600,
+ "collection": {
+  "automatic": false,
+  "hosts": [],
+  "dirty": false,
+  "last_event_at": null,
+  "diagnostics": 0
+ },
+ "feature": {
+  "id": "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+  "title": "<script>window.__PWNED__=1</script><img src=x onerror=\"window.__PWNED__=2\">\"'&amp; مرحبا بالعالم: إضافة تبعيات عند إنشاء مهمة",
+  "dir": "specs/007-small-change",
+  "branch": "<script>window.__PWNED__=1</script><img src=x onerror=\"window.__PWNED__=2\">\"'&amp;",
+  "issue": {
+   "number": 1,
+   "url": "javascript:window.__PWNED__=3"
+  },
+  "stage": {
+   "value": "<script>window.__PWNED__=1</script><img src=x onerror=\"window.__PWNED__=2\">\"'&amp;",
+   "source": "x"
+  },
+  "started_at": null,
+  "workflow": false
+ },
+ "orchestrator": {
+  "host": null,
+  "session_id": null,
+  "model": {
+   "value": null,
+   "source": "none",
+   "observed_at": null,
+   "fidelity": "unknown"
+  },
+  "effort": {
+   "value": null,
+   "source": "none",
+   "observed_at": null,
+   "fidelity": "unknown"
+  },
+  "context": {
+   "value": null,
+   "source": "none",
+   "observed_at": null,
+   "fidelity": "unknown"
+  },
+  "elapsed": {
+   "value": null,
+   "source": "none",
+   "observed_at": null,
+   "fidelity": "unknown"
+  },
+  "active": {
+   "value": null,
+   "source": "none",
+   "observed_at": null,
+   "fidelity": "unknown"
+  },
+  "since": null
+ },
+ "lanes": [
+  {
+   "id": "Lxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "label": "مرحبا بالعالم: إضافة تبعيات عند إنشاء مهمة<script>window.__PWNED__=1</script><img src=x onerror=\"window.__PWNED__=2\">\"'&amp;",
+   "owner": "<script>window.__PWNED__=1</script><img src=x onerror=\"window.__PWNED__=2\">\"'&amp;",
+   "origin": "coordinator",
+   "requested": {
+    "harness": null,
+    "model": null,
+    "effort": null
+   },
+   "observed": {
+    "model": {
+     "value": null,
+     "source": "none",
+     "observed_at": null,
+     "fidelity": "unknown"
+    },
+    "effort": {
+     "value": null,
+     "source": "none",
+     "observed_at": null,
+     "fidelity": "unknown"
+    }
+   },
+   "status": "active",
+   "elapsed": {
+    "value": null,
+    "source": "none",
+    "observed_at": null,
+    "fidelity": "unknown"
+   },
+   "active": {
+    "value": null,
+    "source": "none",
+    "observed_at": null,
+    "fidelity": "unknown"
+   },
+   "last_observed_at": null,
+   "attempts": [],
+   "tasks": {
+    "active": [
+     "Lxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxt1"
+    ],
+    "waiting": [],
+    "blocked": [
+     {
+      "task": "Lxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxt2",
+      "by": [
+       {
+        "type": "external",
+        "ref": "<script>window.__PWNED__=1</script><img src=x onerror=\"window.__PWNED__=2\">\"'&amp;",
+        "blocker": "B1"
+       }
+      ]
+     }
+    ],
+    "done": []
+   }
+  }
+ ],
+ "unassigned_tasks": {
+  "active": [],
+  "waiting": [],
+  "blocked": [],
+  "done": []
+ },
+ "tasks": {
+  "Lxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxt1": {
+   "title": "<script>window.__PWNED__=1</script><img src=x onerror=\"window.__PWNED__=2\">\"'&amp;مرحبا بالعالم: إضافة تبعيات عند إنشاء مهمة",
+   "phase": "<script>window.__PWNED__=1</script><img src=x onerror=\"window.__PWNED__=2\">\"'&amp;",
+   "done": false,
+   "parallel": false,
+   "depends_on": [],
+   "lane": "Lxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  "Lxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxt2": {
+   "title": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+   "phase": "p",
+   "done": false,
+   "parallel": false,
+   "depends_on": [],
+   "lane": "Lxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  }
+ },
+ "decisions": {
+  "pending": [
+   {
+    "id": "D1",
+    "question": "<script>window.__PWNED__=1</script><img src=x onerror=\"window.__PWNED__=2\">\"'&amp;مرحبا بالعالم: إضافة تبعيات عند إنشاء مهمة",
+    "options": [
+     "<script>window.__PWNED__=1</script><img src=x onerror=\"window.__PWNED__=2\">\"'&amp;",
+     "مرحبا بالعالم: إضافة تبعيات عند إنشاء مهمة"
+    ],
+    "selected": null,
+    "decided_by": null,
+    "at": null,
+    "url": "javascript:window.__PWNED__=4",
+    "source": "x"
+   }
+  ],
+  "made": [
+   {
+    "id": "D2",
+    "question": "مرحبا بالعالم: إضافة تبعيات عند إنشاء مهمة",
+    "options": [
+     "<script>window.__PWNED__=1</script><img src=x onerror=\"window.__PWNED__=2\">\"'&amp;"
+    ],
+    "selected": "<script>window.__PWNED__=1</script><img src=x onerror=\"window.__PWNED__=2\">\"'&amp;",
+    "decided_by": "user",
+    "at": "2026-10-15T09:00:00Z",
+    "url": "javascript:window.__PWNED__=5",
+    "source": "x"
+   }
+  ]
+ },
+ "blockers": [
+  {
+   "id": "B1",
+   "target": "Lxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxt2",
+   "by": {
+    "type": "external",
+    "ref": "<script>window.__PWNED__=1</script><img src=x onerror=\"window.__PWNED__=2\">\"'&amp;"
+   },
+   "since": "2026-10-15T09:00:00Z",
+   "source": "facts"
+  }
+ ],
+ "events": [
+  {
+   "at": "2026-10-15T09:00:00Z",
+   "kind": "<script>window.__PWNED__=1</script><img src=x onerror=\"window.__PWNED__=2\">\"'&amp;",
+   "text": "<script>window.__PWNED__=1</script><img src=x onerror=\"window.__PWNED__=2\">\"'&amp;مرحبا بالعالم: إضافة تبعيات عند إنشاء مهمة"
+  }
+ ],
+ "summary": {
+  "tasks_total": 2,
+  "tasks_done": 0,
+  "lanes_active": 1,
+  "blocked": 1,
+  "decisions_pending": 1
+ }
+}
