@@ -430,6 +430,56 @@ class ShimMappings(Project):
         self.assertEqual((code, out), (2, 'error Unknown task ID: T999'))
 
 
+class ProcessCounts(Project):
+    """Each forwarded legacy call spawns as few Progress processes as it needs."""
+
+    def counted(self, *argv):
+        calls, real = [], bridge.run
+        bridge.run = lambda root, args, *a, **k: calls.append(args[0]) or real(root, args, *a, **k)
+        try:
+            code, out, err = self.legacy(*argv)
+        finally:
+            bridge.run = real
+        self.assertEqual(code, 0, out + err)
+        return calls
+
+    # command -> (processes without --summary, with --summary)
+    EXPECTED = {
+        'event': (['status', 'note'], ['status', 'note', 'status']),
+        'phase': (['status', 'note'], ['status', 'note', 'status']),
+        'pr': (['status', 'note'], ['status', 'note', 'status']),
+        'sync': (['status', 'refresh'], ['status', 'refresh', 'status']),
+    }
+    ARGS = {'event': ('--message', 'm'), 'phase': ('--name', 'P1', '--status', 'complete'),
+            'pr': ('--url', 'https://github.com/a/b/pull/1', '--status', 'open'), 'sync': ()}
+
+    def test_notes_and_sync_skip_redundant_status_calls(self):
+        self.init()
+        for command, (plain, summary) in self.EXPECTED.items():
+            with self.subTest(command=command):
+                self.assertEqual(self.counted(command, *self.ARGS[command]), plain)
+                self.assertEqual(self.counted(command, *self.ARGS[command], '--summary'), summary)
+
+    def test_first_call_for_a_feature_initialises_once(self):
+        self.assertEqual(self.counted('event', '--message', 'm'), ['status', 'init', 'status', 'note'])
+
+    def test_task_running_needs_one_status_before_and_none_after_without_summary(self):
+        self.init()
+        calls = self.counted('task', '--id', 'T002', '--status', 'running', '--agent', 'w1')
+        self.assertEqual(calls.count('status'), 1, calls)
+        self.assertEqual(self.counted('task', '--id', 'T002', '--status', 'running', '--agent', 'w1', '--summary').count('status'), 2)
+
+    def test_usage_without_a_split_needs_no_extra_status(self):
+        self.init()
+        self.legacy('task', '--id', 'T002', '--status', 'running', '--agent', 'w1')
+        calls = self.counted('usage', '--id', 'T002', '--agent', 'w1', '--fresh-input', '1')
+        self.assertEqual(calls.count('status'), 1, calls)
+
+    def test_init_prints_the_index_without_asking_status(self):
+        calls = self.counted('init', '--tasks', str(self.feature_dir / 'tasks.md'))
+        self.assertEqual(calls, ['init'])
+
+
 class CompatibilityErrors(Project):
     def test_unsupported_requests_exit_non_zero_with_an_explicit_error_and_write_nothing(self):
         self.init()
