@@ -7,7 +7,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-import safelog  # scripts/safelog.py: standard library only, shared with the fast hook entry
+from . import safelog  # standard library only; the fast hook entry loads the same file by path
 
 CONTROL = re.compile(r'[\x00-\x1f\x7f-\x9f  ]')
 DIAG_LIMIT = safelog.DIAG_LIMIT

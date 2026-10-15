@@ -60,8 +60,11 @@ def log_unbound_once(progress_dir, payload, now):
     except OSError:
         pass
     try:
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        import safelog
+        import importlib.util  # by path: importing the package (even its __init__) is what this entry avoids
+        spec = importlib.util.spec_from_file_location(
+            'safelog', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sanduq_progress', 'safelog.py'))
+        safelog = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(safelog)
         safelog.append_line(path, f'{safelog.stamp(now)} {message}')
     except OSError:
         pass

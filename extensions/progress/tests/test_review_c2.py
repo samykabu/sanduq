@@ -108,7 +108,8 @@ class A1FastLogger(Project):
         self.assertEqual(outside.read_text(encoding='utf-8'), 'keep\n')
 
     def test_the_shared_helper_imports_only_light_modules(self):
-        code = (f"import sys; sys.path.insert(0, {str(SCRIPTS)!r}); import safelog; "
+        path = str(SCRIPTS / 'sanduq_progress' / 'safelog.py')
+        code = (f"import sys, importlib.util as u; s = u.spec_from_file_location('safelog', {path!r}); m = u.module_from_spec(s); s.loader.exec_module(m); "
                 "print(sorted(m for m in ('json', 're', 'datetime', 'pathlib', 'tempfile') if m in sys.modules))")
         out = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True).stdout
         self.assertEqual(out.strip(), '[]', out)

@@ -8,7 +8,8 @@
   `diagnostics.log*` and `*.lock` under `.specify/progress/` join the git exclude list.
 - A debounce window publishes the clean-to-dirty transition once instead of rewriting `report.json` and `data.js` on every event.
 - Codex `spawn_agent` and other asynchronous launches no longer finish on the launch response. A finished child that runs
-  again starts a new generation. Child lane ids (`C<n>`) are kept in `state.json` and never renumber.
+  again starts a new generation. Child lane ids (`C<n>`) are kept in `state.json` and never renumber. Host snapshots moved from `.view/host` to the git-ignored `.host/` (moved on first access), so deleting
+  `.view/` keeps every child id; blockers follow a child into the lane it merges into; linking and splitting a child keeps its newest lifecycle.
 - Writes refuse a symlink or junction at `facts.jsonl`, the view files and copied assets (`PROGRESS_UNSAFE_TARGET`).
 - The UI poller abandons a data.js load that never settles after 10 s and tries again (Chromium under heavy load sometimes
   fires neither load nor error, which froze the page).

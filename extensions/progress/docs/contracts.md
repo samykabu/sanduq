@@ -4,7 +4,8 @@ These contracts are normative. Code and tests follow them. Change them only with
 
 ## Principles
 
-1. The report is a **projection**. It is rebuilt from producers on every refresh and can be deleted at any time.
+1. The report is a **projection**. It is rebuilt from producers on every refresh. Deleting `.view/` loses nothing but the
+   projection: host observations (child identity) live in `.host/`, outside it.
 2. Producers keep their authority: `tasks.md` owns task text and checkbox state, Workflow owns checkpoint, delegation
    ledger and decisions. Progress never writes to producer files.
 3. `facts.jsonl` holds only facts no producer records: lane assignment, blocker, plain spec-kit decision, note.
@@ -19,7 +20,9 @@ These contracts are normative. Code and tests follow them. Change them only with
 ```
 specs/<feature>/progress/
   facts.jsonl            tracked in git (owner decision D4)
-  .view/                 git-ignored (Progress writes `specs/*/progress/.view/` to .git/info/exclude at init)
+  .host/                 git-ignored, NOT disposable: host snapshots (progress.host.v1), the durable home of child identity
+    <host>-<session>.json   (older versions kept them in .view/host; the first access moves them here)
+  .view/                 git-ignored and disposable (Progress writes `specs/*/progress/.view/` and `.host/` to .git/info/exclude at init)
     report.json          projection, schema sanduq.progress.v2
     data.js              window.__SANDUQ_PROGRESS__ = <report.json>;   (file:// safe)
     index.html           static shell, copied from assets/ui at init/upgrade, never templated with data
@@ -27,10 +30,9 @@ specs/<feature>/progress/
     base.css             static layout styles (copied like index.html)
     theme.css            generated from the resolved theme (tokens only)
     layout.js            generated: window.__SANDUQ_PROGRESS_LAYOUT__ (block order, hidden, density, title, logo)
-    host/<host>-<session>.json   host snapshots (progress.host.v1)
     state.json           collector cursors, debounce stamp, dirty flag, last refresh rev (child lane numbers are not kept here: see Host children below)
     diagnostics.log      bounded (rotate at 256 KB, keep 1); never written through a link, by the main writer and by the
-                         fast hook entry alike (both use `scripts/safelog.py`)
+                         fast hook entry alike (both use `scripts/sanduq_progress/safelog.py`)
     lock                 per-feature lock held by the OS for the life of the process (msvcrt.locking on Windows,
                          fcntl.flock elsewhere); the OS drops it if the process dies, so there is no stale recovery.
                          The file content {"pid", "host", "started_at", "token"} is diagnostic only
@@ -91,7 +93,7 @@ When Workflow's `decisions.json` exists, `decision` facts are refused (`PROGRESS
 
 ## Host snapshot (`progress.host.v1`)
 
-File `host/<host>-<session_id>.json`, merged field-by-field under the lock (never replaces unrelated fields).
+File `.host/<host>-<session_id>.json`, merged field-by-field under the lock (never replaces unrelated fields).
 
 ```json
 {"v":1,"host":"claude|codex","session_id":"…","parent_session_id":null,"agent_id":null,
@@ -123,7 +125,7 @@ attached agent becomes its own entry and the launch keeps the id the host report
 `agentId`/`agent_id` count, plus `id` for Codex `spawn_agent`; no other `id` is an agent id.
 `lane_no` is the child's durable `C<n>` number: assigned once, when the entry is created, one above every number any
 snapshot ever held. `lane_aliases` are the numbers of entries later found to be the same child; they keep resolving.
-Because the number sits in the host snapshot (durable host data, not the disposable view), deleting `.view/` or re-keying an
+Because the number sits in the host snapshot (durable host data, not the disposable view), deleting `.view/` (it is only the projection) or re-keying an
 entry (agent id <-> tool_use id) changes no lane id.
 
 ## Binding

@@ -6,7 +6,7 @@ from pathlib import Path
 from .util import ProgressError, read_json
 
 ASSETS = Path(__file__).resolve().parent.parent.parent / 'assets' / 'ui'
-EXCLUDES = ('specs/*/progress/.view/', '.specify/progress/bindings.json',
+EXCLUDES = ('specs/*/progress/.view/', 'specs/*/progress/.host/', '.specify/progress/bindings.json',
             '.specify/progress/*.lock', '.specify/progress/diagnostics.log*')
 
 
@@ -119,7 +119,7 @@ class Ctx:
         self.dir = self.feature_dir / 'progress'
         self.facts = self.dir / 'facts.jsonl'
         self.view = self.dir / '.view'
-        self.host_dir = self.view / 'host'
+        self.host_dir = self.dir / '.host'  # durable host observations (child identity): git-ignored, not part of the disposable view
         self.state = self.view / 'state.json'
         self.report = self.view / 'report.json'
         self.data_js = self.view / 'data.js'
@@ -137,7 +137,7 @@ class Ctx:
         directory (a symlinked or forged feature or output directory must not move writes outside the repository)."""
         specs = self.root / 'specs'
         chain = ((specs, self.root), (self.cfg_dir, self.root), (self.feature_dir, specs), (self.dir, self.feature_dir),
-                 (self.view, self.dir))
+                 (self.view, self.dir), (self.host_dir, self.dir))
         parts = Path(self.feature).parts
         if len(parts) != 2 or parts[0] != 'specs' or any(p in ('', '.', '..') for p in parts):
             raise ProgressError('PROGRESS_NO_FEATURE', 'feature must be specs/<dir>', 2)

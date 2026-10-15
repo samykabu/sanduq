@@ -20,7 +20,27 @@ TERMINAL = ('done', 'failed')
 BIND_TTL = timedelta(seconds=120)
 
 
+def migrate_host_dir(ctx):
+    """Host snapshots used to live under the disposable `.view/host`. Move any left there to `.host` once (a file that
+    already exists in the new place wins), so deleting the view never loses a child's durable identity."""
+    legacy = ctx.view / 'host'
+    if not legacy.is_dir():
+        return
+    try:
+        ctx.host_dir.mkdir(parents=True, exist_ok=True)
+        for path in sorted(legacy.glob('*.json')):
+            target = ctx.host_dir / path.name
+            if target.exists():
+                path.unlink()
+            else:
+                os.replace(path, target)
+        legacy.rmdir()
+    except OSError:
+        pass
+
+
 def snapshot_path(ctx, host, session_id):
+    migrate_host_dir(ctx)
     return ctx.host_dir / (session_key(host, session_id) + '.json')
 
 
@@ -69,6 +89,34 @@ def _stale_lifecycle(entry, update):
     return bool(update.get('status') is not None and at and at < (entry.get('status_at') or ''))
 
 
+def _gate(entry, update):
+    """Apply the lifecycle freshness rule to `update` (mutated): a stale lifecycle is dropped, a newer running
+    observation after a terminal one starts a new generation. Used for every way an observation reaches an entry."""
+    if _stale_lifecycle(entry, update):
+        for name in ('status', 'started_at', 'ended_at'):
+            update.pop(name, None)
+    elif _restarts(entry, update):
+        _restart(entry, update)
+        update.pop('status'), update.pop('started_at', None)
+
+
+def _absorb_lifecycle(entry, old):
+    """The lifecycle of another record of the same child (linking two ids) is one more observation, stamped with when
+    that record's lifecycle was last accepted, and goes through the same freshness rule."""
+    update = {n: old[n] for n in ('status', 'started_at', 'ended_at') if old.get(n) is not None}
+    update['last_observed_at'] = old.get('status_at') or old.get('last_observed_at') or ''
+    _gate(entry, update)
+    if 'status' in update:
+        _apply(entry, 'status', update['status'])
+        if entry.get('status') == update['status'] and update.get('ended_at'):
+            entry['ended_at'] = max(entry.get('ended_at') or '', update['ended_at'])
+    if update.get('started_at') and not entry.get('started_at'):
+        entry['started_at'] = update['started_at']
+    if old.get('generation'):
+        entry['generation'] = max(int(entry.get('generation') or 1), int(old['generation']))
+    entry['status_at'] = max(entry.get('status_at') or '', old.get('status_at') or '') or None
+
+
 def _numbers(entry):
     return [n for n in [entry.get('lane_no'), *(entry.get('lane_aliases') or [])] if isinstance(n, int) and not isinstance(n, bool)]
 
@@ -106,9 +154,14 @@ def _split_provisional(ctx, snap, entry, real_id):
     moved = {name: entry.pop(name) for name in ('model', 'effort')
              if isinstance(entry.get(name), dict) and entry[name].get('fidelity') != 'partial'}
     children[guessed] = {**moved, 'kind': 'subagent', 'agent_id': guessed, 'status': entry.get('status') or 'running',
-                         'started_at': entry.get('started_at'), 'ended_at': None,
+                         'started_at': entry.get('started_at'), 'ended_at': entry.get('ended_at'),
                          'last_observed_at': entry.get('last_observed_at'), 'status_at': entry.get('status_at'),
                          'lane_no': _next_lane_no(ctx, snap)}
+    if entry.get('generation'):
+        children[guessed]['generation'] = entry['generation']
+    if entry.get('status') in TERMINAL:  # that end belonged to the attached agent, not to the launch
+        entry.update(status='running', ended_at=None, status_at=None)
+        entry.pop('generation', None)
     entry.pop('agent_link', None)
     entry['agent_id'] = real_id
 
@@ -139,25 +192,27 @@ def merge(ctx, host, session_id, now, fields=None, child=None, parent_session_id
                 linked = _provisional_target(children)
                 provisional = linked is not None
             key = linked or key
-        elif update.get('agent_id') and update['agent_id'] in children and update['agent_id'] != key:
-            old = children.pop(update['agent_id'])
-            entry = children.setdefault(key, {})
-            if _restarts(entry, old):
-                _restart(entry, old)
-            for name, value in old.items():
-                if name in ('model', 'effort', 'status', 'last_observed_at'):
-                    _apply(entry, name, value)
-                elif name in ('lane_no', 'lane_aliases', 'agent_link', 'status_at'):
-                    continue
-                elif value is not None:
-                    entry.setdefault(name, value)  # the tool-call record keeps its own description and type
-            _join_numbers(entry, old)
-            entry['status_at'] = max(entry.get('status_at') or '', old.get('status_at') or '') or None
-        elif update.get('agent_id') and children.get(key, {}).get('agent_link') == 'provisional':
-            if children[key].get('agent_id') == update['agent_id']:
-                children[key].pop('agent_link')
-            else:
-                _split_provisional(ctx, snap, children[key], update['agent_id'])
+        elif update.get('agent_id'):
+            # The tool result names the agent. A provisional association is reconciled first (confirmed, or split off
+            # as its own child), so merging a record of the named agent can never overwrite another running child.
+            attached = children.get(key) or {}
+            if attached.get('agent_link') == 'provisional':
+                if attached.get('agent_id') == update['agent_id']:
+                    attached.pop('agent_link')
+                else:
+                    _split_provisional(ctx, snap, attached, update['agent_id'])
+            if update['agent_id'] in children and update['agent_id'] != key:
+                old = children.pop(update['agent_id'])
+                entry = children.setdefault(key, {})
+                for name, value in old.items():
+                    if name in ('model', 'effort', 'last_observed_at'):
+                        _apply(entry, name, value)
+                    elif name in ('status', 'started_at', 'ended_at', 'generation', 'lane_no', 'lane_aliases', 'agent_link', 'status_at'):
+                        continue
+                    elif value is not None:
+                        entry.setdefault(name, value)  # the tool-call record keeps its own description and type
+                _absorb_lifecycle(entry, old)
+                _join_numbers(entry, old)
         entry = children.setdefault(key, {})
         if not isinstance(entry.get('lane_no'), int):
             entry['lane_no'] = _next_lane_no(ctx, snap)
@@ -165,12 +220,7 @@ def merge(ctx, host, session_id, now, fields=None, child=None, parent_session_id
             entry['agent_id'] = child['key']
             if provisional:
                 entry['agent_link'] = 'provisional'
-        if _stale_lifecycle(entry, update):
-            for name in ('status', 'started_at', 'ended_at'):
-                update.pop(name, None)
-        elif _restarts(entry, update):
-            _restart(entry, update)
-            update.pop('status'), update.pop('started_at', None)
+        _gate(entry, update)
         for name, value in update.items():
             _apply(entry, name, value)
         if update.get('status') is not None and entry.get('status') == update['status'] and update.get('last_observed_at'):
@@ -187,6 +237,7 @@ def merge(ctx, host, session_id, now, fields=None, child=None, parent_session_id
 
 def read_all(ctx):
     out = []
+    migrate_host_dir(ctx)
     if ctx.host_dir.is_dir():
         for path in sorted(ctx.host_dir.glob('*.json')):
             data = read_json(path)
