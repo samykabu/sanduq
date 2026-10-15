@@ -30,13 +30,19 @@ specs/<feature>/progress/
     host/<host>-<session>.json   host snapshots (progress.host.v1)
     state.json           collector cursors, debounce stamp, dirty flag, last refresh rev
     diagnostics.log      bounded (rotate at 256 KB, keep 1)
-    lock                 per-feature lock: {"pid", "host", "started_at"}
+    lock                 per-feature lock: {"pid", "host", "started_at", "token"}; stale recovery is serialised by
+                         a short-lived `lock.recover` file (O_EXCL) and re-checks the owner before removing
 .specify/progress/
   config.json            {"feature_dir_mode": "auto", "debounce_seconds": 5, "stale_after_seconds": 600,
                           "statusline": {"enabled": bool, "chained": "<previous command or null>"}}
   theme.json             progress.theme.v1 (optional; preset default "sanduq")
   bindings.json          session bindings (see Binding)
 ```
+
+A feature directory is always `specs/<dir>`: `.` and `..` components are rejected, and the resolved directory must be a
+direct child of the resolved `specs/` directory (a symlinked feature pointing elsewhere is refused). The `progress/`
+and `.view/` output directories must also resolve inside it; otherwise the command fails with `PROGRESS_NO_FEATURE`
+(hooks drop the event) before anything is written.
 
 The feature directory is resolved in order: `--feature <dir>`; `SPECIFY_FEATURE` env; Workflow checkpoint `feature`;
 current git branch matching `specs/<branch>`; else error `PROGRESS_NO_FEATURE` (one line).
@@ -47,10 +53,17 @@ One JSON object per line, UTF-8, `\n` terminated, appended with flush+fsync unde
 final line and report it in diagnostics. Lines are never rewritten; later lines supersede earlier ones by `id`.
 
 Common fields: `v` (1), `ts` (UTC ISO-8601 `Z`), `kind`, `id`, `actor` (`user` | `agent:<stable-id>` | `hook` |
-`legacy`), `source` (`cli` | `workflow-shim` | `import`).
+`legacy`; `<stable-id>` is 1-64 characters of `A-Za-z0-9._-`, anything else is refused), `source` (`cli` |
+`workflow-shim` | `import`).
 
 Forbidden content: secrets, tokens, absolute paths outside the repo, prompt or transcript text. Free text fields are
-capped at 200 characters and stripped of control characters.
+capped at 200 characters and stripped of control characters. The whole record is validated before it is appended, not
+only the free text: every string in it (including `actor`, `owner`, `label`, `requested.*`, `usage.*`) is checked for
+secrets and absolute paths. An absolute path is a drive path (`C:\...`), a UNC path (`\\host\share`, `//host/share`)
+or a POSIX path starting with `/`, on any platform; it is allowed only when it lies inside the repository root by path
+components (`<root>-other/x` is outside; `..` segments are resolved first). Log paths in attempt usage follow the same
+rule: inside the repo they are stored repo-relative, any other absolute path (Windows or POSIX, whatever the executing
+platform) becomes `external:<name>`.
 
 | kind | fields |
 |---|---|
@@ -81,6 +94,13 @@ File `host/<host>-<session_id>.json`, merged field-by-field under the lock (neve
               "model":{…},"background":true,"started_at":"…","ended_at":null,"last_observed_at":"…","status":"running|done|failed|unknown"}}}
 ```
 
+Child `model` and `effort` are measurements. A child model with `fidelity:"partial"` is the requested alias from the
+launching `Task`/`Agent` call and never replaces an exact (observed) model, whichever event arrives first. A child's
+effort comes from the `effort.level` of the hook payload fired inside that child. `context.value.used_tokens` is the
+sum of the integer `current_usage` counters of the Claude statusline (`input_tokens`,
+`cache_creation_input_tokens`, `cache_read_input_tokens`), i.e. what the context holds now; the cumulative
+`total_input_tokens` is never used, and without current usage the token count is `null` (unknown).
+
 `ended_at` stays null until terminal evidence exists (tool result, stop event of that child). `last_observed_at` is
 separate. Parent usage is never attributed to children.
 
@@ -93,6 +113,9 @@ A CLI process cannot know the host session id, so binding is a two-step explicit
 2. The host's `post_tool_use` payload for that same shell call (tool input contains `progress` + `bind`/`init` and the
    nonce, or the tool response contains the nonce) carries `session_id`; the hook converts the pending bind into
    `{session_id, host, feature, worktree, bound_at}`.
+
+A fresh pending handshake that matches the tool call takes precedence over an existing binding for that session: the
+session is rebound to the feature that was just initialised (observations then go to the new feature).
 
 `progress bind --session <id>` binds directly when the id is known (tests, hosts without hooks).
 A later `session_start` with a bound `session_id` (resume) keeps the binding. Hooks attach observations only to a bound
@@ -127,14 +150,39 @@ Unbound or ambiguous observations are dropped and counted in diagnostics.
 ```
 
 `M` = measurement `{"value":…, "source":"…", "observed_at":"…", "fidelity":"exact|partial|estimated|unknown"}`.
-`elapsed` = wall time since start; `active` = sum of observed active intervals (only when a host provides interval
-evidence, else `fidelity:"unknown"`). Elapsed is never labelled as work time.
+
+**Units.** Every duration in the projection (`orchestrator.elapsed`, `orchestrator.active`, `lanes[].elapsed`,
+`lanes[].active`) is a whole number of **seconds**; the UI formats them as `1h 2m` / `3m 4s` / `5s`. Host snapshots keep
+the host's own `*_ms` fields (`elapsed_ms`, `api_ms`) and the projection converts them. Timestamps are ISO-8601 strings.
+
+`elapsed` = wall time since start. `active` = sum of observed active intervals, and is unknown (`value:null`,
+`fidelity:"unknown"`) unless a producer supplies them: a delegation attempt may carry `active_intervals`
+(`[{"start","end"}]`, an open end counts to the generation time) and the lane's `active` is their sum with
+`fidelity:"partial"`. An attempt's start-to-end span is wall time and is never reported as active work time. Elapsed is
+never labelled as work time.
+
+**Observed vs requested model.** `lanes[].observed.model` comes only from explicit evidence: the delegation ledger's
+`actual_model` (fidelity `exact`, or `partial` while its evidence is `pending`), a model the run result reports it
+actually ran (`model_reported` / `model_observed` in `result.json`, fidelity `partial`, source `run-result`), or a
+child's own hook payload. A model that was only asked for (ledger `requested_model`, a run's `model`, a `Task` call's
+`model`) goes under `requested` and the observed model stays unknown.
 
 Task state per lane: `done` = checkbox checked in tasks.md; `blocked` = open blocker targeting the task or its lane;
 `active` = lane active and task is the lane's first not-done, not-blocked task (or explicitly started by a
 delegation attempt); `waiting` = everything else not done. `depends_on` is parsed only from documented annotations
 in the task line: `(depends on T001, T002)` or `(after T001)`; `[P]` sets `parallel:true` only. Task IDs inside code
 spans/blocks or other prose are ignored.
+
+Host children and assigned lanes. A host child is merged into an assigned lane (facts or delegation lane) when that
+lane's `owner` equals, case-insensitively, the child's agent id, the `tool_use_id` it was launched with (the key in
+`children`), or its `description` label. A merged child contributes its observed model and effort, and its last
+observation time, to the lane; it does not change the lane's status or tasks, and it gets no `C<n>` lane. Only children
+that match no lane owner become `host-child` lanes (`C1`, `C2`, ... numbered over the unmatched children).
+
+Workflow decisions. `decisions[].selected` is the option text for a single-selection decision and a list of option texts
+for a multiple-selection decision (Workflow stores `selected: ["A","C"]` with `option: null` in that mode, and
+`selected: ["B"]` plus `option: "B"` in single mode). `at` is the latest answer timestamp (`updated_at`, falling back to
+`created_at`/`at`). A pending or conflicting decision has `selected:null`.
 
 Workflow lanes: one lane per delegation identity (retries and resumes become attempts of the same lane), task ids from
 the delegation identity/owned task list when present. Plain spec-kit: one `coordinator` lane by default; host children
@@ -171,7 +219,7 @@ another extension to read this projection; callers must not import Progress code
 
 ```json
 {"schema":"progress.runs.v1","generated_at":"…","stall_seconds":300,
- "runs":[{"run_id":"…","harness":"…","source":"<run dir name>","model":null,"started_at":"…","ended_at":null,
+ "runs":[{"run_id":"…","harness":"…","source":"<run dir name>","model":null,"model_reported":null,"started_at":"…","ended_at":null,
           "harness_status":"running|finalizing|stalled|successful|failed|…","phase":"active|finishing|stalled|done",
           "usage":null,"elapsed_seconds":0,"journal_events":0,"latest_event":null,"latest_event_at":null,
           "task_verdict":"unknown","review_verdict":"unknown","next_action":null,"conflict":["harness"]}],
@@ -181,13 +229,16 @@ another extension to read this projection; callers must not import Progress code
 `usage` is null unless the harness reported exact counters. The three caveats are part of the contract: elapsed is wall
 time and not active time; `stalled` is a heuristic; `harness_status` is a harness verdict and not acceptance. Verdict
 words and `next_action` come from a final `result.json` and read `unknown`/null when absent. A final record beats a live
-one for the same run id; real disagreement is listed in `conflict`.
+one for the same run id; real disagreement is listed in `conflict`, and the conflicts of every duplicate (across all `--runs-dir` roots) accumulate on the retained record. `model` is the launch request; `model_reported` is the model the harness says it ran (`null` when it did not say), and only that is evidence of the model that ran.
 
 ## Hook behaviour
 
 `progress hook <event>`: parse stdin (tolerate empty/invalid → diagnostics, exit 0). Update the host snapshot under the
 lock. Debounce: if the last refresh is younger than `debounce_seconds`, set `dirty=true` and exit; else refresh.
-`stop` and `session_end` always refresh. Any exception → diagnostics, exit 0, no stdout (never block the host).
+`stop` and `session_end` always refresh. A deferred (debounced) event is not invisible: the hook patches the current
+`report.json`/`data.js` with `collection.dirty:true` and `collection.last_event_at` and advances `rev` (no producer is
+read, nothing is rebuilt) so the UI shows its pending banner; the first hook after the window, a statusline update after
+it, `stop`, or any verb performs the real refresh and clears the flag. Any exception → diagnostics, exit 0, no stdout (never block the host).
 
 ## Theme (`progress.theme.v1`)
 
