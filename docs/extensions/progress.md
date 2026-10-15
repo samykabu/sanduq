@@ -37,6 +37,17 @@ The agent records only what no other source holds: a lane assignment, a blocker,
 The skill at `extensions/progress/skills/progress/SKILL.ext.md` lists the verbs. Task state comes from `tasks.md`;
 model, effort and context come from host hooks and are shown as unknown when a host does not send them.
 
+## With Workflow
+
+Progress is optional for [Workflow](workflow.md). Install it with `install.py --with progress`. Workflow then reports
+through Progress and no longer asks an agent to keep a report current. If you leave Progress out, Workflow's own
+report runs as before. Details:
+
+- Workflow's `progress.py` forwards its old subcommands to the Progress CLI, so existing prompts keep working.
+  `--json` and `init --title` have no faithful mapping and fail with a compatibility error.
+- Legacy usage is stored as an attempt labelled `legacy`. It never overrides the delegation ledger.
+- Workflow's lean run status reads `progress runs --json` (schema `progress.runs.v1`).
+
 ## More
 
 The [package README](../../extensions/progress/README.md) has the hosts table, theming and token results.

@@ -112,6 +112,31 @@ In Codex, call each command as `$speckit-workflow-<cmd>`. In Claude Code, use
 Worked examples for every command are in the
 [commands reference](https://github.com/samykabu/sanduq/blob/main/docs/reference/commands.md).
 
+## Progress reporting
+
+Workflow works without any report extension. If you install the optional
+[Progress](https://github.com/samykabu/sanduq/blob/main/docs/extensions/progress.md) extension, the report
+becomes a projection of `tasks.md`, the delegation ledger and the host's hooks:
+
+```bash
+python .specify/extensions/workflow/scripts/install.py --with progress          # preview
+python .specify/extensions/workflow/scripts/install.py --with progress --apply
+```
+
+The instructions pick one of three modes (`python .specify/extensions/workflow/scripts/progress_bridge.py mode`):
+
+| Mode | When | What the coordinator does |
+| --- | --- | --- |
+| `projection` | Progress is installed and collects automatically | Records only lanes, blockers and notes. Task state, retries, usage and run history are collected. |
+| `refresh` | Progress is installed, nothing collects automatically | The same, plus an explicit `progress refresh` after each attempt and phase. |
+| `legacy` | Progress is absent | The `progress.py` calls it has always made. |
+
+In every mode no agent is spawned, kept, messaged or polled only to maintain the report. When Progress is
+installed, `scripts/progress.py` forwards the old subcommands to it, so older instructions still work. A request
+with no faithful mapping (`--json`, `init --title`) fails with a compatibility error. Lean run status
+(`workflow.py status --runs`) reads Progress's `runs --json` when available. The rules are in
+`skills/workflow/references/reporting.md`.
+
 ## Where state lives
 
 - Policy is in `.specify/workflow.yml`.

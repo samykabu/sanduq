@@ -94,11 +94,28 @@ tokenizer exists.
 | --- | ---: | ---: |
 | Progress verbs | 1,847 | 631 |
 | Hand-edited Markdown report | 59,967 | 581 |
-| Legacy Workflow report protocol | 11,146 | 3,484 |
+| Legacy Workflow report protocol | 12,092 | 3,957 |
 
 Task start, completion and reopening cost nothing because they are read from `tasks.md`. The full table by update
 class, the assumptions and the cl100k_base counts are in [the token benchmark](docs/token-benchmark.md). Measured
 usage from real harness runs comes from `scripts/live_ab.py`, which is a manual tool.
+
+## Using with Sanduq Workflow
+
+Progress is optional for Workflow, and Workflow never imports Progress code. It uses only the CLI and versioned JSON.
+
+- **Install.** `python .specify/extensions/workflow/scripts/install.py --with progress --apply`. An installed Progress
+  is kept in step on later installs and upgrades. `reconcile` leaves its hooks and events enabled.
+- **Instructions.** Workflow's `references/reporting.md` picks `projection` (this extension collects automatically),
+  `refresh` (installed, no automatic collection) or `legacy` (absent). In every mode no agent is spawned, kept,
+  messaged or polled only to maintain the report.
+- **Old calls.** Workflow's `scripts/progress.py` forwards `init`, `task`, `event`, `phase`, `usage`, `sync` and `pr` here
+  (`lane`, `attempt record`, `block`, `note`, `refresh`). Usage keeps its explicit log path, time window and reported
+  counters as a fact with origin `legacy`; legacy facts never override the ledger. `--json` and `init --title` are
+  refused with a compatibility error.
+- **Runs.** `progress runs --json` returns schema `progress.runs.v1`, built from `.delegate/runs`. Workflow's lean
+  status renders from it. Elapsed time is wall time, `stalled` is a heuristic, and a harness's terminal status is not
+  acceptance.
 
 ## Contract and hosts
 

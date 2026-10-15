@@ -55,6 +55,10 @@ sentences whose target relocated); `extensions/scripts/smoke_install.py` and
 `test_execution_policy.py` check the built package and an installed fixture
 project carry every stage's reference and stay under the core budget.
 
+`reporting.md` is the only place that decides how the report is kept: `projection`, `refresh` or
+`legacy`, and in every mode no agent is spawned, retained, messaged or polled solely for reporting. The legacy
+`progress.py` call sequences sit at the end of `execution-report.md`.
+
 `execution-assign.md` and `execution-report.md` also carry the retrospective's
 execution-protocol rules (B11): workers are spawned with blocking, concurrent
 tool calls whose results return to the orchestration agent directly rather than
@@ -68,7 +72,8 @@ for a failed lane (T8); `git stash` and `git add -A`/`git add .` are forbidden
 for workers (S6); and a consumers checklist runs after every fix (F11). It also
 places `task_issues.py --sync-states` at the phase boundary rather than per task
 (from B7), records dispatcher overhead with `progress.py usage --overhead
-dispatcher --agent <id> --collect claude --log <path>` at every phase commit,
+dispatcher --agent <id> --collect claude --log <path>` at every phase commit in
+legacy mode (with Progress installed hooks collect it),
 and puts `--summary` (B7: `ok`/`error` plus counts, or `skipped reason=...`
 when a call had nothing to do) on every routine `task_issues.py` and
 `progress.py` example call, reserving `--json` for a call whose result must be
