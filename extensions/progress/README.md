@@ -94,7 +94,7 @@ tokenizer exists.
 | --- | ---: | ---: |
 | Progress verbs | 1,847 | 631 |
 | Hand-edited Markdown report | 59,967 | 581 |
-| Legacy Workflow report protocol | 12,092 | 3,957 |
+| Legacy Workflow report protocol | 12,030 | 3,926 |
 
 Task start, completion and reopening cost nothing because they are read from `tasks.md`. The full table by update
 class, the assumptions and the cl100k_base counts are in [the token benchmark](docs/token-benchmark.md). Measured

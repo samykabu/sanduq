@@ -31,7 +31,7 @@ Fixed tool framing is identical across approaches and is not counted. Setup cost
 - NEW lines are the real CLI's own output: the benchmark runs `scripts/progress.py` in a sandbox repository.
 - Re-orientation (`resume`, `compaction`) reloads the skill for NEW and the protocol page for LEGACY. MD-EDIT re-reads the whole report. NEW's `status` line is shorter than a full report read, so it tells the agent less.
 - MD-RENDER is the real `export --format md` file. MD-EDIT is a hand-maintained report of the same six sections written by the benchmark.
-- LEGACY setup counts `execution-report.md` only. The full execute protocol is longer. Since Workflow 1.10.0 that page also carries the reporting-mode pointer, so it is about 470 tokens larger than the 1.9.x page (o200k_base: 3,484 setup, 11,146 updates).
+- LEGACY setup counts `execution-report.md` only. The full execute protocol is longer. Since Workflow 1.10.0 that page also carries the reporting-mode pointer, so it is about 440 tokens larger than the 1.9.x page (o200k_base: 3,484 setup, 11,146 updates).
 
 ## Results: o200k_base (declared)
 
@@ -47,11 +47,11 @@ Fixed tool framing is identical across approaches and is not counted. Setup cost
 | `decision_made` | 2 | 79 | 1288 | 797 | 170 | 0 |
 | `reopen_task` | 1 | 0 | 1368 | 504 | 87 | 0 |
 | `noop_refresh` | 7 | 0 | 0 | 0 | 0 | 0 |
-| `resume` | 1 | 615 | 901 | 901 | 3933 | 1349 |
-| `compaction` | 1 | 615 | 898 | 898 | 3933 | 1355 |
-| **Updates total** | 55 | **1847** | **59967** | **24206** | **12092** | **2704** |
-| Setup (once per feature) | | 631 | 581 | 581 | 3957 | 0 |
-| **Total with setup** | | **2478** | **60548** | **24787** | **16049** | **2704** |
+| `resume` | 1 | 615 | 901 | 901 | 3902 | 1349 |
+| `compaction` | 1 | 615 | 898 | 898 | 3902 | 1355 |
+| **Updates total** | 55 | **1847** | **59967** | **24206** | **12030** | **2704** |
+| Setup (once per feature) | | 631 | 581 | 581 | 3926 | 0 |
+| **Total with setup** | | **2478** | **60548** | **24787** | **15956** | **2704** |
 
 ## Results: cl100k_base
 
@@ -67,11 +67,11 @@ Fixed tool framing is identical across approaches and is not counted. Setup cost
 | `decision_made` | 2 | 79 | 1269 | 784 | 170 | 0 |
 | `reopen_task` | 1 | 0 | 1364 | 500 | 87 | 0 |
 | `noop_refresh` | 7 | 0 | 0 | 0 | 0 | 0 |
-| `resume` | 1 | 617 | 904 | 904 | 3931 | 1351 |
-| `compaction` | 1 | 617 | 901 | 901 | 3931 | 1357 |
-| **Updates total** | 55 | **1856** | **59771** | **24014** | **12095** | **2708** |
-| Setup (once per feature) | | 633 | 582 | 582 | 3955 | 0 |
-| **Total with setup** | | **2489** | **60353** | **24596** | **16050** | **2708** |
+| `resume` | 1 | 617 | 904 | 904 | 3900 | 1351 |
+| `compaction` | 1 | 617 | 901 | 901 | 3900 | 1357 |
+| **Updates total** | 55 | **1856** | **59771** | **24014** | **12033** | **2708** |
+| Setup (once per feature) | | 633 | 582 | 582 | 3924 | 0 |
+| **Total with setup** | | **2489** | **60353** | **24596** | **15957** | **2708** |
 
 ## Break-even including setup
 
@@ -86,7 +86,7 @@ Fixed tool framing is identical across approaches and is not counted. Setup cost
 | NEW | 7389 | 2504 |
 | MD-EDIT | 195314 | 2162 |
 | MD-EDIT-LEAN | 80828 | 2162 |
-| LEGACY | 50903 | 17553 |
+| LEGACY | 50585 | 17394 |
 | MD-RENDER | 7701 | 0 |
 
 ## Reading the result

@@ -74,7 +74,7 @@ def render(data):
             "- Re-orientation (`resume`, `compaction`) reloads the skill for NEW and the protocol page for LEGACY. MD-EDIT re-reads the whole report. "
             "NEW's `status` line is shorter than a full report read, so it tells the agent less.",
             "- MD-RENDER is the real `export --format md` file. MD-EDIT is a hand-maintained report of the same six sections written by the benchmark.",
-            "- LEGACY setup counts `execution-report.md` only. The full execute protocol is longer. Since Workflow 1.10.0 that page also carries the reporting-mode pointer, so it is about 470 tokens larger than the 1.9.x page (o200k_base: 3,484 setup, 11,146 updates).", ""]
+            "- LEGACY setup counts `execution-report.md` only. The full execute protocol is longer. Since Workflow 1.10.0 that page also carries the reporting-mode pointer, so it is about 440 tokens larger than the 1.9.x page (o200k_base: 3,484 setup, 11,146 updates).", ""]
     for encoding, title in (("o200k_base", "o200k_base (declared)"), ("cl100k_base", "cl100k_base")):
         rows, totals, setup = _rows(data, encoding)
         out += ["## Results: %s" % title, ""] + rows + [""]
