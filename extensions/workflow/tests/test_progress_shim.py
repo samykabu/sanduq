@@ -164,13 +164,9 @@ class ReportingModes(Project):
         (self.root / '.codex').mkdir()
         (self.root / '.codex' / 'hooks.json').write_text(json.dumps({'hooks': {
             'Stop': [{'command': self.HOOK}]}}), encoding='utf-8')
-        (self.root / '.codex' / 'config.toml').write_text('[features]
-hooks = false
-', encoding='utf-8')
+        (self.root / '.codex' / 'config.toml').write_text('[features]\nhooks = false\n', encoding='utf-8')
         self.assertEqual(self.mode()['mode'], 'refresh')
-        (self.root / '.codex' / 'config.toml').write_text('[features]
-codex_hooks = false
-', encoding='utf-8')
+        (self.root / '.codex' / 'config.toml').write_text('[features]\ncodex_hooks = false\n', encoding='utf-8')
         self.assertEqual(self.mode()['mode'], 'refresh')
 
     def test_disabled_extensions_yml_hook_is_not_automatic(self):
