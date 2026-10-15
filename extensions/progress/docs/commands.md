@@ -58,7 +58,7 @@ are not tried.
 
 **Output.** Each verb prints one line that starts `progress:`, and nothing else, with these exceptions: `refresh` prints
 nothing unless `--verbose`; `status --json`, `runs --json`, `theme --show` and `export` without `--out` print a
-document; `init --theme X` prints a second line (the theme line); `hook` and `statusline run` never print errors. Relay
+document; `hook` and `statusline run` never print errors. Relay
 the line and do not elaborate.
 
 **Exit codes.**
@@ -118,10 +118,15 @@ progress: ready specs/001-demo/progress/.view/index.html bind=0b04e35005e9
 The `bind=` nonce is valid for 120 seconds. The host's `post_tool_use` hook for that same shell call carries the
 session id and completes the bind, so run `init` through the shell tool and do not edit the line.
 
-With `--theme cobalt` the output is two lines: `progress: theme cobalt`, then the `ready` line. An unknown preset
-prints `progress: error PROGRESS_THEME_INVALID unknown preset nope` first and still creates the report and exits 0.
+`--theme` is checked before anything is created. With `--theme cobalt` the output is still the single `ready` line (the
+theme verb's own line is not printed). An unknown preset prints one line and exits 2 with nothing created:
 
-Errors: `PROGRESS_NO_FEATURE` (2), `PROGRESS_UNSAFE_TARGET` (3), `PROGRESS_LOCK_BUSY` (4).
+```text
+$ progress init --theme nope
+progress: error PROGRESS_THEME_INVALID unknown preset nope
+```
+
+Errors: `PROGRESS_THEME_INVALID` (2), `PROGRESS_NO_FEATURE` (2), `PROGRESS_UNSAFE_TARGET` (3), `PROGRESS_LOCK_BUSY` (4).
 
 ### bind
 
@@ -428,11 +433,13 @@ progress theme --preset NAME
 progress theme --from-illustrate
 progress theme --file PATH
 progress theme --show
+progress theme --help
 ```
 
-The verb needs an initialised feature (`PROGRESS_NOT_INITIALIZED` otherwise) and takes no other option, so
-`theme --help` is not available. Any other form prints
-`progress: error PROGRESS_USAGE theme --preset X | --from-illustrate | --file PATH | --show`.
+The theme file is project-level (`.specify/progress/theme.json`), so the verb needs no initialised feature and works in
+a project before any `progress init`. It takes no other option. `--help` prints
+`theme --preset NAME | --from-illustrate | --file PATH | --show | --help`. Any other form prints
+`progress: error PROGRESS_USAGE theme --preset NAME | --from-illustrate | --file PATH | --show | --help`.
 
 | Form | Effect | Output |
 | --- | --- | --- |
@@ -441,7 +448,7 @@ The verb needs an initialised feature (`PROGRESS_NOT_INITIALIZED` otherwise) and
 | `--file PATH` | Validates your file and stores it as `theme.json` | `progress: theme classic` (the file's preset) |
 | `--show` | Prints the resolved theme, with every default filled in, as JSON | the JSON document |
 
-A successful change rewrites `theme.css` and `layout.js` in the `.view/` of every feature. Open pages pick it up on the next
+A successful change rewrites `theme.css` and `layout.js` in the `.view/` of every feature that has one (none is created). Open pages pick it up on the next
 poll. Failures print `progress: error PROGRESS_THEME_INVALID reason` and exit 2, for example `unknown preset nope`,
 `unknown key bogus`, `no .github/illustration-theme.yml` and `unsupported illustrate theme X`. Only the `cobalt`,
 `emerald` and `classic` Illustrate themes are mapped.
@@ -630,7 +637,7 @@ python extensions/progress/scripts/live_ab.py [--delegate PATH] [--node NODE] [-
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
-| `--delegate` | `$DELEGATE`, else a path on the author's machine | Path to `delegate.mjs` |
+| `--delegate` | `$DELEGATE_SCRIPT`, else `.agents/skills/delegate-task/delegate.mjs`, else `.claude/skills/delegate-task/delegate.mjs` under the current folder | Path to `delegate.mjs`. With none found the tool exits 2 and says so |
 | `--node` | `node` | The Node.js executable |
 | `--targets` | `claude:claude-haiku-5-5,codex:gpt-6-luna` | Comma list of `harness:model`. Each needs an explicit model |
 | `--pairs` | 3 | Pairs per target. Pairs alternate arm order |

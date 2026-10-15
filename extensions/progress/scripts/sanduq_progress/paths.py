@@ -148,7 +148,7 @@ class Ctx:
         return self
 
     def config_data(self):
-        data = {'feature_dir_mode': 'auto', 'debounce_seconds': 5, 'stale_after_seconds': 600,
+        data = {'debounce_seconds': 5, 'stale_after_seconds': 600,
                 'statusline': {'enabled': False, 'chained': None}}
         stored = read_json(self.config, {})
         if isinstance(stored, dict):

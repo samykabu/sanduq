@@ -272,10 +272,16 @@ def _refresh_views(project_root, resolved):
             write_assets(view, resolved)
 
 
+USAGE = "theme --preset NAME | --from-illustrate | --file PATH | --show | --help"
+
+
 def cli(argv, project_root=None):
     root = Path(project_root) if project_root else Path.cwd()
     args = list(argv)
     try:
+        if args in (["--help"], ["-h"]):
+            print(USAGE)
+            return 0
         if args == ["--show"]:
             print(json.dumps(resolve(root), indent=2))
             return 0
@@ -295,7 +301,7 @@ def cli(argv, project_root=None):
             doc.setdefault("v", 1)
             label = doc.get("preset", DEFAULT_PRESET)
         else:
-            print("progress: error PROGRESS_USAGE theme --preset X | --from-illustrate | --file PATH | --show")
+            print("progress: error PROGRESS_USAGE " + USAGE)
             return 2
         _store(root, doc)
         _refresh_views(root, resolve_doc(doc))

@@ -174,6 +174,8 @@ def refresh_now(ctx):
 # ---- verbs ----------------------------------------------------------------------------------------------------
 
 def cmd_init(a, root):
+    if a.theme:
+        check_theme_preset(a.theme)  # before anything is created
     feature = resolve_feature(root, a.feature)
     ctx = Ctx(root, feature)
     ctx.view.mkdir(parents=True, exist_ok=True)
@@ -190,7 +192,7 @@ def cmd_init(a, root):
         write_json(ctx.state, state)
         write_theme_css(ctx)
         if a.theme:
-            run_theme(ctx, ['--preset', a.theme])
+            run_theme(ctx, ['--preset', a.theme], quiet=True)
         refresh_now(ctx)
     if a.statusline == 'yes':
         statuslib.install(root)
@@ -199,22 +201,40 @@ def cmd_init(a, root):
     return 0
 
 
-def run_theme(ctx, rest):
+def check_theme_preset(name):
+    try:
+        from sanduq_progress import theme
+    except Exception:
+        raise ProgressError('PROGRESS_THEME_UNAVAILABLE', 'theme module not available', 2) from None
+    if name not in theme.PRESETS:
+        raise ProgressError('PROGRESS_THEME_INVALID', f'unknown preset {name[:40]}', 2)
+
+
+def run_theme(ctx, rest, quiet=False):
     try:
         from sanduq_progress import theme
     except Exception:
         atomic_write(ctx.view / 'theme.css', FALLBACK_CSS)
         raise ProgressError('PROGRESS_THEME_UNAVAILABLE', '', 2) from None
-    code = theme.cli(rest, project_root=ctx.root)
+    if quiet:
+        import contextlib
+        import io
+        with contextlib.redirect_stdout(io.StringIO()):
+            code = theme.cli(rest, project_root=ctx.root)
+    else:
+        code = theme.cli(rest, project_root=ctx.root)
     if code == 0:
         write_theme_css(ctx)
     return code
 
 
 def cmd_theme(a, root):
-    ctx = Ctx(root, resolve_feature(root, a.feature))
-    require_init(ctx)
-    return run_theme(ctx, a.rest)
+    # theme.json is project-level; theme.cli rewrites theme.css/layout.js only in feature views that exist.
+    try:
+        from sanduq_progress import theme
+    except Exception:
+        raise ProgressError('PROGRESS_THEME_UNAVAILABLE', '', 2) from None
+    return theme.cli(a.rest, project_root=root)
 
 
 def cmd_bind(a, root):

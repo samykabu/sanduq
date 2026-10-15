@@ -36,7 +36,7 @@ Suggested extension manifest fragment:
 events:
   session_start:      { command: speckit.progress.hook-session-start }
   post_tool_use:      { command: speckit.progress.hook-post-tool-use, matcher: ".*", timeout: 10 }
-  pre_tool_use:       { command: speckit.progress.hook-pre-tool-use, matcher: "Task|Agent", timeout: 10 }
+  pre_tool_use:       { command: speckit.progress.hook-pre-tool-use, matcher: "Task|Agent|spawn_agent", timeout: 10 }
   stop:               { command: speckit.progress.hook-stop, timeout: 20 }
   session_end:        { command: speckit.progress.hook-session-end, timeout: 20 }
 ```
@@ -72,7 +72,7 @@ shape yields unknown, never a guess. Only numbers and the model/effort words are
 
 ## Which host is active (environment variables)
 
-`progress mode` and the hook registration check need to know which host is running. Status of each signal:
+Workflow's `python .specify/extensions/workflow/scripts/progress_bridge.py mode [--host claude|codex]` and the hook registration check need to know which host is running. Status of each signal:
 
 | Host | Variable | Status |
 | --- | --- | --- |

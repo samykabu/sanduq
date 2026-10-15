@@ -14,6 +14,7 @@
 - The UI poller abandons a data.js load that never settles after 10 s and tries again (Chromium under heavy load sometimes
   fires neither load nor error, which froze the page).
 - `os.replace` retries a Windows sharing violation. The projection reads only the runs the ledger names.
+- `init --theme BAD` fails before creating anything (`PROGRESS_THEME_INVALID`, exit 2) and a valid theme prints only the `ready` line. `theme` supports `--help` and works without an initialised feature, refreshing only existing views. `live_ab.py` finds `delegate.mjs` through `DELEGATE_SCRIPT` or the project's skills folders instead of an author path. The unused `feature_dir_mode` config key is no longer written.
 - Flaky test fixes on Windows and under load; regression tests and docs for the review fixes.
 
 ## [1.0.0] - 2026-10-15

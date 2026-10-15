@@ -37,7 +37,7 @@ specs/<feature>/progress/
                          fcntl.flock elsewhere); the OS drops it if the process dies, so there is no stale recovery.
                          The file content {"pid", "host", "started_at", "token"} is diagnostic only
 .specify/progress/
-  config.json            {"feature_dir_mode": "auto", "debounce_seconds": 5, "stale_after_seconds": 600,
+  config.json            {"debounce_seconds": 5, "stale_after_seconds": 600,
                           "statusline": {"enabled": bool, "chained": "<previous command or null>"}}
   theme.json             progress.theme.v1 (optional; preset default "sanduq")
   bindings.json          session bindings (see Binding)

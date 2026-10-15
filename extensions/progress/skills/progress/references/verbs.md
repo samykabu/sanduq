@@ -1,6 +1,6 @@
 # Progress verbs
 
-Output is one line (`refresh` prints nothing without `--verbose`; `init --theme` adds a theme line). Exit codes: 0 ok, 2 usage, 3 refused (authority or binding), 4 lock busy (retried 3 times first).
+Output is one line (`refresh` prints nothing without `--verbose`). Exit codes: 0 ok, 2 usage, 3 refused (authority or binding), 4 lock busy (retried 3 times first).
 Error lines start with `progress: error CODE`. The full contract is in `docs/contracts.md` of the extension source; every flag and example is in `docs/commands.md`.
 
 | Verb | Writes | Notes |
