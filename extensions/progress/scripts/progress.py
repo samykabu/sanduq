@@ -124,11 +124,10 @@ def write_theme_css(ctx):
     """Generate theme.css through the theme module (owned by the UI lane); minimal fallback otherwise."""
     try:
         from sanduq_progress import theme
-        css = theme.render_css(theme.resolve(ctx.root))
+        theme.write_assets(ctx.view, theme.resolve(ctx.root))
     except Exception as exc:
         diag(ctx.diag, f'theme unavailable, wrote fallback css: {type(exc).__name__}', now())
-        css = FALLBACK_CSS
-    atomic_write(ctx.view / 'theme.css', css)
+        atomic_write(ctx.view / 'theme.css', FALLBACK_CSS)
 
 
 def copy_assets(ctx):
@@ -180,8 +179,7 @@ def run_theme(ctx, rest):
     except Exception:
         atomic_write(ctx.view / 'theme.css', FALLBACK_CSS)
         raise ProgressError('PROGRESS_THEME_UNAVAILABLE', '', 2) from None
-    os.environ['SANDUQ_PROGRESS_ROOT'] = str(ctx.root)
-    code = theme.cli(rest)
+    code = theme.cli(rest, project_root=ctx.root)
     if code == 0:
         write_theme_css(ctx)
     return code
