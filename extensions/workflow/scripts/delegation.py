@@ -550,7 +550,7 @@ MIXED_IMPLEMENTATION = re.compile(
     r'migrate|wire|patch|resolve|rewrite|change|correct|repair)\b')
 
 
-def task_type(description):
+def task_type(description, lean=False):
     """Classify explicit task markers, then only an unambiguous leading action.
 
     Anything unclear stays implementation, the route every task can take.
@@ -561,6 +561,8 @@ def task_type(description):
     value = description.casefold()
     prefix = TASK_PREFIX.match(value)[0]
     matched = [work_type for work_type, marker in TYPE_MARKERS if re.search(marker, prefix)]
+    if lean and '[artifact-analysis]' in prefix and not matched and not COLLECT_MARKER.search(prefix):
+        return 'discovery'
     if COLLECT_MARKER.search(prefix):
         return 'implementation' if matched else 'qa_collect'
     if matched:
@@ -740,7 +742,7 @@ def active_task_ids(root, feature):
     return active
 
 
-def annotate_tasks(root, feature, config, selected_host=None):
+def annotate_tasks(root, feature, config, selected_host=None, lean=False):
     """Refresh pending task metadata without changing checkbox lines or active work."""
     validate_delegation(config)
     feature = feature_identity(root, feature)
@@ -788,7 +790,7 @@ def annotate_tasks(root, feature, config, selected_host=None):
             if old_marker is not None:
                 output.append(old_marker + marker_ending)
             continue
-        work_type = task_type(match[1])
+        work_type = task_type(match[1], lean)
         route = selected_route(config, work_type, selected_host, feature + '/' + task_id)[0]
         metadata = {'task_id': task_id, 'task_type': work_type,
                     'preferred_harness': route['harness'],
@@ -1185,7 +1187,8 @@ def main(argv=None):
         if args.action in ('doctor', 'install'):
             result = doctor(root, host, args.action == 'install', config['install_scope'])
         elif args.action == 'annotate':
-            result = annotate_tasks(root, args.feature, config, host)
+            import lean_policy
+            result = annotate_tasks(root, args.feature, config, host, lean_policy.enabled(policy))
         else:
             # The same specs/<name> identity the dispatcher and overrides use.
             require(re.fullmatch(r'T\d{3,}|stage:[a-z_]+', args.id), 'DELEGATION_IDENTITY_INVALID')

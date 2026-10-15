@@ -1,5 +1,19 @@
 # Stage reference: pr
 
+In lean mode the existing lifecycle coordinator owns PR mechanics, including
+deterministic reuse of unchanged evidence. No model dispatch is required for
+this stage. Claim tokens, publication evidence, human decisions and project
+checks remain enforced.
+
+Before publication, lint the exact UTF-8/LF whole body using
+`execution_tools.py pr-lint --repo <bound-repo> --issue <bound-issue>
+[--prerequisite <n> ...] --body-file <body.md> --output <lint.json>`.
+Derive all identity/prerequisites from the bound `scope-source.json`, not PR
+prose. Include `pr_body_file`, `pr_lint_file`, `pr_body_sha256` and both evidence
+paths in the native lean PR receipt. Completion recomputes lint and fingerprints
+body/lint/Scope dependencies. A local sent-body binding does not reread the remote
+PR body; retain actual publication evidence and exact body bytes.
+
 Loaded when `claim` returns `stage: pr`, and read for the **finalize** entry point
 and its post-merge follow-up.
 

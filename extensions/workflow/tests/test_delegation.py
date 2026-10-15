@@ -1046,6 +1046,32 @@ class DelegationTests(unittest.TestCase):
             self.assertIn(name, captured['args'])
         self.assertEqual(captured['args'].count('--keep-env'), 3)
 
+    def test_launch_without_lean_passes_no_claim_identity(self):
+        """Lean off (the default) behaves as before lean existed: no claim
+        token or session id is added to the worker environment and no
+        extra --keep-env flag or git call is made."""
+        captured = {}
+        def fake_run(args, cwd, env, **kwargs):
+            captured['env'] = env
+            captured['args'] = args
+            return subprocess.CompletedProcess(args, 0, json.dumps({'run_id': 'codex-1', 'state': 'running'}), '')
+        candidate = {'harness': 'codex', 'requested_model': None, 'read_only': False,
+                     'allow_commit': False}
+        checkpoint = self.root / self.feature / 'workflow/checkpoint.json'
+        checkpoint.parent.mkdir(parents=True, exist_ok=True)
+        checkpoint.write_text(json.dumps({'feature': self.feature, 'branch': 'feature-test',
+                                          'active': {'token': 'tok', 'session_id': 'sess'}}),
+                              encoding='utf-8')
+        with patch.dict(dispatch.os.environ, {}, clear=False),              patch.object(dispatch.workflow, 'git', side_effect=AssertionError('no git call')),              patch.object(dispatch.shutil, 'which', return_value='node'),              patch.object(dispatch.subprocess, 'run', side_effect=fake_run):
+            dispatch.os.environ.pop('SANDUQ_WORKFLOW_CLAIM_TOKEN', None)
+            dispatch.os.environ.pop('SANDUQ_WORKFLOW_SESSION_ID', None)
+            dispatch.launch(self.root, 'driver.mjs', candidate, self.root, 'task text', 1800,
+                            'intent-xyz', feature=self.feature)
+        self.assertNotIn('SANDUQ_WORKFLOW_CLAIM_TOKEN', captured['env'])
+        self.assertNotIn('SANDUQ_WORKFLOW_SESSION_ID', captured['env'])
+        self.assertEqual(captured['args'].count('--keep-env'), 3)
+        self.assertNotIn('SANDUQ_WORKFLOW_CLAIM_TOKEN', captured['args'])
+
     def test_launch_sets_orchestrator_role_for_the_execute_stage(self):
         """Round 10, finding 1: launching the execute stage itself sets
         SANDUQ_DELEGATED_ROLE=orchestrator plus SANDUQ_DELEGATED_FEATURE,

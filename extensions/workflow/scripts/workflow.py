@@ -24,6 +24,9 @@ from sanduq_hash import eol_drift, portable_files
 import sanduq_ci
 import skill_inventory
 import source_key as sk
+import lean_policy
+import verification_plan
+import execution_tools
 
 import yaml
 from packaging.specifiers import SpecifierSet
@@ -52,7 +55,7 @@ AMENDMENT_ASSESSMENTS = ('unchanged', 'changed')
 AMENDMENT_DEPENDENTS = ('verify', 'review', 'ready')
 # Receipt fields only the runtime writes; a submitted receipt may not carry them.
 RUNTIME_RECEIPT_FIELDS = ('amendments', 'stale', 'head', 'source_key', 'ci_evidence', 'diff_reviewed',
-                          'revalidations', 'delegation_ledger_trust')
+                          'revalidations', 'delegation_ledger_trust', 'verification_snapshot', 'pr_lint_binding')
 # Stages whose receipts also inventory source (`source_fingerprints`) and record `head` and `source_key`.
 SOURCE_STAGES = ('verify', 'review', 'ready')
 # How recovery recipes name the runtime in a consumer project.
@@ -659,8 +662,16 @@ def select_gate(ci, mode=None, scope=None, rules=(), keys=None):
     return ci
 
 
-def validate_policy(policy):
+def validate_policy(policy, root=None):
     require(isinstance(policy, dict) and policy.get('schema_version') == SCHEMA, 'POLICY_SCHEMA_UNSUPPORTED')
+    if 'lean_execution' in policy:
+        try:
+            lean_policy.validate(policy['lean_execution'])
+            for key in ('verification_plan', 'preflight_manifest', 'scope_analysis'):
+                if policy['lean_execution'].get(key):
+                    verification_plan.file_path(Path(root) if root is not None else Path.cwd(), policy['lean_execution'][key])
+        except ValueError as exc:
+            raise WorkflowError(str(exc)) from exc
     for section in ('processes','execution','providers','issue_sync','clarification','context','finalize','updates'):
         require(isinstance(policy.get(section), dict), 'POLICY_SECTION_INVALID: ' + section)
     for key in ('qa', 'user_manual'):
@@ -744,7 +755,7 @@ def validate_policy(policy):
 def load_policy(root):
     path = root / '.specify/workflow.yml'
     require(path.is_file(), 'WORKFLOW_INIT_REQUIRED')
-    return validate_policy(yaml.safe_load(path.read_text(encoding='utf-8-sig')))
+    return validate_policy(yaml.safe_load(path.read_text(encoding='utf-8-sig')), root)
 
 
 def scope_decision(policy, estimate, unit):
@@ -768,7 +779,7 @@ def policy_cutoff(previous, current):
     affected = []
     for key, stage in {'scope':'scope','clarification':'clarify','decisions':'clarify','providers':'clarify',
                        'processes':'tasks','issue_sync':'taskstoissues','execution':'execute',
-                       'finalize':'ready'}.items():
+                       'finalize':'ready', 'lean_execution':'execute'}.items():
         if previous.get(key) != current.get(key): affected.append(BASE_STAGES.index(stage))
     # Context, update scheduling and receipt-contract keys (`receipts`) do not
     # retroactively invalidate semantic work: requiring input roles applies to
@@ -974,7 +985,7 @@ def host_warnings(root):
     return [problem + '; run "' + repair + '" to re-register every installed host' for problem in problems]
 
 
-def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True):
+def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True, check_preflight=True):
     needed = ['scope', 'project', 'pr'] + (['assure'] if policy['processes']['qa'] else []) + (['user-manual'] if policy['processes']['user_manual'] else [])
     errors = ['DEPENDENCY_UNAVAILABLE: ' + name + ' ' + RANGES[name] for name in needed if not compatible(root, name)]
     if active_host(root) not in ('codex','claude'):
@@ -1043,11 +1054,98 @@ def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True
             'working tree see different bytes than CI. Remedy: commit or stash edits, add "*.sql -text" to '
             '.gitattributes (or set core.autocrlf=false), then re-checkout the files listed by "git ls-files --eol" '
             'with "git -c core.autocrlf=false checkout -- <path>".')
+    preflight = lean_preflight(root, policy) if check_preflight else None
+    if preflight and not preflight['ok']:
+        errors += ['LEAN_PREFLIGHT_FAILED: ' + json.dumps(preflight)]
     result = {'ok': not errors, 'errors': errors, 'warnings': warnings, 'project_checked': project,
               'context': 'Only fresh reliable measurements can trigger context pauses; unavailable or estimated usage is nonblocking outside explicit strict mode'}
     if project:
         result['skill_inventory'] = skill_inventory_result
+    if preflight:
+        result['preflight'] = preflight
     return result
+
+
+def lean_preflight(root, policy):
+    config = lean_policy.settings(policy)
+    if not config['enabled'] or not config.get('preflight_manifest'):
+        return None
+    try:
+        return execution_tools.preflight(inside(root, config['preflight_manifest']))
+    except (execution_tools.InputError, OSError, ValueError) as exc:
+        return {'schema': execution_tools.PREFLIGHT_SCHEMA, 'ok': False,
+                'checks': [], 'failed': ['manifest'], 'error': str(exc)}
+
+
+def pr_lint_binding(root, feature, state, receipt):
+    """Recompute exact-body lint from native Scope binding, never a submitted success flag."""
+    source_label = feature + '/scope-source.json'
+    source = read(inside(root, source_label), {})
+    repo, issue = state['issue'].split('#')
+    require(same_github_repository(github_repository(root), repo), 'PR_LINT_REPOSITORY_MISMATCH')
+    require((source.get('repo'), source.get('issue')) == (repo, int(issue)), 'PR_LINT_SCOPE_BINDING_MISMATCH')
+    require('dependencies' in source and isinstance(source['dependencies'], list) and
+            all(type(n) is int and n > 0 for n in source['dependencies']), 'PR_LINT_SCOPE_PREREQUISITES_REQUIRED')
+    body_label = canonical_path(root, receipt.get('pr_body_file', ''))
+    lint_label = canonical_path(root, receipt.get('pr_lint_file', ''))
+    require(body_label != lint_label and body_label in receipt['evidence'] and lint_label in receipt['evidence'],
+            'PR_LINT_EVIDENCE_REQUIRED')
+    try:
+        body = inside(root, body_label).read_bytes().decode('utf-8')
+    except (OSError, UnicodeDecodeError) as exc:
+        raise WorkflowError('PR_LINT_BODY_UNREADABLE: ' + str(body_label) + ': ' + str(exc)) from exc
+    computed = execution_tools.pr_lint(body, repo, int(issue), source['dependencies'])
+    require(computed['ok'], 'PR_CLOSING_REFERENCE_REJECTED: ' + json.dumps(computed['violations']))
+    recorded = read(inside(root, lint_label), {})
+    require(recorded == computed, 'PR_LINT_RECEIPT_MISMATCH: regenerate lint for the exact sent body')
+    require(receipt.get('pr_body_sha256') == computed['body_sha256'], 'PR_SENT_BODY_SHA_MISMATCH')
+    return {'body': body_label, 'lint': lint_label, 'scope': source_label,
+            'body_sha256': computed['body_sha256'], 'bound': computed['bound'],
+            'prerequisites': sorted(set(source['dependencies']))}
+
+
+def native_run_status(root, feature, state, roots):
+    """Compact run projection enriched with explicit ledger acceptance, never raw logs."""
+    try:
+        report = execution_tools.progress(roots)
+    except execution_tools.InputError as exc:
+        raise WorkflowError('RUN_STATUS_INVALID: ' + str(exc)) from exc
+    import delegation
+    trust = delegation.ledger_trust_state(root, feature)
+    projects = {Path(root).resolve()}
+    for folder in roots:
+        folder = Path(folder).resolve()
+        if folder.name == 'runs' and folder.parent.name == '.delegate':
+            projects.add(folder.parent.parent)
+        elif (folder / 'specs').is_dir():
+            projects.add(folder)
+    attempts, ledger_conflicts = {}, set()
+    for project in sorted(projects):
+        if delegation.ledger_trust_state(project, feature) == 'untrusted':
+            continue
+        ledger = read(inside(project, feature + '/workflow/delegations.json'), {})
+        for attempt in ledger.get('attempts', []):
+            run_id = attempt.get('run_id')
+            if not run_id:
+                continue
+            projected = {key: attempt.get(key) for key in ('identity', 'status', 'accepted_evidence', 'status_provenance')}
+            if run_id in attempts and attempts[run_id] != projected:
+                ledger_conflicts.add(run_id)
+            attempts[run_id] = projected
+    for run in report['runs']:
+        attempt = attempts.get(run['run_id']) if run['run_id'] not in ledger_conflicts else None
+        run['ledger_status'] = attempt.get('status', 'unknown') if attempt else 'unknown'
+        accepted = (attempt and attempt.get('status') == 'successful' and
+                    (attempt.get('accepted_evidence') or {}).get('source') in ('accept', 'adopt'))
+        run['acceptance_verdict'] = 'accepted' if accepted else 'unknown'
+        run['acceptance_provenance'] = attempt['accepted_evidence']['source'] if accepted else None
+        if attempt and (attempt.get('status_provenance') or {}).get('primary') == 'self_report':
+            run['task_verdict'] = attempt.get('status', 'unknown')
+            run['task_verdict_provenance'] = 'delegate-self-report'
+        run['assignment'] = attempt.get('identity') if attempt else None
+    return {'feature': feature, 'issue': state['issue'], 'active': state.get('active'),
+            'ledger_trust': trust, 'ledger_conflicts': sorted(ledger_conflicts),
+            'progress': report, 'ok': report['ok'] and not ledger_conflicts}
 
 
 def context_gate(policy, usage):
@@ -1435,6 +1533,13 @@ def receipt_status(root, feature, stage, receipt, policy=None):
                 'paths': sorted(path for path in dependencies if now_hashes.get(path) != dependencies[path])}
     if stage not in SOURCE_STAGES:
         return {'current': True, 'via': 'identity'}
+    if stage == 'verify' and policy and lean_policy.enabled(policy):
+        selected_plan = lean_policy.settings(policy).get('verification_plan')
+        if selected_plan:
+            selected = verification_plan.current(root, selected_plan, receipt.get('verification_snapshot'))
+            if not selected['current']:
+                return {'current': False, 'reason': 'verification-plan-drift', **selected}
+            return {'current': True, 'via': 'verification-plan'}
     current = source_fingerprints(root)
     if receipt.get('source_fingerprints') == current:
         return {'current': True, 'via': 'identity'}
@@ -1523,7 +1628,7 @@ def receipt_drift(root, feature, stage, receipt):
     return sorted(changed)
 
 
-def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=None):
+def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=None, coding_only=False):
     """Task completion, task-issue mapping and selected documentation freshness.
 
     The Ready stage's automated checks, shared by `ci_gate.py` (under the
@@ -1541,7 +1646,12 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
         from task_issues import parse_tasks
         tasks = parse_tasks((directory / 'tasks.md').read_text(encoding='utf-8-sig'))
     if rules.get('tasks'):
-        require(all(t['done'] for t in tasks.values()), 'INCOMPLETE_TASKS')
+        if coding_only and lean_policy.enabled(policy):
+            coding = lean_policy.coding_tasks((directory / 'tasks.md').read_text(encoding='utf-8-sig'))
+            completion_tasks = {key: task for key, task in tasks.items() if key in coding}
+        else:
+            completion_tasks = tasks
+        require(all(t['done'] for t in completion_tasks.values()), 'INCOMPLETE_TASKS')
         if policy.get('delegation', {}).get('enabled'):
             # A checked task delegated through the dispatcher must have a
             # verified, successful outcome, not merely a checkbox (finding 1):
@@ -1588,7 +1698,7 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
             # ride the earlier adoption to Ready.
             current_lines = task_lines((directory / 'tasks.md').read_text(encoding='utf-8-sig'))
             not_verified, changed = [], []
-            for task_id in tasks:
+            for task_id in completion_tasks:
                 attempt = latest_attempt(root, feature, task_id) or {}
                 if attempt.get('status') != 'successful':
                     not_verified.append(task_id)
@@ -1649,6 +1759,15 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
         require(json.loads(result.stdout).get('current') is True, 'DOCUMENTATION_NOT_CURRENT')
         ran.append('documentation:' + Path(args[0]).stem)
     return ran
+
+
+def coding_review_checks(root, feature, policy, state):
+    """Final coding review waits for coding/testing; artifact analysis remains available."""
+    if not lean_policy.enabled(policy):
+        return []
+    return ready_checks(root, feature, policy, state,
+                        rules={'tasks': True, 'task_links': False, 'documentation': False},
+                        coding_only=True)
 
 
 def default_actor(root):
@@ -2119,6 +2238,8 @@ class Run:
         with locked(self.lock):
             state = self.load()
             require(not state['active'], 'ACTIVE_CLAIM_MUST_BE_RESOLVED_BEFORE_REVALIDATE')
+            if stage == 'review':
+                coding_review_checks(self.root, self.relative, self.policy, state)
             require(stage in stages(self.policy), 'STAGE_NOT_SELECTED: ' + stage)
             receipt = state['receipts'].get(stage)
             require(receipt, 'RECEIPT_MISSING: ' + stage)
@@ -2172,6 +2293,13 @@ class Run:
                                                         'stale': receipt['stale']}, self.policy, receipt),
                             'next': self.next(state)}
                 receipt['ci_evidence'] = evidence
+                if lean_policy.enabled(self.policy):
+                    selected_plan = lean_policy.settings(self.policy).get('verification_plan')
+                    if selected_plan:
+                        try:
+                            receipt['verification_snapshot'] = verification_plan.snapshot(self.root, selected_plan)
+                        except ValueError as exc:
+                            raise WorkflowError(str(exc)) from exc
             elif stage == 'review':
                 receipt['diff_reviewed'] = self.diff_review_evidence(receipt, diff_reviewed, head)
                 path = receipt['diff_reviewed']['evidence']
@@ -2368,7 +2496,7 @@ class Run:
             require(state['dependency_digest'] == package_digest(self.root), 'DEPENDENCY_CHANGED: review upgrade and migrate the checkpoint before execution')
             # Delegation health is checked below, after every rejection, because
             # the claim may install the skill it would otherwise report missing.
-            health = doctor(self.root, self.policy, project=True, check_delegation=False)
+            health = doctor(self.root, self.policy, project=True, check_delegation=False, check_preflight=False)
             require(health['ok'], '; '.join(health['errors']))
             gate = context_gate(self.policy, usage)
             if gate['pause']:
@@ -2377,7 +2505,13 @@ class Run:
             if not nxt.get('stage'):
                 return nxt
             stage = nxt['stage']
-            if self.policy['delegation']['enabled']:
+            if BASE_STAGES.index(stage) >= BASE_STAGES.index('execute'):
+                preflight = lean_preflight(self.root, self.policy)
+                require(not preflight or preflight['ok'], 'LEAN_PREFLIGHT_FAILED: ' + json.dumps(preflight))
+            if stage == 'review':
+                coding_review_checks(self.root, self.relative, self.policy, state)
+            coordinator_owned = lean_policy.coordinator_owned(self.policy, stage, state['commands'])
+            if self.policy['delegation']['enabled'] and not coordinator_owned:
                 # Side effects only once a stage will be claimed: a rejected claim
                 # leaves tasks.md and every skill location untouched.
                 from delegation import annotate_tasks, doctor as delegation_doctor, health_error
@@ -2386,7 +2520,7 @@ class Run:
                 require(delegation_health['ok'], health_error(delegation_health))
                 require(any(delegation_health['harnesses'].values()),
                         'DELEGATE_AGENT_CLI_UNAVAILABLE: no supported Codex or Claude CLI')
-                annotate_tasks(self.root, self.relative, self.policy['delegation'])
+                annotate_tasks(self.root, self.relative, self.policy['delegation'], lean=lean_policy.enabled(self.policy))
                 notices = delegation_health.get('notices') or []
             else:
                 notices = []
@@ -2403,7 +2537,9 @@ class Run:
             source = read(self.feature / 'scope-source.json', {})
             existing = (self.feature / 'spec.md').is_file() and f"{source.get('repo')}#{source.get('issue')}" == state['issue']
             state['active']['mode'] = 'revalidate' if existing and stage in ('scope', 'specify', 'clarify', 'plan', 'tasks') else 'initial'
-            if self.policy['delegation']['enabled']:
+            if coordinator_owned:
+                state['active']['execution_owner'] = 'coordinator'
+            if self.policy['delegation']['enabled'] and not coordinator_owned:
                 from delegation import selected_route, stage_work_type
                 work_type = stage_work_type(state['commands'], stage,
                                             self.policy['delegation'].get('fixed_collection_commands'))
@@ -2418,6 +2554,17 @@ class Run:
             self.save(state)
             claimed = {**state['active'], 'command': state['commands'][stage], 'feature': self.relative, 'issue': state['issue'],
                        'reference': stage_reference(stage)}
+            if lean_policy.enabled(self.policy):
+                claimed['environment'] = {'SANDUQ_WORKFLOW_CLAIM_TOKEN': state['active']['token'],
+                                          'SANDUQ_WORKFLOW_SESSION_ID': usage['session_id']}
+            if lean_policy.enabled(self.policy) and stage in ('scope', 'specify'):
+                mode = state['active']['mode']
+                params = ({'feature': self.relative, 'token': state['active']['token'],
+                           'session': usage['session_id'], 'analysis': lean_policy.settings(self.policy).get(
+                               'scope_analysis', '<analysis.json>')} if mode == 'initial' else {})
+                claimed['scope_command'] = execution_tools.scope_command(
+                    mode, 'gate' if stage == 'scope' else 'bind', state['issue'].split('#')[1], **params)
+                claimed['scope_analysis_required'] = mode == 'initial'
             if notices:
                 # Reported to the caller only; the checkpoint keeps the claim itself.
                 claimed['notices'] = notices
@@ -2429,6 +2576,8 @@ class Run:
             active = state['active']
             require(active and active['token'] == token, 'CLAIM_TOKEN_MISMATCH')
             stage = active['stage']
+            if stage == 'review':
+                coding_review_checks(self.root, self.relative, self.policy, state)
             require(receipt.get('stage') == stage and receipt.get('outcome') == 'passed', 'STAGE_NOT_PASSED')
             require(receipt.get('summary') and receipt.get('evidence'), 'EVIDENCE_REQUIRED')
             require(isinstance(receipt.get('inputs'), list) and receipt['inputs'], 'INPUT_MANIFEST_REQUIRED')
@@ -2485,9 +2634,16 @@ class Run:
                 require(receipt.get('blocking_findings') == 0, 'BLOCKING_FINDINGS_REMAIN')
             if stage == 'pr':
                 require(receipt.get('images_verified') is True and receipt.get('pr_url', '').startswith('https://github.com/' + state['issue'].split('#')[0] + '/pull/'), 'PR_EVIDENCE_INCOMPLETE')
+                if lean_policy.enabled(self.policy):
+                    binding = pr_lint_binding(self.root, self.relative, state, receipt)
+                    receipt['inputs'] = list(dict.fromkeys(receipt['inputs'] + [binding['scope']]))
+                    if receipt.get('input_roles') is not None:
+                        for path in (binding['scope'], binding['body'], binding['lint']):
+                            if path in receipt['inputs']:
+                                receipt['input_roles'][path] = {'role': 'dependency'}
             if stage in ('tasks', 'qa_analyze', 'manual_analyze') and self.policy['delegation']['enabled']:
                 from delegation import annotate_tasks
-                annotate_tasks(self.root, self.relative, self.policy['delegation'])
+                annotate_tasks(self.root, self.relative, self.policy['delegation'], lean=lean_policy.enabled(self.policy))
             # Known semantic transformations advance upstream artifact snapshots with an
             # explicit lineage record. They do not pretend the old artifact remained current.
             permitted = {'clarify': ['spec.md'], 'qa_analyze': ['tasks.md'], 'manual_analyze': ['tasks.md']}.get(stage, [])
@@ -2513,6 +2669,15 @@ class Run:
                         if path in prior['fingerprints']:
                             prior['fingerprints'][path] = after[path]
             stored = copy.deepcopy(receipt)
+            if stage == 'pr' and lean_policy.enabled(self.policy):
+                stored['pr_lint_binding'] = binding
+            if stage == 'verify' and lean_policy.enabled(self.policy):
+                selected_plan = lean_policy.settings(self.policy).get('verification_plan')
+                if selected_plan:
+                    try:
+                        stored['verification_snapshot'] = verification_plan.snapshot(self.root, selected_plan)
+                    except ValueError as exc:
+                        raise WorkflowError(str(exc)) from exc
             if stored.get('input_roles') is None:
                 stored.pop('input_roles', None)  # absent means all-dependency
             if delegation_ledger_trust is not None:
@@ -2640,13 +2805,15 @@ def main():
                                       '(recreated or rewritten history sharing the remote) is the same project; '
                                       'logged in the relocation record')
     relocate_parser.add_argument('--actor', help='Defaults to the Git user name')
-    for name in ('start', 'next', 'claim', 'complete', 'pause', 'recover', 'bind', 'migrate', 'refresh', 'amend',
+    for name in ('start', 'next', 'status', 'claim', 'complete', 'pause', 'recover', 'bind', 'migrate', 'refresh', 'amend',
                  'revalidate'):
         cmd = sub.add_parser(name)
         cmd.add_argument('--feature', required=True)
         if name == 'start': cmd.add_argument('--issue', required=True)
         if name in ('next', 'claim'): cmd.add_argument('--finalize', action='store_true')
         if name == 'claim': cmd.add_argument('--usage', type=Path, required=True)
+        if name == 'status': cmd.add_argument('--runs', action='append', type=Path, required=True,
+                                            help='Explicit normalized run root/worktree (repeatable)')
         if name == 'complete':
             cmd.add_argument('--token', required=True)
             cmd.add_argument('--receipt', type=Path, required=True)
@@ -2696,7 +2863,7 @@ def main():
             if args.decision_owner:
                 policy.setdefault('decisions', default_policy(False, False)['decisions'])['authorized_users'] = args.decision_owner
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(yaml.safe_dump(validate_policy(policy), sort_keys=False), encoding='utf-8')
+            path.write_text(yaml.safe_dump(validate_policy(policy, root), sort_keys=False), encoding='utf-8')
             result = {'configured': True, 'processes': policy['processes'],
                       'gate': sanduq_ci.gate_config(policy['ci']), 'doctor': doctor(root, policy)}
         elif args.action == 'ci':
@@ -2719,7 +2886,7 @@ def main():
                              'verify_command': args.verify_command})
                 write(root / '.specify/workflow/backups' / (uuid.uuid4().hex + '.json'), load_policy(root))
                 (root / '.specify/workflow.yml').write_text(
-                    yaml.safe_dump(validate_policy(policy), sort_keys=False), encoding='utf-8')
+                    yaml.safe_dump(validate_policy(policy, root), sort_keys=False), encoding='utf-8')
             # The recorded selection is not live until the installer re-renders
             # each managed workflow file from it.
             result = {'ci': ci, 'saved': not args.show, 'doctor': doctor(root, policy)}
@@ -2729,7 +2896,7 @@ def main():
             if not args.show and (args.owner or args.field_name):
                 if args.owner: config['authorized_users'] = args.owner
                 if args.field_name: config['project_field'] = args.field_name
-                validate_policy(policy)
+                validate_policy(policy, root)
                 write(root / '.specify/workflow/backups' / (uuid.uuid4().hex + '.json'), load_policy(root))
                 (root / '.specify/workflow.yml').write_text(yaml.safe_dump(policy, sort_keys=False), encoding='utf-8')
             result = {'decisions': config, 'saved': bool(not args.show and (args.owner or args.field_name))}
@@ -2754,6 +2921,7 @@ def main():
             run = Run(root, args.feature)
             if args.action == 'start': result = run.start(args.issue)
             elif args.action == 'next': result = run.next(run.load(), args.finalize)
+            elif args.action == 'status': result = native_run_status(root, run.relative, run.load(), args.runs)
             elif args.action == 'claim': result = run.claim(read(args.usage), args.finalize)
             elif args.action == 'complete': result = run.complete(args.token, read(args.receipt, {}))
             elif args.action == 'bind': result = run.bind(args.token)

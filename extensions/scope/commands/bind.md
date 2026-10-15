@@ -15,6 +15,11 @@ Project Status and local sync state to **Feature Specification**. A status write
 failure is a hard failure, not a successful Specify completion.
 
 
+Print the exact bind command with
+`python .specify/extensions/workflow/scripts/execution_tools.py scope-command --mode initial --command bind --issue <number> --feature specs/<feature> --token <active-token> --session <active-session> --analysis <resolved-analysis.json>`
+and run it unchanged. Use `--mode revalidate` with the issue alone for an existing claim. Both forms
+append `--apply`.
+
 Fresh managed clarification return (Scope 1.6.1): for the current initial Scope/Specify
 claim, pass the exact dispatcher feature, token and session to both native guard and bind:
 `scope.py gate <issue> --feature specs/<feature> --token <active-token> --session <active-session> --analysis <resolved-analysis.json>`;

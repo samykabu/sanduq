@@ -1,5 +1,14 @@
 # Implementation orchestration: assign
 
+When `lean_execution.enabled: true`, use the existing lifecycle coordinator for
+all assignments, integration, report writes and authorized Git operations.
+Do not create the additional orchestration agent in the legacy instructions
+below. Dispatch only concrete deliverables with acceptance criteria. Use
+`--deliverable`, `--correction-plan` and, after one correction, `--diagnosis` as
+described in `references/delegation-and-decisions.md#opt-in-lean-execution`.
+Complete all feature coding/testing before independent coding review; artifact
+analysis remains available and `[artifact-analysis]` explicitly identifies it.
+
 Use this protocol for both core Implement and SuperSpec Execute in a managed
 Sanduq workflow. The installed preset supplies it without editing either upstream
 command. The dispatcher keeps the Execute claim and remains the only agent that

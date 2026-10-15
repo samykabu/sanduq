@@ -245,6 +245,22 @@ review it`**), then the full feature-details narrative (the body of `<Feature>-E
   <!-- speckit-pr:end -->
   ```
 
+- **When `.specify/extensions/workflow/scripts/execution_tools.py` exists (Workflow 1.10.0 or later), lint closing references before any GitHub write.** If the file is absent (older or no Workflow), skip this lint and continue; standalone PR use is unchanged. Write the final body (the whole body
+  that `gh` will receive, not just the marked section) to `<tmpfile>`, then run:
+  `python .specify/extensions/workflow/scripts/execution_tools.py pr-lint --repo <owner/repo> --issue <bound-issue> [--prerequisite <n> ...] --body-file <tmpfile> --output <lint.json>`.
+  Take `<owner/repo>` and `<bound-issue>` from `specs/<feature>/scope-source.json` (`repo`, `issue`),
+  and pass every prerequisite issue the Scope receipt lists, one `--prerequisite` each. Exit 1 means the
+  body closes a foreign repository's issue, a prerequisite, or an issue other than the bound one: stop,
+  fix the body, and lint again. Exit 2 means the input was malformed. Never run `gh pr create` or
+  `gh pr edit` after a nonzero exit, and never change the body after linting. The body in
+  `<lint.json>` (`body_sha256`) must match the body file that you send.
+  For native lean Workflow, include `pr_body_file`, `pr_lint_file`, and
+  `pr_body_sha256` in the PR receipt, and list both files under `evidence`.
+  Workflow recomputes lint from its bound repository/issue and Scope dependencies;
+  a caller-written `ok: true` does not satisfy completion. Save the exact body
+  as UTF-8/LF before linting and publication. When Workflow is absent, retain
+  standalone PR behavior: manually check closing references against the selected
+  issue and prerequisites; do not require or install Workflow merely for linting.
 - **If a PR exists:**
   - If the body already contains `<!-- speckit-pr:start -->`…`<!-- speckit-pr:end -->`, **replace
     everything between the markers** (preserve all other PR body content above/below). Never append

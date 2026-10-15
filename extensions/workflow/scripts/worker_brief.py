@@ -26,6 +26,7 @@ lines a worker needs.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -43,7 +44,8 @@ SPEC_ARTIFACTS = ('spec.md', 'plan.md', 'data-model.md', 'research.md')
 PATH_TOKEN = re.compile(r'`([\w./-]+\.[A-Za-z0-9]{1,5})`')
 # CLI-selectable classes; qa_collect is never one of them (finding 10).
 CLI_WORK_TYPES = ('implementation', 'qa_author', 'documentation', 'review')
-MIN_BYTES, MAX_BYTES = 3 * 1024, 5 * 1024
+# 5 KB of brief plus the two full 64-hex fingerprints and the details pointers (P04).
+MIN_BYTES, MAX_BYTES = 3 * 1024, 5 * 1024 + 512
 
 
 def read_text(path):
@@ -59,7 +61,7 @@ def task_context(root, feature, task_id):
     require(task_id in lines, 'TASK_NOT_FOUND: ' + task_id)
     descriptions = parse_tasks(tasks_text)
     description = descriptions[task_id]['description']
-    return {'line': lines[task_id], 'description': description, 'work_type': task_type(description)}
+    return {'line': lines[task_id], 'description': description, 'work_type': task_type(description, dd.lean_enabled(root))}
 
 
 def requirement_lines(root, feature, description, extra_ids=()):
@@ -167,13 +169,71 @@ def t7_template():
     return match.group(1).strip() if match else None
 
 
+ACCEPTANCE = re.compile(r'\bAcceptance:\s*(.+)$', re.I)
+PROTOCOL_FILES = ('execution-assign.md', 'execution-report.md')
+PROJECTION_SCHEMA = 'sanduq.worker-result.projection.v1'
+
+
+def digest(text):
+    return hashlib.sha256(text.encode('utf-8')).hexdigest()
+
+
+def policy_fingerprint():
+    """Hash of the exact protocol reference files the brief's fixed rules are read from."""
+    return digest('\n'.join(name + '\0' + read_text(REFERENCES / name) for name in PROTOCOL_FILES))
+
+
+def source_fingerprint(context, requirements, owned):
+    """Hash of the task line, the verbatim requirement lines and the owned paths."""
+    return digest(json.dumps([context['line'], requirements, owned], sort_keys=True))
+
+
+def acceptance_criteria(description):
+    match = ACCEPTANCE.search(description)
+    return [part.strip() for part in re.split(r';\s*', match.group(1)) if part.strip()] if match else []
+
+
+USAGE_FIELDS = ('input_total', 'input_fresh', 'cache_read', 'cache_write', 'output_total', 'reasoning', 'total')
+
+
+def project_usage(result):
+    """Measured usage counters, or None. Only fidelity "exact" is a measurement: the driver fills
+    every counter with 0 when a harness reports nothing ("unavailable"), and those are unknown."""
+    tokens = result.get('tokens')
+    if not isinstance(tokens, dict) or tokens.get('fidelity') != 'exact':
+        return None
+    return {field: (tokens[field] if isinstance(tokens.get(field), int) and not isinstance(tokens.get(field), bool)
+                    and tokens[field] >= 0 else None) for field in USAGE_FIELDS}
+
+
+def project_result(result):
+    """Compact projection of one normalized delegate-task result: identity, fingerprints, owned
+    paths, status and the usage counters (fresh/cache/output kept apart; never a single merged
+    figure). The full result stays at `details` for retrieval."""
+    return {'schema': PROJECTION_SCHEMA, 'run_id': result.get('run_id'), 'harness': result.get('harness'),
+            'status': result.get('status'), 'summary': (result.get('summary') or '')[:300],
+            'policy_fingerprint': result.get('policy_fingerprint'),
+            'source_fingerprint': result.get('source_fingerprint'),
+            'owned_paths': result.get('owned_paths'), 'acceptance': result.get('acceptance'),
+            'files_claimed': result.get('files_claimed'), 'usage': project_usage(result),
+            'details': (result.get('artifacts') or {}).get('dir') or result.get('source')}
+
+
 def render_brief(feature, task_id, context, requirements, contract, owned, budget_row, forbidden, spawn_rules,
-                 f3_rule, t8_rule, template):
+                 f3_rule, t8_rule, template, fingerprints=None, details=()):
     lines = [f'# Worker brief: {task_id}', '', f'Feature: {feature}', f'Task line: {context["line"]}',
               f'Work type: {context["work_type"]}', '']
     lines.append('## Owned paths')
     lines += ([f'- `{path}`' for path in owned] or ['- (none extracted; confirm with the orchestration agent)'])
     lines.append('')
+    acceptance = acceptance_criteria(context['description'])
+    lines.append('## Acceptance criteria')
+    lines += ([f'- {item}' for item in acceptance] or ['- None stated; use the requirements below.'])
+    lines.append('')
+    if fingerprints:
+        lines += [f'Fingerprints: policy `{fingerprints[0]}`', f'source `{fingerprints[1]}`', '']
+    if details:
+        lines += ['Details on demand: ' + ', '.join(f'`{path}`' for path, _ in details), '']
     lines.append('## Verbatim requirements')
     if requirements:
         lines += [f'- ({source}) {line}' for source, line in requirements]
@@ -223,8 +283,12 @@ def build(root, feature, task_id, work_type=None):
     f3_rule = report_on_state_change_rule()
     t8_rule = read_summary_first_rule()
     template = t7_template()
+    fingerprints = (policy_fingerprint(), source_fingerprint(context, requirements, owned))
+    details = [(f'{feature}/{name}', 'full spec text') for name in SPEC_ARTIFACTS if (root / feature / name).is_file()]
+    if contract:
+        details.append((contract['path'], 'contract; excerpt included unless the size budget dropped it'))
     args = (feature, task_id, context, requirements, contract, owned, budget_row, forbidden, spawn_rules,
-            f3_rule, t8_rule, template)
+            f3_rule, t8_rule, template, fingerprints, details)
     brief = render_brief(*args)
     # Finding 10: enforce the 3-5 KB target. Drop the contract excerpt first
     # (the one section that is a nice-to-have, never a fixed protocol rule);
@@ -232,8 +296,13 @@ def build(root, feature, task_id, work_type=None):
     # requirement line or a protocol rule a worker actually needs.
     if len(brief.encode('utf-8')) > MAX_BYTES and contract is not None:
         brief = render_brief(feature, task_id, context, requirements, None, owned, budget_row, forbidden,
-                             spawn_rules, f3_rule, t8_rule, template)
+                             spawn_rules, f3_rule, t8_rule, template, fingerprints, details)
     oversized = len(brief.encode('utf-8')) > MAX_BYTES
+    # A protocol section that could not be read falls back to built-in text; say so, never hide it.
+    context['fallback_sections'] = [name for name, value in (
+        ('turn_budget', budget_row), ('spawn_f1', spawn_rules[0]), ('spawn_f2', spawn_rules[1]),
+        ('report_f3', f3_rule), ('read_t8', t8_rule), ('template_t7', template)) if not value]
+    context['fingerprints'] = {'policy': fingerprints[0], 'source': fingerprints[1]}
     return brief, context, oversized
 
 
@@ -265,7 +334,8 @@ def main():
     # json.dumps, not manual string formatting (finding 10): a Windows path
     # like the default --output has backslashes, which break hand-built JSON.
     print(json.dumps({'ok': True, 'path': str(output), 'bytes': len(brief.encode('utf-8')),
-                      'work_type': context['work_type'], 'oversized': oversized}))
+                      'work_type': context['work_type'], 'oversized': oversized,
+                      'fingerprints': context['fingerprints'], 'fallback_sections': context['fallback_sections']}))
     return 0
 
 
