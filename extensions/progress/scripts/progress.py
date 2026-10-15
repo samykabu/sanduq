@@ -1,0 +1,429 @@
+#!/usr/bin/env python3
+"""Sanduq Progress CLI. One-line output per verb; exit 0 ok, 2 usage, 3 refused, 4 lock busy.
+
+Run `progress.py --help`. The report is a projection rebuilt from producers on every refresh."""
+import argparse
+import json
+import os
+import re
+import shutil
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from sanduq_progress import facts as factslib, hook as hooklib, model, refresh as refreshlib, render_md  # noqa: E402
+from sanduq_progress import snapshot, statusline as statuslib  # noqa: E402
+from sanduq_progress.collect import tasks as taskscol, workflow as wf  # noqa: E402
+from sanduq_progress.lock import Lock, LockBusy  # noqa: E402
+from sanduq_progress.paths import ASSETS, Ctx, ProgressError, find_root, git_exclude, resolve_feature  # noqa: E402
+from sanduq_progress.util import atomic_write, diag, iso, read_json, utcnow, write_json  # noqa: E402
+
+FALLBACK_CSS = (':root{--bg:#f6f7f4;--surface:#fff;--text:#1b2a24;--muted:#4e5d56;--line:#d5dcd7;--brand:#233c32;'
+                '--accent:#c65b36;--active:#dcebf7;--waiting:#e9ece9;--blocked:#f8e0d6;--done:#dcefe2;--failed:#f4c7c0}\n')
+
+
+class Parser(argparse.ArgumentParser):
+    def error(self, message):
+        raise ProgressError('PROGRESS_USAGE', message.replace('\n', ' '), 2)
+
+
+def now():
+    stamp = os.environ.get('SANDUQ_PROGRESS_NOW')
+    if stamp:
+        return datetime.fromisoformat(stamp.replace('Z', '+00:00')).astimezone(timezone.utc)
+    return utcnow()
+
+
+def build_parser():
+    p = Parser(prog='progress', description=__doc__)
+    p.add_argument('--root', help=argparse.SUPPRESS)
+    common = Parser(add_help=False)
+    common.add_argument('--feature', help='feature directory, e.g. specs/001-name')
+    common.add_argument('--actor', default=os.environ.get('SANDUQ_PROGRESS_ACTOR', 'agent:coordinator'))
+    sub = p.add_subparsers(dest='verb', parser_class=Parser, required=True)
+
+    def verb(name, **kw):
+        return sub.add_parser(name, parents=[common], **kw)
+
+    s = verb('init')
+    s.add_argument('--statusline', choices=('yes', 'no'), default='no')
+    s.add_argument('--theme')
+    s = verb('bind')
+    s.add_argument('--session')
+    s.add_argument('--host', choices=('claude', 'codex'), default='claude')
+    s = verb('refresh')
+    s.add_argument('--final', action='store_true')
+    s.add_argument('--verbose', action='store_true')
+    s = verb('status')
+    s.add_argument('--json', action='store_true')
+    s = verb('lane')
+    s.add_argument('id')
+    s.add_argument('--tasks')
+    s.add_argument('--owner')
+    s.add_argument('--label')
+    s.add_argument('--harness')
+    s.add_argument('--model')
+    s.add_argument('--effort')
+    s.add_argument('--close', action='store_true')
+    s = verb('block')
+    s.add_argument('target')
+    s.add_argument('--by', required=True)
+    s = verb('unblock')
+    s.add_argument('id', nargs='?')
+    s.add_argument('--all-for')
+    s = verb('decide')
+    d = s.add_subparsers(dest='action', parser_class=Parser, required=True)
+    ask = d.add_parser('ask')
+    ask.add_argument('question')
+    ask.add_argument('--options', required=True)
+    made = d.add_parser('made')
+    made.add_argument('id')
+    made.add_argument('selected')
+    made.add_argument('--by', choices=('user', 'agent-recommendation', 'assumption'), required=True)
+    made.add_argument('--evidence')
+    s = verb('note')
+    s.add_argument('text')
+    s.add_argument('--target')
+    verb('theme', add_help=False)  # every other token goes to the theme module
+    s = verb('export')
+    s.add_argument('--format', choices=('md', 'json'), default='md')
+    s.add_argument('--out')
+    s = verb('hook')
+    s.add_argument('event')
+    s.add_argument('--host', choices=('claude', 'codex'))
+    s = verb('statusline')
+    s.add_argument('action', nargs='?', choices=('run', 'install', 'uninstall'), default='run')
+    return p
+
+
+def require_init(ctx):
+    if not ctx.dir.is_dir():
+        raise ProgressError('PROGRESS_NOT_INITIALIZED', 'run progress init first', 2)
+
+
+class locked:
+    """Feature lock for verbs: 3 retries at 200 ms, then exit 4."""
+
+    def __init__(self, ctx):
+        self.lock = Lock(ctx.lock, retries=3, delay=0.2)
+
+    def __enter__(self):
+        try:
+            return self.lock.acquire()
+        except LockBusy:
+            raise ProgressError('PROGRESS_LOCK_BUSY', 'another progress command is running; retry', 4) from None
+
+    def __exit__(self, *exc):
+        self.lock.release()
+        return False
+
+
+def write_theme_css(ctx):
+    """Generate theme.css through the theme module (owned by the UI lane); minimal fallback otherwise."""
+    try:
+        from sanduq_progress import theme
+        css = theme.render_css(theme.resolve(ctx.root))
+    except Exception as exc:
+        diag(ctx.diag, f'theme unavailable, wrote fallback css: {type(exc).__name__}', now())
+        css = FALLBACK_CSS
+    atomic_write(ctx.view / 'theme.css', css)
+
+
+def copy_assets(ctx):
+    if not ASSETS.is_dir():
+        diag(ctx.diag, f'ui assets not found at {ASSETS.name}; view not installed', now())
+        return False
+    for src in sorted(p for p in ASSETS.rglob('*') if p.is_file() and p.name != 'theme.css'):
+        target = ctx.view / src.relative_to(ASSETS)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, target)
+    return True
+
+
+def refresh_now(ctx, final=False):
+    return refreshlib.refresh(ctx, now(), final=final)
+
+
+# ---- verbs ----------------------------------------------------------------------------------------------------
+
+def cmd_init(a, root):
+    feature = resolve_feature(root, a.feature)
+    ctx = Ctx(root, feature)
+    ctx.view.mkdir(parents=True, exist_ok=True)
+    ctx.cfg_dir.mkdir(parents=True, exist_ok=True)
+    if not ctx.config.exists():
+        write_json(ctx.config, ctx.config_data())
+    if not ctx.facts.exists():
+        ctx.facts.touch()
+    git_exclude(root)
+    copy_assets(ctx)
+    with locked(ctx):
+        state = refreshlib.read_state(ctx)
+        state.setdefault('started_at', iso(now()))
+        write_json(ctx.state, state)
+        write_theme_css(ctx)
+        if a.theme:
+            run_theme(ctx, ['--preset', a.theme])
+        refresh_now(ctx)
+    if a.statusline == 'yes':
+        statuslib.install(root)
+    nonce = snapshot.create_pending(ctx, now())
+    print(f'progress: ready {feature}/progress/.view/index.html bind={nonce}')
+    return 0
+
+
+def run_theme(ctx, rest):
+    try:
+        from sanduq_progress import theme
+    except Exception:
+        atomic_write(ctx.view / 'theme.css', FALLBACK_CSS)
+        raise ProgressError('PROGRESS_THEME_UNAVAILABLE', '', 2) from None
+    os.environ['SANDUQ_PROGRESS_ROOT'] = str(ctx.root)
+    code = theme.cli(rest)
+    if code == 0:
+        write_theme_css(ctx)
+    return code
+
+
+def cmd_theme(a, root):
+    ctx = Ctx(root, resolve_feature(root, a.feature))
+    require_init(ctx)
+    return run_theme(ctx, a.rest)
+
+
+def cmd_bind(a, root):
+    ctx = Ctx(root, resolve_feature(root, a.feature))
+    require_init(ctx)
+    if a.session:
+        snapshot.bind_session(ctx, a.host, a.session, now())
+        print(f'progress: bound {a.session}')
+    else:
+        print(f'progress: pending bind={snapshot.create_pending(ctx, now())}')
+    return 0
+
+
+def cmd_refresh(a, root):
+    ctx = Ctx(root, resolve_feature(root, a.feature))
+    require_init(ctx)
+    with locked(ctx):
+        report = refresh_now(ctx, final=a.final)
+    if a.verbose:
+        print(f"progress: refreshed rev {report['rev']}")
+    return 0
+
+
+def summary_line(report):
+    s = report['summary']
+    return (f"progress: {s['tasks_done']}/{s['tasks_total']} tasks, {s['lanes_active']} lanes active, "
+            f"{s['blocked']} blocked, {s['decisions_pending']} decisions pending (rev {report['rev']})")
+
+
+def cmd_status(a, root):
+    ctx = Ctx(root, resolve_feature(root, a.feature))
+    require_init(ctx)
+    state = refreshlib.read_state(ctx)
+    report = model.build(ctx, now(), int(state.get('rev') or 0), state)
+    print(json.dumps(report, indent=2, ensure_ascii=False) if a.json else summary_line(report))
+    return 0
+
+
+def mutate(ctx, a, make):
+    """Run `make(loaded_facts) -> (records, output_line)` under the lock, append, refresh."""
+    require_init(ctx)
+    with locked(ctx):
+        loaded = factslib.load(ctx.facts)
+        records, line = make(loaded)
+        for record in records:
+            factslib.append(ctx.facts, record)
+        refresh_now(ctx)
+    print(line)
+    return 0
+
+
+def cmd_lane(a, root):
+    ctx = Ctx(root, resolve_feature(root, a.feature))
+
+    def make(loaded):
+        current = {r['id']: r for r in loaded['current']}
+        ident = factslib.next_id(loaded['all'], 'lane') if a.id.lower() == 'new' else a.id.upper()
+        if not re.fullmatch(r'L\d+', ident):
+            raise ProgressError('PROGRESS_USAGE', 'lane id must look like L1 (or "new")', 2)
+        old = current.get(ident, {})
+        try:
+            tasks = taskscol.expand(a.tasks) if a.tasks is not None else old.get('tasks', [])
+        except ValueError as exc:
+            raise ProgressError('PROGRESS_USAGE', f'bad task range {exc}', 2) from None
+        requested = dict(old.get('requested') or {'harness': None, 'model': None, 'effort': None})
+        for key in ('harness', 'model', 'effort'):
+            if getattr(a, key) is not None:
+                requested[key] = factslib.sanitise(getattr(a, key), ctx.root, 60)
+        record = factslib.make(
+            'lane', ident, a.actor, now=now(), tasks=tasks,
+            owner=factslib.sanitise(a.owner, ctx.root, 80) if a.owner is not None else old.get('owner'),
+            label=factslib.sanitise(a.label, ctx.root, 60) if a.label is not None else old.get('label') or ident,
+            requested=requested, state='closed' if a.close else 'open' if (a.tasks is not None or not old) else old.get('state', 'open'))
+        return [record], f"progress: {ident} {record['state']} {len(tasks)} tasks"
+    return mutate(ctx, a, make)
+
+
+def parse_by(text, root):
+    text = text.strip()
+    if text.lower().startswith('ext:'):
+        return {'type': 'external', 'ref': factslib.sanitise(text[4:].strip().strip('"'), root, 120)}
+    ident = text.upper()
+    if re.fullmatch(r'[LWC]\d+', ident):
+        return {'type': 'lane', 'ref': ident}
+    if re.fullmatch(r'T\d+', ident):
+        return {'type': 'task', 'ref': ident}
+    if re.fullmatch(r'(SD|D)\d+', ident):
+        return {'type': 'decision', 'ref': ident}
+    raise ProgressError('PROGRESS_USAGE', '--by takes a lane (L2), task (T003), decision (SD2) or ext:"text"', 2)
+
+
+def cmd_block(a, root):
+    ctx = Ctx(root, resolve_feature(root, a.feature))
+    target = a.target.upper()
+
+    def make(loaded):
+        if not re.fullmatch(r'[TLWC]\d+', target):
+            raise ProgressError('PROGRESS_USAGE', 'block target is a task or lane id', 2)
+        by = parse_by(a.by, ctx.root)
+        for item in loaded['current']:
+            if item['kind'] == 'block' and item.get('state') == 'open' and item.get('target') == target and item.get('by') == by:
+                return [], f"progress: {item['id']} open {target} by {by['ref']}"
+        ident = factslib.next_id(loaded['all'], 'block')
+        record = factslib.make('block', ident, a.actor, now=now(), target=target, by=by, state='open', resolved_at=None)
+        return [record], f"progress: {ident} open {target} by {by['ref']}"
+    return mutate(ctx, a, make)
+
+
+def cmd_unblock(a, root):
+    ctx = Ctx(root, resolve_feature(root, a.feature))
+
+    def make(loaded):
+        if bool(a.id) == bool(a.all_for):
+            raise ProgressError('PROGRESS_USAGE', 'give a blocker id or --all-for TARGET', 2)
+        opened = [r for r in loaded['current'] if r['kind'] == 'block' and r.get('state') == 'open'
+                  and (r['id'] == (a.id or '').upper() or r.get('target') == (a.all_for or '').upper())]
+        if not opened:
+            raise ProgressError('PROGRESS_NOT_FOUND', 'no matching open blocker', 2)
+        stamp = iso(now())
+        records = [factslib.make('block', r['id'], a.actor, now=now(), target=r['target'], by=r['by'], state='resolved', resolved_at=stamp)
+                   for r in opened]
+        return records, 'progress: ' + (f"{opened[0]['id']} resolved" if len(opened) == 1 else f'{len(opened)} resolved')
+    return mutate(ctx, a, make)
+
+
+def cmd_decide(a, root):
+    ctx = Ctx(root, resolve_feature(root, a.feature))
+    if (ctx.feature_dir / 'workflow' / 'decisions.json').is_file():
+        raise ProgressError('PROGRESS_DECISION_AUTHORITY', 'Workflow owns decisions for this feature', 3)
+
+    def make(loaded):
+        if a.action == 'ask':
+            options = [factslib.sanitise(o, ctx.root, 80) for o in a.options.split(',') if o.strip()]
+            if len(options) < 2:
+                raise ProgressError('PROGRESS_USAGE', '--options needs at least two comma separated values', 2)
+            ident = factslib.next_id(loaded['all'], 'decision')
+            record = factslib.make('decision', ident, a.actor, now=now(), question=factslib.sanitise(a.question, ctx.root),
+                                   options=options, status='pending', selected=None, decided_by=None, evidence=None)
+            return [record], f'progress: {ident} pending'
+        old = next((r for r in loaded['current'] if r['kind'] == 'decision' and r['id'] == a.id.upper()), None)
+        if old is None:
+            raise ProgressError('PROGRESS_NOT_FOUND', f'no decision {a.id}', 2)
+        match = next((o for o in old.get('options') or [] if o.lower() == a.selected.strip().lower()), None)
+        if match is None:
+            raise ProgressError('PROGRESS_USAGE', 'selected must be one of: ' + ', '.join(old.get('options') or []), 2)
+        evidence = factslib.sanitise(a.evidence, ctx.root) if a.evidence else None
+        record = {**factslib.make('decision', old['id'], a.actor, now=now()), 'question': old['question'], 'options': old['options'],
+                  'status': 'made', 'selected': match, 'decided_by': a.by, 'evidence': evidence}
+        return [record], f"progress: {old['id']} made {match}"
+    return mutate(ctx, a, make)
+
+
+def cmd_note(a, root):
+    ctx = Ctx(root, resolve_feature(root, a.feature))
+
+    def make(loaded):
+        target = a.target.upper() if a.target else None
+        if target and not re.fullmatch(r'[TLWC]\d+', target):
+            raise ProgressError('PROGRESS_USAGE', 'note target is a task or lane id', 2)
+        ident = factslib.next_id(loaded['all'], 'note')
+        record = factslib.make('note', ident, a.actor, now=now(), text=factslib.sanitise(a.text, ctx.root), target=target)
+        return [record], f'progress: {ident} noted'
+    return mutate(ctx, a, make)
+
+
+def cmd_export(a, root):
+    ctx = Ctx(root, resolve_feature(root, a.feature))
+    require_init(ctx)
+    report = read_json(ctx.report)
+    if not isinstance(report, dict):
+        with locked(ctx):
+            report = refresh_now(ctx)
+    text = json.dumps(report, indent=2, ensure_ascii=False) + '\n' if a.format == 'json' else render_md.render(report)
+    if a.out:
+        atomic_write(Path(a.out), text)
+        print(f'progress: exported {a.out}')
+    else:
+        sys.stdout.write(text)
+    return 0
+
+
+def cmd_hook(a, root):
+    hooklib.handle(a.event, sys.stdin.read() if not sys.stdin.isatty() else '', root=root, host=a.host)
+    return 0
+
+
+def cmd_statusline(a, root):
+    if a.action == 'install':
+        statuslib.install(root)
+        print('progress: statusline installed')
+    elif a.action == 'uninstall':
+        statuslib.uninstall(root)
+        print('progress: statusline removed')
+    else:
+        statuslib.main_stdin(root)
+    return 0
+
+
+VERBS = {'init': cmd_init, 'bind': cmd_bind, 'refresh': cmd_refresh, 'status': cmd_status, 'lane': cmd_lane,
+         'block': cmd_block, 'unblock': cmd_unblock, 'decide': cmd_decide, 'note': cmd_note, 'theme': cmd_theme,
+         'export': cmd_export, 'hook': cmd_hook, 'statusline': cmd_statusline}
+
+
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] in ('hook', 'statusline'):
+        # The host must never see output or failures from the automatic paths.
+        try:
+            args = build_parser().parse_args(argv)
+            root = Path(args.root).resolve() if args.root else find_root()
+            return VERBS[args.verb](args, root) if args.verb == 'statusline' and args.action != 'run' else _quiet(args, root)
+        except Exception:
+            return 0
+    try:
+        args, extra = build_parser().parse_known_args(argv)
+        if extra and args.verb != 'theme':
+            raise ProgressError('PROGRESS_USAGE', 'unrecognized arguments: ' + ' '.join(extra), 2)
+        args.rest = extra
+        root = Path(args.root).resolve() if args.root else find_root()
+        return VERBS[args.verb](args, root)
+    except ProgressError as error:
+        print(error.line())
+        return error.exit_code
+    except SystemExit as exit_:
+        return exit_.code if isinstance(exit_.code, int) else 2
+
+
+def _quiet(args, root):
+    try:
+        return VERBS[args.verb](args, root)
+    except Exception:
+        return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

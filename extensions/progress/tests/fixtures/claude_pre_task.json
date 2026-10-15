@@ -1,0 +1,18 @@
+{
+  "session_id": "claude-sess-1",
+  "transcript_path": "/home/u/.claude/projects/x/claude-sess-1.jsonl",
+  "cwd": "{CWD}",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "effort": {
+    "level": "high"
+  },
+  "tool_name": "Task",
+  "tool_input": {
+    "subagent_type": "general-purpose",
+    "description": "Explore the parser module",
+    "model": "sonnet",
+    "run_in_background": false
+  },
+  "tool_use_id": "toolu_01TASK"
+}
