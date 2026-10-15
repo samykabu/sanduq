@@ -1,11 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "workflow": "1.10.0",
-    "scope": "1.6.2",
-    "pr": "4.2.3",
-    "progress": "1.0.0"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Workflow 1.10.0 adds opt-in lean execution and capability-aware reporting through the optional Progress extension (no agent kept solely for reporting); Scope 1.6.2 and PR 4.2.3 follow Workflow 1.10.0; Progress 1.0.0 is the first release of the deterministic HTML progress report. Publish after successful main CI and downloaded asset verification."
 }

@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-10-12T17:59:29.656249+00:00",
+  "updated_at": "2026-10-15T16:29:58.970311+00:00",
   "catalog_url": "https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json",
   "extensions": {
     "project": {
@@ -52,14 +52,14 @@
     "pr": {
       "name": "Pull Request Workflow",
       "id": "pr",
-      "version": "4.2.2",
+      "version": "4.2.3",
       "description": "Generate or update pull requests from Spec Kit artifacts, enforce installed QA and User Manual freshness policies, then process review feedback through an approval-gated fix and reply workflow.",
       "author": "Samy K. Abushanab",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/pr",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/pr/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/pr/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/pr-v4.2.2/pr.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/pr-v4.2.3/pr.zip",
       "license": "PolyForm-Noncommercial-1.0.0",
       "category": "process",
       "effect": "read-write",
@@ -117,8 +117,8 @@
       ],
       "verified": false,
       "created_at": "2026-07-09T20:26:15Z",
-      "updated_at": "2026-10-10T16:29:40.227944+00:00",
-      "sha256": "29cdd093ed687f3af0c08003d9b0c676111069893bb32aaee2a970a0aea1108f"
+      "updated_at": "2026-10-15T16:29:58.934739+00:00",
+      "sha256": "ca615081902402befcbd51ebc035ed03b11252520e0b1007213fcdff658b64e1"
     },
     "illustrate": {
       "name": "Illustrate",
@@ -307,7 +307,7 @@
     "workflow": {
       "name": "Sanduq Workflow",
       "id": "workflow",
-      "version": "1.9.5",
+      "version": "1.10.0",
       "description": "GitHub issue decisions and resumable Scope-to-PR orchestration with optional model-aware delegation, QA, User Manual, and workflow evidence CI.",
       "author": "Samy K. Abushanab",
       "license": "PolyForm-Noncommercial-1.0.0",
@@ -315,7 +315,7 @@
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/workflow",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v1.9.5/workflow.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v1.10.0/workflow.zip",
       "requires": {
         "speckit_version": ">=1.0.0,<2.0.0",
         "tools": [
@@ -349,13 +349,13 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "084801ce0a9797e7f0f725817090498a6c7145ffdeb1e506b3474965cfed35b9",
-      "updated_at": "2026-10-12T17:59:29.656214+00:00"
+      "sha256": "bd895c272f8578b62864e28c68248074d4b630c7cc705d6b2acf96b0293fa4d8",
+      "updated_at": "2026-10-15T16:29:58.911465+00:00"
     },
     "scope": {
       "name": "Speckit Scope",
       "id": "scope",
-      "version": "1.6.1",
+      "version": "1.6.2",
       "description": "Analyze GitHub issue scope, enforce prerequisites, review user-selected decomposition before publishing, and maintain parent progress.",
       "author": "Samy K. Abushanab",
       "license": "MIT",
@@ -363,13 +363,13 @@
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/scope",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/scope/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/scope/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/scope-v1.6.1/scope.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/scope-v1.6.2/scope.zip",
       "requires": {
         "speckit_version": ">=1.0.0",
         "extensions": [
           {
             "id": "workflow",
-            "version": ">=1.8.0,<2.0.0",
+            "version": ">=1.10.0,<2.0.0",
             "required": true
           },
           {
@@ -403,8 +403,8 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "cb834fb9c2e2aef907deee10e290257417b2c70ef5a9c5dd64f29dd97a0261e9",
-      "updated_at": "2026-10-10T22:49:09.912244+00:00"
+      "sha256": "16e39aa873558eabae2961d6129f7c73f232bf2a6013aa2e6e26db90aec15893",
+      "updated_at": "2026-10-15T16:29:58.927869+00:00"
     },
     "memory": {
       "name": "Sanduq Memory",
@@ -446,6 +446,47 @@
       "verified": false,
       "sha256": "b0b13e952404fbd78523526bb9c861b82e8bbb894bc0c9bf79301c5b62c0c9e7",
       "updated_at": "2026-10-10T16:29:40.224146+00:00"
+    },
+    "progress": {
+      "name": "Sanduq Progress Report",
+      "id": "progress",
+      "version": "1.0.0",
+      "description": "A live, deterministic progress report for a Spec Kit feature: lanes, tasks, blockers and decisions, collected from the host's native hooks and the feature files with no agent spent on upkeep.",
+      "author": "Samy K. Abushanab",
+      "license": "PolyForm-Noncommercial-1.0.0",
+      "repository": "https://github.com/samykabu/sanduq",
+      "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/progress",
+      "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/progress/README.md",
+      "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/progress/CHANGELOG.md",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/progress-v1.0.0/progress.zip",
+      "requires": {
+        "speckit_version": ">=1.1.1.dev0,<2.0.0",
+        "tools": [
+          {
+            "name": "python",
+            "required": true,
+            "version": ">=3.11"
+          }
+        ]
+      },
+      "provides": {
+        "commands": 10,
+        "hooks": 2
+      },
+      "tags": [
+        "progress",
+        "report",
+        "dashboard",
+        "lanes",
+        "telemetry",
+        "hooks",
+        "workflow"
+      ],
+      "category": "process",
+      "effect": "read-write",
+      "verified": false,
+      "sha256": "5e47cc3100d7f419b00393f1e6431c20469ce446aa619e946808384b964a5dba",
+      "updated_at": "2026-10-15T16:29:58.970278+00:00"
     }
   }
 }
