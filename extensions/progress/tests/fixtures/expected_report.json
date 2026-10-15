@@ -249,7 +249,7 @@
     {
       "id": "C1",
       "label": "Explore the parser module",
-      "owner": "toolu_01TASK",
+      "owner": "agent-9f",
       "origin": "host-child",
       "requested": {
         "harness": "claude",

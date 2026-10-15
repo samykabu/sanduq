@@ -59,7 +59,58 @@ def _restarts(entry, update):
 
 def _restart(entry, update):
     entry.update(status=update['status'], ended_at=None, started_at=update.get('started_at') or update['last_observed_at'],
-                 generation=int(entry.get('generation') or 1) + 1)
+                 generation=int(entry.get('generation') or 1) + 1, status_at=update['last_observed_at'])
+
+
+def _stale_lifecycle(entry, update):
+    """A lifecycle observation (status with its start and end times) older than the entry's last accepted lifecycle
+    observation describes an earlier moment: a delayed `done` must not end a generation that started after it."""
+    at = update.get('last_observed_at') or ''
+    return bool(update.get('status') is not None and at and at < (entry.get('status_at') or ''))
+
+
+def _numbers(entry):
+    return [n for n in [entry.get('lane_no'), *(entry.get('lane_aliases') or [])] if isinstance(n, int) and not isinstance(n, bool)]
+
+
+def _next_lane_no(ctx, snap):
+    """The next `C<n>` number: one above every number any host snapshot ever held, retired aliases included, so a number is
+    never reused. The numbers live in the host snapshots (durable host data), not in the disposable view."""
+    top = max((n for child in (snap.get('children') or {}).values() for n in _numbers(child)), default=0)
+    for other in read_all(ctx):
+        top = max([top] + [n for child in (other.get('children') or {}).values() for n in _numbers(child)])
+    return top + 1
+
+
+def _join_numbers(entry, other):
+    """Two entries turn out to be one child: the lowest number stays its lane id and the others become aliases that
+    still resolve, so a blocker recorded against a retired number keeps its meaning."""
+    numbers = sorted(set(_numbers(entry)) | set(_numbers(other)))
+    if numbers:
+        entry['lane_no'] = numbers[0]
+        if numbers[1:]:
+            entry['lane_aliases'] = numbers[1:]
+
+
+def _provisional_target(children):
+    """The one running tool-launched child (no agent id yet) that an agent-keyed event can belong to, or None."""
+    open_launches = [k for k, v in children.items()
+                     if not v.get('agent_id') and v.get('kind') == 'subagent' and v.get('status') == 'running']
+    return open_launches[0] if len(open_launches) == 1 else None
+
+
+def _split_provisional(ctx, snap, entry, real_id):
+    """The tool result names another agent than the one provisionally attached: the attached agent was a different
+    child. It gets its own entry (with the observations that came from it); the launch keeps the id the host reported."""
+    children, guessed = snap['children'], entry.get('agent_id')
+    moved = {name: entry.pop(name) for name in ('model', 'effort')
+             if isinstance(entry.get(name), dict) and entry[name].get('fidelity') != 'partial'}
+    children[guessed] = {**moved, 'kind': 'subagent', 'agent_id': guessed, 'status': entry.get('status') or 'running',
+                         'started_at': entry.get('started_at'), 'ended_at': None,
+                         'last_observed_at': entry.get('last_observed_at'), 'status_at': entry.get('status_at'),
+                         'lane_no': _next_lane_no(ctx, snap)}
+    entry.pop('agent_link', None)
+    entry['agent_id'] = real_id
 
 
 def merge(ctx, host, session_id, now, fields=None, child=None, parent_session_id=None, agent_id=None):
@@ -77,9 +128,17 @@ def merge(ctx, host, session_id, now, fields=None, child=None, parent_session_id
     if child:
         children = snap['children']
         key, update = child['key'], dict(child['update'])
+        provisional = False
         # A child launched by a tool call (keyed by tool_use_id) is later seen by its own agent id: merge them.
         if child.get('by_agent') and key not in children:
-            key = next((k for k, v in children.items() if v.get('agent_id') == key), key)
+            linked = next((k for k, v in children.items() if v.get('agent_id') == key), None)
+            if linked is None:
+                # The host reports a running subagent under two ids (the launching tool call, then its own agent id)
+                # before the tool result names the agent. With exactly one open launch the two are the same child;
+                # the tool result confirms the link or splits it.
+                linked = _provisional_target(children)
+                provisional = linked is not None
+            key = linked or key
         elif update.get('agent_id') and update['agent_id'] in children and update['agent_id'] != key:
             old = children.pop(update['agent_id'])
             entry = children.setdefault(key, {})
@@ -88,16 +147,34 @@ def merge(ctx, host, session_id, now, fields=None, child=None, parent_session_id
             for name, value in old.items():
                 if name in ('model', 'effort', 'status', 'last_observed_at'):
                     _apply(entry, name, value)
+                elif name in ('lane_no', 'lane_aliases', 'agent_link', 'status_at'):
+                    continue
                 elif value is not None:
                     entry.setdefault(name, value)  # the tool-call record keeps its own description and type
+            _join_numbers(entry, old)
+            entry['status_at'] = max(entry.get('status_at') or '', old.get('status_at') or '') or None
+        elif update.get('agent_id') and children.get(key, {}).get('agent_link') == 'provisional':
+            if children[key].get('agent_id') == update['agent_id']:
+                children[key].pop('agent_link')
+            else:
+                _split_provisional(ctx, snap, children[key], update['agent_id'])
         entry = children.setdefault(key, {})
-        if child.get('by_agent'):
-            entry.setdefault('agent_id', child['key'])
-        if _restarts(entry, update):
+        if not isinstance(entry.get('lane_no'), int):
+            entry['lane_no'] = _next_lane_no(ctx, snap)
+        if child.get('by_agent') and not entry.get('agent_id'):
+            entry['agent_id'] = child['key']
+            if provisional:
+                entry['agent_link'] = 'provisional'
+        if _stale_lifecycle(entry, update):
+            for name in ('status', 'started_at', 'ended_at'):
+                update.pop(name, None)
+        elif _restarts(entry, update):
             _restart(entry, update)
             update.pop('status'), update.pop('started_at', None)
         for name, value in update.items():
             _apply(entry, name, value)
+        if update.get('status') is not None and entry.get('status') == update['status'] and update.get('last_observed_at'):
+            entry['status_at'] = max(entry.get('status_at') or '', update['last_observed_at'])
         entry.setdefault('ended_at', None)
         entry.setdefault('started_at', None)
         entry.setdefault('status', 'unknown')
