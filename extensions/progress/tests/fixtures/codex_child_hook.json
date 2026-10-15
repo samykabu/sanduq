@@ -1,0 +1,10 @@
+{
+  "session_id": "codex-sess-1",
+  "turn_id": "turn-1",
+  "agent_id": "codex-child-1",
+  "agent_type": "worker",
+  "transcript_path": "/x/rollout-2.jsonl",
+  "cwd": "{CWD}",
+  "hook_event_name": "PostToolUse",
+  "model": "gpt-6-luna"
+}
