@@ -1,9 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "progress": "1.1.0",
-    "workflow": "1.10.2"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Progress 1.1.0 vendors the progress-report skill from agent-tools 1.2.0 and adds plan mode and the hooks installer; Workflow 1.10.2 offers Progress 1.1.0. Publish after successful main CI and downloaded asset verification."
 }
