@@ -1,5 +1,6 @@
 """Project root, feature resolution and layout paths."""
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -54,18 +55,42 @@ def current_branch(root):
     return head[len('ref: refs/heads/'):] if head.startswith('ref: refs/heads/') else None
 
 
+def inside(path, base):
+    """True when `path` is `base` or lies beneath it, compared by resolved path components (no prefix tricks)."""
+    try:
+        a, b = Path(os.path.realpath(str(path))), Path(os.path.realpath(str(base)))
+    except OSError:
+        return False
+    a, b = Path(os.path.normcase(str(a))), Path(os.path.normcase(str(b)))
+    return a == b or b in a.parents
+
+
 def normalise_feature(root, value):
+    """`specs/<dir>` (or a bare `<dir>`, or an absolute path inside the repo) for a real directory that, once symlinks are
+    resolved, is a direct child of the resolved specs directory. Dot components are never accepted."""
+    root = Path(root)
     path = Path(value)
+    if not path.is_absolute() and any(p in ('.', '..') for p in re.split(r'[\\/]', str(value))):
+        return None
     if path.is_absolute():
         try:
-            path = path.resolve().relative_to(root)
+            path = path.resolve().relative_to(root.resolve())
         except ValueError:
             return None
     text = path.as_posix().strip('/')
     if '/' not in text:
         text = 'specs/' + text
     parts = text.split('/')
-    return text if len(parts) == 2 and parts[0] == 'specs' and (root / text).is_dir() else None
+    if len(parts) != 2 or parts[0] != 'specs' or any(p in ('', '.', '..') for p in parts):
+        return None
+    candidate = root / text
+    if not candidate.is_dir():
+        return None
+    specs = Path(os.path.realpath(str(root / 'specs')))
+    resolved = Path(os.path.realpath(str(candidate)))
+    if os.path.normcase(str(resolved.parent)) != os.path.normcase(str(specs)):
+        return None
+    return text
 
 
 def checkpoint_feature(root, branch):
@@ -108,10 +133,25 @@ class Ctx:
         self.lock = self.view / 'lock'
         self.diag = self.view / 'diagnostics.log'
         self.cfg_dir = self.root / '.specify' / 'progress'
+        self.check_confined()
         self.config = self.cfg_dir / 'config.json'
         self.theme = self.cfg_dir / 'theme.json'
         self.bindings = self.cfg_dir / 'bindings.json'
         self.bindings_lock = self.cfg_dir / 'bindings.lock'
+
+    def check_confined(self):
+        """Raise unless the feature, its progress directory and the view directory stay beneath the resolved specs
+        directory (a symlinked or forged feature or output directory must not move writes outside the repository)."""
+        specs = self.root / 'specs'
+        chain = ((self.feature_dir, specs), (self.dir, self.feature_dir), (self.view, self.dir))
+        parts = Path(self.feature).parts
+        if len(parts) != 2 or parts[0] != 'specs' or any(p in ('', '.', '..') for p in parts):
+            raise ProgressError('PROGRESS_NO_FEATURE', 'feature must be specs/<dir>', 2)
+        for path, base in chain:
+            if path.exists() or path.is_symlink():
+                if not inside(path, base):
+                    raise ProgressError('PROGRESS_NO_FEATURE', f'{path.name} resolves outside the repository', 2)
+        return self
 
     def config_data(self):
         data = {'feature_dir_mode': 'auto', 'debounce_seconds': 5, 'stale_after_seconds': 600,

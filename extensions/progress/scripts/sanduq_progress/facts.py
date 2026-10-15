@@ -1,6 +1,7 @@
 """facts.jsonl: append-only facts that no producer records (progress.facts.v1)."""
 import json
 import os
+import posixpath
 import re
 from pathlib import Path
 
@@ -11,19 +12,62 @@ PREFIX = {'lane': 'L', 'block': 'B', 'decision': 'D', 'note': 'N', 'attempt': 'A
 TEXT_CAP = 200
 SECRET = re.compile(r'(sk-[A-Za-z0-9]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|'
                     r'(?i:bearer\s+[A-Za-z0-9._-]{16,})|(?i:(password|passwd|secret|token|api[_-]?key)\s*[=:]\s*\S{6,}))')
-ABSOLUTE = re.compile(r'(?<![\w:/.\\])(?:[A-Za-z]:[\\/]|/(?:home|Users|etc|var|tmp|opt|root|mnt|usr|private)/)\S*')
+ACTOR = re.compile(r'user|hook|legacy|agent:[A-Za-z0-9][A-Za-z0-9._-]{0,63}')
+# Absolute-path candidates in free text, on any platform: drive paths, UNC paths and POSIX absolute paths. A slash that
+# follows a word character, ':' (URL) or '.' is not the start of a path ("and/or", "https://host/x", "a/b").
+ABSOLUTE = re.compile(r'(?<![\w:/.\\-])(?:[A-Za-z]:[\\/]|\\\\[^\s\\/]|//[^\s\\/]|/(?=[^\s/\\]))\S*')
+BS = chr(92)  # backslash
+TRAILING = ".,;:)]}>'\""
+
+
+def _is_inside(candidate, root_text):
+    """Path-component containment of an absolute candidate beneath the repository root (never a string prefix)."""
+    cand = posixpath.normpath(candidate.replace(BS, '/'))
+    base = posixpath.normpath(root_text.replace(BS, '/'))
+    if re.match(r'[A-Za-z]:', base) or os.name == 'nt':
+        cand, base = cand.lower(), base.lower()
+    cand_parts, base_parts = cand.split('/'), base.split('/')
+    return cand_parts[:len(base_parts)] == base_parts
+
+
+def scan(text, root):
+    """Raise unless `text` is free of secrets and of absolute paths outside the repository."""
+    if SECRET.search(text):
+        raise ProgressError('PROGRESS_FORBIDDEN_CONTENT', 'looks like a secret', 3)
+    root_text = Path(root).as_posix()
+    for match in ABSOLUTE.finditer(text):
+        token = match.group(0).rstrip(TRAILING)
+        flat = token.replace(BS, '/')
+        if flat.startswith('//') or not _is_inside(flat, root_text):
+            raise ProgressError('PROGRESS_FORBIDDEN_CONTENT', 'absolute path outside the repository', 3)
+    return text
 
 
 def sanitise(text, root, cap=TEXT_CAP):
     """Cap and strip free text; refuse secrets and absolute paths outside the repository."""
-    value = clean(text, cap)
-    if SECRET.search(value):
-        raise ProgressError('PROGRESS_FORBIDDEN_CONTENT', 'looks like a secret', 3)
-    root_text = Path(root).as_posix().lower()
-    for match in ABSOLUTE.finditer(value):
-        if not match.group(0).replace('\\', '/').lower().startswith(root_text):
-            raise ProgressError('PROGRESS_FORBIDDEN_CONTENT', 'absolute path outside the repository', 3)
-    return value
+    return scan(clean(text, cap), root)
+
+
+def _strings(value):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            yield from _strings(key)
+            yield from _strings(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            yield from _strings(item)
+
+
+def check(record, root):
+    """Validate the whole stored record: a constrained actor, and the secret and path rules on every string it holds."""
+    actor = record.get('actor')
+    if not isinstance(actor, str) or not ACTOR.fullmatch(actor):
+        raise ProgressError('PROGRESS_FORBIDDEN_CONTENT', 'actor must be user, hook, legacy or agent:<id>', 3)
+    for text in _strings(record):
+        scan(text, root)
+    return record
 
 
 def read_lines(path):
@@ -82,8 +126,11 @@ def next_id(records, kind):
     return f'{prefix}{top + 1}'
 
 
-def append(path, record):
-    """Append one record with flush+fsync. The caller holds the feature lock."""
+def append(path, record, root=None):
+    """Append one record with flush+fsync. The caller holds the feature lock. With `root` the whole record is validated
+    first (see `check`), so nothing forbidden reaches the tracked file."""
+    if root is not None:
+        check(record, root)
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     line = json.dumps(record, ensure_ascii=False, separators=(',', ':')) + '\n'

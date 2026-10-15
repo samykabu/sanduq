@@ -5,6 +5,7 @@ Run `progress.py --help`. The report is a projection rebuilt from producers on e
 import argparse
 import json
 import os
+import posixpath
 import re
 import shutil
 import sys
@@ -258,7 +259,9 @@ def mutate(ctx, a, make):
         loaded = factslib.load(ctx.facts)
         records, line = make(loaded)
         for record in records:
-            factslib.append(ctx.facts, record)
+            factslib.check(record, ctx.root)
+        for record in records:
+            factslib.append(ctx.facts, record, root=ctx.root)
         refresh_now(ctx)
     print(line)
     return 0
@@ -378,15 +381,24 @@ def cmd_note(a, root):
     return mutate(ctx, a, make)
 
 
+WINDOWS_ABSOLUTE = re.compile(r'[A-Za-z]:/|//[^/]')
+
+
 def _log_path(value, root):
+    """Repo-relative path for a log inside the repository, `external:<name>` for any other absolute path, the text
+    unchanged for a relative one. Windows (drive, UNC) and POSIX absolute forms are recognised on every platform."""
     text = str(value).replace(chr(92), '/')
-    path = Path(text)
-    if path.is_absolute():
-        try:
-            return path.resolve().relative_to(root).as_posix()
-        except ValueError:
-            return 'external:' + path.name
-    return text
+    windows = bool(WINDOWS_ABSOLUTE.match(text))
+    if not (windows or text.startswith('/')):
+        return text
+    name = text.rstrip('/').rsplit('/', 1)[-1] or 'log'
+    if text.startswith('//'):
+        return 'external:' + name
+    root_text = Path(root).as_posix()
+    if factslib._is_inside(text, root_text) and posixpath.normpath(text) != posixpath.normpath(root_text):
+        base = len(posixpath.normpath(root_text).rstrip('/'))
+        return posixpath.normpath(text)[base:].lstrip('/')
+    return 'external:' + name
 
 
 def _usage_record(path, root):
@@ -445,7 +457,7 @@ def cmd_runs(a, root):
     stamp = parse_time(a.now) if a.now else now()
     if stamp is None:
         raise ProgressError('PROGRESS_USAGE', '--now must be an ISO timestamp', 2)
-    merged, malformed, duplicates = {}, [], []
+    merged, malformed, duplicates, conflicts = {}, [], [], {}
     for entry in a.runs_dir or [str(root / '.delegate' / 'runs')]:
         folder = Path(entry)
         found = runscol.collect_runs(folder if folder.is_absolute() else root / folder, now=stamp, stall_seconds=a.stall_seconds)
@@ -455,12 +467,16 @@ def cmd_runs(a, root):
             known = merged.get(run['run_id'])
             if known:
                 duplicates.append(run['run_id'])
-                diff = runscol._conflicts(known, run)
-                if diff:
-                    run['conflict'] = sorted(set(diff) | set(known.get('conflict') or []))
+                # Conflicts accumulate per run id and attach to whichever record is retained, so a discarded
+                # incoming record cannot take the disagreement with it.
+                conflicts.setdefault(run['run_id'], set()).update(runscol._conflicts(known, run), known.get('conflict') or [],
+                                                                  run.get('conflict') or [])
                 if run['phase'] != 'done' and known['phase'] == 'done':
                     continue
             merged[run['run_id']] = run
+    for run_id, fields in conflicts.items():
+        if fields:
+            merged[run_id]['conflict'] = sorted(fields)
     runs = sorted(merged.values(), key=lambda r: (r['started_at'] or '', r['run_id']))
     if a.json:
         print(json.dumps({'schema': RUNS_SCHEMA, 'generated_at': iso(stamp), 'stall_seconds': a.stall_seconds,
