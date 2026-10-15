@@ -6,6 +6,7 @@ from ..util import clean, iso
 
 EVENTS = ('session_start', 'pre_tool_use', 'post_tool_use', 'user_prompt_submit', 'stop', 'session_end')
 SUBAGENT_TOOLS = ('Task', 'Agent')
+ASYNC_TOOLS = ('spawn_agent',)
 SAFE = re.compile(r'[^A-Za-z0-9._-]')
 
 
@@ -48,14 +49,15 @@ def text_of(value, limit=4000):
 
 def subagent_child(payload, event, now, source, host):
     """Child update for a subagent-launching tool call seen in the parent: started on pre_tool_use, terminal on a
-    non-background tool result. A background launch stays running until the child's own stop is observed."""
+    non-background tool result. An asynchronous launch (`run_in_background`, or Codex `spawn_agent`, whose response only
+    says the agent exists) stays running until the child's own stop is observed: a launch response is never completion."""
     tool_input = payload.get('tool_input') if isinstance(payload.get('tool_input'), dict) else {}
     response = payload.get('tool_response')
     key = str(payload.get('tool_use_id') or '')
     if not key:
         return None
-    background = bool(tool_input.get('run_in_background'))
-    update = {'kind': 'subagent', 'subagent_type': clean(tool_input.get('subagent_type') or 'unknown', 60),
+    background = bool(tool_input.get('run_in_background')) or payload.get('tool_name') in ASYNC_TOOLS
+    update = {'kind': 'subagent', 'subagent_type': clean(tool_input.get('subagent_type') or tool_input.get('agent_type') or 'unknown', 60),
               'description': clean(tool_input.get('description') or '', 80), 'background': background,
               'last_observed_at': iso(now)}
     requested = meas(tool_input.get('model'), source, now, 'partial')
@@ -66,7 +68,7 @@ def subagent_child(payload, event, now, source, host):
     elif event == 'post_tool_use':
         agent_id = None
         if isinstance(response, dict):
-            agent_id = response.get('agentId') or response.get('agent_id')
+            agent_id = response.get('agentId') or response.get('agent_id') or response.get('id')
         if agent_id:
             update['agent_id'] = str(agent_id)
         failed = isinstance(response, dict) and bool(response.get('is_error') or response.get('error'))

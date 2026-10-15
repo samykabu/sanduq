@@ -124,13 +124,15 @@ def _child_end(lane):
 
 
 def build(ctx, now, rev=1, state=None):
-    state, cfg = state or {}, ctx.config_data()
+    state = {} if state is None else state
+    cfg = ctx.config_data()
     stale_after = int(cfg.get('stale_after_seconds') or 600)
     tk = taskscol.collect(ctx.feature_dir)
     cp = wf.checkpoint(ctx.feature_dir)
     attempts = wf.attempts(ctx.feature_dir)
     wf_decisions_exist, wf_decisions = wf.decisions(ctx.feature_dir)
-    run_list = runscol.collect_runs(ctx.root / '.delegate' / 'runs', now=now)
+    referenced = {str(a['run_id']) for a in attempts if a.get('run_id')}
+    run_list = runscol.collect_runs(ctx.root / '.delegate' / 'runs', now=now, only=referenced)
     run_by_id = {r['run_id']: r for r in run_list}
     loaded = factslib.load(ctx.facts)
     fact_rows = loaded['current']
@@ -209,8 +211,19 @@ def build(ctx, now, rev=1, state=None):
             _diagnose(ctx, f"description '{clean(label, 60)}' matches {len(group)} children; not merged into lane "
                            f"{owned[label]['id']} (use the agent id or tool_use id as the lane owner)", now)
     unmatched.sort(key=lambda x: (x[2].get('started_at') or x[2].get('last_observed_at') or '', x[1]))
-    for number, (snap, key, child) in enumerate(unmatched, 1):
-        lanes.append({'id': f'C{number}', 'label': clean(child.get('description') or child.get('subagent_type') or key, 60),
+    # Child lane ids are assigned once and persisted in state.json: when another child later merges into an assigned
+    # lane the remaining children keep their ids, so a blocker that targets C2 keeps pointing at the same child.
+    assigned = state.get('child_lanes') if isinstance(state.get('child_lanes'), dict) else {}
+    top = max([int(v[1:]) for v in assigned.values() if re.fullmatch(r'C\d+', str(v))] + [0])
+    for snap, key, child in unmatched:
+        token = f"{snap.get('host')}:{snap.get('session_id')}:{key}"
+        if token not in assigned:
+            top += 1
+            assigned[token] = f'C{top}'
+    state['child_lanes'] = assigned
+    unmatched.sort(key=lambda x: natural(assigned[f"{x[0].get('host')}:{x[0].get('session_id')}:{x[1]}"]))
+    for snap, key, child in unmatched:
+        lanes.append({'id': assigned[f"{snap.get('host')}:{snap.get('session_id')}:{key}"], 'label': clean(child.get('description') or child.get('subagent_type') or key, 60),
                       'owner': child.get('agent_id') or key, 'origin': 'host-child', 'child': child, 'host': snap.get('host'),
                       'requested': {}, 'tasks': [], 'closed': False, 'since': parse_time(child.get('started_at'))})
     claimed = {t for lane in lanes for t in lane['tasks']}
