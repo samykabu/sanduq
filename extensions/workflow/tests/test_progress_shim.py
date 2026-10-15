@@ -212,6 +212,18 @@ class ShimMappings(Project):
         mine = next(l for l in report['lanes'] if l['owner'] == 'worker-1')
         self.assertEqual(mine['attempts'][0]['origin'], 'legacy')
 
+    def test_running_without_agent_never_forwards_an_invalid_lane(self):
+        self.init()
+        before = self.facts()
+        code, out, err = self.legacy('task', '--id', 'T002', '--status', 'running', '--summary')
+        if code == 0:  # mapped onto something Progress accepts
+            attempts = self.facts('attempt')
+            self.assertTrue(attempts, 'running must still record an attempt')
+            self.assertRegex(attempts[-1]['lane'] or 'L0', r'^L\d+$')
+        else:  # explicit compatibility error, before any mutation
+            self.assertIn('compatibility:', out + err)
+            self.assertEqual(self.facts(), before)
+
     def test_blocked_uses_note_as_external_blocker_unless_a_reference_is_given(self):
         self.init()
         self.legacy('task', '--id', 'T002', '--status', 'blocked', '--agent', 'w1', '--note', 'waiting for API key')

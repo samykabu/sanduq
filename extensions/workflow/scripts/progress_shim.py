@@ -122,12 +122,18 @@ def summary_line(report):
 
 # ---- lane handling ---------------------------------------------------------------------------------------------------
 
-def ensure_lane(fwd, report, task, agent):
+def ensure_lane(fwd, report, task, agent, attempt_wanted=False):
     """The facts lane owned by `agent` that carries `task`. The latest agent owns the task, as in the legacy state."""
     lanes = [lane for lane in report.get('lanes') or [] if lane.get('origin') == 'facts']
     mine = next((lane for lane in lanes if agent and lane.get('owner') == agent), None)
     if mine is None and agent is None:
         mine = next((lane for lane in report.get('lanes') or [] if task in lane_task_ids(lane)), None)
+        if mine is not None and not FACTS_LANE.fullmatch(mine['id']):
+            # A derived lane (coordinator, host child, delegation) is not addressable by lane/attempt facts: give the
+            # task an ownerless facts lane so the attempt targets an id Progress accepts.
+            return fwd.call('lane', 'new', '--tasks', task, '--label', mine.get('label') or 'coordinator').split()[1]
+        if mine is None and attempt_wanted:
+            return fwd.call('lane', 'new', '--tasks', task, '--label', 'coordinator').split()[1]
         return mine['id'] if mine else None
     for other in lanes:
         if other is not mine and task in lane_task_ids(other):
@@ -142,6 +148,9 @@ def ensure_lane(fwd, report, task, agent):
     if task not in held:
         fwd.call('lane', mine['id'], '--tasks', ','.join(held + [task]))
     return mine['id']
+
+
+FACTS_LANE = re.compile(r'L\d+')
 
 
 def attempt_status(status):
@@ -172,7 +181,7 @@ def do_task(fwd, args):
     note = args.note
     if args.status == 'pending':
         fwd.call('unblock', '--all-for', task, tolerate=('PROGRESS_NOT_FOUND',))
-    lane = ensure_lane(fwd, report, task, agent) if args.status != 'pending' else None
+    lane = ensure_lane(fwd, report, task, agent, bool(attempt_status(args.status))) if args.status != 'pending' else None
     owner = agent
     if lane and not owner:
         owner = next((l.get('owner') for l in report['lanes'] if l['id'] == lane and l.get('owner')), None)
