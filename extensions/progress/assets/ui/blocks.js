@@ -3,6 +3,7 @@
 (function () {
   'use strict';
   var POLL_MS = 3000;
+  var LOAD_TIMEOUT_MS = 10000;
   var LAYOUT = window.__SANDUQ_PROGRESS_LAYOUT__ || {};
   var ALL = ['header', 'orchestrator', 'lanes', 'boards', 'decisions', 'blockers', 'events'];
   var TITLES = { orchestrator: 'Orchestrator', lanes: 'Lanes', boards: 'Boards', decisions: 'Decisions', blockers: 'Blockers', events: 'Events' };
@@ -245,7 +246,6 @@
   }
 
   function selectedList(x) { return Array.isArray(x.selected) ? x.selected : x.selected == null ? [] : [x.selected]; }
-  function selectedList(x) { return Array.isArray(x.selected) ? x.selected : x.selected == null ? [] : [x.selected]; }
   function decItem(x, made) {
     var li = el('li', null, [el('h3', 'wrap', [x.id, ' ', x.question || '']), pill(made ? 'done' : 'waiting')]);
     li.lastChild.textContent = made ? 'made' : 'pending';
@@ -336,7 +336,11 @@
     inflight = true;
     window.__SANDUQ_PROGRESS__ = undefined;
     var s = document.createElement('script');
+    var settled = false, guard = setTimeout(function () { done('data.js did not load in time.'); }, LOAD_TIMEOUT_MS);
     var done = function (err) {
+      if (settled) return;  // a load that never settles must not stop the poller for good
+      settled = true;
+      clearTimeout(guard);
       inflight = false;
       if (s.parentNode) s.parentNode.removeChild(s);
       var d = window.__SANDUQ_PROGRESS__;

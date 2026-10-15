@@ -8,7 +8,6 @@ a newer observation. Bindings live in .specify/progress/bindings.json under thei
 """
 import json
 import os
-import secrets
 from datetime import timedelta
 from pathlib import Path
 
@@ -49,6 +48,20 @@ def _apply(entry, name, value):
     entry[name] = value
 
 
+def _restarts(entry, update):
+    """A newer running observation after a terminal one is a new attempt generation of the same child (the agent was
+    given follow-up work): the end time is cleared and the generation counts up. An observation at or before the end
+    time is stale and is rejected by `_apply`."""
+    status, at = update.get('status'), update.get('last_observed_at') or ''
+    return (entry.get('status') in TERMINAL and status is not None and status not in TERMINAL
+            and at > (entry.get('ended_at') or '') and at > '')
+
+
+def _restart(entry, update):
+    entry.update(status=update['status'], ended_at=None, started_at=update.get('started_at') or update['last_observed_at'],
+                 generation=int(entry.get('generation') or 1) + 1)
+
+
 def merge(ctx, host, session_id, now, fields=None, child=None, parent_session_id=None, agent_id=None):
     """Merge one observation into the session snapshot. Caller holds the feature lock. Returns True if changed."""
     path = snapshot_path(ctx, host, session_id)
@@ -70,6 +83,8 @@ def merge(ctx, host, session_id, now, fields=None, child=None, parent_session_id
         elif update.get('agent_id') and update['agent_id'] in children and update['agent_id'] != key:
             old = children.pop(update['agent_id'])
             entry = children.setdefault(key, {})
+            if _restarts(entry, old):
+                _restart(entry, old)
             for name, value in old.items():
                 if name in ('model', 'effort', 'status', 'last_observed_at'):
                     _apply(entry, name, value)
@@ -78,6 +93,9 @@ def merge(ctx, host, session_id, now, fields=None, child=None, parent_session_id
         entry = children.setdefault(key, {})
         if child.get('by_agent'):
             entry.setdefault('agent_id', child['key'])
+        if _restarts(entry, update):
+            _restart(entry, update)
+            update.pop('status'), update.pop('started_at', None)
         for name, value in update.items():
             _apply(entry, name, value)
         entry.setdefault('ended_at', None)
@@ -116,7 +134,7 @@ def lookup(root, host, session_id):
 
 
 def create_pending(ctx, now):
-    nonce = secrets.token_hex(6)
+    nonce = os.urandom(6).hex()
     with Lock(ctx.bindings_lock):
         data = _load(ctx.bindings)
         data['pending'] = [p for p in data['pending']

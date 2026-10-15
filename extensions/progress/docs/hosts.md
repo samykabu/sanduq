@@ -9,7 +9,7 @@ and `specify_cli/integrations/base.py`), https://code.claude.com/docs/en/hooks a
 1. The integration writes a native hook whose command is
    `<python> <project>/.specify/events.py <command-name> <event> [<timeout>] [<envelope>] [<native-event>]`.
 2. The dispatcher locates the extension's command template (`.specify/extensions/<id>/commands/*.md`) by command
-   name and parses its `scripts:` frontmatter, e.g. `scripts: { py: scripts/progress.py hook post_tool_use }`.
+   name and parses its `scripts:` frontmatter, e.g. `scripts: { py: scripts/hook.py post_tool_use }`.
 3. **The event name is not passed to the script.** The dispatcher accepts it only for argv compatibility. The script
    receives exactly the tokens written in the `scripts:` value. Progress therefore needs **one command template per
    event**, each baking the event into its `scripts:` line. The payload's own `hook_event_name` is a fallback only.
@@ -26,7 +26,7 @@ and `specify_cli/integrations/base.py`), https://code.claude.com/docs/en/hooks a
 6. Only six canonical events exist: `session_start`, `pre_tool_use`, `post_tool_use`, `session_end`,
    `user_prompt_submit`, `stop`. There is **no subagent start or stop event**. Consequences:
    - a foreground subagent ends when its parent's `Task`/`Agent` tool result arrives;
-   - a background subagent stays `running` until a `stop` payload carrying its `agent_id` is delivered
+   - a background subagent, and a Codex `spawn_agent` (its response says only that the agent exists), stays `running` until a `stop` payload carrying its `agent_id` is delivered
      (**unverified** that hosts deliver one); otherwise it ages into lane status `waiting` after
      `stale_after_seconds`, never into a fabricated `done`.
 
@@ -41,7 +41,8 @@ events:
   session_end:        { command: speckit.progress.hook-session-end, timeout: 20 }
 ```
 
-Each template contains `scripts:\n  py: scripts/progress.py hook <event>`.
+Each template contains `scripts:\n  py: scripts/hook.py <event>`, a standard-library entry that returns before importing Progress for an unbound
+session (about 30 ms, the interpreter start-up) and otherwise runs the same handler as `progress.py hook <event>`.
 
 ## Claude Code payloads (verified from docs)
 

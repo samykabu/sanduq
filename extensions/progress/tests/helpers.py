@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -22,6 +23,19 @@ from sanduq_progress.paths import Ctx  # noqa: E402
 T0 = '2026-10-15T12:00:00Z'
 
 
+def remove_tree(tmp, attempts=10):
+    """TemporaryDirectory.cleanup with retries: on Windows a just-closed browser, scanner or child process can still hold a
+    file for a moment, which made cleanup raise PermissionError (WinError 32) intermittently."""
+    for attempt in range(attempts):
+        try:
+            tmp.cleanup()
+            return
+        except OSError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(0.2 * (attempt + 1))
+
+
 def fixture(name, **replace):
     text = (FIXTURES / name).read_text(encoding='utf-8')
     for key, value in replace.items():
@@ -35,7 +49,7 @@ class Project(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
+        self.addCleanup(remove_tree, self.tmp)
         self.root = Path(self.tmp.name).resolve()
         subprocess.run(['git', 'init', '-q', '-b', self.branch], cwd=self.root, check=True)
         (self.root / '.specify').mkdir()

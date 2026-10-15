@@ -145,18 +145,24 @@ def _conflicts(first, second):
     return [f for f in CONFLICT_FIELDS if first[f] != second[f]]
 
 
-def collect_runs(runs_dir, *, since=None, now=None, stall_seconds=DEFAULT_STALL_SECONDS):
+def collect_runs(runs_dir, *, since=None, now=None, stall_seconds=DEFAULT_STALL_SECONDS, only=None):
     """Compact projections of every run under `runs_dir`, sorted by (started_at, run_id).
 
-    `since` (aware datetime) drops runs that started earlier; runs with an unknown start are kept."""
+    `since` (aware datetime) drops runs that started earlier; runs with an unknown start are kept.
+    `only` (a set of run ids) limits the read to those runs: directories named after an id are read first and the rest
+    are scanned only when some id was not found under its own name, so a long history is not parsed on every refresh."""
     global _malformed, _duplicates
     _malformed, _duplicates = [], []
     now = now or datetime.now(timezone.utc)
     root = Path(runs_dir)
     if not root.is_dir():
         return []
+    folders = sorted(p for p in root.iterdir() if p.is_dir())
+    if only is not None:
+        wanted = [p for p in folders if p.name in only]
+        folders = wanted if only <= {p.name for p in wanted} else folders
     runs, conflicting = {}, {}
-    for directory in sorted(p for p in root.iterdir() if p.is_dir()):
+    for directory in folders:
         result, meta = directory / 'result.json', directory / 'meta.json'
         source = result if result.is_file() else meta if meta.is_file() else None
         if source is None:
@@ -178,5 +184,6 @@ def collect_runs(runs_dir, *, since=None, now=None, stall_seconds=DEFAULT_STALL_
     for run_id, fields in conflicting.items():
         runs[run_id]['conflict'] = sorted(fields)
     started = lambda r: parse_time(r['started_at'])
-    chosen = [r for r in runs.values() if since is None or started(r) is None or started(r) >= since]
+    chosen = [r for r in runs.values() if (since is None or started(r) is None or started(r) >= since)
+              and (only is None or r['run_id'] in only or r['source'] in only)]
     return sorted(chosen, key=lambda r: (r['started_at'] or '', r['run_id']))

@@ -8,46 +8,21 @@ on release (removing it would let a contender lock an unlinked inode).
 """
 import json
 import os
-import secrets
-import socket
 import time
 from pathlib import Path
 
-from .util import iso, utcnow
+from .util import iso, refuse_link, utcnow
 
 # On Windows a locked byte range cannot be read by other handles, so the lock byte sits far beyond the metadata.
 _WIN_LOCK_OFFSET = 1 << 30
 
 
+def _hostname():
+    return os.environ.get('COMPUTERNAME') or (os.uname().nodename if hasattr(os, 'uname') else '')
+
+
 class LockBusy(Exception):
     pass
-
-
-def pid_alive(pid):
-    if not isinstance(pid, int) or pid <= 0:
-        return False
-    if os.name == 'nt':
-        import ctypes
-        kernel = ctypes.windll.kernel32
-        handle = kernel.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
-        if not handle:
-            return ctypes.GetLastError() == 5  # access denied means the process exists
-        try:
-            code = ctypes.c_ulong()
-            if not kernel.GetExitCodeProcess(handle, ctypes.byref(code)):
-                return True
-            return code.value == 259  # STILL_ACTIVE
-        finally:
-            kernel.CloseHandle(handle)
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    except OSError:
-        return False
-    return True
 
 
 def _os_lock(fd):
@@ -81,20 +56,22 @@ def _os_unlock(fd):
 class Lock:
     def __init__(self, path, retries=3, delay=0.2):
         self.path, self.retries, self.delay = Path(path), retries, delay
-        self.token = secrets.token_hex(8)
+        self.token = None
         self.fd = None
 
     def _try(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        refuse_link(self.path)
         fd = os.open(str(self.path), os.O_RDWR | os.O_CREAT)
         if not _os_lock(fd):
             os.close(fd)
             return False
         self.fd = fd
         try:  # diagnostics only
+            self.token = os.urandom(8).hex()
             os.lseek(fd, 0, os.SEEK_SET)
             os.ftruncate(fd, 0)
-            os.write(fd, json.dumps({'pid': os.getpid(), 'host': socket.gethostname(), 'started_at': iso(utcnow()),
+            os.write(fd, json.dumps({'pid': os.getpid(), 'host': _hostname(), 'started_at': iso(utcnow()),
                                      'token': self.token}).encode('utf-8'))
         except OSError:
             pass
