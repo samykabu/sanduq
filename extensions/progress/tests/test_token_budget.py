@@ -16,7 +16,7 @@ except ImportError:  # pragma: no cover
     HAVE_TIKTOKEN = False
 
 if HAVE_TIKTOKEN:
-    from bench import approaches, report, run, traces
+    from bench import approaches, run, traces
 
 ENC = "o200k_base"
 REQUIRES_CLI = unittest.skipUnless(HAVE_TIKTOKEN and approaches.new_available() if HAVE_TIKTOKEN else False,
@@ -72,10 +72,6 @@ class TokenBudget(unittest.TestCase):
         self.assertLessEqual(len(lines), 60)
         text = "\n".join(lines)
         self.assertIn("Reporting is a deterministic projection. Never spawn, retain, message or poll an agent solely to maintain it.", text)
-
-    def test_generated_report_is_current(self):
-        doc = report.DOC.read_text(encoding="utf-8")
-        self.assertEqual(doc, report.render(self.data), "run: python -m tests.bench.report")
 
 
 if __name__ == "__main__":

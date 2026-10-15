@@ -17,12 +17,19 @@ These contracts are normative. Code and tests follow them. Change them only with
 
 ## Layout
 
+A report is either a Spec Kit **feature** report (`specs/<feature>/progress/`, tasks from `tasks.md`) or a **plan**
+report (`.progress/<name>/` by default, tasks from a Markdown checklist). The two have the same files and the same
+contracts below; only the places named in this section and in "Plan mode" differ. The examples say `specs/<feature>`.
+
 ```
 specs/<feature>/progress/
   facts.jsonl            tracked in git (owner decision D4)
   .host/                 git-ignored, NOT disposable: host snapshots (progress.host.v1), the durable home of child identity
+    .gitignore           a single `*` line, written atomically with the directory (git applies the closest .gitignore first,
+                         so a parent rule such as `!claude-*.json` cannot expose a snapshot; the `*` ignores this file too)
     <host>-<session>.json   (older versions kept them in .view/host; the first access moves them here)
-  .view/                 git-ignored and disposable (Progress writes `specs/*/progress/.view/` and `.host/` to .git/info/exclude at init)
+  .view/                 git-ignored and disposable (Progress writes `specs/*/progress/.view/` and `.host/` to .git/info/exclude at init;
+                         it also carries the same single-`*` .gitignore; a link at either path is refused)
     report.json          projection, schema sanduq.progress.v2
     data.js              window.__SANDUQ_PROGRESS__ = <report.json>;   (file:// safe)
     index.html           static shell, copied from assets/ui at init/upgrade, never templated with data
@@ -36,7 +43,7 @@ specs/<feature>/progress/
     lock                 per-feature lock held by the OS for the life of the process (msvcrt.locking on Windows,
                          fcntl.flock elsewhere); the OS drops it if the process dies, so there is no stale recovery.
                          The file content {"pid", "host", "started_at", "token"} is diagnostic only
-.specify/progress/
+.specify/progress/        (Spec Kit project; `.progress/.project/` when the project has no `.specify`, see Plan mode)
   config.json            {"debounce_seconds": 5, "stale_after_seconds": 600,
                           "statusline": {"enabled": bool, "chained": "<previous command or null>"}}
   theme.json             progress.theme.v1 (optional; preset default "sanduq")
@@ -56,8 +63,65 @@ direct child of the resolved `specs/` directory (a symlinked feature pointing el
 and `.view/` output directories must also resolve inside it; otherwise the command fails with `PROGRESS_NO_FEATURE`
 (hooks drop the event) before anything is written.
 
-The feature directory is resolved in order: `--feature <dir>`; `SPECIFY_FEATURE` env; Workflow checkpoint `feature`;
-current git branch matching `specs/<branch>`; else error `PROGRESS_NO_FEATURE` (one line).
+The report is resolved in order: `--plan <name|path>` or `--feature <dir>` (exclusive; a wrong value is an error);
+`SPECIFY_FEATURE` env; Workflow checkpoint `feature`; current git branch matching `specs/<branch>` (these three only when
+that feature is initialised); the only initialised report; else error `PROGRESS_NO_FEATURE` (one line, listing the
+candidates when any exist).
+
+## Plan mode
+
+```
+.progress/<name>/            or the --dir directory: any directory inside the repository, never under `specs/`
+  facts.jsonl                tracked, identical to feature mode
+  plan.json                  tracked, progress.plan.v1: {"schema", "name", "source", "ids": [{"id", "fp"}], "next"}; `fp` is the first 16 hex digits of SHA-256 of the normalised item text. No item text is ever tracked
+  .host/                     git-ignored; also holds plan-source.json {"path": "<absolute>", "fingerprint"} for an external
+                             plan and plan-keys.json {"<id>": "<normalised text>"}, the only place item text is kept
+  .view/                     git-ignored and disposable, identical to feature mode; `.host/` and `.view/` each hold a
+                             `.gitignore` with a single `*`. Default `.progress/<name>` needs no extra exclude lines (the wildcards cover it)
+.progress/plans.json         tracked; {"dirs": [...]}, only when a --dir outside .progress/ is used
+.progress/.project/          project state when there is no .specify/progress: config.json, theme.json, bindings.json,
+                             bindings.lock, diagnostics.log[.1]. bindings, locks, the log and config.json are git-ignored
+```
+
+- **Target id.** The `feature` value in bindings and in `feature.dir` of the projection is the report directory
+  (`.progress/launch`) for a plan. A value of the form `specs/<dir>` is always a feature; anything else is a plan.
+- **Project directory.** `.specify/progress` if it exists, else `.progress/.project` if it exists, else
+  `.specify/progress` when `.specify/` exists, else `.progress/.project`. The standard-library hook entry applies the
+  same rule.
+- **Confinement.** The plan report directory has no `.`/`..` components, is not the repository root, is not under `.git`,
+  is not under `specs/`, and (links resolved) lies inside the repository, as do its `.view/` and `.host/`.
+  Otherwise `PROGRESS_NO_FEATURE` (hooks drop the event).
+- **Source reference.** `plan.json` `source` is a repo-relative posix path, or `external:<file name>` for a plan outside
+  the repository. Tracked files never hold an absolute path or item text (so nothing in them needs a secret scan); the
+  absolute path of an external plan and its path fingerprint are only in `.host/plan-source.json`. Another external file
+  with the same name is refused unless `--rebind`. The plan file is only read (at most 1 MiB). `init` writes into a
+  `--dir` only when its `plan.json` is absent or `progress.plan.v1`, and only after `git check-ignore` confirms that
+  `.view/` and `.host/` are ignored.
+- **Items.** A list item `- [ ]`/`- [x]` (markers `-`, `*`, `+`; any indent) outside fenced blocks. Phase: the nearest
+  preceding heading of level 2 or deeper. Title: the first level-1 heading. Explicit id: at the start of the item,
+  optionally bold, followed by `:`, `.`, `)` or a space; one to three capital letters, an optional dash, digits, and not a
+  lane, blocker, decision or note id shape (`L`, `W`, `C`, `B`, `D`, `N`, `SD` plus digits). Unless bold, the id needs two
+  digits or more, or the prefix `T` or `US` (so `MP3`, `GPT-4`, `Q3`, `A4`, `ES6` are text). An id already used by an earlier
+  item turns the later item into an auto item and writes one diagnostics line. `(depends on …)` and
+  `(after …)` list task ids; `[P]` marks a parallel item.
+- **Auto ids.** `P<nnn>` (three digits or more), assigned from `plan.json` `ids` in three steps: equal fingerprint,
+  then text at least 60 percent similar to the local `.host/plan-keys.json` text (difflib ratio, best first), then `next + 1`. `next` only grows. Normalised text
+  is lower-cased, without `*`, `_`, backticks and `~`, whitespace collapsed, 120 characters at most. `plan.json` is
+  rewritten under the report lock on a refresh, and only when the map changed; read-only verbs compute the same ids
+  without writing.
+- **Projection.** `sanduq.progress.v2` unchanged. `feature` gains `mode: "plan"` and `source`; `feature.id` is the plan
+  name, `feature.title` the plan title (else the name), `stage` is null and `workflow` false. No Workflow files are
+  read for a plan.
+
+## Native hooks installer
+
+`progress hooks install|uninstall|status` edits the host's hook file (see the commands reference). Every entry it writes
+has a command containing `hook.py` and the argument `--managed-by=progress-report`; an entry is "ours" if and only if
+both appear. Entries registered by Spec Kit's dispatcher contain `speckit.progress.hook`; when one exists in a file of
+the target host the installer writes nothing and exits 3. Commands end in `; exit 0` and use `${CLAUDE_PROJECT_DIR}` (braced)
+for Claude project scope. Installs run under one OS-held lock (`<user settings file>.progress-lock`, never taken over by age) that also covers the Spec Kit and other-scope checks, which repeat on every attempt. Writes happen only when the file bytes are unchanged since they were
+read (one re-read, then `PROGRESS_HOOKS_CONFLICT`). Entries of this installer in the other scope are refused
+(`PROGRESS_HOOKS_DUPLICATE`) unless `--force-both`.
 
 ## facts.jsonl (`progress.facts.v1`)
 
@@ -130,7 +194,7 @@ entry (agent id <-> tool_use id) changes no lane id.
 
 ## Binding
 
-A CLI process cannot know the host session id, so binding is a two-step explicit handshake:
+(`bindings.json` is in the project directory.) A CLI process cannot know the host session id, so binding is a two-step explicit handshake:
 
 1. `progress init` / `progress bind` (run by the coordinator through its shell tool) writes a pending bind
    `{feature, worktree, nonce, created_at}` to `bindings.json` (expires after 120 s) and prints the nonce in its line.
@@ -232,6 +296,7 @@ appear as `host-child` lanes (unmapped = no tasks, shown as such).
 
 ```
 progress init [--feature DIR] [--statusline yes|no] [--theme PRESET]   -> "progress: ready specs/…/progress/.view/index.html"
+progress init --plan PATH [--name NAME] [--dir DIR]                     -> "progress: ready .progress/<name>/.view/index.html bind=…"
 progress bind [--session ID]                                            -> "progress: bound <session>"
 progress refresh [--final]                                              -> silent on success unless --verbose
 progress status [--json]                                                -> one-line summary or projection JSON
@@ -246,7 +311,11 @@ progress export [--format md|json] [--out PATH]                         -> deter
 progress attempt record (--lane L1 | --overhead LABEL) --run ID --status S [--started T] [--ended T] [--usage-json PATH]
 progress runs [--json] [--runs-dir DIR]... [--now T] [--stall-seconds N]  -> progress.runs.v1
 progress hook <event>                                                   -> reads host JSON on stdin; never prints on success
+progress hooks install|uninstall --host claude|codex [--scope project|user] [--python CMD] [--force-both]   -> one line
+progress hooks status [--host claude|codex]                              -> one line
 ```
+
+Every verb that works on one report also takes `--plan NAME|PATH` or `--feature DIR`.
 
 Exit codes: 0 ok, 2 usage error, 3 refused (authority/binding), 4 lock busy (the OS lock is held by another process; verbs retry 3× with 200 ms backoff first).
 Error lines start with `progress: error <CODE>`.
@@ -274,7 +343,7 @@ one for the same run id; real disagreement is listed in `conflict`, and the conf
 ## Hook behaviour
 
 Hooks run `scripts/hook.py <event>` (standard library only). It exits before importing Progress when Progress was never
-initialised in the project (no `.specify/progress/`, nothing is written) or when the session is not bound, has no pending
+initialised in the project (no project directory, `.specify/progress/` or `.progress/.project/`; nothing is written) or when the session is not bound, has no pending
 handshake and its drop is already logged; an unbound session is logged once per session id. Anything else is handed to
 `progress hook <event>` (same code, `progress.py hook` stays available): parse stdin (tolerate empty/invalid → diagnostics,
 exit 0). Update the host snapshot under the

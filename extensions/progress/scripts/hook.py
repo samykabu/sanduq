@@ -17,7 +17,7 @@ def find_root():
     if override:
         return os.path.realpath(override)
     here = os.path.realpath(os.getcwd())
-    for marker in ('.specify', '.git'):
+    for marker in ('.specify', '.git', '.progress'):
         folder = here
         while True:
             if os.path.exists(os.path.join(folder, marker)):
@@ -27,6 +27,16 @@ def find_root():
                 break
             folder = parent
     return here
+
+
+def project_dir(root):
+    """Same rule as sanduq_progress.paths.project_dir: an existing home wins; else .specify/progress when the project has
+    Spec Kit, .progress/.project otherwise."""
+    for candidate in (('.specify', 'progress'), ('.progress', '.project')):
+        folder = os.path.join(root, *candidate)
+        if os.path.isdir(folder):
+            return folder
+    return os.path.join(root, '.specify', 'progress') if os.path.isdir(os.path.join(root, '.specify')) else os.path.join(root, '.progress', '.project')
 
 
 def load(path):
@@ -85,7 +95,7 @@ def quick_unbound(root, event, raw):
     """True when the event is provably ignorable using only string tests, so not even `json` (which pulls in `re`) is
     imported: Progress was never initialised here, or the payload opens with a plain session_id that no binding
     names, no handshake is pending for it and its drop is already logged. Anything unusual returns False."""
-    progress_dir = os.path.join(root, '.specify', 'progress')
+    progress_dir = project_dir(root)
     if not os.path.isdir(progress_dir):
         return True
     head = raw.lstrip()
@@ -111,7 +121,7 @@ def quick_unbound(root, event, raw):
 
 def relevant(root, event, payload):
     """False when the event provably cannot attach to a binding (no state, no bound session, no pending handshake)."""
-    progress_dir = os.path.join(root, '.specify', 'progress')
+    progress_dir = project_dir(root)
     if not os.path.isdir(progress_dir):
         return False
     bindings = load(os.path.join(progress_dir, 'bindings.json'))

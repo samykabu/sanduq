@@ -1,60 +1,58 @@
 # Progress command reference
 
-Every Spec Kit command, CLI verb, flag, output line, exit code and schema of the Progress extension. For an overview,
-read the [README](../README.md). The normative file formats are in [contracts](contracts.md).
+Every CLI verb, flag, output line, exit code and schema of the `progress-report` skill, in plan mode and in Spec Kit
+feature mode. For an overview, read the [README](../README.md). The normative file formats are in
+[contracts](contracts.md); host details and the hook installer's host files are in [hosts](hosts.md).
 
-Contents: [Spec Kit commands](#spec-kit-commands) · [The CLI](#the-cli) · [Verbs](#verbs) ·
-[Hook entry](#hook-entry) · [Status line](#status-line-wrapper) · [Theme](#theme-verb-and-theme-file) ·
-[Export](#export-formats) · [Schemas](#json-schemas) · [Benchmarks](#benchmarks)
-
-## Spec Kit commands
-
-Spec Kit registers these through your host's integration. Codex shows them as `$speckit-progress-init`; Claude Code as
-`/speckit-progress-init`. Each command loads the skill, then runs one CLI verb and relays its single line. Text after the
-command name is appended to the verb as arguments.
-
-| Command | Runs | Use | Example |
-| --- | --- | --- | --- |
-| `speckit.progress.init` | `progress.py init $ARGUMENTS` | Once per feature, after the task list exists. Also an optional `after_tasks` hook | `$speckit-progress-init Create the progress report for specs/001-demo.` |
-| `speckit.progress.refresh` | `progress.py refresh --verbose $ARGUMENTS` | A forced snapshot. Also an optional `after_implement` hook. It does not mean the feature is complete | `$speckit-progress-refresh Write a final progress snapshot.` |
-| `speckit.progress.status` | `progress.py status $ARGUMENTS` | The one-line summary; add `--json` for the projection | `$speckit-progress-status Show the one-line progress status.` |
-| `speckit.progress.theme` | `progress.py theme $ARGUMENTS` | Choose a preset, import the Illustrate theme, load a file or show the theme | `$speckit-progress-theme Use the cobalt theme for the progress report.` |
-| `speckit.progress.export` | `progress.py export $ARGUMENTS` | Write the projection as Markdown or JSON | `$speckit-progress-export Export the progress report as Markdown.` |
-| `speckit.progress.hook-session-start` | `scripts/hook.py session_start` | Internal. Never invoked by an agent | |
-| `speckit.progress.hook-pre-tool-use` | `scripts/hook.py pre_tool_use` | Internal | |
-| `speckit.progress.hook-post-tool-use` | `scripts/hook.py post_tool_use` | Internal | |
-| `speckit.progress.hook-stop` | `scripts/hook.py stop` | Internal | |
-| `speckit.progress.hook-session-end` | `scripts/hook.py session_end` | Internal | |
-
-Agents record lanes, blockers, decisions and notes with the other verbs below. There is no Spec Kit command for them, so
-the skill ([`skills/progress/SKILL.ext.md`](../skills/progress/SKILL.ext.md)) lists the command lines.
+Contents: [The CLI](#the-cli) · [Verbs](#verbs) · [Hook entry](#hook-entry) · [Status line](#status-line-wrapper) ·
+[Theme](#theme-verb-and-theme-file) · [Export](#export-formats) · [Schemas](#json-schemas) ·
+[Spec Kit commands](#spec-kit-commands-sanduq-extension) · [Benchmarks](#benchmarks)
 
 ## The CLI
 
 ```text
-python .specify/extensions/progress/scripts/progress.py <verb> [options]
+python <skill dir>/scripts/progress.py <verb> [options]
 ```
 
-Run it from the repository root. This page writes `progress` for that command. Fifteen verbs exist:
-`init`, `bind`, `refresh`, `status`, `lane`, `block`, `unblock`, `decide`, `note`, `attempt`, `runs`, `theme`,
-`export`, `hook` and `statusline`.
+`<skill dir>` is where the skill is installed: `.claude/skills/progress-report`, `.agents/skills/progress-report`, or
+`$CLAUDE_PLUGIN_ROOT/skills/progress-report`. Run it from the repository root. This page writes `progress` for that
+command. Sixteen verbs exist: `init`, `bind`, `refresh`, `status`, `lane`, `block`, `unblock`, `decide`, `note`,
+`attempt`, `runs`, `theme`, `export`, `hook`, `hooks` and `statusline`. Python 3.11 or newer; standard library only.
 
-**Options every verb takes.** They go after the verb name, for example `progress lane --feature specs/001-demo L1`.
+**Options every verb takes** (except `hooks`). They go after the verb name and before any sub-action, for example
+`progress lane --plan launch L1` or `progress decide --plan launch ask "..." --options a,b`.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `--feature DIR` | resolved, see below | The feature directory, `specs/<dir>` or the bare `<dir>`. A path with `.` or `..`, a nested path and a symlinked directory that leaves `specs/` are refused |
+| `--plan NAME\|PATH` | the one active report, see below | Plan mode. A plan name (`launch`), a report directory (`.progress/launch`), or the plan file itself (`docs/plan.md`). On `init` it is the Markdown file to read |
+| `--feature DIR` | resolved, see below | Feature mode. The feature directory, `specs/<dir>` or the bare `<dir>`. A path with `.` or `..`, a nested path and a symlinked directory that leaves `specs/` are refused. Not combinable with `--plan` |
 | `--actor ACTOR` | `agent:coordinator`, or `$SANDUQ_PROGRESS_ACTOR` | Who is recording. `user`, `hook`, `legacy` or `agent:<id>` (1 to 64 characters of `A-Za-z0-9._-`). Anything else is `PROGRESS_FORBIDDEN_CONTENT` |
 
 `--root DIR` is accepted before the verb, hidden from `--help`, and used by Workflow to run Progress from another
 directory.
 
-**Which feature.** In order: `--feature`, the `SPECIFY_FEATURE` environment variable, the `feature` of the Workflow
-checkpoint whose branch is the current branch, then the current git branch when it names a `specs/<branch>` directory.
-If none matches, the verb exits 2 with `PROGRESS_NO_FEATURE`. If `--feature` is given and wrong, the other sources
-are not tried.
+**Which report.** Every verb except `init`, `runs`, `theme` and `hooks` works on one report. In order:
 
-**Which repository.** `$SANDUQ_PROGRESS_ROOT`, else the nearest parent holding `.specify`, else the nearest holding `.git`.
+1. `--plan NAME|PATH` (a plan report), or `--feature DIR` (a feature report). A wrong value is an error; nothing else is tried.
+2. The feature named by the `SPECIFY_FEATURE` environment variable, by the Workflow checkpoint whose branch is the current
+   branch, or by the current git branch (a `specs/<branch>` directory), when that feature has been initialised.
+3. The only initialised report in the repository, plan or feature, when there is exactly one.
+
+Otherwise the verb exits 2 with `PROGRESS_NO_FEATURE` and one line that lists what exists:
+
+```text
+progress: error PROGRESS_NO_FEATURE pass --plan NAME or --feature DIR (candidates: plan:launch, plan:backlog, specs/001-demo)
+```
+
+With no report at all the line reads `pass --feature specs/<dir>`. `init` without `--plan` resolves a Spec Kit feature
+only, as before.
+
+**Which repository.** `$SANDUQ_PROGRESS_ROOT`, else the nearest parent holding `.specify`, else the nearest holding
+`.git`, else the nearest holding `.progress`.
+
+**Where project state lives.** Config, theme, bindings and diagnostics are per project, not per report. They are in
+`.specify/progress/` in a Spec Kit project and in `.progress/.project/` everywhere else. An existing directory wins, so a
+project keeps one home once it has one.
 
 **Output.** Each verb prints one line that starts `progress:`, and nothing else, with these exceptions: `refresh` prints
 nothing unless `--verbose`; `status --json`, `runs --json`, `theme --show` and `export` without `--out` print a
@@ -66,14 +64,15 @@ the line and do not elaborate.
 | Code | Meaning |
 | ---: | --- |
 | 0 | Done |
-| 2 | Usage error, no feature, not initialised, not found, invalid theme |
-| 3 | Refused: Workflow owns decisions, forbidden content, unsafe link |
+| 2 | Usage error, no report, not initialised, not found, invalid theme, plan file missing |
+| 3 | Refused: Workflow owns decisions, forbidden content, unsafe link, plan name taken, hook installer refusals |
 | 4 | Another Progress process holds the feature lock. A verb retries 3 times, 200 ms apart, first |
 
 **Error lines** read `progress: error CODE message`. The codes are `PROGRESS_USAGE`, `PROGRESS_NO_FEATURE`,
 `PROGRESS_NOT_INITIALIZED`, `PROGRESS_NOT_FOUND`, `PROGRESS_THEME_INVALID`, `PROGRESS_THEME_UNAVAILABLE`,
-`PROGRESS_DECISION_AUTHORITY`, `PROGRESS_FORBIDDEN_CONTENT`, `PROGRESS_UNSAFE_TARGET` and `PROGRESS_LOCK_BUSY`. The
-[README table](../README.md#error-codes) gives the cause and fix of each.
+`PROGRESS_DECISION_AUTHORITY`, `PROGRESS_FORBIDDEN_CONTENT`, `PROGRESS_UNSAFE_TARGET`, `PROGRESS_LOCK_BUSY`, and in plan
+mode `PROGRESS_PLAN_MISSING`, `PROGRESS_PLAN_EXISTS`, and for `hooks` `PROGRESS_HOOKS_SPECKIT`, `PROGRESS_HOOKS_SETTINGS`,
+`PROGRESS_HOOKS_PATH`, `PROGRESS_HOOKS_DUPLICATE`, `PROGRESS_HOOKS_CONFLICT`, `PROGRESS_DIR_CONFLICT` and `PROGRESS_EXCLUDE_FAILED`. The [README table](../README.md#error-codes) gives the cause and fix of each.
 
 **Environment.**
 
@@ -82,6 +81,8 @@ the line and do not elaborate.
 | `SANDUQ_PROGRESS_ROOT` | Repository root, instead of searching upward from the working directory |
 | `SANDUQ_PROGRESS_ACTOR` | Default for `--actor` |
 | `SANDUQ_PROGRESS_NOW` | A fixed ISO-8601 clock, for tests |
+| `SANDUQ_PROGRESS_HOME` | Home directory for `hooks --scope user`, instead of the OS home |
+| `CLAUDE_CONFIG_DIR`, `CODEX_HOME` | Where `hooks --scope user` finds Claude's `settings.json` and Codex's `hooks.json` |
 
 **Text rules for every fact.** Free text is stripped of control characters and capped (200 characters unless a verb
 says otherwise). The whole record is checked before it is written. A string that looks like a secret, or an absolute
@@ -89,7 +90,10 @@ path outside the repository (drive, UNC or POSIX form, on any platform), is refu
 and exit 3. Never put secrets, absolute paths or transcript text in a note.
 
 Ids are assigned by the CLI: lanes `L1`, `L2`, ...; blockers `B1`; decisions `D1`; notes `N1`; attempts `A1`. Workflow
-delegation lanes are `W1`... and host child agents `C1`... They appear on their own.
+delegation lanes are `W1`... and host child agents `C1`... They appear on their own. Task ids come from the plan or
+`tasks.md` (`T001`, `US3`, or the auto ids `P001`...) and are accepted wherever a task is named: `lane --tasks`,
+`block`, `unblock`, `note --target`, `--by`. A task id is one to three capital letters, an optional dash and digits;
+`L`, `W`, `C`, `B`, `D`, `N` and `SD` followed by digits are lane, blocker, decision and note ids and never task ids.
 
 ## Verbs
 
@@ -97,18 +101,24 @@ delegation lanes are `W1`... and host child agents `C1`... They appear on their 
 
 ```text
 progress init [--feature DIR] [--statusline yes|no] [--theme PRESET]
+progress init --plan PATH [--name NAME] [--dir DIR] [--statusline yes|no] [--theme PRESET]
 ```
 
-Creates the report for a feature and prepares to bind this session. Safe to run again: facts, config and theme are kept,
-and the report files are copied afresh (run it again after an upgrade).
+Creates a report and prepares to bind this session. Safe to run again: facts, config, theme and the stored plan ids are
+kept, and the report files are copied afresh (run it again after an upgrade).
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
+| `--plan PATH` | none | Plan mode. Any Markdown checklist file. Read, never written. See [plan mode](#plan-mode) |
+| `--name NAME` | the plan file name without extension, slugified | Plan mode. The report name: lowercase letters, digits, `.`, `-`, `_`, 64 characters at most |
+| `--rebind` | off | Plan mode. Let an existing report follow a different plan file (without it a different file is refused with `PROGRESS_PLAN_EXISTS`) |
+| `--dir DIR` | `.progress/<name>` | Plan mode. A report directory inside the repository. Refused when it has `.` or `..` components, is the repository root, is under `.git` or anywhere under `specs/`, or reaches outside through a symlink |
 | `--statusline` | `no` | `yes` also installs the [status line wrapper](#status-line-wrapper) |
 | `--theme` | none | A preset name, applied like [`theme --preset`](#theme-verb-and-theme-file) |
 
-It creates `specs/<feature>/progress/` with `facts.jsonl` and `.view/`, `.specify/progress/config.json`, adds the
-git-ignored paths to `.git/info/exclude`, writes the first projection, and starts the bind handshake.
+Feature mode creates `specs/<feature>/progress/` with `facts.jsonl` and `.view/`. Plan mode creates the report directory
+with `facts.jsonl`, `plan.json` and `.view/`. Both write the project `config.json`, add the git-ignored paths to
+`.git/info/exclude`, write the first projection, and start the bind handshake.
 
 ```text
 $ progress init
@@ -126,7 +136,58 @@ $ progress init --theme nope
 progress: error PROGRESS_THEME_INVALID unknown preset nope
 ```
 
-Errors: `PROGRESS_THEME_INVALID` (2), `PROGRESS_NO_FEATURE` (2), `PROGRESS_UNSAFE_TARGET` (3), `PROGRESS_LOCK_BUSY` (4).
+Errors: `PROGRESS_THEME_INVALID` (2), `PROGRESS_NO_FEATURE` (2), `PROGRESS_USAGE` (2: `--name` or `--dir` without
+`--plan`, bad name or directory, `--plan` with `--feature`), `PROGRESS_PLAN_MISSING` (2), `PROGRESS_PLAN_EXISTS` (3: the
+report already follows another plan; pass `--name`, `--dir` or `--rebind`), `PROGRESS_DIR_CONFLICT` (3), `PROGRESS_EXCLUDE_FAILED` (3), `PROGRESS_UNSAFE_TARGET` (3), `PROGRESS_LOCK_BUSY` (4).
+
+#### Plan mode
+
+```text
+$ progress init --plan docs/plan.md
+progress: ready .progress/plan/.view/index.html bind=0b04e35005e9
+```
+
+**What counts as a plan.** Any Markdown file. Every list item that starts `- [ ]` or `- [x]` (also `*` and `+`, nested items
+too) is a task. A heading of level 2 or deeper names the phase of the items below it; the first level-1 heading is the
+report title. Fenced code blocks and inline code spans are ignored, so an item or id quoted in prose or in a code
+example is not a task.
+
+**Ids.** An item that starts with an id keeps it: `T001`, `US3`, `**T001**: title`, `T-12: title`, `T001) title`. Rule:
+an id with no bold and no `:` `.` `)` after it must be a `T`, `US` or `P` prefix followed by digits and no dash (`T001 title`,
+`US12 title`); any other form needs a delimiter (`X11: title`, with two digits or more, or a `T`/`US` prefix) or bold. So
+MP3, GPT-4, Q3, A4, ES6, X11, H264, ES2015, RFC-7231 and CVE-2024 followed by a space are text. A second item with an id that is already taken becomes an auto item and a line goes to the
+diagnostics log. Every other item gets an auto id `P001`, `P002`, ... The tracked `plan.json` stores, per auto id, a
+truncated SHA-256 fingerprint of the normalised text and never the text; the text itself is kept in the git-ignored
+`.host/plan-keys.json`. The map is applied on every refresh, in this order:
+
+1. an item whose normalised text (case, spacing and emphasis ignored) has the stored fingerprint reuses its id, first
+   unused match in plan order;
+2. an item at least 60 percent similar to a stored, unmatched text (known locally) reuses that id, best match first. A
+   fresh clone has the fingerprints only, so rewording there gives a new id;
+3. any other item takes the next number. Numbers are never reused, even after the item is deleted.
+
+So reordering items, checking them off and small rewordings keep their ids; adding an item never shifts the others. A
+rewrite beyond recognition, or deleting one item and adding another, gives a new id. An explicit id that equals an auto id
+wins, and the auto id moves on.
+
+**Annotations.** `(depends on T001, P002)` and `(after T001)` add dependency edges to items named by id. Unknown ids and
+self references are dropped. `[P]` marks an item parallel. Annotations are removed from the shown title.
+
+**Where it lives.** The default report directory is `.progress/<name>/`; `--dir` puts it elsewhere in the repository and
+records it in the tracked `.progress/plans.json` so `--plan NAME` finds it. `facts.jsonl` and `plan.json` are tracked;
+`.view/` and `.host/` are git-ignored through `.git/info/exclude`, with glob characters in `--dir` escaped (a `--dir
+"reports/[review]"` works). `init` first creates `.host/` and `.view/` with a nested `.gitignore` holding `*` (every write there goes through it, so a parent rule that re-includes a file cannot expose it), then runs `git check-ignore` on the actual local-only files (`.host/plan-keys.json`,
+`.host/plan-source.json`, a host snapshot and every `.view/` file) and fails with `PROGRESS_EXCLUDE_FAILED` if any would be
+tracked, for example because a `.gitignore` re-includes one. The check runs before the directory is registered in
+`.progress/plans.json`, and a refusal removes the directories and nested files it created, so a refused `init` leaves `git status` unchanged. It also refuses (`PROGRESS_DIR_CONFLICT`) a `--dir` whose
+`plan.json` or `facts.jsonl` is not a Progress plan report, before any write.
+
+**The plan file.** Progress never writes it. Whoever owns the plan checks items off, and the next refresh follows. A plan
+inside the repository is stored as a repo-relative path. A plan outside it (for example `~/.claude/plans/x.md`) is read
+in place; `plan.json` stores only `external:<file name>`, and the absolute path stays in the git-ignored
+`.host/plan-source.json` together with a fingerprint of the full path; `init` with another file of the same name is
+refused unless `--rebind` is given. A fresh clone has the facts but not that path: run `progress init --plan PATH` again to point
+the report at the file. While the source is missing the report shows no tasks.
 
 ### bind
 
@@ -372,10 +433,85 @@ progress statusline [run|install|uninstall]
 `install` and `uninstall` print one line. `run` is the default and is what Claude Code calls. See
 [Status line wrapper](#status-line-wrapper).
 
+### hooks
+
+```text
+progress hooks install   --host claude|codex [--scope project|user] [--python CMD] [--force-both]
+progress hooks uninstall --host claude|codex [--scope project|user]
+progress hooks status    [--host claude|codex]
+```
+
+Writes or removes the host's native hook entries that call `scripts/hook.py`. Nothing is written unless you run
+`install` or `uninstall`; `status` only reads.
+
+| Host | Project scope file | User scope file | Events written |
+| --- | --- | --- | --- |
+| `claude` | `.claude/settings.json` | `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR`) | `SessionStart`, `PreToolUse` (matcher `Task\|Agent\|spawn_agent`), `PostToolUse`, `Stop`, `SessionEnd` |
+| `codex` | `.codex/hooks.json` | `~/.codex/hooks.json` (or `$CODEX_HOME`) | `SessionStart`, `PreToolUse` (same matcher), `PostToolUse`, `Stop`. No session end: Codex documents none, and `Stop` already forces a refresh |
+
+Each entry has this shape and a 10 second timeout. The `--managed-by=progress-report` argument is the tag: it is how
+`uninstall` and `status` recognise exactly these entries.
+
+```json
+{"matcher": "Task|Agent|spawn_agent", "hooks": [{"type": "command", "timeout": 10,
+  "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/skills/progress-report/scripts/hook.py\" pre_tool_use --managed-by=progress-report; exit 0"}]}
+```
+
+- **Preserving settings.** The file is read as JSON and only the `hooks` entries carrying the tag are touched. Other
+  settings, other hooks (including other groups for the same event), key order and indentation are kept. `install` run
+  again replaces its own entries and adds no duplicates. `uninstall` removes only tagged entries, then any group, event
+  key or `hooks` key left empty. A file that is not valid JSON, or whose `hooks` is not an object, is never overwritten
+  (`PROGRESS_HOOKS_SETTINGS`, exit 3).
+- **Paths.** Project scope never writes an absolute path into a file you commit: the command is repo-relative, as
+  `${CLAUDE_PROJECT_DIR}/<path>` for Claude (the braced form is the one Claude Code rewrites in both bash and PowerShell) and `<path>` for Codex (Codex runs hooks in the session's working directory;
+  **unverified**, so start Codex at the repository root). When the skill lives outside the repository (a plugin install),
+  project scope is refused with `PROGRESS_HOOKS_PATH`; use `--scope user`, which writes the absolute path, or copy the
+  skill into the repository.
+- **Interpreter.** `--python CMD` sets the command; the default is `python` on Windows and `python3` elsewhere, chosen when
+  you run `install`. Pass it when a shared project file must work on both. It must be one word without spaces or shell
+  characters (`PROGRESS_USAGE`, exit 2); put the interpreter on PATH instead of quoting a path with spaces.
+- **A vanished script.** Every command ends in `; exit 0`, which bash and PowerShell (the two shells Claude Code uses; on
+  Windows PowerShell is the fallback when Git Bash is absent) both accept. If the script path disappears, for example a
+  plugin cache directory that was updated or pruned, the hook ends quietly instead of returning Python's exit code 2.
+  `hooks status` shows `(N script missing)` for such entries. Run `hooks uninstall --scope user` before updating or
+  removing the plugin, then install again. Claude Code's exec form (`args`) and `async` hooks are documented but
+  version dependent, so they are future work; `Stop` and `SessionEnd` must stay synchronous.
+- **Two scopes.** When this installer's entries exist in the other scope of the same host, `install` exits 3
+  (`PROGRESS_HOOKS_DUPLICATE`) because the host would run both; `--force-both` overrides. A file in the other scope that
+  cannot be read does not stop an install and shows as `unreadable` in `status`; only the file being written must parse.
+- **Concurrent edits.** Installs run under one OS-held lock per host (`settings.json.progress-lock` or `hooks.json.progress-lock`
+  next to the user-scope file), released by the operating system if the process dies; it is never taken over by age. The Spec Kit
+  and other-scope checks run inside the lock on every attempt, so two concurrent installs in different scopes cannot both
+  succeed without `--force-both`. The file is written only if its bytes are unchanged since they were read. A change in
+  between is re-read and the checks and the edit applied once more; a second change, or a lock held by another installer, exits 3 with `PROGRESS_HOOKS_CONFLICT`. A settings file that is a symlink
+  (a dotfiles setup) is refused with `PROGRESS_UNSAFE_TARGET`.
+- **Binding.** When exactly one report already exists, `install` appends `bind=<nonce>` to its line so the new hooks bind
+  the session on the next tool call. Install hooks before `init` and the `init` line carries the nonce as usual.
+- **Spec Kit.** The Sanduq extension registers the same events through Spec Kit's dispatcher
+  (`speckit.progress.hook-*` commands). When such an entry exists in the project or user file of that host, `install`
+  prints `progress: error PROGRESS_HOOKS_SPECKIT ...`, changes nothing and exits 3, so no event is recorded twice.
+- **Codex.** Codex hooks are experimental and need the `codex_hooks` feature enabled in your Codex configuration. The
+  `hooks.json` shape is the one Claude uses (**unverified** against a running Codex).
+
+```text
+$ progress hooks install --host claude
+progress: hooks installed claude project 5 entries in .claude/settings.json
+$ progress hooks status
+progress: hooks claude project 5/5 user 0/5; codex project 0/4 user 0/4; spec-kit no
+$ progress hooks uninstall --host claude
+progress: hooks removed claude project 5 entries from .claude/settings.json
+```
+
+`status` counts tagged entries against the number written for that host, per scope, and says whether Spec Kit's Progress
+hooks are present. Errors: `PROGRESS_USAGE` (2: no `--host`, unsafe `--python`), `PROGRESS_HOOKS_SPECKIT`,
+`PROGRESS_HOOKS_SETTINGS`, `PROGRESS_HOOKS_PATH`, `PROGRESS_HOOKS_DUPLICATE`, `PROGRESS_HOOKS_CONFLICT`,
+`PROGRESS_UNSAFE_TARGET` (all 3).
+
 ## Hook entry
 
-The host calls `python .specify/extensions/progress/scripts/hook.py <event>` with the event's JSON on stdin. Spec Kit
-builds this call from each `speckit.progress.hook-*` command, so there is one command per event.
+The host calls `python <skill dir>/scripts/hook.py <event>` with the event's JSON on stdin. With
+[`progress hooks install`](#hooks) the host's own hook file makes this call. In a Spec Kit project the Sanduq extension
+makes it through the `speckit.progress.hook-*` commands, one command per event.
 
 | Event | Command | Matcher | Timeout |
 | --- | --- | --- | ---: |
@@ -403,7 +539,7 @@ unbound session, a busy lock, an exception. The host forwards a hook's stdout to
 would cost tokens and a non-zero exit would be shown as a failure. The reason for a dropped event goes to a
 [diagnostics log](../README.md#diagnostics-logs). A project where Progress was never initialised gets nothing
 written. `hook.py` uses only the standard library and returns before importing Progress for a session it can already
-tell is unbound (about 30 ms).
+tell is unbound (interpreter start-up, roughly 30 to 100 ms by platform).
 
 ## Status line wrapper
 
@@ -416,9 +552,9 @@ $ progress statusline uninstall
 progress: statusline removed
 ```
 
-- **install** sets `statusLine` in `.claude/settings.json` to `python3 ".specify/extensions/progress/scripts/progress.py" statusline`
+- **install** sets `statusLine` in `.claude/settings.json` to `python3 "<skill dir>/scripts/progress.py" statusline`
   (`python` on Windows), keeps an existing `padding`, and saves the previous status line object in
-  `.specify/progress/config.json` under `statusline.previous`. When the previous one was a command, it is also saved as
+  the project `config.json` under `statusline.previous`. When the previous one was a command, it is also saved as
   `statusline.chained`. Installing twice changes nothing. `init --statusline yes` does the same.
 - **run** reads the status line JSON from stdin. For a bound session it merges the snapshot into the report. Then it runs
   the chained command with the same stdin and passes its output through byte for byte. With no chained command it prints
@@ -436,14 +572,14 @@ progress theme --show
 progress theme --help
 ```
 
-The theme file is project-level (`.specify/progress/theme.json`), so the verb needs no initialised feature and works in
+The theme file is project-level (`.specify/progress/theme.json`, or `.progress/.project/theme.json` without Spec Kit), so the verb needs no initialised feature and works in
 a project before any `progress init`. It takes no other option. `--help` prints
 `theme --preset NAME | --from-illustrate | --file PATH | --show | --help`. Any other form prints
 `progress: error PROGRESS_USAGE theme --preset NAME | --from-illustrate | --file PATH | --show | --help`.
 
 | Form | Effect | Output |
 | --- | --- | --- |
-| `--preset NAME` | Replaces `.specify/progress/theme.json` with `{"v":1,"preset":"NAME"}` | `progress: theme cobalt` |
+| `--preset NAME` | Replaces the project `theme.json` with `{"v":1,"preset":"NAME"}` | `progress: theme cobalt` |
 | `--from-illustrate` | Reads `active.theme` from `.github/illustration-theme.yml` and writes the matching colours as tokens | `progress: theme emerald` |
 | `--file PATH` | Validates your file and stores it as `theme.json` | `progress: theme classic` (the file's preset) |
 | `--show` | Prints the resolved theme, with every default filled in, as JSON | the JSON document |
@@ -489,7 +625,7 @@ Tokens are `#rgb` or `#rrggbb` colours:
 | `accent` | The keyboard focus outline |
 | `active`, `waiting`, `blocked`, `done`, `failed` | Status colours |
 
-Example, `.specify/progress/theme.json`:
+Example, the project `theme.json`:
 
 ```json
 {
@@ -563,7 +699,7 @@ The JSON export is the full projection, indented, followed by a newline.
 | --- | --- |
 | `schema`, `rev`, `generated_at`, `stale_after_seconds` | `sanduq.progress.v2`; the refresh counter; the UTC time; 600 by default |
 | `collection` | `automatic` (a host has reported), `hosts`, `dirty`, `last_event_at`, `diagnostics` (lines in the feature's log) |
-| `feature` | `id`, `title`, `dir`, `branch`, `issue` (`number`, `url`, or null), `stage` (`value`, `source`, or null), `started_at`, `workflow` |
+| `feature` | `id`, `title`, `dir`, `branch`, `issue` (`number`, `url`, or null), `stage` (`value`, `source`, or null), `started_at`, `workflow`. A plan report adds `mode: "plan"` and `source` (the repo-relative or `external:<name>` plan reference); a feature report has neither field |
 | `orchestrator` | `host`, `session_id`, `since`, and the measurements `model`, `effort`, `context`, `elapsed`, `active` |
 | `lanes[]` | `id`, `label`, `owner`, `origin` (`facts`, `workflow-delegation`, `host-child`, `coordinator`), `requested` (`harness`, `model`, `effort`), `observed` (`model`, `effort`), `status`, `elapsed`, `active`, `last_observed_at`, `attempts[]`, `tasks` (`active`, `waiting`, `blocked[]`, `done`) |
 | `unassigned_tasks` | The same four task lists, for tasks no lane owns |
@@ -611,10 +747,33 @@ The fact `progress attempt record` appends to `facts.jsonl`:
 `usage` holds the file's whitelisted fields, or null. The other fact kinds (`lane`, `block`, `decision`, `note`) and
 the host snapshot are specified in [contracts](contracts.md).
 
+## Spec Kit commands (Sanduq extension)
+
+The skill needs no Spec Kit. The [Sanduq extension](https://github.com/samykabu/sanduq) vendors this skill and adds the
+command templates below, which Spec Kit registers through your host's integration (they are not part of this skill).
+Codex shows them as `$speckit-progress-init`; Claude Code as `/speckit-progress-init`. Each command loads the skill, then
+runs one CLI verb and relays its single line. Text after the command name is appended to the verb as arguments.
+
+| Command | Runs | Use | Example |
+| --- | --- | --- | --- |
+| `speckit.progress.init` | `progress.py init $ARGUMENTS` | Once per feature, after the task list exists. Also an optional `after_tasks` hook | `$speckit-progress-init Create the progress report for specs/001-demo.` |
+| `speckit.progress.refresh` | `progress.py refresh --verbose $ARGUMENTS` | A forced snapshot. Also an optional `after_implement` hook. It does not mean the feature is complete | `$speckit-progress-refresh Write a final progress snapshot.` |
+| `speckit.progress.status` | `progress.py status $ARGUMENTS` | The one-line summary; add `--json` for the projection | `$speckit-progress-status Show the one-line progress status.` |
+| `speckit.progress.theme` | `progress.py theme $ARGUMENTS` | Choose a preset, import the Illustrate theme, load a file or show the theme | `$speckit-progress-theme Use the cobalt theme for the progress report.` |
+| `speckit.progress.export` | `progress.py export $ARGUMENTS` | Write the projection as Markdown or JSON | `$speckit-progress-export Export the progress report as Markdown.` |
+| `speckit.progress.hook-session-start` | `scripts/hook.py session_start` | Internal. Never invoked by an agent | |
+| `speckit.progress.hook-pre-tool-use` | `scripts/hook.py pre_tool_use` | Internal | |
+| `speckit.progress.hook-post-tool-use` | `scripts/hook.py post_tool_use` | Internal | |
+| `speckit.progress.hook-stop` | `scripts/hook.py stop` | Internal | |
+| `speckit.progress.hook-session-end` | `scripts/hook.py session_end` | Internal | |
+
+Agents record lanes, blockers, decisions and notes with the other verbs above. There is no Spec Kit command for them, so
+the skill ([`SKILL.md`](../SKILL.md)) lists the command lines.
+
 ## Benchmarks
 
 The token benchmark compares Progress with a hand-edited report and Workflow's legacy protocol. It counts tokens and
-spends none of your budget. Run it from `extensions/progress` in a source checkout, with `pip install -r test-requirements.txt`:
+spends none of your budget. Run it from the skill directory in a source checkout, with `pip install tiktoken==0.14.0`:
 
 ```bash
 python -m tests.bench.report            # rewrites docs/token-benchmark.md
@@ -631,7 +790,7 @@ through the `delegate-task` driver: arm `new` records the updates with the Progr
 by hand.
 
 ```text
-python extensions/progress/scripts/live_ab.py [--delegate PATH] [--node NODE] [--targets LIST] [--pairs N]
+python scripts/live_ab.py [--delegate PATH] [--node NODE] [--targets LIST] [--pairs N]
                                               [--updates N] [--timeout SECONDS] [--runs-dir DIR] [--out DIR] [--dry-run]
 ```
 
@@ -648,7 +807,7 @@ python extensions/progress/scripts/live_ab.py [--delegate PATH] [--node NODE] [-
 | `--dry-run` | off | Print the planned runs and exit without a sandbox or a harness |
 
 ```text
-$ python extensions/progress/scripts/live_ab.py --dry-run --pairs 1 --updates 5
+$ python scripts/live_ab.py --dry-run --pairs 1 --updates 5
 Planned 4 runs (1 pairs x 2 targets x 2 arms), 5 trace events each.
  1. harness=claude model=claude-haiku-5-5 pair=1 arm=new task=861 chars
  2. harness=claude model=claude-haiku-5-5 pair=1 arm=md task=868 chars

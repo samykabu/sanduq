@@ -107,7 +107,8 @@ def check(lock):
     return errors
 
 
-BUNDLES = {'illustration-tools': 'illustrate', 'dev-tools': 'user-manual', 'agent-tools': 'delegate-task'}
+BUNDLES = {'illustration-tools': ['illustrate'], 'dev-tools': ['user-manual'],
+           'agent-tools': ['delegate-task', 'progress-report']}
 MARKETPLACE = ROOT / '.claude-plugin/marketplace.json'
 
 
@@ -127,14 +128,16 @@ def update(lock, source):
     """Vendor and pin every bundle whose newest release differs from the lock; return what changed."""
     changed = []
     market = json.loads(MARKETPLACE.read_text(encoding='utf-8'))
-    for bundle, name in BUNDLES.items():
+    for bundle, names in BUNDLES.items():
         tag = newest_tag(source, bundle)
-        if not tag or tag == lock['inputs'][name].get('ref'):
+        stale = [name for name in names if lock['inputs'][name].get('ref') != tag]
+        if not tag or not stale:
             continue
-        sync(lock, source, name, tag)
+        for name in stale:
+            sync(lock, source, name, tag)
         for plugin in market['plugins']:
             if plugin['name'] == bundle:
-                plugin['source'].update(ref=tag, sha=lock['inputs'][name]['sha'])
+                plugin['source'].update(ref=tag, sha=lock['inputs'][names[0]]['sha'])
         changed.append(tag)
     if changed:
         MARKETPLACE.write_text(json.dumps(market, indent=2, ensure_ascii=False) + '\n', encoding='utf-8', newline='\n')

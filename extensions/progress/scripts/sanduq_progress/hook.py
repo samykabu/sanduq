@@ -2,7 +2,7 @@
 
 Never prints, never raises, always exits 0. Observations attach only to a bound session (or a child whose
 parent is verified from the payload); everything else is dropped. A project where Progress was never initialised
-(no .specify/progress directory) gets nothing written; elsewhere an unbound session is logged once per session id."""
+(no project directory) gets nothing written; elsewhere an unbound session is logged once per session id."""
 import json
 import os
 from pathlib import Path
@@ -10,7 +10,7 @@ from pathlib import Path
 from . import refresh as refreshlib, snapshot
 from .hosts import claude, codex, detect_host, normalise_event
 from .lock import Lock, LockBusy
-from .paths import Ctx, find_root
+from .paths import Ctx, find_root, project_dir
 from .util import clean, diag, diag_once, utcnow
 
 ROLLOUT_EVENTS = ('session_start', 'user_prompt_submit', 'stop', 'session_end')
@@ -21,10 +21,10 @@ def handle(event_arg, raw, root=None, now=None, host=None):
     """Process one hook invocation. Returns a short status string for tests; callers ignore it."""
     root = Path(root) if root else find_root()
     now = now or utcnow()
-    project_log = root / '.specify' / 'progress' / 'diagnostics.log'
+    project_log = project_dir(root) / 'diagnostics.log'
 
     def note(message, once=False):
-        if project_log.parent.is_dir():  # never create .specify/progress just to log a dropped event
+        if project_log.parent.is_dir():  # never create the project directory just to log a dropped event
             (diag_once if once else diag)(project_log, message, now)
 
     try:

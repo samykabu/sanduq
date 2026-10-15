@@ -110,7 +110,8 @@
     if (f.id) meta.appendChild(el('span', 'mono wrap', f.id));
     if (f.issue) meta.appendChild(link('Issue #' + f.issue.number, f.issue.url));
     meta.appendChild(el('span', 'wrap', ['Branch ', f.branch ? el('code', null, f.branch) : unk()]));
-    meta.appendChild(el('span', null, ['Stage ', f.stage && f.stage.value ? pill(f.stage.value) : unk()]));
+    if (f.mode === 'plan') meta.appendChild(el('span', 'wrap', ['Plan ', f.source ? el('code', null, f.source) : unk()]));
+    else meta.appendChild(el('span', null, ['Stage ', f.stage && f.stage.value ? pill(f.stage.value) : unk()]));
     head.appendChild(meta);
     top.appendChild(head);
     var bar = attr(el('div', 'bar', el('i')), { role: 'progressbar', 'aria-label': 'Tasks done', 'aria-valuemin': '0', 'aria-valuemax': String(total), 'aria-valuenow': String(done) });
