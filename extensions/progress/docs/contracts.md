@@ -30,8 +30,9 @@ specs/<feature>/progress/
     host/<host>-<session>.json   host snapshots (progress.host.v1)
     state.json           collector cursors, debounce stamp, dirty flag, last refresh rev
     diagnostics.log      bounded (rotate at 256 KB, keep 1)
-    lock                 per-feature lock: {"pid", "host", "started_at", "token"}; stale recovery is serialised by
-                         a short-lived `lock.recover` file (O_EXCL) and re-checks the owner before removing
+    lock                 per-feature lock held by the OS for the life of the process (msvcrt.locking on Windows,
+                         fcntl.flock elsewhere); the OS drops it if the process dies, so there is no stale recovery.
+                         The file content {"pid", "host", "started_at", "token"} is diagnostic only
 .specify/progress/
   config.json            {"feature_dir_mode": "auto", "debounce_seconds": 5, "stale_after_seconds": 600,
                           "statusline": {"enabled": bool, "chained": "<previous command or null>"}}
@@ -208,7 +209,7 @@ progress runs [--json] [--runs-dir DIR]... [--now T] [--stall-seconds N]  -> pro
 progress hook <event>                                                   -> reads host JSON on stdin; never prints on success
 ```
 
-Exit codes: 0 ok, 2 usage error, 3 refused (authority/binding), 4 lock busy (verbs retry 3× with 200 ms backoff first).
+Exit codes: 0 ok, 2 usage error, 3 refused (authority/binding), 4 lock busy (the OS lock is held by another process; verbs retry 3× with 200 ms backoff first).
 Error lines start with `progress: error <CODE>`.
 
 ## Runs contract (`progress.runs.v1`)

@@ -11,7 +11,7 @@ import helpers
 from helpers import FIXTURES, Project
 from sanduq_progress import facts
 from sanduq_progress.collect import runs as runscol, tasks as taskscol
-from sanduq_progress.lock import Lock, LockBusy, pid_alive
+from sanduq_progress.lock import Lock, LockBusy
 from sanduq_progress.paths import ProgressError, resolve_feature
 
 
@@ -114,23 +114,15 @@ class Locking(Project):
     def _write_owner(self, pid, host):
         self.path.write_text(json.dumps({'pid': pid, 'host': host, 'started_at': '2026-10-15T00:00:00Z'}))
 
-    def test_dead_pid_on_this_host_is_recovered(self):
+    def test_owner_metadata_is_diagnostic_only(self):
+        """A dead pid, a live pid or a foreign host in the file decides nothing: only the OS lock does."""
         child = subprocess.Popen([sys.executable, '-c', 'pass'])
         child.wait()
-        self.assertFalse(pid_alive(child.pid))
-        self._write_owner(child.pid, socket.gethostname())
-        with Lock(self.path, retries=0):
-            owner = json.loads(self.path.read_text())
-            self.assertEqual(owner['pid'], os.getpid())
-
-    def test_live_or_foreign_owner_is_never_stolen(self):
-        self._write_owner(os.getpid(), socket.gethostname())
-        with self.assertRaises(LockBusy):
-            Lock(self.path, retries=1, delay=0.01).acquire()
-        self._write_owner(99999999, 'some-other-host')
-        with self.assertRaises(LockBusy):
-            Lock(self.path, retries=1, delay=0.01).acquire()
-        self.assertTrue(self.path.exists())
+        for pid, host in ((child.pid, socket.gethostname()), (os.getpid(), socket.gethostname()), (99999999, 'some-other-host')):
+            self._write_owner(pid, host)
+            with Lock(self.path, retries=0):
+                owner = json.loads(self.path.read_bytes().rstrip(b'\x00').decode('utf-8'))
+                self.assertEqual(owner['pid'], os.getpid())
 
     def test_verbs_exit_4_when_the_feature_lock_is_held(self):
         self.init()

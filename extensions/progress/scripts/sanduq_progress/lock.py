@@ -1,13 +1,10 @@
-"""Per-feature lock file {"pid","host","started_at"}.
+"""Per-feature lock held by the operating system.
 
-Stale recovery happens only when the owner ran on this host and its pid is dead. A lock whose owner is alive,
-or on another host, is never stolen. An unreadable lock (a writer died between create and write) is stale
-after 10 seconds.
-
-Recovery is serialised by a second, short-lived lock `<lock>.recover`, created with O_EXCL. Whoever holds it
-re-reads the owner and re-checks that it is still stale before unlinking, so a contender that observed a dead owner
-earlier can never delete a live lock that another contender acquired in between. A recovery lock left by a crashed
-recoverer expires after 10 seconds. Only one process recovers at a time; the others keep retrying.
+The lock file is opened and an exclusive, non-blocking OS lock is taken on it (msvcrt.locking on Windows,
+fcntl.flock elsewhere) and held for the lifetime of the Lock. The OS drops the lock when the owning process dies, so
+there is no stale-lock recovery and nothing a contender can delete using stale evidence. The file content
+{"pid","host","started_at","token"} is diagnostic only and is never used to decide ownership. The file is left in place
+on release (removing it would let a contender lock an unlinked inode).
 """
 import json
 import os
@@ -17,6 +14,9 @@ import time
 from pathlib import Path
 
 from .util import iso, utcnow
+
+# On Windows a locked byte range cannot be read by other handles, so the lock byte sits far beyond the metadata.
+_WIN_LOCK_OFFSET = 1 << 30
 
 
 class LockBusy(Exception):
@@ -50,86 +50,74 @@ def pid_alive(pid):
     return True
 
 
+def _os_lock(fd):
+    """Take an exclusive non-blocking lock on fd. Returns False when another holder has it."""
+    try:
+        if os.name == 'nt':
+            import msvcrt
+            os.lseek(fd, _WIN_LOCK_OFFSET, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return False
+    return True
+
+
+def _os_unlock(fd):
+    try:
+        if os.name == 'nt':
+            import msvcrt
+            os.lseek(fd, _WIN_LOCK_OFFSET, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fd, fcntl.LOCK_UN)
+    except OSError:
+        pass
+
+
 class Lock:
     def __init__(self, path, retries=3, delay=0.2):
         self.path, self.retries, self.delay = Path(path), retries, delay
         self.token = secrets.token_hex(8)
-
-    def _stale(self):
-        try:
-            owner = json.loads(self.path.read_text(encoding='utf-8'))
-            if not isinstance(owner, dict):
-                raise ValueError
-        except FileNotFoundError:
-            return False
-        except (OSError, ValueError):
-            try:
-                return time.time() - self.path.stat().st_mtime > 10
-            except OSError:
-                return False
-        return owner.get('host') == socket.gethostname() and not pid_alive(owner.get('pid'))
+        self.fd = None
 
     def _try(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            fd = os.open(str(self.path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError:
+        fd = os.open(str(self.path), os.O_RDWR | os.O_CREAT)
+        if not _os_lock(fd):
+            os.close(fd)
             return False
-        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
-            json.dump({'pid': os.getpid(), 'host': socket.gethostname(), 'started_at': iso(utcnow()),
-                       'token': self.token}, stream)
+        self.fd = fd
+        try:  # diagnostics only
+            os.lseek(fd, 0, os.SEEK_SET)
+            os.ftruncate(fd, 0)
+            os.write(fd, json.dumps({'pid': os.getpid(), 'host': socket.gethostname(), 'started_at': iso(utcnow()),
+                                     'token': self.token}).encode('utf-8'))
+        except OSError:
+            pass
         return True
 
-    def _recover(self):
-        """Remove a stale lock under the recovery lock. Returns True when this call removed it."""
-        guard = self.path.with_name(self.path.name + '.recover')
-        fd = None
-        for _ in range(2):
-            try:
-                fd = os.open(str(guard), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                break
-            except FileExistsError:
-                try:
-                    if time.time() - guard.stat().st_mtime <= 10:
-                        return False
-                    os.unlink(guard)  # its recoverer died; take the guard on the second pass
-                except OSError:
-                    return False
-            except OSError:
-                return False
-        if fd is None:
-            return False
-        try:
-            with os.fdopen(fd, 'w', encoding='utf-8') as stream:
-                json.dump({'pid': os.getpid(), 'host': socket.gethostname()}, stream)
-            if not self._stale():  # re-check now that no other recoverer can act
-                return False
-            os.unlink(self.path)
-            return True
-        except OSError:
-            return False
-        finally:
-            try:
-                os.unlink(guard)
-            except OSError:
-                pass
-
     def acquire(self):
+        if self.fd is not None:
+            return self
         for attempt in range(self.retries + 1):
             if self._try():
-                return self
-            if self._stale() and self._recover() and self._try():
                 return self
             if attempt < self.retries:
                 time.sleep(self.delay)
         raise LockBusy(str(self.path))
 
     def release(self):
+        if self.fd is None:
+            return
+        fd, self.fd = self.fd, None
+        _os_unlock(fd)
         try:
-            owner = json.loads(self.path.read_text(encoding='utf-8'))
-            if owner.get('token') == self.token:
-                os.unlink(self.path)
-        except (OSError, ValueError):
+            os.close(fd)
+        except OSError:
             pass
 
     def __enter__(self):
