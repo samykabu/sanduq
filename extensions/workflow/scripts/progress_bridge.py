@@ -4,12 +4,14 @@
 Workflow reaches Progress only through its command line and versioned JSON. This module never
 imports Progress code. It is the single place that decides the reporting mode:
 
-  projection  Progress is installed and collects automatically (its status reports
-              collection.automatic, or its host hooks are registered).
-  refresh     Progress is installed but nothing collects automatically.
-  legacy      Progress is absent; Workflow's own scripts/progress.py reporter runs unchanged.
+  projection  Progress is installed and enabled, and its hooks are registered and enabled for the active host.
+  refresh     Progress is installed and enabled, but the active host does not collect automatically (or the host
+              cannot be told).
+  legacy      Progress is absent or disabled in the spec-kit registry; Workflow's own scripts/progress.py reporter
+              runs unchanged.
 
-`python progress_bridge.py mode` prints one line: `reporting: <mode>`.
+`python progress_bridge.py mode [--host claude|codex]` prints one line: `reporting: <mode>`. Without --host the host
+is detected from the environment; an unknown or ambiguous host selects `refresh`.
 """
 import argparse
 import json
@@ -27,8 +29,13 @@ except ImportError:  # Python < 3.11: TOML host configs cannot be read
 SCRIPT_ENV = 'SANDUQ_PROGRESS_SCRIPT'  # tests and source-tree use; normally the installed path is used
 RELATIVE = Path('.specify/extensions/progress/scripts/progress.py')
 HOOK_MARKERS = ('speckit.progress.hook', 'progress.py hook', 'progress.py" hook')
-HOST_FILES = ('.claude/settings.json', '.claude/settings.local.json', '.codex/hooks.json', '.codex/config.toml',
-              '.specify/extensions.yml')
+HOST_FILES = {'claude': ('.claude/settings.json', '.claude/settings.local.json'),
+              'codex': ('.codex/hooks.json', '.codex/config.toml')}
+HOSTS = tuple(HOST_FILES)
+# Variables the host CLIs set in the processes they start. CODEX_HOME is only a config location users also set under
+# other hosts, so it does not identify Codex.
+HOST_ENV_CLAUDE = ('CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT')
+HOST_ENV_CODEX = ('CODEX_THREAD_ID', 'CODEX_SANDBOX', 'CODEX_SANDBOX_NETWORK_DISABLED', 'CODEX_CI')
 RUNS_SCHEMA = 'progress.runs.v1'
 MODES = ('projection', 'refresh', 'legacy')
 
@@ -49,7 +56,10 @@ def find_root(start=None):
 
 
 def script(root):
-    """Path of the Progress CLI, or None when Progress is not installed."""
+    """Path of the Progress CLI, or None when Progress is not installed or is disabled in the spec-kit registry
+    (a disabled extension's commands and hooks are inert, so nothing may be forwarded to it)."""
+    if not extension_enabled(root):
+        return None
     override = os.environ.get(SCRIPT_ENV)
     if override:
         return Path(override) if Path(override).is_file() else None
@@ -91,32 +101,6 @@ def _globally_disabled(data):
     return None
 
 
-def _yml_hooks(text):
-    """Enabled Progress hook entries in .specify/extensions.yml (small line parser; no YAML dependency)."""
-    blocks = []
-    for line in text.splitlines():
-        if re.match(r'\s*-\s+extension\s*:', line):
-            blocks.append([line])
-        elif blocks and line.strip() and not line.lstrip().startswith('#') and line[:1] in ' \t':
-            blocks[-1].append(line)
-        elif line.strip() and line[:1] not in ' \t-#':
-            blocks.append([])  # a new top-level key ends the current entry
-    for block in blocks:
-        if not block:
-            continue
-        body = '\n'.join(block)
-        if not re.search(r'extension\s*:\s*[\'"]?progress[\'"]?\s*$', block[0]):
-            continue
-        command = re.search(r'command\s*:\s*(\S+)', body)
-        if not command or 'speckit.progress.hook' not in command.group(1):
-            continue
-        enabled = re.search(r'\benabled\s*:\s*(\S+)', body)
-        if enabled and enabled.group(1).strip('\'"').lower() in ('false', 'no', 'off', '0'):
-            continue
-        return True
-    return False
-
-
 def extension_enabled(root):
     """False only when the installed-extension registry says Progress is disabled."""
     try:
@@ -147,42 +131,41 @@ def _user_configs():
     return found
 
 
-def hooks_registered(root):
-    """True when an enabled Progress hook is wired in a host config and the extension itself is enabled."""
-    if not extension_enabled(root):
+def detect_host(env=None):
+    """'claude' or 'codex' from the host CLI's own environment variables; None when neither or both are present."""
+    env = os.environ if env is None else env
+    claude = any(env.get(name) for name in HOST_ENV_CLAUDE)
+    codex = any(env.get(name) for name in HOST_ENV_CODEX)
+    return 'claude' if claude and not codex else 'codex' if codex and not claude else None
+
+
+def hooks_registered(root, host):
+    """True when an enabled Progress hook is wired in the given host's config (only that host's files count) and the
+    extension itself is enabled."""
+    if host not in HOSTS or not extension_enabled(root):
         return False
     configs = {}
-    for name in HOST_FILES:
+    for name in [n for files in HOST_FILES.values() for n in files]:
         try:
             text = (Path(root) / name).read_text(encoding='utf-8-sig')
-        except OSError:
-            continue
-        if name.endswith('.yml'):
-            if _yml_hooks(text):
-                return True
-            continue
-        try:
             if name.endswith('.toml') and tomllib is None:
                 continue
             configs[name] = tomllib.loads(text) if name.endswith('.toml') else json.loads(text)
-        except Exception:  # unreadable config is not evidence of collection
+        except Exception:  # absent or unreadable config is not evidence of collection
             continue
     user = _user_configs()
-    # Claude: local settings override project settings, which override user settings, when they state the switch.
-    # Codex: a switch in the project or user config.toml turns hooks off everywhere.
-    claude = [_globally_disabled(configs.get(n)) for n in ('.claude/settings.local.json', '.claude/settings.json')]
-    claude.append(_globally_disabled(user.get('claude')))
-    claude_off = next((v for v in claude if v is not None), False)
-    codex_off = (any(_globally_disabled(d) for n, d in configs.items() if n.startswith('.codex/'))
-                 or bool(_globally_disabled(user.get('codex'))))
-    for name, data in configs.items():
-        if name.startswith('.claude/') and claude_off:
-            continue
-        if name.startswith('.codex/') and codex_off:
-            continue
-        if _json_hooks(data):
-            return True
-    return False
+    if host == 'claude':
+        # Local settings override project settings, which override user settings, when they state the switch.
+        switches = [_globally_disabled(configs.get(n)) for n in ('.claude/settings.local.json', '.claude/settings.json')]
+        switches.append(_globally_disabled(user.get('claude')))
+        if next((v for v in switches if v is not None), False):
+            return False
+    else:
+        # A switch in the project or user config.toml turns hooks off everywhere.
+        if (any(_globally_disabled(configs.get(n)) for n in HOST_FILES['codex'])
+                or bool(_globally_disabled(user.get('codex')))):
+            return False
+    return any(_json_hooks(configs[n]) for n in HOST_FILES[host] if n in configs)
 
 
 def run(root, args, timeout=60, stdin=None):
@@ -211,16 +194,19 @@ def status(root, feature=None):
     return data if isinstance(data, dict) else None
 
 
-def mode(root, feature=None):
-    """Decide the reporting mode. Returns {mode, script, automatic, source}."""
+def mode(root, feature=None, host=None):
+    """Decide the reporting mode for the active host (detected from the environment when not given).
+    Returns {mode, script, automatic, host, source}. `feature` is accepted for compatibility and unused: the decision
+    needs no Progress process."""
     path = script(root)
     if path is None:
-        return {'mode': 'legacy', 'script': None, 'automatic': False, 'source': 'progress not installed'}
-    report = status(root, feature)
-    # status collection.automatic only reflects stored snapshots (history), so it is not proof of current collection.
-    if hooks_registered(root):
-        return {'mode': 'projection', 'script': str(path), 'automatic': True, 'source': 'hooks registered'}
-    return {'mode': 'refresh', 'script': str(path), 'automatic': False, 'source': 'no automatic collection'}
+        return {'mode': 'legacy', 'script': None, 'automatic': False, 'host': None, 'source': 'progress not installed or disabled'}
+    host = host or detect_host()
+    if host is None:
+        return {'mode': 'refresh', 'script': str(path), 'automatic': False, 'host': None, 'source': 'active host unknown'}
+    if hooks_registered(root, host):
+        return {'mode': 'projection', 'script': str(path), 'automatic': True, 'host': host, 'source': 'hooks registered'}
+    return {'mode': 'refresh', 'script': str(path), 'automatic': False, 'host': host, 'source': 'no automatic collection'}
 
 
 def runs(root, runs_dirs, now=None, stall_seconds=None):
@@ -247,11 +233,12 @@ def main(argv=None):
     sub = parser.add_subparsers(dest='cmd', required=True)
     p = sub.add_parser('mode', help='print the reporting mode')
     p.add_argument('--root', type=Path)
-    p.add_argument('--feature')
+    p.add_argument('--feature', help='accepted for compatibility; ignored')
+    p.add_argument('--host', choices=HOSTS, help='active host; detected from the environment when absent')
     p.add_argument('--json', action='store_true')
     args = parser.parse_args(argv)
     root = args.root.resolve() if args.root else find_root()
-    decision = mode(root, args.feature)
+    decision = mode(root, args.feature, args.host)
     print(json.dumps(decision) if args.json else 'reporting: ' + decision['mode'])
     return 0
 

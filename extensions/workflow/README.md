@@ -123,13 +123,13 @@ python .specify/extensions/workflow/scripts/install.py --with progress          
 python .specify/extensions/workflow/scripts/install.py --with progress --apply
 ```
 
-The instructions pick one of three modes (`python .specify/extensions/workflow/scripts/progress_bridge.py mode`):
+The instructions pick one of three modes (`python .specify/extensions/workflow/scripts/progress_bridge.py mode [--host claude|codex]`; the host is detected when omitted):
 
 | Mode | When | What the coordinator does |
 | --- | --- | --- |
-| `projection` | Progress is installed and collects automatically | Records only lanes, blockers and notes. Task state, retries, usage and run history are collected. |
-| `refresh` | Progress is installed, nothing collects automatically | The same, plus an explicit `progress refresh` after each attempt and phase. |
-| `legacy` | Progress is absent | The `progress.py` calls it has always made. |
+| `projection` | Progress is installed and enabled, and its hooks are registered and enabled for the active host | Records only lanes, blockers and notes. Task state, retries, usage and run history are collected. |
+| `refresh` | Progress is installed and enabled, but the active host does not collect automatically (or the host is unknown) | The same, plus an explicit `progress refresh` after each attempt and phase. |
+| `legacy` | Progress is absent or disabled in the spec-kit registry | The `progress.py` calls it has always made. |
 
 In every mode no agent is spawned, kept, messaged or polled only to maintain the report. When Progress is
 installed, `scripts/progress.py` forwards the old subcommands to it, so older instructions still work. A request

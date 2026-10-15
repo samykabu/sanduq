@@ -56,6 +56,7 @@ def feature_of(args, root):
 class Forward:
     def __init__(self, root, feature):
         self.root, self.feature = root, feature
+        self.latest = None  # the newest status projection this call fetched
 
     def call(self, verb, *args, sub=None, tolerate=()):
         """Run one Progress verb; return its one-line stdout. Raise Compat with Progress' own exit code on failure."""
@@ -75,12 +76,17 @@ class Forward:
         report = bridge.status(self.root, self.feature)
         if report is None:
             raise Compat('progress status is unavailable; run progress init for this feature', 2, plain=True)
+        self.latest = report
         return report
 
     def ensure_init(self):
-        if bridge.status(self.root, self.feature) is None:
+        """The status projection, running `init` first when the feature has none. One status process when it exists."""
+        report = bridge.status(self.root, self.feature)
+        if report is None:
             self.call('init')
-        return self.status()
+            return self.status()
+        self.latest = report
+        return report
 
 
 # ---- lookups over the status projection (JSON only) ---------------------------------------------------------------
@@ -171,11 +177,14 @@ def do_init(fwd, args):
                      'the tasks.md "# Tasks:" heading')
     fwd.call('init')
     if args.open:
-        webbrowser.open(index_of(fwd, fwd.status()).resolve().as_uri())
+        webbrowser.open(index_of(fwd).resolve().as_uri())
 
 
-def index_of(fwd, report):
-    return fwd.root / ((report.get('feature') or {}).get('dir') or fwd.feature or 'specs') / 'progress' / '.view' / 'index.html'
+def index_of(fwd):
+    """The report page. The feature folder comes from the request when known, else from the newest projection
+    (fetched here only when nothing was fetched yet)."""
+    folder = fwd.feature or ((fwd.latest or fwd.status()).get('feature') or {}).get('dir') or 'specs'
+    return fwd.root / folder / 'progress' / '.view' / 'index.html'
 
 
 def do_task(fwd, args):
@@ -267,9 +276,10 @@ def do_usage(fwd, args):
         lane = (owner_lane or {}).get('id') or ensure_lane(fwd, report, task, args.agent)
         if known:
             started, ended, status = known.get('started_at'), known.get('ended_at'), known.get('status') or status
-        current = next((l for l in fwd.status().get('lanes') or [] if l.get('id') == lane), {})
+        splitting = args.collect in ('claude', 'codex') and since is None and until is None
+        current = next((l for l in fwd.status().get('lanes') or [] if l.get('id') == lane), {}) if splitting else {}
         reused = len(set(lane_task_ids(current))) > 1
-        if args.collect in ('claude', 'codex') and since is None and until is None and reused:
+        if splitting and reused:
             if not started:
                 raise Compat(f'Agent {args.agent} also worked on other tasks. Mark {task} running before assigning it, '
                              'or pass --since, so its log can be split.', 2, plain=True)
@@ -303,7 +313,8 @@ def forward(args, root):
             raise Compat('--json is not supported when Sanduq Progress is installed; use progress.py status --json')
         fwd = Forward(root, feature_of(args, root))
         HANDLERS[args.command](fwd, args)
-        report = fwd.status()
+        report = fwd.status() if quiet else None  # the summary counts need the state after the mutation
+        page = None if quiet else index_of(fwd)
     except Compat as exc:
         message = str(exc) if exc.plain else f'compatibility: {exc}'
         print(('error ' + message) if quiet else message, file=None if quiet else sys.stderr)
@@ -311,5 +322,5 @@ def forward(args, root):
     if quiet:
         print(summary_line(report))
     else:
-        print(index_of(fwd, report))
+        print(page)
     return 0

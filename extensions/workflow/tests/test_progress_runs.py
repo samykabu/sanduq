@@ -109,6 +109,16 @@ class RunsViaProgress(unittest.TestCase):
         self.assertEqual(report.get('via'), 'progress.runs.v1')
         self.assertEqual(len(report['runs']), 3)
 
+    def test_archive_outside_the_runs_folder_keeps_legacy_discovery(self):
+        archive = self.root / 'archive'
+        archive.mkdir()
+        (archive / 'two.result.json').write_text(json.dumps({'run_id': 'two', 'status': 'successful'}), encoding='utf-8')
+        os.environ['SANDUQ_PROGRESS_SCRIPT'] = str(PROGRESS_SCRIPT)
+        report = tools.progress([str(self.root)], NOW)
+        self.assertNotIn('via', report)
+        self.assertIn('two', {r['run_id'] for r in report['runs']})
+        self.assertIn('done', {r['run_id'] for r in report['runs']})
+
     def test_missing_root_is_still_an_input_error(self):
         os.environ['SANDUQ_PROGRESS_SCRIPT'] = str(PROGRESS_SCRIPT)
         with self.assertRaises(tools.InputError):
