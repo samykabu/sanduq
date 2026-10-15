@@ -123,7 +123,19 @@ python .specify/extensions/workflow/scripts/install.py --with progress          
 python .specify/extensions/workflow/scripts/install.py --with progress --apply
 ```
 
-The instructions pick one of three modes (`python .specify/extensions/workflow/scripts/progress_bridge.py mode [--host claude|codex]`; the host is detected when omitted):
+The instructions pick one of three modes. Ask the bridge once per Execute claim or resume:
+
+```bash
+python .specify/extensions/workflow/scripts/progress_bridge.py mode [--host claude|codex] [--json]
+```
+
+```text
+reporting: projection
+```
+
+The bridge reads the spec-kit registry and the host's hook configuration. It never starts Progress. The host is detected
+from the environment when `--host` is omitted. A Codex coordinator passes `--host codex`, because Codex is not always
+detectable. `--json` adds `script`, `automatic`, `host` and the `source` of the decision.
 
 | Mode | When | What the coordinator does |
 | --- | --- | --- |
@@ -131,11 +143,41 @@ The instructions pick one of three modes (`python .specify/extensions/workflow/s
 | `refresh` | Progress is installed and enabled, but the active host does not collect automatically (or the host is unknown) | The same, plus an explicit `progress refresh` after each attempt and phase. |
 | `legacy` | Progress is absent or disabled in the spec-kit registry | The `progress.py` calls it has always made. |
 
-In every mode no agent is spawned, kept, messaged or polled only to maintain the report. When Progress is
-installed, `scripts/progress.py` forwards the old subcommands to it, so older instructions still work. A request
-with no faithful mapping (`--json`, `init --title`) fails with a compatibility error. Lean run status
+Hooks count as disabled when the host's own switch is off: Claude Code's `disableAllHooks`, or a Codex `[features]`
+entry (`hooks` or `codex_hooks`) set to `false`. A config that cannot be read is not evidence of collection.
+
+**Never spawn, retain, message or poll an agent only to maintain the report.** This holds in every mode. The coordinator
+makes the few calls in its mode table as part of its own turn. Opening the report once for a person is fine; reopening it,
+re-verifying it or waiting to see it refresh is not. Waiting for a worker to finish is different and stays.
+
+### Old calls while Progress is installed
+
+When Progress is installed, `scripts/progress.py` forwards every subcommand to the Progress CLI and writes no legacy
+state, so older instructions keep working. Each call prints what it always did: the report path, or one `--summary`
+line such as `ok done=0 total=6 pending=4 running=1 blocked=1`.
+
+| Legacy call | Progress verbs it runs |
+| --- | --- |
+| `init --tasks T --output O [--open]` | `init`; `--open` then opens `index.html`. `--title` is refused |
+| `task --id T --status running [--agent A] [--note N]` | A lane owned by `A` is found or made (`lane new --tasks T --owner A`), `T` is moved into it, then `unblock --all-for T`, `note` when a note is given and `attempt record --lane L --run legacy-T-A --status running` |
+| `task --id T --status done` | The same lane step, `unblock --all-for T`, `attempt record ... --status done --ended <now>` |
+| `task --id T --status blocked --note N` | `block T --by L2` when the note is a lane, task, W or C id such as `L2`, else `block T --by ext:"N"`; plus `attempt record ... --status blocked` |
+| `task --id T --status pending` | `unblock --all-for T`, then `note "T pending" --target T` |
+| `event --message M` | `note M` |
+| `phase --name N --status S [--commit C]` | `note "Phase N: S (C)"` |
+| `pr --url U --status open\|merged` | `note "PR S: U"` |
+| `sync` | `refresh` |
+| `usage --id T` or `--overhead LABEL` | `attempt record ... --usage-json` with the counters Workflow's own usage reader produced, and a `note` when usage is unavailable |
+| any call with `--json` | Refused with a compatibility error and exit 2. Use `progress.py status --json` |
+| `--summary` | Kept |
+
+An unknown task id prints `error Unknown task ID: T099` and exits 2. A legacy request with no faithful mapping fails
+with a compatibility error; it never succeeds silently. Do not retry it. Use the Progress verb named above.
+
+Legacy attempts carry origin `legacy` and never override the delegation ledger. Lean run status
 (`workflow.py status --runs`) reads Progress's `runs --json` when available. The rules are in
-`skills/workflow/references/reporting.md`.
+`skills/workflow/references/reporting.md`. The full Progress reference is
+[here](https://github.com/samykabu/sanduq/blob/main/extensions/progress/docs/commands.md).
 
 ## Where state lives
 

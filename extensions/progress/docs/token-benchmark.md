@@ -47,11 +47,11 @@ Fixed tool framing is identical across approaches and is not counted. Setup cost
 | `decision_made` | 2 | 79 | 1288 | 797 | 170 | 0 |
 | `reopen_task` | 1 | 0 | 1368 | 504 | 87 | 0 |
 | `noop_refresh` | 7 | 0 | 0 | 0 | 0 | 0 |
-| `resume` | 1 | 615 | 901 | 901 | 3902 | 1349 |
-| `compaction` | 1 | 615 | 898 | 898 | 3902 | 1355 |
-| **Updates total** | 55 | **1847** | **59967** | **24206** | **12030** | **2704** |
-| Setup (once per feature) | | 631 | 581 | 581 | 3926 | 0 |
-| **Total with setup** | | **2478** | **60548** | **24787** | **15956** | **2704** |
+| `resume` | 1 | 620 | 901 | 901 | 3902 | 1349 |
+| `compaction` | 1 | 620 | 898 | 898 | 3902 | 1355 |
+| **Updates total** | 55 | **1857** | **59967** | **24206** | **12030** | **2704** |
+| Setup (once per feature) | | 636 | 581 | 581 | 3926 | 0 |
+| **Total with setup** | | **2493** | **60548** | **24787** | **15956** | **2704** |
 
 ## Results: cl100k_base
 
@@ -67,11 +67,11 @@ Fixed tool framing is identical across approaches and is not counted. Setup cost
 | `decision_made` | 2 | 79 | 1269 | 784 | 170 | 0 |
 | `reopen_task` | 1 | 0 | 1364 | 500 | 87 | 0 |
 | `noop_refresh` | 7 | 0 | 0 | 0 | 0 | 0 |
-| `resume` | 1 | 617 | 904 | 904 | 3900 | 1351 |
-| `compaction` | 1 | 617 | 901 | 901 | 3900 | 1357 |
-| **Updates total** | 55 | **1856** | **59771** | **24014** | **12033** | **2708** |
-| Setup (once per feature) | | 633 | 582 | 582 | 3924 | 0 |
-| **Total with setup** | | **2489** | **60353** | **24596** | **15957** | **2708** |
+| `resume` | 1 | 622 | 904 | 904 | 3900 | 1351 |
+| `compaction` | 1 | 622 | 901 | 901 | 3900 | 1357 |
+| **Updates total** | 55 | **1866** | **59771** | **24014** | **12033** | **2708** |
+| Setup (once per feature) | | 638 | 582 | 582 | 3924 | 0 |
+| **Total with setup** | | **2504** | **60353** | **24596** | **15957** | **2708** |
 
 ## Break-even including setup
 
@@ -83,7 +83,7 @@ Fixed tool framing is identical across approaches and is not counted. Setup cost
 
 | Approach | Updates | Setup |
 | --- | ---: | ---: |
-| NEW | 7389 | 2504 |
+| NEW | 7431 | 2525 |
 | MD-EDIT | 195314 | 2162 |
 | MD-EDIT-LEAN | 80828 | 2162 |
 | LEGACY | 50583 | 17393 |
@@ -91,8 +91,8 @@ Fixed tool framing is identical across approaches and is not counted. Setup cost
 
 ## Reading the result
 
-- Updates only, o200k_base: NEW 1847, MD-EDIT 59967 (32.5x), MD-EDIT-LEAN 24206.
-- NEW setup is 631 tokens (the skill text plus `init`). The skill loads again after a restart or compaction.
+- Updates only, o200k_base: NEW 1857, MD-EDIT 59967 (32.3x), MD-EDIT-LEAN 24206.
+- NEW setup is 636 tokens (the skill text plus `init`). The skill loads again after a restart or compaction.
 - `unblock`, `block`, `decision` and note verbs cost tens of tokens because their command line is the whole cost.
 - The per-verb prefix `python .specify/extensions/progress/scripts/progress.py` is 11 tokens of each NEW line. A shorter entry point would reduce every NEW figure.
 
