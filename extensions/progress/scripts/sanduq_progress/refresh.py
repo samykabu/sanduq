@@ -2,7 +2,7 @@
 All functions expect the caller to hold the feature lock."""
 import time
 
-from . import model, render_data
+from . import render_data
 from .util import iso, read_json, utcnow, write_json
 
 
@@ -11,18 +11,18 @@ def read_state(ctx):
     return data if isinstance(data, dict) else {}
 
 
-def refresh(ctx, now=None, final=False):
+def refresh(ctx, now=None):
+    from . import model  # imported here: a debounced hook event never builds a projection
     now = now or utcnow()
     state = read_state(ctx)
     state['rev'] = int(state.get('rev') or 0) + 1
     state['dirty'] = False
+    state.pop('dirty_published', None)
     state.setdefault('started_at', iso(now))
     report = model.build(ctx, now, state['rev'], state)
     render_data.write(ctx, report)
     state['last_refresh_ts'] = time.time()
     state['last_refresh_at'] = iso(now)
-    if final:
-        state['final_at'] = iso(now)
     write_json(ctx.state, state)
     return report
 
@@ -34,10 +34,13 @@ def after_update(ctx, now, force=False):
     debounce = float(ctx.config_data().get('debounce_seconds') or 0)
     if force or time.time() - float(state.get('last_refresh_ts') or 0) >= debounce:
         write_json(ctx.state, state)
-        refresh(ctx, now, final=force)
+        refresh(ctx, now)
         return True
+    # The clean -> dirty transition is published once (one report.json and data.js write). Later events in the same
+    # window only move the timestamps in state.json; the next real refresh publishes the latest values.
     state['dirty'] = True
-    publish_pending(ctx, state)
+    if not state.get('dirty_published'):
+        state['dirty_published'] = publish_pending(ctx, state)
     write_json(ctx.state, state)
     return False
 
@@ -57,9 +60,3 @@ def publish_pending(ctx, state):
         return True
     except (OSError, ValueError, TypeError):
         return False
-
-
-def count_dropped(ctx, reason, now=None):
-    state = read_state(ctx)
-    state['dropped'] = int(state.get('dropped') or 0) + 1
-    write_json(ctx.state, state)

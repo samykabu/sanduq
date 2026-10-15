@@ -61,10 +61,11 @@ class Binding(Project):
         self.hook('post_tool_use', self.payload('claude_child_event.json'))  # fires inside a subagent
         snap = self.snap()
         self.assertEqual(snap['effort']['value'], 'high')  # parent fields come from the parent's own event
-        self.assertIn('agent-9f', snap['children'])
+        self.assertEqual(list(snap['children']), ['toolu_01TASK'])  # the one open launch and its agent are one child
+        self.assertEqual(snap['children']['toolu_01TASK']['agent_id'], 'agent-9f')
         self.hook('post_tool_use', self.payload('claude_post_task.json', tool_response={'agentId': 'agent-9f'}))
         snap = self.snap()
-        self.assertEqual(len(snap['children']), 1, snap['children'])  # tool_use_id child and agent_id child merged
+        self.assertEqual(len(snap['children']), 1, snap['children'])  # still one child once the tool result names the agent
         self.assertEqual(snap['children']['toolu_01TASK']['status'], 'done')
         self.assertIsNotNone(snap['children']['toolu_01TASK']['ended_at'])
         self.assertNotIn('model', {k for k in snap if k == 'model' and snap[k]['value'] == 'sonnet'})

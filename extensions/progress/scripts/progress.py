@@ -7,7 +7,6 @@ import json
 import os
 import posixpath
 import re
-import shutil
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,10 +15,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from sanduq_progress import facts as factslib, hook as hooklib, model, refresh as refreshlib, render_md  # noqa: E402
 from sanduq_progress import snapshot, statusline as statuslib  # noqa: E402
-from sanduq_progress.collect import runs as runscol, tasks as taskscol, workflow as wf  # noqa: E402
+from sanduq_progress.collect import runs as runscol, tasks as taskscol  # noqa: E402
 from sanduq_progress.lock import Lock, LockBusy  # noqa: E402
 from sanduq_progress.paths import ASSETS, Ctx, ProgressError, find_root, git_exclude, resolve_feature  # noqa: E402
-from sanduq_progress.util import atomic_write, diag, iso, parse_time, read_json, utcnow, write_json  # noqa: E402
+from sanduq_progress.util import atomic_write, diag, iso, parse_time, read_json, refuse_link, utcnow, write_json  # noqa: E402
 
 FALLBACK_CSS = (':root{--bg:#f6f7f4;--surface:#fff;--text:#1b2a24;--muted:#4e5d56;--line:#d5dcd7;--brand:#233c32;'
                 '--accent:#c65b36;--active:#dcebf7;--waiting:#e9ece9;--blocked:#f8e0d6;--done:#dcefe2;--failed:#f4c7c0}\n')
@@ -63,7 +62,7 @@ def build_parser():
     s.add_argument('--session')
     s.add_argument('--host', choices=('claude', 'codex'), default='claude')
     s = verb('refresh')
-    s.add_argument('--final', action='store_true')
+    s.add_argument('--final', action='store_true', help='accepted for compatibility; every refresh is a full one')
     s.add_argument('--verbose', action='store_true')
     s = verb('status')
     s.add_argument('--json', action='store_true')
@@ -162,17 +161,21 @@ def copy_assets(ctx):
     for src in sorted(p for p in ASSETS.rglob('*') if p.is_file() and p.name != 'theme.css'):
         target = ctx.view / src.relative_to(ASSETS)
         target.parent.mkdir(parents=True, exist_ok=True)
+        refuse_link(target)  # copyfile would write through a link
+        import shutil
         shutil.copyfile(src, target)
     return True
 
 
-def refresh_now(ctx, final=False):
-    return refreshlib.refresh(ctx, now(), final=final)
+def refresh_now(ctx):
+    return refreshlib.refresh(ctx, now())
 
 
 # ---- verbs ----------------------------------------------------------------------------------------------------
 
 def cmd_init(a, root):
+    if a.theme:
+        check_theme_preset(a.theme)  # before anything is created
     feature = resolve_feature(root, a.feature)
     ctx = Ctx(root, feature)
     ctx.view.mkdir(parents=True, exist_ok=True)
@@ -189,7 +192,7 @@ def cmd_init(a, root):
         write_json(ctx.state, state)
         write_theme_css(ctx)
         if a.theme:
-            run_theme(ctx, ['--preset', a.theme])
+            run_theme(ctx, ['--preset', a.theme], quiet=True)
         refresh_now(ctx)
     if a.statusline == 'yes':
         statuslib.install(root)
@@ -198,22 +201,40 @@ def cmd_init(a, root):
     return 0
 
 
-def run_theme(ctx, rest):
+def check_theme_preset(name):
+    try:
+        from sanduq_progress import theme
+    except Exception:
+        raise ProgressError('PROGRESS_THEME_UNAVAILABLE', 'theme module not available', 2) from None
+    if name not in theme.PRESETS:
+        raise ProgressError('PROGRESS_THEME_INVALID', f'unknown preset {name[:40]}', 2)
+
+
+def run_theme(ctx, rest, quiet=False):
     try:
         from sanduq_progress import theme
     except Exception:
         atomic_write(ctx.view / 'theme.css', FALLBACK_CSS)
         raise ProgressError('PROGRESS_THEME_UNAVAILABLE', '', 2) from None
-    code = theme.cli(rest, project_root=ctx.root)
+    if quiet:
+        import contextlib
+        import io
+        with contextlib.redirect_stdout(io.StringIO()):
+            code = theme.cli(rest, project_root=ctx.root)
+    else:
+        code = theme.cli(rest, project_root=ctx.root)
     if code == 0:
         write_theme_css(ctx)
     return code
 
 
 def cmd_theme(a, root):
-    ctx = Ctx(root, resolve_feature(root, a.feature))
-    require_init(ctx)
-    return run_theme(ctx, a.rest)
+    # theme.json is project-level; theme.cli rewrites theme.css/layout.js only in feature views that exist.
+    try:
+        from sanduq_progress import theme
+    except Exception:
+        raise ProgressError('PROGRESS_THEME_UNAVAILABLE', '', 2) from None
+    return theme.cli(a.rest, project_root=root)
 
 
 def cmd_bind(a, root):
@@ -231,7 +252,7 @@ def cmd_refresh(a, root):
     ctx = Ctx(root, resolve_feature(root, a.feature))
     require_init(ctx)
     with locked(ctx):
-        report = refresh_now(ctx, final=a.final)
+        report = refresh_now(ctx)
     if a.verbose:
         print(f"progress: refreshed rev {report['rev']}")
     return 0

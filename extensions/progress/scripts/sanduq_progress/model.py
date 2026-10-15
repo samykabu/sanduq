@@ -123,14 +123,20 @@ def _child_end(lane):
     return last['status'], parse_time(last['ended_at'])
 
 
+def _child_numbers(child):
+    return [n for n in [child.get('lane_no'), *(child.get('lane_aliases') or [])] if isinstance(n, int) and not isinstance(n, bool)]
+
+
 def build(ctx, now, rev=1, state=None):
-    state, cfg = state or {}, ctx.config_data()
+    state = {} if state is None else state
+    cfg = ctx.config_data()
     stale_after = int(cfg.get('stale_after_seconds') or 600)
     tk = taskscol.collect(ctx.feature_dir)
     cp = wf.checkpoint(ctx.feature_dir)
     attempts = wf.attempts(ctx.feature_dir)
     wf_decisions_exist, wf_decisions = wf.decisions(ctx.feature_dir)
-    run_list = runscol.collect_runs(ctx.root / '.delegate' / 'runs', now=now)
+    referenced = {str(a['run_id']) for a in attempts if a.get('run_id')}
+    run_list = runscol.collect_runs(ctx.root / '.delegate' / 'runs', now=now, only=referenced)
     run_by_id = {r['run_id']: r for r in run_list}
     loaded = factslib.load(ctx.facts)
     fact_rows = loaded['current']
@@ -189,12 +195,13 @@ def build(ctx, now, rev=1, state=None):
     # description label is only a fallback, and only when exactly one child carries that label for the lane; an ambiguous
     # label merges nothing (the children stay separate C<n> lanes) and a diagnostic says so.
     owned = {str(l['owner']).strip().lower(): l for l in lanes if l.get('owner') and l['origin'] != 'host-child'}
-    unmatched, by_label = [], {}
+    unmatched, by_label, merged = [], {}, []
     for snap, key, child in host_children:
         target = next((owned[str(n).strip().lower()] for n in (child.get('agent_id'), key)
                        if n and str(n).strip().lower() in owned), None)
         if target is not None:
             target.setdefault('children', []).append((snap, child))
+            merged.append((child, target))
             continue
         label = str(child.get('description') or '').strip().lower()
         if label in owned:
@@ -204,13 +211,28 @@ def build(ctx, now, rev=1, state=None):
     for label, group in sorted(by_label.items()):
         if len(group) == 1:
             owned[label].setdefault('children', []).append((group[0][0], group[0][2]))
+            merged.append((group[0][2], owned[label]))
         else:
             unmatched.extend(group)
             _diagnose(ctx, f"description '{clean(label, 60)}' matches {len(group)} children; not merged into lane "
                            f"{owned[label]['id']} (use the agent id or tool_use id as the lane owner)", now)
     unmatched.sort(key=lambda x: (x[2].get('started_at') or x[2].get('last_observed_at') or '', x[1]))
-    for number, (snap, key, child) in enumerate(unmatched, 1):
-        lanes.append({'id': f'C{number}', 'label': clean(child.get('description') or child.get('subagent_type') or key, 60),
+    # A child's lane number is durable host data: the snapshot entry carries `lane_no` (assigned once, never reused) and
+    # `lane_aliases` (numbers of entries later found to be the same child). Deleting the disposable view or re-keying
+    # an entry (agent id <-> tool_use id) therefore changes no id, and a blocker on a retired number still resolves.
+    # An entry written before numbers existed gets one above every known number, in start order (not persisted).
+    numbers = [n for _, _, c in unmatched for n in ([c.get('lane_no')] + list(c.get('lane_aliases') or [])) if isinstance(n, int)]
+    top = max(numbers + [0])
+    unmatched.sort(key=lambda x: (not isinstance(x[2].get('lane_no'), int), x[2].get('lane_no') if isinstance(x[2].get('lane_no'), int) else 0,
+                                  x[2].get('started_at') or x[2].get('last_observed_at') or '', x[1]))
+    identity = {f'C{n}': lane['id'] for child, lane in merged for n in _child_numbers(child)}
+    for snap, key, child in unmatched:
+        if not isinstance(child.get('lane_no'), int):
+            top += 1
+            child = dict(child, lane_no=top)
+        for number in _child_numbers(child):
+            identity[f'C{number}'] = f"C{child['lane_no']}"
+        lanes.append({'id': f"C{child['lane_no']}", 'label': clean(child.get('description') or child.get('subagent_type') or key, 60),
                       'owner': child.get('agent_id') or key, 'origin': 'host-child', 'child': child, 'host': snap.get('host'),
                       'requested': {}, 'tasks': [], 'closed': False, 'since': parse_time(child.get('started_at'))})
     claimed = {t for lane in lanes for t in lane['tasks']}
@@ -225,9 +247,16 @@ def build(ctx, now, rev=1, state=None):
         lane['tasks'] = [t for t in lane['tasks'] if task_lane.get(t) == lane['id']]
 
     # ---- blockers -----------------------------------------------------------------------------------------
+    def resolve(ref):
+        """A reference to a child (its C<n> number or a retired alias) means the lane that child is displayed in now."""
+        return identity.get(ref, ref)
+
     blockers = []
     for rec in sorted((r for r in fact_rows if r['kind'] == 'block' and r.get('state') == 'open'), key=lambda r: natural(r['id'])):
-        blockers.append({'id': rec['id'], 'target': rec.get('target'), 'by': rec.get('by') or {}, 'since': rec.get('ts'), 'source': 'facts'})
+        by = rec.get('by') or {}
+        by = dict(by, ref=resolve(by.get('ref'))) if by.get('type') == 'lane' else by
+        blockers.append({'id': rec['id'], 'target': resolve(rec.get('target')), 'by': by,
+                         'since': rec.get('ts'), 'source': 'facts'})
     if cp and cp.get('pause'):
         blockers.append({'id': 'WP', 'target': 'feature', 'by': {'type': 'external', 'ref': cp['pause']['reason']},
                          'since': cp['pause']['at'], 'source': 'workflow-pause'})
@@ -289,7 +318,7 @@ def build(ctx, now, rev=1, state=None):
         shown = {'run_id': rec.get('run'), 'status': rec.get('status') or 'unknown', 'started_at': rec.get('started_at'),
                  'ended_at': rec.get('ended_at'), 'tokens': tokens, 'fidelity': usage.get('fidelity') or 'unknown',
                  'origin': 'legacy'}
-        target = next((l for l in lanes if l['id'] == rec.get('lane')), None)
+        target = next((l for l in lanes if l['id'] == resolve(rec.get('lane'))), None)
         if target is not None:
             if not any(x.get('run_id') == shown['run_id'] and x.get('origin') != 'legacy' for x in target['attempts']):
                 target['attempts'].append(shown)

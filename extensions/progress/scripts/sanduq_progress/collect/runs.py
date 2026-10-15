@@ -145,38 +145,57 @@ def _conflicts(first, second):
     return [f for f in CONFLICT_FIELDS if first[f] != second[f]]
 
 
-def collect_runs(runs_dir, *, since=None, now=None, stall_seconds=DEFAULT_STALL_SECONDS):
+def collect_runs(runs_dir, *, since=None, now=None, stall_seconds=DEFAULT_STALL_SECONDS, only=None):
     """Compact projections of every run under `runs_dir`, sorted by (started_at, run_id).
 
-    `since` (aware datetime) drops runs that started earlier; runs with an unknown start are kept."""
+    `since` (aware datetime) drops runs that started earlier; runs with an unknown start are kept.
+    `only` (a set of run ids) limits the read to those runs: directories named after an id are read first, the run id
+    each one holds is what counts (a directory name is only a hint), and the rest are scanned only while some id is
+    still unresolved, so a long history is not parsed on every refresh. An empty set reads nothing."""
     global _malformed, _duplicates
     _malformed, _duplicates = [], []
+    if only is not None and not only:
+        return []
     now = now or datetime.now(timezone.utc)
     root = Path(runs_dir)
     if not root.is_dir():
         return []
+    folders = sorted(p for p in root.iterdir() if p.is_dir())
+    if only is not None:
+        # a directory name is only a hint: read the same-named directories first, validate the run id each one holds,
+        # and scan the rest only while some requested id is still unresolved
+        hinted = [p for p in folders if p.name in only]
+        rest = [p for p in folders if p.name not in only]
+        folders = hinted
     runs, conflicting = {}, {}
-    for directory in sorted(p for p in root.iterdir() if p.is_dir()):
-        result, meta = directory / 'result.json', directory / 'meta.json'
-        source = result if result.is_file() else meta if meta.is_file() else None
-        if source is None:
-            continue
-        try:
-            run = project_run(source is meta, source, now, stall_seconds)
-        except (OSError, ValueError) as exc:
-            _malformed.append({'source': directory.name, 'error': str(exc)[:120]})
-            continue
-        known = runs.get(run['run_id'])
-        if known:
-            _duplicates.append(run['run_id'])
-            diff = _conflicts(known, run)
-            if diff:
-                conflicting.setdefault(run['run_id'], set()).update(diff)
-            if run['phase'] != 'done':
+
+    def read(directories):
+        for directory in directories:
+            result, meta = directory / 'result.json', directory / 'meta.json'
+            source = result if result.is_file() else meta if meta.is_file() else None
+            if source is None:
                 continue
-        runs[run['run_id']] = run
+            try:
+                run = project_run(source is meta, source, now, stall_seconds)
+            except (OSError, ValueError) as exc:
+                _malformed.append({'source': directory.name, 'error': str(exc)[:120]})
+                continue
+            known = runs.get(run['run_id'])
+            if known:
+                _duplicates.append(run['run_id'])
+                diff = _conflicts(known, run)
+                if diff:
+                    conflicting.setdefault(run['run_id'], set()).update(diff)
+                if run['phase'] != 'done':
+                    continue
+            runs[run['run_id']] = run
+
+    read(folders)
+    if only is not None and not only <= set(runs):
+        read(rest)
     for run_id, fields in conflicting.items():
         runs[run_id]['conflict'] = sorted(fields)
     started = lambda r: parse_time(r['started_at'])
-    chosen = [r for r in runs.values() if since is None or started(r) is None or started(r) >= since]
+    chosen = [r for r in runs.values() if (since is None or started(r) is None or started(r) >= since)
+              and (only is None or r['run_id'] in only)]
     return sorted(chosen, key=lambda r: (r['started_at'] or '', r['run_id']))

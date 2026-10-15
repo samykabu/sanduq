@@ -9,7 +9,7 @@ and `specify_cli/integrations/base.py`), https://code.claude.com/docs/en/hooks a
 1. The integration writes a native hook whose command is
    `<python> <project>/.specify/events.py <command-name> <event> [<timeout>] [<envelope>] [<native-event>]`.
 2. The dispatcher locates the extension's command template (`.specify/extensions/<id>/commands/*.md`) by command
-   name and parses its `scripts:` frontmatter, e.g. `scripts: { py: scripts/progress.py hook post_tool_use }`.
+   name and parses its `scripts:` frontmatter, e.g. `scripts: { py: scripts/hook.py post_tool_use }`.
 3. **The event name is not passed to the script.** The dispatcher accepts it only for argv compatibility. The script
    receives exactly the tokens written in the `scripts:` value. Progress therefore needs **one command template per
    event**, each baking the event into its `scripts:` line. The payload's own `hook_event_name` is a fallback only.
@@ -26,7 +26,7 @@ and `specify_cli/integrations/base.py`), https://code.claude.com/docs/en/hooks a
 6. Only six canonical events exist: `session_start`, `pre_tool_use`, `post_tool_use`, `session_end`,
    `user_prompt_submit`, `stop`. There is **no subagent start or stop event**. Consequences:
    - a foreground subagent ends when its parent's `Task`/`Agent` tool result arrives;
-   - a background subagent stays `running` until a `stop` payload carrying its `agent_id` is delivered
+   - a background subagent, and a Codex `spawn_agent` (its response says only that the agent exists), stays `running` until a `stop` payload carrying its `agent_id` is delivered
      (**unverified** that hosts deliver one); otherwise it ages into lane status `waiting` after
      `stale_after_seconds`, never into a fabricated `done`.
 
@@ -36,19 +36,22 @@ Suggested extension manifest fragment:
 events:
   session_start:      { command: speckit.progress.hook-session-start }
   post_tool_use:      { command: speckit.progress.hook-post-tool-use, matcher: ".*", timeout: 10 }
-  pre_tool_use:       { command: speckit.progress.hook-pre-tool-use, matcher: "Task|Agent", timeout: 10 }
+  pre_tool_use:       { command: speckit.progress.hook-pre-tool-use, matcher: "Task|Agent|spawn_agent", timeout: 10 }
   stop:               { command: speckit.progress.hook-stop, timeout: 20 }
   session_end:        { command: speckit.progress.hook-session-end, timeout: 20 }
 ```
 
-Each template contains `scripts:\n  py: scripts/progress.py hook <event>`.
+Each template contains `scripts:\n  py: scripts/hook.py <event>`, a standard-library entry that returns before importing Progress for an unbound
+session (about 30 ms, the interpreter start-up) and otherwise runs the same handler as `progress.py hook <event>`.
 
 ## Claude Code payloads (verified from docs)
 
 - Hooks: `session_id`, `transcript_path`, `cwd`, `hook_event_name`, `permission_mode`, `effort {level}`, and inside a
   subagent `agent_id` plus `agent_type`. Tool events add `tool_name`, `tool_input`, `tool_use_id`, and
   `tool_response` on post. The `Task`/`Agent` tool input fields (`subagent_type`, `description`, `model`,
-  `run_in_background`) and the `tool_response` shape (`agentId`) are read defensively (**unverified**).
+  `run_in_background`) are read defensively (**unverified**). The `tool_response` of an `Agent` result carries `agentId`
+  (seen in local Claude transcripts, not documented), which links the launching tool call to the child's own events; until it
+  arrives the one running launch of the session is linked provisionally (see contracts.md, Child identity).
   A hook payload has no `model`; it is recorded only if present.
 - Statusline stdin: `model {id, display_name}`, `effort {level}` (absent when unsupported),
   `context_window {used_percentage, context_window_size, total_input_tokens, current_usage}` (percentage may be null
@@ -66,6 +69,20 @@ Effort and context come from the rollout JSONL via `hosts/codex.py` (`ROLLOUT_AD
 (`model`, `effort` | `reasoning_effort` | `collaboration_mode.settings.reasoning_effort`) and last `token_count`
 event (`info.last_token_usage`, `info.model_context_window`) in the final 512 KiB, fidelity `partial`. An unknown
 shape yields unknown, never a guess. Only numbers and the model/effort words are retained.
+
+## Which host is active (environment variables)
+
+Workflow's `python .specify/extensions/workflow/scripts/progress_bridge.py mode [--host claude|codex]` and the hook registration check need to know which host is running. Status of each signal:
+
+| Host | Variable | Status |
+| --- | --- | --- |
+| Claude Code | `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT` | **Verified** on a real Claude Code host (both set in its sessions) |
+| Codex | `CODEX_SANDBOX_NETWORK_DISABLED` | Documented (set to 1 in sandboxed Codex child processes); absent outside the sandbox, so it proves Codex only when present |
+| Codex | `CODEX_THREAD_ID`, `CODEX_CI`, others | **Unverified**: not found in any Codex documentation or source checked |
+
+An unknown or ambiguous environment never guesses a host: it falls back to the safe `refresh` mode. A Codex coordinator
+therefore passes `--host codex` explicitly instead of relying on detection. Hook payload detection (`turn_id`, a `rollout-`
+or `.codex` transcript path) is separate and unchanged.
 
 ## Binding
 

@@ -1,7 +1,7 @@
 # Progress verbs
 
-Output is one line. Exit codes: 0 ok, 2 usage, 3 refused (authority or binding), 4 lock busy (retried 3 times first).
-Error lines start with `progress: error CODE`. The full contract is in `docs/contracts.md` of the extension source.
+Output is one line (`refresh` prints nothing without `--verbose`). Exit codes: 0 ok, 2 usage, 3 refused (authority or binding), 4 lock busy (retried 3 times first).
+Error lines start with `progress: error CODE`. The full contract is in `docs/contracts.md` of the extension source; every flag and example is in `docs/commands.md`.
 
 | Verb | Writes | Notes |
 | --- | --- | --- |
@@ -20,6 +20,7 @@ Error lines start with `progress: error CODE`. The full contract is in `docs/con
 | `statusline [install\|uninstall\|run]` | Claude `settings.json` | Chains the previous status line command and restores it on uninstall. |
 | `theme --preset sanduq\|cobalt\|emerald\|classic \| --from-illustrate \| --file theme.json \| --show` | `.specify/progress/theme.json` | |
 | `export [--format md\|json] [--out PATH]` | the output file | Deterministic. |
+| `hook EVENT [--host H]` | host snapshot | Internal. Called by the host's hooks; prints nothing and always exits 0. |
 
 ## What is collected without a command
 

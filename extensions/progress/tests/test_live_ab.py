@@ -148,5 +148,54 @@ class UsageSummary(unittest.TestCase):
         self.assertIn("unknown", md)
 
 
+class DelegateDiscoveryTests(unittest.TestCase):
+    def setUp(self):
+        import os
+        self.env = dict(os.environ)
+        os.environ.pop("DELEGATE_SCRIPT", None)
+        self.addCleanup(lambda: (os.environ.clear(), os.environ.update(self.env)))
+
+    def test_search_order_and_none(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            self.assertIsNone(live_ab.find_delegate(base))
+            claude = base / ".claude/skills/delegate-task/delegate.mjs"
+            claude.parent.mkdir(parents=True)
+            claude.write_text("//", encoding="utf-8")
+            self.assertEqual(live_ab.find_delegate(base), claude)
+            agents = base / ".agents/skills/delegate-task/delegate.mjs"
+            agents.parent.mkdir(parents=True)
+            agents.write_text("//", encoding="utf-8")
+            self.assertEqual(live_ab.find_delegate(base), agents)
+
+    def test_env_wins(self):
+        import os
+        os.environ["DELEGATE_SCRIPT"] = "/somewhere/delegate.mjs"
+        self.assertEqual(live_ab.find_delegate(Path(".")), Path("/somewhere/delegate.mjs"))
+
+    def test_dry_run_with_found_driver_and_clear_error_without(self):
+        import contextlib
+        import io
+        import os
+        old = os.getcwd()
+        with tempfile.TemporaryDirectory() as tmp:
+            os.chdir(tmp)
+            try:
+                err = io.StringIO()
+                with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as caught:
+                    live_ab.main(["--dry-run", "--pairs", "1", "--updates", "5"])
+                self.assertEqual(caught.exception.code, 2)
+                self.assertIn("no delegate-task driver found", err.getvalue())
+                driver = Path(tmp, ".agents/skills/delegate-task/delegate.mjs")
+                driver.parent.mkdir(parents=True)
+                driver.write_text("//", encoding="utf-8")
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out):
+                    self.assertEqual(live_ab.main(["--dry-run", "--pairs", "1", "--updates", "5"]), 0)
+                self.assertIn("(found)", out.getvalue())
+            finally:
+                os.chdir(old)
+
+
 if __name__ == "__main__":
     unittest.main()

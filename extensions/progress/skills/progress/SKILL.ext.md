@@ -11,7 +11,7 @@ Record only missing assignment, decision or blocker facts.
 Host hooks, `tasks.md` and the Workflow ledger are collected automatically. A refresh prints nothing.
 Run the CLI from the repository root. In this skill `progress` stands for
 `python .specify/extensions/progress/scripts/progress.py`; type the full command each time, since shell state may not persist.
-Every verb prints one line; relay it, do not elaborate.
+Verbs print one line (`refresh` prints nothing); relay it, do not elaborate.
 
 ## Verbs
 

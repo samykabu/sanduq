@@ -5,6 +5,7 @@ Use this reference when configuring runners or inspecting an interrupted feature
 ## Table of contents
 
 - [Orchestrated implementation and live progress](#orchestrated-implementation-and-live-progress)
+- [Reporting modes and the legacy call mapping](#reporting-modes-and-the-legacy-call-mapping)
 - [The lifetime of one feature](#the-lifetime-of-one-feature)
 - [Where the state lives](#where-the-state-lives)
 - [What the CI gate actually checks](#what-the-ci-gate-actually-checks)
@@ -72,6 +73,59 @@ state before starting replacements. The [stage-by-stage guide](lifecycle.md#ever
 includes prompts for setup, specification, analysis, review, and publication.
 
 ![Managed feature lifecycle from Scope to an authorized and verified PR merge](../diagrams/workflow-lifecycle.svg)
+
+## Reporting modes and the legacy call mapping
+
+The coordinator picks how it reports once per Execute claim or resume, with the bridge:
+
+```bash
+python .specify/extensions/workflow/scripts/progress_bridge.py mode [--host claude|codex] [--json]
+```
+
+```text
+reporting: projection
+```
+
+The bridge reads the spec-kit registry and the host's hook configuration, and never starts Progress. Without `--host` it
+detects the host from the environment and chooses `refresh` when the host is unknown. A Codex coordinator passes
+`--host codex`. `--json` adds the script path, `automatic`, the host and why the mode was chosen.
+
+| Mode | When | What the coordinator does |
+| --- | --- | --- |
+| `projection` | [Progress](../extensions/progress.md) is installed and enabled, and its hooks are registered and enabled for the active host | Runs `progress init` once, then records only lanes, blockers and notes. Task state, retries, usage and run history are collected. Runs `progress refresh --final` once at Finalize |
+| `refresh` | Progress is installed and enabled, but the host does not collect automatically, or is unknown | The same, plus `progress refresh` after each collected attempt and phase commit |
+| `legacy` | Progress is absent, or disabled in the spec-kit registry | The `progress.py` calls Workflow has always made, as in the section above |
+
+Hooks count as off when the host's own switch is off: Claude Code's `disableAllHooks`, or a Codex `[features]` entry
+(`hooks` or `codex_hooks`) set to `false`.
+
+**Never spawn, retain, message or poll an additional agent only to maintain the report.** This holds in every mode. The
+coordinator makes its few calls as part of its own turn. Opening the report once for a person is fine. Reopening it,
+re-verifying it or waiting to see it refresh is not. Waiting for a worker to finish is different and stays.
+
+When Progress is installed, `scripts/progress.py` forwards each legacy subcommand to the Progress CLI and writes no legacy
+state, so existing instructions keep working. Each call prints what it always did: the report path, or one `--summary` line
+such as `ok done=0 total=6 pending=4 running=1 blocked=1`.
+
+| Legacy call | Progress verbs it runs |
+| --- | --- |
+| `init --tasks T --output O [--open]` | `init`; `--open` then opens `index.html`. `--title` is refused |
+| `task --id T --status running [--agent A] [--note N]` | Finds or makes the lane owned by `A` (`lane new --tasks T --owner A`) and moves `T` into it, then `unblock --all-for T`, `note` when a note is given, and `attempt record --lane L --run legacy-T-A --status running` |
+| `task --id T --status done` | The same lane step, `unblock --all-for T`, then `attempt record ... --status done --ended <now>` |
+| `task --id T --status blocked --note N` | `block T --by L2` when the note is a lane, task, W or C id such as `L2`, otherwise `block T --by ext:"N"`; plus `attempt record ... --status blocked` |
+| `task --id T --status pending` | `unblock --all-for T`, then `note "T pending" --target T` |
+| `event --message M` | `note M` |
+| `phase --name N --status S [--commit C]` | `note "Phase N: S (C)"` |
+| `pr --url U --status open\|merged` | `note "PR S: U"` |
+| `sync` | `refresh` |
+| `usage --id T` or `--overhead LABEL` | `attempt record ... --usage-json` with the counters Workflow's own usage reader produced, and a `note` when usage is unavailable |
+| any call with `--json` | Refused with a compatibility error and exit 2. Use `progress.py status --json` |
+| `--summary` | Kept |
+
+An unknown task id prints `error Unknown task ID: T099` and exits 2. A request with no faithful mapping fails with a
+compatibility error and never succeeds silently. Do not retry it; use the Progress verb in the table. Legacy attempts carry
+origin `legacy` and never override the delegation ledger. Every Progress verb is in the
+[command reference](../../extensions/progress/docs/commands.md).
 
 ## The lifetime of one feature
 

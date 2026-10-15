@@ -5,8 +5,7 @@ import posixpath
 import re
 from pathlib import Path
 
-from .paths import ProgressError
-from .util import clean, iso, utcnow
+from .util import ProgressError, clean, iso, refuse_link, utcnow
 
 PREFIX = {'lane': 'L', 'block': 'B', 'decision': 'D', 'note': 'N', 'attempt': 'A'}
 TEXT_CAP = 200
@@ -134,6 +133,7 @@ def append(path, record, root=None):
         check(record, root)
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    refuse_link(path)  # an append through a link would write outside the repository
     line = json.dumps(record, ensure_ascii=False, separators=(',', ':')) + '\n'
     prefix = b''
     if path.exists() and path.stat().st_size:

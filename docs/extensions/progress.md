@@ -8,7 +8,7 @@ native hook payloads. No agent is spent keeping it current.
 | --- | --- |
 | Lifecycle phase | After `tasks` through `implement`; native hooks keep it fresh |
 | Hooks | Two optional lifecycle hooks and five native host events ([hooks](../reference/hooks.md)) |
-| Commands | `init`, `refresh`, `status`, `theme`, `export` ([reference](../reference/commands.md#progress)) |
+| Commands | `init`, `refresh`, `status`, `theme`, `export` ([reference](../reference/commands.md#progress)) and a CLI with 15 verbs ([full reference](../../extensions/progress/docs/commands.md)) |
 | Requires | Nothing; Python 3.11 or later. Workflow and Illustrate are optional |
 | Standalone | Yes |
 | License | PolyForm Noncommercial 1.0.0 |
@@ -18,6 +18,9 @@ native hook payloads. No agent is spent keeping it current.
 ```bash
 specify extension add progress
 ```
+
+Add the Sanduq catalog first if you have not ([install by host](../start/install-by-host.md)). With Workflow, use
+`install.py --with progress --apply` instead.
 
 ```text
 $speckit-progress-init Create the progress report for specs/412-refund-approval.
@@ -33,6 +36,16 @@ $speckit-progress-theme Use the cobalt theme for the progress report.
 $speckit-progress-export Export the progress report as Markdown.
 ```
 
+Record a lane when you assign work:
+
+```bash
+python .specify/extensions/progress/scripts/progress.py lane L1 --tasks T001-T003 --owner worker-a
+```
+
+```text
+progress: L1 open 3 tasks
+```
+
 The agent records only what no other source holds: a lane assignment, a blocker, a plain Spec Kit decision or a note.
 The skill at `extensions/progress/skills/progress/SKILL.ext.md` lists the verbs. Task state comes from `tasks.md`;
 model, effort and context come from host hooks and are shown as unknown when a host does not send them.
@@ -41,13 +54,25 @@ model, effort and context come from host hooks and are shown as unknown when a h
 
 Progress is optional for [Workflow](workflow.md). Install it with `install.py --with progress`. Workflow then reports
 through Progress and no longer asks an agent to keep a report current. If you leave Progress out, Workflow's own
-report runs as before. Details:
+report runs as before. `progress_bridge.py mode` prints the mode in use (`projection`, `refresh` or `legacy`); the
+[modes and the old-call mapping](../workflow/operations.md#reporting-modes-and-the-legacy-call-mapping) are in the
+operations guide. Details:
 
 - Workflow's `progress.py` forwards its old subcommands to the Progress CLI, so existing prompts keep working.
   `--json` and `init --title` have no faithful mapping and fail with a compatibility error.
 - Legacy usage is stored as an attempt labelled `legacy`. It never overrides the delegation ledger.
 - Workflow's lean run status reads `progress runs --json` (schema `progress.runs.v1`).
 
+## Limits
+
+- Active work time is always shown as unknown. Hosts do not report it.
+- Codex fields and the stop event of a background child are unverified against a running host.
+- A session must be bound to a feature before its hooks are recorded. If the report does not update, start with
+  [troubleshooting](../../extensions/progress/README.md#report-is-not-updating).
+
 ## More
 
-The [package README](../../extensions/progress/README.md) has the hosts table, theming and token results.
+The [package README](../../extensions/progress/README.md) has the install steps, what each report block shows,
+file layout, theming, token results, upgrading and troubleshooting. The
+[command reference](../../extensions/progress/docs/commands.md) lists every verb, flag, output line, exit code,
+schema and the benchmark tools.

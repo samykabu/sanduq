@@ -5,7 +5,6 @@ runs the previously configured statusLine command (kept in .specify/progress/con
 passes its stdout through byte for byte. With no previous command it prints one minimal line."""
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 
@@ -55,6 +54,7 @@ def run(raw, root, now=None):
     config = read_json(Path(root) / '.specify' / 'progress' / 'config.json', {})
     chained = (config.get('statusline') or {}).get('chained') if isinstance(config, dict) else None
     if chained:
+        import subprocess
         try:
             out = subprocess.run(chained, shell=True, input=raw, capture_output=True, timeout=5, cwd=str(root))
             if out.stdout or out.returncode == 0:

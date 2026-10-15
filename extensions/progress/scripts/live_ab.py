@@ -27,8 +27,21 @@ HERE = Path(__file__).resolve().parent
 EXT = HERE.parent
 sys.path.insert(0, str(EXT / "tests"))
 
-DEFAULT_DELEGATE = Path(os.environ.get(
-    "DELEGATE", r"D:\Projects\abushanab-net\Bunyan\.agents\skills\delegate-task\delegate.mjs"))
+DELEGATE_CANDIDATES = (".agents/skills/delegate-task/delegate.mjs", ".claude/skills/delegate-task/delegate.mjs")
+
+
+def find_delegate(cwd=None):
+    """env DELEGATE_SCRIPT, else the first delegate.mjs under the cwd; None when neither exists."""
+    env = os.environ.get("DELEGATE_SCRIPT")
+    if env:
+        return Path(env)
+    base = Path(cwd) if cwd else Path.cwd()
+    for rel in DELEGATE_CANDIDATES:
+        if (base / rel).is_file():
+            return base / rel
+    return None
+
+
 DEFAULT_TARGETS = "claude:claude-haiku-5-5,codex:gpt-6-luna"
 ARMS = ("new", "md")
 
@@ -355,7 +368,8 @@ def write_reports(out, args, planned, results):
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--delegate", type=Path, default=DEFAULT_DELEGATE, help="path to delegate.mjs")
+    p.add_argument("--delegate", type=Path, default=None,
+                   help="path to delegate.mjs (default: env DELEGATE_SCRIPT, else .agents/ or .claude/skills/delegate-task/delegate.mjs under the cwd)")
     p.add_argument("--node", default="node")
     p.add_argument("--targets", default=DEFAULT_TARGETS, help="comma list of harness:model (explicit model required)")
     p.add_argument("--pairs", type=int, default=3)
@@ -365,6 +379,11 @@ def main(argv=None):
     p.add_argument("--out", type=Path, default=Path("live-ab-report"))
     p.add_argument("--dry-run", action="store_true", help="print the planned runs and exit without spending tokens")
     args = p.parse_args(argv)
+    if args.delegate is None:
+        args.delegate = find_delegate()
+        if args.delegate is None:
+            p.error("no delegate-task driver found: pass --delegate PATH, set DELEGATE_SCRIPT, or run from a "
+                    "project with .agents/skills/delegate-task/delegate.mjs or .claude/skills/delegate-task/delegate.mjs")
     for t in args.targets.split(","):
         if ":" not in t:
             p.error("every target needs harness:model, got %r" % t)

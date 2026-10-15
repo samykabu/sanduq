@@ -39,6 +39,8 @@ class Project(unittest.TestCase):
         saved = dict(os.environ)
         self.addCleanup(lambda: (os.environ.clear(), os.environ.update(saved)))
         os.environ.pop('SANDUQ_PROGRESS_SCRIPT', None)
+        for name in bridge.HOST_ENV_CLAUDE + bridge.HOST_ENV_CODEX:
+            os.environ.pop(name, None)
         # Keep the real user-level host configs out of every test.
         self.user_home = self.root / '.user-home'
         os.environ['CODEX_HOME'] = str(self.user_home / 'codex')
@@ -84,8 +86,8 @@ class Project(unittest.TestCase):
 
 
 class ReportingModes(Project):
-    def mode(self):
-        return bridge.mode(self.root, FEATURE)
+    def mode(self, host='claude'):
+        return bridge.mode(self.root, FEATURE, host=host)
 
     def test_absent_progress_means_legacy(self):
         os.environ.pop('SANDUQ_PROGRESS_SCRIPT')
@@ -123,12 +125,6 @@ class ReportingModes(Project):
         (self.root / '.claude').mkdir(exist_ok=True)
         (self.root / '.claude' / 'settings.json').write_text(json.dumps({'hooks': {'Stop': [{'hooks': [entry]}]}}), encoding='utf-8')
 
-    def _yml(self, enabled):
-        (self.root / '.specify').mkdir(exist_ok=True)
-        (self.root / '.specify' / 'extensions.yml').write_text(
-            'hooks:\n  after_implement:\n  - extension: progress\n    command: speckit.progress.hook-stop\n'
-            f'    enabled: {enabled}\n    optional: false\n', encoding='utf-8')
-
     def test_disabled_native_hook_entry_is_not_automatic(self):
         self._claude({'type': 'command', 'enabled': False, 'command': 'python .specify/events.py speckit.progress.hook-stop stop'})
         self.assertEqual(self.mode()['mode'], 'refresh')
@@ -162,26 +158,26 @@ class ReportingModes(Project):
         (self.root / '.codex').mkdir()
         (self.root / '.codex' / 'hooks.json').write_text(json.dumps({'features': {'codex_hooks': False}, 'hooks': {
             'Stop': [{'command': self.HOOK}]}}), encoding='utf-8')
-        self.assertEqual(self.mode()['mode'], 'refresh')
+        self.assertEqual(self.mode('codex')['mode'], 'refresh')
 
     def test_codex_config_toml_switch_disables_hooks_json(self):
         (self.root / '.codex').mkdir()
         (self.root / '.codex' / 'hooks.json').write_text(json.dumps({'hooks': {
             'Stop': [{'command': self.HOOK}]}}), encoding='utf-8')
         (self.root / '.codex' / 'config.toml').write_text('[features]\nhooks = false\n', encoding='utf-8')
-        self.assertEqual(self.mode()['mode'], 'refresh')
+        self.assertEqual(self.mode('codex')['mode'], 'refresh')
         (self.root / '.codex' / 'config.toml').write_text('[features]\ncodex_hooks = false\n', encoding='utf-8')
-        self.assertEqual(self.mode()['mode'], 'refresh')
+        self.assertEqual(self.mode('codex')['mode'], 'refresh')
 
     def test_user_level_switches_disable_project_hooks(self):
         (self.root / '.codex').mkdir()
         (self.root / '.codex' / 'hooks.json').write_text(json.dumps({'hooks': {
             'Stop': [{'command': self.HOOK}]}}), encoding='utf-8')
-        self.assertEqual(self.mode()['mode'], 'projection')
+        self.assertEqual(self.mode('codex')['mode'], 'projection')
         codex_home = Path(os.environ['CODEX_HOME'])
         codex_home.mkdir(parents=True)
         (codex_home / 'config.toml').write_text('[features]\nhooks = false\n', encoding='utf-8')
-        self.assertEqual(self.mode()['mode'], 'refresh')
+        self.assertEqual(self.mode('codex')['mode'], 'refresh')
         (codex_home / 'config.toml').unlink()
         self._claude({'type': 'command', 'command': 'python .specify/events.py speckit.progress.hook-stop stop'})
         (self.root / '.codex' / 'hooks.json').unlink()
@@ -191,35 +187,79 @@ class ReportingModes(Project):
         (claude_home / 'settings.json').write_text(json.dumps({'disableAllHooks': True}), encoding='utf-8')
         self.assertEqual(self.mode()['mode'], 'refresh')
 
-    def test_disabled_extensions_yml_hook_is_not_automatic(self):
-        self._yml('false')
-        self.assertEqual(self.mode()['mode'], 'refresh')
-
-    def test_enabled_extensions_yml_hook_is_automatic(self):
-        self._yml('true')
-        self.assertEqual(self.mode()['mode'], 'projection')
-
-    def test_other_extension_hook_in_extensions_yml_is_ignored(self):
-        (self.root / '.specify').mkdir(exist_ok=True)
+    def test_extensions_yml_command_hooks_are_not_collection_evidence(self):
+        # spec-kit writes only the manifest's after_* command hooks there, never the host event handlers.
         (self.root / '.specify' / 'extensions.yml').write_text(
-            'hooks:\n  after_implement:\n  - extension: scope\n    command: speckit.scope.plan-guard\n    enabled: true\n',
-            encoding='utf-8')
+            'hooks:\n  after_implement:\n  - extension: progress\n    command: speckit.progress.hook-stop\n'
+            '    enabled: true\n', encoding='utf-8')
         self.assertEqual(self.mode()['mode'], 'refresh')
+        self.assertFalse(hasattr(bridge, '_yml_hooks'))
 
-    def test_disabled_extension_in_registry_is_not_automatic(self):
+    def test_disabled_extension_in_registry_is_legacy_and_does_not_forward(self):
         self._claude({'type': 'command', 'command': 'python .specify/events.py speckit.progress.hook-stop stop'})
         reg = self.root / '.specify' / 'extensions' / '.registry'
         reg.parent.mkdir(parents=True, exist_ok=True)
         reg.write_text(json.dumps({'schema_version': '1.0', 'extensions': {'progress': {'enabled': False}}}), encoding='utf-8')
+        decision = self.mode()
+        self.assertEqual((decision['mode'], decision['script']), ('legacy', None))
+        self.assertIsNone(bridge.script(self.root))
+        code, out, err = self.legacy('init', '--tasks', str(self.feature_dir / 'tasks.md'), '--summary')
+        self.assertEqual(code, 0, out + err)
+        self.assertTrue((self.output / 'state.json').is_file())  # the legacy reporter ran
+        self.assertFalse((self.feature_dir / 'progress').exists())
+
+    def test_mode_runs_no_progress_process(self):
+        calls = []
+        real = bridge.run
+        bridge.run = lambda *a, **k: calls.append(a) or real(*a, **k)
+        self.addCleanup(setattr, bridge, 'run', real)
         self.assertEqual(self.mode()['mode'], 'refresh')
+        self._claude({'type': 'command', 'command': self.HOOK})
+        self.assertEqual(self.mode()['mode'], 'projection')
+        self.assertEqual(calls, [])
+
+    def _both_hosts(self):
+        self._claude({'type': 'command', 'command': self.HOOK})
+        (self.root / '.codex').mkdir(exist_ok=True)
+        (self.root / '.codex' / 'hooks.json').write_text(json.dumps({'features': {'codex_hooks': False}, 'hooks': {
+            'Stop': [{'command': self.HOOK}]}}), encoding='utf-8')
+
+    def test_only_the_active_hosts_hooks_count(self):
+        self._both_hosts()  # Claude hooks registered, Codex hooks switched off
+        self.assertEqual(self.mode('claude')['mode'], 'projection')
+        self.assertEqual(self.mode('codex')['mode'], 'refresh')
+        self.assertEqual(self.mode('claude')['host'], 'claude')
+
+    def test_active_host_is_detected_from_the_environment(self):
+        self._both_hosts()
+        self.assertEqual(self.mode(None)['mode'], 'refresh')  # unknown host
+        os.environ['CLAUDECODE'] = '1'
+        self.assertEqual(self.mode(None)['mode'], 'projection')
+        os.environ['CODEX_THREAD_ID'] = 'abc'
+        self.assertEqual(self.mode(None)['mode'], 'refresh')  # both signals: ambiguous
+        os.environ.pop('CLAUDECODE')
+        self.assertEqual(self.mode(None)['mode'], 'refresh')  # Codex only, and its hooks are off
+        self.assertEqual(self.mode(None)['host'], 'codex')
+
+    def test_codex_home_alone_does_not_identify_the_host(self):
+        self._both_hosts()
+        os.environ['CODEX_HOME'] = str(self.user_home / 'codex')
+        self.assertIsNone(self.mode(None)['host'])
+
+    def test_mode_command_takes_a_host(self):
+        self._both_hosts()
+        for host, expected in (('claude', 'projection'), ('codex', 'refresh')):
+            done = subprocess.run([sys.executable, str(SCRIPTS / 'progress_bridge.py'), 'mode', '--root', str(self.root),
+                                   '--host', host], capture_output=True, text=True, env=os.environ.copy())
+            self.assertEqual((done.returncode, done.stdout.strip()), (0, 'reporting: ' + expected), done.stderr)
 
     def test_codex_toml_hook_is_detected_and_disabled_one_is_not(self):
         (self.root / '.codex').mkdir(exist_ok=True)
         cfg = self.root / '.codex' / 'config.toml'
         cfg.write_text('[[hooks.Stop]]\ncommand = "python x.py speckit.progress.hook-stop"\n', encoding='utf-8')
-        self.assertEqual(self.mode()['mode'], 'projection')
+        self.assertEqual(self.mode('codex')['mode'], 'projection')
         cfg.write_text('[[hooks.Stop]]\nenabled = false\ncommand = "python x.py speckit.progress.hook-stop"\n', encoding='utf-8')
-        self.assertEqual(self.mode()['mode'], 'refresh')
+        self.assertEqual(self.mode('codex')['mode'], 'refresh')
 
     def test_mode_command_prints_one_line(self):
         done = subprocess.run([sys.executable, str(SCRIPTS / 'progress_bridge.py'), 'mode', '--root', str(self.root)],
@@ -388,6 +428,56 @@ class ShimMappings(Project):
         self.init()
         code, out, _ = self.legacy('task', '--id', 'T999', '--status', 'done', '--summary')
         self.assertEqual((code, out), (2, 'error Unknown task ID: T999'))
+
+
+class ProcessCounts(Project):
+    """Each forwarded legacy call spawns as few Progress processes as it needs."""
+
+    def counted(self, *argv):
+        calls, real = [], bridge.run
+        bridge.run = lambda root, args, *a, **k: calls.append(args[0]) or real(root, args, *a, **k)
+        try:
+            code, out, err = self.legacy(*argv)
+        finally:
+            bridge.run = real
+        self.assertEqual(code, 0, out + err)
+        return calls
+
+    # command -> (processes without --summary, with --summary)
+    EXPECTED = {
+        'event': (['status', 'note'], ['status', 'note', 'status']),
+        'phase': (['status', 'note'], ['status', 'note', 'status']),
+        'pr': (['status', 'note'], ['status', 'note', 'status']),
+        'sync': (['status', 'refresh'], ['status', 'refresh', 'status']),
+    }
+    ARGS = {'event': ('--message', 'm'), 'phase': ('--name', 'P1', '--status', 'complete'),
+            'pr': ('--url', 'https://github.com/a/b/pull/1', '--status', 'open'), 'sync': ()}
+
+    def test_notes_and_sync_skip_redundant_status_calls(self):
+        self.init()
+        for command, (plain, summary) in self.EXPECTED.items():
+            with self.subTest(command=command):
+                self.assertEqual(self.counted(command, *self.ARGS[command]), plain)
+                self.assertEqual(self.counted(command, *self.ARGS[command], '--summary'), summary)
+
+    def test_first_call_for_a_feature_initialises_once(self):
+        self.assertEqual(self.counted('event', '--message', 'm'), ['status', 'init', 'status', 'note'])
+
+    def test_task_running_needs_one_status_before_and_none_after_without_summary(self):
+        self.init()
+        calls = self.counted('task', '--id', 'T002', '--status', 'running', '--agent', 'w1')
+        self.assertEqual(calls.count('status'), 1, calls)
+        self.assertEqual(self.counted('task', '--id', 'T002', '--status', 'running', '--agent', 'w1', '--summary').count('status'), 2)
+
+    def test_usage_without_a_split_needs_no_extra_status(self):
+        self.init()
+        self.legacy('task', '--id', 'T002', '--status', 'running', '--agent', 'w1')
+        calls = self.counted('usage', '--id', 'T002', '--agent', 'w1', '--fresh-input', '1')
+        self.assertEqual(calls.count('status'), 1, calls)
+
+    def test_init_prints_the_index_without_asking_status(self):
+        calls = self.counted('init', '--tasks', str(self.feature_dir / 'tasks.md'))
+        self.assertEqual(calls, ['init'])
 
 
 class CompatibilityErrors(Project):

@@ -198,5 +198,61 @@ class CliTests(unittest.TestCase):
             self.assertEqual(theme.resolve(d)["tokens"]["light"]["bg"], "#f4f8f5")
 
 
+class VerbTests(unittest.TestCase):
+    """The progress verbs around theme: init validation and the project-level theme verb."""
+
+    def setUp(self):
+        sys.path.insert(0, str(HERE))
+        import helpers
+        self.helpers = helpers
+
+    def make(self):
+        case = self.helpers.Project("setUp")
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        return case
+
+    def test_init_bad_theme_creates_nothing(self):
+        p = self.make()
+        code, out = p.cli("init", "--theme", "BAD")
+        self.assertEqual(code, 2)
+        self.assertEqual(out, "progress: error PROGRESS_THEME_INVALID unknown preset BAD")
+        self.assertFalse((p.feature_dir / "progress").exists())
+        self.assertFalse((p.root / ".specify" / "progress").exists())
+
+    def test_init_good_theme_prints_one_line(self):
+        p = self.make()
+        code, out = p.cli("init", "--theme", "cobalt")
+        self.assertEqual(code, 0)
+        self.assertEqual(len(out.splitlines()), 1)
+        self.assertTrue(out.startswith("progress: ready "))
+        self.assertEqual(theme.resolve(p.root)["preset"], "cobalt")
+
+    def test_theme_verb_without_initialised_feature(self):
+        p = self.make()
+        self.assertEqual(p.cli("theme", "--preset", "emerald"), (0, "progress: theme emerald"))
+        self.assertEqual(json.loads(p.cli("theme", "--show")[1])["preset"], "emerald")
+        self.assertFalse((p.feature_dir / "progress").exists())
+        code, out = p.cli("theme", "--help")
+        self.assertEqual(code, 0)
+        self.assertIn("--preset NAME", out)
+
+    def test_theme_verb_refreshes_only_existing_views(self):
+        p = self.make()
+        p.init()
+        other = p.root / "specs" / "002-other"
+        other.mkdir()
+        self.assertEqual(p.cli("theme", "--preset", "classic")[0], 0)
+        self.assertIn("--bg:#f5f5f5", (p.feature_dir / "progress" / ".view" / "theme.css").read_text(encoding="utf-8"))
+        self.assertFalse((other / "progress").exists())
+
+    def test_config_has_no_feature_dir_mode_but_old_one_is_read(self):
+        p = self.make()
+        p.init()
+        self.assertNotIn("feature_dir_mode", json.loads(p.ctx.config.read_text(encoding="utf-8")))
+        p.ctx.config.write_text(json.dumps({"feature_dir_mode": "auto", "debounce_seconds": 7}), encoding="utf-8")
+        self.assertEqual(p.ctx.config_data()["debounce_seconds"], 7)
+
+
 if __name__ == "__main__":
     unittest.main()

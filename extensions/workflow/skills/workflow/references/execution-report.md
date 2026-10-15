@@ -276,4 +276,3 @@ python .specify/extensions/workflow/scripts/progress.py pr --output specs/<featu
 python .specify/extensions/workflow/scripts/progress.py event --output specs/<feature>/workflow/progress --message "CI failure: <check>; fix assigned to <worker-id>" --summary
 python .specify/extensions/workflow/scripts/progress.py pr --output specs/<feature>/workflow/progress --url <pr-url> --status merged --summary
 ```
-

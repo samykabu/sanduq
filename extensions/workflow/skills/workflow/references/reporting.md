@@ -14,14 +14,17 @@ Pick the mode once per Execute claim or resume:
 python .specify/extensions/workflow/scripts/progress_bridge.py mode
 ```
 
+The host is detected from the environment and an unknown host selects `refresh`. A Codex coordinator passes
+`--host codex`.
+
 It prints `reporting: projection`, `reporting: refresh` or `reporting: legacy`. In the commands below `progress` stands
 for `python .specify/extensions/progress/scripts/progress.py`; every verb prints one line.
 
 | Mode | When | Coordinator does |
 | --- | --- | --- |
-| `projection` | Progress is installed and collects automatically (its `status --json` says `collection.automatic`, or its host hooks are registered) | `progress init` once (idempotent). Then only record facts nothing else records: `progress lane L1 --tasks T001-T004 --owner <worker-id> --harness H --model M --effort E` when assigning, `progress block T007 --by L2` / `progress unblock B4`, `progress note "text" --target T007`. Decisions come from the Workflow ledger. At Finalize run `progress refresh --final` once. |
-| `refresh` | Progress is installed but nothing collects automatically | The `projection` calls, plus `progress refresh` after each collected attempt and phase commit. |
-| `legacy` | Progress is absent | The legacy calls in [`execution-report.md`](execution-report.md#legacy-reporter-calls-mode-legacy-only): init, task, usage, sync, phase and pr, exactly as before. |
+| `projection` | Progress is installed and enabled, and its hooks are registered and enabled for the active host | `progress init` once (idempotent). Then only record facts nothing else records: `progress lane L1 --tasks T001-T004 --owner <worker-id> --harness H --model M --effort E` when assigning, `progress block T007 --by L2` / `progress unblock B4`, `progress note "text" --target T007`. Decisions come from the Workflow ledger. At Finalize run `progress refresh --final` once. |
+| `refresh` | Progress is installed and enabled, but the active host does not collect automatically (or the host is unknown) | The `projection` calls, plus `progress refresh` after each collected attempt and phase commit. |
+| `legacy` | Progress is absent or disabled | The legacy calls in [`execution-report.md`](execution-report.md#legacy-reporter-calls-mode-legacy-only): init, task, usage, sync, phase and pr, exactly as before. |
 
 In `projection` and `refresh` mode task state comes from `tasks.md`, retries and attempts from the delegation ledger, and
 model, effort, context and run usage from host hooks and delegate results. Do not call task, usage, sync, phase or pr

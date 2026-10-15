@@ -1,22 +1,13 @@
 """Project root, feature resolution and layout paths."""
 import os
 import re
-import subprocess
 from pathlib import Path
 
-from .util import read_json
+from .util import ProgressError, read_json
 
 ASSETS = Path(__file__).resolve().parent.parent.parent / 'assets' / 'ui'
-EXCLUDES = ('specs/*/progress/.view/', '.specify/progress/bindings.json')
-
-
-class ProgressError(Exception):
-    def __init__(self, code, message='', exit_code=2):
-        super().__init__(code)
-        self.code, self.message, self.exit_code = code, message, exit_code
-
-    def line(self):
-        return f'progress: error {self.code}' + (f' {self.message}' if self.message else '')
+EXCLUDES = ('specs/*/progress/.view/', 'specs/*/progress/.host/', '.specify/progress/bindings.json',
+            '.specify/progress/*.lock', '.specify/progress/diagnostics.log*')
 
 
 def find_root(start=None):
@@ -128,7 +119,7 @@ class Ctx:
         self.dir = self.feature_dir / 'progress'
         self.facts = self.dir / 'facts.jsonl'
         self.view = self.dir / '.view'
-        self.host_dir = self.view / 'host'
+        self.host_dir = self.dir / '.host'  # durable host observations (child identity): git-ignored, not part of the disposable view
         self.state = self.view / 'state.json'
         self.report = self.view / 'report.json'
         self.data_js = self.view / 'data.js'
@@ -146,7 +137,7 @@ class Ctx:
         directory (a symlinked or forged feature or output directory must not move writes outside the repository)."""
         specs = self.root / 'specs'
         chain = ((specs, self.root), (self.cfg_dir, self.root), (self.feature_dir, specs), (self.dir, self.feature_dir),
-                 (self.view, self.dir))
+                 (self.view, self.dir), (self.host_dir, self.dir))
         parts = Path(self.feature).parts
         if len(parts) != 2 or parts[0] != 'specs' or any(p in ('', '.', '..') for p in parts):
             raise ProgressError('PROGRESS_NO_FEATURE', 'feature must be specs/<dir>', 2)
@@ -157,7 +148,7 @@ class Ctx:
         return self
 
     def config_data(self):
-        data = {'feature_dir_mode': 'auto', 'debounce_seconds': 5, 'stale_after_seconds': 600,
+        data = {'debounce_seconds': 5, 'stale_after_seconds': 600,
                 'statusline': {'enabled': False, 'chained': None}}
         stored = read_json(self.config, {})
         if isinstance(stored, dict):
@@ -167,6 +158,7 @@ class Ctx:
 
 def git_exclude(root, patterns=EXCLUDES):
     """Add patterns to the repository's info/exclude (never to a tracked .gitignore)."""
+    import subprocess
     try:
         out = subprocess.run(['git', 'rev-parse', '--git-path', 'info/exclude'], cwd=str(root), capture_output=True,
                              text=True, timeout=10)

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.1] - 2026-10-15
+
+- `progress_bridge.py mode` detects the active host (`--host claude|codex`, else from the environment) without starting a Progress process. An unknown host selects `refresh`. A Progress that the registry disables selects `legacy`.
+- Remove the unused Progress status call and the `extensions.yml` parser from the bridge.
+- A forwarded legacy `progress.py` call spawns fewer Progress subprocesses.
+- Lean `execution_tools.py progress` uses the Progress run collector only when it covers every run under the requested root.
+
 ## [1.10.0] - 2026-10-15
 
 - Add opt-in lean execution: the coordinator owns lifecycle mechanics, coding review waits for completed implementation/testing, and retries require bounded correction evidence. Existing projects keep their current behavior until enabled.

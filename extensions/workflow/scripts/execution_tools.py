@@ -438,9 +438,21 @@ def fits_runs_shape(folder):
     return True
 
 
+def covers_all_runs(root, folder):
+    """True when every run file the legacy discovery finds under the requested root lies inside folder, so reading
+    only folder cannot drop a run (for example an archive next to .delegate/runs)."""
+    folder = folder.resolve()
+    for _, path in discover([root]):
+        try:
+            path.resolve().relative_to(folder)
+        except ValueError:
+            return False
+    return True
+
+
 def runs_dirs(roots):
     """Roots that Progress can read directly (a runs folder, or a worktree holding .delegate/runs) whose whole
-    tree fits that shape; else None so the legacy recursive discovery runs."""
+    tree fits that shape and that holds every run file under the requested root; else None so the legacy recursive discovery runs."""
     found = []
     for root in roots:
         root = Path(root)
@@ -449,7 +461,7 @@ def runs_dirs(roots):
         nested = root / '.delegate' / 'runs'
         direct = any((child / name).is_file() for child in root.iterdir() if child.is_dir() for name in RESULT_NAMES + ('meta.json',))
         folder = root if direct else nested if nested.is_dir() else None
-        if folder is None or not fits_runs_shape(folder):
+        if folder is None or not fits_runs_shape(folder) or not covers_all_runs(root, folder):
             return None
         found.append(str(folder))
     return found

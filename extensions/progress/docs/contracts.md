@@ -4,7 +4,8 @@ These contracts are normative. Code and tests follow them. Change them only with
 
 ## Principles
 
-1. The report is a **projection**. It is rebuilt from producers on every refresh and can be deleted at any time.
+1. The report is a **projection**. It is rebuilt from producers on every refresh. Deleting `.view/` loses nothing but the
+   projection: host observations (child identity) live in `.host/`, outside it.
 2. Producers keep their authority: `tasks.md` owns task text and checkbox state, Workflow owns checkpoint, delegation
    ledger and decisions. Progress never writes to producer files.
 3. `facts.jsonl` holds only facts no producer records: lane assignment, blocker, plain spec-kit decision, note.
@@ -19,7 +20,9 @@ These contracts are normative. Code and tests follow them. Change them only with
 ```
 specs/<feature>/progress/
   facts.jsonl            tracked in git (owner decision D4)
-  .view/                 git-ignored (Progress writes `specs/*/progress/.view/` to .git/info/exclude at init)
+  .host/                 git-ignored, NOT disposable: host snapshots (progress.host.v1), the durable home of child identity
+    <host>-<session>.json   (older versions kept them in .view/host; the first access moves them here)
+  .view/                 git-ignored and disposable (Progress writes `specs/*/progress/.view/` and `.host/` to .git/info/exclude at init)
     report.json          projection, schema sanduq.progress.v2
     data.js              window.__SANDUQ_PROGRESS__ = <report.json>;   (file:// safe)
     index.html           static shell, copied from assets/ui at init/upgrade, never templated with data
@@ -27,18 +30,26 @@ specs/<feature>/progress/
     base.css             static layout styles (copied like index.html)
     theme.css            generated from the resolved theme (tokens only)
     layout.js            generated: window.__SANDUQ_PROGRESS_LAYOUT__ (block order, hidden, density, title, logo)
-    host/<host>-<session>.json   host snapshots (progress.host.v1)
-    state.json           collector cursors, debounce stamp, dirty flag, last refresh rev
-    diagnostics.log      bounded (rotate at 256 KB, keep 1)
+    state.json           collector cursors, debounce stamp, dirty flag, last refresh rev (child lane numbers are not kept here: see Host children below)
+    diagnostics.log      bounded (rotate at 256 KB, keep 1); never written through a link, by the main writer and by the
+                         fast hook entry alike (both use `scripts/sanduq_progress/safelog.py`)
     lock                 per-feature lock held by the OS for the life of the process (msvcrt.locking on Windows,
                          fcntl.flock elsewhere); the OS drops it if the process dies, so there is no stale recovery.
                          The file content {"pid", "host", "started_at", "token"} is diagnostic only
 .specify/progress/
-  config.json            {"feature_dir_mode": "auto", "debounce_seconds": 5, "stale_after_seconds": 600,
+  config.json            {"debounce_seconds": 5, "stale_after_seconds": 600,
                           "statusline": {"enabled": bool, "chained": "<previous command or null>"}}
   theme.json             progress.theme.v1 (optional; preset default "sanduq")
   bindings.json          session bindings (see Binding)
+  bindings.lock, diagnostics.log[.1]   runtime files, local only
 ```
+
+`init` adds the runtime files (`bindings.json`, `*.lock`, `diagnostics.log*` under `.specify/progress/`, and each
+`.view/`) to `.git/info/exclude`.
+
+A write never goes through a link: before `facts.jsonl`, any `.view` file (including the lock and copied assets) is
+written or opened, a symbolic link or Windows junction at that path is refused with `PROGRESS_UNSAFE_TARGET` (exit 3;
+a hook drops the event). Other reparse points, such as cloud placeholders, are ordinary files.
 
 A feature directory is always `specs/<dir>`: `.` and `..` components are rejected, and the resolved directory must be a
 direct child of the resolved `specs/` directory (a symlinked feature pointing elsewhere is refused). The `progress/`
@@ -82,7 +93,7 @@ When Workflow's `decisions.json` exists, `decision` facts are refused (`PROGRESS
 
 ## Host snapshot (`progress.host.v1`)
 
-File `host/<host>-<session_id>.json`, merged field-by-field under the lock (never replaces unrelated fields).
+File `.host/<host>-<session_id>.json`, merged field-by-field under the lock (never replaces unrelated fields).
 
 ```json
 {"v":1,"host":"claude|codex","session_id":"…","parent_session_id":null,"agent_id":null,
@@ -91,8 +102,9 @@ File `host/<host>-<session_id>.json`, merged field-by-field under the lock (neve
  "effort":  {…same shape…},
  "context": {"value":{"used_percent":41.2,"used_tokens":82000,"window":200000}, …},
  "elapsed_ms": {…}, "api_ms": {…},
- "children": {"<tool_use_id|agent_id>": {"kind":"subagent","subagent_type":"…","description":"…(≤80)",
-              "model":{…},"background":true,"started_at":"…","ended_at":null,"last_observed_at":"…","status":"running|done|failed|unknown"}}}
+ "children": {"<tool_use_id|agent_id>": {"kind":"subagent","subagent_type":"…","description":"…(≤80)","agent_id":"…",
+              "model":{…},"background":true,"started_at":"…","ended_at":null,"last_observed_at":"…","status":"running|done|failed|unknown",
+              "status_at":"…","generation":2,"lane_no":2,"lane_aliases":[3],"agent_link":"provisional"}}}
 ```
 
 Child `model` and `effort` are measurements. A child model with `fidelity:"partial"` is the requested alias from the
@@ -104,6 +116,17 @@ sum of the integer `current_usage` counters of the Claude statusline (`input_tok
 
 `ended_at` stays null until terminal evidence exists (tool result, stop event of that child). `last_observed_at` is
 separate. Parent usage is never attributed to children.
+
+Child identity. A launch is keyed by its `tool_use_id`; the child's own hook events are keyed by its agent id. They are one
+child once the tool result carries `agentId`. Before that, an agent-keyed event that matches no entry attaches to the single
+running launch of the session that has no agent id yet (`agent_link:"provisional"`); with zero or several open launches it
+stays a separate entry. The tool result then confirms the link (same `agentId`) or splits it (a different `agentId`: the
+attached agent becomes its own entry and the launch keeps the id the host reported). Only Agent/Task results'
+`agentId`/`agent_id` count, plus `id` for Codex `spawn_agent`; no other `id` is an agent id.
+`lane_no` is the child's durable `C<n>` number: assigned once, when the entry is created, one above every number any
+snapshot ever held. `lane_aliases` are the numbers of entries later found to be the same child; they keep resolving.
+Because the number sits in the host snapshot (durable host data, not the disposable view), deleting `.view/` (it is only the projection) or re-keying an
+entry (agent id <-> tool_use id) changes no lane id.
 
 ## Binding
 
@@ -182,7 +205,19 @@ leaves the lane `waiting` while tasks are unchecked (the tasks.md checkbox stays
 targeting the lane outranks that terminal evidence, so the lane reports `blocked`. A `description` match merges only
 when it identifies exactly one child; if several children share the label, none merges on that label and each stays a
 `host-child` lane. Agent id and `tool_use_id` matches are unique by construction. Only children that match no lane
-owner become `host-child` lanes (`C1`, `C2`, ... numbered over the unmatched children).
+owner become `host-child` lanes (`C<lane_no>`). The number is assigned once, when the child is first seen, and lives in the
+host snapshot (`lane_no`); it is never reused or renumbered when another child later merges into an assigned lane, when the
+view is deleted or when the entry's key changes, so a blocker that targets `C2` keeps pointing at the same child. A blocker
+on a retired number (`lane_aliases`) resolves to the surviving lane. A snapshot entry written before numbers existed is numbered
+above all known numbers, in start order, for display until its next observation stores a number.
+
+Child lifecycle. A launch by a synchronous `Task`/`Agent` call ends with its tool result. An asynchronous launch
+(`run_in_background`, or Codex `spawn_agent`) only proves the child exists: the launch response never sets `done` or
+`ended_at`; the child's own `stop` does. A child that has ended can run again: a running observation newer than its
+`ended_at` starts a new generation (`generation` counts up, `ended_at` is cleared, `started_at` is that observation); a
+running observation at or before `ended_at` is stale and is ignored. Lifecycle updates are validated together against the
+entry's last accepted lifecycle observation (`status_at`): a status with its start and end times that is older than
+`status_at` is dropped as a whole, so a delayed `done` from 12:05 cannot end a generation that started at 12:10.
 
 Workflow decisions. `decisions[].selected` is the option text for a single-selection decision and a list of option texts
 for a multiple-selection decision (Workflow stores `selected: ["A","C"]` with `option: null` in that mode, and
@@ -238,11 +273,16 @@ one for the same run id; real disagreement is listed in `conflict`, and the conf
 
 ## Hook behaviour
 
-`progress hook <event>`: parse stdin (tolerate empty/invalid → diagnostics, exit 0). Update the host snapshot under the
+Hooks run `scripts/hook.py <event>` (standard library only). It exits before importing Progress when Progress was never
+initialised in the project (no `.specify/progress/`, nothing is written) or when the session is not bound, has no pending
+handshake and its drop is already logged; an unbound session is logged once per session id. Anything else is handed to
+`progress hook <event>` (same code, `progress.py hook` stays available): parse stdin (tolerate empty/invalid → diagnostics,
+exit 0). Update the host snapshot under the
 lock. Debounce: if the last refresh is younger than `debounce_seconds`, set `dirty=true` and exit; else refresh.
-`stop` and `session_end` always refresh. A deferred (debounced) event is not invisible: the hook patches the current
+`stop` and `session_end` always refresh. A deferred (debounced) event is not invisible: the first one in a window patches the current
 `report.json`/`data.js` with `collection.dirty:true` and `collection.last_event_at` and advances `rev` (no producer is
-read, nothing is rebuilt) so the UI shows its pending banner; the first hook after the window, a statusline update after
+read, nothing is rebuilt) so the UI shows its pending banner. That clean-to-dirty transition is written once per window;
+later events only move the timestamps in `state.json`, and the next real refresh publishes the latest values; the first hook after the window, a statusline update after
 it, `stop`, or any verb performs the real refresh and clears the flag. Any exception → diagnostics, exit 0, no stdout (never block the host).
 
 ## Theme (`progress.theme.v1`)
