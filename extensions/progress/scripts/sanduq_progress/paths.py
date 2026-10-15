@@ -87,6 +87,8 @@ def normalise_feature(root, value):
     if not candidate.is_dir():
         return None
     specs = Path(os.path.realpath(str(root / 'specs')))
+    if not inside(specs, root):
+        return None
     resolved = Path(os.path.realpath(str(candidate)))
     if os.path.normcase(str(resolved.parent)) != os.path.normcase(str(specs)):
         return None
@@ -143,7 +145,8 @@ class Ctx:
         """Raise unless the feature, its progress directory and the view directory stay beneath the resolved specs
         directory (a symlinked or forged feature or output directory must not move writes outside the repository)."""
         specs = self.root / 'specs'
-        chain = ((self.feature_dir, specs), (self.dir, self.feature_dir), (self.view, self.dir))
+        chain = ((specs, self.root), (self.cfg_dir, self.root), (self.feature_dir, specs), (self.dir, self.feature_dir),
+                 (self.view, self.dir))
         parts = Path(self.feature).parts
         if len(parts) != 2 or parts[0] != 'specs' or any(p in ('', '.', '..') for p in parts):
             raise ProgressError('PROGRESS_NO_FEATURE', 'feature must be specs/<dir>', 2)
