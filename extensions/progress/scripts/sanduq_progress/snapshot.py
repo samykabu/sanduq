@@ -20,27 +20,57 @@ TERMINAL = ('done', 'failed')
 BIND_TTL = timedelta(seconds=120)
 
 
-def migrate_host_dir(ctx):
-    """Host snapshots used to live under the disposable `.view/host`. Move any left there to `.host` once (a file that
-    already exists in the new place wins), so deleting the view never loses a child's durable identity."""
-    legacy = ctx.view / 'host'
-    if not legacy.is_dir():
-        return
+def _unsafe_legacy(ctx, legacy):
+    """True when the legacy directory (or an entry in it) is a link or resolves outside the feature's progress dir."""
+    from .util import is_link
     try:
-        ctx.host_dir.mkdir(parents=True, exist_ok=True)
-        for path in sorted(legacy.glob('*.json')):
-            target = ctx.host_dir / path.name
-            if target.exists():
-                path.unlink()
-            else:
-                os.replace(path, target)
-        legacy.rmdir()
+        if is_link(legacy) or is_link(ctx.view) or is_link(ctx.dir):
+            return True
+        base = Path(os.path.realpath(str(ctx.dir)))
+        if base not in Path(os.path.realpath(str(legacy))).parents:
+            return True
+        with os.scandir(legacy) as entries:
+            return any(is_link(entry.path) or base not in Path(os.path.realpath(entry.path)).parents for entry in entries)
     except OSError:
-        pass
+        return True
+
+
+def migrate_host_dir(ctx):
+    """Host snapshots used to live under the disposable `.view/host`. Move them to the durable `.host` once. Caller holds
+    the feature lock. Returns True when nothing is left to migrate; False means the migration is pending (a linked
+    source, or a failed move) and the caller must not create a fresh snapshot, so a child never loses its identity."""
+    legacy = ctx.view / 'host'
+    if not os.path.lexists(legacy):
+        return True
+    from .util import diag, is_link
+    if is_link(ctx.host_dir) or _unsafe_legacy(ctx, legacy):
+        diag(ctx.diag, 'host snapshot migration skipped: .view/host or .host is a link or outside the progress directory')
+        return False
+    try:
+        if not legacy.is_dir():
+            return True
+        if not os.path.lexists(ctx.host_dir):
+            os.replace(legacy, ctx.host_dir)  # one atomic rename: no state with half the history in each place
+        else:
+            for path in sorted(legacy.iterdir()):
+                target = ctx.host_dir / path.name
+                if os.path.lexists(target):
+                    target = ctx.host_dir / ('legacy-' + path.name)
+                    n = 1
+                    while os.path.lexists(target):
+                        n += 1
+                        target = ctx.host_dir / f'legacy-{n}-{path.name}'
+                os.replace(path, target)
+            legacy.rmdir()
+    except OSError as exc:
+        diag(ctx.diag, f'host snapshot migration pending: {type(exc).__name__}')
+        return False
+    from .paths import git_exclude
+    git_exclude(ctx.root)  # the new directory must be ignored even if `init` is not re-run after an upgrade
+    return True
 
 
 def snapshot_path(ctx, host, session_id):
-    migrate_host_dir(ctx)
     return ctx.host_dir / (session_key(host, session_id) + '.json')
 
 
@@ -168,6 +198,8 @@ def _split_provisional(ctx, snap, entry, real_id):
 
 def merge(ctx, host, session_id, now, fields=None, child=None, parent_session_id=None, agent_id=None):
     """Merge one observation into the session snapshot. Caller holds the feature lock. Returns True if changed."""
+    if not migrate_host_dir(ctx):
+        return False  # migration pending: write nothing now, retry on the next event
     path = snapshot_path(ctx, host, session_id)
     snap = read_json(path, None)
     before = json.dumps(snap, sort_keys=True)
@@ -236,13 +268,21 @@ def merge(ctx, host, session_id, now, fields=None, child=None, parent_session_id
 
 
 def read_all(ctx):
-    out = []
-    migrate_host_dir(ctx)
-    if ctx.host_dir.is_dir():
-        for path in sorted(ctx.host_dir.glob('*.json')):
-            data = read_json(path)
-            if isinstance(data, dict) and data.get('session_id'):
-                out.append(data)
+    """Read-only: never migrates. A legacy `.view/host` that is safe to read and not yet migrated is read as well."""
+    out, seen = [], set()
+    legacy = ctx.view / 'host'
+    folders = [ctx.host_dir]
+    if os.path.lexists(legacy) and legacy.is_dir() and not _unsafe_legacy(ctx, legacy):
+        folders.append(legacy)
+    for folder in folders:
+        if folder.is_dir():
+            for path in sorted(folder.glob('*.json')):
+                if path.name in seen:
+                    continue
+                seen.add(path.name)
+                data = read_json(path)
+                if isinstance(data, dict) and data.get('session_id'):
+                    out.append(data)
     return out
 
 
