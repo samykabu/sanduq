@@ -23,8 +23,10 @@ specs/<feature>/progress/
     report.json          projection, schema sanduq.progress.v2
     data.js              window.__SANDUQ_PROGRESS__ = <report.json>;   (file:// safe)
     index.html           static shell, copied from assets/ui at init/upgrade, never templated with data
-    blocks.js            static block renderers
+    blocks.js            static block renderers + data.js poller
+    base.css             static layout styles (copied like index.html)
     theme.css            generated from the resolved theme (tokens only)
+    layout.js            generated: window.__SANDUQ_PROGRESS_LAYOUT__ (block order, hidden, density, title, logo)
     host/<host>-<session>.json   host snapshots (progress.host.v1)
     state.json           collector cursors, debounce stamp, dirty flag, last refresh rev
     diagnostics.log      bounded (rotate at 256 KB, keep 1)
