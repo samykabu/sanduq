@@ -15,6 +15,8 @@ Error lines start with `progress: error CODE`. The full contract is in `docs/con
 | `decide ask "question" --options a,b,c` | `facts.jsonl` | Plain Spec Kit only. Refused when Workflow's `decisions.json` exists (`PROGRESS_DECISION_AUTHORITY`). |
 | `decide made D2 b --by user\|agent-recommendation\|assumption [--evidence URL]` | `facts.jsonl` | |
 | `note "text" [--target T005]` | `facts.jsonl` | Retries and failures worth a human's attention. |
+| `attempt record (--lane L1 \| --overhead LABEL) --run ID --status S [--started T] [--ended T] [--usage-json PATH]` | `facts.jsonl` | Integration verb for the Workflow legacy shim. Writes a `kind:"attempt"` fact with origin `legacy`; it never overrides a producer's attempt or lane status. |
+| `runs [--json] [--runs-dir DIR]...` | nothing | `progress.runs.v1`: normalized `.delegate/runs` projections for other tools. Needs no initialised feature. |
 | `statusline [install\|uninstall\|run]` | Claude `settings.json` | Chains the previous status line command and restores it on uninstall. |
 | `theme --preset sanduq\|cobalt\|emerald\|classic \| --from-illustrate \| --file theme.json \| --show` | `.specify/progress/theme.json` | |
 | `export [--format md\|json] [--out PATH]` | the output file | Deterministic. |

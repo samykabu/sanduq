@@ -200,6 +200,24 @@ def build(ctx, now, rev=1, state=None):
             lane['elapsed'] = measure(seconds(lane['since'], now), 'facts', now)
         lane['_derived'] = derived
 
+    # Legacy supplemental attempts (Workflow shim). They are labelled origin 'legacy', appended after producer
+    # attempts, and never change a lane's status or replace a producer's attempt of the same run.
+    overhead = []
+    for rec in sorted((r for r in fact_rows if r['kind'] == 'attempt'), key=lambda r: natural(r['id'])):
+        usage = rec.get('usage') or {}
+        measured = usage.get('fidelity') in ('exact', 'reported')
+        tokens = ({k: usage.get(k) for k in ('fresh_input', 'cache_read', 'cache_write', 'output', 'reasoning')} | {'total': None}
+                  if measured else None)
+        shown = {'run_id': rec.get('run'), 'status': rec.get('status') or 'unknown', 'started_at': rec.get('started_at'),
+                 'ended_at': rec.get('ended_at'), 'tokens': tokens, 'fidelity': usage.get('fidelity') or 'unknown',
+                 'origin': 'legacy'}
+        target = next((l for l in lanes if l['id'] == rec.get('lane')), None)
+        if target is not None:
+            if not any(x.get('run_id') == shown['run_id'] and x.get('origin') != 'legacy' for x in target['attempts']):
+                target['attempts'].append(shown)
+        elif rec.get('lane') is None:
+            overhead.append({**shown, 'label': rec.get('label'), 'agent': usage.get('agent')})
+
     lane_blockers = {}
     for b in blockers:
         lane_blockers.setdefault(b['target'], []).append(b)
@@ -282,7 +300,8 @@ def build(ctx, now, rev=1, state=None):
         text = {'lane': f"{ident} {len(rec.get('tasks') or [])} tasks" + (' closed' if rec.get('state') == 'closed' else ''),
                 'block': f"{ident} {rec.get('state')} on {rec.get('target')}",
                 'decision': f"{ident} {rec.get('status')}: {rec.get('question') or ''}",
-                'note': f"{ident}: {rec.get('text') or ''}"}.get(kind)
+                'note': f"{ident}: {rec.get('text') or ''}",
+                'attempt': f"{ident} {rec.get('status')} {rec.get('lane') or rec.get('label')} run {rec.get('run')} (legacy)"}.get(kind)
         if text and rec.get('ts'):
             events.append({'at': rec['ts'], 'kind': kind, 'text': clean(text, 120)})
     for a in attempts:
@@ -311,6 +330,7 @@ def build(ctx, now, rev=1, state=None):
                'stage': stage, 'started_at': iso(started), 'workflow': workflow_mode}
     task_out = {t['id']: {'title': t['title'], 'phase': t['phase'], 'done': t['done'], 'parallel': t['parallel'],
                           'depends_on': t['depends_on'], 'lane': task_lane.get(t['id'])} for t in tk['tasks']}
+    extra = {'overhead': overhead} if overhead else {}
     return {'schema': SCHEMA, 'rev': rev, 'generated_at': iso(now), 'stale_after_seconds': stale_after,
             'collection': {'automatic': bool(snaps), 'hosts': sorted({s.get('host') for s in snaps if s.get('host')}),
                            'dirty': bool(state.get('dirty')), 'last_event_at': state.get('last_event_at'),
@@ -319,4 +339,4 @@ def build(ctx, now, rev=1, state=None):
             'tasks': task_out, 'decisions': {'pending': pending, 'made': made}, 'blockers': blockers, 'events': events[-30:],
             'summary': {'tasks_total': len(task_ids), 'tasks_done': sum(1 for t in tk['tasks'] if t['done']),
                         'lanes_active': sum(1 for l in report_lanes if l['status'] == 'active'),
-                        'blocked': len(blockers), 'decisions_pending': len(pending)}}
+                        'blocked': len(blockers), 'decisions_pending': len(pending)}, **extra}

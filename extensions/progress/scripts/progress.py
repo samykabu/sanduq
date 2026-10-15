@@ -15,13 +15,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from sanduq_progress import facts as factslib, hook as hooklib, model, refresh as refreshlib, render_md  # noqa: E402
 from sanduq_progress import snapshot, statusline as statuslib  # noqa: E402
-from sanduq_progress.collect import tasks as taskscol, workflow as wf  # noqa: E402
+from sanduq_progress.collect import runs as runscol, tasks as taskscol, workflow as wf  # noqa: E402
 from sanduq_progress.lock import Lock, LockBusy  # noqa: E402
 from sanduq_progress.paths import ASSETS, Ctx, ProgressError, find_root, git_exclude, resolve_feature  # noqa: E402
-from sanduq_progress.util import atomic_write, diag, iso, read_json, utcnow, write_json  # noqa: E402
+from sanduq_progress.util import atomic_write, diag, iso, parse_time, read_json, utcnow, write_json  # noqa: E402
 
 FALLBACK_CSS = (':root{--bg:#f6f7f4;--surface:#fff;--text:#1b2a24;--muted:#4e5d56;--line:#d5dcd7;--brand:#233c32;'
                 '--accent:#c65b36;--active:#dcebf7;--waiting:#e9ece9;--blocked:#f8e0d6;--done:#dcefe2;--failed:#f4c7c0}\n')
+
+
+ATTEMPT_STATUSES = ('pending', 'running', 'done', 'blocked', 'failed', 'successful')
+USAGE_COUNTERS = ('fresh_input', 'cache_read', 'cache_write', 'output', 'reasoning')
+RUNS_SCHEMA = 'progress.runs.v1'
+RUNS_CAVEATS = ('elapsed_seconds is wall time between start and end (or now), not active work time',
+                'phase "stalled" is a heuristic: no journal event for stall_seconds; a quiet worker may be healthy',
+                'harness_status is the harness verdict, not acceptance; Workflow records acceptance in its ledger')
 
 
 class Parser(argparse.ArgumentParser):
@@ -86,6 +94,22 @@ def build_parser():
     s = verb('note')
     s.add_argument('text')
     s.add_argument('--target')
+    s = verb('attempt')
+    d = s.add_subparsers(dest='action', parser_class=Parser, required=True)
+    rec = d.add_parser('record')
+    where = rec.add_mutually_exclusive_group(required=True)
+    where.add_argument('--lane')
+    where.add_argument('--overhead', metavar='LABEL')
+    rec.add_argument('--run', required=True)
+    rec.add_argument('--status', required=True, choices=ATTEMPT_STATUSES)
+    rec.add_argument('--started')
+    rec.add_argument('--ended')
+    rec.add_argument('--usage-json', metavar='PATH')
+    s = verb('runs')
+    s.add_argument('--json', action='store_true')
+    s.add_argument('--runs-dir', action='append', default=[])
+    s.add_argument('--now')
+    s.add_argument('--stall-seconds', type=int, default=runscol.DEFAULT_STALL_SECONDS)
     verb('theme', add_help=False)  # every other token goes to the theme module
     s = verb('export')
     s.add_argument('--format', choices=('md', 'json'), default='md')
@@ -354,6 +378,96 @@ def cmd_note(a, root):
     return mutate(ctx, a, make)
 
 
+def _log_path(value, root):
+    text = str(value).replace(chr(92), '/')
+    path = Path(text)
+    if path.is_absolute():
+        try:
+            return path.resolve().relative_to(root).as_posix()
+        except ValueError:
+            return 'external:' + path.name
+    return text
+
+
+def _usage_record(path, root):
+    """Whitelist a legacy usage measurement: counters, window, provenance. Nothing else is stored."""
+    raw = read_json(path, None)
+    if not isinstance(raw, dict):
+        raise ProgressError('PROGRESS_USAGE', '--usage-json must be a JSON object', 2)
+    fidelity = raw.get('fidelity')
+    if fidelity not in ('exact', 'reported', 'unavailable'):
+        raise ProgressError('PROGRESS_USAGE', 'usage fidelity must be exact, reported or unavailable', 2)
+    out = {'fidelity': fidelity}
+    for key, cap in (('agent', 80), ('harness', 40), ('model', 80), ('reason', 200)):
+        if raw.get(key) is not None:
+            out[key] = factslib.sanitise(raw[key], root, cap)
+    for key in USAGE_COUNTERS:
+        value = raw.get(key)
+        out[key] = value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+    for key in ('since', 'until'):
+        if raw.get(key) is not None:
+            moment = parse_time(raw[key])
+            if moment is None:
+                raise ProgressError('PROGRESS_USAGE', f'usage {key} is not an ISO-8601 time', 2)
+            out[key] = iso(moment)
+    if raw.get('log'):
+        out['log'] = factslib.sanitise(_log_path(raw['log'], root), root, 200)
+    return out
+
+
+def cmd_attempt(a, root):
+    ctx = Ctx(root, resolve_feature(root, a.feature))
+
+    def make(loaded):
+        lane = a.lane.upper() if a.lane else None
+        if lane and not re.fullmatch(r'[LWC]\d+', lane):
+            raise ProgressError('PROGRESS_USAGE', 'lane id must look like L1', 2)
+        times = {}
+        for key, value in (('started_at', a.started), ('ended_at', a.ended)):
+            moment = parse_time(value) if value else None
+            if value and moment is None:
+                raise ProgressError('PROGRESS_USAGE', f'--{key.split("_")[0]} is not an ISO-8601 time', 2)
+            times[key] = iso(moment)
+        label = factslib.sanitise(a.overhead, ctx.root, 60) if a.overhead else None
+        run = factslib.sanitise(a.run, ctx.root, 80)
+        usage = _usage_record(a.usage_json, ctx.root) if a.usage_json else None
+        same = next((r for r in loaded['current'] if r['kind'] == 'attempt' and r.get('run') == run
+                     and r.get('lane') == lane and r.get('label') == label), None)
+        ident = same['id'] if same else factslib.next_id(loaded['all'], 'attempt')
+        record = factslib.make('attempt', ident, 'legacy', source='workflow-shim', now=now(), lane=lane, label=label, run=run,
+                               status=a.status, usage=usage, origin='legacy', **times)
+        return [record], f"progress: {ident} {a.status} {lane or label} run {run}"
+    return mutate(ctx, a, make)
+
+
+def cmd_runs(a, root):
+    stamp = parse_time(a.now) if a.now else now()
+    if stamp is None:
+        raise ProgressError('PROGRESS_USAGE', '--now must be an ISO timestamp', 2)
+    merged, malformed = {}, []
+    for entry in a.runs_dir or [str(root / '.delegate' / 'runs')]:
+        folder = Path(entry)
+        found = runscol.collect_runs(folder if folder.is_absolute() else root / folder, now=stamp, stall_seconds=a.stall_seconds)
+        malformed += runscol.last_malformed()
+        for run in found:
+            known = merged.get(run['run_id'])
+            if known:
+                diff = runscol._conflicts(known, run)
+                if diff:
+                    run['conflict'] = sorted(set(diff) | set(known.get('conflict') or []))
+                if run['phase'] != 'done' and known['phase'] == 'done':
+                    continue
+            merged[run['run_id']] = run
+    runs = sorted(merged.values(), key=lambda r: (r['started_at'] or '', r['run_id']))
+    if a.json:
+        print(json.dumps({'schema': RUNS_SCHEMA, 'generated_at': iso(stamp), 'stall_seconds': a.stall_seconds,
+                          'runs': runs, 'malformed': malformed, 'caveats': list(RUNS_CAVEATS)}, ensure_ascii=False))
+    else:
+        live = sum(1 for r in runs if r['phase'] != 'done')
+        print(f'progress: {len(runs)} runs, {live} live, {len(malformed)} malformed')
+    return 0
+
+
 def cmd_export(a, root):
     ctx = Ctx(root, resolve_feature(root, a.feature))
     require_init(ctx)
@@ -389,7 +503,7 @@ def cmd_statusline(a, root):
 
 VERBS = {'init': cmd_init, 'bind': cmd_bind, 'refresh': cmd_refresh, 'status': cmd_status, 'lane': cmd_lane,
          'block': cmd_block, 'unblock': cmd_unblock, 'decide': cmd_decide, 'note': cmd_note, 'theme': cmd_theme,
-         'export': cmd_export, 'hook': cmd_hook, 'statusline': cmd_statusline}
+         'export': cmd_export, 'attempt': cmd_attempt, 'runs': cmd_runs, 'hook': cmd_hook, 'statusline': cmd_statusline}
 
 
 def main(argv=None):

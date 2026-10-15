@@ -58,7 +58,11 @@ capped at 200 characters and stripped of control characters.
 | `block` | `id` (`B1`â€¦, assigned by CLI), `target` (task id or lane id), `by` {`type`: `lane`/`task`/`decision`/`external`, `ref`: id or text}, `state` (`open`/`resolved`), `resolved_at` |
 | `decision` | `id` (`D1`â€¦; plain spec-kit only), `question` (â‰¤200), `options` (list), `status` (`pending`/`made`/`withdrawn`), `selected`, `decided_by` (`user`/`agent-recommendation`/`assumption`), `evidence` (â‰¤200, e.g. URL or "chat") |
 | `note` | `id` (`N1`â€¦), `text` (â‰¤200), `target` (optional task/lane id) |
-| `attempt` | legacy/shim only: `lane`, `agent`, `status`, `started_at`, `ended_at`, `usage` (as in legacy progress.py), `origin`=`legacy` |
+| `attempt` | legacy/shim only (`progress attempt record`): `lane` (or null with `label` for overhead), `run`, `status`, `started_at`, `ended_at`, `usage` {`fidelity` exact\|reported\|unavailable, `agent`, `harness`, `model`, `fresh_input`, `cache_read`, `cache_write`, `output`, `reasoning`, `since`, `until`, `log` (repo-relative, or `external:<name>`), `reason`}, `origin`=`legacy`; `actor` `legacy`, `source` `workflow-shim`. One fact per (lane, run); a later record supersedes it. |
+
+Legacy attempts are supplemental. The projection appends them to the lane's `attempts` with `origin:"legacy"` after the
+producer's attempts, skips a run id a producer already reports for that lane, and never lets them change a lane's
+status. Attempts without a lane appear under a top-level `overhead` list (only when present).
 
 When Workflow's `decisions.json` exists, `decision` facts are refused (`PROGRESS_DECISION_AUTHORITY`).
 
@@ -151,11 +155,33 @@ progress decide made D2 b --by user|agent-recommendation|assumption [--evidence 
 progress note "text" [--target T005]
 progress theme --preset sanduq|cobalt|emerald|classic | --from-illustrate | --file theme.json | --show
 progress export [--format md|json] [--out PATH]                         -> deterministic, same projection
+progress attempt record (--lane L1 | --overhead LABEL) --run ID --status S [--started T] [--ended T] [--usage-json PATH]
+progress runs [--json] [--runs-dir DIR]... [--now T] [--stall-seconds N]  -> progress.runs.v1
 progress hook <event>                                                   -> reads host JSON on stdin; never prints on success
 ```
 
 Exit codes: 0 ok, 2 usage error, 3 refused (authority/binding), 4 lock busy (verbs retry 3Ã— with 200 ms backoff first).
 Error lines start with `progress: error <CODE>`.
+
+## Runs contract (`progress.runs.v1`)
+
+`progress runs --json` prints one JSON object built from `.delegate/runs/*/{meta.json,journal.jsonl,result.json}` (or
+each `--runs-dir`, relative to the repository root). It needs no initialised feature. It is the only supported way for
+another extension to read this projection; callers must not import Progress code.
+
+```json
+{"schema":"progress.runs.v1","generated_at":"…","stall_seconds":300,
+ "runs":[{"run_id":"…","harness":"…","source":"<run dir name>","model":null,"started_at":"…","ended_at":null,
+          "harness_status":"running|finalizing|stalled|successful|failed|…","phase":"active|finishing|stalled|done",
+          "usage":null,"elapsed_seconds":0,"journal_events":0,"latest_event":null,"latest_event_at":null,
+          "task_verdict":"unknown","review_verdict":"unknown","next_action":null,"conflict":["harness"]}],
+ "malformed":[{"source":"…","error":"…"}],"caveats":["…","…","…"]}
+```
+
+`usage` is null unless the harness reported exact counters. The three caveats are part of the contract: elapsed is wall
+time and not active time; `stalled` is a heuristic; `harness_status` is a harness verdict and not acceptance. Verdict
+words and `next_action` come from a final `result.json` and read `unknown`/null when absent. A final record beats a live
+one for the same run id; real disagreement is listed in `conflict`.
 
 ## Hook behaviour
 

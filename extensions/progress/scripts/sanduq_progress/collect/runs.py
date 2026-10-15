@@ -11,6 +11,8 @@ Caveats, kept deliberately:
     ledger; this module never infers it.
   * Only each journal event's `t` and a lowercase `state` word are read, from the last 64 KiB. No prompt, stdout
     or stderr text is consulted.
+  * `task_verdict`, `review_verdict` (one short word) and `next_action` (<= 200 characters) are copied from a final
+    result.json when present; absent means 'unknown'/None. They are the harness's words, not acceptance.
   * `usage` is None unless the harness reported exact counters; zero placeholders are unknown, never measured.
   * Two records of one run_id are merged: a final record beats a live one; real disagreement is listed in
     `conflict`. Malformed run directories are skipped (and reported through `last_malformed()`).
@@ -71,6 +73,17 @@ def journal_projection(directory):
             'terminal': any(state == 'terminal' for state, _ in events)}
 
 
+VERDICT = re.compile(r'[A-Za-z][A-Za-z0-9_-]{0,31}')
+
+
+def _word(value):
+    return value if isinstance(value, str) and VERDICT.fullmatch(value) else 'unknown'
+
+
+def _text(value):
+    return value[:200] if isinstance(value, str) and value else None
+
+
 def _seconds(started, ended):
     return max(0, int((ended - started).total_seconds())) if started and ended else None
 
@@ -82,6 +95,8 @@ def project_run(live, path, now, stall_seconds):
     started, ended = parse_time(data.get('started_at')), parse_time(data.get('ended_at'))
     base = {'run_id': data['run_id'], 'harness': data.get('harness') or 'unknown', 'source': path.parent.name,
             'started_at': data.get('started_at'), 'model': data.get('model')}
+    # Verdict words are copied as short plain strings; their absence stays 'unknown'. Neither is acceptance.
+    verdicts = {key: _word(data.get(key)) for key in ('task_verdict', 'review_verdict')}
     if live:
         journal = journal_projection(path.parent)
         last = parse_time(journal['last_event_at'])
@@ -91,13 +106,14 @@ def project_run(live, path, now, stall_seconds):
             phase, status = 'stalled', 'stalled'
         else:
             phase, status = 'active', 'running'
-        return {**base, 'harness_status': status, 'phase': phase, 'usage': None,
+        return {**base, **{k: 'unknown' for k in verdicts}, 'next_action': None, 'harness_status': status, 'phase': phase, 'usage': None,
                 'elapsed_seconds': _seconds(started, now), 'journal_events': journal['events'],
                 'latest_event': journal['state'], 'latest_event_at': journal['last_event_at'], 'ended_at': None}
     elapsed = _seconds(started, ended)
     if elapsed is None and isinstance(data.get('duration_ms'), int) and not isinstance(data['duration_ms'], bool):
         elapsed = data['duration_ms'] // 1000
-    return {**base, 'harness_status': data.get('status') or 'unknown', 'phase': 'done', 'usage': usage_of(data),
+    return {**base, **verdicts, 'next_action': _text(data.get('next_action')),
+            'harness_status': data.get('status') or 'unknown', 'phase': 'done', 'usage': usage_of(data),
             'elapsed_seconds': elapsed, 'journal_events': None, 'latest_event': data.get('latest_event'),
             'latest_event_at': data.get('ended_at'), 'ended_at': data.get('ended_at')}
 

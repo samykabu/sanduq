@@ -7,7 +7,7 @@ from pathlib import Path
 from .paths import ProgressError
 from .util import clean, iso, utcnow
 
-PREFIX = {'lane': 'L', 'block': 'B', 'decision': 'D', 'note': 'N'}
+PREFIX = {'lane': 'L', 'block': 'B', 'decision': 'D', 'note': 'N', 'attempt': 'A'}
 TEXT_CAP = 200
 SECRET = re.compile(r'(sk-[A-Za-z0-9]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|'
                     r'(?i:bearer\s+[A-Za-z0-9._-]{16,})|(?i:(password|passwd|secret|token|api[_-]?key)\s*[=:]\s*\S{6,}))')
