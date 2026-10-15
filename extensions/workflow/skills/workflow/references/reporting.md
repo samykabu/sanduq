@@ -11,11 +11,11 @@ on `delegate_dispatch.py collect` with a bounded loop.
 Pick the mode once per Execute claim or resume:
 
 ```text
-python .specify/extensions/workflow/scripts/progress_bridge.py mode --host claude
+python .specify/extensions/workflow/scripts/progress_bridge.py mode
 ```
 
-Pass `--host claude` or `--host codex` for the host you run in. Without it the host is detected from the environment,
-and an unknown host selects `refresh`.
+The host is detected from the environment and an unknown host selects `refresh`. A Codex coordinator passes
+`--host codex`.
 
 It prints `reporting: projection`, `reporting: refresh` or `reporting: legacy`. In the commands below `progress` stands
 for `python .specify/extensions/progress/scripts/progress.py`; every verb prints one line.

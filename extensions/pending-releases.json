@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "versions": {
-    "workflow": "1.10.0",
+    "workflow": "1.10.1",
     "scope": "1.6.2",
     "pr": "4.2.3",
-    "progress": "1.0.0"
+    "progress": "1.0.1"
   },
-  "status": "ready",
-  "note": "Workflow 1.10.0 adds opt-in lean execution and capability-aware reporting through the optional Progress extension (no agent kept solely for reporting); Scope 1.6.2 and PR 4.2.3 follow Workflow 1.10.0; Progress 1.0.0 is the first release of the deterministic HTML progress report. Publish after successful main CI and downloaded asset verification."
+  "status": "pending-review",
+  "note": "Patch release after the 1.10.0 and Progress 1.0.0 merge review: Workflow 1.10.1 detects the active host for reporting mode (--host), selects legacy when the registry disables Progress, spawns fewer shim processes and checks full-root run coverage; Progress 1.0.1 adds fast hook entry, publish-once debounce, referenced-runs projection, async child launches and restarts, stable child lanes, link-target refusal and flaky test fixes. Scope 1.6.2 and PR 4.2.3 follow Workflow 1.10.x. Publish after successful main CI and downloaded asset verification."
 }
