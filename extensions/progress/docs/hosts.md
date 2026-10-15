@@ -49,7 +49,9 @@ session (about 30 ms, the interpreter start-up) and otherwise runs the same hand
 - Hooks: `session_id`, `transcript_path`, `cwd`, `hook_event_name`, `permission_mode`, `effort {level}`, and inside a
   subagent `agent_id` plus `agent_type`. Tool events add `tool_name`, `tool_input`, `tool_use_id`, and
   `tool_response` on post. The `Task`/`Agent` tool input fields (`subagent_type`, `description`, `model`,
-  `run_in_background`) and the `tool_response` shape (`agentId`) are read defensively (**unverified**).
+  `run_in_background`) are read defensively (**unverified**). The `tool_response` of an `Agent` result carries `agentId`
+  (seen in local Claude transcripts, not documented), which links the launching tool call to the child's own events; until it
+  arrives the one running launch of the session is linked provisionally (see contracts.md, Child identity).
   A hook payload has no `model`; it is recorded only if present.
 - Statusline stdin: `model {id, display_name}`, `effort {level}` (absent when unsupported),
   `context_window {used_percentage, context_window_size, total_input_tokens, current_usage}` (percentage may be null
@@ -67,6 +69,20 @@ Effort and context come from the rollout JSONL via `hosts/codex.py` (`ROLLOUT_AD
 (`model`, `effort` | `reasoning_effort` | `collaboration_mode.settings.reasoning_effort`) and last `token_count`
 event (`info.last_token_usage`, `info.model_context_window`) in the final 512 KiB, fidelity `partial`. An unknown
 shape yields unknown, never a guess. Only numbers and the model/effort words are retained.
+
+## Which host is active (environment variables)
+
+`progress mode` and the hook registration check need to know which host is running. Status of each signal:
+
+| Host | Variable | Status |
+| --- | --- | --- |
+| Claude Code | `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT` | **Verified** on a real Claude Code host (both set in its sessions) |
+| Codex | `CODEX_SANDBOX_NETWORK_DISABLED` | Documented (set to 1 in sandboxed Codex child processes); absent outside the sandbox, so it proves Codex only when present |
+| Codex | `CODEX_THREAD_ID`, `CODEX_CI`, others | **Unverified**: not found in any Codex documentation or source checked |
+
+An unknown or ambiguous environment never guesses a host: it falls back to the safe `refresh` mode. A Codex coordinator
+therefore passes `--host codex` explicitly instead of relying on detection. Hook payload detection (`turn_id`, a `rollout-`
+or `.codex` transcript path) is separate and unchanged.
 
 ## Binding
 

@@ -68,7 +68,9 @@ def subagent_child(payload, event, now, source, host):
     elif event == 'post_tool_use':
         agent_id = None
         if isinstance(response, dict):
-            agent_id = response.get('agentId') or response.get('agent_id') or response.get('id')
+            agent_id = response.get('agentId') or response.get('agent_id')
+            if not agent_id and payload.get('tool_name') in ASYNC_TOOLS:
+                agent_id = response.get('id')  # Codex spawn_agent names the new agent `id`; no other tool's `id` is an agent
         if agent_id:
             update['agent_id'] = str(agent_id)
         failed = isinstance(response, dict) and bool(response.get('is_error') or response.get('error'))

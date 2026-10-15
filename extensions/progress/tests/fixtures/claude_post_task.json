@@ -12,6 +12,7 @@
     "run_in_background": false
   },
   "tool_response": {
+    "agentId": "agent-9f",
     "content": [
       {
         "type": "text",

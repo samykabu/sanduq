@@ -211,19 +211,22 @@ def build(ctx, now, rev=1, state=None):
             _diagnose(ctx, f"description '{clean(label, 60)}' matches {len(group)} children; not merged into lane "
                            f"{owned[label]['id']} (use the agent id or tool_use id as the lane owner)", now)
     unmatched.sort(key=lambda x: (x[2].get('started_at') or x[2].get('last_observed_at') or '', x[1]))
-    # Child lane ids are assigned once and persisted in state.json: when another child later merges into an assigned
-    # lane the remaining children keep their ids, so a blocker that targets C2 keeps pointing at the same child.
-    assigned = state.get('child_lanes') if isinstance(state.get('child_lanes'), dict) else {}
-    top = max([int(v[1:]) for v in assigned.values() if re.fullmatch(r'C\d+', str(v))] + [0])
+    # A child's lane number is durable host data: the snapshot entry carries `lane_no` (assigned once, never reused) and
+    # `lane_aliases` (numbers of entries later found to be the same child). Deleting the disposable view or re-keying
+    # an entry (agent id <-> tool_use id) therefore changes no id, and a blocker on a retired number still resolves.
+    # An entry written before numbers existed gets one above every known number, in start order (not persisted).
+    numbers = [n for _, _, c in unmatched for n in ([c.get('lane_no')] + list(c.get('lane_aliases') or [])) if isinstance(n, int)]
+    top = max(numbers + [0])
+    unmatched.sort(key=lambda x: (not isinstance(x[2].get('lane_no'), int), x[2].get('lane_no') if isinstance(x[2].get('lane_no'), int) else 0,
+                                  x[2].get('started_at') or x[2].get('last_observed_at') or '', x[1]))
+    child_alias = {}
     for snap, key, child in unmatched:
-        token = f"{snap.get('host')}:{snap.get('session_id')}:{key}"
-        if token not in assigned:
+        if not isinstance(child.get('lane_no'), int):
             top += 1
-            assigned[token] = f'C{top}'
-    state['child_lanes'] = assigned
-    unmatched.sort(key=lambda x: natural(assigned[f"{x[0].get('host')}:{x[0].get('session_id')}:{x[1]}"]))
-    for snap, key, child in unmatched:
-        lanes.append({'id': assigned[f"{snap.get('host')}:{snap.get('session_id')}:{key}"], 'label': clean(child.get('description') or child.get('subagent_type') or key, 60),
+            child = dict(child, lane_no=top)
+        for alias in child.get('lane_aliases') or []:
+            child_alias[f'C{alias}'] = f"C{child['lane_no']}"
+        lanes.append({'id': f"C{child['lane_no']}", 'label': clean(child.get('description') or child.get('subagent_type') or key, 60),
                       'owner': child.get('agent_id') or key, 'origin': 'host-child', 'child': child, 'host': snap.get('host'),
                       'requested': {}, 'tasks': [], 'closed': False, 'since': parse_time(child.get('started_at'))})
     claimed = {t for lane in lanes for t in lane['tasks']}
@@ -240,7 +243,8 @@ def build(ctx, now, rev=1, state=None):
     # ---- blockers -----------------------------------------------------------------------------------------
     blockers = []
     for rec in sorted((r for r in fact_rows if r['kind'] == 'block' and r.get('state') == 'open'), key=lambda r: natural(r['id'])):
-        blockers.append({'id': rec['id'], 'target': rec.get('target'), 'by': rec.get('by') or {}, 'since': rec.get('ts'), 'source': 'facts'})
+        blockers.append({'id': rec['id'], 'target': child_alias.get(rec.get('target'), rec.get('target')), 'by': rec.get('by') or {},
+                         'since': rec.get('ts'), 'source': 'facts'})
     if cp and cp.get('pause'):
         blockers.append({'id': 'WP', 'target': 'feature', 'by': {'type': 'external', 'ref': cp['pause']['reason']},
                          'since': cp['pause']['at'], 'source': 'workflow-pause'})
@@ -302,7 +306,7 @@ def build(ctx, now, rev=1, state=None):
         shown = {'run_id': rec.get('run'), 'status': rec.get('status') or 'unknown', 'started_at': rec.get('started_at'),
                  'ended_at': rec.get('ended_at'), 'tokens': tokens, 'fidelity': usage.get('fidelity') or 'unknown',
                  'origin': 'legacy'}
-        target = next((l for l in lanes if l['id'] == rec.get('lane')), None)
+        target = next((l for l in lanes if l['id'] == child_alias.get(rec.get('lane'), rec.get('lane'))), None)
         if target is not None:
             if not any(x.get('run_id') == shown['run_id'] and x.get('origin') != 'legacy' for x in target['attempts']):
                 target['attempts'].append(shown)
