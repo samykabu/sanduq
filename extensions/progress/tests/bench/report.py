@@ -6,7 +6,7 @@ Run from extensions/progress:  python -m tests.bench.report [--check]
 import sys
 from pathlib import Path
 
-from . import counting, run, traces
+from . import approaches, counting, run, traces
 
 DOC = Path(__file__).resolve().parents[2] / "docs" / "token-benchmark.md"
 ORDER = ["NEW", "MD-EDIT", "MD-EDIT-LEAN", "LEGACY", "MD-RENDER"]
@@ -70,11 +70,10 @@ def render(data):
             "- Producers record what they own. Checking a task off in `tasks.md` happens in every approach, so it is not charged to any of them.",
             "  NEW therefore costs nothing for task start, completion and reopening: the report derives them from `tasks.md`.",
             "- The trace is plain Spec Kit. Under Workflow, lanes, retries and decisions come from its ledger and NEW would cost less.",
-            "- NEW output lines other than the contract's examples are the proposed one-line forms in `docs/contracts.md`.",
+            "- NEW lines are the real CLI's own output: the benchmark runs `scripts/progress.py` in a sandbox repository.",
             "- Re-orientation (`resume`, `compaction`) reloads the skill for NEW and the protocol page for LEGACY. MD-EDIT re-reads the whole report. "
             "NEW's `status` line is shorter than a full report read, so it tells the agent less.",
-            "- MD-RENDER and MD-EDIT use the same renderer in this benchmark, so the Markdown is the same document. "
-            "The MD-RENDER size is the benchmark's renderer; re-run after the real `export --format md` lands.",
+            "- MD-RENDER is the real `export --format md` file. MD-EDIT is a hand-maintained report of the same six sections written by the benchmark.",
             "- LEGACY setup counts `execution-report.md` only. The full execute protocol is longer.", ""]
     for encoding, title in (("o200k_base", "o200k_base (declared)"), ("cl100k_base", "cl100k_base")):
         rows, totals, setup = _rows(data, encoding)
@@ -92,14 +91,14 @@ def render(data):
         if a in data["results"]:
             r = data["results"][a]
             out.append("| %s | %d | %d |" % (a, sum(e["bytes"] for e in r["events"]), r["setup"]["bytes"]))
+    prefix_tokens = counting.count(counting.load()[counting.DECLARED], approaches.NEW_CLI)
     ratio = declared_totals["MD-EDIT"] / max(declared_totals["NEW"], 1)
     out += ["", "## Reading the result", "",
             "- Updates only, o200k_base: NEW %d, MD-EDIT %d (%.1fx), MD-EDIT-LEAN %d." % (
                 declared_totals["NEW"], declared_totals["MD-EDIT"], ratio, declared_totals["MD-EDIT-LEAN"]),
-            "- Setup is the skill text. NEW loads %d tokens once, and again after a restart or compaction." % declared_setup["NEW"],
+            "- NEW setup is %d tokens (the skill text plus `init`). The skill loads again after a restart or compaction." % declared_setup["NEW"],
             "- `unblock`, `block`, `decision` and note verbs cost tens of tokens because their command line is the whole cost.",
-            "- The per-verb prefix `python .specify/extensions/progress/scripts/progress.py` is about 14 tokens of each NEW line. "
-            "A shorter entry point would reduce every NEW figure.",
+            "- The per-verb prefix `python .specify/extensions/progress/scripts/progress.py` is %d tokens of each NEW line. A shorter entry point would reduce every NEW figure." % prefix_tokens,
             "", "## Reproduce", "",
             "```bash", "python -m pip install -r extensions/progress/test-requirements.txt",
             "cd extensions/progress", "python -m tests.bench.report", "python -m unittest discover -s tests -q", "```", ""]

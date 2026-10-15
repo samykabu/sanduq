@@ -35,9 +35,21 @@ provides:
     - name: speckit.progress.export
       file: commands/export.md
       description: "Write the current projection as deterministic Markdown or JSON"
-    - name: speckit.progress.hook
-      file: commands/hook.md
-      description: "Internal. Invoked by the host's native hooks, never by an agent; collects host facts and refreshes the projection silently"
+    - name: speckit.progress.hook-session-start
+      file: commands/hook-session-start.md
+      description: "Internal. Invoked by the host's native session start hook, never by an agent; records host facts and refreshes silently"
+    - name: speckit.progress.hook-pre-tool-use
+      file: commands/hook-pre-tool-use.md
+      description: "Internal. Invoked by the host's native pre tool use hook, never by an agent; records host facts and refreshes silently"
+    - name: speckit.progress.hook-post-tool-use
+      file: commands/hook-post-tool-use.md
+      description: "Internal. Invoked by the host's native post tool use hook, never by an agent; records host facts and refreshes silently"
+    - name: speckit.progress.hook-stop
+      file: commands/hook-stop.md
+      description: "Internal. Invoked by the host's native stop hook, never by an agent; records host facts and refreshes silently"
+    - name: speckit.progress.hook-session-end
+      file: commands/hook-session-end.md
+      description: "Internal. Invoked by the host's native session end hook, never by an agent; records host facts and refreshes silently"
 
 hooks:
   after_tasks:
@@ -53,17 +65,21 @@ hooks:
 
 events:
   session_start:
-    - command: speckit.progress.hook
+    - command: speckit.progress.hook-session-start
+      timeout: 10
+  pre_tool_use:
+    - command: speckit.progress.hook-pre-tool-use
+      matcher: "Task|Agent|spawn_agent"
       timeout: 10
   post_tool_use:
-    - command: speckit.progress.hook
+    - command: speckit.progress.hook-post-tool-use
       matcher: "Bash|Task|Agent|apply_patch|shell|exec_command|spawn_agent"
       timeout: 10
   stop:
-    - command: speckit.progress.hook
+    - command: speckit.progress.hook-stop
       timeout: 10
   session_end:
-    - command: speckit.progress.hook
+    - command: speckit.progress.hook-session-end
       timeout: 10
 
 tags:

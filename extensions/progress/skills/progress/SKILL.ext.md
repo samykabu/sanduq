@@ -18,7 +18,7 @@ Every verb prints one line; relay it, do not elaborate.
 | Need | Command |
 | --- | --- |
 | Create the report | `progress init [--theme PRESET]` |
-| Bind this session | `progress bind` |
+| Bind this session | `progress bind` (prints `bind=<nonce>`; the next hook completes it) |
 | One-line state | `progress status` |
 | Assign a lane | `progress lane L1 --tasks T001-T004 --owner ID --harness H --model M --effort E` |
 | Close a lane | `progress lane L1 --close` |
@@ -28,12 +28,13 @@ Every verb prints one line; relay it, do not elaborate.
 | Record a decision | `progress decide made D2 b --by user` |
 | Note | `progress note "text" --target T005` |
 | Forced snapshot | `progress refresh --final` |
+| Status line | `progress statusline install` |
 | Theme | `progress theme --preset cobalt` |
 | Markdown export | `progress export --format md` |
 
 ## Rules
 
-1. Record a lane when you assign work. Task start, completion, retries and reopening need no command.
+1. Record a lane when you assign work (lane ids are `L#`; Workflow `W#` and host-child `C#` lanes appear on their own). Task start, completion, retries and reopening need no command.
 2. Check a task off in `tasks.md` as usual; the report follows.
 3. When Workflow is installed, decisions come from its ledger and `decide` is refused. Do not work around it.
 4. Never put secrets, absolute paths or transcript text in a note. Text is capped at 200 characters.

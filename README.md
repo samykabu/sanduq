@@ -35,6 +35,7 @@ The map shows each extension and what it requires; arrows point to the dependenc
 | [PR](docs/extensions/pr.md) | Feature docs, PR description, review feedback | After Implement | Yes | Illustrate | Codex, Claude Code (unverified) | PolyForm NC |
 | [Illustrate](docs/extensions/illustrate.md) | Themed diagrams and charts, 44 types | Any, on request | Yes | Nothing | Codex, Claude Code (unverified) | PolyForm NC |
 | [Memory](docs/extensions/memory.md) | Project memory and recoverable spec archiving | Before Specify and Analyze; after merge | Yes | Python 3.11+, Git | Codex, Claude Code (unverified) | PolyForm NC |
+| [Progress](docs/extensions/progress.md) | Live feature progress report with lanes, blockers and decisions | Tasks to Implement; native host hooks | Yes | Python 3.11+ | Codex, Claude Code (unverified) | PolyForm NC |
 | [Portable skills](https://github.com/samykabu/sanduq-skills) | Illustrate, User Manual (5 skills), Delegate Task | No Spec Kit needed | Yes | Per skill | Codex, Claude Code, Claude Desktop (unverified) | MIT |
 
 "Standalone" means it works without Workflow. "Requires" lists hard dependencies; Spec Kit does not

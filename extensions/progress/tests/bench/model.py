@@ -71,13 +71,6 @@ def summary(state):
     return done, active, blocked, pending, len(state["tasks"])
 
 
-def status_line(state, rev):
-    """The one-line `progress status` output used for re-orientation (contract: one line)."""
-    done, active, blocked, pending, total = summary(state)
-    return "progress: %s %d/%d done, %d active, %d blocked, %d decisions pending (rev %d)" % (
-        FEATURE.split("-")[0], done, total, active, blocked, pending, rev)
-
-
 def sections(state):
     """Return the six report sections as an ordered list of (name, [lines])."""
     done, active, blocked, pending, total = summary(state)

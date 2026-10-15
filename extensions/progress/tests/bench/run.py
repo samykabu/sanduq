@@ -19,11 +19,12 @@ def compute():
     declared = encoders[counting.DECLARED]
     trace = traces.build()
     measure = lambda text: counting.count(declared, text)  # noqa: E731
+    new_setup, new_events, render_events = approaches.real_cli_run(trace)
     raw = {
-        "NEW": (approaches.new_setup(), approaches.new_events(trace)),
+        "NEW": (new_setup, new_events),
         "MD-EDIT": (approaches.md_setup(), approaches.md_events(trace, measure)),
         "MD-EDIT-LEAN": (approaches.md_setup(), approaches.md_events(trace, measure, reads_required=False)),
-        "MD-RENDER": ([], approaches.render_events(trace)),
+        "MD-RENDER": ([], render_events),
     }
     if approaches.legacy_available():
         raw["LEGACY"] = approaches.legacy_setup_and_events(trace)

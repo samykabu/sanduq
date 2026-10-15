@@ -1,6 +1,6 @@
 # Command reference
 
-This is the authoritative list of Sanduq's 42 public extension commands, with one example each.
+This is the authoritative list of Sanduq's 47 public extension commands, with one example each.
 Package READMEs and extension pages link here. Examples use the
 [synthetic booking application](../README.md#example-conventions) and issue 412. Guards still
 enforce issue binding and stage order; an example does not bypass them.
@@ -28,6 +28,7 @@ agent requests, not shell commands. Claude Desktop does not run extensions.
 - [PR](#pr) (2 commands)
 - [Illustrate](#illustrate) (4 commands)
 - [Memory](#memory) (7 commands)
+- [Progress](#progress) (5 commands)
 - [Workflow utilities from the shell](#workflow-utilities-from-the-shell)
 - [Internal skills and overlays](#internal-skills-and-overlays)
 
@@ -128,6 +129,22 @@ agent requests, not shell commands. Claude Desktop does not run extensions.
 | `$speckit-memory-enable` | Once per concrete policy/implementation: `Present the configured branch, checks, hooks, and guards for owner review before enabling automatic mode.` |
 | `$speckit-memory-impact` | Before a new spec: `Consult current refund constraints and settlement decisions relevant to this proposed change.` |
 | `$speckit-memory-status` | Inspect: `Show policy approval, queued refund work, writer state, and recovery phase.` |
+
+## Progress
+
+[Extension page](../extensions/progress.md) · [package README](../../extensions/progress/README.md)
+
+| Command | When and example |
+| --- | --- |
+| `$speckit-progress-init` | Once per feature, after Tasks: `Create the progress report for specs/412-refund-approval and bind this session.` |
+| `$speckit-progress-refresh` | Forced snapshot only: `Write a final progress snapshot for specs/412-refund-approval.` |
+| `$speckit-progress-status` | Any time: `Show the one-line progress status.` |
+| `$speckit-progress-theme` | Once: `Use the cobalt theme for the progress report.` |
+| `$speckit-progress-export` | On request: `Export the progress report as Markdown.` |
+
+The hook handlers `$speckit-progress-hook-session-start`, `$speckit-progress-hook-pre-tool-use`,
+`$speckit-progress-hook-post-tool-use`, `$speckit-progress-hook-stop` and `$speckit-progress-hook-session-end`
+are internal. The host runs them through its native hooks; do not invoke them.
 
 ## Workflow utilities from the shell
 

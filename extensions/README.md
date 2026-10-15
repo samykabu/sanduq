@@ -1,7 +1,7 @@
 # Spec Kit extension source index
 
-Eight extensions supply the managed workflow and independently usable documentation, QA, Project,
-PR, illustration, and Memory processes. Use [install by host](../docs/start/install-by-host.md) to install them, the
+Nine extensions supply the managed workflow and independently usable documentation, QA, Project,
+PR, illustration, Memory, and Progress reporting processes. Use [install by host](../docs/start/install-by-host.md) to install them, the
 [extension pages](../docs/README.md#extensions) to choose, and the
 [command reference](../docs/reference/commands.md) for every public command and its example.
 
@@ -13,6 +13,7 @@ PR, illustration, and Memory processes. Use [install by host](../docs/start/inst
 | [illustrate](illustrate/README.md) | 2.4.1 | 4 |
 | [memory](memory/README.md) | 2.1.2 | 7 |
 | [pr](pr/README.md) | 4.2.2 | 2 |
+| [progress](progress/README.md) | 1.0.0 | 10 |
 | [project](project/README.md) | 2.2.2 | 2 |
 | [scope](scope/README.md) | 1.6.1 | 7 |
 | [user-manual](user-manual/README.md) | 1.5.2 | 4 |

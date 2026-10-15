@@ -8,6 +8,7 @@ not counted.
 import difflib
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -44,7 +45,13 @@ def numbered(lines, start=1):
     return "\n".join("%6d\t%s" % (i, line) for i, line in enumerate(lines, start))
 
 
-# ---------------------------------------------------------------- NEW
+# ---------------------------------------------------------------- NEW and MD-RENDER (real CLI)
+
+NEW_SCRIPT = EXT / "scripts" / "progress.py"
+
+
+def new_available():
+    return NEW_SCRIPT.is_file()
 
 
 def skill_text():
@@ -55,46 +62,90 @@ def skill_load():
     return [("skill-call", call(skill="progress")), ("skill", skill_text())]
 
 
-def new_setup():
-    out = "progress: ready specs/%s/progress/.view/index.html nonce 7f3a9c" % FEATURE
-    return skill_load() + [("call", bash(NEW_CLI + " init")), ("result", out)]
+def _git(args, cwd):
+    subprocess.run(["git", "-c", "user.email=bench@example.invalid", "-c", "user.name=bench"] + args, cwd=cwd,
+                   check=True, capture_output=True)
 
 
-def new_events(trace):
-    """The CLI line the agent types for events that need a verb, and its one-line output."""
+def _run_new(args, cwd):
+    proc = subprocess.run([sys.executable, str(NEW_SCRIPT)] + args, cwd=cwd, capture_output=True, text=True,
+                          encoding="utf-8", env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+    out = proc.stdout.strip() or proc.stderr.strip()
+    # The bind nonce is random; pin it so token counts are reproducible.
+    return proc.returncode, re.sub(r"bind=[0-9a-f]+", "bind=a1b2c3d4e5f6", out)
+
+
+def _write_tasks(path, state):
+    lines = ["# Tasks: %s" % FEATURE, ""]
+    phase = None
+    for tid, t in state["tasks"].items():
+        if t["phase"] != phase:
+            phase = t["phase"]
+            lines += ["## Phase: " + phase, ""]
+        lines.append("- [%s] %s %s" % ("X" if t["state"] == "done" else " ", tid, t["title"]))
+    Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def real_cli_run(trace):
+    """Run the verbs of the trace through the real Progress CLI in a sandbox repository.
+
+    Returns (new_setup, new_events, render_events). NEW messages are the command line the agent types and the
+    CLI's own output. Events with no verb (task start, completion, reopening, no-op refresh) type nothing; the
+    sandbox only mirrors the checkbox edit the agent makes in tasks.md anyway, then refreshes as a hook would.
+    MD-RENDER reads the real `export --format md` file at re-orientation events.
+    """
     state = model.new_state()
-    notes = 0
-    rev = 0
-    result = []
-    for ev in trace:
-        k = ev["kind"]
-        msgs = []
-        if k == "assign_lane":
-            cmd = "lane %s --tasks %s --owner %s --label %s --harness %s --model %s --effort %s" % (
-                ev["lane"], model.task_range(ev["tasks"]), ev["owner"], quote(ev["label"]), ev["harness"], ev["model"], ev["effort"])
-            msgs = [("call", bash(NEW_CLI + " " + cmd)), ("result", "progress: %s open %d tasks" % (ev["lane"], len(ev["tasks"])))]
-        elif k == "fail_retry":
-            notes += 1
-            cmd = "note %s --target %s" % (quote(ev["note"]), ev["task"])
-            msgs = [("call", bash(NEW_CLI + " " + cmd)), ("result", "progress: N%d noted" % notes)]
-        elif k == "block":
-            cmd = "block %s --by %s" % (ev["task"], ev["by_arg"])
-            msgs = [("call", bash(NEW_CLI + " " + cmd)), ("result", "progress: %s open %s by %s" % (ev["blocker"], ev["task"], ev["by"]))]
-        elif k == "unblock":
-            msgs = [("call", bash(NEW_CLI + " unblock " + ev["blocker"])), ("result", "progress: %s resolved" % ev["blocker"])]
-        elif k == "decision_ask":
-            cmd = "decide ask %s --options %s" % (quote(ev["question"]), ",".join(ev["options"]))
-            msgs = [("call", bash(NEW_CLI + " " + cmd)), ("result", "progress: %s pending" % ev["id"])]
-        elif k == "decision_made":
-            cmd = "decide made %s %s --by %s --evidence %s" % (ev["id"], ev["selected"], ev["by"], quote(ev["evidence"]))
-            msgs = [("call", bash(NEW_CLI + " " + cmd)), ("result", "progress: %s made %s" % (ev["id"], ev["selected"]))]
-        elif k in ("resume", "compaction"):
-            msgs = skill_load() + [("call", bash(NEW_CLI + " status")), ("result", model.status_line(state, rev))]
-        # start_task, complete_task, reopen_task, noop_refresh: collected automatically, nothing is typed.
-        model.apply(state, ev)
-        rev += 1
-        result.append(dict(kind=k, messages=msgs))
-    return result
+    new_events, render_events = [], []
+    with tempfile.TemporaryDirectory(prefix="progress-bench-") as tmp:
+        (Path(tmp) / ".specify").mkdir()
+        feature = Path(tmp) / "specs" / FEATURE
+        feature.mkdir(parents=True)
+        _write_tasks(feature / "tasks.md", state)
+        _git(["init", "-q"], tmp)
+        _git(["add", "-A"], tmp)
+        _git(["commit", "-qm", "init"], tmp)
+        _git(["checkout", "-qb", FEATURE], tmp)
+        code, init_out = _run_new(["init"], tmp)
+        setup = skill_load() + [("call", bash(NEW_CLI + " init")), ("result", init_out)]
+        for ev in trace:
+            k = ev["kind"]
+            args = None
+            if k == "assign_lane":
+                args = ["lane", ev["lane"], "--tasks", model.task_range(ev["tasks"]), "--owner", ev["owner"], "--label", ev["label"],
+                        "--harness", ev["harness"], "--model", ev["model"], "--effort", ev["effort"]]
+            elif k == "fail_retry":
+                args = ["note", ev["note"], "--target", ev["task"]]
+            elif k == "block":
+                args = ["block", ev["task"], "--by", ev["by_arg"]]
+            elif k == "unblock":
+                args = ["unblock", ev["blocker"]]
+            elif k == "decision_ask":
+                args = ["decide", "ask", ev["question"], "--options", ",".join(ev["options"])]
+            elif k == "decision_made":
+                args = ["decide", "made", ev["id"], ev["selected"], "--by", ev["by"], "--evidence", ev["evidence"]]
+            elif k in ("resume", "compaction"):
+                args = ["status"]
+            msgs = []
+            if args:
+                code, out = _run_new(args, tmp)
+                shown = " ".join(_shell_quote(a) for a in args)
+                msgs = (skill_load() if k in ("resume", "compaction") else []) + [
+                    ("call", bash(NEW_CLI + " " + shown)), ("result", out)]
+            model.apply(state, ev)
+            _write_tasks(feature / "tasks.md", state)
+            if not args:
+                _run_new(["refresh"], tmp)  # what the hooks do silently
+            new_events.append(dict(kind=k, messages=msgs, exit_code=(code if args else 0)))
+            rmsgs = []
+            if k in ("resume", "compaction"):
+                _, text = _run_new(["export", "--format", "md"], tmp)
+                rmsgs = [("call", call(file_path=REPORT_PATH)), ("result", numbered(text.split("\n")))]
+            render_events.append(dict(kind=k, messages=rmsgs))
+    return setup, new_events, render_events
+
+
+def _shell_quote(arg):
+    return quote(arg) if (" " in arg or not arg) else arg
 
 
 # ---------------------------------------------------------------- MD-EDIT
@@ -168,24 +219,6 @@ def md_events(trace, measure, reads_required=True):
             for old_string, new_string in _hunks(old, new):
                 msgs.append(("call", call(file_path=REPORT_PATH, old_string=old_string, new_string=new_string)))
                 msgs.append(("result", EDIT_OK))
-        result.append(dict(kind=k, messages=msgs))
-    return result
-
-
-# ---------------------------------------------------------------- MD-RENDER
-
-
-def render_events(trace):
-    """Deterministic export maintained by hooks: no cost per update; reading it costs its size."""
-    state = model.new_state()
-    result = []
-    for ev in trace:
-        k = ev["kind"]
-        model.apply(state, ev)
-        msgs = []
-        if k in ("resume", "compaction"):
-            lines = model.render(state).rstrip("\n").split("\n")
-            msgs = [("call", call(file_path=REPORT_PATH)), ("result", numbered(lines))]
         result.append(dict(kind=k, messages=msgs))
     return result
 
