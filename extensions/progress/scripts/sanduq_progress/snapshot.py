@@ -281,8 +281,14 @@ def read_all(ctx):
                     continue
                 seen.add(path.name)
                 data = read_json(path)
-                if isinstance(data, dict) and data.get('session_id'):
-                    out.append(data)
+                if not (isinstance(data, dict) and data.get('session_id')):
+                    continue
+                # A conflict kept as `legacy-<name>` holds the same session as the current file, which sorts first.
+                key = (data.get('host'), data.get('session_id'))
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append(data)
     return out
 
 

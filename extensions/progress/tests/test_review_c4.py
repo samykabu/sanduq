@@ -84,3 +84,12 @@ class C4Migration(Children):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class C4ReadAllDedupe(Children):
+    def test_a_conflict_copy_of_the_same_session_is_read_once(self):
+        self.setup_children('agent-a')
+        current = next(self.ctx.host_dir.glob('*.json'))
+        shutil.copyfile(current, self.ctx.host_dir / ('legacy-' + current.name))
+        sessions = [(s.get('host'), s.get('session_id')) for s in snapshot.read_all(self.ctx)]
+        self.assertEqual(len(sessions), len(set(sessions)))
