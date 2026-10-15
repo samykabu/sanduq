@@ -57,17 +57,38 @@ def script(root):
     return path if path.is_file() else None
 
 
+def _off(data):
+    """True when a config object is itself switched off (`enabled: false` or `disabled: true`)."""
+    return data.get('enabled') is False or data.get('disabled') is True
+
+
 def _json_hooks(data):
-    """True when a parsed host config holds an enabled command entry that runs a Progress hook."""
+    """True when a parsed host config holds an enabled command entry that runs a Progress hook. A disabled object
+    disables everything beneath it, so the walk does not descend into it."""
     if isinstance(data, dict):
+        if _off(data):
+            return False
         command = data.get('command')
         if isinstance(command, str) and any(m in command for m in HOOK_MARKERS):
-            if data.get('enabled') is not False and data.get('disabled') is not True:
-                return True
+            return True
         return any(_json_hooks(v) for v in data.values())
     if isinstance(data, list):
         return any(_json_hooks(v) for v in data)
     return False
+
+
+def _globally_disabled(data):
+    """Host-wide switches: Claude's `disableAllHooks: true`; Codex's `[features] codex_hooks/hooks = false`."""
+    if not isinstance(data, dict):
+        return None
+    if isinstance(data.get('disableAllHooks'), bool):
+        return data['disableAllHooks']
+    features = data.get('features')
+    if isinstance(features, dict):
+        for key in ('codex_hooks', 'hooks'):
+            if features.get(key) is False:
+                return True
+    return None
 
 
 def _yml_hooks(text):
@@ -110,6 +131,7 @@ def hooks_registered(root):
     """True when an enabled Progress hook is wired in a host config and the extension itself is enabled."""
     if not extension_enabled(root):
         return False
+    configs = {}
     for name in HOST_FILES:
         try:
             text = (Path(root) / name).read_text(encoding='utf-8-sig')
@@ -122,8 +144,16 @@ def hooks_registered(root):
         try:
             if name.endswith('.toml') and tomllib is None:
                 continue
-            data = tomllib.loads(text) if name.endswith('.toml') else json.loads(text)
+            configs[name] = tomllib.loads(text) if name.endswith('.toml') else json.loads(text)
         except Exception:  # unreadable config is not evidence of collection
+            continue
+    # Claude: the local settings file overrides the shared one when it states the switch; Codex: either file may switch off.
+    claude = [_globally_disabled(configs.get(n)) for n in ('.claude/settings.local.json', '.claude/settings.json')]
+    claude_off = next((v for v in claude if v is not None), False)
+    for name, data in configs.items():
+        if name.startswith('.claude/') and claude_off:
+            continue
+        if name.startswith('.codex/') and _globally_disabled(data):
             continue
         if _json_hooks(data):
             return True

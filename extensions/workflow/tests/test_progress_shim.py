@@ -129,6 +129,37 @@ class ReportingModes(Project):
         self._claude({'type': 'command', 'enabled': False, 'command': 'python .specify/events.py speckit.progress.hook-stop stop'})
         self.assertEqual(self.mode()['mode'], 'refresh')
 
+    HOOK = 'python .specify/events.py speckit.progress.hook-stop stop'
+
+    def _claude_file(self, name, data):
+        (self.root / '.claude').mkdir(exist_ok=True)
+        (self.root / '.claude' / name).write_text(json.dumps(data), encoding='utf-8')
+
+    def test_claude_disable_all_hooks_is_not_automatic(self):
+        self._claude_file('settings.json', {'disableAllHooks': True, 'hooks': {'Stop': [{'hooks': [
+            {'type': 'command', 'command': self.HOOK}]}]}})
+        self.assertEqual(self.mode()['mode'], 'refresh')
+
+    def test_local_settings_can_reenable_hooks_the_shared_file_disabled(self):
+        self._claude_file('settings.json', {'disableAllHooks': True, 'hooks': {'Stop': [{'hooks': [
+            {'type': 'command', 'command': self.HOOK}]}]}})
+        self._claude_file('settings.local.json', {'disableAllHooks': False})
+        self.assertEqual(self.mode()['mode'], 'projection')
+
+    def test_command_beneath_a_disabled_parent_is_not_automatic(self):
+        self._claude_file('settings.json', {'hooks': {'Stop': [{'enabled': False, 'hooks': [
+            {'type': 'command', 'command': self.HOOK}]}]}})
+        self.assertEqual(self.mode()['mode'], 'refresh')
+        self._claude_file('settings.json', {'hooks': {'disabled': True, 'Stop': [{'hooks': [
+            {'type': 'command', 'command': self.HOOK}]}]}})
+        self.assertEqual(self.mode()['mode'], 'refresh')
+
+    def test_codex_hooks_feature_switched_off_is_not_automatic(self):
+        (self.root / '.codex').mkdir()
+        (self.root / '.codex' / 'hooks.json').write_text(json.dumps({'features': {'codex_hooks': False}, 'hooks': {
+            'Stop': [{'command': self.HOOK}]}}), encoding='utf-8')
+        self.assertEqual(self.mode()['mode'], 'refresh')
+
     def test_disabled_extensions_yml_hook_is_not_automatic(self):
         self._yml('false')
         self.assertEqual(self.mode()['mode'], 'refresh')
