@@ -48,7 +48,8 @@ def detect_host(payload):
 
 
 def log_unbound_once(progress_dir, payload, now):
-    """One line per unbound session id, same text as sanduq_progress.hook; skipped when the log already holds it."""
+    """One line per unbound session id, same text as sanduq_progress.hook; skipped when the log already holds it. The
+    append goes through the shared link-refusing, size-bounded writer (`sanduq_progress.safelog`, standard library only)."""
     path = os.path.join(progress_dir, 'diagnostics.log')
     session = ''.join(ch if ch.isprintable() else ' ' for ch in str(payload['session_id'])).strip()[:80]
     message = f'unbound {detect_host(payload)} session {session} dropped'
@@ -59,8 +60,9 @@ def log_unbound_once(progress_dir, payload, now):
     except OSError:
         pass
     try:
-        with open(path, 'a', encoding='utf-8') as stream:
-            stream.write(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(now))} {message}\n")
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import safelog
+        safelog.append_line(path, f'{safelog.stamp(now)} {message}')
     except OSError:
         pass
 

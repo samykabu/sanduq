@@ -7,10 +7,11 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+import safelog  # scripts/safelog.py: standard library only, shared with the fast hook entry
+
 CONTROL = re.compile(r'[\x00-\x1f\x7f-\x9f  ]')
-DIAG_LIMIT = 256 * 1024
+DIAG_LIMIT = safelog.DIAG_LIMIT
 REPLACE_ATTEMPTS = 8  # os.replace can hit a sharing violation on Windows while a reader has the target open
-LINK_TAGS = (0xA000000C, 0xA0000003)  # Windows symlink and junction (mount point) reparse tags
 
 
 class ProgressError(Exception):
@@ -22,15 +23,7 @@ class ProgressError(Exception):
         return f'progress: error {self.code}' + (f' {self.message}' if self.message else '')
 
 
-def is_link(path):
-    """True for a symbolic link or a Windows junction. Other reparse points (cloud placeholders) are ordinary files."""
-    try:
-        info = os.lstat(str(path))
-    except OSError:
-        return False
-    if stat.S_ISLNK(info.st_mode):
-        return True
-    return bool(getattr(info, 'st_file_attributes', 0) & 0x400) and getattr(info, 'st_reparse_tag', 0) in LINK_TAGS
+is_link = safelog.is_link
 
 
 def refuse_link(path):
