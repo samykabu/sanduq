@@ -28,7 +28,7 @@ specs/<feature>/progress/
     theme.css            generated from the resolved theme (tokens only)
     layout.js            generated: window.__SANDUQ_PROGRESS_LAYOUT__ (block order, hidden, density, title, logo)
     host/<host>-<session>.json   host snapshots (progress.host.v1)
-    state.json           collector cursors, debounce stamp, dirty flag, last refresh rev
+    state.json           collector cursors, debounce stamp, dirty flag, last refresh rev, `child_lanes` (child -> `C<n>` id)
     diagnostics.log      bounded (rotate at 256 KB, keep 1)
     lock                 per-feature lock held by the OS for the life of the process (msvcrt.locking on Windows,
                          fcntl.flock elsewhere); the OS drops it if the process dies, so there is no stale recovery.
@@ -38,7 +38,15 @@ specs/<feature>/progress/
                           "statusline": {"enabled": bool, "chained": "<previous command or null>"}}
   theme.json             progress.theme.v1 (optional; preset default "sanduq")
   bindings.json          session bindings (see Binding)
+  bindings.lock, diagnostics.log[.1]   runtime files, local only
 ```
+
+`init` adds the runtime files (`bindings.json`, `*.lock`, `diagnostics.log*` under `.specify/progress/`, and each
+`.view/`) to `.git/info/exclude`.
+
+A write never goes through a link: before `facts.jsonl`, any `.view` file (including the lock and copied assets) is
+written or opened, a symbolic link or Windows junction at that path is refused with `PROGRESS_UNSAFE_TARGET` (exit 3;
+a hook drops the event). Other reparse points, such as cloud placeholders, are ordinary files.
 
 A feature directory is always `specs/<dir>`: `.` and `..` components are rejected, and the resolved directory must be a
 direct child of the resolved `specs/` directory (a symlinked feature pointing elsewhere is refused). The `progress/`
@@ -182,7 +190,15 @@ leaves the lane `waiting` while tasks are unchecked (the tasks.md checkbox stays
 targeting the lane outranks that terminal evidence, so the lane reports `blocked`. A `description` match merges only
 when it identifies exactly one child; if several children share the label, none merges on that label and each stays a
 `host-child` lane. Agent id and `tool_use_id` matches are unique by construction. Only children that match no lane
-owner become `host-child` lanes (`C1`, `C2`, ... numbered over the unmatched children).
+owner become `host-child` lanes (`C1`, `C2`, ...). The id of a child is assigned once, in start order, and kept in
+`state.json` (`child_lanes`); ids are never reused or renumbered when another child later merges into an assigned lane, so a
+blocker that targets `C2` keeps pointing at the same child.
+
+Child lifecycle. A launch by a synchronous `Task`/`Agent` call ends with its tool result. An asynchronous launch
+(`run_in_background`, or Codex `spawn_agent`) only proves the child exists: the launch response never sets `done` or
+`ended_at`; the child's own `stop` does. A child that has ended can run again: a running observation newer than its
+`ended_at` starts a new generation (`generation` counts up, `ended_at` is cleared, `started_at` is that observation); a
+running observation at or before `ended_at` is stale and is ignored.
 
 Workflow decisions. `decisions[].selected` is the option text for a single-selection decision and a list of option texts
 for a multiple-selection decision (Workflow stores `selected: ["A","C"]` with `option: null` in that mode, and
@@ -238,11 +254,16 @@ one for the same run id; real disagreement is listed in `conflict`, and the conf
 
 ## Hook behaviour
 
-`progress hook <event>`: parse stdin (tolerate empty/invalid → diagnostics, exit 0). Update the host snapshot under the
+Hooks run `scripts/hook.py <event>` (standard library only). It exits before importing Progress when Progress was never
+initialised in the project (no `.specify/progress/`, nothing is written) or when the session is not bound, has no pending
+handshake and its drop is already logged; an unbound session is logged once per session id. Anything else is handed to
+`progress hook <event>` (same code, `progress.py hook` stays available): parse stdin (tolerate empty/invalid → diagnostics,
+exit 0). Update the host snapshot under the
 lock. Debounce: if the last refresh is younger than `debounce_seconds`, set `dirty=true` and exit; else refresh.
-`stop` and `session_end` always refresh. A deferred (debounced) event is not invisible: the hook patches the current
+`stop` and `session_end` always refresh. A deferred (debounced) event is not invisible: the first one in a window patches the current
 `report.json`/`data.js` with `collection.dirty:true` and `collection.last_event_at` and advances `rev` (no producer is
-read, nothing is rebuilt) so the UI shows its pending banner; the first hook after the window, a statusline update after
+read, nothing is rebuilt) so the UI shows its pending banner. That clean-to-dirty transition is written once per window;
+later events only move the timestamps in `state.json`, and the next real refresh publishes the latest values; the first hook after the window, a statusline update after
 it, `stop`, or any verb performs the real refresh and clears the flag. Any exception → diagnostics, exit 0, no stdout (never block the host).
 
 ## Theme (`progress.theme.v1`)
