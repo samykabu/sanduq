@@ -29,6 +29,22 @@ def _newer(new, old):
     return not old or (new.get('observed_at') or '') >= (old.get('observed_at') or '')
 
 
+def _apply(entry, name, value):
+    """Set one child field. A terminal status is not reopened, an older observation never replaces a newer one, and a
+    requested (partial) model never replaces an observed (exact) one, whichever order the two events arrive in."""
+    if value is None:
+        return
+    if name == 'status' and entry.get('status') in TERMINAL and value not in TERMINAL:
+        return
+    if name == 'last_observed_at' and (entry.get(name) or '') > value:
+        return
+    if name == 'model' and isinstance(value, dict) and isinstance(entry.get('model'), dict)             and entry['model'].get('fidelity') == 'exact' and value.get('fidelity') != 'exact':
+        return
+    if name == 'effort' and isinstance(value, dict) and isinstance(entry.get('effort'), dict) and not _newer(value, entry['effort']):
+        return
+    entry[name] = value
+
+
 def merge(ctx, host, session_id, now, fields=None, child=None, parent_session_id=None, agent_id=None):
     """Merge one observation into the session snapshot. Caller holds the feature lock. Returns True if changed."""
     path = snapshot_path(ctx, host, session_id)
@@ -49,18 +65,17 @@ def merge(ctx, host, session_id, now, fields=None, child=None, parent_session_id
             key = next((k for k, v in children.items() if v.get('agent_id') == key), key)
         elif update.get('agent_id') and update['agent_id'] in children and update['agent_id'] != key:
             old = children.pop(update['agent_id'])
-            children[key] = {**old, **children.get(key, {})}
+            entry = children.setdefault(key, {})
+            for name, value in old.items():
+                if name in ('model', 'effort', 'status', 'last_observed_at'):
+                    _apply(entry, name, value)
+                elif value is not None:
+                    entry.setdefault(name, value)  # the tool-call record keeps its own description and type
         entry = children.setdefault(key, {})
         if child.get('by_agent'):
             entry.setdefault('agent_id', child['key'])
         for name, value in update.items():
-            if value is None:
-                continue
-            if name == 'status' and entry.get('status') in TERMINAL and value not in TERMINAL:
-                continue
-            if name == 'last_observed_at' and (entry.get(name) or '') > value:
-                continue
-            entry[name] = value
+            _apply(entry, name, value)
         entry.setdefault('ended_at', None)
         entry.setdefault('started_at', None)
         entry.setdefault('status', 'unknown')

@@ -34,15 +34,16 @@
     var s = String(status || 'unknown');
     return el('span', 'pill s-' + s.replace(/[^a-z]/gi, '').slice(0, 12).toLowerCase(), s);
   }
-  function dur(ms) {
-    if (typeof ms !== 'number' || ms < 0) return null;
-    var s = Math.round(ms / 1000), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60);
+  /* every duration in the projection is whole seconds (docs/contracts.md, "Units") */
+  function dur(seconds) {
+    if (typeof seconds !== 'number' || !isFinite(seconds) || seconds < 0) return null;
+    var s = Math.round(seconds), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60);
     return h ? h + 'h ' + m + 'm' : m ? m + 'm ' + (s % 60) + 's' : s + 's';
   }
   function ago(iso) {
     var t = Date.parse(iso);
     if (isNaN(t)) return null;
-    return (dur(Math.max(0, Date.now() - t)) || '0s') + ' ago';
+    return (dur(Math.max(0, Date.now() - t) / 1000) || '0s') + ' ago';
   }
   function when(iso) {
     var a = iso && ago(iso);
@@ -176,7 +177,7 @@
       det.open = open;
       det.appendChild(el('summary', null, at.length + (at.length === 1 ? ' attempt' : ' attempts')));
       if (at.length) det.appendChild(el('ul', null, at.map(function (a) {
-        return el('li', 'wrap', [a.run_id || '?', ' ', pill(a.status), ' ', dur(Date.parse(a.ended_at) - Date.parse(a.started_at)) || (a.ended_at ? '' : 'running'),
+        return el('li', 'wrap', [a.run_id || '?', ' ', pill(a.status), ' ', dur((Date.parse(a.ended_at) - Date.parse(a.started_at)) / 1000) || (a.ended_at ? '' : 'running'),
           a.tokens ? ' ' + tokText(a.tokens) : '', a.fidelity ? el('span', 'fid', a.fidelity) : null]);
       })));
       det.addEventListener('toggle', function () {
@@ -243,13 +244,15 @@
     return section('boards', null, parts.length ? parts : el('p', 'empty', 'No boards.'), st);
   }
 
+  function selectedList(x) { return Array.isArray(x.selected) ? x.selected : x.selected == null ? [] : [x.selected]; }
+  function selectedList(x) { return Array.isArray(x.selected) ? x.selected : x.selected == null ? [] : [x.selected]; }
   function decItem(x, made) {
     var li = el('li', null, [el('h3', 'wrap', [x.id, ' ', x.question || '']), pill(made ? 'done' : 'waiting')]);
     li.lastChild.textContent = made ? 'made' : 'pending';
-    var opts = el('div', 'opts', (x.options || []).map(function (o) { return el('span', 'wrap' + (made && o === x.selected ? ' sel' : ''), o); }));
+    var opts = el('div', 'opts', (x.options || []).map(function (o) { return el('span', 'wrap' + (made && selectedList(x).indexOf(o) >= 0 ? ' sel' : ''), o); }));
     li.appendChild(opts);
     if (made) {
-      li.appendChild(el('p', 'note', ['Selected ', el('strong', 'wrap', x.selected == null ? 'unknown' : x.selected), ' by ', x.decided_by || 'unknown', x.at ? ' ' + (ago(x.at) || '') : '', ' ', x.url ? link('evidence', x.url) : el('span', 'unk', 'no evidence link')]));
+      li.appendChild(el('p', 'note', ['Selected ', el('strong', 'wrap', selectedList(x).length ? selectedList(x).join(', ') : 'unknown'), ' by ', x.decided_by || 'unknown', x.at ? ' ' + (ago(x.at) || '') : '', ' ', x.url ? link('evidence', x.url) : el('span', 'unk', 'no evidence link')]));
     }
     return li;
   }

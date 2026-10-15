@@ -37,8 +37,26 @@ def after_update(ctx, now, force=False):
         refresh(ctx, now, final=force)
         return True
     state['dirty'] = True
+    publish_pending(ctx, state)
     write_json(ctx.state, state)
     return False
+
+
+def publish_pending(ctx, state):
+    """Feed the browser while a refresh is deferred. data.js is the UI's only input, so the dirty flag and the last event
+    time are patched into the current document (cheap: no producers are read, nothing is rebuilt) and `rev` advances so
+    the poller accepts it. The next real refresh replaces it and clears the flag. Best effort."""
+    try:
+        report = read_json(ctx.report)
+        if not isinstance(report, dict) or not isinstance(report.get('collection'), dict):
+            return False
+        state['rev'] = max(int(state.get('rev') or 0), int(report.get('rev') or 0)) + 1
+        report['rev'] = state['rev']
+        report['collection'].update(dirty=True, last_event_at=state.get('last_event_at'))
+        render_data.write(ctx, report)
+        return True
+    except (OSError, ValueError, TypeError):
+        return False
 
 
 def count_dropped(ctx, reason, now=None):

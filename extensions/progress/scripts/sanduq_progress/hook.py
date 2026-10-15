@@ -36,9 +36,10 @@ def handle(event_arg, raw, root=None, now=None, host=None):
         if not obs['session_id']:
             diag(project_log, f'hook {event}: payload without session_id dropped', now)
             return 'dropped'
-        binding = snapshot.lookup(root, host, obs['session_id'])
-        if not binding and event == 'post_tool_use':
-            binding = snapshot.convert_pending(root, obs, now)
+        # A fresh, matching handshake (the nonce is in this very tool call) outranks an existing binding: it is the
+        # explicit request to attach this session to the feature that was just initialised.
+        binding = snapshot.convert_pending(root, obs, now) if event == 'post_tool_use' else None
+        binding = binding or snapshot.lookup(root, host, obs['session_id'])
         if not binding:
             diag(project_log, f'hook {event}: unbound {host} session dropped', now)
             return 'dropped'

@@ -2,8 +2,12 @@
 
 Stale recovery happens only when the owner ran on this host and its pid is dead. A lock whose owner is alive,
 or on another host, is never stolen. An unreadable lock (a writer died between create and write) is stale
-after 10 seconds. Recovery is atomic rename-away, but two recoverers racing can still hand a lock to both;
-the window is a few microseconds and the protected data is append-only or rebuildable.
+after 10 seconds.
+
+Recovery is serialised by a second, short-lived lock `<lock>.recover`, created with O_EXCL. Whoever holds it
+re-reads the owner and re-checks that it is still stale before unlinking, so a contender that observed a dead owner
+earlier can never delete a live lock that another contender acquired in between. A recovery lock left by a crashed
+recoverer expires after 10 seconds. Only one process recovers at a time; the others keep retrying.
 """
 import json
 import os
@@ -76,19 +80,46 @@ class Lock:
                        'token': self.token}, stream)
         return True
 
+    def _recover(self):
+        """Remove a stale lock under the recovery lock. Returns True when this call removed it."""
+        guard = self.path.with_name(self.path.name + '.recover')
+        fd = None
+        for _ in range(2):
+            try:
+                fd = os.open(str(guard), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                break
+            except FileExistsError:
+                try:
+                    if time.time() - guard.stat().st_mtime <= 10:
+                        return False
+                    os.unlink(guard)  # its recoverer died; take the guard on the second pass
+                except OSError:
+                    return False
+            except OSError:
+                return False
+        if fd is None:
+            return False
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+                json.dump({'pid': os.getpid(), 'host': socket.gethostname()}, stream)
+            if not self._stale():  # re-check now that no other recoverer can act
+                return False
+            os.unlink(self.path)
+            return True
+        except OSError:
+            return False
+        finally:
+            try:
+                os.unlink(guard)
+            except OSError:
+                pass
+
     def acquire(self):
         for attempt in range(self.retries + 1):
             if self._try():
                 return self
-            if self._stale():
-                away = self.path.with_name(self.path.name + f'.stale-{os.getpid()}')
-                try:
-                    os.replace(self.path, away)
-                    os.unlink(away)
-                except OSError:
-                    pass
-                if self._try():
-                    return self
+            if self._stale() and self._recover() and self._try():
+                return self
             if attempt < self.retries:
                 time.sleep(self.delay)
         raise LockBusy(str(self.path))

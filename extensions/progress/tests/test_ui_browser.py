@@ -11,7 +11,8 @@ HERE = Path(__file__).resolve().parent
 UI = HERE.parent / "assets" / "ui"
 FIX = HERE / "fixtures"
 sys.path.insert(0, str(HERE.parent / "scripts"))
-from sanduq_progress import theme  # noqa: E402
+import helpers  # noqa: E402
+from sanduq_progress import model, statusline, theme  # noqa: E402
 
 try:
     from playwright.sync_api import sync_playwright
@@ -83,20 +84,20 @@ class BrowserTest(unittest.TestCase):
     def setUp(self):
         if SKIP:
             self.skipTest(SKIP)
-        self.tmp = tempfile.TemporaryDirectory()
-        self.view = Path(self.tmp.name)
+        self.view_tmp = tempfile.TemporaryDirectory()
+        self.view = Path(self.view_tmp.name)
         for f in ("index.html", "base.css", "blocks.js"):
             shutil.copy(UI / f, self.view / f)
         theme.write_assets(self.view, theme.resolve_doc({}))
-        self.ctx = BROWSER.new_context(viewport={"width": 1280, "height": 900}, color_scheme=self.scheme)
-        self.page = self.ctx.new_page()
+        self.bctx = BROWSER.new_context(viewport={"width": 1280, "height": 900}, color_scheme=self.scheme)
+        self.page = self.bctx.new_page()
         self.errors = []
         self.page.on("pageerror", lambda e: self.errors.append(str(e)))
 
     def tearDown(self):
-        if getattr(self, "ctx", None):
-            self.ctx.close()
-            self.tmp.cleanup()
+        if getattr(self, "bctx", None):
+            self.bctx.close()
+            self.view_tmp.cleanup()
 
     def open(self, proj=None, **kw):
         write_data(self.view, proj if proj is not None else fresh(load("projection-sample.json")))
@@ -109,6 +110,47 @@ class BrowserTest(unittest.TestCase):
     def wait_text(self, sel, needle, timeout=5000):
         self.page.wait_for_function("([s,n])=>{const e=document.querySelector(s);return e&&e.textContent.includes(n)}",
                                     arg=[sel, needle], timeout=timeout)
+
+
+class RealProjectionTests(helpers.Project, BrowserTest):
+    """The UI rendering a projection produced by the real builder (model.py) from real producer files, so unit and
+    shape mismatches between the two cannot hide behind hand-written fixtures."""
+
+    def setUp(self):
+        helpers.Project.setUp(self)
+        BrowserTest.setUp(self)
+
+    def real_projection(self):
+        self.init(debounce_seconds=0)
+        self.bind()
+        stat = json.loads(helpers.fixture("claude_statusline.json", CWD=self.root.as_posix()))
+        statusline.record(json.dumps(stat), self.root, datetime.datetime(2026, 10, 15, 12, 0, 5, tzinfo=datetime.timezone.utc))
+        folder = self.feature_dir / "workflow"
+        folder.mkdir()
+        (folder / "delegations.json").write_text(json.dumps({"attempts": [{
+            "identity": "specs/001-demo/T002", "run_id": "run-1", "requested_harness": "codex", "requested_model": "m",
+            "actual_model": "gpt-real", "actual_model_evidence": "driver-result", "status": "successful",
+            "started_at": "2026-10-15T10:00:00Z", "ended_at": "2026-10-15T11:00:00Z"}]}), encoding="utf-8")
+        (folder / "decisions.json").write_text(json.dumps({"version": 1, "decisions": [{
+            "id": "SD1", "mode": "multiple", "options": ["Alpha", "Beta", "Gamma"], "status": "answered", "option": None,
+            "selected": ["A", "C"], "answers": [{"option": "A", "updated_at": "2026-10-15T09:00:00Z"}]}]}), encoding="utf-8")
+        built = model.build(self.ctx, datetime.datetime(2026, 10, 15, 12, 30, tzinfo=datetime.timezone.utc), 1, {})
+        return fresh(built)
+
+    def test_durations_selections_and_unknowns_render_from_real_output(self):
+        proj = self.real_projection()
+        self.assertEqual(proj["orchestrator"]["elapsed"]["value"], 45)  # seconds, not milliseconds
+        self.open(proj)
+        orch = self.text("#b-orchestrator")
+        self.assertIn("45s", orch)
+        self.assertIn("82,000", orch)  # current-usage tokens from the statusline fixture
+        lanes = self.text("#b-lanes")
+        self.assertIn("1h 0m", lanes)  # a one-hour attempt, lane elapsed and the attempt line
+        self.assertEqual(self.page.locator("#b-lanes details li").first.text_content().count("1h 0m"), 1)
+        self.assertIn("gpt-real", lanes)
+        self.assertIn("Selected Alpha, Gamma", self.text("#b-decisions"))
+        self.assertEqual(self.page.locator("#b-decisions .sel").count(), 2)
+        self.assertEqual(self.errors, [])
 
 
 class SampleTests(BrowserTest):

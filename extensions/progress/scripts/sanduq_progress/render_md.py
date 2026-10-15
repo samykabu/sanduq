@@ -49,7 +49,8 @@ def render(report):
     out += ['', '## Decisions', '']
     for label, key in (('Pending', 'pending'), ('Made', 'made')):
         for d in report['decisions'][key]:
-            out.append(f"- {label} {d['id']}: {d['question']}" + (f" -> {d['selected']} ({d['decided_by']})" if d.get('selected') else ''))
+            out.append(f"- {label} {d['id']}: {d['question']}" + (f" -> {', '.join(d['selected']) if isinstance(d['selected'], list) else d['selected']} ({d['decided_by']})"
+                                                                 if d.get('selected') else ''))
     if not (report['decisions']['pending'] or report['decisions']['made']):
         out.append('None.')
     out += ['', '## Blockers', '']

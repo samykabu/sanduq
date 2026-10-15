@@ -52,7 +52,7 @@ Each template contains `scripts:\n  py: scripts/progress.py hook <event>`.
   A hook payload has no `model`; it is recorded only if present.
 - Statusline stdin: `model {id, display_name}`, `effort {level}` (absent when unsupported),
   `context_window {used_percentage, context_window_size, total_input_tokens, current_usage}` (percentage may be null
-  early), `cost {total_duration_ms, total_api_duration_ms}`, `session_id`, `transcript_path`, `workspace`.
+  early; `total_input_tokens` is cumulative and unused, `used_tokens` is the sum of the `current_usage` counters or unknown), `cost {total_duration_ms, total_api_duration_ms}`, `session_id`, `transcript_path`, `workspace`.
   `total_duration_ms` is session run time, not active work time, so `orchestrator.active` stays unknown.
 - `settings.json` shape: `"statusLine": {"type": "command", "command": "...", "padding": n}`.
 
