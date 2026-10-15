@@ -1,7 +1,8 @@
 # Implementation orchestration: assign
 
 When `lean_execution.enabled: true`, use the existing lifecycle coordinator for
-all assignments, integration, report writes and authorized Git operations.
+all assignments, integration, reporting calls (`references/reporting.md`) and
+authorized Git operations.
 Do not create the additional orchestration agent in the legacy instructions
 below. Dispatch only concrete deliverables with acceptance criteria. Use
 `--deliverable`, `--correction-plan` and, after one correction, `--diagnosis` as
@@ -13,12 +14,14 @@ Use this protocol for both core Implement and SuperSpec Execute in a managed
 Sanduq workflow. The installed preset supplies it without editing either upstream
 command. The dispatcher keeps the Execute claim and remains the only agent that
 chooses lifecycle stages. This half covers starting, resuming and assigning work;
-[`execution-report.md`](execution-report.md) covers updating the report, finishing
-phases and continuing through delivery.
+[`execution-report.md`](execution-report.md) covers finishing phases, the legacy
+reporter calls and continuing through delivery. How the report is maintained is
+decided only in [`reporting.md`](reporting.md); no agent exists solely for it.
 
 ## Start and resume
 
-Create a dedicated orchestration agent before implementation starts. Give it the
+Create a dedicated orchestration agent for scheduling and integration before
+implementation starts. It is not a reporting agent. Give it the
 bound feature, repository, branch, issue, current claim identity, task list,
 approved decisions and project instructions. Record its actual host agent ID in
 the feature handoff. On resume, inspect that handle and reuse it while it is live.
@@ -29,41 +32,36 @@ In Codex, use the available agent spawn, message and status tools. In Claude, us
 the installed host's agent/team tools. Check their actual capabilities and limits;
 do not invent tool names or assume a child can spawn workers. If nested spawning
 is unavailable, the dispatcher creates workers on the orchestration agent's
-behalf and forwards results. Where this fallback applies, the dispatcher
+behalf and forwards results. If the only duty left for that layer would be
+reporting, drop it and let the dispatcher assign workers directly. Where this fallback applies, the dispatcher
 spawns the batch with blocking calls and forwards each T7 result once,
 unchanged, the same as the orchestration agent would; it does not relay,
 re-summarise or add commentary. The orchestration agent still controls assignments.
-Reserve capacity for it and the dispatcher, and release idle workers when needed.
+Reserve capacity for the dispatcher and, while it does real coordination work, the
+orchestration agent; never reserve any for reporting. Release idle workers when needed.
 If the host has no usable subagent support or cannot fit a worker, record that
 specific blocker and request a supported host/configuration. Do not report a
 simulated role or serial parent execution as agent delegation.
 
-The orchestration agent creates the report before assigning the first task:
+The current coordinator creates the report before assigning the first task, using
+the idempotent `progress init` or the legacy `init` call that
+[`reporting.md`](reporting.md) names for the mode. Record phase results under the
+exact phase heading from `tasks.md` so each phase appears once.
 
-```text
-python .specify/extensions/workflow/scripts/progress.py init --tasks specs/<feature>/tasks.md --output specs/<feature>/workflow/progress --summary
-```
-
-The report is titled from the plan's `# Tasks: <feature>` heading. Pass
-`--title "<feature title>"` to name it explicitly; rerunning `init` with a new
-title renames an existing report without losing its evidence. The report shows
-the Sanduq logo and page icon, a Phase column, token usage, Status and Phase
-filters and a separate Activity tab; filters and the chosen tab survive the automatic refresh. Record
-phase results under the exact phase heading from `tasks.md` so each phase
-appears once.
-
-Open `specs/<feature>/workflow/progress/index.html` in the host browser or a
-platform-supported browser command. Verify that it loads. The page reloads while
-the report changes. If browser control is unavailable, record that limitation and
-provide the absolute file link; do not claim to have opened it. Keep the report
-local unless publication is explicitly authorized. Exclude credentials and full
-transcripts from notes.
+Open the report once, in the host browser or a platform-supported browser command,
+when that helps the human: `specs/<feature>/progress/.view/index.html`
+(`specs/<feature>/workflow/progress/index.html` in legacy mode). The page reloads
+by itself. Do not re-open or re-verify it in a loop. If browser control is
+unavailable, record that limitation and provide the absolute file link; do not claim
+to have opened it. Keep the report local unless publication is explicitly
+authorized. Exclude credentials and full transcripts from notes.
 
 ## Assign work
 
 Read the task dependency graph and the real files before building each batch.
 Record each assignment's stable task IDs, prerequisites, owned paths, shared
-resources, acceptance checks and worker ID in the report and handoff. Give workers
+resources, acceptance checks and worker ID in the handoff, and in the report as
+`reporting.md` says (a lane in projection mode). Give workers
 only their scope and the context needed to implement it. Workers must not stage,
 commit, push, merge, change shared report files or invoke another executor.
 `git stash` and `git add -A`/`git add .` are forbidden for a task worker, as
@@ -159,7 +157,9 @@ agent.
 No agent in this protocol, dispatcher, orchestration agent or worker, ends its
 turn while it still owns background work that is running. Block on it (a
 foreground wait with a bounded, re-armed timeout, or the host's own blocking or
-monitor primitive) and report exactly once, when the work concludes.
+monitor primitive) and report exactly once, when the work concludes. This is about
+worker completion only. Watching the report itself, or checking that it refreshed,
+is never background work and is not allowed (`reporting.md`).
 "Waiting for X" is never a valid final message from any agent in this protocol.
 For a run started through `delegate_dispatch.py`, block with a bounded
 foreground loop around `delegate_dispatch.py collect` until the run's status is
@@ -171,13 +171,17 @@ because turn count, not what a worker reads at the start, explains almost all of
 its token cost. Each figure below is a policy budget on fresh input plus output
 tokens only; it excludes cache reads, which are about 96% of a worker's total
 token volume and are not part of the budget. It is not a hard stop: when
-accepting a task, the orchestration agent compares the task's recorded
-`progress.py usage` figure against its class budget, and logs any overrun
-instead of cutting the worker off mid-task:
+accepting a task, the orchestration agent compares the task's recorded usage
+figure against its class budget, and logs any overrun instead of cutting the
+worker off mid-task. In `projection` and `refresh` mode the figure is collected
+automatically from the run and the log is a note:
 
 ```text
-python .specify/extensions/workflow/scripts/progress.py event --output specs/<feature>/workflow/progress --message "Budget overrun T###: <class> <figure>/<budget>: <reason>" --summary
+python .specify/extensions/progress/scripts/progress.py note "Budget overrun T###: <class> <figure>/<budget>: <reason>" --target T###
 ```
+
+In `legacy` mode the figure is the `progress.py usage` entry and the log is the
+`event` call in `execution-report.md`.
 
 | Task class | Turn budget (fresh + output) | Notes |
 | --- | --- | --- |

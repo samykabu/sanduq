@@ -81,6 +81,9 @@ that is genuinely the same project relocated (a fork, a renamed remote, a migrat
 ## status
 
 **status**: `next --feature ...`, then summarize receipts, active claim, blockers and drift.
+When Progress is installed, append its one line (`python .specify/extensions/progress/scripts/progress.py status`).
+Those facts are the status; a model-written narrative on top is optional explanation, never required, and no agent
+is started to produce it (`references/reporting.md`).
 
 ## doctor
 
