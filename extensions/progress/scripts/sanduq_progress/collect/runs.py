@@ -13,6 +13,8 @@ Caveats, kept deliberately:
     or stderr text is consulted.
   * `task_verdict`, `review_verdict` (one short word) and `next_action` (<= 200 characters) are copied from a final
     result.json when present; absent means 'unknown'/None. They are the harness's words, not acceptance.
+  * `model` is the model that was requested at launch; only `model_reported` (from the result's `model_reported` or
+    `model_observed`) is evidence of the model that ran.
   * `usage` is None unless the harness reported exact counters; zero placeholders are unknown, never measured.
   * Two records of one run_id are merged: a final record beats a live one; real disagreement is listed in
     `conflict`. Malformed run directories are skipped (and reported through `last_malformed()`).
@@ -93,13 +95,23 @@ def _seconds(started, ended):
     return max(0, int((ended - started).total_seconds())) if started and ended else None
 
 
+def _model_reported(data):
+    """The model the harness says it actually ran. `model` in a result is the launch request, not an observation."""
+    for key in ('model_reported', 'model_observed'):
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()[:80]
+    return None
+
+
 def project_run(live, path, now, stall_seconds):
     data = json.loads(path.read_text(encoding='utf-8'))
     if not isinstance(data, dict) or not isinstance(data.get('run_id'), str) or not data['run_id']:
         raise ValueError('needs a non-empty string run_id')
     started, ended = parse_time(data.get('started_at')), parse_time(data.get('ended_at'))
     base = {'run_id': data['run_id'], 'harness': data.get('harness') or 'unknown', 'source': path.parent.name,
-            'started_at': data.get('started_at'), 'model': data.get('model')}
+            'started_at': data.get('started_at'), 'model': data.get('model'),
+            'model_reported': _model_reported(data)}
     # Verdict words are copied as short plain strings; their absence stays 'unknown'. Neither is acceptance.
     verdicts = {key: _word(data.get(key)) for key in ('task_verdict', 'review_verdict')}
     if live:

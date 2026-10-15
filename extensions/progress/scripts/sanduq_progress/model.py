@@ -39,10 +39,25 @@ def _heading(path):
     return None
 
 
+def _observed_seconds(intervals, now):
+    """Seconds covered by explicit {start, end} intervals (an open end counts to `now`); None when there are none."""
+    total = None
+    for item in intervals if isinstance(intervals, list) else []:
+        if not isinstance(item, dict):
+            continue
+        begin, finish = parse_time(item.get('start')), parse_time(item.get('end')) or now
+        if begin and finish >= begin:
+            total = (total or 0) + int((finish - begin).total_seconds())
+    return total
+
+
 def _lane_from_attempts(rows, run_by_id, now):
-    """Status, elapsed, active, attempts, observed model from one delegation identity's attempts."""
+    """Status, elapsed, active, attempts, observed model from one delegation identity's attempts.
+
+    `active_s` is the sum of work intervals a producer observed (`active_intervals` on an attempt) and is None
+    otherwise: an attempt's start-to-end span is wall time and is never reported as active work time."""
     rows = sorted(rows, key=lambda a: (a.get('started_at') or '', str(a.get('run_id') or '')))
-    shown, active_total, first, last_end, running = [], 0, None, None, False
+    shown, active_total, first, last_end, running = [], None, None, None, False
     for a in rows:
         run = run_by_id.get(a.get('run_id')) or {}
         start = parse_time(a.get('started_at'))
@@ -59,22 +74,25 @@ def _lane_from_attempts(rows, run_by_id, now):
         shown.append({'run_id': a.get('run_id'), 'status': a.get('status') or 'unknown', 'started_at': a.get('started_at'),
                       'ended_at': a.get('ended_at') or run.get('ended_at'), 'tokens': tokens,
                       'fidelity': 'exact' if tokens else 'unknown', 'phase': run.get('phase')})
-        span = seconds(start, end or (now if live else None))
-        active_total += span or 0
+        observed = _observed_seconds(a.get('active_intervals'), now)
+        if observed is not None:
+            active_total = (active_total or 0) + observed
     final = rows[-1].get('status') if rows else None
     status = ('active' if final in wf.ACTIVE else 'done' if final in DONE_STATES or rows[-1].get('accepted_at')
               else 'waiting' if final in WAIT_STATES else 'failed' if final in FAIL_STATES
               else 'blocked' if final == 'blocked' else 'pending')
     return {'status': status, 'attempts': shown, 'elapsed_s': seconds(first, now if running else last_end),
-            'active_s': active_total if shown else None, 'row': rows[-1], 'running': running}
+            'active_s': active_total, 'row': rows[-1], 'running': running}
 
 
 def _model_measure(row, run, now):
+    """Observed model: only explicit evidence counts (the ledger's actual_model, or a model the run result reports it
+    ran). A launch request, from the ledger or from meta/result `model`, is never an observation."""
     if row.get('actual_model'):
         pending = row.get('actual_model_evidence') in (None, 'pending')
         return measure(row['actual_model'], 'delegation-ledger', now, 'partial' if pending else 'exact')
-    if run.get('model'):
-        return measure(run['model'], 'run-result', now, 'partial')
+    if run.get('model_reported'):
+        return measure(run['model_reported'], 'run-result', now, 'partial')
     return unknown()
 
 
@@ -139,7 +157,19 @@ def build(ctx, now, rev=1, state=None):
         for key, child in sorted((snap.get('children') or {}).items(), key=lambda kv: (kv[1].get('started_at') or '', kv[0])):
             host_children.append((snap, key, child))
     host_children.sort(key=lambda x: (x[2].get('started_at') or x[2].get('last_observed_at') or '', x[1]))
-    for number, (snap, key, child) in enumerate(host_children, 1):
+    # A host child belongs to an assigned lane when that lane's owner names it: the child's agent id, the tool_use id it
+    # was launched with (its snapshot key) or its description label, compared case-insensitively. Matching children add
+    # their observations to that lane; only unmatched children become their own C<n> lanes.
+    owned = {str(l['owner']).strip().lower(): l for l in lanes if l.get('owner') and l['origin'] != 'host-child'}
+    unmatched = []
+    for snap, key, child in host_children:
+        names = (child.get('agent_id'), key, child.get('description'))
+        target = next((owned[str(n).strip().lower()] for n in names if n and str(n).strip().lower() in owned), None)
+        if target is None:
+            unmatched.append((snap, key, child))
+        else:
+            target.setdefault('children', []).append((snap, child))
+    for number, (snap, key, child) in enumerate(unmatched, 1):
         lanes.append({'id': f'C{number}', 'label': clean(child.get('description') or child.get('subagent_type') or key, 60),
                       'owner': child.get('agent_id') or key, 'origin': 'host-child', 'child': child, 'host': snap.get('host'),
                       'requested': {}, 'tasks': [], 'closed': False, 'since': parse_time(child.get('started_at'))})
@@ -173,7 +203,8 @@ def build(ctx, now, rev=1, state=None):
             lane['observed']['model'] = _model_measure(derived['row'], run_by_id.get(derived['row'].get('run_id')) or {}, now)
             row = derived['row']
             lane['requested'] = {'harness': row.get('requested_harness') or lane['requested'].get('harness'),
-                                 'model': row.get('requested_model') or lane['requested'].get('model'),
+                                 'model': row.get('requested_model') or lane['requested'].get('model')
+                                 or (run_by_id.get(row.get('run_id')) or {}).get('model'),
                                  'effort': row.get('requested_effort') or lane['requested'].get('effort')}
             if derived['elapsed_s'] is not None:
                 lane['elapsed'] = measure(derived['elapsed_s'], 'delegation-ledger', now)
@@ -182,18 +213,24 @@ def build(ctx, now, rev=1, state=None):
             if derived['status'] == 'blocked':
                 blockers.append({'id': f"WB:{lane['id']}", 'target': lane['id'], 'by': {'type': 'external', 'ref': 'delegation blocked'},
                                  'since': row.get('ended_at') or row.get('started_at'), 'source': 'delegation'})
-        child = lane.get('child')
-        if child:
-            tag = lane['host']
-            if child.get('model'):
-                slot = 'requested' if child['model'].get('fidelity') == 'partial' else 'observed'
-                if slot == 'requested':
-                    lane['requested'] = {'harness': tag, 'model': child['model']['value'], 'effort': None}
-                else:
-                    lane['observed']['model'] = child['model']
-            lane['last_observed_at'] = child.get('last_observed_at')
-            lane['elapsed'] = (measure(seconds(parse_time(child.get('started_at')), parse_time(child.get('ended_at')) or now), 'hook', now)
-                               if child.get('started_at') else unknown())
+        own = [(lane['host'], lane['child'])] if lane['origin'] == 'host-child' else []
+        merged = [(snap.get('host'), child) for snap, child in lane.get('children', [])]
+        for tag, child in own + merged:
+            for slot, field in (('model', 'model'), ('effort', 'effort')):
+                m = child.get(field)
+                if not m or m.get('value') is None:
+                    continue
+                if slot == 'model' and m.get('fidelity') == 'partial':
+                    # the launch call's requested alias: not an observation of the child
+                    if not lane['requested'].get('model'):
+                        lane['requested'] = {'harness': tag, 'model': m['value'], 'effort': lane['requested'].get('effort')}
+                elif lane['observed'][slot]['value'] is None:
+                    lane['observed'][slot] = m
+            if child.get('last_observed_at') and (lane['last_observed_at'] or '') < child['last_observed_at']:
+                lane['last_observed_at'] = child['last_observed_at']
+            if lane['origin'] == 'host-child':
+                lane['elapsed'] = (measure(seconds(parse_time(child.get('started_at')), parse_time(child.get('ended_at')) or now), 'hook', now)
+                                   if child.get('started_at') else unknown())
         if lane['origin'] == 'coordinator':
             lane['elapsed'], lane['last_observed_at'] = orchestrator['elapsed'], (main or {}).get('last_observed_at')
         elif lane['origin'] == 'facts' and not lane.get('rows') and lane['since'] and not lane['closed']:

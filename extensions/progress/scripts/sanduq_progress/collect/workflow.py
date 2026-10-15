@@ -40,6 +40,13 @@ def identity_tasks(attempt):
     return list(dict.fromkeys(re.findall(r'(?<![A-Za-z0-9])T\d+(?![A-Za-z0-9])', str(attempt.get('identity')))))
 
 
+def _option_text(value, options):
+    """A letter answer (A, B, ...) names the option at that position; anything else is shown as the cleaned text."""
+    text = value.strip()
+    letter = ord(text.upper()) - 65 if len(text) == 1 else -1
+    return options[letter] if 0 <= letter < len(options) else clean(text, 80)
+
+
 def decisions(feature_dir):
     """(exists, normalised list). Workflow decisions carry ids like SD1; the question text is not stored in the
     ledger, so a missing `question` is shown as the id."""
@@ -52,16 +59,21 @@ def decisions(feature_dir):
         if not isinstance(item, dict) or not item.get('id'):
             continue
         options = [clean(o, 80) for o in item.get('options') or []] if isinstance(item.get('options'), list) else []
-        raw = item.get('option')
-        selected = None
-        if isinstance(raw, str) and raw:
-            letter = ord(raw.strip().upper()[:1]) - 65
-            selected = options[letter] if len(raw.strip()) == 1 and 0 <= letter < len(options) else clean(raw, 80)
-        answers = item.get('answers') if isinstance(item.get('answers'), list) else []
-        stamp = next((a.get('created_at') or a.get('at') for a in reversed(answers) if isinstance(a, dict)), None)
         status = str(item.get('status') or 'pending')
+        pending = status in ('pending', 'conflict')
+        answers = [x for x in item.get('answers') or [] if isinstance(x, dict)] if isinstance(item.get('answers'), list) else []
+        # Producer shapes (workflow decisions.py): single mode stores `option` (a letter) and `selected` ([letter]);
+        # multiple mode stores `option: null` and `selected: [letters]`. Either may be absent in older ledgers.
+        picked = item.get('selected') if isinstance(item.get('selected'), list) else []
+        if not picked and item.get('option'):
+            picked = [item['option']]
+        multiple = item.get('mode') == 'multiple' or (item.get('mode') is None and len(picked) > 1)
+        chosen = [] if pending else [_option_text(p, options) for p in picked if isinstance(p, str) and p.strip()]
+        selected = (chosen if multiple else chosen[0]) if chosen else None
+        stamps = [str(x.get(k)) for x in answers for k in ('updated_at', 'created_at', 'at') if x.get(k)]
+        stamp = max(stamps) if stamps else None
         out.append({'id': str(item['id']), 'question': clean(item.get('question') or f"Workflow decision {item['id']}", 200),
                     'options': options, 'selected': selected, 'decided_by': 'user' if selected else None,
                     'at': stamp, 'url': item.get('question_url'), 'source': 'workflow',
-                    'pending': status in ('pending', 'conflict')})
+                    'pending': pending})
     return True, out
