@@ -122,10 +122,11 @@ class HookBehaviour(Project):
         before = rev()['rev']
         self.assertEqual(self.hook('post_tool_use', self.payload('claude_pre_task.json', tool_name='Bash', tool_input={})), 'dirty')
         state = rev()
-        self.assertEqual((state['rev'], state['dirty']), (before, True))
+        # the deferred event is published to the browser as a pending-freshness document: rev advances, dirty is set
+        self.assertEqual((state['rev'], state['dirty']), (before + 1, True))
         self.assertEqual(self.hook('stop', self.payload('claude_pre_task.json', tool_name=None)), 'refreshed')
         state = rev()
-        self.assertEqual((state['rev'], state['dirty']), (before + 1, False))
+        self.assertEqual((state['rev'], state['dirty']), (before + 2, False))
         self.assertEqual(self.report()['collection']['dirty'], False)
         self.assertEqual(self.hook('session_end', self.payload('claude_pre_task.json', tool_name=None)), 'refreshed')
 
