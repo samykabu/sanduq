@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.0.0] - Unreleased
+## [1.0.0] - 2026-10-15
 
 - First release. A live report for one Spec Kit feature, built as a deterministic projection of `tasks.md`,
   the Workflow ledger, a small tracked fact file and the host's native hook payloads.

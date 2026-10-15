@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.10.0] - Unreleased
+## [1.10.0] - 2026-10-15
 
 - Add opt-in lean execution: the coordinator owns lifecycle mechanics, coding review waits for completed implementation/testing, and retries require bounded correction evidence. Existing projects keep their current behavior until enabled.
 - Bind verification reuse to selected commands, source/fixture bytes, environment and passing evidence. Add aggregate preflight, bounded worker briefs and per-harness progress from normalized run records.

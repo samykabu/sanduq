@@ -1,6 +1,6 @@
 # Changelog
 
-## [4.2.3] - Unreleased
+## [4.2.3] - 2026-10-15
 
 - Add the lean Workflow pre-publication check for closing references, binding the prepared body to its issue and prerequisites. Standalone PR use remains supported.
 
