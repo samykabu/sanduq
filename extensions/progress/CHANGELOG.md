@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.0.1] - 2026-10-15
 
 - Hooks run `scripts/hook.py`, a standard-library entry that exits before importing Progress for an unbound session
   (about 30 ms instead of about 105 ms; a bound debounced event about 60 ms instead of about 120 ms).
@@ -13,6 +13,7 @@
 - The UI poller abandons a data.js load that never settles after 10 s and tries again (Chromium under heavy load sometimes
   fires neither load nor error, which froze the page).
 - `os.replace` retries a Windows sharing violation. The projection reads only the runs the ledger names.
+- Flaky test fixes on Windows and under load; regression tests and docs for the review fixes.
 
 ## [1.0.0] - 2026-10-15
 

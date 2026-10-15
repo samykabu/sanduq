@@ -42,10 +42,10 @@ class OptionalProgressInstall(unittest.TestCase):
         names = self.names(result)
         self.assertEqual(names[-1], 'progress')
         operation = result['extensions'][-1]
-        self.assertEqual(operation['version'], '1.0.0')
+        self.assertEqual(operation['version'], '1.0.1')
         self.assertEqual(operation['args'][:3], ['specify', 'extension', 'add'])
         self.assertIn('--from', operation['args'])
-        self.assertIn('progress-v1.0.0/progress.zip', ' '.join(operation['args']))
+        self.assertIn('progress-v1.0.1/progress.zip', ' '.join(operation['args']))
         self.assertEqual(result['optional_extensions'], ['progress'])
 
     def test_an_unknown_optional_name_is_refused(self):

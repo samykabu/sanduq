@@ -16,7 +16,7 @@
     }
   },
   "optional": {
-    "progress": "1.0.0"
+    "progress": "1.0.1"
   },
   "upstream_optional": {
     "superspec": {
