@@ -1,0 +1,91 @@
+schema_version: "1.0"
+
+extension:
+  id: progress
+  name: "Sanduq Progress Report"
+  version: "1.0.0"
+  description: "A live, deterministic progress report for a Spec Kit feature: lanes, tasks, blockers and decisions, collected from the host's native hooks and the feature files with no agent spent on upkeep."
+  author: "Samy K. Abushanab"
+  repository: "https://github.com/samykabu/sanduq"
+  homepage: "https://github.com/samykabu/sanduq/tree/main/extensions/progress"
+  category: "process"
+  license: PolyForm-Noncommercial-1.0.0
+
+requires:
+  speckit_version: ">=1.1.1.dev0,<2.0.0"
+  tools:
+    - name: python
+      required: true
+      version: ">=3.11"
+
+provides:
+  commands:
+    - name: speckit.progress.init
+      file: commands/init.md
+      description: "Create the progress report for the active feature, bind this session and optionally install the status line"
+    - name: speckit.progress.refresh
+      file: commands/refresh.md
+      description: "Force a projection snapshot now; automatic collection already refreshes it"
+    - name: speckit.progress.status
+      file: commands/status.md
+      description: "Print a one-line summary of the report, or its JSON projection"
+    - name: speckit.progress.theme
+      file: commands/theme.md
+      description: "Pick a preset, import the Illustrate theme or load a theme file for the report"
+    - name: speckit.progress.export
+      file: commands/export.md
+      description: "Write the current projection as deterministic Markdown or JSON"
+    - name: speckit.progress.hook-session-start
+      file: commands/hook-session-start.md
+      description: "Internal. Invoked by the host's native session start hook, never by an agent; records host facts and refreshes silently"
+    - name: speckit.progress.hook-pre-tool-use
+      file: commands/hook-pre-tool-use.md
+      description: "Internal. Invoked by the host's native pre tool use hook, never by an agent; records host facts and refreshes silently"
+    - name: speckit.progress.hook-post-tool-use
+      file: commands/hook-post-tool-use.md
+      description: "Internal. Invoked by the host's native post tool use hook, never by an agent; records host facts and refreshes silently"
+    - name: speckit.progress.hook-stop
+      file: commands/hook-stop.md
+      description: "Internal. Invoked by the host's native stop hook, never by an agent; records host facts and refreshes silently"
+    - name: speckit.progress.hook-session-end
+      file: commands/hook-session-end.md
+      description: "Internal. Invoked by the host's native session end hook, never by an agent; records host facts and refreshes silently"
+
+hooks:
+  after_tasks:
+    command: speckit.progress.init
+    optional: true
+    prompt: "Create the live progress report for this feature?"
+    description: "Create the report as soon as the task list exists"
+  after_implement:
+    command: speckit.progress.refresh
+    optional: true
+    prompt: "Write a final progress snapshot?"
+    description: "Forces one snapshot. It does not declare the feature complete"
+
+events:
+  session_start:
+    command: speckit.progress.hook-session-start
+    timeout: 10
+  pre_tool_use:
+    command: speckit.progress.hook-pre-tool-use
+    matcher: "Task|Agent|spawn_agent"
+    timeout: 10
+  post_tool_use:
+    command: speckit.progress.hook-post-tool-use
+    timeout: 10
+  stop:
+    command: speckit.progress.hook-stop
+    timeout: 10
+  session_end:
+    command: speckit.progress.hook-session-end
+    timeout: 10
+
+tags:
+  - "progress"
+  - "report"
+  - "dashboard"
+  - "lanes"
+  - "telemetry"
+  - "hooks"
+  - "workflow"
