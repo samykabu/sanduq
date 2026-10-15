@@ -1,7 +1,10 @@
 """Keep an implementation report beside its durable JSON state.
 
-The orchestrator is the sole writer. Workers send updates to the orchestrator.
+The current coordinator is the sole writer. Workers send updates to the coordinator.
 Run with --help for the portable CLI; no web server or dependencies are needed.
+
+This is the legacy reporter. When the optional Sanduq Progress extension is installed, the same subcommands are
+forwarded to its CLI (progress_shim.py) and no legacy state is written; see references/reporting.md.
 """
 import argparse
 from datetime import datetime, timezone
@@ -461,6 +464,13 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.summary and args.json:
         parser.error('--summary and --json cannot be combined')
+    # Optional Sanduq Progress: when its CLI is installed this script only forwards to it (progress_shim.py).
+    # When it is absent the legacy reporter below runs unchanged.
+    import progress_bridge
+    root = progress_bridge.find_root(args.output)
+    if progress_bridge.script(root):
+        import progress_shim
+        sys.exit(progress_shim.forward(args, root))
     fail = summary_error if args.summary else parser.error
     try:
         _run(args, fail)

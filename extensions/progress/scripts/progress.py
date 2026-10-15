@@ -422,17 +422,18 @@ def cmd_attempt(a, root):
         lane = a.lane.upper() if a.lane else None
         if lane and not re.fullmatch(r'[LWC]\d+', lane):
             raise ProgressError('PROGRESS_USAGE', 'lane id must look like L1', 2)
+        label = factslib.sanitise(a.overhead, ctx.root, 60) if a.overhead else None
+        run = factslib.sanitise(a.run, ctx.root, 80)
+        same = next((r for r in loaded['current'] if r['kind'] == 'attempt' and r.get('run') == run
+                     and r.get('lane') == lane and r.get('label') == label), None)
+        # A re-record keeps what it does not restate: times and usage. An empty --started/--ended clears that time.
         times = {}
         for key, value in (('started_at', a.started), ('ended_at', a.ended)):
             moment = parse_time(value) if value else None
             if value and moment is None:
                 raise ProgressError('PROGRESS_USAGE', f'--{key.split("_")[0]} is not an ISO-8601 time', 2)
-            times[key] = iso(moment)
-        label = factslib.sanitise(a.overhead, ctx.root, 60) if a.overhead else None
-        run = factslib.sanitise(a.run, ctx.root, 80)
-        usage = _usage_record(a.usage_json, ctx.root) if a.usage_json else None
-        same = next((r for r in loaded['current'] if r['kind'] == 'attempt' and r.get('run') == run
-                     and r.get('lane') == lane and r.get('label') == label), None)
+            times[key] = (same or {}).get(key) if value is None else iso(moment)
+        usage = _usage_record(a.usage_json, ctx.root) if a.usage_json else (same or {}).get('usage')
         ident = same['id'] if same else factslib.next_id(loaded['all'], 'attempt')
         record = factslib.make('attempt', ident, 'legacy', source='workflow-shim', now=now(), lane=lane, label=label, run=run,
                                status=a.status, usage=usage, origin='legacy', **times)
