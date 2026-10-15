@@ -128,45 +128,16 @@ class F04Rebind(Project):
 
 
 class F05StaleLockRace(Project):
-    def test_a_recoverer_that_lost_the_race_never_removes_a_live_lock(self):
+    """Round 1 asked for race-free stale handling; round 2 replaced recovery with an OS-held lock (see test_review_r2.F01)."""
+    def test_a_contender_cannot_take_a_held_lock_whatever_the_file_says(self):
         path = self.root / 'lockfile'
-        dead = subprocess.Popen([sys.executable, '-c', 'pass'])
-        dead.wait()
-        path.write_text(json.dumps({'pid': dead.pid, 'host': socket.gethostname(), 'started_at': '2026-10-15T00:00:00Z'}))
-        winner, loser = Lock(path, retries=0), Lock(path, retries=0)
-        real = Lock._stale
-        calls = []
-
-        def interleaved(lock):
-            first = not calls
-            calls.append(1)
-            if lock is loser and first:
-                observed = real(lock)  # the loser sees the dead owner ...
-                winner.acquire()  # ... then the winner recovers and takes the lock ...
-                return observed  # ... before the loser acts on its stale observation
-            return real(lock)
-        Lock._stale = interleaved
+        holder = Lock(path, retries=0).acquire()
         try:
+            path.write_text(json.dumps({'pid': 99999999, 'host': socket.gethostname(), 'started_at': '2026-10-15T00:00:00Z'}))
             with self.assertRaises(LockBusy):
-                loser.acquire()
+                Lock(path, retries=0).acquire()
         finally:
-            Lock._stale = real
-        self.assertEqual(json.loads(path.read_text())['token'], winner.token)
-        winner.release()
-        self.assertFalse(path.exists())
-
-    def test_recovery_lock_does_not_leak_and_dead_recovery_lock_expires(self):
-        path = self.root / 'lockfile'
-        dead = subprocess.Popen([sys.executable, '-c', 'pass'])
-        dead.wait()
-        path.write_text(json.dumps({'pid': dead.pid, 'host': socket.gethostname()}))
-        recovery = path.with_name(path.name + '.recover')
-        recovery.write_text('{}')
-        old = time.time() - 60
-        os.utime(recovery, (old, old))
-        with Lock(path, retries=0):
-            pass
-        self.assertFalse(recovery.exists())
+            holder.release()
 
 
 class F06ChildMerge(Project):
@@ -187,7 +158,8 @@ class F06ChildMerge(Project):
         lane = next(l for l in report['lanes'] if l['id'] == 'L1')
         self.assertEqual(lane['observed']['model']['value'], 'claude-haiku-5-5')
         self.assertEqual(lane['observed']['effort']['value'], 'xhigh')  # F07: child effort reaches the lane
-        self.assertEqual(lane['status'], 'active')
+        # the child's Stop event ended it: the lane waits for its unchecked task (round 2 F03) instead of staying active
+        self.assertEqual(lane['status'], 'waiting')
 
     def merged_by(self, owner):
         report = self.child_events(owner)

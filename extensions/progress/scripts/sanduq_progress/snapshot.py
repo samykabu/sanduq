@@ -38,8 +38,12 @@ def _apply(entry, name, value):
         return
     if name == 'last_observed_at' and (entry.get(name) or '') > value:
         return
-    if name == 'model' and isinstance(value, dict) and isinstance(entry.get('model'), dict)             and entry['model'].get('fidelity') == 'exact' and value.get('fidelity') != 'exact':
-        return
+    if name == 'model' and isinstance(value, dict) and isinstance(entry.get('model'), dict):
+        current = entry['model']
+        if current.get('fidelity') == 'exact' and value.get('fidelity') != 'exact':
+            return
+        if (current.get('fidelity') == 'exact') == (value.get('fidelity') == 'exact') and not _newer(value, current):
+            return  # an older measurement never replaces a newer one of the same kind
     if name == 'effort' and isinstance(value, dict) and isinstance(entry.get('effort'), dict) and not _newer(value, entry['effort']):
         return
     entry[name] = value

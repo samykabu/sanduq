@@ -8,7 +8,7 @@ from . import SCHEMA, facts as factslib
 from .collect import hosts as hostscol, runs as runscol, tasks as taskscol, workflow as wf
 from .hosts import unknown
 from .paths import current_branch
-from .util import clean, count_lines, iso, parse_time
+from .util import clean, count_lines, diag, iso, parse_time
 
 DONE_STATES = ('accepted',)
 WAIT_STATES = ('successful', 'unverified')
@@ -96,6 +96,33 @@ def _model_measure(row, run, now):
     return unknown()
 
 
+def _diagnose(ctx, message, now):
+    """Record a diagnostic once (the projection is rebuilt often)."""
+    try:
+        if message in ctx.diag.read_text(encoding='utf-8', errors='replace'):
+            return
+    except OSError:
+        pass
+    diag(ctx.diag, message, now)
+
+
+def _newer_measure(new, old):
+    """Whether `new` is a better observation than `old`: newest observed_at wins; a first value always wins."""
+    if old is None or old.get('value') is None:
+        return True
+    return (new.get('observed_at') or '') > (old.get('observed_at') or '')
+
+
+def _child_end(lane):
+    """(status, ended_at) from the terminal evidence of an assigned lane's merged children, or None while any child
+    is still running or has no recorded end. The child that ended last decides (a retry that succeeded clears a failure)."""
+    children = [c for _, c in lane.get('children', [])]
+    if not children or any(c.get('status') not in ('done', 'failed') or not parse_time(c.get('ended_at')) for c in children):
+        return None
+    last = max(children, key=lambda c: parse_time(c['ended_at']))
+    return last['status'], parse_time(last['ended_at'])
+
+
 def build(ctx, now, rev=1, state=None):
     state, cfg = state or {}, ctx.config_data()
     stale_after = int(cfg.get('stale_after_seconds') or 600)
@@ -157,18 +184,31 @@ def build(ctx, now, rev=1, state=None):
         for key, child in sorted((snap.get('children') or {}).items(), key=lambda kv: (kv[1].get('started_at') or '', kv[0])):
             host_children.append((snap, key, child))
     host_children.sort(key=lambda x: (x[2].get('started_at') or x[2].get('last_observed_at') or '', x[1]))
-    # A host child belongs to an assigned lane when that lane's owner names it: the child's agent id, the tool_use id it
-    # was launched with (its snapshot key) or its description label, compared case-insensitively. Matching children add
-    # their observations to that lane; only unmatched children become their own C<n> lanes.
+    # A host child belongs to an assigned lane when that lane's owner names it by a stable id: the child's agent id or the
+    # tool_use id it was launched with (its snapshot key). Matching children add their observations to that lane. A
+    # description label is only a fallback, and only when exactly one child carries that label for the lane; an ambiguous
+    # label merges nothing (the children stay separate C<n> lanes) and a diagnostic says so.
     owned = {str(l['owner']).strip().lower(): l for l in lanes if l.get('owner') and l['origin'] != 'host-child'}
-    unmatched = []
+    unmatched, by_label = [], {}
     for snap, key, child in host_children:
-        names = (child.get('agent_id'), key, child.get('description'))
-        target = next((owned[str(n).strip().lower()] for n in names if n and str(n).strip().lower() in owned), None)
-        if target is None:
-            unmatched.append((snap, key, child))
-        else:
+        target = next((owned[str(n).strip().lower()] for n in (child.get('agent_id'), key)
+                       if n and str(n).strip().lower() in owned), None)
+        if target is not None:
             target.setdefault('children', []).append((snap, child))
+            continue
+        label = str(child.get('description') or '').strip().lower()
+        if label in owned:
+            by_label.setdefault(label, []).append((snap, key, child))
+        else:
+            unmatched.append((snap, key, child))
+    for label, group in sorted(by_label.items()):
+        if len(group) == 1:
+            owned[label].setdefault('children', []).append((group[0][0], group[0][2]))
+        else:
+            unmatched.extend(group)
+            _diagnose(ctx, f"description '{clean(label, 60)}' matches {len(group)} children; not merged into lane "
+                           f"{owned[label]['id']} (use the agent id or tool_use id as the lane owner)", now)
+    unmatched.sort(key=lambda x: (x[2].get('started_at') or x[2].get('last_observed_at') or '', x[1]))
     for number, (snap, key, child) in enumerate(unmatched, 1):
         lanes.append({'id': f'C{number}', 'label': clean(child.get('description') or child.get('subagent_type') or key, 60),
                       'owner': child.get('agent_id') or key, 'origin': 'host-child', 'child': child, 'host': snap.get('host'),
@@ -224,7 +264,7 @@ def build(ctx, now, rev=1, state=None):
                     # the launch call's requested alias: not an observation of the child
                     if not lane['requested'].get('model'):
                         lane['requested'] = {'harness': tag, 'model': m['value'], 'effort': lane['requested'].get('effort')}
-                elif lane['observed'][slot]['value'] is None:
+                elif _newer_measure(m, lane['observed'][slot]):
                     lane['observed'][slot] = m
             if child.get('last_observed_at') and (lane['last_observed_at'] or '') < child['last_observed_at']:
                 lane['last_observed_at'] = child['last_observed_at']
@@ -234,7 +274,8 @@ def build(ctx, now, rev=1, state=None):
         if lane['origin'] == 'coordinator':
             lane['elapsed'], lane['last_observed_at'] = orchestrator['elapsed'], (main or {}).get('last_observed_at')
         elif lane['origin'] == 'facts' and not lane.get('rows') and lane['since'] and not lane['closed']:
-            lane['elapsed'] = measure(seconds(lane['since'], now), 'facts', now)
+            ended = _child_end(lane)
+            lane['elapsed'] = measure(seconds(lane['since'], ended[1] if ended else now), 'facts', now)
         lane['_derived'] = derived
 
     # Legacy supplemental attempts (Workflow shim). They are labelled origin 'legacy', appended after producer
@@ -274,6 +315,9 @@ def build(ctx, now, rev=1, state=None):
             return 'active' if recent else ('pending' if not lane['tasks'] else 'waiting')
         if lane['closed']:
             return 'done'
+        ended = None if lane['_derived'] else _child_end(lane)
+        if ended:  # the delegated child finished: failed, or waiting for its unchecked tasks to be ticked
+            return 'failed' if ended[0] == 'failed' else 'waiting'
         if lane_blockers.get(lane['id']) or (lane['_derived'] and lane['_derived']['status'] == 'blocked'):
             return 'blocked'
         if lane['_derived']:

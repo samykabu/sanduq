@@ -101,6 +101,10 @@ def _model_reported(data):
         value = data.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()[:80]
+    if data.get('model_observed') is True:  # the delegate driver's shape: a flag plus the model it observed
+        value = data.get('actual_model')
+        if isinstance(value, str) and value.strip():
+            return value.strip()[:80]
     return None
 
 
