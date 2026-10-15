@@ -39,6 +39,10 @@ class Project(unittest.TestCase):
         saved = dict(os.environ)
         self.addCleanup(lambda: (os.environ.clear(), os.environ.update(saved)))
         os.environ.pop('SANDUQ_PROGRESS_SCRIPT', None)
+        # Keep the real user-level host configs out of every test.
+        self.user_home = self.root / '.user-home'
+        os.environ['CODEX_HOME'] = str(self.user_home / 'codex')
+        os.environ['CLAUDE_CONFIG_DIR'] = str(self.user_home / 'claude')
         if self.installed:
             os.environ['SANDUQ_PROGRESS_SCRIPT'] = str(PROGRESS_SCRIPT)
         self.cwd = os.getcwd()
@@ -167,6 +171,24 @@ class ReportingModes(Project):
         (self.root / '.codex' / 'config.toml').write_text('[features]\nhooks = false\n', encoding='utf-8')
         self.assertEqual(self.mode()['mode'], 'refresh')
         (self.root / '.codex' / 'config.toml').write_text('[features]\ncodex_hooks = false\n', encoding='utf-8')
+        self.assertEqual(self.mode()['mode'], 'refresh')
+
+    def test_user_level_switches_disable_project_hooks(self):
+        (self.root / '.codex').mkdir()
+        (self.root / '.codex' / 'hooks.json').write_text(json.dumps({'hooks': {
+            'Stop': [{'command': self.HOOK}]}}), encoding='utf-8')
+        self.assertEqual(self.mode()['mode'], 'projection')
+        codex_home = Path(os.environ['CODEX_HOME'])
+        codex_home.mkdir(parents=True)
+        (codex_home / 'config.toml').write_text('[features]\nhooks = false\n', encoding='utf-8')
+        self.assertEqual(self.mode()['mode'], 'refresh')
+        (codex_home / 'config.toml').unlink()
+        self._claude({'type': 'command', 'command': 'python .specify/events.py speckit.progress.hook-stop stop'})
+        (self.root / '.codex' / 'hooks.json').unlink()
+        self.assertEqual(self.mode()['mode'], 'projection')
+        claude_home = Path(os.environ['CLAUDE_CONFIG_DIR'])
+        claude_home.mkdir(parents=True)
+        (claude_home / 'settings.json').write_text(json.dumps({'disableAllHooks': True}), encoding='utf-8')
         self.assertEqual(self.mode()['mode'], 'refresh')
 
     def test_disabled_extensions_yml_hook_is_not_automatic(self):

@@ -127,6 +127,26 @@ def extension_enabled(root):
     return not (isinstance(entry, dict) and entry.get('enabled') is False)
 
 
+def _user_configs():
+    """User-level host configs that can switch hooks off: $CLAUDE_CONFIG_DIR or ~/.claude, $CODEX_HOME or ~/.codex."""
+    homes = {'claude': (os.environ.get('CLAUDE_CONFIG_DIR'), '.claude', 'settings.json'),
+             'codex': (os.environ.get('CODEX_HOME'), '.codex', 'config.toml')}
+    found = {}
+    for host, (override, default, name) in homes.items():
+        path = Path(override) / name if override else Path.home() / default / name
+        try:
+            text = path.read_text(encoding='utf-8-sig')
+            if name.endswith('.toml'):
+                if tomllib is None:
+                    continue
+                found[host] = tomllib.loads(text)
+            else:
+                found[host] = json.loads(text)
+        except Exception:  # absent or unreadable user config states no switch
+            continue
+    return found
+
+
 def hooks_registered(root):
     """True when an enabled Progress hook is wired in a host config and the extension itself is enabled."""
     if not extension_enabled(root):
@@ -147,10 +167,14 @@ def hooks_registered(root):
             configs[name] = tomllib.loads(text) if name.endswith('.toml') else json.loads(text)
         except Exception:  # unreadable config is not evidence of collection
             continue
-    # Claude: the local settings file overrides the shared one when it states the switch; Codex: either file may switch off.
+    user = _user_configs()
+    # Claude: local settings override project settings, which override user settings, when they state the switch.
+    # Codex: a switch in the project or user config.toml turns hooks off everywhere.
     claude = [_globally_disabled(configs.get(n)) for n in ('.claude/settings.local.json', '.claude/settings.json')]
+    claude.append(_globally_disabled(user.get('claude')))
     claude_off = next((v for v in claude if v is not None), False)
-    codex_off = any(_globally_disabled(d) for n, d in configs.items() if n.startswith('.codex/'))
+    codex_off = (any(_globally_disabled(d) for n, d in configs.items() if n.startswith('.codex/'))
+                 or bool(_globally_disabled(user.get('codex'))))
     for name, data in configs.items():
         if name.startswith('.claude/') and claude_off:
             continue
