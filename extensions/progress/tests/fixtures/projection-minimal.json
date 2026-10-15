@@ -1,0 +1,149 @@
+{
+ "schema": "sanduq.progress.v2",
+ "rev": 3,
+ "generated_at": "2026-10-15T09:30:00Z",
+ "stale_after_seconds": 600,
+ "collection": {
+  "automatic": false,
+  "hosts": [],
+  "dirty": false,
+  "last_event_at": null,
+  "diagnostics": 0
+ },
+ "feature": {
+  "id": "007-small-change",
+  "title": "Small change",
+  "dir": "specs/007-small-change",
+  "branch": "007-small-change",
+  "issue": null,
+  "stage": null,
+  "started_at": null,
+  "workflow": false
+ },
+ "orchestrator": {
+  "host": null,
+  "session_id": null,
+  "model": {
+   "value": null,
+   "source": "none",
+   "observed_at": null,
+   "fidelity": "unknown"
+  },
+  "effort": {
+   "value": null,
+   "source": "none",
+   "observed_at": null,
+   "fidelity": "unknown"
+  },
+  "context": {
+   "value": null,
+   "source": "none",
+   "observed_at": null,
+   "fidelity": "unknown"
+  },
+  "elapsed": {
+   "value": null,
+   "source": "none",
+   "observed_at": null,
+   "fidelity": "unknown"
+  },
+  "active": {
+   "value": null,
+   "source": "none",
+   "observed_at": null,
+   "fidelity": "unknown"
+  },
+  "since": null
+ },
+ "lanes": [
+  {
+   "id": "coordinator",
+   "label": "Coordinator",
+   "owner": null,
+   "origin": "coordinator",
+   "requested": {
+    "harness": null,
+    "model": null,
+    "effort": null
+   },
+   "observed": {
+    "model": {
+     "value": null,
+     "source": "none",
+     "observed_at": null,
+     "fidelity": "unknown"
+    },
+    "effort": {
+     "value": null,
+     "source": "none",
+     "observed_at": null,
+     "fidelity": "unknown"
+    }
+   },
+   "status": "active",
+   "elapsed": {
+    "value": null,
+    "source": "none",
+    "observed_at": null,
+    "fidelity": "unknown"
+   },
+   "active": {
+    "value": null,
+    "source": "none",
+    "observed_at": null,
+    "fidelity": "unknown"
+   },
+   "last_observed_at": null,
+   "attempts": [],
+   "tasks": {
+    "active": [
+     "T001"
+    ],
+    "waiting": [
+     "T002"
+    ],
+    "blocked": [],
+    "done": []
+   }
+  }
+ ],
+ "unassigned_tasks": {
+  "active": [],
+  "waiting": [],
+  "blocked": [],
+  "done": []
+ },
+ "tasks": {
+  "T001": {
+   "title": "First task",
+   "phase": "Setup",
+   "done": false,
+   "parallel": false,
+   "depends_on": [],
+   "lane": "coordinator"
+  },
+  "T002": {
+   "title": "Second task",
+   "phase": "Setup",
+   "done": false,
+   "parallel": false,
+   "depends_on": [
+    "T001"
+   ],
+   "lane": "coordinator"
+  }
+ },
+ "decisions": {
+  "pending": [],
+  "made": []
+ },
+ "blockers": [],
+ "events": [],
+ "summary": {
+  "tasks_total": 2,
+  "tasks_done": 0,
+  "lanes_active": 1,
+  "blocked": 0,
+  "decisions_pending": 0
+ }
+}
