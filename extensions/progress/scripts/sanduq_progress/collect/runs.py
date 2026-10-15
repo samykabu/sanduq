@@ -31,10 +31,15 @@ JOURNAL_TAIL_BYTES = 65536
 DEFAULT_STALL_SECONDS = 300
 CONFLICT_FIELDS = ('harness', 'harness_status', 'started_at', 'ended_at', 'usage')
 _malformed = []
+_duplicates = []
 
 
 def last_malformed():
     return list(_malformed)
+
+
+def last_duplicates():
+    return sorted(set(_duplicates))
 
 
 def usage_of(data):
@@ -128,8 +133,8 @@ def collect_runs(runs_dir, *, since=None, now=None, stall_seconds=DEFAULT_STALL_
     """Compact projections of every run under `runs_dir`, sorted by (started_at, run_id).
 
     `since` (aware datetime) drops runs that started earlier; runs with an unknown start are kept."""
-    global _malformed
-    _malformed = []
+    global _malformed, _duplicates
+    _malformed, _duplicates = [], []
     now = now or datetime.now(timezone.utc)
     root = Path(runs_dir)
     if not root.is_dir():
@@ -147,6 +152,7 @@ def collect_runs(runs_dir, *, since=None, now=None, stall_seconds=DEFAULT_STALL_
             continue
         known = runs.get(run['run_id'])
         if known:
+            _duplicates.append(run['run_id'])
             diff = _conflicts(known, run)
             if diff:
                 conflicting.setdefault(run['run_id'], set()).update(diff)

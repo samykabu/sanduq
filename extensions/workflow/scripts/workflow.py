@@ -34,7 +34,7 @@ from packaging.version import Version
 
 SCHEMA = 1
 RANGES = {'scope': '>=1.4,<2', 'assure': '>=2.2,<3', 'user-manual': '>=1.2,<2',
-          'pr': '>=4.1,<5', 'superspec': '>=1.0.2,<2', 'project': '>=2.1,<3'}
+          'pr': '>=4.1,<5', 'superspec': '>=1.0.2,<2', 'project': '>=2.1,<3', 'progress': '>=1.0,<2'}
 BASE_STAGES = ['scope', 'specify', 'clarify', 'plan', 'tasks', 'qa_analyze',
                'manual_analyze', 'analyze', 'taskstoissues', 'execute', 'verify',
                'review', 'qa_document', 'manual_update', 'ready', 'pr']

@@ -445,14 +445,16 @@ def cmd_runs(a, root):
     stamp = parse_time(a.now) if a.now else now()
     if stamp is None:
         raise ProgressError('PROGRESS_USAGE', '--now must be an ISO timestamp', 2)
-    merged, malformed = {}, []
+    merged, malformed, duplicates = {}, [], []
     for entry in a.runs_dir or [str(root / '.delegate' / 'runs')]:
         folder = Path(entry)
         found = runscol.collect_runs(folder if folder.is_absolute() else root / folder, now=stamp, stall_seconds=a.stall_seconds)
         malformed += runscol.last_malformed()
+        duplicates += runscol.last_duplicates()
         for run in found:
             known = merged.get(run['run_id'])
             if known:
+                duplicates.append(run['run_id'])
                 diff = runscol._conflicts(known, run)
                 if diff:
                     run['conflict'] = sorted(set(diff) | set(known.get('conflict') or []))
@@ -462,7 +464,7 @@ def cmd_runs(a, root):
     runs = sorted(merged.values(), key=lambda r: (r['started_at'] or '', r['run_id']))
     if a.json:
         print(json.dumps({'schema': RUNS_SCHEMA, 'generated_at': iso(stamp), 'stall_seconds': a.stall_seconds,
-                          'runs': runs, 'malformed': malformed, 'caveats': list(RUNS_CAVEATS)}, ensure_ascii=False))
+                          'runs': runs, 'duplicates': sorted(set(duplicates)), 'malformed': malformed, 'caveats': list(RUNS_CAVEATS)}, ensure_ascii=False))
     else:
         live = sum(1 for r in runs if r['phase'] != 'done')
         print(f'progress: {len(runs)} runs, {live} live, {len(malformed)} malformed')

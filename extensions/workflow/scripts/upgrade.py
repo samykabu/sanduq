@@ -17,7 +17,7 @@ REPOSITORY = 'https://github.com/samykabu/sanduq'
 
 
 def upgrade(root, version, apply=False, packages=None, runner=command, preserve_ci=False,
-            replace_unrecognized_aliases=False):
+            replace_unrecognized_aliases=False, with_optional=()):
     root = root.resolve()
     require(re.fullmatch(r'\d+\.\d+\.\d+', version), 'EXPLICIT_RELEASE_VERSION_REQUIRED')
     current = registry(root).get('workflow', {})
@@ -64,6 +64,8 @@ def upgrade(root, version, apply=False, packages=None, runner=command, preserve_
                 tail.append('--preserve-ci')
             if replace_unrecognized_aliases:
                 tail.append('--replace-unrecognized-aliases')
+            for name in with_optional:  # an already installed optional extension is kept in step without this
+                tail += ['--with', name]
             if ci_before is not None:
                 # A target installer may check CI health before it records the
                 # preserved file, and older ones read only the git-excluded
@@ -110,9 +112,12 @@ if __name__ == '__main__':
     parser.add_argument('--preserve-ci', action='store_true', help='Retain the project workflow-gates CI file during the upgrade')
     parser.add_argument('--replace-unrecognized-aliases', action='store_true',
                         help='Back up, then replace, a managed alias file whose content Sanduq does not recognise')
+    parser.add_argument('--with', dest='with_optional', action='append', default=[], metavar='EXTENSION',
+                        help='Also install an optional extension (for example: progress) while upgrading')
     args = parser.parse_args()
     try:
         print(json.dumps(upgrade(args.root, args.version, args.apply, args.packages, preserve_ci=args.preserve_ci,
-                                 replace_unrecognized_aliases=args.replace_unrecognized_aliases), indent=2))
+                                 replace_unrecognized_aliases=args.replace_unrecognized_aliases,
+                                 with_optional=args.with_optional), indent=2))
     except (WorkflowError, ValueError, OSError, KeyError) as error:
         print(json.dumps({'ok': False, 'error': str(error)})); sys.exit(1)

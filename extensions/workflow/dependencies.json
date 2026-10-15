@@ -15,6 +15,9 @@
       "user-manual": "1.5.2"
     }
   },
+  "optional": {
+    "progress": "1.0.0"
+  },
   "upstream_optional": {
     "superspec": {
       "repository": "https://github.com/WangX0111/superspec",

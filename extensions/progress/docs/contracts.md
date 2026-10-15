@@ -170,12 +170,12 @@ each `--runs-dir`, relative to the repository root). It needs no initialised fea
 another extension to read this projection; callers must not import Progress code.
 
 ```json
-{"schema":"progress.runs.v1","generated_at":"…","stall_seconds":300,
- "runs":[{"run_id":"…","harness":"…","source":"<run dir name>","model":null,"started_at":"…","ended_at":null,
-          "harness_status":"running|finalizing|stalled|successful|failed|…","phase":"active|finishing|stalled|done",
+{"schema":"progress.runs.v1","generated_at":"â€¦","stall_seconds":300,
+ "runs":[{"run_id":"â€¦","harness":"â€¦","source":"<run dir name>","model":null,"started_at":"â€¦","ended_at":null,
+          "harness_status":"running|finalizing|stalled|successful|failed|â€¦","phase":"active|finishing|stalled|done",
           "usage":null,"elapsed_seconds":0,"journal_events":0,"latest_event":null,"latest_event_at":null,
           "task_verdict":"unknown","review_verdict":"unknown","next_action":null,"conflict":["harness"]}],
- "malformed":[{"source":"…","error":"…"}],"caveats":["…","…","…"]}
+ "duplicates":["run id seen twice"],"malformed":[{"source":"â€¦","error":"â€¦"}],"caveats":["â€¦","â€¦","â€¦"]}
 ```
 
 `usage` is null unless the harness reported exact counters. The three caveats are part of the contract: elapsed is wall
