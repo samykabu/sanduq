@@ -478,3 +478,17 @@ class F17LogPaths(Project):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class SlashWordsInNotes(unittest.TestCase):
+    """Single-segment slash words are commands, not paths; two-segment POSIX paths outside the repo are refused."""
+
+    def test_slash_command_allowed_and_posix_path_refused(self):
+        import tempfile
+        facts = factslib
+        root = Path(tempfile.mkdtemp())
+        self.assertEqual(facts.scan('run /speckit.tasks then /help', root), 'run /speckit.tasks then /help')
+        with self.assertRaises(ProgressError):
+            facts.scan('see /etc/passwd', root)
+        with self.assertRaises(ProgressError):
+            facts.scan('logs in /srv/data', root)

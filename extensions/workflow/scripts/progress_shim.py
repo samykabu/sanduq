@@ -128,12 +128,18 @@ def ensure_lane(fwd, report, task, agent, attempt_wanted=False):
     mine = next((lane for lane in lanes if agent and lane.get('owner') == agent), None)
     if mine is None and agent is None:
         mine = next((lane for lane in report.get('lanes') or [] if task in lane_task_ids(lane)), None)
-        if mine is not None and not FACTS_LANE.fullmatch(mine['id']):
-            # A derived lane (coordinator, host child, delegation) is not addressable by lane/attempt facts: give the
-            # task an ownerless facts lane so the attempt targets an id Progress accepts.
-            return fwd.call('lane', 'new', '--tasks', task, '--label', mine.get('label') or 'coordinator').split()[1]
-        if mine is None and attempt_wanted:
-            return fwd.call('lane', 'new', '--tasks', task, '--label', 'coordinator').split()[1]
+        derived = mine is not None and not FACTS_LANE.fullmatch(mine['id'])
+        if derived or (mine is None and attempt_wanted):
+            # A derived lane (coordinator, host child, delegation) is not addressable by lane/attempt facts. Agent-less
+            # tasks share one ownerless 'coordinator' facts lane instead of getting a lane each.
+            shared = next((lane for lane in lanes if not lane.get('owner') and lane.get('label') == 'coordinator'
+                           and lane.get('status') not in ('done', 'failed')), None)
+            if shared is None:
+                return fwd.call('lane', 'new', '--tasks', task, '--label', 'coordinator').split()[1]
+            held = lane_task_ids(shared)
+            if task not in held:
+                fwd.call('lane', shared['id'], '--tasks', ','.join(held + [task]))
+            return shared['id']
         return mine['id'] if mine else None
     for other in lanes:
         if other is not mine and task in lane_task_ids(other):

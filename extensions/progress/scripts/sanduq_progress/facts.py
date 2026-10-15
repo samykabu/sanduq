@@ -15,7 +15,8 @@ SECRET = re.compile(r'(sk-[A-Za-z0-9]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-
 ACTOR = re.compile(r'user|hook|legacy|agent:[A-Za-z0-9][A-Za-z0-9._-]{0,63}')
 # Absolute-path candidates in free text, on any platform: drive paths, UNC paths and POSIX absolute paths. A slash that
 # follows a word character, ':' (URL) or '.' is not the start of a path ("and/or", "https://host/x", "a/b").
-ABSOLUTE = re.compile(r'(?<![\w:/.\\-])(?:[A-Za-z]:[\\/]|\\\\[^\s\\/]|//[^\s\\/]|/(?=[^\s/\\]))\S*')
+# A POSIX candidate needs two segments, so slash commands such as /speckit.tasks stay allowed.
+ABSOLUTE = re.compile(r'(?<![\w:/.\\-])(?:[A-Za-z]:[\\/]|\\\\[^\s\\/]|//[^\s\\/]|/(?=[^\s/\\]+/))\S*')
 BS = chr(92)  # backslash
 TRAILING = ".,;:)]}>'\""
 

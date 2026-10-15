@@ -224,6 +224,15 @@ class ShimMappings(Project):
             self.assertIn('compatibility:', out + err)
             self.assertEqual(self.facts(), before)
 
+    def test_agentless_running_tasks_share_one_coordinator_lane(self):
+        self.init()
+        for task in ('T002', 'T003'):
+            code, out, _ = self.legacy('task', '--id', task, '--status', 'running', '--summary')
+            self.assertEqual(code, 0, out)
+        lanes = {l['id'] for l in self.facts('lane')}
+        self.assertEqual(len(lanes), 1, lanes)
+        self.assertEqual(self.facts('lane')[-1]['tasks'], ['T002', 'T003'])
+
     def test_blocked_uses_note_as_external_blocker_unless_a_reference_is_given(self):
         self.init()
         self.legacy('task', '--id', 'T002', '--status', 'blocked', '--agent', 'w1', '--note', 'waiting for API key')
