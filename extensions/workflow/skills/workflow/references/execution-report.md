@@ -212,13 +212,7 @@ are unchanged. When Progress is installed the same script forwards them to the
 Progress CLI, and a request with no faithful mapping prints a compatibility error
 and exits non-zero.
 
-Create the report before assigning the first task:
-
-```text
-python .specify/extensions/workflow/scripts/progress.py init --tasks specs/<feature>/tasks.md --output specs/<feature>/workflow/progress --summary
-```
-
-The report is titled from the plan's `# Tasks: <feature>` heading. Pass
+The `init` call is in `execution-assign.md`. The report is titled from the plan's `# Tasks: <feature>` heading. Pass
 `--title "<feature title>"` to name it explicitly; rerunning `init` with a new
 title renames an existing report without losing its evidence. The report shows
 the Sanduq logo and page icon, a Phase column, token usage, Status and Phase
@@ -263,7 +257,7 @@ is recorded as unavailable and shown as a gap, never as zero. The report shows
 fresh input, cached input and output per task, the total of the filtered tasks,
 per phase, overhead and the feature; it covers implementation only.
 
-At every phase commit, the coordinator also records the dispatcher's own
+At every phase commit, the orchestration agent also records the dispatcher's own
 overhead, reading its session transcript path from the handoff:
 
 ```text

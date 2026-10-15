@@ -45,8 +45,15 @@ simulated role or serial parent execution as agent delegation.
 
 The current coordinator creates the report before assigning the first task, using
 the idempotent `progress init` or the legacy `init` call that
-[`reporting.md`](reporting.md) names for the mode. Record phase results under the
-exact phase heading from `tasks.md` so each phase appears once.
+[`reporting.md`](reporting.md) names for the mode. In `legacy` mode only, the
+call is:
+
+```text
+python .specify/extensions/workflow/scripts/progress.py init --tasks specs/<feature>/tasks.md --output specs/<feature>/workflow/progress --summary
+```
+
+Record phase results under the exact phase heading from `tasks.md` so each phase
+appears once.
 
 Open the report once, in the host browser or a platform-supported browser command,
 when that helps the human: `specs/<feature>/progress/.view/index.html`
@@ -171,9 +178,8 @@ because turn count, not what a worker reads at the start, explains almost all of
 its token cost. Each figure below is a policy budget on fresh input plus output
 tokens only; it excludes cache reads, which are about 96% of a worker's total
 token volume and are not part of the budget. It is not a hard stop: when
-accepting a task, the orchestration agent compares the task's recorded usage
-figure against its class budget, and logs any overrun instead of cutting the
-worker off mid-task. In `projection` and `refresh` mode the figure is collected
+accepting a task, the coordinator logs any overrun instead of cutting the
+worker off mid-task. In `legacy` mode the orchestration agent compares the task's recorded `progress.py usage` figure against its class budget and logs the overrun. In `projection` and `refresh` mode the figure is collected
 automatically from the run and the log is a note:
 
 ```text

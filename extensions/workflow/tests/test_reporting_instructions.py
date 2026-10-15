@@ -66,6 +66,10 @@ class ReportingInstructions(unittest.TestCase):
             hits = [m.start() for m in legacy_call.finditer(text)]
             if not hits:
                 continue
+            if path.name == 'execution-assign.md':  # only the init call, introduced as legacy-only
+                self.assertTrue(all('legacy' in text[max(0, h - 300):h] and text[h:h + 80].split()[1:2] == ['init']
+                                    for h in hits))
+                continue
             self.assertEqual(path.name, 'execution-report.md', path.name + ' carries a legacy reporter call')
             self.assertIn(LEGACY_HEADING, text)
             self.assertGreater(min(hits), text.index(LEGACY_HEADING))
