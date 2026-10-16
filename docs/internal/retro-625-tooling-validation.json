@@ -1,0 +1,78 @@
+{
+  "scope": "retro-625-tooling",
+  "versions": {
+    "memory": "2.2.0",
+    "workflow": "1.11.0",
+    "agent-tools": "1.3.0"
+  },
+  "release_status": "local-unreleased",
+  "portable_commit": "4e77d4e5147c3457996827adef19132b08ea285f",
+  "unit_acceptance": {
+    "portable": {
+      "passed": 207,
+      "existing": 174,
+      "execution": 33,
+      "proof": "sanduq-skills--retro625/.delegate/proofs/retro625-continuation/evidence.json"
+    },
+    "memory": {
+      "run": 164,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "workflow_initial": {
+      "run": 1004,
+      "passed": 999,
+      "failed": 2,
+      "errors": 1,
+      "skipped": 2
+    },
+    "workflow_closure": {
+      "run": 6,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "covers": "all four evidence recovery cases and both failed skill budget assertions"
+    },
+    "package_helper": {
+      "run": 1,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "proofs": {
+    "unit_attempts": ".delegate/retro625-final-checks/unit-summary.json",
+    "correction": ".delegate/retro625-fixture-correction/handoff.md",
+    "integration_initial": "retro625-package-integration/attempt-1792177890541-74371da065ff",
+    "integration_closure": "retro625-integration-corrections/attempt-1792178424540-0133eef7b1bc"
+  },
+  "package_sha256": {
+    "memory": "be9e89863f7389da1b5f957ae253ca81c438f336bc375a3ab586f8282662b43b",
+    "workflow": "82e2a5b5360b1adc260b5a06de9983205227ea9d27cb2bf3484b36fdc8cdb3b0"
+  },
+  "integration": {
+    "vendor_integrity": "passed",
+    "documentation_checker_regressions": "passed",
+    "documentation": "passed after version-table correction",
+    "memory_package": "passed",
+    "workflow_package": "passed after skill-budget correction",
+    "native_memory_install": "six host/shell cases passed; automatic archival disabled",
+    "native_workflow_upgrade": "passed native upgrade, injected failure, byte-exact rollback and retry; config, policy and progress retained"
+  },
+  "retained_failures": [
+    "Initial Workflow skill was 6260 bytes, exceeding 6144; corrected to 6111 and both assertions passed.",
+    "Windows loose-object removal fixture failed on read-only Git objects; owner-write permission added before unlink; strict missing-object refusal retained and four evidence tests passed.",
+    "Initial documentation table used old versions; corrected and checker passed.",
+    "One earlier portable legacy version-refusal test had empty child stderr before an explicit passing retry; cause remains unverified."
+  ],
+  "limitations": [
+    "Windows execution only; POSIX-only branches were not executed locally.",
+    "Workflow recorded two skips in the full run; no full-suite rerun was claimed after the bounded correction.",
+    "No remote CI, tags, release publication or active Bunyan adoption."
+  ],
+  "independent_review": {
+    "status": "pending",
+    "policy": "One review after all feature implementation and validation; affected closure only thereafter"
+  }
+}

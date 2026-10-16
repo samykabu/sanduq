@@ -78,6 +78,11 @@ repo, good luck".
 
 ## Requirements
 
+For named local CLI checks, use the native [check runner](contracts/check-runner.md): a JSON argv
+plan, one batch invocation and one bounded collector. That contract includes PowerShell examples,
+attempt ownership, failure exits and `delegate collect --summary` projection limits. It also
+documents heartbeat-only startup diagnostics and the opt-in `--startup-timeout` deadline.
+
 - **Node 18+.** No dependencies, nothing to install.
 - At least one agent CLI on `PATH`, already logged in.
 - `git`, for the measurement layer. Without it every git field reports `null`, never `false`.

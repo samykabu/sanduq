@@ -773,6 +773,10 @@ class ArchiveIntegrationTests(unittest.TestCase):
         shutil.copytree(workspace / ".specify/scripts", self.root / ".specify/scripts", dirs_exist_ok=True)
         shutil.copytree(workspace / ".specify/extensions/git/scripts", self.root / ".specify/extensions/git/scripts", dirs_exist_ok=True)
         shutil.copytree(SCRIPTS, self.root / EXTENSION / "scripts", dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
+        # These entry-point fixtures execute an installed package, whose shared modules are injected at build time.
+        for helper in ('check_inputs.py', 'bounded_json.py'):
+            shutil.copyfile(SCRIPTS.parents[1] / 'scripts/shared' / helper,
+                            self.root / EXTENSION / 'scripts' / helper)
         from install import prepare_guards
         for path, data in prepare_guards(self.archive.repo).items():
             (self.root / path).write_bytes(data)

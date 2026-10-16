@@ -249,6 +249,16 @@ class ArchiveV2Tests(unittest.TestCase):
         self.assertIn("has no disposition", output["error"])
         self.assertEqual("", self.git("status", "--short"))
 
+    def test_preflight_reports_bindings_while_review_is_missing(self):
+        self.save(self.candidate(), review=False)
+        code, output = self.cli("preflight", "--run", self.prepared["run_id"])
+        self.assertEqual(0, code, output)
+        data = output["data"]
+        self.assertEqual("passed", data["candidate_guards"])
+        self.assertEqual("missing", data["review"]["status"])
+        self.assertEqual(self.base_root, data["base_memory_root"])
+        self.assertEqual(digest((self.run_dir / "candidate.json").read_bytes()), data["candidate_sha256"])
+
     def interrupt_publishing(self):
         """Fail the third output write so publication stops with some outputs written and some pending."""
         self.save(self.candidate())

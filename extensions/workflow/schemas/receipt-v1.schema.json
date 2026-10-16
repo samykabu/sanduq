@@ -10,6 +10,7 @@
     "summary": {"type": "string", "minLength": 1},
     "inputs": {"$ref": "#/$defs/paths"},
     "evidence": {"$ref": "#/$defs/paths"},
+    "evidence_snapshots": {"description": "Evidence paths containing sanduq.evidence.snapshot.v1 capture descriptors. Admission and freshness validate retained Git references and exact file proofs through evidence_snapshot.resolve.", "type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
     "command": {"type": "string", "minLength": 1},
     "dependency_digest": {"$ref": "#/$defs/hash"},
     "fingerprints": {"type": "object", "minProperties": 1, "additionalProperties": {"$ref": "#/$defs/hash"}},

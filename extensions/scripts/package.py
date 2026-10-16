@@ -45,6 +45,12 @@ def package(extension, output=None, root=ROOT):
     deps_script = root / 'extensions/scripts/shared/deps.py'
     if extension in ('pr', 'assure', 'user-manual') and deps_script.exists():
         files[extension + '/scripts/deps.py'] = deps_script.read_bytes()
+    if extension in ('memory', 'workflow'):
+        helpers = ['check_inputs.py', 'bounded_json.py']
+        if extension == 'workflow':
+            helpers.append('evidence_snapshot.py')
+        for helper in helpers:
+            files[extension + '/scripts/' + helper] = (root / 'extensions/scripts/shared' / helper).read_bytes()
     inventory = {name: hashlib.sha256(value).hexdigest() for name, value in sorted(files.items())}
     files[extension + '/package-inventory.json'] = (json.dumps(inventory, indent=2) + '\n').encode()
     output = output or root / 'dist' / (extension + '.zip')

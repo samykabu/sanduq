@@ -1,7 +1,9 @@
 """Exact-input local verification manifests and affected-check selection.
 
 A plan is {schema_version: 1, checks: [{id, sources, fixtures, command,
-environment, evidence}]}. Paths are repository-relative files; environment is
+environment, evidence, inputs?}]}. `inputs` follows shared check_inputs.py's
+complete version-1 declaration; without it, all project inputs share freshness.
+Paths are repository-relative files; environment is
 an explicit list of variable names. Each evidence path is a runner-written
 JSON record. Local records are not CI certification.
 """
@@ -14,7 +16,14 @@ import os
 import platform
 import shutil
 import sys
+import uuid
 from pathlib import Path, PurePosixPath
+
+try:
+    import check_inputs
+except ModuleNotFoundError:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'shared'))
+    import check_inputs
 
 
 class VerificationPlanError(ValueError):
@@ -58,7 +67,7 @@ def read_plan(root, label):
             'VERIFICATION_PLAN_INVALID')
     ids, outputs = set(), set()
     for check in value['checks']:
-        require(isinstance(check, dict) and set(check) ==
+        require(isinstance(check, dict) and set(check) - {'inputs'} ==
                 {'id', 'sources', 'fixtures', 'command', 'environment', 'evidence'},
                 'VERIFICATION_CHECK_INVALID')
         require(isinstance(check['id'], str) and check['id'].strip() and check['id'] not in ids,
@@ -81,32 +90,50 @@ def read_plan(root, label):
     return value
 
 
-def identity(root, check):
-    command = check['command'][0]
-    local = Path(root) / command
-    # The selected invocation path is kept as-is (a venv python is often a
-    # symlink whose location drives interpreter discovery); the resolved
-    # target and its bytes are bound separately.
-    selected = os.path.abspath(local) if local.is_file() else shutil.which(command)
-    require(selected and Path(selected).is_file(), 'VERIFICATION_EXECUTABLE_MISSING: ' + command)
-    selected = os.path.abspath(selected)
-    target = Path(selected).resolve()
-    executable = {'invocation': selected, 'path': str(target),
-                  'sha256': hashlib.sha256(target.read_bytes()).hexdigest()}
-    return {'definition': digest(check), 'sources': {p: file_hash(root, p) for p in check['sources']},
+def identity(root, check, outputs=()):
+    try:
+        check_inputs.command_input(root, check['command'])
+        environment = check_inputs.environment_identity(root, check['command'], check['environment'])
+        manifest = (check_inputs.manifest_identity(root, check, check['command'], check['inputs'])
+                    if 'inputs' in check else None)
+    except check_inputs.InputIdentityError as exc:
+        raise VerificationPlanError(str(exc)) from exc
+    result = {'definition': digest(check), 'sources': {p: file_hash(root, p) for p in check['sources']},
             'fixtures': {p: file_hash(root, p) for p in check['fixtures']},
-            'command': check['command'],
-            'environment': {'python': sys.version, 'platform': platform.platform(),
-                            'cwd': str(Path(root).resolve()), 'executable': executable,
-                            'variables': {name: os.environ.get(name)
-                                          for name in sorted(set(check['environment']) | {'PATH'})}}}
+            'command': check['command'], 'environment': environment}
+    if manifest is not None:
+        result['inputs'] = manifest
+    else:
+        paths = [check['evidence'], *outputs]
+        try:
+            result['legacy_global'] = check_inputs.global_identity(root, paths +
+                [(PurePosixPath(p).parent / 'attempts').as_posix() for p in paths])
+        except check_inputs.InputIdentityError as exc:
+            raise VerificationPlanError(str(exc)) from exc
+    return result
 
 
-def passing_record(root, check, expected):
+def passing_record(root, check, expected, retained=None):
     path = check['evidence']
     try:
         record = json.loads(file_path(root, path).read_text(encoding='utf-8'))
-    except (OSError, ValueError) as exc:
+        if 'attempt' in record:
+            proof = record['attempt']
+            require(isinstance(proof, dict) and set(proof) == {'path', 'sha256'}, 'VERIFICATION_ATTEMPT_INVALID')
+            require(file_hash(root, proof['path']) == proof['sha256'], 'VERIFICATION_ATTEMPT_TAMPERED')
+            immutable = json.loads(file_path(root, proof['path']).read_text(encoding='utf-8'))
+            require({k: v for k, v in record.items() if k != 'attempt'} == immutable,
+                    'VERIFICATION_ATTEMPT_POINTER_TAMPERED')
+            require(immutable.get('identity') != expected or immutable.get('outcome') == 'passed',
+                    'VERIFICATION_LATEST_ATTEMPT_FAILED')
+            if retained:
+                require(file_hash(root, retained['path']) == retained['sha256'], 'VERIFICATION_ATTEMPT_TAMPERED')
+                proof = retained
+                immutable = json.loads(file_path(root, proof['path']).read_text(encoding='utf-8'))
+            record, path = immutable, proof['path']
+            output = record.get('output_proof', {})
+            require(file_hash(root, output['path']) == output['sha256'], 'VERIFICATION_OUTPUT_TAMPERED')
+    except (OSError, ValueError, KeyError, TypeError) as exc:
         raise VerificationPlanError('VERIFICATION_EVIDENCE_UNREADABLE: ' + path) from exc
     require(isinstance(record, dict) and record.get('schema_version') == 1 and
             record.get('check') == check['id'] and record.get('identity') == expected and
@@ -122,7 +149,7 @@ def snapshot(root, plan):
     value = read_plan(root, plan)
     checks = {}
     for check in value['checks']:
-        expected = identity(root, check)
+        expected = identity(root, check, [c['evidence'] for c in value['checks']])
         checks[check['id']] = {'identity': expected, 'evidence': passing_record(root, check, expected)}
     return {'schema_version': 1, 'plan': plan, 'plan_sha256': file_hash(root, plan), 'checks': checks}
 
@@ -136,8 +163,8 @@ def affected_checks(root, plan, prior=None):
     for check in value['checks']:
         name = check['id']
         try:
-            expected = identity(root, check)
-            evidence = passing_record(root, check, expected)
+            expected = identity(root, check, [c['evidence'] for c in value['checks']])
+            evidence = passing_record(root, check, expected, saved.get(name, {}).get('evidence'))
             require(same_plan and saved.get(name) == {'identity': expected, 'evidence': evidence},
                     'VERIFICATION_SNAPSHOT_CHANGED: ' + name)
         except (VerificationPlanError, OSError) as exc:
@@ -146,6 +173,8 @@ def affected_checks(root, plan, prior=None):
         else:
             reusable.append(name)
     return {'affected': affected, 'reusable': reusable, 'reasons': reasons,
+            'statuses': {c['id']: ('reused' if c['id'] in reusable else
+                         'unknown' if 'INPUT_' in reasons.get(c['id'], '') else 'invalidated') for c in value['checks']},
             'removed': sorted(set(saved) - {c['id'] for c in value['checks']})}
 
 
@@ -170,21 +199,46 @@ def run_checks(root, plan, selected=None, timeout=1800):
     results = {}
     plan_hash = file_hash(root, plan)
     for check in value['checks']:
+        if selected is None or check['id'] in selected:
+            try:
+                check_inputs.command_input(root, check['command'])
+            except check_inputs.InputIdentityError as exc:
+                raise VerificationPlanError(str(exc)) from exc
+    for check in value['checks']:
         if selected is not None and check['id'] not in selected:
             continue
-        before = identity(root, check)
+        before = identity(root, check, [c['evidence'] for c in value['checks']])
         argv = [before['environment']['executable']['invocation'], *check['command'][1:]]
-        measured = dispatch.run_capped(argv, Path(root), timeout)
-        stable = before == identity(root, check) and plan_hash == file_hash(root, plan)
+        path = file_path(root, check['evidence'])
+        attempt_dir = path.parent / 'attempts' / digest(check['id'])[:16] / uuid.uuid4().hex
+        attempt_dir.mkdir(parents=True, exist_ok=False)
+        try:
+            with check_inputs.utf8_environment():
+                measured = dispatch.run_capped(argv, Path(root), timeout)
+        except OSError as exc:
+            measured = {'exit_code': None, 'timed_out': False, 'output': str(exc), 'truncated': False}
+        try:
+            stable = before == identity(root, check, [c['evidence'] for c in value['checks']]) and plan_hash == file_hash(root, plan)
+        except (VerificationPlanError, OSError):
+            stable = False
         passed = measured['exit_code'] == 0 and not measured['timed_out'] and stable
         record = {'schema_version': 1, 'check': check['id'], 'identity': before,
                   'outcome': 'passed' if passed else 'failed', 'source': 'local', 'ci_grade': False,
                   'exit_code': measured['exit_code'], 'timed_out': measured['timed_out'],
                   'inputs_unchanged': stable, 'output': measured['output'],
                   'truncated': measured['truncated']}
-        path = file_path(root, check['evidence'])
+        output_path = attempt_dir / 'output.txt'
+        output_path.write_bytes(measured['output'].encode('utf-8'))
+        record.update(status='executed', attempt_id=attempt_dir.name,
+                      output_proof={'path': output_path.relative_to(Path(root).resolve()).as_posix(),
+                                    'sha256': check_inputs.file_digest(output_path)})
+        immutable_path = attempt_dir / 'receipt.json'
+        with immutable_path.open('x', encoding='utf-8', newline='\n') as stream:
+            json.dump(record, stream, ensure_ascii=False, indent=2)
+            stream.write('\n')
         path.parent.mkdir(parents=True, exist_ok=True)
-        dispatch.save(path, record)
+        dispatch.save(path, {**record, 'attempt': {'path': immutable_path.relative_to(Path(root).resolve()).as_posix(),
+                                                'sha256': check_inputs.file_digest(immutable_path)}})
         results[check['id']] = record['outcome']
     return results
 
@@ -217,4 +271,6 @@ def main(argv=None):
 
 
 if __name__ == '__main__':
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
     sys.exit(main())

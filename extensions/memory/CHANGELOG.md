@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.2.0] - Unreleased
+
+- Native early preflight, bounded archive inspection and batched Git inventory.
+- Opt-in complete check-input manifests permit hash-validated receipt reuse; legacy checks keep conservative freshness.
+- Preserve exact critique/publication guards and both memory formats.
+
 ## [2.1.2] - 2026-10-10
 
 - README links point to the new extension page, install-by-host page and command reference.

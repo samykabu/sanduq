@@ -68,6 +68,10 @@ class PreflightTests(Base):
                 {'name': 'forb', 'executable': sys.executable, 'args': ['--force'], 'forbidden_args': ['--force']}]
         self.assertEqual(self.failed(commands=cmds), ['command:nope', 'command:empty', 'command:req', 'command:forb'])
 
+    def test_interpreter_requires_script_module_or_code_before_execution(self):
+        for args in ([], ['-m'], ['-c'], ['-u', 'missing-checker.py']):
+            self.assertFalse(et.check_command({'name': 'python', 'executable': sys.executable, 'args': args})['ok'])
+
     def test_browser_existence(self):
         self.write('chrome', 'x')
         b = [{'name': 'a', 'path': 'chrome'}, {'name': 'b', 'path': 'gone'}]

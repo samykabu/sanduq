@@ -29,6 +29,14 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+try:
+    import evidence_snapshot
+except ModuleNotFoundError:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'shared'))
+    import evidence_snapshot
+
+import check_inputs
+
 PREFLIGHT_SCHEMA = 'sanduq.execution.preflight.v1'
 PR_LINT_SCHEMA = 'sanduq.execution.pr-lint.v1'
 PROGRESS_SCHEMA = 'sanduq.execution.progress.v1'
@@ -47,6 +55,9 @@ class InputError(Exception):
 
 def contracts():
     return {
+        'evidence': {'schema': evidence_snapshot.SCHEMA, 'max_file_bytes': evidence_snapshot.MAX_BYTES,
+                     'capture': 'evidence-capture --root ROOT --path FILE --out NEW_SNAPSHOT',
+                     'resolve': 'evidence-resolve --root ROOT --snapshot SNAPSHOT --path FILE --out NEW_FILE'},
         'preflight': {'schema': PREFLIGHT_SCHEMA,
                       'output': {'ok': 'bool', 'checks': '[{id, ok, detail}]', 'failed': '[id]'},
                       'manifest': {
@@ -161,6 +172,11 @@ def check_command(item):
     problems = []
     if not (shutil.which(executable) or Path(executable).is_file()):
         problems.append(f'executable not found: {executable}')
+    else:
+        try:
+            check_inputs.command_input(Path.cwd(), [executable, *args])
+        except evidence_snapshot.InputIdentityError as exc:
+            problems.append(str(exc))
     problems += [f'empty argument at position {i}' for i, a in enumerate(args) if not a.strip()]
     problems += [f'missing required argument {a}' for a in item.get('required_args', []) if a not in args]
     problems += [f'forbidden argument {a}' for a in item.get('forbidden_args', []) if a in args]
@@ -587,6 +603,15 @@ def progress_markdown(report):
 def build_parser():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='cmd', required=True)
+    p = sub.add_parser('evidence-capture', help='capture exact bytes before editing stage inputs')
+    p.add_argument('--root', type=Path, default=Path.cwd())
+    p.add_argument('--path', action='append', required=True)
+    p.add_argument('--out', required=True, help='new repository-relative snapshot JSON')
+    p = sub.add_parser('evidence-resolve', help='validate a snapshot and recover one exact input')
+    p.add_argument('--root', type=Path, default=Path.cwd())
+    p.add_argument('--snapshot', required=True)
+    p.add_argument('--path', required=True)
+    p.add_argument('--out', required=True, type=Path, help='new output file; existing files are refused')
     p = sub.add_parser('preflight', help='aggregate deterministic preflight from a manifest')
     p.add_argument('--manifest', required=True)
     p = sub.add_parser('scope-command', help='exact Scope gate/bind command')
@@ -618,6 +643,18 @@ def build_parser():
 def main(argv=None):
     args = build_parser().parse_args(argv)
     try:
+        if args.cmd == 'evidence-capture':
+            result = evidence_snapshot.capture(args.root, args.path, args.out)
+            print(json.dumps({'ok': True, **result}, ensure_ascii=False))
+            return 0
+        if args.cmd == 'evidence-resolve':
+            contents = evidence_snapshot.resolve(args.root, args.snapshot)
+            if args.path not in contents:
+                raise InputError('path is absent from the snapshot')
+            with args.out.open('xb') as stream:
+                stream.write(contents[args.path])
+            print(json.dumps({'ok': True, 'out': str(args.out), 'bytes': len(contents[args.path])}))
+            return 0
         if args.cmd == 'preflight':
             result = preflight(args.manifest)
         elif args.cmd == 'scope-command':
@@ -645,7 +682,7 @@ def main(argv=None):
                 return 0 if result['ok'] else 1
         else:
             result = contracts()
-    except InputError as exc:
+    except (InputError, evidence_snapshot.InputIdentityError, OSError, ValueError, KeyError, TypeError) as exc:
         print(json.dumps({'ok': False, 'error': str(exc)}))
         return 2
     print(json.dumps(result, indent=2))
@@ -653,4 +690,6 @@ def main(argv=None):
 
 
 if __name__ == '__main__':
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
     sys.exit(main())

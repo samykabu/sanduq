@@ -38,7 +38,7 @@ enter the stage loop below; see `references/stage-scope.md`,
 4. Invoke the selected command in this host using its installed skill/command registration,
    or its delegation route when `delegation.enabled` is true. Full rule, including decision
    escalation: [delegation-and-decisions.md](references/delegation-and-decisions.md).
-5. Before writing any receipt, read
+5. Before changing evidence or writing a receipt, read
    [receipt-rules.md](references/receipt-rules.md): it holds the rules for what
    makes a receipt honest (failed/skipped/pending work cannot pass, a pending or conflicted
    issue decision blocks a passed receipt and must be in the stage inputs, checkpoint files

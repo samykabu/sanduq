@@ -125,14 +125,14 @@ Owner approved implementation of all three remaining tooling fixes. Work is isol
 
    Vendor from canonical source using the existing vendor tool. Do not edit `extensions/workflow/assets/delegate-task` directly. Keep unpublished versions out of published catalogs and pending status at `implementation-in-progress` until validation is complete.
 
-   Document these proposed interfaces with runnable fixtures:
+   The implemented interfaces use a separate native check runner:
 
    ```text
    python .specify/extensions/memory/scripts/archive.py preflight --spec specs/412-refund-approval --check docs
    python .specify/extensions/memory/scripts/archive.py inspect --run <run-id> --view checks --max-bytes 16384
 
-   node <delegate-task>/delegate.mjs checks --manifest checks.json --owner retro625-collector
-   node <delegate-task>/delegate.mjs collect-batch --batch <batch-id> --owner retro625-collector --max-bytes 16384
+   node <delegate-task>/check-runner.mjs run --plan checks.json --max-bytes 16384
+   node <delegate-task>/check-runner.mjs collect --batch <batch-id> --limit 20 --max-bytes 16384
    ```
 
    Retain the existing `verification_plan.py run/select/snapshot` interface. Explain opt-in completeness, invalidation reasons, retry ownership, projection limits and old-receipt behavior in one authoritative contract each.
@@ -161,5 +161,13 @@ Owner approved implementation of all three remaining tooling fixes. Work is isol
 
 - Planning complete from current source. Prior #624 repairs are already merged; no duplicate repair work.
 - Portable execution batch started on Codex with requested `gpt-6.1-sol`. The two initial Claude invocations stalled before producing output or edits, were stopped, and remain recorded; usage is unavailable.
-- Memory/Workflow batch is next. No implementation review has started.
+- Both implementation batches are complete. The portable source is committed locally at `4e77d4e5147c3457996827adef19132b08ea285f` and synchronized through `vendor.py`. No implementation review has started.
 - Actual package versions, checks and source commit pins are recorded after integration. No release or remote CI has been triggered.
+
+- Local staged versions are Memory 2.2.0, Workflow 1.11.0 and portable agent-tools 1.3.0. Catalogs and release pins remain published versions.
+- Portable validation passed 207 tests (174 existing and 33 execution tests). One earlier legacy refusal test failed with empty child stderr before an explicit passing retry; its cause remains unverified.
+- Frozen-source acceptance completed 164 Memory tests with no failures or skips, and 1,004 Workflow tests with two skill-size failures, one Windows loose-object fixture error and two skips. The original attempts are retained. The coordinator reduced the core skill from 6,260 to 6,111 bytes and corrected the extension version table. The author is fixing the disposable Windows fixture; affected retests are pending.
+- Initial package acceptance passed vendor integrity, documentation-checker regressions, both packages and the six native Memory installation cases. Documentation failed on stale table versions; Workflow upgrade smoke stopped at the skill-size guard. Only the affected documentation, Workflow package and upgrade checks are being repeated after correction.
+- Full test jobs are deterministic native processes, without an AI worker waiting on them. Package smoke uses separate temporary directories and overlaps safely with unit execution. Raw output remains ignored; bounded collection is used for status. Tests were run locally; no remote CI, release or Bunyan adoption has been started.
+
+- Correction complete: all six affected Workflow tests and the package-helper test passed. Documentation, rebuilt Workflow package and native upgrade/rollback smoke passed. Full suites were not repeated. See `retro-625-tooling-validation.json` for counts, retained failures, package hashes and limitations. The single completed-feature review is next.
