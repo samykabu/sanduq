@@ -1,8 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "progress": "1.1.2"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Progress 1.1.2 registers one internal hook command that is not a skill (ten skills down to five). Publish after successful main CI and downloaded asset verification."
 }

@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-10-16T14:17:51.411017+00:00",
+  "updated_at": "2026-10-16T16:13:10.315945+00:00",
   "catalog_url": "https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json",
   "extensions": {
     "project": {
@@ -450,7 +450,7 @@
     "progress": {
       "name": "Sanduq Progress Report",
       "id": "progress",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "description": "A live, deterministic progress report for a Spec Kit feature: lanes, tasks, blockers and decisions, collected from the host's native hooks and the feature files with no agent spent on upkeep.",
       "author": "Samy K. Abushanab",
       "license": "PolyForm-Noncommercial-1.0.0",
@@ -458,7 +458,7 @@
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/progress",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/progress/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/progress/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/progress-v1.1.1/progress.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/progress-v1.1.2/progress.zip",
       "requires": {
         "speckit_version": ">=1.1.1.dev0,<2.0.0",
         "tools": [
@@ -470,7 +470,7 @@
         ]
       },
       "provides": {
-        "commands": 10,
+        "commands": 5,
         "hooks": 2
       },
       "tags": [
@@ -485,8 +485,8 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "2765a384f08af636583d262eb41e52ce04c60cff8aca53e3290f5cb190e901d6",
-      "updated_at": "2026-10-16T14:17:51.410962+00:00"
+      "sha256": "566f5be45253c6e0fdbbbe88e85d72d1f1b79528fa48f347bf642754ab0a1126",
+      "updated_at": "2026-10-16T16:13:10.315877+00:00"
     }
   }
 }
