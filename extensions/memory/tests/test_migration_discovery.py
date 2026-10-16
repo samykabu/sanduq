@@ -53,17 +53,22 @@ class MigrationDiscoveryChecks:
         run = self.pause_after_publication()
         real_path = self.archive.repo.path
         deepest = max(run['created_output_directories'], key=lambda p: len(p.split('/')))
-        original_rmdir = Path.rmdir
+        # repo.path uses the resolved root; the fixture may retain a Windows 8.3 alias.
+        cleanup_target = real_path(deepest).resolve()
+        self.assertTrue(cleanup_target.is_dir())
+        path_type = type(cleanup_target)
+        original_rmdir = path_type.rmdir
 
         def interrupted(directory):
-            if directory == self.root / deepest:
+            if directory.resolve() == cleanup_target:
                 raise OSError('directory cleanup interrupted')
             return original_rmdir(directory)
 
-        with patch.object(Path, 'rmdir', interrupted):
+        with patch.object(path_type, 'rmdir', interrupted):
             with self.assertRaisesRegex(OSError, 'directory cleanup interrupted'):
                 self.archive.rollback(run['run_id'])
         self.assertEqual('rolling-back', self.archive.journal(run['run_id'])['phase'])
+        self.assertTrue(cleanup_target.is_dir())
         self.assertEqual('rolled-back', self.archive.rollback(run['run_id'])['phase'])
         self.assertEqual(self.before_discovery, self.archive.declared_hashes(['consumer']))
         self.assertEqual(self.original_fixture, real_path(self.source).read_bytes())

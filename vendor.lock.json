@@ -672,8 +672,8 @@
       ],
       "internal": true,
       "exclusive": true,
-      "ref": "agent-tools-v1.2.2",
-      "sha": "260b7a5565c129617e6c12a1f6f06087af6e2f18",
+      "ref": "8c77aafe3bc93cf01b6576750e91bc0591613fea",
+      "sha": "8c77aafe3bc93cf01b6576750e91bc0591613fea",
       "files": {
         "extensions/progress/assets/skill/SKILL.md": "9a54922d4a3399f68873a4aff2d4e4f2105d35b37117a589e8a36aa954148953",
         "extensions/progress/assets/ui/base.css": "fcfe5f3b9c86b8779e5b6d28a9923e329d103514f028c057d56e174e063c7c08",

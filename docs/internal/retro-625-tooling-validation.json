@@ -100,7 +100,7 @@
   },
   "package_sha256": {
     "memory": "8011681e91284c562a34918659f08d454a10e0f1ffc649d9e0c3a931c90bce52",
-    "workflow": "3a19f42ac97fe552f4c9e61bd03c2b8b9fe5a0e3aab2bfc790fde61a5887be90"
+    "workflow": "273725c3d6ae62945927f3c17a12b03e22492c18546cb0837877b8159881bdd9"
   },
   "integration": {
     "vendor_integrity": "passed",
@@ -191,5 +191,61 @@
       "residual": "R4 crossing overlap remained and received the final mechanical interval-union correction."
     },
     "final_r4_policy": "Small mechanical correction closed with focused regression evidence; no additional independent review or full-suite rerun."
+  },
+  "pr85_ci_correction": {
+    "failed_run": 38960044247,
+    "failed_head": "b6dc5219b897ec958de7f57ae5815fe79c9dca24",
+    "fixes": {
+      "bundle_pin": "Both agent-tools inputs pinned to 8c77aafe3bc93cf01b6576750e91bc0591613fea; Progress Report bytes unchanged.",
+      "workflow_guard": "Exact receipt-rule phrase restored; capture-before-editing retained; core 6134 bytes.",
+      "project_init": "Smoke installs packaged Workflow with automatically included shared helpers.",
+      "memory_fixture": "Canonical concrete cleanup target handles Windows 8.3 aliases; runtime archive.py unchanged."
+    },
+    "local_checks": {
+      "repository_tooling": {
+        "run": 83,
+        "status": "passed",
+        "attempt": "attempt-1792184051302-1c27f426fd9e"
+      },
+      "focused_author": {
+        "workflow_passed": 3,
+        "memory_alias_cases_passed": 2,
+        "python": "supplied venv313: CPython 3.13.15, Windows AMD64; original CI used 3.13.16"
+      },
+      "linux_shell_smokes": [
+        {
+          "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+          "yaml": "6.0.3",
+          "packaging": "25.0"
+        },
+        {
+          "shell": "bash",
+          "exit_code": 0,
+          "seconds": 3.95,
+          "log": "/work/dist/pr85-bash-corrected.log",
+          "failure_tail": null
+        },
+        {
+          "shell": "pwsh",
+          "exit_code": 0,
+          "seconds": 4.13,
+          "log": "/work/dist/pr85-pwsh-corrected.log",
+          "failure_tail": null
+        }
+      ],
+      "vendor": "passed",
+      "documentation": "passed",
+      "workflow_package": "passed",
+      "source_hashes_unchanged_during_checks": true
+    },
+    "retained_attempts": {
+      "initial_native": "attempt-1792184051302-1c27f426fd9e",
+      "linux_final": "attempt-1792184184758-73a120d5e4ee",
+      "note": "Local Linux runtime preparation needed pinned dependencies and the python alias normally provided by CI setup-python; no product edits were made for those environment issues.",
+      "local_missing_packaging": "attempt-1792184051302-1c27f426fd9e",
+      "local_missing_unversioned_python": "attempt-1792184135145-68608e781b31"
+    },
+    "proof_root": ".delegate/pr85-ci",
+    "remote_status": "Local evidence only. Remote PR CI is separate; no remote success is claimed here."
   }
 }
