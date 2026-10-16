@@ -17,7 +17,12 @@ python .specify/extensions/workflow/scripts/progress_bridge.py mode
 The host is detected from the environment and an unknown host selects `refresh`. A Codex coordinator passes
 `--host codex`.
 
-It prints `reporting: projection`, `reporting: refresh` or `reporting: legacy`. In the commands below `progress` stands
+It prints `reporting: projection`, `reporting: refresh` or `reporting: legacy`. On Codex, registered Progress hooks that the
+user has not approved print `reporting: refresh (codex hooks not approved)` (`--json` has a `reason` field): Codex skips
+untrusted projects and unapproved hooks. Tell the user to approve the five Progress hooks in Codex (SessionStart, PreToolUse
+matcher `Task|Agent|spawn_agent`, PostToolUse, Stop, SessionEnd; each runs
+`python3 .specify/events.py speckit.progress.hook-<event> <event> 10`) and to trust the project. A hook changed after
+approval may need approving again; the bridge cannot detect a stale approval. In the commands below `progress` stands
 for `python .specify/extensions/progress/scripts/progress.py`; every verb prints one line.
 
 | Mode | When | Coordinator does |

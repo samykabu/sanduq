@@ -40,7 +40,7 @@ Items keep a written id (`T001`); others get stable `P001`... ids. With one plan
 | Decision | `progress decide ask "question" --options a,b`; `progress decide made D2 b --by user` |
 | Note | `progress note "text" --target P005` |
 | Export | `progress export --format md` |
-| Hooks | `progress hooks install\|uninstall\|status --host claude\|codex [--scope project\|user]` |
+| Hooks | `progress hooks install\|uninstall\|status --host claude\|codex [--scope project\|user]`; Codex also needs the project trusted and hooks approved |
 
 ## Rules
 

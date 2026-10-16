@@ -280,7 +280,8 @@ def install(root, host, scope, python, force_both=False):
         return True
 
     edit(path, mutate, install_lock_path(root, host))
-    note = ' (Codex hooks are experimental: enable the codex_hooks feature)' if host == 'codex' else ''
+    note = (' (Codex hooks are experimental: enable the codex_hooks feature; Codex runs them only after you trust the project '
+            'and approve each hook)') if host == 'codex' else ''
     return f'progress: hooks installed {host} {scope} {len(EVENTS[host])} entries in {shown(root, path)}{note}'
 
 
@@ -292,10 +293,108 @@ def uninstall(root, host, scope):
     return f'progress: hooks removed {host} {scope} {removed or 0} entries from {shown(root, path)}'
 
 
+# ---- Codex approval -----------------------------------------------------------------------------------------
+# Codex runs a project hook only when the project is trusted in the user config ([projects."<path>"] trust_level) and the
+# hook definition is approved ([hooks.state."<file>:<event>:<group>:<hook>"] trusted_hash). Read-only: never edited here.
+# The hash algorithm is not ours to verify, so an edited hook may need approving again.
+
+def codex_config(scope, root):
+    if scope == 'project':
+        return Path(root) / '.codex' / 'config.toml'
+    base = Path(os.environ['CODEX_HOME']) if os.environ.get('CODEX_HOME') else home() / '.codex'
+    return base / 'config.toml'
+
+
+def load_toml(path):
+    """The parsed TOML document, {} when absent, None when unreadable (or tomllib is missing: Python before 3.11)."""
+    try:
+        import tomllib
+        return tomllib.loads(Path(path).read_text(encoding='utf-8'))
+    except FileNotFoundError:
+        return {}
+    except Exception:
+        return None
+
+
+def norm_key(text):
+    """Windows-proof comparison: separators and case do not matter, nor an extended-length prefix."""
+    text = str(text).replace(chr(92), '/')
+    return re.sub(r'^//[?.]/', '', text).lower()
+
+
+def snake(name):
+    return re.sub(r'(?<!^)(?=[A-Z])', '_', name).lower() if not name.islower() else name
+
+
+def codex_hook_keys(path, data, ours):
+    """State keys of every hook in `data['hooks']` accepted by `ours(handler)`: file:event:group:hook."""
+    keys = []
+    hooks = data.get('hooks')
+    for event, groups in (hooks.items() if isinstance(hooks, dict) else ()):
+        if not isinstance(groups, list):
+            continue
+        for gi, group in enumerate(groups):
+            inner = group.get('hooks') if isinstance(group, dict) else None
+            for hi, handler in enumerate(inner if isinstance(inner, list) else ()):
+                if ours(handler):
+                    keys.append(f'{Path(path).resolve().as_posix()}:{snake(event)}:{gi}:{hi}')
+    return keys
+
+
+def mentions_speckit(handler):
+    return any(SPECKIT_MARK in t for t in strings(handler))
+
+
+def codex_registered(root, scope):
+    """State keys of the Progress hooks Codex would read for this scope: the installer's hooks.json entries plus the
+    Spec Kit entries in config.toml."""
+    found = []
+    hooks_file = settings_path(root, 'codex', scope)
+    data, ok = load_quiet(hooks_file)
+    if ok:
+        found += codex_hook_keys(hooks_file, data, is_ours)
+    config = codex_config(scope, root)
+    toml = load_toml(config)
+    if toml:
+        found += codex_hook_keys(config, toml, mentions_speckit)
+    return found
+
+
+def codex_approval(root):
+    """{'trusted': bool|None, 'project': (registered, approved), 'user': (registered, approved), 'known': bool}.
+    `known` is False when the user config cannot be read, in which case nothing is claimed about approval."""
+    user = load_toml(codex_config('user', root))
+    state = user.get('hooks', {}).get('state', {}) if isinstance(user, dict) and isinstance(user.get('hooks'), dict) else {}
+    approved = {norm_key(k) for k, v in state.items() if isinstance(v, dict) and str(v.get('trusted_hash') or '').strip()}
+    projects = user.get('projects', {}) if isinstance(user, dict) and isinstance(user.get('projects'), dict) else {}
+    trusted_paths = {norm_key(k).rstrip('/') for k, v in projects.items() if isinstance(v, dict) and v.get('trust_level') == 'trusted'}
+    here = Path(root).resolve()
+    chain = [norm_key(p.as_posix()).rstrip('/') for p in (here, *here.parents)]
+    out = {'known': user is not None, 'trusted': any(c in trusted_paths for c in chain)}
+    for scope in ('project', 'user'):
+        keys = codex_registered(root, scope)
+        out[scope] = (len(keys), sum(1 for k in keys if norm_key(k) in approved))
+    return out
+
+
+def codex_unapproved(root):
+    """True when Codex has Progress hooks registered that it will not run (not approved, or project untrusted)."""
+    try:
+        info = codex_approval(root)
+    except Exception:
+        return False
+    if not info['known']:
+        return False
+    registered, approved = info['project']
+    user_registered, user_approved = info['user']
+    return (registered and (approved < registered or not info['trusted'])) or user_approved < user_registered
+
+
 def status(root, hosts):
     parts, speckit = [], False
+    approval = codex_approval(root) if 'codex' in hosts else None
     for host in hosts:
-        cells = []
+        cells, needs_action = [], False
         for scope in ('project', 'user'):
             data, ok = load_quiet(settings_path(root, host, scope))
             if not ok:
@@ -303,8 +402,28 @@ def status(root, hosts):
                 continue
             speckit = speckit or has_speckit(data)
             gone = missing_scripts(root, data)
-            cells.append(f'{scope} {own_count(data)}/{len(EVENTS[host])}' + (f' ({gone} script missing)' if gone else ''))
-        parts.append(f'{host} ' + ' '.join(cells))
+            expected = len(EVENTS[host])
+            count = own_count(data)
+            if host == 'codex':
+                toml = load_toml(codex_config(scope, root))
+                speckit = speckit or bool(toml) and SPECKIT_MARK in ' '.join(strings(toml.get('hooks', {})))
+                registered, approved = approval[scope]
+                if registered:
+                    expected = max(expected, registered)
+                    cell = f'{scope} {registered}/{expected} registered' + (f' ({gone} script missing)' if gone else '')
+                    if approval['known']:
+                        cell += f', {approved}/{registered} approved'
+                        needs_action = needs_action or approved < registered
+                        if scope == 'project' and not approval['trusted']:
+                            cell += ', project untrusted'
+                            needs_action = True
+                    cells.append(cell)
+                    continue
+            cells.append(f'{scope} {count}/{expected}' + (f' ({gone} script missing)' if gone else ''))
+        detailed = any('registered' in c for c in cells)
+        parts.append(f'{host} ' + ('; ' if detailed else ' ').join(cells))
+        if needs_action:
+            parts[-1] += ' (approve the hooks in Codex)'
     return 'progress: hooks ' + '; '.join(parts) + f"; spec-kit {'yes' if speckit else 'no'}"
 
 

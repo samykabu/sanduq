@@ -146,6 +146,15 @@ detectable. `--json` adds `script`, `automatic`, `host` and the `source` of the 
 Hooks count as disabled when the host's own switch is off: Claude Code's `disableAllHooks`, or a Codex `[features]`
 entry (`hooks` or `codex_hooks`) set to `false`. A config that cannot be read is not evidence of collection.
 
+**Codex approval.** Codex runs a project hook only when the project is `trusted` in the user config and the hook
+definition was approved. Review and approve the five Progress hooks in Codex (its hooks review prompt), each running
+`python3 .specify/events.py speckit.progress.hook-<event> <event> 10`: SessionStart, PreToolUse (matcher
+`Task|Agent|spawn_agent`), PostToolUse, Stop and SessionEnd. The bridge counts a Codex hook as active only when
+`[projects."<path>"] trust_level = "trusted"` and a `[hooks.state."<config file>:<event>:<group>:<hook>"]` entry with a
+`trusted_hash` exist in `$CODEX_HOME/config.toml` (or `~/.codex/config.toml`). Without them it selects `refresh` and prints
+`reporting: refresh (codex hooks not approved)`; `--json` adds `reason`. The hash is not verified: a hook that changed after
+approval may need approving again, and the bridge cannot detect that.
+
 **Never spawn, retain, message or poll an agent only to maintain the report.** This holds in every mode. The coordinator
 makes the few calls in its mode table as part of its own turn. Opening the report once for a person is fine; reopening it,
 re-verifying it or waiting to see it refresh is not. Waiting for a worker to finish is different and stays.

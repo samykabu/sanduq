@@ -503,7 +503,13 @@ progress: hooks removed claude project 5 entries from .claude/settings.json
 ```
 
 `status` counts tagged entries against the number written for that host, per scope, and says whether Spec Kit's Progress
-hooks are present. Errors: `PROGRESS_USAGE` (2: no `--host`, unsafe `--python`), `PROGRESS_HOOKS_SPECKIT`,
+hooks are present. For Codex it also reads the user's Codex config (read-only) and, once hooks are registered in a
+scope, reports `N/M registered, K/M approved` and `project untrusted` when the project is not trusted, ending with
+`(approve the hooks in Codex)` when something is unapproved. Spec Kit hooks in the project's `.codex/config.toml` count
+too. Codex skips unapproved hooks silently; see [Hosts](hosts.md#codex-trust-and-hook-approval-verified-on-a-real-codex-session-2026-10-16).
+Example: `progress: hooks codex project 5/5 registered, 0/5 approved, project untrusted; user 0/4 (approve the hooks in Codex); spec-kit no`.
+`install --host codex` prints a reminder that Codex must trust the project and approve the hooks before they run. When no
+Codex session is bound and the hooks are unapproved, `progress status` ends with `no bound session (codex hooks not approved?)`. Errors: `PROGRESS_USAGE` (2: no `--host`, unsafe `--python`), `PROGRESS_HOOKS_SPECKIT`,
 `PROGRESS_HOOKS_SETTINGS`, `PROGRESS_HOOKS_PATH`, `PROGRESS_HOOKS_DUPLICATE`, `PROGRESS_HOOKS_CONFLICT`,
 `PROGRESS_UNSAFE_TARGET` (all 3).
 

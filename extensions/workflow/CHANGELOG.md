@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.10.3] - 2026-10-16
+
+- On Codex, `progress_bridge.py mode` counts the Progress hooks as active only when Codex will run them: the project is `trusted` in `$CODEX_HOME/config.toml` (or `~/.codex/config.toml`) and a `[hooks.state."<config file>:<event>:<group>:<hook>"]` entry with a `trusted_hash` exists for the hook. Registered but unapproved hooks select `refresh` instead of `projection`; the text line becomes `reporting: refresh (codex hooks not approved)` and `--json` adds `reason`. The hash is not verified, so a hook changed after approval is not detected. User-level `hooks.json` hooks follow the same rule. Claude is unchanged.
+
 ## [1.10.2] - 2026-10-16
 
 - Offer Progress 1.1.0 as the optional Progress version. It vendors the portable `progress-report` skill and adds plan mode; the Workflow bridge and the `progress.py` forwarding are unchanged. The vendored `delegate-task` is re-pinned to `agent-tools-v1.2.0` without file changes.
