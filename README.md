@@ -18,11 +18,11 @@ also run them together, taking one GitHub issue to a verified pull request and r
 interruption. If you do not use Spec Kit, the same diagram, manual and delegation skills are
 available as portable agent skills in [sanduq-skills](https://github.com/samykabu/sanduq-skills).
 
-> $${\color{red}	ext{CI runner exception: .github/workflows/ci.yml jobs changes, regression and memory-installation run on GitHub-hosted runners (ubuntu-latest, windows-latest).}}$$
+> $${\color{red}\text{CI runner exception: .github/workflows/ci.yml jobs changes, regression and memory-installation run on GitHub-hosted runners (ubuntu-latest, windows-latest).}}$$
 >
-> $${\color{red}	ext{Why: no self-hosted runner is registered for samykabu/sanduq; the home ARC scale sets serve the abushanab-net organization only. The regression matrix also needs a Windows runner.}}$$
+> $${\color{red}\text{Why: no self-hosted runner is registered for samykabu/sanduq; the home ARC scale sets serve the abushanab-net organization only. The regression matrix also needs a Windows runner.}}$$
 >
-> $${\color{red}	ext{Removal: register a self-hosted runner or ARC scale set for samykabu/sanduq, then move these jobs to it.}}$$
+> $${\color{red}\text{Removal: register a self-hosted runner or ARC scale set for samykabu/sanduq, then move these jobs to it.}}$$
 
 ## Products
 
