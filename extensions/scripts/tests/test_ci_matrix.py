@@ -50,5 +50,47 @@ class CiMatrixTests(unittest.TestCase):
         self.assertFalse(ci_matrix.build(["extensions/scope/x.py"], "push")["memory_install"])
 
 
+
+class ReviewFindings(unittest.TestCase):
+    def test_scope_change_also_runs_workflow(self):
+        self.assertEqual(ci_matrix.suites_for(["extensions/scope/scripts/scope.py"]), {"scope", "workflow"})
+
+    def test_docs_examples_run_the_suites_that_read_them(self):
+        self.assertEqual(ci_matrix.suites_for(["docs/examples/booking-illustration-theme.yml"]),
+                         {"illustrate", "user-manual"})
+        self.assertEqual(ci_matrix.suites_for(["docs/start/install.md"]), set())
+
+    def test_rename_out_of_a_suite_keeps_the_old_path(self):
+        import os
+        import shutil
+        import subprocess
+        import tempfile
+        repo = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, repo, ignore_errors=True)
+
+        def git(*args):
+            return subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, text=True).stdout.strip()
+        git("init", "-q")
+        git("config", "user.email", "t@example.invalid")
+        git("config", "user.name", "t")
+        os.makedirs(os.path.join(repo, "extensions", "memory"))
+        with open(os.path.join(repo, "extensions", "memory", "a.py"), "w") as fh:
+            fh.write("x = 1" + chr(10) * 1 + "y = 2" + chr(10))
+        git("add", "-A")
+        git("commit", "-qm", "base")
+        base = git("rev-parse", "HEAD")
+        os.makedirs(os.path.join(repo, "docs"))
+        git("mv", "extensions/memory/a.py", "docs/a.py")
+        git("commit", "-qm", "move")
+        head = git("rev-parse", "HEAD")
+        here = os.getcwd()
+        os.chdir(repo)
+        try:
+            files = ci_matrix.changed_files("push", base, head)
+        finally:
+            os.chdir(here)
+        self.assertIn("extensions/memory/a.py", files)
+        self.assertIn("memory", ci_matrix.suites_for(files))
+
 if __name__ == "__main__":
     unittest.main()

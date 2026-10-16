@@ -27,7 +27,14 @@ ALWAYS_ALL = {"schedule", "workflow_dispatch"}
 #   progress -> workflow: workflow tests exercise the Progress integration.
 #   workflow -> scope: scope loads extensions/workflow/scripts/{workflow,decisions}.py
 #                      (extensions/scope/scripts/workflow_policy.py).
-DEPENDENTS = {"progress": ["workflow"], "workflow": ["scope"]}
+#   scope -> workflow: workflow's ScopeCommandTests import Scope's real parser and main()
+#                      (extensions/workflow/tests/test_execution_tools.py).
+DEPENDENTS = {"progress": ["workflow"], "workflow": ["scope"], "scope": ["workflow"]}
+
+# docs/ paths that a regression suite reads as real inputs (not fixtures). Other docs/ changes only need lint.
+#   docs/examples/: illustrate validates booking-illustration-theme.yml (test_illustration_theme.py);
+#                   the booking manual is the user-manual example.
+DOC_SUITES = {"docs/examples/": ["illustrate", "user-manual"]}
 
 
 def suites_for(files):
@@ -39,7 +46,10 @@ def suites_for(files):
             continue
         parts = path.split("/")
         if parts[0] == "docs":
-            continue  # lint runs check_docs.py; no regression suite reads docs/
+            for prefix, dependents in DOC_SUITES.items():
+                if path.startswith(prefix):
+                    suites.update(dependents)
+            continue  # lint runs check_docs.py for the rest of docs/
         if parts[0] == "extensions" and len(parts) > 2 and parts[1] in SUITES:
             suite = parts[1]
             suites.add(suite)
@@ -73,7 +83,7 @@ def changed_files(event, base, head):
         return None
     sep = "..." if event == "pull_request" else ".."
     try:
-        out = subprocess.run(["git", "diff", "--name-only", f"{base}{sep}{head}"],
+        out = subprocess.run(["git", "diff", "--name-only", "--no-renames", f"{base}{sep}{head}"],
                              check=True, capture_output=True, text=True).stdout
     except (subprocess.CalledProcessError, OSError):
         return None  # e.g. force push removed `before`; run everything
