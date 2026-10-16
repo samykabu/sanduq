@@ -29,6 +29,35 @@ entries are present. The command reference lists the files, paths and exit codes
 An entry written by `install` is silent: `hook.py` prints nothing and exits 0 in every case, so a Claude or Codex
 session never shows a hook failure. Without a binding (`progress init` through the shell tool) the events are dropped.
 
+### Codex: trust and hook approval (verified on a real Codex session, 2026-10-16)
+
+Codex runs a project hook only when both hold:
+
+1. The project is trusted in the user config (`$CODEX_HOME/config.toml`, else `~/.codex/config.toml`):
+   `[projects."<lowercased project path>"]` with `trust_level = "trusted"`.
+2. Each hook definition is approved: `[hooks.state."<absolute path of the defining file>:<event>:<group index>:<hook index>"]`
+   with `trusted_hash = "sha256:..."`. The event is snake_case, for example
+   `C:/work/app/.codex/hooks.json:post_tool_use:0:0`.
+
+Unapproved hooks are skipped silently: the session never binds and the report goes stale. `codex exec` sessions skip
+unapproved hooks too. Approve the hooks in Codex after `progress hooks install --host codex`; editing a hook may require
+approving it again (Progress does not compute or check the hash). Progress only reads this state, and never edits the
+trust or approval entries. `progress hooks status --host codex` reports registered and approved counts per scope and
+whether the project is trusted. It compares keys ignoring case and `\` versus `/`.
+
+The five hooks (four from the installer: Codex has no session end):
+
+| Event | Matcher | Installer command (`.codex/hooks.json`) | Spec Kit command (`.codex/config.toml`) |
+| --- | --- | --- | --- |
+| `session_start` | | `python "<hook.py>" session_start --managed-by=progress-report; exit 0` | `speckit.progress.hook-session-start` |
+| `pre_tool_use` | `Task\|Agent\|spawn_agent` | `... pre_tool_use ...` | `speckit.progress.hook-pre-tool-use` |
+| `post_tool_use` | | `... post_tool_use ...` | `speckit.progress.hook-post-tool-use` |
+| `stop` | | `... stop ...` | `speckit.progress.hook-stop` |
+| `session_end` | | not installed for Codex | `speckit.progress.hook-session-end` |
+
+Spec Kit writes its hooks into the project's `.codex/config.toml` (`[[hooks.<Event>]]` groups); `hooks status` counts
+those that name `speckit.progress.hook` and checks their approval under the `config.toml` path.
+
 ## Spec Kit event dispatch (verified in source)
 
 1. The integration writes a native hook whose command is

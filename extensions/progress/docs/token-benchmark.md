@@ -47,11 +47,11 @@ Fixed tool framing is identical across approaches and is not counted. Setup cost
 | `decision_made` | 2 | 83 | 1288 | 797 | 0 |
 | `reopen_task` | 1 | 0 | 1368 | 504 | 0 |
 | `noop_refresh` | 7 | 0 | 0 | 0 | 0 |
-| `resume` | 1 | 877 | 901 | 901 | 1349 |
-| `compaction` | 1 | 877 | 898 | 898 | 1355 |
-| **Updates total** | 55 | **2399** | **59967** | **24206** | **2704** |
-| Setup (once per feature) | | 893 | 581 | 581 | 0 |
-| **Total with setup** | | **3292** | **60548** | **24787** | **2704** |
+| `resume` | 1 | 887 | 901 | 901 | 1349 |
+| `compaction` | 1 | 887 | 898 | 898 | 1355 |
+| **Updates total** | 55 | **2419** | **59967** | **24206** | **2704** |
+| Setup (once per feature) | | 903 | 581 | 581 | 0 |
+| **Total with setup** | | **3322** | **60548** | **24787** | **2704** |
 
 ## Results: cl100k_base
 
@@ -67,11 +67,11 @@ Fixed tool framing is identical across approaches and is not counted. Setup cost
 | `decision_made` | 2 | 83 | 1269 | 784 | 0 |
 | `reopen_task` | 1 | 0 | 1364 | 500 | 0 |
 | `noop_refresh` | 7 | 0 | 0 | 0 | 0 |
-| `resume` | 1 | 873 | 904 | 904 | 1351 |
-| `compaction` | 1 | 873 | 901 | 901 | 1357 |
-| **Updates total** | 55 | **2396** | **59771** | **24014** | **2708** |
-| Setup (once per feature) | | 889 | 582 | 582 | 0 |
-| **Total with setup** | | **3285** | **60353** | **24596** | **2708** |
+| `resume` | 1 | 883 | 904 | 904 | 1351 |
+| `compaction` | 1 | 883 | 901 | 901 | 1357 |
+| **Updates total** | 55 | **2416** | **59771** | **24014** | **2708** |
+| Setup (once per feature) | | 899 | 582 | 582 | 0 |
+| **Total with setup** | | **3315** | **60353** | **24596** | **2708** |
 
 ## Break-even including setup
 
@@ -82,15 +82,15 @@ Fixed tool framing is identical across approaches and is not counted. Setup cost
 
 | Approach | Updates | Setup |
 | --- | ---: | ---: |
-| NEW | 9367 | 3479 |
+| NEW | 9481 | 3536 |
 | MD-EDIT | 195314 | 2162 |
 | MD-EDIT-LEAN | 80828 | 2162 |
 | MD-RENDER | 7701 | 0 |
 
 ## Reading the result
 
-- Updates only, o200k_base: NEW 2399, MD-EDIT 59967 (25.0x), MD-EDIT-LEAN 24206.
-- NEW setup is 893 tokens (the skill text plus `init`). The skill loads again after a restart or compaction.
+- Updates only, o200k_base: NEW 2419, MD-EDIT 59967 (24.8x), MD-EDIT-LEAN 24206.
+- NEW setup is 903 tokens (the skill text plus `init`). The skill loads again after a restart or compaction.
 - `unblock`, `block`, `decision` and note verbs cost tens of tokens because their command line is the whole cost.
 - The per-verb prefix `python .claude/skills/progress-report/scripts/progress.py` is 13 tokens of each NEW line. A shorter entry point would reduce every NEW figure.
 

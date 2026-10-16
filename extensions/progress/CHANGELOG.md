@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.1.1] - 2026-10-16
+
+- Vendors `progress-report` from `agent-tools-v1.2.1`. `progress hooks status --host codex` now reports how many Progress hooks Codex has approved and whether the project is trusted, including the hooks Spec Kit writes into `.codex/config.toml`; Codex skips unapproved project hooks silently, so the session never binds until you approve them in Codex. `progress status` hints at this when no session is bound. The host docs list the five hooks to approve.
+
 ## [1.1.0] - 2026-10-16
 
 - The Progress code, report page and reference docs are now vendored from the portable `progress-report` skill in

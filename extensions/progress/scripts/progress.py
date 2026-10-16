@@ -419,8 +419,20 @@ def cmd_status(a, root):
     require_init(ctx)
     state = refreshlib.read_state(ctx)
     report = model.build(ctx, now(), int(state.get('rev') or 0), state)
-    print(json.dumps(report, indent=2, ensure_ascii=False) if a.json else summary_line(report))
+    print(json.dumps(report, indent=2, ensure_ascii=False) if a.json else summary_line(report) + codex_hint(root))
     return 0
+
+
+def codex_hint(root):
+    """Cheap: only when no Codex session is bound, and then one small read of the user's Codex config."""
+    try:
+        from sanduq_progress import hooks_install
+        sessions = snapshot._load(snapshot.project_dir(root) / 'bindings.json').get('sessions', {})
+        if any(str(k).startswith('codex:') for k in sessions):
+            return ''
+        return ' no bound session (codex hooks not approved?)' if hooks_install.codex_unapproved(root) else ''
+    except Exception:
+        return ''
 
 
 def mutate(ctx, a, make):

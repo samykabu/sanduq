@@ -1,8 +1,9 @@
 {
   "schema_version": 1,
   "versions": {
-    "workflow": "1.10.3"
+    "workflow": "1.10.3",
+    "progress": "1.1.1"
   },
   "status": "ready",
-  "note": "Progress 1.1.0 vendors the progress-report skill from agent-tools 1.2.0 and adds plan mode and the hooks installer; Workflow 1.10.2 offers Progress 1.1.0. Workflow 1.10.3 makes Codex reporting fall back to refresh until the Progress hooks are approved in Codex. Publish after successful main CI and downloaded asset verification."
+  "note": "Workflow 1.10.3 makes Codex reporting fall back to refresh until the Progress hooks are approved in Codex; Progress 1.1.1 vendors agent-tools 1.2.1 (hooks status reports Codex approval). Publish after successful main CI and downloaded asset verification."
 }
