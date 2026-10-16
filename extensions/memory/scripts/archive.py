@@ -912,7 +912,24 @@ class Archive:
         if self.repo.scoped_index(run["scope"]) != run["input_index"]:
             raise ArchiveError("Unrelated index changed during this archive. Resolve before resuming.")
 
+    def output_parents(self, after: dict) -> set[str]:
+        """Exact validated directories required by approved nondeleted file outputs."""
+        parents = set()
+        for name, content_hash in after.items():
+            if content_hash is None:
+                continue
+            for parent in self.repo.path(name).parents:
+                if parent == self.repo.root:
+                    break
+                label = parent.relative_to(self.repo.root).as_posix()
+                directory = self.repo.path(label)
+                if directory.exists() and not directory.is_dir():
+                    raise ArchiveError('Archive output parent is not a directory: ' + label)
+                parents.add(label)
+        return parents
+
     def publishing_guard(self, run: dict) -> None:
+        output_parents = self.output_parents(run['after'])
         current = self.product_state()
         for path in set(current) | set(run["product"]):
             expected = {run["product"].get(path)}
@@ -926,6 +943,8 @@ class Archive:
                 expected = {run['declared_hashes'].get(path)}
                 if path.endswith('/') and self.repo.within(path.rstrip('/'), run['specs']):
                     expected.add(None)  # selected feature directories are removed with their inventoried files
+                if path.endswith('/') and path[:-1] in output_parents:
+                    expected.add('directory')
                 if path in run['after']:
                     expected.add(run['after'][path])
                 if current.get(path) not in expected:
@@ -951,6 +970,10 @@ class Archive:
         if self.repo.scoped_index(run["scope"]) != run["input_index"]:
             raise ArchiveError("Unrelated index changed; preserving user work before rollback.")
         self.publishing_guard(run)
+        output_parents = self.output_parents(run['after'])
+        created_directories = run.get('created_output_directories', [])
+        if any(path not in output_parents for path in created_directories):
+            raise ArchiveError('Recorded output directory is not an approved file parent.')
         for path in run["outputs"]:
             if self.repo.file_hash(path) not in (run["before"][path], run["after"][path]):
                 raise ArchiveError(f"Unexpected edit to archive output; preserving user work: {path}")
@@ -963,6 +986,11 @@ class Archive:
                 target.unlink(missing_ok=True)
             else:
                 atomic_write(target, base64.b64decode(encoded))
+        # Restore discovery membership too; rmdir preserves any unexpected user contents.
+        for path in sorted(created_directories, key=lambda p: len(p.split('/')), reverse=True):
+            directory = self.repo.path(path)
+            if directory.exists():
+                directory.rmdir()
         indexed = [p for p in self.repo.index() if p in run["outputs"]]
         if indexed:
             self.repo.git_paths("restore", "--source=" + run["final_parent"], "--staged", paths=indexed)
@@ -1015,6 +1043,8 @@ class Archive:
             run["original_outputs"] = {p: base64.b64encode(self.repo.path(p).read_bytes()).decode()
                                        if run["before"][p] is not None else None for p in outputs}
             run["after"] = {p: None if data is None else digest(data) for p, data in outputs.items()}
+            run['created_output_directories'] = sorted(
+                path for path in self.output_parents(run['after']) if not self.repo.path(path).exists())
             run["scope"] = scope
             run["input_index"] = self.repo.scoped_index(scope)
             run["final_parent"] = self.repo.head()

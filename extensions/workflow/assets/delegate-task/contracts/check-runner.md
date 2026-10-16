@@ -1,6 +1,10 @@
 # Native check batches and bounded collection
 
-`check-runner.mjs` runs a sequential batch of local programs with Node 18+ and no dependencies.
+`check-runner.mjs` runs a sequential batch of local programs with Node 18+.
+Containment uses built-in Windows PowerShell 5 on Windows 8+/Server 2012+, or a real Python 3.9+
+interpreter with Linux 3.4+ subreaper support and a readable `/proc`. Linux probes
+`/usr/bin/python3` and `/usr/local/bin/python3`; `DELEGATE_CONTAINMENT_PYTHON` selects an explicit
+absolute binary instead. Other platforms refuse execution before launching a check.
 Use it for deterministic checks whose argv is already known. One batch invocation executes each
 check once; one collector reads the evidence. Keep bookkeeping in these CLIs.
 
@@ -65,8 +69,9 @@ An exclusive execution lock is held for the whole batch, including all checks. A
 exits 3 without executing any check. Recovery removes only the dead owner's immutable filename,
 then removes the empty lock directory. Unknown, incomplete or live ownership blocks execution;
 age alone never proves death. Launch intent and the active child are recorded under that lock;
-recovery also refuses a live child/group or an uncertain launch. On Windows, an interrupted active
-tree remains protected even if its root pid has gone. PID reuse can conservatively block recovery. No process read from
+recovery also refuses a live helper, an uncertain launch, or missing native closure proof.
+An interrupted active tree remains protected even if its root pid has gone.
+PID reuse can conservatively block recovery. No process read from
 a lock is killed, and a runner never removes another owner's attempt or artifacts.
 
 An existing attempt also protects a batch after its execution lock is released. Default `run`
@@ -92,13 +97,34 @@ before manifest binding remain collectable but require a new batch ID for execut
 Python interpreter probe occurs only on an authorized execution, never when returning an existing
 receipt. An incomplete launched attempt requires explicit ownership/child resolution before retry.
 
-Failures do not trigger retries. Following checks still run. Per-check statuses distinguish
-`passed`, `failed`, `launch_failed`, `timeout`, `abandoned`, `pending` and `skipped`; exit codes,
+Failures do not trigger retries. Following checks run only after containment has closed.
+Per-check statuses distinguish
+`passed`, `failed`, `launch_failed`, `timeout`, `abandoned`, `containment_unresolved`, `pending` and `skipped`; exit codes,
 signals, launch errors and artifact errors are retained. Success means every named check passed.
-Timeouts and caught interrupts terminate the owned process group on POSIX or the owned tree
-with Windows `taskkill /T /F`. Descendants that deliberately escape their group/tree require
-OS-level containment. A hard-killed runner may leave a child alive; recovery does not kill it.
-Before recovering such a batch, the owner must resolve its recorded child separately.
+
+A private helper owns each check's descendants, including background processes with detached
+stdio. A direct-child exit retains its actual exit code while the helper waits for descendants;
+the check's deadline includes that wait. Windows creates the root suspended, assigns it to a
+Job Object with kill-on-close and no breakaway, then resumes it. Job accounting must report zero
+active processes before closure. Linux uses a subreaper, reaps adopted descendants, and requires
+`ECHILD` before closure. Timeouts, caught interrupts and detected supervisor loss stop only the
+helper's owned processes and wait for closure. See the platform contracts for
+[Windows Job Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects) and
+[Linux subreapers](https://man7.org/linux/man-pages/man2/PR_SET_CHILD_SUBREAPER.2const.html).
+
+Each helper writes a nonce-bound, immutable UTF-8 `NNN.containment.json` proof before announcing
+completion. Missing proof or failed cleanup records `containment_unresolved`, skips later checks,
+retains execution ownership and refuses subsequent runs/retries. A dead supervisor can be recovered
+only after its helper is dead and matching closure proof exists. A hard-killed Windows helper
+closes its Job Object, but can die before persisting proof; the lease then remains unresolved.
+On Linux, hard helper loss can leave descendants alive and also keeps the lease unresolved.
+Recovery never terminates processes or clears that uncertainty automatically.
+
+This contains ordinary descendant processes, including new sessions/process groups. It is not a
+security sandbox: programs that ask external brokers, services or privileged facilities to create
+unrelated processes exceed this ownership model. A Windows host that prevents Job Object
+assignment fails the launch while the root is still suspended. Linux requires the private helper
+to remain alive to supervise adopted descendants. Run untrusted programs in a separate sandbox.
 
 The runner keeps completed checkpoints even if it dies before the terminal result. Collection
 reports that attempt as `incomplete` and unlaunched checks as `pending`, never passed.

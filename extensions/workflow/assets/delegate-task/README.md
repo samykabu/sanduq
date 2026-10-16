@@ -83,7 +83,8 @@ plan, one batch invocation and one bounded collector. That contract includes Pow
 attempt ownership, failure exits and `delegate collect --summary` projection limits. It also
 documents heartbeat-only startup diagnostics and the opt-in `--startup-timeout` deadline.
 
-- **Node 18+.** No dependencies, nothing to install.
+- **Node 18+.** The delegate driver has no dependencies. Native check batches also need the
+  platform containment helper described in the [check runner contract](contracts/check-runner.md).
 - At least one agent CLI on `PATH`, already logged in.
 - `git`, for the measurement layer. Without it every git field reports `null`, never `false`.
 

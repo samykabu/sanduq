@@ -3,9 +3,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { spawn, execFileSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { acquireBatchLock, killOwnedTree, alive } from './process-tools.mjs';
+import { acquireBatchLock, containmentClosed, containmentProof, alive } from './process-tools.mjs';
+import { runContained } from './containment.mjs';
 import { excerptFile, redact, clipChars } from './bounded.mjs';
 import { batchManifest } from './check-identity.mjs';
 import { encodeReceipt, counts, validateMaxBytes, DEFAULT_MAX_BYTES } from './check-receipt.mjs';
@@ -37,14 +38,14 @@ export function validatePlan(p, { probePython = true } = {}) {
   for (const c of p.checks) {
     if (!c || typeof c.name !== 'string' || !c.name.trim() || c.name.length > 128 || names.has(c.name)) throw new Error('check names must be nonempty and unique (128 characters maximum)');
     names.add(c.name);
-    if (!Array.isArray(c.argv) || !c.argv.length || c.argv.length > 256 || c.argv.some(a => typeof a !== 'string' || a.includes('\0') || a.length > 65536) || !c.argv[0].trim()) throw new Error(`${c.name}: argv executable must be nonempty; arguments must be strings`);
-    if (!seconds(c.timeout_s)) throw new Error(`${c.name}: timeout_s must be explicit, positive and within the Node timer range`);
-    if (c.cwd !== undefined && (!path.isAbsolute(c.cwd) || !fs.statSync(c.cwd).isDirectory())) throw new Error(`${c.name}: cwd must be an existing absolute directory`);
+    if (!Array.isArray(c.argv) || !c.argv.length || c.argv.length > 256 || c.argv.some(a => typeof a !== 'string' || a.includes('\0') || a.length > 65536) || !c.argv[0].trim()) throw new Error('check argv executable must be nonempty; arguments must be strings');
+    if (!seconds(c.timeout_s)) throw new Error('check timeout_s must be explicit, positive and within the Node timer range');
+    if (c.cwd !== undefined && (!path.isAbsolute(c.cwd) || !fs.statSync(c.cwd).isDirectory())) throw new Error('check cwd must be an existing absolute directory');
     envObject(c.env);
     for (const arg of c.argv) {
       if (arg === '{{python}}') {
         const py = p.interpreters?.python;
-        if (typeof py !== 'string' || !path.isAbsolute(py) || !fs.statSync(py).isFile() || /\.(cmd|bat|ps1|py)$/i.test(py)) throw new Error(`${c.name}: {{python}} requires an explicit real Python executable path`);
+        if (typeof py !== 'string' || !path.isAbsolute(py) || !fs.statSync(py).isFile() || /\.(cmd|bat|ps1|py)$/i.test(py)) throw new Error('{{python}} requires an explicit real Python executable path');
         if (probePython && !pythonChecked) {
           if (/[/\\]WindowsApps[/\\]/i.test(py)) throw new Error('Python app aliases are unsupported; select a real Python installation');
           try {
@@ -59,9 +60,11 @@ export function validatePlan(p, { probePython = true } = {}) {
   return p;
 }
 function secretValues(p) {
-  return Object.entries({ ...process.env, ...p.env, ...Object.assign({}, ...p.checks.map(c => c.env)) })
-    .filter(([k, v]) => v && /token|secret|passw|key|credential|auth/i.test(k)).map(([, v]) => v)
-    .concat(Object.values(p.env || {}), ...p.checks.map(c => Object.values(c.env || {}))).filter(Boolean);
+  // Safe even before plan validation. Inspect only string values in env maps;
+  // malformed plans and overlapping/overridden credentials remain redacted.
+  const strings = o => o && typeof o === 'object' && !Array.isArray(o) ? Object.values(o).filter(v => typeof v === 'string' && v) : [];
+  const inherited = Object.entries(process.env).filter(([k, v]) => v && /token|secret|passw|key|credential|auth/i.test(k)).map(([, v]) => v);
+  return [...inherited, ...strings(p?.env), ...(Array.isArray(p?.checks) ? p.checks.flatMap(c => strings(c?.env)) : [])];
 }
 function executable(name, cwd, env) {
   const win = process.platform === 'win32';
@@ -80,43 +83,40 @@ function executable(name, cwd, env) {
 async function execute(c, p, dir, index, ownership) {
   const prefix = String(index + 1).padStart(3, '0');
   const paths = { stdout: path.join(dir, `${prefix}.stdout.log`), stderr: path.join(dir, `${prefix}.stderr.log`) };
-  const fds = Object.fromEntries(Object.entries(paths).map(([k, f]) => [k, fs.openSync(f, 'wx', 0o600)]));
+  for (const file of Object.values(paths)) fs.closeSync(fs.openSync(file, 'wx', 0o600));
   const r = { name: c.name, status: 'pending', exit_code: null, signal: null, launch_error: null, error: null, timed_out: false, started_at: new Date().toISOString(), artifacts: paths, bytes: { stdout: 0, stderr: 0 } };
   const t0 = Date.now();
-  let child, timer, aborted = false;
-  const abort = () => { aborted = true; if (child) killOwnedTree(child.pid); };
+  let cancel = () => {}, aborted = false;
+  const abort = () => { aborted = true; cancel(); };
   for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, abort);
   try {
     const env = { ...process.env, ...p.env, ...c.env };
     const cwd = c.cwd || p.cwd;
     const argv = c.argv.map(a => a === '{{node}}' ? process.execPath : a === '{{python}}' ? p.interpreters.python : a);
     const file = executable(argv[0], cwd, env);
-    // Publish intent before spawn: if the owner dies between OS launch and its
-    // spawn callback, recovery cannot mistake an unrecorded child for no child.
-    ownership.child('launching');
-    child = spawn(file, argv.slice(1), { cwd, env, shell: false, windowsHide: true, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
-    r.status = 'running';
-    child.on('spawn', () => {
-      try { ownership.child(child.pid); write(path.join(dir, `${prefix}.started.json`), { pid: child.pid, started_at: r.started_at }); }
-      catch (e) { r.error = `artifact write failed: ${e.code || 'unknown'}`; killOwnedTree(child.pid); }
+    const proof = path.join(dir, `${prefix}.containment.json`), cancelFile = path.join(dir, `${prefix}.cancel`);
+    const contained = await runContained({ file, args: argv.slice(1), cwd, env, timeout_s: c.timeout_s,
+      owner_pid: process.pid, stdout: paths.stdout, stderr: paths.stderr, proof,
+      nonce: crypto.randomBytes(16).toString('hex'), cancel: cancelFile }, {
+      ownership, startedFile: path.join(dir, `${prefix}.started.json`), cancelFile,
+      onCancelReady: fn => { cancel = fn; if (aborted) cancel(); },
     });
-    for (const key of ['stdout', 'stderr']) child[key].on('data', chunk => {
-      r.bytes[key] += chunk.length;
-      try { fs.writeFileSync(fds[key], chunk); }
-      catch (e) { r.error = `artifact write failed: ${e.code || 'unknown'}`; killOwnedTree(child.pid); }
-    });
-    timer = setTimeout(() => { r.timed_out = true; killOwnedTree(child.pid); }, c.timeout_s * 1000);
-    await new Promise(resolve => {
-      child.on('error', e => { r.launch_error = e.code || e.message; });
-      child.on('close', (code, signal) => { r.exit_code = code; r.signal = signal; resolve(); });
-    });
-    ownership.child(null);
-    r.status = aborted ? 'abandoned' : r.timed_out ? 'timeout' : r.launch_error ? 'launch_failed' : r.error ? 'failed' : r.exit_code === 0 && !r.signal ? 'passed' : 'failed';
-  } catch (e) { r.launch_error = e.message; r.status = 'launch_failed'; }
+    r.containment = contained.proof || { state: 'unresolved', mechanism: null };
+    r.exit_code = contained.proof?.exit_code ?? null;
+    r.signal = contained.proof?.signal ?? null;
+    r.launch_error = contained.proof?.launch_error || contained.spawn_error;
+    r.timed_out = Boolean(contained.timed_out || contained.proof?.timed_out);
+    for (const key of ['stdout', 'stderr']) r.bytes[key] = fs.statSync(paths[key]).size;
+    if (r.containment.state === 'closed') ownership.child(null);
+    else r.error = 'owned descendant containment is unresolved; further execution is blocked';
+    r.status = r.containment.state !== 'closed' ? 'containment_unresolved' : aborted ? 'abandoned' : r.timed_out ? 'timeout' : r.launch_error ? 'launch_failed' : r.exit_code === 0 && !r.signal ? 'passed' : 'failed';
+  } catch (e) {
+    r.launch_error = e.message;
+    if (ownership.hasActive()) { cancel(); r.status = 'containment_unresolved'; r.containment = { state: 'unresolved', mechanism: null }; }
+    else r.status = 'launch_failed';
+  }
   finally {
-    clearTimeout(timer);
     for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.removeListener(sig, abort);
-    for (const fd of Object.values(fds)) fs.closeSync(fd);
   }
   r.ended_at = new Date().toISOString(); r.duration_ms = Date.now() - t0;
   return r;
@@ -159,7 +159,10 @@ export async function runBatch(p, root, { retryOf = null } = {}) {
         if (alive(previous.owner_pid)) throw new Error('previous attempt owner is live or unknown; retry refused');
         // The execution lock carries launch intent and active-child guards. A
         // missing lock on an unfinished launched attempt cannot prove containment.
-        if (fs.readdirSync(previousDir).some(n => n.endsWith('.started.json'))) throw new Error('unfinished launched attempt requires explicit child/ownership resolution; retry refused');
+        for (const name of fs.readdirSync(previousDir).filter(n => n.endsWith('.started.json'))) {
+          const started = boundedRead(path.join(previousDir, name));
+          if (alive(started.pid) || !containmentClosed(started.containment)) throw new Error('unfinished launched attempt requires explicit child/ownership resolution; retry refused');
+        }
       }
     }
     validatePlan(p);
@@ -175,13 +178,13 @@ export async function runBatch(p, root, { retryOf = null } = {}) {
       const r = await execute(p.checks[i], p, dir, i, unlock);
       result.checks.push(r);
       write(path.join(dir, `${String(i + 1).padStart(3, '0')}.result.json`), r);
-      if (r.status === 'abandoned') {
-        result.checks.push(...p.checks.slice(i + 1).map(c => ({ name: c.name, status: 'skipped', exit_code: null, error: 'batch interrupted before launch' })));
+      if (r.status === 'abandoned' || r.status === 'containment_unresolved') {
+        result.checks.push(...p.checks.slice(i + 1).map(c => ({ name: c.name, status: 'skipped', exit_code: null, error: r.status === 'containment_unresolved' ? 'prior check containment is unresolved' : 'batch interrupted before launch' })));
         break;
       }
     }
     result.status = result.checks.length === p.checks.length && result.checks.every(c => c.status === 'passed') ? 'successful' : 'failed';
-    result.status_provenance = { primary: 'check_results' };
+    result.status_provenance = { primary: result.checks.some(c => c.status === 'containment_unresolved') ? 'containment_unresolved' : 'check_results' };
     result.ended_at = new Date().toISOString();
     write(path.join(dir, 'result.json'), result);
     return publicAttempt(result, secretValues(p), 1024);
@@ -200,7 +203,7 @@ function readAttempt(dir) {
         if (e.code !== 'ENOENT') throw e;
         try {
           const started = boundedRead(path.join(dir, `${String(i + 1).padStart(3, '0')}.started.json`));
-          return { ...c, status: Number.isInteger(r.owner_pid) && alive(r.owner_pid) ? 'running' : 'interrupted', child_pid: started.pid, started_at: started.started_at };
+          return { ...c, status: Number.isInteger(r.owner_pid) && alive(r.owner_pid) ? 'running' : 'interrupted', child_pid: started.pid, started_at: started.started_at, containment: containmentProof(started.containment) || { state: 'unresolved' } };
         } catch (e) { if (e.code !== 'ENOENT') throw e; return c; }
       }
     });
@@ -243,6 +246,8 @@ export function collectBatch(root, batchId, attemptId = null, limit = 10, output
   };
 }
 async function main(args) {
+  let diagnosticsSecrets = secretValues(null);
+  try {
   const cmd = args.shift(), opts = {};
   while (args.length) {
     const k = args.shift();
@@ -254,7 +259,9 @@ async function main(args) {
   const maxBytes = validateMaxBytes(Number(opts['--max-bytes'] ?? DEFAULT_MAX_BYTES));
   if (cmd === 'run' && opts['--plan']) {
     if (['--batch', '--attempt', '--limit', '--output-bytes', '--cursor', '--check-index'].some(k => k in opts)) throw new Error('collection flags are not valid for run');
-    const result = await runBatch(boundedRead(opts['--plan']), root, { retryOf: opts['--retry-of'] ?? null });
+    const plan = boundedRead(opts['--plan']);
+    diagnosticsSecrets = secretValues(plan);
+    const result = await runBatch(plan, root, { retryOf: opts['--retry-of'] ?? null });
     process.stdout.write(encodeReceipt(result, maxBytes));
     process.exitCode = result.busy ? 3 : result.requires_explicit_retry ? 4 : result.status === 'successful' ? 0 : 1;
   } else if (cmd === 'collect' && opts['--batch']) {
@@ -265,7 +272,14 @@ async function main(args) {
     if (checkIndex !== null && (!opts['--attempt'] || !Number.isInteger(checkIndex) || checkIndex < 0 || checkIndex > 99)) throw new Error('--check-index requires --attempt and an integer 0..99');
     process.stdout.write(encodeReceipt(collectBatch(root, opts['--batch'], opts['--attempt'], limit, bytes, checkIndex), maxBytes, opts['--cursor'] || null));
   } else throw new Error('expected run --plan FILE or collect --batch ID');
+  } catch (e) {
+    // Never print a raw JSON parse error (it may quote a secret from malformed
+    // input). Other diagnostics use both explicit and inherited credentials.
+    const message = e instanceof SyntaxError ? 'invalid UTF-8 JSON metadata' : e.message;
+    console.error(`check-runner: ${redact(message, diagnosticsSecrets)}`);
+    process.exitCode = 2;
+  }
 }
 if (process.argv[1] && fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url))) {
-  main(process.argv.slice(2)).catch(e => { console.error(`check-runner: ${redact(e.message)}`); process.exitCode = 2; });
+  await main(process.argv.slice(2));
 }

@@ -6,13 +6,14 @@
     "agent-tools": "1.3.0"
   },
   "release_status": "local-unreleased",
-  "portable_commit": "4e77d4e5147c3457996827adef19132b08ea285f",
+  "portable_commit": "44063654eed8e83efcd52de40e55d7070f362a66",
   "unit_acceptance": {
     "portable": {
       "passed": 207,
       "existing": 174,
       "execution": 33,
-      "proof": "sanduq-skills--retro625/.delegate/proofs/retro625-continuation/evidence.json"
+      "proof": "sanduq-skills--retro625/.delegate/proofs/retro625-continuation/evidence.json",
+      "scope": "Before finding corrections; legacy normalization was unchanged by those corrections."
     },
     "memory": {
       "run": 164,
@@ -39,17 +40,60 @@
       "failed": 0,
       "errors": 0,
       "skipped": 0
+    },
+    "memory_finding_closure": {
+      "distinct_tests_passed": 16,
+      "new_migration_tests": 8,
+      "existing_guard_tests": 8,
+      "formats": [
+        1,
+        2
+      ],
+      "proof": ".delegate/retro625-memory-review-closure/handoff.md",
+      "attempts": "Initial 16-test attempt had two fixture assertion failures and five fixture errors; eight existing guards passed. After one fixture-only correction, all eight new cases passed. Runtime archive.py was unchanged between attempts."
+    },
+    "portable_finding_closure": {
+      "windows_execution_suite_passed": 39,
+      "final_targeted_passed": 3,
+      "proof": "sanduq-skills--retro625/.delegate/proofs/retro625-findings/evidence.json",
+      "linux": {
+        "batch_id": "retro625-linux-closure",
+        "attempt_id": "attempt-1792180469874-1f4daa7e4663",
+        "status": "successful",
+        "source_unchanged": true,
+        "counts": {
+          "tests": 40,
+          "pass": 39,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 1,
+          "todo": 0
+        },
+        "image": {
+          "tag": "registry.abushanab.net/infrastructure/arc-runner-general:2.337.0-node24.21.0-gh2.100.0-pwsh7.6.7-20261016",
+          "id": "sha256:3c7f3efacac218897b6c37eb6812a0e3c96a85f57b9846a978a938a41cb418ab",
+          "node": "24.21.0",
+          "python": "3.12.3",
+          "network": "none",
+          "source": "read-only"
+        },
+        "proof": ".delegate\\runs\\checks\\retro625-linux-closure\\attempt-1792180469874-1f4daa7e4663\\result.json"
+      }
     }
   },
   "proofs": {
     "unit_attempts": ".delegate/retro625-final-checks/unit-summary.json",
     "correction": ".delegate/retro625-fixture-correction/handoff.md",
     "integration_initial": "retro625-package-integration/attempt-1792177890541-74371da065ff",
-    "integration_closure": "retro625-integration-corrections/attempt-1792178424540-0133eef7b1bc"
+    "integration_closure": "retro625-integration-corrections/attempt-1792178424540-0133eef7b1bc",
+    "memory_finding_closure": ".delegate/retro625-memory-review-closure/handoff.md",
+    "portable_finding_closure": "sanduq-skills--retro625/.delegate/proofs/retro625-findings/evidence.json",
+    "linux": ".delegate/retro625-linux-proof.json",
+    "installed_runner": ".delegate/retro625-installed-runner-proof.json"
   },
   "package_sha256": {
-    "memory": "be9e89863f7389da1b5f957ae253ca81c438f336bc375a3ab586f8282662b43b",
-    "workflow": "82e2a5b5360b1adc260b5a06de9983205227ea9d27cb2bf3484b36fdc8cdb3b0"
+    "memory": "8011681e91284c562a34918659f08d454a10e0f1ffc649d9e0c3a931c90bce52",
+    "workflow": "038093f3575c38e32bd12ce95055cbd668e4f29f71b2791a0e03d4a71e76f25f"
   },
   "integration": {
     "vendor_integrity": "passed",
@@ -58,7 +102,17 @@
     "memory_package": "passed",
     "workflow_package": "passed after skill-budget correction",
     "native_memory_install": "six host/shell cases passed; automatic archival disabled",
-    "native_workflow_upgrade": "passed native upgrade, injected failure, byte-exact rollback and retry; config, policy and progress retained"
+    "native_workflow_upgrade": "passed native upgrade, injected failure, byte-exact rollback and retry; config, policy and progress retained",
+    "memory_postreview": "Rebuilt corrected package and six native installation cases passed; attempt-1792179785484-63238180a7f2",
+    "workflow_postreview": "Vendor integrity, docs, rebuilt Workflow and native upgrade/rollback passed; attempt-1792180563112-d94ba6ff79df",
+    "installed_runner": {
+      "status": "passed",
+      "installed_driver": "D:\\Projects\\Personal\\sanduq--retro625\\dist\\install-tests\\codex-r9by2cis\\project\\.specify\\extensions\\workflow\\assets\\delegate-task\\check-runner.mjs",
+      "helper_bytes_equal": true,
+      "argv_count": 3,
+      "attempt_id": "attempt-1792180668956-f8a2fe6e6009",
+      "proof": "D:\\Projects\\Personal\\sanduq--retro625\\.delegate\\runs\\checks\\retro625-installed-runner\\attempt-1792180668956-f8a2fe6e6009\\result.json"
+    }
   },
   "retained_failures": [
     "Initial Workflow skill was 6260 bytes, exceeding 6144; corrected to 6111 and both assertions passed.",
@@ -67,12 +121,46 @@
     "One earlier portable legacy version-refusal test had empty child stderr before an explicit passing retry; cause remains unverified."
   ],
   "limitations": [
-    "Windows execution only; POSIX-only branches were not executed locally.",
-    "Workflow recorded two skips in the full run; no full-suite rerun was claimed after the bounded correction.",
+    "Original Workflow full run recorded two skips; bounded corrections did not repeat that full suite.",
+    "Linux container ran 40 execution tests: 39 passed and the Windows-only shim test skipped. Windows evidence is separate.",
+    "Native check containment supports Windows and Linux; other platforms refuse execution before checks. Linux requires Python 3.9+, subreaper support and readable /proc.",
+    "Missing native closure proof retains an unresolved lease. Containment covers ordinary descendants, not processes launched through external brokers or privileged services.",
+    "The earlier portable legacy refusal empty-stderr failure remains unexplained despite an explicit passing retry.",
     "No remote CI, tags, release publication or active Bunyan adoption."
   ],
   "independent_review": {
-    "status": "pending",
-    "policy": "One review after all feature implementation and validation; affected closure only thereafter"
+    "status": "all four findings implemented and tested; targeted confirmation pending",
+    "run_id": "codex-20261016192342-435930",
+    "native_status": "failed",
+    "status_provenance": "head_moved",
+    "harness_telemetry": "successful",
+    "coordinator_annotation": "Coordinator committed bdb7f11 while read-only review was active. This moved HEAD without changing reviewed file bytes; native failure is retained, not overridden. Review output completed and yielded four actionable findings.",
+    "findings": [
+      {
+        "id": "R1",
+        "severity": "P1",
+        "summary": "Direct-parent exit could outlive descendant ownership",
+        "status": "implemented and tested; targeted confirmation pending"
+      },
+      {
+        "id": "R2",
+        "severity": "P1",
+        "summary": "Validation diagnostics omitted known-secret redaction",
+        "status": "implemented and tested; targeted confirmation pending"
+      },
+      {
+        "id": "R3",
+        "severity": "P2",
+        "summary": "Approved migration parents blocked finalize and rollback",
+        "status": "implemented and tested; targeted confirmation pending"
+      },
+      {
+        "id": "R4",
+        "severity": "P2",
+        "summary": "Overlapping secret values could leak suffixes",
+        "status": "implemented and tested; targeted confirmation pending"
+      }
+    ],
+    "policy": "One completed-feature review, followed only by finding-specific closure."
   }
 }
