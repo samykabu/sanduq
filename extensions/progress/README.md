@@ -176,8 +176,8 @@ link or junction (`PROGRESS_UNSAFE_TARGET`). The layout and every schema are in 
 | `$speckit-progress-export` | Write the projection as Markdown or JSON |
 
 The `lane`, `block`, `unblock`, `decide`, `note`, `attempt` and `runs` verbs run through the CLI. Every verb, flag,
-output line, exit code, schema and example is in [the command reference](docs/commands.md). The five
-`speckit.progress.hook-*` commands are internal.
+output line, exit code, schema and example is in [the command reference](docs/commands.md). The internal
+`speckit.progress.hook` command (one script for all five hook events) is not registered as a skill.
 
 ## Theming
 

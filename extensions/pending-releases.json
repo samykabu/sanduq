@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Workflow 1.10.3 makes Codex reporting fall back to refresh until the Progress hooks are approved in Codex; Progress 1.1.1 vendors agent-tools 1.2.1 (hooks status reports Codex approval). Publish after successful main CI and downloaded asset verification."
+  "versions": {
+    "progress": "1.1.2"
+  },
+  "status": "ready",
+  "note": "Progress 1.1.2 registers one internal hook command that is not a skill (ten skills down to five). Publish after successful main CI and downloaded asset verification."
 }

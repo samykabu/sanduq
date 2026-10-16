@@ -4,6 +4,13 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## Hook command is not a skill — progress 1.1.2 — 2026-10-16
+
+- Progress registered ten skills, five of them internal hook handlers that cost the host skill budget (Codex skipped skills
+  over its limit). One internal command, `speckit.progress.hook`, now serves all five events; it stays out of
+  `provides.commands`, which Spec Kit turns into skills, and the event dispatcher finds it by file name. Its script reads
+  the event from the hook payload. Reinstall to remove the old skills.
+
 ## Export keeps page styles — illustrate 2.4.1, workflow 1.9.4 — 2026-10-11
 
 - Illustrate 2.4.1 vendors illustration-tools 3.4.1: exported SVG, animated SVG and GIF keep the

@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.1.2] - 2026-10-16
+
+- The five hook commands (`speckit.progress.hook-session-start` and the others) are replaced by one internal command, `speckit.progress.hook`, that is no longer listed under `provides.commands`. Spec Kit registers every listed command as an agent skill, which cost the host ten skills for Progress and tripped Codex's skills budget. The command file `commands/speckit.progress.hook.md` is still found by the event dispatcher through its on-disk file-name lookup, so only the five user commands remain as skills. The hook script `hooks/dispatch.py` takes the event from the payload's `hook_event_name` and hands it to the unchanged `scripts/hook.py`. Reinstall to drop the old hook entries and skills.
+- The vendored `docs/` still describe the five `speckit.progress.hook-*` commands until the next vendor update from sanduq-skills.
+
 ## [1.1.1] - 2026-10-16
 
 - Vendors `progress-report` from `agent-tools-v1.2.1`. `progress hooks status --host codex` now reports how many Progress hooks Codex has approved and whether the project is trusted, including the hooks Spec Kit writes into `.codex/config.toml`; Codex skips unapproved project hooks silently, so the session never binds until you approve them in Codex. `progress status` hints at this when no session is bound. The host docs list the five hooks to approve.

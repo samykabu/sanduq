@@ -42,10 +42,10 @@ class OptionalProgressInstall(unittest.TestCase):
         names = self.names(result)
         self.assertEqual(names[-1], 'progress')
         operation = result['extensions'][-1]
-        self.assertEqual(operation['version'], '1.1.1')
+        self.assertEqual(operation['version'], '1.1.2')
         self.assertEqual(operation['args'][:3], ['specify', 'extension', 'add'])
         self.assertIn('--from', operation['args'])
-        self.assertIn('progress-v1.1.1/progress.zip', ' '.join(operation['args']))
+        self.assertIn('progress-v1.1.2/progress.zip', ' '.join(operation['args']))
         self.assertEqual(result['optional_extensions'], ['progress'])
 
     def test_an_unknown_optional_name_is_refused(self):
@@ -102,7 +102,7 @@ class ReconcileKeepsProgress(unittest.TestCase):
                 'after_tasks': [{'extension': 'project', 'command': 'speckit.project.sync', 'optional': False},
                                 {'extension': 'progress', 'command': 'speckit.progress.init', 'optional': True, 'enabled': True}],
                 'after_implement': [{'extension': 'progress', 'command': 'speckit.progress.refresh', 'optional': True, 'enabled': True}]},
-            'events': {name: {'extension': 'progress', 'command': 'speckit.progress.hook-' + name.replace('_', '-'), 'enabled': True}
+            'events': {name: {'extension': 'progress', 'command': 'speckit.progress.hook', 'enabled': True}
                        for name in ('session_start', 'pre_tool_use', 'post_tool_use', 'stop', 'session_end')}}
         path.write_text(yaml.safe_dump(document, sort_keys=False), encoding='utf-8')
         report = reconciler.reconcile(self.root, apply=True)

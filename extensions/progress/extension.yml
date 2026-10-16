@@ -3,7 +3,7 @@ schema_version: "1.0"
 extension:
   id: progress
   name: "Sanduq Progress Report"
-  version: "1.1.1"
+  version: "1.1.2"
   description: "A live, deterministic progress report for a Spec Kit feature: lanes, tasks, blockers and decisions, collected from the host's native hooks and the feature files with no agent spent on upkeep."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
@@ -35,21 +35,6 @@ provides:
     - name: speckit.progress.export
       file: commands/export.md
       description: "Write the current projection as deterministic Markdown or JSON"
-    - name: speckit.progress.hook-session-start
-      file: commands/hook-session-start.md
-      description: "Internal. Invoked by the host's native session start hook, never by an agent; records host facts and refreshes silently"
-    - name: speckit.progress.hook-pre-tool-use
-      file: commands/hook-pre-tool-use.md
-      description: "Internal. Invoked by the host's native pre tool use hook, never by an agent; records host facts and refreshes silently"
-    - name: speckit.progress.hook-post-tool-use
-      file: commands/hook-post-tool-use.md
-      description: "Internal. Invoked by the host's native post tool use hook, never by an agent; records host facts and refreshes silently"
-    - name: speckit.progress.hook-stop
-      file: commands/hook-stop.md
-      description: "Internal. Invoked by the host's native stop hook, never by an agent; records host facts and refreshes silently"
-    - name: speckit.progress.hook-session-end
-      file: commands/hook-session-end.md
-      description: "Internal. Invoked by the host's native session end hook, never by an agent; records host facts and refreshes silently"
 
 hooks:
   after_tasks:
@@ -65,20 +50,20 @@ hooks:
 
 events:
   session_start:
-    command: speckit.progress.hook-session-start
+    command: speckit.progress.hook
     timeout: 10
   pre_tool_use:
-    command: speckit.progress.hook-pre-tool-use
+    command: speckit.progress.hook
     matcher: "Task|Agent|spawn_agent"
     timeout: 10
   post_tool_use:
-    command: speckit.progress.hook-post-tool-use
+    command: speckit.progress.hook
     timeout: 10
   stop:
-    command: speckit.progress.hook-stop
+    command: speckit.progress.hook
     timeout: 10
   session_end:
-    command: speckit.progress.hook-session-end
+    command: speckit.progress.hook
     timeout: 10
 
 tags:
