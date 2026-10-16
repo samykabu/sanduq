@@ -488,7 +488,7 @@ Each entry has this shape and a 10 second timeout. The `--managed-by=progress-re
 - **Binding.** When exactly one report already exists, `install` appends `bind=<nonce>` to its line so the new hooks bind
   the session on the next tool call. Install hooks before `init` and the `init` line carries the nonce as usual.
 - **Spec Kit.** The Sanduq extension registers the same events through Spec Kit's dispatcher
-  (`speckit.progress.hook-*` commands). When such an entry exists in the project or user file of that host, `install`
+  (the `speckit.progress.hook` command). When such an entry exists in the project or user file of that host, `install`
   prints `progress: error PROGRESS_HOOKS_SPECKIT ...`, changes nothing and exits 3, so no event is recorded twice.
 - **Codex.** Codex hooks are experimental and need the `codex_hooks` feature enabled in your Codex configuration. The
   `hooks.json` shape is the one Claude uses (**unverified** against a running Codex).
@@ -517,15 +517,17 @@ Codex session is bound and the hooks are unapproved, `progress status` ends with
 
 The host calls `python <skill dir>/scripts/hook.py <event>` with the event's JSON on stdin. With
 [`progress hooks install`](#hooks) the host's own hook file makes this call. In a Spec Kit project the Sanduq extension
-makes it through the `speckit.progress.hook-*` commands, one command per event.
+makes it through one internal command, `speckit.progress.hook`, for every event. That command is not listed in
+`provides.commands`, so Spec Kit does not register it as an agent skill; its dispatcher reads the event name from the
+payload's `hook_event_name` and calls `scripts/hook.py <event>`.
 
 | Event | Command | Matcher | Timeout |
 | --- | --- | --- | ---: |
-| `session_start` | `speckit.progress.hook-session-start` | | 10 s |
-| `pre_tool_use` | `speckit.progress.hook-pre-tool-use` | `Task\|Agent\|spawn_agent` | 10 s |
-| `post_tool_use` | `speckit.progress.hook-post-tool-use` | | 10 s |
-| `stop` | `speckit.progress.hook-stop` | | 10 s |
-| `session_end` | `speckit.progress.hook-session-end` | | 10 s |
+| `session_start` | `speckit.progress.hook` | | 10 s |
+| `pre_tool_use` | `speckit.progress.hook` | `Task\|Agent\|spawn_agent` | 10 s |
+| `post_tool_use` | `speckit.progress.hook` | | 10 s |
+| `stop` | `speckit.progress.hook` | | 10 s |
+| `session_end` | `speckit.progress.hook` | | 10 s |
 
 `user_prompt_submit` is understood by the handler but no command is registered for it. The handler accepts the event
 name as `post_tool_use`, `PostToolUse` or `post-tool-use`, and falls back to the payload's `hook_event_name`.
@@ -767,11 +769,7 @@ runs one CLI verb and relays its single line. Text after the command name is app
 | `speckit.progress.status` | `progress.py status $ARGUMENTS` | The one-line summary; add `--json` for the projection | `$speckit-progress-status Show the one-line progress status.` |
 | `speckit.progress.theme` | `progress.py theme $ARGUMENTS` | Choose a preset, import the Illustrate theme, load a file or show the theme | `$speckit-progress-theme Use the cobalt theme for the progress report.` |
 | `speckit.progress.export` | `progress.py export $ARGUMENTS` | Write the projection as Markdown or JSON | `$speckit-progress-export Export the progress report as Markdown.` |
-| `speckit.progress.hook-session-start` | `scripts/hook.py session_start` | Internal. Never invoked by an agent | |
-| `speckit.progress.hook-pre-tool-use` | `scripts/hook.py pre_tool_use` | Internal | |
-| `speckit.progress.hook-post-tool-use` | `scripts/hook.py post_tool_use` | Internal | |
-| `speckit.progress.hook-stop` | `scripts/hook.py stop` | Internal | |
-| `speckit.progress.hook-session-end` | `scripts/hook.py session_end` | Internal | |
+| `speckit.progress.hook` | `hooks/dispatch.py` → `scripts/hook.py <event>` | Internal, events only. Not registered as a skill; never invoked by an agent | |
 
 Agents record lanes, blockers, decisions and notes with the other verbs above. There is no Spec Kit command for them, so
 the skill ([`SKILL.md`](../SKILL.md)) lists the command lines.

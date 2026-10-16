@@ -1,20 +1,39 @@
 """Extension-owned checks. The Progress code, docs and UI are vendored from the sanduq-skills `progress-report` skill
 (see vendor.lock.json) and are tested there; these tests cover only what this extension adds: the hook command
-templates, the host-agnostic skill entry point and the layout Workflow's progress_bridge relies on."""
+template, the host-agnostic skill entry point and the layout Workflow's progress_bridge relies on."""
+import importlib.util
 import re
 import unittest
 from pathlib import Path
 
 EXT = Path(__file__).resolve().parents[1]
-HOOKS = ('post-tool-use', 'pre-tool-use', 'session-end', 'session-start', 'stop')
 
 
 class ExtensionLayout(unittest.TestCase):
-    def test_hook_commands_use_the_fast_entry(self):
-        files = sorted((EXT / 'commands').glob('hook-*.md'))
-        self.assertEqual([f.stem for f in files], ['hook-' + name for name in HOOKS])
-        for path in files:
-            self.assertIn('scripts/hook.py ', path.read_text(encoding='utf-8'), path.name)
+    def test_one_internal_hook_command_outside_the_skill_list(self):
+        """Spec Kit registers every `provides.commands` entry as an agent skill; the hook command is found by its file
+        name instead (events/__init__.py, `_find_command_template` step 2), so it must not be listed."""
+        manifest = (EXT / 'extension.yml').read_text(encoding='utf-8')
+        self.assertNotIn('speckit.progress.hook', re.findall(r'^\s+- name: (\S+)', manifest, re.M))
+        self.assertEqual(sorted(p.name for p in (EXT / 'commands').glob('speckit.progress.hook*.md')),
+                         ['speckit.progress.hook.md'])
+        self.assertEqual(set(re.findall(r'^\s+command: (speckit\.progress\.hook\S*)\s*$', manifest, re.M)),
+                         {'speckit.progress.hook'})
+        self.assertEqual(len(re.findall(r'^  (?:session_start|pre_tool_use|post_tool_use|stop|session_end):', manifest, re.M)), 5)
+        text = (EXT / 'commands/speckit.progress.hook.md').read_text(encoding='utf-8')
+        self.assertIn('py: hooks/dispatch.py', text)
+        self.assertTrue((EXT / 'hooks/dispatch.py').is_file())
+
+    def test_dispatch_reads_the_event_from_the_payload(self):
+        spec = importlib.util.spec_from_file_location('dispatch', EXT / 'hooks/dispatch.py')
+        dispatch = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(dispatch)
+        for name, event in (('SessionStart', 'session_start'), ('PreToolUse', 'pre_tool_use'),
+                            ('PostToolUse', 'post_tool_use'), ('Stop', 'stop'), ('SessionEnd', 'session_end'),
+                            ('post_tool_use', 'post_tool_use'), ('Unknown', '')):
+            self.assertEqual(dispatch.event_name('{"session_id": "s", "hook_event_name": "%s"}' % name), event)
+        self.assertEqual(dispatch.event_name('{}'), '')
+        self.assertEqual(dispatch.event_name(''), '')
 
     def test_every_manifest_command_has_a_file(self):
         manifest = (EXT / 'extension.yml').read_text(encoding='utf-8')

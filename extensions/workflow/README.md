@@ -148,7 +148,7 @@ entry (`hooks` or `codex_hooks`) set to `false`. A config that cannot be read is
 
 **Codex approval.** Codex runs a project hook only when the project is `trusted` in the user config and the hook
 definition was approved. Review and approve the five Progress hooks in Codex (its hooks review prompt), each running
-`python3 .specify/events.py speckit.progress.hook-<event> <event> 10`: SessionStart, PreToolUse (matcher
+`python3 .specify/events.py speckit.progress.hook <event> 10`: SessionStart, PreToolUse (matcher
 `Task|Agent|spawn_agent`), PostToolUse, Stop and SessionEnd. The bridge counts a Codex hook as active only when
 `[projects."<path>"] trust_level = "trusted"` and a `[hooks.state."<config file>:<event>:<group>:<hook>"]` entry with a
 `trusted_hash` exist in `$CODEX_HOME/config.toml` (or `~/.codex/config.toml`). Without them it selects `refresh` and prints

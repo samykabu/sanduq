@@ -142,9 +142,8 @@ agent requests, not shell commands. Claude Desktop does not run extensions.
 | `$speckit-progress-theme` | Once: `Use the cobalt theme for the progress report.` |
 | `$speckit-progress-export` | On request: `Export the progress report as Markdown.` |
 
-The hook handlers `$speckit-progress-hook-session-start`, `$speckit-progress-hook-pre-tool-use`,
-`$speckit-progress-hook-post-tool-use`, `$speckit-progress-hook-stop` and `$speckit-progress-hook-session-end`
-are internal. The host runs them through its native hooks; do not invoke them.
+The hook handler `speckit.progress.hook` is internal and is not registered as a skill. Spec Kit's event dispatcher
+runs it for the five hook events; do not invoke it.
 
 ## Workflow utilities from the shell
 
