@@ -12,7 +12,7 @@ and `specify_cli/integrations/base.py`), https://code.claude.com/docs/en/hooks a
 
 `progress hooks install --host claude|codex [--scope project|user]` writes the same five events (four for Codex) into the
 host's own hook file, each command ending in `--managed-by=progress-report` so `uninstall` removes exactly those entries.
-It reads the file as JSON, keeps everything else, and refuses a second registration when Spec Kit's `speckit.progress.hook-*`
+It reads the file as JSON, keeps everything else, and refuses a second registration when Spec Kit's `speckit.progress.hook`
 entries are present. The command reference lists the files, paths and exit codes.
 
 | Fact | Status |
@@ -49,11 +49,11 @@ The five hooks (four from the installer: Codex has no session end):
 
 | Event | Matcher | Installer command (`.codex/hooks.json`) | Spec Kit command (`.codex/config.toml`) |
 | --- | --- | --- | --- |
-| `session_start` | | `python "<hook.py>" session_start --managed-by=progress-report; exit 0` | `speckit.progress.hook-session-start` |
-| `pre_tool_use` | `Task\|Agent\|spawn_agent` | `... pre_tool_use ...` | `speckit.progress.hook-pre-tool-use` |
-| `post_tool_use` | | `... post_tool_use ...` | `speckit.progress.hook-post-tool-use` |
-| `stop` | | `... stop ...` | `speckit.progress.hook-stop` |
-| `session_end` | | not installed for Codex | `speckit.progress.hook-session-end` |
+| `session_start` | | `python "<hook.py>" session_start --managed-by=progress-report; exit 0` | `speckit.progress.hook session_start 10` |
+| `pre_tool_use` | `Task\|Agent\|spawn_agent` | `... pre_tool_use ...` | `speckit.progress.hook pre_tool_use 10` |
+| `post_tool_use` | | `... post_tool_use ...` | `speckit.progress.hook post_tool_use 10` |
+| `stop` | | `... stop ...` | `speckit.progress.hook stop 10` |
+| `session_end` | | not installed for Codex | `speckit.progress.hook session_end 10` |
 
 Spec Kit writes its hooks into the project's `.codex/config.toml` (`[[hooks.<Event>]]` groups); `hooks status` counts
 those that name `speckit.progress.hook` and checks their approval under the `config.toml` path.
@@ -88,11 +88,11 @@ Suggested extension manifest fragment:
 
 ```yaml
 events:
-  session_start:      { command: speckit.progress.hook-session-start }
-  post_tool_use:      { command: speckit.progress.hook-post-tool-use, matcher: ".*", timeout: 10 }
-  pre_tool_use:       { command: speckit.progress.hook-pre-tool-use, matcher: "Task|Agent|spawn_agent", timeout: 10 }
-  stop:               { command: speckit.progress.hook-stop, timeout: 20 }
-  session_end:        { command: speckit.progress.hook-session-end, timeout: 20 }
+  session_start:      { command: speckit.progress.hook, timeout: 10 }
+  post_tool_use:      { command: speckit.progress.hook, timeout: 10 }
+  pre_tool_use:       { command: speckit.progress.hook, matcher: "Task|Agent|spawn_agent", timeout: 10 }
+  stop:               { command: speckit.progress.hook, timeout: 10 }
+  session_end:        { command: speckit.progress.hook, timeout: 10 }
 ```
 
 Each template contains `scripts:\n  py: scripts/hook.py <event>`, a standard-library entry that returns before importing Progress for an unbound
