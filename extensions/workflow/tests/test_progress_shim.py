@@ -173,10 +173,11 @@ class ReportingModes(Project):
         (self.root / '.codex').mkdir()
         (self.root / '.codex' / 'hooks.json').write_text(json.dumps({'hooks': {
             'Stop': [{'command': self.HOOK}]}}), encoding='utf-8')
+        self._codex_user(approve=[(self.root / '.codex' / 'hooks.json', 'stop', 0, 0)])
         self.assertEqual(self.mode('codex')['mode'], 'projection')
         codex_home = Path(os.environ['CODEX_HOME'])
-        codex_home.mkdir(parents=True)
-        (codex_home / 'config.toml').write_text('[features]\nhooks = false\n', encoding='utf-8')
+        with open(codex_home / 'config.toml', 'a', encoding='utf-8') as handle:
+            handle.write('\n[features]\nhooks = false\n')
         self.assertEqual(self.mode('codex')['mode'], 'refresh')
         (codex_home / 'config.toml').unlink()
         self._claude({'type': 'command', 'command': 'python .specify/events.py speckit.progress.hook-stop stop'})
@@ -257,9 +258,96 @@ class ReportingModes(Project):
         (self.root / '.codex').mkdir(exist_ok=True)
         cfg = self.root / '.codex' / 'config.toml'
         cfg.write_text('[[hooks.Stop]]\ncommand = "python x.py speckit.progress.hook-stop"\n', encoding='utf-8')
+        self._codex_user(approve=[(cfg, 'stop', 0, 0)])
         self.assertEqual(self.mode('codex')['mode'], 'projection')
         cfg.write_text('[[hooks.Stop]]\nenabled = false\ncommand = "python x.py speckit.progress.hook-stop"\n', encoding='utf-8')
         self.assertEqual(self.mode('codex')['mode'], 'refresh')
+
+    # --- Codex trust: a hook counts only for a trusted project with an approval for that exact hook ---
+    def _codex_user(self, trusted=True, approve=(), quote="'"):
+        """Write $CODEX_HOME/config.toml. `approve` holds (file, event, group, hook) tuples."""
+        home = Path(os.environ['CODEX_HOME'])
+        home.mkdir(parents=True, exist_ok=True)
+        lines = []
+        if trusted:
+            path = str(self.root).lower()
+            path = path.replace('\\', '\\\\') if quote == '"' else path
+            lines.append(f'[projects.{quote}{path}{quote}]\ntrust_level = "trusted"\n')
+        for file, event, group, hook in approve:
+            key = f'{file}:{event}:{group}:{hook}'.replace('\\', '\\\\')
+            lines.append(f'[hooks.state."{key}"]\ntrusted_hash = "sha256:abc"\n')
+        (home / 'config.toml').write_text('\n'.join(lines), encoding='utf-8')
+
+    def _codex_project_hook(self):
+        (self.root / '.codex').mkdir(exist_ok=True)
+        cfg = self.root / '.codex' / 'config.toml'
+        cfg.write_text('[[hooks.Stop]]\n[[hooks.Stop.hooks]]\ntype = "command"\n'
+                       'command = "python3 .specify/events.py speckit.progress.hook-stop stop 10"\n', encoding='utf-8')
+        return cfg
+
+    def test_codex_trusted_project_with_approved_hook_is_projection(self):
+        cfg = self._codex_project_hook()
+        self._codex_user(approve=[(cfg, 'stop', 0, 0)])
+        decision = self.mode('codex')
+        self.assertEqual((decision['mode'], decision['automatic']), ('projection', True))
+
+    def test_codex_double_quoted_project_key_is_accepted(self):
+        cfg = self._codex_project_hook()
+        self._codex_user(approve=[(cfg, 'stop', 0, 0)], quote='"')
+        self.assertEqual(self.mode('codex')['mode'], 'projection')
+
+    def test_codex_untrusted_project_is_refresh_with_reason(self):
+        cfg = self._codex_project_hook()
+        self._codex_user(trusted=False, approve=[(cfg, 'stop', 0, 0)])
+        decision = self.mode('codex')
+        self.assertEqual((decision['mode'], decision['reason']), ('refresh', 'codex hooks not approved'))
+
+    def test_codex_trusted_project_without_hook_state_is_refresh(self):
+        self._codex_project_hook()
+        self._codex_user()
+        self.assertEqual(self.mode('codex')['mode'], 'refresh')
+        self.assertEqual(self.mode('codex')['reason'], 'codex hooks not approved')
+
+    def test_codex_approval_for_another_event_or_index_is_refresh(self):
+        cfg = self._codex_project_hook()
+        for other in ((cfg, 'session_start', 0, 0), (cfg, 'stop', 1, 0), (cfg, 'stop', 0, 1),
+                      (self.root / '.codex' / 'other.toml', 'stop', 0, 0)):
+            self._codex_user(approve=[other])
+            self.assertEqual(self.mode('codex')['mode'], 'refresh', other)
+
+    def test_codex_blank_trusted_hash_is_not_approval(self):
+        cfg = self._codex_project_hook()
+        self._codex_user()
+        key = str(cfg).replace('\\', '\\\\')
+        with open(Path(os.environ['CODEX_HOME']) / 'config.toml', 'a', encoding='utf-8') as handle:
+            handle.write(f'\n[hooks.state."{key}:stop:0:0"]\ntrusted_hash = ""\n')
+        self.assertEqual(self.mode('codex')['mode'], 'refresh')
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows path rules')
+    def test_codex_state_key_path_case_and_separators_do_not_matter_on_windows(self):
+        cfg = self._codex_project_hook()
+        self._codex_user(approve=[(str(cfg).upper().replace('\\', '/'), 'stop', 0, 0)])
+        self.assertEqual(self.mode('codex')['mode'], 'projection')
+
+    def test_codex_user_level_hooks_json_needs_its_own_approval(self):
+        home = Path(os.environ['CODEX_HOME'])
+        home.mkdir(parents=True, exist_ok=True)
+        hooks = home / 'hooks.json'
+        hooks.write_text(json.dumps({'hooks': {'Stop': [{'hooks': [{'type': 'command', 'command': self.HOOK}]}]}}),
+                         encoding='utf-8')
+        self._codex_user(trusted=False)
+        self.assertEqual(self.mode('codex')['mode'], 'refresh')
+        self._codex_user(trusted=False, approve=[(hooks, 'stop', 0, 0)])
+        self.assertEqual(self.mode('codex')['mode'], 'projection')
+
+    def test_mode_command_text_carries_the_reason_and_json_has_it(self):
+        self._codex_project_hook()
+        self._codex_user()
+        base = [sys.executable, str(SCRIPTS / 'progress_bridge.py'), 'mode', '--root', str(self.root), '--host', 'codex']
+        text = subprocess.run(base, capture_output=True, text=True, env=os.environ.copy())
+        self.assertEqual(text.stdout.strip(), 'reporting: refresh (codex hooks not approved)')
+        data = subprocess.run(base + ['--json'], capture_output=True, text=True, env=os.environ.copy())
+        self.assertEqual(json.loads(data.stdout)['reason'], 'codex hooks not approved')
 
     def test_mode_command_prints_one_line(self):
         done = subprocess.run([sys.executable, str(SCRIPTS / 'progress_bridge.py'), 'mode', '--root', str(self.root)],

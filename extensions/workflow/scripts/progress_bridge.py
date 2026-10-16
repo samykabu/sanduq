@@ -6,12 +6,14 @@ imports Progress code. It is the single place that decides the reporting mode:
 
   projection  Progress is installed and enabled, and its hooks are registered and enabled for the active host.
   refresh     Progress is installed and enabled, but the active host does not collect automatically (or the host
-              cannot be told).
+              cannot be told). On Codex that includes registered hooks the user has not approved: Codex silently
+              skips a hook whose project is untrusted or whose definition has no approval in its user config.
   legacy      Progress is absent or disabled in the spec-kit registry; Workflow's own scripts/progress.py reporter
               runs unchanged.
 
 `python progress_bridge.py mode [--host claude|codex]` prints one line: `reporting: <mode>`. Without --host the host
-is detected from the environment; an unknown or ambiguous host selects `refresh`.
+is detected from the environment; an unknown or ambiguous host selects `refresh`. When Codex hooks are registered but
+not approved the line carries the reason: `reporting: refresh (codex hooks not approved)`.
 """
 import argparse
 import json
@@ -111,6 +113,92 @@ def extension_enabled(root):
     return not (isinstance(entry, dict) and entry.get('enabled') is False)
 
 
+def _snake(name):
+    return re.sub(r'(?<!^)(?=[A-Z])', '_', str(name)).lower()
+
+
+def _norm_path(value):
+    """Comparable form of a path: forward slashes, no extended-length prefix, lowercased on Windows."""
+    text = str(value)
+    if text.startswith('\\\\?\\'):
+        text = text[4:]
+    text = text.replace('\\', '/').rstrip('/')
+    return text.lower() if os.name == 'nt' else text
+
+
+def _hook_slots(data):
+    """Yield (event, group index, hook index) for each enabled Progress hook in a parsed Codex hooks config.
+    Nested groups (`hooks.Event[i].hooks[j]`) and flat groups (the entry itself is the hook, index 0) are accepted."""
+    hooks = data.get('hooks') if isinstance(data, dict) else None
+    if not isinstance(hooks, dict) or _off(hooks):
+        return
+    for event, groups in hooks.items():
+        if not isinstance(groups, list):
+            continue
+        for gi, group in enumerate(groups):
+            if not isinstance(group, dict) or _off(group):
+                continue
+            inner = group.get('hooks')
+            entries = inner if isinstance(inner, list) else [group]
+            for hi, entry in enumerate(entries):
+                if _json_hooks(entry):
+                    yield _snake(event), gi, hi
+
+
+def _codex_trusted(user, root):
+    """True when the user's Codex config marks the project path as trusted."""
+    projects = (user or {}).get('projects')
+    if not isinstance(projects, dict):
+        return False
+    want = _norm_path(root)
+    return any(isinstance(v, dict) and v.get('trust_level') == 'trusted' and _norm_path(k) == want
+               for k, v in projects.items())
+
+
+def _codex_approvals(user):
+    """Normalised (path, event, group, hook) keys of hooks.state entries holding a non-empty trusted_hash. The hash
+    algorithm is Codex's own and is not verified, so an edited hook whose approval went stale is not detected."""
+    hooks = (user or {}).get('hooks')
+    state = hooks.get('state') if isinstance(hooks, dict) else None
+    keys = set()
+    if isinstance(state, dict):
+        for key, value in state.items():
+            digest = value.get('trusted_hash') if isinstance(value, dict) else None
+            parts = str(key).rsplit(':', 3)
+            if isinstance(digest, str) and digest.strip() and len(parts) == 4:
+                keys.add((_norm_path(parts[0]), parts[1].lower(), parts[2], parts[3]))
+    return keys
+
+
+def _codex_active(root, configs, user_toml, user_files):
+    """(active, registered). A Progress hook is active only when Codex will run it: project-defined hooks need the
+    project trusted and an approval entry for that exact file, event, group and hook index; user-level hooks need the
+    approval entry."""
+    approvals = _codex_approvals(user_toml)
+    trusted = _codex_trusted(user_toml, root)
+    registered = False
+    sources = [(Path(root) / n, configs[n], True) for n in HOST_FILES['codex'] if n in configs]
+    sources += [(p, d, False) for p, d in user_files]
+    for path, data, project in sources:
+        for event, gi, hi in _hook_slots(data):
+            registered = True
+            if (not project or trusted) and (_norm_path(path), event, str(gi), str(hi)) in approvals:
+                return True, True
+    return False, registered
+
+
+def _user_codex_files(user_toml):
+    """User-level Codex hook definitions: hooks.json and config.toml under $CODEX_HOME or ~/.codex."""
+    override = os.environ.get('CODEX_HOME')
+    base = Path(override) if override else Path.home() / '.codex'
+    found = [(base / 'config.toml', user_toml)] if user_toml else []
+    try:
+        found.append((base / 'hooks.json', json.loads((base / 'hooks.json').read_text(encoding='utf-8-sig'))))
+    except Exception:
+        pass
+    return found
+
+
 def _user_configs():
     """User-level host configs that can switch hooks off: $CLAUDE_CONFIG_DIR or ~/.claude, $CODEX_HOME or ~/.codex."""
     homes = {'claude': (os.environ.get('CLAUDE_CONFIG_DIR'), '.claude', 'settings.json'),
@@ -140,10 +228,15 @@ def detect_host(env=None):
 
 
 def hooks_registered(root, host):
-    """True when an enabled Progress hook is wired in the given host's config (only that host's files count) and the
-    extension itself is enabled."""
+    """True when an enabled Progress hook is wired in the given host's config (only that host's files count), the
+    extension itself is enabled and, for Codex, the hooks are approved (see `hooks_state`)."""
+    return hooks_state(root, host)[0]
+
+
+def hooks_state(root, host):
+    """(active, unapproved). `unapproved` is True when Codex hooks are registered but Codex would skip them."""
     if host not in HOSTS or not extension_enabled(root):
-        return False
+        return False, False
     configs = {}
     for name in [n for files in HOST_FILES.values() for n in files]:
         try:
@@ -159,13 +252,15 @@ def hooks_registered(root, host):
         switches = [_globally_disabled(configs.get(n)) for n in ('.claude/settings.local.json', '.claude/settings.json')]
         switches.append(_globally_disabled(user.get('claude')))
         if next((v for v in switches if v is not None), False):
-            return False
+            return False, False
     else:
         # A switch in the project or user config.toml turns hooks off everywhere.
         if (any(_globally_disabled(configs.get(n)) for n in HOST_FILES['codex'])
                 or bool(_globally_disabled(user.get('codex')))):
-            return False
-    return any(_json_hooks(configs[n]) for n in HOST_FILES[host] if n in configs)
+            return False, False
+        active, registered = _codex_active(root, configs, user.get('codex'), _user_codex_files(user.get('codex')))
+        return active, registered and not active
+    return any(_json_hooks(configs[n]) for n in HOST_FILES[host] if n in configs), False
 
 
 def run(root, args, timeout=60, stdin=None):
@@ -204,8 +299,12 @@ def mode(root, feature=None, host=None):
     host = host or detect_host()
     if host is None:
         return {'mode': 'refresh', 'script': str(path), 'automatic': False, 'host': None, 'source': 'active host unknown'}
-    if hooks_registered(root, host):
+    active, unapproved = hooks_state(root, host)
+    if active:
         return {'mode': 'projection', 'script': str(path), 'automatic': True, 'host': host, 'source': 'hooks registered'}
+    if unapproved:
+        return {'mode': 'refresh', 'script': str(path), 'automatic': False, 'host': host,
+                'source': 'codex hooks registered but not approved', 'reason': 'codex hooks not approved'}
     return {'mode': 'refresh', 'script': str(path), 'automatic': False, 'host': host, 'source': 'no automatic collection'}
 
 
@@ -239,7 +338,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     root = args.root.resolve() if args.root else find_root()
     decision = mode(root, args.feature, args.host)
-    print(json.dumps(decision) if args.json else 'reporting: ' + decision['mode'])
+    reason = decision.get('reason')
+    print(json.dumps(decision) if args.json else 'reporting: ' + decision['mode'] + (f' ({reason})' if reason else ''))
     return 0
 
 
