@@ -4,8 +4,36 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Nightly full run, including the Windows workflow suite. The release gate only accepts
+  # `push` runs on main (release-extensions.yml), so this never triggers a release.
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch:
 
 jobs:
+  # Decides which expensive jobs run. Skipped jobs count as success for the release gate.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      has_regression: ${{ steps.matrix.outputs.has_regression }}
+      memory_install: ${{ steps.matrix.outputs.memory_install }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: matrix
+        run: |
+          if [[ "$EVENT" == pull_request ]]; then base="$PR_BASE"; head="$PR_HEAD"
+          else base="$PUSH_BEFORE"; head="$SHA"; fi
+          python3 .github/scripts/ci_matrix.py --event "$EVENT" --base "$base" --head "$head"
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -144,12 +172,14 @@ jobs:
           $issues | Format-Table -AutoSize
           if ($issues | Where-Object Severity -eq 'Error') { throw 'PSScriptAnalyzer found errors' }
 
+  # Path-filtered: extensions/<suite>/** runs that suite (progress also runs workflow, workflow
+  # also runs scope); shared paths run all. Windows workflow runs on PRs and nightly only.
   regression:
+    needs: changes
+    if: needs.changes.outputs.has_regression == 'true'
     strategy:
       fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-        suite: [workflow, scope, user-manual, memory, illustrate]
+      matrix: ${{ fromJSON(needs.changes.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     # Tests create and delete many temporary repositories; a detached `git gc --auto` or background
     # maintenance writing into one while it is removed fails cleanup (Errno 39) on Linux.
@@ -165,6 +195,9 @@ jobs:
         with:
           python-version: '3.13'
       - run: python -m pip install -r extensions/workflow/test-requirements.txt
+      - name: Install Progress test requirements
+        if: matrix.suite == 'progress'
+        run: python -m pip install -r extensions/progress/test-requirements.txt
       - name: Install Playwright for Illustrate render checks
         if: matrix.suite == 'illustrate'
         shell: bash
@@ -199,7 +232,12 @@ jobs:
           python scripts/lint-render.py --self-test
           python scripts/lint-render.py --all
 
+  # Memory install smoke only exercises extensions/memory, so it follows that path filter.
+  # installation, upgrade, project-init and dryrun stay always-on: they install the whole
+  # Spec Kit + workflow stack (or project-sync), so any extension or shared change can break them.
   memory-installation:
+    needs: changes
+    if: needs.changes.outputs.memory_install == 'true'
     strategy:
       fail-fast: false
       matrix:
