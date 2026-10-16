@@ -6,7 +6,7 @@
     "agent-tools": "1.3.0"
   },
   "release_status": "local-unreleased",
-  "portable_commit": "44063654eed8e83efcd52de40e55d7070f362a66",
+  "portable_commit": "8c77aafe3bc93cf01b6576750e91bc0591613fea",
   "unit_acceptance": {
     "portable": {
       "passed": 207,
@@ -79,6 +79,13 @@
         },
         "proof": ".delegate\\runs\\checks\\retro625-linux-closure\\attempt-1792180469874-1f4daa7e4663\\result.json"
       }
+    },
+    "final_redaction_closure": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "proof": "sanduq-skills--retro625/.delegate/proofs/retro625-r4-final/evidence.json",
+      "retained_reproduction": "Four crossing/chained/Unicode/gap regressions failed before the interval-union correction; all seven selected regressions passed after it."
     }
   },
   "proofs": {
@@ -93,7 +100,7 @@
   },
   "package_sha256": {
     "memory": "8011681e91284c562a34918659f08d454a10e0f1ffc649d9e0c3a931c90bce52",
-    "workflow": "038093f3575c38e32bd12ce95055cbd668e4f29f71b2791a0e03d4a71e76f25f"
+    "workflow": "3a19f42ac97fe552f4c9e61bd03c2b8b9fe5a0e3aab2bfc790fde61a5887be90"
   },
   "integration": {
     "vendor_integrity": "passed",
@@ -112,6 +119,15 @@
       "argv_count": 3,
       "attempt_id": "attempt-1792180668956-f8a2fe6e6009",
       "proof": "D:\\Projects\\Personal\\sanduq--retro625\\.delegate\\runs\\checks\\retro625-installed-runner\\attempt-1792180668956-f8a2fe6e6009\\result.json"
+    },
+    "final_package": {
+      "status": "passed",
+      "attempt_id": "attempt-1792181175395-767a2d913b21",
+      "checks": [
+        "vendor integrity",
+        "Workflow package",
+        "all four final helper file bytes match package"
+      ]
     }
   },
   "retained_failures": [
@@ -126,10 +142,10 @@
     "Native check containment supports Windows and Linux; other platforms refuse execution before checks. Linux requires Python 3.9+, subreaper support and readable /proc.",
     "Missing native closure proof retains an unresolved lease. Containment covers ordinary descendants, not processes launched through external brokers or privileged services.",
     "The earlier portable legacy refusal empty-stderr failure remains unexplained despite an explicit passing retry.",
-    "No remote CI, tags, release publication or active Bunyan adoption."
+    "No tags, release publication or active Bunyan adoption. Remote PR checks are separate from local evidence."
   ],
   "independent_review": {
-    "status": "all four findings implemented and tested; targeted confirmation pending",
+    "status": "all four findings addressed",
     "run_id": "codex-20261016192342-435930",
     "native_status": "failed",
     "status_provenance": "head_moved",
@@ -140,27 +156,40 @@
         "id": "R1",
         "severity": "P1",
         "summary": "Direct-parent exit could outlive descendant ownership",
-        "status": "implemented and tested; targeted confirmation pending"
+        "status": "confirmed closed by original reviewer"
       },
       {
         "id": "R2",
         "severity": "P1",
         "summary": "Validation diagnostics omitted known-secret redaction",
-        "status": "implemented and tested; targeted confirmation pending"
+        "status": "confirmed closed by original reviewer"
       },
       {
         "id": "R3",
         "severity": "P2",
         "summary": "Approved migration parents blocked finalize and rollback",
-        "status": "implemented and tested; targeted confirmation pending"
+        "status": "confirmed closed by original reviewer"
       },
       {
         "id": "R4",
         "severity": "P2",
         "summary": "Overlapping secret values could leak suffixes",
-        "status": "implemented and tested; targeted confirmation pending"
+        "status": "addressed by prescribed interval-union correction, seven focused passes and coordinator source/proof verification"
       }
     ],
-    "policy": "One completed-feature review, followed only by finding-specific closure."
+    "policy": "One completed-feature review, followed only by finding-specific closure.",
+    "targeted_confirmation": {
+      "run_id": "codex-20261016195909-055659",
+      "status": "successful",
+      "read_only_violation": false,
+      "heads_and_all_77_hashes_frozen": true,
+      "confirmed_closed": [
+        "R1",
+        "R2",
+        "R3"
+      ],
+      "residual": "R4 crossing overlap remained and received the final mechanical interval-union correction."
+    },
+    "final_r4_policy": "Small mechanical correction closed with focused regression evidence; no additional independent review or full-suite rerun."
   }
 }

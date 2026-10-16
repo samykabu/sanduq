@@ -31,12 +31,27 @@ export function redact(text, extraValues = []) {
       for (const part of [v, JSON.stringify(v).slice(1, -1), ...v.split(/\r?\n/)]) if (part) variants.add(part);
     }
   }
-  // Match against the original text once. Shorter secrets cannot split a longer
-  // value or rewrite a marker inserted by an earlier replacement.
+  // Look ahead at every original start position, including inside earlier
+  // matches. Merge coverage before replacing so crossing secrets cannot leak.
   if (variants.size) variants.add(REDACTED);
   const alternatives = [...variants].sort((a, b) => b.length - a.length)
     .map(v => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  if (alternatives.length) s = s.replace(new RegExp(alternatives.join('|'), 'g'), () => REDACTED);
+  if (alternatives.length) {
+    const intervals = [];
+    for (const match of s.matchAll(new RegExp(`(?=(${alternatives.join('|')}))`, 'g'))) {
+      const start = match.index, end = start + match[1].length;
+      const previous = intervals[intervals.length - 1];
+      if (previous && start <= previous[1]) previous[1] = Math.max(previous[1], end);
+      else intervals.push([start, end]);
+    }
+    const parts = [];
+    let offset = 0;
+    for (const [start, end] of intervals) {
+      parts.push(s.slice(offset, start), REDACTED);
+      offset = end;
+    }
+    s = parts.join('') + s.slice(offset);
+  }
   s = s.replace(BEARER_RE, (_m, scheme) => `${scheme} ${REDACTED}`);
   s = s.replace(PAIR_RE, (match, lead) => SECRET_NAME.test(lead) ? `${lead}${REDACTED}` : match);
   for (const re of TOKEN_SHAPES) s = s.replace(re, REDACTED);
