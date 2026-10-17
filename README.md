@@ -18,11 +18,11 @@ also run them together, taking one GitHub issue to a verified pull request and r
 interruption. If you do not use Spec Kit, the same diagram, manual and delegation skills are
 available as portable agent skills in [sanduq-skills](https://github.com/samykabu/sanduq-skills).
 
-> $${\color{red}\text{CI runner exception: .github/workflows/ci.yml jobs changes, regression and memory-installation run on GitHub-hosted runners (ubuntu-latest, windows-latest).}}$$
+> $${\color{red}\text{CI runner exception: every job runs on the home office runner homek8-general except two cases. The windows-latest legs of the regression and memory-installation matrices in .github/workflows/ci.yml run on GitHub-hosted Windows, and every ci.yml job of a pull request from a fork runs on ubuntu-latest.}}$$
 >
-> $${\color{red}\text{Why: no self-hosted runner is registered for samykabu/sanduq; the home ARC scale sets serve the abushanab-net organization only. The regression matrix also needs a Windows runner.}}$$
+> $${\color{red}\text{Why: Windows legs: the home office runners are Linux pods. Fork pull requests: this repository is public, and code from a fork must not run inside the home office cluster, so jobs of pull requests from forks run on ubuntu-latest.}}$$
 >
-> $${\color{red}\text{Removal: register a self-hosted runner or ARC scale set for samykabu/sanduq, then move these jobs to it.}}$$
+> $${\color{red}\text{Removal: Windows legs: register a self-hosted Windows runner for samykabu/sanduq and point the windows-latest legs at it. Fork pull requests: none planned; this exception is a security boundary, not a missing runner.}}$$
 
 ## Products
 
