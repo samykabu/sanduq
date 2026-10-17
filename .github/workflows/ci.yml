@@ -13,7 +13,7 @@ on:
 jobs:
   # Decides which expensive jobs run. Skipped jobs count as success for the release gate.
   changes:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || 'homek8-general' }}
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       has_regression: ${{ steps.matrix.outputs.has_regression }}
@@ -35,7 +35,7 @@ jobs:
           SHA: ${{ github.sha }}
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || 'homek8-general' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -183,7 +183,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.changes.outputs.matrix) }}
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os != 'ubuntu-latest' && matrix.os || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || 'homek8-general' }}
     # Tests create and delete many temporary repositories; a detached `git gc --auto` or background
     # maintenance writing into one while it is removed fails cleanup (Errno 39) on Linux.
     env:
@@ -245,7 +245,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os != 'ubuntu-latest' && matrix.os || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || 'homek8-general' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -266,7 +266,7 @@ jobs:
       matrix:
         host: [codex, claude]
         provider: [core, superspec]
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || 'homek8-general' }}
     permissions:
       contents: read
     steps:
@@ -310,7 +310,7 @@ jobs:
           if-no-files-found: ignore
 
   upgrade:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || 'homek8-general' }}
     permissions:
       contents: read
     steps:
@@ -340,7 +340,7 @@ jobs:
       fail-fast: false
       matrix:
         shell: [pwsh, bash]
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || 'homek8-general' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -358,7 +358,7 @@ jobs:
           if-no-files-found: ignore
 
   dryrun:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || 'homek8-general' }}
     steps:
       - uses: actions/checkout@v4
       - name: project-sync degrades gracefully without config/gh
