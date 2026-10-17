@@ -113,3 +113,7 @@ details ul{margin:6px 0 0;padding-inline-start:18px;font-size:.82rem}
  .ev li{grid-template-columns:1fr}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+details.board>summary{display:flex;gap:10px;align-items:baseline}
+details.board>summary h3{display:inline;margin:0}
+details.quiet{margin-top:12px}
+.note.warn{color:var(--blocked)}

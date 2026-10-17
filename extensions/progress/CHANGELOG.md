@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.1.3] - 2026-10-17
+
+- Vendors `progress-report` from `agent-tools-v1.3.1`: the correctness patch found on the real #842 run. The stage comes from receipts when no claim is active; superseded pauses are no longer blockers; durations are summed from attempts and stop at the last activity; runs link to lanes only by durable ids (retired lane ids keep aliases); decisions and blockers come first, empty boards are gone, quiet lanes collapse into one line, and events filter by kind. From the review of this release: two facts lanes naming the same delegation fold into one, and a receipt Workflow marked stale no longer names the current stage.
+
 ## [1.1.2] - 2026-10-16
 
 - The five hook commands (`speckit.progress.hook-session-start` and the others) are replaced by one internal command, `speckit.progress.hook`, that is no longer listed under `provides.commands`. Spec Kit registers every listed command as an agent skill, which cost the host ten skills for Progress and tripped Codex's skills budget. The command file `commands/speckit.progress.hook.md` is still found by the event dispatcher through its on-disk file-name lookup, so only the five user commands remain as skills. The hook script `hooks/dispatch.py` takes the event from the payload's `hook_event_name` and hands it to the unchanged `scripts/hook.py`. Reinstall to drop the old hook entries and skills.

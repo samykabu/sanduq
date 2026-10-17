@@ -5,7 +5,7 @@
   var POLL_MS = 3000;
   var LOAD_TIMEOUT_MS = 10000;
   var LAYOUT = window.__SANDUQ_PROGRESS_LAYOUT__ || {};
-  var ALL = ['header', 'orchestrator', 'lanes', 'boards', 'decisions', 'blockers', 'events'];
+  var ALL = ['header', 'decisions', 'blockers', 'orchestrator', 'lanes', 'boards', 'events'];  /* attention first */
   var TITLES = { orchestrator: 'Orchestrator', lanes: 'Lanes', boards: 'Boards', decisions: 'Decisions', blockers: 'Blockers', events: 'Events' };
   var cur = -1, inflight = false, data = null, loadError = '', renderError = '';
   var app = document.getElementById('app'), banners = document.getElementById('banners');
@@ -66,11 +66,12 @@
   function readState() {
     var p = new URLSearchParams(location.hash.replace(/^#/, ''));
     var list = function (k) { return (p.get(k) || '').split(',').filter(Boolean); };
-    return { f: p.get('f') || '', c: list('c'), o: list('o') };
+    return { f: p.get('f') || '', k: p.get('k') || '', c: list('c'), o: list('o') };
   }
   function writeState(s) {
     var p = new URLSearchParams();
     if (s.f) p.set('f', s.f);
+    if (s.k) p.set('k', s.k);
     if (s.c.length) p.set('c', s.c.join(','));
     if (s.o.length) p.set('o', s.o.join(','));
     var h = p.toString();
@@ -111,7 +112,8 @@
     if (f.issue) meta.appendChild(link('Issue #' + f.issue.number, f.issue.url));
     meta.appendChild(el('span', 'wrap', ['Branch ', f.branch ? el('code', null, f.branch) : unk()]));
     if (f.mode === 'plan') meta.appendChild(el('span', 'wrap', ['Plan ', f.source ? el('code', null, f.source) : unk()]));
-    else meta.appendChild(el('span', null, ['Stage ', f.stage && f.stage.value ? pill(f.stage.value) : unk()]));
+    else meta.appendChild(el('span', null, ['Stage ', f.stage && f.stage.value ? pill(f.stage.value) : unk(),
+      f.stage && f.stage.status && f.stage.status !== 'in-progress' ? el('span', 'sub', ' \u00b7 ' + f.stage.status) : null]));
     head.appendChild(meta);
     top.appendChild(head);
     var bar = attr(el('div', 'bar', el('i')), { role: 'progressbar', 'aria-label': 'Tasks done', 'aria-valuemin': '0', 'aria-valuemax': String(total), 'aria-valuenow': String(done) });
@@ -139,7 +141,10 @@
       item('Elapsed (wall time)', mv(o.elapsed, dur)), item('Active (observed work)', mv(o.active, dur)),
       item('Session', plain(o.session_id)), item('Since', when(o.since))
     ]);
-    return section('orchestrator', null, [kv, el('p', 'note', 'Elapsed is wall time since start. Active counts only observed work intervals and stays unknown without them.')], st);
+    var c = d.collection || {}, missing = o.model && o.model.value == null && c.automatic === false && (!o.host || o.host === 'codex' || o.host === 'unknown');
+    return section('orchestrator', null, [kv,
+      missing ? el('p', 'note warn', 'No host hook data for this report yet' + (o.host === 'codex' ? ' \u2014 are the Codex worktree hooks active?' : '.')) : null,
+      el('p', 'note', 'Elapsed is wall time since start. Active counts only observed work intervals and stays unknown without them.')], st);
   }
   function mvTag(m) {
     var f = ['exact', 'partial', 'estimated'].indexOf(m.fidelity) < 0 ? 'unknown' : m.fidelity;
@@ -153,12 +158,62 @@
     return (d.lanes || []).filter(function (l) { return !st.f || l.id === st.f; });
   }
 
+  function hasWork(l) {
+    var t = l.tasks || {};
+    return (l.attempts || []).length > 0 || ['active', 'waiting', 'blocked', 'done'].some(function (k) { return (t[k] || []).length; });
+  }
+  function laneRow(l, st) {
+    var req = l.requested || {}, obs = l.observed || {};
+    var open = st.o.indexOf(l.id) >= 0, at = l.attempts || [];
+    var det = el('details');
+    det.open = open;
+    det.appendChild(attr(el('summary', null, at.length + (at.length === 1 ? ' attempt' : ' attempts')), { 'data-k': 'attempts-' + l.id }));
+    if (at.length) det.appendChild(el('ul', null, at.map(function (a) {
+      return el('li', 'wrap', [a.run_id || '?', ' ', pill(a.status), ' ', dur((Date.parse(a.ended_at) - Date.parse(a.started_at)) / 1000) || (a.ended_at ? '' : 'running'),
+        a.tokens ? ' ' + tokText(a.tokens) : '', a.fidelity ? el('span', 'fid', a.fidelity) : null]);
+    })));
+    det.addEventListener('toggle', function () {
+      var s = readState();
+      if (det.open === (s.o.indexOf(l.id) >= 0)) return;
+      toggle(s.o, l.id, det.open);
+      writeState(s);
+    });
+    var rowHead = el('td', null, [el('strong', 'wrap', l.id), el('span', 'sub', l.label || ''), el('span', 'sub', l.origin || '')]);
+    rowHead.setAttribute('data-label', 'Lane');
+    var cells = [
+      [rowHead],
+      ['Owner', plain(l.owner)],
+      ['Model', [el('span', 'sub', 'requested ' + ([req.harness, req.model].filter(Boolean).join(' ') || 'unknown')), el('span', null, ['observed ', mv(obs.model)])]],
+      ['Effort', [el('span', 'sub', 'requested ' + (req.effort || 'unknown')), el('span', null, ['observed ', mv(obs.effort)])]],
+      ['Status', pill(l.status)],
+      ['Elapsed', mv(l.elapsed, dur)],
+      ['Active', mv(l.active, dur)],
+      ['Last observed', when(l.last_observed_at)],
+      ['Attempts', det]
+    ];
+    var tr = el('tr');
+    cells.forEach(function (c) {
+      if (c.length === 1) { tr.appendChild(c[0]); return; }
+      tr.appendChild(attr(el('td', null, c[1]), { 'data-label': c[0] }));
+    });
+    return tr;
+  }
+  function laneTable(list, st) {
+    var tbl = el('table', 'stack');
+    var cols = ['Lane', 'Owner', 'Model', 'Effort', 'Status', 'Elapsed', 'Active', 'Last observed', 'Attempts'];
+    tbl.appendChild(el('thead', null, el('tr', null, cols.map(function (c) { return attr(el('th', null, c), { scope: 'col' }); }))));
+    tbl.appendChild(el('tbody', null, list.map(function (l) { return laneRow(l, st); })));
+    return tbl;
+  }
+
   function bLanes(d, st) {
     var lanes = d.lanes || [];
+    var shown = visibleLanes(d, st);
+    var busy = shown.filter(hasWork), quiet = shown.filter(function (l) { return !hasWork(l); });
     var filter = el('div', 'filter');
     filter.setAttribute('role', 'group');
     filter.setAttribute('aria-label', 'Filter by lane');
-    [{ id: '' }].concat(lanes).forEach(function (l) {
+    [{ id: '' }].concat(lanes.filter(function (l) { return hasWork(l) || l.id === st.f; })).forEach(function (l) {
       var b = attr(el('button', null, l.id || 'All lanes'), { type: 'button', 'aria-pressed': String(st.f === l.id), 'data-k': 'f-' + l.id });
       b.addEventListener('click', function () {
         var s = readState();
@@ -168,48 +223,21 @@
       });
       filter.appendChild(b);
     });
-    var tbl = el('table', 'stack');
-    var cols = ['Lane', 'Owner', 'Model', 'Effort', 'Status', 'Elapsed', 'Active', 'Last observed', 'Attempts'];
-    tbl.appendChild(el('thead', null, el('tr', null, cols.map(function (c) { return attr(el('th', null, c), { scope: 'col' }); }))));
-    var tb = el('tbody');
-    visibleLanes(d, st).forEach(function (l) {
-      var req = l.requested || {}, obs = l.observed || {};
-      var open = st.o.indexOf(l.id) >= 0, at = l.attempts || [];
-      var det = el('details');
-      det.open = open;
-      det.appendChild(el('summary', null, at.length + (at.length === 1 ? ' attempt' : ' attempts')));
-      if (at.length) det.appendChild(el('ul', null, at.map(function (a) {
-        return el('li', 'wrap', [a.run_id || '?', ' ', pill(a.status), ' ', dur((Date.parse(a.ended_at) - Date.parse(a.started_at)) / 1000) || (a.ended_at ? '' : 'running'),
-          a.tokens ? ' ' + tokText(a.tokens) : '', a.fidelity ? el('span', 'fid', a.fidelity) : null]);
-      })));
+    var body = [filter];
+    if (!lanes.length) body.push(el('p', 'empty', 'No lanes yet.'));
+    if (busy.length) body.push(laneTable(busy, st));
+    if (quiet.length) {
+      /* lanes with no tasks and no attempts have no board or run to read: one collapsed line, not table rows */
+      var det = el('details', 'quiet', [attr(el('summary', null, quiet.length + (quiet.length === 1 ? ' lane' : ' lanes') + ' with no tasks or attempts'), { 'data-k': 'quiet-lanes' }), laneTable(quiet, st)]);
+      det.open = st.o.indexOf('quiet-lanes') >= 0;
       det.addEventListener('toggle', function () {
         var s = readState();
-        if (det.open === (s.o.indexOf(l.id) >= 0)) return;
-        toggle(s.o, l.id, det.open);
+        if (det.open === (s.o.indexOf('quiet-lanes') >= 0)) return;
+        toggle(s.o, 'quiet-lanes', det.open);
         writeState(s);
       });
-      var rowHead = el('td', null, [el('strong', 'wrap', l.id), el('span', 'sub', l.label || ''), el('span', 'sub', l.origin || '')]);
-      rowHead.setAttribute('data-label', 'Lane');
-      var cells = [
-        [rowHead],
-        ['Owner', plain(l.owner)],
-        ['Model', [el('span', 'sub', 'requested ' + ([req.harness, req.model].filter(Boolean).join(' ') || 'unknown')), el('span', null, ['observed ', mv(obs.model)])]],
-        ['Effort', [el('span', 'sub', 'requested ' + (req.effort || 'unknown')), el('span', null, ['observed ', mv(obs.effort)])]],
-        ['Status', pill(l.status)],
-        ['Elapsed', mv(l.elapsed, dur)],
-        ['Active', mv(l.active, dur)],
-        ['Last observed', when(l.last_observed_at)],
-        ['Attempts', det]
-      ];
-      var tr = el('tr');
-      cells.forEach(function (c) {
-        if (c.length === 1) { tr.appendChild(c[0]); return; }
-        tr.appendChild(attr(el('td', null, c[1]), { 'data-label': c[0] }));
-      });
-      tb.appendChild(tr);
-    });
-    tbl.appendChild(tb);
-    var body = [filter, lanes.length ? tbl : el('p', 'empty', 'No lanes yet.')];
+      body.push(det);
+    }
     return section('lanes', lanes.length, body, st);
   }
   function tokText(t) {
@@ -227,7 +255,7 @@
     })));
     return c;
   }
-  function board(d, name, tasks, id) {
+  function board(d, name, tasks, key, st) {
     var t = tasks || {};
     var spec = [['active', 'Active', t.active || []], ['waiting', 'Waiting', t.waiting || []], ['blocked', 'Blocked', t.blocked || []], ['done', 'Done', t.done || []]];
     var cols = el('div', 'cols', spec.map(function (s) {
@@ -237,12 +265,30 @@
       });
       return el('div', 'col', [el('h4', null, [s[1], el('span', null, s[2].length)]), el('ul', null, items.length ? items : el('li', 'none', 'None'))]);
     }));
-    return el('div', 'board', [el('h3', 'wrap', name), cols]);
+    /* a board with only finished work starts closed; a click flips it, and the flip is kept in the hash */
+    var doneOnly = !(spec[0][2].length || spec[1][2].length || spec[2][2].length);
+    var flipped = st.o.indexOf(key) >= 0;
+    var det = el('details', 'board', [attr(el('summary', null, [el('h3', 'wrap', name), el('span', 'sub', doneOnly ? spec[3][2].length + ' done' : '')]), { 'data-k': 'board-' + key }), cols]);
+    det.open = doneOnly === flipped;
+    det.addEventListener('toggle', function () {
+      var s = readState(), nowFlipped = det.open === doneOnly;
+      if (nowFlipped === (s.o.indexOf(key) >= 0)) return;
+      toggle(s.o, key, nowFlipped);
+      writeState(s);
+    });
+    return det;
+  }
+  function taskTotal(t) {
+    t = t || {};
+    return ['active', 'waiting', 'blocked', 'done'].reduce(function (n, k) { return n + (t[k] || []).length; }, 0);
   }
   function bBoards(d, st) {
-    var parts = visibleLanes(d, st).map(function (l) { return board(d, l.id + (l.label ? ' ' + l.label : ''), l.tasks); });
+    /* a lane with no tasks has nothing to put on a board */
+    var parts = visibleLanes(d, st).filter(function (l) { return taskTotal(l.tasks) > 0; }).map(function (l) {
+      return board(d, l.id + (l.label ? ' ' + l.label : ''), l.tasks, 'bd:' + l.id, st);
+    });
     var un = d.unassigned_tasks;
-    if (!st.f && un && ['active', 'waiting', 'blocked', 'done'].some(function (k) { return (un[k] || []).length; })) parts.push(board(d, 'Unassigned', un));
+    if (!st.f && taskTotal(un) > 0) parts.push(board(d, 'Unassigned', un, 'bd:unassigned', st));
     return section('boards', null, parts.length ? parts : el('p', 'empty', 'No boards.'), st);
   }
 
@@ -260,7 +306,7 @@
   function bDecisions(d, st) {
     var dc = d.decisions || {}, p = dc.pending || [], m = dc.made || [];
     var body = [el('p', 'sect', 'Pending'), p.length ? el('ul', 'dec', p.map(function (x) { return decItem(x, false); })) : el('p', 'empty', 'None pending.'),
-      el('p', 'sect', 'Made'), m.length ? el('ul', 'dec', m.map(function (x) { return decItem(x, true); })) : el('p', 'empty', 'None made.')];
+      el('p', 'sect', 'Made'), m.length ? el('ul', 'dec', m.map(function (x) { return decItem(x, true); })) : el('p', 'empty', 'No decisions recorded in Workflow decisions.')];
     return section('decisions', p.length + ' pending', body, st);
   }
 
@@ -280,11 +326,26 @@
   }
 
   function bEvents(d, st) {
-    var ev = (d.events || []).slice(0, 30);
-    var body = ev.length ? el('ol', 'ev', ev.map(function (e) {
+    var all = d.events || [], kinds = [];
+    all.forEach(function (e) { if (e.kind && kinds.indexOf(e.kind) < 0) kinds.push(e.kind); });
+    var filter = el('div', 'filter');
+    filter.setAttribute('role', 'group');
+    filter.setAttribute('aria-label', 'Filter events by kind');
+    [''].concat(kinds).forEach(function (k) {
+      var b = attr(el('button', null, k || 'All events'), { type: 'button', 'aria-pressed': String(st.k === k), 'data-k': 'k-' + k });
+      b.addEventListener('click', function () {
+        var s = readState();
+        s.k = s.k === k ? '' : k;
+        writeState(s);
+        render();
+      });
+      filter.appendChild(b);
+    });
+    var ev = all.filter(function (e) { return !st.k || e.kind === st.k; }).slice(-100);
+    var list = ev.length ? el('ol', 'ev', ev.map(function (e) {
       return el('li', null, [el('span', 't', e.at ? new Date(e.at).toLocaleTimeString() : ''), el('span', 'k', e.kind || ''), el('span', null, e.text || '')]);
     })) : el('p', 'empty', 'No events yet.');
-    return section('events', ev.length, body, st);
+    return section('events', ev.length, [kinds.length ? filter : null, list], st);
   }
 
   var RENDER = { header: bHeader, orchestrator: bOrch, lanes: bLanes, boards: bBoards, decisions: bDecisions, blockers: bBlockers, events: bEvents };

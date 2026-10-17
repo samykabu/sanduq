@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.11.1] - 2026-10-17
+
+- Reporting instructions: lifecycle stage runs (scope, specify, clarify...) are recorded by the delegation ledger and get no `progress lane` call. `progress lane` is only for real Execute workstreams, once per workstream, and a new worker updates that lane's owner. The legacy shim reuses the open lane that already carries a task and updates its owner instead of adding a lane per worker.
+- The vendored `delegate-task` is re-pinned to `agent-tools-v1.3.1`. Check batches resolve every launcher before starting; on Linux, containment falls back to a `/proc/*/stat` scan when the kernel has no children file; on Windows, environment overrides match names without regard to case, and a check cancelled before launch starts nothing.
+
 ## [1.11.0] - 2026-10-17
 
 - Immutable verification attempts and validated recoverable evidence snapshots.

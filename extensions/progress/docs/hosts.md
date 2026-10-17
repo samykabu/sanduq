@@ -165,7 +165,8 @@ logged and nothing is created.
 
 ## Projection details worth knowing
 
-- `events` are chronological (oldest first), the last 30.
+- `events` are chronological (oldest first), bounded by kind: the last 50 stage, failure, decision, block and workflow
+  lines, the last 15 notes (`NOTE_LIMIT`) and the last 30 others.
 - Workflow lane ids: facts lanes `L#`; delegation identities without a facts lane `W#`; host children `C#`;
   plain mode adds `coordinator`. A facts lane whose `owner` equals a delegation identity absorbs that identity's attempts.
 - `orchestrator.elapsed` is the statusline's session duration when present, otherwise wall time since
