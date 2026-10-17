@@ -56,6 +56,9 @@ export function validatePlan(p, { probePython = true } = {}) {
         }
       }
     }
+    // Resolve every launcher before runBatch creates an attempt or executes a
+    // check. Resolution only inspects files; Python's isolated probe is above.
+    resolveCommand(c, p);
   }
   return p;
 }
@@ -68,17 +71,33 @@ function secretValues(p) {
 }
 function executable(name, cwd, env) {
   const win = process.platform === 'win32';
-  const dirs = /[/\\]/.test(name) ? [''] : (env.PATH || env.Path || '').split(path.delimiter);
+  const searchPath = win ? Object.entries(env).find(([k]) => k.toUpperCase() === 'PATH')?.[1] : env.PATH;
+  const dirs = /[/\\]/.test(name) ? [''] : (searchPath ?? '').split(path.delimiter);
   const exts = win && !path.extname(name) ? ['.exe', '.com', '.cmd', '.bat', ''] : [''];
   for (const d of dirs) for (const ext of exts) {
     const f = path.resolve(cwd, d.replace(/^"(.*)"$/, '$1'), name + ext);
     try {
       if (!fs.statSync(f).isFile()) continue;
       if (win && !/\.(exe|com)$/i.test(f)) throw new Error('unsupported Windows shim/script; provide its real executable and script as separate argv entries');
+      if (!win) fs.accessSync(f, fs.constants.X_OK);
       return f;
     } catch (e) { if (e.message.startsWith('unsupported')) throw e; }
   }
   throw new Error('executable not found');
+}
+function resolveCommand(c, p) {
+  const env = { ...process.env };
+  for (const overrides of [p.env, c.env]) for (const [key, value] of Object.entries(overrides || {})) {
+    // Windows environment names are case-insensitive. Remove inherited or
+    // batch aliases so explicit check values also win with different casing.
+    if (process.platform === 'win32') for (const existing of Object.keys(env)) {
+      if (existing.toUpperCase() === key.toUpperCase()) delete env[existing];
+    }
+    env[key] = value;
+  }
+  const cwd = c.cwd || p.cwd;
+  const argv = c.argv.map(a => a === '{{node}}' ? process.execPath : a === '{{python}}' ? p.interpreters.python : a);
+  return { env, cwd, argv, file: executable(argv[0], cwd, env) };
 }
 async function execute(c, p, dir, index, ownership) {
   const prefix = String(index + 1).padStart(3, '0');
@@ -90,10 +109,7 @@ async function execute(c, p, dir, index, ownership) {
   const abort = () => { aborted = true; cancel(); };
   for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, abort);
   try {
-    const env = { ...process.env, ...p.env, ...c.env };
-    const cwd = c.cwd || p.cwd;
-    const argv = c.argv.map(a => a === '{{node}}' ? process.execPath : a === '{{python}}' ? p.interpreters.python : a);
-    const file = executable(argv[0], cwd, env);
+    const { env, cwd, argv, file } = resolveCommand(c, p);
     const proof = path.join(dir, `${prefix}.containment.json`), cancelFile = path.join(dir, `${prefix}.cancel`);
     const contained = await runContained({ file, args: argv.slice(1), cwd, env, timeout_s: c.timeout_s,
       owner_pid: process.pid, stdout: paths.stdout, stderr: paths.stderr, proof,

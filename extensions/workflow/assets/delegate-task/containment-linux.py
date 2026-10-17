@@ -16,6 +16,33 @@ def event(obj):
         pass
 
 
+def list_children():
+    """PIDs whose parent is this process. Prefer the kernel's children file; it is missing without
+    CONFIG_CHECKPOINT_RESTORE, so fall back to matching ppid in /proc/*/stat. The scan is not atomic, but the caller
+    repeats it every tick and kills before reaping, so a child that is missed is found on the next pass and a
+    PID cannot be reused while its unreaped zombie is still ours."""
+    me = os.getpid()
+    try:
+        with open('/proc/self/task/%s/children' % me, encoding='ascii') as f:
+            return [int(v) for v in f.read().split()]
+    except OSError:
+        pass
+    found = []
+    for name in os.listdir('/proc'):  # OSError here means /proc is unusable: the preflight reports it
+        if not name.isdigit():
+            continue
+        try:
+            with open('/proc/%s/stat' % name, 'rb') as f:
+                stat = f.read().decode('ascii', 'replace')
+        except OSError:
+            continue  # exited while scanning
+        # pid (comm) state ppid ...; comm may contain spaces and parentheses, so split after the last ')'.
+        fields = stat.rpartition(')')[2].split()
+        if len(fields) > 1 and fields[1].isdigit() and int(fields[1]) == me:
+            found.append(int(name))
+    return found
+
+
 def run(req):
     proof = dict(nonce=req['nonce'], state='unresolved', mechanism='linux_subreaper',
                  started=False, root_pid=None, exit_code=None, signal=None,
@@ -39,11 +66,9 @@ def run(req):
     if os.getppid() != req['owner_pid']:
         proof.update(state='closed', owner_lost=True)
         return proof
-    # Verify the kernel child-enumeration interface before launching anything.
-    children_file = '/proc/self/task/%s/children' % os.getpid()
+    # Verify a child-enumeration interface before launching anything.
     try:
-        with open(children_file, encoding='ascii') as f:
-            f.read()
+        list_children()
     except OSError:
         proof.update(state='closed', launch_error='CHILD_ENUMERATION_UNAVAILABLE')
         return proof
@@ -94,9 +119,7 @@ def run(req):
                 # Kill direct children before reaping them, so their PIDs cannot
                 # be reused between enumeration and kill. Orphans are adopted and
                 # handled on the next iteration, including new process groups.
-                with open(children_file, encoding='ascii') as f:
-                    children = [int(v) for v in f.read().split()]
-                for pid in children:
+                for pid in list_children():
                     try:
                         os.kill(pid, signal.SIGKILL)
                     except ProcessLookupError:

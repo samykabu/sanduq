@@ -22,6 +22,10 @@ def checkpoint(feature_dir):
     first = next((h.get('at') for h in data.get('branch_history', []) if isinstance(h, dict) and h.get('at')), None)
     accepted = accepted_receipts(data.get('receipts'))
     last = accepted[-1] if accepted else None
+    # A receipt Workflow marked stale (outcome still passed) is no longer current: it never names the stage the feature
+    # is at. It stays in `accepted` for pause supersession and the events list, which record what happened.
+    current = [r for r in accepted if not r['_stale']]
+    latest = current[-1] if current else None
     # A pause is a snapshot taken when the feature stopped. An accepted receipt completed after it means the feature
     # moved on, so the pause is history, not a blocker. The checkpoint keeps the stale record; we do not.
     paused_at = parse_time(pause.get('at')) if pause else None
@@ -38,7 +42,7 @@ def checkpoint(feature_dir):
             superseded = f'status is {status}'
     return {'branch': data.get('branch'), 'feature': data.get('feature'), 'status': data.get('status'),
             'stage': active.get('stage') if active else None, 'issue': link, 'updated_at': data.get('updated_at'),
-            'started_at': first, 'last_accepted': {'stage': last['stage'], 'at': last['at']} if last else None,
+            'started_at': first, 'last_accepted': {'stage': latest['stage'], 'at': latest['at']} if latest else None,
             'receipts': [{'stage': r['stage'], 'at': r['at']} for r in accepted],
             'pause': {'reason': clean(pause.get('reason'), 120), 'at': pause.get('at'), 'superseded': superseded}
             if pause else None}
@@ -46,7 +50,7 @@ def checkpoint(feature_dir):
 
 def accepted_receipts(receipts):
     """Accepted stage receipts ({stage, at, _when}) in completion order: outcome `passed` with a completion time. Ties
-    keep the receipts' own (lifecycle) order. Receipt bodies are not read beyond these three fields."""
+    keep the receipts' own (lifecycle) order. Receipt bodies are not read beyond these three fields and the `stale` mark."""
     rows = []
     for index, (key, item) in enumerate((receipts or {}).items() if isinstance(receipts, dict) else ()):
         if not isinstance(item, dict) or item.get('outcome') != 'passed':
@@ -54,7 +58,7 @@ def accepted_receipts(receipts):
         at = item.get('completed_at') or item.get('created_at')
         when = parse_time(at)
         if when:
-            rows.append((when, index, {'stage': str(item.get('stage') or key), 'at': at, '_when': when}))
+            rows.append((when, index, {'stage': str(item.get('stage') or key), 'at': at, '_when': when, '_stale': bool(item.get('stale'))}))
     return [r[2] for r in sorted(rows, key=lambda r: (r[0], r[1]))]
 
 

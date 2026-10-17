@@ -5,5 +5,5 @@
     "progress": "1.1.3"
   },
   "status": "ready",
-  "note": "Workflow 1.10.4 stops coordinator lanes for lifecycle stage runs (one lane per Execute workstream) and the shim reuses or splits lanes correctly; Progress 1.1.3 vendors agent-tools 1.3.0 (report correctness patch). Publish after successful main CI and downloaded asset verification."
+  "note": "Workflow 1.10.4 stops coordinator lanes for lifecycle stage runs (one lane per Execute workstream) and the shim reuses or splits lanes correctly; Progress 1.1.3 vendors agent-tools 1.3.1 (report correctness patch and #87 review fixes). Publish after successful main CI and downloaded asset verification."
 }
