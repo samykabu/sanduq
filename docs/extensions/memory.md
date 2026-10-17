@@ -41,7 +41,7 @@ python .specify/extensions/memory/scripts/archive.py memory check
 
 ## Preflight and bounded inspection
 
-The staged Memory 2.2.0 package exposes the same early guards used by verification and preparation:
+The Memory 2.2.0 package exposes the same early guards used by verification and preparation:
 
 ```bash
 python .specify/extensions/memory/scripts/archive.py preflight --spec specs/412-refund-approval --check docs

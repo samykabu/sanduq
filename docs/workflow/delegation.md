@@ -103,7 +103,7 @@ changes later. The stored path must still be a recognized skill location
 
 ## Run deterministic checks without another agent
 
-For known local commands, the staged Workflow 1.11.0 bundle includes a native check runner. Store
+For known local commands, the Workflow 1.11.0 bundle includes a native check runner. Store
 argv arrays and timeouts in a JSON plan. Run the batch once and collect its retained evidence:
 
 ```powershell

@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.2.0] - Unreleased
+## [2.2.0] - 2026-10-17
 
 - Native early preflight, bounded archive inspection and batched Git inventory.
 - Opt-in complete check-input manifests permit hash-validated receipt reuse; legacy checks keep conservative freshness.

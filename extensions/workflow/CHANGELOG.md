@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.11.0] - Unreleased
+## [1.11.0] - 2026-10-17
 
 - Immutable verification attempts and validated recoverable evidence snapshots.
 - Use shared check-input fingerprints and retain legacy evidence compatibility.
