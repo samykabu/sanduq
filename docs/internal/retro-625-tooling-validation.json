@@ -6,7 +6,7 @@
     "agent-tools": "1.3.0"
   },
   "release_status": "local-unreleased",
-  "portable_commit": "8c77aafe3bc93cf01b6576750e91bc0591613fea",
+  "portable_commit": "0727ec2b54f96fb7ab76f1ef5b3cb83976027b90",
   "unit_acceptance": {
     "portable": {
       "passed": 207,
@@ -247,5 +247,29 @@
     },
     "proof_root": ".delegate/pr85-ci",
     "remote_status": "Local evidence only. Remote PR CI is separate; no remote success is claimed here."
+  },
+  "pr85_review_corrections": {
+    "source_commit": "0727ec2b54f96fb7ab76f1ef5b3cb83976027b90",
+    "valid_threads": 7,
+    "already_fixed_in_10bd01f": [
+      4299275100,
+      4299275111
+    ],
+    "new_fixes": [
+      "whole-batch executable resolution before attempts",
+      "manifest-relative executable and script checks",
+      "normalized summary excludes raw provider usage",
+      "retained Git evidence survives verified relocation",
+      "256-record and 64-MiB aggregate evidence limits with streaming admission"
+    ],
+    "acceptance": {
+      "portable_windows": "48 passed; 1 POSIX-only skip",
+      "portable_linux": "48 passed; 1 Windows-only skip",
+      "workflow_affected_windows": "45 passed; 1 existing local-data skip",
+      "workflow_affected_linux": "45 passed; 1 existing local-data skip"
+    },
+    "proof_root": ".delegate/pr85-review",
+    "svg_status": "Separate candidate failed local timer-clock fixture; not vendored or claimed fixed. No illustration source changes in this review-correction commit.",
+    "full_review": "Existing completed-feature review retained; coordinator inspected corrective deltas and affected regressions."
   }
 }

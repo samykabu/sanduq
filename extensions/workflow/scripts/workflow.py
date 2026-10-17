@@ -1516,7 +1516,7 @@ def validate_evidence_snapshots(root, receipt):
             and set(snapshots) <= set(receipt.get('evidence', [])), 'EVIDENCE_SNAPSHOTS_INVALID')
     for path in snapshots:
         try:
-            evidence_snapshot.resolve(root, path)
+            evidence_snapshot.validate(root, path)
         except (ValueError, OSError, KeyError, TypeError) as exc:
             raise WorkflowError('EVIDENCE_SNAPSHOT_UNRECOVERABLE: ' + path + ': ' + str(exc)) from exc
 

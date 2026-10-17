@@ -56,6 +56,9 @@ class InputError(Exception):
 def contracts():
     return {
         'evidence': {'schema': evidence_snapshot.SCHEMA, 'max_file_bytes': evidence_snapshot.MAX_BYTES,
+                     'max_snapshot_bytes': evidence_snapshot.MAX_BYTES,
+                     'max_records': evidence_snapshot.MAX_RECORDS,
+                     'max_payload_bytes': evidence_snapshot.MAX_TOTAL_BYTES,
                      'capture': 'evidence-capture --root ROOT --path FILE --out NEW_SNAPSHOT',
                      'resolve': 'evidence-resolve --root ROOT --snapshot SNAPSHOT --path FILE --out NEW_FILE'},
         'preflight': {'schema': PREFLIGHT_SCHEMA,
@@ -159,7 +162,9 @@ def check_identity(base, item):
     return {'id': cid, 'ok': True, 'detail': 'ok'}
 
 
-def check_command(item):
+def check_command(item, base=None):
+    # Keep direct callers compatible; manifest callers supply their own directory.
+    base = Path.cwd() if base is None else Path(base).resolve()
     cid = 'command:' + str(item['name'])
     args = item.get('args', [])
     for field in ('args', 'required_args', 'forbidden_args'):
@@ -170,11 +175,21 @@ def check_command(item):
     if not isinstance(executable, str) or not executable:
         raise InputError(f'{cid}: executable must be a non-empty string')
     problems = []
-    if not (shutil.which(executable) or Path(executable).is_file()):
+    local = base / executable
+    explicit_path = Path(executable).is_absolute() or '/' in executable or '\\' in executable
+    selected = os.path.abspath(local) if local.is_file() else None
+    if selected is None and not explicit_path:
+        # Absolute lookup candidates preserve PATH/PATHEXT while preventing
+        # Windows which() from implicitly prepending the unrelated caller cwd.
+        for directory in [str(base), *os.get_exec_path()]:
+            selected = shutil.which(os.path.abspath(base / directory / executable))
+            if selected:
+                break
+    if not selected:
         problems.append(f'executable not found: {executable}')
     else:
         try:
-            check_inputs.command_input(Path.cwd(), [executable, *args])
+            check_inputs.command_input(base, [selected, *args])
         except evidence_snapshot.InputIdentityError as exc:
             problems.append(str(exc))
     problems += [f'empty argument at position {i}' for i, a in enumerate(args) if not a.strip()]
@@ -239,7 +254,7 @@ def preflight(manifest_path):
     base = manifest_path.resolve().parent
     checks = [check_file(base, i) for i in _entries(manifest, 'files', ('path',))]
     checks += [check_identity(base, i) for i in _entries(manifest, 'identities', ('name', 'kind', 'path'))]
-    checks += [check_command(i) for i in _entries(manifest, 'commands', ('name', 'executable'))]
+    checks += [check_command(i, base) for i in _entries(manifest, 'commands', ('name', 'executable'))]
     checks += [check_browser(base, i) for i in _entries(manifest, 'browsers', ('name', 'path'))]
     if 'runtime_status' in manifest:
         checks.append(check_runtime_status(base, manifest['runtime_status']))
