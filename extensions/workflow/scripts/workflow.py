@@ -2646,7 +2646,12 @@ class Run:
                 annotate_tasks(self.root, self.relative, self.policy['delegation'], lean=lean_policy.enabled(self.policy))
             # Known semantic transformations advance upstream artifact snapshots with an
             # explicit lineage record. They do not pretend the old artifact remained current.
-            permitted = {'clarify': ['spec.md'], 'qa_analyze': ['tasks.md'], 'manual_analyze': ['tasks.md']}.get(stage, [])
+            permitted = {'clarify': [self.relative + '/spec.md'],
+                         'qa_analyze': [self.relative + '/tasks.md'],
+                         'manual_analyze': [self.relative + '/tasks.md'],
+                         # Assure Document refreshes this generated source inventory.
+                         # It is project context, not requirements authority.
+                         'qa_document': ['.github/memory/project-memory.md']}.get(stage, [])
             after = fingerprint_files(self.root, active['baseline'])
             changed = [p for p, before in active['baseline'].items() if after[p] != before]
             # Only an earlier receipt's dependency can be undermined by this stage.
@@ -2657,8 +2662,10 @@ class Run:
                 dependencies.update(dependency_fingerprints(prior, required_inputs(self.root, self.relative, name)))
             consulted = [p for p in changed if p not in dependencies]
             changed = [p for p in changed if p in dependencies]
-            unexpected = [p for p in changed if portable_label(p) not in [self.relative + '/' + f for f in permitted]]
+            unexpected = [p for p in changed if portable_label(p) not in permitted]
             require(not unexpected, 'UPSTREAM_INPUT_CHANGED_DURING_STAGE: ' + ', '.join(unexpected))
+            if stage == 'qa_document':
+                require(all(after[p] is not None for p in changed), 'INPUT_MISSING')
             if consulted:
                 state.setdefault('lineage', []).append({'stage': stage, 'advisory': True, 'consulted': {
                     p: {'before': active['baseline'][p], 'after': after[p]} for p in consulted}, 'at': now()})
@@ -2668,6 +2675,12 @@ class Run:
                     for path in changed:
                         if path in prior['fingerprints']:
                             prior['fingerprints'][path] = after[path]
+                        # Verify/Review also inventory this root-relative context file.
+                        # Advance only the accepted QA-document transformation, retaining
+                        # its old/new hashes in the same runtime-owned lineage above.
+                        source_path = portable_label(path)
+                        if stage == 'qa_document' and source_path in prior.get('source_fingerprints', {}):
+                            prior['source_fingerprints'][source_path] = after[path]
             stored = copy.deepcopy(receipt)
             if stage == 'pr' and lean_policy.enabled(self.policy):
                 stored['pr_lint_binding'] = binding
