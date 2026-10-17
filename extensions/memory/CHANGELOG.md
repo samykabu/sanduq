@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.1.3] - 2026-10-17
+
+- Archive prepare and finalize no longer fail when a scope names files that are tracked under an ignored parent such as `artifacts/`. The expected tree stages tracked edits and deletions with `git add -u` and adds new unignored files by name. Untracked ignored files stay out of the commit, and one named exactly as a scope is still refused.
+
 ## [2.1.2] - 2026-10-10
 
 - README links point to the new extension page, install-by-host page and command reference.
