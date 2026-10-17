@@ -1,10 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "memory": "2.2.0",
-    "workflow": "1.11.0",
-    "illustrate": "2.4.2"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Owner approved publication after PRs #85 and sanduq-skills#8 merged and their push CI passed. Completed-feature review, affected retests and packaged install/upgrade acceptance are recorded in docs/internal/retro-625-tooling-validation.json. Native agent-tools inputs retain the reviewed f89debe source; marketplace consumers use published agent-tools 1.3.1. Separate Progress/Workflow work in PR #87 is outside this release."
 }
