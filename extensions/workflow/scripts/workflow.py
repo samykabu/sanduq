@@ -2483,6 +2483,7 @@ class Run:
             return state
 
     def save(self, state):
+        self.__dict__.pop('_saved_next', None)
         state['generation'] += 1
         state['updated_at'] = now()
         state['head'] = git(self.root, 'rev-parse', 'HEAD')
@@ -2505,6 +2506,8 @@ class Run:
             result = self.next_stage(state)
         except Exception:  # an evaluation that cannot run is recorded as absent, never guessed
             return None
+        # The command usually asks for the same answer right after the save; hand it over once.
+        self._saved_next = (state, state['generation'], copy.deepcopy(result))
         if result.get('stage'):
             text = 'Run ' + result['stage'] + (' (' + result['command'] + ')' if result.get('command') else '')
             if result.get('reason') in ('inputs-or-evidence-changed', 'policy-changed'):
@@ -2524,6 +2527,9 @@ class Run:
         return result
 
     def next_stage(self, state, finalize=False):
+        saved = self.__dict__.pop('_saved_next', None)
+        if saved and not finalize and saved[0] is state and saved[1] == state['generation']:
+            return saved[2]
         policy_changed = state['policy_digest'] != checkpoint_policy_digest(state, self.policy)
         cutoff = policy_cutoff(state.get('policy'), self.policy) if policy_changed else len(BASE_STAGES)
         for stage in stages(self.policy):
@@ -2591,7 +2597,8 @@ class Run:
             claim_id = lifecycle.claim_id_for(token)
             for downstream in removed:
                 # Captured before deletion: the receipts this claim removes are recorded as invalidated.
-                lifecycle.queue(state, downstream, 'invalidated', claim_id=claim_id,
+                # The removed receipt belongs to no claim or episode; the cause is a separate field.
+                lifecycle.queue(state, downstream, 'invalidated', caused_by_claim_id=claim_id,
                                 reason='removed when ' + stage + ' was claimed (completed '
                                        + str(state['receipts'][downstream].get('completed_at')) + ')')
                 state['receipts'].pop(downstream, None)
@@ -2643,7 +2650,7 @@ class Run:
             require(active and active['token'] == token, 'CLAIM_TOKEN_MISMATCH')
             try:
                 return self._accept_completion(state, active, token, receipt)
-            except WorkflowError as exc:
+            except (WorkflowError, ValueError) as exc:
                 try:
                     self._record_rejection(token, exc)
                 except Exception:  # the log must never hide the rejection the caller has to see
@@ -2686,6 +2693,7 @@ class Run:
             require(inside(self.root, path).is_file(), 'EVIDENCE_MISSING: ' + path)
         validate_evidence_snapshots(self.root, receipt)
         delegation_ledger_trust = None
+        stage_attempt = None
         if self.policy['delegation']['enabled'] and active.get('delegation'):
             # The claim recorded a delegation route for this stage; require the
             # dispatcher's own ledger (never the receipt's self-report) to show
@@ -2802,6 +2810,7 @@ class Run:
         claim_id = active.get('claim_id') or lifecycle.claim_id_for(token)
         lifecycle.queue(state, stage, 'accepted', claim_id=claim_id,
                         episode_id=lifecycle.episode_for_claim(claim_id),
+                        candidate_run_id=(stage_attempt or {}).get('run_id'),
                         delegation_run_ids=lifecycle.delegation_runs_for(self.feature, token, claim_id))
         self.save(state)
         return self.next(state)

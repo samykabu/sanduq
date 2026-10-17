@@ -19,7 +19,7 @@ VERSION = 1
 EVENTS = ('claim', 'resume', 'accepted', 'rejected-completion', 'recovered', 'paused',
           'invalidated', 'revalidated', 'revalidation-stale')
 FIELDS = ('v', 'event_id', 'workflow_run_id', 'generation', 'at', 'stage', 'event', 'episode_id',
-          'claim_id', 'delegation_run_ids', 'reason')
+          'claim_id', 'caused_by_claim_id', 'candidate_run_id', 'delegation_run_ids', 'reason')
 REASON_LIMIT = 240
 OUTBOX = 'lifecycle_outbox'
 
@@ -39,9 +39,14 @@ def log_path(feature_dir):
     return Path(feature_dir) / 'workflow' / 'lifecycle.jsonl'
 
 
-def make_event(state, stage, event, *, episode_id=None, claim_id=None, delegation_run_ids=None,
-               reason=None, generation=None, at=None):
-    """Build one record. Nullable ids are written explicitly as null."""
+def make_event(state, stage, event, *, episode_id=None, claim_id=None, caused_by_claim_id=None,
+               candidate_run_id=None, delegation_run_ids=None, reason=None, generation=None, at=None):
+    """Build one record. Nullable ids are written explicitly as null.
+
+    ``candidate_run_id`` is set only on ``accepted``: the delegation run the exact-claim check validated.
+    ``caused_by_claim_id`` is set only on a claim-time ``invalidated``, which carries no claim or episode
+    of its own.
+    """
     assert event in EVENTS, event
     event_id = uuid.uuid4().hex
     if episode_id == 'revalidation':
@@ -50,8 +55,8 @@ def make_event(state, stage, event, *, episode_id=None, claim_id=None, delegatio
     return {'v': VERSION, 'event_id': event_id, 'workflow_run_id': state.get('run_id'),
             'generation': state.get('generation', 0) + 1 if generation is None else generation,
             'at': at or datetime.now(timezone.utc).isoformat(), 'stage': stage, 'event': event,
-            'episode_id': episode_id, 'claim_id': claim_id,
-            'delegation_run_ids': list(delegation_run_ids or []), 'reason': text}
+            'episode_id': episode_id, 'claim_id': claim_id, 'caused_by_claim_id': caused_by_claim_id,
+            'candidate_run_id': candidate_run_id, 'delegation_run_ids': list(delegation_run_ids or []), 'reason': text}
 
 
 def queue(state, stage, event, **kwargs):
@@ -83,25 +88,42 @@ def read_events(path):
     return events, torn
 
 
+def _repair_tail(path):
+    """Make the file end on a record boundary before the replay is deduplicated.
+
+    A complete JSON record that only lacks its newline is kept and terminated; an unparseable fragment
+    is dropped. Returns True when the file changed.
+    """
+    if not path.exists():
+        return False
+    data = path.read_bytes()
+    if not data or data.endswith(b'\n'):
+        return False
+    cut = data.rfind(b'\n') + 1
+    tail = data[cut:]
+    try:
+        value = json.loads(tail.decode('utf-8'))
+        keep = isinstance(value, dict) and bool(value.get('event_id'))
+    except ValueError:
+        keep = False
+    data = data + b'\n' if keep else data[:cut]
+    temp = path.with_name(path.name + '.' + uuid.uuid4().hex + '.tmp')
+    temp.write_bytes(data)
+    os.replace(temp, path)
+    return True
+
+
 def append_events(path, records):
     """Append records whose ``event_id`` is not in the file yet. Returns the number appended."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    _repair_tail(path)
     seen = {event['event_id'] for event in read_events(path)[0]}
     fresh = []
     for record in records:
         if record['event_id'] not in seen:
             seen.add(record['event_id'])
             fresh.append(record)
-    if not fresh and not path.exists():
-        return 0
-    data = path.read_bytes() if path.exists() else b''
-    if data and not data.endswith(b'\n'):
-        # A torn final line from an interrupted append: drop the fragment, keep the complete lines.
-        data = data[:data.rfind(b'\n') + 1]
-        temp = path.with_name(path.name + '.' + uuid.uuid4().hex + '.tmp')
-        temp.write_bytes(data)
-        os.replace(temp, path)
     if not fresh:
         return 0
     payload = ''.join(json.dumps(record, ensure_ascii=False, sort_keys=False) + '\n' for record in fresh)

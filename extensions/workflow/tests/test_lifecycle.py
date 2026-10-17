@@ -15,7 +15,7 @@ from test_ci_revalidation import DriftHarness, SHAPE_VERIFICATION_INPUTS, ALL_LA
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'scripts/workflow.py'
 FIELDS = ('v', 'event_id', 'workflow_run_id', 'generation', 'at', 'stage', 'event', 'episode_id', 'claim_id',
-          'delegation_run_ids', 'reason')
+          'caused_by_claim_id', 'candidate_run_id', 'delegation_run_ids', 'reason')
 
 
 class LifecycleBase(Harness):
@@ -53,6 +53,8 @@ class ClaimAndAcceptTests(LifecycleBase):
             self.assertEqual(event['claim_id'], lifecycle.claim_id_for(claim['token']))
             self.assertEqual(event['episode_id'], 'claim:' + event['claim_id'])
             self.assertEqual(event['delegation_run_ids'], [])
+            self.assertIsNone(event['caused_by_claim_id'])
+            self.assertIsNone(event['candidate_run_id'])  # no delegation route: nothing was validated
         self.assertEqual(len({e['event_id'] for e in events}), 2)
         self.assertLess(events[0]['generation'], events[1]['generation'])
         self.assertEqual(events[1]['generation'], run.load()['generation'])
@@ -76,6 +78,10 @@ class ClaimAndAcceptTests(LifecycleBase):
         run = self.start()
         self.assertEqual(run.claim(self.usage(.51, method='measured'))['status'], 'paused')
         self.assertEqual(self.kinds(), [('paused', None)])
+        # A feature-level pause (no claim held) is valid: stage, claim and episode are all null.
+        paused = self.events()[0]
+        self.assertEqual((paused['stage'], paused['claim_id'], paused['episode_id'], paused['reason']),
+                         (None, None, None, 'context-budget'))
         claim = run.claim(self.usage())
         self.assertEqual(claim['stage'], 'scope')
         self.assertEqual(self.kinds(), [('paused', None), ('resume', 'scope')])
@@ -90,8 +96,13 @@ class ClaimAndAcceptTests(LifecycleBase):
         tail = self.events()[-3:]
         self.assertEqual([(e['event'], e['stage']) for e in tail],
                          [('invalidated', 'scope'), ('invalidated', 'specify'), ('claim', 'scope')])
-        self.assertTrue(all(e['claim_id'] == claim['claim_id'] for e in tail))
-        self.assertEqual(tail[0]['episode_id'], None)
+        # A removed receipt belongs to no claim or episode; the new claim is only its cause.
+        for removed in tail[:2]:
+            self.assertEqual((removed['claim_id'], removed['episode_id']), (None, None))
+            self.assertEqual(removed['caused_by_claim_id'], claim['claim_id'])
+        self.assertEqual(tail[2]['claim_id'], claim['claim_id'])
+        self.assertEqual(tail[2]['episode_id'], 'claim:' + claim['claim_id'])
+        self.assertIsNone(tail[2]['caused_by_claim_id'])
         self.assertEqual(run.load()['receipts'], {})
 
     def test_pause_and_recover_record_the_claim_before_it_is_cleared(self):
@@ -138,6 +149,28 @@ class RejectionTests(LifecycleBase):
         # The same claim can still complete with a valid receipt, and both outcomes are on record.
         run.complete(claim['token'], self.receipt('clarify'))
         self.assertEqual([e['event'] for e in self.events()][-2:], ['rejected-completion', 'accepted'])
+
+    def test_a_value_error_rejection_is_recorded_like_a_workflow_error(self):
+        # DelegationError and VerificationPlanError are ValueErrors raised from inside the acceptance.
+        import delegation
+        run = self.start()
+        claim = run.claim(self.usage())
+        with patch.object(w.Run, '_accept_completion', side_effect=delegation.DelegationError('DELEGATION_LEDGER_UNTRUSTED: x')):
+            with self.assertRaises(delegation.DelegationError):
+                run.complete(claim['token'], self.receipt('scope'))
+        last = self.events()[-1]
+        self.assertEqual((last['event'], last['claim_id']), ('rejected-completion', claim['claim_id']))
+        self.assertIn('DELEGATION_LEDGER_UNTRUSTED', last['reason'])
+        self.assertEqual(run.load()['active']['token'], claim['token'])
+        path = self.root / 'receipt.json'
+        path.write_text(json.dumps(self.receipt('scope')), encoding='utf-8')
+        with patch.object(w.Run, '_accept_completion', side_effect=ValueError('VERIFICATION_PLAN_X')):
+            with patch.object(sys, 'argv', ['workflow.py', '--root', str(self.root), 'complete', '--feature', self.feature,
+                                            '--token', claim['token'], '--receipt', str(path)]):
+                with patch('builtins.print') as out:
+                    self.assertEqual(w.main(), 1)
+        self.assertEqual(json.loads(out.call_args.args[0]), {'ok': False, 'error': 'VERIFICATION_PLAN_X'})
+        self.assertEqual(self.events()[-1]['event'], 'rejected-completion')
 
     def test_a_wrong_token_is_not_a_recorded_rejection(self):
         run = self.start()
@@ -249,6 +282,65 @@ class OutboxTests(LifecycleBase):
         run = self.start()
         run.claim(self.usage())
         self.assertNotIn(b'\r', (run.feature / 'workflow/lifecycle.jsonl').read_bytes())
+
+
+class TailRepairTests(LifecycleBase):
+    def test_a_complete_record_missing_only_its_newline_is_kept(self):
+        path = self.root / 'workflow/lifecycle.jsonl'
+        state = {'run_id': 'r', 'generation': 0}
+        first = lifecycle.make_event(state, 'scope', 'claim', claim_id='c-1')
+        lifecycle.append_events(path, [first])
+        # Interrupted right before the newline: the record is whole, only the terminator is missing.
+        path.write_bytes(path.read_bytes().rstrip(b'\n'))
+        self.assertFalse(path.read_bytes().endswith(b'\n'))
+        second = lifecycle.make_event(state, 'scope', 'accepted', claim_id='c-1')
+        # Replaying the same record plus a new one must not lose or duplicate the first.
+        self.assertEqual(lifecycle.append_events(path, [first, second]), 1)
+        events, torn = lifecycle.read_events(path)
+        self.assertFalse(torn)
+        self.assertEqual([e['event_id'] for e in events], [first['event_id'], second['event_id']])
+        self.assertTrue(path.read_bytes().endswith(b'\n'))
+        self.assertEqual(path.read_bytes().count(b'\n'), 2)
+
+    def test_replaying_only_the_unterminated_record_appends_nothing_but_terminates_it(self):
+        path = self.root / 'workflow/lifecycle.jsonl'
+        state = {'run_id': 'r', 'generation': 0}
+        only = lifecycle.make_event(state, 'scope', 'claim', claim_id='c-1')
+        lifecycle.append_events(path, [only])
+        path.write_bytes(path.read_bytes().rstrip(b'\n'))
+        self.assertEqual(lifecycle.append_events(path, [only]), 0)
+        self.assertEqual([e['event_id'] for e in lifecycle.read_events(path)[0]], [only['event_id']])
+        self.assertTrue(path.read_bytes().endswith(b'\n'))
+
+    def test_a_crash_before_the_newline_loses_nothing_through_the_outbox(self):
+        run = self.start()
+        real = lifecycle.append_events
+
+        def crash_before_the_newline(path, records):
+            real(path, records)
+            Path(path).write_bytes(Path(path).read_bytes().rstrip(b'\n'))
+            raise RuntimeError('crash before the newline reached the disk')
+
+        with patch.object(lifecycle, 'append_events', crash_before_the_newline):
+            with self.assertRaises(RuntimeError):
+                run.claim(self.usage())
+        claim = run.load()['active']
+        w.Run(self.root, self.feature).complete(claim['token'], self.receipt('scope'))
+        self.assertEqual(self.kinds(), [('claim', 'scope'), ('accepted', 'scope')])
+
+    def test_an_unparseable_fragment_is_still_dropped(self):
+        path = self.root / 'workflow/lifecycle.jsonl'
+        state = {'run_id': 'r', 'generation': 0}
+        first = lifecycle.make_event(state, 'scope', 'claim', claim_id='c-1')
+        lifecycle.append_events(path, [first])
+        with open(path, 'ab') as handle:
+            handle.write(b'{"v": 1, "event_id": "torn"}')  # parses, but is not an event of this run's shape
+            handle.write(b'{')
+        second = lifecycle.make_event(state, 'scope', 'accepted', claim_id='c-1')
+        self.assertEqual(lifecycle.append_events(path, [second]), 1)
+        events, torn = lifecycle.read_events(path)
+        self.assertFalse(torn)
+        self.assertEqual([e['event_id'] for e in events], [first['event_id'], second['event_id']])
 
 
 class PlanAndNextActionTests(LifecycleBase):

@@ -655,19 +655,74 @@ class WorkstreamMarker(Project):
         self.fake_progress('1.10.1')
         self.assertEqual(self.new_lane_argv()[-1], '--workstream')
 
-    def test_older_or_unreadable_progress_gets_no_flag(self):
+    def test_older_progress_gets_no_flag_and_an_unreadable_version_is_probed(self):
         for version in ('1.1.3', '1.0.0'):
             self.fake_progress(version)
             self.assertNotIn('--workstream', self.new_lane_argv())
         self.assertEqual(bridge.progress_version(self.root), (1, 0, 0))
         (self.root / 'fake-progress' / 'extension.yml').unlink()
-        self.assertIsNone(bridge.progress_version(self.root))
+        self.assertIsNone(bridge.progress_version(self.root))  # no extension.yml and no package VERSION
+
+    def fake_source_tree(self, version):
+        """A script folder with no extension.yml beside it, only the package's VERSION."""
+        folder = self.root / 'source-tree'
+        (folder / 'sanduq_progress').mkdir(parents=True, exist_ok=True)
+        (folder / 'progress.py').write_text('# fake', encoding='utf-8')
+        (folder / 'sanduq_progress' / '__init__.py').write_text("VERSION = '%s'\n" % version, encoding='utf-8')
+        os.environ['SANDUQ_PROGRESS_SCRIPT'] = str(folder / 'progress.py')
+
+    def test_a_source_tree_without_extension_yml_is_versioned_from_the_package(self):
+        self.fake_source_tree('1.2.0')
+        self.assertEqual(bridge.progress_version(self.root), (1, 2, 0))
+        self.assertEqual(self.new_lane_argv()[-1], '--workstream')
+        self.fake_source_tree('1.1.0')
         self.assertNotIn('--workstream', self.new_lane_argv())
 
-    def test_the_installed_progress_in_this_tree_is_below_the_threshold(self):
-        os.environ['SANDUQ_PROGRESS_SCRIPT'] = str(PROGRESS_SCRIPT)
-        self.assertEqual(bridge.progress_at_least(self.root, (1, 2, 0)),
-                         bridge.progress_version(self.root) >= (1, 2, 0))
+    def test_extension_yml_wins_over_the_package_version(self):
+        self.fake_source_tree('1.0.0')
+        (self.root / 'extension.yml').write_text('extension:\n  id: progress\n  version: "1.5.0"\n', encoding='utf-8')
+        self.assertEqual(bridge.progress_version(self.root), (1, 5, 0))
+
+    PROBE = r"""import json, sys
+open(LOG, "a").write(json.dumps(sys.argv[1:]) + "\n")
+if "--workstream" in sys.argv and not ACCEPTS:
+    print("PROGRESS_USAGE: unrecognized arguments: --workstream", file=sys.stderr)
+    sys.exit(2)
+print("progress: L1 open 1 tasks")
+"""
+
+    def unversioned(self, accepts):
+        import progress_shim
+        progress_shim.WORKSTREAM_PROBE.clear()
+        script = self.root / 'unversioned.py'
+        script.write_text(self.PROBE.replace('LOG', repr(str(self.root / 'probe.log'))).replace('ACCEPTS', repr(accepts)),
+                          encoding='utf-8')
+        os.environ['SANDUQ_PROGRESS_SCRIPT'] = str(script)
+        log = self.root / 'probe.log'
+        if log.exists():
+            log.unlink()
+        return progress_shim, log
+
+    def lines(self, log):
+        return [json.loads(line) for line in log.read_text(encoding='utf-8').splitlines()]
+
+    def test_an_unversioned_progress_is_probed_once_per_process(self):
+        shim, log = self.unversioned(True)
+        forward = shim.Forward(self.root, FEATURE)
+        forward.new_lane('--tasks', 'T001')
+        forward.new_lane('--tasks', 'T002')
+        calls = self.lines(log)
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(all(c[-1] == '--workstream' for c in calls))
+
+    def test_an_unversioned_progress_that_rejects_the_flag_is_retried_without_it_then_remembered(self):
+        shim, log = self.unversioned(False)
+        forward = shim.Forward(self.root, FEATURE)
+        forward.new_lane('--tasks', 'T001')
+        forward.new_lane('--tasks', 'T002')
+        calls = self.lines(log)
+        self.assertEqual([c[-1] for c in calls], ['--workstream', 'T001', 'T002'])  # one probe, then no flag at all
+        self.assertNotIn('--workstream', calls[1] + calls[2])
 
 
 class StatusSchemaFlag(Project):
@@ -696,6 +751,34 @@ print(json.dumps({"schema": "v2" if "--schema" in sys.argv else "legacy"}))
         calls = self.calls()
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0][-2:], ['--schema', 'v2'])
+
+    def test_a_progress_that_names_another_usage_error_is_not_retried(self):
+        # Exit 2 also reports an uninitialised feature; retrying without --schema cannot fix that.
+        script = self.root / 'fake_progress.py'
+        script.write_text("import json, sys\nopen(%r, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n"
+                          "print('PROGRESS_NOT_INITIALISED: run progress init', file=sys.stderr)\nsys.exit(2)\n"
+                          % str(self.root / 'calls.log'), encoding='utf-8')
+        os.environ['SANDUQ_PROGRESS_SCRIPT'] = str(script)
+        self.assertIsNone(bridge.status(self.root, FEATURE))
+        self.assertEqual(len(self.calls()), 1)
+
+    def test_the_exact_call_sequence_for_an_uninitialised_unversioned_feature(self):
+        script = self.root / 'fake_progress.py'
+        script.write_text(
+            "import json, os, sys\nlog = %r\nopen(log, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n"
+            "verb = [a for a in sys.argv[3:] if not a.startswith('-')][0]\n"
+            "marker = log + '.init'\n"
+            "if verb == 'init':\n    open(marker, 'w').write('x')\n    print('progress: initialised')\n    sys.exit(0)\n"
+            "if verb == 'status' and not os.path.exists(marker):\n"
+            "    print('PROGRESS_NOT_INITIALISED: run progress init', file=sys.stderr)\n    sys.exit(2)\n"
+            "print(json.dumps({'schema': 'v2'}))\n" % str(self.root / 'calls.log'), encoding='utf-8')
+        os.environ['SANDUQ_PROGRESS_SCRIPT'] = str(script)
+        import progress_shim
+        forward = progress_shim.Forward(self.root, FEATURE)
+        forward.ensure_init()
+        verbs = [[a for a in c[2:] if not a.startswith('-')][0] for c in self.calls()]
+        self.assertEqual(verbs, ['status', 'init', 'status'])  # no extra status between the failure and init
+        self.assertEqual([c for c in self.calls() if 'status' in c][0][-2:], ['--schema', 'v2'])
 
     def test_an_older_progress_is_retried_once_without_the_flag(self):
         self.fake(False)

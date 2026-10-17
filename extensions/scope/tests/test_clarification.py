@@ -523,7 +523,7 @@ class ClarificationTests(unittest.TestCase):
         self.assertIsNone(item['applied'])
         self.assertEqual(item['url'], f'https://github.com/acme/app/issues/1#issuecomment-{comment["id"]}')
         self.assertTrue(item['observed_at'])
-        self.assertEqual(item['evidence'][0]['kind'], 'published')
+        self.assertEqual(item['evidence'][0]['kind'], 'comment')
         self.assertNotIn(b'\r', self.records_path().read_bytes())
         self.assertEqual(list(self.records_path().parent.glob('*.tmp')), [])
 
@@ -580,7 +580,7 @@ class ClarificationTests(unittest.TestCase):
         self.assertEqual(applied['answer'], {'kind': 'single', 'value': 'A'})
         self.assertIsNone(applied['editor'])  # who ticked the box is not recorded
         self.assertIsNone(applied['answered_at'])
-        self.assertEqual(applied['applied']['evidence'], 'specs/001-example/spec.md#speckit-clarification:spec ' + applied['batch'])
+        self.assertEqual(applied['applied']['evidence'], ['specs/001-example/spec.md#speckit-clarification:spec ' + applied['batch']])
         self.assertTrue(applied['applied']['at'])
         self.assertEqual([e['kind'] for e in applied['evidence']], ['selection', 'disposition'])
         self.assertEqual(applied['options'], ['Retry', 'Start again'])
@@ -629,7 +629,7 @@ class ClarificationTests(unittest.TestCase):
         waived = self.records()['items'][-1]
         self.assertEqual(waived['state'], 'waived')
         self.assertIsNone(waived['answer'])
-        self.assertEqual(waived['evidence'][0]['kind'], 'creator-closure')
+        self.assertEqual(waived['evidence'][0]['kind'], 'closure')
         self.assertEqual(waived['evidence'][0]['comment_id'], control['id'])
 
     def test_a_superseded_question_is_recorded_as_superseded(self):
@@ -668,18 +668,154 @@ class ClarificationTests(unittest.TestCase):
         self.assertEqual(len(same['items']), 1)
         # A later batch with a change adds the next revision and keeps the earlier one.
         answered = dict(item, state='applied', answer={'kind': 'single', 'value': 'A'}, observed_at='t4', batch='b3',
-                        applied={'at': 't4', 'evidence': 'spec.md'})
+                        applied={'at': 't4', 'evidence': ['spec.md']})
         changed = m.persist_clarifications(path, [answered], 'b3')
         self.assertEqual([(i['revision'], i['state']) for i in changed['items']], [(1, 'pending'), (2, 'applied')])
         self.assertEqual(sm.read_json(path), changed)
 
-    def test_an_unreadable_records_file_is_not_overwritten(self):
-        path = self.root / 'out/clarifications.json'
-        path.parent.mkdir(parents=True)
-        path.write_text('{"v": 2, "items": "x"}', encoding='utf-8')
-        with self.assertRaisesRegex(sm.ScopeError, 'CLARIFICATIONS_UNREADABLE'):
-            m.persist_clarifications(path, [], 'b1')
-        self.assertEqual(path.read_text(encoding='utf-8'), '{"v": 2, "items": "x"}')
+    def test_an_unreadable_records_file_is_moved_aside_not_overwritten(self):
+        item = {'source_id': 'C1Q1', 'question': 'Q?', 'options': [], 'answer': None, 'state': 'pending', 'url': 'u',
+                'editor': None, 'observed_at': 't1', 'answered_at': None, 'applied': None, 'evidence': [], 'batch': 'b1'}
+        for bad in ('{"v": 2, "items": "x"}', '{not json', '[]'):
+            path = self.root / 'out/clarifications.json'
+            path.parent.mkdir(parents=True, exist_ok=True)
+            for old in path.parent.glob('clarifications.json*'):
+                old.unlink()
+            path.write_text(bad, encoding='utf-8')
+            with patch('sys.stderr') as err:
+                document = m.persist_clarifications(path, [item], 'b1')
+            self.assertEqual([i['source_id'] for i in document['items']], ['C1Q1'])
+            self.assertEqual(sm.read_json(path), document)
+            self.assertEqual((path.parent / 'clarifications.json.unreadable-b1').read_text(encoding='utf-8'), bad)
+            self.assertIn('CLARIFICATIONS_UNREADABLE', ''.join(c.args[0] for c in err.write.call_args_list))
+
+    # ---- an interrupted publication, after the board moved -----------------------------------------------------
+
+    def interrupted(self, review, target):
+        """Publish `review` with the record write failing after the board moved to `target`."""
+        with patch.object(m, 'persist_clarifications', side_effect=OSError('disk full')):
+            with self.assertRaises(OSError):
+                self.app.publish('1', review, True)
+        self.assertEqual(self.gh.statuses[1], target)
+        self.assertFalse(self.records_path().exists())
+        journal, = (self.root / '.specify/scope/clarifications').glob('*/journal.json')
+        self.assertFalse(sm.read_json(journal).get('complete'))
+        return journal
+
+    def retry_repairs_without_a_second_publication(self, review, target):
+        posts = len([w for w in self.gh.writes if w[0] == 'POST'])
+        transitions = []
+        real = self.scope.set_status
+        with patch.object(self.scope, 'set_status', side_effect=lambda *a: transitions.append(a) or real(*a)):
+            result = self.app.publish('1', review, True)
+        self.assertEqual(len([w for w in self.gh.writes if w[0] == 'POST']), posts)  # nothing posted twice
+        self.assertEqual(transitions, [])  # the board is not moved again
+        self.assertEqual(self.gh.statuses[1], target)
+        self.assertTrue(self.records_path().exists())
+        journal, = (self.root / '.specify/scope/clarifications').glob('*/journal.json')
+        self.assertTrue(sm.read_json(journal).get('complete'))
+        return result
+
+    def test_a_retry_after_the_move_to_need_clarifications_repairs_the_records(self):
+        review = self.analysis([question()])
+        self.interrupted(review, m.WAITING)
+        self.retry_repairs_without_a_second_publication(review, m.WAITING)
+        item, = self.records()['items']
+        self.assertEqual((item['source_id'], item['state']), ('C1Q1', 'pending'))
+        self.assertEqual(len([c for c in self.gh.comments if m.record(c)['kind'] == 'question']), 1)
+
+    def test_a_retry_after_the_move_to_ready_repairs_the_records_and_hands_off(self):
+        review = self.analysis()
+        self.interrupted(review, 'Ready')
+        result = self.retry_repairs_without_a_second_publication(review, 'Ready')
+        self.assertEqual(result['next_action']['command'], '/speckit-plan')
+        self.assertEqual(self.records()['v'], 1)
+
+    def test_a_retry_with_an_unreadable_records_file_moves_it_aside_and_finishes(self):
+        review = self.analysis([question()])
+        self.interrupted(review, m.WAITING)
+        self.records_path().parent.mkdir(parents=True, exist_ok=True)
+        self.records_path().write_text('{broken', encoding='utf-8')
+        with patch('sys.stderr'):
+            self.retry_repairs_without_a_second_publication(review, m.WAITING)
+        self.assertEqual(len(self.records()['items']), 1)
+        self.assertEqual(len(list(self.records_path().parent.glob('clarifications.json.unreadable-*'))), 1)
+
+    def test_a_journal_that_no_longer_matches_does_not_bypass_the_status_gate(self):
+        review = self.analysis([question()])
+        journal = self.interrupted(review, m.WAITING)
+        (journal.parent / 'analysis.json').unlink()
+        with self.assertRaisesRegex(sm.ScopeError, 'CLARIFICATION_JOURNAL_INVALID'):
+            self.app.publish('1', review, True)
+        value = sm.read_json(journal)
+        (journal.parent / 'analysis.json').write_text(json.dumps(review), encoding='utf-8')
+        (self.feature / 'spec.md').write_text('# Changed by hand\n', encoding='utf-8')
+        with self.assertRaisesRegex(sm.ScopeError, 'CLARIFICATION_JOURNAL_INVALID'):
+            self.app.publish('1', review, True)
+        self.assertFalse(value.get('complete'))
+
+    def test_a_new_publication_still_meets_the_status_gate(self):
+        self.move(m.WAITING)
+        with self.assertRaisesRegex(sm.ScopeError, 'CLARIFICATION_WAITING'):
+            self.app.publish('1', {'version': 1, 'issue': 1, 'snapshot_digest': 'x', 'engine': 'clarify', 'questions': []}, True)
+
+    # ---- the shared test vector ---------------------------------------------------------------------------------
+
+    VECTOR = Path(__file__).resolve().parent / 'fixtures/clarifications-vector.json'
+
+    def build_vector(self):
+        """Run `clarification_items` over a realistic snapshot: every state and evidence kind Scope writes."""
+        self.app.publish('1', self.analysis([question(f'q-{n}') for n in range(1, 5)]), True)
+        for n, c in enumerate(self.gh.comments):
+            c['created_at'] = '2026-09-10T08:0%d:00Z' % n
+        q1, q2, q3, q4 = [c for c in self.gh.comments if m.record(c)['kind'] == 'question']
+        q1['body'] = q1['body'].replace('- [ ] **A.**', '- [x] **A.**')  # a ticked box
+        q2['body'] = q2['body'].replace('- [ ] **A.**', '- [x] **A.**').replace('- [ ] **B.**', '- [x] **B.**')  # two ticks
+        reply = self.gh.comment('C1Q3: B - start again please')
+        self.gh.comments[-1]['created_at'] = '2026-09-11T10:00:00Z'
+        wizard = self.gh.comment('C1Q4: Neither; the form is replaced by a wizard.')
+        self.gh.comments[-1]['created_at'] = '2026-09-11T10:05:00Z'
+        self.move(m.FEATURE)
+        snapshot = self.app.inspect('1')
+        answers = [
+            {'question_id': 'C1Q1', 'disposition': 'answered', 'comment_ids': [q1['id']], 'explanation': 'Retry was ticked.'},
+            {'question_id': 'C1Q2', 'disposition': 'unresolved', 'comment_ids': [], 'explanation': 'Two boxes are ticked.'},
+            {'question_id': 'C1Q3', 'disposition': 'answered', 'comment_ids': [reply['id']], 'explanation': 'B chosen in a reply.'},
+            {'question_id': 'C1Q4', 'disposition': 'superseded', 'comment_ids': [wizard['id']], 'explanation': 'Replaced.'}]
+        waiting = {'questions': [question('again', ['C1Q2'])], 'answers': answers}
+        closing = {'questions': [], 'answers': [dict(a, disposition='unresolved', comment_ids=[]) for a in answers]}
+        now = '2026-09-12T09:00:00+00:00'
+        cases = []
+        snapshot['policy'] = dict(snapshot['policy'], closed=False, control_comment_ids=[])
+        cases.append({'name': 'round-two-publication', 'outcome': 'waiting', 'items': m.clarification_items(
+            snapshot, waiting, 'waiting', 2, 'batch-round-two', 'acme/app', {'C2Q1': 2000},
+            'specs/001-example/spec.md', now)})
+        closed = dict(snapshot, policy=dict(snapshot['policy'], closed=True, control_comment_ids=[3001]))
+        cases.append({'name': 'creator-closure', 'outcome': 'closed', 'items': m.clarification_items(
+            closed, closing, 'closed', 2, 'batch-closed', 'acme/app', {}, 'specs/001-example/spec.md', now)})
+        return {'v': 1,
+                'note': 'Produced by clarification_items in extensions/scope/scripts/clarification.py. Regenerate with '
+                        'UPDATE_CLARIFICATIONS_VECTOR=1 python -m unittest test_clarification.',
+                'cases': cases}
+
+    def test_the_shared_vector_matches_what_scope_writes(self):
+        import os
+        vector = self.build_vector()
+        text = json.dumps(vector, indent=2, ensure_ascii=False) + '\n'
+        if os.environ.get('UPDATE_CLARIFICATIONS_VECTOR'):
+            self.VECTOR.parent.mkdir(parents=True, exist_ok=True)
+            self.VECTOR.write_text(text, encoding='utf-8', newline='\n')
+        self.assertEqual(json.loads(self.VECTOR.read_text(encoding='utf-8')), vector)
+        states = {i['state'] for case in vector['cases'] for i in case['items']}
+        self.assertEqual(states, {'applied', 'conflict', 'superseded', 'pending', 'waived'})
+        kinds = {e['kind'] for case in vector['cases'] for i in case['items'] for e in i['evidence']}
+        self.assertEqual(kinds, {'comment', 'disposition', 'selection', 'closure'})
+        for case in vector['cases']:
+            for item in case['items']:
+                self.assertTrue(all(set(e) == {'kind', 'url', 'comment_id', 'explanation'} for e in item['evidence']))
+                if item['applied']:
+                    self.assertIsInstance(item['applied']['evidence'], list)
+                    self.assertTrue(all(isinstance(x, str) for x in item['applied']['evidence']))
 
 
 if __name__ == '__main__':

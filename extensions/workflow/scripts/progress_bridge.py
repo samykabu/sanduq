@@ -74,12 +74,19 @@ def progress_version(root):
     path = script(root)
     if path is None:
         return None
-    manifest = Path(path).resolve().parent.parent / 'extension.yml'
-    try:
-        match = re.search(r"(?m)^\s+version:\s*[\"']?(\d+)\.(\d+)\.(\d+)", manifest.read_text(encoding='utf-8'))
-    except OSError:
-        return None
-    return tuple(int(part) for part in match.groups()) if match else None
+    folder = Path(path).resolve().parent
+    # An installed extension has extension.yml beside the scripts folder. A source tree (tests, direct use) has
+    # none, so fall back to the package's own VERSION.
+    sources = ((folder.parent / 'extension.yml', r"(?m)^\s+version:\s*[\"']?(\d+)\.(\d+)\.(\d+)"),
+               (folder / 'sanduq_progress' / '__init__.py', r"(?m)^VERSION\s*=\s*[\"'](\d+)\.(\d+)\.(\d+)"))
+    for source, pattern in sources:
+        try:
+            match = re.search(pattern, source.read_text(encoding='utf-8'))
+        except OSError:
+            continue
+        if match:
+            return tuple(int(part) for part in match.groups())
+    return None
 
 
 def progress_at_least(root, minimum):
@@ -295,6 +302,12 @@ def run(root, args, timeout=60, stdin=None):
     return done.returncode, done.stdout, done.stderr
 
 
+def _flag_unsupported(result, flag):
+    """True when a usage failure names `flag` as an unrecognised argument."""
+    text = (result[1] or '') + '\n' + (result[2] or '')
+    return flag.lstrip('-') in text and ('PROGRESS_USAGE' in text or 'unrecognized arguments' in text)
+
+
 def status(root, feature=None):
     """The Progress projection from `status --json`, or None when unavailable (absent, not initialised, broken)."""
     args = ['status', '--json'] + (['--feature', feature] if feature else [])
@@ -305,7 +318,9 @@ def status(root, feature=None):
         result = run(root, args)  # known to predate the flag: no probe process
     else:
         result = run(root, args + ['--schema', 'v2'])
-        if result and result[0] == 2:
+        # Retry only when the version is unknown and the failure says the flag itself is unsupported. Exit 2 also
+        # reports an uninitialised feature, which a retry cannot fix.
+        if version is None and result and result[0] == 2 and _flag_unsupported(result, '--schema'):
             result = run(root, args)
     if not result or result[0] != 0:
         return None

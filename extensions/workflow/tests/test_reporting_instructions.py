@@ -56,6 +56,8 @@ class ReportingInstructions(unittest.TestCase):
         self.assertIn('labelled self-report', text)
         self.assertIn('never host-observed telemetry', text)
         self.assertIn('`semantics: "workstream"`', text)
+        self.assertIn('--effort E --workstream`', text)  # the direct command marks the lane too
+        self.assertIn('leave `--workstream` out for a Progress older than 1.2.0', text)
         self.assertIn('codex hooks not approved', text)
         self.assertEqual(text.count('progress bind'), 1)
 

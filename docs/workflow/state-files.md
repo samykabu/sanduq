@@ -135,32 +135,46 @@ records that history in `specs/<feature>/workflow/lifecycle.jsonl`, one JSON obj
 ```json
 {"v": 1, "event_id": "…", "workflow_run_id": "…", "generation": 14, "at": "2026-10-17T09:30:00+00:00",
  "stage": "clarify", "event": "rejected-completion", "episode_id": "claim:c-…", "claim_id": "c-…",
- "delegation_run_ids": ["codex-12"], "reason": "CLARIFICATION_UNRESOLVED"}
+ "caused_by_claim_id": null, "candidate_run_id": null, "delegation_run_ids": ["codex-12"],
+ "reason": "CLARIFICATION_UNRESOLVED"}
 ```
 
 | `event` | Written when |
 | --- | --- |
 | `claim` | A stage is claimed. |
 | `resume` | A stage is claimed while the checkpoint was paused. |
-| `accepted` | `complete` validated the receipt and stored it. Never written before validation passes. |
+| `accepted` | `complete` validated the receipt and stored it. Never written before validation passes. `candidate_run_id` names the delegation run that validation accepted. |
 | `rejected-completion` | `complete` authenticated the claim and then refused the receipt. The claim stays active and nothing is stored, so the same claim can complete again. The CLI still prints the same error and exits 1. |
 | `recovered` | `recover` is about to clear the claim. The event keeps the claim's `claim_id`. |
-| `paused` | A checkpoint was written for a pause or a recovery. |
+| `paused` | A checkpoint was written for a pause or a recovery. With no claim held (the context-budget pause before a claim, or the pause that follows a recovery) it is a feature-level event: `stage`, `claim_id` and `episode_id` are `null`. |
 | `invalidated` | A receipt was removed or marked stale: by the claim that replaces it, by `migrate`, by `refresh`, or by a `changed` amendment. One event per stage, with the cause in `reason`. |
 | `revalidated`, `revalidation-stale` | `revalidate` made a receipt current, or recorded a lane gap that left it stale. |
 
 `claim_id` identifies a claim without being the claim token. It is a one-way hash of the token, so it
 is safe to show and to copy into reports, and it cannot be used to complete or recover anything.
-Ids that do not apply are written as `null`, never left out. `delegation_run_ids` lists the runs the
-delegation ledger links to the claim. `episode_id` is `claim:<claim_id>` for a claim and
+Ids that do not apply are written as `null`, never left out. `episode_id` is `claim:<claim_id>` for a claim and
 `revalidation:<event_id>` for a revalidation.
+
+Three fields answer different questions, and a reader should not merge them:
+
+- `delegation_run_ids` is claim membership: every run the delegation ledger links to the claim,
+  including a failed attempt that a later one replaced.
+- `candidate_run_id` is set only on `accepted`. It is the stage attempt that the exact-claim check
+  validated, so a failed predecessor under the same claim is a member but not the candidate. It is
+  `null` when the claim had no delegation route, and `null` on every other event.
+- `caused_by_claim_id` is set only on the `invalidated` events that a claim writes for the downstream
+  receipts it removes. Those receipts belong to no claim and no episode, so `claim_id` and `episode_id`
+  are `null` and the new claim is named here. Every other event writes `null`.
+
+`stage` is `null` only on `paused`, as described above. Every other event names a stage.
 
 Each event is queued in the checkpoint (`lifecycle_outbox`) in the same write that changes the state,
 then appended to the file under the feature lock. If the process stops between the two, the next
 write replays the queue and skips every `event_id` that is already in the file. A reader should
 ignore a torn final line. `scripts/lifecycle.py` has `read_events(path)` for that: it returns the
-complete events and says whether it skipped a damaged line. The next append drops a torn fragment
-before it writes.
+complete events and says whether it skipped a damaged line. Before the next append deduplicates, it
+repairs the tail: a complete record that only lacks its final newline is kept and terminated, and an
+unparseable fragment is dropped. A crash right before the newline therefore loses no event.
 
 The same write also stores two small facts in the checkpoint, so a report does not have to guess them.
 `stage_plan` is the selected stage order after policy filtering. `next_action` is Workflow's own
@@ -170,6 +184,30 @@ It is a cache. If the generation is older than the checkpoint's, treat it as sta
 Delegation attempts in `delegations.json` carry matching links when they are known: `intent_id`,
 `claim_id` (stage attempts only), `parent_run_id` and `replaces_run_id`. A replacement or a
 reassignment names the run it replaces; a repeated start does not.
+
+## Clarification records (Scope 1.7.0)
+
+Scope writes `specs/<feature>/workflow/clarifications.json` as `{"v": 1, "items": [...]}` after a
+clarification round is published. A reader can show the questions without calling GitHub. These two
+shapes are pinned, and `extensions/scope/tests/fixtures/clarifications-vector.json` is a test vector
+that Scope's own `clarification_items` produces and a test regenerates.
+
+`evidence` is a list of objects, one per reference, always with the same four keys:
+
+| Key | Value |
+| --- | --- |
+| `kind` | `comment` (a published question or a reply), `selection` (a ticked box), `closure` (the creator closed clarification) or `disposition` (the reviewer's verdict on the question). |
+| `url` | The comment URL, or `null`. |
+| `comment_id` | The GitHub comment id, or `null`. |
+| `explanation` | Free text, or `null`. A `disposition` carries `<disposition>: <explanation>`. |
+
+`applied` is `null` or `{"at": "<time>", "evidence": ["<string>", ...]}`. `applied.evidence` is always a
+list of strings, even when it holds one entry. A reader that sees a bare string is looking at a file
+written before the shape was pinned and should wrap it.
+
+If a later publication finds `clarifications.json` unreadable, Scope moves it to
+`clarifications.json.unreadable-<batch>`, writes a fresh file and prints a warning. The specification and
+the board have already moved by then, so failing would repeat the same failure on every rerun.
 
 ## Receipt contract (1.6.0)
 
