@@ -10,14 +10,14 @@ PR, illustration, Memory, and Progress reporting processes. Use [install by host
 | Extension | Source version | Commands |
 | --- | --- | ---: |
 | [assure](assure/README.md) | 2.3.2 | 3 |
-| [illustrate](illustrate/README.md) | 2.4.1 | 4 |
-| [memory](memory/README.md) | 2.1.2 | 7 |
+| [illustrate](illustrate/README.md) | 2.4.2 | 4 |
+| [memory](memory/README.md) | 2.2.0 | 7 |
 | [pr](pr/README.md) | 4.2.3 | 2 |
 | [progress](progress/README.md) | 1.1.3 | 5 |
 | [project](project/README.md) | 2.2.2 | 2 |
 | [scope](scope/README.md) | 1.6.2 | 7 |
 | [user-manual](user-manual/README.md) | 1.5.2 | 4 |
-| [workflow](workflow/README.md) | 1.10.4 | 13 |
+| [workflow](workflow/README.md) | 1.11.1 | 13 |
 
 Published versions live in the authoritative root [catalog](../catalog.json);
 [catalog.json](catalog.json) mirrors it.

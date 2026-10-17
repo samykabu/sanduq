@@ -3,6 +3,22 @@
 The stage loop's step 5 in full: how to record an honest receipt, declare input
 roles, amend evidence, and recover a stale receipt after source drift (G6).
 
+## Capturing prior document bytes
+
+Before editing documents whose prior bytes the stage needs as evidence, run
+`python .specify/extensions/workflow/scripts/execution_tools.py evidence-capture
+--path <file> --out <feature>/evidence/<unique-name>.snapshot.json` (repeat `--path`).
+Use a new output path for each capture. List the descriptor in both `evidence` and
+`evidence_snapshots` in the completed receipt.
+
+Capture uses a retained immutable Git reference only when the working bytes exactly
+match the validated blob. Dirty, untracked, CRLF and filter-different bytes keep a file
+proof. Each input is limited to 16777216 bytes. Admission and later freshness checks
+resolve every declared snapshot and validate repository, commit, blob and content hashes.
+Recover exact bytes with `execution_tools.py evidence-resolve --snapshot <descriptor>
+--path <file> --out <new-output-file>`. A missing or altered proof blocks reuse; preserve
+the snapshot and its `.objects` directory together. Ordinary file evidence stays supported.
+
 ## Recording the receipt
 
 Record an honest receipt JSON: `stage`, `outcome: passed`, `summary`, `inputs` (project-relative

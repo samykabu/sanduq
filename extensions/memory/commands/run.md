@@ -27,6 +27,10 @@ numbers, merge status, a plan or checked boxes alone.
 
 On the configured target branch, inspect actual implementation, required QA/review/manual results,
 unfinished concerns and any external/submodule evidence. Once completion is real,
+run `A preflight --spec <path> --check <name>` with the selected checks. Continue when
+`data.ok` is true. `repair-required` references and pending candidate guards are inputs
+to synthesis; preserve them for explicit repairs. Fix missing inputs, coverage, configuration,
+ignore and scope failures before launching verification. The same guards run inside verify/prepare.
 run `A verify --spec <path> --complete --check <name>` with all relevant approved
 check names. This executes the checks and binds their results to the exact evidence.
 Do not assert completion for convenience. For enumerated uncommitted related
@@ -77,7 +81,12 @@ verification. `finalize` accepts no skip flag.
 
 ## Read inputs (v2)
 
-Read the journal's `units`, `references`, `checkpoint`, `base_memory_root` and scope.
+Read `A inspect --run <id> --view status`, then `--view inventory`, `--view checks`
+and `--view coverage` as needed. Each view defaults to 16384 UTF-8 bytes including its
+newline. Follow `next_cursor` with `--cursor`; if `oversized_record` is present, increase
+`--max-bytes` (maximum 1048576) or read that exact unit from its checkpoint. Records
+remain whole. The journal retains the full recovery payload.
+Read the journal's `references`, `checkpoint`, `base_memory_root` and scope when needed.
 There is no `previous_entries`. Read existing memory through budgeted helpers, never by
 loading `specs/memory/` wholesale:
 
@@ -195,7 +204,7 @@ Small runs draft one candidate as above. For large runs (v2), draft in parallel 
    into its fragment, then merge again. Proposals never enter the candidate directly. A
    folded-in update still needs an anchor in this run (the proposer keeps the coverage and
    provenance that cite the entry) or a `reason`. Tombstones follow ownership like updates.
-4. `A validate --run <id>` until there are no mechanical problems (see below).
+4. `A preflight --run <id>` until candidate guards pass (see below).
 5. `A review-packets --run <id>` cuts each fragment's review into parts of at most 40k
    tokens, `review/partition-<pkt>-NN.json`, plus one `review/integration.json` (shared
    selectors and relations, near-duplicate titles, taxonomy changes, updates with their
@@ -246,9 +255,9 @@ The content rules above (kinds, evidence, text rules, capability organization) a
 
 ## Independent review and publication
 
-Run `A validate --run <id>` until the candidate has no mechanical problems. For v2 it
+Run `A preflight --run <id>` until `data.candidate_guards` is `passed`. For v2 it
 materializes the result in a temporary copy (entries, new ledger, regenerated views,
-taxonomy) and checks it as a whole. Its `data` fields are `valid`, `candidate_sha256`,
+taxonomy) and checks it as a whole. Its `data` fields include `candidate_guards`, `candidate_sha256`,
 `base_memory_root`, `result_memory_root`, `outputs_sha256`, `summary`,
 `review{status, problems}` and `paths`. It exits 1 only on mechanical problems; it
 exits 0 even when the review is missing or mismatched. Stray files under
@@ -268,14 +277,17 @@ Write `review.json` beside the candidate only after all findings are resolved:
   `reviewer` and `summary`, `passed: true`, `findings: []`, and `verification_override`
   when skipped;
 - v2: the reviewer copies `candidate_sha256`, `base_memory_root`,
-  `result_memory_root` and `outputs_sha256` exactly as validate reported them.
+  `result_memory_root` and `outputs_sha256` exactly as preflight reported them.
 
 Any candidate edit invalidates the review and needs a new critique. Coverage and
 provenance checks cannot prove semantic correctness; independent review is an
 additional requirement.
 
-Run `A validate --run <id>` again; v2: finalize only when `data.review.status ==
-"passed"`. Then run `A finalize --run <id>`. Finalize writes the
+For v2, `A validate --run <id>` returns mechanical validity and exact result
+bindings even when `data.review.status` is `missing`; `data.valid: true` does not
+approve publication. For format 1, `validate` requires passed critique. Run
+`A validate --run <id>` again after review; v2: finalize only when
+`data.review.status == "passed"`. Then run `A finalize --run <id>`. Finalize writes the
 memory outputs (v2: changed/new entry files, deleted removed entries, the new
 `provenance/<seq>-<checkpoint8>-<run8>.jsonl`, regenerated views, taxonomy) and fixture
 repairs, deletes every selected folder, runs required checks (or records the explicit

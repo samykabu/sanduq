@@ -5,7 +5,7 @@
     "url": "https://github.com/samykabu"
   },
   "metadata": {
-    "description": "Sanduq — a chest of shared AI-agent tooling: Claude Code plugins, skills, and Spec Kit extensions.",
+    "description": "Sanduq â€” a chest of shared AI-agent tooling: Claude Code plugins, skills, and Spec Kit extensions.",
     "version": "0.7.0"
   },
   "plugins": [
@@ -15,8 +15,8 @@
         "source": "git-subdir",
         "url": "https://github.com/samykabu/sanduq-skills.git",
         "path": "skills/illustration-tools",
-        "ref": "illustration-tools-v3.4.1",
-        "sha": "2cd4029bf90d8d43b6c25b08b6d6e3df4eef65ea"
+        "ref": "illustration-tools-v3.4.2",
+        "sha": "ed04f5c52d48f9526ab5bc8675353d222e673552"
       },
       "description": "Generate, import, and export forty-four kinds of technical, product, architecture, process, and data illustrations through one unified skill.",
       "author": {
@@ -74,7 +74,7 @@
         "url": "https://github.com/samykabu/sanduq-skills.git",
         "path": "skills/agent-tools",
         "ref": "agent-tools-v1.3.1",
-        "sha": "11cf20f4d9e8d2959440acf95d5b0ab7d8a60827"
+        "sha": "7eddfc4f9381b1ac3edbd2f17231c1f12f078459"
       },
       "description": "Delegate one task to an external agent CLI and get back a measured result: status with provenance, git-measured file changes, and normalised token usage.",
       "author": {

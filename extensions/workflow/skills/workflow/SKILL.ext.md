@@ -39,7 +39,8 @@ enter the stage loop below; see `references/stage-scope.md`,
    or its delegation route when `delegation.enabled` is true. Full rule, including decision
    escalation: [delegation-and-decisions.md](references/delegation-and-decisions.md).
 5. Before writing any receipt, read
-   [receipt-rules.md](references/receipt-rules.md): it holds the rules for what
+   [receipt-rules.md](references/receipt-rules.md): capture prior evidence before editing.
+   It holds the rules for what
    makes a receipt honest (failed/skipped/pending work cannot pass, a pending or conflicted
    issue decision blocks a passed receipt and must be in the stage inputs, checkpoint files
    never belong in the input manifest), declaring `input_roles`, `amend`, and the recovery

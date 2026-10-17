@@ -15,11 +15,14 @@ This command is also the final `after_implement` hook. Do not assume
 3. Read the feature's implemented changes and policy to select verification check
    names that cover the changed product behavior and its consumers. Do not pick
    only tooling checks for a product feature.
-4. Run `python .specify/extensions/memory/scripts/archive.py queue --spec
+4. Run `python .specify/extensions/memory/scripts/archive.py preflight --spec
+   specs/<full-feature-name> --check <approved-name>` with the selected checks.
+   Resolve deterministic blockers; keep reported repair-required references for synthesis.
+5. Run `python .specify/extensions/memory/scripts/archive.py queue --spec
    specs/<full-feature-name> --check <approved-name>` (repeat `--check` as needed).
    This records pending scope on the implementation branch. It does not commit,
    synthesize memory, delete, mark completion or claim tests passed.
-5. Explain that the full checkpoint, synthesis and archive will run in the next
+6. Explain that the full checkpoint, synthesis and archive will run in the next
    local agent session after merge into the configured target branch, completion and verification.
 
 Keep using the feature folder for QA, documentation, review and PR generation.

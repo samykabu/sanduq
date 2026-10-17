@@ -30,6 +30,10 @@ class VerificationPlanTests(unittest.TestCase):
             {'id': 'b', 'sources': ['src/b.py'], 'fixtures': [],
              'command': [sys.executable, '-c', 'print("b passed")'],
              'environment': [], 'evidence': 'evidence/b.json'}]}
+        for check in self.plan['checks']:
+            check['inputs'] = {'schema_version': 1, 'complete': True,
+                               'files': check['sources'] + check['fixtures'], 'directories': [],
+                               'environment': check['environment'], 'unresolved': []}
         self.save_plan()
 
     def save_plan(self):
@@ -182,6 +186,85 @@ class VerificationPlanTests(unittest.TestCase):
             status = w.receipt_status(self.root, 'specs/example', 'verify', receipt, policy)
         self.assertFalse(status['current'])
         self.assertEqual(status['rule'], 'identity')
+
+    def test_legacy_plans_invalidate_all_checks_on_unrelated_source_change(self):
+        for check in self.plan['checks']:
+            check.pop('inputs')
+        self.save_plan()
+        saved = self.passing_snapshot()
+        (self.root / 'src/a.py').write_text('changed', encoding='utf-8')
+        self.assertEqual(vp.affected_checks(self.root, self.plan_path, saved)['affected'], ['a', 'b'])
+
+    def test_complete_manifest_binds_checker_shared_config_env_and_discovery(self):
+        for name in ('checker.py', 'shared.py', 'config.json', 'lock.txt'):
+            (self.root / name).write_text('original', encoding='utf-8')
+        (self.root / 'discovery').mkdir()
+        for check in self.plan['checks']:
+            check['inputs']['files'] += ['shared.py', 'config.json', 'lock.txt']
+        self.plan['checks'][0]['inputs']['files'].append('checker.py')
+        self.plan['checks'][0]['inputs']['directories'] = ['discovery']
+        self.save_plan()
+        saved = self.passing_snapshot()
+        for name, expected in (('checker.py', ['a']), ('shared.py', ['a', 'b']),
+                               ('config.json', ['a', 'b']), ('lock.txt', ['a', 'b'])):
+            path = self.root / name
+            path.write_text('changed', encoding='utf-8')
+            self.assertEqual(vp.affected_checks(self.root, self.plan_path, saved)['affected'], expected)
+            path.write_text('original', encoding='utf-8')
+        (self.root / 'discovery/new.py').write_text('new', encoding='utf-8')
+        self.assertEqual(vp.affected_checks(self.root, self.plan_path, saved)['affected'], ['a'])
+
+    def test_attempts_survive_retry_and_missing_or_tampered_proof_refuses_reuse(self):
+        saved = self.passing_snapshot()
+        proof = saved['checks']['a']['evidence']
+        original = (self.root / proof['path']).read_bytes()
+        vp.run_checks(self.root, self.plan_path, ['a'], timeout=10)
+        self.assertEqual(original, (self.root / proof['path']).read_bytes())
+        self.assertEqual(vp.affected_checks(self.root, self.plan_path, saved)['reusable'], ['a', 'b'])
+        record = json.loads(original)
+        (self.root / record['output_proof']['path']).write_text('tampered', encoding='utf-8')
+        self.assertEqual(vp.affected_checks(self.root, self.plan_path, saved)['affected'], ['a'])
+        (self.root / proof['path']).unlink()
+        self.assertEqual(vp.affected_checks(self.root, self.plan_path, saved)['affected'], ['a'])
+
+    def test_incomplete_empty_unknown_manifest_never_establishes_independence(self):
+        for update in ({'complete': False}, {'files': []}, {'schema_version': 2}, {'unresolved': ['secret identity unavailable']}):
+            declaration = copy.deepcopy(self.plan['checks'][0]['inputs'])
+            self.plan['checks'][0]['inputs'].update(update)
+            self.save_plan()
+            selected = vp.affected_checks(self.root, self.plan_path)
+            self.assertEqual(selected['statuses']['a'], 'unknown')
+            with self.assertRaises(vp.VerificationPlanError):
+                vp.snapshot(self.root, self.plan_path)
+            self.plan['checks'][0]['inputs'] = declaration
+
+    def test_env_value_is_not_written_and_midrun_deleted_input_cannot_pass(self):
+        with patch.dict(os.environ, {'SANDUQ_TEST_LEAN_ENV': 'private-test-value'}):
+            self.passing_snapshot()
+        self.assertNotIn('private-test-value', (self.root / 'evidence/a.json').read_text(encoding='utf-8'))
+        def mutation(*args):
+            (self.root / 'src/a.py').unlink()
+            return {'exit_code': 0, 'timed_out': False, 'truncated': False, 'output': 'OK'}
+        with patch('delegate_dispatch.run_capped', side_effect=mutation):
+            self.assertEqual(vp.run_checks(self.root, self.plan_path, ['a'], timeout=10), {'a': 'failed'})
+
+    def test_failed_latest_attempt_prevents_reusing_an_older_same_input_pass(self):
+        saved = self.passing_snapshot()
+        with patch('delegate_dispatch.run_capped', return_value={
+                'exit_code': 1, 'timed_out': False, 'truncated': False, 'output': 'failed'}):
+            self.assertEqual(vp.run_checks(self.root, self.plan_path, ['a'], timeout=10), {'a': 'failed'})
+        self.assertEqual(vp.affected_checks(self.root, self.plan_path, saved)['affected'], ['a'])
+
+    def test_utf8_execution_environment_is_bound_and_restored(self):
+        def inspect_environment(*args):
+            self.assertEqual(os.environ['PYTHONIOENCODING'], 'utf-8')
+            self.assertEqual(os.environ['PYTHONUTF8'], '1')
+            return {'exit_code': 0, 'timed_out': False, 'truncated': False, 'output': 'مرحبا'}
+        with patch.dict(os.environ, {'PYTHONIOENCODING': 'ascii', 'PYTHONUTF8': '0'}):
+            with patch('delegate_dispatch.run_capped', side_effect=inspect_environment):
+                self.assertEqual(vp.run_checks(self.root, self.plan_path, ['a'], timeout=10), {'a': 'passed'})
+            self.assertEqual(os.environ['PYTHONIOENCODING'], 'ascii')
+            self.assertEqual(os.environ['PYTHONUTF8'], '0')
 
 
 if __name__ == '__main__':

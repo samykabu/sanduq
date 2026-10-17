@@ -16,8 +16,7 @@ ID = re.compile(r"PM-[a-z][a-z0-9-]{1,79}$")
 
 def inventory(repo: Repository, checkpoint: str, files: list[str]) -> list[dict]:
     units = []
-    for path in files:
-        data = repo.blob(checkpoint, path)
+    for path, data in repo.blobs(checkpoint, files).items():
         try:
             text = data.decode("utf-8-sig")
             if "\0" in text:
