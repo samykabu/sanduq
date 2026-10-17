@@ -101,6 +101,26 @@ that copy even if both project and global copies exist or `install_scope`
 changes later. The stored path must still be a recognized skill location
 (`DELEGATION_DRIVER_UNTRUSTED` otherwise).
 
+## Run deterministic checks without another agent
+
+For known local commands, the staged Workflow 1.11.0 bundle includes a native check runner. Store
+argv arrays and timeouts in a JSON plan. Run the batch once and collect its retained evidence:
+
+```powershell
+$env:DELEGATE_RUNS_DIR = Join-Path (Get-Location).Path '.delegate/runs'
+node .specify/extensions/workflow/assets/delegate-task/check-runner.mjs run --plan checks.json
+node .specify/extensions/workflow/assets/delegate-task/check-runner.mjs collect --batch refund-checks --max-bytes 16384
+```
+
+A completed batch does not execute again by default. Intentional retries name the latest attempt
+with `--retry-of`, and every attempt remains available. Collection applies a total UTF-8 byte budget;
+raw logs remain local. See the [check-runner contract](../../extensions/workflow/assets/delegate-task/contracts/check-runner.md)
+for plan fields, interpreter selection, ownership, cursors and exit codes.
+
+The bundled delegate driver also offers `collect <id> --summary`, startup diagnostics and an optional
+`start --startup-timeout <seconds>`. A heartbeat proves supervisor liveness, not task progress.
+Diagnostics do not retry tasks or change requested models. Keep routine bookkeeping in the CLI.
+
 ## Routes, defaults and overrides
 
 Each stage and task has a work type. Its route resolves in this order: a

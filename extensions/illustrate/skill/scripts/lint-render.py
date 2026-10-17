@@ -51,6 +51,16 @@ a *scrolling* ancestor, which report ``unmeasurable`` rather than passing quietl
 Every property this script mutates is snapshotted and restored verbatim in a
 ``finally``, and ``--self-test`` asserts the DOM is byte-identical afterwards.
 
+JavaScript time is controlled separately from CSS animations. A paused
+Playwright clock is installed before navigation: ``animations="disabled"``
+alone does not stop a playback timer from changing the SVG or its controls
+between screenshots. Reveal figures are measured at the initial frame and
+after every declared hold, through the complete frame, with controls intact.
+Only this disposable measurement context uses fake time; shipped playback is
+unchanged. Call ``prepare_context`` before navigation, and ``prepare_page``
+after navigation or before ``set_content``, when using this module outside
+its CLI. Context installation alone does not bootstrap each page's clock.
+
 Trust boundary
 --------------
 This renders contributor HTML in a real browser with JavaScript enabled, so treat
@@ -96,6 +106,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import weakref
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -121,6 +132,8 @@ FONT_HOSTS = ("fonts.googleapis.com", "fonts.gstatic.com")
 # Kill name resolution outright. Unlike request routing this also covers
 # WebSockets, EventSource and anything else that opens its own connection.
 RESOLVER_RULE = "MAP * ~NOTFOUND"
+
+_CLOCK_CONTEXTS = weakref.WeakSet()
 
 # Findings in these categories are reported but do not fail the run: they say
 # "not checked", which is worth printing and wrong to treat as a defect.
@@ -379,11 +392,91 @@ def watch(page, findings):
     page.on("requestfailed", on_request_failed)
 
 
+# Screenshot internals may leave an absent style as style="", including on a
+# clipping ancestor that this stage does not release. Keep this snapshot local
+# to shoot: restoring the outer __lintSnapshots here would undo the scale or
+# released overflow before the second image was captured.
+CAPTURE_STYLES_JS = """() => {
+  const targets = new Set();
+  for (const svg of document.querySelectorAll('svg')) {
+    for (let el = svg; el; el = el.parentElement) targets.add(el);
+  }
+  return [...targets].map(el => [el, el.getAttribute('style')]);
+}"""
+
+RESTORE_CAPTURE_STYLES_JS = """snapshots => {
+  for (const [el, style] of snapshots) {
+    if (style === null) el.removeAttribute('style');
+    else el.setAttribute('style', style);
+  }
+}"""
+
+
 def shoot(page):
     """The viewport, not the page: fixed dimensions, so releasing overflow can't
     resize the image, and the whole visible area is available to spill into.
     Viewport pixels are also the coordinate system every rect here uses."""
-    return page.screenshot(animations="disabled")
+    snapshots = page.evaluate_handle(CAPTURE_STYLES_JS)
+    try:
+        return page.screenshot(animations="disabled")
+    finally:
+        try:
+            snapshots.evaluate(RESTORE_CAPTURE_STYLES_JS)
+        finally:
+            snapshots.dispose()
+
+
+def prepare_context(context):
+    """Install before contributor scripts can retain native timer functions.
+
+    Clock is context-wide, even through page.clock. Record the initial pause on
+    the empty context. Each page still needs prepare_page: replaying init-script
+    clock logs alone does not dispose the initial native timer. Numeric time here
+    is Unix seconds; run_for below takes elapsed milliseconds.
+    """
+    if context not in _CLOCK_CONTEXTS:
+        context.clock.install(time=0)
+        context.clock.pause_at(1)
+        _CLOCK_CONTEXTS.add(context)
+
+
+def prepare_page(page):
+    """Finish clock bootstrap in this document before fixture scripts run.
+
+    new Date() replays the context's clock logs using a public clocked API. Then
+    pause_at at that exact emulated time cancels the native wake-up created by
+    clock injection, without a jump, a reset, or executing queued callbacks.
+    set_content keeps this global; navigation creates a new one, so repeat this
+    step after goto. The WeakSet only records context installation, not a pause
+    guarantee for every new document.
+    """
+    prepare_context(page.context)
+    # ISO preserves milliseconds exactly; float seconds can round down and make
+    # pause_at try to rewind after an explicit run_for(1) in a previous fixture.
+    page.clock.pause_at(page.evaluate("() => new Date().toISOString()"))
+
+
+def require_capture_clock(page):
+    if page.context not in _CLOCK_CONTEXTS:
+        raise RuntimeError("call prepare_context(context) before loading the document")
+
+
+def reveal_frame_times(page):
+    """All sanctioned autoplay steps, not a wall-clock guess or a static override."""
+    roots = page.evaluate("""() => [...document.querySelectorAll(
+      '[data-motion-root][data-motion-mode="reveal"]')].map(root => ({
+        count: Number(root.dataset.stepCount),
+        hold: parseFloat(getComputedStyle(root).getPropertyValue('--motion-hold')) || 720
+      }))""")
+    times = {0}
+    for root in roots:
+        count, hold = root["count"], root["hold"]
+        if not isinstance(count, (int, float)) or (isinstance(count, float) and not count.is_integer()):
+            raise ValueError("reveal step count must be an integer")
+        if not 1 <= count <= 8 or not 400 <= hold <= 1200 or count * hold > 8000:
+            raise ValueError("reveal timing exceeds the motion capture budget")
+        times.update(round(step * hold) for step in range(1, int(count) + 1))
+    return sorted(times)
 
 
 def data_url(png_bytes):
@@ -395,6 +488,7 @@ def compare_release(page, index, depth, scale):
 
     Restores every mutated property before returning, whatever happens.
     """
+    require_capture_clock(page)
     try:
         if scale != 1:
             page.evaluate(SET_SCALE_JS, [index, scale])
@@ -492,6 +586,7 @@ def clipping_findings(page, survey):
 
 
 def measure(page):
+    require_capture_clock(page)
     findings = []
     # Playwright awaits a returned promise; no timeout kwarg exists on evaluate.
     page.evaluate("() => document.fonts.ready")
@@ -507,9 +602,18 @@ def measure(page):
 
 def check(page, path):
     findings = []
+    prepare_context(page.context)
     watch(page, findings)
     page.goto(path.resolve().as_uri(), wait_until="load")
-    return measure(page) + findings
+    prepare_page(page)
+    page.evaluate("() => document.fonts.ready")
+    elapsed = 0
+    for at in reveal_frame_times(page):
+        if at > elapsed:
+            page.context.clock.run_for(at - elapsed)
+        elapsed = at
+        findings.extend(measure(page))
+    return list(dict.fromkeys(findings))
 
 
 # --- self-test ---------------------------------------------------------------
@@ -632,6 +736,76 @@ def fixture_html(markup, svg_style="", wrapper=None, filler=""):
         "svg_style": svg_style,
         "markup": markup,
     }
+
+
+def timer_fixture_html(mode):
+    """UI false positive, SVG false negative, and a genuine persistent spill.
+
+    armTimer runs after authored pixels are taken. Native time will execute the
+    callback before the released shot; capture time must not. The SVG race moves
+    genuinely clipped ink inside, so freezing must preserve its true finding.
+    """
+    if mode not in {"ui", "svg", "spill"}:
+        raise ValueError(mode)
+    spilling = mode != "ui"
+    rect = ('<rect id="target" x="150" y="60" width="1000" height="20" fill="#000"/>'
+            if spilling else '<rect id="target" x="10" y="10" width="100" height="40" fill="#000"/>')
+    mutation = {
+        "ui": "document.querySelector('#ui').style.background = '#000';",
+        "svg": "const r = document.querySelector('#target'); r.setAttribute('x', '10'); r.setAttribute('width', '100');",
+        "spill": "",  # The same real spill survives every frame.
+    }[mode]
+    return fixture_html(rect).replace("</body>",
+        '<div id="ui" style="margin-top:60px;width:80px;height:40px;background:#fff"></div>'
+        '<script>window.timerFired = false; window.armTimer = () => setTimeout(() => {'
+        + mutation + 'window.timerFired = true;}, 0);</script></body>')
+
+
+def timer_comparison_failures(context):
+    """Real-browser regressions, used by --self-test. No wall-clock race needed."""
+    failures = []
+    checks = 0
+    original_shoot = shoot
+    for mode, expected in (("ui", False), ("svg", True), ("spill", True)):
+        for scale in DIFF_SCALES:
+            checks += 1
+            page = context.new_page()
+            try:
+                prepare_page(page)
+                page.set_content(timer_fixture_html(mode))
+                page.evaluate("() => document.fonts.ready")
+                before = page.evaluate(DOM_STATE_JS)
+                shots = 0
+
+                def arm_after_authored(p):
+                    nonlocal shots
+                    png = original_shoot(p)
+                    if shots == 0:
+                        p.evaluate("() => window.armTimer()")
+                        # Real driver time, not clock.run_for: a frozen browser
+                        # timer must remain queued even across a slow capture.
+                        p.wait_for_timeout(50)
+                    shots += 1
+                    return png
+
+                globals()["shoot"] = arm_after_authored
+                try:
+                    diff = compare_release(page, 0, 0, scale)
+                finally:
+                    globals()["shoot"] = original_shoot
+                name = f"timer-{mode}-{scale:g}x"
+                if diff.get("resized") or bool(diff.get("reported")) != expected:
+                    failures.append(f"{name}: incorrect clipping result {diff}")
+                if page.evaluate("() => window.timerFired"):
+                    failures.append(f"{name}: timer ran between screenshots")
+                if page.evaluate(DOM_STATE_JS) != before:
+                    failures.append(f"{name}: measurement did not restore exact DOM")
+                context.clock.run_for(1)
+                if not page.evaluate("() => window.timerFired"):
+                    failures.append(f"{name}: queued callback was lost instead of paused")
+            finally:
+                page.close()
+    return checks, failures
 
 
 def network_isolation_failures(context):
@@ -1104,9 +1278,15 @@ def template_export_failures(context, template_paths=None):
 
 
 def self_test(context):
+    prepare_context(context)
     page = context.new_page()
+    prepare_page(page)
     failures = []
     checks = 0
+
+    timer_checks, timer_failures = timer_comparison_failures(context)
+    checks += timer_checks
+    failures += timer_failures
 
     def flagged(html):
         page.set_content(html)
@@ -1415,6 +1595,7 @@ def main():
         # The oracle is pixels, so record which browser produced them.
         print(f"Chromium {browser.version}, network: {resolver_rule(args.fonts)}", file=sys.stderr)
         context = browser.new_context(viewport=VIEWPORT)
+        prepare_context(context)
         block_network(context, args.fonts)
         if args.self_test:
             status = self_test(context)

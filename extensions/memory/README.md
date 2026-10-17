@@ -16,7 +16,10 @@ specify extension catalog add --name sanduq --priority 10 --install-allowed http
 specify extension add memory
 ```
 
-For development, install from an external clone with `specify extension add --dev /path/to/sanduq/extensions/memory`. Initialize in the target project:
+For development, build `python extensions/scripts/package.py memory` in the Sanduq checkout,
+extract `dist/memory.zip` outside the consumer, and install its `memory` directory with
+`specify extension add --dev /path/to/extracted/memory`. The package includes shared Python helpers.
+Initialize in the target project:
 
 ```bash
 python .specify/extensions/memory/scripts/install.py --target-branch main
@@ -42,6 +45,53 @@ Configure `product_prefixes` (directories ending in `/`), `product_files`, named
 Use commands that actually verify implementation and repaired consumers. `covers` declares their scope. Commands execute as argument arrays without a shell. Failed checks or missing infrastructure block archival. Commit the policy, extension and integrations before enabling automatic mode.
 
 Feature-number and transaction guards use context-checked patches to core feature scripts and, when installed, Git-extension feature/auto-commit scripts. Unknown versions or local edits stop initialization before guard writes. Preserve custom scripts and adapt guards explicitly. Reinitialize after Spec Kit/Git-extension upgrades; state checks detect lost guards once an archive registry exists, including disappearance of a recorded script.
+
+### Preflight and check reuse
+
+Run `python .specify/extensions/memory/scripts/archive.py preflight --spec specs/412-refund-approval --check tests`
+before verification. It checks coverage, command inputs, ignored artifacts/outputs and scope. Live
+references become explicit repair work. `preflight --run <id>` simulates the candidate's repairs,
+fixture migrations and outputs before critique in either memory format. Format 2 `validate` returns
+mechanical validity and exact review bindings even when critique is missing; format 1 keeps its
+critique admission check. `finalize` requires the exact passed critique in both formats.
+
+Checks without an `inputs` declaration retain global product freshness and execute again. To opt
+into independent reuse, add this declaration to the check definition:
+
+```json
+{
+  "inputs": {
+    "schema_version": 1,
+    "complete": true,
+    "files": ["scripts/check_refunds.py", "scripts/check_helpers.py", "pyproject.toml", "uv.lock"],
+    "directories": ["src/refunds", "tests/refunds"],
+    "environment": ["REFUND_TEST_PROFILE"],
+    "unresolved": []
+  }
+}
+```
+
+The project owns the completeness claim. Enumerate checker code, configuration, transitive inputs,
+fixtures and lockfiles; directories bind membership and bytes, including newly discovered files.
+An empty file list, unsupported version, incomplete declaration, missing input or unresolved
+dependency disables reuse. Put unknown or secret-dependent identities in `unresolved`; receipts
+store environment hashes, never values. Executable bytes, invocation, Python/platform identity,
+working directory and the complete definition/argv are also bound. Inputs must match before and
+after execution. A passing immutable attempt is reused only while its receipt and output hashes
+match. Results distinguish `executed`/`reused`; `reuse_status` records `invalidated` or `unknown`
+when appropriate. Verification overrides remain `skipped`.
+
+Optional check `references` lists required file paths; `required_branch` declares the branch the
+command assumes and must equal the configured target branch. For configuration assumptions,
+policy `project_checks` accepts `{ "path": "config.json", "json_pointer": "/branch",
+"equals": "{target_branch}" }`. These checks inspect declared executable/configuration inputs;
+historical prose alone does not establish a branch assumption.
+
+Inspect an archive with `archive.py inspect --run <id> --view status|checks|inventory|coverage`.
+The default limit is 16384 UTF-8 bytes, including the newline; `--max-bytes` accepts 512 through
+1048576. Pages contain whole typed records, total/returned counters and a content-bound
+`next_cursor`. An oversized record is reported with its byte count and remains available at the
+same cursor with a larger budget. Full journals and recovery payloads remain intact.
 
 ## Commands
 

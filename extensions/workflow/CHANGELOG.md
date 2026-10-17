@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.11.0] - Unreleased
+
+- Immutable verification attempts and validated recoverable evidence snapshots.
+- Use shared check-input fingerprints and retain legacy evidence compatibility.
+- Stage the canonical delegate-task native runner, bounded collection and startup diagnostics from agent-tools 1.3.0.
+
 ## [1.10.3] - 2026-10-16
 
 - On Codex, `progress_bridge.py mode` counts the Progress hooks as active only when Codex will run them: the project is `trusted` in `$CODEX_HOME/config.toml` (or `~/.codex/config.toml`) and a `[hooks.state."<config file>:<event>:<group>:<hook>"]` entry with a `trusted_hash` exists for the hook. Registered but unapproved hooks select `refresh` instead of `projection`; the text line becomes `reporting: refresh (codex hooks not approved)` and `--json` adds `reason`. The hash is not verified, so a hook changed after approval is not detected. User-level `hooks.json` hooks follow the same rule. Claude is unchanged.

@@ -27,5 +27,6 @@
     "package-lock.json"
   ],
   "default_checks": [],
+  "project_checks": [],
   "checks": {}
 }

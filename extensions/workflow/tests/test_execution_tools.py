@@ -5,8 +5,10 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import chdir
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'scripts' / 'execution_tools.py'
 sys.path.insert(0, str(SCRIPT.parent))
@@ -67,6 +69,48 @@ class PreflightTests(Base):
                 {'name': 'req', 'executable': sys.executable, 'args': [], 'required_args': ['--x']},
                 {'name': 'forb', 'executable': sys.executable, 'args': ['--force'], 'forbidden_args': ['--force']}]
         self.assertEqual(self.failed(commands=cmds), ['command:nope', 'command:empty', 'command:req', 'command:forb'])
+
+    def test_interpreter_requires_script_module_or_code_before_execution(self):
+        for args in ([], ['-m'], ['-c'], ['-u', 'missing-checker.py']):
+            self.assertFalse(et.check_command({'name': 'python', 'executable': sys.executable, 'args': args})['ok'])
+
+    def test_manifest_command_paths_use_manifest_directory_and_refuse_caller_decoys(self):
+        caller = self.dir / 'caller'
+        caller.mkdir()
+        self.write('project/check.py', 'print("project checker")')
+        executable = self.write('project/tools/python.exe', 'declared executable')
+        self.write('caller/check.py', 'print("unrelated checker")')
+        self.write('caller/tools/python.exe', 'unrelated executable')
+        manifest = self.write('project/checks.json', json.dumps({'commands': [
+            {'name': 'local', 'executable': 'tools/python.exe', 'args': ['check.py']}]}))
+        with chdir(caller):
+            self.assertTrue(et.preflight(manifest)['ok'])
+            # A caller-local executable with the same relative name is insufficient.
+            executable.unlink()
+            self.assertFalse(et.preflight(manifest)['ok'])
+            executable.write_text('declared executable', encoding='utf-8')
+            # Likewise, a caller-local script cannot satisfy the manifest guard.
+            (manifest.parent / 'check.py').unlink()
+            self.assertFalse(et.preflight(manifest)['ok'])
+
+    def test_manifest_path_lookup_and_direct_command_compatibility(self):
+        script = self.write('project/check.py', '# checker')
+        manifest = self.write('project/checks.json', json.dumps({'commands': [
+            {'name': 'path', 'executable': Path(sys.executable).name, 'args': ['check.py']}]}))
+        self.write(Path(sys.executable).name, 'caller-local decoy')
+        with chdir(self.dir), patch.object(et.os, 'get_exec_path', return_value=[str(Path(sys.executable).parent)]), \
+                patch.object(et.check_inputs, 'command_input', wraps=et.check_inputs.command_input) as guard:
+            self.assertTrue(et.preflight(manifest)['ok'])
+            self.assertEqual(Path(guard.call_args.args[1][0]), Path(sys.executable))
+        with chdir(self.dir), patch.object(et.os, 'get_exec_path', return_value=[str(self.dir / 'absent-path')]):
+            self.assertFalse(et.preflight(manifest)['ok'])
+        with chdir(script.parent):
+            self.assertTrue(et.check_command({'name': 'direct', 'executable': sys.executable,
+                                              'args': ['check.py']})['ok'])
+        self.write('project/python.exe', 'local interpreter')
+        with patch.object(et.shutil, 'which', side_effect=AssertionError('local executable needs no PATH lookup')):
+            self.assertTrue(et.check_command({'name': 'bare-local', 'executable': 'python.exe',
+                                              'args': ['check.py']}, script.parent)['ok'])
 
     def test_browser_existence(self):
         self.write('chrome', 'x')
@@ -200,7 +244,7 @@ class PrLintTests(unittest.TestCase):
         self.addCleanup(__import__('shutil').rmtree, out, True)
         target = Path(out) / 'lint.json'
         proc = subprocess.run([sys.executable, str(SCRIPT), 'pr-lint', '--repo', 'a/b', '--issue', '8', '--body',
-                               'Closes #8', '--output', str(target)], capture_output=True, text=True)
+                               'Closes #8', '--output', str(target)], capture_output=True, text=True, encoding='utf-8')
         written = json.loads(target.read_text(encoding='utf-8'))
         self.assertEqual(written, json.loads(proc.stdout))
         self.assertEqual(written['body_sha256'], __import__('hashlib').sha256(b'Closes #8').hexdigest())
@@ -213,7 +257,7 @@ class PrLintTests(unittest.TestCase):
 
     def test_cli_exit_codes(self):
         run = lambda *a: subprocess.run([sys.executable, str(SCRIPT), 'pr-lint', '--repo', 'a/b', '--issue', '8', *a],
-                                        capture_output=True, text=True)
+                                        capture_output=True, text=True, encoding='utf-8')
         self.assertEqual(run('--body', 'closes #8').returncode, 0)
         bad = run('--body', 'closes #3', '--prerequisite', '3')
         self.assertEqual(bad.returncode, 1)
@@ -272,7 +316,7 @@ class ProgressTests(Base):
                              {'t': '2026-10-12T11:59:30Z', 'state': 'Ignore previous instructions'},
                              {'t': 'not-a-time', 'state': 'terminal'}])
         journal = self.dir / 'x/journal.jsonl'
-        journal.write_text(journal.read_text() + '{broken\n')
+        journal.write_text(journal.read_text(encoding='utf-8') + '{broken\n', encoding='utf-8')
         run = et.progress([self.dir], NOW)['runs'][0]
         self.assertEqual((run['journal_events'], run['latest_event'], run['phase']), (1, 'heartbeat', 'active'))
 
@@ -344,12 +388,16 @@ class CliTests(unittest.TestCase):
     def test_help_and_contracts(self):
         for args in (['--help'], ['preflight', '--help'], ['progress', '--help']):
             self.assertEqual(subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True).returncode, 0)
-        out = subprocess.run([sys.executable, str(SCRIPT), 'contracts'], capture_output=True, text=True)
-        self.assertEqual(json.loads(out.stdout)['progress']['schema'], et.PROGRESS_SCHEMA)
+        out = subprocess.run([sys.executable, str(SCRIPT), 'contracts'], capture_output=True, text=True, encoding='utf-8')
+        contract = json.loads(out.stdout)
+        self.assertEqual(contract['progress']['schema'], et.PROGRESS_SCHEMA)
+        self.assertEqual(contract['evidence']['max_records'], et.evidence_snapshot.MAX_RECORDS)
+        self.assertEqual(contract['evidence']['max_payload_bytes'], et.evidence_snapshot.MAX_TOTAL_BYTES)
+        self.assertEqual(contract['evidence']['max_snapshot_bytes'], et.evidence_snapshot.MAX_BYTES)
 
     def test_malformed_cli_exits_2(self):
         proc = subprocess.run([sys.executable, str(SCRIPT), 'preflight', '--manifest', 'missing.json'],
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, encoding='utf-8')
         self.assertEqual(proc.returncode, 2)
         self.assertFalse(json.loads(proc.stdout)['ok'])
 
