@@ -10,8 +10,8 @@
       ],
       "internal": true,
       "exclusive": true,
-      "ref": "f89debe6834fc4699d8fa6cada26c796d3712876",
-      "sha": "f89debe6834fc4699d8fa6cada26c796d3712876",
+      "ref": "illustration-tools-v3.4.2",
+      "sha": "ed04f5c52d48f9526ab5bc8675353d222e673552",
       "files": {
         "extensions/illustrate/skill/SKILL.md": "71d73d0f82d063bc7200eae417b2197bf0dd925c40a72bd1fffa64c88bf9326d",
         "extensions/illustrate/skill/agents/openai.yaml": "94f4c310ca3cfea9f74c10f98e9999f7510a4d896e64c3ea91838054e76b3e8d",

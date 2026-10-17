@@ -1,10 +1,11 @@
 # Changelog
 
-## Unreleased — Memory 2.2.0, Workflow 1.11.0
+## 2026-10-17 — Memory 2.2.0, Workflow 1.11.0, Illustrate 2.4.2
 
 - Bring archive guards forward, bound inspection output and batch Git reads.
 - Add conservative opt-in check reuse and immutable verification/evidence records.
 - Stage native argv check batches, explicit retries and bounded collection from agent-tools 1.3.0.
+- Illustrate render verification pauses JavaScript clocks between captures and restores styles exactly.
 
 All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
