@@ -424,6 +424,22 @@ class ShimMappings(Project):
         self.assertEqual(lanes['worker-a']['tasks']['active'], ['T002'])
         self.assertEqual(lanes['worker-b']['tasks']['active'], ['T003'])
 
+    def test_reassigning_an_open_task_leaves_the_done_task_with_its_worker(self):
+        self.init()
+        for task in ('T002', 'T003'):
+            code, out, err = self.legacy('task', '--id', task, '--status', 'running', '--agent', 'worker-a', '--summary')
+            self.assertEqual(code, 0, out + err)
+        code, out, err = self.legacy('task', '--id', 'T002', '--status', 'done', '--agent', 'worker-a', '--summary')
+        self.assertEqual(code, 0, out + err)
+        tasks = self.feature_dir / 'tasks.md'
+        tasks.write_text(tasks.read_text(encoding='utf-8').replace('- [ ] T002', '- [x] T002'), encoding='utf-8', newline='')
+        code, out, err = self.legacy('task', '--id', 'T003', '--status', 'running', '--agent', 'worker-b', '--summary')
+        self.assertEqual(code, 0, out + err)
+        lanes = {l['owner']: l for l in self.status()['lanes'] if l.get('origin') == 'facts'}
+        self.assertIn('T002', lanes['worker-a']['tasks']['done'])
+        self.assertEqual(lanes['worker-b']['tasks']['active'], ['T003'])
+        self.assertNotIn('T002', lanes['worker-b']['tasks']['done'])
+
     def test_running_without_agent_never_forwards_an_invalid_lane(self):
         self.init()
         before = self.facts()
