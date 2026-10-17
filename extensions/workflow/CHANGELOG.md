@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.10.4] - 2026-10-17
+
+- Queue Memory work after accepted Execute completion for both Core and SuperSpec. Repeated handoffs preserve existing queue entries; missing dependencies, disabled approval and check coverage failures keep their actual pending or blocked reason.
+- Add one local handoff for session entry and verified post-merge follow-up. It binds the exact feature, repository, PR and target, prioritizes active recovery and returns registered Memory actions for verification, synthesis and review. Product receipts and `pr_open` keep their existing meaning.
+
 ## [1.10.3] - 2026-10-16
 
 - On Codex, `progress_bridge.py mode` counts the Progress hooks as active only when Codex will run them: the project is `trusted` in `$CODEX_HOME/config.toml` (or `~/.codex/config.toml`) and a `[hooks.state."<config file>:<event>:<group>:<hook>"]` entry with a `trusted_hash` exists for the hook. Registered but unapproved hooks select `refresh` instead of `projection`; the text line becomes `reporting: refresh (codex hooks not approved)` and `--json` adds `reason`. The hash is not verified, so a hook changed after approval is not detected. User-level `hooks.json` hooks follow the same rule. Claude is unchanged.
