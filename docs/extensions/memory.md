@@ -39,9 +39,26 @@ python .specify/extensions/memory/scripts/archive.py memory query --text refund
 python .specify/extensions/memory/scripts/archive.py memory check
 ```
 
+## Preflight and bounded inspection
+
+The staged Memory 2.2.0 package exposes the same early guards used by verification and preparation:
+
+```bash
+python .specify/extensions/memory/scripts/archive.py preflight --spec specs/412-refund-approval --check docs
+python .specify/extensions/memory/scripts/archive.py inspect --run <run-id> --view checks --max-bytes 16384
+```
+
+Preflight reports repairable references and candidate-only checks separately. It does not replace
+independent critique or authorize deletion. Inspection returns whole records and continuation data
+within a byte budget, so you can inspect a large journal without printing it in full.
+
+Check reuse requires an explicit complete input declaration and intact passing evidence. Missing or
+unknown dependencies retain conservative freshness. Both memory formats and recovery data remain
+supported. See the [package contract and examples](../../extensions/memory/README.md).
+
 ## How it runs
 
-![Memory sequence: memory.init enables automatic mode; memory.impact runs as a required hook before Analyze; memory.prepare queues finished work after implementation; after the merge, the next session or memory.run checks eligibility and evidence, migrates knowledge with an independent review, and commits a recoverable checkpoint before the final archive.](../diagrams/extension-memory.animated.svg)
+![Memory sequence: memory.init configures policy; memory.impact runs as a required hook before Analyze; memory.prepare queues finished work after implementation; after the merge, the next session or memory.run checks eligibility and evidence, migrates knowledge with an independent review, and commits a recoverable checkpoint before the final archive.](../diagrams/extension-memory.animated.svg)
 
 Impact reads current knowledge before Analyze. Prepare queues finished work. After the merge, the
 next local session checks the approved policy and the real checks, then reconciles knowledge,

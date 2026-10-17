@@ -391,6 +391,9 @@ class PolicyIntegrationTests(unittest.TestCase):
         scripts = copy / '.specify/extensions/workflow/scripts'
         shutil.copytree(EXTENSIONS / 'workflow/scripts', scripts,
                         ignore=shutil.ignore_patterns('__pycache__'))
+        # Installed scripts include package.py's canonical shared-module injection.
+        for helper in ('check_inputs.py', 'evidence_snapshot.py', 'bounded_json.py'):
+            shutil.copyfile(EXTENSIONS / 'scripts/shared' / helper, scripts / helper)
         subprocess.run(['git', 'init', '-q'], cwd=copy, check=True, capture_output=True)
         (copy / '.specify/workflow.yml').write_text(
             yaml.safe_dump(w.default_policy(False, False)), encoding='utf-8')

@@ -130,6 +130,11 @@ agent requests, not shell commands. Claude Desktop does not run extensions.
 | `$speckit-memory-impact` | Before a new spec: `Consult current refund constraints and settlement decisions relevant to this proposed change.` |
 | `$speckit-memory-status` | Inspect: `Show policy approval, queued refund work, writer state, and recovery phase.` |
 
+Native Memory utilities do not register additional agent skills. In the staged Memory 2.2.0 package,
+`archive.py preflight --spec <path> --check <name>` exposes early guards, and
+`archive.py inspect --run <id> --view checks --max-bytes 16384` returns bounded records.
+See [Memory](../extensions/memory.md#preflight-and-bounded-inspection).
+
 ## Progress
 
 [Extension page](../extensions/progress.md) · [package README](../../extensions/progress/README.md)
