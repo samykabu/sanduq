@@ -173,6 +173,10 @@ not presentation.
 
 ## Single-writer rule
 
+Optional `execution` telemetry and bounded read-only `collect --summary` are defined in
+[check-runner.md](check-runner.md#delegate-collection-and-startup). Missing execution telemetry
+in an older result stays absent; summary mode preserves unknown actual-model identity.
+
 A result is written **exactly once**, and never patched afterwards — a post-write amendment
 reopens the window the claim exists to close.
 

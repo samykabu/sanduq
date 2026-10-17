@@ -232,6 +232,10 @@ this driver cannot restrict them. Clean up with `prune`.
 
 ## Going deeper
 
+- For a batch of known local CLI checks, read [the native check-runner contract](contracts/check-runner.md).
+  It covers JSON argv plans, immutable attempts, bounded collection and PowerShell invocation.
+  Use the same reference for `collect --summary`, heartbeat-only diagnostics and opt-in startup deadlines.
+
 - `contracts/status-precedence.md` — how a status is decided, and the cross-product to test
 - `contracts/git-fields.md` — what the tripwire measures and what it cannot see
 - `contracts/result-schema-v2.md` — the result shape, v1 backward read, journal, single-writer
@@ -240,3 +244,4 @@ this driver cannot restrict them. Clean up with `prune`.
 - `references/task-queues.md` — running several dependent tasks without losing the thread
 
 Tests: `node test/run.mjs`, from this skill's directory.
+Execution regressions: `node --test test/execution.test.mjs` (Node/Python CLI fixtures).

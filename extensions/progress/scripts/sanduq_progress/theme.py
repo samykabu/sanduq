@@ -15,7 +15,7 @@ except ImportError:  # run as a script
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from sanduq_progress.paths import PLAN_ROOT, project_dir, registry_dirs
 
-BLOCKS = ("header", "orchestrator", "lanes", "boards", "decisions", "blockers", "events")
+BLOCKS = ("header", "decisions", "blockers", "orchestrator", "lanes", "boards", "events")  # attention first
 TOKEN_KEYS = ("bg", "surface", "text", "muted", "line", "brand", "accent",
               "active", "waiting", "blocked", "done", "failed")
 TOP_KEYS = {"v", "preset", "title", "logo", "density", "blocks", "hidden", "tokens", "font"}

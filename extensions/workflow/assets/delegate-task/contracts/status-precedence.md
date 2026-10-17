@@ -21,6 +21,7 @@ both facts.
 | # | Condition | Status | `primary` |
 | --- | --- | --- | --- |
 | 1 | The watchdog fired | `abandoned` | `timeout` |
+| 1a | Explicit startup deadline expired before the first structured harness event | `abandoned` | `startup_timeout` |
 | 2 | The child failed to spawn | `failed` | `spawn_error` |
 | 3 | The child died on a signal we did not send | `failed` | `signal` |
 | 4 | **Process exit code is non-zero** | `failed` | `exit_code` |
@@ -74,7 +75,11 @@ on an otherwise-clean run is accepted but changes nothing.
 }
 ```
 
-`primary` is one of: `timeout`, `spawn_error`, `signal`, `exit_code`, `parse_error`,
+If the explicit startup deadline fires, it owns the terminal result and retains the observed
+exit/telemetry evidence. It is opt-in and independent of the overall watchdog. See
+[check-runner.md](check-runner.md#delegate-collection-and-startup) for the progress fields.
+
+`primary` is one of: `timeout`, `startup_timeout`, `spawn_error`, `signal`, `exit_code`, `parse_error`,
 `telemetry_incomplete`, `harness_telemetry`, `self_report`, `head_moved`, `index_moved`,
 `supervisor_lost`, `relay_aborted`, `legacy`.
 
