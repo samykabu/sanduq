@@ -6,7 +6,7 @@
     "agent-tools": "1.3.0"
   },
   "release_status": "local-unreleased",
-  "portable_commit": "0727ec2b54f96fb7ab76f1ef5b3cb83976027b90",
+  "portable_commit": "f89debe6834fc4699d8fa6cada26c796d3712876",
   "unit_acceptance": {
     "portable": {
       "passed": 207,
@@ -271,5 +271,33 @@
     "proof_root": ".delegate/pr85-review",
     "svg_status": "Separate candidate failed local timer-clock fixture; not vendored or claimed fixed. No illustration source changes in this review-correction commit.",
     "full_review": "Existing completed-feature review retained; coordinator inspected corrective deltas and affected regressions."
+  },
+  "pr85_svg_correction": {
+    "source_commit": "f89debe6834fc4699d8fa6cada26c796d3712876",
+    "source_pr": "https://github.com/samykabu/sanduq-skills/pull/8",
+    "cause": "JavaScript timers changed the compared frame; screenshot style artifacts also affected exact DOM restoration.",
+    "fix": "Pause per-page JavaScript clocks, capture every declared reveal hold, and restore exact pre-screenshot styles.",
+    "acceptance": {
+      "browser": "Playwright 1.63.0 / Chromium 153.0.8010.12",
+      "browser_free_units": 15,
+      "clipping_self_tests": 43,
+      "animated_assets": 3,
+      "dom_restore_pairs": "8/8 exact; zero spill",
+      "old_new_proof": "Both scales preserve true clipping; queued callbacks remain live after explicit advance.",
+      "static_reduced_and_playback": "passed",
+      "frozen_hashes": "passed",
+      "vendored_script_matches_tested_candidate": "87df1c006e27f65afbac2cfa522e5683ef74635817115b5dfdcddda32f9ec106"
+    },
+    "proof": ".delegate/pr85-review/svg-style-final-handoff.json",
+    "retained_failures": [
+      "svg-author-result.json",
+      "svg-diagnostic-haiku-result.json",
+      "svg-diagnostic-luna-result.json",
+      "svg-diagnostic-fresh-result.json",
+      "svg-final-result.json",
+      "svg-isolation-result.json",
+      "svg-bootstrap-final-result.json"
+    ],
+    "review_boundary": "No additional full feature review or unchanged geometry/motion suites."
   }
 }
