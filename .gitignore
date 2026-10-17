@@ -12,3 +12,4 @@ Thumbs.db
 # Recorded CI plan artifacts used as test fixtures
 !extensions/workflow/tests/fixtures/ci-runs/*/artifact.zip
 .delegate/
+/artifacts/workflow-memory-lifecycle/

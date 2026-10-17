@@ -1272,6 +1272,9 @@ def memory_cli_read(archive: Archive, args) -> str | None:
 
 
 def main() -> int:
+    # JSON output is not ASCII-escaped; a legacy console codepage (cp1252) must not decide what survives.
+    for stream in (sys.stdout, sys.stderr):
+        stream.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=".")
     sub = parser.add_subparsers(dest="verb", required=True)

@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.11.2] - 2026-10-18
+
+- Force UTF-8 only for Memory helper I/O so Unicode recovery journals remain readable under Windows legacy code pages.
+- Queue Memory work after accepted Execute completion for both Core and SuperSpec. Repeated handoffs preserve existing queue entries; missing dependencies, disabled approval and check coverage failures keep their actual pending or blocked reason.
+- Add one local handoff for session entry and verified post-merge follow-up. It binds the exact feature, repository, PR and target, prioritizes active recovery and returns registered Memory actions for verification, synthesis and review. Product receipts and `pr_open` keep their existing meaning.
+- The QA Document stage may refresh the generated `.github/memory/project-memory.md` inventory. The runtime records the old and new hashes in lineage and advances the earlier receipts' source fingerprints instead of failing with `UPSTREAM_INPUT_CHANGED_DURING_STAGE`.
+- Generated Progress reports (`specs/*/progress/`, `.specify/progress/`) no longer count as freshness inputs, so writing a report cannot stale a passing check receipt. Product directories such as `src/progress` still count.
+
 ## [1.11.1] - 2026-10-17
 
 - Reporting instructions: lifecycle stage runs (scope, specify, clarify...) are recorded by the delegation ledger and get no `progress lane` call. `progress lane` is only for real Execute workstreams, once per workstream, and a new worker updates that lane's owner. The legacy shim reuses the open lane that already carries a task and updates its owner instead of adding a lane per worker.

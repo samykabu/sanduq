@@ -2,6 +2,11 @@
 
 Loaded when `claim` returns `stage: execute`.
 
+After either provider succeeds, native `complete` invokes the shared executable
+Memory handoff. Honor `memory_handoff`, its exit and returned registered actions
+as [memory-lifecycle.md](memory-lifecycle.md) specifies. The dispatcher owns this
+transition; do not dispatch another prepare hook after native completion.
+
 With `lean_execution.enabled: true`, the existing lifecycle coordinator owns
 Execute and the following verification, documentation and publication work.
 Do not create the additional orchestration agent described by the legacy
