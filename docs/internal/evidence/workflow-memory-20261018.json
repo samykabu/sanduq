@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "collected_at": "2026-10-17T23:19:33.868069+00:00",
+  "reviewed_commit": "2e38ee1a683c4a24349f36da27ef1acd9941fe91",
+  "reviewed_tree": "d08c154e61edf77197d74e7d7ce4a4e35c78c583",
+  "baseline": "cbb4059dbb799a78a9480073025ea8a372651acc",
+  "binding": {
+    "kind": "Retained execution identity; no test rerun is implied",
+    "execution_record_head": "cbb4059dbb799a78a9480073025ea8a372651acc",
+    "tested_dirty_source_equals_committed_source": true,
+    "source_sha256": {
+      ".gitignore": "a79d610d0db39d9e59f8f28f36c4d91c8e2d78a9c8d2463d20c59802979d0480",
+      "docs/reference/commands.md": "8c4755ab49152c07fd05ca0bfe06e155bdaff0e899f85af3e1223e9fd204638b",
+      "docs/workflow/stages.md": "abbd5a2e35574ff5654cb67a8e3e1178ded86aca9805a400787dfb0a38fd5fc4",
+      "extensions/README.md": "d0a72d405ffd19e2e5bba068567d63b0ec847bae7fc13e80ffabbc02e3abc3f5",
+      "extensions/memory/CHANGELOG.md": "b74ca04be2a19d3642f5e2e7e9bbf7fff8b8cff610d128224c7f6e3ba57431c4",
+      "extensions/memory/extension.yml": "3c6f7f31732051b8436201b2c05d7df7d74b5e57bf47f70e762c834517e93cb9",
+      "extensions/memory/scripts/archive.py": "1c3acd392714356872a537cfc758b9dc64926c4dce6d012add691a20798682b1",
+      "extensions/memory/scripts/git_state.py": "41f2899864674b8bcb81313d32637bdfaf19ed14de6253c2c386fc5dfccca1ff",
+      "extensions/memory/tests/test_archive_v2.py": "5a20840eb620dfbc31663a3ecf06b6cad392fc31df66f3ef72d3ac2c49982c95",
+      "extensions/pending-releases.json": "fae8235710f8b65f8c090ca5c9e628c37dbd8d4c4c656f2f67b134be0ced58d2",
+      "extensions/scripts/shared/sanduq_freshness.py": "506e53963bfb07513af2e674c9d287908adf7c403e609ddebcdfd04cd22aed40",
+      "extensions/workflow/CHANGELOG.md": "3745885cc8cdb910ebd7adbae2939e04ac3c78d8209a5e0b68d14e0f2285d593",
+      "extensions/workflow/extension.yml": "2e233cf1fc147e0e316d917c1122c55d86d9cde788ea79c03e77920cf8790c40",
+      "extensions/workflow/scripts/workflow.py": "fc0c26f398c04688f50a1c2ac527257cac5691f98b5be1bdd389ac3d830f6f11",
+      "extensions/workflow/skills/workflow/references/dispatcher-operations.md": "35781e26b421bc607d5199046bbf088dcd51cb1397e83143401a5181745c5452",
+      "extensions/workflow/skills/workflow/references/stage-execute.md": "a66f3fdcc68d44bd965170566c59d3dc0f65ead2807033bd510f63203184cbd3",
+      "extensions/workflow/skills/workflow/references/stage-pr.md": "f68d245fba7969c072adffb848d28e6134cbed7177b9867b878c2701268fb95b",
+      "extensions/workflow/tests/test_freshness.py": "f4aff15f6711dc2602549a0c5c345c1d1c3499da3615178c354b630a31ab3bab",
+      "extensions/workflow/tests/test_receipt_contract.py": "a491bc79cd1ba2f45f10a143a6e3a4156871e513fd90bd412632f445d5588153",
+      "extensions/memory/tests/test_git_state.py": "be1f2e7dcd5de810c969d557253e9bca5e6498db7d26536213cb696c2a31c867",
+      "extensions/workflow/scripts/memory_handoff.py": "0485c2b214081a2912be6b0fdb3c432093427c24d11900b53249c48934fa2144",
+      "extensions/workflow/skills/workflow/references/memory-lifecycle.md": "33270cb146f1a1300b96db792472b0c43ffa29737c09bb2b25ceec887c2a74ea",
+      "extensions/workflow/tests/test_memory_handoff.py": "d1e420a84a34e7a86c6c6bf434c943fa8ddfa51a189350b7613f19412639a68c"
+    },
+    "commands_results_sha256": "71fee62ff1fe52ed34d6dfabf253ba8d2d928140012d7c7c373fe92f265dec99"
+  },
+  "selected_unit_passes": {
+    "git_staging": 7,
+    "native_utf8": 1,
+    "memory_handoff": 17,
+    "freshness": 14,
+    "changed_receipt_contract_cases": 7
+  },
+  "documentation_checks": "Regression checks, documentation validation and diff check passed",
+  "unverified": "Complete receipt-contract file timed out after300seconds; broad author runs produced no terminal result. Neither is counted as passed.",
+  "memory_installation": {
+    "host_shell_cases_passed": 6,
+    "automatic_enabled": false
+  },
+  "upgrade_smoke": {
+    "result": "passed",
+    "cases": [
+      "native upgrade",
+      "injected-failure byte-exact rollback",
+      "retry",
+      "self-upgrade",
+      "outer rollback",
+      "self-upgrade retry",
+      "preserved configuration and progress"
+    ],
+    "spec_kit_version": "1.0.11",
+    "spec_kit_commit": "8147943512404afb9d99c6252cb9bf84369fd0b0",
+    "python": "3.13.15",
+    "setup": "Real isolated source Git checkout and absolute private interpreter"
+  },
+  "independent_review": {
+    "run_id": "claude-20261017231304-9c432f",
+    "requested_model": "claude-opus-5-5",
+    "actual_model": "claude-opus-5-5",
+    "status": "successful",
+    "provenance": "harness_telemetry",
+    "blocking_findings": 0,
+    "decision": "approved"
+  },
+  "local_package_sha256": {
+    "memory": {
+      "sha256": "03e19ff98e8bd630e0c09e618d0b2b82f5ae72c55555f498be6f645dc4bd2d65",
+      "bytes": 99434
+    },
+    "workflow": {
+      "sha256": "74303473741fa382a83f8cb0ab0153228f6ede1f151dea1bfa7fd511ff385078",
+      "bytes": 722996
+    }
+  },
+  "publication_boundary": "Local Windows ZIP hashes are local identities. Published Linux release assets and inventories require separate verification. Automatic archival approval is unchanged."
+}

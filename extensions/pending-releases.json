@@ -4,6 +4,6 @@
     "workflow": "1.11.2",
     "memory": "2.2.1"
   },
-  "status": "implementation-in-progress",
-  "note": "Workflow 1.11.2 adds local Memory lifecycle handoffs, keeps QA Document generated-memory lineage and excludes generated Progress reports from freshness inputs; Memory 2.2.1 handles tracked files under ignored parents and emits UTF-8 from the native CLI. Awaiting independent review. Publication remains with the parent; no assets were published."
+  "status": "ready",
+  "note": "Workflow1.11.2 and Memory2.2.1 are independently reviewed and locally validated. Publish through the existing release workflow after successful current-main CI; verify immutable assets before catalog promotion."
 }
