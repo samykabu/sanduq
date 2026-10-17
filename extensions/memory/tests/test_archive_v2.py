@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -102,6 +103,27 @@ class ArchiveV2Tests(unittest.TestCase):
         run = subprocess.run([sys.executable, str(SCRIPTS / "archive.py"), "--root", str(self.root), *args],
                              capture_output=True)
         return run.returncode, json.loads(run.stdout)
+
+    def test_native_cli_emits_lossless_utf8_under_a_legacy_console_codepage(self):
+        note = "قبل → بعد: ضريبة القيمة المضافة"
+        run = self.journal()
+        run["note"] = note
+        self.archive.save(run)
+        env = dict(os.environ, PYTHONIOENCODING="cp1252")
+        env.pop("PYTHONUTF8", None)
+        base = [sys.executable, str(SCRIPTS / "archive.py"), "--root", str(self.root)]
+        status = subprocess.run([*base, "status"], capture_output=True, env=env)
+        self.assertEqual(0, status.returncode, status.stderr)
+        self.assertNotIn(rb"\u2192", status.stdout)
+        output = json.loads(status.stdout.decode("utf-8"))
+        self.assertTrue(output["success"])
+        self.assertEqual(note, output["data"]["active"]["note"])
+        # The error envelope crosses the same boundary: an unknown memory id carrying the same text.
+        failed = subprocess.run([*base, "memory", "show", "--id", note], capture_output=True, env=env)
+        self.assertEqual(1, failed.returncode, failed.stderr)
+        error = json.loads(failed.stdout.decode("utf-8"))
+        self.assertFalse(error["success"])
+        self.assertIn(note, error["error"])
 
     def test_prepare_writes_a_v2_journal_and_delta_skeleton(self):
         run = self.journal()
