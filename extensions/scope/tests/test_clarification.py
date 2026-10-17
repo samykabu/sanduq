@@ -500,6 +500,187 @@ class ClarificationTests(unittest.TestCase):
         self.move('Ready')
         self.assertEqual(self.app.plan_gate('1')['status'], 'Ready')
 
+    # ---- workflow/clarifications.json (Scope 1.7.0) -------------------------------------------------------------
+
+    def records_path(self):
+        return self.feature / 'workflow/clarifications.json'
+
+    def records(self):
+        return sm.read_json(self.records_path())
+
+    def test_a_published_question_is_recorded_as_pending(self):
+        self.app.publish('1', self.analysis([question()]), True)
+        document = self.records()
+        self.assertEqual(document['v'], 1)
+        item, = document['items']
+        comment = self.gh.comments[0]
+        self.assertEqual((item['source_id'], item['revision'], item['state']), ('C1Q1', 1, 'pending'))
+        self.assertEqual(item['question'], 'What should happen if the request fails?')
+        self.assertEqual(item['options'], ['Retry', 'Start again'])
+        self.assertIsNone(item['answer'])
+        self.assertIsNone(item['editor'])
+        self.assertIsNone(item['answered_at'])
+        self.assertIsNone(item['applied'])
+        self.assertEqual(item['url'], f'https://github.com/acme/app/issues/1#issuecomment-{comment["id"]}')
+        self.assertTrue(item['observed_at'])
+        self.assertEqual(item['evidence'][0]['kind'], 'published')
+        self.assertNotIn(b'\r', self.records_path().read_bytes())
+        self.assertEqual(list(self.records_path().parent.glob('*.tmp')), [])
+
+    def test_a_dry_run_writes_no_records(self):
+        self.app.publish('1', self.analysis([question()]))
+        self.assertFalse(self.records_path().exists())
+
+    def test_a_failed_transition_or_stale_publication_writes_no_records(self):
+        review = self.analysis([question()])
+        with patch.object(self.scope, 'set_status', side_effect=sm.ScopeError('Project update failed')):
+            with self.assertRaisesRegex(sm.ScopeError, 'Project update failed'):
+                self.app.publish('1', review, True)
+        self.assertFalse(self.records_path().exists())
+        stale = self.analysis([question()])
+        self.gh.comment('A new human comment')
+        with self.assertRaisesRegex(sm.ScopeError, 'STALE'):
+            self.app.publish('1', stale, True)
+        self.assertFalse(self.records_path().exists())
+
+    def test_the_records_are_written_after_the_spec_and_before_the_journal_completes(self):
+        order = []
+        real = m.persist_clarifications
+
+        def watch(path, items, batch):
+            order.append(('persist', 'Offer retry' in (self.feature / 'spec.md').read_text(encoding='utf-8'),
+                          sorted(bool(sm.read_json(j).get('complete')) for j in
+                                 (self.root / '.specify/scope/clarifications').glob('*/journal.json'))))
+            return real(path, items, batch)
+
+        self.app.publish('1', self.analysis([question()]), True)
+        q = self.gh.comments[0]
+        q['body'] = q['body'].replace('- [ ] **A.**', '- [x] **A.**')
+        self.move(m.FEATURE)
+        answer = {'question_id': 'C1Q1', 'disposition': 'answered', 'comment_ids': [q['id']], 'explanation': 'Retry.'}
+        review = self.analysis(answers=[answer])
+        review['spec_edits'] = [{'before': 'The form can be submitted.', 'after': 'The form can be submitted. Offer retry.'}]
+        with patch.object(m, 'persist_clarifications', watch):
+            self.app.publish('1', review, True)
+        # Only the earlier batch's journal is complete; this batch's is marked after the records are written.
+        self.assertEqual(order, [('persist', True, [False, True])])
+        self.assertTrue(all(sm.read_json(j).get('complete') for j in
+                            (self.root / '.specify/scope/clarifications').glob('*/journal.json')))
+
+    def test_a_checkbox_answer_is_applied_and_keeps_the_pending_revision(self):
+        self.app.publish('1', self.analysis([question()]), True)
+        q = self.gh.comments[0]
+        q['body'] = q['body'].replace('- [ ] **A.**', '- [x] **A.**')
+        self.move(m.FEATURE)
+        answer = {'question_id': 'C1Q1', 'disposition': 'answered', 'comment_ids': [q['id']], 'explanation': 'Retry was selected.'}
+        self.app.publish('1', self.analysis(answers=[answer]), True)
+        pending, applied = self.records()['items']
+        self.assertEqual((pending['revision'], pending['state']), (1, 'pending'))
+        self.assertEqual((applied['source_id'], applied['revision'], applied['state']), ('C1Q1', 2, 'applied'))
+        self.assertEqual(applied['answer'], {'kind': 'single', 'value': 'A'})
+        self.assertIsNone(applied['editor'])  # who ticked the box is not recorded
+        self.assertIsNone(applied['answered_at'])
+        self.assertEqual(applied['applied']['evidence'], 'specs/001-example/spec.md#speckit-clarification:spec ' + applied['batch'])
+        self.assertTrue(applied['applied']['at'])
+        self.assertEqual([e['kind'] for e in applied['evidence']], ['selection', 'disposition'])
+        self.assertEqual(applied['options'], ['Retry', 'Start again'])
+
+    def test_a_reply_answer_records_its_author_and_the_option_it_names(self):
+        self.app.publish('1', self.analysis([question()]), True)
+        reply = self.gh.comment('C1Q1: B - start again please')
+        self.gh.comments[-1]['created_at'] = '2026-09-11T10:00:00Z'
+        self.move(m.FEATURE)
+        answer = {'question_id': 'C1Q1', 'disposition': 'answered', 'comment_ids': [reply['id']], 'explanation': 'B chosen.'}
+        self.app.publish('1', self.analysis(answers=[answer]), True)
+        item = self.records()['items'][-1]
+        self.assertEqual(item['answer'], {'kind': 'single', 'value': 'B'})
+        self.assertEqual(item['editor'], 'creator')
+        self.assertEqual(item['answered_at'], '2026-09-11T10:00:00Z')
+
+    def test_a_free_text_reply_is_a_text_answer(self):
+        self.app.publish('1', self.analysis([question()]), True)
+        reply = self.gh.comment('C1Q1: Keep the form and offer retry.')
+        self.move(m.FEATURE)
+        answer = {'question_id': 'C1Q1', 'disposition': 'answered', 'comment_ids': [reply['id']], 'explanation': 'Text.'}
+        self.app.publish('1', self.analysis(answers=[answer]), True)
+        self.assertEqual(self.records()['items'][-1]['answer'], {'kind': 'text', 'value': 'Keep the form and offer retry.'})
+
+    def test_several_ticked_options_without_an_answer_are_a_conflict(self):
+        self.app.publish('1', self.analysis([question()]), True)
+        q = self.gh.comments[0]
+        q['body'] = q['body'].replace('- [ ] **A.**', '- [x] **A.**').replace('- [ ] **B.**', '- [x] **B.**')
+        self.move(m.FEATURE)
+        answer = {'question_id': 'C1Q1', 'disposition': 'unresolved', 'comment_ids': [], 'explanation': 'Two boxes are ticked.'}
+        self.app.publish('1', self.analysis([question('again', ['C1Q1'])], [answer]), True)
+        by_id = {}
+        for item in self.records()['items']:
+            by_id[item['source_id']] = item
+        self.assertEqual(by_id['C1Q1']['state'], 'conflict')
+        self.assertEqual(by_id['C2Q1']['state'], 'pending')
+
+    def test_a_creator_closure_records_the_open_question_as_waived(self):
+        self.app.publish('1', self.analysis([question()]), True)
+        control = self.gh.comment('Close the clarification process')
+        self.move(m.FEATURE)
+        answer = {'question_id': 'C1Q1', 'disposition': 'unresolved', 'comment_ids': [], 'explanation': 'Waived by the creator.'}
+        review = self.analysis(answers=[answer])
+        review['summary'] = 'Failure behavior was explicitly waived by the creator.'
+        self.app.publish('1', review, True)
+        waived = self.records()['items'][-1]
+        self.assertEqual(waived['state'], 'waived')
+        self.assertIsNone(waived['answer'])
+        self.assertEqual(waived['evidence'][0]['kind'], 'creator-closure')
+        self.assertEqual(waived['evidence'][0]['comment_id'], control['id'])
+
+    def test_a_superseded_question_is_recorded_as_superseded(self):
+        self.app.publish('1', self.analysis([question()]), True)
+        reply = self.gh.comment('C1Q1: Neither; the form is replaced by a wizard.')
+        self.move(m.FEATURE)
+        answer = {'question_id': 'C1Q1', 'disposition': 'superseded', 'comment_ids': [reply['id']], 'explanation': 'Replaced.'}
+        review = self.analysis(answers=[answer])
+        review['spec_edits'] = [{'before': 'The form can be submitted.', 'after': 'The wizard can be submitted.'}]
+        self.app.publish('1', review, True)
+        self.assertEqual(self.records()['items'][-1]['state'], 'superseded')
+
+    def test_building_the_records_makes_no_github_calls(self):
+        self.app.publish('1', self.analysis([question()]), True)
+        q = self.gh.comments[0]
+        q['body'] = q['body'].replace('- [ ] **A.**', '- [x] **A.**')
+        self.move(m.FEATURE)
+        snapshot = self.app.inspect('1')
+        answer = {'question_id': 'C1Q1', 'disposition': 'answered', 'comment_ids': [q['id']], 'explanation': 'Retry.'}
+        analysis = self.analysis(answers=[answer])
+        with patch.object(self.gh, 'api', side_effect=AssertionError('no GitHub call while rendering')):
+            items = m.clarification_items(snapshot, analysis, 'ready', 2, 'b1', 'acme/app', {}, 'specs/001-example/spec.md', 'now')
+        self.assertEqual(items[0]['state'], 'applied')
+
+    def test_replaying_a_batch_replaces_its_records_and_unchanged_ones_keep_their_revision(self):
+        item = {'source_id': 'C1Q1', 'question': 'Q?', 'options': ['A'], 'answer': None, 'state': 'pending', 'url': 'u',
+                'editor': None, 'observed_at': 't1', 'answered_at': None, 'applied': None, 'evidence': [], 'batch': 'b1'}
+        path = self.root / 'out/clarifications.json'
+        first = m.persist_clarifications(path, [item], 'b1')
+        self.assertEqual([(i['revision'], i['batch']) for i in first['items']], [(1, 'b1')])
+        # Replay of the same batch (a repair after an interrupted publication): replaced in place.
+        replay = m.persist_clarifications(path, [dict(item, observed_at='t2')], 'b1')
+        self.assertEqual([(i['revision'], i['observed_at']) for i in replay['items']], [(1, 't2')])
+        # A later batch that observes the same facts adds nothing.
+        same = m.persist_clarifications(path, [dict(item, observed_at='t3', batch='b2')], 'b2')
+        self.assertEqual(len(same['items']), 1)
+        # A later batch with a change adds the next revision and keeps the earlier one.
+        answered = dict(item, state='applied', answer={'kind': 'single', 'value': 'A'}, observed_at='t4', batch='b3',
+                        applied={'at': 't4', 'evidence': 'spec.md'})
+        changed = m.persist_clarifications(path, [answered], 'b3')
+        self.assertEqual([(i['revision'], i['state']) for i in changed['items']], [(1, 'pending'), (2, 'applied')])
+        self.assertEqual(sm.read_json(path), changed)
+
+    def test_an_unreadable_records_file_is_not_overwritten(self):
+        path = self.root / 'out/clarifications.json'
+        path.parent.mkdir(parents=True)
+        path.write_text('{"v": 2, "items": "x"}', encoding='utf-8')
+        with self.assertRaisesRegex(sm.ScopeError, 'CLARIFICATIONS_UNREADABLE'):
+            m.persist_clarifications(path, [], 'b1')
+        self.assertEqual(path.read_text(encoding='utf-8'), '{"v": 2, "items": "x"}')
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -9,6 +9,8 @@ import os
 import re
 import subprocess
 import sys
+import uuid
+from datetime import datetime, timezone
 from urllib.parse import quote
 from pathlib import Path
 
@@ -203,6 +205,147 @@ def apply_edits(spec, edits):
         require(spec.count(before) == 1, 'Spec edit target is missing or ambiguous; reread the spec.')
         spec = spec.replace(before, after, 1)
     return spec
+
+
+CLARIFICATIONS_FILE = 'workflow/clarifications.json'
+ANSWER_LINE = r'^\s*{qid}\s*[:\-]\s*(.*)$'
+VALUE_LIMIT = 500
+
+
+def comment_url(repo, number, comment_id):
+    return f'https://github.com/{repo}/issues/{number}#issuecomment-{comment_id}'
+
+
+def reply_text(body, qid):
+    """The part of a human comment that answers `qid`: its own line, else the whole plain text."""
+    plain = plain_lines(body)
+    for line in plain.splitlines():
+        found = re.match(ANSWER_LINE.format(qid=re.escape(qid)), line, re.I)
+        if found and found[1].strip():
+            return found[1].strip()
+    return plain
+
+
+def reply_answer(text, options):
+    """`A`, `A, B` or `A - feedback` against the question's option letters; anything else is free text."""
+    head = re.split(r'\s+[\u2014\u2013-]\s+', text, maxsplit=1)[0].strip()
+    labels = [part.strip().upper() for part in re.split(r'\s*[,/&]\s*|\s+and\s+', head) if part.strip()]
+    valid = {option_label(i) for i in range(1, len(options) + 1)}
+    if labels and options and all(label in valid for label in labels):
+        return ('single', labels[0]) if len(labels) == 1 else ('multiple', labels)
+    return 'text', text[:VALUE_LIMIT]
+
+
+def answer_record(question, answer, comments):
+    """(answer, editor, answered_at, evidence) for one prior question, from recorded human evidence only.
+
+    A checkbox selection has no recorded author or time (GitHub does not say who ticked it), so both stay null.
+    """
+    qid = question['id']
+    options = question.get('options') or []
+    evidence = []
+    chosen = None
+    for cid in answer.get('comment_ids', []):
+        comment = comments.get(cid)
+        if comment is None:
+            continue
+        if cid == question.get('comment_id'):
+            evidence.append({'kind': 'selection', 'comment_id': cid, 'url': question.get('comment_url')})
+            picked = question['selection']
+            if picked.get('state') == 'selected':
+                chosen = chosen or ({'kind': 'single', 'value': picked['labels'][0]}, None, None)
+        else:
+            evidence.append({'kind': 'reply', 'comment_id': cid, 'url': comment.get('html_url')})
+            if chosen is None:
+                kind, value = reply_answer(reply_text(comment.get('body', ''), qid), options)
+                chosen = ({'kind': kind, 'value': value}, (comment.get('user') or {}).get('login'),
+                          comment.get('created_at'))
+    return (chosen or (None, None, None)) + (evidence,)
+
+
+def clarification_items(snapshot, analysis, outcome, round_number, batch, repo, comment_ids, spec_path, observed_at):
+    """Normalized clarification records for one validated publication. Pure: no GitHub calls, no writes."""
+    number = snapshot['issue']['number']
+    comments = {c['id']: c for c in snapshot['comments']}
+    items = []
+    by_question = {a['question_id']: a for a in analysis.get('answers', [])}
+    for qid, prior in snapshot['history']['questions'].items():
+        answer = by_question[qid]
+        disposition = answer['disposition']
+        value, editor, answered_at, evidence = answer_record(prior, answer, comments) \
+            if disposition in ('answered', 'superseded') else (None, None, None, [])
+        applied = None
+        if disposition == 'answered':
+            state = 'applied'
+            applied = {'at': observed_at, 'evidence': spec_path + '#speckit-clarification:spec ' + batch}
+        elif disposition == 'superseded':
+            state = 'superseded'
+        elif outcome == 'closed':
+            state = 'waived'
+            evidence = [{'kind': 'creator-closure', 'comment_id': cid, 'url': comment_url(repo, number, cid)}
+                        for cid in snapshot['policy'].get('control_comment_ids', [])]
+        elif prior['selection'].get('state') in ('ambiguous', 'edited'):
+            state = 'conflict'
+            evidence = [{'kind': 'selection', 'comment_id': prior.get('comment_id'), 'url': prior.get('comment_url')}]
+        else:
+            state = 'pending'
+        items.append({'source_id': qid, 'question': prior['question'], 'options': list(prior.get('options') or []),
+                      'answer': value, 'state': state,
+                      'url': prior.get('comment_url') or comment_url(repo, number, prior.get('comment_id')),
+                      'editor': editor, 'observed_at': observed_at, 'answered_at': answered_at, 'applied': applied,
+                      'evidence': evidence + [{'kind': 'disposition', 'disposition': disposition,
+                                               'explanation': str(answer.get('explanation', ''))[:VALUE_LIMIT]}],
+                      'batch': batch})
+    if outcome == 'waiting':
+        for index, question in enumerate(analysis['questions'], 1):
+            qid = f'C{round_number}Q{index}'
+            url = comment_url(repo, number, comment_ids[qid])
+            items.append({'source_id': qid, 'question': question['question'],
+                          'options': list(question.get('options') or []), 'answer': None, 'state': 'pending',
+                          'url': url, 'editor': None, 'observed_at': observed_at, 'answered_at': None,
+                          'applied': None,
+                          'evidence': [{'kind': 'published', 'comment_id': comment_ids[qid], 'url': url}],
+                          'batch': batch})
+    return items
+
+
+def substance(item):
+    """What identifies a revision: everything except when it was observed and which batch re-observed it."""
+    value = {k: v for k, v in item.items() if k not in ('observed_at', 'batch', 'revision')}
+    if value.get('applied'):
+        value['applied'] = {k: v for k, v in value['applied'].items() if k != 'at'}
+    return value
+
+
+def merge_items(existing, fresh, batch):
+    """Add this batch's records to the kept ones. A record this batch already wrote is replaced (replay); an
+    unchanged record keeps its revision; a changed one becomes the next revision. Earlier revisions stay."""
+    items = [dict(item) for item in existing]
+    for new in fresh:
+        history = [i for i, item in enumerate(items) if item['source_id'] == new['source_id']]
+        latest = items[history[-1]] if history else None
+        if latest and latest.get('batch') == batch:
+            items[history[-1]] = dict(new, revision=latest['revision'])
+        elif latest and substance(latest) == substance(new):
+            continue
+        else:
+            items.append(dict(new, revision=(latest['revision'] + 1) if latest else 1))
+    return items
+
+
+def persist_clarifications(path, fresh, batch):
+    """Write `workflow/clarifications.json` atomically, keeping prior revisions."""
+    path = Path(path)
+    current = read_json(path, {}) if path.exists() else {}
+    require(not current or (current.get('v') == 1 and isinstance(current.get('items'), list)),
+            'CLARIFICATIONS_UNREADABLE: ' + str(path))
+    document = {'v': 1, 'items': merge_items(current.get('items', []), fresh, batch)}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_name(path.name + '.' + uuid.uuid4().hex + '.tmp')
+    with open(temp, 'w', encoding='utf-8', newline='\n') as handle:
+        handle.write(json.dumps(document, indent=2, ensure_ascii=False) + '\n')
+    temp.replace(path)
+    return document
 
 
 class Clarification:
@@ -499,6 +642,12 @@ class Clarification:
         self.app._board = None
         self.gate(self.app.issue(number))
         self.transition(self.app.issue(number), result['status'])
+        # Only now: the spec is replaced and the transition succeeded. Written before the journal is marked
+        # complete, so an interrupted publication repairs the file when it is rerun.
+        persist_clarifications(self.root / Path(snapshot['spec_path']).parent / CLARIFICATIONS_FILE,
+                               clarification_items(snapshot, analysis, outcome, round_number, batch, self.app.repo,
+                                                   journal['comments'], Path(snapshot['spec_path']).as_posix(),
+                                                   datetime.now(timezone.utc).isoformat()), batch)
         journal['complete'] = True
         write_json(journal_path, journal)
         if automatic_resume and result['status'] == WAITING:

@@ -69,6 +69,25 @@ def script(root):
     return path if path.is_file() else None
 
 
+def progress_version(root):
+    """The installed Progress version as a tuple of ints, or None when it cannot be read."""
+    path = script(root)
+    if path is None:
+        return None
+    manifest = Path(path).resolve().parent.parent / 'extension.yml'
+    try:
+        match = re.search(r"(?m)^\s+version:\s*[\"']?(\d+)\.(\d+)\.(\d+)", manifest.read_text(encoding='utf-8'))
+    except OSError:
+        return None
+    return tuple(int(part) for part in match.groups()) if match else None
+
+
+def progress_at_least(root, minimum):
+    """True only when the installed Progress is known to be at least `minimum` (a tuple)."""
+    version = progress_version(root)
+    return version is not None and version >= tuple(minimum)
+
+
 def _off(data):
     """True when a config object is itself switched off (`enabled: false` or `disabled: true`)."""
     return data.get('enabled') is False or data.get('disabled') is True
@@ -279,7 +298,15 @@ def run(root, args, timeout=60, stdin=None):
 def status(root, feature=None):
     """The Progress projection from `status --json`, or None when unavailable (absent, not initialised, broken)."""
     args = ['status', '--json'] + (['--feature', feature] if feature else [])
-    result = run(root, args)
+    # Workflow reads the v2 projection. Progress 1.2.0 defaults to v3 and takes `--schema v2`; Progress 1.1.x
+    # rejects the flag with a usage error (exit 2), so retry once without it.
+    version = progress_version(root)
+    if version is not None and version < (1, 2, 0):
+        result = run(root, args)  # known to predate the flag: no probe process
+    else:
+        result = run(root, args + ['--schema', 'v2'])
+        if result and result[0] == 2:
+            result = run(root, args)
     if not result or result[0] != 0:
         return None
     try:

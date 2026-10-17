@@ -167,6 +167,8 @@ edited to claim that a new package executed old work.
 | `specs/<feature>/workflow/` | Per-feature checkpoint, handoff, resume prompt, receipts, evidence |
 | `specs/<feature>/workflow/progress/index.html` | Live implementation report through authorized PR merge |
 | `specs/<feature>/workflow/delegations.json` | Tracked delegation attempts, route decisions and usage |
+| `specs/<feature>/workflow/lifecycle.jsonl` | Append-only claim, completion, recovery, invalidation and revalidation events ([details](state-files.md#lifecycle-events-stage-plan-and-next-action-1120)) |
+| `specs/<feature>/workflow/clarifications.json` | Clarification questions, answers and their application, written by Scope 1.7.0 |
 | `.specify/workflow/backups/installs/` | Backup ZIP and operation log for every install and upgrade |
 | `docs/workflow/implementation-plan.html` | The Illustrate dependency plan, regenerated after every decomposition |
 

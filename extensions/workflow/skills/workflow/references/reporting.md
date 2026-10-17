@@ -31,6 +31,8 @@ for `python .specify/extensions/progress/scripts/progress.py`; every verb prints
 | `refresh` | Progress is installed and enabled, but the active host does not collect automatically (or the host is unknown) | The `projection` calls, plus `progress refresh` after each collected attempt and phase commit. |
 | `legacy` | Progress is absent or disabled | The legacy calls in [`execution-report.md`](execution-report.md#legacy-reporter-calls-mode-legacy-only): init, task, usage, sync, phase and pr, exactly as before. |
 
+On a Codex worktree whose hooks are not approved (`codex hooks not approved`), the coordinator also runs `progress bind --host codex --model <m> --effort <e>` once per session. It is a labelled self-report, never host-observed telemetry, and needs Progress 1.2.0 or later. From 1.2.0 a workstream lane fact carries `semantics: "workstream"` (`progress lane new ... --workstream`); the `progress.py` forwarder adds it to the lanes it creates.
+
 In `projection` and `refresh` mode task state comes from `tasks.md`, retries and attempts from the delegation ledger, and
 model, effort, context and run usage from host hooks and delegate results. Do not call task, usage, sync, phase or pr
 reporters for them. Check task boxes in `tasks.md` as usual. A budget overrun is a `progress note`.

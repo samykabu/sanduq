@@ -61,6 +61,24 @@
         "new_issue": {"type": "string", "pattern": "^[^/]+/[^#]+#[1-9][0-9]*$"}
       }}
     },
+    "stage_plan": {
+      "description": "The selected, policy-filtered stage order at the time of the last write (1.12.0+).",
+      "type": "object", "required": ["v", "generation", "stages"],
+      "properties": {"v": {"const": 1}, "generation": {"type": "integer", "minimum": 0},
+                     "stages": {"type": "array", "items": {"type": "string"}}}
+    },
+    "next_action": {
+      "description": "Workflow's own next/next_stage evaluation at the time of the last write (1.12.0+); null when it could not be evaluated.",
+      "oneOf": [{"type": "null"}, {"type": "object", "required": ["text", "stage", "kind", "evaluated_at", "generation"], "properties": {
+        "text": {"type": "string"}, "stage": {"type": ["string", "null"]},
+        "kind": {"enum": ["active-claim", "next-stage"]},
+        "evaluated_at": {"type": "string", "format": "date-time"}, "generation": {"type": "integer", "minimum": 0}}}]
+    },
+    "lifecycle_outbox": {
+      "description": "Lifecycle events queued with a state change and not yet appended to workflow/lifecycle.jsonl (1.12.0+). Replayed on the next save; deduplicated by event_id.",
+      "type": "array",
+      "items": {"type": "object", "required": ["v", "event_id", "workflow_run_id", "generation", "at", "stage", "event", "episode_id", "claim_id", "delegation_run_ids", "reason"]}
+    },
     "updated_at": {"type": "string", "format": "date-time"},
     "head": {"type": "string"}
   }

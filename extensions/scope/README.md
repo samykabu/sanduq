@@ -32,6 +32,14 @@ Plan. Questions are individual comments, mentioning the creator, with stable IDs
 and unchecked recommendations. Project `scope.statuses` maps logical names such as
 Backlog, Feature Specification, Need Clarifications and Ready to actual board names.
 
+From 1.7.0 each published clarification round also writes `specs/<feature>/workflow/clarifications.json`,
+so a report can show the questions without calling GitHub. It lists every question with its options,
+answer, state (`pending`, `conflict`, `answered`, `applied`, `waived` or `superseded`), comment URL and the
+evidence behind the answer. The file is written only after the specification is replaced and the board
+transition succeeds, and before the publication journal is marked complete. Dry runs and failed or stale
+publications write nothing. A changed question becomes the next `revision`; earlier revisions stay.
+A checkbox answer has no recorded author or time, so `editor` and `answered_at` stay `null`.
+
 After a split, `/speckit-scope-plan` redraws the implementation dependency plan as an
 Illustrate dependency graph and `scripts/accept_plan.py` accepts it only after issue
 coverage, dependency reachability, Illustrate's own checks, SVG/PNG export and a headless

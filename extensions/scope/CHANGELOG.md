@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.7.0] - 2026-10-17
+
+- Clarification publication writes `specs/<feature>/workflow/clarifications.json` (`{v: 1, items}`). Each item has `source_id`, `revision`, `question`, `options`, `answer` (`single`, `multiple` or `text`), `state` (`pending`, `conflict`, `answered`, `applied`, `waived` or `superseded`), `url`, `editor`, `observed_at`, `answered_at`, `applied` and `evidence`, plus the `batch` that wrote it. Pending, answered, superseded and waived questions are included.
+- The file is written after the specification is replaced and the board transition succeeds, and before the publication journal is marked complete. Dry runs, stale publications and failed transitions write nothing. The write is atomic, a rerun of the same batch replaces its own records, and a changed question adds the next revision while earlier revisions stay. Building the records makes no GitHub calls.
+- A checkbox answer records no author and no time (`editor` and `answered_at` are `null`); a reply comment records its author and creation time.
+
 ## [1.6.2] - 2026-10-15
 
 - Document the verified initial and revalidation gate/bind command forms through Workflow's command helper. Revalidation does not use initial-claim flags. Existing binding, status and REST safeguards remain.

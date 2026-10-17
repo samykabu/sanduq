@@ -53,10 +53,20 @@ def feature_of(args, root):
     return None
 
 
+WORKSTREAM_SEMANTICS_MINIMUM = (1, 2, 0)
+
+
 class Forward:
     def __init__(self, root, feature):
         self.root, self.feature = root, feature
         self.latest = None  # the newest status projection this call fetched
+
+    def new_lane(self, *args):
+        """Create a lane fact. From Progress 1.2.0 it is marked with `--workstream` (`semantics: "workstream"`), so a reader can tell it
+        from the older lane facts; an older Progress does not know the flag and gets none."""
+        marker = (['--workstream']
+                  if bridge.progress_at_least(self.root, WORKSTREAM_SEMANTICS_MINIMUM) else [])
+        return self.call('lane', 'new', *args, *marker)
 
     def call(self, verb, *args, sub=None, tolerate=()):
         """Run one Progress verb; return its one-line stdout. Raise Compat with Progress' own exit code on failure."""
@@ -141,7 +151,7 @@ def ensure_lane(fwd, report, task, agent, attempt_wanted=False):
             shared = next((lane for lane in lanes if not lane.get('owner') and lane.get('label') == 'coordinator'
                            and lane.get('status') not in ('done', 'failed')), None)
             if shared is None:
-                return fwd.call('lane', 'new', '--tasks', task, '--label', 'coordinator').split()[1]
+                return fwd.new_lane('--tasks', task, '--label', 'coordinator').split()[1]
             held = lane_task_ids(shared)
             if task not in held:
                 fwd.call('lane', shared['id'], '--tasks', ','.join(held + [task]))
@@ -163,7 +173,7 @@ def ensure_lane(fwd, report, task, agent, attempt_wanted=False):
             if not rest:
                 fwd.call('lane', other['id'], '--close')
     if mine is None:
-        line = fwd.call('lane', 'new', '--tasks', task, '--owner', agent, '--label', agent)
+        line = fwd.new_lane('--tasks', task, '--owner', agent, '--label', agent)
         return line.split()[1]
     held = lane_task_ids(mine)
     if task not in held:

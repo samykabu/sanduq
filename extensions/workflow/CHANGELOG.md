@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.12.0] - 2026-10-17
+
+- Lifecycle events: `specs/<feature>/workflow/lifecycle.jsonl` records `claim`, `resume`, `accepted`, `rejected-completion`, `recovered`, `paused`, `invalidated`, `revalidated` and `revalidation-stale`. Each record carries `workflow_run_id`, `generation`, `stage`, `episode_id`, `claim_id`, `delegation_run_ids` and a short `reason`. `claim_id` is a one-way hash of the claim token, never the token. Receipts a claim removes are recorded as `invalidated` before they are deleted; `migrate`, `refresh` and changed amendments record the stages they invalidate.
+- A completion that fails validation after the claim is authenticated is recorded as `rejected-completion`. The claim stays active, nothing is accepted, and the CLI prints the same error and exits 1 as before.
+- Events are queued in the checkpoint (`lifecycle_outbox`) with the state change and appended under the feature lock. An interrupted append is replayed on the next write and deduplicated by `event_id`. `lifecycle.read_events` tolerates a torn final line and the next append repairs it.
+- The checkpoint stores `stage_plan` (the selected, policy-filtered stage order) and `next_action` (Workflow's own next evaluation with `evaluated_at` and `generation`, either an active claim or the next stage). The active claim also records `claim_id`.
+- Delegation attempts record `intent_id`, `claim_id` (stage attempts) and `replaces_run_id` next to the existing `parent_run_id`.
+- Reporting: on a Codex worktree whose hooks are not approved, the coordinator reports its own model and effort with `progress bind --host codex --model <m> --effort <e>` (needs Progress 1.2.0 or later). From Progress 1.2.0 the `progress.py` forwarder creates lanes with `--workstream`; older Progress versions get no flag.
+- Progress compatibility: the bridge reads `progress status --json --schema v2`, so Workflow keeps the v2 projection when Progress 1.2.0 defaults to v3. A Progress known to be older than 1.2.0 is called without it; for an unknown version, a usage-error rejection (exit 2) is retried once without the flag.
+
 ## [1.10.4] - 2026-10-17
 
 - Reporting instructions: lifecycle stage runs (scope, specify, clarify...) are recorded by the delegation ledger and get no `progress lane` call. `progress lane` is only for real Execute workstreams, once per workstream, and a new worker updates that lane's owner. The legacy shim reuses the open lane that already carries a task and updates its owner instead of adding a lane per worker.

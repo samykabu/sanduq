@@ -629,5 +629,82 @@ class CompatibilityErrors(Project):
         self.assertIn('PROGRESS_FORBIDDEN_CONTENT', out)
 
 
+class WorkstreamMarker(Project):
+    """New lane facts carry `--workstream` only from Progress 1.2.0; older Progress gets no flag."""
+
+    def fake_progress(self, version):
+        folder = self.root / 'fake-progress'
+        (folder / 'scripts').mkdir(parents=True, exist_ok=True)
+        (folder / 'scripts' / 'progress.py').write_text('# fake', encoding='utf-8')
+        (folder / 'extension.yml').write_text('extension:\n  id: progress\n  version: "%s"\n' % version, encoding='utf-8')
+        os.environ['SANDUQ_PROGRESS_SCRIPT'] = str(folder / 'scripts' / 'progress.py')
+
+    def new_lane_argv(self):
+        import progress_shim
+        calls = []
+        forward = progress_shim.Forward(self.root, FEATURE)
+        forward.call = lambda *argv, **kwargs: calls.append(argv) or 'progress: L1 open 1 tasks'
+        forward.new_lane('--tasks', 'T001', '--owner', 'worker', '--label', 'worker')
+        return calls[0]
+
+    def test_progress_1_2_0_gets_the_marker(self):
+        self.fake_progress('1.2.0')
+        argv = self.new_lane_argv()
+        self.assertEqual(argv[:2], ('lane', 'new'))
+        self.assertEqual(argv[-1], '--workstream')
+        self.fake_progress('1.10.1')
+        self.assertEqual(self.new_lane_argv()[-1], '--workstream')
+
+    def test_older_or_unreadable_progress_gets_no_flag(self):
+        for version in ('1.1.3', '1.0.0'):
+            self.fake_progress(version)
+            self.assertNotIn('--workstream', self.new_lane_argv())
+        self.assertEqual(bridge.progress_version(self.root), (1, 0, 0))
+        (self.root / 'fake-progress' / 'extension.yml').unlink()
+        self.assertIsNone(bridge.progress_version(self.root))
+        self.assertNotIn('--workstream', self.new_lane_argv())
+
+    def test_the_installed_progress_in_this_tree_is_below_the_threshold(self):
+        os.environ['SANDUQ_PROGRESS_SCRIPT'] = str(PROGRESS_SCRIPT)
+        self.assertEqual(bridge.progress_at_least(self.root, (1, 2, 0)),
+                         bridge.progress_version(self.root) >= (1, 2, 0))
+
+
+class StatusSchemaFlag(Project):
+    """`bridge.status` asks for v2 and falls back once for a Progress that does not know `--schema`."""
+
+    FAKE = r"""import json, sys
+open(LOG, "a").write(json.dumps(sys.argv[1:]) + "\n")
+if "--schema" in sys.argv and not ACCEPTS:
+    print("PROGRESS_USAGE: unrecognized arguments: --schema", file=sys.stderr)
+    sys.exit(2)
+print(json.dumps({"schema": "v2" if "--schema" in sys.argv else "legacy"}))
+"""
+
+    def fake(self, accepts_schema):
+        script = self.root / 'fake_progress.py'
+        text = self.FAKE.replace('LOG', repr(str(self.root / 'calls.log'))).replace('ACCEPTS', repr(accepts_schema))
+        script.write_text(text, encoding='utf-8')
+        os.environ['SANDUQ_PROGRESS_SCRIPT'] = str(script)
+
+    def calls(self):
+        return [json.loads(line) for line in (self.root / 'calls.log').read_text(encoding='utf-8').splitlines()]
+
+    def test_a_progress_that_accepts_the_flag_is_asked_once_for_v2(self):
+        self.fake(True)
+        self.assertEqual(bridge.status(self.root, FEATURE), {'schema': 'v2'})
+        calls = self.calls()
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][-2:], ['--schema', 'v2'])
+
+    def test_an_older_progress_is_retried_once_without_the_flag(self):
+        self.fake(False)
+        self.assertEqual(bridge.status(self.root, FEATURE), {'schema': 'legacy'})
+        calls = self.calls()
+        self.assertEqual(len(calls), 2)
+        self.assertIn('--schema', calls[0])
+        self.assertNotIn('--schema', calls[1])
+
+
 if __name__ == '__main__':
     unittest.main()

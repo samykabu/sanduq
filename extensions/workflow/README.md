@@ -192,7 +192,8 @@ Legacy attempts carry origin `legacy` and never override the delegation ledger. 
 
 - Policy is in `.specify/workflow.yml`.
 - Feature state is in `specs/<feature>/workflow/`. This includes the checkpoint, the receipts and,
-  when delegation is on, the `delegations.json` ledger.
+  when delegation is on, the `delegations.json` ledger. From 1.12.0 it also holds `lifecycle.jsonl`,
+  the event log of claims, completions, recoveries and invalidations.
 - Install locks, backups and runtime locks are under `.specify/workflow/`.
 
 Commit the feature state with the feature. Do not edit checkpoints by hand. Use `recover`,

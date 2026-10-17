@@ -3572,6 +3572,41 @@ class DelegationTests(unittest.TestCase):
         self.assertFalse(rejected('Error: model is not available\n', requested=None))
         self.assertTrue(rejected('', requested=None, reason='Unknown model'))
 
+    def test_attempts_link_intent_claim_and_replaced_run_without_the_token(self):
+        """Lifecycle joins (1.12.0): a stage attempt carries intent_id and a non-credential claim_id, and a
+        replacement carries replaces_run_id. The claim token is never the claim_id."""
+        import lifecycle
+        self.enable()
+        run = w.Run(self.root, self.feature)
+        run.start('acme/app#10')
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()),              patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}):
+            claim = run.claim({'session_id': 'test-session'})
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()),              patch.object(dispatch, 'launch', return_value={'run_id': 'codex-scope', 'state': 'running'}):
+            started = dispatch.start(self.root, self.feature, 'stage:scope', token=claim['token'])
+        attempt = dispatch.find_run(dispatch.load_ledger(self.root, self.feature), 'codex-scope')
+        self.assertEqual(attempt['intent_id'], started['intent_id'])
+        self.assertEqual(attempt['claim_id'], lifecycle.claim_id_for(claim['token']))
+        self.assertEqual(attempt['claim_id'], claim['claim_id'])
+        self.assertNotEqual(attempt['claim_id'], claim['token'])
+        self.assertIsNone(attempt['replaces_run_id'])
+        self.assertIsNone(attempt['parent_run_id'])
+
+    def test_a_replacement_attempt_links_the_run_it_replaces(self):
+        self.tasks()
+        self.enable()
+        self.start_one(run_id='codex-1')
+        payload = self.failed_payload('codex-1', dirty_paths_changed=[], repo_root=str(self.root))
+        result = self.collect_with(payload, lambda *args, **kwargs: {'run_id': 'codex-2', 'state': 'running'},
+                                   run_id='codex-1')
+        self.assertEqual(result['replacement']['run_id'], 'codex-2')
+        ledger = dispatch.load_ledger(self.root, self.feature)
+        replacement = dispatch.find_run(ledger, 'codex-2')
+        self.assertEqual(replacement['replaces_run_id'], 'codex-1')
+        self.assertEqual(replacement['parent_run_id'], 'codex-1')
+        self.assertTrue(replacement['intent_id'])
+        self.assertIsNone(replacement['claim_id'])  # a task attempt has no stage claim
+        self.assertIsNone(dispatch.find_run(ledger, 'codex-1')['replaces_run_id'])
+
 
 if __name__ == '__main__':
     unittest.main()

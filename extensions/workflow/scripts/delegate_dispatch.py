@@ -26,6 +26,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 import delegation
 import workflow
 import lean_policy
+import lifecycle
 
 
 def stamp():
@@ -695,7 +696,9 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
                                    'owned_paths': owned_paths, 'route_candidates': candidates,
                                    'driver': relative(root, status['driver']),
                                    'claim_token': claim_token, 'pinned': bool(pinned),
-                                   'parent_run_id': parent_run_id, 'retry_count': retry_count,
+                                   'claim_id': lifecycle.claim_id_for(claim_token),
+                                   'parent_run_id': parent_run_id, 'replaces_run_id': parent_run_id,
+                                   'retry_count': retry_count,
                                    **({'lean_admission': admission, 'timeout_guidance': guidance} if admission else {})})
     for index, candidate in enumerate(candidates):
         if not status['harnesses'].get(candidate['harness']):
@@ -764,6 +767,8 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
                    'started_at': stamp(), 'task_file': relative(root, task_path),
                    'cwd': relative(root, cwd), 'timeout': timeout, 'owned_paths': owned_paths,
                    'claim_token': claim_token, 'pinned': bool(pinned),
+                   'intent_id': intent_id, 'claim_id': lifecycle.claim_id_for(claim_token),
+                   'replaces_run_id': parent_run_id,
                    'evidence_location': '.delegate/runs/' + started['run_id'] + '/result.json',
                    **({'lean_admission': admission, 'timeout_guidance': guidance} if admission else {})}
         with edit_ledger(root, feature, ('intent_id', intent_id)) as ledger:
