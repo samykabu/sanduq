@@ -16,6 +16,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { StringDecoder } from 'node:string_decoder';
+import { projectResult } from './bounded.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const RUNS = process.env.DELEGATE_RUNS_DIR || path.join(HERE, 'runs');
@@ -842,13 +843,41 @@ function journal(dir, obj) {
   } catch { /* a journal write must never take the run down */ }
 }
 
-function readJournal(dir) {
+function readJournal(dir, bounded = false) {
+  if (!bounded) {
+    try {
+      return fs.readFileSync(path.join(dir, 'journal.jsonl'), 'utf8')
+        .split(/\r?\n/).filter(l => l.trim().startsWith('{'))
+        .map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+    } catch { return []; }
+  }
+  let fd;
   try {
-    return fs.readFileSync(path.join(dir, 'journal.jsonl'), 'utf8')
-      .split(/\r?\n/).filter((l) => l.trim().startsWith('{'))
-      .map((l) => { try { return JSON.parse(l); } catch { return null; } })
-      .filter(Boolean);
+    fd = fs.openSync(path.join(dir, 'journal.jsonl'), 'r');
+    const decoder = new StringDecoder('utf8'), buf = Buffer.alloc(16384), latest = new Map();
+    let line = '', dropping = false, sequence = 0, n;
+    const record = text => {
+      try {
+        const e = JSON.parse(text);
+        if (typeof e.state !== 'string' || e.state.length > 128) return;
+        if (latest.has(e.state) || latest.size < 100) latest.set(e.state, { e, sequence: sequence++ });
+      } catch { /* partial or invalid journal record */ }
+    };
+    const scan = text => {
+      for (const fragment of text.split(/(?<=\n)/)) {
+        if (!dropping) line += fragment;
+        if (fragment.endsWith('\n')) {
+          if (!dropping && line.length <= 65536) record(line);
+          line = ''; dropping = false;
+        } else if (line.length > 65536) { dropping = true; line = ''; }
+      }
+    };
+    while ((n = fs.readSync(fd, buf, 0, buf.length, null)) > 0) scan(decoder.write(buf.subarray(0, n)));
+    scan(decoder.end());
+    if (line && !dropping) record(line);
+    return [...latest.values()].sort((a, b) => a.sequence - b.sequence).map(x => x.e);
   } catch { return []; }
+  finally { if (fd !== undefined) fs.closeSync(fd); }
 }
 
 // Single-writer rule with recovery. A claim records its owner; a claim whose
@@ -919,7 +948,7 @@ function alive(pid) {
 
 function killTree(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return;
-  if (WIN) spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' });
+  if (WIN) spawnSync(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'taskkill.exe'), ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true, shell: false });
   else {
     try { process.kill(-pid, 'SIGKILL'); }
     catch { try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ } }
@@ -969,14 +998,18 @@ function journalPid(j, state) {
   return e && Number.isInteger(e.pid) ? e.pid : null;
 }
 
-function stateOf(id) {
+function stateOf(id, bounded = false) {
   const dir = runDir(id);
-  const meta = readJson(path.join(dir, 'meta.json'));
+  const metaPath = path.join(dir, 'meta.json');
+  if (bounded && fs.existsSync(metaPath) && fs.statSync(metaPath).size > 8 * 1024 * 1024) die('bounded collector refused run metadata over 8 MiB', 8);
+  const meta = readJson(metaPath);
   if (!meta) return null;
-  const res = normaliseResult(readJson(path.join(dir, 'result.json')));
+  const resultPath = path.join(dir, 'result.json');
+  if (bounded && fs.existsSync(resultPath) && fs.statSync(resultPath).size > 8 * 1024 * 1024) die('bounded collector refused result metadata over 8 MiB; legacy --json remains available', 8);
+  const res = normaliseResult(readJson(resultPath));
   if (res) return { state: 'done', meta, res, dir };
 
-  const j = readJournal(dir);
+  const j = readJournal(dir, bounded);
   const lastBeat = j.filter((e) => e.state === 'heartbeat' || e.state === 'supervisor_started').pop();
   const beatMs = lastBeat ? Date.parse(lastBeat.t) : NaN;
   // An unparseable timestamp, or one meaningfully in the FUTURE, is not evidence
@@ -1001,7 +1034,7 @@ function stateOf(id) {
       why: `the supervisor (pid ${meta.supervisor_pid}) is alive but has not heartbeat for ${Math.round(beatAge / 1000)}s`,
     };
   }
-  if (supAlive) return { state: 'running', meta, res: null, dir, childPid };
+  if (supAlive) return { state: 'running', meta, res: null, dir, childPid, execution: executionProgress(meta, dir) };
 
   // The supervisor is gone. NEVER finalise while its child is still alive: on
   // POSIX the child leads its own process group and outlives the supervisor, and
@@ -1013,6 +1046,25 @@ function stateOf(id) {
     };
   }
   return { state: 'lost', meta, res: null, dir, childPid, why: 'supervisor process is gone' };
+}
+
+function executionProgress(meta, dir, now = Date.now()) {
+  const p = readJson(path.join(dir, 'progress.json')) || {};
+  const elapsed = now - Date.parse(p.child_started_at || meta.started_at);
+  const quiet = elapsed >= (meta.no_output_after_ms || 60_000);
+  const hasChild = Boolean(p.child_started_at);
+  return {
+    ...p,
+    last_structured_event_at: p.last_structured_event_at || null,
+    last_output_at: p.last_output_at || null,
+    stdout_bytes: p.stdout_bytes || 0, stderr_bytes: p.stderr_bytes || 0,
+    progress_state: !hasChild ? 'supervisor_preparing' : p.last_structured_event_at ? 'harness_events'
+      : quiet || p.startup_deadline_expired ? 'startup_stalled' : p.last_output_at ? 'unstructured_output' : 'heartbeat_only',
+    diagnostic: p.startup_deadline_expired ? 'configured startup deadline expired before first structured harness event'
+      : hasChild && !p.last_structured_event_at && quiet
+        ? (p.last_output_at ? 'no structured harness event observed within diagnostic window' : 'no harness output observed within diagnostic window') : null,
+    startup_deadline_ms: meta.startup_timeout_ms || null,
+  };
 }
 
 /* ---------- result assembly ---------- */
@@ -1081,6 +1133,7 @@ function buildResult({
     // Post-cap records the retention window could not hold. Non-zero means the
     // delegate's own words may be missing even though the status is sound.
     records_dropped: recordsDropped || 0,
+    execution: executionProgress(meta, dir),
 
     task: meta.task, cwd: meta.cwd, model: (parse && parse.model) || meta.model || null,
     repo_root: repoRoot || null, repo_id: repoIdString(repoId),
@@ -1126,6 +1179,9 @@ async function cmdStart(o) {
   // flag rather than "not installed" on a machine lacking that CLI.
   if (!Number.isFinite(o.timeout) || o.timeout <= 0 || o.timeout * 1000 > 2_147_483_647) {
     die(`--timeout must be a positive number of seconds under ${Math.floor(2_147_483_647 / 1000)} (got "${o.timeoutRaw}")`);
+  }
+  for (const [flag, value] of [['--startup-timeout', o.startupTimeout], ['--no-output-after', o.noOutputAfter]]) {
+    if (value !== null && (!Number.isFinite(value) || value <= 0 || value * 1000 > 2_147_483_647)) die(`${flag} must be positive seconds within the Node timer range`);
   }
   try {
     if (!fs.statSync(o.cwd).isDirectory()) die(`--cwd is not a directory: ${o.cwd}`);
@@ -1205,6 +1261,8 @@ async function cmdStart(o) {
     deliverable, constraint: constraints,
     permission: o.perm, allow_commit: o.allowCommit, raw: o.raw,
     timeout_ms: Math.round(o.timeout * 1000),
+    startup_timeout_ms: o.startupTimeout === null ? null : Math.round(o.startupTimeout * 1000),
+    no_output_after_ms: Math.round(o.noOutputAfter * 1000),
     clean_env: o.cleanEnv, keep_env: o.keepEnv, kept_env_names: keptEnvNames,
     started_at: new Date().toISOString(), nonce: crypto.randomBytes(4).toString('hex'),
     supervisor_pid: null,
@@ -1318,6 +1376,21 @@ async function cmdSupervise(id) {
   });
 
   let spawnError = null;
+  const progress = { child_started_at: new Date().toISOString(), last_structured_event_at: null, last_output_at: null, stdout_bytes: 0, stderr_bytes: 0 };
+  let progressWritten = 0, startupTimer = null, startupTimedOut = false;
+  const saveProgress = (force = false) => {
+    if (force || Date.now() - progressWritten >= 1000) {
+      writeJson(path.join(dir, 'progress.json'), progress);
+      progressWritten = Date.now();
+    }
+  };
+  saveProgress(true);
+  const observeOutput = (key, chunk) => {
+    const first = !progress.last_output_at;
+    progress[`${key}_bytes`] += chunk.length;
+    progress.last_output_at = new Date().toISOString();
+    saveProgress(first);
+  };
   let sessionId = meta.resume_session || null;
   const streams = {
     out: { fd: outFd, written: 0, capped: false, tail: [], tailBytes: 0 },
@@ -1400,6 +1473,12 @@ async function cmdSupervise(id) {
       if (!s.startsWith('{')) continue;
       if (s.length > MAX_LINE_CHARS) { if (streams.out.capped) retained.dropped++; continue; }
       let e; try { e = JSON.parse(s); } catch { continue; }
+      if (typeof e.type === 'string') {
+        const first = !progress.last_structured_event_at;
+        progress.last_structured_event_at = new Date().toISOString();
+        clearTimeout(startupTimer);
+        saveProgress(first);
+      }
       if (streams.out.capped) retain(s);
       const sid = h.session(e);
       if (sid && sid !== sessionId) {
@@ -1423,8 +1502,8 @@ async function cmdSupervise(id) {
     }
   };
 
-  child.stdout.on('data', (c) => { capWrite(streams.out, c); scan(dec.out.write(c)); });
-  child.stderr.on('data', (c) => { capWrite(streams.err, c); });
+  child.stdout.on('data', (c) => { observeOutput('stdout', c); capWrite(streams.out, c); scan(dec.out.write(c)); });
+  child.stderr.on('data', (c) => { observeOutput('stderr', c); capWrite(streams.err, c); });
   child.on('error', (e) => { spawnError = e.message; });
   // Journal the child only once the OS confirms it started; Node reports spawn
   // failure asynchronously, so recording it earlier claims a child that may
@@ -1446,11 +1525,22 @@ async function cmdSupervise(id) {
     }
   };
 
-  const beat = setInterval(() => journal(dir, { state: 'heartbeat' }), HEARTBEAT_MS);
+  const beat = setInterval(() => { journal(dir, { state: 'heartbeat' }); saveProgress(true); }, HEARTBEAT_MS);
   beat.unref?.();
 
   let timedOut = false;
-  const timer = setTimeout(() => { timedOut = true; killTree(child.pid); }, meta.timeout_ms);
+  const timer = setTimeout(() => {
+    if (startupTimedOut) return;
+    timedOut = true; clearTimeout(startupTimer); killTree(child.pid);
+  }, meta.timeout_ms);
+  if (meta.startup_timeout_ms) startupTimer = setTimeout(() => {
+    if (timedOut || progress.last_structured_event_at) return;
+    startupTimedOut = true;
+    progress.startup_deadline_expired = true;
+    saveProgress(true);
+    journal(dir, { state: 'startup_deadline', last_structured_event_at: progress.last_structured_event_at });
+    killTree(child.pid);
+  }, meta.startup_timeout_ms);
 
   // The supervisor's own death must still produce a result. Registration is a
   // no-op for SIGTERM/SIGHUP on native Windows; the heartbeat/staleness path in
@@ -1460,7 +1550,7 @@ async function cmdSupervise(id) {
     process.on(sig, () => {
       if (aborting) return;
       aborting = true;
-      clearTimeout(timer); clearInterval(beat);
+      clearTimeout(timer); clearTimeout(startupTimer); clearInterval(beat); saveProgress(true);
       killTree(child.pid);
 
       // Shutdown must be ASYNCHRONOUS. A synchronous wait here starves the very
@@ -1513,8 +1603,9 @@ async function cmdSupervise(id) {
   // and publishes the SIGKILL that killTree sent as a harness signal death.
   // POSIX only in practice: native Windows never runs those handlers.
   if (aborting) return;
-  clearTimeout(timer); clearInterval(beat);
+  clearTimeout(timer); clearTimeout(startupTimer); clearInterval(beat);
   if (lineBuf.trim()) scan('\n');
+  saveProgress(true);
   flushTails();
   try { fs.closeSync(outFd); fs.closeSync(errFd); } catch { /* ignore */ }
 
@@ -1528,6 +1619,11 @@ async function cmdSupervise(id) {
     headMoved: gitCmp.head_changed, indexMoved: gitCmp.index_changed,
     allowCommit: meta.allow_commit,
   });
+  if (startupTimedOut) {
+    statusRes.status = 'abandoned';
+    statusRes.reason = `startup deadline expired after ${meta.startup_timeout_ms / 1000}s without a structured harness event`;
+    statusRes.provenance = { primary: 'startup_timeout', evidence: [...statusRes.provenance.evidence, statusRes.reason, `last_structured_event_at: ${progress.last_structured_event_at || 'none'}`] };
+  }
 
   // Written exactly once, inside the claim. Patching the file afterwards - as an
   // earlier build did to add repo_root - reopens the window the claim exists to
@@ -1555,12 +1651,12 @@ function safeParse(h, outPath, errPath, code) {
   }
 }
 
-function synthesizeLost(s) {
+function synthesizeLost(s, bounded = false) {
   // No handler could run (SIGKILL, crash, native-Windows hard kill). Build a
   // terminal result from the journal, the logs and a git snapshot.
   const { meta, dir } = s;
   const h = HARNESSES[meta.harness];
-  const j = readJournal(dir);
+  const j = readJournal(dir, bounded);
   const sid = (j.filter((e) => e.state === 'session').pop() || {}).session_id || meta.resume_session || null;
   const parsed = safeParse(h, path.join(dir, 'stdout.log'), path.join(dir, 'stderr.log'), null);
   // A synthesised result has no run-start baseline, so only the after-state is
@@ -1592,19 +1688,20 @@ function cmdStatus(id) {
     provenance: s.res ? s.res.status_provenance.primary : null,
     session_id: s.res ? s.res.session_id : null,
     child_pid: s.childPid ?? null,
+    execution: s.execution || s.res?.execution || executionProgress(s.meta, s.dir),
     elapsed_s: Math.round((Date.now() - new Date(s.meta.started_at)) / 1000),
     ...(s.why ? { why: s.why } : {}),
   }, null, 2));
 }
 
 async function cmdCollect(id, o) {
-  let s = stateOf(id) || die(`no such run: ${id}`);
+  let s = stateOf(id, o.summary) || die(`no such run: ${id}`);
   const deadline = Date.now() + (o.wait ? o.wait * 1000 : 0);
   while (['running', 'starting', 'adrift', 'stalled'].includes(s.state) && Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 2000));
-    s = stateOf(id);
+    s = stateOf(id, o.summary);
   }
-  if (s.state === 'running' || s.state === 'starting') die(`run ${id} still executing (use --wait <seconds>)`, 3);
+  if (s.state === 'running' || s.state === 'starting') die(`run ${id} still executing (use --wait <seconds>); progress=${s.execution?.progress_state || 'supervisor_preparing'}, last_structured_event_at=${s.execution?.last_structured_event_at || 'none'}`, 3);
   if (s.state === 'adrift') {
     die(`run ${id}: ${s.why}. Refusing to publish a result while the harness is still writing. ` +
         `Wait for it, or kill pid ${s.childPid} and collect again.`, 6);
@@ -1614,7 +1711,13 @@ async function cmdCollect(id, o) {
         `Inspect ${path.join(s.dir, 'journal.jsonl')}, or kill it and collect again.`, 6);
   }
   if (s.state === 'lost') {
-    const res = synthesizeLost(s);
+    if (o.summary) {
+      for (const file of ['stdout.log', 'stderr.log']) {
+        const p = path.join(s.dir, file);
+        if (fs.existsSync(p) && fs.statSync(p).size > 64 * 1024 * 1024) die('bounded collector refused recovery log over 64 MiB; recover with legacy --json first', 8);
+      }
+    }
+    const res = synthesizeLost(s, o.summary);
     if (!res) die(`run ${id}: another process is finalising this run; retry in a moment`, 7);
     s = { ...s, state: 'done', res: normaliseResult(res) };
   }
@@ -1622,6 +1725,7 @@ async function cmdCollect(id, o) {
   if (s.res.unsupported_schema) {
     die(`run ${id} was written by a different driver (schema "${s.res.schema}"); this build cannot read it`, 8);
   }
+  if (o.summary) { console.log(JSON.stringify(projectResult(s.res, { chars: o.maxChars, items: o.maxItems }), null, 2)); return; }
   if (o.json) { console.log(JSON.stringify(s.res, null, 2)); return; }
   printResult(s.res);
 }
@@ -1766,6 +1870,7 @@ function parseArgs(argv) {
     timeout: 1800, timeoutRaw: '1800', wait: 0, waitRaw: '0', json: false, raw: false,
     deliverable: null, constraint: [], allowCommit: false, resume: null,
     cleanEnv: false, keepEnv: [], keep: null, olderThan: null, yes: false,
+    startupTimeout: null, noOutputAfter: 60, summary: false, maxChars: 2000, maxItems: 40,
   };
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
@@ -1787,6 +1892,11 @@ function parseArgs(argv) {
     else if (a === '--sandbox') o.perm = 'sandbox';
     else if (a === '--bypass') o.perm = 'bypass';
     else if (a === '--timeout') { o.timeoutRaw = next(); o.timeout = Number(o.timeoutRaw); }
+    else if (a === '--startup-timeout') o.startupTimeout = Number(next());
+    else if (a === '--no-output-after') o.noOutputAfter = Number(next());
+    else if (a === '--summary') o.summary = true;
+    else if (a === '--max-chars') o.maxChars = Number(next());
+    else if (a === '--max-items') o.maxItems = Number(next());
     else if (a === '--wait') { o.waitRaw = next(); o.wait = Number(o.waitRaw); }
     else if (a === '--deliverable') o.deliverable = next();
     else if (a === '--constraint') o.constraint.push(next());
@@ -1803,6 +1913,7 @@ function parseArgs(argv) {
     else rest.push(a);
   }
   if (!Number.isFinite(o.wait) || o.wait < 0) die(`--wait must be a non-negative number of seconds (got "${o.waitRaw}")`);
+  if (!Number.isInteger(o.maxChars) || o.maxChars < 128 || o.maxChars > 8000 || !Number.isInteger(o.maxItems) || o.maxItems < 1 || o.maxItems > 100) die('projection limits: --max-chars 128..8000 and --max-items 1..100');
   if (o.keep !== null && (!Number.isInteger(o.keep) || o.keep < 0)) die('--keep must be a non-negative integer');
   if (o.olderThan !== null && (!Number.isFinite(o.olderThan) || o.olderThan < 0)) die('--older-than must be a non-negative number of days');
   if (o.raw && o.resume) die('--raw and --resume are incompatible: a resumed dispatch must carry its policy rules');
@@ -1817,8 +1928,8 @@ const DRIVER_CONTRACT = Object.freeze({
   result_schema: SCHEMA,
   commands: ['start', 'collect', 'status', 'list', 'doctor', 'prune', 'contract'],
   start_flags: ['--harness', '--task', '--cwd', '--model', '--sandbox', '--timeout',
-    '--deliverable', '--constraint', '--resume', '--allow-commit'],
-  collect_flags: ['--wait', '--json'],
+    '--deliverable', '--constraint', '--resume', '--allow-commit', '--startup-timeout', '--no-output-after'],
+  collect_flags: ['--wait', '--json', '--summary', '--max-chars', '--max-items'],
   env: ['DELEGATE_RUNS_DIR'],
   meta_fields: ['run_id', 'harness', 'model', 'constraint', 'permission', 'allow_commit'],
   result_fields: ['schema', 'run_id', 'harness', 'status', 'status_reason', 'status_provenance',
@@ -1832,9 +1943,9 @@ function cmdContract() { console.log(JSON.stringify(DRIVER_CONTRACT, null, 2)); 
 const HELP = `delegate.mjs - run one task on an external agent CLI, in the background
 
   start    --harness <id> --task <text> [--cwd DIR] [--model M] [--sandbox]
-           [--timeout SEC] [--deliverable TEXT] [--constraint TEXT]...
+           [--timeout SEC] [--startup-timeout SEC] [--no-output-after SEC] [--deliverable TEXT] [--constraint TEXT]...
            [--resume <run_id>] [--allow-commit] [--clean-env] [--keep-env NAME]... [--raw]
-  collect  <run_id> [--wait SEC] [--json]
+  collect  <run_id> [--wait SEC] [--json | --summary [--max-chars N] [--max-items N]]
   status   <run_id>
   list
   doctor
@@ -1852,6 +1963,7 @@ export {
   HARNESSES, DRIVER_CONTRACT, tokens, parseEnvelope, parsePorcelainZ, claimMismatch,
   readOnlyVerdict, normaliseResult, resolveBin, envelope, deltaEnvelope, policyLines,
   gitCapture, gitCompare, headMovement, finalizeOnce, finalizeStartFailure, positiveIntEnv,
+  executionProgress,
 };
 
 // Node loads the entry module by its real path, so a skill folder reached

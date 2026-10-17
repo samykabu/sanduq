@@ -57,16 +57,26 @@ def _lane_from_attempts(rows, run_by_id, now):
     `active_s` is the sum of work intervals a producer observed (`active_intervals` on an attempt) and is None
     otherwise: an attempt's start-to-end span is wall time and is never reported as active work time."""
     rows = sorted(rows, key=lambda a: (a.get('started_at') or '', str(a.get('run_id') or '')))
-    shown, active_total, first, last_end, running = [], None, None, None, False
+    shown, active_total, running, spent = [], None, False, None
     for a in rows:
         run = run_by_id.get(a.get('run_id')) or {}
         start = parse_time(a.get('started_at'))
         end = parse_time(a.get('ended_at') or run.get('ended_at'))
         live = a.get('status') in wf.ACTIVE
         running = running or live
-        first = first or start
-        if end:
-            last_end = end
+        # An attempt's own duration: start to its end, or to now while it runs. A finished attempt with no recorded end
+        # falls back to the harness-measured duration, never to now. Durations are summed, so a lane that was reused
+        # hours later does not show the gap between its attempts as work.
+        if start and end:
+            length = seconds(start, end)
+        elif start and live:
+            length = seconds(start, now)
+        else:
+            length = a.get('actual_duration_seconds')
+            length = length if isinstance(length, (int, float)) and not isinstance(length, bool) else None
+            length = int(length) if length is not None and length >= 0 else None
+        if length is not None:
+            spent = (spent or 0) + length
         usage = run.get('usage')
         tokens = None if not usage else {'fresh_input': usage['input_fresh'], 'cache_read': usage['cache_read'],
                                          'cache_write': usage['cache_write'], 'output': usage['output_total'],
@@ -81,7 +91,7 @@ def _lane_from_attempts(rows, run_by_id, now):
     status = ('active' if final in wf.ACTIVE else 'done' if final in DONE_STATES or rows[-1].get('accepted_at')
               else 'waiting' if final in WAIT_STATES else 'failed' if final in FAIL_STATES
               else 'blocked' if final == 'blocked' else 'pending')
-    return {'status': status, 'attempts': shown, 'elapsed_s': seconds(first, now if running else last_end),
+    return {'status': status, 'attempts': shown, 'elapsed_s': spent,
             'active_s': active_total, 'row': rows[-1], 'running': running}
 
 
@@ -127,6 +137,91 @@ def _child_numbers(child):
     return [n for n in [child.get('lane_no'), *(child.get('lane_aliases') or [])] if isinstance(n, int) and not isinstance(n, bool)]
 
 
+TASK_IDENTITY = re.compile(r'/(T\d+)$')
+
+
+def link_attempts(lanes, grouped):
+    """Attach delegation attempts to the facts lane that describes the same run, so one run is one lane.
+
+    Only durable ids link them, never labels, time windows or matching model requests:
+      1. the lane owner is a delegation identity            -> all of that identity's attempts
+      2. the lane owner is a delegation run id              -> that attempt
+    A run no lane names keeps its own `W<n>` lane. An attempt is never in two lanes and never lost."""
+    facts = [l for l in lanes if l['origin'] == 'facts']
+    by_run = {str(a['run_id']): (identity, a) for identity, rows in grouped.items() for a in rows if a.get('run_id')}
+
+    def take(lane, identity, row):
+        grouped[identity] = [r for r in grouped[identity] if r is not row]
+        lane.setdefault('rows', []).append(row)
+
+    for lane in facts:
+        owner = str(lane['owner'] or '')
+        if owner in grouped:
+            for row in list(grouped[owner]):
+                take(lane, owner, row)
+    for lane in facts:
+        owner = str(lane['owner'] or '')
+        if not lane.get('rows') and owner in by_run:
+            identity, row = by_run[owner]
+            if any(r is row for r in grouped.get(identity, [])):
+                take(lane, identity, row)
+
+
+KEEP_KINDS = ('stage', 'failure', 'decision', 'block', 'workflow')
+KEEP_LIMIT, OTHER_LIMIT, NOTE_LIMIT = 50, 30, 15
+
+
+def bounded_events(events):
+    """Events stay bounded but are not just the newest lines: stage acceptances, failures, decisions, blockers and
+    workflow pauses keep their own budget, so a burst of delegation lines cannot push them out."""
+    important = [e for e in events if e['kind'] in KEEP_KINDS][-KEEP_LIMIT:]
+    notes = [e for e in events if e['kind'] == 'note'][-NOTE_LIMIT:]  # the coordinator's own record: its own budget
+    rest = [e for e in events if e['kind'] not in KEEP_KINDS and e['kind'] != 'note'][-OTHER_LIMIT:]
+    return sorted(important + notes + rest, key=lambda e: (e['at'], e['kind'], e['text']))
+
+
+def fold_lanes(lanes, grouped):
+    """One delegation identity is one lane. Facts lanes whose attempts all belong to one identity are the same work seen
+    twice (a stage run, or a task run), so they fold into a single lane per identity, keeping the lowest lane id; the
+    other ids stay resolvable through the returned alias map (a blocker on L4 still lands on the folded lane). A lane
+    holding attempts of several identities is a real workstream and stays as it is."""
+    members, order = {}, []
+    for lane in lanes:
+        names = {str(r['identity']) for r in lane.get('rows') or []}
+        if lane['origin'] == 'facts' and len(names) == 1:
+            name = next(iter(names))
+            members.setdefault(name, []).append(lane)
+            order.append(name if len(members[name]) == 1 else None)
+        else:
+            order.append(lane)
+    out, aliases = [], {}
+    for item in order:
+        if item is None:
+            continue
+        if not isinstance(item, str):
+            out.append(item)
+            continue
+        group = members[item]
+        head, rest = group[0], grouped.get(item) or []
+        if len(group) == 1 and not rest:
+            out.append(head)
+            continue
+        rows = [r for lane in group for r in lane['rows']] + list(rest)
+        grouped[item] = []
+        tasks = list(dict.fromkeys(t for lane in group for t in lane['tasks']))
+        closed = all(lane['closed'] for lane in group)
+        ends = [lane['ended'] for lane in group]
+        starts = [lane['since'] for lane in group if lane['since']]
+        merged = dict(head, rows=rows, tasks=tasks, closed=closed, owner=item, requested=group[-1]['requested'],
+                      label=head['label'] if TASK_IDENTITY.search(item) and head['label'] != head['id']
+                      else clean(item.rsplit('/', 1)[-1], 60),
+                      since=min(starts) if starts else None, ended=max(ends) if closed and all(ends) else None)
+        for lane in group[1:]:
+            aliases[lane['id']] = head['id']
+        out.append(merged)
+    return out, aliases
+
+
 def build(ctx, now, rev=1, state=None, plan=None):
     state = {} if state is None else state
     cfg = ctx.config_data()
@@ -160,31 +255,43 @@ def build(ctx, now, rev=1, state=None, plan=None):
                     'since': iso(started)}
 
     # ---- lanes --------------------------------------------------------------------------------------------
-    lanes, by_owner = [], {}
-    firsts = {}
+    lanes = []
+    history = {}
     for rec in loaded['all']:
-        firsts.setdefault(rec['id'], rec.get('ts'))
+        if rec['kind'] == 'lane':
+            history.setdefault(rec['id'], []).append(rec)
     for rec in sorted((r for r in fact_rows if r['kind'] == 'lane'), key=lambda r: natural(r['id'])):
+        # A lane id is reused for new owners. Its current assignment began with the first record of the unbroken tail
+        # that names the current owner, not when the id first appeared, so a reused lane does not span the gap.
+        tail = []
+        for earlier in reversed(history.get(rec['id'], [])):
+            if earlier.get('owner') != rec.get('owner'):
+                break
+            tail.append(earlier)
+        began = (tail[-1] if tail else rec).get('ts')
         lane = {'id': rec['id'], 'label': clean(rec.get('label') or rec['id'], 60), 'owner': rec.get('owner'), 'origin': 'facts',
                 'requested': {k: (rec.get('requested') or {}).get(k) for k in ('harness', 'model', 'effort')},
                 'tasks': [t for t in rec.get('tasks') or [] if t in tmap], 'closed': rec.get('state') == 'closed',
-                'since': parse_time(firsts.get(rec['id']))}
+                'since': parse_time(began), 'ended': parse_time(rec.get('ts')) if rec.get('state') == 'closed' else None}
         lanes.append(lane)
-        if lane['owner']:
-            by_owner[lane['owner']] = lane
     grouped = {}
     for a in sorted(attempts, key=lambda a: (a.get('started_at') or '', str(a.get('run_id')))):
         grouped.setdefault(str(a['identity']), []).append(a)
+    link_attempts(lanes, grouped)
+    lanes, folded = fold_lanes(lanes, grouped)
+    retired = {}
     for number, (identity, rows) in enumerate(grouped.items(), 1):
-        lane = by_owner.get(identity)
-        if lane is None:
-            lane = {'id': f'W{number}', 'label': clean(identity.rsplit('/', 1)[-1], 60), 'owner': identity,
-                    'origin': 'workflow-delegation', 'requested': {}, 'tasks': [], 'closed': False, 'since': None}
-            lanes.append(lane)
-        lane['rows'] = rows
-        for tid in wf.identity_tasks(rows[-1]):
-            if tid in tmap and tid not in lane['tasks']:
-                lane['tasks'].append(tid)
+        if not rows:
+            retired[f'W{number}'] = identity
+            continue
+        lane = {'id': f'W{number}', 'label': clean(identity.rsplit('/', 1)[-1], 60), 'owner': identity,
+                'origin': 'workflow-delegation', 'requested': {}, 'tasks': [], 'closed': False, 'since': None, 'rows': rows}
+        lanes.append(lane)
+    for lane in lanes:
+        for row in lane.get('rows') or []:
+            for tid in wf.identity_tasks(row):
+                if tid in tmap and tid not in lane['tasks']:
+                    lane['tasks'].append(tid)
     host_children = []
     for snap in snaps:
         for key, child in sorted((snap.get('children') or {}).items(), key=lambda kv: (kv[1].get('started_at') or '', kv[0])):
@@ -247,9 +354,15 @@ def build(ctx, now, rev=1, state=None, plan=None):
         lane['tasks'] = [t for t in lane['tasks'] if task_lane.get(t) == lane['id']]
 
     # ---- blockers -----------------------------------------------------------------------------------------
+    shown_in = {str(r['identity']): lane['id'] for lane in lanes for r in lane.get('rows') or []}
+    for wid, name in retired.items():  # a retired W lane id keeps meaning the lane its identity's attempts are shown in
+        if name in shown_in:
+            folded.setdefault(wid, shown_in[name])
+
     def resolve(ref):
         """A reference to a child (its C<n> number or a retired alias) means the lane that child is displayed in now."""
-        return identity.get(ref, ref)
+        ref = folded.get(ref) or identity.get(ref, ref)
+        return folded.get(ref) or ref
 
     blockers = []
     for rec in sorted((r for r in fact_rows if r['kind'] == 'block' and r.get('state') == 'open'), key=lambda r: natural(r['id'])):
@@ -257,7 +370,7 @@ def build(ctx, now, rev=1, state=None, plan=None):
         by = dict(by, ref=resolve(by.get('ref'))) if by.get('type') == 'lane' else by
         blockers.append({'id': rec['id'], 'target': resolve(rec.get('target')), 'by': by,
                          'since': rec.get('ts'), 'source': 'facts'})
-    if cp and cp.get('pause'):
+    if cp and cp.get('pause') and not cp['pause'].get('superseded'):
         blockers.append({'id': 'WP', 'target': 'feature', 'by': {'type': 'external', 'ref': cp['pause']['reason']},
                          'since': cp['pause']['at'], 'source': 'workflow-pause'})
 
@@ -302,9 +415,11 @@ def build(ctx, now, rev=1, state=None, plan=None):
                                    if child.get('started_at') else unknown())
         if lane['origin'] == 'coordinator':
             lane['elapsed'], lane['last_observed_at'] = orchestrator['elapsed'], (main or {}).get('last_observed_at')
-        elif lane['origin'] == 'facts' and not lane.get('rows') and lane['since'] and not lane['closed']:
-            ended = _child_end(lane)
-            lane['elapsed'] = measure(seconds(lane['since'], ended[1] if ended else now), 'facts', now)
+        elif lane['origin'] == 'facts' and not lane.get('rows') and lane['since']:
+            # Frozen at the last terminal evidence: the lane's close record, else the merged children's end, else it is
+            # still running and the clock is now.
+            ended = lane['ended'] or (_child_end(lane) or (None, None))[1]
+            lane['elapsed'] = measure(seconds(lane['since'], ended or now), 'facts', now)
         lane['_derived'] = derived
 
     # Legacy supplemental attempts (Workflow shim). They are labelled origin 'legacy', appended after producer
@@ -330,6 +445,18 @@ def build(ctx, now, rev=1, state=None, plan=None):
         lane_blockers.setdefault(b['target'], []).append(b)
     report_lanes, unassigned = [], {'active': [], 'waiting': [], 'blocked': [], 'done': []}
 
+    def _later_activity(lane):
+        """An attempt still active after the lane closed: it ended after the close, or is still running."""
+        if not lane['ended']:
+            return False
+
+        def last_activity(row):
+            began = parse_time(row.get('started_at'))
+            if row.get('status') == 'running' and not row.get('ended_at'):
+                return now
+            return parse_time(row.get('ended_at')) or began or lane['ended']
+        return any(last_activity(r) > lane['ended'] for r in lane.get('rows') or [])
+
     def status_of(lane):
         todo = [t for t in lane['tasks'] if not tmap[t]['done']]
         if lane['origin'] == 'host-child':
@@ -342,8 +469,8 @@ def build(ctx, now, rev=1, state=None, plan=None):
         if lane['origin'] == 'coordinator':
             recent = main and (parse_time(main.get('last_observed_at')) or now) + timedelta(seconds=stale_after) >= now
             return 'active' if recent else ('pending' if not lane['tasks'] else 'waiting')
-        if lane['closed']:
-            return 'done'
+        if lane['closed'] and not _later_activity(lane):
+            return 'done'  # historical closure never outranks an attempt still active after the lane closed
         if lane_blockers.get(lane['id']):  # an open blocker outranks terminal child evidence
             return 'blocked'
         ended = None if lane['_derived'] else _child_end(lane)
@@ -420,7 +547,9 @@ def build(ctx, now, rev=1, state=None, plan=None):
         if a.get('started_at'):
             events.append({'at': a['started_at'], 'kind': 'delegation', 'text': clean(f"run {a.get('run_id')} started for {a['identity']}", 120)})
         if a.get('ended_at'):
-            events.append({'at': a['ended_at'], 'kind': 'delegation', 'text': clean(f"run {a.get('run_id')} {a.get('status')}", 120)})
+            failed = a.get('status') in FAIL_STATES
+            events.append({'at': a['ended_at'], 'kind': 'failure' if failed else 'delegation',
+                           'text': clean(f"run {a.get('run_id')} {a.get('status')} ({str(a['identity']).rsplit('/', 1)[-1]})", 120)})
     for snap, key, child in host_children:
         label = child.get('description') or child.get('subagent_type') or key
         if child.get('started_at'):
@@ -428,14 +557,25 @@ def build(ctx, now, rev=1, state=None, plan=None):
         if child.get('ended_at'):
             events.append({'at': child['ended_at'], 'kind': 'subagent', 'text': clean(f"{label} {child.get('status')}", 120)})
     if cp and cp.get('pause') and cp['pause'].get('at'):
-        events.append({'at': cp['pause']['at'], 'kind': 'workflow', 'text': clean('paused: ' + cp['pause']['reason'], 120)})
+        resolved = f" (superseded: {cp['pause']['superseded']})" if cp['pause'].get('superseded') else ''
+        events.append({'at': cp['pause']['at'], 'kind': 'workflow', 'text': clean('paused' + resolved + ': ' + cp['pause']['reason'], 120)})
+    for receipt in (cp or {}).get('receipts') or []:
+        events.append({'at': receipt['at'], 'kind': 'stage', 'text': clean(f"{receipt['stage']} accepted", 120)})
     events.sort(key=lambda e: (e['at'], e['kind'], e['text']))
+    events = bounded_events(events)
 
     # ---- feature, collection, summary ---------------------------------------------------------------------
     stage = None
     if cp:
-        value = cp['stage'] or (cp['status'] if cp['status'] not in (None, 'in-progress') else None)
-        stage = {'value': value, 'source': 'workflow-checkpoint'} if value else None
+        # The active claim names the stage. With no claim the last accepted receipt does (the stage the feature is at),
+        # and the checkpoint status says whether it is finished; only without receipts does the status stand in.
+        last = cp.get('last_accepted')
+        if cp['stage']:
+            stage = {'value': cp['stage'], 'source': 'workflow-checkpoint'}
+        elif last:
+            stage = {'value': last['stage'], 'source': 'workflow-receipts', 'status': cp['status']}
+        elif cp['status'] not in (None, 'in-progress'):
+            stage = {'value': cp['status'], 'source': 'workflow-checkpoint'}
     plan_name = plan_info(ctx.root, ctx.feature).get('name') or Path(ctx.feature).name if ctx.is_plan else None
     title = tk['title'] or (plan_name if ctx.is_plan else _heading(ctx.feature_dir / 'spec.md')) or Path(ctx.feature).name
     feature = {'id': plan_name if ctx.is_plan else Path(ctx.feature).name, 'title': title, 'dir': ctx.feature,
@@ -451,7 +591,7 @@ def build(ctx, now, rev=1, state=None, plan=None):
                            'dirty': bool(state.get('dirty')), 'last_event_at': state.get('last_event_at'),
                            'diagnostics': count_lines(ctx.diag)},
             'feature': feature, 'orchestrator': orchestrator, 'lanes': report_lanes, 'unassigned_tasks': unassigned,
-            'tasks': task_out, 'decisions': {'pending': pending, 'made': made}, 'blockers': blockers, 'events': events[-30:],
+            'tasks': task_out, 'decisions': {'pending': pending, 'made': made}, 'blockers': blockers, 'events': events,
             'summary': {'tasks_total': len(task_ids), 'tasks_done': sum(1 for t in tk['tasks'] if t['done']),
                         'lanes_active': sum(1 for l in report_lanes if l['status'] == 'active'),
                         'blocked': len(blockers), 'decisions_pending': len(pending)}, **extra}

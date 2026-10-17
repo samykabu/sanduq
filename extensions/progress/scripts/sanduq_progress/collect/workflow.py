@@ -3,7 +3,7 @@ older shapes. Progress never imports Workflow code and never writes these files.
 import re
 from pathlib import Path
 
-from ..util import clean, read_json
+from ..util import clean, parse_time, read_json
 
 ACTIVE = ('starting', 'running')
 
@@ -20,10 +20,42 @@ def checkpoint(feature_dir):
         link = {'number': int(match.group(2)), 'url': f'https://github.com/{match.group(1)}/issues/{match.group(2)}'}
     pause = data.get('pause') if isinstance(data.get('pause'), dict) else None
     first = next((h.get('at') for h in data.get('branch_history', []) if isinstance(h, dict) and h.get('at')), None)
+    accepted = accepted_receipts(data.get('receipts'))
+    last = accepted[-1] if accepted else None
+    # A pause is a snapshot taken when the feature stopped. An accepted receipt completed after it means the feature
+    # moved on, so the pause is history, not a blocker. The checkpoint keeps the stale record; we do not.
+    paused_at = parse_time(pause.get('at')) if pause else None
+    claimed = parse_time(active.get('claimed_at')) if active else None
+    status = data.get('status')
+    # Workflow's claim moves the status off `paused` and stamps `active.claimed_at`, but never clears `pause`.
+    superseded = None  # why the pause is history: a neutral reason, or None while it still stands
+    if pause:
+        if paused_at and last and last['_when'] > paused_at:
+            superseded = 'later accepted receipt'
+        elif paused_at and claimed and claimed > paused_at:
+            superseded = 'newer claim'
+        elif status not in (None, 'paused'):
+            superseded = f'status is {status}'
     return {'branch': data.get('branch'), 'feature': data.get('feature'), 'status': data.get('status'),
             'stage': active.get('stage') if active else None, 'issue': link, 'updated_at': data.get('updated_at'),
-            'started_at': first, 'pause': {'reason': clean(pause.get('reason'), 120), 'at': pause.get('at')}
+            'started_at': first, 'last_accepted': {'stage': last['stage'], 'at': last['at']} if last else None,
+            'receipts': [{'stage': r['stage'], 'at': r['at']} for r in accepted],
+            'pause': {'reason': clean(pause.get('reason'), 120), 'at': pause.get('at'), 'superseded': superseded}
             if pause else None}
+
+
+def accepted_receipts(receipts):
+    """Accepted stage receipts ({stage, at, _when}) in completion order: outcome `passed` with a completion time. Ties
+    keep the receipts' own (lifecycle) order. Receipt bodies are not read beyond these three fields."""
+    rows = []
+    for index, (key, item) in enumerate((receipts or {}).items() if isinstance(receipts, dict) else ()):
+        if not isinstance(item, dict) or item.get('outcome') != 'passed':
+            continue
+        at = item.get('completed_at') or item.get('created_at')
+        when = parse_time(at)
+        if when:
+            rows.append((when, index, {'stage': str(item.get('stage') or key), 'at': at, '_when': when}))
+    return [r[2] for r in sorted(rows, key=lambda r: (r[0], r[1]))]
 
 
 def attempts(feature_dir):

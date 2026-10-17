@@ -37,6 +37,18 @@ class ReportingInstructions(unittest.TestCase):
             self.assertIn('`' + mode + '`', text)
         self.assertIn('progress_bridge.py mode', text)
 
+    def test_stage_runs_never_get_progress_lane_calls(self):
+        text = flat(REFERENCES / 'reporting.md')
+        self.assertIn('Lifecycle stage runs', text)
+        self.assertIn('recorded by the delegation ledger', text)
+        self.assertIn('no `progress lane` for them', text)
+        self.assertIn('once per Execute workstream', text)
+        self.assertIn('never per run', text)
+        self.assertIn("updates that lane's owner", text)
+        for path in self.references():
+            if path.name != 'reporting.md':
+                self.assertNotRegex(flat(path), r'progress lane [^.]*(?:stage|scope-worker)', path.name)
+
     def test_decision_reference_stays_small(self):
         self.assertLess(len((REFERENCES / 'reporting.md').read_bytes()), 4000)
 

@@ -218,7 +218,7 @@ Unbound or ambiguous observations are dropped and counted in diagnostics.
  "schema":"sanduq.progress.v2","rev":17,"generated_at":"…","stale_after_seconds":600,
  "collection":{"automatic":true,"hosts":["claude"],"dirty":false,"last_event_at":"…","diagnostics":0},
  "feature":{"id":"624-…","title":"…","dir":"specs/624-…","branch":"…","issue":{"number":624,"url":"…"}|null,
-            "stage":{"value":"execute","source":"workflow-checkpoint"}|null,"started_at":"…","workflow":true},
+            "stage":{"value":"execute","source":"workflow-checkpoint|workflow-receipts","status":"in-progress"}|null,"started_at":"…","workflow":true},
  "orchestrator":{"host":"claude","session_id":"…","model":M,"effort":M,"context":M,
                  "elapsed":M,"active":M,"since":"…"},
  "lanes":[{"id":"L1","label":"…","owner":"…","origin":"facts|workflow-delegation|host-child|coordinator",
@@ -232,7 +232,7 @@ Unbound or ambiguous observations are dropped and counted in diagnostics.
  "tasks":{"T001":{"title":"…(≤160)","phase":"…","done":true,"parallel":false,"depends_on":["T000"],"lane":"L1"}},
  "decisions":{"pending":[D],"made":[D]},          // D = {id, question, options, selected, decided_by, at, url, source}
  "blockers":[{"id":"B3","target":"T005","by":{"type":"lane","ref":"L2"},"since":"…","source":"facts|workflow-pause|delegation"}],
- "events":[{"at":"…","kind":"…","text":"…(≤120)"}],   // last 30, derived; notes included
+ "events":[{"at":"…","kind":"…","text":"…(≤120)"}],   // bounded (≤95), derived; stage, failure, decision, block and workflow lines (50), notes (`NOTE_LIMIT`, 15) and all other lines (30) each keep their own budget
  "summary":{"tasks_total":40,"tasks_done":12,"lanes_active":2,"blocked":1,"decisions_pending":1}
 }
 ```
@@ -242,6 +242,34 @@ Unbound or ambiguous observations are dropped and counted in diagnostics.
 **Units.** Every duration in the projection (`orchestrator.elapsed`, `orchestrator.active`, `lanes[].elapsed`,
 `lanes[].active`) is a whole number of **seconds**; the UI formats them as `1h 2m` / `3m 4s` / `5s`. Host snapshots keep
 the host's own `*_ms` fields (`elapsed_ms`, `api_ms`) and the projection converts them. Timestamps are ISO-8601 strings.
+
+**Stage.** `feature.stage.value` is the stage of the active claim when there is one (`source: "workflow-checkpoint"`).
+With no claim it is the stage of the latest accepted receipt (`outcome: "passed"`, ordered by `completed_at`, then
+receipt order) with `source: "workflow-receipts"` and `status` copied from the checkpoint (`in-progress`, ...). Only a
+checkpoint without receipts falls back to a terminal checkpoint status; otherwise `stage` is null.
+
+**Pause.** A checkpoint `pause` becomes the `WP` blocker (`source: "workflow-pause"`) only while it is the latest word: the
+checkpoint status is still `paused`, no new claim (`active.claimed_at`) is newer than the pause, and no accepted receipt
+was completed after it. Workflow's `claim` moves the status off `paused` but never clears `pause`, so any of the three
+makes the pause history: no blocker, and the event reads `paused (superseded: <reason>): ...` with the real reason (`status is <x>`, `newer claim` or
+`later accepted receipt`).
+
+**One run, one lane.** A facts lane and a Workflow delegation describe the same work when a durable id says so, and
+only then. Two rules: the lane `owner` is a delegation `identity`, or the `owner` is a delegation `run_id`. Time
+windows and matching requested harness or model never link a lane and a run; a run no lane names by id keeps its own
+`W<n>` lane. A lane's status comes from its attempts: a closed lane's closure counts only while no absorbed attempt
+started after the lane closed; a newer attempt decides instead (running: `active`, failed: `failed`, blocked:
+`blocked`, successful but not yet accepted: `waiting`, or the derived status). Facts lanes that end up holding attempts of one identity fold into one lane per identity: the lowest lane id
+survives, `owner` becomes the identity, and a blocker that targets a folded id, or a retired `W<n>` id, resolves to the surviving lane (blocker targets,
+`by.ref` and lane references all go through the alias). Labels are never compared. Every attempt appears in exactly one
+lane; an identity named in a multi-identity workstream lane keeps its share there and is not also folded elsewhere
+unless its own lane exists, so a task id can appear in two lanes' attempts (T021 on the #842 fixture).
+
+**Lane time.** A lane with attempts reports `elapsed` as the sum of its attempts' own durations (start to end, or to
+now while one runs; a finished attempt with no end uses the harness-measured duration), never the span between the
+first start and the last end, so reuse gaps are not work. A facts lane with no attempts counts from the first record
+of its current owner (a reused lane id restarts) and stops at its close record, or at its merged children's last end;
+only an open lane runs to now.
 
 `elapsed` = wall time since start. `active` = sum of observed active intervals, and is unknown (`value:null`,
 `fidelity:"unknown"`) unless a producer supplies them: a delegation attempt may carry `active_intervals`

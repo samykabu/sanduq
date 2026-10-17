@@ -620,7 +620,7 @@ poll. Failures print `progress: error PROGRESS_THEME_INVALID reason` and exit 2,
 | `tokens` | `{"light": {...}, "dark": {...}}` | Colour overrides, below |
 | `font` | `{"sans": "...", "mono": "..."}` | A font stack, up to 200 characters, none of `; { } < > \` or a newline |
 
-Block names are `header`, `orchestrator`, `lanes`, `boards`, `decisions`, `blockers` and `events`. Lists hold unique known names.
+Block names are `header`, `decisions`, `blockers`, `orchestrator`, `lanes`, `boards` and `events`, which is also the default order (what needs attention comes first). Lists hold unique known names.
 
 Tokens are `#rgb` or `#rrggbb` colours:
 
@@ -648,7 +648,7 @@ Example, the project `theme.json`:
 }
 ```
 
-This draws the header, lanes and boards first, then the blocks not listed (orchestrator, decisions, blockers) in their
+This draws the header, lanes and boards first, then the blocks not listed (decisions, blockers, orchestrator) in their
 default order, and hides events.
 
 ## Export formats
@@ -707,14 +707,14 @@ The JSON export is the full projection, indented, followed by a newline.
 | --- | --- |
 | `schema`, `rev`, `generated_at`, `stale_after_seconds` | `sanduq.progress.v2`; the refresh counter; the UTC time; 600 by default |
 | `collection` | `automatic` (a host has reported), `hosts`, `dirty`, `last_event_at`, `diagnostics` (lines in the feature's log) |
-| `feature` | `id`, `title`, `dir`, `branch`, `issue` (`number`, `url`, or null), `stage` (`value`, `source`, or null), `started_at`, `workflow`. A plan report adds `mode: "plan"` and `source` (the repo-relative or `external:<name>` plan reference); a feature report has neither field |
+| `feature` | `id`, `title`, `dir`, `branch`, `issue` (`number`, `url`, or null), `stage` (`value`, `source` (`workflow-checkpoint` or `workflow-receipts`), optional `status`, or null), `started_at`, `workflow`. A plan report adds `mode: "plan"` and `source` (the repo-relative or `external:<name>` plan reference); a feature report has neither field |
 | `orchestrator` | `host`, `session_id`, `since`, and the measurements `model`, `effort`, `context`, `elapsed`, `active` |
 | `lanes[]` | `id`, `label`, `owner`, `origin` (`facts`, `workflow-delegation`, `host-child`, `coordinator`), `requested` (`harness`, `model`, `effort`), `observed` (`model`, `effort`), `status`, `elapsed`, `active`, `last_observed_at`, `attempts[]`, `tasks` (`active`, `waiting`, `blocked[]`, `done`) |
 | `unassigned_tasks` | The same four task lists, for tasks no lane owns |
 | `tasks` | By id: `title`, `phase`, `done`, `parallel`, `depends_on`, `lane` |
 | `decisions` | `pending[]` and `made[]`: `id`, `question`, `options`, `selected`, `decided_by`, `at`, `url`, `source` |
 | `blockers[]` | `id`, `target`, `by` (`type`, `ref`), `since`, `source` (`facts`, `workflow-pause`, `delegation`) |
-| `events[]` | The last 30, oldest first: `at`, `kind`, `text` |
+| `events[]` | Bounded (up to 50 stage, failure, decision, block and workflow lines, up to 15 notes (`NOTE_LIMIT`) and up to 30 others), oldest first: `at`, `kind` (`stage`, `failure`, `decision`, `block`, `workflow`, `delegation`, `subagent`, `lane`, `note`, `attempt`), `text` |
 | `summary` | `tasks_total`, `tasks_done`, `lanes_active`, `blocked`, `decisions_pending` |
 | `overhead[]` | Only when present: attempts that belong to no lane |
 

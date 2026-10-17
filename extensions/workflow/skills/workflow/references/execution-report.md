@@ -12,7 +12,7 @@ retained, messaged or polled solely for reporting.
 The current coordinator is the sole writer and follows the mode in
 [`reporting.md`](reporting.md). In `projection` and `refresh` mode the report
 follows `tasks.md`, the delegation ledger and host hooks; the coordinator records
-only lanes, blockers and notes, and none of the legacy calls apply. In `legacy`
+only workstream lanes (never lifecycle stage runs, which the delegation ledger records), blockers and notes, and none of the legacy calls apply. In `legacy`
 mode make the [legacy reporter calls](#legacy-reporter-calls-mode-legacy-only)
 on assignment, completion, failure, recovery and each lifecycle transition.
 
