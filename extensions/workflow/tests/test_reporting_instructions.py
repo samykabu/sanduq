@@ -45,7 +45,6 @@ class ReportingInstructions(unittest.TestCase):
         self.assertIn('once per Execute workstream', text)
         self.assertIn('never per run', text)
         self.assertIn("updates that lane's owner", text)
-        self.assertIn('from Progress 1.2.0', text)
         for path in self.references():
             if path.name != 'reporting.md':
                 self.assertNotRegex(flat(path), r'progress lane [^.]*(?:stage|scope-worker)', path.name)

@@ -413,6 +413,17 @@ class ShimMappings(Project):
         lanes = [l for l in self.status()['lanes'] if l.get('origin') == 'facts']
         self.assertEqual(len(lanes), 1)
 
+    def test_reassigning_one_task_of_a_shared_lane_splits_it_out(self):
+        self.init()
+        for task in ('T002', 'T003'):
+            code, out, err = self.legacy('task', '--id', task, '--status', 'running', '--agent', 'worker-a', '--summary')
+            self.assertEqual(code, 0, out + err)
+        code, out, err = self.legacy('task', '--id', 'T003', '--status', 'running', '--agent', 'worker-b', '--summary')
+        self.assertEqual(code, 0, out + err)
+        lanes = {l['owner']: l for l in self.status()['lanes'] if l.get('origin') == 'facts'}
+        self.assertEqual(lanes['worker-a']['tasks']['active'], ['T002'])
+        self.assertEqual(lanes['worker-b']['tasks']['active'], ['T003'])
+
     def test_running_without_agent_never_forwards_an_invalid_lane(self):
         self.init()
         before = self.facts()

@@ -38,4 +38,3 @@ reporters for them. Check task boxes in `tasks.md` as usual. A budget overrun is
 If a legacy `progress.py` call is made while Progress is installed it is forwarded to the Progress CLI. An unsupported
 request prints a compatibility error and exits non-zero; do not retry it, use the verb named above instead.
 Do not pass secrets, absolute paths or transcript text to any reporting call. Lean mode follows the same table.
-If `progress_bridge.py mode --host codex` reports hooks not active, run once per session `progress bind --host codex --model <model> --effort <effort>` (self-reported, labelled so) from Progress 1.2.0.

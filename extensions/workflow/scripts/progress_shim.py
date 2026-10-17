@@ -151,7 +151,10 @@ def ensure_lane(fwd, report, task, agent, attempt_wanted=False):
         # Reassignment: the open facts lane that already carries the task keeps its identity and takes the new owner,
         # so a new worker or run never adds a second lane for the same work.
         held_by = next((l for l in lanes if task in lane_task_ids(l) and l.get('status') not in ('done', 'failed')), None)
-        if held_by is not None:
+        # Only a whole-workstream reassignment (the task is the lane's only open task) transfers the lane; otherwise the
+        # task is split out below and the other tasks keep their current owner.
+        done = {t for t, v in (report.get('tasks') or {}).items() if v.get('done')}
+        if held_by is not None and {t for t in lane_task_ids(held_by) if t not in done} <= {task}:
             fwd.call('lane', held_by['id'], '--owner', agent, '--label', agent)
             return held_by['id']
     for other in lanes:
