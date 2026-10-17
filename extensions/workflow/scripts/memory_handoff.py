@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -15,7 +16,8 @@ class HandoffError(Exception):
 def helper(root, *args):
     argv = [sys.executable, '-B', str(root / '.specify/extensions/memory/scripts/archive.py'),
             '--root', str(root), *args]
-    result = subprocess.run(argv, cwd=root, capture_output=True, text=True, encoding='utf-8')
+    environment = {**os.environ, 'PYTHONIOENCODING': 'utf-8'}
+    result = subprocess.run(argv, cwd=root, capture_output=True, text=True, encoding='utf-8', env=environment)
     try:
         body = json.loads(result.stdout)
     except (ValueError, TypeError):

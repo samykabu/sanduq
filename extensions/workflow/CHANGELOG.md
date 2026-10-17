@@ -2,6 +2,7 @@
 
 ## [1.10.4] - 2026-10-17
 
+- Force UTF-8 only for Memory helper I/O so Unicode recovery journals remain readable under Windows legacy code pages.
 - Queue Memory work after accepted Execute completion for both Core and SuperSpec. Repeated handoffs preserve existing queue entries; missing dependencies, disabled approval and check coverage failures keep their actual pending or blocked reason.
 - Add one local handoff for session entry and verified post-merge follow-up. It binds the exact feature, repository, PR and target, prioritizes active recovery and returns registered Memory actions for verification, synthesis and review. Product receipts and `pr_open` keep their existing meaning.
 

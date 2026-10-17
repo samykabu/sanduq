@@ -3,6 +3,7 @@
 No archive preparation/finalization, network, synthesis or fake archive success.
 """
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -205,6 +206,52 @@ class MemoryHandoffTests(unittest.TestCase):
         self.assertEqual(['--run', 'a' * 32], result['actions'][0]['arguments'])
         self.assertEqual('status', helper.call_args_list[-1].args[1])
         self.assertFalse(result['ok'])
+
+    def test_native_cli_recovers_unicode_active_run_under_cp1252(self):
+        self.install_memory()
+        run_id = 'b' * 32
+        text = 'Implemented \u2192 \u0645\u0631\u0627\u062c\u0639\u0629 \u0627\u0644\u0630\u0627\u0643\u0631\u0629'
+        active = self.memory_state / 'active.json'
+        journal = self.memory_state / 'runs' / run_id / 'journal.json'
+        w.write(active, {'run_id': run_id})
+        w.write(journal, {'run_id': run_id, 'root': str(self.root), 'phase': 'synthesis',
+                          'units': [{'id': 'L1', 'text': text}]})
+        before = {path: path.read_bytes() for path in (active, journal, self.policy_file)}
+        head = w.git(self.root, 'rev-parse', 'HEAD')
+        environment = {**os.environ, 'PYTHONIOENCODING': 'cp1252', 'PYTHONUTF8': '0'}
+        result = subprocess.run(
+            [sys.executable, '-B', str(Path(w.__file__)), '--root', str(self.root),
+             'memory-handoff', '--transition', 'session'],
+            env=environment, capture_output=True)
+        self.assertEqual(b'', result.stderr)
+        body = json.loads(result.stdout.decode('utf-8'))
+        self.assertEqual('MEMORY_ACTIVE_RECOVERY_REQUIRED', body['reason'])
+        # Recovery still gates new lifecycle work; retrieving it is not finalization.
+        self.assertEqual(1, result.returncode)
+        self.assertFalse(body['ok'])
+        self.assertEqual('blocked', body['status'])
+        self.assertFalse(body['pending']['enabled'])
+        self.assertEqual('synthesis', body['pending']['active_phase'])
+        self.assertIsNone(body['pending']['writer'])
+        self.assertEqual(text, body['recovery']['active']['units'][0]['text'])
+        self.assertEqual([{'command': 'speckit.memory.session', 'arguments': ['--run', run_id],
+                           'reason': 'Resume the active transaction before new work.'}], body['actions'])
+        for path, content in before.items():
+            self.assertEqual(content, path.read_bytes())
+        self.assertEqual(head, w.git(self.root, 'rev-parse', 'HEAD'))
+        self.assertFalse((self.memory_state / 'approval.json').exists())
+        self.assertFalse((self.memory_state / 'pending.json').exists())
+
+    def test_helper_overrides_only_child_io_encoding(self):
+        process = subprocess.CompletedProcess([], 0, '{"success":true,"data":{}}', '')
+        with patch.dict(os.environ, {'PYTHONIOENCODING': 'cp1252', 'PYTHONUTF8': '0',
+                                     'SANDUQ_UTF8_PROBE': 'preserve exactly'}):
+            environment = dict(os.environ)
+            with patch.object(mh.subprocess, 'run', return_value=process) as invoke:
+                self.assertEqual({}, mh.helper(self.root, 'status'))
+            self.assertTrue({**environment, 'PYTHONIOENCODING': 'utf-8'} == invoke.call_args.kwargs['env'],
+                            'Child environment changed beyond its I/O encoding')
+            self.assertTrue(environment == dict(os.environ), 'Parent environment was modified')
 
     def test_nonzero_false_and_malformed_envelopes_fail_and_remain_durable(self):
         self.install_memory()
