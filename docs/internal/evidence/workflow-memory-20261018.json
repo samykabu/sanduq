@@ -83,5 +83,30 @@
       "bytes": 722996
     }
   },
-  "publication_boundary": "Local Windows ZIP hashes are local identities. Published Linux release assets and inventories require separate verification. Automatic archival approval is unchanged."
+  "publication_boundary": "Local Windows ZIP hashes are local identities. Published Linux release assets and inventories require separate verification. Automatic archival approval is unchanged.",
+  "ci_correction": {
+    "collected_at": "2026-10-17T23:36:37.812203+00:00",
+    "failed_run": 39078588871,
+    "scope": "Two unit-test repairs; runtime and packaged payloads are unchanged",
+    "changes": [
+      "Persist core.autocrlf in the clone instead of setting it only for checkout",
+      "Assert the enriched Execute response while retaining claim-token and evidence checks"
+    ],
+    "source_sha256": {
+      "extensions/workflow/tests/test_freshness.py": "c0a42863e3d3235b54211ec8cd48d04401d700a155109b924957735343e2bb60",
+      "extensions/workflow/tests/test_lean_execution.py": "1fc63877e90e933d0e68d7e4eb239e601e36f5cbf21374176930364ef7ca4448"
+    },
+    "local_passes": {
+      "freshness_file": 14,
+      "lean_execution_file": 20
+    },
+    "raw_output_sha256": "5d9ffc90d7846b2ddeeb225511567ea28d19a23c83af7dba4034179fca1d82c5",
+    "author": {
+      "run_id": "claude-20261017233210-40b1c0",
+      "actual_model": "claude-sonnet-5-5",
+      "provenance": "harness_telemetry"
+    },
+    "coordinator_check": "Exact two-file delta inspected; no assertion removed and no runtime or fingerprint change",
+    "platform_boundary": "Windows checks passed locally. Corrected Linux confirmation remains a merge gate."
+  }
 }

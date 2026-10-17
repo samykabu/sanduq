@@ -99,7 +99,9 @@ class FreshnessTests(unittest.TestCase):
         f.git(self.root, 'commit', '-qm', 'portable freshness state')
         with tempfile.TemporaryDirectory() as folder:
             clone = Path(folder) / 'checkout'
-            f.git(self.root, '-c', 'core.autocrlf=true', 'clone', '-q', str(self.root), str(clone))
+            # `clone -c` persists autocrlf in the clone's config; a transient `git -c ... clone` only
+            # affects checkout, so later status calls (Linux CI) would see CRLF files as modified.
+            f.git(self.root, 'clone', '-q', '-c', 'core.autocrlf=true', str(self.root), str(clone))
             self.assertEqual(f.git(clone, 'status', '--porcelain'), '')
             self.assertFalse((clone / self.feature / 'progress').exists())
             self.assertFalse((clone / '.specify/progress').exists())
