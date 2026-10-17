@@ -10,9 +10,16 @@
 - Reporting: on a Codex worktree whose hooks are not approved, the coordinator reports its own model and effort with `progress bind --host codex --model <m> --effort <e>` (needs Progress 1.2.0 or later). From Progress 1.2.0 the `progress.py` forwarder creates lanes with `--workstream`; older Progress versions get no flag.
 - Progress compatibility: the bridge reads `progress status --json --schema v2`, so Workflow keeps the v2 projection when Progress 1.2.0 defaults to v3. A Progress known to be older than 1.2.0 is called without it; for an unknown version, a usage-error rejection (exit 2) is retried once without the flag.
 
-## [1.10.4] - 2026-10-17
+## [1.11.1] - 2026-10-17
 
 - Reporting instructions: lifecycle stage runs (scope, specify, clarify...) are recorded by the delegation ledger and get no `progress lane` call. `progress lane` is only for real Execute workstreams, once per workstream, and a new worker updates that lane's owner. The legacy shim reuses the open lane that already carries a task and updates its owner instead of adding a lane per worker.
+- The vendored `delegate-task` is re-pinned to `agent-tools-v1.3.1`. Check batches resolve every launcher before starting; on Linux, containment falls back to a `/proc/*/stat` scan when the kernel has no children file; on Windows, environment overrides match names without regard to case, and a check cancelled before launch starts nothing.
+
+## [1.11.0] - 2026-10-17
+
+- Immutable verification attempts and validated recoverable evidence snapshots.
+- Use shared check-input fingerprints and retain legacy evidence compatibility.
+- Stage the canonical delegate-task native runner, bounded collection and startup diagnostics from agent-tools 1.3.0.
 
 ## [1.10.3] - 2026-10-16
 

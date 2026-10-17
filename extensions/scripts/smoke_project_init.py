@@ -7,8 +7,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 import yaml
+
+from package import package
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'extensions/workflow/scripts'))
@@ -20,7 +23,9 @@ def smoke(shell):
     root = Path(tempfile.mkdtemp(prefix=shell + '-', dir=parent)).resolve()
     subprocess.run(['git', 'init', '-q'], cwd=root, check=True)
     shutil.copytree(ROOT / 'extensions/project', root / '.specify/extensions/project', ignore=shutil.ignore_patterns('__pycache__'))
-    shutil.copytree(ROOT / 'extensions/workflow/scripts', root / '.specify/extensions/workflow/scripts', ignore=shutil.ignore_patterns('__pycache__'))
+    workflow_package = package('workflow', output=root / 'workflow.zip')
+    with zipfile.ZipFile(workflow_package['archive']) as archive:
+        archive.extractall(root / '.specify/extensions')
     names = dict(zip(('Backlog', 'Feature Specification', 'Need Clarifications', 'Ready', 'In progress', 'In review', 'Done'),
                      ('Inbox', 'Discovery', 'Questions', 'Planned', 'Building', 'Reviewing', 'Complete')))
     policy = default_policy(False, False); policy['scope'] = {'statuses': names}

@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-10-16T16:13:10.315945+00:00",
+  "updated_at": "2026-10-17T21:52:09.154400+00:00",
   "catalog_url": "https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json",
   "extensions": {
     "project": {
@@ -123,14 +123,14 @@
     "illustrate": {
       "name": "Illustrate",
       "id": "illustrate",
-      "version": "2.4.1",
+      "version": "2.4.2",
       "description": "Generate, import, and export forty-four technical, product, architecture, process, and quantitative illustration types with tracked project-level light/dark color and font themes.",
       "author": "Samy K. Abushanab",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/illustrate",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/illustrate/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/illustrate/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/illustrate-v2.4.1/illustrate.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/illustrate-v2.4.2/illustrate.zip",
       "license": "PolyForm-Noncommercial-1.0.0",
       "category": "documentation",
       "effect": "read-write",
@@ -181,8 +181,8 @@
       ],
       "verified": false,
       "created_at": "2026-07-18T15:47:12Z",
-      "updated_at": "2026-10-10T23:33:48.601945+00:00",
-      "sha256": "51399bbdd89d5513e7b9a9b1ad2a9a08329491235a2010309c969a809772d0e4"
+      "updated_at": "2026-10-17T20:37:50.717261+00:00",
+      "sha256": "22f67523ff5ae0fb033230b8d34b2215e59ba840f5476396a9bd233dfa2786b6"
     },
     "assure": {
       "name": "Assure",
@@ -307,7 +307,7 @@
     "workflow": {
       "name": "Sanduq Workflow",
       "id": "workflow",
-      "version": "1.10.3",
+      "version": "1.11.1",
       "description": "GitHub issue decisions and resumable Scope-to-PR orchestration with optional model-aware delegation, QA, User Manual, and workflow evidence CI.",
       "author": "Samy K. Abushanab",
       "license": "PolyForm-Noncommercial-1.0.0",
@@ -315,7 +315,7 @@
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/workflow",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v1.10.3/workflow.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v1.11.1/workflow.zip",
       "requires": {
         "speckit_version": ">=1.0.0,<2.0.0",
         "tools": [
@@ -349,8 +349,8 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "97166d3988641e9ee136bb8a0b2deb103828461726d195f66e2c2a5e6bab84d9",
-      "updated_at": "2026-10-16T14:17:51.368345+00:00"
+      "sha256": "d09db993d30a77aa87061087219b94b0e78471778fb026c60f9aea9f26442174",
+      "updated_at": "2026-10-17T21:52:09.085555+00:00"
     },
     "scope": {
       "name": "Speckit Scope",
@@ -409,7 +409,7 @@
     "memory": {
       "name": "Sanduq Memory",
       "id": "memory",
-      "version": "2.1.2",
+      "version": "2.2.0",
       "description": "Reconcile verified feature specifications into current project memory, migrate required fixtures, and archive through scoped recoverable Git commits.",
       "author": "Samy K. Abushanab",
       "license": "PolyForm-Noncommercial-1.0.0",
@@ -417,7 +417,7 @@
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/memory",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/memory/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/memory/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/memory-v2.1.2/memory.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/memory-v2.2.0/memory.zip",
       "requires": {
         "speckit_version": ">=1.0.0,<2.0.0",
         "tools": [
@@ -444,13 +444,13 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "b0b13e952404fbd78523526bb9c861b82e8bbb894bc0c9bf79301c5b62c0c9e7",
-      "updated_at": "2026-10-10T16:29:40.224146+00:00"
+      "sha256": "cc1ea6a0d09b161fb5c100538c48e09774036619cbc0910982a16d87b844e439",
+      "updated_at": "2026-10-17T20:37:50.024177+00:00"
     },
     "progress": {
       "name": "Sanduq Progress Report",
       "id": "progress",
-      "version": "1.1.2",
+      "version": "1.1.3",
       "description": "A live, deterministic progress report for a Spec Kit feature: lanes, tasks, blockers and decisions, collected from the host's native hooks and the feature files with no agent spent on upkeep.",
       "author": "Samy K. Abushanab",
       "license": "PolyForm-Noncommercial-1.0.0",
@@ -458,7 +458,7 @@
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/progress",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/progress/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/progress/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/progress-v1.1.2/progress.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/progress-v1.1.3/progress.zip",
       "requires": {
         "speckit_version": ">=1.1.1.dev0,<2.0.0",
         "tools": [
@@ -485,8 +485,8 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "566f5be45253c6e0fdbbbe88e85d72d1f1b79528fa48f347bf642754ab0a1126",
-      "updated_at": "2026-10-16T16:13:10.315877+00:00"
+      "sha256": "a3ed2cd3b7d52206401ce5f960f78787d5b896b19547430364214c1e95b8ae73",
+      "updated_at": "2026-10-17T21:52:09.154296+00:00"
     }
   }
 }

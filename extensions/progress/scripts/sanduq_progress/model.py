@@ -154,11 +154,18 @@ def link_attempts(lanes, grouped):
         grouped[identity] = [r for r in grouped[identity] if r is not row]
         lane.setdefault('rows', []).append(row)
 
+    # Find every lane that names an identity before draining its attempts: the first takes them, the others are marked
+    # so fold_lanes still recognises them as the same work and folds them in.
+    named = {}
     for lane in facts:
         owner = str(lane['owner'] or '')
         if owner in grouped:
-            for row in list(grouped[owner]):
-                take(lane, owner, row)
+            named.setdefault(owner, []).append(lane)
+    for owner, owners in named.items():
+        for row in list(grouped[owner]):
+            take(owners[0], owner, row)
+        for lane in owners[1:]:
+            lane['fold_identity'] = owner
     for lane in facts:
         owner = str(lane['owner'] or '')
         if not lane.get('rows') and owner in by_run:
@@ -187,7 +194,7 @@ def fold_lanes(lanes, grouped):
     holding attempts of several identities is a real workstream and stays as it is."""
     members, order = {}, []
     for lane in lanes:
-        names = {str(r['identity']) for r in lane.get('rows') or []}
+        names = {str(r['identity']) for r in lane.get('rows') or []} or ({lane['fold_identity']} if lane.get('fold_identity') else set())
         if lane['origin'] == 'facts' and len(names) == 1:
             name = next(iter(names))
             members.setdefault(name, []).append(lane)
@@ -206,13 +213,13 @@ def fold_lanes(lanes, grouped):
         if len(group) == 1 and not rest:
             out.append(head)
             continue
-        rows = [r for lane in group for r in lane['rows']] + list(rest)
+        rows = [r for lane in group for r in lane.get('rows') or []] + list(rest)
         grouped[item] = []
         tasks = list(dict.fromkeys(t for lane in group for t in lane['tasks']))
         closed = all(lane['closed'] for lane in group)
         ends = [lane['ended'] for lane in group]
         starts = [lane['since'] for lane in group if lane['since']]
-        merged = dict(head, rows=rows, tasks=tasks, closed=closed, owner=item, requested=group[-1]['requested'],
+        merged = dict(head, rows=rows, fold_identity=None, tasks=tasks, closed=closed, owner=item, requested=group[-1]['requested'],
                       label=head['label'] if TASK_IDENTITY.search(item) and head['label'] != head['id']
                       else clean(item.rsplit('/', 1)[-1], 60),
                       since=min(starts) if starts else None, ended=max(ends) if closed and all(ends) else None)

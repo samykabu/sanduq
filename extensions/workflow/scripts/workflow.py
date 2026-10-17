@@ -26,6 +26,7 @@ import skill_inventory
 import source_key as sk
 import lean_policy
 import verification_plan
+import evidence_snapshot
 import execution_tools
 import lifecycle
 
@@ -1509,6 +1510,18 @@ def ci_evidence_current(root, receipt):
     return evidence['source_key'] in keys and receipt.get('source_key') in keys
 
 
+def validate_evidence_snapshots(root, receipt):
+    snapshots = receipt.get('evidence_snapshots', [])
+    require(isinstance(snapshots, list) and all(isinstance(p, str) for p in snapshots)
+            and len(set(snapshots)) == len(snapshots)
+            and set(snapshots) <= set(receipt.get('evidence', [])), 'EVIDENCE_SNAPSHOTS_INVALID')
+    for path in snapshots:
+        try:
+            evidence_snapshot.validate(root, path)
+        except (ValueError, OSError, KeyError, TypeError) as exc:
+            raise WorkflowError('EVIDENCE_SNAPSHOT_UNRECOVERABLE: ' + path + ': ' + str(exc)) from exc
+
+
 def receipt_status(root, feature, stage, receipt, policy=None):
     """Whether a receipt is current, and why not.
 
@@ -1523,6 +1536,11 @@ def receipt_status(root, feature, stage, receipt, policy=None):
     """
     if receipt.get('stale'):
         return {'current': False, 'reason': 'marked-stale', 'stale': receipt['stale']}
+    try:
+        validate_evidence_snapshots(root, receipt)
+    except (WorkflowError, ValueError, OSError, KeyError, TypeError) as exc:
+        return {'current': False, 'reason': 'evidence-snapshot-unrecoverable', 'paths': receipt.get('evidence_snapshots', []),
+                'detail': str(exc)}
     saved = receipt.get('fingerprints', {})
     required = set(required_inputs(root, feature, stage))
     if not saved or not required <= {portable_label(path) for path in saved}:
@@ -2666,6 +2684,7 @@ class Run:
         validate_input_roles(self.root, self.relative, stage, receipt, self.policy)
         for path in receipt['evidence']:
             require(inside(self.root, path).is_file(), 'EVIDENCE_MISSING: ' + path)
+        validate_evidence_snapshots(self.root, receipt)
         delegation_ledger_trust = None
         if self.policy['delegation']['enabled'] and active.get('delegation'):
             # The claim recorded a delegation route for this stage; require the

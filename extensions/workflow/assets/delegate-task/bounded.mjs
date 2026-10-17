@@ -168,7 +168,7 @@ export function projectResult(result, { chars = 2000, items = 40,
     'cost_usd', 'cost_reported', 'exit_code', 'signal', 'duration_ms',
     'truncated_output', 'records_dropped', 'files_claimed', 'dirty_paths_changed', 'head_changed',
     'index_changed', 'coverage_complete', 'read_only_violation', 'started_at', 'ended_at', 'execution',
-    'status_reason', 'status_provenance', 'summary', 'artifacts', 'usage_raw'];
+    'status_reason', 'status_provenance', 'summary', 'artifacts'];
   const projected = visit(Object.fromEntries(keys.filter(k => k in result).map(k => [k, result[k]])), '');
   projected.actual_model ??= null;
   projected.model_observed ??= false;

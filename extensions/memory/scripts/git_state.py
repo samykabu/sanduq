@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from pathlib import Path, PurePosixPath
 import subprocess
 import tempfile
@@ -41,6 +42,7 @@ class Repository:
     def __init__(self, root: str | Path):
         self.root = Path(root).resolve()
         self._exists: dict[tuple[str, str], bool] = {}
+        self._commits: set[str] = set()
         top = self.git("rev-parse", "--show-toplevel").decode().strip()
         if Path(top).resolve() != self.root:
             raise ArchiveError("Run from the repository root or pass --root explicitly.")
@@ -117,25 +119,103 @@ class Repository:
             return "unknown"
 
     def blob(self, commit: str, path: str) -> bytes:
-        self.path(path)
-        if not __import__("re").fullmatch(r"[0-9a-f]{40,64}", commit):
+        return self.blobs(commit, [path])[path]
+
+    def immutable_commit(self, commit: str) -> None:
+        if not isinstance(commit, str) or not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", commit):
             raise ArchiveError("Provenance must use a full immutable commit SHA.")
-        return self.git("show", f"{commit}:{path}")
+        if commit in self._commits:
+            return
+        if self.git("cat-file", "-t", commit).strip() != b"commit":
+            raise ArchiveError("Provenance object must be a retained commit.")
+        self._commits.add(commit)
+
+    def blobs(self, commit: str, paths: list[str], *, batch_size=32, max_blob_bytes=16777216,
+              max_batch_bytes=16777216):
+        """Read exact blob bytes in bounded batches, checking framing, type, size and identity."""
+        self.immutable_commit(commit)
+        if type(batch_size) is not int or not 1 <= batch_size <= 128:
+            raise ArchiveError("Blob batch size must be between 1 and 128.")
+        if any(type(n) is not int or not 0 < n <= 67108864 for n in (max_blob_bytes, max_batch_bytes)):
+            raise ArchiveError("Blob byte limits must be between 1 and 67108864.")
+        unique = list(dict.fromkeys(paths))
+        for path in unique:
+            self.path(path)
+            if '\n' in path or '\r' in path:
+                raise ArchiveError("Batch paths cannot contain newlines.")
+        result = {}
+        for start in range(0, len(unique), batch_size):
+            labels = unique[start:start + batch_size]
+            queries = ''.join(f'{commit}:{p}\n' for p in labels).encode('utf-8')
+            headers = self.git('cat-file', '--batch-check', stdin=queries).splitlines()
+            if len(headers) != len(labels):
+                raise ArchiveError("Unexpected blob batch header count.")
+            expected = []
+            for path, header in zip(labels, headers):
+                fields = header.split()
+                if (len(fields) != 3 or fields[1] != b'blob'
+                        or not re.fullmatch(rb'(?:[0-9a-f]{40}|[0-9a-f]{64})', fields[0])
+                        or not fields[2].isdigit()):
+                    raise ArchiveError(f"Missing or invalid blob: {path}")
+                size = int(fields[2])
+                if size > min(max_blob_bytes, max_batch_bytes):
+                    raise ArchiveError(f"Blob exceeds byte limit: {path}")
+                expected.append((path, header, size))
+            groups, group, size = [], [], 0
+            for item in expected:
+                if group and size + item[2] > max_batch_bytes:
+                    groups.append(group)
+                    group, size = [], 0
+                group.append(item)
+                size += item[2]
+            if group:
+                groups.append(group)
+            for group in groups:
+                data = self.git('cat-file', '--batch', stdin=''.join(f'{commit}:{p}\n' for p, _, _ in group).encode('utf-8'))
+                offset = 0
+                for path, expected_header, size in group:
+                    end = data.find(b'\n', offset)
+                    if end < 0 or data[offset:end] != expected_header:
+                        raise ArchiveError("Invalid blob response framing.")
+                    offset = end + 1
+                    content = data[offset:offset + size]
+                    if len(content) != size or data[offset + size:offset + size + 1] != b'\n':
+                        raise ArchiveError("Truncated blob response.")
+                    oid = expected_header.split()[0].decode('ascii')
+                    algorithm = 'sha1' if len(oid) == 40 else 'sha256'
+                    if hashlib.new(algorithm, b'blob ' + str(size).encode('ascii') + b'\0' + content).hexdigest() != oid:
+                        raise ArchiveError("Blob identity mismatch.")
+                    result[path] = content
+                    offset += size + 1
+                if offset != len(data):
+                    raise ArchiveError("Unexpected trailing blob response bytes.")
+        return result
+
+    def ignored(self, paths: list[str]) -> list[str]:
+        for path in paths:
+            self.path(path)
+        if not paths:
+            return []
+        return self.names('check-ignore', '--no-index', '--stdin', '-z', ok=(0, 1),
+                          stdin=b'\0'.join(p.encode('utf-8') for p in paths))
 
     def exists_at(self, commit: str, paths: list[str]) -> dict[str, bool]:
         """Which paths are files at commit: one batched `cat-file --batch-check` over stdin, cached per (commit, path)."""
+        self.immutable_commit(commit)
         cache = self._exists
         # A newline would desynchronize the batch protocol; such a path cannot be a valid repository file anyway.
         for path in paths:
-            if "\n" in path:
+            self.path(path)
+            if "\n" in path or "\r" in path:
                 cache[(commit, path)] = False
         missing = sorted({p for p in paths if (commit, p) not in cache})
-        if missing:
+        for start in range(0, len(missing), 128):
+            batch = missing[start:start + 128]
             lines = self.git("cat-file", "--batch-check=%(objecttype)",
-                             stdin="".join(f"{commit}:{p}\n" for p in missing).encode("utf-8")).decode("utf-8").splitlines()
-            if len(lines) != len(missing):
+                             stdin="".join(f"{commit}:{p}\n" for p in batch).encode("utf-8")).decode("utf-8").splitlines()
+            if len(lines) != len(batch):
                 raise ArchiveError("git cat-file returned an unexpected batch result.")
-            cache.update({(commit, p): line == "blob" for p, line in zip(missing, lines)})
+            cache.update({(commit, p): line == "blob" for p, line in zip(batch, lines)})
         return {p: cache[(commit, p)] for p in paths}
 
     def file_hash(self, path: str) -> str | None:

@@ -84,6 +84,7 @@ public static class CheckContainment {
     try {
       owner = OpenProcess(0x100000, false, Convert.ToUInt32(r["owner_pid"])); Require(owner != IntPtr.Zero);
       if (WaitForSingleObject(owner,0) == 0) { proof["owner_lost"]=true; proof["state"]="closed"; }
+      else if (File.Exists((string)r["cancel"])) { proof["state"]="closed"; } // cancelled before launch: nothing was started
       else {
         job=CreateJobObjectW(IntPtr.Zero,null); Require(job != IntPtr.Zero);
         var limits = new Extended(); limits.basic.flags=0x2000; // KILL_ON_JOB_CLOSE; no breakaway

@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.4.2] - 2026-10-17
+
+- Vendors illustration-tools 3.4.2. Render verification pauses JavaScript clocks between captures and restores SVG and ancestor styles exactly after capture.
+
 ## [2.4.1] - 2026-10-11
 
 - Vendors illustration-tools 3.4.1. Exports carry the page's CSS (theme tokens, classes and

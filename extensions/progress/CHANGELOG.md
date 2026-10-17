@@ -2,7 +2,7 @@
 
 ## [1.1.3] - 2026-10-17
 
-- Vendors `progress-report` from `agent-tools-v1.3.0`: the correctness patch found on the real #842 run. The stage comes from receipts when no claim is active; superseded pauses are no longer blockers; durations are summed from attempts and stop at the last activity; runs link to lanes only by durable ids (retired lane ids keep aliases); decisions and blockers come first, empty boards are gone, quiet lanes collapse into one line, and events filter by kind.
+- Vendors `progress-report` from `agent-tools-v1.3.1`: the correctness patch found on the real #842 run. The stage comes from receipts when no claim is active; superseded pauses are no longer blockers; durations are summed from attempts and stop at the last activity; runs link to lanes only by durable ids (retired lane ids keep aliases); decisions and blockers come first, empty boards are gone, quiet lanes collapse into one line, and events filter by kind. From the review of this release: two facts lanes naming the same delegation fold into one, and a receipt Workflow marked stale no longer names the current stage.
 
 ## [1.1.2] - 2026-10-16
 
