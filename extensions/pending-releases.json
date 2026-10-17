@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Progress 1.1.2 registers one internal hook command that is not a skill (ten skills down to five). Publish after successful main CI and downloaded asset verification."
+  "versions": {
+    "workflow": "1.10.4"
+  },
+  "status": "pending-review",
+  "note": "Workflow 1.10.4: no progress lane for lifecycle stage runs; the legacy shim reuses the existing lane. The Progress vendor bump is added by the coordinator."
 }

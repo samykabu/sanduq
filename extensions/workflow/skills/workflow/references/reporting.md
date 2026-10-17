@@ -27,7 +27,7 @@ for `python .specify/extensions/progress/scripts/progress.py`; every verb prints
 
 | Mode | When | Coordinator does |
 | --- | --- | --- |
-| `projection` | Progress is installed and enabled, and its hooks are registered and enabled for the active host | `progress init` once (idempotent). Then only record facts nothing else records: `progress lane L1 --tasks T001-T004 --owner <worker-id> --harness H --model M --effort E` when assigning, `progress block T007 --by L2` / `progress unblock B4`, `progress note "text" --target T007`. Decisions come from the Workflow ledger. At Finalize run `progress refresh --final` once. |
+| `projection` | Progress is installed and enabled, and its hooks are registered and enabled for the active host | `progress init` once (idempotent). Then only record facts nothing else records: `progress lane L1 --tasks T001-T004 --owner <worker-id> --harness H --model M --effort E` once per Execute workstream (task group), never per run; a new worker for it updates that lane's owner. Lifecycle stage runs (scope, specify, clarify...) are recorded by the delegation ledger: no `progress lane` for them. `progress block T007 --by L2` / `progress unblock B4`, `progress note "text" --target T007` (one line, only for facts no producer records). Decisions come from the Workflow ledger. At Finalize run `progress refresh --final` once. |
 | `refresh` | Progress is installed and enabled, but the active host does not collect automatically (or the host is unknown) | The `projection` calls, plus `progress refresh` after each collected attempt and phase commit. |
 | `legacy` | Progress is absent or disabled | The legacy calls in [`execution-report.md`](execution-report.md#legacy-reporter-calls-mode-legacy-only): init, task, usage, sync, phase and pr, exactly as before. |
 
@@ -38,3 +38,4 @@ reporters for them. Check task boxes in `tasks.md` as usual. A budget overrun is
 If a legacy `progress.py` call is made while Progress is installed it is forwarded to the Progress CLI. An unsupported
 request prints a compatibility error and exits non-zero; do not retry it, use the verb named above instead.
 Do not pass secrets, absolute paths or transcript text to any reporting call. Lean mode follows the same table.
+If `progress_bridge.py mode --host codex` reports hooks not active, run once per session `progress bind --host codex --model <model> --effort <effort>` (self-reported, labelled so) from Progress 1.2.0.

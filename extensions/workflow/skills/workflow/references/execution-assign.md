@@ -68,7 +68,7 @@ authorized. Exclude credentials and full transcripts from notes.
 Read the task dependency graph and the real files before building each batch.
 Record each assignment's stable task IDs, prerequisites, owned paths, shared
 resources, acceptance checks and worker ID in the handoff, and in the report as
-`reporting.md` says (a lane in projection mode). Give workers
+`reporting.md` says (one lane per workstream in projection mode, updated, not duplicated, when it moves to a new worker). Give workers
 only their scope and the context needed to implement it. Workers must not stage,
 commit, push, merge, change shared report files or invoke another executor.
 `git stash` and `git add -A`/`git add .` are forbidden for a task worker, as

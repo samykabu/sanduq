@@ -402,6 +402,17 @@ class ShimMappings(Project):
         mine = next(l for l in report['lanes'] if l['owner'] == 'worker-1')
         self.assertEqual(mine['attempts'][0]['origin'], 'legacy')
 
+    def test_a_new_worker_for_the_same_task_updates_the_lane_instead_of_adding_one(self):
+        self.init()
+        for agent in ('scope-worker', 'specify-worker', 'clarify-worker'):
+            code, out, err = self.legacy('task', '--id', 'T002', '--status', 'running', '--agent', agent, '--summary')
+            self.assertEqual(code, 0, out + err)
+        self.assertEqual(len({l['id'] for l in self.facts('lane')}), 1)
+        self.assertEqual(self.facts('lane')[-1]['owner'], 'clarify-worker')
+        self.assertEqual(self.facts('lane')[-1]['tasks'], ['T002'])
+        lanes = [l for l in self.status()['lanes'] if l.get('origin') == 'facts']
+        self.assertEqual(len(lanes), 1)
+
     def test_running_without_agent_never_forwards_an_invalid_lane(self):
         self.init()
         before = self.facts()
