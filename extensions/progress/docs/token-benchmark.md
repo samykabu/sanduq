@@ -47,11 +47,11 @@ Fixed tool framing is identical across approaches and is not counted. Setup cost
 | `decision_made` | 2 | 83 | 1288 | 797 | 0 |
 | `reopen_task` | 1 | 0 | 1368 | 504 | 0 |
 | `noop_refresh` | 7 | 0 | 0 | 0 | 0 |
-| `resume` | 1 | 887 | 901 | 901 | 1349 |
-| `compaction` | 1 | 887 | 898 | 898 | 1355 |
-| **Updates total** | 55 | **2419** | **59967** | **24206** | **2704** |
+| `resume` | 1 | 887 | 901 | 901 | 1142 |
+| `compaction` | 1 | 887 | 898 | 898 | 1145 |
+| **Updates total** | 55 | **2419** | **59967** | **24206** | **2287** |
 | Setup (once per feature) | | 903 | 581 | 581 | 0 |
-| **Total with setup** | | **3322** | **60548** | **24787** | **2704** |
+| **Total with setup** | | **3322** | **60548** | **24787** | **2287** |
 
 ## Results: cl100k_base
 
@@ -67,11 +67,11 @@ Fixed tool framing is identical across approaches and is not counted. Setup cost
 | `decision_made` | 2 | 83 | 1269 | 784 | 0 |
 | `reopen_task` | 1 | 0 | 1364 | 500 | 0 |
 | `noop_refresh` | 7 | 0 | 0 | 0 | 0 |
-| `resume` | 1 | 883 | 904 | 904 | 1351 |
-| `compaction` | 1 | 883 | 901 | 901 | 1357 |
-| **Updates total** | 55 | **2416** | **59771** | **24014** | **2708** |
+| `resume` | 1 | 883 | 904 | 904 | 1142 |
+| `compaction` | 1 | 883 | 901 | 901 | 1145 |
+| **Updates total** | 55 | **2416** | **59771** | **24014** | **2287** |
 | Setup (once per feature) | | 899 | 582 | 582 | 0 |
-| **Total with setup** | | **3315** | **60353** | **24596** | **2708** |
+| **Total with setup** | | **3315** | **60353** | **24596** | **2287** |
 
 ## Break-even including setup
 
@@ -85,13 +85,14 @@ Fixed tool framing is identical across approaches and is not counted. Setup cost
 | NEW | 9481 | 3536 |
 | MD-EDIT | 195314 | 2162 |
 | MD-EDIT-LEAN | 80828 | 2162 |
-| MD-RENDER | 7701 | 0 |
+| MD-RENDER | 7093 | 0 |
 
 ## Reading the result
 
 - Updates only, o200k_base: NEW 2419, MD-EDIT 59967 (24.8x), MD-EDIT-LEAN 24206.
 - NEW setup is 903 tokens (the skill text plus `init`). The skill loads again after a restart or compaction.
 - `unblock`, `block`, `decision` and note verbs cost tens of tokens because their command line is the whole cost.
+- MD-RENDER is the size of the real export, and it is only comparable when it carries the same content. The first v3 export dropped the Tasks checklist, which cut a re-read from 1349 to 557 tokens (resume). That was information loss, not a saving. The export now lists every task by phase with its workstream and state, and the MD-RENDER column is reported as measured with that section included.
 - The per-verb prefix `python .claude/skills/progress-report/scripts/progress.py` is 13 tokens of each NEW line. A shorter entry point would reduce every NEW figure.
 
 ## Reproduce

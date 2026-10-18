@@ -1,9 +1,11 @@
 """Small shared helpers: time, atomic writes, text sanitising, tolerant JSON, bounded diagnostics log."""
+import hashlib
 import json
 import os
 import re
 import stat
 import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -109,9 +111,90 @@ def _write_atomic(path, data):
             os.unlink(name)
 
 
-def read_json(path, default=None):
+# ---- reads that remember what they parsed ------------------------------------------------------------------------------
+# A projection reads several producer files one after another. `tracking()` records, for each file read through
+# `read_bytes`, the hash, size and read time of the bytes that were actually parsed, plus the file's stat at that moment.
+# The source list of the report is built from those records, never from a second read, and `Reads.changed()` reports a file
+# whose bytes moved on while the others were still being read.
+CHUNK = 1 << 16
+_TRACK = []
+
+
+class Reads:
+    def __init__(self):
+        self.rows = {}  # normalised path -> record
+        self.torn = set()  # paths read twice with different bytes
+
+    def record(self, path, digest, size, parsed, stat_result, truncated):
+        key = os.path.normpath(str(path))
+        row = {'sha': digest, 'size': size, 'bytes': parsed, 'truncated': truncated, 'read_at': iso(utcnow()),
+               'stamp': (stat_result.st_size, stat_result.st_mtime_ns)}
+        old = self.rows.get(key)
+        if old is not None and (old['sha'], old['size']) != (digest, size):
+            self.torn.add(key)
+        self.rows[key] = row
+
+    def get(self, path):
+        return self.rows.get(os.path.normpath(str(path)))
+
+    def changed(self):
+        """Paths whose bytes differ between two reads, or whose file changed on disk after the last read."""
+        out = set(self.torn)
+        for key, row in self.rows.items():
+            try:
+                st = os.stat(key)
+            except OSError:
+                out.add(key)
+                continue
+            if (st.st_size, st.st_mtime_ns) != row['stamp']:
+                out.add(key)
+        return out
+
+
+@contextmanager
+def tracking():
+    reads = Reads()
+    _TRACK.append(reads)
     try:
-        return json.loads(Path(path).read_text(encoding='utf-8'))
+        yield reads
+    finally:
+        _TRACK.remove(reads)
+
+
+def read_capped(path, cap=None, tail=False):
+    """(bytes, file size, truncated). With `cap`, at most that many bytes: the head, or with `tail=True` the last `cap`
+    bytes (the cut may fall inside a line; the caller drops it). Raises OSError. Hashes while it reads in chunks, so the
+    digest describes exactly the returned bytes and memory stays bounded by `cap`."""
+    digest, chunks, got = hashlib.sha256(), [], 0
+    with open(path, 'rb') as stream:
+        st = os.fstat(stream.fileno())
+        size = st.st_size
+        truncated = bool(cap and size > cap)
+        if truncated and tail:
+            stream.seek(size - cap)
+        limit = cap if cap else None
+        while True:
+            want = CHUNK if limit is None else min(CHUNK, limit - got)
+            if want <= 0:
+                break
+            chunk = stream.read(want)
+            if not chunk:
+                break
+            digest.update(chunk)
+            chunks.append(chunk)
+            got += len(chunk)
+    for reads in _TRACK:
+        reads.record(path, digest.hexdigest(), size, got, st, truncated)
+    return b''.join(chunks), size, truncated
+
+
+def read_bytes(path, cap=None, tail=False):
+    return read_capped(path, cap, tail)[0]
+
+
+def read_json(path, default=None, cap=None):
+    try:
+        return json.loads(read_bytes(path, cap).decode('utf-8'))
     except (OSError, ValueError):
         return default
 

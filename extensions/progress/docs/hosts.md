@@ -163,7 +163,20 @@ writes a minimal fallback `theme.css` and prints `progress: error PROGRESS_THEME
 UI files are copied from the skill's `assets/ui/` at `init`; when that directory is absent a diagnostic is
 logged and nothing is created.
 
+## Self-report when the host reports nothing
+
+A Codex worktree whose hooks are not approved produces no host snapshot, so the report has no orchestrator model or effort. Progress
+does not change Codex trust. The coordinator can say what it runs with `progress bind --host codex --model <model> --effort <effort>`
+(add `--session <id>` to tie it to one session). The report then shows those two fields as `self-report` and tells the reader that
+the host did not observe them. If the host later observes a field, the observation wins for that field and the other keeps its
+self-reported value. The report is stored in `.host/self-report.json`, which belongs to one worktree and one feature; a copy in another
+worktree is ignored. Context size and elapsed time cannot be self-reported and stay `unknown`.
+
 ## Projection details worth knowing
+
+This list describes the v2 compatibility document (`progress status --json --schema v2`). The v3 rules are in
+[contracts](contracts.md#projection-sanduqprogressv3).
+
 
 - `events` are chronological (oldest first), bounded by kind: the last 50 stage, failure, decision, block and workflow
   lines, the last 15 notes (`NOTE_LIMIT`) and the last 30 others.

@@ -284,7 +284,7 @@ def read_all(ctx):
     for folder in folders:
         if folder.is_dir():
             for path in sorted(folder.glob('*.json')):
-                if path.name in seen:
+                if path.name in seen or path.name == 'self-report.json':  # the coordinator's self-report is not a host observation
                     continue
                 seen.add(path.name)
                 data = read_json(path)

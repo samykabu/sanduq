@@ -25,7 +25,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..util import parse_time
+from ..util import parse_time, read_bytes, read_capped
 
 USAGE_FIELDS = ('input_total', 'input_fresh', 'cache_read', 'cache_write', 'output_total', 'reasoning', 'total')
 JOURNAL_STATE = re.compile(r'[a-z][a-z_]{0,31}')
@@ -59,11 +59,8 @@ def journal_projection(directory):
     path = directory / 'journal.jsonl'
     if not path.is_file():
         return {'events': 0, 'state': None, 'last_event_at': None, 'terminal': False}
-    with open(path, 'rb') as stream:
-        stream.seek(0, os.SEEK_END)
-        size = stream.tell()
-        stream.seek(max(0, size - JOURNAL_TAIL_BYTES))
-        tail = stream.read().decode('utf-8', 'replace').splitlines()
+    raw, size, _ = read_capped(path, JOURNAL_TAIL_BYTES, tail=True)  # tracked: the report knows this file was read
+    tail = raw.decode('utf-8', 'replace').splitlines()
     if size > JOURNAL_TAIL_BYTES:
         tail = tail[1:]  # first line is probably cut
     events = []
@@ -109,7 +106,7 @@ def _model_reported(data):
 
 
 def project_run(live, path, now, stall_seconds):
-    data = json.loads(path.read_text(encoding='utf-8'))
+    data = json.loads(read_bytes(path).decode('utf-8'))
     if not isinstance(data, dict) or not isinstance(data.get('run_id'), str) or not data['run_id']:
         raise ValueError('needs a non-empty string run_id')
     started, ended = parse_time(data.get('started_at')), parse_time(data.get('ended_at'))

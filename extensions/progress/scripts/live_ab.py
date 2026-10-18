@@ -289,7 +289,7 @@ def status_new(root, feature):
     """`progress status --json` of the NEW arm's sandbox, or None when the CLI answers nothing usable."""
     script = root / ".claude" / "skills" / "progress-report" / "scripts" / "progress.py"
     try:
-        done = subprocess.run([sys.executable, str(script), "--root", str(root), "status", "--json", "--feature", feature],
+        done = subprocess.run([sys.executable, str(script), "--root", str(root), "status", "--json", "--schema", "v2", "--feature", feature],
                               capture_output=True, text=True, encoding="utf-8", timeout=60, cwd=root)
         return json.loads(done.stdout) if done.returncode == 0 else None
     except (OSError, ValueError, subprocess.SubprocessError):

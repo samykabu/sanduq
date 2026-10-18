@@ -1,10 +1,10 @@
-"""Projection builder: producers in, `sanduq.progress.v2` out. Pure apart from reading files; `now` is injected so
+"""Projection builder: producers in, `sanduq.progress.v3` (default) or the `sanduq.progress.v2` compatibility document out. Pure apart from reading files; `now` is injected so
 the same inputs give the same document (golden-testable)."""
 import re
 from datetime import timedelta
 from pathlib import Path
 
-from . import SCHEMA, facts as factslib
+from . import SCHEMA_V2, SCHEMA_V3, facts as factslib
 from .collect import hosts as hostscol, plan as plancol, runs as runscol, tasks as taskscol, workflow as wf
 from .hosts import unknown
 from .paths import current_branch, plan_info
@@ -229,7 +229,41 @@ def fold_lanes(lanes, grouped):
     return out, aliases
 
 
-def build(ctx, now, rev=1, state=None, plan=None):
+SCHEMAS = {'v2': SCHEMA_V2, 'v3': SCHEMA_V3, SCHEMA_V2: SCHEMA_V2, SCHEMA_V3: SCHEMA_V3}
+
+
+def schema_name(value):
+    """`v2` / `v3` / full schema id -> the full schema id; ProgressError for anything else."""
+    from .util import ProgressError
+    if value is None:
+        return SCHEMA_V3
+    if str(value) not in SCHEMAS:
+        raise ProgressError('PROGRESS_USAGE', '--schema takes v2 or v3', 2)
+    return SCHEMAS[str(value)]
+
+
+def build(ctx, now, rev=1, state=None, plan=None, schema=None):
+    """The projection in the requested schema (v3 by default). The v2 document is the unchanged compatibility contract."""
+    v3, v2 = build_pair(ctx, now, rev, state, plan, want_v3=schema_name(schema) == SCHEMA_V3)
+    return v3 if schema_name(schema) == SCHEMA_V3 else v2
+
+
+def build_pair(ctx, now, rev=1, state=None, plan=None, want_v3=True):
+    """(v3 document or None, v2 document). Both come from one read of the producers."""
+    from . import model_v3
+    from .util import tracking
+    with tracking() as reads:  # every producer file read below is remembered by hash, size and read time
+        v2, aux = _build_v2(ctx, now, rev, state, plan)
+        if not want_v3:
+            return None, v2
+        aux['reads'] = reads
+        v3 = model_v3.build(ctx, now, rev, state or {}, v2, aux)
+    if v3['collection'].get('inconsistent_sources') and state is not None:
+        state['dirty'] = True  # a file changed while the others were read: the next refresh must run again
+    return v3, v2
+
+
+def _build_v2(ctx, now, rev=1, state=None, plan=None):
     state = {} if state is None else state
     cfg = ctx.config_data()
     stale_after = int(cfg.get('stale_after_seconds') or 600)
@@ -593,7 +627,7 @@ def build(ctx, now, rev=1, state=None, plan=None):
     task_out = {t['id']: {'title': t['title'], 'phase': t['phase'], 'done': t['done'], 'parallel': t['parallel'],
                           'depends_on': t['depends_on'], 'lane': task_lane.get(t['id'])} for t in tk['tasks']}
     extra = {'overhead': overhead} if overhead else {}
-    return {'schema': SCHEMA, 'rev': rev, 'generated_at': iso(now), 'stale_after_seconds': stale_after,
+    doc = {'schema': SCHEMA_V2, 'rev': rev, 'generated_at': iso(now), 'stale_after_seconds': stale_after,
             'collection': {'automatic': bool(snaps), 'hosts': sorted({s.get('host') for s in snaps if s.get('host')}),
                            'dirty': bool(state.get('dirty')), 'last_event_at': state.get('last_event_at'),
                            'diagnostics': count_lines(ctx.diag)},
@@ -602,3 +636,14 @@ def build(ctx, now, rev=1, state=None, plan=None):
             'summary': {'tasks_total': len(task_ids), 'tasks_done': sum(1 for t in tk['tasks'] if t['done']),
                         'lanes_active': sum(1 for l in report_lanes if l['status'] == 'active'),
                         'blocked': len(blockers), 'decisions_pending': len(pending)}, **extra}
+    aux = {'tk': tk, 'cp': cp, 'attempts': attempts, 'run_by_id': run_by_id, 'loaded': loaded, 'snaps': snaps,
+           'main': main, 'started': started, 'lanes': lanes, 'folded': folded, 'retired': retired, 'identity': identity,
+           'host_children': host_children, 'blockers': blockers, 'workflow_mode': workflow_mode, 'stale_after': stale_after,
+           'wf_decisions_exist': wf_decisions_exist, 'wf_decisions': wf_decisions, 'orchestrator': orchestrator,
+           'pending_v2': pending, 'made_v2': made, 'events_v2': events}
+    return doc, aux
+
+
+def build_v2(ctx, now, rev=1, state=None, plan=None):
+    """The v2 compatibility document (what `status --json --schema v2` prints)."""
+    return build(ctx, now, rev, state, plan, schema='v2')

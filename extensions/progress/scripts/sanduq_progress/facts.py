@@ -5,7 +5,7 @@ import posixpath
 import re
 from pathlib import Path
 
-from .util import ProgressError, clean, iso, refuse_link, utcnow
+from .util import ProgressError, clean, iso, read_bytes, refuse_link, utcnow
 
 PREFIX = {'lane': 'L', 'block': 'B', 'decision': 'D', 'note': 'N', 'attempt': 'A'}
 TEXT_CAP = 200
@@ -73,7 +73,7 @@ def check(record, root):
 def read_lines(path):
     """Return (records, torn, corrupt). A torn final line is skipped, not an error."""
     try:
-        raw = Path(path).read_bytes()
+        raw = read_bytes(path)
     except OSError:
         return [], False, 0
     records, corrupt, torn = [], 0, False

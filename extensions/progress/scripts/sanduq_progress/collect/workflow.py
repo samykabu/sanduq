@@ -42,10 +42,84 @@ def checkpoint(feature_dir):
             superseded = f'status is {status}'
     return {'branch': data.get('branch'), 'feature': data.get('feature'), 'status': data.get('status'),
             'stage': active.get('stage') if active else None, 'issue': link, 'updated_at': data.get('updated_at'),
+            'generation': _int(data.get('generation')), 'stage_plan': stage_plan(data.get('stage_plan')),
+            'next_action': next_action(data.get('next_action')), 'recoveries': recoveries(data.get('recoveries')),
+            'processes': _processes(data.get('policy')),
+            'receipt_flags': {str(r['stage']): {'stale': r['_stale'], 'mode': r['mode']} for r in accepted},
             'started_at': first, 'last_accepted': {'stage': latest['stage'], 'at': latest['at']} if latest else None,
             'receipts': [{'stage': r['stage'], 'at': r['at']} for r in accepted],
             'pause': {'reason': clean(pause.get('reason'), 120), 'at': pause.get('at'), 'superseded': superseded}
             if pause else None}
+
+
+def _int(value):
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _processes(policy):
+    """The policy snapshot's qa / user_manual switches when the checkpoint carries them, else None for each."""
+    processes = policy.get('processes') if isinstance(policy, dict) and isinstance(policy.get('processes'), dict) else {}
+    return {k: processes.get(k) if isinstance(processes.get(k), bool) else None for k in ('qa', 'user_manual')}
+
+
+def stage_plan(value):
+    """Workflow's published stage list (`stage_plan: {v, generation, stages}`), validated. `state` is absent, available,
+    unsupported (a version this reader does not know) or invalid; only `available` carries stages."""
+    if value is None:
+        return {'state': 'absent', 'generation': None, 'stages': []}
+    if not isinstance(value, dict) or not isinstance(value.get('stages'), list):
+        return {'state': 'invalid', 'generation': None, 'stages': []}
+    if value.get('v') != 1:
+        return {'state': 'unsupported', 'generation': None, 'stages': []}
+    out = []
+    for item in value['stages']:
+        ident = (item.get('id') or item.get('stage')) if isinstance(item, dict) else item
+        if not isinstance(ident, str) or not re.fullmatch(r'[A-Za-z0-9_.-]{1,40}', ident) or any(s['id'] == ident for s in out):
+            return {'state': 'invalid', 'generation': None, 'stages': []}
+        label = item.get('label') if isinstance(item, dict) and isinstance(item.get('label'), str) else None
+        out.append({'id': ident, 'label': clean(label, 60) if label else None})
+    return {'state': 'available', 'generation': _int(value.get('generation')), 'stages': out}
+
+
+NEXT_KINDS = ('active-claim', 'next-stage')
+
+
+def next_action(value):
+    """Workflow's cached next-action evaluation, or None. Progress never computes one."""
+    if not isinstance(value, dict) or not isinstance(value.get('text'), str) or not value['text'].strip():
+        return None
+    kind, stage = value.get('kind'), value.get('stage')
+    return {'text': clean(value['text'], 200), 'stage': stage if isinstance(stage, str) and stage else None,
+            'kind': kind if kind in NEXT_KINDS else None,
+            'evaluated_at': value.get('evaluated_at') if isinstance(value.get('evaluated_at'), str) else None,
+            'generation': _int(value.get('generation'))}
+
+
+def _claim_id(value):
+    """The non-credential claim id Workflow 1.12.0 writes on receipts and recoveries, or None (a legacy record)."""
+    return clean(value, 120) if isinstance(value, str) and value.strip() else None
+
+
+def recoveries(value):
+    """Recorded recoveries. Workflow stores each as `{claim: {stage, claimed_at, mode, delegation: {identity}, ...}, reason, at}`
+    (an older flat `{stage, reason, at}` is read too). The claim's `claimed_at` is kept as the episode start and its
+    delegation identity as identity evidence. The claim token is never read."""
+    if not isinstance(value, list):
+        return []
+    out = []
+    for r in value:
+        if not isinstance(r, dict) or not parse_time(r.get('at')):
+            continue
+        claim = r.get('claim') if isinstance(r.get('claim'), dict) else {}
+        stage = r.get('stage') or claim.get('stage')
+        delegation = claim.get('delegation') if isinstance(claim.get('delegation'), dict) else {}
+        identity = delegation.get('identity')
+        started = claim.get('claimed_at')
+        out.append({'stage': str(stage) if stage else None, 'reason': clean(r.get('reason'), 120), 'at': r.get('at'),
+                    'started_at': started if parse_time(started) else None, 'claim_id': _claim_id(claim.get('claim_id')),
+                    'mode': claim.get('mode') if claim.get('mode') in ('initial', 'revalidate', 'resume') else None,
+                    'identity': clean(identity, 160) if isinstance(identity, str) and identity.strip() else None})
+    return out
 
 
 def accepted_receipts(receipts):
@@ -58,7 +132,10 @@ def accepted_receipts(receipts):
         at = item.get('completed_at') or item.get('created_at')
         when = parse_time(at)
         if when:
-            rows.append((when, index, {'stage': str(item.get('stage') or key), 'at': at, '_when': when, '_stale': bool(item.get('stale'))}))
+            rows.append((when, index, {'stage': str(item.get('stage') or key), 'at': at, '_when': when, '_stale': bool(item.get('stale')),
+                                    'mode': item.get('mode') if isinstance(item.get('mode'), str) else None,
+                                    'claim_id': _claim_id(item.get('claim_id')),
+                                    'created_at': item.get('created_at') if parse_time(item.get('created_at')) else None}))
     return [r[2] for r in sorted(rows, key=lambda r: (r[0], r[1]))]
 
 
@@ -66,6 +143,13 @@ def attempts(feature_dir):
     data = read_json(Path(feature_dir) / 'workflow' / 'delegations.json')
     rows = data.get('attempts') if isinstance(data, dict) else None
     return [a for a in rows or [] if isinstance(a, dict) and a.get('identity')]
+
+
+def ledger_feature(feature_dir):
+    """The feature directory the delegation ledger says it belongs to (it prefixes every delegation identity)."""
+    data = read_json(Path(feature_dir) / 'workflow' / 'delegations.json')
+    value = data.get('feature') if isinstance(data, dict) else None
+    return value if isinstance(value, str) and value else None
 
 
 def identity_tasks(attempt):
@@ -77,10 +161,15 @@ def identity_tasks(attempt):
 
 
 def _option_text(value, options):
-    """A letter answer (A, B, ...) names the option at that position; anything else is shown as the cleaned text."""
+    """(option text, option index or None). The ledger stores choices as letters (A, B, ...), which name the option at that
+    position; the text is returned here so no later stage decodes it again. Anything else is the cleaned text, with its
+    index only when it equals an option exactly."""
     text = value.strip()
-    letter = ord(text.upper()) - 65 if len(text) == 1 else -1
-    return options[letter] if 0 <= letter < len(options) else clean(text, 80)
+    letter = ord(text.upper()) - 65 if re.fullmatch(r'[A-Za-z]', text) else -1  # ASCII letters only
+    if 0 <= letter < len(options):
+        return options[letter], letter
+    shown = clean(text, 80)
+    return shown, options.index(shown) if shown in options else None
 
 
 def decisions(feature_dir):
@@ -104,12 +193,23 @@ def decisions(feature_dir):
         if not picked and item.get('option'):
             picked = [item['option']]
         multiple = item.get('mode') == 'multiple' or (item.get('mode') is None and len(picked) > 1)
-        chosen = [] if pending else [_option_text(p, options) for p in picked if isinstance(p, str) and p.strip()]
+        pairs = [] if pending else [_option_text(p, options) for p in picked if isinstance(p, str) and p.strip()]
+        chosen = [t for t, _ in pairs]
+        indexes = [i for _, i in pairs]
         selected = (chosen if multiple else chosen[0]) if chosen else None
+        selected_index = (None if None in indexes else indexes if multiple else indexes[0]) if indexes else None
         stamps = [str(x.get(k)) for x in answers for k in ('updated_at', 'created_at', 'at') if x.get(k)]
         stamp = max(stamps) if stamps else None
+        authors = [clean(x.get('author'), 80) for x in answers if isinstance(x.get('author'), str) and x['author'].strip()]
+        application = item.get('application') if isinstance(item.get('application'), dict) else None
+        evidence = application.get('evidence') if application and isinstance(application.get('evidence'), dict) else {}
         out.append({'id': str(item['id']), 'question': clean(item.get('question') or f"Workflow decision {item['id']}", 200),
-                    'options': options, 'selected': selected, 'decided_by': 'user' if selected else None,
+                    'options': options, 'selected': selected, 'selected_index': selected_index, 'decided_by': 'user' if selected else None,
                     'at': stamp, 'url': item.get('question_url'), 'source': 'workflow',
-                    'pending': pending})
+                    'pending': pending,
+                    # v3 adapter inputs: the ledger's own status and mode, answer digest, recorded author, application evidence
+                    'raw_status': status, 'multiple': multiple, 'revision': len(answers),
+                    'answer_digest': item.get('answer_digest') if isinstance(item.get('answer_digest'), str) else None,
+                    'author': authors[-1] if authors else None,
+                    'applied_evidence': sorted(clean(k, 160) for k in evidence)})
     return True, out
