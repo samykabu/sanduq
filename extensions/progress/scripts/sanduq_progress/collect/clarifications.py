@@ -26,6 +26,7 @@ KINDS = ('single', 'multiple', 'text')
 READ_CAP = 2 * 1024 * 1024
 EVIDENCE_CAP = 200
 EVIDENCE_ITEMS = 10
+OPTION_CAP = 100  # Scope labels options past Z (AA, AB, ...), so the cap sits well above 26
 
 
 def _str(value, cap):
@@ -36,12 +37,23 @@ def _https(value):
     return value.strip()[:500] if isinstance(value, str) and value.strip().startswith('https://') else None
 
 
+def _label_index(text):
+    """The 0-based option index a Scope label names, or None. Scope's `option_label` is spreadsheet style: A..Z, then AA, AB, ...
+    (A is 0, Z is 25, AA is 26). ASCII letters only, one to three of them, either case."""
+    if not re.fullmatch(r'[A-Za-z]{1,3}', text):
+        return None
+    n = 0
+    for ch in text.upper():
+        n = n * 26 + ord(ch) - 64
+    return n - 1
+
+
 def _decode(text, options):
-    """(option text, index). Scope records a choice as a letter (A, B, ...) that names the option at that position; a
-    letter in range is decoded here, once, so nothing downstream guesses. Otherwise the text counts only when it equals an
+    """(option text, index). Scope records a choice as a label (A, B, ... Z, AA, ...) that names the option at that position; a
+    label in range is decoded here, once, so nothing downstream guesses. Otherwise the text counts only when it equals an
     option exactly. Free text (kind `text`) is never decoded."""
-    if re.fullmatch(r'[A-Za-z]', text) and ord(text.upper()) - 65 < len(options):  # ASCII letters only; anything else is exact text
-        i = ord(text.upper()) - 65
+    i = _label_index(text)
+    if i is not None and i < len(options):
         return options[i], i
     return text, options.index(text) if text in options else None
 
@@ -101,8 +113,8 @@ def _item(item):
     return {'source_id': _str(item['source_id'], 80),
             'revision': revision if isinstance(revision, int) and not isinstance(revision, bool) else 1,
             'question': _str(item.get('question'), 200),
-            'options': [clean(o, 200) for o in options[:20] if isinstance(o, str)] if isinstance(options, list) else [],
-            'answer': _answer(item.get('answer'), [clean(o, 200) for o in options[:20] if isinstance(o, str)] if isinstance(options, list) else []), 'state': item['state'],
+            'options': [clean(o, 200) for o in options[:OPTION_CAP] if isinstance(o, str)] if isinstance(options, list) else [],
+            'answer': _answer(item.get('answer'), [clean(o, 200) for o in options[:OPTION_CAP] if isinstance(o, str)] if isinstance(options, list) else []), 'state': item['state'],
             'url': _https(item.get('url')),
             'editor': _str(item.get('editor'), 80), 'observed_at': _str(item.get('observed_at'), 40),
             'answered_at': _str(item.get('answered_at'), 40),

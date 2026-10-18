@@ -10,7 +10,7 @@ import json
 import os
 from pathlib import Path
 
-from ..util import clean, iso
+from ..util import clean, iso, read_capped
 from . import SUBAGENT_TOOLS, meas, subagent_child, text_of
 
 ROLLOUT_ADAPTER = 'codex-rollout-v1 (turn_context.payload.model/effort, event token_count.info)'
@@ -53,10 +53,8 @@ def _tail_records(path):
     path = Path(path)
     if not path.is_file() or path.suffix != '.jsonl':
         return []
-    with open(path, 'rb') as stream:
-        size = stream.seek(0, os.SEEK_END)
-        stream.seek(max(0, size - TAIL_BYTES))
-        lines = stream.read().decode('utf-8', 'replace').splitlines()
+    raw, size, _ = read_capped(path, TAIL_BYTES, tail=True)
+    lines = raw.decode('utf-8', 'replace').splitlines()
     if size > TAIL_BYTES:
         lines = lines[1:]
     out = []

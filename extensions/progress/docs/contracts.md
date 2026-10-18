@@ -333,7 +333,8 @@ in its legend; (3) `shared`. A legend is a table row whose first cell holds brac
 "workstream" (`` | `[A]` / `[B]` | Coding lane: **A** … | ``), or a bold `**Workstream A**`. Role markers (`[Impl]`, `[QA]`,
 `[Docs]`, `[Collect]`, `[Review]`), `[P]` and phase headings are never workstream tags. A task with two legend tags is `shared`.
 Buckets hold task ids: checkbox done first, then an open blocker on the task or a marked lane, then a task with a running
-linked run, and the rest wait. A run's `workstream` is set when every task it holds belongs to the same workstream at its
+linked run, and the rest wait. When two marked lanes list the same task, the later record wins the task. Every marked workstream is still listed, with its
+owners, and each one the conflict names carries it in `conflicts`; only the winner holds the task in its buckets. A run's `workstream` is set when every task it holds belongs to the same workstream at its
 start (replayed from dated lane records for marked lanes), otherwise `null`. A run whose `started_at` is missing or not a time
 has no start to place against those records, so its workstream is `null` unless the ledger row names a marked lane in
 `workstream` or `lane_id` that holds all of its tasks. Lane facts that carry no marker are not
@@ -349,7 +350,9 @@ characters) and `evidence_links` holds the `{text, url}` of those that carry an 
 (or a list of texts) and `answer.index` is the explicit position (an int, a list for `multiple`, or `null` when the text names no
 option). The adapters decode once: Workflow's ledger and Scope's records store choices as letters (`A`, `B`, ...), and an in-range
 ASCII letter (`A`-`Z`, `a`-`z`) becomes the option at that position (any other character, such as `ß`, is kept as exact text with
-`index` `null`, and never raises); facts and free-text answers are matched by exact option text only. The UI highlights by
+`index` `null`, and never raises). Scope's labels are spreadsheet style, so a clarification label is one to three ASCII letters in
+either case, `A` is 0, `Z` is 25 and `AA` is 26, and it counts only when the index is within the options (Progress keeps up to 100
+options per item). Workflow decisions use single letters only; facts and free-text answers are matched by exact option text only. The UI highlights by
 `index`, else by exact option text. It never decodes a letter, so with options `S`, `M`, `L` the answer `M` is the option `M`. `pending` holds `pending` and `conflict`. `sources` states which
 adapters ran; "none recorded" is only true for the sources that were `available`.
 
@@ -375,7 +378,10 @@ a timeline, episode or history reference that names a run, a stage or a workstre
 
 **Sources.** `sources` lists every producer file that was read, its repository-relative path, a 16-hex SHA-256 prefix of
 the bytes that were parsed, the producer's generation when it has one, the read time and the file size. The hash, size and time
-are taken during collection, from the same bytes the collector parsed, never from a second read afterwards. `consistent` is
+are taken during collection, from the same bytes the collector parsed, never from a second read afterwards. Every file the build
+read through the tracked readers is listed, not a fixed set: a producer file keeps its name (`workflow-checkpoint`, `tasks`, `facts`
+and so on) and any other, such as a host snapshot, a delegate run's `meta.json` or `journal.jsonl` or the project config, is named by
+its repository-relative path (`external:<file name>` outside the repository). `consistent` is
 `false` when the file changed on disk after it was read, or was read twice with different bytes. Then the report is marked
 `collection.dirty` with `collection.inconsistent_sources`, the next refresh is flagged, and the UI shows that the snapshot may mix
 generations; the fingerprint still describes what was parsed, not the newer file. A source read through a byte cap carries a
@@ -579,7 +585,7 @@ self-report).
 ## Self-report
 
 `progress bind --host H --model M --effort E` writes `.host/self-report.json`: `{v, feature, worktree, host, session_id, actor, fields:{model:{value, at}, effort:{value, at}}}`. It is durable (not under `.view`, so deleting the view
-keeps it) and git-ignored. It applies only to the feature and worktree it was written in. With `--session ID` it applies to that session;
+keeps it) and git-ignored. It applies only to the feature and worktree it was written in. With `--session ID` it applies only when the host snapshot's main session equals that id; with no snapshot, or an unreadable one, it is not shown;
 without one it is an explicit "session unknown" report that applies to whichever session is bound, and to a report with no host
 session at all. Binding the same session again keeps the fields the new call does not restate; another session replaces the report.
 The projection takes each field from the host's own observation first and fills a gap from the self-report, with `source: "self-report"`,

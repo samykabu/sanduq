@@ -9,6 +9,7 @@ on top of it and takes the pieces v2 already settled (orchestrator telemetry, bl
 """
 import hashlib
 import os
+from pathlib import PurePath
 import re
 
 from . import SCHEMA_V3, selfreport
@@ -420,7 +421,9 @@ def build_workstreams(x, member, marked, conflicts, runs, blockers):
     done = {t['id'] for t in tk['tasks'] if t['done']}
     blocked_targets = {b['target'] for b in blockers if b.get('source') == 'facts'}
     live_tasks = {tid for r in runs if r['worker_status'] in LIVE for tid in r['tasks']}
-    groups = {}
+    # every marked workstream is listed, including one that lost all its tasks to a later assignment: it keeps its owners and
+    # the conflict, while each task's bucket stays on the winner
+    groups = {lid: {'origin': 'facts-marked', 'tasks': []} for lid in marked}
     for t in tk['tasks']:
         ws_id, origin = member[t['id']]
         groups.setdefault(ws_id, {'origin': origin, 'tasks': []})['tasks'].append(t['id'])
@@ -459,7 +462,7 @@ def build_workstreams(x, member, marked, conflicts, runs, blockers):
         out.append({'id': ws_id, 'label': label, 'description': description, 'origin': group['origin'], 'tasks': buckets,
                     'owners': owners, 'run_ids': [r['run_id'] for r in runs if r['workstream'] == ws_id],
                     'conflicts': [{'task': tid, 'workstreams': lanes} for tid, lanes in sorted(conflicts.items())
-                                  if tid in group['tasks']]})
+                                  if ws_id in lanes]})
     return out
 
 
@@ -546,22 +549,28 @@ def build_sources(ctx, reads):
     size and read time come from the read itself, never from a second read). `consistent` is false when the file changed on
     disk after it was read, or was read twice with different bytes, so the report may mix generations."""
     out = []
-    candidates = [('workflow-checkpoint', ctx.feature_dir / 'workflow' / 'checkpoint.json'),
-                  ('workflow-delegations', ctx.feature_dir / 'workflow' / 'delegations.json'),
-                  ('workflow-decisions', ctx.feature_dir / 'workflow' / 'decisions.json'),
-                  ('workflow-lifecycle', ctx.feature_dir / 'workflow' / 'lifecycle.jsonl'),
-                  ('clarifications', ctx.feature_dir / 'workflow' / 'clarifications.json'),
-                  ('tasks', ctx.feature_dir / 'tasks.md'), ('facts', ctx.facts), ('self-report', selfreport.path_of(ctx))]
+    known = {os.path.normpath(str(p)): n for n, p in (
+        ('workflow-checkpoint', ctx.feature_dir / 'workflow' / 'checkpoint.json'),
+        ('workflow-delegations', ctx.feature_dir / 'workflow' / 'delegations.json'),
+        ('workflow-decisions', ctx.feature_dir / 'workflow' / 'decisions.json'),
+        ('workflow-lifecycle', ctx.feature_dir / 'workflow' / 'lifecycle.jsonl'),
+        ('clarifications', ctx.feature_dir / 'workflow' / 'clarifications.json'),
+        ('tasks', ctx.feature_dir / 'tasks.md'), ('facts', ctx.facts), ('self-report', selfreport.path_of(ctx)))}
     changed = reads.changed() if reads else set()
-    for name, path in candidates:
-        row = reads.get(path) if reads else None
-        if row is None:
-            continue
-        entry = {'name': name, 'path': path.relative_to(ctx.root).as_posix(), 'fingerprint': row['sha'][:16], 'generation': None,
-                 'read_at': row['read_at'], 'bytes': row['size'], 'consistent': os.path.normpath(str(path)) not in changed}
+    root = os.path.normpath(str(ctx.root))
+    # Every file the build read is a source, not a fixed list: host snapshots, delegate run journals, project config and so on.
+    # A file the report knows by name keeps it; any other is named by its repository-relative path (a file outside the
+    # repository by `external:<file name>`, never an absolute path).
+    for key, row in sorted((reads.rows if reads else {}).items()):
+        inside = os.path.commonpath([root, key]) == root if os.path.splitdrive(root)[0] == os.path.splitdrive(key)[0] else False
+        rel = PurePath(os.path.relpath(key, root)).as_posix() if inside else 'external:' + os.path.basename(key)
+        entry = {'name': known.get(key) or rel, 'path': rel, 'fingerprint': row['sha'][:16], 'generation': None,
+                 'read_at': row['read_at'], 'bytes': row['size'], 'consistent': key not in changed}
         if row['truncated']:
             entry['note'] = f"only {row['bytes']} of {row['size']} bytes read"
         out.append(entry)
+    order = list(known.values())
+    out.sort(key=lambda e: (order.index(e['name']) if e['name'] in order else len(order), e['name']))
     return out
 
 

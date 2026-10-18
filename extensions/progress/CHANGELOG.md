@@ -2,7 +2,7 @@
 
 ## [1.2.0] - 2026-10-18
 
-- Vendors `progress-report` from `agent-tools-v1.4.1`. The report becomes the Timeline page: what needs attention, the
+- Vendors `progress-report` from `agent-tools-v1.4.2`. The report becomes the Timeline page: what needs attention, the
   orchestrator, a Gantt of Workflow stages over time with episode detail, what happened next to the workstreams and
   decisions, a History section for retired lanes, and a collapsed, searchable runs table. Lane boards are gone from the
   default page; `progress theme --layout classic` keeps the old view for one release.

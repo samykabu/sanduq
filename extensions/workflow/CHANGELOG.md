@@ -17,7 +17,7 @@
 - Reporting: on a Codex worktree whose hooks are not approved, the coordinator reports its own model and effort with `progress bind --host codex --model <m> --effort <e>` (needs Progress 1.2.0 or later). From Progress 1.2.0 the `progress.py` forwarder creates lanes with `--workstream`; older Progress versions get no flag.
 - Progress compatibility: the bridge reads `progress status --json --schema v2`, so Workflow keeps the v2 projection when Progress 1.2.0 defaults to v3. A Progress known to be older than 1.2.0 is called without it; for an unknown version, a usage-error rejection (exit 2) is retried once without the flag.
 - Requires Scope 1.7.0, which writes the clarification records Progress 1.2.0 reads.
-- The vendored `delegate-task` is re-pinned to `agent-tools-v1.4.1` without file changes, and Progress 1.2.0 is the optional
+- The vendored `delegate-task` is re-pinned to `agent-tools-v1.4.2` without file changes, and Progress 1.2.0 is the optional
   Progress version.
 
 ## [1.11.2] - 2026-10-18

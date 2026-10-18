@@ -48,12 +48,13 @@ def read(ctx, any_session=False):
 
 
 def applicable(doc, main_session_id):
-    """Fields that apply to the orchestrating session: a self-report bound to a session applies only to that session; a
+    """Fields that apply to the orchestrating session: a self-report bound to a session applies only when the observed main session equals it (a missing or unreadable host
+    snapshot, so no observed session, does not apply it); a
     session-unknown report applies to whichever session the host bound."""
     if not doc:
         return {}
     session = doc.get('session_id')
-    if session is not None and main_session_id is not None and session != main_session_id:
+    if session is not None and session != main_session_id:  # no observed main session means a bound report cannot be shown to match
         return {}
     return {name: f for name, f in doc['fields'].items()
             if name in FIELDS and isinstance(f, dict) and isinstance(f.get('value'), str) and parse_time(f.get('at'))}
