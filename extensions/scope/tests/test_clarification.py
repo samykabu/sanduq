@@ -698,8 +698,18 @@ class ClarificationTests(unittest.TestCase):
                 self.app.publish('1', review, True)
         self.assertEqual(self.gh.statuses[1], target)
         self.assertFalse(self.records_path().exists())
-        journal, = (self.root / '.specify/scope/clarifications').glob('*/journal.json')
+        journal, = [j for j in (self.root / '.specify/scope/clarifications').glob('*/journal.json')
+                    if not sm.read_json(j).get('complete')]
         self.assertFalse(sm.read_json(journal).get('complete'))
+        return journal
+
+    def interrupted_after_move(self, review, target):
+        with patch.object(m, 'persist_clarifications', side_effect=OSError('disk full')):
+            with self.assertRaises(OSError):
+                self.app.publish('1', review, True)
+        self.assertEqual(self.gh.statuses[1], target)
+        journal, = [j for j in (self.root / '.specify/scope/clarifications').glob('*/journal.json')
+                    if not sm.read_json(j).get('complete')]
         return journal
 
     def retry_repairs_without_a_second_publication(self, review, target):
@@ -740,6 +750,69 @@ class ClarificationTests(unittest.TestCase):
             self.retry_repairs_without_a_second_publication(review, m.WAITING)
         self.assertEqual(len(self.records()['items']), 1)
         self.assertEqual(len(list(self.records_path().parent.glob('clarifications.json.unreadable-*'))), 1)
+
+    def test_a_human_reply_after_the_crash_does_not_block_the_repair(self):
+        review = self.analysis([question()])
+        self.interrupted(review, m.WAITING)
+        self.gh.comment('C1Q1: B - I changed my mind')  # a human replies before the retry
+        preview = self.app.publish('1', review)
+        self.assertTrue(preview['unfinished'])
+        self.assertTrue(preview['dry_run'])
+        self.assertIn('unfinished', preview['reason'])
+        self.assertFalse(self.records_path().exists())
+        result = self.retry_repairs_without_a_second_publication(review, m.WAITING)
+        self.assertEqual(result['comment_ids'], {'C1Q1': 1000, 'summary': 1001})
+        item, = self.records()['items']
+        self.assertEqual((item['source_id'], item['state']), ('C1Q1', 'pending'))
+
+    def test_the_repair_requires_every_journaled_comment_to_exist(self):
+        review = self.analysis([question()])
+        self.interrupted(review, m.WAITING)
+        del self.gh.comments[0]
+        with self.assertRaisesRegex(sm.ScopeError, 'CLARIFICATION_JOURNAL_INVALID'):
+            self.app.publish('1', review, True)
+        self.assertFalse(self.records_path().exists())
+
+    def test_malformed_items_in_an_existing_file_are_quarantined_not_fatal(self):
+        item = {'source_id': 'C1Q1', 'question': 'Q?', 'options': [], 'answer': None, 'state': 'pending', 'url': 'u',
+                'editor': None, 'observed_at': 't1', 'answered_at': None, 'applied': None, 'evidence': [], 'batch': 'b1'}
+        bad_documents = ['{"v":1,"items":[{}]}', '{"v":1,"items":[null]}', '{"v":1,"items":["x"]}',
+                         '{"v":1,"items":[{"source_id":"C1Q1","revision":"2"}]}',
+                         '{"v":1,"items":[{"source_id":"C1Q1","revision":0}]}',
+                         '{"v":1,"items":[{"source_id":"C1Q1","revision":true}]}',
+                         '{"v":1,"items":[{"source_id":null,"revision":1}]}']
+        for bad in bad_documents:
+            path = self.root / 'out/clarifications.json'
+            path.parent.mkdir(parents=True, exist_ok=True)
+            for old in path.parent.glob('clarifications.json*'):
+                old.unlink()
+            path.write_text(bad, encoding='utf-8')
+            with patch('sys.stderr'):
+                document = m.persist_clarifications(path, [item], 'b1')
+                replay = m.persist_clarifications(path, [item], 'b1')  # the replay merges into the fresh file
+            self.assertEqual([i['revision'] for i in document['items']], [1], bad)
+            self.assertEqual(replay, document)
+            self.assertEqual((path.parent / 'clarifications.json.unreadable-b1').read_text(encoding='utf-8'), bad)
+
+    def test_publication_and_replay_survive_malformed_existing_items(self):
+        review = self.analysis([question()])
+        self.records_path().parent.mkdir(parents=True, exist_ok=True)
+        self.records_path().write_text('{"v":1,"items":[{}]}', encoding='utf-8')
+        with patch('sys.stderr'):
+            self.app.publish('1', review, True)
+        self.assertEqual(len(self.records()['items']), 1)
+        self.assertEqual(len(list(self.records_path().parent.glob('clarifications.json.unreadable-*'))), 1)
+        # An interrupted publication whose retry meets malformed items repairs too.
+        q = self.gh.comments[0]
+        q['body'] = q['body'].replace('- [ ] **A.**', '- [x] **A.**')
+        self.move(m.FEATURE)
+        answer = {'question_id': 'C1Q1', 'disposition': 'answered', 'comment_ids': [q['id']], 'explanation': 'Retry.'}
+        second = self.analysis(answers=[answer])
+        journal = self.interrupted_after_move(second, 'Ready')
+        self.records_path().write_text('{"v":1,"items":[null]}', encoding='utf-8')
+        with patch('sys.stderr'):
+            self.app.publish('1', second, True)
+        self.assertTrue(sm.read_json(journal).get('complete'))
 
     def test_a_journal_that_no_longer_matches_does_not_bypass_the_status_gate(self):
         review = self.analysis([question()])

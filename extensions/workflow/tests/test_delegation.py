@@ -743,6 +743,42 @@ class DelegationTests(unittest.TestCase):
         self.assertEqual(sorted(accepted['delegation_run_ids']), ['codex-scope', 'codex-scope-first'])
         self.assertTrue(all(e['candidate_run_id'] is None for e in events if e['event'] != 'accepted'))
 
+    def test_a_rejection_after_the_exact_claim_check_names_the_validated_attempt(self):
+        import lifecycle
+        self.enable()
+        run = w.Run(self.root, self.feature)
+        run.start('acme/app#10')
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()),              patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}):
+            claim = run.claim({'session_id': 'test-session'})
+        log = self.root / self.feature / 'workflow/lifecycle.jsonl'
+        # Before the delegation check: no attempt exists, so the rejection names no candidate.
+        with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_STAGE_NOT_VERIFIED'):
+            run.complete(claim['token'], fixture.WorkflowTests.receipt(self, 'scope'))
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()),              patch.object(dispatch, 'launch', return_value={'run_id': 'codex-scope', 'state': 'running'}):
+            dispatch.start(self.root, self.feature, 'stage:scope', token=claim['token'])
+        payload = {'run_id': 'codex-scope', 'status': 'successful', 'summary': 'Scoped',
+                   'harness': 'codex', 'model': 'gpt-6-sol', 'model_reported': False,
+                   'actual_model': None, 'model_observed': False,
+                   'status_provenance': {'primary': 'harness_telemetry'},
+                   'dirty_paths_changed': [], 'artifacts': {'dir': str(self.root / '.delegate/runs/codex-scope')}}
+        with patch.object(delegation, 'inspect_skill', return_value=self.fake_doctor()),              patch.object(dispatch.shutil, 'which', return_value='node'),              patch.object(dispatch.subprocess, 'run',
+                         return_value=subprocess.CompletedProcess([], 0, json.dumps(payload), '')):
+            dispatch.collect(self.root, self.feature, 'codex-scope')
+        # After it: a later check refuses the receipt, and the validated attempt is on the record.
+        with patch.object(w, 'fingerprint_files', side_effect=w.WorkflowError('INPUT_MISSING')):
+            with self.assertRaisesRegex(w.WorkflowError, 'INPUT_MISSING'):
+                run.complete(claim['token'], fixture.WorkflowTests.receipt(self, 'scope'))
+        # A rejection at the very first check, on a fresh instance, is back to null.
+        bad = fixture.WorkflowTests.receipt(self, 'scope')
+        bad['outcome'] = 'failed'
+        with self.assertRaisesRegex(w.WorkflowError, 'STAGE_NOT_PASSED'):
+            w.Run(self.root, self.feature).complete(claim['token'], bad)
+        events, _ = lifecycle.read_events(log)
+        rejected = [e for e in events if e['event'] == 'rejected-completion']
+        self.assertEqual([e['candidate_run_id'] for e in rejected], [None, 'codex-scope', None])
+        self.assertEqual([e['reason'].split(':')[0] for e in rejected],
+                         ['DELEGATION_STAGE_NOT_VERIFIED', 'INPUT_MISSING', 'STAGE_NOT_PASSED'])
+
     def test_complete_refuses_a_legacy_stage_attempt_with_no_claim_token(self):
         """Finding 5, round 3: a stage attempt recorded before claim_token
         existed has none and can never match a claim's token; complete

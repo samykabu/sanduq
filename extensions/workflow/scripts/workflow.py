@@ -2648,6 +2648,7 @@ class Run:
             state = self.load()
             active = state['active']
             require(active and active['token'] == token, 'CLAIM_TOKEN_MISMATCH')
+            self._validated_candidate = None  # set once the exact-claim delegation check has passed
             try:
                 return self._accept_completion(state, active, token, receipt)
             except (WorkflowError, ValueError) as exc:
@@ -2672,6 +2673,7 @@ class Run:
         claim_id = held.get('claim_id') or lifecycle.claim_id_for(token)
         lifecycle.queue(fresh, held['stage'], 'rejected-completion', claim_id=claim_id,
                         generation=fresh.get('generation', 0), episode_id=lifecycle.episode_for_claim(claim_id),
+                        candidate_run_id=getattr(self, '_validated_candidate', None),
                         delegation_run_ids=lifecycle.delegation_runs_for(self.feature, token, claim_id),
                         reason=str(exc))
         write(self.path, fresh)
@@ -2724,6 +2726,7 @@ class Run:
                     ' or was not started under this claim; collect, accept or reassign it before '
                     'completing this stage. A legacy attempt recorded before claim_token existed has '
                     'none and will never match; re-delegate the stage once under this workflow release')
+            self._validated_candidate = stage_attempt.get('run_id')
         if stage == 'clarify':
             require(receipt.get('unresolved') == 0 and receipt.get('answers_applied') is True, 'CLARIFICATION_UNRESOLVED')
         if BASE_STAGES.index(stage) >= BASE_STAGES.index('specify'):

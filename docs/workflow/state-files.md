@@ -159,9 +159,10 @@ Three fields answer different questions, and a reader should not merge them:
 
 - `delegation_run_ids` is claim membership: every run the delegation ledger links to the claim,
   including a failed attempt that a later one replaced.
-- `candidate_run_id` is set only on `accepted`. It is the stage attempt that the exact-claim check
-  validated, so a failed predecessor under the same claim is a member but not the candidate. It is
-  `null` when the claim had no delegation route, and `null` on every other event.
+- `candidate_run_id` is the stage attempt that the exact-claim check validated, so a failed predecessor
+  under the same claim is a member but not the candidate. `accepted` always carries it, and
+  `rejected-completion` carries it when the refusal came after that check passed. It is `null` when the
+  claim had no delegation route, when a rejection happened at or before the check, and on every other event.
 - `caused_by_claim_id` is set only on the `invalidated` events that a claim writes for the downstream
   receipts it removes. Those receipts belong to no claim and no episode, so `claim_id` and `episode_id`
   are `null` and the new claim is named here. Every other event writes `null`.
@@ -205,9 +206,15 @@ that Scope's own `clarification_items` produces and a test regenerates.
 list of strings, even when it holds one entry. A reader that sees a bare string is looking at a file
 written before the shape was pinned and should wrap it.
 
-If a later publication finds `clarifications.json` unreadable, Scope moves it to
+If a later publication finds `clarifications.json` unreadable or malformed (not an object with `v: 1`, an item
+that is not an object, a missing `source_id`, or a `revision` that is not a positive integer), Scope moves it to
 `clarifications.json.unreadable-<batch>`, writes a fresh file and prints a warning. The specification and
 the board have already moved by then, so failing would repeat the same failure on every rerun.
+
+A retry of a publication that stopped after the board moved repairs only the records. It does not compare the
+live thread with the stored baseline, so a human reply that arrived after the crash does not block it. It builds
+the records from the stored snapshot and analysis and the journaled comment ids, and requires that those
+comments still exist. A dry run reports `unfinished: true`.
 
 ## Receipt contract (1.6.0)
 
