@@ -2,8 +2,10 @@
   "schema_version": 1,
   "versions": {
     "workflow": "1.11.2",
-    "memory": "2.2.1"
+    "memory": "2.2.1",
+    "assure": "2.3.3",
+    "user-manual": "1.5.3"
   },
   "status": "ready",
-  "note": "Workflow1.11.2 and Memory2.2.1 are independently reviewed and locally validated. Publish through the existing release workflow after successful current-main CI; verify immutable assets before catalog promotion."
+  "note": "Workflow 1.11.2 and Memory 2.2.1 retain their independently reviewed and locally validated fixes. Assure 2.3.3 and User Manual 1.5.3 ship the reviewed shared freshness helper; Workflow 1.11.2 pins both selected dependencies. This release-closure batch changes metadata only; reviewed production code is unchanged. All four versions are ready for publication through the existing release workflow after successful current-main CI; verify immutable assets before catalog promotion."
 }

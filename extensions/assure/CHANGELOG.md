@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.3] - 2026-10-18
+
+- Ship the reviewed shared freshness helper in the Assure package. Generated Progress reports
+  under `specs/*/progress/` and `.specify/progress/` no longer stale QA analysis or documentation
+  state. Changes to true source inputs, including product directories such as `src/progress`,
+  still invalidate that state.
+
 ## [2.3.2] - 2026-10-10
 
 - README links point to the new extension page, install-by-host page and command reference.

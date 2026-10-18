@@ -108,5 +108,108 @@
     },
     "coordinator_check": "Exact two-file delta inspected; no assertion removed and no runtime or fingerprint change",
     "platform_boundary": "Windows checks passed locally. Corrected Linux confirmation remains a merge gate."
+  },
+  "release_closure": {
+    "collected_at": "2026-10-18T00:03:51.223179+00:00",
+    "base_commit": "fe3d6815ccb609f4e6ccd37bf399576f45bdded5",
+    "scope": "Version, dependency pin, changelog and source-index metadata only; reviewed runtime code unchanged",
+    "versions": {
+      "workflow": "1.11.2",
+      "memory": "2.2.1",
+      "assure": "2.3.3",
+      "user-manual": "1.5.3"
+    },
+    "owners": "Shared freshness helper is packaged by Assure and User Manual; Workflow pins the corrected selected dependencies",
+    "shared_helper_sha256": "506e53963bfb07513af2e674c9d287908adf7c403e609ddebcdfd04cd22aed40",
+    "static_unit_passes": 70,
+    "validation_results_sha256": "bd0942a2352e35443a9a86941db9b5776b17af85444360eed75a347c2ea47d33",
+    "four_package_inventories_and_helper_bytes_verified": true,
+    "local_windows_package_identities": [
+      {
+        "id": "workflow",
+        "version": "1.11.2",
+        "tag": "workflow-v1.11.2",
+        "archive": "dist\\workflow.zip",
+        "sha256": "2b2e78e982084218113b6cc2614acb650cb163091682164e9e75d1a1d56bf7e5",
+        "files": 147,
+        "inventory_verified": true,
+        "ships_shared_freshness": false,
+        "dependencies": {
+          "schema_version": 1,
+          "repository": "https://github.com/samykabu/sanduq",
+          "required": {
+            "scope": "1.6.2",
+            "project": "2.2.2",
+            "pr": "4.2.3",
+            "illustrate": "2.4.2"
+          },
+          "selected": {
+            "qa": {
+              "assure": "2.3.3"
+            },
+            "user_manual": {
+              "user-manual": "1.5.3"
+            }
+          },
+          "optional": {
+            "progress": "1.1.3"
+          },
+          "upstream_optional": {
+            "superspec": {
+              "repository": "https://github.com/WangX0111/superspec",
+              "tested_version": "1.0.2",
+              "tested_commit": "c20ac6c1ba069cc9a72dacb8044b7b193d3dde81"
+            }
+          },
+          "tested_spec_kit": {
+            "version": "1.0.11",
+            "commit": "8147943512404afb9d99c6252cb9bf84369fd0b0"
+          }
+        },
+        "deterministic_rebuild_verified": true
+      },
+      {
+        "id": "memory",
+        "version": "2.2.1",
+        "tag": "memory-v2.2.1",
+        "archive": "dist\\memory.zip",
+        "sha256": "03e19ff98e8bd630e0c09e618d0b2b82f5ae72c55555f498be6f645dc4bd2d65",
+        "files": 26,
+        "inventory_verified": true,
+        "ships_shared_freshness": false,
+        "deterministic_rebuild_verified": true
+      },
+      {
+        "id": "assure",
+        "version": "2.3.3",
+        "tag": "assure-v2.3.3",
+        "archive": "dist\\assure.zip",
+        "sha256": "fd380c518da103c3b51521e27cf93b73b1d7df29a18733d1486e740008c19560",
+        "files": 21,
+        "inventory_verified": true,
+        "shared_freshness_sha256": "506e53963bfb07513af2e674c9d287908adf7c403e609ddebcdfd04cd22aed40",
+        "shared_freshness_byte_identical": true,
+        "deterministic_rebuild_verified": true
+      },
+      {
+        "id": "user-manual",
+        "version": "1.5.3",
+        "tag": "user-manual-v1.5.3",
+        "archive": "dist\\user-manual.zip",
+        "sha256": "b4a78d30b76942ff793672aa062a453e32f6d631d5bf4fadf046408d0ad535db",
+        "files": 50,
+        "inventory_verified": true,
+        "shared_freshness_sha256": "506e53963bfb07513af2e674c9d287908adf7c403e609ddebcdfd04cd22aed40",
+        "shared_freshness_byte_identical": true,
+        "deterministic_rebuild_verified": true
+      }
+    ],
+    "author": {
+      "run_id": "codex-20261017235744-0e3455",
+      "requested_model": "gpt-6.1-sol",
+      "actual_model": "unreported",
+      "provenance": "harness_telemetry"
+    },
+    "remaining_gate": "Public CLI upgrade smoke with the final pins and normal PR/main CI before publication"
   }
 }

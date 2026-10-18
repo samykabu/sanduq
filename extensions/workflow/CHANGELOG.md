@@ -6,7 +6,7 @@
 - Queue Memory work after accepted Execute completion for both Core and SuperSpec. Repeated handoffs preserve existing queue entries; missing dependencies, disabled approval and check coverage failures keep their actual pending or blocked reason.
 - Add one local handoff for session entry and verified post-merge follow-up. It binds the exact feature, repository, PR and target, prioritizes active recovery and returns registered Memory actions for verification, synthesis and review. Product receipts and `pr_open` keep their existing meaning.
 - The QA Document stage may refresh the generated `.github/memory/project-memory.md` inventory. The runtime records the old and new hashes in lineage and advances the earlier receipts' source fingerprints instead of failing with `UPSTREAM_INPUT_CHANGED_DURING_STAGE`.
-- Generated Progress reports (`specs/*/progress/`, `.specify/progress/`) no longer count as freshness inputs, so writing a report cannot stale a passing check receipt. Product directories such as `src/progress` still count.
+- Pin the selected QA and User Manual dependencies to Assure 2.3.3 and User Manual 1.5.3. Their packages ship the reviewed shared freshness helper, which excludes generated Progress reports (`specs/*/progress/`, `.specify/progress/`) from QA and manual freshness inputs while preserving true source changes. Workflow and Memory do not ship that helper.
 
 ## [1.11.1] - 2026-10-17
 
