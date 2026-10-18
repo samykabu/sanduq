@@ -65,7 +65,7 @@ and the per-feature migration above:
 4. Compare the run with the previous one: `status` shows the profile and the skipped stages, the
    receipts record `command: workflow:lint` where the lint replaced a model Analyze, and the host's
    own usage view gives the token spend. The repository benchmark
-   ([docs/internal/benchmarks](../internal/benchmarks/README.md)) measured runtime cost and
+   (`docs/internal/benchmarks/` in the sanduq repository) measured runtime cost and
    instruction load, not generated tokens, so a live run is the confirmation.
 
 Codex can now install the portable plugin bundles from the same marketplace

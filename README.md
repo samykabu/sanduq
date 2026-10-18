@@ -128,7 +128,7 @@ $speckit-workflow-scope 412 Scope this issue and continue through implementation
 
 Scope records the effort score, the first Plan claim fixes the tier, and `status` lists the stages
 the tier skips. On Codex, approve the new guard hook once in `/hooks`. The benchmark that motivated
-these defaults, and how to rerun it, is in [docs/internal/benchmarks](docs/internal/benchmarks/README.md);
+these defaults, and how to rerun it, is in `docs/internal/benchmarks/` in this repository;
 a live run is the confirmation of token spend, because the benchmark measures runtime cost and
 instruction load, not generated tokens. Codex installs of the portable plugin bundles from the
 marketplace are published but not yet exercised. See [upgrades](docs/start/upgrades.md#adopt-workflow-1130-profiles)
