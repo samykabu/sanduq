@@ -11,6 +11,8 @@ command, restoring the recorded default afterwards, and verifies the result.
 """
 from __future__ import annotations
 
+import json
+import os
 import re
 import uuid
 from pathlib import Path
@@ -36,6 +38,31 @@ INTEGRATION_FILES = ('.specify/integration.json', '.specify/init-options.json')
 # hashes of earlier content each may replace without it being a local edit.
 ALIASES = {'speckit-scope': 'legacy-alias-hashes.json',
            'speckit-superpowers-bridge': 'legacy-bridge-alias-hashes.json'}
+INSTALL_LOCK = '.specify/workflow/install-lock.json'
+# Scope commands only its hooks call; on Claude they leave the slash menu but stay callable.
+HOOK_ONLY_SKILLS = tuple('speckit-scope-' + name for name in ('guard', 'bind', 'after-specify', 'plan-guard', 'reconcile'))
+# Where each host reads project hooks, and the text that marks Sanduq's guard entry in them.
+HOOK_FILES = {'claude': '.claude/settings.json', 'codex': '.codex/hooks.json'}
+GUARD_MARK = 'workflow/hooks/guard.py'
+CODEX_HOOK_APPROVAL = ('Codex runs project hooks only in a trusted project and after you approve them: open Codex here, '
+                       'run /hooks and approve the Sanduq guard (.codex/hooks.json).')
+ROLES = ('worker', 'reviewer')
+ROLE_FILES = {'claude': '.claude/agents/sanduq-{}.md', 'codex': '.codex/agents/sanduq-{}.toml'}
+ROLE_MARKER = 'sanduq-role:v1'
+
+
+def aliases_enabled(root):
+    """Whether the short aliases are installed: the recorded choice, else what an older install left."""
+    lock = read(root / INSTALL_LOCK, {})
+    lock = lock if isinstance(lock, dict) else {}
+    return lock['with_aliases'] if isinstance(lock.get('with_aliases'), bool) else bool(lock.get('aliases'))
+
+
+def alias_wanted(name, destination, enabled, registered):
+    """An upstream Bridge, once registered, is always replaced: it is an executor that bypasses the workflow."""
+    if name == 'speckit-superpowers-bridge':
+        return name in registered or (enabled and destination.exists())
+    return enabled
 
 
 def skill_name(command):
@@ -153,9 +180,10 @@ def alias_sources(package_root):
     return {name: source(name).read_bytes() for name in ALIASES}
 
 
-def alias_errors(root, package_root, hosts=None):
+def alias_errors(root, package_root, hosts=None, enabled=None):
     """Managed aliases that are not the packaged Sanduq content on every host folder."""
     hosts = installed_hosts(root) if hosts is None else hosts
+    enabled = aliases_enabled(root) if enabled is None else enabled
     registered = registry(root)
     errors = []
     for name, source in alias_sources(package_root).items():
@@ -164,7 +192,7 @@ def alias_errors(root, package_root, hosts=None):
             if not skills.is_dir():
                 continue
             destination = skills / name / 'SKILL.md'
-            if name == 'speckit-superpowers-bridge' and name not in registered and not destination.exists():
+            if not alias_wanted(name, destination, enabled, registered):
                 continue
             if (not destination.is_file() or destination.is_symlink() or
                     destination.read_bytes().replace(b'\r\n', b'\n') != source.replace(b'\r\n', b'\n')):
@@ -193,6 +221,148 @@ def register_hosts(root, runner, log, default, hosts, only=None):
     for name, content in saved.items():
         (root / name).write_bytes(content)
     return others
+
+
+def with_flag(text, key='user-invocable', value='false'):
+    """``text`` with ``key: value`` in its YAML frontmatter; unchanged when already so or without frontmatter."""
+    newline = '\r\n' if text.split('\n', 1)[0].endswith('\r') else '\n'
+    lines = text.split(newline)
+    fences = [index for index, line in enumerate(lines) if line.strip() == '---']
+    if len(fences) < 2 or fences[0] != 0:
+        return text
+    end = fences[1]
+    wanted = key + ': ' + value
+    for index in range(1, end):
+        if re.match(re.escape(key) + r'\s*:', lines[index]):
+            if lines[index].strip() == wanted:
+                return text
+            lines[index] = wanted
+            return newline.join(lines)
+    return newline.join(lines[:end] + [wanted] + lines[end:])
+
+
+def hide_hook_skills(root):
+    """Mark Scope's hook-only commands ``user-invocable: false`` on Claude, after every Spec Kit render."""
+    changed = []
+    for name in HOOK_ONLY_SKILLS:
+        path = root / HOST_SKILLS['claude'] / name / 'SKILL.md'
+        if not path.is_file() or path.is_symlink():
+            continue
+        text = path.read_bytes().decode('utf-8')
+        updated = with_flag(text)
+        if updated != text:
+            path.write_bytes(updated.encode('utf-8'))
+            changed.append(path.relative_to(root).as_posix())
+    return changed
+
+
+def python_name(os_name=None):
+    """Windows' python3 is often the Store stub; elsewhere python may not exist."""
+    return 'python' if (os_name or os.name) == 'nt' else 'python3'
+
+
+def guard_hooks(package_root, os_name=None):
+    """The packaged guard hook entries, with {python} rendered for this platform."""
+    document = json.loads((package_root / 'hooks/hooks.json').read_text(encoding='utf-8'))
+    for groups in document['hooks'].values():
+        for group in groups:
+            for hook in group['hooks']:
+                hook['command'] = hook['command'].replace('{python}', python_name(os_name))
+    return document['hooks']
+
+
+def is_guard(handler):
+    return isinstance(handler, dict) and GUARD_MARK in str(handler.get('command', ''))
+
+
+def register_guard(root, host, package_root):
+    """Merge the guard into the host's project hook file, replacing only an earlier guard entry."""
+    path = root / HOOK_FILES[host]
+    raw = path.read_text(encoding='utf-8-sig') if path.is_file() else ''
+    try:
+        data = json.loads(raw) if raw.strip() else {}
+    except ValueError:
+        data = None
+    require(isinstance(data, dict) and isinstance(data.get('hooks', {}), dict),
+            'HOOK_SETTINGS_INVALID: ' + HOOK_FILES[host] + ' is not a JSON object with a "hooks" object; fix it first')
+    before = json.dumps(data, sort_keys=True)
+    hooks = data.setdefault('hooks', {})
+    for event, groups in guard_hooks(package_root).items():
+        kept = []
+        for group in hooks.get(event) if isinstance(hooks.get(event), list) else []:
+            inner = group.get('hooks') if isinstance(group, dict) else None
+            if isinstance(inner, list) and any(is_guard(h) for h in inner):
+                inner = [h for h in inner if not is_guard(h)]
+                if not inner:
+                    continue
+                group = {**group, 'hooks': inner}
+            kept.append(group)
+        hooks[event] = kept + groups
+    if json.dumps(data, sort_keys=True) == before:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2) + '\n', encoding='utf-8')
+    return True
+
+
+def render_role(role, host, model=None):
+    """One role definition as the host's custom-agent file."""
+    source = '.specify/extensions/workflow/assets/roles/' + role['name'].removeprefix('sanduq-') + '.yml'
+    note = ROLE_MARKER + ' generated from ' + source + ' by the workflow installer; local edits are replaced'
+    instructions = role['instructions'].strip() + '\n'
+    if host == 'claude':
+        head = ['---', 'name: ' + role['name'], 'description: ' + json.dumps(role['description'], ensure_ascii=False),
+                'tools: ' + ', '.join(role['tools'])] + (['model: ' + model] if model else []) + ['---']
+        return '\n'.join(head) + '\n\n<!-- ' + note + ' -->\n\n' + instructions
+    # A TOML literal string keeps the text readable; JSON string escapes are valid TOML otherwise.
+    body = "'''\n" + instructions + "'''" if "'''" not in instructions else json.dumps(instructions, ensure_ascii=False)
+    lines = ['# ' + note, 'name = ' + json.dumps(role['name']),
+             'description = ' + json.dumps(role['description'], ensure_ascii=False)]
+    lines += ['model = ' + json.dumps(model)] if model else []
+    return '\n'.join(lines + ['developer_instructions = ' + body]) + '\n'
+
+
+def install_roles(root, host, package_root, policy=None):
+    """Write each role file Sanduq owns; a same-named file without the marker is the user's and is left alone.
+
+    A model is set only when delegation is enabled, so its reviewed model names apply; otherwise the
+    role inherits the session's model.
+    """
+    delegation = (policy or {}).get('delegation') or {}
+    models = ((delegation.get('models') or {}).get(host) or {}) if delegation.get('enabled') else {}
+    written, skipped = [], []
+    for name in ROLES:
+        role = yaml.safe_load((package_root / 'assets/roles' / (name + '.yml')).read_text(encoding='utf-8'))
+        path = root / ROLE_FILES[host].format(name)
+        relative = path.relative_to(root).as_posix()
+        current = path.read_text(encoding='utf-8-sig') if path.is_file() else None
+        if current is not None and ROLE_MARKER not in current:
+            skipped.append(relative)
+            continue
+        content = render_role(role, host, models.get(role['model_tier']))
+        if current != content:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding='utf-8')
+            written.append(relative)
+    return written, skipped
+
+
+def apply_host_files(root, policy=None, package_root=None, hosts=None):
+    """Re-apply what Sanduq adds to each installed host beside its skills: hidden hook-only
+    skills, the guard hook and the role agents. Idempotent; install, host switch and reconcile run it."""
+    package_root = package_root or PACKAGE
+    hosts = installed_hosts(root) if hosts is None else hosts
+    result = {'hidden_skills': hide_hook_skills(root) if 'claude' in hosts else [],
+              'hooks_registered': [], 'roles_written': [], 'roles_skipped': []}
+    for host in hosts:
+        if register_guard(root, host, package_root):
+            result['hooks_registered'].append(HOOK_FILES[host])
+        written, skipped = install_roles(root, host, package_root, policy)
+        result['roles_written'] += written
+        result['roles_skipped'] += skipped
+    if 'codex' in hosts:
+        result['codex_hook_approval'] = CODEX_HOOK_APPROVAL
+    return result
 
 
 def model_family(model):
@@ -332,7 +502,8 @@ def switch(root, target, preview=False, runner=None, package_root=None, replace_
         blockers.append('LEGACY_EXECUTOR_OWNS_FEATURE: reconcile its actual work before switching hosts')
     # Judged before any Spec Kit command runs; Spec Kit's own render counts only
     # when the whole file is exactly what it generates from the current sources.
-    review = review_aliases(root, package_root, runner)
+    enabled = aliases_enabled(root)
+    review = review_aliases(root, package_root, runner, enabled=enabled)
     if not replace_unrecognized_aliases:
         blockers += alias_edit_errors(root, package_root, review=review)
     upgrade = read(root / '.specify/workflow/runtime/upgrade.lock', {})
@@ -387,7 +558,7 @@ def switch(root, target, preview=False, runner=None, package_root=None, replace_
             replaced = []
             aliases = install_aliases(root, package_root, baseline=before, generated=review['generated'],
                                       replace_unrecognized=replace_unrecognized_aliases, backup=backup,
-                                      replaced=replaced)
+                                      replaced=replaced, enabled=enabled)
             reconcile(root, apply=True)
             if policy['delegation']['enabled']:
                 from delegation import doctor as delegation_doctor, health_error

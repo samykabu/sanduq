@@ -17,7 +17,7 @@ def reconcile(root, apply=False, restore=False):
 
 
 def _reconcile(root, apply=False, restore=False):
-    load_policy(root)
+    policy = load_policy(root)
     path = root / '.specify/extensions.yml'
     require(path.is_file(), 'EXTENSIONS_CONFIG_REQUIRED')
     document = yaml.safe_load(path.read_text(encoding='utf-8-sig'))
@@ -53,7 +53,11 @@ def _reconcile(root, apply=False, restore=False):
         if not restore: write(backup, journal)
         path.write_text(yaml.safe_dump(document, sort_keys=False, allow_unicode=True), encoding='utf-8')
         if restore: backup.unlink(missing_ok=True)
-    return {'applied': apply, 'restore': restore, 'changes': changes,
+    host_files = None
+    if apply and not restore:
+        from hosts import apply_host_files  # hidden hook-only skills, guard hook, role agents
+        host_files = apply_host_files(root, policy)
+    return {'applied': apply, 'restore': restore, 'changes': changes, 'host_files': host_files,
             'note': 'Domain commands remain installed. Managed dispatcher owns sequencing; scope guard/bind and unrelated hooks remain intact.'}
 
 

@@ -9,7 +9,7 @@ Install only the tools your [adoption level](../reference/glossary.md#adoption-l
 | Tool | Needed by | Tested |
 | --- | --- | --- |
 | Spec Kit (`specify` CLI) | Every extension | 1.0.11, commit `8147943` |
-| Python | Every extension; Illustrate export; User Manual builds | 3.13 in CI |
+| Python | Every extension; Illustrate export; User Manual builds; Workflow's guard hook (`python3`, or `python` on Windows, on `PATH`) | 3.13 in CI |
 | Node.js and npm | `npx skills`; Delegate Task (18 or later); Illustrate's hand-drawn generator | `skills` 1.7.2 in CI; Node unverified |
 | Git | Workflow, Memory, Scope (required); others (optional) | Unverified |
 | GitHub CLI (`gh`) with Project scopes | Workflow, Scope (required); Project, PR (optional) | Unverified |

@@ -23,6 +23,19 @@ npx skills add samykabu/sanduq-skills --skill user-manual -a codex
 Add `-g` to install for your user instead of the project. Codex reads project skills from
 `.agents/skills/`. Start a new session after installing.
 
+**Plugin bundles.** Codex reads the Sanduq marketplace from `.agents/plugins/marketplace.json`. It
+lists the same bundles, pinned to the same releases, as the Claude Code marketplace:
+
+```bash
+codex plugin marketplace add samykabu/sanduq
+codex plugin add dev-tools@sanduq
+codex plugin add illustration-tools@sanduq
+codex plugin add agent-tools@sanduq
+```
+
+A Codex install of these bundles has not been exercised yet. Each bundle carries a root
+`plugin.json` (Agent Plugins 1.0.0) next to its Claude Code manifest; report anything that fails.
+
 **Extensions.** Initialize Spec Kit for Codex and register the catalog:
 
 ```bash
@@ -157,6 +170,49 @@ $speckit-workflow-doctor Verify project readiness and installed host commands.
 ```
 
 Continue with the [managed-workflow scenario](../scenarios/managed-workflow.md).
+
+## What the Workflow installer adds to each host
+
+`install.py` and `reconcile` write these for every installed host, and rerunning either restores
+them. A failed install rolls them back.
+
+| File | Claude Code | Codex |
+| --- | --- | --- |
+| Guard hook (PreToolUse on `Bash`) | `.claude/settings.json` | `.codex/hooks.json` |
+| Worker and reviewer role agents | `.claude/agents/sanduq-worker.md`, `sanduq-reviewer.md` | `.codex/agents/sanduq-worker.toml`, `sanduq-reviewer.toml` |
+
+- **Guard hook.** It refuses `git add -A`, `git add .` and `git stash` in every session, with a
+  one-line reason, unless `SANDUQ_ROLE=coordinator` is set. It refuses the coordinator-only
+  `delegate_dispatch.py` commands (`trust-reset`, `accept`, `reassign`, `adopt`) only to a worker:
+  a subagent session (the host sends `agent_id` or `agent_type`), a delegated run
+  (`SANDUQ_DELEGATED_RUN` set) or `SANDUQ_ROLE=worker`. Your top-level session runs them as before.
+  The installer merges its one entry into the hook file and keeps your other settings and hooks.
+  Codex runs project hooks only in a trusted project after you approve them: open Codex in the
+  project, run `/hooks` and approve the Sanduq guard. The installer writes `python` on Windows and
+  `python3` elsewhere into the hook command, so that name must be on `PATH`; without the installed
+  guard script the hook allows everything.
+- **Role agents.** They hold the worker protocol, so a worker brief shrinks to a task card under
+  1.5 KB. A role file without the `sanduq-role:v1` marker is yours and is left alone. The model is
+  set only when delegation is enabled; otherwise the role uses the session's model.
+- **Hook-only Scope skills.** On Claude Code, `speckit-scope-guard`, `-bind`, `-after-specify`,
+  `-plan-guard` and `-reconcile` get `user-invocable: false`, so they leave the `/` menu but stay
+  callable by Scope's hooks.
+- **Short aliases.** `speckit-scope` and `speckit-superpowers-bridge` are installed only with
+  `install.py --with-aliases`. A project that already has them keeps them until you run
+  `--without-aliases`. A registered upstream Superpowers Bridge is always replaced, because it is an
+  executor that would bypass the workflow.
+
+## Standing instructions: AGENTS.md
+
+Keep the project's standing agent instructions in `AGENTS.md`; Codex reads it directly. Claude Code
+reads `CLAUDE.md`, so make `CLAUDE.md` import the shared file instead of copying it:
+
+```markdown
+@AGENTS.md
+```
+
+Add Claude-only notes below the import. Workflow `doctor` warns `INSTRUCTION_FILES_DUPLICATED` when
+both files exist and `CLAUDE.md` does not import `@AGENTS.md`.
 
 ## Limits
 

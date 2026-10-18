@@ -278,5 +278,56 @@ class WorkerBriefLeanTests(unittest.TestCase):
                          (3, None, None))
 
 
+class TaskCardTests(unittest.TestCase):
+    """E8: with the role agents installed, the worker gets a task card under 1.5 KB."""
+    setUp = WorkerBriefTests.setUp
+
+    def install_role(self, path='.claude/agents/sanduq-worker.md'):
+        target = self.root / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text('role', encoding='utf-8')
+
+    def test_card_replaces_the_brief_when_a_role_is_installed(self):
+        for path, previous in (('.claude/agents/sanduq-worker.md', None),
+                               ('.codex/agents/sanduq-worker.toml', '.claude/agents/sanduq-worker.md')):
+            if previous:
+                (self.root / previous).unlink()
+            self.install_role(path)
+            card, context, oversized = wb.build(self.root, self.feature, 'T001')
+            self.assertEqual((context['format'], context['role'], oversized), ('card', 'sanduq-worker', False))
+            self.assertLessEqual(len(card.encode('utf-8')), wb.CARD_MAX_BYTES)
+            self.assertIn('- [ ] T001 Implement the `src/pool.py` capacity check for EXEC-06', card)
+            self.assertIn('`src/pool.py`', card)
+            self.assertIn('EXEC-06: The capacity warning must use the correct flag.', card)
+            self.assertIn(context['fingerprints']['source'], card)
+            self.assertNotIn('Result template', card)
+
+    def test_review_work_uses_the_reviewer_role_or_the_full_brief(self):
+        self.install_role()
+        brief, context, _ = wb.build(self.root, self.feature, 'T001', work_type='review')
+        self.assertEqual(context['format'], 'brief')
+        self.assertIn('## Result template (T7)', brief)
+        self.install_role('.claude/agents/sanduq-reviewer.md')
+        _, context, _ = wb.build(self.root, self.feature, 'T001', work_type='review')
+        self.assertEqual((context['format'], context['role']), ('card', 'sanduq-reviewer'))
+
+    def test_long_requirements_become_ids_and_a_too_long_task_falls_back(self):
+        self.install_role()
+        (self.directory / 'spec.md').write_text(
+            '\n'.join('EXEC-06: line %d %s' % (i, 'x' * 60) for i in range(40)), encoding='utf-8')
+        card, context, _ = wb.build(self.root, self.feature, 'T001')
+        self.assertEqual(context['format'], 'card')
+        self.assertIn('Requirements: EXEC-06 (verbatim lines in the details)', card)
+        self.assertLessEqual(len(card.encode('utf-8')), wb.CARD_MAX_BYTES)
+        (self.directory / 'tasks.md').write_text('- [ ] T001 ' + 'Implement it carefully. ' * 80 + '\n', encoding='utf-8')
+        _, context, _ = wb.build(self.root, self.feature, 'T001')
+        self.assertEqual(context['format'], 'brief')
+
+    def test_without_roles_the_full_brief_is_kept(self):
+        brief, context, _ = wb.build(self.root, self.feature, 'T001')
+        self.assertEqual(context['format'], 'brief')
+        self.assertIn('## Forbidden commands (S6)', brief)
+
+
 if __name__ == '__main__':
     unittest.main()

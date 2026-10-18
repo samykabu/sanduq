@@ -67,6 +67,13 @@ Install the [prerequisites](docs/start/prerequisites.md) first.
 npx skills add samykabu/sanduq-skills --skill illustrate -a codex
 ```
 
+**A plugin bundle, in Codex** (not yet exercised in a Codex install; Claude Code uses `/plugin`):
+
+```bash
+codex plugin marketplace add samykabu/sanduq
+codex plugin add illustration-tools@sanduq
+```
+
 **An extension, in a Spec Kit project:**
 
 ```bash
@@ -87,7 +94,9 @@ $speckit-workflow-doctor Check project readiness, dependencies and host commands
 $speckit-workflow-scope 412 Assess refund approval and continue through implementation. Stop before PR creation.
 ```
 
-Claude Code uses `/` instead of `$`. Every host is covered in [install by host](docs/start/install-by-host.md).
+Claude Code uses `/` instead of `$`. Every host is covered in [install by host](docs/start/install-by-host.md),
+including what the Workflow installer adds to each host: a guard hook, two role agents and the
+optional short aliases (`--with-aliases`).
 
 ## Can I use this?
 

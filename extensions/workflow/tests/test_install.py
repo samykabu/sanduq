@@ -224,14 +224,14 @@ class InstallTests(unittest.TestCase):
         with self.assertRaisesRegex(w.WorkflowError, 'NEWER_DEPENDENCY_DISABLED'):
             installer.install(self.root, package_root=self.package)
 
-    def test_scope_declares_it_requires_workflow_1_10_0(self):
+    def test_scope_declares_it_requires_workflow_1_13_0(self):
         source = Path(__file__).resolve().parents[2] / 'scope/extension.yml'
         doc = yaml.safe_load(source.read_text(encoding='utf-8'))
-        self.assertIn({'id': 'workflow', 'version': '>=1.10.0,<2.0.0', 'required': True},
+        self.assertIn({'id': 'workflow', 'version': '>=1.13.0,<2.0.0', 'required': True},
                       doc['requires']['extensions'])
-        installer.check_workflow_requirement('scope', doc, '1.10.0')
-        installer.check_workflow_requirement('scope', doc, '1.10.4')
-        for unsupported in ('1.7.0', '1.9.5', '2.0.0'):
+        installer.check_workflow_requirement('scope', doc, '1.13.0')
+        installer.check_workflow_requirement('scope', doc, '1.13.4')
+        for unsupported in ('1.7.0', '1.12.0', '2.0.0'):
             with self.assertRaisesRegex(w.WorkflowError, 'WORKFLOW_VERSION_UNSUPPORTED'):
                 installer.check_workflow_requirement('scope', doc, unsupported)
 
