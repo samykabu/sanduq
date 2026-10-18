@@ -186,6 +186,17 @@ Delegation attempts in `delegations.json` carry matching links when they are kno
 `claim_id` (stage attempts only), `parent_run_id` and `replaces_run_id`. A replacement or a
 reassignment names the run it replaces; a repeated start does not.
 
+## Linking checkpoint records to lifecycle events (1.12.0)
+
+A reader should not match a checkpoint record to a lifecycle event by stage and time. Two fields name the link:
+
+- A stored receipt carries `claim_id`, the claim that produced it. Its `completed_at` is the same instant
+  as the `at` of the `accepted` event for that claim.
+- A `recoveries[]` entry keeps the recovered claim in `claim`, and `claim.claim_id` is that claim's id. The
+  entry's `at` is the same instant as the `at` of the `recovered` event.
+
+Receipts and recoveries written before 1.12.0 have neither id; fall back to the stage and the time for those.
+
 ## Clarification records (Scope 1.7.0)
 
 Scope writes `specs/<feature>/workflow/clarifications.json` as `{"v": 1, "items": [...]}` after a

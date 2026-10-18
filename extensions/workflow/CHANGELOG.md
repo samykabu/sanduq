@@ -3,6 +3,7 @@
 ## [1.12.0] - 2026-10-17
 
 - Lifecycle events carry two more ids. `accepted` writes `candidate_run_id`, the stage attempt the exact-claim check validated (`null` without a delegation route), while `delegation_run_ids` stays claim membership. The `invalidated` events a claim writes for the receipts it removes have `claim_id` and `episode_id` `null` and name the new claim in `caused_by_claim_id`. Every other event writes both as `null`. `paused` with `stage: null` is a valid feature-level event.
+- A stored receipt carries `claim_id`, and a recovery record carries `claim.claim_id`. The `accepted` and `recovered` events use the receipt's `completed_at` and the recovery's `at` as their own `at`, so a reader can join them exactly.
 - `rejected-completion` also carries `candidate_run_id` when the refusal came after the exact-claim delegation check passed; it is `null` at or before that check.
 - A lifecycle log whose last record lacks only its newline keeps that record and terminates it before the replay is deduplicated. `complete` also records a rejection for `ValueError` (delegation and verification-plan errors), not only `WorkflowError`.
 - Progress capability detection reads `extension.yml`, else the package `VERSION`, else probes `lane new --workstream` once per process. The `--schema v2` retry happens only for an unknown version and only when the failure names the flag.

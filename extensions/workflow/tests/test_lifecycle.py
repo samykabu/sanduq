@@ -126,6 +126,27 @@ class ClaimAndAcceptTests(LifecycleBase):
         self.assertEqual((paused['event'], paused['claim_id'], paused['stage']), ('paused', claim['claim_id'], 'scope'))
 
 
+class IdentityLinkTests(LifecycleBase):
+    def test_receipts_and_recoveries_carry_the_claim_id_and_the_instant_of_their_events(self):
+        run = self.start()
+        claim = run.claim(self.usage())
+        run.complete(claim['token'], self.receipt('scope'))
+        receipt = run.load()['receipts']['scope']
+        accepted, = [e for e in self.events() if e['event'] == 'accepted']
+        self.assertEqual(receipt['claim_id'], claim['claim_id'])
+        self.assertEqual(receipt['claim_id'], accepted['claim_id'])
+        self.assertEqual(receipt['completed_at'], accepted['at'])
+        second = run.claim(self.usage())
+        code, result = self.cli('recover', '--feature', self.feature, '--token', second['token'], '--reason', 'lost session')
+        self.assertEqual(code, 0, result)
+        recovery, = run.load()['recoveries']
+        recovered, = [e for e in self.events() if e['event'] == 'recovered']
+        self.assertEqual(recovery['claim']['claim_id'], second['claim_id'])
+        self.assertEqual(recovery['claim']['claim_id'], recovered['claim_id'])
+        self.assertEqual(recovery['at'], recovered['at'])
+        self.assertEqual(recovery['claim']['stage'], recovered['stage'])
+
+
 class RejectionTests(LifecycleBase):
     def test_a_rejected_completion_is_recorded_and_the_claim_stays(self):
         run = self.start()

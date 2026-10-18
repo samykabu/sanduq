@@ -2808,10 +2808,11 @@ class Run:
             if key:
                 stored['head'], stored['source_key'] = head, key
         stored['completed_at'] = now()
+        claim_id = active.get('claim_id') or lifecycle.claim_id_for(token)
+        stored['claim_id'] = claim_id  # links this receipt to its lifecycle events
         state['receipts'][stage] = stored
         state['active'] = None
-        claim_id = active.get('claim_id') or lifecycle.claim_id_for(token)
-        lifecycle.queue(state, stage, 'accepted', claim_id=claim_id,
+        lifecycle.queue(state, stage, 'accepted', claim_id=claim_id, at=stored['completed_at'],
                         episode_id=lifecycle.episode_for_claim(claim_id),
                         candidate_run_id=(stage_attempt or {}).get('run_id'),
                         delegation_run_ids=lifecycle.delegation_runs_for(self.feature, token, claim_id))
@@ -3063,9 +3064,11 @@ def main():
                     state = run.load()
                     if args.action == 'recover':
                         require(state['active'] and state['active']['token'] == args.token, 'CLAIM_TOKEN_MISMATCH')
-                        state.setdefault('recoveries', []).append({'claim': state['active'], 'reason': args.reason, 'at': now()})
                         lost = state['active'].get('claim_id') or lifecycle.claim_id_for(args.token)
-                        lifecycle.queue(state, state['active']['stage'], 'recovered', claim_id=lost,
+                        recovered_at = now()
+                        state.setdefault('recoveries', []).append(
+                            {'claim': {**state['active'], 'claim_id': lost}, 'reason': args.reason, 'at': recovered_at})
+                        lifecycle.queue(state, state['active']['stage'], 'recovered', claim_id=lost, at=recovered_at,
                                         episode_id=lifecycle.episode_for_claim(lost), reason=args.reason,
                                         delegation_run_ids=lifecycle.delegation_runs_for(run.feature, args.token, lost))
                         state['active'] = None

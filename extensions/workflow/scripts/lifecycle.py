@@ -43,7 +43,8 @@ def make_event(state, stage, event, *, episode_id=None, claim_id=None, caused_by
                candidate_run_id=None, delegation_run_ids=None, reason=None, generation=None, at=None):
     """Build one record. Nullable ids are written explicitly as null.
 
-    ``candidate_run_id`` is set only on ``accepted``: the delegation run the exact-claim check validated.
+    ``candidate_run_id`` is set on ``accepted`` and on a ``rejected-completion`` that happened after the
+    exact-claim check passed: the delegation run that check validated. Every other event leaves it null.
     ``caused_by_claim_id`` is set only on a claim-time ``invalidated``, which carries no claim or episode
     of its own.
     """

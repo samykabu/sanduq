@@ -581,8 +581,13 @@ class Clarification:
         from workflow_policy import load
         managed = load(self.root)
         if managed and managed.get('clarification', {}).get('resume_on_reinvoke') == 'reread-answers' and status == WAITING:
+            # The digest of the input this repair actually processed: the live thread without any comment that
+            # arrived after the crash, so such a reply is still new on the next run.
+            live = self.inspect(value, gate=False)
+            seen = {c['id'] for c in snapshot['comments']} | set(journal['comments'].values())
+            processed = dict(live, comments=[c for c in live['comments'] if c['id'] in seen])
             write_json(self.root / '.specify/scope/clarifications' / f'{number}-observed.json',
-                       {'waiting_digest': self.inspect(value, gate=False)['snapshot_digest']})
+                       {'waiting_digest': snapshot_digest(processed)})
         result = dict(result, comment_ids=journal['comments'], next_action=None)
         resolved = not analysis['questions'] and all(a['disposition'] != 'unresolved' for a in analysis.get('answers', []))
         if status == 'Ready' and resolved:

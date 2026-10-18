@@ -765,6 +765,24 @@ class ClarificationTests(unittest.TestCase):
         item, = self.records()['items']
         self.assertEqual((item['source_id'], item['state']), ('C1Q1', 'pending'))
 
+    def test_a_repair_keeps_an_answer_that_arrived_after_the_crash_new(self):
+        (self.root / '.specify/workflow.yml').write_text('schema_version: 1\nclarification:\n  resume_on_reinvoke: reread-answers\n', encoding='utf-8')
+        review = self.analysis([question()])
+        self.interrupted(review, m.WAITING)
+        reply = self.gh.comment('C1Q1: B - start again please')
+        self.retry_repairs_without_a_second_publication(review, m.WAITING)
+        observed = sm.read_json(self.root / '.specify/scope/clarifications/1-observed.json')
+        # The next run sees the reply as new input: the digest was not taken over the live thread.
+        self.assertNotEqual(observed['waiting_digest'], self.app.inspect('1', gate=False)['snapshot_digest'])
+        self.move(m.FEATURE)
+        answer = {'question_id': 'C1Q1', 'disposition': 'answered', 'comment_ids': [reply['id']], 'explanation': 'B chosen.'}
+        result = self.app.publish('1', self.analysis(answers=[answer]), True)
+        self.assertNotIn('unchanged', result)
+        self.assertEqual(result['outcome'], 'ready')
+        applied = self.records()['items'][-1]
+        self.assertEqual((applied['source_id'], applied['state'], applied['answer']),
+                         ('C1Q1', 'applied', {'kind': 'single', 'value': 'B'}))
+
     def test_the_repair_requires_every_journaled_comment_to_exist(self):
         review = self.analysis([question()])
         self.interrupted(review, m.WAITING)
