@@ -6,6 +6,15 @@ from . import render_data
 from .util import iso, read_json, utcnow, write_json
 
 
+def layout(ctx):
+    """The theme's layout (`timeline` by default). A theme that cannot be read leaves the default."""
+    try:
+        from . import theme
+        return theme.resolve(ctx.root).get('layout') or 'timeline'
+    except Exception:
+        return 'timeline'
+
+
 def read_state(ctx):
     data = read_json(ctx.state, {})
     return data if isinstance(data, dict) else {}
@@ -23,8 +32,9 @@ def refresh(ctx, now=None):
     if ctx.is_plan:
         from .collect import plan
         collected = plan.persist(ctx)  # the plan is read once; the projection reuses it
-    report = model.build(ctx, now, state['rev'], state, plan=collected)
-    render_data.write(ctx, report)
+    classic = layout(ctx) == 'classic'
+    report, v2 = model.build_pair(ctx, now, state['rev'], state, plan=collected)
+    render_data.write(ctx, report, display=v2 if classic else None, layout='classic' if classic else 'timeline')
     state['last_refresh_ts'] = time.time()
     state['last_refresh_at'] = iso(now)
     write_json(ctx.state, state)
@@ -58,9 +68,7 @@ def publish_pending(ctx, state):
         if not isinstance(report, dict) or not isinstance(report.get('collection'), dict):
             return False
         state['rev'] = max(int(state.get('rev') or 0), int(report.get('rev') or 0)) + 1
-        report['rev'] = state['rev']
-        report['collection'].update(dirty=True, last_event_at=state.get('last_event_at'))
-        render_data.write(ctx, report)
+        render_data.patch_collection(ctx, state['rev'], dirty=True, last_event_at=state.get('last_event_at'))
         return True
     except (OSError, ValueError, TypeError):
         return False

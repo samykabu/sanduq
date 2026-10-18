@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.0] - 2026-10-18
+
+- Vendors `progress-report` from `agent-tools-v1.4.1`. The report becomes the Timeline page: what needs attention, the
+  orchestrator, a Gantt of Workflow stages over time with episode detail, what happened next to the workstreams and
+  decisions, a History section for retired lanes, and a collapsed, searchable runs table. Lane boards are gone from the
+  default page; `progress theme --layout classic` keeps the old view for one release.
+- `progress status --json` prints `sanduq.progress.v3`; `--schema v2` keeps the old document for the Workflow bridge and
+  other v2 readers. Workflow 1.12.0 asks for v2 and falls back for older Progress.
+- Reads Workflow 1.12.0's `workflow/lifecycle.jsonl`, `stage_plan`, `next_action` and run links, and Scope 1.7.0's
+  `workflow/clarifications.json`. Older producers still work; missing evidence shows as unknown.
+- `progress lane ... --workstream` marks a lane as an Execute workstream; `progress bind --host --model --effort` records
+  a coordinator self-report, labelled as such.
+
 ## [1.1.3] - 2026-10-17
 
 - Vendors `progress-report` from `agent-tools-v1.3.1`: the correctness patch found on the real #842 run. The stage comes from receipts when no claim is active; superseded pauses are no longer blockers; durations are summed from attempts and stop at the last activity; runs link to lanes only by durable ids (retired lane ids keep aliases); decisions and blockers come first, empty boards are gone, quiet lanes collapse into one line, and events filter by kind. From the review of this release: two facts lanes naming the same delegation fold into one, and a receipt Workflow marked stale no longer names the current stage.

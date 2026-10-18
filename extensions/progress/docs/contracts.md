@@ -28,15 +28,16 @@ specs/<feature>/progress/
     .gitignore           a single `*` line, written atomically with the directory (git applies the closest .gitignore first,
                          so a parent rule such as `!claude-*.json` cannot expose a snapshot; the `*` ignores this file too)
     <host>-<session>.json   (older versions kept them in .view/host; the first access moves them here)
+    self-report.json     the coordinator's self-report from `progress bind --model/--effort` (see Self-report)
   .view/                 git-ignored and disposable (Progress writes `specs/*/progress/.view/` and `.host/` to .git/info/exclude at init;
                          it also carries the same single-`*` .gitignore; a link at either path is refused)
-    report.json          projection, schema sanduq.progress.v2
-    data.js              window.__SANDUQ_PROGRESS__ = <report.json>;   (file:// safe)
+    report.json          projection, schema sanduq.progress.v3
+    data.js              window.__SANDUQ_PROGRESS__ = <report.json>;   (file:// safe). With theme layout "classic" it holds the v2 document instead
     index.html           static shell, copied from assets/ui at init/upgrade, never templated with data
     blocks.js            static block renderers + data.js poller
     base.css             static layout styles (copied like index.html)
     theme.css            generated from the resolved theme (tokens only)
-    layout.js            generated: window.__SANDUQ_PROGRESS_LAYOUT__ (block order, hidden, density, title, logo)
+    layout.js            generated: window.__SANDUQ_PROGRESS_LAYOUT__ (block order, hidden, density, title, logo, preset, layout)
     state.json           collector cursors, debounce stamp, dirty flag, last refresh rev (child lane numbers are not kept here: see Host children below)
     diagnostics.log      bounded (rotate at 256 KB, keep 1); never written through a link, by the main writer and by the
                          fast hook entry alike (both use `scripts/sanduq_progress/safelog.py`)
@@ -109,7 +110,7 @@ candidates when any exist).
   is lower-cased, without `*`, `_`, backticks and `~`, whitespace collapsed, 120 characters at most. `plan.json` is
   rewritten under the report lock on a refresh, and only when the map changed; read-only verbs compute the same ids
   without writing.
-- **Projection.** `sanduq.progress.v2` unchanged. `feature` gains `mode: "plan"` and `source`; `feature.id` is the plan
+- **Projection.** Same as for a feature report (v3 by default, v2 on request), with no Workflow stages. `feature` gains `mode: "plan"` and `source`; `feature.id` is the plan
   name, `feature.title` the plan title (else the name), `stage` is null and `workflow` false. No Workflow files are
   read for a plan.
 
@@ -211,7 +212,180 @@ session, or to a child whose parent is verified from the payload (Claude: same `
 `agent_id`/parent thread fields when present). Cwd inside the bound worktree validates a binding; it never creates one.
 Unbound or ambiguous observations are dropped and counted in diagnostics.
 
-## Projection (`sanduq.progress.v2`)
+## Projection (`sanduq.progress.v3`)
+
+`report.json` holds the v3 projection, and `status --json` prints it by default. The Timeline view reads it. The
+[v2 projection](#projection-sanduqprogressv2-compatibility) is still available for one release.
+
+**The rule behind every field: no inference from proximity.** A time gap, adjacency, matching text, a model name or
+overlapping timestamps never establish identity, a retry, a revalidation, a rejection, an acceptance or membership.
+When no explicit record supports a fact, the field is `null` (or an `unknown` measurement) and the UI says so.
+
+```json
+{
+ "schema":"sanduq.progress.v3","rev":17,"generated_at":"…","stale_after_seconds":600,
+ "collection":{"automatic":true,"hosts":["claude"],"dirty":false,"last_event_at":"…","diagnostics":0},
+ "feature":{"id":"…","title":"…","dir":"specs/…","branch":"…","issue":{"number":842,"url":"…"}|null,"workflow":true,
+            "started_at":M,
+            "stage":{"value":"execute","status":"running","validity":"unknown","source":"workflow-checkpoint|workflow-receipts","checkpoint_status":"in-progress"}|null,
+            "next_action":{"text":"…","stage":"execute"|null,"kind":"active-claim|next-stage"|null,"evaluated_at":"…"|null,"generation":9|null,"source":"workflow-checkpoint"}|null},
+ "orchestrator":{"host":"codex"|null,"session_id":"…"|null,"model":M,"effort":M,"context":M,"host_elapsed":M,"active":M,"since":"…",
+                 "provenance":{"model":"host-hook|self-report|none","effort":"…","context":"…","host_elapsed":"…","active":"…"},"note":"…"|null},
+ "attention":[{"id":"…","kind":"blocker|decision|failure|stale|telemetry","severity":"high|medium|info","text":"(≤160)","refs":["…"],"since":"…"|null}],
+ "stages":[{"id":"execute","label":"Execute","order":10,"selected":true,"status":"pending|running|accepted|excluded",
+            "validity":"current|stale|unknown","accepted_at":"…"|null,
+            "episodes":[{"id":"execute#ep1","n":1,"source":"workflow-lifecycle|checkpoint-receipt|checkpoint-recovery","fidelity":"exact|partial",
+                         "claim_id":"…"|null,"started_at":"…"|null,"ended_at":"…"|null,
+                         "outcome":"accepted|rejected-completion|recovered|paused|invalidated|running|unknown","runs":["run id"],"reason":"(≤120)"|null}],
+            "unknown_runs":["run id"],"run_count":6,"failed_runs":1,
+            "run_time":{"value":123,"source":"delegation-ledger","observed_at":"…","fidelity":"partial","complete":true,"sources":["delegation-ledger"],"label":"summed, may overlap"},
+            "models":["…"],"first_start":"…"|null,"last_end":"…"|null,"open":false,"timing":"open|closed|end-unknown|unknown"}],
+ "workstreams":[{"id":"tag:A|L3|shared","label":"Workstream A","description":"…"|null,"origin":"facts-marked|tasks-tag|shared",
+                 "tasks":{"done":["T001"],"blocked":[],"active":[],"waiting":[]},
+                 "owners":[{"agent":"…","from":"…","to":"…"|null}],"run_ids":["…"],"conflicts":[{"task":"T003","workstreams":["L1","L2"]}]}],
+ "tasks":{"T001":{"title":"…","phase":"…","done":true,"parallel":false,"depends_on":[],"workstream":"tag:A"}},
+ "runs":[{"run_id":"…","identity":"…","stage":"plan"|null,"tasks":["T002"],"episode_id":"…"|null,"workstream":"…"|null,
+          "harness":"…","requested_model":"…"|null,"actual_model":M,"effort":M,"started_at":"…","ended_at":"…"|null,"duration":M,
+          "worker_status":"successful|failed|abandoned|unverified|running|…","evidence_accepted":true|false|null,
+          "candidate_accepted":true|false|null,"retry_of":"run id"|null,"summary":"(≤160)"|null,"conflict":["status"]}],
+ "dispatch":[{"intent_id":"…","identity":"…","created_at":"…"|null,"state":"…"}],
+ "decisions":{"pending":[D],"made":[D],"sources":[{"name":"facts|workflow|clarification","state":"available|absent|unsupported|invalid","note":"…"}]},
+ "timeline":[{"id":"tl-…","at":"…","kind":"stage|decision|failure|recovery|revalidation|note|blocker","text":"(≤140)","refs":["…"],"fidelity":"recorded|partial|observed|inferred"}],
+ "history":{"lane_aliases":{"L4":"run:…|identity:…|workstream:L3|lane:L2"},"unresolved":[{"id":"L4","label":"…","owners":[{"agent":"…","from":"…","to":"…"|null}],"reason":"…"}]},
+ "sources":[{"name":"workflow-checkpoint","path":"specs/…/workflow/checkpoint.json","fingerprint":"16 hex","generation":111|null,"read_at":"…","bytes":4096,"consistent":true,"note":"…"}],
+ "summary":{"tasks_total":23,"tasks_done":23,"stages_selected":16,"stages_accepted":16,"runs_total":89,"runs_failed":5,"decisions_pending":0,"blockers_open":0}
+}
+```
+
+`M` is a measurement `{"value","source","observed_at","fidelity"}`. `fidelity` is `exact`, `partial`, `estimated` or
+`unknown`; `source` says where the value came from (`host-hook`, `self-report`, `delegation-ledger`, `harness`,
+`timestamps`, `workflow-checkpoint`, `earliest-evidence`). An aggregate (`run_time`) also carries `complete` (false when a
+run has no duration), `sources` and a `label`. A decision is
+`D = {key, source, source_id, question, options, answer:{kind:single|multiple|text, value, index}|null, state, revision, answer_digest,
+evidence:["display text"], evidence_links:[{text, url}], url, decided_by, observed_at, answered_at, applied:{at, evidence:["…"]}|null, stage}`.
+
+`data.js` also carries `ui: {layout}` (`timeline` or `classic`) beside the document, so an open page switches renderer with the next
+data revision after `progress theme --layout`; `report.json` does not have it.
+
+`rev` rises on every refresh and on the cheap patch a debounced hook event makes; the UI uses it as its refresh counter.
+`collection`, `rev`, `generated_at` and `stale_after_seconds` mean what they mean in v2.
+
+**Runs.** One entry per delegation `run_id`. If the ledger holds a run twice, the finished record wins and the fields that
+disagreed are listed in `conflict`. A ledger row with an `intent_id` and no `run_id` is a `dispatch` intent (it is dropped
+once a run carries the same `intent_id`) and is never counted as a run. A host-session child is a run whose id and identity
+are `host:<session>:<child>`; it joins a delegation run only when the child record names that `run_id`. The stage suffix
+(`stage:plan`) and task suffix (`T002`) of an identity are read only when the identity starts with a feature directory this
+report knows: the report's own, the checkpoint's or the ledger's `feature`. An explicit `tasks` list on a ledger row is kept as written.
+`stage` of a task run is set only through a recorded claim link (below); otherwise it is `null`, and the run is not in any episode.
+
+- `worker_status` is the harness verdict. `evidence_accepted` is the dispatcher's own acceptance (`accepted_at`): `true` when
+  it is recorded, otherwise `null`. A failed or abandoned worker does not make it `false`; no acceptance evidence means unknown.
+  `candidate_accepted` is Workflow's exact-claim acceptance of one run: `true` when an `accepted` lifecycle event names the run
+  in `candidate_run_id`, `false` when a `rejected-completion` event does, else `null` (the latest event for the run wins).
+  `delegation_run_ids` is claim membership. It places a run in an episode and never makes it the accepted candidate, so a failed
+  attempt and its replacement under one claim are not both accepted. A later receipt for the same stage is not evidence. Stage
+  acceptance (`stages[].accepted_at`) is a third, separate fact.
+- `retry_of` comes from `replaces_run_id`, else `parent_run_id`. Running the same identity again, or revalidating, is not a retry.
+- `duration` is the harness-recorded duration (`exact`); else end minus start (`estimated`, source `timestamps`); a running run
+  counts to the snapshot time; a finished run with no recorded end stays `unknown` and never grows with the clock. Stage
+  `run_time` sums the runs it holds and says that concurrent runs may overlap.
+- `actual_model` is observed-model evidence only. `effort` is `unknown` unless the ledger carries `actual_effort`
+  (`exact`) or `requested_effort` / `effort` (`partial`: a request, not an observation).
+
+**Stages.** Workflow's published `stage_plan` gives the selected stages and their order. Without one, the list is
+Workflow's canonical order; the `qa_*` and `manual_*` stages follow the checkpoint's policy snapshot (`policy.processes`)
+when it has one, and otherwise count as selected only if some record mentions them. Stages outside the plan are listed as
+`excluded` (never `waived`), after the planned ones. Plain Spec Kit and plan reports have `stages: []`.
+
+- `accepted_at` is the latest passed receipt or `accepted`/`revalidated` lifecycle event. It is history. `validity` is the
+  current state: `stale` when the receipt carries `stale: true` or the last lifecycle event for the stage is `invalidated`
+  or `revalidation-stale`; `current` when the last such event is `accepted` or `revalidated`; otherwise `unknown`. A receipt
+  alone does not prove it is current.
+- Episodes come from lifecycle events that share an explicit `episode_id`; a `claim` or `resume` event without one is grouped by
+  its own `claim_id`. Every other event is loose: a claim-time `invalidated` event, a feature-level `paused` or `recovered`
+  event, and an event that names only a claim feed validity and the timeline but create no episode. An episode starts at its
+  `claim` or `resume` event and never at an invalidation. A `rejected-completion` does not end the episode. For a stage with no
+  lifecycle events, the episodes come from the passed receipt and from `recoveries` (`source` `checkpoint-receipt` /
+  `checkpoint-recovery`, `fidelity` `partial`). A stage that also has lifecycle events keeps these historical episodes. Workflow
+  1.12.0 writes the same `claim_id` on a receipt (`receipts[stage].claim_id`), on a recovery (`claim.claim_id`) and on the lifecycle
+  events of that claim. A checkpoint receipt episode is dropped only when an `accepted` or `revalidated` event of the same stage
+  carries the same `claim_id`, and a checkpoint recovery episode only when a `recovered` event of the same stage does. The same
+  rule keeps the timeline to one row per fact. A record with no `claim_id` (older Workflow) is always kept. A shared stage or a
+  shared timestamp never suppresses anything; the checkpoint episodes carry the record's `claim_id` when it has one. A recovery is read from Workflow's `{claim: {stage, claimed_at, mode,
+  delegation: {identity}}, reason, at}` record (a flat `{stage, reason, at}` too): `claimed_at` is its start, the delegation
+  identity is kept as `identity`, and the claim token is never read. Runs of a stage that no event or shared claim places in an
+  episode are listed in `unknown_runs`.
+- A run joins an episode only when a lifecycle event names it in `delegation_run_ids`, or when its `claim_id` matches exactly
+  one episode. A failed worker does not reject a stage.
+- `open` is true only when something confirms the stage is running now: a live run, a running episode or the active claim.
+  `timing` is `open`, `closed` (a start and an end), `end-unknown` or `unknown` (no start). A stage is `closed` only when
+  every relevant run and episode has a resolved end, whatever its start: a run that is not live and records no end is unresolved
+  unless its own episode has an end (an `accepted`, `recovered` or `invalidated` event bounds it), and an episode that is neither
+  running nor ended is unresolved. Otherwise it is `end-unknown`, and `last_end` keeps the last end that was recorded, apart from
+  the verdict. `first_start` and `last_end` take the runs and the episode boundaries; `last_end` is `null` while the stage is `open`. The UI
+  extends a bar to the snapshot time only when `open` is true and draws `end-unknown` as a short bar with a broken edge.
+- `feature.stage.status` is the status of that stage's entry; `checkpoint_status` is the checkpoint's own.
+
+**Workstreams.** A task belongs to one workstream, decided in this order: (1) a lane in `facts.jsonl` marked
+`semantics: "workstream"` that lists the task (`progress lane L1 --tasks … --workstream`; if two marked lanes list it, the later
+record wins and the task is in `conflicts` on both); (2) a workstream tag at the start of the task line that `tasks.md` declares
+in its legend; (3) `shared`. A legend is a table row whose first cell holds bracket tags and whose second cell says "lane" or
+"workstream" (`` | `[A]` / `[B]` | Coding lane: **A** … | ``), or a bold `**Workstream A**`. Role markers (`[Impl]`, `[QA]`,
+`[Docs]`, `[Collect]`, `[Review]`), `[P]` and phase headings are never workstream tags. A task with two legend tags is `shared`.
+Buckets hold task ids: checkbox done first, then an open blocker on the task or a marked lane, then a task with a running
+linked run, and the rest wait. A run's `workstream` is set when every task it holds belongs to the same workstream at its
+start (replayed from dated lane records for marked lanes), otherwise `null`. A run whose `started_at` is missing or not a time
+has no start to place against those records, so its workstream is `null` unless the ledger row names a marked lane in
+`workstream` or `lane_id` that holds all of its tasks. Lane facts that carry no marker are not
+workstreams, whatever Workflow version is installed.
+
+**Decisions.** Keys are `<feature id>:<source>:<source id>`; two decisions are never merged because their text matches.
+`facts` maps pending, made and withdrawn. `workflow` keeps the ledger's `pending`, `conflict`, `answered` and `applied`, its
+`answer_digest` and the application evidence names. `clarification` keeps `answered`, `applied`, `waived`, `superseded` and
+the rest of the states in `clarifications.json`; a lower revision of the same `source_id` is shown as `superseded` under the key
+`<source id>@r<revision>`. `decided_by` is set only from a recorded author or editor; a checkbox edit has none, and the UI says
+"editor not recorded". A missing answer time stays `null`. `evidence` is a list of display strings (each at most 200
+characters) and `evidence_links` holds the `{text, url}` of those that carry an https URL. `answer.value` is always option text
+(or a list of texts) and `answer.index` is the explicit position (an int, a list for `multiple`, or `null` when the text names no
+option). The adapters decode once: Workflow's ledger and Scope's records store choices as letters (`A`, `B`, ...), and an in-range
+ASCII letter (`A`-`Z`, `a`-`z`) becomes the option at that position (any other character, such as `ß`, is kept as exact text with
+`index` `null`, and never raises); facts and free-text answers are matched by exact option text only. The UI highlights by
+`index`, else by exact option text. It never decodes a letter, so with options `S`, `M`, `L` the answer `M` is the option `M`. `pending` holds `pending` and `conflict`. `sources` states which
+adapters ran; "none recorded" is only true for the sources that were `available`.
+
+**Attention.** Open blockers (high); pending and conflicting decisions (medium); failed or abandoned runs with no later
+`successful` run of the same identity, worded "no recovery recorded" (medium); and a telemetry gap that names a diagnosed
+cause (`codex hooks not approved`), only when no host session was observed. The `stale` kind is added by the UI from its own
+clock (age against `stale_after_seconds`, or a newer source fingerprint); the Python side never emits it.
+
+**Timeline.** Curated events with ids that depend only on the event: lifecycle events (accepted, rejected-completion, paused,
+recovered, invalidated, revalidated, revalidation-stale), failures, recoveries, answered decisions, blockers opened and
+resolved, and every coordinator note (all notes are kept; the UI bounds the default view). A recovery has `fidelity`
+`recorded` when a retry link says so, and `inferred` ("Later successful run … no retry link recorded") when only a later
+successful run of the same identity exists. A `paused` or `recovered` event with no stage reads "Feature paused" or
+"Feature recovered". The timeline is not capped: `report.json` and `data.js` keep every entry, because the UI's "show all" needs
+them. On the frozen #842 run that is 97 entries, about 22 KB of a 139 KB document; it grows linearly with notes and lifecycle
+events. A cap is only worth adding if the token benchmark regresses.
+
+**History.** `lane_aliases` maps legacy lane ids (`L`, `W`, `C`) to `run:<id>`, `identity:<identity>`, `workstream:<id>` or
+`lane:<id>`, only through an explicit link (a lane owned by a run id or a delegation identity, a folded duplicate, a marked
+lane). Every other legacy lane is listed in `unresolved` with its owner history, so a note or blocker that names it stays
+navigable. `facts.jsonl` is never rewritten. The UI lists both in a collapsed History section with a stable id per row, and
+a timeline, episode or history reference that names a run, a stage or a workstream is a button that opens and focuses it.
+
+**Sources.** `sources` lists every producer file that was read, its repository-relative path, a 16-hex SHA-256 prefix of
+the bytes that were parsed, the producer's generation when it has one, the read time and the file size. The hash, size and time
+are taken during collection, from the same bytes the collector parsed, never from a second read afterwards. `consistent` is
+`false` when the file changed on disk after it was read, or was read twice with different bytes. Then the report is marked
+`collection.dirty` with `collection.inconsistent_sources`, the next refresh is flagged, and the UI shows that the snapshot may mix
+generations; the fingerprint still describes what was parsed, not the newer file. A source read through a byte cap carries a
+`note` ("only N of M bytes read"). The browser cannot find newer files on its own; the existing producer boundaries (hooks,
+Workflow writes) mark the report dirty, and a refresh publishes the new fingerprints.
+
+## Projection (`sanduq.progress.v2`, compatibility)
+
+This is the document `progress status --json --schema v2` prints, and the one the Workflow shim, `progress export --schema v2`
+and the `classic` layout read. Its contract has not changed. The one-line `progress status` summary still reads its keys.
 
 ```json
 {
@@ -327,15 +501,16 @@ progress init [--feature DIR] [--statusline yes|no] [--theme PRESET]   -> "progr
 progress init --plan PATH [--name NAME] [--dir DIR]                     -> "progress: ready .progress/<name>/.view/index.html bind=…"
 progress bind [--session ID]                                            -> "progress: bound <session>"
 progress refresh [--final]                                              -> silent on success unless --verbose
-progress status [--json]                                                -> one-line summary or projection JSON
-progress lane L1 --tasks T001-T004,T009 [--owner ID] [--label T] [--harness H --model M --effort E] [--close]
+progress status [--json [--schema v2|v3]]                               -> one-line summary, or the projection JSON (v3 by default)
+progress lane L1 --tasks T001-T004,T009 [--owner ID] [--label T] [--harness H --model M --effort E] [--close] [--workstream]
 progress block T007 --by L2|T003|SD2|ext:"text"                         -> "progress: B4 open T007 by L2"
 progress unblock B4 | --all-for T007
 progress decide ask "question" --options a,b,c                          -> "progress: D2 pending"
 progress decide made D2 b --by user|agent-recommendation|assumption [--evidence URL]
 progress note "text" [--target T005]
-progress theme --preset sanduq|cobalt|emerald|classic | --from-illustrate | --file theme.json | --show
-progress export [--format md|json] [--out PATH]                         -> deterministic, same projection
+progress theme --preset sanduq|cobalt|emerald|classic | --from-illustrate | --file theme.json | --layout timeline|classic | --show
+progress export [--format md|json] [--schema v2|v3] [--out PATH]        -> deterministic; v3 by default
+progress bind --host claude|codex --model M [--effort E] [--session ID]  -> coordinator self-report, stored in .host/
 progress attempt record (--lane L1 | --overhead LABEL) --run ID --status S [--started T] [--ended T] [--usage-json PATH]
 progress runs [--json] [--runs-dir DIR]... [--now T] [--stall-seconds N]  -> progress.runs.v1
 progress hook <event>                                                   -> reads host JSON on stdin; never prints on success
@@ -347,6 +522,68 @@ Every verb that works on one report also takes `--plan NAME|PATH` or `--feature 
 
 Exit codes: 0 ok, 2 usage error, 3 refused (authority/binding), 4 lock busy (the OS lock is held by another process; verbs retry 3× with 200 ms backoff first).
 Error lines start with `progress: error <CODE>`.
+
+## Producer files Progress reads (Workflow and Scope)
+
+Progress never imports Workflow or Scope code and never writes their files. Every file below is optional; an older
+producer simply leaves the matching fields empty or labelled `partial`.
+
+**`workflow/lifecycle.jsonl`** (Workflow 1.12.0). One JSON object per line:
+`{v, event_id, workflow_run_id, generation, at, stage, event, episode_id, claim_id, caused_by_claim_id, candidate_run_id, delegation_run_ids, reason}`.
+`v` is 1. `event` is `claim`, `resume`, `accepted`, `rejected-completion`, `recovered`, `paused`, `invalidated`,
+`revalidated` or `revalidation-stale`. `workflow_run_id`, `episode_id`, `claim_id`, `caused_by_claim_id` and `candidate_run_id`
+may be `null`, and null means unknown. `claim_id` is a non-credential id, never the claim token.
+
+- `candidate_run_id` (on `accepted` and `rejected-completion`) is the exact run whose candidate Workflow validated, or `null`.
+  `delegation_run_ids` is claim membership, every delegation run linked to the claim, and never implies acceptance.
+- A claim-time `invalidated` event, which removes a downstream receipt, has `claim_id` and `episode_id` `null` and names the claim
+  that caused it in `caused_by_claim_id`.
+- `stage` may be `null` only for `paused` and `recovered`, which are feature-level when no claim is held. Any other event with no
+  stage is skipped. Skipped records are counted in the source's `note` ("N unusable record(s) skipped").
+
+The reader skips a torn final line (a crashed append), counts and skips a corrupt complete line, skips records with an unknown
+`v` or `event`, and keeps the first record of a repeated `event_id` (a replayed append); a repeat that differs is reported in the
+source's `note`. Read cap: at most 8 MiB. A larger file is read from its tail, so the newest events are kept; the cut line is dropped
+(not counted as corrupt) and the `note` says "older events not read".
+
+**`workflow/checkpoint.json`**, new fields. `stage_plan: {v, generation, stages}` where `stages` is an ordered list of ids or
+`{id, label}` objects, already filtered by policy (`v` 1 only; anything else is ignored and the canonical list is used).
+`next_action: {text, stage, kind, evaluated_at, generation}` where `kind` is `active-claim` or `next-stage`; Progress shows it
+with its age and never computes one. `generation` is the checkpoint generation. Read as before: `receipts`, `recoveries`,
+`pause`, `active`, `branch_history`, and `policy.processes.qa` / `.user_manual` when present. Each `recoveries` entry is
+`{claim: {stage, claim_id, claimed_at, mode, delegation: {identity}, …}, reason, at}` and each receipt may carry `claim_id`; Progress reads only those fields, never the claim
+`token`.
+
+**`workflow/delegations.json`**, new attempt fields: `intent_id`, `claim_id` (non-credential), `parent_run_id` and
+`replaces_run_id`. Optional: `tasks` (explicit task ids), `actual_effort`, `requested_effort`, `accepted_at`.
+The top-level `feature` prefixes every identity.
+
+**`workflow/clarifications.json`** (Scope 1.7.0).
+`{"v":1,"items":[{source_id, revision, question, options, answer:{kind, value}|null, state, url, editor|null, observed_at, answered_at|null, applied:{at, evidence:["…"]}|null, evidence:[{kind, url|null, comment_id|null, explanation|null}]}]}`.
+`state` is `pending`, `conflict`, `answered`, `applied`, `waived`, `superseded` or `withdrawn`; an item with another state is skipped and
+counted in the source's `note`. `url` must be https. Render makes no GitHub call.
+
+Evidence types: `evidence` is a list of objects `{kind, url, comment_id, explanation}` and `applied.evidence` is a list of strings.
+The reader also accepts plain strings in `evidence` and one string for `applied.evidence` (it is wrapped in a list). An object is
+flattened to a display string of at most 200 characters: its `kind`, then `comment <comment_id>` and the `explanation` when it has
+them, or its `url` when it has neither. A `url` that is https is kept as a link (`evidence_links`); any other scheme is text only.
+Input cap: 2 MiB. A larger file is `invalid`, is not parsed, and the source's `note` says "file over the size cap".
+
+**`facts.jsonl`** lane records may carry `semantics: "workstream"` (`progress lane … --workstream`).
+
+**Read caps.** The two files a producer can grow without bound are capped: `lifecycle.jsonl` at 8 MiB (tail) and
+`clarifications.json` at 2 MiB (all or nothing). Both are hashed while they stream in 64 KiB chunks, so memory stays bounded by the
+cap. The other producer files are small by construction (checkpoint, ledger, decisions) or written by Progress itself (facts,
+self-report).
+
+## Self-report
+
+`progress bind --host H --model M --effort E` writes `.host/self-report.json`: `{v, feature, worktree, host, session_id, actor, fields:{model:{value, at}, effort:{value, at}}}`. It is durable (not under `.view`, so deleting the view
+keeps it) and git-ignored. It applies only to the feature and worktree it was written in. With `--session ID` it applies to that session;
+without one it is an explicit "session unknown" report that applies to whichever session is bound, and to a report with no host
+session at all. Binding the same session again keeps the fields the new call does not restate; another session replaces the report.
+The projection takes each field from the host's own observation first and fills a gap from the self-report, with `source: "self-report"`,
+`fidelity: "estimated"` and `orchestrator.provenance.<field>: "self-report"`. Values go through the same secret and path filter as notes.
 
 ## Runs contract (`progress.runs.v1`)
 
@@ -385,7 +622,7 @@ it, `stop`, or any verb performs the real refresh and clears the flag. Any excep
 ## Theme (`progress.theme.v1`)
 
 ```json
-{"v":1,"preset":"sanduq","title":null,"logo":null,"density":"comfortable|compact",
+{"v":1,"preset":"sanduq","title":null,"logo":null,"density":"comfortable|compact","layout":"timeline|classic",
  "blocks":["header","orchestrator","lanes","boards","decisions","blockers","events"],
  "hidden":[],
  "tokens":{"light":{"bg":"#…","surface":"…","text":"…","muted":"…","line":"…","brand":"…","accent":"…",
@@ -394,7 +631,12 @@ it, `stop`, or any verb performs the real refresh and clears the flag. Any excep
  "font":{"sans":"system-ui, sans-serif","mono":"ui-monospace, monospace"}}
 ```
 
-Colors are validated as `#rgb`/`#rrggbb`. Unknown keys are rejected with a one-line error. `--from-illustrate` maps
+`layout` picks the view. `timeline` (the default) is the v3 Timeline view and `data.js` carries the v3 document. `classic` is the v2
+lanes view for one more release, and `data.js` then carries the v2 document (`report.json` stays v3). `progress theme --layout classic|timeline`
+changes only this key and keeps every other customization; picking a new preset or `--from-illustrate` keeps the layout. When the
+layout changes, the command also rebuilds each initialised report under its own report lock, so `data.js` carries the matching
+document at once. A report whose lock is busy is named on a second line and keeps its old `data.js` until the next refresh. The
+generated `layout.js` carries it as `"layout":"classic"`. Colors are validated as `#rgb`/`#rrggbb`. Unknown keys are rejected with a one-line error. `--from-illustrate` maps
 Illustrate roles explicitly: paper→bg, paper-2→surface, ink→text, muted→muted, rule→line, accent→accent,
 link→brand, accent-tint→active. Status colours keep the preset's values unless set.
 

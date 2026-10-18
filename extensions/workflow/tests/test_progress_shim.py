@@ -75,7 +75,7 @@ class Project(unittest.TestCase):
         return [r for r in rows if kind in (None, r['kind'])]
 
     def status(self):
-        code, text = self.progress('status', '--json', '--feature', FEATURE)
+        code, text = self.progress('status', '--json', '--schema', 'v2', '--feature', FEATURE)
         self.assertEqual(code, 0, text)
         return json.loads(text)
 

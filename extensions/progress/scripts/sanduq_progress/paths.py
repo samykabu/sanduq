@@ -364,7 +364,7 @@ def git_exclude(root, patterns=None):
 
 # Local-only files a report writes (names under `.host/` and `.view/`). A sample snapshot name stands for the hashed
 # per-session files; the check is of the files themselves, so a rule that re-includes one of them is caught.
-LOCAL_FILES = {'.host': ('plan-keys.json', 'plan-source.json', 'session-snapshot.json'),
+LOCAL_FILES = {'.host': ('plan-keys.json', 'plan-source.json', 'session-snapshot.json', 'self-report.json'),
                '.view': ('state.json', 'report.json', 'data.js', 'lock', 'diagnostics.log', 'index.html', 'base.css',
                          'blocks.js', 'theme.css', 'layout.js')}
 
