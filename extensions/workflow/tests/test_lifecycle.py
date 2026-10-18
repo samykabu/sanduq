@@ -126,6 +126,48 @@ class ClaimAndAcceptTests(LifecycleBase):
         self.assertEqual((paused['event'], paused['claim_id'], paused['stage']), ('paused', claim['claim_id'], 'scope'))
 
 
+class LinkedLogTests(LifecycleBase):
+    def link(self, link, target):
+        try:
+            link.symlink_to(target, target_is_directory=target.is_dir())
+        except (OSError, NotImplementedError):
+            self.skipTest('this OS does not allow creating symbolic links here')
+
+    def test_a_symlinked_log_is_refused_and_the_events_stay_queued(self):
+        run = self.start()
+        outside = self.root / 'outside.txt'
+        outside.write_text('keep', encoding='utf-8')
+        (run.feature / 'workflow').mkdir(parents=True, exist_ok=True)
+        self.link(run.feature / 'workflow/lifecycle.jsonl', outside)
+        with self.assertRaisesRegex(ValueError, 'LIFECYCLE_LOG_UNSAFE'):
+            run.claim(self.usage())
+        self.assertEqual(outside.read_text(encoding='utf-8'), 'keep')
+        state = run.load()
+        self.assertEqual([e['event'] for e in state['lifecycle_outbox']], ['claim'])
+        # Removing the link lets the queued event through on the next write; nothing was lost.
+        (run.feature / 'workflow/lifecycle.jsonl').unlink()
+        w.Run(self.root, self.feature).complete(state['active']['token'], self.receipt('scope'))
+        self.assertEqual(self.kinds(), [('claim', 'scope'), ('accepted', 'scope')])
+
+    def test_a_symlinked_workflow_folder_is_refused_for_reading_and_appending(self):
+        elsewhere = self.root / 'elsewhere'
+        elsewhere.mkdir()
+        feature = self.root / 'feat'
+        feature.mkdir()
+        self.link(feature / 'workflow', elsewhere)
+        state = {'run_id': 'r', 'generation': 0}
+        record = lifecycle.make_event(state, 'scope', 'claim', claim_id='c-1')
+        with self.assertRaisesRegex(ValueError, 'LIFECYCLE_LOG_UNSAFE'):
+            lifecycle.append_events(lifecycle.log_path(feature), [record])
+        with self.assertRaisesRegex(ValueError, 'LIFECYCLE_LOG_UNSAFE'):
+            lifecycle.read_events(lifecycle.log_path(feature))
+        self.assertEqual(list(elsewhere.iterdir()), [])
+        state['lifecycle_outbox'] = [record]
+        with self.assertRaises(ValueError):
+            lifecycle.flush(state, feature)
+        self.assertEqual(state['lifecycle_outbox'], [record])
+
+
 class IdentityLinkTests(LifecycleBase):
     def test_receipts_and_recoveries_carry_the_claim_id_and_the_instant_of_their_events(self):
         run = self.start()

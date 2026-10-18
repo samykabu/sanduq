@@ -342,6 +342,14 @@ def merge_items(existing, fresh, batch):
     return items
 
 
+def _is_link(path):
+    try:
+        info = os.lstat(path)
+    except OSError:
+        return False
+    return os.path.islink(path) or bool(getattr(info, 'st_file_attributes', 0) & 0x400)
+
+
 def well_formed(items):
     """True when every kept item can be merged: an object with a text `source_id` and a positive integer `revision`."""
     return isinstance(items, list) and all(
@@ -352,13 +360,21 @@ def well_formed(items):
 def persist_clarifications(path, fresh, batch):
     """Write `workflow/clarifications.json` atomically, keeping prior revisions."""
     path = Path(path)
-    try:
-        current = read_json(path, {}) if path.exists() else {}
-    except (ValueError, OSError):
-        current = None
-    if current is not None and not isinstance(current, dict):
-        current = None
-    if current is None or (current and not (current.get('v') == 1 and well_formed(current.get('items')))):
+    for item in (path.parent, path):
+        if _is_link(item):
+            raise ScopeError('CLARIFICATIONS_UNSAFE: ' + str(item) + ' is a symbolic link or reparse point; remove it '
+                             'so the clarification records are not written through it.')
+    current = {}
+    if path.exists():
+        try:
+            current = read_json(path)
+        except (ValueError, OSError):
+            current = None
+        # An existing file that is empty, `{}`, `[]`, `""` or any other unsupported shape is not a record file.
+        supported = isinstance(current, dict) and current.get('v') == 1 and well_formed(current.get('items'))
+        if not supported:
+            current = None
+    if current is None:
         # The file cannot be merged. The spec and the board have already moved, so failing here would fail
         # every rerun at the same point: keep the bytes aside and write a fresh file.
         aside = path.with_name(path.name + '.unreadable-' + batch)

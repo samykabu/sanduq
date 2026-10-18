@@ -35,6 +35,28 @@ def episode_for_claim(claim_id):
     return ('claim:' + claim_id) if claim_id else None
 
 
+class LifecycleLogUnsafe(ValueError):
+    """The log or its folder is a link, so reading or appending could reach a path outside the feature."""
+
+
+def _is_link(path):
+    try:
+        info = os.lstat(path)
+    except OSError:
+        return False
+    # A symlink, or a Windows reparse point (junction, mount point).
+    return os.path.islink(path) or bool(getattr(info, 'st_file_attributes', 0) & 0x400)
+
+
+def guard(path):
+    """Refuse a link as the log or as its `workflow/` folder. Events stay queued in the checkpoint."""
+    path = Path(path)
+    for item in (path.parent, path):
+        if _is_link(item):
+            raise LifecycleLogUnsafe('LIFECYCLE_LOG_UNSAFE: ' + str(item) + ' is a symbolic link or reparse point; '
+                                     'remove it so lifecycle events can be written. The events stay queued in the checkpoint.')
+
+
 def log_path(feature_dir):
     return Path(feature_dir) / 'workflow' / 'lifecycle.jsonl'
 
@@ -70,6 +92,7 @@ def queue(state, stage, event, **kwargs):
 def read_events(path):
     """Return ``(events, torn)``. Unparseable lines are skipped; ``torn`` is true when any were found."""
     events, torn = [], False
+    guard(path)
     try:
         raw = Path(path).read_bytes()
     except FileNotFoundError:
@@ -117,7 +140,9 @@ def _repair_tail(path):
 def append_events(path, records):
     """Append records whose ``event_id`` is not in the file yet. Returns the number appended."""
     path = Path(path)
+    guard(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    guard(path)
     _repair_tail(path)
     seen = {event['event_id'] for event in read_events(path)[0]}
     fresh = []
@@ -128,7 +153,9 @@ def append_events(path, records):
     if not fresh:
         return 0
     payload = ''.join(json.dumps(record, ensure_ascii=False, sort_keys=False) + '\n' for record in fresh)
-    with open(path, 'ab') as handle:
+    flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_BINARY', 0)
+    descriptor = os.open(path, flags, 0o644)
+    with os.fdopen(descriptor, 'ab') as handle:
         handle.write(payload.encode('utf-8'))
         handle.flush()
         os.fsync(handle.fileno())

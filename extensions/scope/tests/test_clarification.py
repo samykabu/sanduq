@@ -861,6 +861,50 @@ class ClarificationTests(unittest.TestCase):
             self.assertEqual(replay, document)
             self.assertEqual((path.parent / 'clarifications.json.unreadable-b1').read_text(encoding='utf-8'), bad)
 
+    def test_an_empty_or_falsy_existing_file_is_quarantined_not_overwritten(self):
+        item = {'source_id': 'C1Q1', 'question': 'Q?', 'options': [], 'answer': None, 'state': 'pending', 'url': 'u',
+                'editor': None, 'observed_at': 't1', 'answered_at': None, 'applied': None, 'evidence': [], 'batch': 'b1'}
+        for bad in ('{}', '[]', '""', '', '0', 'null'):
+            path = self.root / 'out/clarifications.json'
+            path.parent.mkdir(parents=True, exist_ok=True)
+            for old in path.parent.glob('clarifications.json*'):
+                old.unlink()
+            path.write_text(bad, encoding='utf-8')
+            with patch('sys.stderr') as err:
+                m.persist_clarifications(path, [item], 'b1')
+            self.assertEqual((path.parent / 'clarifications.json.unreadable-b1').read_text(encoding='utf-8'), bad, repr(bad))
+            self.assertIn('CLARIFICATIONS_UNREADABLE', ''.join(c.args[0] for c in err.write.call_args_list))
+        # A file that does not exist is simply created, with nothing set aside.
+        fresh = self.root / 'new/clarifications.json'
+        m.persist_clarifications(fresh, [item], 'b1')
+        self.assertEqual(list(fresh.parent.glob('*.unreadable-*')), [])
+
+    def link(self, link, target):
+        try:
+            link.symlink_to(target, target_is_directory=target.is_dir())
+        except (OSError, NotImplementedError):
+            self.skipTest('this OS does not allow creating symbolic links here')
+
+    def test_records_are_never_written_through_a_link(self):
+        item = {'source_id': 'C1Q1', 'question': 'Q?', 'options': [], 'answer': None, 'state': 'pending', 'url': 'u',
+                'editor': None, 'observed_at': 't1', 'answered_at': None, 'applied': None, 'evidence': [], 'batch': 'b1'}
+        outside = self.root / 'outside.json'
+        outside.write_text('keep', encoding='utf-8')
+        path = self.root / 'feat/workflow/clarifications.json'
+        path.parent.mkdir(parents=True)
+        self.link(path, outside)
+        with self.assertRaisesRegex(sm.ScopeError, 'CLARIFICATIONS_UNSAFE'):
+            m.persist_clarifications(path, [item], 'b1')
+        self.assertEqual(outside.read_text(encoding='utf-8'), 'keep')
+        path.unlink()
+        folder = self.root / 'other'
+        folder.mkdir()
+        (self.root / 'moved').mkdir()
+        self.link(folder / 'workflow', self.root / 'moved')
+        with self.assertRaisesRegex(sm.ScopeError, 'CLARIFICATIONS_UNSAFE'):
+            m.persist_clarifications(folder / 'workflow/clarifications.json', [item], 'b1')
+        self.assertEqual(list((self.root / 'moved').iterdir()), [])
+
     def test_publication_and_replay_survive_malformed_existing_items(self):
         review = self.analysis([question()])
         self.records_path().parent.mkdir(parents=True, exist_ok=True)
