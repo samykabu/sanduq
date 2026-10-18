@@ -224,7 +224,7 @@ class LeanExecutionTests(unittest.TestCase):
         with patch.object(run, 'load', return_value=state), patch.object(run, 'save'), \
              patch.object(run, 'next', return_value={'stage': 'verify'}), \
              patch.object(w, 'required_inputs', return_value=[]), \
-             patch.object(w, 'fingerprint_files', side_effect=lambda root, paths: {p: 'hash' for p in paths}), \
+             patch.object(w, 'fingerprint_files', side_effect=lambda root, paths, **_: {p: 'hash' for p in paths}), \
              patch.object(delegation, 'latest_attempt') as attempt:
             with self.assertRaisesRegex(w.WorkflowError, 'CLAIM_TOKEN_MISMATCH'):
                 run.complete('foreign', receipt)

@@ -17,7 +17,7 @@ from pathlib import Path
 
 VERSION = 1
 EVENTS = ('claim', 'resume', 'accepted', 'rejected-completion', 'recovered', 'paused',
-          'invalidated', 'revalidated', 'revalidation-stale')
+          'invalidated', 'revalidated', 'revalidation-stale', 'skipped', 'revalidate-upstream')
 FIELDS = ('v', 'event_id', 'workflow_run_id', 'generation', 'at', 'stage', 'event', 'episode_id',
           'claim_id', 'caused_by_claim_id', 'candidate_run_id', 'delegation_run_ids', 'reason')
 REASON_LIMIT = 240

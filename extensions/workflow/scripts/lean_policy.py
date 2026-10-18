@@ -1,8 +1,10 @@
 """Opt-in lean execution admission. No model routing or evidence shortcuts."""
 from __future__ import annotations
 
+import json
 import math
 from datetime import datetime
+from pathlib import Path
 
 
 class LeanPolicyError(ValueError):
@@ -40,12 +42,26 @@ def settings(policy):
     return validate(policy['lean_execution']) if 'lean_execution' in policy else dict(DEFAULTS)
 
 
-def enabled(policy):
+def feature_tier(root, feature):
+    """The tier frozen in a feature's checkpoint (`profile.tier`), or None when none is fixed or readable."""
+    try:
+        state = json.loads((Path(root) / feature / 'workflow/checkpoint.json').read_text(encoding='utf-8-sig'))
+    except (OSError, ValueError, TypeError):
+        return None
+    profile = state.get('profile') if isinstance(state, dict) else None
+    return profile.get('tier') if isinstance(profile, dict) else None
+
+
+def enabled(policy, tier=None):
+    """Lean execution is on when the policy enables it, and by default for a lite or standard
+    feature unless the policy sets `lean_execution.enabled: false` explicitly."""
+    if tier in ('lite', 'standard') and (policy.get('lean_execution') or {}).get('enabled') is not False:
+        return True
     return settings(policy)['enabled']
 
 
-def coordinator_owned(policy, stage, commands):
-    if not enabled(policy):
+def coordinator_owned(policy, stage, commands, tier=None):
+    if not enabled(policy, tier):
         return False
     if stage in COORDINATOR_STAGES:
         return True
@@ -65,8 +81,8 @@ def concrete_text(value):
     return isinstance(value, str) and len(value.strip()) >= 12 and len(value.split()) >= 3
 
 
-def admit(policy, attempts, identity, work_type, deliverable, correction_plan=None, diagnosis=None):
-    if not enabled(policy):
+def admit(policy, attempts, identity, work_type, deliverable, correction_plan=None, diagnosis=None, tier=None):
+    if not enabled(policy, tier):
         return {}
     require(work_type != 'coordination', 'LEAN_NESTED_COORDINATOR_FORBIDDEN')
     require(concrete_text(deliverable), 'LEAN_CONCRETE_DELIVERABLE_REQUIRED')

@@ -7,10 +7,12 @@ import copy
 import hashlib
 import json
 import os
+import random
 import re
 import shlex
 import subprocess
 import sys
+import time
 import unicodedata
 import urllib.parse
 import uuid
@@ -59,9 +61,37 @@ AMENDMENT_ASSESSMENTS = ('unchanged', 'changed')
 AMENDMENT_DEPENDENTS = ('verify', 'review', 'ready')
 # Receipt fields only the runtime writes; a submitted receipt may not carry them.
 RUNTIME_RECEIPT_FIELDS = ('amendments', 'stale', 'head', 'source_key', 'ci_evidence', 'diff_reviewed',
-                          'revalidations', 'delegation_ledger_trust', 'verification_snapshot', 'pr_lint_binding')
-# Stages whose receipts also inventory source (`source_fingerprints`) and record `head` and `source_key`.
+                          'revalidations', 'delegation_ledger_trust', 'verification_snapshot', 'pr_lint_binding',
+                          'source_inventory', 'text_fingerprints', 'revalidated_upstream')
+# Stages whose receipts also inventory source (`source_inventory`) and record `head` and `source_key`.
 SOURCE_STAGES = ('verify', 'review', 'ready')
+# Effort scores a Scope receipt may carry (`effort_score`), and the tier bands they map to.
+EFFORT_SCORES = (1, 2, 3, 5, 8, 13, 21)
+TIERS = ('lite', 'standard', 'full')
+DEFAULT_PROFILES = {'lite': {'max_score': 3}, 'standard': {'max_score': 8}}
+# Stages a lite feature skips; `tasks` is merged into `plan` on lite and standard.
+LITE_SKIPPED = ('qa_analyze', 'manual_analyze', 'qa_document', 'manual_update')
+LITE_OPTIONAL_INPUTS = ('research.md', 'data-model.md', 'quickstart.md')
+LINT_COMMAND = 'workflow:lint'
+ARTIFACT_BUDGETS = ('spec_kb', 'plan_kb', 'research_kb', 'tasks_detail_lines')
+ARTIFACT_ENFORCE = ('lite-standard', 'all', 'warn')
+# Stages after which (execute: before which) the dispatcher runs Project Sync; `project_sync.points` narrows it.
+PROJECT_SYNC_POINTS = ('specify', 'plan', 'analyze', 'taskstoissues', 'execute', 'pr')
+TASK_ISSUE_MODES = ('required', 'phase-lazy')
+# Files a stage may change although earlier receipts depend on them (glob `*` stays within one folder).
+# The lineage records each such change; anything else changed during a stage refuses the completion.
+SIDE_EFFECTS = {'clarify': ['<feature>/spec.md', '.specify/project-sync-state.json', '<feature>/checklists/*.md'],
+                'qa_analyze': ['<feature>/tasks.md'],
+                'manual_analyze': ['<feature>/tasks.md'],
+                # Assure Document refreshes this generated source inventory.
+                # It is project context, not requirements authority.
+                'qa_document': ['.github/memory/project-memory.md']}
+RENDER_MARKER = re.compile(r'<!-- sanduq-scope:rendered ([0-9a-f]{64}) -->')
+HANDOFF_BEGIN, HANDOFF_END = '<!-- sanduq-handoff:begin -->', '<!-- sanduq-handoff:end -->'
+DOCTOR_CACHE = '.specify/workflow/runtime/doctor-cache.json'
+DOCTOR_CACHE_SECONDS = 600
+DOCTOR_CACHE_FILES = ('.specify/extensions/.registry', '.specify/presets/.registry', '.specify/extensions.yml',
+                      '.specify/extensions/project/config.json')
 # How recovery recipes name the runtime in a consumer project.
 WORKFLOW_SCRIPT = 'python .specify/extensions/workflow/scripts/workflow.py'
 # Where the workflow package lands inside a consumer project, so `claim`'s `reference`
@@ -73,6 +103,15 @@ WORKFLOW_PACKAGE_PREFIX = '.specify/extensions/workflow/'
 # reference map and extensions/workflow/tests/test_workflow.py for the completeness check.
 def stage_reference(stage):
     return WORKFLOW_PACKAGE_PREFIX + 'skills/workflow/references/stage-' + stage + '.md'
+
+
+def reference_text(root, stage):
+    """The stage reference's content, from the installed package, else from this package's own tree."""
+    relative = stage_reference(stage)
+    for path in (Path(root) / relative, Path(__file__).resolve().parents[1] / relative[len(WORKFLOW_PACKAGE_PREFIX):]):
+        if path.is_file():
+            return path.read_text(encoding='utf-8-sig')
+    return None
 
 
 class WorkflowError(Exception):
@@ -125,11 +164,23 @@ def checkpoint_policy_digest(state, policy):
     return digest(shaped)
 
 
+def replace_file(source, target, attempts=10):
+    """`os.replace` with a short bounded retry: on Windows another process (an indexer, a scanner, a
+    concurrent reader) can hold the target for a moment and the rename fails with PermissionError."""
+    for attempt in range(attempts):
+        try:
+            return os.replace(source, target)
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(0.02 + 0.03 * random.random())
+
+
 def write(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_name(path.name + '.' + uuid.uuid4().hex + '.tmp')
     temp.write_text(json.dumps(value, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
-    os.replace(temp, path)
+    replace_file(temp, path)
 
 
 def inside(root, relative):
@@ -689,7 +740,10 @@ def validate_policy(policy, root=None):
     cap, checkpoint, reserve = (context.get(k) for k in ('max_fraction', 'checkpoint_fraction', 'reserve_fraction'))
     require(all(type(v) in (int, float) for v in (cap, checkpoint, reserve)), 'CONTEXT_LIMIT_INVALID')
     require(0 < checkpoint < cap <= .60 and 0 < reserve < cap, 'CONTEXT_LIMIT_INVALID')
-    require(policy.get('issue_sync') == {'taskstoissues': 'required', 'parent_link': 'native-subissue'}, 'TASK_ISSUES_REQUIRED')
+    issue_sync = policy.get('issue_sync', {})
+    require(set(issue_sync) == {'taskstoissues', 'parent_link'} and issue_sync['taskstoissues'] in TASK_ISSUE_MODES
+            and issue_sync['parent_link'] == 'native-subissue', 'TASK_ISSUES_REQUIRED')
+    validate_front_half_policy(policy)
     require(policy.get('finalize') == {'create_pr': True, 'merge': False}, 'FINALIZE_POLICY_INVALID')
     require(policy.get('clarification', {}).get('resume_on_reinvoke') in ('reread-answers', 'manual-status'), 'CLARIFICATION_POLICY_INVALID')
     # Older consumer policies remain valid and opt out until the project selects delegation.
@@ -756,6 +810,104 @@ def validate_policy(policy, root=None):
     return policy
 
 
+def _positive(value):
+    return type(value) is int and value > 0
+
+
+def validate_front_half_policy(policy):
+    """Profiles, clarification caps, artifact budgets, Project Sync points and the board cache.
+
+    Every key is optional; an absent one keeps the earlier behaviour."""
+    profiles = policy.get('profiles')
+    if profiles is not None:
+        require(isinstance(profiles, dict) and set(profiles) <= {'enabled', 'lite', 'standard'}
+                and type(profiles.get('enabled')) is bool, 'PROFILES_POLICY_INVALID: expected {enabled, lite, standard}')
+        bands = {}
+        for name in ('lite', 'standard'):
+            band = profiles.get(name, DEFAULT_PROFILES[name])
+            require(isinstance(band, dict) and set(band) == {'max_score'} and _positive(band['max_score']),
+                    'PROFILES_POLICY_INVALID: ' + name + ' expects {max_score: positive integer}')
+            bands[name] = band['max_score']
+        require(bands['lite'] < bands['standard'], 'PROFILES_POLICY_INVALID: lite.max_score must be below standard.max_score')
+    clarification = policy.get('clarification', {})
+    if 'max_questions_per_round' in clarification:
+        require(_positive(clarification['max_questions_per_round']), 'CLARIFICATION_POLICY_INVALID: max_questions_per_round')
+    if 'in_session_first_round' in clarification:
+        require(type(clarification['in_session_first_round']) is bool, 'CLARIFICATION_POLICY_INVALID: in_session_first_round')
+    artifacts = policy.get('artifacts')
+    if artifacts is not None:
+        require(isinstance(artifacts, dict) and set(artifacts) <= {'budgets', 'enforce'}, 'ARTIFACTS_POLICY_INVALID')
+        budgets = artifacts.get('budgets', {})
+        require(isinstance(budgets, dict) and set(budgets) <= set(ARTIFACT_BUDGETS)
+                and all(_positive(value) for value in budgets.values()),
+                'ARTIFACTS_POLICY_INVALID: budgets expects positive integers for ' + ', '.join(ARTIFACT_BUDGETS))
+        require(artifacts.get('enforce', 'lite-standard') in ARTIFACT_ENFORCE,
+                'ARTIFACTS_POLICY_INVALID: enforce is one of ' + ', '.join(ARTIFACT_ENFORCE))
+    project_sync = policy.get('project_sync')
+    if project_sync is not None:
+        points = project_sync.get('points') if isinstance(project_sync, dict) else None
+        require(isinstance(project_sync, dict) and set(project_sync) == {'points'} and isinstance(points, list)
+                and set(points) <= set(PROJECT_SYNC_POINTS) and len(set(points)) == len(points),
+                'PROJECT_SYNC_POLICY_INVALID: points is a list of ' + ', '.join(PROJECT_SYNC_POINTS))
+    scope = policy.get('scope')
+    if isinstance(scope, dict) and 'board_cache_seconds' in scope:
+        value = scope['board_cache_seconds']
+        require(type(value) is int and value >= 0, 'SCOPE_BOARD_CACHE_INVALID: expected seconds >= 0 (0 disables)')
+
+
+def tier(policy, score):
+    """The profile tier for an effort score: `full` unless profiles are enabled and the score fits a band."""
+    profiles = policy.get('profiles') or {}
+    if not profiles.get('enabled') or score is None:
+        return 'full'
+    for name in ('lite', 'standard'):
+        if score <= profiles.get(name, DEFAULT_PROFILES[name])['max_score']:
+            return name
+    return 'full'
+
+
+def state_tier(state):
+    """The tier frozen into a checkpoint at the first Plan claim, else None (the full stage list)."""
+    return ((state or {}).get('profile') or {}).get('tier')
+
+
+def feature_tier(root, feature):
+    """The frozen tier read from a feature's checkpoint, for callers that hold no state."""
+    return lean_policy.feature_tier(root, feature)
+
+
+def skipped_stages(policy, tier_name):
+    """Stages a tier does not run, with the reason recorded in the checkpoint and the lifecycle log."""
+    if tier_name not in ('lite', 'standard'):
+        return {}
+    skipped = {'tasks': 'merged into plan (' + tier_name + ' tier)'}
+    if tier_name == 'lite':
+        skipped.update({stage: 'lite tier' for stage in LITE_SKIPPED if stage in stages(policy)})
+    return skipped
+
+
+def project_sync(policy, stage):
+    """Whether the dispatcher runs Project Sync for this stage (`project_sync.points`)."""
+    return stage in (policy.get('project_sync') or {}).get('points', PROJECT_SYNC_POINTS)
+
+
+def task_issue_mode(policy):
+    return policy['issue_sync']['taskstoissues']
+
+
+def side_effects(policy, feature, stage):
+    """The concrete side-effect globs for a stage; phase-lazy issue sync lets Execute extend the mapping."""
+    paths = [path.replace('<feature>', feature) for path in SIDE_EFFECTS.get(stage, [])]
+    if stage == 'execute' and task_issue_mode(policy) == 'phase-lazy':
+        paths.append(feature + '/workflow/task-issues.json')
+    return paths
+
+
+def matches_side_effect(path, patterns):
+    path = portable_label(path)
+    return any(re.fullmatch(re.escape(pattern).replace(r'\*', '[^/]*'), path) for pattern in patterns)
+
+
 def load_policy(root):
     path = root / '.specify/workflow.yml'
     require(path.is_file(), 'WORKFLOW_INIT_REQUIRED')
@@ -773,18 +925,35 @@ def scope_decision(policy, estimate, unit):
             'estimate': estimate, 'unit': unit, 'policy_digest': digest(band)}
 
 
-def stages(policy):
-    return [s for s in BASE_STAGES if not (s.startswith('qa_') and not policy['processes']['qa'])
-            and not (s.startswith('manual_') and not policy['processes']['user_manual'])]
+def stages(policy, tier=None):
+    """The selected stage order; a lite or standard tier merges Tasks into Plan, lite also drops QA/manual stages."""
+    selected = [s for s in BASE_STAGES if not (s.startswith('qa_') and not policy['processes']['qa'])
+                and not (s.startswith('manual_') and not policy['processes']['user_manual'])]
+    if tier in ('lite', 'standard'):
+        selected = [s for s in selected if s != 'tasks' and not (tier == 'lite' and s in LITE_SKIPPED)]
+    return selected
+
+
+# Sub-keys that tune how future work runs (a cache TTL, a question cap) and never change what
+# finished evidence means; a change to them alone reaches no stage.
+OPERATIONAL_SUBKEYS = {'scope': ('board_cache_seconds',),
+                       'clarification': ('max_questions_per_round', 'in_session_first_round')}
 
 
 def policy_cutoff(previous, current):
     if not previous: return 0
     affected = []
+    def section(policy, key):
+        value = policy.get(key)
+        if isinstance(value, dict) and key in OPERATIONAL_SUBKEYS:
+            value = {k: v for k, v in value.items() if k not in OPERATIONAL_SUBKEYS[key]} or None
+        return value
+    # `project_sync` only places board updates, like `context`, so it reaches no stage.
     for key, stage in {'scope':'scope','clarification':'clarify','decisions':'clarify','providers':'clarify',
-                       'processes':'tasks','issue_sync':'taskstoissues','execution':'execute',
+                       'profiles':'plan','processes':'tasks','artifacts':'analyze',
+                       'issue_sync':'taskstoissues','execution':'execute',
                        'finalize':'ready', 'lean_execution':'execute'}.items():
-        if previous.get(key) != current.get(key): affected.append(BASE_STAGES.index(stage))
+        if section(previous, key) != section(current, key): affected.append(BASE_STAGES.index(stage))
     # Context, update scheduling and receipt-contract keys (`receipts`) do not
     # retroactively invalidate semantic work: requiring input roles applies to
     # receipts written after the change, never to completed ones.
@@ -832,8 +1001,10 @@ def package_digest(root):
     return digest({'registrations': entries, 'sources': fingerprint_files(root, paths)})
 
 
-def resolve_commands(root, policy):
+def resolve_commands(root, policy, tier=None):
     commands = dict(COMMANDS)
+    if tier in ('lite', 'standard'):
+        commands['analyze'] = LINT_COMMAND  # a model analyze runs only when lint asks for one
     for stage, suffix, choice in [('clarify', 'brainstorm', policy['providers']['clarification']),
                                   ('tasks', 'tasks', policy['providers']['tasks']),
                                   ('execute', 'execute', policy['execution']['engine'])]:
@@ -989,7 +1160,45 @@ def host_warnings(root):
     return [problem + '; run "' + repair + '" to re-register every installed host' for problem in problems]
 
 
-def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True, check_preflight=True):
+def doctor_cache_key(root, policy, dependency_digest=None):
+    """What a cached green doctor result is valid for: packages, policy and the registration files' mtimes."""
+    mtimes = {}
+    for name in DOCTOR_CACHE_FILES:
+        try:
+            mtimes[name] = (root / name).stat().st_mtime_ns
+        except OSError:
+            mtimes[name] = None
+    return {'dependency_digest': dependency_digest or package_digest(root), 'policy_digest': digest(policy),
+            'mtimes': mtimes}
+
+
+def store_doctor_cache(root, policy, result, dependency_digest=None):
+    if result.get('ok') and result.get('project_checked'):
+        write(root / DOCTOR_CACHE, {'at': datetime.now(timezone.utc).timestamp(),
+                                    'key': doctor_cache_key(root, policy, dependency_digest), 'result': result})
+
+
+def cached_doctor(root, policy, dependency_digest=None):
+    """The last green `doctor(project=True)` result while nothing it checked changed and it is under 600 s old;
+    otherwise a fresh run, cached when green. `dependency_digest` passes a package digest already computed."""
+    cache = read(root / DOCTOR_CACHE, {}) if (root / DOCTOR_CACHE).is_file() else {}
+    try:
+        age = datetime.now(timezone.utc).timestamp() - float(cache.get('at'))
+    except (TypeError, ValueError):
+        age = None
+    if (age is not None and 0 <= age < DOCTOR_CACHE_SECONDS and isinstance(cache.get('result'), dict)
+            and cache['result'].get('ok') is True
+            and cache.get('key') == doctor_cache_key(root, policy, dependency_digest)):
+        return {**cache['result'], 'cached': True}
+    result = doctor(root, policy, project=True, check_delegation=False, check_preflight=False)
+    store_doctor_cache(root, policy, result, dependency_digest)
+    return result
+
+
+def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True, check_preflight=True,
+           explicit=False):
+    """Installation health. `explicit` (the `doctor` command) also runs the skill inventory (with `project`)
+    and the byte-sensitive line-ending scan, which no claim or other command pays for."""
     needed = ['scope', 'project', 'pr'] + (['assure'] if policy['processes']['qa'] else []) + (['user-manual'] if policy['processes']['user_manual'] else [])
     errors = ['DEPENDENCY_UNAVAILABLE: ' + name + ' ' + RANGES[name] for name in needed if not compatible(root, name)]
     if active_host(root) not in ('codex','claude'):
@@ -1035,11 +1244,17 @@ def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True
     errors += ci_errors(root, policy, preserved_ci)
     if project: errors += project_errors(root, policy)
     warnings = host_warnings(root)
+    # E9: AGENTS.md is the standing file; CLAUDE.md should import it, not repeat it.
+    claude_md = root / 'CLAUDE.md'
+    if (root / 'AGENTS.md').is_file() and claude_md.is_file() and \
+            '@AGENTS.md' not in claude_md.read_text(encoding='utf-8-sig', errors='replace'):
+        warnings.append('INSTRUCTION_FILES_DUPLICATED: CLAUDE.md and AGENTS.md both exist; '
+                        'put "@AGENTS.md" in CLAUDE.md so both hosts read one standing file')
     # Only a --project doctor run pays for this (migrate/upgrade doctor calls do
     # not), and a scan failure (an unreadable plugin manifest, an odd path) is
     # reported, never allowed to fail doctor itself.
     skill_inventory_result = None
-    if project:
+    if project and explicit:
         try:
             skill_inventory_result = skill_inventory.inventory(root, policy)
             warnings += skill_inventory.warnings(skill_inventory_result)
@@ -1049,7 +1264,7 @@ def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True
     if isinstance(policy.get('delegation'), dict):
         from delegation import light_tier_route_warnings
         warnings += light_tier_route_warnings(policy['delegation'])
-    drift = eol_drift(root)
+    drift = eol_drift(root) if explicit else None
     if drift:
         warnings.append(
             f'BYTE_SENSITIVE_EOL_DRIFT: {len(drift)} tracked byte-sensitive file(s) (.sql or -text, e.g. {drift[0]}) '
@@ -1063,7 +1278,7 @@ def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True
         errors += ['LEAN_PREFLIGHT_FAILED: ' + json.dumps(preflight)]
     result = {'ok': not errors, 'errors': errors, 'warnings': warnings, 'project_checked': project,
               'context': 'Only fresh reliable measurements can trigger context pauses; unavailable or estimated usage is nonblocking outside explicit strict mode'}
-    if project:
+    if project and explicit:
         result['skill_inventory'] = skill_inventory_result
     if preflight:
         result['preflight'] = preflight
@@ -1108,6 +1323,18 @@ def pr_lint_binding(root, feature, state, receipt):
             'prerequisites': sorted(set(source['dependencies']))}
 
 
+def handoff_text(existing, block):
+    """Replace only the runtime's marked block; everything outside it is the reader's and is kept.
+
+    A file without markers that the runtime wrote before blocks existed (`# Workflow handoff` first) is replaced."""
+    begin, end = existing.find(HANDOFF_BEGIN), existing.find(HANDOFF_END)
+    if 0 <= begin < end:
+        return existing[:begin] + block + existing[end + len(HANDOFF_END):]
+    if not existing.strip() or existing.lstrip().startswith('# Workflow handoff'):
+        return block + '\n'
+    return existing.rstrip('\n') + '\n\n' + block + '\n'
+
+
 def native_run_status(root, feature, state, roots):
     """Compact run projection enriched with explicit ledger acceptance, never raw logs."""
     try:
@@ -1147,9 +1374,17 @@ def native_run_status(root, feature, state, roots):
             run['task_verdict'] = attempt.get('status', 'unknown')
             run['task_verdict_provenance'] = 'delegate-self-report'
         run['assignment'] = attempt.get('identity') if attempt else None
-    return {'feature': feature, 'issue': state['issue'], 'active': state.get('active'),
-            'ledger_trust': trust, 'ledger_conflicts': sorted(ledger_conflicts),
-            'progress': report, 'ok': report['ok'] and not ledger_conflicts}
+    active = state.get('active')
+    if active:
+        active = {key: value for key, value in active.items() if key != 'baseline'}
+    result = {'feature': feature, 'issue': state['issue'], 'status': state.get('status'), 'active': active,
+              'next_action': state.get('next_action'), 'completed': list(state.get('receipts', {})),
+              'ledger_trust': trust, 'ledger_conflicts': sorted(ledger_conflicts),
+              'progress': report, 'ok': report['ok'] and not ledger_conflicts}
+    for key in ('profile', 'skipped', 'pause'):
+        if state.get(key):
+            result[key] = state[key]
+    return result
 
 
 def context_gate(policy, usage):
@@ -1182,7 +1417,19 @@ def measured_context_gate(policy, usage):
             'fraction': fraction, 'session_id': usage['session_id'], 'reason': 'checkpoint-required' if pause else 'within-budget'}
 
 
-def fingerprint_files(root, paths):
+def normalized_text(content):
+    """Markdown read for a drift decision: CRLF, trailing spaces or tabs and final newlines carry no meaning."""
+    return re.sub(rb'[ \t]+(?=\n|\Z)', b'', content.replace(b'\r\n', b'\n')).rstrip(b'\n')
+
+
+def text_fingerprints(root, paths):
+    """Whitespace-normalised hashes of the Markdown paths, used only to decide drift, never stored as the hash."""
+    hashes = fingerprint_files(root, [path for path in paths if portable_label(path).lower().endswith('.md')],
+                               normalize=True)
+    return {path: value for path, value in hashes.items() if value is not None}
+
+
+def fingerprint_files(root, paths, normalize=False):
     result = {}
     paths = sorted(set(paths))
     # Legacy labels with Windows separators keep their identity in the result but are read through the
@@ -1208,14 +1455,20 @@ def fingerprint_files(root, paths):
                 content = re.sub(rb'(?<=[^ \t\r\n])' + marker + rb'\r?\n\Z', b'', content)
                 content = re.sub(rb'\A' + marker + rb'(?:\r?\n)?', b'', content)
                 content = re.sub(rb'(?:\r?\n)?' + marker, b'', content)
+            if normalize:
+                content = normalized_text(content)
             result[relative] = hashlib.sha256(content).hexdigest()
         else:
             result[relative] = None
     return result
 
 
-def required_inputs(root, feature, stage):
-    """Minimum artifact coverage is enforced even if an agent omits a path."""
+def required_inputs(root, feature, stage, tier=None):
+    """Minimum artifact coverage is enforced even if an agent omits a path.
+
+    `tier` None reads the tier frozen in the feature's checkpoint. A lite feature treats
+    research, data model, quickstart and contracts as optional consulted inputs."""
+    tier = tier or feature_tier(root, feature)
     index = BASE_STAGES.index(stage)
     paths = []
     if index >= BASE_STAGES.index('specify'):
@@ -1228,8 +1481,8 @@ def required_inputs(root, feature, stage):
         paths += [feature + '/workflow/task-issues.json']
     constitution = '.specify/memory/constitution.md'
     if (root / constitution).is_file(): paths.append(constitution)
-    if index >= BASE_STAGES.index('plan'):
-        for name in ('research.md', 'data-model.md', 'quickstart.md'):
+    if index >= BASE_STAGES.index('plan') and tier != 'lite':
+        for name in LITE_OPTIONAL_INPUTS:
             if (root / feature / name).is_file(): paths.append(feature + '/' + name)
         contracts = root / feature / 'contracts'
         if contracts.is_dir():
@@ -1249,6 +1502,61 @@ def source_fingerprints(root):
         if Path(path).name.startswith('.env') or Path(path).suffix.lower() in ('.pem', '.key', '.p12', '.pfx'): continue
         selected.append(path)
     return fingerprint_files(root, selected)
+
+
+def inventory_label(stage, claim_id, suffix=None):
+    """Feature-relative side file of a receipt's source inventory; a rewrite gets a new suffix, never the same name."""
+    return 'workflow/inventory/' + stage + '-' + str(claim_id) + ('-' + suffix if suffix else '') + '.json'
+
+
+def store_source_inventory(root, feature, label, inventory):
+    """Write a receipt's source inventory beside the checkpoint; the receipt keeps only its path and hash."""
+    target = inside(root, feature + '/' + label)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    data = (json.dumps(inventory, indent=0, sort_keys=True, ensure_ascii=False) + '\n').encode('utf-8')
+    temp = target.with_name(target.name + '.' + uuid.uuid4().hex + '.tmp')
+    temp.write_bytes(data)
+    replace_file(temp, target)
+    return {'path': label, 'sha256': hashlib.sha256(data).hexdigest()}
+
+
+def source_fingerprints_of(root, receipt, feature=None):
+    """A receipt's source inventory: the legacy inline `source_fingerprints`, or its `source_inventory` side file.
+
+    A side file that is missing or does not match its recorded hash raises SOURCE_INVENTORY_INVALID.
+    `feature` defaults to the folder of the checkpoint the receipt belongs to (`specs/<f>`)."""
+    reference = receipt.get('source_inventory')
+    if not reference:
+        return receipt.get('source_fingerprints') or {}
+    require(isinstance(reference, dict) and isinstance(reference.get('path'), str), 'SOURCE_INVENTORY_INVALID: ' + repr(reference))
+    require(feature, 'SOURCE_INVENTORY_INVALID: the feature is required to read ' + reference['path'])
+    label = feature + '/' + reference['path']
+    try:
+        data = inside(root, label).read_bytes()
+    except OSError as exc:
+        raise WorkflowError('SOURCE_INVENTORY_INVALID: ' + label + ': ' + str(exc)) from exc
+    require(hashlib.sha256(data).hexdigest() == reference.get('sha256'), 'SOURCE_INVENTORY_INVALID: ' + label +
+            ' does not match its recorded sha256')
+    try:
+        value = json.loads(data.decode('utf-8'))
+    except ValueError as exc:
+        raise WorkflowError('SOURCE_INVENTORY_INVALID: ' + label + ': ' + str(exc)) from exc
+    require(isinstance(value, dict), 'SOURCE_INVENTORY_INVALID: ' + label)
+    return value
+
+
+def first_phase_tasks(text):
+    """Task ids of the first phase: the tasks up to the second `#`/`##` heading that follows a task."""
+    selected = []
+    for line in text.splitlines():
+        if re.match(r'^#{1,2}(?!#)\s', line):
+            if selected:
+                break
+            continue
+        match = re.match(r'^\s*- \[[ xX]\]\s+(T\d{3,})\b', line)
+        if match:
+            selected.append(match[1])
+    return selected
 
 
 def consulted_inputs(receipt):
@@ -1305,7 +1613,7 @@ def require_input_roles(policy):
     return (policy.get('receipts') or {}).get('require_input_roles') is True
 
 
-def validate_input_roles(root, feature, stage, receipt, policy):
+def validate_input_roles(root, feature, stage, receipt, policy, tier=None):
     """Check declared roles against the receipt's own input manifest.
 
     Evidence and the stage's required inputs can never be consulted: the
@@ -1319,7 +1627,7 @@ def validate_input_roles(root, feature, stage, receipt, policy):
         roles = {}
     require(isinstance(roles, dict), 'INPUT_ROLES_INVALID: expected a map of input path to role')
     inputs = receipt['inputs']
-    protected = set(receipt['evidence']) | set(required_inputs(root, feature, stage))
+    protected = set(receipt['evidence']) | set(required_inputs(root, feature, stage, tier))
     for path, entry in roles.items():
         require(path in inputs, 'INPUT_ROLE_NOT_IN_MANIFEST: ' + str(path))
         require(isinstance(entry, dict) and entry.get('role') in INPUT_ROLES and set(entry) <= {'role', 'because'},
@@ -1336,11 +1644,11 @@ def validate_input_roles(root, feature, stage, receipt, policy):
         require(not missing, 'INPUT_ROLE_UNDECLARED: ' + ', '.join(missing))
 
 
-def consulted_drift(root, feature, receipts):
+def consulted_drift(root, feature, receipts, tier=None):
     """Changed consulted inputs: reported as advisory drift, never as staleness."""
     drift = []
     for stage, receipt in receipts.items():
-        consulted = without_required(consulted_inputs(receipt), required_inputs(root, feature, stage))
+        consulted = without_required(consulted_inputs(receipt), required_inputs(root, feature, stage, tier))
         saved = {path: receipt['fingerprints'][path] for path in consulted
                  if path in receipt.get('fingerprints', {})}
         if not saved:
@@ -1403,9 +1711,9 @@ def affected_lanes(root, command, paths):
     return lanes
 
 
-def source_drift(receipt, current):
+def source_drift(receipt, current, root=None, feature=None):
     """Source paths added, removed or changed since the receipt's inventory."""
-    old = receipt.get('source_fingerprints') or {}
+    old = source_fingerprints_of(root, receipt, feature)
     return sorted(path for path in set(old) | set(current)
                   if path not in old or path not in current or old[path] != current[path])
 
@@ -1524,7 +1832,7 @@ def validate_evidence_snapshots(root, receipt):
             raise WorkflowError('EVIDENCE_SNAPSHOT_UNRECOVERABLE: ' + path + ': ' + str(exc)) from exc
 
 
-def receipt_status(root, feature, stage, receipt, policy=None):
+def receipt_status(root, feature, stage, receipt, policy=None, tier=None):
     """Whether a receipt is current, and why not.
 
     Explicit fingerprints (inputs and evidence) always keep their byte-hash
@@ -1538,13 +1846,14 @@ def receipt_status(root, feature, stage, receipt, policy=None):
     """
     if receipt.get('stale'):
         return {'current': False, 'reason': 'marked-stale', 'stale': receipt['stale']}
+    tier = tier or feature_tier(root, feature) or 'full'
     try:
         validate_evidence_snapshots(root, receipt)
     except (WorkflowError, ValueError, OSError, KeyError, TypeError) as exc:
         return {'current': False, 'reason': 'evidence-snapshot-unrecoverable', 'paths': receipt.get('evidence_snapshots', []),
                 'detail': str(exc)}
     saved = receipt.get('fingerprints', {})
-    required = set(required_inputs(root, feature, stage))
+    required = set(required_inputs(root, feature, stage, tier))
     if not saved or not required <= {portable_label(path) for path in saved}:
         return {'current': False, 'reason': 'explicit-drift', 'paths': sorted(required - set(saved))}
     dependencies = dependency_fingerprints(receipt, required)
@@ -1554,17 +1863,21 @@ def receipt_status(root, feature, stage, receipt, policy=None):
                 'paths': sorted(path for path in dependencies if now_hashes.get(path) != dependencies[path])}
     if stage not in SOURCE_STAGES:
         return {'current': True, 'via': 'identity'}
-    if stage == 'verify' and policy and lean_policy.enabled(policy):
+    if stage == 'verify' and policy and lean_policy.enabled(policy, tier):
         selected_plan = lean_policy.settings(policy).get('verification_plan')
         if selected_plan:
             selected = verification_plan.current(root, selected_plan, receipt.get('verification_snapshot'))
             if not selected['current']:
                 return {'current': False, 'reason': 'verification-plan-drift', **selected}
             return {'current': True, 'via': 'verification-plan'}
+    try:
+        recorded = source_fingerprints_of(root, receipt, feature)
+    except WorkflowError as exc:
+        return {'current': False, 'reason': 'source-inventory-invalid', 'detail': str(exc)}
     current = source_fingerprints(root)
-    if receipt.get('source_fingerprints') == current:
+    if recorded == current:
         return {'current': True, 'via': 'identity'}
-    drift = source_drift(receipt, current)
+    drift = source_drift({'source_fingerprints': recorded}, current)
     stale = {'current': False, 'reason': 'source-drift', 'paths': drift}
     if not receipt.get('source_key'):
         return {**stale, 'rule': 'identity'}
@@ -1636,14 +1949,33 @@ def recovery_recipe(feature, stage, status, policy, receipt):
     return steps
 
 
-def receipt_drift(root, feature, stage, receipt):
+def upstream_drift(root, feature, stage, receipt, tier=None):
+    """Changed dependency paths of a receipt, where a Markdown input whose only change is CRLF or trailing
+    spaces counts as unchanged (compared through `text_fingerprints`; the stored hash stays the byte hash).
+    A required input the receipt never fingerprinted counts as changed."""
+    required = required_inputs(root, feature, stage, tier)
+    saved = dependency_fingerprints(receipt, required)
+    current = fingerprint_files(root, saved)
+    drifted = [path for path in saved if current[path] != saved[path]]
+    recorded = receipt.get('text_fingerprints') or {}
+    text_now = text_fingerprints(root, [path for path in drifted if current[path] is not None and path in recorded])
+    changed = {path for path in drifted if not (path in text_now and text_now[path] == recorded[path])}
+    changed.update(set(required) - {portable_label(path) for path in receipt.get('fingerprints', {})})
+    return sorted(changed)
+
+
+def receipt_drift(root, feature, stage, receipt, tier=None):
     """Explain staleness without printing source content or weakening the gate."""
-    saved = {portable_label(p): v for p, v in dependency_fingerprints(receipt, required_inputs(root, feature, stage)).items()}
-    current = fingerprint_files(root, set(saved) | set(required_inputs(root, feature, stage)))
+    required = required_inputs(root, feature, stage, tier)
+    saved = {portable_label(p): v for p, v in dependency_fingerprints(receipt, required).items()}
+    current = fingerprint_files(root, set(saved) | set(required))
     changed = {p for p in set(saved) | set(current) if saved.get(p) != current.get(p)}
-    changed.update(set(required_inputs(root, feature, stage)) - {portable_label(p) for p in receipt.get('fingerprints', {})})
+    changed.update(set(required) - {portable_label(p) for p in receipt.get('fingerprints', {})})
     if stage in SOURCE_STAGES:
-        old = receipt.get('source_fingerprints', {})
+        try:
+            old = source_fingerprints_of(root, receipt, feature)
+        except WorkflowError:
+            old = {}  # an unreadable inventory leaves every current source path reported as changed
         new = source_fingerprints(root)
         changed.update(p for p in set(old) | set(new) if p not in old or p not in new or old[p] != new[p])
     return sorted(changed)
@@ -1667,7 +1999,7 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
         from task_issues import parse_tasks
         tasks = parse_tasks((directory / 'tasks.md').read_text(encoding='utf-8-sig'))
     if rules.get('tasks'):
-        if coding_only and lean_policy.enabled(policy):
+        if coding_only and lean_policy.enabled(policy, state_tier(state)):
             coding = lean_policy.coding_tasks((directory / 'tasks.md').read_text(encoding='utf-8-sig'))
             completion_tasks = {key: task for key, task in tasks.items() if key in coding}
         else:
@@ -1763,8 +2095,10 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
         repo, parent = state['issue'].split('#')
         require((mapping.get('repo'), mapping.get('parent'), mapping.get('feature')) == (repo, int(parent), feature),
                 'TASK_MAPPING_IDENTITY_MISMATCH')
-        require(set(tasks) <= set(mapping.get('tasks', {})) and all(mapping['tasks'][t].get('linked') for t in tasks),
-                'TASK_MAPPING_INCOMPLETE')
+        unmapped = sorted(t for t in tasks if not (mapping.get('tasks', {}).get(t) or {}).get('linked'))
+        lazy = ('; phase-lazy issue sync maps a phase when it starts: run task_issues.py --phase "<Phase heading>" '
+                'for each phase still unmapped before Ready' if task_issue_mode(policy) == 'phase-lazy' else '')
+        require(not unmapped, 'TASK_MAPPING_INCOMPLETE: ' + ', '.join(unmapped[:20]) + lazy)
         ran.append('task_links')
     checks = []
     if rules.get('documentation') and policy['processes']['qa']:
@@ -1784,7 +2118,7 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
 
 def coding_review_checks(root, feature, policy, state):
     """Final coding review waits for coding/testing; artifact analysis remains available."""
-    if not lean_policy.enabled(policy):
+    if not lean_policy.enabled(policy, state_tier(state)):
         return []
     return ready_checks(root, feature, policy, state,
                         rules={'tasks': True, 'task_links': False, 'documentation': False},
@@ -2140,8 +2474,9 @@ class Run:
             require(invalidate_from in BASE_STAGES, 'INVALID_MIGRATION_STAGE')
         old_policy_digest = state['policy_digest']
         policy_digest = delivery_digest(self.policy)
-        commands = resolve_commands(self.root, self.policy)
-        changed = [stage for stage in stages(self.policy) if state['commands'].get(stage) != commands[stage]]
+        commands = resolve_commands(self.root, self.policy, state_tier(state))
+        selected = stages(self.policy, state_tier(state))
+        changed = [stage for stage in selected if state['commands'].get(stage) != commands[stage]]
         if policy_digest != old_policy_digest:
             reached = policy_cutoff(state.get('policy'), self.policy)
             if reached < len(BASE_STAGES): changed.append(BASE_STAGES[reached])
@@ -2152,7 +2487,7 @@ class Run:
         return {'from': state['dependency_digest'], 'to': package_digest(self.root),
                 'policy_from': old_policy_digest, 'policy_to': policy_digest,
                 'commands': commands, 'changed_commands': sorted(
-                    stage for stage in stages(self.policy) if state['commands'].get(stage) != commands[stage]),
+                    stage for stage in selected if state['commands'].get(stage) != commands[stage]),
                 'invalidated': invalidated,
                 'preserved_as_historical': [s for s in state['receipts'] if s not in invalidated]}
 
@@ -2192,6 +2527,98 @@ class Run:
                 self.save(state)
             return {'refreshed': list(affected), 'next': self.next(state)}
 
+    # Receipt fields a re-record keeps from the receipt it replaces unless the entry restates them.
+    CARRIED_FIELDS = ('unresolved', 'answers_applied', 'parent_issue', 'native_links_verified', 'lazy', 'effort_score')
+    UPSTREAM_ENTRY_FIELDS = ('summary', 'evidence', 'inputs', 'input_roles', 'evidence_snapshots', 'lint') + CARRIED_FIELDS
+
+    def upstream_plan(self, state, through):
+        """Per stale or removed receipt from Specify through `through`: the changed input paths, which stages
+        only changed by whitespace in Markdown (re-stamped without a model pass), and which need a receipt."""
+        tier = self.tier_of(state)
+        first, last = BASE_STAGES.index('specify'), BASE_STAGES.index(through)
+        changed, restamp, needs = {}, [], []
+        for stage in stages(self.policy, state_tier(state)):
+            if not first <= BASE_STAGES.index(stage) <= last:
+                continue
+            receipt = state['receipts'].get(stage)
+            if receipt is None:
+                changed[stage] = required_inputs(self.root, self.relative, stage, tier)
+                needs.append(stage)
+                continue
+            status = receipt_status(self.root, self.relative, stage, receipt, self.policy, tier)
+            if status['current']:
+                continue
+            paths = upstream_drift(self.root, self.relative, stage, receipt, tier)
+            changed[stage] = paths
+            (restamp if status.get('reason') == 'explicit-drift' and not paths else needs).append(stage)
+        return {'changed': changed, 'restamp': restamp, 'needs_receipt': needs}
+
+    def revalidate_upstream(self, through, receipts=None, plan=False, actor=None):
+        """Re-record stale upstream receipts (Specify through `through`) in one locked operation.
+
+        `plan` only reports `changed: {stage: [paths]}`. Otherwise `receipts` is `{stages: {<stage>:
+        {summary, evidence[], inputs[]}}}` with an entry for every stage that needs one; each is checked the
+        way `complete` checks a receipt (binding, decisions ledger, required inputs). A stage whose only drift
+        is whitespace in Markdown inputs is re-stamped with the new byte hashes and no entry."""
+        require(through in BASE_STAGES and BASE_STAGES.index('specify') <= BASE_STAGES.index(through)
+                < BASE_STAGES.index('execute'), 'REVALIDATE_UPSTREAM_STAGE_INVALID: --through names a stage from '
+                'specify to taskstoissues')
+        with locked(self.lock):
+            state = self.load()
+            active = state['active']
+            require(not active, 'ACTIVE_CLAIM_MUST_BE_RESOLVED_BEFORE_REVALIDATE_UPSTREAM: recover the ' +
+                    str((active or {}).get('stage')) + ' claim first')
+            if state['policy_digest'] != checkpoint_policy_digest(state, self.policy):
+                require(policy_cutoff(state.get('policy'), self.policy) > BASE_STAGES.index(through),
+                        'POLICY_CHANGED: the policy change reaches a stage through ' + through + '; claim it instead')
+            found = self.upstream_plan(state, through)
+            if plan:
+                return {'plan': True, 'feature': self.relative, 'through': through, **found}
+            require(found['changed'], 'REVALIDATE_UPSTREAM_NOT_NEEDED: every receipt through ' + through + ' is current')
+            entries = (receipts or {}).get('stages') if isinstance(receipts, dict) else None
+            require(isinstance(entries, dict), 'REVALIDATE_UPSTREAM_RECEIPT_INVALID: expected {stages: {<stage>: '
+                    '{summary, evidence, inputs}}}')
+            extra = sorted(set(entries) - set(found['needs_receipt']))
+            require(not extra, 'REVALIDATE_UPSTREAM_STAGE_NOT_STALE: ' + ', '.join(extra) +
+                    ' (only stale or removed stages with changed inputs take an entry; see --plan)')
+            missing = [stage for stage in found['needs_receipt'] if stage not in entries]
+            require(not missing, 'REVALIDATE_UPSTREAM_RECEIPT_MISSING: ' + ', '.join(missing))
+            tier = self.tier_of(state)
+            episode = 'revalidate-upstream:' + uuid.uuid4().hex
+            at = now()
+            record = {'episode_id': episode, 'at': at, 'actor': actor or default_actor(self.root)}
+            for stage in [s for s in BASE_STAGES if s in found['changed']]:
+                old = state['receipts'].get(stage) or {}
+                if stage in found['restamp']:
+                    stored = copy.deepcopy(old)
+                    current = fingerprint_files(self.root, stored['fingerprints'])
+                    drifted = sorted(path for path in stored['fingerprints'] if current[path] != stored['fingerprints'][path])
+                    stored['fingerprints'].update(current)
+                    stored['revalidated_upstream'] = {**record, 'via': 'whitespace-only', 'paths': drifted}
+                    reason = 'whitespace-only: ' + ', '.join(drifted)
+                else:
+                    entry = entries[stage]
+                    require(isinstance(entry, dict) and set(entry) <= set(self.UPSTREAM_ENTRY_FIELDS),
+                            'REVALIDATE_UPSTREAM_RECEIPT_INVALID: ' + stage + ' takes ' + ', '.join(self.UPSTREAM_ENTRY_FIELDS))
+                    carried = {key: old[key] for key in self.CARRIED_FIELDS if key in old}
+                    receipt = self._check_receipt(stage, {**carried, **entry, 'stage': stage, 'outcome': 'passed'}, tier)
+                    self._check_stage_rules(state, stage, receipt)
+                    stored = copy.deepcopy(receipt)
+                    if stored.get('input_roles') is None:
+                        stored.pop('input_roles', None)
+                    self._stamp(state, stage, receipt, stored, tier)
+                    stored['revalidated_upstream'] = {**record, 'via': 'receipt', 'paths': found['changed'][stage]}
+                    reason = 're-recorded: ' + ', '.join(found['changed'][stage])
+                stored['completed_at'] = at
+                state['receipts'][stage] = stored
+                lifecycle.queue(state, stage, 'revalidate-upstream', episode_id=episode, at=at, reason=reason)
+            ensure_local_excludes(self.root)
+            write(self.path.parent / 'backups' / (uuid.uuid4().hex + '.json'), read(self.path))
+            self.save(state)
+            return {'revalidated': [s for s in BASE_STAGES if s in found['needs_receipt']],
+                    'restamped': found['restamp'], 'changed': found['changed'], 'episode_id': episode,
+                    'next': self.next(state)}
+
     def amend(self, stage, evidence, reason, assessment, actor=None, evidence_only=False):
         """Re-hash one evidence entry of a completed receipt under a recorded assessment.
 
@@ -2217,7 +2644,7 @@ class Run:
                 # (gate-explain --auto-fix) is re-checked against the receipt
                 # as it is now, under this lock, immediately before the write.
                 require(evidence not in set(receipt.get('inputs') or []) | set(required_inputs(
-                        self.root, self.relative, stage)),
+                        self.root, self.relative, stage, self.tier_of(state))),
                         'AMEND_PATH_IS_A_DEPENDENCY: ' + str(evidence) + ' is a declared input of ' + stage)
             inside(self.root, evidence)
             new_hash = fingerprint_files(self.root, [evidence])[evidence]
@@ -2242,7 +2669,8 @@ class Run:
             receipt.setdefault('amendments', []).append(record)
             self.save(state)
             return {'amended': True, 'stage': stage, 'amendment': copy.deepcopy(record),
-                    'current': receipt_current(self.root, self.relative, stage, receipt, self.policy),
+                    'current': receipt_status(self.root, self.relative, stage, receipt, self.policy,
+                                              self.tier_of(state))['current'],
                     'stale': staled, 'next': self.next(state)}
 
     def revalidate(self, stage, check_run=None, attempt=None, diff_reviewed=None, base_ref=None, reason=None,
@@ -2267,23 +2695,25 @@ class Run:
             require(not state['active'], 'ACTIVE_CLAIM_MUST_BE_RESOLVED_BEFORE_REVALIDATE')
             if stage == 'review':
                 coding_review_checks(self.root, self.relative, self.policy, state)
-            require(stage in stages(self.policy), 'STAGE_NOT_SELECTED: ' + stage)
+            tier = self.tier_of(state)
+            selected = stages(self.policy, state_tier(state))
+            require(stage in selected, 'STAGE_NOT_SELECTED: ' + stage)
             receipt = state['receipts'].get(stage)
             require(receipt, 'RECEIPT_MISSING: ' + stage)
             if state['policy_digest'] != checkpoint_policy_digest(state, self.policy):
                 require(BASE_STAGES.index(stage) < policy_cutoff(state.get('policy'), self.policy),
                         'POLICY_CHANGED: the policy change reaches ' + stage + '; re-record it')
-            for earlier in stages(self.policy)[:stages(self.policy).index(stage)]:
+            for earlier in selected[:selected.index(stage)]:
                 prior = state['receipts'].get(earlier)
                 require(prior, 'EARLIER_STAGE_NOT_CURRENT: ' + earlier + ' has no receipt')
-                prior_status = receipt_status(self.root, self.relative, earlier, prior, self.policy)
+                prior_status = receipt_status(self.root, self.relative, earlier, prior, self.policy, tier)
                 require(prior_status['current'], 'EARLIER_STAGE_NOT_CURRENT: ' + earlier + ' (make it current before ' +
                         stage + '). Recovery: ' + ' | '.join(
                             recovery_recipe(self.relative, earlier, prior_status, self.policy, prior)))
             mark = receipt.get('stale')
             require(not mark or (stage == 'verify' and mark.get('reason') == 'ci-lane-gap'),
                     'RECEIPT_MARKED_STALE: ' + json.dumps(mark) + '; a changed amendment needs a re-record')
-            status = receipt_status(self.root, self.relative, stage, {**receipt, 'stale': None}, self.policy)
+            status = receipt_status(self.root, self.relative, stage, {**receipt, 'stale': None}, self.policy, tier)
             if status.get('reason') == 'explicit-drift':
                 raise WorkflowError('EXPLICIT_FINGERPRINTS_CHANGED: ' + json.dumps(status['paths']) +
                                     '; revalidation never re-hashes inputs or evidence. Recovery: ' +
@@ -2293,7 +2723,7 @@ class Run:
             require(not dirty, 'SOURCE_TREE_DIRTY: commit or stash source changes first: ' + ', '.join(dirty[:10]))
             head, key = git(self.root, 'rev-parse', 'HEAD'), sk.source_key(self.root, 'HEAD')
             inventory = source_fingerprints(self.root)
-            drift = source_drift(receipt, inventory)
+            drift = source_drift(receipt, inventory, self.root, self.relative)
             explicit = sorted(set(drift) & set(receipt.get('fingerprints', {})))
             require(not explicit, 'EXPLICIT_FINGERPRINTS_CHANGED: ' + json.dumps(explicit) +
                     ' drifted as source and are explicit fingerprints of ' + stage + '; re-record it')
@@ -2322,7 +2752,7 @@ class Run:
                                                         'stale': receipt['stale']}, self.policy, receipt),
                             'next': self.next(state)}
                 receipt['ci_evidence'] = evidence
-                if lean_policy.enabled(self.policy):
+                if lean_policy.enabled(self.policy, tier):
                     selected_plan = lean_policy.settings(self.policy).get('verification_plan')
                     if selected_plan:
                         try:
@@ -2348,13 +2778,14 @@ class Run:
             ensure_local_excludes(self.root)
             write(self.path.parent / 'backups' / (uuid.uuid4().hex + '.json'), state)
             receipt.pop('stale', None)
-            receipt['source_fingerprints'] = inventory
+            superseded = self.store_inventory(receipt, stage, inventory, uuid.uuid4().hex[:8])
             receipt['head'], receipt['source_key'] = head, key
             receipt.setdefault('revalidations', []).append(record)
             lifecycle.queue(state, stage, 'revalidated', episode_id='revalidation', reason=reason)
             self.save(state)
+            self.drop_inventories([superseded])
             return {'revalidated': True, 'stage': stage, 'revalidation': copy.deepcopy(record),
-                    'current': receipt_current(self.root, self.relative, stage, receipt, self.policy),
+                    'current': receipt_status(self.root, self.relative, stage, receipt, self.policy, tier)['current'],
                     'next': self.next(state)}
 
     def check_run_evidence(self, state, receipt, run_id, attempt, head, key, drift, github=None):
@@ -2484,12 +2915,32 @@ class Run:
             self.save(state)
             return state
 
+    def tier_of(self, state):
+        """The frozen tier, or `full` (never None, so no helper re-reads the checkpoint mid-operation)."""
+        return state_tier(state) or 'full'
+
+    def store_inventory(self, receipt, stage, inventory, suffix=None):
+        """Point a receipt at a freshly written inventory side file. Returns the superseded file's label, if any:
+        it is removed only after the checkpoint naming the new one is saved, so a crash leaves a readable pair."""
+        old = (receipt.get('source_inventory') or {}).get('path')
+        receipt['source_inventory'] = store_source_inventory(
+            self.root, self.relative, inventory_label(stage, receipt.get('claim_id'), suffix), inventory)
+        receipt.pop('source_fingerprints', None)
+        return old if old != receipt['source_inventory']['path'] else None
+
+    def drop_inventories(self, labels):
+        for label in filter(None, labels):
+            try:
+                inside(self.root, self.relative + '/' + label).unlink(missing_ok=True)
+            except OSError:
+                pass  # an orphaned inventory is harmless; the checkpoint no longer names it
+
     def save(self, state):
         self.__dict__.pop('_saved_next', None)
         state['generation'] += 1
         state['updated_at'] = now()
         state['head'] = git(self.root, 'rev-parse', 'HEAD')
-        state['stage_plan'] = {'v': 1, 'generation': state['generation'], 'stages': stages(self.policy)}
+        state['stage_plan'] = {'v': 1, 'generation': state['generation'], 'stages': stages(self.policy, state_tier(state))}
         state['next_action'] = self.evaluate_next_action(state)
         write(self.path, state)
         # The queued lifecycle events were written with the state; append them now, under the caller's
@@ -2522,10 +2973,14 @@ class Run:
 
     def next(self, state, finalize=False):
         result = self.next_stage(state, finalize)
-        drift = consulted_drift(self.root, self.relative, state['receipts'])
+        drift = consulted_drift(self.root, self.relative, state['receipts'], self.tier_of(state))
         if drift:
             # Advisory only: a consulted input never stales its receipt.
             result['advisory_drift'] = drift
+        if state.get('profile'):
+            result['profile'] = state['profile']
+        if state.get('skipped'):
+            result['skipped'] = state['skipped']
         return result
 
     def next_stage(self, state, finalize=False):
@@ -2534,12 +2989,12 @@ class Run:
             return saved[2]
         policy_changed = state['policy_digest'] != checkpoint_policy_digest(state, self.policy)
         cutoff = policy_cutoff(state.get('policy'), self.policy) if policy_changed else len(BASE_STAGES)
-        for stage in stages(self.policy):
+        for stage in stages(self.policy, state_tier(state)):
             receipt = state['receipts'].get(stage)
             if receipt and BASE_STAGES.index(stage) >= cutoff:
                 return {'stage':stage,'command':state['commands'][stage],'reason':'policy-changed'}
             if receipt:
-                status = receipt_status(self.root, self.relative, stage, receipt, self.policy)
+                status = receipt_status(self.root, self.relative, stage, receipt, self.policy, self.tier_of(state))
                 if status['current']:
                     continue
                 return {'stage': stage, 'reason': 'inputs-or-evidence-changed',
@@ -2559,7 +3014,7 @@ class Run:
             require(state['dependency_digest'] == package_digest(self.root), 'DEPENDENCY_CHANGED: review upgrade and migrate the checkpoint before execution')
             # Delegation health is checked below, after every rejection, because
             # the claim may install the skill it would otherwise report missing.
-            health = doctor(self.root, self.policy, project=True, check_delegation=False, check_preflight=False)
+            health = cached_doctor(self.root, self.policy, state['dependency_digest'])
             require(health['ok'], '; '.join(health['errors']))
             gate = context_gate(self.policy, usage)
             if gate['pause']:
@@ -2573,7 +3028,20 @@ class Run:
                 require(not preflight or preflight['ok'], 'LEAN_PREFLIGHT_FAILED: ' + json.dumps(preflight))
             if stage == 'review':
                 coding_review_checks(self.root, self.relative, self.policy, state)
-            coordinator_owned = lean_policy.coordinator_owned(self.policy, stage, state['commands'])
+            current_policy_digest = checkpoint_policy_digest(state, self.policy)
+            if state['policy_digest'] != current_policy_digest:
+                if (state.get('policy') or {}).get('profiles') != self.policy.get('profiles'):
+                    # The profile bands changed: the next Plan claim (which the cutoff forces) fixes it again.
+                    state.pop('profile', None)
+                    state.pop('skipped', None)
+                state.setdefault('policy_changes', []).append({'from':state['policy_digest'],'to':current_policy_digest,'at':now()})
+                state['policy_digest'] = current_policy_digest
+                state['policy'] = copy.deepcopy(self.policy)
+                state['commands'] = resolve_commands(self.root, self.policy, state_tier(state))
+            if stage == 'plan' and not state.get('profile') and (self.policy.get('profiles') or {}).get('enabled'):
+                self.fix_profile(state)
+            lean = lean_policy.enabled(self.policy, state_tier(state))
+            coordinator_owned = lean_policy.coordinator_owned(self.policy, stage, state['commands'], state_tier(state))
             if self.policy['delegation']['enabled'] and not coordinator_owned:
                 # Side effects only once a stage will be claimed: a rejected claim
                 # leaves tasks.md and every skill location untouched.
@@ -2583,16 +3051,10 @@ class Run:
                 require(delegation_health['ok'], health_error(delegation_health))
                 require(any(delegation_health['harnesses'].values()),
                         'DELEGATE_AGENT_CLI_UNAVAILABLE: no supported Codex or Claude CLI')
-                annotate_tasks(self.root, self.relative, self.policy['delegation'], lean=lean_policy.enabled(self.policy))
+                annotate_tasks(self.root, self.relative, self.policy['delegation'], lean=lean)
                 notices = delegation_health.get('notices') or []
             else:
                 notices = []
-            current_policy_digest = checkpoint_policy_digest(state, self.policy)
-            if state['policy_digest'] != current_policy_digest:
-                state.setdefault('policy_changes', []).append({'from':state['policy_digest'],'to':current_policy_digest,'at':now()})
-                state['policy_digest'] = current_policy_digest
-                state['policy'] = copy.deepcopy(self.policy)
-                state['commands'] = resolve_commands(self.root, self.policy)
             resuming = state.get('status') == 'paused'
             removed = [name for name in BASE_STAGES[BASE_STAGES.index(stage):] if name in state['receipts']]
             token = uuid.uuid4().hex
@@ -2612,6 +3074,10 @@ class Run:
             source = read(self.feature / 'scope-source.json', {})
             existing = (self.feature / 'spec.md').is_file() and f"{source.get('repo')}#{source.get('issue')}" == state['issue']
             state['active']['mode'] = 'revalidate' if existing and stage in ('scope', 'specify', 'clarify', 'plan', 'tasks') else 'initial'
+            scope_mode = state['active']['mode']
+            if stage == 'specify' and self.rendered_spec():
+                # Scope rendered spec.md from the approved analysis: Specify only binds, no model pass.
+                state['active']['mode'] = 'bind-only'
             if coordinator_owned:
                 state['active']['execution_owner'] = 'coordinator'
             if self.policy['delegation']['enabled'] and not coordinator_owned:
@@ -2628,12 +3094,17 @@ class Run:
             write(self.root / '.specify/feature.json', {'feature_directory': self.relative})
             self.save(state)
             claimed = {**state['active'], 'command': state['commands'][stage], 'feature': self.relative, 'issue': state['issue'],
-                       'reference': stage_reference(stage)}
-            if lean_policy.enabled(self.policy):
+                       'reference': stage_reference(stage), 'reference_text': reference_text(self.root, stage),
+                       'side_effects': side_effects(self.policy, self.relative, stage),
+                       'project_sync': project_sync(self.policy, stage)}
+            if stage == 'plan' and state_tier(state) in ('lite', 'standard'):
+                claimed['merged'] = ['tasks']
+                claimed['profile'] = state['profile']
+            if lean:
                 claimed['environment'] = {'SANDUQ_WORKFLOW_CLAIM_TOKEN': state['active']['token'],
                                           'SANDUQ_WORKFLOW_SESSION_ID': usage['session_id']}
-            if lean_policy.enabled(self.policy) and stage in ('scope', 'specify'):
-                mode = state['active']['mode']
+            if lean and stage in ('scope', 'specify'):
+                mode = scope_mode
                 params = ({'feature': self.relative, 'token': state['active']['token'],
                            'session': usage['session_id'], 'analysis': lean_policy.settings(self.policy).get(
                                'scope_analysis', '<analysis.json>')} if mode == 'initial' else {})
@@ -2644,6 +3115,25 @@ class Run:
                 # Reported to the caller only; the checkpoint keeps the claim itself.
                 claimed['notices'] = notices
             return claimed
+
+    def rendered_spec(self):
+        """The analysis hash of a spec.md Scope rendered (`<!-- sanduq-scope:rendered <sha256> -->`), else None."""
+        path = self.feature / 'spec.md'
+        if not path.is_file():
+            return None
+        with path.open('r', encoding='utf-8-sig', errors='replace') as handle:
+            match = RENDER_MARKER.fullmatch(handle.readline().strip())
+        return match[1] if match else None
+
+    def fix_profile(self, state):
+        """Freeze the tier at the first Plan claim from the Scope receipt's effort score, and record what it skips."""
+        score = (state['receipts'].get('scope') or {}).get('effort_score')
+        fixed = tier(self.policy, score)
+        state['profile'] = {'tier': fixed, 'score': score, 'fixed_at': now()}
+        state['skipped'] = skipped_stages(self.policy, fixed)
+        for name, reason in state['skipped'].items():
+            lifecycle.queue(state, name, 'skipped', reason=reason)
+        state['commands'] = resolve_commands(self.root, self.policy, fixed)
 
     def complete(self, token, receipt):
         with locked(self.lock):
@@ -2682,20 +3172,83 @@ class Run:
         if lifecycle.flush(fresh, self.feature):
             write(self.path, fresh)
 
-    def _accept_completion(self, state, active, token, receipt):
-        stage = active['stage']
-        if stage == 'review':
-            coding_review_checks(self.root, self.relative, self.policy, state)
+    def _check_receipt(self, stage, receipt, tier):
+        """The shape every recorded receipt meets (complete and revalidate-upstream). Returns the canonical copy."""
         require(receipt.get('stage') == stage and receipt.get('outcome') == 'passed', 'STAGE_NOT_PASSED')
         require(receipt.get('summary') and receipt.get('evidence'), 'EVIDENCE_REQUIRED')
         require(isinstance(receipt.get('inputs'), list) and receipt['inputs'], 'INPUT_MANIFEST_REQUIRED')
         require(not any(field in receipt for field in RUNTIME_RECEIPT_FIELDS),
                 'RECEIPT_FIELD_RESERVED: ' + ', '.join(f for f in RUNTIME_RECEIPT_FIELDS if f in receipt))
         receipt = canonical_receipt(self.root, receipt)
-        validate_input_roles(self.root, self.relative, stage, receipt, self.policy)
+        validate_input_roles(self.root, self.relative, stage, receipt, self.policy, tier)
         for path in receipt['evidence']:
             require(inside(self.root, path).is_file(), 'EVIDENCE_MISSING: ' + path)
         validate_evidence_snapshots(self.root, receipt)
+        return receipt
+
+    def _check_stage_rules(self, state, stage, receipt, token=None, session_id=None):
+        """Binding, the decisions ledger and each stage's own fields (complete and revalidate-upstream)."""
+        if stage == 'scope':
+            score = receipt.get('effort_score')
+            if (self.policy.get('profiles') or {}).get('enabled') or score is not None:
+                require(type(score) is int and score in EFFORT_SCORES, 'EFFORT_SCORE_REQUIRED: the Scope receipt '
+                        'records effort_score, one of ' + ', '.join(map(str, EFFORT_SCORES)))
+        if stage == 'clarify':
+            require(receipt.get('unresolved') == 0 and receipt.get('answers_applied') is True, 'CLARIFICATION_UNRESOLVED')
+        if BASE_STAGES.index(stage) >= BASE_STAGES.index('specify'):
+            source = read(self.feature / 'scope-source.json', {})
+            require(f"{source.get('repo')}#{source.get('issue')}" == state['issue'], 'FEATURE_BINDING_MISMATCH')
+        ledger_path = self.feature / 'workflow/decisions.json'
+        if ledger_path.is_file():
+            from decisions import reconcile, verify_ledger
+            verify_ledger(self.root, self.relative, reconcile(
+                self.root, self.relative, claim_token=token, session_id=session_id))
+        if stage == 'plan' and state_tier(state) in ('lite', 'standard'):
+            require(self.relative + '/tasks.md' in receipt['inputs'], 'MERGED_TASKS_REQUIRED: on the ' +
+                    state_tier(state) + ' tier Plan also writes tasks.md; list ' + self.relative +
+                    '/tasks.md in the receipt inputs')
+        if stage == 'analyze' and state['commands'].get(stage) == LINT_COMMAND \
+                and receipt.get('command') != COMMANDS['analyze']:
+            lint = receipt.get('lint')
+            require(receipt.get('command') in (None, LINT_COMMAND) and isinstance(lint, dict) and lint.get('ok') is True
+                    and type(lint.get('findings')) is int and lint['findings'] >= 0,
+                    'LINT_RECEIPT_REQUIRED: Analyze runs as workflow:lint on this tier; record it with "lint.py '
+                    '--feature ' + self.relative + ' --record --token <token>", or complete a model Analyze '
+                    '(command ' + COMMANDS['analyze'] + ') when lint reports needs_model_analyze')
+        if stage == 'taskstoissues':
+            require(receipt.get('parent_issue') == state['issue'] and receipt.get('native_links_verified') is True, 'TASK_PARENT_NOT_VERIFIED')
+            if task_issue_mode(self.policy) == 'phase-lazy':
+                require(receipt.get('lazy') is True, 'TASK_ISSUES_LAZY_REQUIRED: issue_sync.taskstoissues is phase-lazy; '
+                        'the receipt records lazy: true after mapping the first phase')
+                tasks_path = self.feature / 'tasks.md'
+                first = first_phase_tasks(tasks_path.read_text(encoding='utf-8-sig')) if tasks_path.is_file() else []
+                mapping = read(self.feature / 'workflow/task-issues.json', {}).get('tasks', {})
+                unmapped = [task for task in first if not (mapping.get(task) or {}).get('linked')]
+                require(not unmapped, 'TASK_MAPPING_FIRST_PHASE_INCOMPLETE: ' + ', '.join(unmapped) +
+                        '; run task_issues.py --phase "<first phase heading>" before completing Tasks-to-Issues')
+
+    def _stamp(self, state, stage, receipt, stored, tier):
+        """The runtime-owned fields of a recorded receipt: command, digests and fingerprints."""
+        model_analyze = (stage == 'analyze' and state['commands'].get(stage) == LINT_COMMAND
+                         and receipt.get('command') == COMMANDS['analyze'])
+        stored['command'] = COMMANDS['analyze'] if model_analyze else state['commands'][stage]
+        stored['dependency_digest'] = state['dependency_digest']
+        decision_input = [self.relative + '/workflow/decisions.json'] if (self.feature / 'workflow/decisions.json').is_file() else []
+        stored['fingerprints'] = fingerprint_files(self.root, receipt['inputs'] + receipt['evidence'] + required_inputs(
+            self.root, self.relative, stage, tier) + decision_input)
+        require(all(v is not None for v in stored['fingerprints'].values()), 'INPUT_MISSING')
+        # Whitespace-normalised Markdown hashes: revalidate-upstream's drift decision only.
+        text = text_fingerprints(self.root, stored['fingerprints'])
+        if text:
+            stored['text_fingerprints'] = text
+
+    def _accept_completion(self, state, active, token, receipt):
+        stage = active['stage']
+        tier = self.tier_of(state)
+        lean = lean_policy.enabled(self.policy, state_tier(state))
+        if stage == 'review':
+            coding_review_checks(self.root, self.relative, self.policy, state)
+        receipt = self._check_receipt(stage, receipt, tier)
         delegation_ledger_trust = None
         stage_attempt = None
         if self.policy['delegation']['enabled'] and active.get('delegation'):
@@ -2729,40 +3282,25 @@ class Run:
                     'completing this stage. A legacy attempt recorded before claim_token existed has '
                     'none and will never match; re-delegate the stage once under this workflow release')
             self._validated_candidate = stage_attempt.get('run_id')
-        if stage == 'clarify':
-            require(receipt.get('unresolved') == 0 and receipt.get('answers_applied') is True, 'CLARIFICATION_UNRESOLVED')
-        if BASE_STAGES.index(stage) >= BASE_STAGES.index('specify'):
-            source = read(self.feature / 'scope-source.json', {})
-            require(f"{source.get('repo')}#{source.get('issue')}" == state['issue'], 'FEATURE_BINDING_MISMATCH')
-        ledger_path = self.feature / 'workflow/decisions.json'
-        if ledger_path.is_file():
-            from decisions import reconcile, verify_ledger
-            verify_ledger(self.root, self.relative, reconcile(
-                self.root, self.relative, claim_token=token, session_id=active.get('session_id')))
-        if stage == 'taskstoissues':
-            require(receipt.get('parent_issue') == state['issue'] and receipt.get('native_links_verified') is True, 'TASK_PARENT_NOT_VERIFIED')
+        self._check_stage_rules(state, stage, receipt, token, active.get('session_id'))
         if stage in SOURCE_STAGES:
             require(receipt.get('blocking_findings') == 0, 'BLOCKING_FINDINGS_REMAIN')
         if stage == 'pr':
             require(receipt.get('images_verified') is True and receipt.get('pr_url', '').startswith('https://github.com/' + state['issue'].split('#')[0] + '/pull/'), 'PR_EVIDENCE_INCOMPLETE')
-            if lean_policy.enabled(self.policy):
+            if lean:
                 binding = pr_lint_binding(self.root, self.relative, state, receipt)
                 receipt['inputs'] = list(dict.fromkeys(receipt['inputs'] + [binding['scope']]))
                 if receipt.get('input_roles') is not None:
                     for path in (binding['scope'], binding['body'], binding['lint']):
                         if path in receipt['inputs']:
                             receipt['input_roles'][path] = {'role': 'dependency'}
-        if stage in ('tasks', 'qa_analyze', 'manual_analyze') and self.policy['delegation']['enabled']:
+        if stage in ('tasks', 'plan', 'qa_analyze', 'manual_analyze') and self.policy['delegation']['enabled'] \
+                and (stage != 'plan' or tier in ('lite', 'standard')):
             from delegation import annotate_tasks
-            annotate_tasks(self.root, self.relative, self.policy['delegation'], lean=lean_policy.enabled(self.policy))
+            annotate_tasks(self.root, self.relative, self.policy['delegation'], lean=lean)
         # Known semantic transformations advance upstream artifact snapshots with an
         # explicit lineage record. They do not pretend the old artifact remained current.
-        permitted = {'clarify': [self.relative + '/spec.md'],
-                     'qa_analyze': [self.relative + '/tasks.md'],
-                     'manual_analyze': [self.relative + '/tasks.md'],
-                     # Assure Document refreshes this generated source inventory.
-                     # It is project context, not requirements authority.
-                     'qa_document': ['.github/memory/project-memory.md']}.get(stage, [])
+        permitted = side_effects(self.policy, self.relative, stage)
         after = fingerprint_files(self.root, active['baseline'])
         changed = [p for p, before in active['baseline'].items() if after[p] != before]
         # Only an earlier receipt's dependency can be undermined by this stage.
@@ -2770,32 +3308,40 @@ class Run:
         # (nothing is re-stamped) and `next` reports it as advisory drift.
         dependencies = set()
         for name, prior in state['receipts'].items():
-            dependencies.update(dependency_fingerprints(prior, required_inputs(self.root, self.relative, name)))
+            dependencies.update(dependency_fingerprints(prior, required_inputs(self.root, self.relative, name, tier)))
         consulted = [p for p in changed if p not in dependencies]
         changed = [p for p in changed if p in dependencies]
-        unexpected = [p for p in changed if portable_label(p) not in permitted]
+        unexpected = [p for p in changed if not matches_side_effect(p, permitted)]
         require(not unexpected, 'UPSTREAM_INPUT_CHANGED_DURING_STAGE: ' + ', '.join(unexpected))
         if stage == 'qa_document':
             require(all(after[p] is not None for p in changed), 'INPUT_MISSING')
+        claim_id = active.get('claim_id') or lifecycle.claim_id_for(token)
+        inventories = []  # (receipt, stage, inventory) side files written just before the save
         if consulted:
             state.setdefault('lineage', []).append({'stage': stage, 'advisory': True, 'consulted': {
                 p: {'before': active['baseline'][p], 'after': after[p]} for p in consulted}, 'at': now()})
         if changed:
             state.setdefault('lineage', []).append({'stage': stage, 'changes': {p: {'before': active['baseline'][p], 'after': after[p]} for p in changed}, 'at': now()})
-            for prior in state['receipts'].values():
+            for name, prior in state['receipts'].items():
                 for path in changed:
                     if path in prior['fingerprints']:
                         prior['fingerprints'][path] = after[path]
-                    # Verify/Review also inventory this root-relative context file.
-                    # Advance only the accepted QA-document transformation, retaining
-                    # its old/new hashes in the same runtime-owned lineage above.
-                    source_path = portable_label(path)
-                    if stage == 'qa_document' and source_path in prior.get('source_fingerprints', {}):
-                        prior['source_fingerprints'][source_path] = after[path]
+                # Verify/Review also inventory this root-relative context file.
+                # Advance only the accepted QA-document transformation, retaining
+                # its old/new hashes in the same runtime-owned lineage above.
+                if stage == 'qa_document' and name in SOURCE_STAGES:
+                    inventory = source_fingerprints_of(self.root, prior, self.relative)
+                    hits = [path for path in changed if portable_label(path) in inventory]
+                    for path in hits:
+                        inventory[portable_label(path)] = after[path]
+                    if hits and prior.get('source_inventory'):
+                        inventories.append((prior, name, inventory, claim_id))
+                    elif hits:
+                        prior['source_fingerprints'] = inventory
         stored = copy.deepcopy(receipt)
-        if stage == 'pr' and lean_policy.enabled(self.policy):
+        if stage == 'pr' and lean:
             stored['pr_lint_binding'] = binding
-        if stage == 'verify' and lean_policy.enabled(self.policy):
+        if stage == 'verify' and lean:
             selected_plan = lean_policy.settings(self.policy).get('verification_plan')
             if selected_plan:
                 try:
@@ -2809,30 +3355,28 @@ class Run:
             # local dispatcher-write marker existed to check against (a
             # fresh checkout or CI runner), not that anything was wrong.
             stored['delegation_ledger_trust'] = delegation_ledger_trust
-        stored['command'] = state['commands'][stage]
-        stored['dependency_digest'] = state['dependency_digest']
-        decision_input = [self.relative + '/workflow/decisions.json'] if (self.feature / 'workflow/decisions.json').is_file() else []
-        stored['fingerprints'] = fingerprint_files(self.root, receipt['inputs'] + receipt['evidence'] + required_inputs(self.root, self.relative, stage) + decision_input)
-        require(all(v is not None for v in stored['fingerprints'].values()), 'INPUT_MISSING')
+        self._stamp(state, stage, receipt, stored, tier)
+        stored['completed_at'] = now()
+        stored['claim_id'] = claim_id  # links this receipt to its lifecycle events
         if stage in SOURCE_STAGES:
-            stored['source_fingerprints'] = source_fingerprints(self.root)
+            inventories.append((stored, stage, source_fingerprints(self.root), None))
             # The commit and its source key bind the inventory; with source
             # changes outside HEAD the key would not describe it, so none is
             # recorded and the identity rule applies to this receipt.
             head, key = current_source_key(self.root)
             if key:
                 stored['head'], stored['source_key'] = head, key
-        stored['completed_at'] = now()
-        claim_id = active.get('claim_id') or lifecycle.claim_id_for(token)
-        stored['claim_id'] = claim_id  # links this receipt to its lifecycle events
         state['receipts'][stage] = stored
         state['active'] = None
         lifecycle.queue(state, stage, 'accepted', claim_id=claim_id, at=stored['completed_at'],
                         episode_id=lifecycle.episode_for_claim(claim_id),
                         candidate_run_id=(stage_attempt or {}).get('run_id'),
                         delegation_run_ids=lifecycle.delegation_runs_for(self.feature, token, claim_id))
+        superseded = [self.store_inventory(owner, name, inventory, suffix)
+                      for owner, name, inventory, suffix in inventories]
         self.save(state)
-        result = self.next(state)
+        self.drop_inventories(superseded)
+        result = {**self.next(state), 'completed': stage}
         if stage == 'execute':
             result['memory_handoff'] = memory_handoff.handoff(
                 SimpleNamespace(**globals()), self.root, 'execute', self.relative)
@@ -2854,18 +3398,35 @@ class Run:
         task_path = self.feature / 'tasks.md'
         pending_tasks = re.findall(r'(?m)^\s*- \[ \]\s+(T\d{3,})\b', task_path.read_text(encoding='utf-8-sig')) if task_path.is_file() else []
         active_summary = {k: state['active'].get(k) for k in ('stage', 'session_id', 'claimed_at')} if state['active'] else None
-        text = '# Workflow handoff\n\n' + '\n'.join([
+        block = '\n'.join([
+            HANDOFF_BEGIN, '# Workflow handoff\n',
             '- Feature: ' + self.relative, '- Issue: ' + state['issue'], '- Branch: ' + state['branch'],
             '- Head: ' + state['head'], '- Reason: ' + reason, '- Next: ' + str(pending),
             '- Completed stages: ' + ', '.join(state['receipts']),
             '- Active claim: ' + str(active_summary),
             '- Pending task IDs: ' + ', '.join(pending_tasks[:100]) + (' (more in tasks.md)' if len(pending_tasks) > 100 else ''),
-            '\nRead evidence paths and summaries in checkpoint.json; do not infer skipped tests passed.',
-            '\nInspect git status before continuing; do not discard uncommitted files.'])
-        (self.path.parent / 'handoff.md').write_text(text + '\n', encoding='utf-8')
-        prompt = f'Continue the Sanduq workflow in {self.root}. Read {self.relative}/workflow/checkpoint.json and handoff.md. Invoke speckit.workflow.continue for {self.relative}; validate inputs and resolve any active claim before resuming. Preserve policy and unresolved approvals.\n'
+            '\nRead evidence paths and summaries with workflow.py status; do not infer skipped tests passed.',
+            '\nInspect git status before continuing; do not discard uncommitted files.', HANDOFF_END])
+        handoff = self.path.parent / 'handoff.md'
+        (self.path.parent).mkdir(parents=True, exist_ok=True)
+        handoff.write_text(handoff_text(handoff.read_text(encoding='utf-8-sig') if handoff.is_file() else '', block),
+                           encoding='utf-8')
+        prompt = (f'Run {WORKFLOW_SCRIPT} status --feature {self.relative} and continue with '
+                  'speckit.workflow.continue; do not read checkpoint.json directly.\n')
         (self.path.parent / 'resume-prompt.md').write_text(prompt, encoding='utf-8')
         return {'status': 'paused', 'checkpoint': str(self.path), 'prompt': prompt}
+
+
+def compact_completion(result):
+    """What a dispatcher needs after `complete`: the stage it may run next and why. A failed Memory
+    handoff is kept, since it is the reason `ok` is false."""
+    compact = {'ok': result.get('ok', True), 'stage': result.get('completed'),
+               'next': {key: result.get(key) for key in ('stage', 'command', 'reason')}}
+    if result.get('status'):
+        compact['next']['status'] = result['status']
+    if result.get('ok') is False and result.get('memory_handoff'):
+        compact['memory_handoff'] = result['memory_handoff']
+    return compact
 
 
 def main():
@@ -2953,17 +3514,28 @@ def main():
                                       'logged in the relocation record')
     relocate_parser.add_argument('--actor', help='Defaults to the Git user name')
     for name in ('start', 'next', 'status', 'claim', 'complete', 'pause', 'recover', 'bind', 'migrate', 'refresh', 'amend',
-                 'revalidate'):
+                 'revalidate', 'revalidate-upstream'):
         cmd = sub.add_parser(name)
         cmd.add_argument('--feature', required=True)
         if name == 'start': cmd.add_argument('--issue', required=True)
         if name in ('next', 'claim'): cmd.add_argument('--finalize', action='store_true')
         if name == 'claim': cmd.add_argument('--usage', type=Path, required=True)
-        if name == 'status': cmd.add_argument('--runs', action='append', type=Path, required=True,
+        if name in ('claim', 'complete'):
+            cmd.add_argument('--verbose', action='store_true',
+                             help='Print the full result (claim: with the baseline fingerprints; complete: with next details)')
+        if name == 'status': cmd.add_argument('--runs', action='append', type=Path, default=[],
                                             help='Explicit normalized run root/worktree (repeatable)')
         if name == 'complete':
             cmd.add_argument('--token', required=True)
             cmd.add_argument('--receipt', type=Path, required=True)
+        if name == 'revalidate-upstream':
+            cmd.add_argument('--through', required=True, choices=BASE_STAGES[BASE_STAGES.index('specify'):
+                                                                             BASE_STAGES.index('execute')],
+                             help='Last upstream stage to re-record (specify to taskstoissues)')
+            cmd.add_argument('--receipt', type=Path,
+                             help='{stages: {<stage>: {summary, evidence[], inputs[]}}}; required unless --plan')
+            cmd.add_argument('--plan', action='store_true', help='Print the changed inputs per stage without writing')
+            cmd.add_argument('--actor', help='Defaults to the Git user name')
         if name in ('pause', 'recover', 'refresh', 'amend'): cmd.add_argument('--reason', required=True)
         if name == 'migrate': cmd.add_argument('--reason', help='Required unless --preview')
         if name in ('recover', 'bind'): cmd.add_argument('--token', required=True)
@@ -3061,7 +3633,9 @@ def main():
             else:
                 result = hosts.status(root)
         elif args.action == 'doctor':
-            result = doctor(root, load_policy(root), project=args.project)
+            policy = load_policy(root)
+            result = doctor(root, policy, project=args.project, explicit=True)
+            store_doctor_cache(root, policy, result)
         elif args.action == 'project-defaults':
             result = project_defaults(root, load_policy(root))
         elif args.action == 'identity':
@@ -3073,8 +3647,18 @@ def main():
             if args.action == 'start': result = run.start(args.issue)
             elif args.action == 'next': result = run.next(run.load(), args.finalize)
             elif args.action == 'status': result = native_run_status(root, run.relative, run.load(), args.runs)
-            elif args.action == 'claim': result = run.claim(read(args.usage), args.finalize)
-            elif args.action == 'complete': result = run.complete(args.token, read(args.receipt, {}))
+            elif args.action == 'claim':
+                result = run.claim(read(args.usage), args.finalize)
+                if not args.verbose:
+                    result.pop('baseline', None)  # kept in the checkpoint; --verbose prints it
+            elif args.action == 'complete':
+                result = run.complete(args.token, read(args.receipt, {}))
+                if not args.verbose:
+                    result = compact_completion(result)
+            elif args.action == 'revalidate-upstream':
+                require(args.plan or args.receipt, 'REVALIDATE_UPSTREAM_RECEIPT_REQUIRED: pass --receipt, or --plan')
+                result = run.revalidate_upstream(args.through, read(args.receipt) if args.receipt else None,
+                                                 args.plan, args.actor)
             elif args.action == 'bind': result = run.bind(args.token)
             elif args.action == 'relocate':
                 result = run.relocate(args.reason, args.preview, args.allow_branch_rebind,

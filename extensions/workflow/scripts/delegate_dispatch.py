@@ -458,10 +458,12 @@ def brief_file(root, text):
     return path
 
 
-def lean_enabled(root):
-    """True only when the project's policy opts in to lean execution."""
+def lean_enabled(root, feature=None):
+    """True when the project's policy opts in to lean execution, or the feature's frozen tier (lite or
+    standard) defaults it on and the policy does not set it false."""
     try:
-        return lean_policy.enabled(workflow.load_policy(root))
+        return lean_policy.enabled(workflow.load_policy(root),
+                                   lean_policy.feature_tier(root, feature) if feature else None)
     except workflow.WorkflowError:
         return False
 
@@ -495,7 +497,7 @@ def driver_env(root, run_context=None, role=None, feature=None):
     """
     env = os.environ.copy()
     env['DELEGATE_RUNS_DIR'] = str(root / '.delegate/runs')
-    if feature and lean_enabled(root):
+    if feature and lean_enabled(root, feature):
         # Lean only. Only the claim of exactly this feature, on its recorded branch, is
         # passed on; anything inherited from another feature is dropped.
         env.pop('SANDUQ_WORKFLOW_CLAIM_TOKEN', None)
@@ -591,7 +593,7 @@ def launch(root, driver, candidate, cwd, task, timeout, intent_id=None, orchestr
             '--timeout', str(timeout), '--task', task,
             '--keep-env', 'SANDUQ_DELEGATED_RUN', '--keep-env', 'SANDUQ_DELEGATED_ROLE',
             '--keep-env', 'SANDUQ_DELEGATED_FEATURE']
-    if lean_enabled(root):
+    if lean_enabled(root, feature or orchestrator_feature):
         args += ['--keep-env', 'SANDUQ_WORKFLOW_CLAIM_TOKEN', '--keep-env', 'SANDUQ_WORKFLOW_SESSION_ID']
     if candidate['requested_model']:
         args += ['--model', candidate['requested_model']]
@@ -627,7 +629,9 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
     policy = workflow.load_policy(root)
     config = policy['delegation']
     guidance = None
-    if lean_policy.enabled(policy):
+    tier = lean_policy.feature_tier(root, feature)
+    lean = lean_policy.enabled(policy, tier)
+    if lean:
         # Alternate eligible routes remain explicitly selectable at start;
         # a failed launch never silently substitutes a stronger candidate.
         candidates = candidates[:1]
@@ -639,7 +643,8 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
             preflight = workflow.lean_preflight(root, policy)
             delegation.require(not preflight or preflight['ok'],
                                'LEAN_PREFLIGHT_FAILED: ' + json.dumps(preflight))
-        delegation.require(not stage or not lean_policy.coordinator_owned(policy, stage, checkpoint.get('commands', {})),
+        delegation.require(not stage or not lean_policy.coordinator_owned(policy, stage, checkpoint.get('commands', {}),
+                                                                          tier),
                            'LEAN_COORDINATOR_OWNS_STAGE: ' + str(stage))
         if work_type == 'review' and stage != 'analyze':
             workflow.coding_review_checks(root, feature, policy, checkpoint)
@@ -648,7 +653,7 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
             if delegation.task_type(description, True) == 'review':
                 workflow.coding_review_checks(root, feature, policy, checkpoint)
         lean_policy.admit(policy, read_ledger(root, feature)['attempts'], identity, work_type,
-                          deliverable, correction_plan, diagnosis)
+                          deliverable, correction_plan, diagnosis, tier)
         if diagnosis:
             evidence = workflow.inside(root, diagnosis['evidence'])
             delegation.require(evidence.is_file(), 'LEAN_DIAGNOSIS_EVIDENCE_MISSING')
@@ -684,7 +689,7 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
         # write, so a concurrent start or collect cannot launch the work twice.
         reserve(ledger, identity, parent_run_id)
         admission = lean_policy.admit(policy, ledger['attempts'], identity, work_type,
-                                      deliverable, correction_plan, diagnosis)
+                                      deliverable, correction_plan, diagnosis, tier)
         if admission and diagnosis:
             admission['diagnosis_evidence_sha256'] = file_sha256(evidence)
         if decision:
@@ -734,7 +739,7 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
                 intent = find_intent(ledger, intent_id)
                 if confirmed:
                     failure = {'at': stamp(), 'candidate_index': index, 'reason': str(error)}
-                    if lean_policy.enabled(policy):
+                    if lean:
                         failure['failure_category'] = 'harness-failure'
                     if not_launched:
                         failure.update(run_id=not_launched, evidence='driver exit 5; result says the '
@@ -791,7 +796,7 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
     with edit_ledger(root, feature, ('intent_id', intent_id)) as ledger:
         find_intent(ledger, intent_id).update(status='blocked', ended_at=stamp(),
                                               result_summary='No configured route could start')
-        if lean_policy.enabled(policy):
+        if lean:
             find_intent(ledger, intent_id)['failure_category'] = 'harness-failure'
     raise delegation.DelegationError('DELEGATION_ROUTES_UNAVAILABLE: ' + identity)
 
@@ -823,13 +828,15 @@ def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
     require_not_worker_context(feature, identity)
     policy = workflow.load_policy(root)
     config = policy['delegation']
-    if lean_policy.enabled(policy):
+    tier = lean_policy.feature_tier(root, feature)
+    lean = lean_policy.enabled(policy, tier)
+    if lean:
         delegation.require(delegation.delegated_role() != 'orchestrator',
                            'LEAN_NESTED_COORDINATOR_FORBIDDEN')
         if identity.startswith('stage:'):
             checkpoint = workflow.read(root / feature / 'workflow/checkpoint.json', {})
             delegation.require(not lean_policy.coordinator_owned(policy, identity.removeprefix('stage:'),
-                                                                  checkpoint.get('commands', {})),
+                                                                  checkpoint.get('commands', {}), tier),
                                'LEAN_COORDINATOR_OWNS_STAGE: ' + identity)
     claimed_route = None
     if identity.startswith('stage:'):
@@ -861,7 +868,7 @@ def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
         text = stage_brief(root, feature, stage, token, work_type)
     else:
         description = task_description(root, feature, identity)
-        work_type = work_type or delegation.task_type(description, lean_policy.enabled(policy))
+        work_type = work_type or delegation.task_type(description, lean)
         delegation.require(work_type in delegation.TYPES, 'DELEGATION_TASK_TYPE_INVALID')
         text = task_brief(root, feature, identity, work_type)
     if task_file:
@@ -893,7 +900,7 @@ def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
     if pinned:
         chosen, original_index = pin_candidate(candidates, harness, model)
         candidates = [chosen]
-    if lean_policy.enabled(policy) and not timeout_selected:
+    if lean and not timeout_selected:
         timeout = lean_policy.timeout_guidance(policy, read_ledger(root, feature)['attempts'],
                                                work_type, candidates)['timeout_seconds']
     requires_owned = work_type == 'qa_collect' or any(c.get('tier') == 'light' for c in candidates)
@@ -1002,9 +1009,9 @@ def measured_change(payload):
                 payload.get('index_changed') is True)
 
 
-def retry_plan(policy, attempt, payload, rejected, host):
+def retry_plan(policy, attempt, payload, rejected, host, tier=None):
     """Return (candidates, reason, decision, retry_count) for an automatic retry."""
-    if lean_policy.enabled(policy) or payload['status'] != 'failed' or attempt.get('pinned'):
+    if lean_policy.enabled(policy, tier) or payload['status'] != 'failed' or attempt.get('pinned'):
         return None
     if rejected:
         # A rejected model did no work; keep the configured fallback order
@@ -1807,7 +1814,7 @@ def collect(root, feature, run_id, auto_retry=True):
                 attempt['unverified_reason'] = LIGHT_TIER_EVIDENCE_MISSING_REASON
         attempt['evidence_location'] = relative(root, Path((payload.get('artifacts') or {}).get('dir',
                                                         root / '.delegate/runs' / run_id)) / 'result.json')
-        if lean_policy.enabled(policy):
+        if lean_policy.enabled(policy, lean_policy.feature_tier(root, feature)):
             attempt['failure_category'] = lean_policy.failure_category(
                 {**payload, 'status': attempt['status']}, rejected)
             attempt.setdefault('failure_domain', 'unknown')
@@ -1816,7 +1823,8 @@ def collect(root, feature, run_id, auto_retry=True):
     response = _recorded_response(attempt)
     if linked:
         return {**response, **linked}
-    plan = retry_plan(policy, attempt, measured, rejected, workflow.active_host(root)) if auto_retry else None
+    plan = retry_plan(policy, attempt, measured, rejected, workflow.active_host(root),
+                      lean_policy.feature_tier(root, feature)) if auto_retry else None
     if not plan:
         return response
     remaining, reason, kind, retry_count = plan
@@ -1895,7 +1903,7 @@ def reassign(root, feature, run_id, reason, task_file=None, diagnosis=None):
                        'route to escalate; re-run "delegate_dispatch.py adopt" with a corrected '
                        'acceptance check, or "start" the task normally to create a real dispatched '
                        'attempt reassign can act on')
-    lean = lean_policy.enabled(policy)
+    lean = lean_policy.enabled(policy, lean_policy.feature_tier(root, feature))
     delegation.require(lean or not prior.get('pinned'),
                        'DELEGATION_PINNED_ROUTE_NO_ESCALATION: the run was started with an explicit '
                        '--harness/--model pair; start again with another eligible pair instead')

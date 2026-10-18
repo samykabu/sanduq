@@ -560,7 +560,7 @@ class DoctorSkillInventoryIntegrationTests(unittest.TestCase):
         self.assertNotIn('skill_inventory', result)
 
     def test_project_doctor_carries_the_full_inventory_and_it_never_blocks_by_itself(self):
-        result = w.doctor(self.root, w.default_policy(True, True), project=True, check_delegation=False)
+        result = w.doctor(self.root, w.default_policy(True, True), project=True, check_delegation=False, explicit=True)
         self.assertIn('skill_inventory', result)
         self.assertEqual(result['skill_inventory']['hosts']['claude']['combined']['skill_count'], 0)
         self.assertFalse(any(m.startswith('SKILL_INVENTORY_LARGE') for m in result['warnings']))
@@ -571,7 +571,7 @@ class DoctorSkillInventoryIntegrationTests(unittest.TestCase):
         write_skill(self.root / '.claude/skills', 'skill-2', description='d')
         policy = w.default_policy(True, True)
         policy['skills'] = {'inventory_thresholds': {'skill_count': 2}}
-        result = w.doctor(self.root, policy, project=True, check_delegation=False)
+        result = w.doctor(self.root, policy, project=True, check_delegation=False, explicit=True)
         self.assertTrue(any(m.startswith('SKILL_INVENTORY_LARGE: claude') for m in result['warnings']))
         self.assertEqual(result['skill_inventory']['hosts']['claude']['combined']['skill_count'], 3)
 
@@ -581,7 +581,7 @@ class DoctorSkillInventoryIntegrationTests(unittest.TestCase):
         original = w.skill_inventory.inventory
         w.skill_inventory.inventory = boom
         try:
-            result = w.doctor(self.root, w.default_policy(True, True), project=True, check_delegation=False)
+            result = w.doctor(self.root, w.default_policy(True, True), project=True, check_delegation=False, explicit=True)
         finally:
             w.skill_inventory.inventory = original
         self.assertIsNone(result['skill_inventory'])

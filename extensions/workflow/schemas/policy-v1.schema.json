@@ -92,9 +92,49 @@
       }
     },
     "issue_sync": {
-      "const": {
-        "taskstoissues": "required",
-        "parent_link": "native-subissue"
+      "type": "object", "additionalProperties": false, "required": ["taskstoissues", "parent_link"],
+      "properties": {
+        "taskstoissues": {"enum": ["required", "phase-lazy"], "description": "phase-lazy maps each phase's tasks when the phase starts (task_issues.py --phase); Ready still requires every task mapped."},
+        "parent_link": {"const": "native-subissue"}
+      }
+    },
+    "profiles": {
+      "type": "object", "additionalProperties": false, "required": ["enabled"],
+      "description": "Optional effort tiers. Absent means disabled: every feature runs the full stage list. The Scope receipt's effort_score picks lite (<= lite.max_score), standard (<= standard.max_score) or full; the tier is frozen at the first Plan claim.",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "lite": {"type": "object", "additionalProperties": false, "required": ["max_score"], "properties": {"max_score": {"type": "integer", "minimum": 1, "default": 3}}},
+        "standard": {"type": "object", "additionalProperties": false, "required": ["max_score"], "properties": {"max_score": {"type": "integer", "minimum": 1, "default": 8}}}
+      }
+    },
+    "clarification": {
+      "type": "object",
+      "properties": {
+        "transport": {"type": "string"},
+        "resume_on_reinvoke": {"enum": ["reread-answers", "manual-status"]},
+        "max_questions_per_round": {"type": "integer", "minimum": 1, "description": "Optional cap on questions per clarification round; absent means no cap."},
+        "in_session_first_round": {"type": "boolean", "default": false, "description": "Allow the first clarification round to be answered in session (clarification.py publish --answers)."}
+      }
+    },
+    "artifacts": {
+      "type": "object", "additionalProperties": false,
+      "description": "Optional artifact budgets checked by workflow:lint; absent means no budgets.",
+      "properties": {
+        "budgets": {"type": "object", "additionalProperties": false, "properties": {
+          "spec_kb": {"type": "integer", "minimum": 1}, "plan_kb": {"type": "integer", "minimum": 1},
+          "research_kb": {"type": "integer", "minimum": 1}, "tasks_detail_lines": {"type": "integer", "minimum": 1}}},
+        "enforce": {"enum": ["lite-standard", "all", "warn"], "default": "lite-standard"}
+      }
+    },
+    "project_sync": {
+      "type": "object", "additionalProperties": false, "required": ["points"],
+      "description": "Stages at which the dispatcher runs Project Sync; absent means all six.",
+      "properties": {"points": {"type": "array", "uniqueItems": true, "items": {"enum": ["specify", "plan", "analyze", "taskstoissues", "execute", "pr"]}}}
+    },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "board_cache_seconds": {"type": "integer", "minimum": 0, "default": 300, "description": "Scope board cache TTL; 0 disables the cache."}
       }
     },
     "decisions": {
