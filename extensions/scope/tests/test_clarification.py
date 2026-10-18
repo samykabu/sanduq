@@ -783,6 +783,55 @@ class ClarificationTests(unittest.TestCase):
         self.assertEqual((applied['source_id'], applied['state'], applied['answer']),
                          ('C1Q1', 'applied', {'kind': 'single', 'value': 'B'}))
 
+    def open_answer(self, qid):
+        return {'question_id': qid, 'disposition': 'unresolved', 'comment_ids': [], 'explanation': 'Still open.'}
+
+    def repaired_then_edited(self, edit):
+        (self.root / '.specify/workflow.yml').write_text('schema_version: 1\nclarification:\n  resume_on_reinvoke: reread-answers\n', encoding='utf-8')
+        self.app.publish('1', self.analysis([question()]), True)
+        self.move(m.FEATURE)
+        reply = self.gh.comment('C1Q1: A')
+        second = self.analysis([question('again', ['C1Q1'])], [
+            {'question_id': 'C1Q1', 'disposition': 'unresolved', 'comment_ids': [], 'explanation': 'Not yet.'}])
+        journal = self.interrupted_after_move(second, m.WAITING)
+        edit(reply)  # between the crash and the repair
+        posts = len([w for w in self.gh.writes if w[0] == 'POST'])
+        with patch('sys.stderr'):
+            self.app.publish('1', second, True)
+        self.assertEqual(len([w for w in self.gh.writes if w[0] == 'POST']), posts)
+        self.assertTrue(sm.read_json(journal).get('complete'))
+        self.move(m.FEATURE)
+        return reply
+
+    def test_a_checkbox_ticked_between_the_crash_and_the_repair_is_still_new(self):
+        first = self.gh.comments
+
+        def tick(reply):
+            q = first[0]
+            q['body'] = q['body'].replace('- [ ] **A.**', '- [x] **A.**')
+
+        self.repaired_then_edited(tick)
+        q = self.gh.comments[0]
+        answer = {'question_id': 'C1Q1', 'disposition': 'answered', 'comment_ids': [q['id']], 'explanation': 'Ticked.'}
+        third = self.analysis([question('more', ['C2Q1'])], [answer, self.open_answer('C2Q1')])
+        # Nothing about the thread is unchanged: the tick is evaluated, not swallowed.
+        result = self.app.publish('1', third, True)
+        self.assertNotIn('unchanged', result)
+
+    def test_an_existing_reply_edited_between_the_crash_and_the_repair_is_still_new(self):
+        def edit_reply(reply):
+            item = [c for c in self.gh.comments if c['id'] == reply['id']][0]
+            item['body'] = 'C1Q1: B - actually this'
+            item['updated_at'] = '2026-09-12T00:00:00Z'
+
+        reply = self.repaired_then_edited(edit_reply)
+        answer = {'question_id': 'C1Q1', 'disposition': 'answered', 'comment_ids': [reply['id']], 'explanation': 'B.'}
+        third = self.analysis([question('more', ['C2Q1'])], [answer, self.open_answer('C2Q1')])
+        result = self.app.publish('1', third, True)
+        self.assertNotIn('unchanged', result)
+        applied = [i for i in self.records()['items'] if i['source_id'] == 'C1Q1' and i['state'] == 'applied']
+        self.assertEqual(applied[-1]['answer'], {'kind': 'single', 'value': 'B'})
+
     def test_the_repair_requires_every_journaled_comment_to_exist(self):
         review = self.analysis([question()])
         self.interrupted(review, m.WAITING)

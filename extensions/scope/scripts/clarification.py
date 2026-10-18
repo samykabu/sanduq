@@ -581,11 +581,16 @@ class Clarification:
         from workflow_policy import load
         managed = load(self.root)
         if managed and managed.get('clarification', {}).get('resume_on_reinvoke') == 'reread-answers' and status == WAITING:
-            # The digest of the input this repair actually processed: the live thread without any comment that
-            # arrived after the crash, so such a reply is still new on the next run.
+            # The digest of the exact input this repair processed, in the live thread's order: the stored
+            # snapshot's version of each comment it held and the journaled posts as published. A comment that
+            # arrived after the crash is left out, and an edit to any processed comment changes the next digest.
             live = self.inspect(value, gate=False)
-            seen = {c['id'] for c in snapshot['comments']} | set(journal['comments'].values())
-            processed = dict(live, comments=[c for c in live['comments'] if c['id'] in seen])
+            stored = {c['id']: c for c in snapshot['comments']}
+            published = {v['id']: v for v in journal.get('published', {}).values()}
+            ours = set(journal['comments'].values())
+            processed = dict(live, issue=snapshot['issue'], comments=[
+                stored.get(c['id']) or (published.get(c['id']) or c) for c in live['comments']
+                if c['id'] in stored or c['id'] in ours])
             write_json(self.root / '.specify/scope/clarifications' / f'{number}-observed.json',
                        {'waiting_digest': snapshot_digest(processed)})
         result = dict(result, comment_ids=journal['comments'], next_action=None)
@@ -725,6 +730,8 @@ class Clarification:
             require(len(matches) <= 1, f'Duplicate published comment for {qid}; reconcile before proceeding.')
             posted = matches[0] if matches else self.gh.api(f'{self.app.base}/{number}/comments', 'POST', {'body': body})
             journal['comments'][qid] = posted['id']
+            # The version published now, so a repair can digest what was processed, not what was edited later.
+            journal.setdefault('published', {})[qid] = {k: posted.get(k) for k in ('id', 'body', 'updated_at', 'user')}
             write_json(journal_path, journal)
         path = self.root / snapshot['spec_path']
         self.app._board = None

@@ -195,7 +195,7 @@ A reader should not match a checkpoint record to a lifecycle event by stage and 
 - A `recoveries[]` entry keeps the recovered claim in `claim`, and `claim.claim_id` is that claim's id. The
   entry's `at` is the same instant as the `at` of the `recovered` event.
 
-Receipts and recoveries written before 1.12.0 have neither id; fall back to the stage and the time for those.
+Receipts and recoveries written before 1.12.0 have no `claim_id`. They stay separate evidence: a reader never matches or deduplicates them against events by stage or time.
 
 ## Clarification records (Scope 1.7.0)
 
