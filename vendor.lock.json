@@ -10,8 +10,8 @@
       ],
       "internal": true,
       "exclusive": true,
-      "ref": "illustration-tools-v3.4.2",
-      "sha": "ed04f5c52d48f9526ab5bc8675353d222e673552",
+      "ref": "illustration-tools-v3.4.3",
+      "sha": "1f0a7d886688e5fabc22a6c7cd1b8beb3e14ba68",
       "files": {
         "extensions/illustrate/skill/SKILL.md": "71d73d0f82d063bc7200eae417b2197bf0dd925c40a72bd1fffa64c88bf9326d",
         "extensions/illustrate/skill/agents/openai.yaml": "94f4c310ca3cfea9f74c10f98e9999f7510a4d896e64c3ea91838054e76b3e8d",
@@ -522,8 +522,8 @@
       ],
       "internal": true,
       "exclusive": true,
-      "ref": "agent-tools-v1.4.2",
-      "sha": "28c046dd66c45d39d1e0cdc58685b5e4a2b2ec6a",
+      "ref": "agent-tools-v1.4.3",
+      "sha": "1f0a7d886688e5fabc22a6c7cd1b8beb3e14ba68",
       "files": {
         "extensions/workflow/assets/delegate-task/.gitignore": "247681cefffa8448d973f21147c92b38b63f492a98a50aca3b3c490bc97499e1",
         "extensions/workflow/assets/delegate-task/README.ar.md": "7c2cade9d85acab9c3da95d81c59d6bd44abbed9bdd465f92e6de81ed034ea12",
@@ -618,8 +618,8 @@
           ]
         ]
       },
-      "ref": "dev-tools-v1.1.1",
-      "sha": "189300b3dce8b1ab584009ba623b018ec539c112",
+      "ref": "dev-tools-v1.1.2",
+      "sha": "1f0a7d886688e5fabc22a6c7cd1b8beb3e14ba68",
       "files": {
         "extensions/user-manual/assets/github/user-manual-preview.yml": "bd9dcd2c83e00776f6a8e37c3f51b19e4530cc6a2680e468e34f8c65adcee636",
         "extensions/user-manual/assets/github/user-manual-release.yml": "7cf68e6694ee9a36304905f3bdb15a31f5e7e27df4e959c8e1f6ff1ec645490d",
@@ -672,8 +672,8 @@
       ],
       "internal": true,
       "exclusive": true,
-      "ref": "agent-tools-v1.4.2",
-      "sha": "28c046dd66c45d39d1e0cdc58685b5e4a2b2ec6a",
+      "ref": "agent-tools-v1.4.3",
+      "sha": "1f0a7d886688e5fabc22a6c7cd1b8beb3e14ba68",
       "files": {
         "extensions/progress/assets/skill/SKILL.md": "9a54922d4a3399f68873a4aff2d4e4f2105d35b37117a589e8a36aa954148953",
         "extensions/progress/assets/ui/base.css": "6c5e32f0ca4fb687ef681339957b1ed85805cfaf9f1fa551a3367127032585b0",

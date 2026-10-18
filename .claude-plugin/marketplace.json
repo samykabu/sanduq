@@ -15,8 +15,8 @@
         "source": "git-subdir",
         "url": "https://github.com/samykabu/sanduq-skills.git",
         "path": "skills/illustration-tools",
-        "ref": "illustration-tools-v3.4.2",
-        "sha": "ed04f5c52d48f9526ab5bc8675353d222e673552"
+        "ref": "illustration-tools-v3.4.3",
+        "sha": "1f0a7d886688e5fabc22a6c7cd1b8beb3e14ba68"
       },
       "description": "Generate, import, and export forty-four kinds of technical, product, architecture, process, and data illustrations through one unified skill.",
       "author": {
@@ -45,8 +45,8 @@
         "source": "git-subdir",
         "url": "https://github.com/samykabu/sanduq-skills.git",
         "path": "skills/dev-tools",
-        "ref": "dev-tools-v1.1.1",
-        "sha": "189300b3dce8b1ab584009ba623b018ec539c112"
+        "ref": "dev-tools-v1.1.2",
+        "sha": "1f0a7d886688e5fabc22a6c7cd1b8beb3e14ba68"
       },
       "description": "Standalone modular application-manual tooling for MkDocs Material, PDF, APIs, releases, screenshots, previews, English, Arabic, and RTL.",
       "author": {
@@ -73,8 +73,8 @@
         "source": "git-subdir",
         "url": "https://github.com/samykabu/sanduq-skills.git",
         "path": "skills/agent-tools",
-        "ref": "agent-tools-v1.4.2",
-        "sha": "28c046dd66c45d39d1e0cdc58685b5e4a2b2ec6a"
+        "ref": "agent-tools-v1.4.3",
+        "sha": "1f0a7d886688e5fabc22a6c7cd1b8beb3e14ba68"
       },
       "description": "Delegate one task to an external agent CLI and get back a measured result: status with provenance, git-measured file changes, and normalised token usage.",
       "author": {
