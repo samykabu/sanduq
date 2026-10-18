@@ -29,6 +29,7 @@ import lean_policy
 import verification_plan
 import evidence_snapshot
 import execution_tools
+import lifecycle
 import memory_handoff
 
 import yaml
@@ -2123,7 +2124,9 @@ class Run:
                                                                'at': now(), 'via': 'migrate', 'reason': reason})
                 state['policy_digest'] = plan['policy_to']
                 state['policy'] = copy.deepcopy(self.policy)
-            for stage in plan['invalidated']: state['receipts'].pop(stage)
+            for stage in plan['invalidated']:
+                state['receipts'].pop(stage)
+                lifecycle.queue(state, stage, 'invalidated', reason='migrate: ' + reason.strip())
             self.save(state)
             return {'migrated': True, 'migration': copy.deepcopy(entry), 'next': self.next(state)}
 
@@ -2183,7 +2186,9 @@ class Run:
                 write(backup, state)
                 state.setdefault('refreshes', []).append({'stage': stage, 'reason': reason, 'at': now(),
                                                          'invalidated': list(affected), 'backup': str(backup.relative_to(self.root))})
-                for name in affected: state['receipts'].pop(name)
+                for name in affected:
+                    state['receipts'].pop(name)
+                    lifecycle.queue(state, name, 'invalidated', reason='refresh ' + stage + ': ' + reason.strip())
                 self.save(state)
             return {'refreshed': list(affected), 'next': self.next(state)}
 
@@ -2230,6 +2235,8 @@ class Run:
                         state['receipts'][name]['stale'] = {'reason': 'evidence-amended', 'stage': stage,
                                                             'path': evidence, 'at': record['at']}
                         staled.append(name)
+                        lifecycle.queue(state, name, 'invalidated',
+                                        reason='changed amendment of ' + stage + ': ' + reason.strip())
             record['staled'] = staled
             receipt['fingerprints'][evidence] = new_hash
             receipt.setdefault('amendments', []).append(record)
@@ -2306,6 +2313,8 @@ class Run:
                     receipt['stale'] = {'reason': 'ci-lane-gap', 'stage': 'verify', 'lanes': lanes['gap'],
                                         'run_id': evidence['run_id'], 'at': record['at']}
                     receipt.setdefault('revalidations', []).append(record)
+                    lifecycle.queue(state, stage, 'revalidation-stale', episode_id='revalidation',
+                                    reason='ci-lane-gap: ' + ', '.join(str(l) for l in lanes['gap']))
                     self.save(state)
                     return {'revalidated': False, 'stage': stage, 'lane_gap': lanes['gap'],
                             'run_id': evidence['run_id'], 'revalidation': copy.deepcopy(record),
@@ -2342,6 +2351,7 @@ class Run:
             receipt['source_fingerprints'] = inventory
             receipt['head'], receipt['source_key'] = head, key
             receipt.setdefault('revalidations', []).append(record)
+            lifecycle.queue(state, stage, 'revalidated', episode_id='revalidation', reason=reason)
             self.save(state)
             return {'revalidated': True, 'stage': stage, 'revalidation': copy.deepcopy(record),
                     'current': receipt_current(self.root, self.relative, stage, receipt, self.policy),
@@ -2475,10 +2485,40 @@ class Run:
             return state
 
     def save(self, state):
+        self.__dict__.pop('_saved_next', None)
         state['generation'] += 1
         state['updated_at'] = now()
         state['head'] = git(self.root, 'rev-parse', 'HEAD')
+        state['stage_plan'] = {'v': 1, 'generation': state['generation'], 'stages': stages(self.policy)}
+        state['next_action'] = self.evaluate_next_action(state)
         write(self.path, state)
+        # The queued lifecycle events were written with the state; append them now, under the caller's
+        # lock. A crash here leaves them queued and the next save replays them (deduplicated by event_id).
+        if lifecycle.flush(state, self.feature):
+            write(self.path, state)
+
+    def evaluate_next_action(self, state):
+        """Workflow's own next/next_stage evaluation, cached with its time and generation."""
+        stamp = {'evaluated_at': now(), 'generation': state['generation']}
+        active = state.get('active')
+        if active:
+            return {'text': 'Complete or recover the active ' + active['stage'] + ' claim',
+                    'stage': active['stage'], 'kind': 'active-claim', **stamp}
+        try:
+            result = self.next_stage(state)
+        except Exception:  # an evaluation that cannot run is recorded as absent, never guessed
+            return None
+        # The command usually asks for the same answer right after the save; hand it over once.
+        self._saved_next = (state, state['generation'], copy.deepcopy(result))
+        if result.get('stage'):
+            text = 'Run ' + result['stage'] + (' (' + result['command'] + ')' if result.get('command') else '')
+            if result.get('reason') in ('inputs-or-evidence-changed', 'policy-changed'):
+                text = 'Re-run ' + result['stage'] + ': ' + result['reason'].replace('-', ' ')
+        elif result.get('status') == 'ready_to_finalize':
+            text = 'Finalize the feature (' + result.get('command', 'speckit.workflow.finalize') + ')'
+        else:
+            text = 'No stage remains: ' + str(result.get('status'))
+        return {'text': text, 'stage': result.get('stage'), 'kind': 'next-stage', **stamp}
 
     def next(self, state, finalize=False):
         result = self.next_stage(state, finalize)
@@ -2489,6 +2529,9 @@ class Run:
         return result
 
     def next_stage(self, state, finalize=False):
+        saved = self.__dict__.pop('_saved_next', None)
+        if saved and not finalize and saved[0] is state and saved[1] == state['generation']:
+            return saved[2]
         policy_changed = state['policy_digest'] != checkpoint_policy_digest(state, self.policy)
         cutoff = policy_cutoff(state.get('policy'), self.policy) if policy_changed else len(BASE_STAGES)
         for stage in stages(self.policy):
@@ -2550,10 +2593,22 @@ class Run:
                 state['policy_digest'] = current_policy_digest
                 state['policy'] = copy.deepcopy(self.policy)
                 state['commands'] = resolve_commands(self.root, self.policy)
-            for downstream in BASE_STAGES[BASE_STAGES.index(stage):]:
+            resuming = state.get('status') == 'paused'
+            removed = [name for name in BASE_STAGES[BASE_STAGES.index(stage):] if name in state['receipts']]
+            token = uuid.uuid4().hex
+            claim_id = lifecycle.claim_id_for(token)
+            for downstream in removed:
+                # Captured before deletion: the receipts this claim removes are recorded as invalidated.
+                # The removed receipt belongs to no claim or episode; the cause is a separate field.
+                lifecycle.queue(state, downstream, 'invalidated', caused_by_claim_id=claim_id,
+                                reason='removed when ' + stage + ' was claimed (completed '
+                                       + str(state['receipts'][downstream].get('completed_at')) + ')')
                 state['receipts'].pop(downstream, None)
-            state['active'] = {'stage': stage, 'token': uuid.uuid4().hex, 'claimed_at': now(),
+            state['active'] = {'stage': stage, 'token': token, 'claim_id': claim_id, 'claimed_at': now(),
                                'session_id': usage['session_id'], 'context': gate}
+            lifecycle.queue(state, stage, 'resume' if resuming else 'claim', claim_id=claim_id,
+                            episode_id=lifecycle.episode_for_claim(claim_id),
+                            reason='resumed after a pause' if resuming else None)
             source = read(self.feature / 'scope-source.json', {})
             existing = (self.feature / 'spec.md').is_file() and f"{source.get('repo')}#{source.get('issue')}" == state['issue']
             state['active']['mode'] = 'revalidate' if existing and stage in ('scope', 'specify', 'clarify', 'plan', 'tasks') else 'initial'
@@ -2595,160 +2650,205 @@ class Run:
             state = self.load()
             active = state['active']
             require(active and active['token'] == token, 'CLAIM_TOKEN_MISMATCH')
-            stage = active['stage']
-            if stage == 'review':
-                coding_review_checks(self.root, self.relative, self.policy, state)
-            require(receipt.get('stage') == stage and receipt.get('outcome') == 'passed', 'STAGE_NOT_PASSED')
-            require(receipt.get('summary') and receipt.get('evidence'), 'EVIDENCE_REQUIRED')
-            require(isinstance(receipt.get('inputs'), list) and receipt['inputs'], 'INPUT_MANIFEST_REQUIRED')
-            require(not any(field in receipt for field in RUNTIME_RECEIPT_FIELDS),
-                    'RECEIPT_FIELD_RESERVED: ' + ', '.join(f for f in RUNTIME_RECEIPT_FIELDS if f in receipt))
-            receipt = canonical_receipt(self.root, receipt)
-            validate_input_roles(self.root, self.relative, stage, receipt, self.policy)
-            for path in receipt['evidence']:
-                require(inside(self.root, path).is_file(), 'EVIDENCE_MISSING: ' + path)
-            validate_evidence_snapshots(self.root, receipt)
-            delegation_ledger_trust = None
-            if self.policy['delegation']['enabled'] and active.get('delegation'):
-                # The claim recorded a delegation route for this stage; require the
-                # dispatcher's own ledger (never the receipt's self-report) to show
-                # the delegated attempt actually succeeded, following any reassignment
-                # to its terminal end (finding 1: the guard was previously unread).
-                # The ledger itself must still be trustworthy: 'untrusted' (a
-                # genuine, persisted tamper, or a marker that disagrees with the
-                # current bytes) refuses; 'unverified-local' (no local write
-                # marker at all -- the normal state for a CI checkout or a fresh
-                # clone) is recorded on the receipt as a warning, not a block
-                # (round 3, findings 1-2). The attempt must also have been
-                # started under this exact claim (finding 2a, round 2): a
-                # successful attempt left over from an earlier claim of this
-                # same stage (for example one abandoned and re-claimed) must
-                # not satisfy a different, later claim it was never part of.
-                from delegation import latest_attempt, ledger_trust_state
-                delegation_ledger_trust = ledger_trust_state(self.root, self.relative)
-                require(delegation_ledger_trust != 'untrusted',
-                        'DELEGATION_LEDGER_UNTRUSTED: the delegation ledger for ' + self.relative +
-                        ' was tampered with (a hand-edit, or one not yet cleared by trust-reset); run '
-                        '"delegate_dispatch.py trust-reset --feature ' + self.relative +
-                        ' --reason <text>" only after reviewing exactly what changed')
-                stage_attempt = latest_attempt(self.root, self.relative, 'stage:' + stage)
-                require(stage_attempt is not None and stage_attempt.get('status') == 'successful' and
-                        stage_attempt.get('claim_token') == token,
-                        'DELEGATION_STAGE_NOT_VERIFIED: the latest delegate_dispatch attempt for stage:' +
-                        stage + ' is ' + (str(stage_attempt.get('status')) if stage_attempt else 'missing') +
-                        ' or was not started under this claim; collect, accept or reassign it before '
-                        'completing this stage. A legacy attempt recorded before claim_token existed has '
-                        'none and will never match; re-delegate the stage once under this workflow release')
-            if stage == 'clarify':
-                require(receipt.get('unresolved') == 0 and receipt.get('answers_applied') is True, 'CLARIFICATION_UNRESOLVED')
-            if BASE_STAGES.index(stage) >= BASE_STAGES.index('specify'):
-                source = read(self.feature / 'scope-source.json', {})
-                require(f"{source.get('repo')}#{source.get('issue')}" == state['issue'], 'FEATURE_BINDING_MISMATCH')
-            ledger_path = self.feature / 'workflow/decisions.json'
-            if ledger_path.is_file():
-                from decisions import reconcile, verify_ledger
-                verify_ledger(self.root, self.relative, reconcile(
-                    self.root, self.relative, claim_token=token, session_id=active.get('session_id')))
-            if stage == 'taskstoissues':
-                require(receipt.get('parent_issue') == state['issue'] and receipt.get('native_links_verified') is True, 'TASK_PARENT_NOT_VERIFIED')
-            if stage in SOURCE_STAGES:
-                require(receipt.get('blocking_findings') == 0, 'BLOCKING_FINDINGS_REMAIN')
-            if stage == 'pr':
-                require(receipt.get('images_verified') is True and receipt.get('pr_url', '').startswith('https://github.com/' + state['issue'].split('#')[0] + '/pull/'), 'PR_EVIDENCE_INCOMPLETE')
-                if lean_policy.enabled(self.policy):
-                    binding = pr_lint_binding(self.root, self.relative, state, receipt)
-                    receipt['inputs'] = list(dict.fromkeys(receipt['inputs'] + [binding['scope']]))
-                    if receipt.get('input_roles') is not None:
-                        for path in (binding['scope'], binding['body'], binding['lint']):
-                            if path in receipt['inputs']:
-                                receipt['input_roles'][path] = {'role': 'dependency'}
-            if stage in ('tasks', 'qa_analyze', 'manual_analyze') and self.policy['delegation']['enabled']:
-                from delegation import annotate_tasks
-                annotate_tasks(self.root, self.relative, self.policy['delegation'], lean=lean_policy.enabled(self.policy))
-            # Known semantic transformations advance upstream artifact snapshots with an
-            # explicit lineage record. They do not pretend the old artifact remained current.
-            permitted = {'clarify': [self.relative + '/spec.md'],
-                         'qa_analyze': [self.relative + '/tasks.md'],
-                         'manual_analyze': [self.relative + '/tasks.md'],
-                         # Assure Document refreshes this generated source inventory.
-                         # It is project context, not requirements authority.
-                         'qa_document': ['.github/memory/project-memory.md']}.get(stage, [])
-            after = fingerprint_files(self.root, active['baseline'])
-            changed = [p for p, before in active['baseline'].items() if after[p] != before]
-            # Only an earlier receipt's dependency can be undermined by this stage.
-            # A path every earlier receipt only consulted keeps its recorded hash
-            # (nothing is re-stamped) and `next` reports it as advisory drift.
-            dependencies = set()
-            for name, prior in state['receipts'].items():
-                dependencies.update(dependency_fingerprints(prior, required_inputs(self.root, self.relative, name)))
-            consulted = [p for p in changed if p not in dependencies]
-            changed = [p for p in changed if p in dependencies]
-            unexpected = [p for p in changed if portable_label(p) not in permitted]
-            require(not unexpected, 'UPSTREAM_INPUT_CHANGED_DURING_STAGE: ' + ', '.join(unexpected))
-            if stage == 'qa_document':
-                require(all(after[p] is not None for p in changed), 'INPUT_MISSING')
-            if consulted:
-                state.setdefault('lineage', []).append({'stage': stage, 'advisory': True, 'consulted': {
-                    p: {'before': active['baseline'][p], 'after': after[p]} for p in consulted}, 'at': now()})
-            if changed:
-                state.setdefault('lineage', []).append({'stage': stage, 'changes': {p: {'before': active['baseline'][p], 'after': after[p]} for p in changed}, 'at': now()})
-                for prior in state['receipts'].values():
-                    for path in changed:
-                        if path in prior['fingerprints']:
-                            prior['fingerprints'][path] = after[path]
-                        # Verify/Review also inventory this root-relative context file.
-                        # Advance only the accepted QA-document transformation, retaining
-                        # its old/new hashes in the same runtime-owned lineage above.
-                        source_path = portable_label(path)
-                        if stage == 'qa_document' and source_path in prior.get('source_fingerprints', {}):
-                            prior['source_fingerprints'][source_path] = after[path]
-            stored = copy.deepcopy(receipt)
-            if stage == 'pr' and lean_policy.enabled(self.policy):
-                stored['pr_lint_binding'] = binding
-            if stage == 'verify' and lean_policy.enabled(self.policy):
-                selected_plan = lean_policy.settings(self.policy).get('verification_plan')
-                if selected_plan:
-                    try:
-                        stored['verification_snapshot'] = verification_plan.snapshot(self.root, selected_plan)
-                    except ValueError as exc:
-                        raise WorkflowError(str(exc)) from exc
-            if stored.get('input_roles') is None:
-                stored.pop('input_roles', None)  # absent means all-dependency
-            if delegation_ledger_trust is not None:
-                # A warning record, never a block: 'unverified-local' means no
-                # local dispatcher-write marker existed to check against (a
-                # fresh checkout or CI runner), not that anything was wrong.
-                stored['delegation_ledger_trust'] = delegation_ledger_trust
-            stored['command'] = state['commands'][stage]
-            stored['dependency_digest'] = state['dependency_digest']
-            decision_input = [self.relative + '/workflow/decisions.json'] if (self.feature / 'workflow/decisions.json').is_file() else []
-            stored['fingerprints'] = fingerprint_files(self.root, receipt['inputs'] + receipt['evidence'] + required_inputs(self.root, self.relative, stage) + decision_input)
-            require(all(v is not None for v in stored['fingerprints'].values()), 'INPUT_MISSING')
-            if stage in SOURCE_STAGES:
-                stored['source_fingerprints'] = source_fingerprints(self.root)
-                # The commit and its source key bind the inventory; with source
-                # changes outside HEAD the key would not describe it, so none is
-                # recorded and the identity rule applies to this receipt.
-                head, key = current_source_key(self.root)
-                if key:
-                    stored['head'], stored['source_key'] = head, key
-            stored['completed_at'] = now()
-            state['receipts'][stage] = stored
-            state['active'] = None
-            self.save(state)
-            result = self.next(state)
-            if stage == 'execute':
-                result['memory_handoff'] = memory_handoff.handoff(
-                    SimpleNamespace(**globals()), self.root, 'execute', self.relative)
-                # Product acceptance is already durable. Memory failure is a
-                # separate recoverable operation, never an unpassed Execute.
-                if result['memory_handoff']['ok'] is False:
-                    result['ok'] = False
-            return result
+            self._validated_candidate = None  # set once the exact-claim delegation check has passed
+            try:
+                return self._accept_completion(state, active, token, receipt)
+            except (WorkflowError, ValueError) as exc:
+                try:
+                    self._record_rejection(token, exc)
+                except Exception:  # the log must never hide the rejection the caller has to see
+                    pass
+                raise
+
+    def _record_rejection(self, token, exc):
+        """Record a rejected completion without clearing the claim or accepting the candidate.
+
+        The checkpoint is re-read, so nothing a half-finished validation changed in memory is written.
+        """
+        try:
+            fresh = self.load()
+        except WorkflowError:
+            return  # the original rejection is what the caller must see
+        held = fresh.get('active')
+        if not held or held.get('token') != token:
+            return
+        claim_id = held.get('claim_id') or lifecycle.claim_id_for(token)
+        lifecycle.queue(fresh, held['stage'], 'rejected-completion', claim_id=claim_id,
+                        generation=fresh.get('generation', 0), episode_id=lifecycle.episode_for_claim(claim_id),
+                        candidate_run_id=getattr(self, '_validated_candidate', None),
+                        delegation_run_ids=lifecycle.delegation_runs_for(self.feature, token, claim_id),
+                        reason=str(exc))
+        write(self.path, fresh)
+        if lifecycle.flush(fresh, self.feature):
+            write(self.path, fresh)
+
+    def _accept_completion(self, state, active, token, receipt):
+        stage = active['stage']
+        if stage == 'review':
+            coding_review_checks(self.root, self.relative, self.policy, state)
+        require(receipt.get('stage') == stage and receipt.get('outcome') == 'passed', 'STAGE_NOT_PASSED')
+        require(receipt.get('summary') and receipt.get('evidence'), 'EVIDENCE_REQUIRED')
+        require(isinstance(receipt.get('inputs'), list) and receipt['inputs'], 'INPUT_MANIFEST_REQUIRED')
+        require(not any(field in receipt for field in RUNTIME_RECEIPT_FIELDS),
+                'RECEIPT_FIELD_RESERVED: ' + ', '.join(f for f in RUNTIME_RECEIPT_FIELDS if f in receipt))
+        receipt = canonical_receipt(self.root, receipt)
+        validate_input_roles(self.root, self.relative, stage, receipt, self.policy)
+        for path in receipt['evidence']:
+            require(inside(self.root, path).is_file(), 'EVIDENCE_MISSING: ' + path)
+        validate_evidence_snapshots(self.root, receipt)
+        delegation_ledger_trust = None
+        stage_attempt = None
+        if self.policy['delegation']['enabled'] and active.get('delegation'):
+            # The claim recorded a delegation route for this stage; require the
+            # dispatcher's own ledger (never the receipt's self-report) to show
+            # the delegated attempt actually succeeded, following any reassignment
+            # to its terminal end (finding 1: the guard was previously unread).
+            # The ledger itself must still be trustworthy: 'untrusted' (a
+            # genuine, persisted tamper, or a marker that disagrees with the
+            # current bytes) refuses; 'unverified-local' (no local write
+            # marker at all -- the normal state for a CI checkout or a fresh
+            # clone) is recorded on the receipt as a warning, not a block
+            # (round 3, findings 1-2). The attempt must also have been
+            # started under this exact claim (finding 2a, round 2): a
+            # successful attempt left over from an earlier claim of this
+            # same stage (for example one abandoned and re-claimed) must
+            # not satisfy a different, later claim it was never part of.
+            from delegation import latest_attempt, ledger_trust_state
+            delegation_ledger_trust = ledger_trust_state(self.root, self.relative)
+            require(delegation_ledger_trust != 'untrusted',
+                    'DELEGATION_LEDGER_UNTRUSTED: the delegation ledger for ' + self.relative +
+                    ' was tampered with (a hand-edit, or one not yet cleared by trust-reset); run '
+                    '"delegate_dispatch.py trust-reset --feature ' + self.relative +
+                    ' --reason <text>" only after reviewing exactly what changed')
+            stage_attempt = latest_attempt(self.root, self.relative, 'stage:' + stage)
+            require(stage_attempt is not None and stage_attempt.get('status') == 'successful' and
+                    stage_attempt.get('claim_token') == token,
+                    'DELEGATION_STAGE_NOT_VERIFIED: the latest delegate_dispatch attempt for stage:' +
+                    stage + ' is ' + (str(stage_attempt.get('status')) if stage_attempt else 'missing') +
+                    ' or was not started under this claim; collect, accept or reassign it before '
+                    'completing this stage. A legacy attempt recorded before claim_token existed has '
+                    'none and will never match; re-delegate the stage once under this workflow release')
+            self._validated_candidate = stage_attempt.get('run_id')
+        if stage == 'clarify':
+            require(receipt.get('unresolved') == 0 and receipt.get('answers_applied') is True, 'CLARIFICATION_UNRESOLVED')
+        if BASE_STAGES.index(stage) >= BASE_STAGES.index('specify'):
+            source = read(self.feature / 'scope-source.json', {})
+            require(f"{source.get('repo')}#{source.get('issue')}" == state['issue'], 'FEATURE_BINDING_MISMATCH')
+        ledger_path = self.feature / 'workflow/decisions.json'
+        if ledger_path.is_file():
+            from decisions import reconcile, verify_ledger
+            verify_ledger(self.root, self.relative, reconcile(
+                self.root, self.relative, claim_token=token, session_id=active.get('session_id')))
+        if stage == 'taskstoissues':
+            require(receipt.get('parent_issue') == state['issue'] and receipt.get('native_links_verified') is True, 'TASK_PARENT_NOT_VERIFIED')
+        if stage in SOURCE_STAGES:
+            require(receipt.get('blocking_findings') == 0, 'BLOCKING_FINDINGS_REMAIN')
+        if stage == 'pr':
+            require(receipt.get('images_verified') is True and receipt.get('pr_url', '').startswith('https://github.com/' + state['issue'].split('#')[0] + '/pull/'), 'PR_EVIDENCE_INCOMPLETE')
+            if lean_policy.enabled(self.policy):
+                binding = pr_lint_binding(self.root, self.relative, state, receipt)
+                receipt['inputs'] = list(dict.fromkeys(receipt['inputs'] + [binding['scope']]))
+                if receipt.get('input_roles') is not None:
+                    for path in (binding['scope'], binding['body'], binding['lint']):
+                        if path in receipt['inputs']:
+                            receipt['input_roles'][path] = {'role': 'dependency'}
+        if stage in ('tasks', 'qa_analyze', 'manual_analyze') and self.policy['delegation']['enabled']:
+            from delegation import annotate_tasks
+            annotate_tasks(self.root, self.relative, self.policy['delegation'], lean=lean_policy.enabled(self.policy))
+        # Known semantic transformations advance upstream artifact snapshots with an
+        # explicit lineage record. They do not pretend the old artifact remained current.
+        permitted = {'clarify': [self.relative + '/spec.md'],
+                     'qa_analyze': [self.relative + '/tasks.md'],
+                     'manual_analyze': [self.relative + '/tasks.md'],
+                     # Assure Document refreshes this generated source inventory.
+                     # It is project context, not requirements authority.
+                     'qa_document': ['.github/memory/project-memory.md']}.get(stage, [])
+        after = fingerprint_files(self.root, active['baseline'])
+        changed = [p for p, before in active['baseline'].items() if after[p] != before]
+        # Only an earlier receipt's dependency can be undermined by this stage.
+        # A path every earlier receipt only consulted keeps its recorded hash
+        # (nothing is re-stamped) and `next` reports it as advisory drift.
+        dependencies = set()
+        for name, prior in state['receipts'].items():
+            dependencies.update(dependency_fingerprints(prior, required_inputs(self.root, self.relative, name)))
+        consulted = [p for p in changed if p not in dependencies]
+        changed = [p for p in changed if p in dependencies]
+        unexpected = [p for p in changed if portable_label(p) not in permitted]
+        require(not unexpected, 'UPSTREAM_INPUT_CHANGED_DURING_STAGE: ' + ', '.join(unexpected))
+        if stage == 'qa_document':
+            require(all(after[p] is not None for p in changed), 'INPUT_MISSING')
+        if consulted:
+            state.setdefault('lineage', []).append({'stage': stage, 'advisory': True, 'consulted': {
+                p: {'before': active['baseline'][p], 'after': after[p]} for p in consulted}, 'at': now()})
+        if changed:
+            state.setdefault('lineage', []).append({'stage': stage, 'changes': {p: {'before': active['baseline'][p], 'after': after[p]} for p in changed}, 'at': now()})
+            for prior in state['receipts'].values():
+                for path in changed:
+                    if path in prior['fingerprints']:
+                        prior['fingerprints'][path] = after[path]
+                    # Verify/Review also inventory this root-relative context file.
+                    # Advance only the accepted QA-document transformation, retaining
+                    # its old/new hashes in the same runtime-owned lineage above.
+                    source_path = portable_label(path)
+                    if stage == 'qa_document' and source_path in prior.get('source_fingerprints', {}):
+                        prior['source_fingerprints'][source_path] = after[path]
+        stored = copy.deepcopy(receipt)
+        if stage == 'pr' and lean_policy.enabled(self.policy):
+            stored['pr_lint_binding'] = binding
+        if stage == 'verify' and lean_policy.enabled(self.policy):
+            selected_plan = lean_policy.settings(self.policy).get('verification_plan')
+            if selected_plan:
+                try:
+                    stored['verification_snapshot'] = verification_plan.snapshot(self.root, selected_plan)
+                except ValueError as exc:
+                    raise WorkflowError(str(exc)) from exc
+        if stored.get('input_roles') is None:
+            stored.pop('input_roles', None)  # absent means all-dependency
+        if delegation_ledger_trust is not None:
+            # A warning record, never a block: 'unverified-local' means no
+            # local dispatcher-write marker existed to check against (a
+            # fresh checkout or CI runner), not that anything was wrong.
+            stored['delegation_ledger_trust'] = delegation_ledger_trust
+        stored['command'] = state['commands'][stage]
+        stored['dependency_digest'] = state['dependency_digest']
+        decision_input = [self.relative + '/workflow/decisions.json'] if (self.feature / 'workflow/decisions.json').is_file() else []
+        stored['fingerprints'] = fingerprint_files(self.root, receipt['inputs'] + receipt['evidence'] + required_inputs(self.root, self.relative, stage) + decision_input)
+        require(all(v is not None for v in stored['fingerprints'].values()), 'INPUT_MISSING')
+        if stage in SOURCE_STAGES:
+            stored['source_fingerprints'] = source_fingerprints(self.root)
+            # The commit and its source key bind the inventory; with source
+            # changes outside HEAD the key would not describe it, so none is
+            # recorded and the identity rule applies to this receipt.
+            head, key = current_source_key(self.root)
+            if key:
+                stored['head'], stored['source_key'] = head, key
+        stored['completed_at'] = now()
+        claim_id = active.get('claim_id') or lifecycle.claim_id_for(token)
+        stored['claim_id'] = claim_id  # links this receipt to its lifecycle events
+        state['receipts'][stage] = stored
+        state['active'] = None
+        lifecycle.queue(state, stage, 'accepted', claim_id=claim_id, at=stored['completed_at'],
+                        episode_id=lifecycle.episode_for_claim(claim_id),
+                        candidate_run_id=(stage_attempt or {}).get('run_id'),
+                        delegation_run_ids=lifecycle.delegation_runs_for(self.feature, token, claim_id))
+        self.save(state)
+        result = self.next(state)
+        if stage == 'execute':
+            result['memory_handoff'] = memory_handoff.handoff(
+                SimpleNamespace(**globals()), self.root, 'execute', self.relative)
+            # Product acceptance is already durable. Memory failure is a
+            # separate recoverable operation, never an unpassed Execute.
+            if result['memory_handoff']['ok'] is False:
+                result['ok'] = False
+        return result
 
     def checkpoint(self, state, reason, context=None):
         state['status'] = 'paused'
         state['pause'] = {'reason': reason, 'context': context, 'at': now()}
+        held = state.get('active')
+        claim_id = (held.get('claim_id') or lifecycle.claim_id_for(held['token'])) if held else None
+        lifecycle.queue(state, held['stage'] if held else None, 'paused', claim_id=claim_id,
+                        episode_id=lifecycle.episode_for_claim(claim_id), reason=reason)
         self.save(state)
         pending = self.next(state)
         task_path = self.feature / 'tasks.md'
@@ -2996,7 +3096,13 @@ def main():
                     state = run.load()
                     if args.action == 'recover':
                         require(state['active'] and state['active']['token'] == args.token, 'CLAIM_TOKEN_MISMATCH')
-                        state.setdefault('recoveries', []).append({'claim': state['active'], 'reason': args.reason, 'at': now()})
+                        lost = state['active'].get('claim_id') or lifecycle.claim_id_for(args.token)
+                        recovered_at = now()
+                        state.setdefault('recoveries', []).append(
+                            {'claim': {**state['active'], 'claim_id': lost}, 'reason': args.reason, 'at': recovered_at})
+                        lifecycle.queue(state, state['active']['stage'], 'recovered', claim_id=lost, at=recovered_at,
+                                        episode_id=lifecycle.episode_for_claim(lost), reason=args.reason,
+                                        delegation_run_ids=lifecycle.delegation_runs_for(run.feature, args.token, lost))
                         state['active'] = None
                     result = run.checkpoint(state, args.reason)
         print(json.dumps(result, indent=2))

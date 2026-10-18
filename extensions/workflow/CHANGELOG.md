@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.12.0] - 2026-10-18
+
+- Lifecycle events carry two more ids. `accepted` writes `candidate_run_id`, the stage attempt the exact-claim check validated (`null` without a delegation route), while `delegation_run_ids` stays claim membership. The `invalidated` events a claim writes for the receipts it removes have `claim_id` and `episode_id` `null` and name the new claim in `caused_by_claim_id`. Every other event writes both as `null`. `paused` with `stage: null` is a valid feature-level event.
+- The lifecycle log is never read, repaired or appended through a symbolic link or reparse point, on the file or its `workflow/` folder. The write is refused with `LIFECYCLE_LOG_UNSAFE` and the events stay queued in the checkpoint.
+- A stored receipt carries `claim_id`, and a recovery record carries `claim.claim_id`. The `accepted` and `recovered` events use the receipt's `completed_at` and the recovery's `at` as their own `at`, so a reader can join them exactly.
+- `rejected-completion` also carries `candidate_run_id` when the refusal came after the exact-claim delegation check passed; it is `null` at or before that check.
+- A lifecycle log whose last record lacks only its newline keeps that record and terminates it before the replay is deduplicated. `complete` also records a rejection for `ValueError` (delegation and verification-plan errors), not only `WorkflowError`.
+- Progress capability detection reads `extension.yml`, else the package `VERSION`, else probes `lane new --workstream` once per process. The `--schema v2` retry happens only for an unknown version and only when the failure names the flag.
+- `next_action` is evaluated once per command: `save` hands its result to the `next` call that follows.
+- Lifecycle events: `specs/<feature>/workflow/lifecycle.jsonl` records `claim`, `resume`, `accepted`, `rejected-completion`, `recovered`, `paused`, `invalidated`, `revalidated` and `revalidation-stale`. Each record carries `workflow_run_id`, `generation`, `stage`, `episode_id`, `claim_id`, `delegation_run_ids` and a short `reason`. `claim_id` is a one-way hash of the claim token, never the token. Receipts a claim removes are recorded as `invalidated` before they are deleted; `migrate`, `refresh` and changed amendments record the stages they invalidate.
+- A completion that fails validation after the claim is authenticated is recorded as `rejected-completion`. The claim stays active, nothing is accepted, and the CLI prints the same error and exits 1 as before.
+- Events are queued in the checkpoint (`lifecycle_outbox`) with the state change and appended under the feature lock. An interrupted append is replayed on the next write and deduplicated by `event_id`. `lifecycle.read_events` tolerates a torn final line and the next append repairs it.
+- The checkpoint stores `stage_plan` (the selected, policy-filtered stage order) and `next_action` (Workflow's own next evaluation with `evaluated_at` and `generation`, either an active claim or the next stage). The active claim also records `claim_id`.
+- Delegation attempts record `intent_id`, `claim_id` (stage attempts) and `replaces_run_id` next to the existing `parent_run_id`.
+- Reporting: on a Codex worktree whose hooks are not approved, the coordinator reports its own model and effort with `progress bind --host codex --model <m> --effort <e>` (needs Progress 1.2.0 or later). From Progress 1.2.0 the `progress.py` forwarder creates lanes with `--workstream`; older Progress versions get no flag.
+- Progress compatibility: the bridge reads `progress status --json --schema v2`, so Workflow keeps the v2 projection when Progress 1.2.0 defaults to v3. A Progress known to be older than 1.2.0 is called without it; for an unknown version, a usage-error rejection (exit 2) is retried once without the flag.
+- Requires Scope 1.7.0, which writes the clarification records Progress 1.2.0 reads.
+- The vendored `delegate-task` is re-pinned to `agent-tools-v1.4.2` without file changes, and Progress 1.2.0 is the optional
+  Progress version.
+
 ## [1.11.2] - 2026-10-18
 
 - Force UTF-8 only for Memory helper I/O so Unicode recovery journals remain readable under Windows legacy code pages.

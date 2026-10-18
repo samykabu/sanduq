@@ -710,6 +710,75 @@ class DelegationTests(unittest.TestCase):
         # 'trusted', not the fresh-checkout warning state.
         self.assertEqual(stored.get('delegation_ledger_trust'), 'trusted')
 
+    def test_accepted_names_the_validated_attempt_when_a_claim_has_a_replaced_one(self):
+        """A failed attempt replaced under the same claim is claim membership, not the accepted candidate."""
+        import lifecycle
+        self.enable()
+        run = w.Run(self.root, self.feature)
+        run.start('acme/app#10')
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}):
+            claim = run.claim({'session_id': 'test-session'})
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch.object(dispatch, 'launch', return_value={'run_id': 'codex-scope', 'state': 'running'}):
+            dispatch.start(self.root, self.feature, 'stage:scope', token=claim['token'])
+        payload = {'run_id': 'codex-scope', 'status': 'successful', 'summary': 'Scoped',
+                   'harness': 'codex', 'model': 'gpt-6-sol', 'model_reported': False,
+                   'actual_model': None, 'model_observed': False,
+                   'status_provenance': {'primary': 'harness_telemetry'},
+                   'dirty_paths_changed': [], 'artifacts': {'dir': str(self.root / '.delegate/runs/codex-scope')}}
+        with patch.object(delegation, 'inspect_skill', return_value=self.fake_doctor()), \
+             patch.object(dispatch.shutil, 'which', return_value='node'), \
+             patch.object(dispatch.subprocess, 'run',
+                         return_value=subprocess.CompletedProcess([], 0, json.dumps(payload), '')):
+            dispatch.collect(self.root, self.feature, 'codex-scope')
+        with dispatch.edit_ledger(self.root, self.feature) as ledger:
+            first = {**ledger['attempts'][0], 'run_id': 'codex-scope-first', 'status': 'failed',
+                     'started_at': '2000-01-01T00:00:00+00:00', 'replacement_run_id': 'codex-scope'}
+            ledger['attempts'].insert(0, first)
+        run.complete(claim['token'], fixture.WorkflowTests.receipt(self, 'scope'))
+        events, _ = lifecycle.read_events(self.root / self.feature / 'workflow/lifecycle.jsonl')
+        accepted, = [e for e in events if e['event'] == 'accepted']
+        self.assertEqual(accepted['candidate_run_id'], 'codex-scope')
+        self.assertEqual(sorted(accepted['delegation_run_ids']), ['codex-scope', 'codex-scope-first'])
+        self.assertTrue(all(e['candidate_run_id'] is None for e in events if e['event'] != 'accepted'))
+
+    def test_a_rejection_after_the_exact_claim_check_names_the_validated_attempt(self):
+        import lifecycle
+        self.enable()
+        run = w.Run(self.root, self.feature)
+        run.start('acme/app#10')
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()),              patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}):
+            claim = run.claim({'session_id': 'test-session'})
+        log = self.root / self.feature / 'workflow/lifecycle.jsonl'
+        # Before the delegation check: no attempt exists, so the rejection names no candidate.
+        with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_STAGE_NOT_VERIFIED'):
+            run.complete(claim['token'], fixture.WorkflowTests.receipt(self, 'scope'))
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()),              patch.object(dispatch, 'launch', return_value={'run_id': 'codex-scope', 'state': 'running'}):
+            dispatch.start(self.root, self.feature, 'stage:scope', token=claim['token'])
+        payload = {'run_id': 'codex-scope', 'status': 'successful', 'summary': 'Scoped',
+                   'harness': 'codex', 'model': 'gpt-6-sol', 'model_reported': False,
+                   'actual_model': None, 'model_observed': False,
+                   'status_provenance': {'primary': 'harness_telemetry'},
+                   'dirty_paths_changed': [], 'artifacts': {'dir': str(self.root / '.delegate/runs/codex-scope')}}
+        with patch.object(delegation, 'inspect_skill', return_value=self.fake_doctor()),              patch.object(dispatch.shutil, 'which', return_value='node'),              patch.object(dispatch.subprocess, 'run',
+                         return_value=subprocess.CompletedProcess([], 0, json.dumps(payload), '')):
+            dispatch.collect(self.root, self.feature, 'codex-scope')
+        # After it: a later check refuses the receipt, and the validated attempt is on the record.
+        with patch.object(w, 'fingerprint_files', side_effect=w.WorkflowError('INPUT_MISSING')):
+            with self.assertRaisesRegex(w.WorkflowError, 'INPUT_MISSING'):
+                run.complete(claim['token'], fixture.WorkflowTests.receipt(self, 'scope'))
+        # A rejection at the very first check, on a fresh instance, is back to null.
+        bad = fixture.WorkflowTests.receipt(self, 'scope')
+        bad['outcome'] = 'failed'
+        with self.assertRaisesRegex(w.WorkflowError, 'STAGE_NOT_PASSED'):
+            w.Run(self.root, self.feature).complete(claim['token'], bad)
+        events, _ = lifecycle.read_events(log)
+        rejected = [e for e in events if e['event'] == 'rejected-completion']
+        self.assertEqual([e['candidate_run_id'] for e in rejected], [None, 'codex-scope', None])
+        self.assertEqual([e['reason'].split(':')[0] for e in rejected],
+                         ['DELEGATION_STAGE_NOT_VERIFIED', 'INPUT_MISSING', 'STAGE_NOT_PASSED'])
+
     def test_complete_refuses_a_legacy_stage_attempt_with_no_claim_token(self):
         """Finding 5, round 3: a stage attempt recorded before claim_token
         existed has none and can never match a claim's token; complete
@@ -3571,6 +3640,41 @@ class DelegationTests(unittest.TestCase):
         # Without a requested model only the driver's status reason can say so.
         self.assertFalse(rejected('Error: model is not available\n', requested=None))
         self.assertTrue(rejected('', requested=None, reason='Unknown model'))
+
+    def test_attempts_link_intent_claim_and_replaced_run_without_the_token(self):
+        """Lifecycle joins (1.12.0): a stage attempt carries intent_id and a non-credential claim_id, and a
+        replacement carries replaces_run_id. The claim token is never the claim_id."""
+        import lifecycle
+        self.enable()
+        run = w.Run(self.root, self.feature)
+        run.start('acme/app#10')
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()),              patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}):
+            claim = run.claim({'session_id': 'test-session'})
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()),              patch.object(dispatch, 'launch', return_value={'run_id': 'codex-scope', 'state': 'running'}):
+            started = dispatch.start(self.root, self.feature, 'stage:scope', token=claim['token'])
+        attempt = dispatch.find_run(dispatch.load_ledger(self.root, self.feature), 'codex-scope')
+        self.assertEqual(attempt['intent_id'], started['intent_id'])
+        self.assertEqual(attempt['claim_id'], lifecycle.claim_id_for(claim['token']))
+        self.assertEqual(attempt['claim_id'], claim['claim_id'])
+        self.assertNotEqual(attempt['claim_id'], claim['token'])
+        self.assertIsNone(attempt['replaces_run_id'])
+        self.assertIsNone(attempt['parent_run_id'])
+
+    def test_a_replacement_attempt_links_the_run_it_replaces(self):
+        self.tasks()
+        self.enable()
+        self.start_one(run_id='codex-1')
+        payload = self.failed_payload('codex-1', dirty_paths_changed=[], repo_root=str(self.root))
+        result = self.collect_with(payload, lambda *args, **kwargs: {'run_id': 'codex-2', 'state': 'running'},
+                                   run_id='codex-1')
+        self.assertEqual(result['replacement']['run_id'], 'codex-2')
+        ledger = dispatch.load_ledger(self.root, self.feature)
+        replacement = dispatch.find_run(ledger, 'codex-2')
+        self.assertEqual(replacement['replaces_run_id'], 'codex-1')
+        self.assertEqual(replacement['parent_run_id'], 'codex-1')
+        self.assertTrue(replacement['intent_id'])
+        self.assertIsNone(replacement['claim_id'])  # a task attempt has no stage claim
+        self.assertIsNone(dispatch.find_run(ledger, 'codex-1')['replaces_run_id'])
 
 
 if __name__ == '__main__':

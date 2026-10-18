@@ -89,6 +89,9 @@ Title: "Sanduq feature checkpoint v1". Required keys: `schema_version`, `run_id`
 | `status` | `in-progress`, `paused`, `ready_to_finalize`, `pr_open`, `blocked` or `failed`. |
 | `migrations[]` | Reviewed migrations: `reason`, `from`, `to`, `at`, `invalidated`, `preserved_as_historical`. |
 | `relocations[]` | Reviewed `relocate` entries: `actor`, `at`, `reason`, `old_identity`, `new_identity`, and flags such as `branch_rebound` and `history_changed`. |
+| `stage_plan` | 1.12.0+: `{v, generation, stages}`, the selected stage order after policy filtering, as of the last write. |
+| `next_action` | 1.12.0+: Workflow's own `next` evaluation as of the last write: `{text, stage, kind, evaluated_at, generation}`. `kind` is `active-claim` while a stage is claimed and `next-stage` otherwise. `null` when it could not be evaluated. |
+| `lifecycle_outbox` | 1.12.0+: lifecycle events queued with a state change and not yet appended to `lifecycle.jsonl`. Normally absent. See [lifecycle events](state-files.md#lifecycle-events-stage-plan-and-next-action-1120). |
 | `head`, `updated_at` | Last recorded commit and write time. |
 
 ## Receipt (`receipt-v1.schema.json`)

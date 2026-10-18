@@ -49,8 +49,20 @@ class ReportingInstructions(unittest.TestCase):
             if path.name != 'reporting.md':
                 self.assertNotRegex(flat(path), r'progress lane [^.]*(?:stage|scope-worker)', path.name)
 
+    def test_codex_worktrees_without_approved_hooks_self_report_and_workstream_lanes_are_marked(self):
+        text = flat(REFERENCES / 'reporting.md')
+        self.assertIn('progress bind --host codex --model <m> --effort <e>', text)
+        self.assertIn('Progress 1.2.0 or later', text)
+        self.assertIn('labelled self-report', text)
+        self.assertIn('never host-observed telemetry', text)
+        self.assertIn('`semantics: "workstream"`', text)
+        self.assertIn('--effort E --workstream`', text)  # the direct command marks the lane too
+        self.assertIn('leave `--workstream` out for a Progress older than 1.2.0', text)
+        self.assertIn('codex hooks not approved', text)
+        self.assertEqual(text.count('progress bind'), 1)
+
     def test_decision_reference_stays_small(self):
-        self.assertLess(len((REFERENCES / 'reporting.md').read_bytes()), 4000)
+        self.assertLess(len((REFERENCES / 'reporting.md').read_bytes()), 4600)
 
     def test_no_reference_asks_an_agent_to_keep_update_or_monitor_the_report(self):
         for path in self.references():

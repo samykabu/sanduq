@@ -6,8 +6,9 @@ phase. Fenced blocks and inline code spans are ignored, so task ids quoted in pr
 import re
 from pathlib import Path
 
-from ..util import clean
+from ..util import clean, read_bytes
 
+CRLF, CR, LF = chr(13) + chr(10), chr(13), chr(10)
 TASK = re.compile(r'^\s*[-*]\s+\[([ xX])\]\s+(T\d+)\b\s*(.*)$')
 HEADING = re.compile(r'^(#{1,3})\s+(.*?)\s*#*\s*$')
 FENCE = re.compile(r'^\s*(```|~~~)')
@@ -20,9 +21,49 @@ def _blank_spans(text):
     return SPAN.sub(lambda m: ' ' * len(m.group(0)), text)
 
 
+# ---- workstream legend ------------------------------------------------------------------------------------------------
+# A workstream tag is a bracket tag a tasks.md legend declares as a lane or workstream: a table row whose first cell holds
+# the tags (`[A]` / `[B]`) and whose second cell says "lane" or "workstream", or a bold `**Workstream A**` mention.
+# Role markers, `[P]` and phase headings never qualify, even when a legend row names them.
+ROLE_TAGS = frozenset(('IMPL', 'QA', 'DOCS', 'COLLECT', 'REVIEW', 'P', 'TDD', 'US'))
+TAG = re.compile(r'\[([A-Za-z0-9]{1,12})\]')
+LEGEND_ROW = re.compile(r'^\s*\|\s*([^|]+?)\s*\|\s*(.+?)\s*\|?\s*$')
+LEGEND_FIRST_CELL = re.compile(r'[\s`/,]*(?:\[[A-Za-z0-9]{1,12}\][\s`/,]*)+')
+BOLD_WORKSTREAM = re.compile(r'\*\*(?:Workstream|Lane)\s+([A-Za-z0-9]{1,12})\*\*', re.I)
+LEADING_TAGS = re.compile(r'^(?:\s*\[[^\]]*\])+')
+
+
+def _workstream_tag(tag):
+    return tag.upper() not in ROLE_TAGS and not re.fullmatch(r'US\d+', tag.upper())
+
+
+def legend(text):
+    """{tag: {'label': 'Workstream A', 'description': str|None}} for the workstream tags a tasks.md legend declares."""
+    found, fence = {}, None
+    for line in text.splitlines():
+        marker = FENCE.match(line)
+        if marker:
+            fence = None if fence == marker.group(1) else (fence or marker.group(1))
+            continue
+        if fence:
+            continue
+        row = LEGEND_ROW.match(line)
+        if row and LEGEND_FIRST_CELL.fullmatch(row.group(1)) and re.search(r'\b(?:lane|workstream)s?\b', row.group(2), re.I):
+            for tag in TAG.findall(row.group(1)):
+                if _workstream_tag(tag):
+                    detail = re.search(r'\*\*' + re.escape(tag) + r'\*\*\s+([^;.|]+)', row.group(2))
+                    found.setdefault(tag, {'label': f'Workstream {tag}', 'description': clean(detail.group(1), 100) if detail else None})
+        for tag in BOLD_WORKSTREAM.findall(line):
+            if _workstream_tag(tag):
+                found.setdefault(tag, {'label': f'Workstream {tag}', 'description': None})
+    return found
+
+
 def parse(text):
-    """Return {'title': str|None, 'tasks': [ordered task dicts]}."""
+    """Return {'title': str|None, 'tasks': [ordered task dicts], 'legend': {tag: {...}}}. Each task carries `tags` (the
+    leading bracket tags as written) and `workstream` (the one legend tag among them, else None)."""
     tasks, seen, phase, title, fence = [], set(), None, None, None
+    declared = legend(text)
     for line in text.splitlines():
         marker = FENCE.match(line)
         if marker:
@@ -49,17 +90,26 @@ def parse(text):
         parallel = bool(re.search(r'(?<![\w`])\[P\](?![\w`])', bare))
         shown = re.sub(r'\(\s*(?:depends on|after)\s+[^)]*\)', '', body, flags=re.I)
         shown = re.sub(r'(?<![\w`])\[P\](?![\w`])', '', shown)
+        lead = LEADING_TAGS.match(body)
+        tags = TAG.findall(lead.group(0)) if lead else []
+        mine = [t for t in tags if t in declared]
         tasks.append({'id': found.group(2), 'title': clean(shown, 160), 'phase': phase or '',
-                      'done': found.group(1) != ' ', 'parallel': parallel, 'depends_on': depends})
-    return {'title': title, 'tasks': tasks}
+                      'done': found.group(1) != ' ', 'parallel': parallel, 'depends_on': depends,
+                      'tags': tags, 'workstream': mine[0] if len(mine) == 1 else None})
+    return {'title': title, 'tasks': tasks, 'legend': declared}
+
+
+def _text(raw):
+    """Decode like Path.read_text: UTF-8 with universal newlines."""
+    return raw.decode('utf-8').replace(CRLF, LF).replace(CR, LF)
 
 
 def collect(feature_dir):
     path = Path(feature_dir) / 'tasks.md'
     try:
-        return parse(path.read_text(encoding='utf-8'))
+        return parse(_text(read_bytes(path)))
     except OSError:
-        return {'title': None, 'tasks': []}
+        return {'title': None, 'tasks': [], 'legend': {}}
 
 
 def expand(spec):

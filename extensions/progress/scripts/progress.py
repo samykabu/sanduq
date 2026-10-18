@@ -14,7 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from sanduq_progress import facts as factslib, hook as hooklib, model, refresh as refreshlib, render_md  # noqa: E402
-from sanduq_progress import snapshot, statusline as statuslib  # noqa: E402
+from sanduq_progress import selfreport, snapshot, statusline as statuslib  # noqa: E402
 from sanduq_progress.collect import plan as plancol, runs as runscol, tasks as taskscol  # noqa: E402
 from sanduq_progress.lock import Lock, LockBusy  # noqa: E402
 from sanduq_progress.paths import (ASSETS, NAME, PLAN_REGISTRY, PLAN_ROOT, RESERVED_ID, TASK_REF, Ctx, ProgressError, find_root, is_default_plan_dir,  # noqa: E402
@@ -66,11 +66,14 @@ def build_parser():
     s = verb('bind')
     s.add_argument('--session')
     s.add_argument('--host', choices=('claude', 'codex'), default='claude')
+    s.add_argument('--model', help='coordinator self-report: the model this session runs (shown as self-reported)')
+    s.add_argument('--effort', help='coordinator self-report: the reasoning effort this session runs (shown as self-reported)')
     s = verb('refresh')
     s.add_argument('--final', action='store_true', help='accepted for compatibility; every refresh is a full one')
     s.add_argument('--verbose', action='store_true')
     s = verb('status')
     s.add_argument('--json', action='store_true')
+    s.add_argument('--schema', choices=('v2', 'v3'), default='v3', help='projection schema for --json (default v3)')
     s = verb('lane')
     s.add_argument('id')
     s.add_argument('--tasks')
@@ -80,6 +83,7 @@ def build_parser():
     s.add_argument('--model')
     s.add_argument('--effort')
     s.add_argument('--close', action='store_true')
+    s.add_argument('--workstream', action='store_true', help='mark the lane as a workstream (assignment of tasks to an owner)')
     s = verb('block')
     s.add_argument('target')
     s.add_argument('--by', required=True)
@@ -118,6 +122,7 @@ def build_parser():
     verb('theme', add_help=False)  # every other token goes to the theme module
     s = verb('export')
     s.add_argument('--format', choices=('md', 'json'), default='md')
+    s.add_argument('--schema', choices=('v2', 'v3'), default='v3', help='projection schema to export (default v3)')
     s.add_argument('--out')
     s = verb('hook')
     s.add_argument('event')
@@ -390,6 +395,17 @@ def cmd_theme(a, root):
 def cmd_bind(a, root):
     ctx = target_ctx(a, root)
     require_init(ctx)
+    if a.model or a.effort:
+        # Self-report: stored in .host/ (durable, git-ignored), scoped to this worktree and feature, and to the session when
+        # one is given (otherwise an explicit "session unknown" report). Host observations always win per field.
+        values = {k: factslib.sanitise(v, ctx.root, 80) for k, v in (('model', a.model), ('effort', a.effort)) if v}
+        with locked(ctx):
+            selfreport.write(ctx, a.host, a.session, values, now(), actor=a.actor)
+            if a.session:
+                snapshot.bind_session(ctx, a.host, a.session, now())
+            refresh_now(ctx)
+        print(f"progress: self-report {', '.join(sorted(values))} ({a.host}{', session ' + a.session if a.session else ', session unknown'})")
+        return 0
     if a.session:
         snapshot.bind_session(ctx, a.host, a.session, now())
         print(f'progress: bound {a.session}')
@@ -409,6 +425,7 @@ def cmd_refresh(a, root):
 
 
 def summary_line(report):
+    """The one-line status. It reads the v2 summary keys (the line is a long-standing consumer contract)."""
     s = report['summary']
     return (f"progress: {s['tasks_done']}/{s['tasks_total']} tasks, {s['lanes_active']} lanes active, "
             f"{s['blocked']} blocked, {s['decisions_pending']} decisions pending (rev {report['rev']})")
@@ -418,8 +435,12 @@ def cmd_status(a, root):
     ctx = target_ctx(a, root)
     require_init(ctx)
     state = refreshlib.read_state(ctx)
-    report = model.build(ctx, now(), int(state.get('rev') or 0), state)
-    print(json.dumps(report, indent=2, ensure_ascii=False) if a.json else summary_line(report) + codex_hint(root))
+    wanted = model.schema_name(a.schema)
+    v3, v2 = model.build_pair(ctx, now(), int(state.get('rev') or 0), state, want_v3=a.json and wanted == model.SCHEMA_V3)
+    if a.json:
+        print(json.dumps(v3 if wanted == model.SCHEMA_V3 else v2, indent=2, ensure_ascii=False))
+    else:
+        print(summary_line(v2) + codex_hint(root))
     return 0
 
 
@@ -467,8 +488,9 @@ def cmd_lane(a, root):
         for key in ('harness', 'model', 'effort'):
             if getattr(a, key) is not None:
                 requested[key] = factslib.sanitise(getattr(a, key), ctx.root, 60)
+        extra = {'semantics': 'workstream'} if a.workstream else {k: old[k] for k in ('semantics',) if k in old}
         record = factslib.make(
-            'lane', ident, a.actor, now=now(), tasks=tasks,
+            'lane', ident, a.actor, now=now(), tasks=tasks, **extra,
             owner=factslib.sanitise(a.owner, ctx.root, 80) if a.owner is not None else old.get('owner'),
             label=factslib.sanitise(a.label, ctx.root, 60) if a.label is not None else old.get('label') or ident,
             requested=requested, state='closed' if a.close else 'open' if (a.tasks is not None or not old) else old.get('state', 'open'))
@@ -677,6 +699,10 @@ def cmd_export(a, root):
     if not isinstance(report, dict):
         with locked(ctx):
             report = refresh_now(ctx)
+    if model.schema_name(a.schema) != report.get('schema'):
+        # The stored report is v3. The other schema is built fresh from the producers, at the stored revision.
+        state = refreshlib.read_state(ctx)
+        report = model.build(ctx, now(), int(state.get('rev') or 0), state, schema=a.schema)
     text = json.dumps(report, indent=2, ensure_ascii=False) + '\n' if a.format == 'json' else render_md.render(report)
     if a.out:
         atomic_write(Path(a.out), text)

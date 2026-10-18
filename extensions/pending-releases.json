@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Workflow 1.11.2 and Memory 2.2.1 retain their independently reviewed and locally validated fixes. Assure 2.3.3 and User Manual 1.5.3 ship the reviewed shared freshness helper; Workflow 1.11.2 pins both selected dependencies. This release-closure batch changes metadata only; reviewed production code is unchanged. All four versions are ready for publication through the existing release workflow after successful current-main CI; verify immutable assets before catalog promotion."
+  "versions": {
+    "workflow": "1.12.0",
+    "scope": "1.7.0",
+    "progress": "1.2.0"
+  },
+  "status": "ready",
+  "note": "Progress 1.2.0 vendors agent-tools 1.4.2 (projection v3 and the Timeline page). Workflow 1.12.0 records lifecycle events, the stage plan, the next action and run links, and reads Progress through --schema v2. Scope 1.7.0 writes clarification records. Reviewed over four cycles by Claude Fable 5.1 and Codex gpt-6-astra. Publish after successful main CI and downloaded asset verification."
 }

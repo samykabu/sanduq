@@ -18,7 +18,9 @@ except ImportError:  # run as a script
 BLOCKS = ("header", "decisions", "blockers", "orchestrator", "lanes", "boards", "events")  # attention first
 TOKEN_KEYS = ("bg", "surface", "text", "muted", "line", "brand", "accent",
               "active", "waiting", "blocked", "done", "failed")
-TOP_KEYS = {"v", "preset", "title", "logo", "density", "blocks", "hidden", "tokens", "font"}
+TOP_KEYS = {"v", "preset", "title", "logo", "density", "blocks", "hidden", "tokens", "font", "layout"}
+LAYOUTS = ("timeline", "classic")  # timeline: the v3 Timeline view (default); classic: the v2 lanes view, fed the v2 document
+DEFAULT_LAYOUT = "timeline"
 DENSITIES = ("comfortable", "compact")
 FONT_KEYS = ("sans", "mono")
 DEFAULT_FONT = {"sans": "system-ui, -apple-system, 'Segoe UI', 'Noto Sans Arabic', sans-serif",
@@ -122,6 +124,8 @@ def validate(doc):
             _fail(f"{k} must be a short string or null")
     if doc.get("density", "comfortable") not in DENSITIES:
         _fail("density must be comfortable or compact")
+    if doc.get("layout", DEFAULT_LAYOUT) not in LAYOUTS:
+        _fail("layout must be timeline or classic")
     for k in ("blocks", "hidden"):
         val = doc.get(k, [])
         if not isinstance(val, list) or any(b not in BLOCKS for b in val) or len(set(val)) != len(val):
@@ -159,7 +163,7 @@ def resolve_doc(doc=None):
     font.update(doc.get("font", {}))
     return {"v": 1, "preset": preset, "title": doc.get("title"), "logo": doc.get("logo"),
             "density": doc.get("density", "comfortable"), "blocks": order, "hidden": hidden,
-            "tokens": tokens, "font": font}
+            "tokens": tokens, "font": font, "layout": doc.get("layout", DEFAULT_LAYOUT)}
 
 
 def theme_path(project_root):
@@ -199,7 +203,8 @@ def render_layout(resolved):
     hidden = list(resolved["hidden"])
     blocks = [b for b in resolved["blocks"] if b not in hidden]
     payload = {"blocks": blocks, "hidden": hidden, "density": resolved["density"],
-               "title": resolved.get("title"), "logo": resolved.get("logo"), "preset": resolved["preset"]}
+               "title": resolved.get("title"), "logo": resolved.get("logo"), "preset": resolved["preset"],
+               "layout": resolved.get("layout", DEFAULT_LAYOUT)}
     text = json.dumps(payload, ensure_ascii=True, separators=(",", ":")).replace("</", "<\\/")
     return "window.__SANDUQ_PROGRESS_LAYOUT__=" + text + ";\n"
 
@@ -267,21 +272,76 @@ def from_illustrate(project_root):
     return {"v": 1, "preset": name, "tokens": tokens}
 
 
+def _stored(project_root):
+    """The theme.json document as stored ({} when there is none); an unreadable one is an error, never silently replaced."""
+    path = theme_path(project_root)
+    if not path.is_file():
+        return {}
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        _fail("cannot read theme.json: " + str(exc)[:80])
+    validate(doc)
+    return doc
+
+
 def _store(project_root, doc):
     validate(doc)
     _atomic_write(theme_path(project_root), json.dumps(doc, indent=2, ensure_ascii=False) + "\n")
 
 
+def _views(root):
+    return [*root.glob("specs/*/progress/.view"), *root.glob(PLAN_ROOT + "/*/.view"),
+            *(root / d / ".view" for d in registry_dirs(root))]
+
+
 def _refresh_views(project_root, resolved):
-    root = Path(project_root)
-    views = [*root.glob("specs/*/progress/.view"), *root.glob(PLAN_ROOT + "/*/.view"),
-             *(root / d / ".view" for d in registry_dirs(root))]
-    for view in views:
+    for view in _views(Path(project_root)):
         if view.is_dir():
             write_assets(view, resolved)
 
 
-USAGE = "theme --preset NAME | --from-illustrate | --file PATH | --show | --help"
+def _republish(project_root):
+    """Rebuild report.json and data.js for every initialised report, each under its own report lock. The layout decides
+    which document data.js carries (v3 for timeline, v2 for classic), so changing it must publish the matching one now;
+    the next hook or refresh would otherwise leave the browser showing the wrong schema. Returns the reports it could not
+    republish as (feature, reason) pairs; the theme itself is already saved."""
+    import importlib
+    from datetime import datetime, timezone
+    package = __package__ or "sanduq_progress"  # run as a script, there is no package: the top of this file puts it on sys.path
+    Lock, LockBusy = (getattr(importlib.import_module(package + ".lock"), n) for n in ("Lock", "LockBusy"))
+    Ctx = importlib.import_module(package + ".paths").Ctx
+    refresh = importlib.import_module(package + ".refresh").refresh
+    util = importlib.import_module(package + ".util")
+    ProgressError, utcnow = util.ProgressError, util.utcnow
+    root = Path(project_root)
+    stamp = os.environ.get("SANDUQ_PROGRESS_NOW")  # the same test clock the progress command honours
+    moment = datetime.fromisoformat(stamp.replace("Z", "+00:00")).astimezone(timezone.utc) if stamp else utcnow()
+    failed = []
+    for view in _views(root):
+        directory = view.parent
+        is_feature = directory.name == "progress" and directory.parent.parent.name == "specs"
+        feature = (directory.parent if is_feature else directory).relative_to(root).as_posix()
+        try:
+            ctx = Ctx(root, feature)
+            if not ctx.report.is_file():
+                continue  # never initialised: nothing to republish
+            lock = Lock(ctx.lock, retries=3, delay=0.2)
+            try:
+                lock.acquire()
+            except LockBusy:
+                failed.append((feature, "another progress command is running"))
+                continue
+            try:
+                refresh(ctx, moment)
+            finally:
+                lock.release()
+        except (OSError, ValueError, ProgressError) as exc:
+            failed.append((feature, type(exc).__name__))
+    return failed
+
+
+USAGE = "theme --preset NAME | --from-illustrate | --file PATH | --layout timeline|classic | --show | --help"
 
 
 def cli(argv, project_root=None):
@@ -294,7 +354,14 @@ def cli(argv, project_root=None):
         if args == ["--show"]:
             print(json.dumps(resolve(root), indent=2))
             return 0
-        if len(args) == 2 and args[0] == "--preset":
+        if len(args) == 2 and args[0] == "--layout":
+            if args[1] not in LAYOUTS:
+                _fail("layout must be timeline or classic")
+            doc = _stored(root)  # only the layout changes; every other customization is kept
+            doc["layout"] = args[1]
+            doc.setdefault("v", 1)
+            label = "layout " + args[1]
+        elif len(args) == 2 and args[0] == "--preset":
             if args[1] not in PRESETS:
                 _fail("unknown preset " + args[1][:40])
             doc, label = {"v": 1, "preset": args[1]}, args[1]
@@ -312,9 +379,17 @@ def cli(argv, project_root=None):
         else:
             print("progress: error PROGRESS_USAGE " + USAGE)
             return 2
+        if "layout" not in doc:
+            keep = _stored(root).get("layout")  # a new look keeps the layout the user picked
+            if keep:
+                doc["layout"] = keep
+        before = resolve(root).get("layout")
         _store(root, doc)
         _refresh_views(root, resolve_doc(doc))
         print(f"progress: theme {label}")
+        if resolve_doc(doc).get("layout") != before:
+            for feature, why in _republish(root):
+                print(f"progress: warning data.js for {feature} not republished ({why}); run progress refresh")
         return 0
     except ThemeError as exc:
         print(f"progress: error PROGRESS_THEME_INVALID {exc}")

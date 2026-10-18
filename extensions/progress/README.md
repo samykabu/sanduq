@@ -1,8 +1,9 @@
 # Sanduq Progress Report
 
-**Purpose:** a live report for one Spec Kit feature: which lanes run which tasks, what is blocked, which decisions
-are open, and what the orchestrating agent is using. The report is a deterministic projection. It is rebuilt from the
-feature files and the host's native hook payloads, so no agent is spent keeping it up to date.
+**Purpose:** a live timeline for one Spec Kit feature: which Workflow stage is running and for how long, what needs
+attention, which decisions are open, which workstreams carry the Execute tasks, and what the orchestrating agent is
+using. The report is a deterministic projection. It is rebuilt from the feature files and the host's native hook
+payloads, so no agent is spent keeping it up to date.
 
 ![Progress report, light theme](docs/assets/progress-light.png)
 
@@ -11,8 +12,10 @@ Contents: [Install](#install) · [Quick start](#quick-start) · [How it plugs in
 [Files](#files) · [Theming](#theming) · [Token cost](#token-cost) · [Workflow](#using-with-sanduq-workflow) · [Plans outside Spec Kit](#plans-outside-spec-kit) ·
 [Upgrading](#upgrading-from-100) · [Troubleshooting](#troubleshooting) · [Limits](#limits)
 
-A **lane** is one unit of assignment: a worker, a delegated run or a host subagent that owns a list of tasks. A
-**projection** is a report rebuilt from its sources on every refresh, so deleting it loses nothing.
+A **lane** is a recorded assignment of tasks to a worker. Since 1.2.0 a lane is only an Execute **workstream**, marked
+with `progress lane ... --workstream`. Lifecycle stage runs (specify, plan, tasks and the rest) are recorded by
+Workflow's delegation ledger and need no lane. A **projection** is a report rebuilt from its sources on every refresh,
+so deleting it loses nothing.
 
 ## Install
 
@@ -55,15 +58,18 @@ The install registers five native hooks (see [How it plugs in](#how-it-plugs-in)
    The `bind=` value binds the current session to the feature: the host's next hook for that shell call completes it.
 3. Open `specs/001-demo/progress/.view/index.html` in a browser. It works from `file://`, needs no server and polls
    for new data every 3 seconds.
-4. Assign work. Record a lane when you hand tasks to a worker:
+4. Assign Execute work. Record a workstream lane when you hand tasks to a worker. `--workstream` needs Progress 1.2.0
+   or later; without it the lane is a plain assignment and the Timeline page does not group tasks under it:
 
    ```bash
-   python .specify/extensions/progress/scripts/progress.py lane L1 --tasks T001-T003 --owner worker-a --label Core --harness codex --model gpt-6.1-sol --effort high
+   python .specify/extensions/progress/scripts/progress.py lane L1 --tasks T001-T003 --owner worker-a --label Core --harness codex --model gpt-6.1-sol --effort high --workstream
    ```
 
    ```text
    progress: L1 open 3 tasks
    ```
+
+   Stage runs that Workflow delegates appear on the page without this step.
 
 5. Work as usual. Check tasks off in `tasks.md`. Hooks add model, effort, context and child agents. Read the state
    from the page, or ask for the one-line summary:
@@ -72,6 +78,10 @@ The install registers five native hooks (see [How it plugs in](#how-it-plugs-in)
    progress: 0/6 tasks, 1 lanes active, 0 blocked, 0 decisions pending (rev 15)
    ```
 
+   The summary is built from the v2 counts, so its wording did not change in 1.2.0. `progress status --json` prints the
+   v3 projection (`sanduq.progress.v3`) that the Timeline page reads. `progress status --json --schema v2` prints the
+   old document, kept for the Workflow bridge and other older readers.
+
 In the rest of this page `progress` stands for `python .specify/extensions/progress/scripts/progress.py`, run from the
 repository root.
 
@@ -79,8 +89,20 @@ repository root.
 
 | Setup | What feeds the report |
 | --- | --- |
-| Plain Spec Kit | `tasks.md` (task state, dependencies), native host hooks (model, effort, context, child agents), and a small tracked fact file for what nothing else records: lane assignments, blockers, decisions, notes |
-| With Sanduq Workflow | The same, plus Workflow's checkpoint, delegation ledger and decisions. Retries and attempts become attempts of one lane. Decisions come from Workflow, so `progress decide` is refused |
+| Plain Spec Kit | `tasks.md` (task state, dependencies), native host hooks (model, effort, context, child agents), and a small tracked fact file for what nothing else records: workstream lanes, blockers, decisions, notes |
+| With Sanduq Workflow | The same, plus the files in the table below. Decisions come from Workflow, so `progress decide` is refused |
+
+Producer files Progress reads when they exist. Every one is optional. An older producer leaves the matching fields
+empty or labelled `partial`, and missing evidence shows as unknown, never as a guess.
+
+| File | Producer | Gives the page |
+| --- | --- | --- |
+| `workflow/checkpoint.json` | Workflow | Stage, status, receipts, recoveries, pauses, `stage_plan` (the stages to draw, in order) and `next_action` (shown with its age; Progress never computes one) |
+| `workflow/lifecycle.jsonl` | Workflow 1.12.0 | Claim, resume, accepted, rejected-completion, recovered, paused, invalidated and revalidated events, which give the stage episodes and validity. Read from its tail above 8 MiB |
+| `workflow/delegations.json` | Workflow | Delegated runs, with links to their claim, parent and replaced run |
+| Workflow decisions | Workflow | Decisions and their answers |
+| `workflow/clarifications.json` | Scope 1.7.0 | Clarification questions, answers and whether they were applied. A file above 2 MiB is not read |
+| `.delegate/runs` | delegate-task | Harness status, usage and elapsed time of each run |
 
 Spec Kit calls two lifecycle hooks, both optional and both offered as a prompt:
 
@@ -94,27 +116,27 @@ that prints nothing and always exits 0. `hook.py` uses only the standard library
 when Progress was never initialised in the project, or the session is not bound.
 
 Under Workflow, `speckit.workflow.reconcile` leaves these hooks and events enabled. The agent's part is small. Read
-[the skill](skills/progress/SKILL.ext.md): record a lane when you assign work, and a blocker, decision or note when one
+[the skill](skills/progress/SKILL.ext.md): record a workstream lane when you assign Execute work, and a blocker, decision or note when one
 appears. Everything else is collected. Reporting is a deterministic projection, and no agent is spawned, kept,
 messaged or polled to maintain it.
 
 ## What the report shows
 
-Each block can be hidden or reordered in [the theme file](#theming).
+The page is a timeline, top to bottom. Each section can be hidden or reordered in [the theme file](#theming).
 
-| Block | Shows | Comes from |
+| Section | Shows | Comes from |
 | --- | --- | --- |
-| Header | Feature title, id, issue link, branch, Workflow stage, a progress bar, and counts of tasks done, lanes active, blocked and decisions pending | `tasks.md` heading and checkboxes; git branch; the Workflow checkpoint (stage, issue) |
-| Orchestrator | Host, model, effort, context used (gauge), elapsed time, session id | Host hooks and, on Claude Code, the status line. Each value shows its fidelity |
-| Lanes | One row per lane: owner, requested and observed model and effort, status, elapsed, active time, last observed, attempts. A filter narrows the boards to one lane | `lane` facts; Workflow delegation attempts; host child agents (`C1`, `C2`, ...) |
-| Boards | Tasks grouped as Active, Waiting, Blocked and Done, per lane, plus an Unassigned board | `tasks.md` checkboxes; open blockers; the lane that owns each task |
-| Decisions | Pending questions with their options, and made decisions with who decided and an evidence link | `decide` facts, or the Workflow ledger when Workflow is installed |
-| Blockers | Id, blocked task or lane, what blocks it, since when, source | `block` facts; Workflow pauses; delegation state |
-| Events | The last 30 derived events: lane changes, attempts, notes, subagent starts | The other sources, in time order |
+| Header | Feature title, id, issue link, branch, then the stage as `stage · status · validity` and the next action with its age | `tasks.md` heading; git branch; the Workflow checkpoint (stage, `next_action`, receipts) and `lifecycle.jsonl` (validity) |
+| Needs attention | Open blockers, pending and conflicting decisions, failed runs with no recovery recorded, and a diagnosed telemetry gap such as hooks not approved. The stale banner (below) is added by the page | `block` facts; Workflow pauses; decisions and clarifications; delegation state; the host snapshot |
+| Orchestrator | Host, model, effort, context used, elapsed time, session id. Each value shows where it came from; a value the coordinator typed with `progress bind` is labelled self-reported | Host hooks and, on Claude Code, the status line; `.host/self-report.json` |
+| Stages over time | A Gantt chart with one bar per Workflow stage. Open a stage to see its episodes (one claim or resume to its end) and runs. A run with no recorded episode says "episode unknown". A stage is drawn open only when something confirms it is running now; a stage with no recorded end is drawn short with a broken edge and labelled "end unknown" | `lifecycle.jsonl`; checkpoint receipts and recoveries; `stage_plan`; delegation runs |
+| What happened | Curated events: accepted and rejected stages, pauses, recoveries, invalidations, failures, answered decisions, blockers opened and resolved, and every coordinator note. Shows the latest and expands to all | `lifecycle.jsonl`; the checkpoint; delegation ledger; `decide`, `block` and `note` facts |
+| Workstreams during Execute | Tasks grouped by workstream with owners over time, runs and any task that two workstreams both claim | `lane ... --workstream` facts first, then the task tags a legend in `tasks.md` declares, else Shared |
+| Decisions | Pending and made decisions, who decided, the answer, evidence links, and which sources were checked, so "none recorded" is only claimed for a source that was readable | `decide` facts, the Workflow ledger and `clarifications.json` |
+| History | Retired lanes (`L`, `W`, `C` ids) and the run or workstream each now maps to, or why none does. Collapsed | `facts.jsonl`; only explicit links map an old lane to a run or workstream |
+| All runs | Every run, failures first. Collapsed, with a search box, a filter and pages of 10 | Delegation ledger; `.delegate/runs`; host child agents |
 
-Lane status is one of `pending`, `active`, `waiting`, `blocked`, `done` or `failed`. A task is Active when it is the
-first unchecked, unblocked task of an active lane. Checking the box in `tasks.md` is the only thing that completes
-a task.
+A task is done only when its box is checked in `tasks.md`. Progress writes nothing there.
 
 Two banners sit above the report:
 
@@ -133,7 +155,7 @@ Every measured value carries its source and fidelity. Unknown is shown as unknow
 | Fact | Claude Code | Codex |
 | --- | --- | --- |
 | Task state, dependencies | Exact, from `tasks.md` | Exact, from `tasks.md` |
-| Lane, blocker, decision, note | Exact, recorded by verb | Exact, recorded by verb |
+| Workstream lane, blocker, decision, note | Exact, recorded by verb | Exact, recorded by verb |
 | Model | Exact from the status line when installed; partial from hooks | Partial, from the rollout file |
 | Effort | Exact from hook and status line payloads where the host sends it | Partial, from the rollout file |
 | Context use | Exact from the status line | Partial, from the rollout file |
@@ -150,8 +172,8 @@ guessed feature.
 
 ```text
 specs/<feature>/progress/
-  facts.jsonl      tracked in git: lanes, blockers, decisions, notes, legacy attempts
-  .host/           git-ignored, durable: host snapshots, the home of child agent identity
+  facts.jsonl      tracked in git: workstream lanes, blockers, decisions, notes, legacy attempts
+  .host/           git-ignored, durable: host snapshots (the home of child agent identity) and self-report.json
   .view/           git-ignored, disposable: the report (index.html, data.js, report.json, theme.css, state.json, lock)
 .specify/progress/
   config.json      debounce_seconds (5), stale_after_seconds (600), status line state
@@ -175,15 +197,18 @@ link or junction (`PROGRESS_UNSAFE_TARGET`). The layout and every schema are in 
 | `$speckit-progress-theme` | Choose a preset, import the Illustrate theme or load a file |
 | `$speckit-progress-export` | Write the projection as Markdown or JSON |
 
-The `lane`, `block`, `unblock`, `decide`, `note`, `attempt` and `runs` verbs run through the CLI. Every verb, flag,
+`progress status --json` prints the v3 projection and `--schema v2` the old one (see [Quick start](#quick-start)).
+`progress bind --host codex --model gpt-6.1-sol --effort high` records the coordinator's own model and effort when the host
+reports nothing; the page labels them self-reported and never lets them replace a value the host observed. The `lane`, `block`, `unblock`, `decide`, `note`, `attempt` and `runs` verbs run through the CLI. Every verb, flag,
 output line, exit code, schema and example is in [the command reference](docs/commands.md). The internal
 `speckit.progress.hook` command (one script for all five hook events) is not registered as a skill.
 
 ## Theming
 
 Four presets (`sanduq`, `cobalt`, `emerald`, `classic`) in light and dark, tokens only. `--from-illustrate` maps the
-project's Illustrate theme. Block order, hidden blocks, density, title, logo and fonts are set in
-`.specify/progress/theme.json`.
+project's Illustrate theme. Section order, hidden sections, density, title, logo and fonts are set in
+`.specify/progress/theme.json`. `progress theme --layout timeline|classic` picks the page. `timeline` is the default.
+`classic` is the old lanes and boards page, fed the v2 document, and is kept for one release only.
 
 ![Progress report, dark theme](docs/assets/progress-dark.png)
 
@@ -203,9 +228,11 @@ tokenizer exists.
 
 | Approach | Updates | Setup |
 | --- | ---: | ---: |
-| Progress verbs | 1,857 | 636 |
+| Progress verbs | 2,419 | 903 |
 | Hand-edited Markdown report | 59,967 | 581 |
-| Legacy Workflow report protocol | 12,030 | 3,926 |
+
+The legacy Workflow report protocol was not run in the latest benchmark because Workflow is not present in that checkout.
+Its earlier figures (12,030 updates, 3,926 setup) are not repeated here.
 
 Task start, completion and reopening cost nothing because they are read from `tasks.md`. The skill is the setup cost
 you pay on each load, so it stays short. The full table by update class, the assumptions and the cl100k_base counts
@@ -245,13 +272,18 @@ config and theme.
 - **Hooks run `scripts/hook.py`.** A project where Progress was never initialised gets nothing written, and an
   unbound session is logged once per session id.
 
+Upgrading to 1.2.0 needs no data change. Run `progress init` once per feature to copy the Timeline page into `.view/`.
+`facts.jsonl` is not rewritten, so lanes recorded before 1.2.0 carry no workstream marker and are not grouped as workstreams. Record
+a new lane with `--workstream` for Execute work. To keep the old page for one more release, run
+`progress theme --layout classic`.
+
 The full list of changes is in [the changelog](CHANGELOG.md).
 
 ## Plans outside Spec Kit
 
 Progress also reports on any Markdown plan with `- [ ]` / `- [x]` items; no Spec Kit feature is needed. The code is the
 portable `progress-report` skill, vendored from [sanduq-skills](https://github.com/samykabu/sanduq-skills) at
-`agent-tools-v1.2.0` (see `vendor.lock.json`; edit it there, not here).
+`agent-tools-v1.4.0` (see `vendor.lock.json`; edit it there, not here).
 
 ```bash
 progress hooks install --host claude        # once: model, effort, context and child agents (or --host codex)

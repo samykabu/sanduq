@@ -9,6 +9,8 @@ import os
 import re
 import subprocess
 import sys
+import uuid
+from datetime import datetime, timezone
 from urllib.parse import quote
 from pathlib import Path
 
@@ -205,6 +207,191 @@ def apply_edits(spec, edits):
     return spec
 
 
+CLARIFICATIONS_FILE = 'workflow/clarifications.json'
+ANSWER_LINE = r'^\s*{qid}\s*[:\-]\s*(.*)$'
+VALUE_LIMIT = 500
+
+
+def comment_url(repo, number, comment_id):
+    return f'https://github.com/{repo}/issues/{number}#issuecomment-{comment_id}'
+
+
+EVIDENCE_KINDS = ('comment', 'disposition', 'selection', 'closure')
+
+
+def evidence_ref(kind, url=None, comment_id=None, explanation=None):
+    """One evidence reference in the pinned shape: `{kind, url|null, comment_id|null, explanation|null}`."""
+    assert kind in EVIDENCE_KINDS, kind
+    return {'kind': kind, 'url': url, 'comment_id': comment_id, 'explanation': explanation}
+
+
+def reply_text(body, qid):
+    """The part of a human comment that answers `qid`: its own line, else the whole plain text."""
+    plain = plain_lines(body)
+    for line in plain.splitlines():
+        found = re.match(ANSWER_LINE.format(qid=re.escape(qid)), line, re.I)
+        if found and found[1].strip():
+            return found[1].strip()
+    return plain
+
+
+def reply_answer(text, options):
+    """`A`, `A, B` or `A - feedback` against the question's option letters; anything else is free text."""
+    head = re.split(r'\s+[\u2014\u2013-]\s+', text, maxsplit=1)[0].strip()
+    labels = [part.strip().upper() for part in re.split(r'\s*[,/&]\s*|\s+and\s+', head) if part.strip()]
+    valid = {option_label(i) for i in range(1, len(options) + 1)}
+    if labels and options and all(label in valid for label in labels):
+        return ('single', labels[0]) if len(labels) == 1 else ('multiple', labels)
+    return 'text', text[:VALUE_LIMIT]
+
+
+def answer_record(question, answer, comments):
+    """(answer, editor, answered_at, evidence) for one prior question, from recorded human evidence only.
+
+    A checkbox selection has no recorded author or time (GitHub does not say who ticked it), so both stay null.
+    """
+    qid = question['id']
+    options = question.get('options') or []
+    evidence = []
+    chosen = None
+    for cid in answer.get('comment_ids', []):
+        comment = comments.get(cid)
+        if comment is None:
+            continue
+        if cid == question.get('comment_id'):
+            evidence.append(evidence_ref('selection', question.get('comment_url'), cid))
+            picked = question['selection']
+            if picked.get('state') == 'selected':
+                chosen = chosen or ({'kind': 'single', 'value': picked['labels'][0]}, None, None)
+        else:
+            evidence.append(evidence_ref('comment', comment.get('html_url'), cid))
+            if chosen is None:
+                kind, value = reply_answer(reply_text(comment.get('body', ''), qid), options)
+                chosen = ({'kind': kind, 'value': value}, (comment.get('user') or {}).get('login'),
+                          comment.get('created_at'))
+    return (chosen or (None, None, None)) + (evidence,)
+
+
+def clarification_items(snapshot, analysis, outcome, round_number, batch, repo, comment_ids, spec_path, observed_at):
+    """Normalized clarification records for one validated publication. Pure: no GitHub calls, no writes."""
+    number = snapshot['issue']['number']
+    comments = {c['id']: c for c in snapshot['comments']}
+    items = []
+    by_question = {a['question_id']: a for a in analysis.get('answers', [])}
+    for qid, prior in snapshot['history']['questions'].items():
+        answer = by_question[qid]
+        disposition = answer['disposition']
+        value, editor, answered_at, evidence = answer_record(prior, answer, comments) \
+            if disposition in ('answered', 'superseded') else (None, None, None, [])
+        applied = None
+        if disposition == 'answered':
+            state = 'applied'
+            applied = {'at': observed_at, 'evidence': [spec_path + '#speckit-clarification:spec ' + batch]}
+        elif disposition == 'superseded':
+            state = 'superseded'
+        elif outcome == 'closed':
+            state = 'waived'
+            evidence = [evidence_ref('closure', comment_url(repo, number, cid), cid)
+                        for cid in snapshot['policy'].get('control_comment_ids', [])]
+        elif prior['selection'].get('state') in ('ambiguous', 'edited'):
+            state = 'conflict'
+            evidence = [evidence_ref('selection', prior.get('comment_url'), prior.get('comment_id'))]
+        else:
+            state = 'pending'
+        items.append({'source_id': qid, 'question': prior['question'], 'options': list(prior.get('options') or []),
+                      'answer': value, 'state': state,
+                      'url': prior.get('comment_url') or comment_url(repo, number, prior.get('comment_id')),
+                      'editor': editor, 'observed_at': observed_at, 'answered_at': answered_at, 'applied': applied,
+                      'evidence': evidence + [evidence_ref(
+                          'disposition', explanation=(disposition + ': ' + str(answer.get('explanation', '')))[:VALUE_LIMIT])],
+                      'batch': batch})
+    if outcome == 'waiting':
+        for index, question in enumerate(analysis['questions'], 1):
+            qid = f'C{round_number}Q{index}'
+            url = comment_url(repo, number, comment_ids[qid])
+            items.append({'source_id': qid, 'question': question['question'],
+                          'options': list(question.get('options') or []), 'answer': None, 'state': 'pending',
+                          'url': url, 'editor': None, 'observed_at': observed_at, 'answered_at': None,
+                          'applied': None,
+                          'evidence': [evidence_ref('comment', url, comment_ids[qid])],
+                          'batch': batch})
+    return items
+
+
+def substance(item):
+    """What identifies a revision: everything except when it was observed and which batch re-observed it."""
+    value = {k: v for k, v in item.items() if k not in ('observed_at', 'batch', 'revision')}
+    if value.get('applied'):
+        value['applied'] = {k: v for k, v in value['applied'].items() if k != 'at'}
+    return value
+
+
+def merge_items(existing, fresh, batch):
+    """Add this batch's records to the kept ones. A record this batch already wrote is replaced (replay); an
+    unchanged record keeps its revision; a changed one becomes the next revision. Earlier revisions stay."""
+    items = [dict(item) for item in existing]
+    for new in fresh:
+        history = [i for i, item in enumerate(items) if item['source_id'] == new['source_id']]
+        latest = items[history[-1]] if history else None
+        if latest and latest.get('batch') == batch:
+            items[history[-1]] = dict(new, revision=latest['revision'])
+        elif latest and substance(latest) == substance(new):
+            continue
+        else:
+            items.append(dict(new, revision=(latest['revision'] + 1) if latest else 1))
+    return items
+
+
+def _is_link(path):
+    try:
+        info = os.lstat(path)
+    except OSError:
+        return False
+    return os.path.islink(path) or bool(getattr(info, 'st_file_attributes', 0) & 0x400)
+
+
+def well_formed(items):
+    """True when every kept item can be merged: an object with a text `source_id` and a positive integer `revision`."""
+    return isinstance(items, list) and all(
+        isinstance(item, dict) and isinstance(item.get('source_id'), str) and item['source_id']
+        and type(item.get('revision')) is int and item['revision'] >= 1 for item in items)
+
+
+def persist_clarifications(path, fresh, batch):
+    """Write `workflow/clarifications.json` atomically, keeping prior revisions."""
+    path = Path(path)
+    for item in (path.parent, path):
+        if _is_link(item):
+            raise ScopeError('CLARIFICATIONS_UNSAFE: ' + str(item) + ' is a symbolic link or reparse point; remove it '
+                             'so the clarification records are not written through it.')
+    current = {}
+    if path.exists():
+        try:
+            current = read_json(path)
+        except (ValueError, OSError):
+            current = None
+        # An existing file that is empty, `{}`, `[]`, `""` or any other unsupported shape is not a record file.
+        supported = isinstance(current, dict) and current.get('v') == 1 and well_formed(current.get('items'))
+        if not supported:
+            current = None
+    if current is None:
+        # The file cannot be merged. The spec and the board have already moved, so failing here would fail
+        # every rerun at the same point: keep the bytes aside and write a fresh file.
+        aside = path.with_name(path.name + '.unreadable-' + batch)
+        if aside.exists():
+            aside = path.with_name(aside.name + '-' + uuid.uuid4().hex[:8])
+        path.replace(aside)
+        sys.stderr.write(f'warning: CLARIFICATIONS_UNREADABLE: moved {path} to {aside.name} and wrote a new file\n')
+        current = {}
+    document = {'v': 1, 'items': merge_items(current.get('items', []), fresh, batch)}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_name(path.name + '.' + uuid.uuid4().hex + '.tmp')
+    with open(temp, 'w', encoding='utf-8', newline='\n') as handle:
+        handle.write(json.dumps(document, indent=2, ensure_ascii=False) + '\n')
+    temp.replace(path)
+    return document
+
+
 class Clarification:
     def __init__(self, app):
         self.app = app
@@ -263,9 +450,10 @@ class Clarification:
         return {'issue': issue['number'], 'engine': engine,
                 'command': '/speckit-superspec-brainstorm' if engine == 'brainstorm' else '/speckit-clarify'}
 
-    def inspect(self, value=None):
+    def inspect(self, value=None, gate=True):
         issue = self.source(value)
-        self.gate(issue)  # Must precede reading the spec or comment history.
+        if gate:
+            self.gate(issue)  # Must precede reading the spec or comment history.
         path = self.spec_path(issue)
         comments = self.gh.api(f'{self.app.base}/{issue["number"]}/comments?per_page=100', pages=True)
         creator = issue['user']['login']
@@ -361,7 +549,86 @@ class Clarification:
         if state:
             write_json(path, state)
 
+    def finishing_transition(self, issue, folder, journal, batch):
+        """True when an earlier run moved the board for this batch and stopped before it finished.
+
+        The journal is validated first: it must belong to this batch, keep its snapshot and analysis, and
+        match the spec on disk. Only then may the retry skip the new-publication status gate.
+        """
+        if not journal or journal.get('complete') or not journal.get('transitioning'):
+            return False
+        self.app._board = None
+        if self.app.status(issue) != journal['transitioning']:
+            return False  # the board never moved (or moved elsewhere): the normal path applies
+        stored = read_json(folder / 'analysis.json')
+        require(journal.get('batch') == batch and (folder / 'snapshot.json').is_file() and stored
+                and digest(stored)[:20] == batch and isinstance(journal.get('comments'), dict)
+                and 'summary' in journal['comments'],
+                'CLARIFICATION_JOURNAL_INVALID: the unfinished publication ' + batch + ' cannot be verified; inspect ' + str(folder))
+        require(self.spec_path(issue).read_text(encoding='utf-8-sig') == journal.get('expected_spec'),
+                'CLARIFICATION_JOURNAL_INVALID: the specification no longer matches the unfinished publication ' + batch)
+        return True
+
+    def finish_publication(self, value, folder, journal, batch, analysis, apply):
+        """Repair an unfinished publication: the comments are posted, the spec replaced and the board moved.
+
+        Nothing is posted or moved, so the live thread is not compared with the baseline: a human reply that
+        arrived after the crash must not block the repair. The records come from the stored snapshot and
+        analysis plus the journaled comment ids; each journaled comment must still exist.
+        """
+        snapshot = read_json(folder / 'snapshot.json')
+        number = snapshot['issue']['number']
+        outcome = self.validate(snapshot, analysis)
+        status = WAITING if outcome in {'waiting', 'limit'} else 'Ready'
+        result = {'issue': number, 'outcome': outcome, 'round': snapshot['next_round'], 'status': status,
+                  'dry_run': not apply, 'batch': batch, 'unfinished': True}
+        if not apply:
+            return dict(result, reason='An earlier publication of this batch is unfinished: the comments are posted and the board '
+                        'moved, but the records are missing. Rerun with --apply to repair them; nothing is posted again.')
+        existing = {c['id'] for c in self.gh.api(f'{self.app.base}/{number}/comments?per_page=100', pages=True)}
+        missing = sorted(str(i) for i in journal['comments'].values() if i not in existing)
+        require(not missing, 'CLARIFICATION_JOURNAL_INVALID: journaled comments no longer exist: ' + ', '.join(missing))
+        persist_clarifications(self.root / Path(snapshot['spec_path']).parent / CLARIFICATIONS_FILE,
+                               clarification_items(snapshot, analysis, outcome, snapshot['next_round'], batch, self.app.repo,
+                                                   journal['comments'], Path(snapshot['spec_path']).as_posix(),
+                                                   datetime.now(timezone.utc).isoformat()), batch)
+        journal['complete'] = True
+        write_json(folder / 'journal.json', journal)
+        from workflow_policy import load
+        managed = load(self.root)
+        if managed and managed.get('clarification', {}).get('resume_on_reinvoke') == 'reread-answers' and status == WAITING:
+            # The digest of the exact input this repair processed, in the live thread's order: the stored
+            # snapshot's version of each comment it held and the journaled posts as published. A comment that
+            # arrived after the crash is left out, and an edit to any processed comment changes the next digest.
+            live = self.inspect(value, gate=False)
+            stored = {c['id']: c for c in snapshot['comments']}
+            published = {v['id']: v for v in journal.get('published', {}).values()}
+            ours = set(journal['comments'].values())
+            processed = dict(live, issue=snapshot['issue'], comments=[
+                stored.get(c['id']) or (published.get(c['id']) or c) for c in live['comments']
+                if c['id'] in stored or c['id'] in ours])
+            write_json(self.root / '.specify/scope/clarifications' / f'{number}-observed.json',
+                       {'waiting_digest': snapshot_digest(processed)})
+        result = dict(result, comment_ids=journal['comments'], next_action=None)
+        resolved = not analysis['questions'] and all(a['disposition'] != 'unresolved' for a in analysis.get('answers', []))
+        if status == 'Ready' and resolved:
+            self.app._board = None
+            self.plan_gate(str(number))
+            path = self.root / snapshot['spec_path']
+            result['next_action'] = {'command': '/speckit-plan', 'issue': number, 'spec_path': str(path.resolve()),
+                                     'feature_directory': str(path.parent.relative_to(self.root)),
+                                     'feature_name': path.parent.name}
+        return result
+
     def publish(self, value, analysis, apply=False):
+        batch = digest(analysis)[:20]
+        source = self.source(value)
+        folder = self.root / '.specify/scope/clarifications' / f'{source["number"]}-{batch}'
+        journal_path = folder / 'journal.json'
+        journal = read_json(journal_path)
+        finishing = self.finishing_transition(source, folder, journal, batch)
+        if finishing:
+            return self.finish_publication(value, folder, journal, batch, analysis, apply)
         snapshot = self.inspect(value)
         from workflow_policy import load
         managed_policy = load(self.root)
@@ -372,10 +639,6 @@ class Clarification:
             return {'issue': snapshot['issue']['number'], 'outcome': 'waiting', 'questions': 0,
                     'unchanged': True, 'dry_run': not apply, 'next_action': None,
                     'reason': 'No new answers or material input changes; no comments posted.'}
-        batch = digest(analysis)[:20]
-        folder = self.root / '.specify/scope/clarifications' / f'{snapshot["issue"]["number"]}-{batch}'
-        journal_path = folder / 'journal.json'
-        journal = read_json(journal_path)
         if journal:
             baseline = read_json(folder / 'snapshot.json')
             normalized_spec = baseline['spec'] if snapshot['spec'] == journal.get('expected_spec') else snapshot['spec']
@@ -483,6 +746,8 @@ class Clarification:
             require(len(matches) <= 1, f'Duplicate published comment for {qid}; reconcile before proceeding.')
             posted = matches[0] if matches else self.gh.api(f'{self.app.base}/{number}/comments', 'POST', {'body': body})
             journal['comments'][qid] = posted['id']
+            # The version published now, so a repair can digest what was processed, not what was edited later.
+            journal.setdefault('published', {})[qid] = {k: posted.get(k) for k in ('id', 'body', 'updated_at', 'user')}
             write_json(journal_path, journal)
         path = self.root / snapshot['spec_path']
         self.app._board = None
@@ -498,7 +763,16 @@ class Clarification:
             temporary.replace(path)
         self.app._board = None
         self.gate(self.app.issue(number))
+        # Recorded before the move, so a retry can tell an unfinished publication from a new one.
+        journal['transitioning'] = result['status']
+        write_json(journal_path, journal)
         self.transition(self.app.issue(number), result['status'])
+        # Only now: the spec is replaced and the transition succeeded. Written before the journal is marked
+        # complete, so an interrupted publication repairs the file when it is rerun.
+        persist_clarifications(self.root / Path(snapshot['spec_path']).parent / CLARIFICATIONS_FILE,
+                               clarification_items(snapshot, analysis, outcome, round_number, batch, self.app.repo,
+                                                   journal['comments'], Path(snapshot['spec_path']).as_posix(),
+                                                   datetime.now(timezone.utc).isoformat()), batch)
         journal['complete'] = True
         write_json(journal_path, journal)
         if automatic_resume and result['status'] == WAITING:

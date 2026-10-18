@@ -25,7 +25,7 @@ import re
 from pathlib import Path
 
 from ..paths import RESERVED_ID, TASK_REF, plan_info, plan_source
-from ..util import clean, diag_once, read_json
+from ..util import clean, diag_once, read_capped, read_json
 
 ITEM = re.compile(r'^\s*[-*+]\s+\[([ xX])\]\s+(.*)$')
 HEADING = re.compile(r'^(#{1,6})\s+(.*?)\s*#*\s*$')
@@ -173,8 +173,7 @@ def _read(ctx):
     if source is None:
         return None
     try:
-        with open(source, 'rb') as stream:
-            return stream.read(MAX_BYTES).decode('utf-8', errors='replace')
+        return read_capped(source, MAX_BYTES)[0].decode('utf-8', errors='replace')
     except OSError:
         return None
 
