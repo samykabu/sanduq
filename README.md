@@ -98,6 +98,42 @@ Claude Code uses `/` instead of `$`. Every host is covered in [install by host](
 including what the Workflow installer adds to each host: a guard hook, two role agents and the
 optional short aliases (`--with-aliases`).
 
+## Adopt Workflow 1.13.0 in an existing project
+
+Workflow 1.13.0 and Scope 1.8.0 shorten the front half of the lifecycle. Every new behaviour is
+opt-in; an absent policy key keeps the previous behaviour. To adopt it in a consumer:
+
+```bash
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.13.0
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.13.0 --apply
+python .specify/extensions/workflow/scripts/workflow.py migrate --feature specs/<feature> --reason "Reviewed 1.13.0"   # each feature in progress
+python .specify/extensions/workflow/scripts/workflow.py doctor --project
+```
+
+Then add the profile policy to `.specify/workflow.yml` and run the next real issue through it:
+
+```yaml
+profiles:
+  enabled: true           # lite: score <= 3, standard: score <= 8, full above
+clarification:
+  in_session_first_round: true
+  max_questions_per_round: 6
+issue_sync:
+  taskstoissues: phase-lazy
+```
+
+```text
+$speckit-workflow-scope 412 Scope this issue and continue through implementation.
+```
+
+Scope records the effort score, the first Plan claim fixes the tier, and `status` lists the stages
+the tier skips. On Codex, approve the new guard hook once in `/hooks`. The benchmark that motivated
+these defaults, and how to rerun it, is in [docs/internal/benchmarks](docs/internal/benchmarks/README.md);
+a live run is the confirmation of token spend, because the benchmark measures runtime cost and
+instruction load, not generated tokens. Codex installs of the portable plugin bundles from the
+marketplace are published but not yet exercised. See [upgrades](docs/start/upgrades.md#adopt-workflow-1130-profiles)
+for the details and the [workflow changelog](extensions/workflow/CHANGELOG.md) for every policy key.
+
 ## Can I use this?
 
 | Package | License | Commercial use |
