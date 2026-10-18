@@ -5,8 +5,16 @@ and the [scope page](https://github.com/samykabu/sanduq/blob/main/docs/extension
 Every command and its example is in the [command reference](https://github.com/samykabu/sanduq/blob/main/docs/reference/commands.md#scope).
 
 
-This README describes Scope 1.6.0. The [catalog](https://github.com/samykabu/sanduq/blob/main/catalog.json)
+This README describes Scope 1.8.0. The [catalog](https://github.com/samykabu/sanduq/blob/main/catalog.json)
 lists the published version. Scope is MIT licensed; see [LICENSE](https://github.com/samykabu/sanduq/blob/main/extensions/scope/LICENSE).
+
+Scope 1.8.0 shortens the managed front half: `scope.py render-spec` writes spec.md from an approved
+single-leaf analysis so Specify only binds; `clarification.py publish --answers` records a first
+round the issue creator answered in the session as one GitHub comment and moves the issue to Ready;
+`clarification.max_questions_per_round` caps a round; Mermaid diagrams are allowed in questions;
+Project board reads are cached for `scope.board_cache_seconds` and `--snapshot` reuses an inspect
+snapshot across `gate`, `approve`, `publish` and `bind`. Details are in
+[references/analysis-contract.md](references/analysis-contract.md) and the [changelog](CHANGELOG.md).
 
 Build with `python extensions/scripts/package.py scope`; the archive bundles the
 scope-gate and scope-brainstorm presets. Install the extracted package through

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-18 — Workflow 1.13.0, Scope 1.8.0 (pending release)
+
+- Front-half rebuild: effort-tiered profiles, deterministic `workflow:lint`, merged plan and tasks, batch upstream revalidation, declared side effects, cached doctor, inventory side files and a status-based resume contract.
+- Scope renders the spec from the approved analysis, answers the first clarification round in session, allows Mermaid questions, caps questions per round and caches the board.
+- Cross-host: guard hook and role agents for Claude Code and Codex, opt-in alias skills, skill validation in CI, portable plugin manifests and a Codex marketplace, pruned instruction text (about 41 percent fewer instruction bytes per run; see `docs/internal/benchmarks/`).
+
 ## 2026-10-17 — Memory 2.2.0, Workflow 1.11.0, Illustrate 2.4.2
 
 - Bring archive guards forward, bound inspection output and batch Git reads.

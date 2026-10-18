@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Progress 1.2.0 vendors agent-tools 1.4.2 (projection v3 and the Timeline page). Workflow 1.12.0 records lifecycle events, the stage plan, the next action and run links, and reads Progress through --schema v2. Scope 1.7.0 writes clarification records. Reviewed over four cycles by Claude Fable 5.1 and Codex gpt-6-astra. Publish after successful main CI and downloaded asset verification."
+  "versions": {
+    "workflow": "1.13.0",
+    "scope": "1.8.0"
+  },
+  "status": "implementation-in-progress",
+  "note": "Front-half rebuild: effort-tiered profiles, workflow:lint, merged plan and tasks, revalidate-upstream, side effects, doctor cache, inventory side files, bind-only Specify from a Scope-rendered spec, in-session first clarification round, Mermaid questions, board cache and snapshot reuse, question cap, phase-lazy task issues, guard hook and role agents for Claude Code and Codex, portable plugin manifests and a Codex marketplace, pruned instruction text (about 41 percent fewer instruction bytes per run). Benchmarks under docs/internal/benchmarks. Publish after main CI, a reviewed consumer upgrade and the benchmark comparison."
 }
