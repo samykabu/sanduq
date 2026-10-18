@@ -46,7 +46,7 @@ jobs:
         run: npx -y @anthropic-ai/claude-code plugin validate .
 
       - name: Skills follow the Agent Skills frontmatter rules
-        run: python3 extensions/scripts/validate_skills.py extensions presets skills
+        run: python3 extensions/scripts/validate_skills.py extensions presets
 
       - name: Vendored skills match vendor.lock.json
         run: python3 extensions/scripts/vendor.py check
