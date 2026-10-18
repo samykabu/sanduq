@@ -174,6 +174,19 @@ python .specify/extensions/workflow/scripts/apply_pending.py --root . --feature 
 
 ## Internal skills and overlays
 
+Workflow also exposes the local Memory handoff from the consumer root:
+
+```bash
+python .specify/extensions/workflow/scripts/workflow.py memory-handoff --transition session
+python .specify/extensions/workflow/scripts/workflow.py memory-handoff --transition execute --feature specs/412-refund-approval --check product
+python .specify/extensions/workflow/scripts/workflow.py memory-handoff --transition postmerge --feature specs/412-refund-approval --report verified-merge.json
+```
+
+Use an existing configured check name. Honor the exit, pending reason and returned
+registered action; a returned action does not mean the archive ran. The
+[Memory handoff contract](../../extensions/workflow/skills/workflow/references/memory-lifecycle.md)
+defines the exact post-merge binding and recovery order.
+
 These skills ship inside extensions; they are not additional `npx skills` installs.
 
 | Skill source | Owner and use in the refund example |

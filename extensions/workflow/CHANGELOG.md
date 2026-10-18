@@ -16,6 +16,14 @@
 - Reporting: on a Codex worktree whose hooks are not approved, the coordinator reports its own model and effort with `progress bind --host codex --model <m> --effort <e>` (needs Progress 1.2.0 or later). From Progress 1.2.0 the `progress.py` forwarder creates lanes with `--workstream`; older Progress versions get no flag.
 - Progress compatibility: the bridge reads `progress status --json --schema v2`, so Workflow keeps the v2 projection when Progress 1.2.0 defaults to v3. A Progress known to be older than 1.2.0 is called without it; for an unknown version, a usage-error rejection (exit 2) is retried once without the flag.
 
+## [1.11.2] - 2026-10-18
+
+- Force UTF-8 only for Memory helper I/O so Unicode recovery journals remain readable under Windows legacy code pages.
+- Queue Memory work after accepted Execute completion for both Core and SuperSpec. Repeated handoffs preserve existing queue entries; missing dependencies, disabled approval and check coverage failures keep their actual pending or blocked reason.
+- Add one local handoff for session entry and verified post-merge follow-up. It binds the exact feature, repository, PR and target, prioritizes active recovery and returns registered Memory actions for verification, synthesis and review. Product receipts and `pr_open` keep their existing meaning.
+- The QA Document stage may refresh the generated `.github/memory/project-memory.md` inventory. The runtime records the old and new hashes in lineage and advances the earlier receipts' source fingerprints instead of failing with `UPSTREAM_INPUT_CHANGED_DURING_STAGE`.
+- Pin the selected QA and User Manual dependencies to Assure 2.3.3 and User Manual 1.5.3. Their packages ship the reviewed shared freshness helper, which excludes generated Progress reports (`specs/*/progress/`, `.specify/progress/`) from QA and manual freshness inputs while preserving true source changes. Workflow and Memory do not ship that helper.
+
 ## [1.11.1] - 2026-10-17
 
 - Reporting instructions: lifecycle stage runs (scope, specify, clarify...) are recorded by the delegation ledger and get no `progress lane` call. `progress lane` is only for real Execute workstreams, once per workstream, and a new worker updates that lane's owner. The legacy shim reuses the open lane that already carries a task and updates its owner instead of adding a lane per worker.

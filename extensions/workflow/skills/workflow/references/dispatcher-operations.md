@@ -222,3 +222,13 @@ Pending decisions park mapped Backlog or Feature Specification. Answers return a
 park to Feature Specification; advanced states remain protected. Both Decision and Status
 writes are reread, and a durable pre-write intent recovers lost-response retries. The shared
 Scope transport falls back to REST on GraphQL exhaustion and records the served transport.
+
+# Local Memory entry
+
+Before local dispatcher entry creates a feature or claims a stage, invoke
+`workflow.py memory-handoff --transition session`. Honor its exit and returned
+registered actions through this same host dispatcher. Follow
+[memory-lifecycle.md](memory-lifecycle.md) for exact selection, disabled approval,
+recovery and retry behavior. After native Execute completion, honor the returned
+`memory_handoff` before advancing. Verified post-merge uses the same executable
+contract; accepted product receipts keep their existing meaning.

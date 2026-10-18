@@ -230,7 +230,11 @@ class LeanExecutionTests(unittest.TestCase):
                 run.complete('foreign', receipt)
             with self.assertRaisesRegex(w.WorkflowError, 'EVIDENCE_REQUIRED'):
                 run.complete('owned', {**receipt, 'evidence': []})
-            self.assertEqual(run.complete('owned', receipt), {'stage': 'verify'})
+            completed = run.complete('owned', receipt)
+        # Accepted execute completion now carries a pending Memory handoff (Memory dependency absent here).
+        self.assertEqual(completed['stage'], 'verify')
+        self.assertEqual(completed['memory_handoff']['status'], 'pending')
+        self.assertEqual(completed['memory_handoff']['reason'], 'MEMORY_DEPENDENCY_MISSING_OR_DISABLED')
         attempt.assert_not_called()
         self.assertIsNone(state['active'])
 

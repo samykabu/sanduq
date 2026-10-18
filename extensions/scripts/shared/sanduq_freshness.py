@@ -78,8 +78,12 @@ def inputs(root, feature, kind, base=None):
         comparison = None
     def included(value):
         parts = Path(value).parts
-        return not (any(p in EXCLUDED for p in parts) or value.startswith((feature + '/workflow/',
-            feature + '/evidence/', '.specify/workflow/', '.specify/scope/', '.specify/extensions/',
+        # Reports are metadata, including other features reached by the document
+        # diff. Product directories such as src/progress remain semantic inputs.
+        report = len(parts) > 3 and parts[0] == 'specs' and parts[2] == 'progress'
+        return not (report or any(p in EXCLUDED for p in parts) or value.startswith((feature + '/workflow/',
+            feature + '/evidence/', feature + '/progress/', '.specify/progress/',
+            '.specify/workflow/', '.specify/scope/', '.specify/extensions/',
             'graphify-out/', 'User-Manual/', 'docs/' + Path(feature).name + '/')) or Path(value).name in
             {'.env', 'workflow.yml', 'feature.json', 'project-sync-state.json'})
     result = fingerprints(root, [p for p in paths if included(p)])

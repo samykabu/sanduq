@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.2.1] - 2026-10-18
+
+- Archive prepare and finalize no longer fail when a scope names files that are tracked under an ignored parent such as `artifacts/`. The expected tree stages tracked edits and deletions with `git add -u` and adds new unignored files by name. Untracked ignored files stay out of the commit, and one named exactly as a scope is still refused.
+- Direct `archive.py` commands now write UTF-8 JSON to stdout and stderr, so `status` no longer fails with a charmap error on a Windows cp1252 console when a journal holds text such as an arrow or Arabic.
+
 ## [2.2.0] - 2026-10-17
 
 - Native early preflight, bounded archive inspection and batched Git inventory.
