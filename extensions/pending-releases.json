@@ -1,10 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "workflow": "1.12.0",
-    "scope": "1.7.0",
-    "progress": "1.2.0"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Progress 1.2.0 vendors agent-tools 1.4.2 (projection v3 and the Timeline page). Workflow 1.12.0 records lifecycle events, the stage plan, the next action and run links, and reads Progress through --schema v2. Scope 1.7.0 writes clarification records. Reviewed over four cycles by Claude Fable 5.1 and Codex gpt-6-astra. Publish after successful main CI and downloaded asset verification."
 }

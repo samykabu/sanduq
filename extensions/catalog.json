@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-10-18T01:02:53.263510+00:00",
+  "updated_at": "2026-10-18T06:00:17.756440+00:00",
   "catalog_url": "https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json",
   "extensions": {
     "project": {
@@ -307,7 +307,7 @@
     "workflow": {
       "name": "Sanduq Workflow",
       "id": "workflow",
-      "version": "1.11.2",
+      "version": "1.12.0",
       "description": "GitHub issue decisions and resumable Scope-to-PR orchestration with optional model-aware delegation, QA, User Manual, and workflow evidence CI.",
       "author": "Samy K. Abushanab",
       "license": "PolyForm-Noncommercial-1.0.0",
@@ -315,7 +315,7 @@
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/workflow",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v1.11.2/workflow.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v1.12.0/workflow.zip",
       "requires": {
         "speckit_version": ">=1.0.0,<2.0.0",
         "tools": [
@@ -349,13 +349,13 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "525a6d0573aff71090fac6336cd24120c27df2ac80560765a8068bb948eede2f",
-      "updated_at": "2026-10-18T01:02:53.200025+00:00"
+      "sha256": "612b34f20869e6357e28eaa02288fed03b2f062e04dc839f9710150dfd4cdc3a",
+      "updated_at": "2026-10-18T06:00:17.665966+00:00"
     },
     "scope": {
       "name": "Speckit Scope",
       "id": "scope",
-      "version": "1.6.2",
+      "version": "1.7.0",
       "description": "Analyze GitHub issue scope, enforce prerequisites, review user-selected decomposition before publishing, and maintain parent progress.",
       "author": "Samy K. Abushanab",
       "license": "MIT",
@@ -363,7 +363,7 @@
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/scope",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/scope/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/scope/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/scope-v1.6.2/scope.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/scope-v1.7.0/scope.zip",
       "requires": {
         "speckit_version": ">=1.0.0",
         "extensions": [
@@ -403,8 +403,8 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "16e39aa873558eabae2961d6129f7c73f232bf2a6013aa2e6e26db90aec15893",
-      "updated_at": "2026-10-15T16:29:58.927869+00:00"
+      "sha256": "c940a6423f439687e26246d1e7a388b3e054a753920a4b74daa367b22421582d",
+      "updated_at": "2026-10-18T06:00:17.695372+00:00"
     },
     "memory": {
       "name": "Sanduq Memory",
@@ -450,15 +450,15 @@
     "progress": {
       "name": "Sanduq Progress Report",
       "id": "progress",
-      "version": "1.1.3",
-      "description": "A live, deterministic progress report for a Spec Kit feature: lanes, tasks, blockers and decisions, collected from the host's native hooks and the feature files with no agent spent on upkeep.",
+      "version": "1.2.0",
+      "description": "A live, deterministic progress report for a Spec Kit feature: stages over time, workstreams, runs, blockers and decisions, collected from the host's native hooks and the feature files with no agent spent on upkeep.",
       "author": "Samy K. Abushanab",
       "license": "PolyForm-Noncommercial-1.0.0",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/progress",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/progress/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/progress/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/progress-v1.1.3/progress.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/progress-v1.2.0/progress.zip",
       "requires": {
         "speckit_version": ">=1.1.1.dev0,<2.0.0",
         "tools": [
@@ -485,8 +485,8 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "a3ed2cd3b7d52206401ce5f960f78787d5b896b19547430364214c1e95b8ae73",
-      "updated_at": "2026-10-17T21:52:09.154296+00:00"
+      "sha256": "bba11e3627fdc2b9c33ff58c663c75b6a931c028decf2d0ee19e1b737e90f671",
+      "updated_at": "2026-10-18T06:00:17.756324+00:00"
     }
   }
 }
