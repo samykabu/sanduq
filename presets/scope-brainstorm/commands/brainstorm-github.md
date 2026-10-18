@@ -1,18 +1,14 @@
 ---
-description: "Brainstorm all meaningful ambiguities unattended using individual GitHub question comments."
+description: "Deep-dive edge cases and refine a spec using brainstorming skills, run unattended through individual GitHub question comments on the bound issue. Use to brainstorm or stress-test an issue-bound spec before planning. (Sanduq managed)"
 ---
 
 <!-- scope-brainstorm-overlay:start -->
 ## Managed workflow precedence
 
-When `.specify/workflow.yml` exists, first read the Sanduq workflow policy and
-`.specify/extensions/workflow/skills/workflow/SKILL.md`. During an active stage,
-return to that dispatcher after the domain work; never independently chain Plan
-or stop the entire lifecycle. With `resume_on_reinvoke: reread-answers`, Need
-Clarifications allows reading and applying new answers without a manual status
-move. If no new human answers or material input changes exist, report waiting
-without publishing another round. These managed rules override conflicting
-legacy status/stop instructions below. Unmanaged projects retain the old flow.
+When `.specify/workflow.yml` exists, the workflow dispatcher
+(`.specify/extensions/workflow/skills/workflow/SKILL.md`) owns transitions: return to it after
+the domain work, never chain Plan yourself, and let its managed rules override conflicting
+status or stop instructions below. Unmanaged projects keep the flow below.
 
 ## Mandatory unattended GitHub brainstorm contract
 

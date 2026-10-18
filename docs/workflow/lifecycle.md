@@ -70,7 +70,15 @@ checks. QA and manual stages run only when selected during initialization.
 | PR | Create or update the one feature PR with evidence and rendered images. | `$speckit-workflow-finalize Create or update this feature's PR with the verified results and inline diagrams.` |
 | CI and merge follow-through | When authorized, monitor the exact PR head, repair failures, and verify the merge. | `Continue on this PR: fix failing checks, address review findings, and merge when required checks and approvals pass. Keep the HTML report current until the merge is verified.` |
 
-The runtime has sixteen recorded stages, from `scope` through `pr`. CI and merge follow-through
+The runtime has sixteen recorded stages, from `scope` through `pr`. With profiles enabled, the
+`lite` and `standard` tiers merge Tasks into Plan, run Analyze as the deterministic
+`workflow:lint`, and `lite` also skips the QA and manual stages; see
+[profiles and tiers](stages.md#profiles-and-tiers). When `clarification.in_session_first_round`
+is on, the issue creator can answer the first Clarify round in the session, and the runtime posts
+one comment recording those answers. When Scope renders the spec from the approved analysis
+(`scope.py render-spec`), Specify only binds it (`mode: bind-only`). If a spec or plan is edited
+after its stage passed, `workflow.py revalidate-upstream --through <stage> --plan` lists the
+changed inputs per stale stage, and one `--receipt` call re-records them in order. CI and merge follow-through
 extend the report's lifetime; a green local test run does not establish remote CI or a completed
 merge. After a fix changes source, rerun affected checks and refresh the relevant evidence.
 
@@ -115,7 +123,9 @@ The [command reference](../reference/commands.md) covers all 42 commands, includ
 ## Core, SuperSpec, and bridge overlays
 
 Sanduq owns the [workflow preset](../../presets/workflow/preset.yml), which prepends policy to provider
-commands. The upstream command bodies remain installed through Spec Kit. SuperSpec commands need
+commands. The upstream command bodies remain installed through Spec Kit, except for Clarify and
+SuperSpec Brainstorm: their overlays use `strategy: replace` and carry the upstream coverage
+taxonomy themselves, because their interactive question loop never runs in a managed project. SuperSpec commands need
 a compatible enabled SuperSpec installation; installing the overlay alone does not install that
 provider. The dispatcher chooses one task generator and one executor for a feature.
 

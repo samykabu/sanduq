@@ -2,7 +2,7 @@ schema_version: "1.0"
 extension:
   id: scope
   name: Speckit Scope
-  version: "1.7.0"
+  version: "1.8.0"
   description: "Analyze GitHub issue scope, enforce prerequisites, review user-selected decomposition before publishing, and maintain parent progress."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
@@ -11,7 +11,7 @@ requires:
   speckit_version: ">=1.0.0"
   extensions:
     - id: workflow
-      version: ">=1.10.0,<2.0.0"
+      version: ">=1.13.0,<2.0.0"
       required: true
     - id: illustrate
       version: ">=2.2.1,<3.0.0"
@@ -26,25 +26,25 @@ provides:
   commands:
     - name: speckit.scope.run
       file: commands/run.md
-      description: "Scope an issue by number or exact title; reject unready prerequisites and obtain approval of the user-selected decomposition."
+      description: "Scopes a GitHub issue as a senior solution analyst: checks prerequisites, sizes effort, asks for the preferred number of sub-issues and publishes only an approved decomposition. Use when asked to scope, size, estimate or split an issue by number or exact title."
     - name: speckit.scope.guard
       file: commands/guard.md
-      description: "Require an existing GitHub issue and current approved effort scope before Specify."
+      description: "Blocks Specify before any side effect unless one explicit GitHub issue has a fresh approved Scope receipt and eligible prerequisites, and returns the scoped prompt Specify must use. Runs as the mandatory before_specify hook; use it when Specify starts for an issue."
     - name: speckit.scope.bind
       file: commands/bind.md
-      description: "Bind the newly created specification to its original GitHub issue before Project sync."
+      description: "Binds a newly written specification to its validated source GitHub issue, writes scope-source.json and sets Feature Specification before Project sync. Runs as the mandatory after_specify hook right after Specify; it never creates a second issue."
     - name: speckit.scope.reconcile
       file: commands/reconcile.md
-      description: "Refresh parent progress and close only all-Done scope parents."
+      description: "Refreshes native Scope parent progress after child issues change state, closing a parent only when every descendant is Done and reopening ancestors of a reopened child. Runs after implementation; use when parent progress looks stale."
     - name: speckit.scope.plan
       file: commands/plan.md
-      description: "Refresh the implementation dependency plan using Illustrate after scope decomposition."
+      description: "Regenerates and validates the implementation dependency plan with Illustrate after a Scope decomposition is published. Use after splitting an issue into sub-issues, or when the scope plan-pending marker exists."
     - name: speckit.scope.after-specify
       file: commands/after-specify.md
-      description: "Automatically dispatch Brainstorm when available, otherwise Clarify, after specification creation."
+      description: "Starts the mandatory clarification round after Specify: dispatches SuperSpec Brainstorm when installed and enabled, otherwise Clarify, for the issue just bound. Runs as an after_specify hook; never waits in chat for answers."
     - name: speckit.scope.plan-guard
       file: commands/plan-guard.md
-      description: "Require Ready before planning so unresolved GitHub questions cannot be skipped."
+      description: "Stops Plan unless the bound issue is Ready, so unresolved GitHub clarification questions cannot be skipped. Runs as the mandatory before_plan hook; use it when planning starts for an issue-bound spec."
 hooks:
   before_specify:
     command: speckit.scope.guard

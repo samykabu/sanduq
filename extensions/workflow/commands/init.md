@@ -1,5 +1,5 @@
 ---
-description: "Select QA, User Manual, decision authority and CI evidence policy."
+description: "Sets up the Sanduq workflow in a Spec Kit project: selects QA and User Manual processes, decision reviewers, delegation, CI runners and evidence gate, then installs and checks the managed packages. Use once per project, or when asked to initialize, configure or reconfigure the workflow."
 ---
 
 # Sanduq Workflow: init

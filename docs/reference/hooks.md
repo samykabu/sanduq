@@ -67,13 +67,13 @@ Generated from `presets/*/preset.yml`. An overlay runs Sanduq policy before the 
 | scope-gate | `speckit.clarify` | prepend |
 | workflow | `speckit.scope.run` | prepend |
 | workflow | `speckit.specify` | prepend |
-| workflow | `speckit.clarify` | prepend |
+| workflow | `speckit.clarify` | replace |
 | workflow | `speckit.plan` | prepend |
 | workflow | `speckit.tasks` | prepend |
 | workflow | `speckit.analyze` | prepend |
 | workflow | `speckit.taskstoissues` | prepend |
 | workflow | `speckit.implement` | prepend |
-| workflow | `speckit.superspec.brainstorm` | prepend |
+| workflow | `speckit.superspec.brainstorm` | replace |
 | workflow | `speckit.superspec.tasks` | prepend |
 | workflow | `speckit.superspec.execute` | prepend |
 | workflow | `speckit.superspec.review` | prepend |

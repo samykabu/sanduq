@@ -30,6 +30,7 @@ agent requests, not shell commands. Claude Desktop does not run extensions.
 - [Memory](#memory) (7 commands)
 - [Progress](#progress) (5 commands)
 - [Workflow utilities from the shell](#workflow-utilities-from-the-shell)
+- [Runtime commands for the front half](#runtime-commands-for-the-front-half)
 - [Internal skills and overlays](#internal-skills-and-overlays)
 
 ## Workflow
@@ -172,6 +173,31 @@ python .specify/extensions/workflow/scripts/worker_brief.py --root . --feature s
 python .specify/extensions/workflow/scripts/apply_pending.py --root . --feature specs/412-refund-approval
 ```
 
+## Runtime commands for the front half
+
+These run from the consumer root inside the managed lifecycle; the dispatcher calls them, and you
+can run them to diagnose or recover:
+
+```bash
+# Analyze on the lite and standard tiers: deterministic lint, recorded only when clean
+python .specify/extensions/workflow/scripts/lint.py --feature specs/412-refund-approval --json
+python .specify/extensions/workflow/scripts/lint.py --feature specs/412-refund-approval --record --token <active-token>
+# Re-record stages after an upstream document changed (no active claim)
+python .specify/extensions/workflow/scripts/workflow.py revalidate-upstream --feature specs/412-refund-approval --through plan --plan
+python .specify/extensions/workflow/scripts/workflow.py revalidate-upstream --feature specs/412-refund-approval --through plan --receipt <stages.json>
+# Render the spec from the approved Scope analysis (single leaf, approved analysis only)
+python .specify/extensions/scope/scripts/scope.py render-spec 412 --analysis <analysis.json> --feature specs/412-refund-approval --apply
+# Answer the first clarification round in the session (issue creator only)
+python .specify/extensions/scope/scripts/clarification.py publish 412 --analysis <analysis.json> --answers <answers.json> --apply
+# Publish one phase's task issues under phase-lazy
+python .specify/extensions/workflow/scripts/task_issues.py --feature specs/412-refund-approval --parent 412 --phase "Phase 2: Refund approval" --apply --summary
+```
+
+`scope.py gate`, `approve`, `publish` and `bind` accept `--snapshot <inspect output>` and reuse it
+while it matches the live issue and is within `scope.board_cache_seconds` (`snapshot_reused` in
+their output). The [operating guide](../workflow/operating-guide.md#optional-policy-keys-for-a-lighter-front-half)
+explains the policy keys these depend on.
+
 ## Internal skills and overlays
 
 Workflow also exposes the local Memory handoff from the consumer root:
@@ -194,7 +220,7 @@ These skills ship inside extensions; they are not additional `npx skills` instal
 | [assure](../../extensions/assure/skills/assure/SKILL.ext.md) | Assure Analyze/Document route QA analysis and test walkthroughs. |
 | [scope-analyst](../../extensions/scope/skills/scope-analyst/SKILL.ext.md) | Scope Run owns issue evidence, prerequisite checks, effort, and decomposition. |
 | [github-clarification](../../extensions/scope/skills/github-clarification/SKILL.ext.md) | Clarify/Brainstorm reread issue 412's human answers and preserve binding. |
-| [sanduq-workflow](../../extensions/workflow/skills/workflow/SKILL.ext.md) | Workflow commands claim stages, invoke their references, and validate receipts. |
+| [speckit-workflow](../../extensions/workflow/skills/workflow/SKILL.ext.md) | Workflow commands claim stages, invoke their references, and validate receipts. |
 | [speckit-scope alias](../../extensions/workflow/skills/speckit-scope/SKILL.ext.md) | The short entry routes issue 412 into the managed dispatcher. |
 | [Bridge alias](../../extensions/workflow/skills/speckit-superpowers-bridge/SKILL.ext.md) | Routes continuation to its current owner and prevents a competing executor. |
 | [user-manual](../../extensions/user-manual/skills/user-manual/SKILL.ext.md) | Manual commands own module discovery and incremental refund documentation. |
@@ -207,7 +233,7 @@ These skills ship inside extensions; they are not additional `npx skills` instal
 
 Canonical [Workflow](../../presets/workflow/preset.yml), [Scope Gate](../../presets/scope-gate/preset.yml),
 and [Scope Brainstorm](../../presets/scope-brainstorm/preset.yml) presets prepend policy to provider
-commands. Installing an overlay does not install SuperSpec or Bridge. The
+commands; the Workflow preset replaces Clarify and SuperSpec Brainstorm outright. Installing an overlay does not install SuperSpec or Bridge. The
 [worked lifecycle](../workflow/lifecycle.md#core-superspec-and-bridge-overlays) covers every overlay and its
 consistent prompt. [Contributing](../../CONTRIBUTING.md#find-the-owning-source) explains where to contribute.
 

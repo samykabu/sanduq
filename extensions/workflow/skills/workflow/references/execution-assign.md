@@ -1,22 +1,18 @@
 # Implementation orchestration: assign
 
-When `lean_execution.enabled: true`, use the existing lifecycle coordinator for
-all assignments, integration, reporting calls (`references/reporting.md`) and
-authorized Git operations.
-Do not create the additional orchestration agent in the legacy instructions
-below. Dispatch only concrete deliverables with acceptance criteria. Use
-`--deliverable`, `--correction-plan` and, after one correction, `--diagnosis` as
-described in `references/delegation-and-decisions.md#opt-in-lean-execution`.
-Complete all feature coding/testing before independent coding review; artifact
-analysis remains available and `[artifact-analysis]` explicitly identifies it.
+With `lean_execution.enabled: true`, the existing lifecycle coordinator does all
+assignments, integration, reporting calls (`reporting.md`) and authorized Git operations;
+do not create the additional orchestration agent below. Dispatch only concrete
+deliverables with acceptance criteria (`--deliverable`, `--correction-plan`, then
+`--diagnosis`, as in `delegation-and-decisions.md#opt-in-lean-execution`). Finish all
+coding and testing before the independent coding review; `[artifact-analysis]` marks
+artifact analysis, which may run earlier.
 
-Use this protocol for both core Implement and SuperSpec Execute in a managed
-Sanduq workflow. The installed preset supplies it without editing either upstream
-command. The dispatcher keeps the Execute claim and remains the only agent that
-chooses lifecycle stages. This half covers starting, resuming and assigning work;
-[`execution-report.md`](execution-report.md) covers finishing phases, the legacy
-reporter calls and continuing through delivery. How the report is maintained is
-decided only in [`reporting.md`](reporting.md); no agent exists solely for it.
+Core Implement and SuperSpec Execute both follow this protocol. The dispatcher keeps the
+Execute claim and alone chooses lifecycle stages. This half covers starting, resuming and
+assigning work; [`execution-report.md`](execution-report.md) covers finishing phases, the
+legacy reporter calls and delivery. Reporting is decided only in [`reporting.md`](reporting.md);
+no agent exists solely for it.
 
 ## Start and resume
 
@@ -28,13 +24,12 @@ the feature handoff. On resume, inspect that handle and reuse it while it is liv
 An observation timeout alone does not prove an agent has stopped. Recover a
 terminal or missing agent from the handoff before assigning new work.
 
-In Codex, use the available agent spawn, message and status tools. In Claude, use
-the installed host's agent/team tools. Check their actual capabilities and limits;
-do not invent tool names or assume a child can spawn workers. If nested spawning
+Use the host's real agent spawn, message and status tools; do not invent tool names or
+assume a child can spawn workers. If nested spawning
 is unavailable, the dispatcher creates workers on the orchestration agent's
 behalf and forwards results. If the only duty left for that layer would be
 reporting, drop it and let the dispatcher assign workers directly. Where this fallback applies, the dispatcher
-spawns the batch with blocking calls and forwards each T7 result once,
+spawns the batch with blocking calls and forwards each structured result once,
 unchanged, the same as the orchestration agent would; it does not relay,
 re-summarise or add commentary. The orchestration agent still controls assignments.
 Reserve capacity for the dispatcher and, while it does real coordination work, the
@@ -52,16 +47,12 @@ call is:
 python .specify/extensions/workflow/scripts/progress.py init --tasks specs/<feature>/tasks.md --output specs/<feature>/workflow/progress --summary
 ```
 
-Record phase results under the exact phase heading from `tasks.md` so each phase
-appears once.
-
-Open the report once, in the host browser or a platform-supported browser command,
+Record phase results under the exact phase heading from `tasks.md`. Open the report once
 when that helps the human: `specs/<feature>/progress/.view/index.html`
-(`specs/<feature>/workflow/progress/index.html` in legacy mode). The page reloads
-by itself. Do not re-open or re-verify it in a loop. If browser control is
-unavailable, record that limitation and provide the absolute file link; do not claim
-to have opened it. Keep the report local unless publication is explicitly
-authorized. Exclude credentials and full transcripts from notes.
+(`specs/<feature>/workflow/progress/index.html` in legacy mode); it reloads by itself. Do not
+re-open or re-verify it in a loop. Without browser control, give the absolute file link and do
+not claim to have opened it. Keep the report local unless publication is authorized, and keep
+credentials and transcripts out of notes.
 
 ## Assign work
 
@@ -80,7 +71,7 @@ are ledger-trust decisions the orchestration agent alone makes. The one
 exception is the delegated Execute stage itself: it runs with an orchestrator
 scope over its own feature's `T###` tasks and legitimately calls `start`,
 `collect`, `accept`, `reassign` and `adopt` for them; `trust-reset` stays
-forbidden even for it (see "Light-tier collection results (B12)" in
+forbidden even for it (see "Light-tier collection results" in
 execution-report.md). An ordinary task worker never has that scope. Staging
 stays with the orchestration agent, which stages a worker's owned paths by
 explicit name.
@@ -105,23 +96,12 @@ can run `delegate_dispatch.py reassign --feature specs/<feature> --run-id <id>
 same limit and records the reason. Review partial edits before choosing that
 path.
 
-When a start fails:
-
-- `DELEGATION_ROUTES_UNAVAILABLE`: no candidate could start, and each either
-  created no run or left one proved never launched (driver exit 5, a
-  `failed` never-launched result, no supervisor event, supervisor gone). The attempt is recorded as `blocked`; fix the CLI or route (see
-  `workflow.py doctor --project`) and start the task again.
-- `DELEGATION_START_UNCERTAIN: recover intent <id>`: do not start the task
-  again or hand it to another worker. Run `delegate_dispatch.py recover
-  --feature specs/<feature> --intent-id <id>`. If it binds a run, collect it.
-  If it reports `found: false`, run `delegate_dispatch.py abandon --feature
-  specs/<feature> --intent-id <id> --reason "<why>"` and then start again.
-  `abandon` refuses while a driver run exists for the intent, and for 300
-  seconds after a start that recorded no outcome.
-- `DELEGATION_LEDGER_BUSY`: another dispatcher is writing the ledger; retry.
-  A lock whose owner died on this host is recovered on its own. Delete a lock
-  file by hand only after confirming the process and host it names are not a
-  running dispatcher.
+When a start fails with `DELEGATION_ROUTES_UNAVAILABLE`, no candidate could start or each
+was proved never launched; the attempt is `blocked`: fix the CLI or route (`workflow.py doctor
+--project`) and start again. `DELEGATION_START_UNCERTAIN` and `DELEGATION_LEDGER_BUSY` follow
+[delegation-and-decisions.md](delegation-and-decisions.md#delegation): recover or abandon the
+intent, never start the task again or hand it to another worker; `abandon` refuses for 300
+seconds after a start that recorded no outcome.
 
 Record each abandoned intent's reason in the handoff. The ledger keeps it too.
 Treat routing type as model choice only: a delegated run is writable unless you
@@ -192,8 +172,8 @@ In `legacy` mode the figure is the `progress.py usage` entry and the log is the
 | Task class | Turn budget (fresh + output) | Notes |
 | --- | --- | --- |
 | implementation | ~120K (~200K for an integration-heavy task) | Unit-scoped work stays near the lower figure. |
-| qa_author | ~300K | Authoring a Playwright spec, an API-sample test or a 20+-state capture; never Haiku (standing rule 5). |
-| qa_collect | ~60K | Running an existing, stable spec or script and collecting its counts or files; Haiku-eligible only when the task line carries the `[collect]` marker or an explicit override (B12), never by default. |
+| qa_author | ~300K | Authoring a Playwright spec, an API-sample test or a 20+-state capture; never Haiku. |
+| qa_collect | ~60K | Running an existing, stable spec or script and collecting its counts or files; Haiku-eligible only when the task line carries the `[collect]` marker or an explicit override, never by default. |
 | documentation | ~180K | QA Document, Manual Update and similar lifecycle writes. |
 | review | ~200K for a first independent pass; ~50K for the same reviewer's later pass | Reusing the reviewer by message across passes is markedly cheaper than a fresh spawn per pass. |
 

@@ -1,5 +1,5 @@
 ---
-description: "Require clarification readiness before technical planning."
+description: "Stops Plan unless the bound issue is Ready, so unresolved GitHub clarification questions cannot be skipped. Runs as the mandatory before_plan hook; use it when planning starts for an issue-bound spec."
 ---
 
 # Clarification readiness gate

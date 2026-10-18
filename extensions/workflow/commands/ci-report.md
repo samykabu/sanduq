@@ -1,5 +1,5 @@
 ---
-description: "Summarize the last N CI runs of a workflow into a leg/lane/critical-path table."
+description: "Summarizes the last N runs of a GitHub Actions workflow into per-job durations, wall-clock spans and fixed overhead versus test time. Use before changing CI lanes or runners, or when asked why CI is slow or how often runs are cancelled."
 ---
 
 # Sanduq Workflow: ci-report

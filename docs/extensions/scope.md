@@ -45,7 +45,11 @@ Mandatory hooks guard Specify, bind the specification to its issue, start Brains
 and guard Plan. When the work is split, `scope.plan` accepts an [Illustrate](illustrate.md) dependency graph: it checks
 that every issue is covered and reachable, renders the graph in a browser, and exports SVG and PNG.
 Clarification questions embed that image when GitHub serves the pushed file, and fall back to a
-text list when it cannot.
+text list when it cannot. A question may also carry a Mermaid diagram. With
+`clarification.in_session_first_round`, the issue creator can answer the first round in the
+session, and `clarification.max_questions_per_round` caps a round. In a managed project Scope can
+render the spec from the approved analysis (`scope.py render-spec`), and `--snapshot` reuses an
+`inspect` result across gate, approve, publish and bind.
 The managed Workflow runs these steps through its dispatcher.
 [Editable source](../diagrams/extension-scope.html).
 

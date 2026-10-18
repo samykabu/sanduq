@@ -1,5 +1,5 @@
 ---
-description: Respect the managed workflow execution owner
+description: "Execute Spec Kit tasks.md through the Superpowers bridge. In a Sanduq workflow project it defers to the workflow's execution owner instead of starting a second executor. (Sanduq managed)"
 ---
 
 <!-- sanduq-workflow-legacy-guard:v1 -->

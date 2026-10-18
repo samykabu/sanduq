@@ -1,5 +1,5 @@
 ---
-description: Respect the managed workflow execution owner
+description: "Guard Spec Kit and Superpowers commands from crossing bridge ownership boundaries. In a Sanduq workflow project it reports the workflow as the execution owner without changing legacy state. (Sanduq managed)"
 ---
 
 <!-- sanduq-workflow-legacy-guard:v1 -->

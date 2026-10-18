@@ -1,5 +1,5 @@
 ---
-description: "Explain a gate failure's recovery recipe and, only for evidence-only drift, offer to fix it."
+description: "Explains a failing workflow evidence gate: names the stale stage and its exact recovery recipe, and for evidence-only drift can amend the receipt. Use when the gate or CI reports STALE_RECEIPT or another gate failure, or when asked how to fix it."
 ---
 
 # Sanduq Workflow: gate-explain

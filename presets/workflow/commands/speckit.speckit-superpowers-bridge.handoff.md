@@ -1,5 +1,5 @@
 ---
-description: Respect the managed workflow execution owner
+description: "Create or update the Superpowers implementation handoff state. In a Sanduq workflow project it reports the workflow as the execution owner instead of writing a legacy handoff. (Sanduq managed)"
 ---
 
 <!-- sanduq-workflow-legacy-guard:v1 -->

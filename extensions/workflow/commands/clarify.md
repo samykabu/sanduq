@@ -1,5 +1,5 @@
 ---
-description: "Read GitHub answers and automatically prepare tasks and implementation."
+description: "Rereads the GitHub answers to clarification questions for an issue-bound feature, applies them to the spec and continues the lifecycle into planning, tasks and implementation. Use after people answered the issue's questions, or when asked to check or apply clarification answers."
 ---
 
 # Sanduq Workflow: clarify

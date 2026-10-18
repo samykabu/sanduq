@@ -1,46 +1,27 @@
 # Stage reference: scope
 
-Loaded when `claim` returns `stage: scope`.
-
 ## Entry point
 
-**scope**: require an explicit issue. Inspect its scope prerequisites and project policy;
-never choose a feature from an editor tab. For a new issue-bound feature, run
-`workflow.py prepare --issue <number>` and use its exact `feature` and `branch`
-derived from the issue number and current title. If the Git extension owns
-`before_specify`, pass its branch as `GIT_BRANCH_NAME` to that hook; otherwise
-`prepare` creates the branch with Git argument arrays. For an existing bound feature,
-reuse its saved feature path and branch even if the issue title has changed.
-Resolve or reserve the matching feature identity,
-then `start --feature specs/<feature> --issue owner/repo#number`. Pass this exact
-path into Specify as SPECIFY_FEATURE_DIRECTORY. Run the stage loop in the core skill.
+**scope**: require an explicit issue; never choose a feature from an editor tab. Inspect its
+scope prerequisites and project policy. For a new issue-bound feature run `workflow.py prepare
+--issue <number>` and use its exact `feature` and `branch`. If the Git extension owns
+`before_specify`, pass that branch as `GIT_BRANCH_NAME` to the hook; otherwise `prepare`
+creates it. For an existing bound feature reuse its saved path and branch even if the title
+changed. Then `start --feature specs/<feature> --issue owner/repo#number`, pass the same path to
+Specify as `SPECIFY_FEATURE_DIRECTORY`, and run the stage loop.
 
 ## Required work and evidence
 
-Issue identity, prerequisite snapshot, project preferences, managed issue/labels and
-complete spec-prompt. Policy-settled keep-together decisions skip decomposition
-questions. Return actual publication evidence.
+Run the Scope analyst for the issue: identity, prerequisite snapshot, project preferences,
+managed issue and labels, and a complete Specify prompt. Policy-settled keep-together decisions
+skip decomposition questions. Gate and bind flags inside this claim:
+[scope-binding.md](scope-binding.md).
 
+When the issue is a single executable leaf whose published receipt approves this exact
+analysis, render the spec from it: `scope.py render-spec <issue> --analysis <file> --feature
+specs/<feature>` prints the text; review it, then add `--apply` (it refuses any other case). The spec starts with `<!-- sanduq-scope:rendered
+<sha256> -->`, and the Specify claim then returns `mode: bind-only`.
 
-Fresh managed clarification return (Scope 1.6.1): for the current initial Scope/Specify
-claim, pass the exact dispatcher feature, token and session to both native guard and bind:
-`scope.py gate <issue> --feature specs/<feature> --token <active-token> --session <active-session> --analysis <resolved-analysis.json>`;
-then during Specify use the same flags with `scope.py bind <issue> --apply`.
-This narrow path permits mapped Feature Specification after answered clarification, verifies
-live applied decisions and the unchanged published v2 native leaf with retained parent
-approval, and returns hashes without republishing unchanged scope or creating new approval.
-Use the explicit active feature, never a historical `.specify/feature.json` pointer. A missing
-or foreign claim, wrong branch/repository/issue, pending decision, stale scope, changed approved
-score or native relationship fails closed. Other fresh statuses retain the Backlog gate.
-Standalone invocation and existing revalidation keep their previous guards. This material
-binding change requires focused independent review before installing the local candidate.
-
-
-W01d binding restrictions: fresh native `bind` requires the owned initial **Specify**
-claim before local or remote writes (including the CLI lock). Scope may run the read gate,
-but cannot bind a placeholder spec. An unchanged published prompt remains authoritative;
-local analysis is `consulted` and supplies no replacement scope authority. A revised prompt
-requires the exact `--analysis` file, inside the current feature, among verified applied
-Decision evidence with its current raw SHA256; parsed content must match the consumed analysis.
-Use supported Decisions `apply` to record the reviewed resolved analysis alongside accepted
-choices. Matching fingerprint/score or a returned analysis hash alone does not authorize it.
+Receipt: actual publication evidence, the analysis in `inputs`, and `effort_score` (one of 1 2
+3 5 8 13 21, the approved score). With `profiles.enabled`, `complete` refuses a Scope receipt
+without it; the score fixes the tier when Plan is first claimed.

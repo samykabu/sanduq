@@ -1,7 +1,7 @@
 ---
-description: Sanduq managed lifecycle overlay
+description: "Break down implementation plans into actionable task lists. In a Sanduq workflow project it runs inside the Tasks claim with stable task IDs and GitHub-issue decisions; use to generate or revalidate tasks.md for an issue-bound feature. (Sanduq managed)"
 ---
 
 <!-- sanduq-workflow-managed:v1 -->
 If `.specify/workflow.yml` exists and there is no active matching claim, enter the dispatcher and STOP; never re-enter it from a claim. Full contract: `.specify/extensions/workflow/skills/workflow/references/dispatcher-operations.md#managed-overlay-contract`.
-Inside a matching claim, read `.specify/extensions/workflow/skills/workflow/references/stage-tasks.md` (Core Tasks provider), then continue with the upstream instructions below.
+Inside a matching claim, follow `.specify/extensions/workflow/skills/workflow/references/stage-tasks.md` (Core Tasks provider) from the claim's `reference_text`, then continue with the upstream instructions below.
