@@ -1,0 +1,4 @@
+[
+  {"key": "failed-delivery", "option": 1, "answered_by": "REPLACE_WITH_ISSUE_CREATOR_LOGIN", "answered_at": "2026-10-18T09:00:00Z"},
+  {"key": "retry-limit", "answer": "Allow three retries, then show the support contact.", "answered_by": "REPLACE_WITH_ISSUE_CREATOR_LOGIN", "answered_at": "2026-10-18T09:01:00Z"}
+]

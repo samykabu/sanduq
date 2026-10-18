@@ -288,7 +288,8 @@ class ScopeTests(unittest.TestCase):
         result = self.app.publish(snap, analysis)
         self.assertEqual(result['leaves'], 2)
         self.assertEqual(self.gh.writes, [])
-        self.assertFalse((self.root / '.specify/scope').exists())
+        # Only the board read cache (Scope 1.8.0) may exist after a dry run.
+        self.assertEqual([p.name for p in (self.root / '.specify/scope').iterdir()], ['board-cache.json'])
 
     def test_apply_without_user_approval_has_no_github_writes(self):
         snap, analysis = self.analysis(True)

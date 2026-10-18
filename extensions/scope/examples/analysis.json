@@ -5,6 +5,7 @@
   "alignment": "Replace with evidence of implemented prerequisites and the remaining delta.",
   "evidence": ["Replace with actual source path:line or PR/commit evidence"],
   "images": [],
+  "uncertainty": ["Replace with each question the analysis could not settle; leave the list empty when there is none."],
   "tree": {
     "key": "outcome",
     "title": "Replace with the issue outcome",

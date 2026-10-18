@@ -17,7 +17,7 @@ from pathlib import Path
 from scope import Scope, ScopeError, require, read_json, write_json, with_transport
 
 FEATURE, WAITING = 'Feature Specification', 'Need Clarifications'
-RECORD = re.compile(r'\A<!-- speckit-clarification:(question|round) (\{[^\n]*\}) -->\n')
+RECORD = re.compile(r'\A<!-- speckit-clarification:(question|round|round-in-session) (\{[^\n]*\}) -->\n')
 
 
 def digest(value):
@@ -216,7 +216,7 @@ def comment_url(repo, number, comment_id):
     return f'https://github.com/{repo}/issues/{number}#issuecomment-{comment_id}'
 
 
-EVIDENCE_KINDS = ('comment', 'disposition', 'selection', 'closure')
+EVIDENCE_KINDS = ('comment', 'disposition', 'selection', 'closure', 'in-session')
 
 
 def evidence_ref(kind, url=None, comment_id=None, explanation=None):
@@ -272,8 +272,13 @@ def answer_record(question, answer, comments):
     return (chosen or (None, None, None)) + (evidence,)
 
 
-def clarification_items(snapshot, analysis, outcome, round_number, batch, repo, comment_ids, spec_path, observed_at):
-    """Normalized clarification records for one validated publication. Pure: no GitHub calls, no writes."""
+def clarification_items(snapshot, analysis, outcome, round_number, batch, repo, comment_ids, spec_path, observed_at,
+                        in_session=None):
+    """Normalized clarification records for one validated publication. Pure: no GitHub calls, no writes.
+
+    `in_session` maps each question key to its session answer (`{answer, answered_by, answered_at}`); those
+    questions are recorded as applied, with the single `round-in-session` comment (`comment_ids['summary']`)
+    as their evidence."""
     number = snapshot['issue']['number']
     comments = {c['id']: c for c in snapshot['comments']}
     items = []
@@ -305,7 +310,18 @@ def clarification_items(snapshot, analysis, outcome, round_number, batch, repo, 
                       'evidence': evidence + [evidence_ref(
                           'disposition', explanation=(disposition + ': ' + str(answer.get('explanation', '')))[:VALUE_LIMIT])],
                       'batch': batch})
-    if outcome == 'waiting':
+    for index, question in enumerate(analysis['questions'] if in_session else [], 1):
+        given = in_session[question['key']]
+        url = comment_url(repo, number, comment_ids['summary'])
+        items.append({'source_id': f'C{round_number}Q{index}', 'question': question['question'],
+                      'options': list(question.get('options') or []), 'answer': given['answer'], 'state': 'applied',
+                      'url': url, 'editor': given['answered_by'], 'observed_at': observed_at,
+                      'answered_at': given['answered_at'],
+                      'applied': {'at': observed_at, 'evidence': [spec_path + '#speckit-clarification:spec ' + batch]},
+                      'evidence': [evidence_ref('in-session', url, comment_ids['summary'],
+                                                'answered in session by ' + given['answered_by'])],
+                      'batch': batch})
+    if outcome == 'waiting' and not in_session:
         for index, question in enumerate(analysis['questions'], 1):
             qid = f'C{round_number}Q{index}'
             url = comment_url(repo, number, comment_ids[qid])
@@ -421,6 +437,8 @@ class Clarification:
         if status == WAITING and policy and policy.get('clarification', {}).get('resume_on_reinvoke') == 'reread-answers':
             require(issue.get('state') == 'open', 'CLARIFICATION_CLOSED: do not reopen a closed issue implicitly.')
             return
+        if status != FEATURE and self.app.drop_cached_board():
+            return self.gate(issue)  # a cached board may let the gate pass, never refuse it
         if status == WAITING:
             raise ScopeError(f'CLARIFICATION_WAITING: tick one option per question, or add a normal comment such as C1Q1: A with optional feedback. Then move the issue back to {self.app.actual_status(FEATURE)} and rerun. No new questions were posted and no state was changed.')
         require(status == FEATURE, f'CLARIFICATION_STATE: only {self.app.actual_status(FEATURE)} issues can be processed; #{issue["number"]} is {self.app.actual_status(status)}.')
@@ -459,14 +477,15 @@ class Clarification:
         creator = issue['user']['login']
         prior = history(comments, creator)
         policy = controls(comments, creator)
-        used = max([q['round'] for q in prior['questions'].values()] + [0])
+        used = max([q['round'] for q in prior['questions'].values()] + [0] +
+                   [r.get('round', 1) for r in prior['rounds'] if r['kind'] == 'round-in-session'])
         result = {'version': 1, 'issue': issue, 'creator': creator, 'spec_path': str(path.relative_to(self.root)),
                   'spec': path.read_text(encoding='utf-8-sig'), 'comments': comments, 'history': prior,
                   'policy': policy, 'next_round': used + 1, 'limit_reached': used >= policy['max_rounds']}
         result['snapshot_digest'] = snapshot_digest(result)
         return result
 
-    def validate(self, snapshot, analysis):
+    def validate(self, snapshot, analysis, in_session=False):
         require(analysis.get('version') == 1 and analysis.get('issue') == snapshot['issue']['number'], 'Analysis must identify the current issue.')
         require(analysis.get('snapshot_digest') == snapshot['snapshot_digest'], 'CLARIFICATION_STALE: issue, answers or specification changed; reread and reevaluate.')
         require(analysis.get('engine') in {'clarify', 'brainstorm'}, 'Choose clarify or brainstorm.')
@@ -523,10 +542,21 @@ class Clarification:
                         'diagram_image needs the project-relative path of an exported Illustrate PNG and its alt text.')
                 require(isinstance(question.get('diagram_text'), str) and question['diagram_text'].strip(),
                         'diagram_image needs diagram_text: the text version (for example a dependency list) used when the image cannot be hosted.')
+            if 'priority' in question:
+                require(type(question['priority']) is int and question['priority'] >= 1,
+                        'Question priority must be a positive integer; 1 is the most important.')
+        from workflow_policy import setting
+        cap = setting(self.root, 'clarification', 'max_questions_per_round')
+        if cap is not None and len(analysis['questions']) > cap:
+            # 1 is the most important; a question without a priority is the least important; ties defer the later one.
+            ranked = sorted(enumerate(analysis['questions']), key=lambda q: (q[1].get('priority', float('inf')), q[0]))
+            raise ScopeError(f'CLARIFICATION_TOO_MANY_QUESTIONS: {len(analysis["questions"])} > {cap}; defer '
+                             + ', '.join(q['key'] for _, q in ranked[cap:]))
         followups = {qid for q in analysis['questions'] for qid in q.get('follows_up', [])}
         if unresolved and not snapshot['limit_reached'] and not snapshot['policy']['closed']:
             require(set(unresolved) <= followups, 'Every unresolved prior question needs a precise follow-up question.')
-        require(not analysis.get('spec_edits') or any(a['disposition'] in {'answered', 'superseded'} for a in answers) or snapshot['policy']['closed'],
+        # In session, the answers file is the answer evidence (checked by publish_in_session).
+        require(in_session or not analysis.get('spec_edits') or any(a['disposition'] in {'answered', 'superseded'} for a in answers) or snapshot['policy']['closed'],
                 'Do not change requirements without answer evidence or explicit creator closure.')
         if snapshot['policy']['closed']:
             outcome = 'closed'
@@ -620,7 +650,9 @@ class Clarification:
                                      'feature_name': path.parent.name}
         return result
 
-    def publish(self, value, analysis, apply=False):
+    def publish(self, value, analysis, apply=False, answers=None):
+        if answers is not None:
+            return self.publish_in_session(value, analysis, answers, apply)
         batch = digest(analysis)[:20]
         source = self.source(value)
         folder = self.root / '.specify/scope/clarifications' / f'{source["number"]}-{batch}'
@@ -672,7 +704,6 @@ class Clarification:
             has_diagram = any(question.get(k) for k in ('diagram', 'diagram_image', 'diagram_markdown'))
             body += '<details>\n<summary>More context' + (' and diagram' if has_diagram else '') + '</summary>\n\n' + question['details'] + '\n'
             if question.get('diagram'):
-                require(not automatic_resume, 'ILLUSTRATE_REQUIRED: managed questions use diagram_image (an exported Illustrate PNG) with diagram_text, not Mermaid.')
                 body += '\n```mermaid\n' + question['diagram'].strip() + '\n```\n'
             if question.get('diagram_image'):
                 section, reason = diagram_section(self.root, self.app.repo, self.gh, question)
@@ -709,9 +740,13 @@ class Clarification:
         summary = {'version': 1, 'round': round_number if questions else max(round_number - 1, 0), 'batch': batch,
                    'engine': analysis['engine'], 'outcome': outcome, 'question_ids': [q[0] for q in prepared],
                    'answers': analysis.get('answers', []), 'policy': snapshot['policy']}
+        from workflow_policy import setting
+        if setting(self.root, 'clarification', 'max_questions_per_round') is not None:
+            summary['max_questions_per_round'] = setting(self.root, 'clarification', 'max_questions_per_round')
         summary_body = f'### Clarification review: {outcome}\n\n' + analysis.get('summary', 'Questions need your answers before implementation can be planned.') + '\n\n'
         if outcome == 'waiting':
-            summary_body += f'Posted {len(prepared)} separate questions in round {round_number}. There is no question-count cap.\n\n'
+            summary_body += f'Posted {len(prepared)} separate questions in round {round_number}.' + (
+                '' if 'max_questions_per_round' in summary else ' There is no question-count cap.') + '\n\n'
         if outcome in {'waiting', 'limit'}:
             summary_body += f'The question-round limit is {snapshot["policy"]["max_rounds"]}. The issue creator can post `/clarification max-rounds N` to change it, or `/clarification close` to close the process explicitly. Answer the questions, then move the issue to **Feature Specification** before rerunning.\n'
         if outcome == 'closed':
@@ -790,6 +825,112 @@ class Clarification:
                                      'feature_name': path.parent.name}
         return result
 
+    def session_answers(self, analysis, answers, creator):
+        """`{key: {answer, answered_by, answered_at, shown}}` for every question, from the creator signed in to gh."""
+        questions = {q['key']: q for q in analysis['questions']}
+        require(isinstance(answers, list) and all(isinstance(a, dict) for a in answers),
+                'CLARIFICATION_ANSWERS_INVALID: answers must be a list of {key, option | answer, answered_by, answered_at}.')
+        given = {}
+        for item in answers:
+            key = item.get('key')
+            require(key in questions and key not in given, f'CLARIFICATION_ANSWERS_INVALID: unknown or repeated question key {key!r}.')
+            options = questions[key].get('options') or []
+            require(('option' in item) != ('answer' in item), f'CLARIFICATION_ANSWERS_INVALID: {key} needs exactly one of option or answer.')
+            if 'option' in item:
+                require(type(item['option']) is int and 1 <= item['option'] <= len(options),
+                        f'CLARIFICATION_ANSWERS_INVALID: {key} option must be the 1-based index of one of its options.')
+                answer = {'kind': 'single', 'value': option_label(item['option'])}
+                shown = f'**{answer["value"]}.** {options[item["option"] - 1]}'
+            else:
+                require(isinstance(item['answer'], str) and item['answer'].strip() and len(item['answer']) <= VALUE_LIMIT,
+                        f'CLARIFICATION_ANSWERS_INVALID: {key} answer must be nonempty text of at most {VALUE_LIMIT} characters.')
+                answer = {'kind': 'text', 'value': item['answer'].strip()}
+                shown = answer['value']
+            try:
+                datetime.fromisoformat(str(item.get('answered_at')).replace('Z', '+00:00'))
+            except ValueError:
+                raise ScopeError(f'CLARIFICATION_ANSWERS_INVALID: {key} answered_at must be an ISO 8601 time.')
+            require(isinstance(item.get('answered_by'), str), f'CLARIFICATION_ANSWERS_INVALID: {key} needs answered_by.')
+            given[key] = {'answer': answer, 'answered_by': item['answered_by'], 'answered_at': item['answered_at'], 'shown': shown}
+        missing = [key for key in questions if key not in given]
+        require(not missing, 'CLARIFICATION_IN_SESSION_UNANSWERED: every question needs an answer; missing ' + ', '.join(missing))
+        viewer = (self.gh.api('user') or {}).get('login') or ''
+        others = sorted({a['answered_by'] for a in given.values() if a['answered_by'].casefold() != creator.casefold()})
+        require(not others and viewer.casefold() == creator.casefold(),
+                f'CLARIFICATION_IN_SESSION_IDENTITY: answers must come from the issue creator @{creator}, signed in to gh '
+                f'(answered_by: {", ".join(others) or creator}; gh user: {viewer or "unknown"}).')
+        return given
+
+    def publish_in_session(self, value, analysis, answers, apply=False):
+        """Round 1 answered in the session: one `round-in-session` comment, the spec edits, applied records, Ready."""
+        from workflow_policy import setting
+        require(setting(self.root, 'clarification', 'in_session_first_round', False) is True,
+                'CLARIFICATION_IN_SESSION_DISABLED: set clarification.in_session_first_round: true in .specify/workflow.yml '
+                'to answer the first round in the session, or publish the questions without --answers.')
+        batch = digest(analysis)[:20]
+        live = self.inspect(value)
+        number = live['issue']['number']
+        folder = self.root / '.specify/scope/clarifications' / f'{number}-{batch}'
+        # A rerun of an interrupted apply validates against the stored baseline, not the thread with our own comment.
+        snapshot = read_json(folder / 'snapshot.json') or live
+        require(snapshot['next_round'] == 1, f'CLARIFICATION_IN_SESSION_ROUND: only round 1 can be answered in the session; '
+                f'#{number} is at round {snapshot["next_round"]}. Publish the questions without --answers.')
+        outcome = self.validate(snapshot, analysis, in_session=True)
+        require(outcome == 'waiting', f'CLARIFICATION_IN_SESSION_STATE: in-session answers need open questions and an open '
+                f'clarification process (outcome {outcome}); publish without --answers.')
+        creator = snapshot['creator']
+        given = self.session_answers(analysis, answers, creator)
+        ids = {q['key']: f'C1Q{i}' for i, q in enumerate(analysis['questions'], 1)}
+        spec = apply_edits(snapshot['spec'], analysis.get('spec_edits', []))
+        spec += f'\n\n<!-- speckit-clarification:spec {batch} -->\n### GitHub clarification review 1\n\n'
+        content = (f'### Clarification round 1: answered in session\n\n{analysis.get("summary", "")}\n\n@{creator} answered '
+                   'these questions in the session. The specification is updated and the issue moves to **Ready**.\n\n')
+        for question in analysis['questions']:
+            a, qid = given[question['key']], ids[question['key']]
+            spec += f'- {qid} ({question["key"]}): {a["shown"]}\n  Answered in session by @{a["answered_by"]} at {a["answered_at"]}.\n'
+            content += (f'#### {qid}: {question["question"]}\n\n**Answer:** {a["shown"]}\n\n'
+                        f'**Answered by:** @{a["answered_by"]} at {a["answered_at"]}\n\n')
+        for a in given.values():
+            del a['shown']
+        meta = {'version': 1, 'round': 1, 'batch': batch, 'engine': analysis['engine'], 'outcome': 'ready',
+                'question_ids': list(ids.values()), 'answers': [dict(given[k], id=ids[k], key=k) for k in ids],
+                'policy': snapshot['policy']}
+        body = managed_comment('round-in-session', meta, content)
+        require(len(body) <= 65000, 'The in-session round exceeds GitHub\'s comment size; shorten the summary or answers.')
+        if snapshot is not live:
+            current = snapshot['spec'] if live['spec'] == spec else live['spec']
+            require(snapshot_digest(live, batch, current) == snapshot['snapshot_digest'],
+                    'CLARIFICATION_STALE: issue, comments or specification changed since the interrupted publication; reread and reevaluate.')
+        result = {'issue': number, 'outcome': 'ready', 'round': 1, 'questions': len(ids), 'status': 'Ready',
+                  'dry_run': not apply, 'batch': batch, 'in_session': True}
+        if not apply:
+            return dict(result, comment_preview=body)
+        if snapshot is live:
+            write_json(folder / 'snapshot.json', snapshot)
+        thread = self.gh.api(f'{self.app.base}/{number}/comments?per_page=100', pages=True)
+        mine = [c for c in thread if (record(c) or {}).get('kind') == 'round-in-session' and record(c).get('batch') == batch]
+        require(len(mine) <= 1, 'Duplicate in-session round comment; reconcile before proceeding.')
+        posted = mine[0] if mine else self.gh.api(f'{self.app.base}/{number}/comments', 'POST', {'body': body})
+        path = self.root / snapshot['spec_path']
+        current = path.read_text(encoding='utf-8-sig')
+        require(current in {snapshot['spec'], spec}, 'CLARIFICATION_STALE: the specification changed while publishing; reconcile it and rerun.')
+        if current != spec:
+            temporary = path.with_suffix('.clarification.tmp')
+            temporary.write_text(spec, encoding='utf-8')
+            temporary.replace(path)
+        # Records before the move: a rerun after an interrupted move replaces them (same batch) and finishes.
+        persist_clarifications(path.parent / CLARIFICATIONS_FILE,
+                               clarification_items(snapshot, analysis, 'ready', 1, batch, self.app.repo, {'summary': posted['id']},
+                                                   Path(snapshot['spec_path']).as_posix(), datetime.now(timezone.utc).isoformat(),
+                                                   in_session=given), batch)
+        self.app._board = None
+        self.gate(self.app.issue(number))
+        self.transition(self.app.issue(number), 'Ready')
+        self.plan_gate(str(number))
+        return dict(result, comment_ids={'summary': posted['id']},
+                    next_action={'command': '/speckit-plan', 'issue': number, 'spec_path': str(path.resolve()),
+                                 'feature_directory': str(path.parent.relative_to(self.root)), 'feature_name': path.parent.name})
+
     def plan_gate(self, value=None):
         issue = self.source(value)
         status = self.app.status(issue)
@@ -797,6 +938,8 @@ class Clarification:
         revalidation = bound_claim(self.root, self.app.repo, issue['number'], {'plan'})
         previous = (revalidation or {}).get('state', {}).get('receipts', {}).get('clarify', {})
         continued = revalidation and issue.get('state') == 'open' and status in {'In progress', 'In review'} and previous.get('outcome') == 'passed' and previous.get('unresolved') == 0 and previous.get('answers_applied') is True
+        if not (status == 'Ready' or continued) and self.app.drop_cached_board():
+            return self.plan_gate(value)
         require(status == 'Ready' or continued, 'CLARIFICATION_REQUIRED: planning requires Ready or a matching managed revalidation with resolved clarification. Finish GitHub clarification first.')
         return {'issue': issue['number'], 'status': self.app.actual_status(status), 'revalidation': bool(continued)}
 
@@ -808,6 +951,7 @@ def main(argv=None):
     parser.add_argument('--root', default='.')
     parser.add_argument('--analysis', type=Path)
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--answers', type=Path, help='publish only: the in-session answers for round 1')
     parser.add_argument('--apply', action='store_true')
     args = parser.parse_args(argv)
     lock = None
@@ -825,7 +969,9 @@ def main(argv=None):
             lock = candidate
         if args.command == 'publish':
             require(args.analysis and args.analysis.is_file(), 'Provide --analysis <review.json>.')
-            result = app.publish(args.issue, read_json(args.analysis), args.apply)
+            require(not args.answers or args.answers.is_file(), 'Provide --answers <answers.json>.')
+            result = app.publish(args.issue, read_json(args.analysis), args.apply,
+                                 read_json(args.answers) if args.answers else None)
         else:
             result = getattr(app, args.command.replace('-', '_'))(args.issue)
         if args.output:

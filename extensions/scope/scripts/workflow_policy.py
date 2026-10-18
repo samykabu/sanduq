@@ -15,6 +15,12 @@ def load(root):
     return data
 
 
+def setting(root, section, key, default=None):
+    """One optional policy value; no policy, section or key gives `default`."""
+    value = ((load(root) or {}).get(section) or {}).get(key)
+    return default if value is None else value
+
+
 def keep_together(root, analysis):
     policy = load(root)
     if not policy:
