@@ -22,6 +22,14 @@ claims, evidence, invalidation and handoffs; it does not implement semantic agen
 work or launch a fresh host session by itself. Missing native invocation support
 is a blocker, not an instruction to pretend a stage ran.
 
+When Memory is installed, accepted Execute completion queues its exact feature
+through the same native handoff for Core and SuperSpec. Session entry and verified
+post-merge follow-up use that handoff too. It preserves existing queue entries and
+returns registered Memory actions for work that needs synthesis or independent
+review. Disabled approval remains pending; a Memory failure keeps its actual
+blocked reason without changing an accepted product receipt. See the
+[local Memory contract](../../extensions/workflow/skills/workflow/references/memory-lifecycle.md).
+
 ## Context
 
 Target a maximum 60% context occupancy with a checkpoint at 50% and a 10% reserve.

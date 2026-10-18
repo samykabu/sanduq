@@ -261,6 +261,30 @@ class Repository:
             if changed:
                 raise ArchiveError(f"Automatic archive requires committed inputs: {changed}")
 
+    def stage_scopes(self, scopes: list[str], *, env: dict | None = None) -> None:
+        """Stage the scopes like `add -A`, without Git's ignored-path refusal for tracked files under an ignored parent.
+
+        `add -A` exits 1 when a pathspec reaches a tracked file below an ignored directory. `add -u` stages tracked
+        edits and deletions without that check; unignored new files are added by name, as `commit` does. An
+        untracked ignored file named exactly as a scope is still refused.
+        """
+        # `add -u` refuses a pathspec that matches no tracked file, which `add -A` accepted when it matched new files.
+        tracked = self.names("ls-files", "-z", env=env)
+        reach = set(tracked)
+        for path in tracked:
+            reach.update(str(parent) for parent in PurePosixPath(path).parents if str(parent) != ".")
+        known = [s for s in scopes if s in reach]
+        if known:
+            self.git_paths("add", "-u", paths=known, env=env)
+        ignored = set(self.names("ls-files", "--others", "--ignored", "--exclude-standard", "-z", env=env))
+        named = sorted(p for p in scopes if p in ignored)
+        if named:
+            raise ArchiveError(f"Archive scope names ignored untracked paths: {named}")
+        new = [p for p in self.names("ls-files", "--others", "--exclude-standard", "-z", env=env)
+               if self.within(p, scopes)]
+        if new:
+            self.git_paths("add", paths=new, env=env)
+
     def expected_tree(self, scopes: list[str]) -> str:
         self.state.mkdir(parents=True, exist_ok=True)
         fd, name = tempfile.mkstemp(prefix="index-", dir=self.state)
@@ -269,7 +293,7 @@ class Repository:
         env = dict(os.environ, GIT_INDEX_FILE=name)
         try:
             self.git("read-tree", "HEAD", env=env)
-            self.git_paths("add", "-A", paths=scopes, env=env)
+            self.stage_scopes(scopes, env=env)
             return self.git("write-tree", env=env).decode().strip()
         finally:
             for index_path in (name, name + ".lock"):

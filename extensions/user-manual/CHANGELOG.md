@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.5.3] - 2026-10-18
+
+- Ship the reviewed shared freshness helper in the User Manual package. Generated Progress
+  reports under `specs/*/progress/` and `.specify/progress/` no longer stale manual analysis or
+  update state. Changes to true source inputs, including product directories such as
+  `src/progress`, still invalidate that state. The helper is injected by Sanduq's package builder;
+  the vendored portable User Manual skill files are unchanged.
+
 ## [1.5.2] - 2026-10-10
 
 - Scripts, scaffold, CI templates and skill references are vendored from the portable User Manual

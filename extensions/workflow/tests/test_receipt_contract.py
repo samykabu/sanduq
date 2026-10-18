@@ -335,6 +335,145 @@ class CascadeTests(Harness):
             run.complete(claim['token'], self.receipt('clarify'))
 
 
+class SemanticTransformationTests(Harness):
+    memory = '.github/memory/project-memory.md'
+
+    def claim_with_dependencies(self, stage, targets, role=None):
+        for target in targets:
+            self.write(target, 'original ' + target)
+        run = self.run_object()
+        for current in w.stages(self.policy):
+            claim = run.claim(self.usage(), finalize=current == 'pr')
+            self.assertEqual(claim['stage'], current)
+            if current == stage:
+                return run, claim
+            receipt = self.receipt(current)
+            if current in ('scope', 'qa_analyze'):
+                receipt['inputs'] += targets
+                if role:
+                    receipt['input_roles'] = {p: {'role': role, 'because': 'project context'} for p in targets}
+            run.complete(claim['token'], receipt)
+        self.fail('Stage not selected: ' + stage)
+
+    def test_qa_document_refreshes_generated_memory_with_exact_lineage(self):
+        run, claim = self.claim_with_dependencies('qa_document', [self.memory], 'dependency')
+        before = copy.deepcopy(run.load())
+        old = before['active']['baseline'][self.memory]
+        self.write(self.memory, '# Project inventory\n\nSource marker: src/service.py\n')
+        new = w.fingerprint_files(self.root, [self.memory])[self.memory]
+        self.assertNotEqual(old, new)
+        result = run.complete(claim['token'], self.receipt('qa_document'))
+        after = run.load()
+        lineage = after['lineage'][-1]
+        self.assertEqual(set(lineage), {'stage', 'changes', 'at'})
+        self.assertEqual(lineage['stage'], 'qa_document')
+        self.assertEqual(lineage['changes'], {self.memory: {'before': old, 'after': new}})
+        self.assertTrue(lineage['at'])
+        self.assertEqual(after['lineage'][:-1], before.get('lineage', []))
+        for stage, prior in before['receipts'].items():
+            expected = copy.deepcopy(prior)
+            for field in ('fingerprints', 'source_fingerprints'):
+                if self.memory in expected.get(field, {}):
+                    self.assertEqual(expected[field][self.memory], old)
+                    expected[field][self.memory] = new
+            self.assertEqual(after['receipts'][stage], expected)
+            self.assertTrue(w.receipt_current(self.root, self.feature, stage, after['receipts'][stage]))
+        self.assertEqual(after['receipts']['qa_analyze']['input_roles'][self.memory]['role'], 'dependency')
+        self.assertEqual(result['stage'], 'manual_update')
+        self.assertIsNone(after['active'])
+        checkpoint_validator().validate(after)
+
+    def test_qa_document_keeps_consulted_memory_advisory(self):
+        run, claim = self.claim_with_dependencies('qa_document', [self.memory], 'consulted')
+        before = run.load()
+        self.write(self.memory, 'refreshed context')
+        run.complete(claim['token'], self.receipt('qa_document'))
+        after = run.load()
+        self.assertEqual(after['receipts'], {**before['receipts'], 'qa_document': after['receipts']['qa_document']})
+        lineage = after['lineage'][-1]
+        self.assertTrue(lineage['advisory'])
+        self.assertEqual(lineage['consulted'], {self.memory: {
+            'before': before['active']['baseline'][self.memory],
+            'after': w.fingerprint_files(self.root, [self.memory])[self.memory]}})
+
+    def test_qa_document_cannot_delete_generated_memory_dependency(self):
+        run, claim = self.claim_with_dependencies('qa_document', [self.memory])
+        saved = run.path.read_bytes()
+        (self.root / self.memory).unlink()
+        with self.assertRaisesRegex(w.WorkflowError, 'INPUT_MISSING'):
+            run.complete(claim['token'], self.receipt('qa_document'))
+        self.assertEqual(run.path.read_bytes(), saved)
+
+    def test_memory_refresh_does_not_advance_unrelated_source_inventory(self):
+        source = self.write('src/unlisted.py', 'original source')
+        run, claim = self.claim_with_dependencies('qa_document', [self.memory])
+        before = run.load()
+        self.write(self.memory, 'refreshed inventory')
+        self.write(source, 'changed source')
+        result = run.complete(claim['token'], self.receipt('qa_document'))
+        after = run.load()
+        self.assertEqual(result['stage'], 'verify')
+        for stage in ('verify', 'review'):
+            self.assertEqual(after['receipts'][stage]['source_fingerprints'][source],
+                             before['receipts'][stage]['source_fingerprints'][source])
+            self.assertFalse(w.receipt_current(self.root, self.feature, stage, after['receipts'][stage]))
+        self.assertEqual(set(after['lineage'][-1]['changes']), {self.memory})
+
+    def test_qa_document_rejects_other_dependency_changes_atomically(self):
+        targets = ['src/service.py', self.feature + '/spec.md', self.feature + '/tasks.md',
+                   '.specify/memory/constitution.md', '.github/memory/other.md',
+                   self.feature + '/' + self.memory, '.github/memory/project-memory.md.bak']
+        run, claim = self.claim_with_dependencies('qa_document', targets + [self.memory])
+        saved = run.path.read_bytes()
+        originals = {p: (self.root / p).read_bytes() for p in targets + [self.memory]}
+        for target in targets:
+            with self.subTest(path=target):
+                self.write(self.memory, 'expected inventory refresh')
+                self.write(target, 'unexpected mutation')
+                with self.assertRaisesRegex(w.WorkflowError, 'UPSTREAM_INPUT_CHANGED_DURING_STAGE') as error:
+                    run.complete(claim['token'], self.receipt('qa_document'))
+                self.assertIn(target, str(error.exception))
+                self.assertEqual(run.path.read_bytes(), saved)
+                for path, content in originals.items():
+                    (self.root / path).write_bytes(content)
+
+    def test_other_stages_cannot_refresh_generated_memory_dependency(self):
+        self.write(self.memory, 'original inventory')
+        run = self.run_object()
+        for stage in w.stages(self.policy):
+            with self.subTest(stage=stage):
+                claim = run.claim(self.usage(), finalize=stage == 'pr')
+                self.assertEqual(claim['stage'], stage)
+                receipt = self.receipt(stage)
+                if stage == 'scope':
+                    receipt['inputs'].append(self.memory)
+                elif stage != 'qa_document':
+                    saved = run.path.read_bytes()
+                    self.write(self.memory, 'inventory changed in the wrong stage')
+                    with self.assertRaisesRegex(w.WorkflowError, 'UPSTREAM_INPUT_CHANGED_DURING_STAGE'):
+                        run.complete(claim['token'], receipt)
+                    self.assertEqual(run.path.read_bytes(), saved)
+                    self.write(self.memory, 'original inventory')
+                run.complete(claim['token'], receipt)
+
+    def test_existing_semantic_transformations_keep_exact_lineage(self):
+        for stage, name in (('clarify', 'spec.md'), ('qa_analyze', 'tasks.md'), ('manual_analyze', 'tasks.md')):
+            with self.subTest(stage=stage):
+                (self.root / self.feature / 'workflow/checkpoint.json').unlink(missing_ok=True)
+                target = self.feature + '/' + name
+                run, claim = self.claim_with_dependencies(stage, [target])
+                before = run.load()
+                self.write(target, 'semantic update by ' + stage)
+                run.complete(claim['token'], self.receipt(stage))
+                after = run.load()
+                new = w.fingerprint_files(self.root, [target])[target]
+                self.assertEqual(after['lineage'][-1]['changes'], {target: {
+                    'before': before['active']['baseline'][target], 'after': new}})
+                for prior in before['receipts']:
+                    self.assertEqual(after['receipts'][prior]['fingerprints'].get(target),
+                                     new if target in before['receipts'][prior]['fingerprints'] else None)
+
+
 class AmendmentTests(Harness):
     def ready(self):
         self.policy = w.default_policy(False, False)

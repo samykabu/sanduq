@@ -17,6 +17,7 @@ import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 # Also supports importlib loading directly from the canonical source tree.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -28,6 +29,7 @@ import lean_policy
 import verification_plan
 import evidence_snapshot
 import execution_tools
+import memory_handoff
 
 import yaml
 from packaging.specifiers import SpecifierSet
@@ -2665,7 +2667,12 @@ class Run:
                 annotate_tasks(self.root, self.relative, self.policy['delegation'], lean=lean_policy.enabled(self.policy))
             # Known semantic transformations advance upstream artifact snapshots with an
             # explicit lineage record. They do not pretend the old artifact remained current.
-            permitted = {'clarify': ['spec.md'], 'qa_analyze': ['tasks.md'], 'manual_analyze': ['tasks.md']}.get(stage, [])
+            permitted = {'clarify': [self.relative + '/spec.md'],
+                         'qa_analyze': [self.relative + '/tasks.md'],
+                         'manual_analyze': [self.relative + '/tasks.md'],
+                         # Assure Document refreshes this generated source inventory.
+                         # It is project context, not requirements authority.
+                         'qa_document': ['.github/memory/project-memory.md']}.get(stage, [])
             after = fingerprint_files(self.root, active['baseline'])
             changed = [p for p, before in active['baseline'].items() if after[p] != before]
             # Only an earlier receipt's dependency can be undermined by this stage.
@@ -2676,8 +2683,10 @@ class Run:
                 dependencies.update(dependency_fingerprints(prior, required_inputs(self.root, self.relative, name)))
             consulted = [p for p in changed if p not in dependencies]
             changed = [p for p in changed if p in dependencies]
-            unexpected = [p for p in changed if portable_label(p) not in [self.relative + '/' + f for f in permitted]]
+            unexpected = [p for p in changed if portable_label(p) not in permitted]
             require(not unexpected, 'UPSTREAM_INPUT_CHANGED_DURING_STAGE: ' + ', '.join(unexpected))
+            if stage == 'qa_document':
+                require(all(after[p] is not None for p in changed), 'INPUT_MISSING')
             if consulted:
                 state.setdefault('lineage', []).append({'stage': stage, 'advisory': True, 'consulted': {
                     p: {'before': active['baseline'][p], 'after': after[p]} for p in consulted}, 'at': now()})
@@ -2687,6 +2696,12 @@ class Run:
                     for path in changed:
                         if path in prior['fingerprints']:
                             prior['fingerprints'][path] = after[path]
+                        # Verify/Review also inventory this root-relative context file.
+                        # Advance only the accepted QA-document transformation, retaining
+                        # its old/new hashes in the same runtime-owned lineage above.
+                        source_path = portable_label(path)
+                        if stage == 'qa_document' and source_path in prior.get('source_fingerprints', {}):
+                            prior['source_fingerprints'][source_path] = after[path]
             stored = copy.deepcopy(receipt)
             if stage == 'pr' and lean_policy.enabled(self.policy):
                 stored['pr_lint_binding'] = binding
@@ -2721,7 +2736,15 @@ class Run:
             state['receipts'][stage] = stored
             state['active'] = None
             self.save(state)
-            return self.next(state)
+            result = self.next(state)
+            if stage == 'execute':
+                result['memory_handoff'] = memory_handoff.handoff(
+                    SimpleNamespace(**globals()), self.root, 'execute', self.relative)
+                # Product acceptance is already durable. Memory failure is a
+                # separate recoverable operation, never an unpassed Execute.
+                if result['memory_handoff']['ok'] is False:
+                    result['ok'] = False
+            return result
 
     def checkpoint(self, state, reason, context=None):
         state['status'] = 'paused'
@@ -2749,6 +2772,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=Path.cwd())
     sub = parser.add_subparsers(dest='action', required=True)
+    memory = sub.add_parser('memory-handoff', help='Dispatch local Memory work without changing product stage receipts')
+    memory.add_argument('--transition', choices=('execute', 'session', 'postmerge'), required=True)
+    memory.add_argument('--feature', help='Exact feature; required for execute and postmerge')
+    memory.add_argument('--check', action='append', default=None, help='Existing Memory policy check name (repeatable)')
+    memory.add_argument('--report', type=Path, help='Verified post-merge binding JSON; see memory-lifecycle reference')
     init = sub.add_parser('init')
     init.add_argument('--qa', choices=['on', 'off'], required=True)
     init.add_argument('--manual', choices=['on', 'off'], required=True)
@@ -2863,7 +2891,11 @@ def main():
     args = parser.parse_args()
     root = args.root.resolve()
     try:
-        if args.action == 'init':
+        if args.action == 'memory-handoff':
+            require(args.transition == 'session' or args.feature, 'EXPLICIT_FEATURE_REQUIRED')
+            result = memory_handoff.handoff(SimpleNamespace(**globals()), root, args.transition,
+                                            args.feature, args.check, read(args.report) if args.report else None)
+        elif args.action == 'init':
             ensure_local_excludes(root)
             path = root / '.specify/workflow.yml'
             policy = default_policy(args.qa == 'on', args.manual == 'on')

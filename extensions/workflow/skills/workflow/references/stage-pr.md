@@ -69,6 +69,12 @@ last dispatch state, not a claim that a merged PR is still open or fully verifie
 the post-merge report records external delivery state. Never infer merge/deploy
 authorization from Finalize, or claim completion while required checks are failing.
 
+After verified delivery, invoke the explicit native post-merge Memory handoff in
+[memory-lifecycle.md](memory-lifecycle.md) and dispatch its registered next action.
+Preserve `pr_open` and all accepted stage receipts. Report-only follow-up PRs stop
+after reporting: never recursively archive another feature or refresh dependency
+reports again. A returned Memory action is pending semantic work, not proof of an archive.
+
 ## Managed overlay's finalize entry point
 
 **finalize**: run the same loop with `--finalize`. This authorizes PR generation within the

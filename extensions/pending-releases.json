@@ -1,6 +1,11 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Workflow 1.11.1 stops coordinator lanes for lifecycle stage runs (one lane per Execute workstream), the shim reuses or splits lanes correctly, and the vendored delegate-task moves to agent-tools 1.3.1; Progress 1.1.3 vendors agent-tools 1.3.1 (report correctness patch and #87 review fixes). Publish after workflow 1.11.0 is released, successful main CI and downloaded asset verification."
+  "versions": {
+    "workflow": "1.11.2",
+    "memory": "2.2.1",
+    "assure": "2.3.3",
+    "user-manual": "1.5.3"
+  },
+  "status": "ready",
+  "note": "Workflow 1.11.2 and Memory 2.2.1 retain their independently reviewed and locally validated fixes. Assure 2.3.3 and User Manual 1.5.3 ship the reviewed shared freshness helper; Workflow 1.11.2 pins both selected dependencies. This release-closure batch changes metadata only; reviewed production code is unchanged. All four versions are ready for publication through the existing release workflow after successful current-main CI; verify immutable assets before catalog promotion."
 }
