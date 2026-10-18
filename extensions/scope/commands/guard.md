@@ -1,5 +1,5 @@
 ---
-description: "Validate the explicit GitHub issue and score before any Specify side effects."
+description: "Blocks Specify before any side effect unless one explicit GitHub issue has a fresh approved Scope receipt and eligible prerequisites, and returns the scoped prompt Specify must use. Runs as the mandatory before_specify hook; use it when Specify starts for an issue."
 ---
 
 # Scope prerequisite guard
@@ -14,8 +14,8 @@ and run /speckit-scope <issue> first.` Do not create or edit a specification.
 
 Run `python .specify/extensions/scope/scripts/scope.py gate <number>`.
 Standalone work requires **Backlog** before branch creation or specification writes.
-The explicit fresh managed clarification-return path below is the narrow exception;
-a historical feature pointer or workflow policy alone does not authorize it.
+The fresh managed clarification-return path is the narrow exception; a historical
+feature pointer or workflow policy alone does not authorize it.
 Any nonzero exit is a hard stop for Specify and its remaining hooks. Surface the
 error and prerequisite table without hiding it. On success retain the returned
 issue number and fingerprint in this invocation, and use its returned enriched
@@ -24,34 +24,5 @@ outside that scope require running Scope again, not quietly expanding the spec.
 This guard does not create a branch or a feature; ignore the core command's
 generic assumption that every before_specify hook returns branch metadata.
 
-
-Pick the command from the claim you hold, not from memory. For the initial claim, print it with
-`python .specify/extensions/workflow/scripts/execution_tools.py scope-command --mode initial --command gate --issue <number> --feature specs/<feature> --token <active-token> --session <active-session> --analysis <resolved-analysis.json>`.
-All four values are required: Scope refuses a partial set, and the fresh path needs the analysis file.
-To revalidate an existing claim, use `--mode revalidate` with the issue and nothing else. Scope finds
-that claim itself from the selected feature and its bound checkpoint, and any feature, token or
-session flag would push it onto the fresh path instead. The helper rejects them. It exits 2 on a
-missing or non-numeric issue. Run the printed command unchanged.
-
-Fresh managed clarification return (Scope 1.6.1): for the current initial Scope/Specify
-claim, pass the exact dispatcher feature, token and session to both native guard and bind:
-`scope.py gate <issue> --feature specs/<feature> --token <active-token> --session <active-session> --analysis <resolved-analysis.json>`;
-then during Specify use the same flags with `scope.py bind <issue> --apply`.
-This narrow path permits mapped Feature Specification after answered clarification, verifies
-live applied decisions and the unchanged published v2 native leaf with retained parent
-approval, and returns hashes without republishing unchanged scope or creating new approval.
-Use the explicit active feature, never a historical `.specify/feature.json` pointer. A missing
-or foreign claim, wrong branch/repository/issue, pending decision, stale scope, changed approved
-score or native relationship fails closed. Other fresh statuses retain the Backlog gate.
-Standalone invocation and existing revalidation keep their previous guards. This material
-binding change requires focused independent review before installing the local candidate.
-
-
-W01d binding restrictions: fresh native `bind` requires the owned initial **Specify**
-claim before local or remote writes (including the CLI lock). Scope may run the read gate,
-but cannot bind a placeholder spec. An unchanged published prompt remains authoritative;
-local analysis is `consulted` and supplies no replacement scope authority. A revised prompt
-requires the exact `--analysis` file, inside the current feature, among verified applied
-Decision evidence with its current raw SHA256; parsed content must match the consumed analysis.
-Use supported Decisions `apply` to record the reviewed resolved analysis alongside accepted
-choices. Matching fingerprint/score or a returned analysis hash alone does not authorize it.
+In a managed workflow claim, take the exact command and flags from
+`.specify/extensions/workflow/skills/workflow/references/scope-binding.md`.

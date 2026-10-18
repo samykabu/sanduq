@@ -1,97 +1,50 @@
 ---
-name: sanduq-workflow
-description: Run the project-selected Scope-to-PR lifecycle with GitHub clarification, native task sub-issues, optional QA/manuals and fresh-session checkpoints.
+name: speckit-workflow
+description: "Drives an issue-bound feature through the Spec Kit lifecycle, from scope to pull request, by claiming each stage from the workflow runtime, running its command and recording an evidence receipt. Use in a project with .specify/workflow.yml to scope an issue, continue or resume a feature, show its status, reread clarification answers, run doctor, or finalize the PR."
 ---
 
-# Sanduq workflow dispatcher
+# Workflow dispatcher
 
-This skill dispatches semantic work to the installed commands and verifies their evidence.
-Use the installed runtime at `.specify/extensions/workflow/scripts/workflow.py`.
-Run Python with argument arrays or properly quoted paths. Install runtime dependencies from
-the package's pinned `requirements.txt` when missing. Never install a floating tool version.
+Runtime: `python .specify/extensions/workflow/scripts/workflow.py` (argument arrays or quoted
+paths; missing dependencies only from the pinned `requirements.txt`). Read this file,
+receipt-rules.md, dispatcher-operations.md and delegation-and-decisions.md once per session.
 
 ## Entry points
 
-`init`, `continue`, `status`, `doctor`, `reconcile`, `relocate`: see
-[dispatcher-operations.md](references/dispatcher-operations.md). `scope`, `clarify`
-enter the stage loop below; see `references/stage-scope.md`,
-`references/stage-clarify.md`. `finalize` runs the same loop with `--finalize`; see
-[stage-pr.md](references/stage-pr.md).
+`continue`, `status`, `doctor`, `reconcile`: [dispatcher-operations.md](references/dispatcher-operations.md).
+`init`, upgrades, `migrate`, `relocate`, `host`: [setup-and-updates.md](references/setup-and-updates.md).
+`scope`, `clarify` and `finalize` (`--finalize`) run the stage loop.
 
 ## Stage loop
 
-1. Read `next --feature ...` and run doctor. Stop for missing dependencies, malformed policy,
-   ambiguous binding, active foreign executor, or a changed package lock. Never skip a gate.
-2. Only reliable measured host context usage can trigger a context pause; without it,
-   continue automatically in bounded batches. Never invent percentages or a stop estimate.
-   Full rule: [context-and-telemetry](references/dispatcher-operations.md#context-and-telemetry-stage-loop-step-2).
-3. `claim --feature ... --usage <file>` returns the stage, command and claim token. It also
-   returns a `reference`: the exact project-relative path, e.g.
-   `.specify/extensions/workflow/skills/workflow/references/stage-<stage>.md`, to read
-   before acting. If it checkpoints based on a fresh reliable measurement, save the handoff and
-   use a supported host continuation mechanism when available; otherwise return the
-   fresh-session prompt. Handoff contents and GitHub-discussion rules:
+1. `next --feature specs/<f>`. Stop for missing dependencies, malformed policy, ambiguous
+   binding, a foreign active executor or a changed package lock. Never skip a gate.
+2. Only a reliable measured context reading can pause for context; never invent percentages
+   ([context-and-telemetry](references/dispatcher-operations.md#context-and-telemetry)).
+3. `claim --feature ... --usage <file>` returns `stage`, `command`, the token, `reference` and
+   `reference_text`. The claim already contains the stage reference text; do not read the file
+   again. Each stage reference is self-sufficient. The claim may add `mode` (`revalidate`,
+   `bind-only`), `merged`, `profile`, `side_effects` and `project_sync`. Handoff and GitHub rules:
    [interruption-and-github-behavior](references/dispatcher-operations.md#interruption-and-github-behavior).
-   Unknown, estimated, stale or unreliable measurements do not justify
-   a context pause. Continue ordinary stage transitions automatically and keep durable
-   progress notes.
-4. Invoke the selected command in this host using its installed skill/command registration,
-   or its delegation route when `delegation.enabled` is true. Full rule, including decision
-   escalation: [delegation-and-decisions.md](references/delegation-and-decisions.md).
-5. Before writing any receipt, read
-   [receipt-rules.md](references/receipt-rules.md): capture prior evidence before editing.
-   It holds the rules for what
-   makes a receipt honest (failed/skipped/pending work cannot pass, a pending or conflicted
-   issue decision blocks a passed receipt and must be in the stage inputs, checkpoint files
-   never belong in the input manifest), declaring `input_roles`, `amend`, and the recovery
-   recipes after source drift or a `STALE_RECEIPT` gate failure; never revalidate on a note
-   alone. Record an honest receipt JSON: `stage`, `outcome: passed`, `summary`, `inputs`,
-   `evidence`, and the optional `input_roles` map. A receipt without `input_roles` is read as
-   all-dependency. A changed dependency stales the receipt and fails a later stage with
-   `UPSTREAM_INPUT_CHANGED_DURING_STAGE`; a changed consulted input is reported by `next` as
-   `advisory_drift`. If only a completed stage's evidence file changed afterwards, do not
-   re-record the stage and do not copy hashes forward: use `amend`. Add the stage-specific
-   fields in this stage's own reference.
-6. Run `complete --feature ... --token ... --receipt <file>`. Re-read the next stage.
-   Continue automatically without asking about routine transitions. If blocked, use
-   `pause --reason` and report the actual question or failure. Preserve required human
-   review/deployment gates. Project Sync and native task-issue sync timing:
-   [project-sync](references/dispatcher-operations.md#project-sync-and-task-issue-sync-stage-loop-step-6).
-7. When `ready_to_finalize` is reached, honor the existing publication authorization.
-   If the user already requested a PR, continue with Finalize automatically. Otherwise
-   report readiness and obtain the missing PR authorization. Executor hooks never
-   create the PR. Finalize authorizes PR creation only; merging requires the user's
-   separate authorization, which may already be present in the original request.
+4. Invoke the command through its installed skill, or its delegation route when
+   `delegation.enabled` ([delegation-and-decisions.md](references/delegation-and-decisions.md));
+   material choices go to the GitHub issue. `workflow:*` commands are runtime stages you run
+   yourself, as their reference says. Retest after every fix.
+5. Before writing any receipt, read [receipt-rules.md](references/receipt-rules.md) (once per
+   session): failed, skipped or pending work cannot pass and a pending decision blocks. Add the
+   stage fields its reference names. Drift: [recovery.md](references/recovery.md).
+6. `complete --feature ... --token ... --receipt <file>` prints `{ok, stage, next}`; claim the
+   next stage without asking. When blocked, `pause --reason` and report the actual question or
+   failure. Keep required human review and deployment gates.
+7. At `ready_to_finalize`, continue to Finalize if the user already asked for a PR, otherwise
+   report readiness and ask. Executor hooks never create the PR. Finalize authorizes the PR
+   only; merging needs the user's separate authorization, which may be in the original request.
 
-Runtime `workflow:*` stages are this skill's built-in operations, not missing slash commands:
-**verification** runs the relevant real tests/checks; **review** reviews against spec/constitution
-and fixes blocking findings; **gates** validates readiness, selected documentation audits,
-freshness and task mapping. Preserve their distinct evidence and run necessary retests after fixes.
+With `profiles.enabled`, the Scope `effort_score` fixes a tier (`lite`, `standard`, `full`) at
+the first Plan claim; lite and standard merge Tasks into Plan and run Analyze as
+`workflow:lint`, and lite skips the QA and manual stages. `status` lists skipped stages; never
+run a skipped stage by hand.
 
-## Stage reference map
-
-`claim`'s `reference` field (project-relative, per step 3) names the file for the
-claimed `stage`; load exactly that file, never guess from the stage name alone. The
-table's `Reference` column is relative to `references/` only, unlike the field.
-
-| Stage | Reference | Stage | Reference |
-| --- | --- | --- | --- |
-| scope | stage-scope.md | taskstoissues | stage-taskstoissues.md |
-| specify | stage-specify.md | execute | stage-execute.md |
-| clarify | stage-clarify.md | verify | stage-verify.md |
-| plan | stage-plan.md | review | stage-review.md |
-| tasks | stage-tasks.md | qa_document | stage-qa_document.md |
-| qa_analyze | stage-qa_analyze.md | manual_update | stage-manual_update.md |
-| manual_analyze | stage-manual_analyze.md | ready | stage-ready.md |
-| analyze | stage-analyze.md | pr | stage-pr.md |
-
-A managed command overlay
-(`presets/workflow/commands/*.md`) is a short pointer into this skill and its
-claimed reference; the contract it points to (enter/stop/never-recurse) is
-[managed-overlay-contract](references/dispatcher-operations.md#managed-overlay-contract).
-The `speckit-superpowers-bridge` legacy overlays instead point to
-[legacy-guard.md](references/legacy-guard.md).
-
-## Updates
-
-See [updates](references/dispatcher-operations.md#updates).
+Managed command overlays (`presets/workflow/commands/*.md`) follow the
+[managed-overlay-contract](references/dispatcher-operations.md#managed-overlay-contract); the
+`speckit-superpowers-bridge` overlays follow [legacy-guard.md](references/legacy-guard.md).

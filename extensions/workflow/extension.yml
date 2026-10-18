@@ -2,7 +2,7 @@ schema_version: '1.0'
 extension:
   id: workflow
   name: Sanduq Workflow
-  version: "1.12.0"
+  version: "1.13.0"
   description: GitHub issue decisions and resumable Scope-to-PR orchestration with
     optional model-aware delegation, QA, User Manual, and workflow evidence CI.
   author: Samy K. Abushanab
@@ -23,44 +23,43 @@ provides:
   commands:
   - name: speckit.workflow.init
     file: commands/init.md
-    description: Select QA, User Manual, decision authority and CI evidence policy.
+    description: "Sets up the Sanduq workflow in a Spec Kit project: selects QA and User Manual processes, decision reviewers, delegation, CI runners and evidence gate, then installs and checks the managed packages. Use once per project, or when asked to initialize, configure or reconfigure the workflow."
   - name: speckit.workflow.scope
     file: commands/scope.md
-    description: Scope the explicit issue and automatically continue when decisions
-      are resolved.
+    description: "Scopes an explicit GitHub issue and continues the managed lifecycle into Specify, Clarify and Plan once no decision is pending. Use to start work on an issue by number or title, or when asked to scope, size or begin a feature from an issue."
   - name: speckit.workflow.clarify
     file: commands/clarify.md
-    description: Read GitHub answers and automatically prepare tasks and implementation.
+    description: "Rereads the GitHub answers to clarification questions for an issue-bound feature, applies them to the spec and continues the lifecycle into planning, tasks and implementation. Use after people answered the issue's questions, or when asked to check or apply clarification answers."
   - name: speckit.workflow.continue
     file: commands/continue.md
-    description: Resume the earliest unfinished or stale stage from its checkpoint.
+    description: "Resumes an issue-bound feature at its earliest unfinished or stale stage from the workflow checkpoint and runs the remaining stages. Use in a new session, after an interruption or pause, or when asked to continue, resume or pick up a feature."
   - name: speckit.workflow.finalize
     file: commands/finalize.md
-    description: Verify completion and create or update one PR with inline visuals.
+    description: "Verifies readiness and creates or updates the single pull request for an issue-bound feature, with inline visuals, then verifies the merge when reported. Use when asked to finish, finalize, open or update the PR, or check a merged feature."
   - name: speckit.workflow.status
     file: commands/status.md
-    description: Show current stage, active claim and evidence freshness.
+    description: "Shows an issue-bound feature's current stage, active claim, receipts, profile, skipped stages, blockers and evidence freshness without changing anything. Use when asked where a feature is, what is blocking it, or what the workflow will do next."
   - name: speckit.workflow.doctor
     file: commands/doctor.md
-    description: Check selected dependencies and available host commands.
+    description: "Checks the workflow's dependencies, policy, installed host commands and skills, board configuration and package lock, reporting every missing or broken item. Use after installing or upgrading, when a claim fails on setup, or when asked to diagnose the workflow."
   - name: speckit.workflow.reconcile
     file: commands/reconcile.md
-    description: Install managed hooks and presets without changing unrelated integrations.
+    description: "Installs or repairs the workflow's managed hooks and presets from policy through Spec Kit, without changing unrelated integrations. Use after editing .specify/workflow.yml, after an upgrade, or when doctor reports drifted hook or preset ownership."
   - name: speckit.workflow.verify-affected
     file: commands/verify-affected.md
-    description: Run this feature's affected lanes locally with the project's affected-lane hook, into the same results.json.
+    description: "Runs only the feature's affected test lanes locally, from the project's affected-lane hook, into the CI results.json format; the result is local evidence, never CI evidence. Use before pushing, or when asked to test what a change affects."
   - name: speckit.workflow.ci-report
     file: commands/ci-report.md
-    description: Summarize the last N CI runs of a workflow into a leg/lane/critical-path table.
+    description: "Summarizes the last N runs of a GitHub Actions workflow into per-job durations, wall-clock spans and fixed overhead versus test time. Use before changing CI lanes or runners, or when asked why CI is slow or how often runs are cancelled."
   - name: speckit.workflow.gate-explain
     file: commands/gate-explain.md
-    description: Explain a gate failure's recovery recipe and, only for evidence-only drift, offer to fix it.
+    description: "Explains a failing workflow evidence gate: names the stale stage and its exact recovery recipe, and for evidence-only drift can amend the receipt. Use when the gate or CI reports STALE_RECEIPT or another gate failure, or when asked how to fix it."
   - name: speckit.workflow.worker-brief
     file: commands/worker-brief.md
-    description: Generate a 3-5 KB worker brief for one task from verbatim requirements, owned paths and the execution protocol.
+    description: "Generates a compact 3-5 KB brief for one task with its verbatim requirements, owned paths, turn budget, protocol rules and result template, so a worker skips the full spec set. Use before assigning a task to a worker agent."
   - name: speckit.workflow.apply-pending
     file: commands/apply-pending.md
-    description: Apply workflow/pending-artifact-updates.md to the contracts/data-model/research it targets.
+    description: "Applies the proposed wording queued in workflow/pending-artifact-updates.md to the feature's contracts, data model or research, and names any receipts that became stale. Use at the end of Execute and of Review, or when asked to apply pending artifact updates."
 tags:
 - workflow
 - qa

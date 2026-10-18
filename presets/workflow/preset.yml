@@ -2,7 +2,7 @@ schema_version: '1.0'
 preset:
   id: workflow
   name: Sanduq managed workflow
-  version: 1.1.1
+  version: 1.2.0
   description: One dispatcher owns automatic transitions, GitHub clarification, and
     native task sub-issues.
   author: Samy K. Abushanab
@@ -26,7 +26,7 @@ provides:
     name: speckit.clarify
     file: commands/speckit.clarify.md
     replaces: speckit.clarify
-    strategy: prepend
+    strategy: replace
   - type: command
     name: speckit.plan
     file: commands/speckit.plan.md
@@ -56,7 +56,7 @@ provides:
     name: speckit.superspec.brainstorm
     file: commands/speckit.superspec.brainstorm.md
     replaces: speckit.superspec.brainstorm
-    strategy: prepend
+    strategy: replace
   - type: command
     name: speckit.superspec.tasks
     file: commands/speckit.superspec.tasks.md

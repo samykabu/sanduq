@@ -126,7 +126,7 @@ class NativeIntegrationTests(unittest.TestCase):
              patch.object(run, 'next', return_value={'stage': None}), \
              patch.object(w, 'github_repository', return_value='acme/app'), \
              patch.object(w, 'required_inputs', return_value=[]), \
-             patch.object(w, 'fingerprint_files', side_effect=lambda root, paths: {p: 'hash' for p in paths}):
+             patch.object(w, 'fingerprint_files', side_effect=lambda root, paths, **_: {p: 'hash' for p in paths}):
             run.complete('owned', receipt)
         stored = state['receipts']['pr']
         self.assertEqual(stored['pr_lint_binding']['prerequisites'], [9])

@@ -1,24 +1,18 @@
 # Stage reference: verify
 
-Loaded when `claim` returns `stage: verify` (runtime `workflow:verification`).
-
-If lean policy selects `verification_plan`, run the exact relevant checks and
-record passing local evidence with `references/verification-plan.md`. Verify
-completion captures a runtime-owned snapshot of their commands, sources,
-fixtures, environment and evidence. Reuse is allowed only for unchanged
-passing checks. Local records remain local evidence; the selected CI checks
-and genuine local acceptance remain required. An exact fixed collection
-command belongs to the coordinator and needs no extra model dispatch.
-
-Before the last Verify/Review/Ready pass, read the publication preflight in
-`references/stage-pr.md#publication-preflight-and-post-merge-verification` and
-prepare portable evidence there.
+Runtime stage `workflow:verification`. Before the last Verify, Review or Ready pass, read the
+publication preflight in `references/stage-pr.md#publication-preflight-and-post-merge-verification`
+and prepare portable evidence there.
 
 ## Required work and evidence
 
-Actual tests/review evidence and `blocking_findings: 0`. A command instruction or
-checklist alone is not an executed test.
+Run the relevant real tests and checks. Receipt: actual test evidence and `blocking_findings:
+0`; a command instruction or checklist alone is not an executed test. If lean policy selects a
+`verification_plan`, run the exact relevant checks and record passing local evidence as
+[verification-plan.md](verification-plan.md) says; completion captures a runtime snapshot, and
+only unchanged passing checks are reused. Local records stay local evidence; the selected CI
+checks and real local acceptance remain required. An exact fixed collection command belongs to
+the coordinator and needs no model dispatch.
 
-See `references/receipt-rules.md` for the full amendment and revalidation
-recipes, including the `revalidate --stage verify --check-run <run id>` recovery
-after source drift.
+After source drift, `revalidate --stage verify --check-run <run id>` and the other recipes are
+in [recovery.md](recovery.md).

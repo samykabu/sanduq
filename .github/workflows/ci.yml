@@ -45,6 +45,9 @@ jobs:
       - name: Claude Code validates the marketplace
         run: npx -y @anthropic-ai/claude-code plugin validate .
 
+      - name: Skills follow the Agent Skills frontmatter rules
+        run: python3 extensions/scripts/validate_skills.py extensions presets skills
+
       - name: Vendored skills match vendor.lock.json
         run: python3 extensions/scripts/vendor.py check
 
@@ -80,7 +83,7 @@ jobs:
             echo "checking $f"; jq empty "$f"
           done < <(
             {
-              printf '%s\n' catalog.json .claude-plugin/marketplace.json
+              printf '%s\n' catalog.json .claude-plugin/marketplace.json .agents/plugins/marketplace.json
               find extensions -path '*/node_modules/*' -prune -o -name '*.json' -print
             } | sort -u
           )
@@ -299,6 +302,12 @@ jobs:
             args+=(--superspec-source "$GITHUB_WORKSPACE/dist/upstream-superspec")
           fi
           python extensions/scripts/smoke_install.py "${args[@]}"
+      - name: Installed skills follow the Agent Skills frontmatter rules
+        shell: bash
+        run: |
+          folders=(dist/install-tests/*/project/.claude/skills dist/install-tests/*/project/.agents/skills)
+          existing=(); for f in "${folders[@]}"; do [[ -d "$f" ]] && existing+=("$f"); done
+          python extensions/scripts/validate_skills.py "${existing[@]}"
       - name: Preserve installation evidence
         if: always()
         uses: actions/upload-artifact@v4

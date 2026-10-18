@@ -1,5 +1,7 @@
+import contextlib
 import copy
 import importlib.util
+import io
 import json
 import subprocess
 import tempfile
@@ -20,6 +22,7 @@ class ReviewGitHub(FakeGitHub):
         super().__init__()
         self.comments = []
         self.fail_after_post = False
+        self.viewer = 'creator'
 
     def comment(self, body, login='creator', association='OWNER', user_type='User'):
         item = {'id': len(self.comments) + 1000, 'body': body, 'user': {'login': login, 'type': user_type},
@@ -29,6 +32,8 @@ class ReviewGitHub(FakeGitHub):
         return copy.deepcopy(item)
 
     def api(self, endpoint, method='GET', payload=None, pages=False):
+        if endpoint == 'user':
+            return {'login': self.viewer}
         if endpoint.split('?')[0].endswith('/1/comments'):
             if method == 'POST':
                 self.writes.append((method, endpoint, payload))
@@ -486,10 +491,11 @@ class ClarificationTests(unittest.TestCase):
         with self.assertRaisesRegex(sm.ScopeError, 'alt text'):
             self.app.publish('1', self.analysis([q]))
 
-    def test_managed_questions_use_illustrate_not_mermaid_or_raw_urls(self):
+    def test_managed_questions_render_mermaid_but_refuse_raw_urls(self):
         (self.root / '.specify/workflow.yml').write_text('schema_version: 1\nclarification:\n  resume_on_reinvoke: reread-answers\n', encoding='utf-8')
-        with self.assertRaisesRegex(sm.ScopeError, 'ILLUSTRATE_REQUIRED'):
-            self.app.publish('1', self.analysis([dict(question(), diagram='graph TD; A-->B')]))
+        preview = self.app.publish('1', self.analysis([dict(question(), diagram='graph TD; A-->B')]))['comment_previews'][0]
+        self.assertIn('\n```mermaid\ngraph TD; A-->B\n```\n', preview)
+        self.assertIn('More context and diagram', preview)
         legacy = dict(question(), diagram_markdown='![x](https://raw.githubusercontent.com/acme/app/main/x.png)')
         with self.assertRaisesRegex(sm.ScopeError, 'INLINE_IMAGE_REQUIRED'):
             self.app.publish('1', self.analysis([legacy]))
@@ -943,6 +949,132 @@ class ClarificationTests(unittest.TestCase):
         with self.assertRaisesRegex(sm.ScopeError, 'CLARIFICATION_WAITING'):
             self.app.publish('1', {'version': 1, 'issue': 1, 'snapshot_digest': 'x', 'engine': 'clarify', 'questions': []}, True)
 
+    # ---- Scope 1.8.0: question cap and in-session first round ----------------------------------------------------
+
+    def policy(self, text):
+        (self.root / '.specify/workflow.yml').write_text('schema_version: 1\nclarification:\n' + text, encoding='utf-8')
+
+    def test_the_question_cap_names_the_lowest_priority_keys_to_defer(self):
+        self.policy('  max_questions_per_round: 2\n')
+        questions = [dict(question('a'), priority=2), question('b'), dict(question('c'), priority=1), dict(question('d'), priority=3)]
+        with self.assertRaisesRegex(sm.ScopeError, r'^CLARIFICATION_TOO_MANY_QUESTIONS: 4 > 2; defer d, b$'):
+            self.app.publish('1', self.analysis(questions))
+        self.assertEqual(self.gh.writes, [])
+        for bad in (0, True, '1'):
+            with self.assertRaisesRegex(sm.ScopeError, 'priority'):
+                self.app.publish('1', self.analysis([dict(question(), priority=bad)]))
+        result = self.app.publish('1', self.analysis(questions[:2]), True)
+        self.assertEqual(result['questions'], 2)
+        summary = next(c for c in self.gh.comments if m.record(c)['kind'] == 'round')
+        self.assertEqual(m.record(summary)['max_questions_per_round'], 2)
+        self.assertNotIn('no question-count cap', summary['body'])
+
+    def test_no_cap_keeps_unlimited_questions(self):
+        self.assertEqual(self.app.publish('1', self.analysis([question(f'q-{n}') for n in range(9)]))['questions'], 9)
+
+    def session(self, edits=True):
+        self.policy('  in_session_first_round: true\n')
+        analysis = self.analysis([question('retry'), dict(question('draft'), options=[])])
+        if edits:
+            analysis['spec_edits'] = [{'before': 'The form can be submitted.',
+                                       'after': 'The form can be submitted. A failed request keeps the form and offers retry.'}]
+        answers = [{'key': 'retry', 'option': 1, 'answered_by': 'creator', 'answered_at': '2026-10-18T09:00:00Z'},
+                   {'key': 'draft', 'answer': 'Keep a local draft.', 'answered_by': 'Creator', 'answered_at': '2026-10-18T09:01:00Z'}]
+        return analysis, answers
+
+    def test_in_session_dry_run_previews_one_comment_and_writes_nothing(self):
+        analysis, answers = self.session()
+        before = (self.feature / 'spec.md').read_text()
+        result = self.app.publish('1', analysis, False, answers)
+        self.assertEqual((result['dry_run'], result['status'], result['in_session']), (True, 'Ready', True))
+        preview = result['comment_preview']
+        self.assertTrue(preview.startswith('<!-- speckit-clarification:round-in-session '))
+        self.assertIn('#### C1Q1: What should happen if the request fails?\n\n**Answer:** **A.** Retry', preview)
+        self.assertIn('**Answer:** Keep a local draft.', preview)
+        self.assertIn('**Answered by:** @creator at 2026-10-18T09:00:00Z', preview)
+        self.assertEqual(self.gh.writes, [])
+        self.assertEqual((self.feature / 'spec.md').read_text(), before)
+        self.assertFalse(self.records_path().exists())
+
+    def test_in_session_apply_posts_once_edits_the_spec_records_and_moves_ready(self):
+        analysis, answers = self.session()
+        result = self.app.publish('1', analysis, True, answers)
+        self.assertEqual(len(self.gh.comments), 1)
+        posted = m.record(self.gh.comments[0])
+        self.assertEqual((posted['kind'], posted['round'], posted['question_ids']), ('round-in-session', 1, ['C1Q1', 'C1Q2']))
+        self.assertEqual(self.gh.statuses[1], 'Ready')
+        self.assertEqual(result['next_action']['command'], '/speckit-plan')
+        spec = (self.feature / 'spec.md').read_text(encoding='utf-8')
+        self.assertIn('A failed request keeps the form and offers retry.', spec)
+        self.assertIn('- C1Q2 (draft): Keep a local draft.\n  Answered in session by @Creator at 2026-10-18T09:01:00Z.\n', spec)
+        items = self.records()['items']
+        self.assertEqual([(i['source_id'], i['state']) for i in items], [('C1Q1', 'applied'), ('C1Q2', 'applied')])
+        self.assertEqual(items[0]['answer'], {'kind': 'single', 'value': 'A'})
+        self.assertEqual(items[1]['answer'], {'kind': 'text', 'value': 'Keep a local draft.'})
+        self.assertEqual(items[0]['evidence'][0]['kind'], 'in-session')
+        self.assertEqual(items[0]['evidence'][0]['comment_id'], self.gh.comments[0]['id'])
+        self.move(m.FEATURE)
+        self.assertEqual(self.app.inspect('1')['next_round'], 2)  # the in-session round counts
+        with self.assertRaisesRegex(sm.ScopeError, 'CLARIFICATION_IN_SESSION_ROUND'):
+            self.app.publish('1', self.session()[0], False, answers)
+
+    def test_in_session_rerun_after_a_failed_move_finishes_without_a_second_comment(self):
+        analysis, answers = self.session()
+        with patch.object(self.scope, 'set_status', side_effect=sm.ScopeError('board unavailable')):
+            with self.assertRaisesRegex(sm.ScopeError, 'board unavailable'):
+                self.app.publish('1', analysis, True, answers)
+        self.assertEqual(self.gh.statuses[1], m.FEATURE)
+        self.app.publish('1', analysis, True, answers)
+        self.assertEqual(len(self.gh.comments), 1)
+        self.assertEqual(self.gh.statuses[1], 'Ready')
+        self.assertEqual(len(self.records()['items']), 2)
+
+    def test_in_session_refusals(self):
+        analysis, answers = self.session(edits=False)
+        self.policy('  in_session_first_round: false\n')
+        with self.assertRaisesRegex(sm.ScopeError, 'CLARIFICATION_IN_SESSION_DISABLED'):
+            self.app.publish('1', analysis, False, answers)
+        self.policy('  in_session_first_round: true\n')
+        with self.assertRaisesRegex(sm.ScopeError, 'CLARIFICATION_IN_SESSION_UNANSWERED: .*draft'):
+            self.app.publish('1', analysis, False, answers[:1])
+        for change in ({'option': 3}, {'option': 1, 'answer': 'x'}, {'key': 'other'}, {'answered_at': 'yesterday'}):
+            with self.assertRaisesRegex(sm.ScopeError, 'CLARIFICATION_ANSWERS_INVALID'):
+                self.app.publish('1', analysis, False, [dict(answers[0], **change), answers[1]])
+        with self.assertRaisesRegex(sm.ScopeError, 'CLARIFICATION_IN_SESSION_IDENTITY'):
+            self.app.publish('1', analysis, False, [answers[0], dict(answers[1], answered_by='someone')])
+        self.gh.viewer = 'someone'
+        with self.assertRaisesRegex(sm.ScopeError, 'CLARIFICATION_IN_SESSION_IDENTITY'):
+            self.app.publish('1', analysis, False, answers)
+        self.gh.viewer = 'creator'
+        with self.assertRaisesRegex(sm.ScopeError, 'CLARIFICATION_IN_SESSION_STATE'):
+            self.app.publish('1', self.analysis(), False, [])
+        self.assertEqual(self.gh.writes, [])
+
+    def test_the_answers_example_is_accepted(self):
+        example = json.loads((Path(m.__file__).parents[1] / 'examples/answers.json').read_text(encoding='utf-8'))
+        analysis = {'questions': [dict(question('failed-delivery')), dict(question('retry-limit'), options=[])]}
+        given = self.app.session_answers(analysis, [dict(a, answered_by='creator') for a in example], 'creator')
+        self.assertEqual([given[k]['answer']['kind'] for k in ('failed-delivery', 'retry-limit')], ['single', 'text'])
+
+    def test_in_session_cli_reads_the_answers_file(self):
+        analysis, answers = self.session()
+        sm.write_json(self.root / 'a.json', analysis)
+        sm.write_json(self.root / 'answers.json', answers)
+        out = io.StringIO()
+        with patch.object(m, 'Scope', return_value=self.scope), contextlib.redirect_stdout(out):
+            code = m.main(['publish', '1', '--root', str(self.root), '--analysis', str(self.root / 'a.json'),
+                           '--answers', str(self.root / 'answers.json')])
+        self.assertEqual(code, 0)
+        self.assertTrue(json.loads(out.getvalue())['in_session'])
+
+    def test_a_cached_waiting_status_is_reread_before_refusing(self):
+        self.move(m.WAITING)
+        self.scope.board()  # the shared cache now says Need Clarifications
+        self.gh.statuses[1] = m.FEATURE  # the creator moved it back on GitHub
+        with patch.object(subprocess, 'check_output', return_value='https://github.com/acme/app.git'):
+            fresh = m.Clarification(sm.Scope(self.root, self.gh))
+        self.assertEqual(fresh.inspect('1')['issue']['number'], 1)
+
     # ---- the shared test vector ---------------------------------------------------------------------------------
 
     VECTOR = Path(__file__).resolve().parent / 'fixtures/clarifications-vector.json'
@@ -977,6 +1109,13 @@ class ClarificationTests(unittest.TestCase):
         closed = dict(snapshot, policy=dict(snapshot['policy'], closed=True, control_comment_ids=[3001]))
         cases.append({'name': 'creator-closure', 'outcome': 'closed', 'items': m.clarification_items(
             closed, closing, 'closed', 2, 'batch-closed', 'acme/app', {}, 'specs/001-example/spec.md', now)})
+        first = {'issue': snapshot['issue'], 'comments': [], 'history': {'questions': {}}, 'policy': snapshot['policy']}
+        session = {'questions': [question('retry'), question('draft')], 'answers': []}
+        given = {'retry': {'answer': {'kind': 'single', 'value': 'A'}, 'answered_by': 'creator', 'answered_at': '2026-09-12T08:55:00Z'},
+                 'draft': {'answer': {'kind': 'text', 'value': 'Keep a draft.'}, 'answered_by': 'creator', 'answered_at': '2026-09-12T08:56:00Z'}}
+        cases.append({'name': 'in-session-first-round', 'outcome': 'ready', 'items': m.clarification_items(
+            first, session, 'ready', 1, 'batch-in-session', 'acme/app', {'summary': 3002}, 'specs/001-example/spec.md',
+            now, in_session=given)})
         return {'v': 1,
                 'note': 'Produced by clarification_items in extensions/scope/scripts/clarification.py. Regenerate with '
                         'UPDATE_CLARIFICATIONS_VECTOR=1 python -m unittest test_clarification.',
@@ -993,7 +1132,7 @@ class ClarificationTests(unittest.TestCase):
         states = {i['state'] for case in vector['cases'] for i in case['items']}
         self.assertEqual(states, {'applied', 'conflict', 'superseded', 'pending', 'waived'})
         kinds = {e['kind'] for case in vector['cases'] for i in case['items'] for e in i['evidence']}
-        self.assertEqual(kinds, {'comment', 'disposition', 'selection', 'closure'})
+        self.assertEqual(kinds, {'comment', 'disposition', 'selection', 'closure', 'in-session'})
         for case in vector['cases']:
             for item in case['items']:
                 self.assertTrue(all(set(e) == {'kind', 'url', 'comment_id', 'explanation'} for e in item['evidence']))

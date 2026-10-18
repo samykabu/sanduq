@@ -1,11 +1,9 @@
 # Implementation orchestration: report
 
-The second half of the execution protocol; see
-[`execution-assign.md`](execution-assign.md) for the shared intro, starting a
-dedicated orchestration agent and assigning work. This half covers finishing
-phases, continuing through delivery and the legacy reporter calls. The reporting
-mode is decided only in [`reporting.md`](reporting.md); no agent is spawned,
-retained, messaged or polled solely for reporting.
+The second half of the execution protocol ([`execution-assign.md`](execution-assign.md) is the
+first): finishing phases, delivery and the legacy reporter calls. The reporting mode is decided
+only in [`reporting.md`](reporting.md); no agent is spawned, retained, messaged or polled solely
+for reporting.
 
 ## Update the report and finish phases
 
@@ -22,14 +20,16 @@ failed attempts alongside subsequent successful evidence.
 
 Sync native task issues once per phase, not once per task: the dispatcher owns
 this call and runs `task_issues.py --sync-states --feature ... --parent ...
---apply --summary` exactly once per phase, after every task in the phase is
-committed and its documentation tasks (QA Document, Manual Update, where
-selected) are done. `sync_states()` already walks every task in `tasks.md` on
-each call, so a single call at the phase boundary reports and applies every
-completed task's state together; calling it after each task repeats the same
-walk for no new information. Never infer human-review completion from
-generated evidence: a human-review task's issue closes only on the human's own
-signal, never because its evidence file exists.
+--apply --summary` once the phase's tasks are committed and its selected
+documentation tasks are done (`sync_states()` already walks every task in
+`tasks.md`). Never infer human-review completion from generated evidence: a
+human-review task's issue closes only on the human's own signal.
+
+With `issue_sync.taskstoissues: phase-lazy`, publish each phase's task issues at its start:
+`task_issues.py --feature ... --parent ... --phase "<Phase heading>"` dry run, then the same with
+`--apply --summary`. While a later phase has no issues yet, `--sync-states` refuses with
+`UNPUBLISHED_TASK`; then skip the boundary sync and run it once every phase is published, before
+Ready.
 
 Prefer `--summary` (a one-line result with counts) for routine protocol calls
 to `task_issues.py`, `assure_state.py`, `manual_state.py` and
@@ -37,22 +37,15 @@ to `task_issues.py`, `assure_state.py`, `manual_state.py` and
 reason=<why>` when the call had nothing to do. Reserve `--json` for a call
 whose result must be parsed programmatically.
 
-Continue until every implementation phase is finished. At each phase boundary,
-run the required checks, inspect the combined diff, and have the orchestration
-agent commit and push that phase's completed changes to the bound feature branch.
-Stage only the intended paths; preserve unrelated user changes. Record the actual
-commit SHA and push result. A completed local phase with a failed push remains
-unpublished; diagnose the failure and retry without claiming remote success.
-Keep the report directory out of receipt input manifests and implicit source
-inventories; its routine updates must not stale source verification. Retain it
-locally through merge, with stable evidence stored separately in the feature.
-
-Existing authorization for phase commits and pushes carries forward. Respect an
-explicit user restriction and record the precise limitation if publication is
-not authorized. Under `required-only`, routine phase transitions and backend
-choice do not need another approval. Human review tasks, unresolved requirements,
-security decisions and deployment approvals remain real gates. Record concrete
-blockers and continue independent authorized work.
+At each phase boundary run the required checks, inspect the combined diff, and have
+the orchestration agent commit and push the phase's changes to the bound branch,
+staging only the intended paths and keeping unrelated user changes. Record the
+commit SHA and push result; a failed push leaves the phase unpublished until a retry
+succeeds. Keep the report directory out of receipt inputs and source inventories.
+Existing commit and push authorization carries forward unless the user restricted
+it; record the limitation then. Human review tasks, unresolved requirements,
+security decisions and deployment approvals remain real gates; record blockers and
+continue independent authorized work.
 
 ## Report only on state change (F3)
 
@@ -91,7 +84,7 @@ dotnet test JSON) only for a lane that failed, and only that failing test's
 section. A fully green run is read from its summary alone; the raw artifacts
 stay on disk either way, for anyone who needs them later.
 
-## Consumers checklist after a fix (F11)
+## Consumers checklist after a fix
 
 Before returning a result for any fix, a review finding, a mid-execute defect,
 a rename or a contract change, the worker checks each of the following and
@@ -105,7 +98,7 @@ skipped only when it verifiably does not apply, never by default:
 - Contract docs, through the project's pending-artifact-updates convention where one exists.
 - PR image pins, when a changed screenshot is embedded in the PR body.
 
-## Light-tier collection results (B12)
+## Light-tier collection results
 
 When delegation is enabled, `start` a light-tier or `qa_collect` task with
 `--owned <path>` (repeatable) — it is now required, never a silent

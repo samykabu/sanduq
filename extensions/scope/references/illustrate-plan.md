@@ -91,10 +91,17 @@ Regenerate the plan with steps 3 to 6. Historical receipts and plan files are no
 
 ## Clarification images on GitHub
 
-Decision: a clarification question embeds an Illustrate PNG through a commit-pinned
-GitHub blob URL, the PR extension's approach
-(`extensions/pr/references/pr-image-embedding.md`), and falls back to text when that
-cannot be proven.
+A clarification question can carry a diagram in two ways, and both are optional:
+
+- `diagram`: Mermaid source without code fences. The runtime puts it in the question's
+  details as a fenced `mermaid` block, which GitHub draws. This works in managed and
+  unmanaged projects and needs no commit or push, so it is the quick choice.
+- `diagram_image`: an Illustrate PNG embedded through a commit-pinned GitHub blob URL,
+  the PR extension's approach (`extensions/pr/references/pr-image-embedding.md`), with a
+  fallback to text when the image cannot be proven to be on GitHub. Use it when the
+  picture needs Illustrate's layout or the project theme.
+
+For `diagram_image`:
 
 - Draw with Illustrate, export the PNG (`export_diagram.py <file> --png-only`), commit it
   and push it. In the analysis JSON give the question
@@ -111,6 +118,4 @@ cannot be proven.
   different on GitHub, the comment carries `diagram_text` under a note with the exact
   reason, and the publish result lists it under `image_fallbacks`. Publishing never waits
   for an image. Push the file and rerun before posting if the picture matters.
-- Managed projects do not accept Mermaid `diagram` source in questions
-  (`ILLUSTRATE_REQUIRED`); use `diagram_image` with `diagram_text`.
 - Do not upload private material to public hosts, put tokens in URLs, or use data URLs.

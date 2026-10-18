@@ -16,6 +16,7 @@
       "justification": "This lets the user recover without re-entering information or accidentally submitting twice.",
       "options": ["Keep the information and offer retry", "Clear the form and ask the user to start again"],
       "recommended_option": 1,
+      "priority": 1,
       "follows_up": []
     }
   ],

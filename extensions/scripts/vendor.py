@@ -110,6 +110,8 @@ def check(lock):
 BUNDLES = {'illustration-tools': ['illustrate'], 'dev-tools': ['user-manual'],
            'agent-tools': ['delegate-task', 'progress-report']}
 MARKETPLACE = ROOT / '.claude-plugin/marketplace.json'
+# Codex reads its own marketplace file; it lists the same bundles at the same pins.
+MARKETPLACES = (MARKETPLACE, ROOT / '.agents/plugins/marketplace.json')
 
 
 def newest_tag(source, bundle):
@@ -127,7 +129,7 @@ def newest_tag(source, bundle):
 def update(lock, source):
     """Vendor and pin every bundle whose newest release differs from the lock; return what changed."""
     changed = []
-    market = json.loads(MARKETPLACE.read_text(encoding='utf-8'))
+    markets = {path: json.loads(path.read_text(encoding='utf-8')) for path in MARKETPLACES if path.is_file()}
     for bundle, names in BUNDLES.items():
         tag = newest_tag(source, bundle)
         stale = [name for name in names if lock['inputs'][name].get('ref') != tag]
@@ -135,12 +137,13 @@ def update(lock, source):
             continue
         for name in stale:
             sync(lock, source, name, tag)
-        for plugin in market['plugins']:
+        for plugin in (plugin for market in markets.values() for plugin in market['plugins']):
             if plugin['name'] == bundle:
                 plugin['source'].update(ref=tag, sha=lock['inputs'][names[0]]['sha'])
         changed.append(tag)
     if changed:
-        MARKETPLACE.write_text(json.dumps(market, indent=2, ensure_ascii=False) + '\n', encoding='utf-8', newline='\n')
+        for path, market in markets.items():
+            path.write_text(json.dumps(market, indent=2, ensure_ascii=False) + '\n', encoding='utf-8', newline='\n')
     return changed
 
 

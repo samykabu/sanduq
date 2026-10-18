@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.8.0] - 2026-10-18
+
+- `scope.py render-spec <issue> --analysis <file> --feature specs/<f> [--apply] [--force]` writes spec.md from an approved single-leaf analysis, starting with `<!-- sanduq-scope:rendered <sha256> -->`, so Workflow 1.13.0 can bind without a model pass (`SCOPE_RENDER_UNAPPROVED`, `SCOPE_RENDER_LEAF_REQUIRED`, `SCOPE_RENDER_EXISTS`). Analyses may list `uncertainty` items, rendered as `[NEEDS CLARIFICATION: ...]`.
+- `clarification.py publish <issue> --analysis <file> --answers <answers.json> [--apply]` records a first round answered in the session by the issue creator (`clarification.in_session_first_round: true`): one managed comment of kind `round-in-session`, spec edits applied, `clarifications.json` items `applied` with evidence kind `in-session`, straight to Ready. `examples/answers.json` shows the shape.
+- `clarification.max_questions_per_round` caps a round (`CLARIFICATION_TOO_MANY_QUESTIONS: <n> > <cap>; defer <keys>`); questions may carry `priority` (1 is highest).
+- Mermaid `diagram` questions are allowed in managed projects; `ILLUSTRATE_REQUIRED` is gone and `diagram_image` is optional.
+- Project board reads are cached in `.specify/scope/board-cache.json` for `scope.board_cache_seconds` (default 300, 0 disables), invalidated by every Scope or clarification write; `gate`, `approve`, `publish` and `bind` accept `--snapshot <inspect output>` and report `snapshot_reused`.
+- The scope-analyst and github-clarification skills are short procedures with references (`managed.md`, `standalone.md`, `analysis-json.md`, `controls.md`); the analyst tiers its evidence depth by the first-pass score.
+- Requires Workflow 1.13.0.
+
 ## [1.7.0] - 2026-10-18
 
 - Clarification publication writes `specs/<feature>/workflow/clarifications.json` (`{v: 1, items}`). Each item has `source_id`, `revision`, `question`, `options`, `answer` (`single`, `multiple` or `text`), `state` (`pending`, `conflict`, `answered`, `applied`, `waived` or `superseded`), `url`, `editor`, `observed_at`, `answered_at`, `applied` and `evidence`, plus the `batch` that wrote it. Pending, answered, superseded and waived questions are included.

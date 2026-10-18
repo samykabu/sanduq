@@ -296,6 +296,76 @@
           "batch": "batch-closed"
         }
       ]
+    },
+    {
+      "name": "in-session-first-round",
+      "outcome": "ready",
+      "items": [
+        {
+          "source_id": "C1Q1",
+          "question": "What should happen if the request fails?",
+          "options": [
+            "Retry",
+            "Start again"
+          ],
+          "answer": {
+            "kind": "single",
+            "value": "A"
+          },
+          "state": "applied",
+          "url": "https://github.com/acme/app/issues/1#issuecomment-3002",
+          "editor": "creator",
+          "observed_at": "2026-09-12T09:00:00+00:00",
+          "answered_at": "2026-09-12T08:55:00Z",
+          "applied": {
+            "at": "2026-09-12T09:00:00+00:00",
+            "evidence": [
+              "specs/001-example/spec.md#speckit-clarification:spec batch-in-session"
+            ]
+          },
+          "evidence": [
+            {
+              "kind": "in-session",
+              "url": "https://github.com/acme/app/issues/1#issuecomment-3002",
+              "comment_id": 3002,
+              "explanation": "answered in session by creator"
+            }
+          ],
+          "batch": "batch-in-session"
+        },
+        {
+          "source_id": "C1Q2",
+          "question": "What should happen if the request fails?",
+          "options": [
+            "Retry",
+            "Start again"
+          ],
+          "answer": {
+            "kind": "text",
+            "value": "Keep a draft."
+          },
+          "state": "applied",
+          "url": "https://github.com/acme/app/issues/1#issuecomment-3002",
+          "editor": "creator",
+          "observed_at": "2026-09-12T09:00:00+00:00",
+          "answered_at": "2026-09-12T08:56:00Z",
+          "applied": {
+            "at": "2026-09-12T09:00:00+00:00",
+            "evidence": [
+              "specs/001-example/spec.md#speckit-clarification:spec batch-in-session"
+            ]
+          },
+          "evidence": [
+            {
+              "kind": "in-session",
+              "url": "https://github.com/acme/app/issues/1#issuecomment-3002",
+              "comment_id": 3002,
+              "explanation": "answered in session by creator"
+            }
+          ],
+          "batch": "batch-in-session"
+        }
+      ]
     }
   ]
 }

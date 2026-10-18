@@ -1,0 +1,4 @@
+# Generated from a smoke install before each run (see README.md).
+skills/
+# Written by every claude plugin eval run.
+cases/results/

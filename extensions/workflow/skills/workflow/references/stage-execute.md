@@ -1,86 +1,34 @@
 # Stage reference: execute
 
-Loaded when `claim` returns `stage: execute`.
-
-After either provider succeeds, native `complete` invokes the shared executable
-Memory handoff. Honor `memory_handoff`, its exit and returned registered actions
-as [memory-lifecycle.md](memory-lifecycle.md) specifies. The dispatcher owns this
-transition; do not dispatch another prepare hook after native completion.
-
-With `lean_execution.enabled: true`, the existing lifecycle coordinator owns
-Execute and the following verification, documentation and publication work.
-Do not create the additional orchestration agent described by the legacy
-protocol below. Assign bounded workers directly, each with a concrete artifact
-and acceptance result; the coordinator keeps claims, integration and receipts.
-See `references/delegation-and-decisions.md#opt-in-lean-execution`.
-Reporting follows `references/reporting.md` in every mode; no agent exists solely for it.
-
 ## Required work and evidence
 
-Read `references/execution-assign.md`, then `references/execution-report.md`.
-Create a dedicated orchestration agent for scheduling and integration, and
-delegate implementation to workers. Fill available capacity with tasks whose
-dependencies, files and resources permit concurrent work. Create the progress
-report once before implementation, as `references/reporting.md` says for the
-current mode. Verify, commit and push each completed phase within existing
-authorization. Routine phase transitions are automatic under `required-only`;
-explicit human review markers remain gates. Keep task checkboxes and issue state
-current.
+Read [execution-assign.md](execution-assign.md), then [execution-report.md](execution-report.md);
+both providers (`speckit.implement`, `speckit.superspec.execute`) follow them. Fill available
+capacity with tasks whose dependencies, files and resources allow concurrent work. Create the
+progress report once before implementation, as [reporting.md](reporting.md) says for the mode;
+no agent exists solely for it. Verify, commit and push each completed phase within existing
+authorization. Routine phase transitions are automatic under `required-only`; explicit human
+review markers stay gates. Keep task checkboxes and issue state current. With `phase-lazy`
+task issues, publish each phase's issues at its start (execution-report.md).
 
-## Execution ownership and live progress
+## Lean mode
 
-Both managed executors use the same execution protocol, split into
-`references/execution-assign.md` and `references/execution-report.md`. The
-dispatcher owns the stage claim and lifecycle transitions. A dedicated
-orchestration agent owns task assignments, integration and phase
-commits/pushes; it has no reporting duty. Worker agents implement the assigned
-tasks and return evidence.
-Record the real agent handles and ownership in the feature handoff. Recover live
-work before scheduling replacements; never let two agents own the same writes.
+With `lean_execution.enabled: true`, the existing lifecycle coordinator owns Execute and the
+following verification, documentation and publication work. Do not create the additional
+orchestration agent described by the legacy protocol below. Assign bounded workers directly,
+each with a concrete artifact and acceptance result; the coordinator keeps claims, integration
+and receipts. See `references/delegation-and-decisions.md#opt-in-lean-execution`.
 
-Keep the orchestration agent available after Execute so it can schedule fixes
-during verification, review, documentation and PR checks. The dispatcher sends it
-each stage outcome and remains responsible for honest receipts.
-Continue all authorized phases automatically. Existing PR and merge authorization
-carries forward, while required human decisions and branch protections still apply.
-If merge is authorized, watch the exact final PR head, repair failed checks, rerun
-affected evidence and merge when required checks and approvals pass. Record the
-actual merge result as `references/reporting.md` says and complete post-merge
-verification in `references/stage-pr.md`.
+## Legacy protocol: execution ownership
 
-## Core Implement provider (`speckit.implement`)
+The dispatcher owns the stage claim and lifecycle transitions. A dedicated orchestration agent
+owns task assignments, integration and phase commits and pushes; it has no reporting duty.
+Workers implement the assigned tasks and return evidence. Recover live work before scheduling
+replacements, and never let two agents own the same writes or create competing orchestrators.
+Never silently replace the required agents with work in the parent. Continue all authorized
+phases automatically; post-merge verification is in `references/stage-pr.md`.
 
-Before executing a task, read
-`.specify/extensions/workflow/skills/workflow/references/stage-execute.md`.
-Create a dedicated orchestration agent and have it delegate implementation tasks
-to worker subagents. The dispatcher retains the stage claim and lifecycle transitions;
-the orchestration agent owns scheduling, integration and phase commits.
-Reuse the recorded orchestration agent when resuming a live execution; do not create
-competing orchestrators. Run every ready task that can safely fit the host capacity,
-with explicit dependency, file and resource ownership. A single worker handles a
-serial task. Never silently replace the required agents with work in the parent.
-
-Create the progress report once before the first implementation task and open it
-once for the human, as `references/reporting.md` says. That reference also says who
-updates it through every phase, verification, review, CI and authorized PR merge,
-and that no agent is kept for it. Continue through all implementation phases, verify each phase, then commit and push
-its completed changes through the orchestration agent. Return the execution result
-to the dispatcher for the remaining lifecycle stages. Existing authorization carries
-forward; unresolved human decisions and actual permission limits remain gates.
-These scheduling and reporting rules apply to the upstream domain instructions below.
-
-## SuperSpec Execute provider (`speckit.superspec.execute`)
-
-When execution.checkpoints is required-only, project policy pre-authorizes
-routine phase checkpoints and backend choice. Record the selected execution mode
-and continue automatically. This overrides upstream instructions to pause for
-approval at every routine phase; do not ask again for approvals already recorded.
-Explicit HUMAN-REVIEW tasks, unresolved requirements,
-security decisions and deployment approvals still pause. Execute small batches
-and hand off only at a reliably measured context limit. Without reliable telemetry,
-continue automatically; never stop on estimates or reset a measured budget per task.
-
-It otherwise follows the same Core Implement provider instructions above (read
-`references/execution-assign.md`/`references/execution-report.md`, delegate to
-worker subagents, report as `references/reporting.md` says, and return the
-execution result to the dispatcher).
+After either provider succeeds, native `complete` invokes the Memory handoff: honor
+`memory_handoff`, its exit and returned actions ([memory-lifecycle.md](memory-lifecycle.md)).
+Do not dispatch another prepare hook after native completion. With SuperSpec Execute under
+`required-only` checkpoints, also follow [superspec-checkpoints.md](superspec-checkpoints.md).

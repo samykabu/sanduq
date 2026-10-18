@@ -1,5 +1,5 @@
 ---
-description: "Resume the earliest unfinished or stale stage from its checkpoint."
+description: "Resumes an issue-bound feature at its earliest unfinished or stale stage from the workflow checkpoint and runs the remaining stages. Use in a new session, after an interruption or pause, or when asked to continue, resume or pick up a feature."
 ---
 
 # Sanduq Workflow: continue
@@ -9,6 +9,6 @@ Input: $ARGUMENTS
 Read `.specify/extensions/workflow/skills/workflow/SKILL.md` and follow the `continue` entry point.
 Use the current explicit feature or issue. Do not infer issue identity from an unrelated editor tab.
 When a stage needs prior document bytes as evidence, follow
-`.specify/extensions/workflow/skills/workflow/references/receipt-rules.md#capturing-prior-document-bytes`
+`.specify/extensions/workflow/skills/workflow/references/evidence-capture.md#capturing-prior-document-bytes`
 before editing those documents.
 The shared skill owns orchestration; do not run a second pipeline after it returns.

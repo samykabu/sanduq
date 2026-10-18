@@ -1188,7 +1188,8 @@ def main(argv=None):
             result = doctor(root, host, args.action == 'install', config['install_scope'])
         elif args.action == 'annotate':
             import lean_policy
-            result = annotate_tasks(root, args.feature, config, host, lean_policy.enabled(policy))
+            result = annotate_tasks(root, args.feature, config, host, lean_policy.enabled(
+                policy, lean_policy.feature_tier(root, feature_identity(root, args.feature))))
         else:
             # The same specs/<name> identity the dispatcher and overrides use.
             require(re.fullmatch(r'T\d{3,}|stage:[a-z_]+', args.id), 'DELEGATION_IDENTITY_INVALID')

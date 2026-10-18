@@ -42,7 +42,7 @@ ASSIGN_MARKERS = [
     'bounded foreground loop around `delegate_dispatch.py collect` until the '
     "run's status is terminal",                                           # F2 x delegate_dispatch.py
     'Where this fallback applies, the dispatcher',                        # F1 x nested-spawn fallback
-    'forwards each T7 result once, unchanged',                            # F1 x nested-spawn fallback
+    'forwards each structured result once, unchanged',                            # F1 x nested-spawn fallback
     'its orchestrator-scoped process is the orchestration agent for this '
     'purpose',                                                            # F1 x delegated-Execute-stage
     "it spawns and collects its own feature's task workers directly",     # F1 x delegated-Execute-stage
@@ -52,8 +52,8 @@ ASSIGN_MARKERS = [
     'the orchestration agent compares the task\'s recorded `progress.py '
     'usage` figure against its class budget',                             # T0 overrun mechanism
     'Budget overrun T###: <class> <figure>/<budget>: <reason>',           # T0 overrun log line
-    'never Haiku (standing rule 5)',                                      # T0 x standing rule 5
-    'the `[collect]` marker or an explicit override (B12), never by default',  # T0 x standing rule 5
+    'never Haiku',                                                        # T0: qa_author never on the light tier
+    'the `[collect]` marker or an explicit override, never by default',  # T0: light tier only by marker
     'roughly 150K tokens resident',                                       # T0 hand-off
     '`git stash` and `git add -A`/`git add .` are forbidden for a task worker',  # S6
     'as are `delegate_dispatch.py accept`, `delegate_dispatch.py reassign`, '
@@ -84,7 +84,7 @@ REPORT_MARKERS = [
     'A wake-up that carries no new information produces no message',   # F3
     'read its summary first',                                          # T8
     'only for a lane that failed',                                     # T8
-    '## Light-tier collection results (B12)',                          # B12 heading
+    '## Light-tier collection results',                                # B12 heading (review ids stripped)
     'At every phase commit, the orchestration agent also records the '
     "dispatcher's own",                                                # dispatcher usage cadence
     'python .specify/extensions/workflow/scripts/progress.py usage --output '
@@ -268,15 +268,15 @@ class ExecutionProtocolB11Tests(unittest.TestCase):
                              f'Template field {field!r} missing from the ten-line block: {lines}')
 
     def test_consumers_checklist_has_all_six_bullets(self):
-        start = self.raw_report.index('## Consumers checklist after a fix (F11)')
-        end = self.raw_report.index('## Light-tier collection results (B12)', start)
+        start = self.raw_report.index('## Consumers checklist after a fix')
+        end = self.raw_report.index('## Light-tier collection results', start)
         section = self.raw_report[start:end]
         bullets = [ln[2:].strip() for ln in section.splitlines() if ln.startswith('- ')]
         self.assertEqual(bullets, F11_BULLETS,
                           f'F11 consumers checklist bullets changed or incomplete: {bullets}')
 
     def test_b12_section_matches_the_consensus_text_exactly(self):
-        heading = '## Light-tier collection results (B12)'
+        heading = '## Light-tier collection results'
         start = self.raw_report.index(heading) + len(heading)
         end = self.raw_report.index('## Continue through delivery', start)
         body = normalize(self.raw_report[start:end])

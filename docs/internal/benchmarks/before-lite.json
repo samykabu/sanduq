@@ -1,0 +1,1208 @@
+{
+  "meta": {
+    "repo": "D:\\Projects\\Personal\\sanduq-baseline",
+    "repo_head": "105508f",
+    "generated_at": "2026-10-18T15:27:01.166576+00:00",
+    "python": "3.13.14",
+    "source_files": 750,
+    "tier_requested": "lite",
+    "tier_applied": false,
+    "tier_note": "runtime has no profiles or tiered stages; --tier ignored",
+    "final_tier": null,
+    "recovery_path": "per-stage-reclaim",
+    "recovery_error": null,
+    "assumptions": [
+      "tokens = bytes / 4",
+      "fixture receipts and artifacts from test_workflow.py; no model calls",
+      "stdout bytes are the CLI JSON printed by the runtime main(), run in-process",
+      "model_passes counts claimed stages whose command does not start with workflow: (one revalidate-upstream operation counts as one pass)",
+      "counters wrap module-level functions; git_subprocess counts every git subprocess.run"
+    ]
+  },
+  "stage_sequence": [
+    {
+      "phase": "first-pass",
+      "stage": "scope",
+      "command": "speckit.scope.run",
+      "merged": []
+    },
+    {
+      "phase": "first-pass",
+      "stage": "specify",
+      "command": "speckit.specify",
+      "merged": []
+    },
+    {
+      "phase": "first-pass",
+      "stage": "clarify",
+      "command": "speckit.clarify",
+      "merged": []
+    },
+    {
+      "phase": "first-pass",
+      "stage": "plan",
+      "command": "speckit.plan",
+      "merged": []
+    },
+    {
+      "phase": "first-pass",
+      "stage": "tasks",
+      "command": "speckit.tasks",
+      "merged": []
+    },
+    {
+      "phase": "first-pass",
+      "stage": "qa_analyze",
+      "command": "speckit.assure.analyze",
+      "merged": []
+    },
+    {
+      "phase": "first-pass",
+      "stage": "manual_analyze",
+      "command": "speckit.user-manual.analyze",
+      "merged": []
+    },
+    {
+      "phase": "first-pass",
+      "stage": "analyze",
+      "command": "speckit.analyze",
+      "merged": []
+    },
+    {
+      "phase": "first-pass",
+      "stage": "taskstoissues",
+      "command": "speckit.taskstoissues",
+      "merged": []
+    },
+    {
+      "phase": "first-pass",
+      "stage": "execute",
+      "command": "speckit.implement",
+      "merged": []
+    },
+    {
+      "phase": "recovery",
+      "stage": "specify",
+      "command": "speckit.specify",
+      "merged": []
+    },
+    {
+      "phase": "recovery",
+      "stage": "clarify",
+      "command": "speckit.clarify",
+      "merged": []
+    },
+    {
+      "phase": "recovery",
+      "stage": "plan",
+      "command": "speckit.plan",
+      "merged": []
+    },
+    {
+      "phase": "recovery",
+      "stage": "tasks",
+      "command": "speckit.tasks",
+      "merged": []
+    },
+    {
+      "phase": "recovery",
+      "stage": "qa_analyze",
+      "command": "speckit.assure.analyze",
+      "merged": []
+    },
+    {
+      "phase": "recovery",
+      "stage": "manual_analyze",
+      "command": "speckit.user-manual.analyze",
+      "merged": []
+    },
+    {
+      "phase": "recovery",
+      "stage": "analyze",
+      "command": "speckit.analyze",
+      "merged": []
+    },
+    {
+      "phase": "recovery",
+      "stage": "taskstoissues",
+      "command": "speckit.taskstoissues",
+      "merged": []
+    },
+    {
+      "phase": "recovery",
+      "stage": "execute",
+      "command": "speckit.implement",
+      "merged": []
+    },
+    {
+      "phase": "finish",
+      "stage": "verify",
+      "command": "workflow:verification",
+      "merged": []
+    },
+    {
+      "phase": "finish",
+      "stage": "review",
+      "command": "workflow:review",
+      "merged": []
+    },
+    {
+      "phase": "finish",
+      "stage": "qa_document",
+      "command": "speckit.assure.document",
+      "merged": []
+    },
+    {
+      "phase": "finish",
+      "stage": "manual_update",
+      "command": "speckit.user-manual.update",
+      "merged": []
+    },
+    {
+      "phase": "finish",
+      "stage": "ready",
+      "command": "workflow:gates",
+      "merged": []
+    },
+    {
+      "phase": "finish",
+      "stage": "pr",
+      "command": "speckit.pr.generate",
+      "merged": []
+    }
+  ],
+  "commands": [
+    {
+      "seq": 1,
+      "phase": "start",
+      "action": "start",
+      "stage": null,
+      "ms": 362.3,
+      "stdout_bytes": 6312,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 1,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 8
+      }
+    },
+    {
+      "seq": 2,
+      "phase": "first-pass",
+      "action": "claim",
+      "stage": "scope",
+      "ms": 877.7,
+      "stdout_bytes": 636,
+      "exit": 0,
+      "counters": {
+        "doctor": 1,
+        "fingerprint_files": 2,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 8
+      }
+    },
+    {
+      "seq": 3,
+      "phase": "first-pass",
+      "action": "complete",
+      "stage": "scope",
+      "ms": 377.8,
+      "stdout_bytes": 80,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 3,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 8
+      }
+    },
+    {
+      "seq": 4,
+      "phase": "first-pass",
+      "action": "claim",
+      "stage": "specify",
+      "ms": 990.3,
+      "stdout_bytes": 752,
+      "exit": 0,
+      "counters": {
+        "doctor": 1,
+        "fingerprint_files": 3,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 10
+      }
+    },
+    {
+      "seq": 5,
+      "phase": "first-pass",
+      "action": "complete",
+      "stage": "specify",
+      "ms": 527.6,
+      "stdout_bytes": 80,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 4,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 10
+      }
+    },
+    {
+      "seq": 6,
+      "phase": "first-pass",
+      "action": "claim",
+      "stage": "clarify",
+      "ms": 1020.8,
+      "stdout_bytes": 1081,
+      "exit": 0,
+      "counters": {
+        "doctor": 1,
+        "fingerprint_files": 4,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 11
+      }
+    },
+    {
+      "seq": 7,
+      "phase": "first-pass",
+      "action": "complete",
+      "stage": "clarify",
+      "ms": 472.7,
+      "stdout_bytes": 74,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 5,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 11
+      }
+    },
+    {
+      "seq": 8,
+      "phase": "first-pass",
+      "action": "claim",
+      "stage": "plan",
+      "ms": 962.5,
+      "stdout_bytes": 1186,
+      "exit": 0,
+      "counters": {
+        "doctor": 1,
+        "fingerprint_files": 5,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 12
+      }
+    },
+    {
+      "seq": 9,
+      "phase": "first-pass",
+      "action": "complete",
+      "stage": "plan",
+      "ms": 468.0,
+      "stdout_bytes": 76,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 6,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 12
+      }
+    },
+    {
+      "seq": 10,
+      "phase": "first-pass",
+      "action": "claim",
+      "stage": "tasks",
+      "ms": 1078.9,
+      "stdout_bytes": 1401,
+      "exit": 0,
+      "counters": {
+        "doctor": 1,
+        "fingerprint_files": 6,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 13
+      }
+    },
+    {
+      "seq": 11,
+      "phase": "first-pass",
+      "action": "complete",
+      "stage": "tasks",
+      "ms": 526.7,
+      "stdout_bytes": 90,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 7,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 13
+      }
+    },
+    {
+      "seq": 12,
+      "phase": "first-pass",
+      "action": "claim",
+      "stage": "qa_analyze",
+      "ms": 1115.6,
+      "stdout_bytes": 1631,
+      "exit": 0,
+      "counters": {
+        "doctor": 1,
+        "fingerprint_files": 7,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 14
+      }
+    },
+    {
+      "seq": 13,
+      "phase": "first-pass",
+      "action": "complete",
+      "stage": "qa_analyze",
+      "ms": 647.0,
+      "stdout_bytes": 99,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 8,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 14
+      }
+    },
+    {
+      "seq": 14,
+      "phase": "first-pass",
+      "action": "claim",
+      "stage": "manual_analyze",
+      "ms": 1210.5,
+      "stdout_bytes": 1761,
+      "exit": 0,
+      "counters": {
+        "doctor": 1,
+        "fingerprint_files": 8,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 15
+      }
+    },
+    {
+      "seq": 15,
+      "phase": "first-pass",
+      "action": "complete",
+      "stage": "manual_analyze",
+      "ms": 664.3,
+      "stdout_bytes": 80,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 9,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 15
+      }
+    },
+    {
+      "seq": 16,
+      "phase": "first-pass",
+      "action": "claim",
+      "stage": "analyze",
+      "ms": 1212.8,
+      "stdout_bytes": 1856,
+      "exit": 0,
+      "counters": {
+        "doctor": 1,
+        "fingerprint_files": 9,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 16
+      }
+    },
+    {
+      "seq": 17,
+      "phase": "first-pass",
+      "action": "complete",
+      "stage": "analyze",
+      "ms": 675.9,
+      "stdout_bytes": 92,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 10,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 16
+      }
+    },
+    {
+      "seq": 18,
+      "phase": "first-pass",
+      "action": "claim",
+      "stage": "taskstoissues",
+      "ms": 1232.8,
+      "stdout_bytes": 1988,
+      "exit": 0,
+      "counters": {
+        "doctor": 1,
+        "fingerprint_files": 10,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 17
+      }
+    },
+    {
+      "seq": 19,
+      "phase": "first-pass",
+      "action": "complete",
+      "stage": "taskstoissues",
+      "ms": 815.2,
+      "stdout_bytes": 82,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 11,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 17
+      }
+    },
+    {
+      "seq": 20,
+      "phase": "first-pass",
+      "action": "claim",
+      "stage": "execute",
+      "ms": 1421.1,
+      "stdout_bytes": 2211,
+      "exit": 0,
+      "counters": {
+        "doctor": 1,
+        "fingerprint_files": 11,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 18
+      }
+    },
+    {
+      "seq": 21,
+      "phase": "first-pass",
+      "action": "complete",
+      "stage": "execute",
+      "ms": 919.2,
+      "stdout_bytes": 478,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 12,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 18
+      }
+    },
+    {
+      "seq": 22,
+      "phase": "recovery",
+      "action": "next",
+      "stage": null,
+      "ms": 321.7,
+      "stdout_bytes": 593,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 2,
+        "source_fingerprints": 0,
+        "git": 2,
+        "git_subprocess": 7
+      }
+    },
+    {
+      "seq": 23,
+      "phase": "recovery",
+      "action": "claim",
+      "stage": "specify",
+      "ms": 952.6,
+      "stdout_bytes": 755,
+      "exit": 0,
+      "counters": {
+        "doctor": 1,
+        "fingerprint_files": 4,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 11
+      }
+    },
+    {
+      "seq": 24,
+      "phase": "recovery",
+      "action": "complete",
+      "stage": "specify",
+      "ms": 446.2,
+      "stdout_bytes": 80,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 4,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 10
+      }
+    },
+    {
+      "seq": 25,
+      "phase": "recovery",
+      "action": "claim",
+      "stage": "clarify",
+      "ms": 1001.2,
+      "stdout_bytes": 1081,
+      "exit": 0,
+      "counters": {
+        "doctor": 1,
+        "fingerprint_files": 4,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 11
+      }
+    },
+    {
+      "seq": 26,
+      "phase": "recovery",
+      "action": "complete",
+      "stage": "clarify",
+      "ms": 443.6,
+      "stdout_bytes": 74,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 5,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 11
+      }
+    },
+    {
+      "seq": 27,
+      "phase": "recovery",
+      "action": "claim",
+      "stage": "plan",
+      "ms": 1059.6,
+      "stdout_bytes": 1186,
+      "exit": 0,
+      "counters": {
+        "doctor": 1,
+        "fingerprint_files": 5,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 12
+      }
+    },
+    {
+      "seq": 28,
+      "phase": "recovery",
+      "action": "complete",
+      "stage": "plan",
+      "ms": 493.8,
+      "stdout_bytes": 76,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 6,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 12
+      }
+    },
+    {
+      "seq": 29,
+      "phase": "recovery",
+      "action": "claim",
+      "stage": "tasks",
+      "ms": 1093.5,
+      "stdout_bytes": 1401,
+      "exit": 0,
+      "counters": {
+        "doctor": 1,
+        "fingerprint_files": 6,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 13
+      }
+    },
+    {
+      "seq": 30,
+      "phase": "recovery",
+      "action": "complete",
+      "stage": "tasks",
+      "ms": 596.2,
+      "stdout_bytes": 90,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 7,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 13
+      }
+    },
+    {
+      "seq": 31,
+      "phase": "recovery",
+      "action": "claim",
+      "stage": "qa_analyze",
+      "ms": 1129.8,
+      "stdout_bytes": 1631,
+      "exit": 0,
+      "counters": {
+        "doctor": 1,
+        "fingerprint_files": 7,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 14
+      }
+    },
+    {
+      "seq": 32,
+      "phase": "recovery",
+      "action": "complete",
+      "stage": "qa_analyze",
+      "ms": 540.0,
+      "stdout_bytes": 99,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 8,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 14
+      }
+    },
+    {
+      "seq": 33,
+      "phase": "recovery",
+      "action": "claim",
+      "stage": "manual_analyze",
+      "ms": 1146.8,
+      "stdout_bytes": 1761,
+      "exit": 0,
+      "counters": {
+        "doctor": 1,
+        "fingerprint_files": 8,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 15
+      }
+    },
+    {
+      "seq": 34,
+      "phase": "recovery",
+      "action": "complete",
+      "stage": "manual_analyze",
+      "ms": 656.5,
+      "stdout_bytes": 80,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 9,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 15
+      }
+    },
+    {
+      "seq": 35,
+      "phase": "recovery",
+      "action": "claim",
+      "stage": "analyze",
+      "ms": 1165.1,
+      "stdout_bytes": 1856,
+      "exit": 0,
+      "counters": {
+        "doctor": 1,
+        "fingerprint_files": 9,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 16
+      }
+    },
+    {
+      "seq": 36,
+      "phase": "recovery",
+      "action": "complete",
+      "stage": "analyze",
+      "ms": 694.6,
+      "stdout_bytes": 92,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 10,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 16
+      }
+    },
+    {
+      "seq": 37,
+      "phase": "recovery",
+      "action": "claim",
+      "stage": "taskstoissues",
+      "ms": 1345.1,
+      "stdout_bytes": 1988,
+      "exit": 0,
+      "counters": {
+        "doctor": 1,
+        "fingerprint_files": 10,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 17
+      }
+    },
+    {
+      "seq": 38,
+      "phase": "recovery",
+      "action": "complete",
+      "stage": "taskstoissues",
+      "ms": 788.9,
+      "stdout_bytes": 82,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 11,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 17
+      }
+    },
+    {
+      "seq": 39,
+      "phase": "recovery",
+      "action": "claim",
+      "stage": "execute",
+      "ms": 1351.3,
+      "stdout_bytes": 2211,
+      "exit": 0,
+      "counters": {
+        "doctor": 1,
+        "fingerprint_files": 11,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 18
+      }
+    },
+    {
+      "seq": 40,
+      "phase": "recovery",
+      "action": "complete",
+      "stage": "execute",
+      "ms": 794.5,
+      "stdout_bytes": 478,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 12,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 18
+      }
+    },
+    {
+      "seq": 41,
+      "phase": "pause",
+      "action": "pause",
+      "stage": null,
+      "ms": 648.2,
+      "stdout_bytes": 479,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 10,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 16
+      }
+    },
+    {
+      "seq": 42,
+      "phase": "finish",
+      "action": "claim",
+      "stage": "verify",
+      "ms": 1284.4,
+      "stdout_bytes": 2327,
+      "exit": 0,
+      "counters": {
+        "doctor": 1,
+        "fingerprint_files": 12,
+        "source_fingerprints": 0,
+        "git": 3,
+        "git_subprocess": 19
+      }
+    },
+    {
+      "seq": 43,
+      "phase": "finish",
+      "action": "complete",
+      "stage": "verify",
+      "ms": 6655.3,
+      "stdout_bytes": 79,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 15,
+        "source_fingerprints": 2,
+        "git": 6,
+        "git_subprocess": 27
+      }
+    },
+    {
+      "seq": 44,
+      "phase": "finish",
+      "action": "claim",
+      "stage": "review",
+      "ms": 1765.0,
+      "stdout_bytes": 2434,
+      "exit": 0,
+      "counters": {
+        "doctor": 1,
+        "fingerprint_files": 14,
+        "source_fingerprints": 1,
+        "git": 4,
+        "git_subprocess": 22
+      }
+    },
+    {
+      "seq": 45,
+      "phase": "finish",
+      "action": "complete",
+      "stage": "review",
+      "ms": 1976.1,
+      "stdout_bytes": 92,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 17,
+        "source_fingerprints": 3,
+        "git": 7,
+        "git_subprocess": 30
+      }
+    },
+    {
+      "seq": 46,
+      "phase": "finish",
+      "action": "claim",
+      "stage": "qa_document",
+      "ms": 2028.4,
+      "stdout_bytes": 2565,
+      "exit": 0,
+      "counters": {
+        "doctor": 1,
+        "fingerprint_files": 16,
+        "source_fingerprints": 2,
+        "git": 5,
+        "git_subprocess": 25
+      }
+    },
+    {
+      "seq": 47,
+      "phase": "finish",
+      "action": "complete",
+      "stage": "qa_document",
+      "ms": 1574.5,
+      "stdout_bytes": 97,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 17,
+        "source_fingerprints": 2,
+        "git": 5,
+        "git_subprocess": 25
+      }
+    },
+    {
+      "seq": 48,
+      "phase": "finish",
+      "action": "claim",
+      "stage": "manual_update",
+      "ms": 2143.0,
+      "stdout_bytes": 2690,
+      "exit": 0,
+      "counters": {
+        "doctor": 1,
+        "fingerprint_files": 17,
+        "source_fingerprints": 2,
+        "git": 5,
+        "git_subprocess": 26
+      }
+    },
+    {
+      "seq": 49,
+      "phase": "finish",
+      "action": "complete",
+      "stage": "manual_update",
+      "ms": 1550.1,
+      "stdout_bytes": 77,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 18,
+        "source_fingerprints": 2,
+        "git": 5,
+        "git_subprocess": 26
+      }
+    },
+    {
+      "seq": 50,
+      "phase": "finish",
+      "action": "claim",
+      "stage": "ready",
+      "ms": 2077.3,
+      "stdout_bytes": 2782,
+      "exit": 0,
+      "counters": {
+        "doctor": 1,
+        "fingerprint_files": 18,
+        "source_fingerprints": 2,
+        "git": 5,
+        "git_subprocess": 27
+      }
+    },
+    {
+      "seq": 51,
+      "phase": "finish",
+      "action": "complete",
+      "stage": "ready",
+      "ms": 2609.5,
+      "stdout_bytes": 95,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 21,
+        "source_fingerprints": 4,
+        "git": 8,
+        "git_subprocess": 35
+      }
+    },
+    {
+      "seq": 52,
+      "phase": "finish",
+      "action": "claim",
+      "stage": "pr",
+      "ms": 2505.2,
+      "stdout_bytes": 2893,
+      "exit": 0,
+      "counters": {
+        "doctor": 1,
+        "fingerprint_files": 20,
+        "source_fingerprints": 3,
+        "git": 6,
+        "git_subprocess": 30
+      }
+    },
+    {
+      "seq": 53,
+      "phase": "finish",
+      "action": "complete",
+      "stage": "pr",
+      "ms": 2059.8,
+      "stdout_bytes": 43,
+      "exit": 0,
+      "counters": {
+        "doctor": 0,
+        "fingerprint_files": 21,
+        "source_fingerprints": 3,
+        "git": 6,
+        "git_subprocess": 30
+      }
+    }
+  ],
+  "totals": {
+    "commands": 53,
+    "wall_ms": 62519.1,
+    "command_ms": 62477.5,
+    "stdout_bytes": 54313,
+    "claim_stdout_bytes": 44064,
+    "complete_stdout_bytes": 2865,
+    "claims": 25,
+    "stages_run": 25,
+    "model_passes": 22,
+    "recovery_stages": 9,
+    "doctor": 25,
+    "fingerprint_files": 495,
+    "source_fingerprints": 26,
+    "git": 187,
+    "git_subprocess": 874,
+    "checkpoint_bytes": 256277,
+    "handoff_bytes": 587,
+    "lifecycle_bytes": 24000,
+    "instruction_bytes": 344449,
+    "instruction_tokens": 86112
+  },
+  "instructions": {
+    "per_stage": {
+      "scope": {
+        "bytes": 30662,
+        "files": {
+          "extensions/workflow/skills/workflow/SKILL.ext.md": 6134,
+          "extensions/workflow/skills/workflow/references/stage-scope.md": 2972,
+          "extensions/workflow/skills/workflow/references/receipt-rules.md": 6262,
+          "extensions/scope/commands/run.md": 820,
+          "extensions/scope/skills/scope-analyst/SKILL.ext.md": 10701,
+          "extensions/scope/references/analysis-contract.md": 3266,
+          "presets/workflow/commands/speckit.scope.run.md": 507
+        }
+      },
+      "specify": {
+        "bytes": 28686,
+        "files": {
+          "extensions/workflow/skills/workflow/SKILL.ext.md": 6134,
+          "extensions/workflow/skills/workflow/references/stage-specify.md": 3522,
+          "extensions/workflow/skills/workflow/references/receipt-rules.md": 6262,
+          "presets/scope-gate/commands/specify-gate.md": 5130,
+          "extensions/scope/commands/guard.md": 4077,
+          "extensions/scope/commands/bind.md": 3052,
+          "presets/workflow/commands/speckit.specify.md": 509
+        }
+      },
+      "clarify": {
+        "bytes": 29263,
+        "files": {
+          "extensions/workflow/skills/workflow/SKILL.ext.md": 6134,
+          "extensions/workflow/skills/workflow/references/stage-clarify.md": 2254,
+          "extensions/workflow/skills/workflow/references/receipt-rules.md": 6262,
+          "extensions/scope/skills/github-clarification/SKILL.ext.md": 14104,
+          "presets/workflow/commands/speckit.clarify.md": 509
+        }
+      },
+      "plan": {
+        "bytes": 13699,
+        "files": {
+          "extensions/workflow/skills/workflow/SKILL.ext.md": 6134,
+          "extensions/workflow/skills/workflow/references/stage-plan.md": 797,
+          "extensions/workflow/skills/workflow/references/receipt-rules.md": 6262,
+          "presets/workflow/commands/speckit.plan.md": 506
+        }
+      },
+      "tasks": {
+        "bytes": 14981,
+        "files": {
+          "extensions/workflow/skills/workflow/SKILL.ext.md": 6134,
+          "extensions/workflow/skills/workflow/references/stage-tasks.md": 2056,
+          "extensions/workflow/skills/workflow/references/receipt-rules.md": 6262,
+          "presets/workflow/commands/speckit.tasks.md": 529
+        }
+      },
+      "qa_analyze": {
+        "bytes": 12708,
+        "files": {
+          "extensions/workflow/skills/workflow/SKILL.ext.md": 6134,
+          "extensions/workflow/skills/workflow/references/stage-qa_analyze.md": 312,
+          "extensions/workflow/skills/workflow/references/receipt-rules.md": 6262
+        }
+      },
+      "manual_analyze": {
+        "bytes": 12716,
+        "files": {
+          "extensions/workflow/skills/workflow/SKILL.ext.md": 6134,
+          "extensions/workflow/skills/workflow/references/stage-manual_analyze.md": 320,
+          "extensions/workflow/skills/workflow/references/receipt-rules.md": 6262
+        }
+      },
+      "analyze": {
+        "bytes": 13535,
+        "files": {
+          "extensions/workflow/skills/workflow/SKILL.ext.md": 6134,
+          "extensions/workflow/skills/workflow/references/stage-analyze.md": 630,
+          "extensions/workflow/skills/workflow/references/receipt-rules.md": 6262,
+          "presets/workflow/commands/speckit.analyze.md": 509
+        }
+      },
+      "taskstoissues": {
+        "bytes": 14355,
+        "files": {
+          "extensions/workflow/skills/workflow/SKILL.ext.md": 6134,
+          "extensions/workflow/skills/workflow/references/stage-taskstoissues.md": 1444,
+          "extensions/workflow/skills/workflow/references/receipt-rules.md": 6262,
+          "presets/workflow/commands/speckit.taskstoissues.md": 515
+        }
+      },
+      "execute": {
+        "bytes": 52589,
+        "files": {
+          "extensions/workflow/skills/workflow/SKILL.ext.md": 6134,
+          "extensions/workflow/skills/workflow/references/stage-execute.md": 5235,
+          "extensions/workflow/skills/workflow/references/receipt-rules.md": 6262,
+          "extensions/workflow/skills/workflow/references/execution-assign.md": 13224,
+          "extensions/workflow/skills/workflow/references/execution-report.md": 17090,
+          "extensions/workflow/skills/workflow/references/reporting.md": 4109,
+          "presets/workflow/commands/speckit.implement.md": 535
+        }
+      },
+      "verify": {
+        "bytes": 13541,
+        "files": {
+          "extensions/workflow/skills/workflow/SKILL.ext.md": 6134,
+          "extensions/workflow/skills/workflow/references/stage-verify.md": 1145,
+          "extensions/workflow/skills/workflow/references/receipt-rules.md": 6262
+        }
+      },
+      "review": {
+        "bytes": 14081,
+        "files": {
+          "extensions/workflow/skills/workflow/SKILL.ext.md": 6134,
+          "extensions/workflow/skills/workflow/references/stage-review.md": 1685,
+          "extensions/workflow/skills/workflow/references/receipt-rules.md": 6262
+        }
+      },
+      "qa_document": {
+        "bytes": 12630,
+        "files": {
+          "extensions/workflow/skills/workflow/SKILL.ext.md": 6134,
+          "extensions/workflow/skills/workflow/references/stage-qa_document.md": 234,
+          "extensions/workflow/skills/workflow/references/receipt-rules.md": 6262
+        }
+      },
+      "manual_update": {
+        "bytes": 12652,
+        "files": {
+          "extensions/workflow/skills/workflow/SKILL.ext.md": 6134,
+          "extensions/workflow/skills/workflow/references/stage-manual_update.md": 256,
+          "extensions/workflow/skills/workflow/references/receipt-rules.md": 6262
+        }
+      },
+      "ready": {
+        "bytes": 13596,
+        "files": {
+          "extensions/workflow/skills/workflow/SKILL.ext.md": 6134,
+          "extensions/workflow/skills/workflow/references/stage-ready.md": 1200,
+          "extensions/workflow/skills/workflow/references/receipt-rules.md": 6262
+        }
+      },
+      "pr": {
+        "bytes": 17652,
+        "files": {
+          "extensions/workflow/skills/workflow/SKILL.ext.md": 6134,
+          "extensions/workflow/skills/workflow/references/stage-pr.md": 5256,
+          "extensions/workflow/skills/workflow/references/receipt-rules.md": 6262
+        }
+      }
+    },
+    "pointer_set_once": {
+      "extensions/workflow/skills/workflow/references/dispatcher-operations.md": 16122,
+      "extensions/workflow/skills/workflow/references/delegation-and-decisions.md": 9826
+    },
+    "linked_once": {
+      "extensions/workflow/skills/workflow/references/legacy-guard.md": 933,
+      "extensions/scope/references/illustrate-plan.md": 7537,
+      "extensions/workflow/skills/workflow/references/verification-plan.md": 2685
+    },
+    "missing": [],
+    "total_bytes": 344449,
+    "total_tokens": 86112
+  }
+}

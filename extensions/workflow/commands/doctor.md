@@ -1,5 +1,5 @@
 ---
-description: "Check selected dependencies and available host commands."
+description: "Checks the workflow's dependencies, policy, installed host commands and skills, board configuration and package lock, reporting every missing or broken item. Use after installing or upgrading, when a claim fails on setup, or when asked to diagnose the workflow."
 ---
 
 # Sanduq Workflow: doctor

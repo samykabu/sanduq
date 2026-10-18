@@ -32,7 +32,12 @@ describe their shape.
 | `execution.engine` | `auto`, `speckit` or `superspec`. |
 | `execution.checkpoints` | `required-only` or `every-phase`. |
 | `providers.clarification`, `providers.tasks` | `prefer-superspec`, `core` or `superspec`. |
-| `issue_sync` | Fixed: `{"taskstoissues": "required", "parent_link": "native-subissue"}`. |
+| `issue_sync` | `taskstoissues` is `required` (every task mapped at Tasks-to-Issues) or `phase-lazy` (each phase mapped when it starts; Ready still needs every task mapped); `parent_link` is fixed to `native-subissue`. |
+| `profiles` | Optional. `enabled`, `lite.max_score` (default 3), `standard.max_score` (default 8). Absent means every feature runs the full stage list. |
+| `clarification.max_questions_per_round`, `clarification.in_session_first_round` | Optional question cap per round (absent: no cap) and in-session first round (default false). |
+| `artifacts` | Optional. `budgets` (`spec_kb`, `plan_kb`, `research_kb`, `tasks_detail_lines`) checked by `workflow:lint`, and `enforce` (`lite-standard`, `all` or `warn`). |
+| `project_sync.points` | Optional list of stages at which Project Sync runs: `specify`, `plan`, `analyze`, `taskstoissues`, `execute`, `pr`. Absent means all six. |
+| `scope.board_cache_seconds` | Optional Scope board cache TTL in seconds (default 300, 0 disables). |
 | `decisions` | Optional. Stage-neutral GitHub issue decisions: `transport` (`github-issue`), `authorized_users`, `project_field`, and optional `lifecycle_status` (boolean, default true). Omitted in older policies. |
 | `context` | `mode` (`strict`, `measured-only` or `measured-with-estimated-fallback`), `max_fraction`, `checkpoint_fraction`, `reserve_fraction`. See [Context](stages.md#context). |
 | `finalize` | Fixed: `{"create_pr": true, "merge": false}`. The dispatcher opens a PR and never merges. |
@@ -85,7 +90,9 @@ Title: "Sanduq feature checkpoint v1". Required keys: `schema_version`, `run_id`
 | `commands` | Map of stage to the resolved command selected for it. |
 | `receipts` | Map of stage to receipt (see below). |
 | `generation` | Write counter. |
-| `active` | `null`, or the active claim: `stage`, `token`, `claimed_at`, `session_id`, `context`, `baseline`. |
+| `active` | `null`, or the active claim: `stage`, `token`, `claimed_at`, `session_id`, `context`, `baseline`, `mode` (`initial`, `revalidate` or `bind-only`). |
+| `profile` | `{tier, score, fixed_at}`: the effort tier (`lite`, `standard` or `full`) frozen at the first Plan claim when profiles are enabled. |
+| `skipped` | Map of stage to reason for the stages the tier does not run (`tasks` is merged into `plan` on lite and standard). |
 | `status` | `in-progress`, `paused`, `ready_to_finalize`, `pr_open`, `blocked` or `failed`. |
 | `migrations[]` | Reviewed migrations: `reason`, `from`, `to`, `at`, `invalidated`, `preserved_as_historical`. |
 | `relocations[]` | Reviewed `relocate` entries: `actor`, `at`, `reason`, `old_identity`, `new_identity`, and flags such as `branch_rebound` and `history_changed`. |
@@ -105,7 +112,9 @@ Title: "Sanduq completed stage receipt v1". Required keys: `stage`, `outcome` (a
 or `pr`.
 
 Stage-specific fields include `unresolved`, `answers_applied`, `blocking_findings`,
-`native_links_verified`, `parent_issue`, `images_verified` and `pr_url`.
+`native_links_verified`, `parent_issue`, `images_verified`, `pr_url`, `effort_score` (Scope; one of
+1, 2, 3, 5, 8, 13, 21, required when profiles are enabled), `lint` (`{ok, findings}`, Analyze
+recorded as `workflow:lint`) and `lazy` (Tasks-to-Issues under `phase-lazy`).
 
 Optional fields added in 1.6.0 and later (all backward-compatible):
 
@@ -114,7 +123,10 @@ Optional fields added in 1.6.0 and later (all backward-compatible):
 | `input_roles` | Per-input `role` (`dependency` or `consulted`); `consulted` requires `because`. |
 | `amendments[]` | Written by `workflow.py amend`: `path`, `old_hash`, `new_hash`, `reason`, `assessment`, `actor`, `at`, `staled`. |
 | `stale` | Runtime only. `evidence-amended` (`stage`, `path`, `at`) or `ci-lane-gap` (`stage: verify`, `lanes`, `run_id`, `at`). |
-| `source_fingerprints` | Inventory of the source tree for Verify, Review and Ready. |
+| `source_inventory` | Runtime only. `{path, sha256}` of the side file `workflow/inventory/<stage>-<claim_id>.json` (relative to the feature) holding the Verify, Review or Ready source inventory. |
+| `source_fingerprints` | Legacy inline inventory of the source tree; still read. |
+| `text_fingerprints` | Runtime only. Whitespace-normalised hashes of Markdown fingerprints, used by `revalidate-upstream` to treat CRLF and trailing-space edits as unchanged. |
+| `revalidated_upstream` | Runtime only. `{episode_id, at, actor, via, paths}` from the `revalidate-upstream` operation that re-recorded (`receipt`) or re-stamped (`whitespace-only`) the receipt. |
 | `head`, `source_key` | Commit the receipt was recorded at, and the canonical source key at that commit. |
 | `ci_evidence` | Written only by `revalidate --stage verify --check-run`: `run_id`, `attempt`, `head`, `source_key`, `tier`, `lanes`, `required_lanes`, `lane_gap`, `conclusion` (`success`), and run metadata. |
 | `diff_reviewed` | Written only by `revalidate --stage review --diff-reviewed`: `evidence`, `base`, `head`, `hash`, `diff_sha256`, `reviewer`, `at`. |

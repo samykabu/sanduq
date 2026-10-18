@@ -1,27 +1,27 @@
 # Stage reference: taskstoissues
 
-Loaded when `claim` returns `stage: taskstoissues`.
-
 ## Required work and evidence
 
-Invoke the actual core skill with the Sanduq managed preset. Derive an explicit
-task dependency mapping and run `task_issues.py`. Dry-run, inspect, then apply
-authorized issue writes. Receipt needs exact `parent_issue` and
-`native_links_verified: true`, with the generated mapping/result files.
+This is the core Tasks-to-Issues invocation with a managed adapter. Keep its prerequisite and
+repository validation, but replace its global T001-title deduplication and issue-creation loop:
 
-## Managed overlay (`speckit.taskstoissues`)
+1. Read tasks.md and its dependencies. Write a JSON object mapping each task ID to its
+   prerequisite task IDs (empty list when independent); validate there are no cycles.
+2. Run `.specify/extensions/workflow/scripts/task_issues.py --help`, then its dry run with the
+   explicit feature and issue, and inspect the exact target changes.
+3. Apply within the user's issue-work authorization. The adapter keys issues by repository,
+   parent issue, feature and task ID and verifies native GitHub sub-issue links.
+4. Never also run the core's old MCP creation loop or Project's task creator. A missing adapter
+   is a blocker.
 
-This is the actual core Tasks-to-Issues invocation with a managed adapter.
-Keep prerequisite and repository validation, but replace the upstream global
-T001-title deduplication and issue-creation loop with:
-1. Read tasks.md and its dependencies. Write a JSON object mapping each task ID to
-   prerequisite task IDs (empty list for independent tasks); validate no cycles.
-2. Run `.specify/extensions/workflow/scripts/task_issues.py --help`, then its
-   dry run with the explicit feature and issue. Inspect the exact target changes.
-3. Apply within the user's issue-work authorization. The adapter uses repository,
-   parent issue, feature and task ID, and verifies native GitHub sub-issue links.
-4. Include its result and journal as evidence. Never also execute the core's old
-   MCP creation loop or Project's task creator. A missing adapter is a blocker.
+Receipt: exact `parent_issue` and `native_links_verified: true`, with the mapping and the
+adapter's result and journal as evidence.
 
-Task de-duplication identity and handoff/GitHub rules:
+## Phase-lazy
+
+With `issue_sync.taskstoissues: phase-lazy`, publish only the first phase now: add `--phase
+"<first phase heading>"` to the dry run and apply. The receipt also needs `lazy: true`. Later
+phases are published at each phase start during Execute, and Ready requires every task mapped.
+
+Task deduplication identity and GitHub rules:
 `references/dispatcher-operations.md#interruption-and-github-behavior`.

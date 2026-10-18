@@ -144,14 +144,14 @@ class EolFingerprintTests(unittest.TestCase):
         self.assertLessEqual(spy.call_count, 6)
 
     def test_doctor_warns_about_byte_sensitive_eol_drift_with_a_remedy(self):
-        report = w.doctor(self.root, w.default_policy(False, False))
+        report = w.doctor(self.root, w.default_policy(False, False), explicit=True)
         warnings = [item for item in report.get('warnings', []) if item.startswith('BYTE_SENSITIVE_EOL_DRIFT')]
         self.assertEqual(len(warnings), 1, report)
         self.assertIn('1 tracked', warnings[0])
         self.assertIn('core.autocrlf=false checkout', warnings[0])
         self.assertIn('-text', warnings[0])
         self.assertFalse(any('EOL' in error for error in report['errors']))
-        clean = w.doctor(self.clean, w.default_policy(False, False))
+        clean = w.doctor(self.clean, w.default_policy(False, False), explicit=True)
         self.assertFalse(any(item.startswith('BYTE_SENSITIVE_EOL_DRIFT') for item in clean.get('warnings', [])))
 
 

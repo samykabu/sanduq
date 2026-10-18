@@ -14,7 +14,17 @@
     "command": {"type": "string", "minLength": 1},
     "dependency_digest": {"$ref": "#/$defs/hash"},
     "fingerprints": {"type": "object", "minProperties": 1, "additionalProperties": {"$ref": "#/$defs/hash"}},
-    "source_fingerprints": {"type": "object", "additionalProperties": {"type": ["string", "null"]}},
+    "source_fingerprints": {"description": "Legacy inline source inventory (before 1.13.0); still read.", "type": "object", "additionalProperties": {"type": ["string", "null"]}},
+    "source_inventory": {
+      "description": "Written by the runtime only: the source inventory side file, relative to the feature directory (workflow/inventory/<stage>-<claim_id>[-<suffix>].json), and the SHA-256 of its bytes.",
+      "type": "object", "required": ["path", "sha256"],
+      "properties": {"path": {"type": "string", "pattern": "^workflow/inventory/[^/]+[.]json$"}, "sha256": {"$ref": "#/$defs/hash"}}
+    },
+    "text_fingerprints": {"description": "Written by the runtime only: whitespace-normalised hashes of Markdown fingerprints, read by revalidate-upstream's drift decision.", "type": "object", "additionalProperties": {"$ref": "#/$defs/hash"}},
+    "effort_score": {"description": "Scope only: the effort score that selects the tier; required when profiles are enabled.", "enum": [1, 2, 3, 5, 8, 13, 21]},
+    "lint": {"description": "Analyze recorded by lint.py --record (command workflow:lint).", "type": "object", "required": ["ok", "findings"], "properties": {"ok": {"const": true}, "findings": {"type": "integer", "minimum": 0}}},
+    "lazy": {"description": "Tasks-to-Issues under issue_sync.taskstoissues phase-lazy: only the first phase is mapped.", "const": true},
+    "revalidated_upstream": {"description": "Written by the runtime only: the revalidate-upstream episode that re-recorded or re-stamped this receipt.", "type": "object", "required": ["episode_id", "at", "via"], "properties": {"episode_id": {"type": "string"}, "at": {"type": "string", "format": "date-time"}, "actor": {"type": "string"}, "via": {"enum": ["receipt", "whitespace-only"]}, "paths": {"type": "array", "items": {"type": "string"}}}},
     "completed_at": {"type": "string", "format": "date-time"},
     "unresolved": {"const": 0},
     "answers_applied": {"const": true},
@@ -87,7 +97,7 @@
   "allOf": [
     {"if": {"properties": {"stage": {"const": "clarify"}}}, "then": {"required": ["unresolved", "answers_applied"]}},
     {"if": {"properties": {"stage": {"const": "taskstoissues"}}}, "then": {"required": ["parent_issue", "native_links_verified"]}},
-    {"if": {"properties": {"stage": {"enum": ["verify", "review", "ready"]}}}, "then": {"required": ["blocking_findings", "source_fingerprints"]}},
+    {"if": {"properties": {"stage": {"enum": ["verify", "review", "ready"]}}}, "then": {"required": ["blocking_findings"], "anyOf": [{"required": ["source_inventory"]}, {"required": ["source_fingerprints"]}]}},
     {"if": {"properties": {"stage": {"const": "pr"}}}, "then": {"required": ["pr_url", "images_verified"]}}
   ],
   "$defs": {

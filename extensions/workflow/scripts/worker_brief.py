@@ -22,6 +22,10 @@ targeted at 3-5 KB: when the full brief (with its contract excerpt) is over
 budget, the excerpt is dropped first; if it is still over, the result is
 returned with `oversized: true` rather than silently truncating requirement
 lines a worker needs.
+
+When the installer has rendered the Sanduq role agents (`.claude/agents/sanduq-<role>.md` or
+`.codex/agents/sanduq-<role>.toml`), the role carries these fixed rules and the output is a task card
+of at most 1.5 KB instead: the task line, owned paths, acceptance, requirements and fingerprints.
 """
 from __future__ import annotations
 
@@ -35,6 +39,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import delegate_dispatch as dd
 from delegation import task_lines, task_type
+from hosts import ROLE_FILES
 from task_issues import parse_tasks
 from workflow import WorkflowError, require
 
@@ -46,6 +51,8 @@ PATH_TOKEN = re.compile(r'`([\w./-]+\.[A-Za-z0-9]{1,5})`')
 CLI_WORK_TYPES = ('implementation', 'qa_author', 'documentation', 'review')
 # 5 KB of brief plus the two full 64-hex fingerprints and the details pointers (P04).
 MIN_BYTES, MAX_BYTES = 3 * 1024, 5 * 1024 + 512
+# With a Sanduq role agent installed, the role carries the protocol and the worker gets only a task card.
+CARD_MAX_BYTES = 1536
 
 
 def read_text(path):
@@ -269,6 +276,32 @@ def render_brief(feature, task_id, context, requirements, contract, owned, budge
     return '\n'.join(lines) + '\n'
 
 
+def installed_role(root, work_type):
+    """The installed Sanduq role agent for this work type (``sanduq-worker`` or ``sanduq-reviewer``), or None."""
+    role = 'reviewer' if work_type == 'review' else 'worker'
+    return 'sanduq-' + role if any((root / pattern.format(role)).is_file() for pattern in ROLE_FILES.values()) else None
+
+
+def render_card(feature, task_id, context, requirements, owned, role, fingerprints, details):
+    """The task card: only what is specific to this task. The role definition holds the rules."""
+    lines = [f'# Task card: {task_id}', '', f'Run as: {role} (it holds the protocol, forbidden commands and the '
+             'ten-line result).', f'Feature: {feature}', f'Task line: {context["line"]}',
+             f'Work type: {context["work_type"]}',
+             'Owned paths: ' + (', '.join(f'`{path}`' for path in owned) or 'none extracted; confirm with the orchestrator')]
+    acceptance = acceptance_criteria(context['description'])
+    lines += ['Acceptance: ' + ('; '.join(acceptance) or 'none stated; use the requirements.')]
+    if requirements is None:
+        ids = sorted(set(REQUIREMENT_ID.findall(context['description'])))
+        lines.append('Requirements: ' + (', '.join(ids) or 'none referenced') + ' (verbatim lines in the details)')
+    else:
+        lines.append('Requirements:')
+        lines += [f'- ({source}) {line}' for source, line in requirements] or ['- none referenced']
+    if details:
+        lines.append('Details on demand: ' + ', '.join(f'`{path}`' for path, _ in details))
+    lines += [f'Fingerprints: policy `{fingerprints[0]}`', f'source `{fingerprints[1]}`']
+    return '\n'.join(lines) + '\n'
+
+
 def build(root, feature, task_id, work_type=None):
     root = root.resolve()
     context = task_context(root, feature, task_id)
@@ -287,6 +320,16 @@ def build(root, feature, task_id, work_type=None):
     details = [(f'{feature}/{name}', 'full spec text') for name in SPEC_ARTIFACTS if (root / feature / name).is_file()]
     if contract:
         details.append((contract['path'], 'contract; excerpt included unless the size budget dropped it'))
+    role = installed_role(root, context['work_type'])
+    if role:
+        # Verbatim requirement lines go first when the card is over budget; past that, the full brief.
+        for lines in (requirements, None):
+            card = render_card(feature, task_id, context, lines, owned, role, fingerprints, details)
+            if len(card.encode('utf-8')) <= CARD_MAX_BYTES:
+                context.update(format='card', role=role, fallback_sections=[],
+                               fingerprints={'policy': fingerprints[0], 'source': fingerprints[1]})
+                return card, context, False
+    context['format'] = 'brief'
     args = (feature, task_id, context, requirements, contract, owned, budget_row, forbidden, spawn_rules,
             f3_rule, t8_rule, template, fingerprints, details)
     brief = render_brief(*args)
@@ -334,7 +377,7 @@ def main():
     # json.dumps, not manual string formatting (finding 10): a Windows path
     # like the default --output has backslashes, which break hand-built JSON.
     print(json.dumps({'ok': True, 'path': str(output), 'bytes': len(brief.encode('utf-8')),
-                      'work_type': context['work_type'], 'oversized': oversized,
+                      'work_type': context['work_type'], 'oversized': oversized, 'format': context['format'],
                       'fingerprints': context['fingerprints'], 'fallback_sections': context['fallback_sections']}))
     return 0
 

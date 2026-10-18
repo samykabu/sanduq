@@ -9,6 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import yaml
+
 from workflow import WorkflowError, require, inside, git, read, write, locked, digest, github_repository
 
 MARKER = re.compile(r'<!-- sanduq-task (\{[^\n]+\}) -->')
@@ -42,6 +44,23 @@ def parse_tasks(text):
         tasks[task] = {'description': description, 'done': done.lower() == 'x'}
     require(tasks, 'NO_TASKS_FOUND')
     return tasks
+
+
+def phase_tasks(text, phase):
+    """Task ids under the `## <phase>` heading (case-insensitive, trimmed), up to the next `#` or `##` heading."""
+    wanted, current, found, selected = phase.strip().casefold(), False, False, []
+    for line in text.splitlines():
+        heading = re.match(r'^(#{1,2})(?!#)\s+(.*?)\s*$', line)
+        if heading:
+            current = heading[1] == '##' and heading[2].casefold() == wanted
+            found = found or current
+            continue
+        match = re.match(r'^\s*- \[[ xX]\]\s+(T\d{3,})\b', line)
+        if current and match:
+            selected.append(match[1])
+    require(found, 'PHASE_NOT_FOUND: ' + phase)
+    require(selected, 'PHASE_HAS_NO_TASKS: ' + phase)
+    return selected
 
 
 def dependency_order(tasks, dependencies):
@@ -91,15 +110,21 @@ def matching_issues(issues, repo, parent, feature):
     return found
 
 
-def sync(root, feature, parent, dependencies, apply=False, github=None):
+def sync(root, feature, parent, dependencies, apply=False, github=None, phase=None):
     root = root.resolve()
     directory = inside(root, feature)
     require(directory.is_relative_to(root / 'specs'), 'FEATURE_PATH_INVALID')
     repo = remote_repository(root)
     binding = read(directory / 'scope-source.json', {})
     require(binding.get('repo') == repo and binding.get('issue') == parent, 'TASK_PARENT_BINDING_MISMATCH')
-    tasks = parse_tasks((directory / 'tasks.md').read_text(encoding='utf-8-sig'))
+    text = (directory / 'tasks.md').read_text(encoding='utf-8-sig')
+    tasks = parse_tasks(text)
+    # The whole graph is validated; a phase run creates only its own tasks. Issues of
+    # other phases stay untouched and are found again by marker on their own run.
     ordered = dependency_order(tasks, dependencies)
+    if phase is not None:
+        selected = set(phase_tasks(text, phase))
+        ordered = [task for task in ordered if task in selected]
     gh = github or GitHub()
     base = f'repos/{repo}/issues'
     parent_issue = gh.api(f'{base}/{parent}')
@@ -128,6 +153,8 @@ def sync(root, feature, parent, dependencies, apply=False, github=None):
         journal = read(journal_path, {'schema_version': 1, 'repo': repo, 'parent': parent, 'feature': feature, 'tasks': {}})
         require((journal['repo'], journal['parent'], journal['feature']) == (repo, parent, feature), 'TASK_JOURNAL_IDENTITY_MISMATCH')
         result = {'dry_run': not apply, 'repo': repo, 'parent': parent, 'feature': feature, 'tasks': {}}
+        if phase is not None:
+            result.update(phase=phase.strip(), lazy=True)
         for task in ordered:
             marker = {'repo': repo, 'parent': parent, 'feature': feature, 'task': task}
             text = '<!-- sanduq-task ' + json.dumps(marker, sort_keys=True) + ' -->\n'
@@ -166,7 +193,19 @@ def sync(root, feature, parent, dependencies, apply=False, github=None):
         return result
 
 
-def sync_states(root, feature, parent, apply=False, github=None):
+def phase_lazy(root):
+    """True when `.specify/workflow.yml` selects `issue_sync.taskstoissues: phase-lazy`; an
+    absent or unreadable policy reads as False (the strict default)."""
+    try:
+        policy = yaml.safe_load((root / '.specify/workflow.yml').read_text(encoding='utf-8-sig'))
+        return policy['issue_sync']['taskstoissues'] == 'phase-lazy'
+    except (OSError, yaml.YAMLError, TypeError, KeyError):
+        return False
+
+
+def sync_states(root, feature, parent, apply=False, github=None, allow_unpublished=False):
+    """With `allow_unpublished` (phase-lazy), tasks of phases not yet published are skipped
+    and listed under `unpublished` instead of failing UNPUBLISHED_TASK."""
     root = root.resolve(); directory = inside(root, feature)
     repo = remote_repository(root); gh = github or GitHub()
     journal = read(directory / 'workflow/task-issues.json', {})
@@ -174,8 +213,11 @@ def sync_states(root, feature, parent, apply=False, github=None):
     binding = read(directory / 'scope-source.json', {})
     require(binding.get('repo') == repo and binding.get('issue') == parent, 'TASK_PARENT_BINDING_MISMATCH')
     tasks = parse_tasks((directory / 'tasks.md').read_text(encoding='utf-8-sig'))
-    changes = []
+    changes, unpublished = [], []
     for task, info in tasks.items():
+        if allow_unpublished and task not in journal['tasks']:
+            unpublished.append(task)
+            continue
         require(task in journal['tasks'], 'UNPUBLISHED_TASK: ' + task)
         number = journal['tasks'][task]['number']
         endpoint = f'repos/{repo}/issues/{number}'
@@ -188,23 +230,27 @@ def sync_states(root, feature, parent, apply=False, github=None):
             changes.append({'task': task, 'number': number, 'from': issue['state'], 'to': desired})
             if apply: gh.api(endpoint, 'PATCH', {'state': desired})
     result = {'dry_run': not apply, 'changes': changes}
+    if allow_unpublished:
+        result['unpublished'] = unpublished
     if apply: write(directory / 'workflow/task-state.json', result)
     return result
 
 
 def sync_summary(result):
-    """One line: `ok created=<n> reused=<n> total=<n> dry_run=0|1`, for `--summary`."""
+    """One line: `ok created=<n> reused=<n> total=<n> dry_run=0|1[ phase="<heading>"]`, for `--summary`."""
     tasks = result['tasks'].values()
     created = sum(t['action'] == 'create' for t in tasks)
     reused = sum(t['action'] == 'reuse' for t in tasks)
-    return f'ok created={created} reused={reused} total={len(tasks)} dry_run={int(result["dry_run"])}'
+    line = f'ok created={created} reused={reused} total={len(tasks)} dry_run={int(result["dry_run"])}'
+    return line + (' phase=' + json.dumps(result['phase']) if result.get('phase') else '')
 
 
 def sync_states_summary(result):
-    """One line: `ok opened=<n> closed=<n> changed=<n> dry_run=0|1`, for `--summary`."""
+    """One line: `ok opened=<n> closed=<n> changed=<n>[ unpublished=<n>] dry_run=0|1`, for `--summary`."""
     opened = sum(c['to'] == 'open' for c in result['changes'])
     closed = sum(c['to'] == 'closed' for c in result['changes'])
-    return f'ok opened={opened} closed={closed} changed={len(result["changes"])} dry_run={int(result["dry_run"])}'
+    skipped = f' unpublished={len(result["unpublished"])}' if 'unpublished' in result else ''
+    return f'ok opened={opened} closed={closed} changed={len(result["changes"])}{skipped} dry_run={int(result["dry_run"])}'
 
 
 def main():
@@ -213,20 +259,26 @@ def main():
     parser.add_argument('--feature', required=True)
     parser.add_argument('--parent', type=int, required=True)
     parser.add_argument('--dependencies', type=Path, help='JSON task-ID dependency mapping, explicitly {} if independent')
+    parser.add_argument('--phase', help='Create and link only the tasks under this "## <heading>" of tasks.md (phase-lazy issue sync)')
     parser.add_argument('--sync-states', action='store_true', help='Update already-linked issue states from completed tasks; never create issues')
+    parser.add_argument('--allow-unpublished', action='store_true',
+                        help='With --sync-states, skip tasks with no issue yet (automatic under issue_sync.taskstoissues: phase-lazy)')
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--summary', action='store_true', help='Print one line (ok/error, counts) instead of the full JSON result')
     parser.add_argument('--json', action='store_true', help='Print the full JSON result (today\'s default output)')
     args = parser.parse_args()
     if args.summary and args.json:
         parser.error('--summary and --json cannot be combined')
+    if args.phase is not None and args.sync_states:
+        parser.error('--phase and --sync-states cannot be combined')
     try:
         if args.sync_states:
-            result = sync_states(args.root, args.feature, args.parent, args.apply)
+            result = sync_states(args.root, args.feature, args.parent, args.apply,
+                                 allow_unpublished=args.allow_unpublished or phase_lazy(args.root))
             line = sync_states_summary(result)
         else:
             require(args.dependencies and args.dependencies.is_file(), 'DEPENDENCY_FILE_REQUIRED')
-            result = sync(args.root, args.feature, args.parent, read(args.dependencies), args.apply)
+            result = sync(args.root, args.feature, args.parent, read(args.dependencies), args.apply, phase=args.phase)
             line = sync_summary(result)
         print(line if args.summary else json.dumps(result, indent=2))
         return 0

@@ -307,7 +307,7 @@ class RevalidateFrom007Tests(DriftHarness):
         for stage in w.SOURCE_STAGES:
             receipt, before = state['receipts'][stage], self.recorded[stage]
             self.assertEqual((receipt['head'], receipt['source_key']), (head, key))
-            self.assertEqual(receipt['source_fingerprints'], w.source_fingerprints(self.root))
+            self.assertEqual(w.source_fingerprints_of(self.root, receipt, self.feature), w.source_fingerprints(self.root))
             self.assertEqual(receipt['blocking_findings'], 0)
             self.assertEqual(receipt['summary'], before['summary'])
             self.assertEqual(receipt['revalidations'][-1]['outcome'], 'current')
@@ -341,7 +341,8 @@ class RevalidateFrom007Tests(DriftHarness):
         receipt = self.run.load()['receipts']['verify']
         self.assertEqual(receipt['stale']['reason'], 'ci-lane-gap')
         self.assertNotIn('ci_evidence', receipt)
-        self.assertEqual(receipt['source_fingerprints'], self.recorded['verify']['source_fingerprints'])
+        self.assertEqual(w.source_fingerprints_of(self.root, receipt, self.feature),
+                         w.source_fingerprints_of(self.root, self.recorded['verify'], self.feature))
         self.assertEqual(receipt['revalidations'][-1]['outcome'], 'stale')
         checkpoint_validator().validate(self.run.load())
         self.commit_all('Record the lane gap')

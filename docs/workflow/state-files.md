@@ -149,6 +149,7 @@ records that history in `specs/<feature>/workflow/lifecycle.jsonl`, one JSON obj
 | `paused` | A checkpoint was written for a pause or a recovery. With no claim held (the context-budget pause before a claim, or the pause that follows a recovery) it is a feature-level event: `stage`, `claim_id` and `episode_id` are `null`. |
 | `invalidated` | A receipt was removed or marked stale: by the claim that replaces it, by `migrate`, by `refresh`, or by a `changed` amendment. One event per stage, with the cause in `reason`. |
 | `revalidated`, `revalidation-stale` | `revalidate` made a receipt current, or recorded a lane gap that left it stale. |
+| `skipped` | The profile tier skips the stage; `reason` names the tier. |
 
 `claim_id` identifies a claim without being the claim token. It is a one-way hash of the token, so it
 is safe to show and to copy into reports, and it cannot be used to complete or recover anything.
@@ -186,6 +187,28 @@ Delegation attempts in `delegations.json` carry matching links when they are kno
 `claim_id` (stage attempts only), `parent_run_id` and `replaces_run_id`. A replacement or a
 reassignment names the run it replaces; a repeated start does not.
 
+## Profiles, skipped stages and runtime caches
+
+These fields and files exist only when the matching policy key is set or the command runs.
+
+| Where | What |
+| --- | --- |
+| Scope receipt `effort_score` | The approved effort score (1, 2, 3, 5, 8, 13 or 21). Required when `profiles.enabled`. |
+| Checkpoint `profile` | `{tier, score, fixed_at}`, frozen when Plan is first claimed. |
+| Checkpoint `skipped` | `{stage: reason}` for each stage the tier skips; `lifecycle.jsonl` has a matching `skipped` event, and `next` and `status` list them. |
+| Plan claim `merged` | `['tasks']` on the lite and standard tiers; the Plan receipt then lists `tasks.md` in `inputs`. |
+| Analyze receipt `command: workflow:lint` | Written by `lint.py --record` when lint is clean and needs no model Analyze. |
+| Tasks-to-Issues receipt `lazy: true` | With `issue_sync.taskstoissues: phase-lazy`: only the first phase is mapped; Ready requires every task mapped. |
+| `lifecycle.jsonl` episode `revalidate-upstream` | One locked `revalidate-upstream --receipt` call that re-recorded stale stages in order. |
+| Verify, Review and Ready `source_inventory` | `{path: 'workflow/inventory/<stage>-<claim_id>.json', sha256}` instead of inline `source_fingerprints`; older receipts with the inline form stay readable. |
+| `.specify/workflow/runtime/doctor-cache.json` | The last green project doctor result. `claim` reuses it for up to 600 seconds while the dependency digest, policy digest and registry and config files are unchanged; `doctor` always runs fresh and refreshes it. |
+| `.specify/scope/board-cache.json` | `{fetched_at, repo, items}`, kept for `scope.board_cache_seconds` and cleared by every Scope or clarification write. |
+| `handoff.md` | The runtime rewrites only the block between `<!-- sanduq-handoff:begin -->` and `<!-- sanduq-handoff:end -->`; notes outside it are kept. |
+
+A spec that Scope rendered from the approved analysis starts with
+`<!-- sanduq-scope:rendered <sha256 of the analysis file> -->`; the Specify claim then returns
+`mode: bind-only`.
+
 ## Linking checkpoint records to lifecycle events (1.12.0)
 
 A reader should not match a checkpoint record to a lifecycle event by stage and time. Two fields name the link:
@@ -208,7 +231,7 @@ that Scope's own `clarification_items` produces and a test regenerates.
 
 | Key | Value |
 | --- | --- |
-| `kind` | `comment` (a published question or a reply), `selection` (a ticked box), `closure` (the creator closed clarification) or `disposition` (the reviewer's verdict on the question). |
+| `kind` | `comment` (a published question or a reply), `selection` (a ticked box), `closure` (the creator closed clarification), `disposition` (the reviewer's verdict on the question) or `in-session` (an answer the issue creator gave in the conversation, mirrored to GitHub in one managed comment of kind `round-in-session`). |
 | `url` | The comment URL, or `null`. |
 | `comment_id` | The GitHub comment id, or `null`. |
 | `explanation` | Free text, or `null`. A `disposition` carries `<disposition>: <explanation>`. |

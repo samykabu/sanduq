@@ -22,8 +22,8 @@ Use Workflow when you want:
 Use the individual Spec Kit commands instead when you only need one stage, or when the work is not
 tied to a GitHub issue.
 
-Workflow and clarification illustrations use Illustrate, which Scope 1.6.0 and newer also requires
-for its dependency plan and clarification images.
+Workflow illustrations use Illustrate, which Scope also requires for its dependency plan.
+Clarification questions may use Mermaid diagrams, which GitHub renders without hosting.
 
 ## Install
 
@@ -87,6 +87,16 @@ $speckit-workflow-finalize #412
 The stage chain is: Scope, Specify, Clarify or Brainstorm, Plan, one task generator, selected
 QA/manual analysis, Analyze, Tasks-to-Issues, one executor, verification and review, selected
 QA/manual documentation, Finalize, one PR.
+
+With `profiles.enabled: true` in `.specify/workflow.yml`, the effort score Scope records selects a
+tier at the first Plan claim. The `standard` tier (score 5 to 8 by default) writes plan and tasks in
+one pass and runs Analyze as the deterministic `workflow:lint`; the `lite` tier (score 3 or less)
+also skips the QA and User Manual stages and makes research, data model, quickstart and contracts
+optional. Scores above 8 run the full chain. Skipped stages appear in `status`. Three more options
+shorten the front half: Scope 1.8.0 can render spec.md from the approved analysis so Specify only
+binds, the first clarification round can be answered in the session by the issue creator, and
+`revalidate-upstream` re-records every stale upstream receipt in one operation after a mid-run
+change. See the [changelog](CHANGELOG.md) for the policy keys.
 
 ## Commands
 

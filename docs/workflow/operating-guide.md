@@ -11,6 +11,7 @@ Use the [state, evidence, and runner reference](operations.md) for report usage,
 - [One-time setup](#one-time-setup)
 - [Daily entry points](#daily-entry-points)
 - [Scope preferences and GitHub answers](#scope-preferences-and-github-answers)
+- [Optional policy keys for a lighter front half](#optional-policy-keys-for-a-lighter-front-half)
 - [Provider and task ownership](#provider-and-task-ownership)
 - [Fresh-session continuation](#fresh-session-continuation)
 - [Updates and releases](#updates-and-releases)
@@ -100,6 +101,52 @@ Use `scope.statuses` to map logical names to actual board columns, for example
 `.specify/scope/github` and `docs/workflow/implementation-plan.html`; existing project-specific
 locations can be preserved explicitly through scope policy.
 
+## Optional policy keys for a lighter front half
+
+Each key below is optional; leaving it out keeps the earlier behavior.
+
+```yaml
+profiles:                       # tiers by Scope effort score
+  enabled: true
+  lite: {max_score: 3}
+  standard: {max_score: 8}
+clarification:
+  max_questions_per_round: 6    # publish refuses a larger round and names the overflow
+  in_session_first_round: true  # the issue creator may answer round 1 in the session
+artifacts:
+  budgets: {spec_kb: 25, plan_kb: 20, research_kb: 15, tasks_detail_lines: 2}
+  enforce: lite-standard        # lite-standard | all | warn
+issue_sync:
+  taskstoissues: phase-lazy     # publish each phase's task issues at its start
+project_sync:
+  points: [specify, execute, pr]
+scope:
+  board_cache_seconds: 300      # 0 disables the board cache
+```
+
+- `profiles`: the Scope receipt's `effort_score` picks `lite`, `standard` or `full` when Plan is
+  first claimed. Lite and standard merge Tasks into Plan and run Analyze as `workflow:lint`;
+  lite also skips the QA and manual stages. See [profiles and tiers](stages.md#profiles-and-tiers).
+- `clarification.max_questions_per_round`: questions may carry a `priority` (1 is most
+  important); a larger round fails with `CLARIFICATION_TOO_MANY_QUESTIONS` naming the keys to
+  defer.
+- `clarification.in_session_first_round`: when the person in the session is the issue creator,
+  round 1 can be answered there. The runtime posts one comment listing each question, the chosen
+  answer and who answered, and moves the issue to Ready.
+- `artifacts`: byte budgets that `workflow:lint` enforces; `lite-standard` blocks on those
+  tiers and warns on `full`.
+- `issue_sync.taskstoissues: phase-lazy`: Tasks-to-Issues publishes the first phase; Execute
+  runs `task_issues.py --phase "<Phase heading>"` at each phase start; Ready still requires every
+  task mapped.
+- `project_sync.points`: the stages that sync the GitHub Project; `claim` prints
+  `project_sync: true|false`. Absent means specify, plan, analyze, taskstoissues, execute and pr.
+- `scope.board_cache_seconds`: `gate`, `approve`, `publish` and `bind` reuse an `inspect`
+  snapshot passed with `--snapshot` while it matches the live issue and is younger than this
+  (`snapshot_reused` in their output).
+
+Clarification questions may include a Mermaid diagram in managed projects; an exported
+Illustrate image is optional.
+
 ## Provider and task ownership
 
 The dispatcher independently prefers compatible, enabled SuperSpec Brainstorm,
@@ -141,9 +188,12 @@ Only explicit `strict` mode rejects unavailable enforcement. A prompt cannot gua
 host occupancy or create a fresh host session.
 
 The runtime saves `checkpoint.json`, `handoff.md` and `resume-prompt.md` under the
-feature's workflow directory. The handoff identifies the issue, feature, branch,
-completed stages, pending task IDs, evidence and active claim. Add actual test results,
-background process handles and unresolved approvals. Use the saved prompt after an actual interruption or reliable measured limit,
+feature's workflow directory. The resume prompt runs `workflow.py status --feature <f>` and then
+`speckit.workflow.continue`; nobody reads `checkpoint.json` directly. The runtime rewrites only
+the block between `<!-- sanduq-handoff:begin -->` and `<!-- sanduq-handoff:end -->` in
+`handoff.md` (issue, feature, branch, completed stages, pending task IDs, evidence and active
+claim). Add actual test results, background process handles and unresolved approvals outside
+that block; they are kept. Use the saved prompt after an actual interruption or reliable measured limit,
 not merely because an estimate is unavailable. Inspect possible remote writes before clearing an interrupted claim;
 missing HTTP responses are not proof that an issue or PR was not created.
 

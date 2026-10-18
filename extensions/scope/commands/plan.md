@@ -1,5 +1,5 @@
 ---
-description: "Regenerate and validate the implementation dependency plan with Illustrate after a split."
+description: "Regenerates and validates the implementation dependency plan with Illustrate after a Scope decomposition is published. Use after splitting an issue into sub-issues, or when the scope plan-pending marker exists."
 ---
 
 # Refresh implementation plan

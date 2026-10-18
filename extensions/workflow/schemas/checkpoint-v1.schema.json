@@ -38,6 +38,17 @@
         }}
       ]
     },
+    "profile": {
+      "description": "The effort tier frozen at the first Plan claim when profiles are enabled; absent means the full stage list.",
+      "type": "object", "required": ["tier", "score", "fixed_at"],
+      "properties": {"tier": {"enum": ["lite", "standard", "full"]},
+                     "score": {"type": ["integer", "null"], "enum": [1, 2, 3, 5, 8, 13, 21, null]},
+                     "fixed_at": {"type": "string", "format": "date-time"}}
+    },
+    "skipped": {
+      "description": "Stages the frozen tier does not run, with the reason (tasks is merged into plan on lite and standard).",
+      "type": "object", "additionalProperties": {"type": "string", "minLength": 1}
+    },
     "status": {"enum": ["in-progress", "paused", "ready_to_finalize", "pr_open", "blocked", "failed"]},
     "migrations": {
       "description": "Reviewed migrations. workflow.py migrate --preview returns the same invalidated and preserved lists before the write.",

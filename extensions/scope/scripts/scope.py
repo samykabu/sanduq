@@ -29,6 +29,8 @@ BLOCKS = re.compile(r'(?im)^(?:#{1,6}\s+Blocks\b[^\n]*|\*\*Blocks\*\*[^\n]*)\n(?
 READY = {'In review', 'Done'}
 DIMENSIONS = ('breadth', 'integration', 'data_security', 'verification', 'uncertainty')
 EFFORTS = (1, 2, 3, 5, 8, 13, 21)
+BOARD_CACHE = '.specify/scope/board-cache.json'
+RENDERED = '<!-- sanduq-scope:rendered '
 
 
 def analysis_hash(analysis):
@@ -500,14 +502,68 @@ class Scope:
         self.catalog = read_json(self.catalog_path, {'issues': []})
         self.keymap = read_json(self.map_path, {})
         self._board = None
+        self._board_cached = None  # None: not read yet in this process; True: read from the shared cache
+        self.snapshot_reused = None
+
+    def board_ttl(self):
+        return float(workflow_policy.setting(self.root, 'scope', 'board_cache_seconds', 300))
+
+    def cached_board(self):
+        """The shared board items when they are for this repository and younger than the TTL, else None."""
+        try:
+            cache = read_json(self.root / BOARD_CACHE, {})
+            age = time.time() - datetime.fromisoformat(cache['fetched_at']).timestamp()
+        except (ValueError, KeyError, TypeError, OSError):
+            return None
+        fresh = cache.get('repo') == self.repo and 0 <= age < self.board_ttl() and isinstance(cache.get('items'), list)
+        return cache['items'] if fresh else None
 
     def board(self, fresh=False):
         if self._board is None or fresh:
-            data = self.gh.command(['project', 'item-list', str(self.cfg['projectNumber']), '--owner', self.cfg['owner'], '--limit', '10000', '--format', 'json'])
-            require(data['totalCount'] <= len(data['items']), 'Project exceeds collection limit; refusing a partial board snapshot.')
-            self._board = {x['content']['number']: x for x in data['items']
-                           if x.get('content', {}).get('repository') == self.repo and x['content'].get('type') == 'Issue'}
+            # Only the first read in a process may come from the shared cache; any reload is live.
+            items = None if fresh or self._board_cached is not None else self.cached_board()
+            self._board_cached = items is not None
+            if items is None:
+                data = self.gh.command(['project', 'item-list', str(self.cfg['projectNumber']), '--owner', self.cfg['owner'], '--limit', '10000', '--format', 'json'])
+                require(data['totalCount'] <= len(data['items']), 'Project exceeds collection limit; refusing a partial board snapshot.')
+                items = [x for x in data['items'] if x.get('content', {}).get('repository') == self.repo and x['content'].get('type') == 'Issue']
+                if self.board_ttl() > 0:
+                    write_json(self.root / BOARD_CACHE, {'fetched_at': datetime.now(timezone.utc).isoformat(),
+                                                         'repo': self.repo, 'items': items})
+            self._board = {x['content']['number']: x for x in items}
         return self._board
+
+    def invalidate_board(self, memory=True):
+        """Remove the shared cache (and, by default, this process's board) after a write to the board or an issue."""
+        if memory:
+            self._board = None
+        (self.root / BOARD_CACHE).unlink(missing_ok=True)
+
+    def drop_cached_board(self):
+        """True when the board came from the shared cache and is now dropped: a gate refuses only on a live read."""
+        if not self._board_cached:
+            return False
+        self._board, self._board_cached = None, False
+        return True
+
+    def load_snapshot(self, value, path=None, issue=None):
+        """A saved `inspect --output` file when it is younger than the board cache TTL and its fingerprint matches
+        one fresh fetch of the issue; otherwise a full inspect. Sets `snapshot_reused`."""
+        self.snapshot_reused = False
+        if path:
+            issue = issue or self.resolve(value)
+            try:
+                saved = read_json(Path(path), {})
+                young = time.time() - Path(path).stat().st_mtime < self.board_ttl()
+            except (ValueError, OSError):
+                saved, young = {}, False
+            if (young and isinstance(saved, dict) and saved.get('schema_version') == 1 and saved.get('repo') == self.repo
+                    and (saved.get('issue') or {}).get('number') == issue['number']
+                    and saved.get('fingerprint') == fingerprint(issue)):
+                self.snapshot_reused = True
+                # The fingerprint ignores the managed block, so the receipt and labels come from the fresh issue.
+                return dict(saved, issue=issue)
+        return self.inspect(value)
 
     def issue(self, number):
         issue = self.gh.api(f'{self.base}/{number}')
@@ -625,17 +681,22 @@ class Scope:
                                                      'note': 'Inspect PR files, merge state, code and tests; references alone do not prove implementation.'})
         return result
 
-    def gate(self, value, required_status='Backlog', *, feature=None, token=None, session=None, analysis=None, analysis_path=None):
+    def gate(self, value, required_status='Backlog', *, feature=None, token=None, session=None, analysis=None, analysis_path=None,
+             snapshot_path=None):
         require(re.fullmatch(r'#?[1-9]\d*', (value or '').strip()),
                 'SCOPE_REQUIRED: Specify requires a GitHub issue number and current effort score. Run /speckit-scope <issue> first.')
         initial = self.resolve(value)
         revalidation = workflow_policy.bound_claim(self.root, self.repo, initial['number'], {'scope', 'specify'})
         fresh = workflow_policy.fresh_claim(self.root, self.repo, initial['number'], feature, token, session) if any((feature, token, session)) else None
-        fresh_continued = fresh and initial.get('state') == 'open' and self.status(initial) == 'Feature Specification'
-        continued = revalidation and initial.get('state') == 'open' and self.status(initial) in {'Feature Specification', 'Need Clarifications', 'Ready', 'In progress', 'In review'}
-        require(self.status(initial) == required_status or continued or fresh_continued,
+
+        def allowed():
+            status = self.status(initial)
+            fresh_continued = fresh and initial.get('state') == 'open' and status == 'Feature Specification'
+            continued = revalidation and initial.get('state') == 'open' and status in {'Feature Specification', 'Need Clarifications', 'Ready', 'In progress', 'In review'}
+            return status == required_status or continued or fresh_continued
+        require(allowed() or (self.drop_cached_board() and allowed()),
                 f'SPECIFY_STATE: Specify requires {required_status}; #{initial["number"]} is {self.status(initial)}.')
-        snapshot = self.inspect(value)
+        snapshot = self.load_snapshot(value, snapshot_path, initial)
         issue = snapshot['issue']
         receipt = metadata(issue.get('body'))
         require(not receipt.get('children'), 'SCOPE_PARENT: do not specify this aggregate issue; select a scoped leaf sub-issue.')
@@ -852,9 +913,12 @@ class Scope:
                 from urllib.parse import quote
                 self.gh.api(f'{self.base}/{issue["number"]}/labels/{quote(label, safe="")}', 'DELETE')
         self.gh.api(f'{self.base}/{issue["number"]}/labels', 'POST', {'labels': wanted})
+        self.invalidate_board(memory=False)
 
     def add_to_board(self, issue):
-        return self.gh.command(['project', 'item-add', str(self.cfg['projectNumber']), '--owner', self.cfg['owner'], '--url', issue['html_url'], '--format', 'json'])['id']
+        item = self.gh.command(['project', 'item-add', str(self.cfg['projectNumber']), '--owner', self.cfg['owner'], '--url', issue['html_url'], '--format', 'json'])['id']
+        self.invalidate_board()
+        return item
 
     def set_status(self, issue, status):
         status = self.actual_status(status)
@@ -862,7 +926,7 @@ class Scope:
         item = self.board().get(issue['number'])
         item_id = item['id'] if item else self.add_to_board(issue)
         self.gh.command(['project', 'item-edit', '--id', item_id, '--project-id', self.cfg['projectId'], '--field-id', self.cfg['statusFieldId'], '--single-select-option-id', self.cfg['statusOptions'][status]])
-        self._board = None
+        self.invalidate_board()
 
     def actual_status(self, status):
         return workflow_policy.statuses(self.root).get(status, status)
@@ -874,7 +938,7 @@ class Scope:
             item = self.board().get(issue['number'])
             item_id = item['id'] if item else self.add_to_board(issue)
             self.gh.command(['project', 'item-edit', '--id', item_id, '--project-id', self.cfg['projectId'], '--field-id', field['id'], '--text', ', '.join(f'#{n}' for n in deps)])
-            self._board = None
+            self.invalidate_board()
 
     def publish(self, snapshot, analysis, apply=False):
         root_issue = snapshot['issue']
@@ -944,7 +1008,6 @@ class Scope:
             journal['nodes'][node['key']] = issue['number']
             write_json(journal_path, journal)
             self.add_to_board(issue)
-            self._board = None
             if not self.board().get(issue['number'], {}).get('status'):
                 self.set_status(issue, 'Backlog')
             if node.get('children'):
@@ -1100,9 +1163,60 @@ class Scope:
         report = '# Implementation dependencies\n\nGenerated by Speckit Scope. Aggregate issues are tracking containers.\n\n| Issue | Title | Prerequisites |\n| --- | --- | --- |\n'
         report += '\n'.join(f'| #{x["number"]} | {x["title"].replace("|", "/")} | {", ".join("#" + str(n) for n in x["dependencies"]) or "None"} |' for x in graph)
         (self.artifact_directory / 'DEPENDENCIES.md').write_text(report + '\n', encoding='utf-8')
+        self.invalidate_board(memory=False)
         return graph
 
-    def bind(self, value, apply=False, *, feature=None, token=None, session=None, analysis=None, analysis_path=None):
+    def render_spec(self, value, analysis_path, feature, apply=False, force=False):
+        """spec.md rendered from the approved single-leaf analysis; a dry run returns the text and writes nothing."""
+        target = (self.root / (feature or '')).resolve()
+        require(feature and target.parent == (self.root / 'specs').resolve(),
+                'SCOPE_RENDER_FEATURE_REQUIRED: pass --feature specs/<feature> inside this checkout.')
+        require(analysis_path and Path(analysis_path).is_file(), '--analysis <analysis.json> is required.')
+        raw = Path(analysis_path).read_bytes()
+        analysis = json.loads(raw.decode('utf-8-sig'))
+        tree = analysis.get('tree') or {}
+        issue = self.resolve(value)
+        require(analysis.get('issue') == issue['number'], 'SCOPE_RENDER_MISMATCH: the analysis is for another issue.')
+        require((metadata(issue.get('body')).get('approval') or {}).get('analysis_sha256') == analysis_hash(analysis),
+                'SCOPE_RENDER_UNAPPROVED: the issue\'s scope receipt does not approve this analysis; publish it with scope.py publish --apply first.')
+        require(not tree.get('children'), 'SCOPE_RENDER_LEAF_REQUIRED: render a single-leaf analysis; specify each scoped sub-issue separately.')
+        open_questions = []
+        for key in ('uncertainty', 'open_questions'):
+            items = analysis.get(key) or []
+            require(isinstance(items, list), f'{key} must be a list.')
+            for item in items:
+                text = item.get('question') if isinstance(item, dict) else item
+                require(isinstance(text, str) and text.strip(), f'Each {key} item needs question text.')
+                open_questions.append(text.strip())
+        block = lambda value: '\n'.join('- ' + x for x in value) if isinstance(value, list) else str(value).strip()
+        sha = hashlib.sha256(raw).hexdigest()
+        lines = [f'{RENDERED}{sha} -->', f'# Feature Specification: {issue["title"]}', '',
+                 f'**Feature Branch**: `{target.name}`', '', '**Status**: Draft', '',
+                 f'**Input**: GitHub issue #{issue["number"]} ({issue["html_url"]}), rendered from the approved Scope analysis', '',
+                 '## Overview', '', block(analysis.get('alignment', '')), '', block(tree['scope']), '',
+                 '## User Scenarios & Testing *(mandatory)*', '', f'### User Story 1 - {tree["title"]} (Priority: P1)', '',
+                 tree['specify_prompt'].strip(), '', '## Requirements *(mandatory)*', '', '### Functional Requirements', '']
+        lines += [f'- **FR-{i:03d}**: {text}' for i, text in enumerate(analysis['requirements'], 1)]
+        lines += ['', '## Success Criteria *(mandatory)*', '', '### Measurable Outcomes', '']
+        lines += [f'- **SC-{i:03d}**: {text}' for i, text in enumerate(tree['acceptance'], 1)]
+        lines += ['', '## Out of Scope', '', block(tree['out_of_scope']), '', '## Open Questions', '']
+        lines += [f'- [NEEDS CLARIFICATION: {text}]' for text in open_questions] or ['None.']
+        text = '\n'.join(lines) + '\n'
+        spec = target / 'spec.md'
+        relative = spec.relative_to(self.root).as_posix()
+        require(force or not spec.is_file() or spec.read_text(encoding='utf-8-sig').startswith(RENDERED),
+                f'SCOPE_RENDER_EXISTS: {relative} was not rendered by Scope; pass --force to replace it.')
+        result = {'issue': issue['number'], 'path': relative, 'analysis_sha256': sha, 'dry_run': not apply}
+        if not apply:
+            return dict(result, text=text)
+        target.mkdir(parents=True, exist_ok=True)
+        temporary = spec.with_suffix('.md.tmp')
+        temporary.write_text(text, encoding='utf-8', newline='\n')
+        temporary.replace(spec)
+        return result
+
+    def bind(self, value, apply=False, *, feature=None, token=None, session=None, analysis=None, analysis_path=None,
+             snapshot_path=None):
         if any((feature, token, session)):
             # Refuse wrong phase before even decision reconciliation can write a ledger.
             workflow_policy.fresh_claim(self.root, self.repo, int(str(value).lstrip('#')),
@@ -1118,7 +1232,8 @@ class Scope:
                     self.status(self.resolve(value)) == 'Feature Specification')
         require(not existing_source or (existing_source.get('issue'), existing_source.get('repo')) == (int(str(value).lstrip('#')), self.repo), 'SCOPE_BINDING_MISMATCH')
         checked = self.gate(value, 'Feature Specification' if resuming else 'Backlog',
-                            feature=feature, token=token, session=session, analysis=analysis, analysis_path=analysis_path)
+                            feature=feature, token=token, session=session, analysis=analysis, analysis_path=analysis_path,
+                            snapshot_path=snapshot_path)
         issue = self.issue(checked['issue'])
         state_path = self.root / self.cfg['stateFile']
         state = read_json(state_path, {})
@@ -1184,6 +1299,8 @@ class Scope:
             active.remove(n)
         for n in parents:
             visit(n)
+        if apply:
+            self.invalidate_board(memory=False)
         return result
 
 
@@ -1201,7 +1318,7 @@ def rejection(blocked):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['inspect', 'gate', 'approve', 'publish', 'bind', 'reconcile', 'export-plan'])
+    parser.add_argument('command', choices=['inspect', 'gate', 'approve', 'publish', 'bind', 'reconcile', 'export-plan', 'render-spec'])
     parser.add_argument('issue', nargs='?')
     parser.add_argument('--root', default='.')
     parser.add_argument('--analysis', type=Path)
@@ -1213,11 +1330,13 @@ def main(argv=None):
     parser.add_argument('--child-count', type=int)
     parser.add_argument('--approved-by')
     parser.add_argument('--approval-text')
+    parser.add_argument('--snapshot', type=Path, help='gate, approve, publish, bind: a saved inspect --output to reuse when still current')
+    parser.add_argument('--force', action='store_true', help='render-spec: replace a spec.md that Scope did not render')
     args = parser.parse_args(argv)
     lock = None
     try:
         # Fail on missing identity before any GitHub/network access.
-        if args.command in {'inspect', 'gate', 'approve', 'publish', 'bind'}:
+        if args.command in {'inspect', 'gate', 'approve', 'publish', 'bind', 'render-spec'}:
             require(args.issue and args.issue.strip(), 'SCOPE_ISSUE_REQUIRED: supply a GitHub issue number or exact title. Run /speckit-scope <issue> first.')
         app = Scope(args.root)
         if args.command == 'bind' and any((args.feature, args.token, args.session)):
@@ -1241,22 +1360,28 @@ def main(argv=None):
             require(not result['blocked'], rejection(result['blocked']))
         elif args.command == 'gate':
             result = app.gate(args.issue, feature=args.feature, token=args.token, session=args.session,
-                              analysis=read_json(args.analysis) if args.analysis else None, analysis_path=args.analysis)
+                              analysis=read_json(args.analysis) if args.analysis else None, analysis_path=args.analysis,
+                              snapshot_path=args.snapshot)
         elif args.command == 'approve':
             require(args.analysis and args.analysis.is_file(), '--analysis <analysis.json> is required.')
-            result = app.approve(app.inspect(args.issue), read_json(args.analysis), args.child_count,
+            result = app.approve(app.load_snapshot(args.issue, args.snapshot), read_json(args.analysis), args.child_count,
                                  args.approved_by, args.approval_text)
         elif args.command == 'publish':
             require(args.analysis and args.analysis.is_file(), '--analysis <analysis.json> is required.')
-            result = app.publish(app.inspect(args.issue), read_json(args.analysis), args.apply)
+            result = app.publish(app.load_snapshot(args.issue, args.snapshot), read_json(args.analysis), args.apply)
         elif args.command == 'bind':
             result = app.bind(args.issue, args.apply, feature=args.feature, token=args.token, session=args.session,
-                              analysis=read_json(args.analysis) if args.analysis else None, analysis_path=args.analysis)
+                              analysis=read_json(args.analysis) if args.analysis else None, analysis_path=args.analysis,
+                              snapshot_path=args.snapshot)
         elif args.command == 'reconcile':
             result = app.reconcile(args.apply)
+        elif args.command == 'render-spec':
+            result = app.render_spec(args.issue, args.analysis, args.feature, args.apply, args.force)
         else:
             require(args.apply, 'export-plan requires --apply because it updates local plan data.')
             result = app.export_plan()
+        if args.snapshot and args.command in {'gate', 'approve', 'publish', 'bind'}:
+            result = dict(result, snapshot_reused=bool(app.snapshot_reused))
         if args.output:
             write_json(args.output, result)
         print(json.dumps(with_transport(result, app.gh), indent=2, ensure_ascii=True))

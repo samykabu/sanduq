@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from workflow import (canonical_path, load_policy, stages, read, require, inside, git, digest, checkpoint_policy_digest, receipt_status,
                       receipt_drift, recovery_recipe, ready_checks, github_repository, verification_check, WorkflowError,
-                      WORKFLOW_SCRIPT)
+                      WORKFLOW_SCRIPT, source_fingerprints_of, state_tier)
 import sanduq_ci
 
 
@@ -103,7 +103,7 @@ def check(root, feature, policy, base=None, rules=None, verify_ci_evidence=True,
     require(f"{source.get('repo')}#{source.get('issue')}" == state.get('issue'), 'FEATURE_BINDING_MISMATCH')
     amendments, revalidations, accepted, warnings = [], [], [], []
     if rules['receipts']:
-        for stage in stages(policy):
+        for stage in stages(policy, state_tier(state)):
             if stage == 'pr': continue  # PR publication follows readiness; never requires a recursive PR commit.
             receipt = state.get('receipts', {}).get(stage, {})
             require(receipt.get('outcome') == 'passed' and receipt.get('evidence'), 'RECEIPT_MISSING: ' + stage)
@@ -181,8 +181,13 @@ def check_index(root, feature):
     for stage, receipt in state.get('receipts', {}).items():
         if stage == 'pr':
             continue
+        inventory = receipt.get('source_inventory')
+        if isinstance(inventory, dict) and inventory.get('path'):
+            # The side file itself must be committed with the checkpoint that names it.
+            paths.add(canonical_path(root, feature + '/' + inventory['path']))
         for key in ('fingerprints', 'source_fingerprints'):
-            for p, value in receipt.get(key, {}).items():
+            entries = receipt.get(key, {}) if key == 'fingerprints' else source_fingerprints_of(root, receipt, feature)
+            for p, value in entries.items():
                 if value is None:
                     continue
                 # A legacy label may use Windows separators; git lists forward-slash names. The stored label

@@ -358,6 +358,9 @@ class SemanticTransformationTests(Harness):
     def test_qa_document_refreshes_generated_memory_with_exact_lineage(self):
         run, claim = self.claim_with_dependencies('qa_document', [self.memory], 'dependency')
         before = copy.deepcopy(run.load())
+        # Inventories are side files now; read them before Complete supersedes them.
+        inventories = {stage: w.source_fingerprints_of(self.root, receipt, self.feature)
+                       for stage, receipt in before['receipts'].items() if stage in w.SOURCE_STAGES}
         old = before['active']['baseline'][self.memory]
         self.write(self.memory, '# Project inventory\n\nSource marker: src/service.py\n')
         new = w.fingerprint_files(self.root, [self.memory])[self.memory]
@@ -371,12 +374,16 @@ class SemanticTransformationTests(Harness):
         self.assertTrue(lineage['at'])
         self.assertEqual(after['lineage'][:-1], before.get('lineage', []))
         for stage, prior in before['receipts'].items():
-            expected = copy.deepcopy(prior)
+            expected, actual = copy.deepcopy(prior), copy.deepcopy(after['receipts'][stage])
+            if stage in inventories:
+                expected['source_fingerprints'] = inventories[stage]
+                actual['source_fingerprints'] = w.source_fingerprints_of(self.root, actual, self.feature)
+                expected.pop('source_inventory'), actual.pop('source_inventory')
             for field in ('fingerprints', 'source_fingerprints'):
                 if self.memory in expected.get(field, {}):
                     self.assertEqual(expected[field][self.memory], old)
                     expected[field][self.memory] = new
-            self.assertEqual(after['receipts'][stage], expected)
+            self.assertEqual(actual, expected)
             self.assertTrue(w.receipt_current(self.root, self.feature, stage, after['receipts'][stage]))
         self.assertEqual(after['receipts']['qa_analyze']['input_roles'][self.memory]['role'], 'dependency')
         self.assertEqual(result['stage'], 'manual_update')
@@ -408,14 +415,16 @@ class SemanticTransformationTests(Harness):
         source = self.write('src/unlisted.py', 'original source')
         run, claim = self.claim_with_dependencies('qa_document', [self.memory])
         before = run.load()
+        inventories = {stage: w.source_fingerprints_of(self.root, before['receipts'][stage], self.feature)
+                       for stage in ('verify', 'review')}
         self.write(self.memory, 'refreshed inventory')
         self.write(source, 'changed source')
         result = run.complete(claim['token'], self.receipt('qa_document'))
         after = run.load()
         self.assertEqual(result['stage'], 'verify')
         for stage in ('verify', 'review'):
-            self.assertEqual(after['receipts'][stage]['source_fingerprints'][source],
-                             before['receipts'][stage]['source_fingerprints'][source])
+            self.assertEqual(w.source_fingerprints_of(self.root, after['receipts'][stage], self.feature)[source],
+                             inventories[stage][source])
             self.assertFalse(w.receipt_current(self.root, self.feature, stage, after['receipts'][stage]))
         self.assertEqual(set(after['lineage'][-1]['changes']), {self.memory})
 

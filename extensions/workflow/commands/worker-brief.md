@@ -1,5 +1,5 @@
 ---
-description: "Generate a 3-5 KB worker brief for one task: verbatim requirements, owned paths, turn budget, T7 template."
+description: "Generates a compact 3-5 KB brief for one task with its verbatim requirements, owned paths, turn budget, protocol rules and result template, so a worker skips the full spec set. Use before assigning a task to a worker agent."
 ---
 
 # Sanduq Workflow: worker-brief

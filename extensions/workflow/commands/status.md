@@ -1,5 +1,5 @@
 ---
-description: "Show current stage, active claim and evidence freshness."
+description: "Shows an issue-bound feature's current stage, active claim, receipts, profile, skipped stages, blockers and evidence freshness without changing anything. Use when asked where a feature is, what is blocking it, or what the workflow will do next."
 ---
 
 # Sanduq Workflow: status

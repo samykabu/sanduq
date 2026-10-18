@@ -179,6 +179,90 @@ class TaskIssueTests(unittest.TestCase):
         self.assertEqual(self.gh.issues[result['tasks']['T001']['number']]['state'], 'closed')
         self.assertEqual(self.gh.issues[result['tasks']['T1000']['number']]['state'], 'closed')
 
+    PHASED = ('# Tasks\n\n## Phase 1: Setup\n\n- [ ] T001 [P] First behavior\n\n### Notes\n\n- [ ] T002 Second behavior\n\n'
+              '## Phase 2: User Story 1\n\n- [ ] T003 Third behavior\n\n## Phase 3: Empty\n\nNothing yet.\n')
+
+    def test_phase_creates_only_that_phase_and_reruns_are_idempotent(self):
+        feature = self.feature('001-a', 10)
+        (self.root / feature / 'tasks.md').write_text(self.PHASED)
+        deps = {'T003': ['T001']}
+        first = t.sync(self.root, feature, 10, deps, True, self.gh, phase='  phase 1: SETUP ')
+        self.assertEqual(set(first['tasks']), {'T001', 'T002'})
+        self.assertEqual((first['phase'], first['lazy']), ('phase 1: SETUP', True))
+        self.assertTrue(first['native_links_verified'])
+        writes, size = len(self.gh.writes), len(self.gh.issues)
+        again = t.sync(self.root, feature, 10, deps, True, self.gh, phase='Phase 1: Setup')
+        self.assertEqual((len(self.gh.writes), len(self.gh.issues)), (writes, size))
+        self.assertEqual({task: entry['action'] for task, entry in again['tasks'].items()}, {'T001': 'reuse', 'T002': 'reuse'})
+        second = t.sync(self.root, feature, 10, deps, True, self.gh, phase='Phase 2: User Story 1')
+        self.assertEqual(second['tasks']['T003']['action'], 'create')
+        body = self.gh.issues[second['tasks']['T003']['number']]['body']
+        self.assertIn('Depends on: #' + str(first['tasks']['T001']['number']), body)
+        self.assertEqual(set(t.read(self.root / feature / 'workflow/task-issues.json')['tasks']), {'T001', 'T002', 'T003'})
+        full = t.sync(self.root, feature, 10, deps, True, self.gh)
+        self.assertEqual({entry['action'] for entry in full['tasks'].values()}, {'reuse'})
+        self.assertNotIn('phase', full)
+        self.assertEqual(len(self.gh.issues), size + 1)
+
+    def test_unknown_or_empty_phase_is_refused_before_any_write(self):
+        feature = self.feature('001-a', 10)
+        (self.root / feature / 'tasks.md').write_text(self.PHASED)
+        with self.assertRaisesRegex(t.WorkflowError, 'PHASE_NOT_FOUND'):
+            t.sync(self.root, feature, 10, {}, True, self.gh, phase='Phase 9')
+        with self.assertRaisesRegex(t.WorkflowError, 'PHASE_HAS_NO_TASKS'):
+            t.sync(self.root, feature, 10, {}, True, self.gh, phase='Phase 3: Empty')
+        self.assertEqual(self.gh.writes, [])
+
+    def test_cli_phase_summary_names_the_phase(self):
+        feature = self.feature('001-a', 10)
+        (self.root / feature / 'tasks.md').write_text(self.PHASED)
+        deps = self.root / 'deps.json'; deps.write_text('{}')
+        argv = ['task_issues.py', '--root', str(self.root), '--feature', feature, '--parent', '10',
+                '--dependencies', str(deps), '--phase', 'Phase 1: Setup', '--apply', '--summary']
+        buf = io.StringIO()
+        with mock.patch.object(t, 'GitHub', return_value=self.gh), mock.patch.object(sys, 'argv', argv), \
+                contextlib.redirect_stdout(buf):
+            self.assertEqual(t.main(), 0)
+        self.assertEqual(buf.getvalue().strip(), 'ok created=2 reused=0 total=2 dry_run=0 phase="Phase 1: Setup"')
+        with mock.patch.object(sys, 'argv', argv[:-2] + ['--sync-states']), \
+                contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            t.main()
+
+    def test_sync_states_can_skip_tasks_of_unpublished_phases(self):
+        feature = self.feature('001-a', 10)
+        (self.root / feature / 'tasks.md').write_text(self.PHASED.replace('- [ ] T001', '- [x] T001'))
+        first = t.sync(self.root, feature, 10, {}, True, self.gh, phase='Phase 1: Setup')
+        with self.assertRaisesRegex(t.WorkflowError, 'UNPUBLISHED_TASK: T003'):
+            t.sync_states(self.root, feature, 10, False, self.gh)
+        outcome = t.sync_states(self.root, feature, 10, True, self.gh, allow_unpublished=True)
+        self.assertEqual(outcome['unpublished'], ['T003'])
+        self.assertEqual([c['task'] for c in outcome['changes']], ['T001'])
+        self.assertEqual(self.gh.issues[first['tasks']['T001']['number']]['state'], 'closed')
+        self.assertEqual(t.sync_states_summary(outcome), 'ok opened=0 closed=1 changed=1 unpublished=1 dry_run=0')
+
+    def test_cli_sync_states_follows_the_phase_lazy_policy(self):
+        feature = self.feature('001-a', 10)
+        (self.root / feature / 'tasks.md').write_text(self.PHASED)
+        t.sync(self.root, feature, 10, {}, True, self.gh, phase='Phase 1: Setup')
+        policy = self.root / '.specify/workflow.yml'
+        policy.parent.mkdir(parents=True, exist_ok=True)
+        argv = ['task_issues.py', '--root', str(self.root), '--feature', feature, '--parent', '10',
+                '--sync-states', '--summary']
+        def run(*extra):
+            buf = io.StringIO()
+            with mock.patch.object(t, 'GitHub', return_value=self.gh), mock.patch.object(sys, 'argv', argv + list(extra)), \
+                    contextlib.redirect_stdout(buf):
+                code = t.main()
+            return code, buf.getvalue().strip()
+        policy.write_text('issue_sync:\n  taskstoissues: phase-lazy\n')
+        self.assertTrue(t.phase_lazy(self.root))
+        self.assertEqual(run(), (0, 'ok opened=0 closed=0 changed=0 unpublished=1 dry_run=1'))
+        for text in ('issue_sync: [', 'issue_sync:\n  taskstoissues: required\n', '- not a mapping\n'):
+            policy.write_text(text)
+            self.assertFalse(t.phase_lazy(self.root), text)
+        self.assertEqual(run(), (1, 'error UNPUBLISHED_TASK: T003'))
+        self.assertEqual(run('--allow-unpublished'), (0, 'ok opened=0 closed=0 changed=0 unpublished=1 dry_run=1'))
+
 
 class TaskIssuesSummaryTests(unittest.TestCase):
     def test_sync_summary_counts_created_and_reused(self):

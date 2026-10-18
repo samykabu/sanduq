@@ -1,19 +1,21 @@
 # Stage reference: plan
 
-Loaded when `claim` returns `stage: plan`.
-
 ## Required work and evidence
 
-Produce current plan/research/contracts from the resolved spec, then automatically
-choose one task generator.
+Produce the current plan, research and contracts from the resolved spec. Keep the clarification
+gate: a managed claim may recheck an open feature in progress only with resolved clarification
+evidence. For a `mode: revalidate` claim, update only what changed; keep established decisions
+and task history and never copy a fresh template over reviewed content. A new material choice
+goes to the bound issue through `decisions.py` and pauses for an authorized GitHub answer;
+apply it and record its evidence before a passed receipt.
 
-## Managed overlay (`speckit.plan`)
+## Merged plan and tasks
 
-For a `mode: revalidate` claim with an existing plan, update only what changed.
-Preserve established decisions and task history, and do not blindly copy a new plan
-template over reviewed content. Keep the clarification gate: a managed claim can
-recheck an open feature already in progress only with resolved clarification evidence.
-
-For a new material choice during planning, use the bound issue decision adapter
-and pause for an authorized GitHub answer. Apply the answer to the plan and
-record its evidence before returning a passed Plan receipt.
+When the claim returns `merged: ['tasks']` (standard and lite tiers), this one pass also writes
+tasks.md. Generate tasks with the core Tasks rules: stable `T###` ids in order, one headline line
+of at most 200 characters, `Covers FR-xxx` or the requirement ids inline, explicit `depends on`
+and file paths, and a `## Phase` heading per phase. Keep detail lines within
+`artifacts.budgets.tasks_detail_lines`. On revalidation reconcile only changed requirements and
+keep ids, checkboxes and issue mappings. The receipt lists both plan.md and tasks.md in
+`inputs`. On the lite tier research.md, data-model.md, quickstart.md and contracts/ are
+optional: write them only when the feature needs them.

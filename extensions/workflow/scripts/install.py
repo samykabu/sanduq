@@ -25,14 +25,18 @@ from workflow import load_policy, read, write, require, inside, registry, doctor
 from reconcile import reconcile
 from delegate_dispatch import maintenance_preflight
 from delegation import is_junction, is_link
-from hosts import ALIASES, HOST_SKILLS, installed_hosts, register_hosts, skill_errors, skill_report
+from hosts import (ALIASES, HOST_SKILLS, CODEX_HOOK_APPROVAL, ROLE_FILES, ROLES, alias_wanted, aliases_enabled,
+                   installed_hosts, register_hosts, skill_errors, skill_report)
 
 PACKAGE = Path(__file__).resolve().parents[1]
 DIRECTORIES = ('.specify/extensions', '.specify/presets')
 FILES = ('.specify/extensions.yml', '.specify/workflow.yml', '.specify/integration.json', '.specify/init-options.json', '.specify/workflow/integration-backup.json',
          '.specify/workflow/install-lock.json',
          '.specify/workflow/install-receipt.json',
-         '.github/workflows/sanduq-workflow-gates.yml', '.github/workflows/documentation-gates.yml')
+         '.github/workflows/sanduq-workflow-gates.yml', '.github/workflows/documentation-gates.yml',
+         # Host files the guard hook and role agents are merged into (hosts.apply_host_files).
+         '.claude/settings.json', '.codex/hooks.json',
+         *(pattern.format(role) for pattern in ROLE_FILES.values() for role in ROLES))
 
 
 # Raw delegate-task run artifacts and dependencies are not skill content. They
@@ -351,8 +355,11 @@ def alias_source_path(package_root, name):
     return path if path.is_file() else path.with_name('SKILL.ext.md')
 
 
-def alias_targets(root, package_root):
-    """(name, source, accepted hashes, destination) for every alias Sanduq manages here."""
+def alias_targets(root, package_root, enabled=True, unwanted=False):
+    """(name, source, accepted hashes, destination) for every alias Sanduq manages here.
+
+    ``enabled`` is the --with-aliases choice; ``unwanted`` yields the aliases it excludes instead.
+    """
     registered = registry(root)
     for name, accepted_file in ALIASES.items():
         source = alias_source_path(package_root, name).read_bytes()
@@ -361,8 +368,8 @@ def alias_targets(root, package_root):
             skills = root / agent / 'skills'
             if not skills.is_dir(): continue
             destination = skills / name / 'SKILL.md'
-            if name == 'speckit-superpowers-bridge' and name not in registered and not destination.exists(): continue
-            yield name, source, accepted, destination
+            if alias_wanted(name, destination, enabled, registered) != unwanted:
+                yield name, source, accepted, destination
 
 
 def content_hash(content):
@@ -415,7 +422,7 @@ def spec_kit_render(root, host, runner=command):
         shutil.rmtree(temp, ignore_errors=True)
 
 
-def review_aliases(root, package_root, runner=command):
+def review_aliases(root, package_root, runner=command, enabled=True):
     """Judge every existing alias file before anything changes.
 
     Returns ``{'generated': {key: hash}, 'unrecognized': {key: hash}}``. An
@@ -427,7 +434,7 @@ def review_aliases(root, package_root, runner=command):
     """
     previous = read(root / '.specify/workflow/install-lock.json', {}).get('aliases', {})
     renders, review = {}, {'generated': {}, 'unrecognized': {}}
-    for name, source, accepted, destination in alias_targets(root, package_root):
+    for name, source, accepted, destination in alias_targets(root, package_root, enabled):
         key = destination.relative_to(root).as_posix()
         content = destination.read_bytes() if destination.is_file() else None
         if alias_recognised(content, source, accepted, previous.get(key)):
@@ -452,7 +459,7 @@ def alias_edit_errors(root, package_root, runner=command, review=None):
 
 
 def install_aliases(root, package_root, baseline=None, generated=None, replace_unrecognized=False, backup=None,
-                    replaced=None):
+                    replaced=None, enabled=True, remove_unwanted=False):
     """Write the managed aliases into every host skill folder.
 
     ``baseline`` is the transaction's snapshot. Spec Kit regenerates an alias
@@ -465,11 +472,20 @@ def install_aliases(root, package_root, baseline=None, generated=None, replace_u
     transaction). Anything else is a local edit and is refused, unless
     ``replace_unrecognized`` is set: the file is then copied into ``backup``
     first and recorded in ``replaced``.
+
+    ``enabled`` is the --with-aliases choice. With ``remove_unwanted`` (--without-aliases) an
+    alias it excludes is deleted when it holds Sanduq's own content; anything else stays.
     """
     previous = read(root / '.specify/workflow/install-lock.json', {}).get('aliases', {})
     generated = generated or {}
     inventory = {}
-    for name, source, accepted, destination in alias_targets(root, package_root):
+    if remove_unwanted:
+        for name, source, accepted, destination in alias_targets(root, package_root, enabled, unwanted=True):
+            if destination.is_file() and not destination.is_symlink() and alias_recognised(
+                    destination.read_bytes(), source, accepted, previous.get(destination.relative_to(root).as_posix())):
+                destination.unlink()
+                if not any(destination.parent.iterdir()): destination.parent.rmdir()
+    for name, source, accepted, destination in alias_targets(root, package_root, enabled):
         key = destination.relative_to(root).as_posix()
         content = destination.read_bytes() if destination.exists() else None
         if baseline is not None:
@@ -511,8 +527,11 @@ def check_workflow_requirement(name, doc, version=None):
 
 
 def install(root, apply=False, packages=None, package_root=PACKAGE, runner=command, upgrade_owner=None, preserve_ci=False,
-            replace_unrecognized_aliases=False, with_optional=()):
+            replace_unrecognized_aliases=False, with_optional=(), with_aliases=None):
+    """``with_aliases``: True installs the short aliases, False removes Sanduq's own copies, None keeps
+    the project's earlier choice (an install that left aliases keeps them)."""
     root = root.resolve(); policy = load_policy(root)
+    aliases_on = aliases_enabled(root) if with_aliases is None else with_aliases
     lock = read(package_root / 'dependencies.json')
     require(lock and lock.get('repository') == 'https://github.com/samykabu/sanduq', 'INVALID_DEPENDENCY_LOCK')
     selected = dict(lock['required'])
@@ -568,9 +587,12 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                                        ([['specify', 'integration', 'use', default_host]] if len(hosts) > 1 else [])},
               'gate': sanduq_ci.gate_config(policy['ci']),
               'preserve_ci_requested': preserve_ci, 'preserved_ci': None,
-              'replace_unrecognized_aliases_requested': replace_unrecognized_aliases}
+              'replace_unrecognized_aliases_requested': replace_unrecognized_aliases,
+              'with_aliases': aliases_on}
+    if 'codex' in hosts:
+        result['codex_hook_approval'] = CODEX_HOOK_APPROVAL
     if not apply:
-        review = review_aliases(root, package_root, runner)
+        review = review_aliases(root, package_root, runner, enabled=aliases_on)
         result['aliases'] = {'generated_by_spec_kit': sorted(review['generated']),
                              'unrecognized': sorted(review['unrecognized']),
                              'blockers': [] if replace_unrecognized_aliases else alias_edit_errors(root, package_root, review=review)}
@@ -591,7 +613,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
         delegation_preflight(root)
         # Judge every alias against the sources as they are now, before any
         # Spec Kit command changes them; a local edit stops here untouched.
-        review = review_aliases(root, package_root, runner)
+        review = review_aliases(root, package_root, runner, enabled=aliases_on)
         if not replace_unrecognized_aliases:
             errors = alias_edit_errors(root, package_root, review=review)
             require(not errors, '; '.join(errors))
@@ -615,9 +637,11 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
             replaced = []
             alias_hashes = install_aliases(root, package_root, baseline=before, generated=review['generated'],
                                            replace_unrecognized=replace_unrecognized_aliases, backup=backup,
-                                           replaced=replaced)
+                                           replaced=replaced, enabled=aliases_on,
+                                           remove_unwanted=with_aliases is False)
             result['replaced_unrecognized_aliases'] = replaced
-            reconcile(root, apply=True)
+            # Reconcile also re-applies the host files: hidden hook-only skills, guard hook, roles.
+            result['host_files'] = reconcile(root, apply=True).get('host_files')
             host_errors = skill_errors(skill_report(root, hosts))
             # Nothing may rewrite an alias after it is written (Spec Kit ran above).
             host_errors += ['ALIAS_NOT_RESTORED: ' + key for key, value in alias_hashes.items()
@@ -672,7 +696,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
             write(root / '.specify/workflow/install-lock.json', {
                 'schema_version': 1, 'host': active_host(root), 'processes': policy['processes'],
                 'optional_extensions': chosen, 'extensions': inventory, 'dependency_digest': package_digest(root),
-                'aliases': alias_hashes,
+                'aliases': alias_hashes, 'with_aliases': aliases_on,
                 # Tracked, unlike the receipt, so fresh clones and worktrees
                 # still treat a preserved CI file as project-owned.
                 'preserved_ci': {'path': result['preserved_ci']['path']} if result['preserved_ci'] else None,
@@ -702,10 +726,18 @@ if __name__ == '__main__':
                         help='Back up, then replace, a managed alias file whose content Sanduq does not recognise')
     parser.add_argument('--with', dest='with_optional', action='append', default=[], metavar='EXTENSION',
                         help='Also install an optional extension offered in dependencies.json (for example: progress)')
+    aliases = parser.add_mutually_exclusive_group()
+    aliases.add_argument('--with-aliases', dest='with_aliases', action='store_const', const=True, default=None,
+                         help='Install the short speckit-scope and speckit-superpowers-bridge skills (off by default)')
+    aliases.add_argument('--without-aliases', dest='with_aliases', action='store_const', const=False,
+                         help='Remove the short alias skills an earlier install left (Sanduq content only)')
     parser.add_argument('--upgrade-owner', type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
     try:
-        print(json.dumps(install(args.root,args.apply,args.packages,upgrade_owner=args.upgrade_owner,preserve_ci=args.preserve_ci,
-                                 replace_unrecognized_aliases=args.replace_unrecognized_aliases,with_optional=args.with_optional),indent=2))
+        result = install(args.root,args.apply,args.packages,upgrade_owner=args.upgrade_owner,preserve_ci=args.preserve_ci,
+                         replace_unrecognized_aliases=args.replace_unrecognized_aliases,with_optional=args.with_optional,
+                         with_aliases=args.with_aliases)
+        print(json.dumps(result,indent=2))
+        if result.get('codex_hook_approval'): print(result['codex_hook_approval'], file=sys.stderr)
     except (WorkflowError, ValueError, OSError, KeyError) as exc:
         print(json.dumps({'ok':False,'error':str(exc)})); sys.exit(1)

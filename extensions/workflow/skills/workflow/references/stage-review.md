@@ -1,33 +1,19 @@
 # Stage reference: review
 
-Loaded when `claim` returns `stage: review` (runtime `workflow:review`).
-
-In lean mode, claim, completion, revalidation and review-worker admission block
-until every feature implementation and authored/collected test task is complete
-and any selected delegation evidence is successful and trusted. Review and
-documentation tasks are excluded from this completion test. Specification and
-plan artifact analysis (`analyze`, or `[artifact-analysis]` tasks) can run before
-coding; it is not final coding review. Review remains independent after all
-coding/testing batches finish.
-
-Before the last Verify/Review/Ready pass, read the publication preflight in
-`references/stage-pr.md#publication-preflight-and-post-merge-verification` and
-prepare portable evidence there.
+Runtime stage `workflow:review`. Before the last Verify, Review or Ready pass, read the
+publication preflight in `references/stage-pr.md#publication-preflight-and-post-merge-verification`
+and prepare portable evidence there.
 
 ## Required work and evidence
 
-Actual tests/review evidence and `blocking_findings: 0`. A command instruction or
-checklist alone is not an executed test.
+Review against the spec and constitution and fix blocking findings. Receipt: actual review and
+test evidence and `blocking_findings: 0`; a checklist alone is not an executed test. In lean
+mode, claim, completion, revalidation and review-worker admission wait until every
+implementation and authored or collected test task is complete with successful, trusted
+delegation evidence where selected. Review and documentation tasks are excluded from that test.
+Artifact analysis (`analyze` or `[artifact-analysis]` tasks) may run before coding and is not
+the final coding review, which stays independent after all coding and testing batches.
 
-See `references/receipt-rules.md` for the full amendment and revalidation
-recipes, including the diff-reviewed `revalidate --stage review --diff-reviewed
-<file>` recovery after source drift.
-
-## SuperSpec Review provider (`speckit.superspec.review`)
-
-When execution.checkpoints is required-only, project policy pre-authorizes
-routine phase checkpoints and backend choice. Record the selected execution mode
-and continue automatically. Explicit HUMAN-REVIEW tasks, unresolved requirements,
-security decisions and deployment approvals still pause. Execute small batches
-and hand off only at a reliably measured context limit. Without reliable telemetry,
-continue automatically; never stop on estimates or reset a measured budget per task.
+After source drift, the diff-reviewed `revalidate --stage review --diff-reviewed <file>` and the
+other recipes are in [recovery.md](recovery.md). For SuperSpec Review under `required-only`
+checkpoints, also follow [superspec-checkpoints.md](superspec-checkpoints.md).
