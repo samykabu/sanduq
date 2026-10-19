@@ -4,7 +4,9 @@ Convert a generated diagram HTML file into a portable `.svg` and/or `.png` next 
 
 ## Trigger
 
-Load this file when:
+A normal export needs only `python scripts/export_diagram.py` and the flags in SKILL.md §12. Read this file
+when the exporter exits non-zero, when the request needs the animation options below, or when no exporter
+can run (the procedures further down are the fallback contract). The requests it covers:
 
 - The user invokes an export command (such as Sanduq's `speckit.illustrate.export`) with an HTML file.
 - The user asks in natural language to export, save, rasterize, convert, or download a diagram in `.svg` or `.png` form. Typical phrasings:

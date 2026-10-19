@@ -50,7 +50,7 @@
       margin-bottom: 1.5rem;
     }
 
-    svg { width: 100%; min-width: 900px; display: block; }
+    svg { width: 100%; min-width: 1000px; display: block; }
   </style>
 </head>
 <body>
@@ -58,7 +58,9 @@
     <p class="eyebrow">Radar · Illustrate</p>
     <h1>Storage backends · Capability radar</h1>
 
-    <svg viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg">
+    <svg viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="radar-title radar-desc">
+        <title id="radar-title">Storage backends capability radar</title>
+        <desc id="radar-desc">Radar chart comparing MinIO, Amazon S3, Ceph and Google Cloud Storage on small-file handling, large-object reads, write throughput, operational simplicity and Iceberg integration, with MinIO recommended.</desc>
         <defs>
           <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
             <circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"/>

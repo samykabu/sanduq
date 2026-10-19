@@ -202,7 +202,9 @@
 
     <!-- Main Diagram -->
     <div class="diagram-container">
-      <svg viewBox="0 0 1000 420">
+      <svg viewBox="0 0 1000 420" role="img" aria-labelledby="sprint-report-flow-light-title sprint-report-flow-light-desc">
+        <title id="sprint-report-flow-light-title">Generate sprint reports</title>
+        <desc id="sprint-report-flow-light-desc">Flow that pulls a date range of closed GitHub issues and commits, has Claude Code draft an executive summary, lets the user refine it, and turns it into a presentation through the Gammify API.</desc>
         <!-- Definitions -->
         <defs>
           <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">

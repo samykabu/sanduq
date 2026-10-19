@@ -1,9 +1,3 @@
-# Legacy examples whose label mask is clipped by a later-painted node (SKILL.md connector rule 6).
-# Same nine files upstream fixed in diagram-design v2.3. Fix a file, then delete its line;
-# tests/test_verify_geometry.py fails on new failures AND on stale entries.
-example-architecture-dark.html
-example-architecture-full.html
-example-architecture.html
-example-swimlane-dark.html
-example-swimlane-full.html
-example-swimlane.html
+# Examples whose label mask is clipped by a later-painted node (SKILL.md connector rule 6). None are left;
+# list a file here only while its fix is pending. tests/test_verify_geometry.py fails on new failures AND on
+# stale entries.

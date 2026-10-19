@@ -178,8 +178,32 @@ def _axis(vector: tuple[float, float]) -> str | None:
     return None
 
 
+_NUM = r"-?[\d.]+"
+# references/type-loop.md §2.2 and §2.3: a Loop's ring connector is one clockwise circular arc and its write-back
+# spoke is one straight radius. With the medallion arc below these are the documented exceptions to rule 1.
+RING_ARC_RE = re.compile(rf"^\s*M\s*{_NUM}[\s,]+{_NUM}\s*A\s*({_NUM})[\s,]+({_NUM})[\s,]+0[\s,]+0[\s,]+1[\s,]+{_NUM}[\s,]+{_NUM}\s*$")
+SPOKE_RE = re.compile(rf"^\s*M\s*{_NUM}[\s,]+{_NUM}\s*L\s*{_NUM}[\s,]+{_NUM}\s*$")
+# references/type-medallion.md §2.4: a promotion arc rises on a vertical lead, crosses in one symmetric cubic over the
+# tiers and drops on a vertical lead of the same length.
+PROMOTION_RE = re.compile(
+    rf"^\s*M\s*({_NUM})[\s,]+({_NUM})\s*V\s*({_NUM})\s*C\s*\1[\s,]+({_NUM})[\s,]+({_NUM})[\s,]+\4[\s,]+\5[\s,]+\3\s*V\s*\2\s*$"
+)
+
+
+def _documented_arc(tag: str, attrs: dict[str, str]) -> bool:
+    if tag != "path":
+        return False
+    classes, d = attrs.get("class", "").split(), attrs.get("d", "")
+    ring = RING_ARC_RE.match(d)
+    return (
+        ("ring" in classes and bool(ring) and ring.group(1) == ring.group(2))
+        or ("spoke" in classes and bool(SPOKE_RE.match(d)))
+        or ("promotion" in classes and bool(PROMOTION_RE.match(d)))
+    )
+
+
 def orthogonal_findings(source: str, name: str = "<source>") -> list[str]:
-    """Connector rule 1: arrows are axis-aligned runs joined by quarter turns."""
+    """Connector rule 1: arrows are axis-aligned runs joined by quarter turns (the documented Loop and Medallion arcs excepted)."""
     arrows = _arrow_ends()
     doc = arrows._Document()
     doc.feed(source)
@@ -193,6 +217,8 @@ def orthogonal_findings(source: str, name: str = "<source>") -> list[str]:
                 continue
             if _axis(chord) is None and chord != (0.0, 0.0):
                 findings.append(f"{name}:{line}: diagonal <line> arrow - use an r=8 elbow (connector rule 1)")
+            continue
+        if _documented_arc(tag, attrs):
             continue
         d = arrows._element_path(tag, attrs)
         if not d:

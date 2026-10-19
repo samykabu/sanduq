@@ -29,7 +29,7 @@
     .subtitle { font-size: 1rem; line-height: 1.55; color: var(--color-muted); max-width: 58ch; }
 
     .diagram-container { background: transparent; border: none; padding: 0; overflow-x: auto; }
-    svg { width: 100%; min-width: 900px; display: block; }
+    svg { width: 100%; min-width: 1000px; display: block; }
 
     .cards { display: grid; grid-template-columns: 1.1fr 1fr 0.9fr; gap: 1rem; margin-top: 1.5rem; }
     @media (max-width: 820px) { .cards { grid-template-columns: 1fr; } }
@@ -57,7 +57,9 @@
     </div>
 
     <div class="diagram-container">
-      <svg viewBox="0 0 1000 660" xmlns="http://www.w3.org/2000/svg">
+      <svg viewBox="0 0 1000 660" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="quadrant-consultant-title quadrant-consultant-desc">
+        <title id="quadrant-consultant-title">Workplace 2030, remote work and AI automation</title>
+        <desc id="quadrant-consultant-desc">Scenario matrix crossing remote versus in-person work with human versus AI automation into four named futures, with agent teams as the highlighted bet.</desc>
         <defs>
           <!-- Double-ended axis markers -->
           <marker id="axis-end" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">

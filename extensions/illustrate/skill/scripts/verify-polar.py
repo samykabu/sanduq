@@ -125,7 +125,7 @@ def _canonical_svg_layout(declarations: str) -> bool:
         if key in parsed:
             return False
         parsed[key] = value.strip().casefold()
-    return parsed == {"width": "100%", "min-width": "900px", "display": "block"}
+    return parsed == {"width": "100%", "min-width": "1000px", "display": "block"}  # min-width = the 1000-wide viewBox (type-polar.md)
 
 
 def _selector_can_target_chart(selector: str) -> bool:

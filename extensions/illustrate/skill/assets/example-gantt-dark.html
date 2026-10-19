@@ -12,7 +12,7 @@
     .frame { max-width: 1200px; width: 100%; }
     .eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem; }
     h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 1.5rem; }
-    svg { width: 100%; min-width: 760px; display: block; }
+    svg { width: 100%; min-width: 1000px; display: block; }
   </style>
 </head>
 <body>
@@ -24,7 +24,9 @@
     <!-- Rows: label col x=20-196, timeline x=200-956 -->
     <!-- Row height=40, bar h=24, bar top pad=8 -->
     <!-- Week x = 200 + i*63, i=0..12 -->
-    <svg viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg">
+    <svg viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="gantt-dark-title gantt-dark-desc">
+      <title id="gantt-dark-title">Q2 product launch, 12-week plan</title>
+      <desc id="gantt-dark-desc">Gantt chart of a twelve-week launch from April to June across discovery, design and launch phases, with the design review as the critical gate before development and beta testing.</desc>
       <defs>
         <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
           <circle cx="1" cy="1" r="0.9" fill="rgba(245,245,245,0.10)"/>

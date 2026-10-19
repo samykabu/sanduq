@@ -89,7 +89,7 @@ A self-contained palette for the terminal-window primitive (see [primitive-termi
 | `callout` | Resolved `serif` *italic* | 14px | 400 | Editorial asides only |
 
 The SVG sizes above are the standard ramp (name 12, sublabel 9, arrow label and eyebrow 8); slide,
-social and print presets scale them: [output-spec.md § Type ramp](output-spec.md#type-ramp-per-size-class).
+social and print presets scale them: [size-classes.md § Type ramp](size-classes.md#type-ramp-per-size-class).
 
 ### Font stack
 
@@ -113,7 +113,7 @@ stacks include Arabic fallbacks. Respect `font_loading`: import `remote_css_url`
 | `radius-sm` | `4` | Small tags |
 | `radius-md` | `6` | Node boxes |
 | `radius-lg` | `8` | Containers, rings |
-| `grid` | `4` | Structural geometry (node origins, sizes, gaps, padding) is divisible by 4 (hard rule); type sizes follow the role ramp in [`output-spec.md`](output-spec.md) |
+| `grid` | `4` | Structural geometry (node origins, sizes, gaps, padding) is divisible by 4 (hard rule); type sizes follow the role ramp in [`size-classes.md`](size-classes.md) |
 
 ---
 

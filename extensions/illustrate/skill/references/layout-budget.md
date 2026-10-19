@@ -6,7 +6,7 @@ Routed from SKILL.md §7 and §8. SKILL.md keeps the grid rule in one line, the 
 
 ### 4px grid
 
-**Structural geometry, divisible by 4:** node origins, widths, heights, gaps, padding, and x / y coordinates of boxes. Non-negotiable. Off-grid by design: type sizes (role ramp in [`output-spec.md`](output-spec.md)), radii, data-derived positions, text baselines, arrow markers, `.5` offsets that keep 1px strokes crisp, stroke widths (0.8, 1, 1.2), opacity values, and the 22×22 dot-pattern.
+**Structural geometry, divisible by 4:** node origins, widths, heights, gaps, padding, and x / y coordinates of boxes. Non-negotiable. Off-grid by design: type sizes (role ramp in [`size-classes.md`](size-classes.md)), radii, data-derived positions, text baselines, arrow markers, `.5` offsets that keep 1px strokes crisp, stroke widths (0.8, 1, 1.2), opacity values, and the 22×22 dot-pattern.
 
 | Category | Allowed values |
 |---|---|
@@ -67,7 +67,7 @@ If you exceed, split into two diagrams (overview + detail).
 ### Page layout
 
 1. **Header** — eyebrow (resolved mono), title (resolved serif), optional subtitle (resolved sans + muted).
-2. **Diagram container** — default: **clean, borderless**, no background — the SVG sits directly on the page paper. Optional *framed* variant (for card-heavy layouts or hero placements): `paper-2` bg + 1px `rule` border + 8px radius + `1.5rem` padding + `overflow-x: auto`. Either way the SVG sits in a local `overflow-x: auto` wrapper with `min-width` equal to its viewBox width (see [output-spec.md § Holding the canvas on a narrow screen](output-spec.md#holding-the-canvas-on-a-narrow-screen)).
+2. **Diagram container** — default: **clean, borderless**, no background — the SVG sits directly on the page paper. Optional *framed* variant (for card-heavy layouts or hero placements): `paper-2` bg + 1px `rule` border + 8px radius + `1.5rem` padding + `overflow-x: auto`. Either way the SVG sits in a local `overflow-x: auto` wrapper with `min-width` equal to its viewBox width (see [size-classes.md § Holding the canvas on a narrow screen](size-classes.md#holding-the-canvas-on-a-narrow-screen)).
 3. **Summary cards** — 2–3 col grid with *varied* widths (e.g., `1.1fr 1fr 0.9fr`).
 4. **Footer** — colophon in resolved mono, muted, hairline top border.
 

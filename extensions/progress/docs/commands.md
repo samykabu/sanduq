@@ -815,13 +815,13 @@ The unit test `tests/test_token_budget.py` fails when the committed benchmark is
 more than the hand-edited approach, when a verb prints more than one line, or when the skill passes 60 lines. Regenerate the
 file after you change the skill.
 
-`scripts/live_ab.py` is a manual tool that measures real harness token usage. It spends tokens, so no test runs it. It
+`tests/live_ab.py` is a manual tool that measures real harness token usage. It spends tokens, so no test runs it. It
 needs the `tests/bench` trace, which exists only in a source checkout. Each pair runs the same scripted update trace twice
 through the `delegate-task` driver: arm `new` records the updates with the Progress CLI, arm `md` edits a Markdown report
 by hand.
 
 ```text
-python scripts/live_ab.py [--delegate PATH] [--node NODE] [--targets LIST] [--pairs N]
+python tests/live_ab.py [--delegate PATH] [--node NODE] [--targets LIST] [--pairs N]
                                               [--updates N] [--timeout SECONDS] [--runs-dir DIR] [--out DIR] [--dry-run]
 ```
 
@@ -838,7 +838,7 @@ python scripts/live_ab.py [--delegate PATH] [--node NODE] [--targets LIST] [--pa
 | `--dry-run` | off | Print the planned runs and exit without a sandbox or a harness |
 
 ```text
-$ python scripts/live_ab.py --dry-run --pairs 1 --updates 5
+$ python tests/live_ab.py --dry-run --pairs 1 --updates 5
 Planned 4 runs (1 pairs x 2 targets x 2 arms), 5 trace events each.
  1. harness=claude model=claude-haiku-5-5 pair=1 arm=new task=861 chars
  2. harness=claude model=claude-haiku-5-5 pair=1 arm=md task=868 chars

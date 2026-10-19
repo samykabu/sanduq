@@ -50,7 +50,7 @@
       margin-bottom: 1.5rem;
     }
 
-    svg { width: 100%; min-width: 900px; display: block; }
+    svg { width: 100%; min-width: 1000px; display: block; }
   </style>
 </head>
 <body>
@@ -58,7 +58,9 @@
     <p class="eyebrow">Venn · Illustrate</p>
     <h1>Good design · Desirable × Feasible × Viable</h1>
 
-    <svg viewBox="0 0 1000 480" xmlns="http://www.w3.org/2000/svg">
+    <svg viewBox="0 0 1000 480" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="venn-title venn-desc">
+        <title id="venn-title">Good design: desirable, feasible, viable</title>
+        <desc id="venn-desc">Venn diagram of desirable, feasible and viable products whose shared center is the shippable sweet spot.</desc>
         <defs>
           <!-- Chained clips isolate the all-three intersection: clip to Desirable, then to Feasible, then fill via the third circle. -->
           <clipPath id="clip-desirable">

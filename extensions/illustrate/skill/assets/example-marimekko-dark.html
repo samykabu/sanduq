@@ -21,7 +21,7 @@
     .eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem; }
     h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 1.5rem; }
     .diagram-container { width: 100%; overflow-x: auto; }
-    svg { width: 100%; min-width: 760px; display: block; }
+    svg { width: 100%; min-width: 1000px; display: block; }
   </style>
 </head>
 <body>
@@ -54,52 +54,52 @@
            focal segment is marked by its accent stroke, not by tone. ─── -->
 
       <!-- web · 3,140 min · 31.4% · x 40 w 280 -->
-      <rect x="40" y="40" width="280" height="259" rx="2" fill="#2d3142"/>
+      <rect data-mask="" x="40" y="40" width="280" height="259" rx="2" fill="#2d3142"/>
       <rect x="40" y="40" width="280" height="259" rx="2" data-column="web" data-segment="Linux" data-amount="2140" fill="rgba(245,245,245,0.14)" stroke="rgba(245,245,245,0.30)" stroke-width="1"/>
       <text data-column="web" data-segment="Linux" data-role="label" x="56" y="68" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif">Linux</text>
       <text data-column="web" data-segment="Linux" data-role="label" x="56" y="86" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace">2,140 min · 68%</text>
 
-      <rect x="40" y="299" width="280" height="46" rx="2" fill="#2d3142"/>
+      <rect data-mask="" x="40" y="299" width="280" height="46" rx="2" fill="#2d3142"/>
       <rect x="40" y="299" width="280" height="46" rx="2" data-column="web" data-segment="macOS" data-amount="380" fill="rgba(245,245,245,0.09)" stroke="rgba(245,245,245,0.30)" stroke-width="1"/>
       <text data-column="web" data-segment="macOS" data-role="label" x="56" y="316" fill="#f5f5f5" font-size="11" font-weight="600" font-family="'Geist', sans-serif">macOS</text>
       <text data-column="web" data-segment="macOS" data-role="label" x="56" y="331" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace">380 min · 12%</text>
 
-      <rect x="40" y="345" width="280" height="75" rx="2" fill="#2d3142"/>
+      <rect data-mask="" x="40" y="345" width="280" height="75" rx="2" fill="#2d3142"/>
       <rect x="40" y="345" width="280" height="75" rx="2" data-column="web" data-segment="Windows" data-amount="620" fill="rgba(245,245,245,0.04)" stroke="rgba(245,245,245,0.30)" stroke-width="1"/>
       <text data-column="web" data-segment="Windows" data-role="label" x="56" y="373" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif">Windows</text>
       <text data-column="web" data-segment="Windows" data-role="label" x="56" y="391" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace">620 min · 20%</text>
 
       <!-- api · 2,800 min · 28.0% · x 324 w 252 · no macOS runners, so no macOS
            segment: a series absent from a column is omitted, never drawn at zero -->
-      <rect x="324" y="40" width="252" height="334" rx="2" fill="#2d3142"/>
+      <rect data-mask="" x="324" y="40" width="252" height="334" rx="2" fill="#2d3142"/>
       <rect x="324" y="40" width="252" height="334" rx="2" data-column="api" data-segment="Linux" data-amount="2460" fill="rgba(245,245,245,0.14)" stroke="rgba(245,245,245,0.30)" stroke-width="1"/>
       <text data-column="api" data-segment="Linux" data-role="label" x="340" y="68" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif">Linux</text>
       <text data-column="api" data-segment="Linux" data-role="label" x="340" y="86" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace">2,460 min · 88%</text>
 
-      <rect x="324" y="374" width="252" height="46" rx="2" fill="#2d3142"/>
+      <rect data-mask="" x="324" y="374" width="252" height="46" rx="2" fill="#2d3142"/>
       <rect x="324" y="374" width="252" height="46" rx="2" data-column="api" data-segment="Windows" data-amount="340" fill="rgba(245,245,245,0.04)" stroke="rgba(245,245,245,0.30)" stroke-width="1"/>
       <text data-column="api" data-segment="Windows" data-role="label" x="340" y="391" fill="#f5f5f5" font-size="11" font-weight="600" font-family="'Geist', sans-serif">Windows</text>
       <text data-column="api" data-segment="Windows" data-role="label" x="340" y="406" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace">340 min · 12%</text>
 
       <!-- mobile · 2,400 min · 24.0% · x 580 w 216 -->
-      <rect x="580" y="40" width="216" height="66" rx="2" fill="#2d3142"/>
+      <rect data-mask="" x="580" y="40" width="216" height="66" rx="2" fill="#2d3142"/>
       <rect x="580" y="40" width="216" height="66" rx="2" data-column="mobile" data-segment="Linux" data-amount="420" fill="rgba(245,245,245,0.14)" stroke="rgba(245,245,245,0.30)" stroke-width="1"/>
       <text data-column="mobile" data-segment="Linux" data-role="label" x="596" y="68" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif">Linux</text>
       <text data-column="mobile" data-segment="Linux" data-role="label" x="596" y="86" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace">420 min · 18%</text>
 
       <!-- mobile × macOS FOCAL: the one segment the figure is about -->
-      <rect x="580" y="106" width="216" height="314" rx="2" fill="#2d3142"/>
+      <rect data-mask="" x="580" y="106" width="216" height="314" rx="2" fill="#2d3142"/>
       <rect x="580" y="106" width="216" height="314" rx="2" data-column="mobile" data-segment="macOS" data-amount="1980" fill="rgba(240,138,89,0.16)" stroke="#f08a59" stroke-width="1.5"/>
       <text data-column="mobile" data-segment="macOS" data-role="label" x="596" y="134" fill="#f5f5f5" font-size="14" font-weight="600" font-family="'Geist', sans-serif">macOS</text>
       <text data-column="mobile" data-segment="macOS" data-role="label" x="596" y="152" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace">1,980 min · 83% of mobile</text>
 
       <!-- infra · 1,400 min · 14.0% · x 800 w 128 -->
-      <rect x="800" y="40" width="128" height="304" rx="2" fill="#2d3142"/>
+      <rect data-mask="" x="800" y="40" width="128" height="304" rx="2" fill="#2d3142"/>
       <rect x="800" y="40" width="128" height="304" rx="2" data-column="infra" data-segment="Linux" data-amount="1120" fill="rgba(245,245,245,0.14)" stroke="rgba(245,245,245,0.30)" stroke-width="1"/>
       <text data-column="infra" data-segment="Linux" data-role="label" x="816" y="68" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif">Linux</text>
       <text data-column="infra" data-segment="Linux" data-role="label" x="816" y="86" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace">1,120 min · 80%</text>
 
-      <rect x="800" y="344" width="128" height="76" rx="2" fill="#2d3142"/>
+      <rect data-mask="" x="800" y="344" width="128" height="76" rx="2" fill="#2d3142"/>
       <rect x="800" y="344" width="128" height="76" rx="2" data-column="infra" data-segment="Windows" data-amount="280" fill="rgba(245,245,245,0.04)" stroke="rgba(245,245,245,0.30)" stroke-width="1"/>
       <text data-column="infra" data-segment="Windows" data-role="label" x="816" y="372" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif">Windows</text>
       <text data-column="infra" data-segment="Windows" data-role="label" x="816" y="390" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace">280 min · 20%</text>
@@ -108,7 +108,7 @@
            the info mark rather than sideways text and is named in the legend. The
            column keeps its honest width: a marimekko shows a whole, and a dropped
            pipeline makes every other share a lie. -->
-      <rect x="932" y="40" width="24" height="380" rx="2" fill="#2d3142"/>
+      <rect data-mask="" x="932" y="40" width="24" height="380" rx="2" fill="#2d3142"/>
       <rect x="932" y="40" width="24" height="380" rx="2" data-column="docs" data-segment="Linux" data-amount="260" fill="rgba(245,245,245,0.14)" stroke="rgba(245,245,245,0.30)" stroke-width="1"/>
       <circle cx="944" cy="64" r="5" fill="#f5f5f5"/>
       <text x="944" y="67" fill="#2d3142" font-size="7" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle">i</text>

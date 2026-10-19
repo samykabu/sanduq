@@ -108,7 +108,7 @@ Each tier renders as a rounded-rect card with a tinted header band, a centered b
 ```
 tier_x(i),  tier_y       =  card top-left  (tier_y = 80, just below the arc band)
 header_band_h            = 40            # band from y=tier_y to y=tier_y+40 (i.e., 80..120)
-header_band_extra        = 10            # 10-px extension below band, same tint
+header_band_extra        = 8             # 8-px extension below band, same tint (band total 48, on the 4px grid)
 
 # Inside the card (absolute y; tier_y = 80):
 title_text            at (tier_cx(i), 106)                # node-name role, 13px, weight 700, ink
@@ -159,9 +159,11 @@ Four canonical styles, picked per tier via `tiers[i].style`. Default mapping if 
 Each promotion is a **cubic Bézier arc** anchored at the **top-center** of each adjacent tier — `(tier_cx(i), tier_y)` to `(tier_cx(i+1), tier_y)`. The arc rises into the 80-px `arc_band` above the cards, peaking at y ≈ 20. Both the connector and its label remain fully visible — no paper masks, no overlap with card content.
 
 ```svg
-<path d="M {tier_cx(i)},{tier_y} V {tier_y-16} C {tier_cx(i)},5 {tier_cx(i+1)},5 {tier_cx(i+1)},{tier_y-16} V {tier_y}"
+<path class="promotion" d="M {tier_cx(i)},{tier_y} V {tier_y-16} C {tier_cx(i)},5 {tier_cx(i+1)},5 {tier_cx(i+1)},{tier_y-16} V {tier_y}"
       fill="none" stroke="…" stroke-width="…" marker-end="…"/>
 ```
+
+Keep `class="promotion"` and this exact path shape: `self_check.py --strict` accepts it as the documented exception to connector rule 1 and rejects any other curve.
 
 Concrete for the canonical 5-tier shape (`tier_y = 80`, tier centers at x = 102, 290, 478, 666, 854):
 - 0→1: `M 102,80 V 64 C 102,5 290,5 290,64 V 80`

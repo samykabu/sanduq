@@ -50,7 +50,7 @@
       margin-bottom: 1.5rem;
     }
 
-    svg { width: 100%; min-width: 900px; display: block; }
+    svg { width: 100%; min-width: 1000px; display: block; }
   </style>
 </head>
 <body>
@@ -58,7 +58,9 @@
     <p class="eyebrow">Architecture · Illustrate</p>
     <h1>Content site in production</h1>
 
-    <svg viewBox="0 0 1000 480" xmlns="http://www.w3.org/2000/svg">
+    <svg viewBox="0 0 1000 480" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="architecture-dark-title architecture-dark-desc">
+        <title id="architecture-dark-title">Content site in production</title>
+        <desc id="architecture-dark-desc">Architecture of a content site where readers reach a Cloudflare Pages edge cache that falls back to an Astro origin rendering MDX from a content bundle and a content CMS.</desc>
         <defs>
           <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
             <circle cx="1" cy="1" r="0.9" fill="rgba(245,245,245,0.10)"/>
@@ -99,11 +101,11 @@
         <rect x="368" y="252" width="48" height="12" rx="2" fill="#2d3142"/>
         <text x="392" y="262" fill="#f08a59" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">SSR</text>
 
-        <rect x="564" y="234" width="60" height="12" rx="2" fill="#2d3142"/>
-        <text x="594" y="243" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">READ MDX</text>
+        <rect x="604" y="234" width="60" height="12" rx="2" fill="#2d3142"/>
+        <text x="634" y="243" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">READ MDX</text>
 
-        <rect x="568" y="298" width="44" height="12" rx="2" fill="#2d3142"/>
-        <text x="590" y="307" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">QUERY</text>
+        <rect x="612" y="298" width="44" height="12" rx="2" fill="#2d3142"/>
+        <text x="634" y="307" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">QUERY</text>
 
         <!-- Node: Reader -->
         <rect x="40" y="240" width="128" height="64" rx="6" fill="#2d3142"/>

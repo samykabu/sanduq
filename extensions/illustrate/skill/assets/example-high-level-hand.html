@@ -42,7 +42,7 @@
       line-height: 1.15;
       margin-bottom: 1.5rem;
     }
-    svg { width: 100%; min-width: 960px; display: block; }
+    svg { width: 100%; min-width: 1000px; display: block; }
   </style>
 </head>
 <body>
@@ -50,7 +50,9 @@
     <p class="eyebrow">Architecture · Illustrate · Hand</p>
     <h1>High-level architecture · End-to-end stack</h1>
 
-    <svg viewBox="0 0 1000 540" xmlns="http://www.w3.org/2000/svg">
+    <svg viewBox="0 0 1000 540" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="high-level-title high-level-desc">
+      <title id="high-level-title">High-level architecture, end-to-end stack</title>
+      <desc id="high-level-desc">High-level architecture in which web, FTP, database and legacy sources flow through NiFi ingestion orchestrated by Airflow into MinIO storage, Trino virtualization and analysis, and on to visualization.</desc>
       <defs>
         <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
           <circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"></circle>
