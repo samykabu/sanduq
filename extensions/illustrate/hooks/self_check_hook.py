@@ -106,8 +106,14 @@ def written_diagrams(payload, root):
 
 def checks(root, path):
     python = sys.executable or 'python'
+    try:
+        text = path.read_text(encoding='utf-8', errors='replace')
+    except OSError:
+        text = ''
+    # Technical-color diagrams carry the pinned export toolbar; Illustrate 3.6 checks them with their own profile.
+    profile = ['--profile', 'technical-color'] if 'html2canvas' in text and 'downloadPNG(this)' in text else []
     return (
-        ('self_check.py', [python, str(SCRIPTS / 'self_check.py'), str(path)]),
+        ('self_check.py', [python, str(SCRIPTS / 'self_check.py'), *profile, str(path)]),
         ('verify-geometry.py', [python, str(SCRIPTS / 'verify-geometry.py'), str(path)]),
         ('illustration_theme.py validate',
          [python, str(SCRIPTS / 'illustration_theme.py'), '--project-root', str(root), 'validate']),

@@ -97,6 +97,18 @@ class SelfCheckHook(unittest.TestCase):
         self.assertEqual(run(root, {**self.write("bad.html"), "tool_name": "Bash"})[0], 0)
         self.assertEqual(run(root, {"tool_name": "Write"})[0], 0)
 
+    def test_technical_color_diagrams_are_checked_with_their_profile(self):
+        with tempfile.TemporaryDirectory() as folder:
+            tech = Path(folder) / 'tech.html'
+            tech.write_text('<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>'
+                            '<button onclick="downloadPNG(this)">PNG</button><svg></svg>', encoding='utf-8')
+            plain = Path(folder) / 'plain.html'
+            plain.write_text('<svg></svg>', encoding='utf-8')
+            tech_argv = dict(hook.checks(Path(folder), tech))['self_check.py']
+            plain_argv = dict(hook.checks(Path(folder), plain))['self_check.py']
+        self.assertEqual(tech_argv[-3:-1], ['--profile', 'technical-color'])
+        self.assertNotIn('--profile', plain_argv)
+
     def test_codex_apply_patch_checks_every_added_updated_and_moved_html(self):
         root = self.project(ON)
         (root / "moved.html").write_text(BAD, encoding="utf-8")
