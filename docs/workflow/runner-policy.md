@@ -154,7 +154,10 @@ loads in an authenticated private-repository view.
 
 Before publication, run `ci_gate.py --feature specs/<feature> --base-ref <target-sha>
 --check-index` after staging reviewed evidence, then repeat the gate in a clean
-checkout of the candidate commit. Missing/unstaged dependencies are reported by
+checkout of the candidate commit. In that checkout, an evidence snapshot's git
+record whose local retention ref (`refs/sanduq/evidence/*`) is absent is accepted
+when its commit is an ancestor of `HEAD`, so a fresh CI checkout validates
+committed snapshots. Missing/unstaged dependencies are reported by
 path; the command never stages files. When a missing path is one Git itself
 ignores (e.g. a `*.log` match), the report names the exact `git add -f <path>`
 recipe to recover it. It also warns, without failing the check, when a

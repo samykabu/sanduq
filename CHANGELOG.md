@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-19 — Workflow 1.13.1, Assure 2.3.4, User Manual 1.5.4 (pending release)
+
+- Issue #94: evidence snapshots validate in a fresh CI checkout by commit ancestry; the shipped gate templates skip fork pull requests on self-hosted runners, take the base ref through `env`, and pin every action by commit with a version comment.
+
 ## 2026-10-18 — Workflow 1.13.0, Scope 1.8.0 (pending release)
 
 - Front-half rebuild: effort-tiered profiles, deterministic `workflow:lint`, merged plan and tasks, batch upstream revalidation, declared side effects, cached doctor, inventory side files and a status-based resume contract.

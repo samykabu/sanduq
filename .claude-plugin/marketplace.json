@@ -45,8 +45,8 @@
         "source": "git-subdir",
         "url": "https://github.com/samykabu/sanduq-skills.git",
         "path": "skills/dev-tools",
-        "ref": "dev-tools-v1.1.2",
-        "sha": "1f0a7d886688e5fabc22a6c7cd1b8beb3e14ba68"
+        "ref": "dev-tools-v1.1.3",
+        "sha": "1a27b565861de4fcf3fbe883e9c94bef3499790f"
       },
       "description": "Standalone modular application-manual tooling for MkDocs Material, PDF, APIs, releases, screenshots, previews, English, Arabic, and RTL.",
       "author": {

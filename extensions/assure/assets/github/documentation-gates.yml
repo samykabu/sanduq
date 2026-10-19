@@ -9,8 +9,12 @@ permissions:
 jobs:
   feature-documentation:
     runs-on: __sanduq_runs_on_linux__
+    # sanduq:if self_hosted
+    # A self-hosted runner never executes a fork's checkout and scripts.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    # sanduq:endif
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
           fetch-depth: 0
       - name: Resolve active feature
