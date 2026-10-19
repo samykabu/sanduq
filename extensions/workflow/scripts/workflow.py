@@ -3168,7 +3168,7 @@ class Run:
             return {'stage': stage, 'command': state['commands'][stage], 'reason': 'pending'}
         return {'stage': None, 'status': 'pr_open'}
 
-    def claim(self, usage, finalize=False):
+    def claim(self, usage, finalize=False, verbose=False):
         with operation(), locked(self.root / '.specify/workflow/runtime/dispatch.lock'), locked(self.lock):
             require(not (self.root / '.specify/workflow/runtime/upgrade.lock').exists(), 'WORKFLOW_UPGRADE_IN_PROGRESS')
             state = self.load()
@@ -3256,20 +3256,29 @@ class Run:
             state['active']['baseline'] = fingerprint_files(self.root, [p for r in state['receipts'].values() for p in r['fingerprints']])
             state['status'] = 'in-progress'
             write(self.root / '.specify/feature.json', {'feature_directory': self.relative})
-            self.save(state)
-            parts, reporting = (), None
+            text, protocol, reporting = reference_text(self.root, stage), None, None
             if stage == 'execute':
                 import progress_bridge
                 decided = progress_bridge.mode(self.root, host=progress_bridge.detect_host() or active_host(self.root))
                 reporting = {'mode': decided['mode'], 'reason': decided.get('reason') or decided.get('source')}
                 parts = execute_protocol(self.policy, state_tier(state), reporting['mode'])
+                full = reference_text(self.root, stage, parts)
+                protocol = {'files': parts, 'digest': digest([parts, full])}
+                # The full protocol is printed once per mode and content; an unchanged re-claim names the files.
+                protocol['printed'] = verbose or (state.get('execute_protocol') or {}).get('digest') != protocol['digest']
+                if protocol['printed']:
+                    text = full
+                    state['execute_protocol'] = {'files': parts, 'digest': protocol['digest'], 'printed_at': now()}
+                else:
+                    protocol['note'] = 'unchanged since the last Execute claim; read the files if your context was reset'
+            self.save(state)
             claimed = {**state['active'], 'command': state['commands'][stage], 'feature': self.relative, 'issue': state['issue'],
-                       'reference': stage_reference(stage), 'reference_text': reference_text(self.root, stage, parts),
+                       'reference': stage_reference(stage), 'reference_text': text,
                        'side_effects': side_effects(self.policy, self.relative, stage),
                        'project_sync': project_sync(self.policy, stage)}
             claimed['receipt_template'] = self.receipt_template(state, stage)
             if reporting:
-                claimed['reporting'], claimed['execute_protocol'] = reporting, list(parts)
+                claimed['reporting'], claimed['execute_protocol'] = reporting, protocol
             if stage == 'plan' and state_tier(state) in ('lite', 'standard'):
                 claimed['merged'] = ['tasks']
                 claimed['profile'] = state['profile']
@@ -3719,7 +3728,8 @@ def main():
         if name == 'claim': cmd.add_argument('--usage', type=Path, required=True)
         if name in ('claim', 'complete'):
             cmd.add_argument('--verbose', action='store_true',
-                             help='Print the full result (claim: with the baseline fingerprints; complete: with next details)')
+                             help='Print the full result (claim: with the baseline fingerprints and the full Execute protocol; '
+                                  'complete: with next details)')
         if name == 'status': cmd.add_argument('--runs', action='append', type=Path, default=[],
                                             help='Explicit normalized run root/worktree (repeatable)')
         if name == 'complete':
@@ -3851,7 +3861,7 @@ def run_command(args):
             elif args.action == 'next': result = run.next(run.load(), args.finalize)
             elif args.action == 'status': result = native_run_status(root, run.relative, run.load(), args.runs)
             elif args.action == 'claim':
-                result = run.claim(read(args.usage), args.finalize)
+                result = run.claim(read(args.usage), args.finalize, args.verbose)
                 if not args.verbose:
                     result.pop('baseline', None)  # kept in the checkpoint; --verbose prints it
             elif args.action == 'complete':

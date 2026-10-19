@@ -306,21 +306,60 @@ class ClaimOutputTests(Base):
     def test_execute_claim_prints_its_reporting_mode_and_composed_protocol(self):
         run = self.run_object()
         self.advance(run, 'taskstoissues')
-        claim = run.claim(self.usage())
+        legacy = ['execution-assign.md', 'execution-report.md', 'execute/orchestrator.md', 'execute/reporting-legacy.md']
+
+        def reclaim(**kwargs):
+            state = run.load()
+            state['active'] = None
+            run.save(state)
+            return run.claim(self.usage(), **kwargs)
+
+        claim = run.claim(self.usage())  # first claim: the full protocol
         self.assertEqual(claim['stage'], 'execute')
         self.assertEqual(claim['reporting']['mode'], 'legacy')  # Progress is not installed in the fixture
-        self.assertEqual(claim['execute_protocol'], ['execution-assign.md', 'execution-report.md',
-                                                     'execute/orchestrator.md', 'execute/reporting-legacy.md'])
-        self.assertEqual(claim['reference_text'], w.reference_text(self.root, 'execute', claim['execute_protocol']))
+        protocol = claim['execute_protocol']
+        self.assertEqual((protocol['files'], protocol['printed']), (legacy, True))
+        self.assertEqual(claim['reference_text'], w.reference_text(self.root, 'execute', legacy))
         self.assertIn('## Legacy reporter calls (mode legacy only)', claim['reference_text'])
+        self.assertEqual(run.load()['execute_protocol']['digest'], protocol['digest'])
+        checkpoint_validator().validate(run.load())
+
+        claim = reclaim()  # unchanged: named, not printed
+        self.assertEqual(claim['execute_protocol']['digest'], protocol['digest'])
+        self.assertIs(claim['execute_protocol']['printed'], False)
+        self.assertIn('context was reset', claim['execute_protocol']['note'])
+        self.assertEqual(claim['reference_text'], w.reference_text(self.root, 'execute'))
+
+        self.assertIs(reclaim(verbose=True)['execute_protocol']['printed'], True)  # --verbose always prints
+
+        with patch('progress_bridge.mode', return_value={'mode': 'projection', 'source': 'hooks registered'}):
+            claim = reclaim()  # mode change
+        self.assertEqual(claim['reporting'], {'mode': 'projection', 'reason': 'hooks registered'})
+        self.assertEqual((claim['execute_protocol']['files'][-1], claim['execute_protocol']['printed']),
+                         ('reporting.md', True))
+        self.assertNotIn('## Legacy reporter calls', claim['reference_text'])
+        self.assertIs(reclaim()['execute_protocol']['printed'], True)  # back to legacy: changed again
+
+        real = w.reference_text
+        edited = lambda root, stage, parts=(): real(root, stage, parts) + ('One more rule.' + chr(10) if parts else '')
+        with patch.object(w, 'reference_text', edited):
+            claim = reclaim()  # content change
+        self.assertIs(claim['execute_protocol']['printed'], True)
+        self.assertIn('One more rule.', claim['reference_text'])
+
+    def test_cli_verbose_claim_prints_the_protocol_again(self):
+        run = self.run_object()
+        self.advance(run, 'taskstoissues')
+        run.claim(self.usage())
         state = run.load()
         state['active'] = None
         run.save(state)
-        with patch('progress_bridge.mode', return_value={'mode': 'projection', 'source': 'hooks registered'}):
-            claim = run.claim(self.usage())
-        self.assertEqual(claim['reporting'], {'mode': 'projection', 'reason': 'hooks registered'})
-        self.assertEqual(claim['execute_protocol'][-1], 'reporting.md')
-        self.assertNotIn('## Legacy reporter calls', claim['reference_text'])
+        usage = self.root / 'usage.json'
+        w.write(usage, self.usage())
+        code, claim = self.cli('claim', '--feature', self.feature, '--usage', str(usage), '--verbose')
+        self.assertEqual(code, 0)
+        self.assertIs(claim['execute_protocol']['printed'], True)
+        self.assertIn('## Legacy reporter calls', claim['reference_text'])
 
     def test_receipt_template_completes_every_stage_and_each_stage_field_is_required(self):
         self.profiles()

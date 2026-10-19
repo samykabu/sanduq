@@ -8,7 +8,9 @@ mode, which `execute_protocol` lists: [execution-assign.md](execution-assign.md)
 coordinator or the dedicated orchestration agent, the delegated workers when delegation is
 enabled, and the reporting calls for the claim's `reporting` mode ([reporting.md](reporting.md)
 for `projection` and `refresh`, the legacy reporter for `legacy`). Read that text; do not open
-the separate files. Both providers (`speckit.implement`, `speckit.superspec.execute`) follow it.
+the separate files. A later Execute claim whose protocol is unchanged prints
+`execute_protocol.printed: false` and leaves it out; read the listed files only if your context
+was reset (`claim --verbose` prints it again). Both providers (`speckit.implement`, `speckit.superspec.execute`) follow it.
 
 Fill available capacity with tasks whose dependencies, files and resources allow concurrent
 work. Create the progress report once before implementation, as the reporting part says; no
