@@ -119,10 +119,12 @@ Manual content, in order:
 2. Prerequisites and dev tooling: start commands, dev URLs, dashboards, environment variable names
    only, and redacted test-account guidance.
 3. Illustrate visuals where applicable. Only if step 0a confirmed `illustrate` is ready and a visual
-   improves verification: read `.specify/extensions/illustrate/skill/references/type-index.md`,
-   choose the type, and read its `type-*.md`; read `SKILL.md` only when the diagram is created
-   outside that recipe. Save source HTML under `<assets-dir>/diagrams/`, export PNG beside it, embed
-   the PNG, and link the HTML source. If no visual improves the manual, say no diagram was needed.
+   improves verification, draw it with the procedure in `.specify/extensions/illustrate/skill/SKILL.md`:
+   the §0 theme gate first, then §10 (choose the type from `references/type-index.md`, read its
+   `type-*.md`, apply and validate the theme, and run the step 7 checks). Its `scripts/` are under
+   `.specify/extensions/illustrate/skill/scripts/`; run them from the repository root. Save source
+   HTML under `<assets-dir>/diagrams/`, export PNG beside it, embed the PNG, and link the HTML source.
+   If no visual improves the manual, say no diagram was needed.
 4. One plain-English section per user story or use case: a real-life user scenario, preconditions,
    numbered tester steps, expected result after meaningful actions, and
    validation/error/empty/loading/permission states when applicable.
@@ -137,9 +139,9 @@ Manual content, in order:
 
 Do not hand-take screenshots or diagram exports.
 
-- Diagrams: generate source HTML from the selected Illustrate type reference, then export PNG with
-  the installed `scripts/export_diagram.py` and the `references/export.md` contract. If PNG export
-  cannot run, keep the HTML source, mark the PNG as pending in the manual, and report the follow-up.
+- Diagrams: after step 5.3's checks pass, export PNG with
+  `.specify/extensions/illustrate/skill/scripts/export_diagram.py` as Illustrate §12 describes. If
+  PNG export cannot run, keep the HTML source, mark the PNG as pending in the manual, and report the follow-up.
   Do not embed a broken image.
 - Web UI: add or run a Playwright capture spec that mocks all backend endpoints the feature UI
   depends on with deterministic data. Capture full-page PNGs into the feature assets directory.
@@ -160,8 +162,10 @@ python .specify/extensions/assure/scripts/audit_qa.py <manual-path> [<manual-pat
 
 The script checks that every `<img>` has non-empty `alt` text and a `<figcaption>`, that every
 relative `src` and `href` resolves, that the "Development-only draft" marker is present, and that no
-secret-shaped value survived redaction. Fix every finding, then confirm production builds do not
-ship or link development-only QA docs.
+secret-shaped value survived redaction (redacted placeholders such as `<redacted>`, `${VAR}` or
+`example-` values pass). Fix each real finding and rerun. Never delete correct content to silence
+a finding you believe is wrong; report it with its line instead. Then confirm production builds do
+not ship or link development-only QA docs.
 
 ### 8. Record freshness and report
 

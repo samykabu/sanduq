@@ -52,6 +52,30 @@ class AuditQaTest(unittest.TestCase):
                 self.assertEqual(code, 1)
                 self.assertIn(expected, out)
 
+    def test_redacted_placeholders_pass_like_the_user_manual_audit(self):
+        # D2: the redaction rule's own placeholders are not secrets.
+        for sample in ('password: &lt;redacted&gt;', 'password: <redacted-value>', 'api_key=${API_KEY_VALUE}',
+                       'access_token: example-token-value', 'client_secret: placeholder-secret'):
+            with self.subTest(sample):
+                self.assertEqual(self.audit(CLEAN.replace('</pre>', '\n' + sample + '</pre>')), (0, 'ok files=1\n'))
+
+    def test_encoded_and_root_relative_links_resolve(self):
+        # D3: a percent-encoded file name and a site-root link into a public/ dir are real files.
+        (self.manual.parents[2] / 'assets/reset/a b.png').write_bytes(b'png')
+        self.assertEqual(self.audit(CLEAN.replace('form.png', 'a%20b.png')), (0, 'ok files=1\n'))
+        root = self.manual.parents[3]
+        page = root / 'web/public/qa/features/reset/index.html'
+        (page.parents[2] / 'assets/reset').mkdir(parents=True)
+        (page.parents[2] / 'assets/reset/form.png').write_bytes(b'png')
+        for link, code in (('/qa/assets/reset/form.png', 0), ('/qa/missing.png', 1)):
+            with self.subTest(link):
+                page.parent.mkdir(parents=True, exist_ok=True)
+                page.write_text(CLEAN.replace('../index.html', link), encoding='utf-8')
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out):
+                    self.assertEqual(audit_qa.main([str(page), '--repo-root', str(root)]), code, out.getvalue())
+                self.assertEqual('unresolved link ' + link in out.getvalue(), bool(code))
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Join the changed inputs of `manual_state.py status` with the manual's evidence.
 
-Prints the affected modules, pages, audiences and the changed paths no module
+Runs the status once and prints it (`current`, `reason`, `changed_inputs`, `changed_outputs`) with
+the affected modules, pages, audiences and the changed paths no module
 evidence or page `source_evidence` claims, and records the same list under
 `impact` in `User-Manual/.state/coverage.json`. Gated by `lifecycle.impact_scope`
 in `manual.yml`: `all` (default) lists every module and page, as the commands
@@ -65,7 +66,8 @@ def impact(root: Path, status: dict) -> dict:
                   [e for meta in pages.values() for e in listed(meta.get("source_evidence"))]
         unmatched = [c for c in changed if not any(covers(e, c) for e in claimed)]
     audiences = {str(a) for page in hit_pages for a in pages[page].get("audiences") or []}
-    return {"impact_scope": scope, "reason": status.get("reason"), "changed_inputs": changed,
+    return {"impact_scope": scope, "current": status.get("current") is True, "reason": status.get("reason"),
+            "changed_inputs": changed, "changed_outputs": status.get("changed_outputs") or [],
             "modules": sorted(hit_modules), "pages": sorted(hit_pages),
             "audiences": [a for a in AUDIENCES if a in audiences] + sorted(audiences - set(AUDIENCES)),
             "unmatched": unmatched}

@@ -126,3 +126,54 @@ def record_or_status(root, feature, kind, state_path, action, outputs, base=None
     return {'current': False, 'reason': 'stale-input-or-output',
             'changed_inputs': delta(saved.get('inputs', {}).get('files', {}), current['files']),
             'changed_outputs': delta(saved_outputs, current_outputs)}
+
+
+def cli(description, record, state_path, kind, default_outputs=lambda root: [], gate=None):
+    """The record/status command line shared by assure_state.py and manual_state.py; noncurrent exits 1.
+
+    `record` is the caller's record_or_status (tests patch it there); `kind` is a fixed kind or a tuple
+    of --kind choices; `state_path(root, feature, kind)` names the state file; `gate=(help, on(root))`
+    adds --gate, which prints "skipped gate=off" and exits 0 unless on(root) is true.
+    """
+    import argparse
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument('action', choices=('record', 'status'))
+    parser.add_argument('--feature', required=True, type=Path)
+    parser.add_argument('--repo-root', type=Path, default=Path.cwd())
+    parser.add_argument('--base-ref')
+    parser.add_argument('--output', action='append', default=[])
+    if isinstance(kind, tuple):
+        parser.add_argument('--kind', choices=kind, required=True)
+    parser.add_argument('--summary', action='store_true', help='Print one line (ok/error, counts) instead of the full JSON result')
+    parser.add_argument('--json', action='store_true', help="Print the full JSON result (today's default output)")
+    if gate:
+        parser.add_argument('--gate', action='store_true', help=gate[0])
+    args = parser.parse_args()
+    if args.summary and args.json:
+        parser.error('--summary and --json cannot be combined')
+    if gate and args.gate and args.action != 'status':
+        parser.error('--gate applies to status only')
+    root = args.repo_root.resolve()
+    if gate and args.gate and not gate[1](root):
+        print('skipped gate=off')
+        return 0
+    feature = args.feature if args.feature.is_absolute() else root / args.feature
+    kind = args.kind if isinstance(kind, tuple) else kind
+    outputs = args.output or default_outputs(root)
+    base_ref = args.base_ref or checkpoint_target_branch(feature)
+    try:
+        result = record(root, feature, kind, state_path(root, feature, kind), args.action, outputs, base_ref)
+    except (ValueError, OSError) as exc:
+        result = {'current': False, 'reason': str(exc)}
+    if args.summary:
+        word = 'ok' if result['current'] else 'error'
+        # A raised exception's message can itself carry embedded newlines; a
+        # summary line must still be exactly one line.
+        reason = ' '.join(str(result.get('reason', 'n/a')).split())
+        detail = ' recorded=1' if result.get('recorded') else f' reason={reason}'
+        if 'changed_inputs' in result:
+            detail += f" changed_inputs={len(result['changed_inputs'])} changed_outputs={len(result['changed_outputs'])}"
+        print(f'{word} action={args.action} kind={kind} outputs={len(outputs)}{detail}')
+    else:
+        print(json.dumps(result))
+    return 0 if result['current'] else 1

@@ -79,6 +79,16 @@ class ManualImpactTests(unittest.TestCase):
                 self.assertEqual(result['audiences'], ['end-user', 'administrator', 'technical'])
                 self.assertEqual(result['unmatched'], [])
 
+    def test_output_carries_the_status_so_update_runs_it_once(self):
+        # D6: Update branches on this one call instead of running manual_state.py status first.
+        for status in ({'current': True, 'reason': 'current'},
+                       {'current': False, 'reason': 'stale-input-or-output', 'changed_inputs': ['src/Access/x.cs'],
+                        'changed_outputs': ['User-Manual/docs/en/index.md']}):
+            with self.subTest(status['reason']):
+                result = impact.impact(self.manual('evidence'), status)
+                self.assertEqual((result['current'], result['reason']), (status['current'], status['reason']))
+                self.assertEqual(result['changed_outputs'], status.get('changed_outputs', []))
+
     def test_unknown_scope_is_refused(self):
         with self.assertRaises(SystemExit):
             impact.impact(self.manual('some'), {'changed_inputs': []})

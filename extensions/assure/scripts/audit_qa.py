@@ -14,10 +14,12 @@ import re
 import sys
 from html.parser import HTMLParser
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
-# Copied from the user-manual audit script (audit_manual.py) so the two packages stay independent.
-SECRET = re.compile(r"(?i)(api[_-]?key|client[_-]?secret|password|access[_-]?token|refresh[_-]?token)\s*[:=]\s*[\"']?([^\s\"']{8,})")
+# Copied from the user-manual audit script (audit_manual.py) so the two packages stay independent,
+# with its placeholder allowlist plus the HTML-escaped `<`; a value also ends at the next tag.
+SECRET = re.compile(r"(?i)(api[_-]?key|client[_-]?secret|password|access[_-]?token|refresh[_-]?token)\s*[:=]\s*[\"']?([^\s\"'<]{8,})")
+PLACEHOLDERS = ('redacted', 'example', 'placeholder', '<', '&lt;', '${')
 DRAFT = 'development-only draft'
 LINK_ATTRS = {'img': 'src', 'a': 'href', 'link': 'href', 'script': 'src', 'source': 'src', 'video': 'src', 'audio': 'src'}
 
@@ -53,8 +55,17 @@ class Manual(HTMLParser):
         self.text.append(data)
 
 
-def audit_file(path):
+def resolve(path, link, root):
+    """A root-relative link is served from the nearest `public`/`static` ancestor, else the repository root."""
+    if link.startswith('/'):
+        base = next((p for p in path.parents if p.name in ('public', 'static')), root)
+        return base / link.lstrip('/')
+    return path.parent / link
+
+
+def audit_file(path, root=None):
     path = Path(path)
+    root = Path(root or Path.cwd())
     errors = []
     try:
         raw = path.read_text(encoding='utf-8-sig')
@@ -71,11 +82,13 @@ def audit_file(path):
         parts = urlsplit(target)
         if parts.scheme or target.startswith(('//', '#')) or not parts.path:
             continue
-        if not (path.parent / parts.path).exists():
+        if not resolve(path, unquote(parts.path), root).exists():
             errors.append(f'{path}:{line}: unresolved link {target}')
     if DRAFT not in raw.lower():
         errors.append(f'{path}:0: missing "Development-only draft" marker')
     for match in SECRET.finditer(raw):
+        if any(marker in match.group(2).lower() for marker in PLACEHOLDERS):
+            continue
         line = raw.count('\n', 0, match.start()) + 1
         errors.append(f'{path}:{line}: secret-like value for {match.group(1)}')
     return errors
@@ -105,7 +118,7 @@ def main(argv=None):
         paths += recorded
     if not paths:
         parser.error('give at least one manual path or --feature')
-    errors = [e for p in paths for e in audit_file(p)]
+    errors = [e for p in paths for e in audit_file(p, args.repo_root.resolve())]
     if args.json:
         print(json.dumps({'files': len(paths), 'errors': errors}))
     else:

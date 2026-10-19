@@ -43,7 +43,7 @@ hooks:
   before_implement:
     command: speckit.assure.analyze
     optional: true
-    prompt: "Run the QA readiness gate before implementation? Assure.Init can make this mandatory."
+    prompt: "Run the QA readiness gate before implementation? speckit.assure.init can make this mandatory."
     description: "Mandatory in lifecycle-integrated mode; verifies or refreshes QA analysis before implementation"
   after_implement:
     command: speckit.assure.document

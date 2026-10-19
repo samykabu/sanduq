@@ -1,6 +1,6 @@
 ---
 name: user-manual
-description: Create, organize, incrementally update, validate, and publish a complete application User Manual for web, mobile, API, infrastructure, architecture, and data surfaces. Use for UserManual.Init, Analyze, Update, or Release; MkDocs/Material documentation; bilingual English and Arabic manuals; audience editions; tutorials; system documentation; diagrams; and documentation coverage.
+description: Create, organize, incrementally update, validate, and publish a complete application User Manual for web, mobile, API, infrastructure, architecture, and data surfaces. Use for speckit.user-manual.init, analyze, update, or release; MkDocs/Material documentation; bilingual English and Arabic manuals; audience editions; tutorials; system documentation; diagrams; and documentation coverage.
 ---
 
 # User Manual

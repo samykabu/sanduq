@@ -1,6 +1,6 @@
 ---
 name: assure
-description: Analyze test and documentation readiness for an active Spec Kit feature, generate or refresh a feature-scoped QA test manual, and enforce lifecycle freshness before implementation or pull-request creation. Use for QA initialization, Assure.Analyze, Assure.Document, test scenarios, screenshot evidence, API samples, accessibility checks, or QA lifecycle gates.
+description: Analyze test and documentation readiness for an active Spec Kit feature, generate or refresh a feature-scoped QA test manual, and enforce lifecycle freshness before implementation or pull-request creation. Use for QA initialization, speckit.assure.analyze, speckit.assure.document, test scenarios, screenshot evidence, API samples, accessibility checks, or QA lifecycle gates.
 ---
 
 # Assure

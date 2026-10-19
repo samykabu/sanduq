@@ -21,6 +21,20 @@ Optional flags:
 
 ## Instructions
 
+### Start: skip an unchanged rerun
+
+Resolve the feature (`--feature`, else `feature_directory` in `.specify/feature.json`) and check the
+last recorded analysis:
+
+```text
+python .specify/extensions/assure/scripts/assure_state.py status --kind analyze --feature <feature-path> --summary
+```
+
+On `ok`, nothing changed since the last recorded analysis (the `after_tasks` and `before_implement`
+hooks both run this command): unless `--report-only` was supplied or the user asked for a fresh
+analysis, report "analysis current" with that line and stop. On `error`, or when the feature is not
+resolved yet, continue.
+
 ### 0. Load the QA contract
 
 Read `.specify/extensions/assure/skills/assure/SKILL.md` and its `references/analysis.md` (feature
@@ -75,9 +89,9 @@ For each user story and scenario in `spec.md`, determine whether the later QA ma
   state, empty state, error state, loading state, and expected result.
 - An Illustrate generation/export task for every visual the feature evidence warrants. Only if step 0a
   confirmed `illustrate` is ready and the scenario warrants a visual: read
-  `.specify/extensions/illustrate/skill/references/type-index.md`, choose the type, and read its
-  `type-*.md`; read `SKILL.md` only when the diagram is created outside that recipe. Do not add a
-  visual merely to fill a checklist.
+  `.specify/extensions/illustrate/skill/references/type-index.md`, choose the type, and name it in
+  the task; the stage that draws follows Illustrate's full procedure. Do not add a visual merely to
+  fill a checklist.
 - API contract or integration test that proves request and response bodies for API-only scenarios.
 - Fixture or mock data task for deterministic screenshots and stable examples.
 - Accessibility smoke test for generated manual pages and UI screenshots.

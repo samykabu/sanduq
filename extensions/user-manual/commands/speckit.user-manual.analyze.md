@@ -20,7 +20,7 @@ Flags: `--feature <path>`, `--report-only`.
    `references/incremental-update.md`.
 2. Resolve the feature from `--feature`, then `.specify/feature.json`.
 3. Read `User-Manual/manual.yml`. If it does not exist, add a task to run
-   `UserManual.Init`; do not invent an approved module map.
+   `speckit.user-manual.init`; do not invent an approved module map.
 4. Map every user story, interface, route, endpoint, entity, enumeration, deployment change, and
    breaking behavior to existing or proposed modules. When `lifecycle.impact_scope` is `evidence`,
    run `python .specify/extensions/user-manual/scripts/manual_impact.py --feature <feature-path>`
@@ -34,8 +34,8 @@ Flags: `--feature <path>`, `--report-only`.
      `specify extension` recipe and the user approves, re-run with `--approve`; under a `manual`
      policy the user runs the printed command, then re-runs this command). On a zero exit, pass on
      any "newer compatible release available" note, read
-     `.specify/extensions/illustrate/skill/references/type-index.md`, choose the type, read its
-     `type-*.md`, and read `SKILL.md` only when the diagram is created outside that recipe.
+     `.specify/extensions/illustrate/skill/references/type-index.md`, choose the type, and name it
+     in the task; the stage that draws follows Illustrate's full procedure.
 6. Add concrete tasks for affected audience pages, English content, optional Arabic updates,
    tutorials/how-to/reference/explanation, deterministic screenshots, API bundles/examples,
    architecture/infrastructure/ER diagrams, data dictionary changes, release notes, migration

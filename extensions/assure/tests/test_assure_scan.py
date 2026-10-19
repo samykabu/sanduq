@@ -5,7 +5,9 @@ import json
 import sys
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
+from unittest import mock
 
 import yaml
 
@@ -87,6 +89,24 @@ class AssureScanTest(unittest.TestCase):
                         'Scan Markers', 'Maintenance Rules'):
             self.assertIn('## ' + section, first.decode('utf-8'))
 
+    def test_a_later_day_rewrites_only_when_the_inventory_changes(self):
+        # D5: the memory file is a freshness input of the document and manual states.
+        run('--root', str(self.root))
+        first = self.memory.read_bytes()
+        later = mock.Mock(wraps=date)
+        later.today.return_value = date(2099, 1, 2)
+        with mock.patch.object(assure_scan, 'date', later):
+            _, out = run('--root', str(self.root))
+            self.assertEqual(self.memory.read_bytes(), first)
+            self.assertIn('memory: unchanged', out)
+            _, out = run('--root', str(self.root), '--check')
+            self.assertIn('memory: unchanged', out)
+            (self.root / 'svc').mkdir()
+            (self.root / 'svc/go.mod').write_text('module svc\n', encoding='utf-8')
+            _, out = run('--root', str(self.root))
+        self.assertIn('memory: written', out)
+        self.assertIn('Last scanned: 2099-01-02', self.memory.read_text(encoding='utf-8'))
+
     def test_text_outside_the_markers_survives(self):
         self.memory.parent.mkdir(parents=True)
         self.memory.write_text('Intro\n\n' + assure_scan.START + '\nold\n' + assure_scan.END
@@ -107,6 +127,14 @@ class AssureScanTest(unittest.TestCase):
         template = yaml.safe_load((SCRIPTS.parent / 'assure-config.template.yml').read_text(encoding='utf-8'))
         self.assertEqual(written, assure_scan.DEFAULT_EXCLUDE)
         self.assertEqual(template['scan']['exclude'], assure_scan.DEFAULT_EXCLUDE)
+        # The template is the only literal copy: init substitutes the mode into it.
+        self.assertFalse(hasattr(assure_init, 'SCAN_EXCLUDE'))
+        self.assertNotIn("'node_modules'", (SCRIPTS / 'assure_scan.py').read_text(encoding='utf-8'))
+        self.assertEqual(assure_init.config_text('manual'),
+                         (SCRIPTS.parent / 'assure-config.template.yml').read_text(encoding='utf-8'))
+        integrated = yaml.safe_load(assure_init.config_text('integrated'))
+        self.assertEqual(integrated['lifecycle'], {'mode': 'integrated', 'require_analyze_before_implement': True,
+                                                   'require_document_before_pr': True})
         config = self.root / 'assure-config.yml'
         config.write_text(assure_init.config_text('integrated'), encoding='utf-8')
         parsed = assure_scan.read_config(config)

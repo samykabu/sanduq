@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import date
 from pathlib import Path
@@ -20,8 +21,8 @@ from pathlib import Path
 START, END = '<!-- assure-scan:start -->', '<!-- assure-scan:end -->'
 MEMORY = Path('.github/memory/project-memory.md')
 CONFIG = Path('.specify/extensions/assure/assure-config.yml')
-DEFAULT_EXCLUDE = ['.git', 'node_modules', 'bin', 'obj', 'dist', 'build', '.next', '.nuxt', '.turbo',
-                   '.expo', 'coverage', '.cache']
+# The packaged config template holds the one literal default list (scan.exclude); init copies it.
+TEMPLATE = Path(__file__).resolve().parents[1] / 'assure-config.template.yml'
 WORKSPACE_MARKERS = ('pnpm-workspace.yaml', 'nx.json', 'turbo.json', 'lerna.json', 'rush.json')
 WEB_DEPS = {'react': 'React', 'next': 'Next.js', 'vite': 'Vite', 'react-scripts': 'CRA',
             '@angular/core': 'Angular', 'vue': 'Vue', 'nuxt': 'Nuxt', 'svelte': 'Svelte',
@@ -71,6 +72,9 @@ def _scalar(text):
     if len(text) >= 2 and text[0] == text[-1] and text[0] in '"\'':
         return text[1:-1]
     return {'true': True, 'false': False}.get(text, text)
+
+
+DEFAULT_EXCLUDE = (read_config(TEMPLATE).get('scan') or {}).get('exclude') or []
 
 
 def _package(directory):
@@ -203,10 +207,18 @@ def main(argv=None):
     root = args.root.resolve()
     config = read_config(args.config or root / CONFIG)
     exclude = set((config.get('scan') or {}).get('exclude') or DEFAULT_EXCLUDE)
+    if not exclude:  # no config list and no packaged template: scanning node_modules and .git would be wrong
+        raise SystemExit('assure_scan: no scan.exclude list in ' + str(CONFIG) + ' and no packaged ' + TEMPLATE.name
+                         + '; reinstall the assure extension or add scan.exclude to the config')
     projects, found = scan(root, exclude)
-    block = render_block(projects, found, date.today().isoformat())
     target = root / MEMORY
     existing = target.read_text(encoding='utf-8-sig') if target.is_file() else ''
+    # Keep the previous date when nothing else changed: the memory file is a freshness input.
+    previous = re.search(r'^Last scanned: (\S+)$', existing.split(START, 1)[-1].split(END, 1)[0], re.M) \
+        if START in existing and END in existing else None
+    block = render_block(projects, found, previous.group(1)) if previous else None
+    if block is None or merge(existing, block) != existing:
+        block = render_block(projects, found, date.today().isoformat())
     merged = merge(existing, block)
     print('\n'.join(summary_lines(projects)) or 'no project markers found')
     if args.check:
