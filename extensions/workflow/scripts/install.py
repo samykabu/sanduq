@@ -10,6 +10,7 @@ import hashlib
 import json
 import ntpath
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -35,7 +36,7 @@ FILES = ('.specify/extensions.yml', '.specify/workflow.yml', '.specify/integrati
          '.specify/workflow/install-receipt.json',
          '.github/workflows/sanduq-workflow-gates.yml', '.github/workflows/documentation-gates.yml',
          # Host files the guard hook and role agents are merged into (hosts.apply_host_files).
-         '.claude/settings.json', '.codex/hooks.json',
+         '.claude/settings.json', '.codex/hooks.json', '.codex/config.toml',
          *(pattern.format(role) for pattern in ROLE_FILES.values() for role in ROLES))
 
 
@@ -526,6 +527,117 @@ def check_workflow_requirement(name, doc, version=None):
                 f'WORKFLOW_VERSION_UNSUPPORTED: {name} requires workflow {spec}; this installer is workflow {version}')
 
 
+# Progress wiring (policy `progress:` in workflow.yml). Spec Kit renders the extension's five events into these host
+# files on every extension command, so the installer re-applies the policy after its last Spec Kit call.
+PROGRESS_SCRIPT = '.specify/extensions/progress/scripts/progress.py'
+PROGRESS_HOST_FILES = {'claude': '.claude/settings.json', 'codex': '.codex/config.toml'}
+SPECKIT_PROGRESS = 'speckit.progress.hook'
+NATIVE_TAG = '--managed-by=progress-report'  # the tag `progress hooks install` puts on its entries
+TOML_BLOCK = re.compile(r'\[\[hooks\.(\w+)\]\]\n(?:(?!\[\[hooks\.\w+\]\]).)*?speckit_marker = true\n*', re.DOTALL)
+
+
+def progress_policy(policy):
+    """The `progress:` keys with today's behaviour as the default: Spec Kit wiring, every tool on PostToolUse."""
+    section = policy.get('progress') if isinstance(policy.get('progress'), dict) else {}
+    return {'hook_wiring': section.get('hook_wiring') or 'speckit', 'post_tool_matcher': section.get('post_tool_matcher') or ''}
+
+
+def _is_speckit_progress(handler):
+    return isinstance(handler, dict) and SPECKIT_PROGRESS in str(handler.get('command', ''))
+
+
+def edit_speckit_progress_json(path, remove=False, matcher=''):
+    """Claude settings.json: drop the Spec Kit Progress entries (native wiring), or move the PostToolUse one into its
+    own group with `matcher`. Returns how many entries were touched."""
+    raw = path.read_text(encoding='utf-8-sig') if path.is_file() else ''
+    data = json.loads(raw) if raw.strip() else {}
+    hooks = data.get('hooks') if isinstance(data.get('hooks'), dict) else {}
+    touched = 0
+    for event, groups in list(hooks.items()):
+        if not isinstance(groups, list) or (not remove and event != 'PostToolUse'):
+            continue
+        kept, ours = [], []
+        for group in groups:
+            inner = group.get('hooks') if isinstance(group, dict) else None
+            if not isinstance(inner, list) or not any(_is_speckit_progress(h) for h in inner):
+                kept.append(group); continue
+            ours += [h for h in inner if _is_speckit_progress(h)]
+            rest = [h for h in inner if not _is_speckit_progress(h)]
+            if rest: kept.append({**group, 'hooks': rest})
+        touched += len(ours)
+        if ours and not remove: kept.append({'matcher': matcher, 'hooks': ours})
+        if kept: hooks[event] = kept
+        else: del hooks[event]
+    if touched:
+        path.write_text(json.dumps(data, indent=2) + '\n', encoding='utf-8')
+    return touched
+
+
+def edit_speckit_progress_toml(path, remove=False, matcher=''):
+    """Codex config.toml: the same two edits on the `[[hooks.<Event>]]` blocks Spec Kit wrote (one block per handler)."""
+    text = path.read_text(encoding='utf-8') if path.is_file() else ''
+    touched = 0
+
+    def rewrite(match):
+        nonlocal touched
+        block = match.group(0)
+        if SPECKIT_PROGRESS not in block:
+            return block
+        if remove:
+            touched += 1; return ''
+        if match.group(1) != 'PostToolUse':
+            return block
+        touched += 1
+        return re.sub(r'(?m)^matcher = .*$', 'matcher = ' + json.dumps(matcher), block, count=1)
+    updated = TOML_BLOCK.sub(rewrite, text)
+    if touched:
+        path.write_text(updated, encoding='utf-8')
+    return touched
+
+
+def progress_accepts(script, flag):
+    done = subprocess.run([sys.executable, str(script), 'hooks', '--help'], capture_output=True, text=True, encoding='utf-8')
+    return flag in (done.stdout or '')
+
+
+def wire_progress(root, policy, hosts):
+    """Apply `progress.hook_wiring` and `progress.post_tool_matcher` to each installed host after Spec Kit rendered its
+    entries; the returned record goes into install-lock.json. Native wiring removes the Spec Kit entries and lets
+    `progress hooks install --host <host>` write entries that run scripts/hook.py directly."""
+    wanted = progress_policy(policy)
+    record = {**wanted, 'hosts': {}}
+    script = root / PROGRESS_SCRIPT
+    if not script.is_file():
+        return record
+    for host in hosts:
+        path = root / PROGRESS_HOST_FILES[host]
+        edit = edit_speckit_progress_json if host == 'claude' else edit_speckit_progress_toml
+        entry = {'file': PROGRESS_HOST_FILES[host]}
+        if wanted['hook_wiring'] == 'native':
+            entry['speckit_entries_removed'] = edit(path, remove=True)
+            args = [sys.executable, str(script), '--root', str(root), 'hooks', 'install', '--host', host]
+            if wanted['post_tool_matcher']:
+                entry['matcher_applied'] = progress_accepts(script, '--post-tool-matcher')
+                if entry['matcher_applied']: args += ['--post-tool-matcher', wanted['post_tool_matcher']]
+                else: entry['note'] = 'post_tool_matcher not applied: the installed Progress has no --post-tool-matcher (agent-tools 1.5.0 or later)'
+            done = subprocess.run(args, cwd=str(root), capture_output=True, text=True, encoding='utf-8')
+            require(done.returncode == 0, 'PROGRESS_HOOKS_INSTALL_FAILED: ' + (done.stdout + done.stderr).strip())
+            entry['file'] = '.claude/settings.json' if host == 'claude' else '.codex/hooks.json'
+            entry['result'] = done.stdout.strip()
+        else:
+            native = root / ('.claude/settings.json' if host == 'claude' else '.codex/hooks.json')
+            if native.is_file() and NATIVE_TAG in native.read_text(encoding='utf-8-sig'):
+                # Back from native wiring: drop hook.py's entries; Spec Kit re-rendered its own (install() re-adds progress).
+                done = subprocess.run([sys.executable, str(script), '--root', str(root), 'hooks', 'uninstall', '--host', host],
+                                      cwd=str(root), capture_output=True, text=True, encoding='utf-8')
+                require(done.returncode == 0, 'PROGRESS_HOOKS_UNINSTALL_FAILED: ' + (done.stdout + done.stderr).strip())
+                entry['native_entries_removed'] = done.stdout.strip()
+            if wanted['post_tool_matcher']:
+                entry['matcher_applied'] = edit(path, matcher=wanted['post_tool_matcher']) > 0
+        record['hosts'][host] = entry
+    return record
+
+
 def install(root, apply=False, packages=None, package_root=PACKAGE, runner=command, upgrade_owner=None, preserve_ci=False,
             replace_unrecognized_aliases=False, with_optional=(), with_aliases=None):
     """``with_aliases``: True installs the short aliases, False removes Sanduq's own copies, None keeps
@@ -538,6 +650,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
     for process, enabled in policy['processes'].items():
         if enabled: selected.update(lock['selected'][process])
     existing = registry(root); operations = []; retained = []
+    was_native = (read(root / '.specify/workflow/install-lock.json', {}).get('progress') or {}).get('hook_wiring') == 'native'
     # Optional extensions (Progress) are installed only when asked for with --with, or kept in step when already installed.
     # They are never required, and the workflow works without them.
     offered = lock.get('optional') or {}
@@ -554,7 +667,9 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
         check_workflow_requirement(name, installed_doc)
         if name in existing:
             require(meta.get('repository', '').rstrip('/') == lock['repository'], 'EXISTING_EXTENSION_SOURCE_CONFLICT: ' + name)
-            if existing[name].get('version') == version and existing[name].get('enabled') is True: continue
+            # Leaving native Progress wiring needs Spec Kit to render the progress events again, so re-add it.
+            rewire = name == 'progress' and was_native and progress_policy(policy)['hook_wiring'] == 'speckit'
+            if existing[name].get('version') == version and existing[name].get('enabled') is True and not rewire: continue
             if Version(existing[name]['version']) > Version(version):
                 require(Version(existing[name]['version']) in SpecifierSet(RANGES.get(name, '>=2.1.2,<3')), 'NEWER_DEPENDENCY_INCOMPATIBLE: ' + name)
                 require(existing[name].get('enabled') is True, 'NEWER_DEPENDENCY_DISABLED: enable after compatibility review, never downgrade implicitly')
@@ -588,7 +703,8 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
               'gate': sanduq_ci.gate_config(policy['ci']),
               'preserve_ci_requested': preserve_ci, 'preserved_ci': None,
               'replace_unrecognized_aliases_requested': replace_unrecognized_aliases,
-              'with_aliases': aliases_on}
+              'with_aliases': aliases_on,
+              'progress': progress_policy(policy) if 'progress' in chosen else None}
     if 'codex' in hosts:
         result['codex_hook_approval'] = CODEX_HOOK_APPROVAL
     if not apply:
@@ -642,6 +758,8 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
             result['replaced_unrecognized_aliases'] = replaced
             # Reconcile also re-applies the host files: hidden hook-only skills, guard hook, roles.
             result['host_files'] = reconcile(root, apply=True).get('host_files')
+            if 'progress' in chosen:
+                result['progress'] = wire_progress(root, policy, hosts)
             host_errors = skill_errors(skill_report(root, hosts))
             # Nothing may rewrite an alias after it is written (Spec Kit ran above).
             host_errors += ['ALIAS_NOT_RESTORED: ' + key for key, value in alias_hashes.items()
@@ -697,6 +815,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                 'schema_version': 1, 'host': active_host(root), 'processes': policy['processes'],
                 'optional_extensions': chosen, 'extensions': inventory, 'dependency_digest': package_digest(root),
                 'aliases': alias_hashes, 'with_aliases': aliases_on,
+                'progress': result['progress'],
                 # Tracked, unlike the receipt, so fresh clones and worktrees
                 # still treat a preserved CI file as project-owned.
                 'preserved_ci': {'path': result['preserved_ci']['path']} if result['preserved_ci'] else None,

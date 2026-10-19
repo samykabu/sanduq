@@ -22,7 +22,7 @@ from pathlib import Path
 import yaml
 
 DEFAULT = ['assure', 'user-manual', 'pr', 'project', 'illustrate', 'memory', 'progress']
-SKILL_GLOBS = ['skills/*/SKILL.ext.md', 'skill/SKILL.md', 'assets/skill/SKILL.md']
+SKILL_GLOBS = ['skills/*/SKILL.ext.md', 'skill/SKILL.md']
 INTERPRETERS = {'python', 'python3', 'node', 'bash', 'sh', 'pwsh', 'gh', 'git'}
 # Heuristic: a description whose first word is one of these opens with an imperative, not third person.
 IMPERATIVE = {'generate', 'create', 'run', 'write', 'archive', 'configure', 'consult', 'inspect', 'process',

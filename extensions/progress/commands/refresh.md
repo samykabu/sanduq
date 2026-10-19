@@ -1,8 +1,8 @@
 ---
-description: Force a projection snapshot now
+description: "Forces one progress report snapshot now; the host hooks already refresh it, and a snapshot never marks the feature complete. Use when implementation ends, or when asked to 'refresh the progress report' or 'take a final progress snapshot'."
 ---
 
-Load `.specify/extensions/progress/skills/progress/SKILL.md`, then run from the repository root:
+Run from the repository root:
 
 ```bash
 python .specify/extensions/progress/scripts/progress.py refresh --verbose $ARGUMENTS

@@ -664,10 +664,6 @@
         [
           "skills/agent-tools/skills/progress-report/references",
           "extensions/progress/skills/progress/references"
-        ],
-        [
-          "skills/agent-tools/skills/progress-report/SKILL.md",
-          "extensions/progress/assets/skill/SKILL.md"
         ]
       ],
       "internal": true,
@@ -675,7 +671,6 @@
       "ref": "agent-tools-v1.4.3",
       "sha": "1f0a7d886688e5fabc22a6c7cd1b8beb3e14ba68",
       "files": {
-        "extensions/progress/assets/skill/SKILL.md": "9a54922d4a3399f68873a4aff2d4e4f2105d35b37117a589e8a36aa954148953",
         "extensions/progress/assets/ui/base.css": "6c5e32f0ca4fb687ef681339957b1ed85805cfaf9f1fa551a3367127032585b0",
         "extensions/progress/assets/ui/blocks.js": "be84e638ca6d3e4a97a9e156739ece588628db5fe3ee95df9b78fdab124fe2cd",
         "extensions/progress/assets/ui/index.html": "6a108df64b2c75d252bca2739b86f1f08104779dd7465454c77a80793ad74380",

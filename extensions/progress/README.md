@@ -5,7 +5,7 @@ attention, which decisions are open, which workstreams carry the Execute tasks, 
 using. The report is a deterministic projection. It is rebuilt from the feature files and the host's native hook
 payloads, so no agent is spent keeping it up to date.
 
-![Progress report, light theme](docs/assets/progress-light.png)
+![Progress report, light theme](https://raw.githubusercontent.com/samykabu/sanduq/main/extensions/progress/docs/assets/progress-light.png)
 
 Contents: [Install](#install) · [Quick start](#quick-start) · [How it plugs in](#how-it-plugs-in) ·
 [What the report shows](#what-the-report-shows) · [What is measured](#what-is-measured-and-how-well) ·
@@ -111,9 +111,32 @@ Spec Kit calls two lifecycle hooks, both optional and both offered as a prompt:
   complete.
 
 Five native host events keep the report fresh: `session_start`, `pre_tool_use` (matcher `Task|Agent|spawn_agent`, the
-subagent launches), `post_tool_use`, `stop` and `session_end`. Each runs a script-only command, `scripts/hook.py <event>`,
-that prints nothing and always exits 0. `hook.py` uses only the standard library and returns before importing Progress
-when Progress was never initialised in the project, or the session is not bound.
+subagent launches), `post_tool_use`, `stop` and `session_end`. Spec Kit's event dispatcher runs `scripts/hook.py` for each
+one; the script reads the event from the hook payload, prints nothing and always exits 0. `hook.py` uses only the
+standard library and returns before importing Progress when Progress was never initialised in the project, or the
+session is not bound.
+
+With Workflow, two optional keys in `.specify/workflow.yml` change how these hooks are written. Both are applied by
+`install.py --with progress --apply`, and an absent key keeps the behaviour above:
+
+```yaml
+progress:
+  hook_wiring: native                    # default speckit
+  post_tool_matcher: "Bash|Task|Agent|spawn_agent"   # default "" (every tool)
+```
+
+- `hook_wiring: native` removes the Spec Kit entries from `.claude/settings.json` and `.codex/config.toml` and runs
+  `progress hooks install --host <host>` for each installed host instead, so each event is one Python process running
+  `scripts/hook.py <event>` (`.claude/settings.json`, `.codex/hooks.json`) rather than the dispatcher plus a second
+  process: about half the time per tool call. Spec Kit no longer manages these entries; a later `specify extension`
+  command renders its own again, so run the Workflow installer after one. Setting `speckit` again removes the native
+  entries and re-adds the extension. Codex asks you to approve the changed hooks once.
+- `post_tool_matcher` limits `post_tool_use` to the tools it matches, on both hosts. The bind handshake needs only the
+  shell tool and child lanes the sub-agent tools, so `Bash|Task|Agent|spawn_agent` keeps the report working on Claude
+  Code; on Codex add the shell tool name its hook payloads carry in `tool_name`. The cost: the stale banner and `last_event_at` move only on matched tools, so a long
+  run of reads and edits can show the report as idle. With native wiring the key needs a Progress whose `hooks install`
+  accepts `--post-tool-matcher`; otherwise the install records `matcher_applied: false` in
+  `.specify/workflow/install-lock.json`, which also records the wiring and what was changed per host.
 
 Under Workflow, `speckit.workflow.reconcile` leaves these hooks and events enabled. The agent's part is small. Read
 [the skill](skills/progress/SKILL.ext.md): record a workstream lane when you assign Execute work, and a blocker, decision or note when one
@@ -210,9 +233,9 @@ project's Illustrate theme. Section order, hidden sections, density, title, logo
 `.specify/progress/theme.json`. `progress theme --layout timeline|classic` picks the page. `timeline` is the default.
 `classic` is the old lanes and boards page, fed the v2 document, and is kept for one release only.
 
-![Progress report, dark theme](docs/assets/progress-dark.png)
+![Progress report, dark theme](https://raw.githubusercontent.com/samykabu/sanduq/main/extensions/progress/docs/assets/progress-dark.png)
 
-![Progress report at narrow width](docs/assets/progress-narrow.png)
+![Progress report at narrow width](https://raw.githubusercontent.com/samykabu/sanduq/main/extensions/progress/docs/assets/progress-narrow.png)
 
 ```text
 $speckit-progress-theme Use the cobalt preset.
@@ -315,7 +338,9 @@ Work through these in order.
    binds directly when you know the id.
 4. **Check the hooks are installed.** The host's config must hold the Progress hooks: `.claude/settings.json` (or
    `settings.local.json`) for Claude Code, `.codex/hooks.json` or `.codex/config.toml` for Codex, each with commands
-   that contain `speckit.progress.hook`. If they are missing, reinstall with `specify extension add progress`.
+   that contain `speckit.progress.hook` (or, with `hook_wiring: native`, `scripts/hook.py` and
+   `--managed-by=progress-report`). If they are missing, reinstall with `specify extension add progress`, or rerun the
+   Workflow installer.
    Confirm what Workflow sees with
    `python .specify/extensions/workflow/scripts/progress_bridge.py mode --host claude`: `projection` means the hooks are
    registered and enabled.

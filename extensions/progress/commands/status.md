@@ -1,8 +1,8 @@
 ---
-description: Print a one-line summary of the progress report
+description: "Prints the one-line state of the Sanduq progress report (stage, lanes, blockers, decisions), or its JSON projection with --json. Use when asked 'where are we' or 'progress status', or to show the report state."
 ---
 
-Load `.specify/extensions/progress/skills/progress/SKILL.md`, then run from the repository root:
+Run from the repository root:
 
 ```bash
 python .specify/extensions/progress/scripts/progress.py status $ARGUMENTS

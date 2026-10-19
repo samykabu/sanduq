@@ -1,8 +1,8 @@
 ---
-description: Choose the report theme
+description: "Sets the progress report's look from a preset (sanduq, cobalt, emerald, classic), the project's Illustrate theme or a theme file, or shows the active theme. Use when asked to 'change the report theme' or 'match the Illustrate colors'."
 ---
 
-Load `.specify/extensions/progress/skills/progress/SKILL.md`, then run from the repository root:
+Run from the repository root:
 
 ```bash
 python .specify/extensions/progress/scripts/progress.py theme $ARGUMENTS

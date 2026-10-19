@@ -36,9 +36,7 @@ Verbs print one line (`refresh` prints nothing); relay it, do not elaborate.
 
 1. Record a lane when you assign work (lane ids are `L#`; Workflow `W#` and host-child `C#` lanes appear on their own). Task start, completion, retries and reopening need no command.
 2. Check a task off in `tasks.md` as usual; the report follows.
-3. When Workflow is installed, decisions come from its ledger and `decide` is refused. Do not work around it.
-4. Never put secrets, absolute paths or transcript text in a note. Text is capped at 200 characters.
-5. Unknown values stay unknown. Do not estimate model, effort, context or time.
-6. Errors read `progress: error CODE`. Fix the cause named; do not retry in a loop.
+3. Unknown values stay unknown. Do not estimate model, effort, context or time.
+4. The CLI refuses what the contract forbids and prints `progress: error CODE`; fix the cause the error names, do not retry in a loop.
 
 Details: `references/verbs.md`.
