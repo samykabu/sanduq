@@ -52,6 +52,12 @@ Analysis runs before implementation. Update writes the affected pages, audits th
 preview afterwards. Release uses verified application release evidence.
 [Editable source](../diagrams/extension-user-manual.html).
 
+On a rerun, `manual_state.py status` names the inputs and manual files that changed since the last
+`record` (`changed_inputs`, `changed_outputs`), so Update reads those instead of every artifact. Set
+`lifecycle.impact_scope: evidence` in `User-Manual/manual.yml` and Analyze and Update also start
+from `manual_impact.py`, which matches the changed paths against each module's `evidence` and each
+page's `source_evidence`. The default, `all`, keeps reading the whole manual.
+
 ## Limits
 
 - Previews are private CI artifacts. A public repository needs the encrypted-preview setup in the

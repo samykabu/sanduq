@@ -1,5 +1,5 @@
 ---
-description: "Analyze the active Spec Kit feature for required User Manual content and asset tasks before implementation."
+description: "Adds User Manual content and asset tasks for the active feature to tasks.md before implementation. Use when tasks.md exists and the manual must follow the feature; triggers: 'which manual pages does this feature touch', 'add documentation tasks'."
 ---
 
 # Analyze User Manual Impact
@@ -22,23 +22,20 @@ Flags: `--feature <path>`, `--report-only`.
 3. Read `User-Manual/manual.yml`. If it does not exist, add a task to run
    `UserManual.Init`; do not invent an approved module map.
 4. Map every user story, interface, route, endpoint, entity, enumeration, deployment change, and
-   breaking behavior to existing or proposed modules.
+   breaking behavior to existing or proposed modules. When `lifecycle.impact_scope` is `evidence`,
+   run `python .specify/extensions/user-manual/scripts/manual_impact.py --feature <feature-path>`
+   and start from its `modules`, `pages` and `audiences`; propose modules for its `unmatched` paths.
 5. Load specialist skills only when applicable:
    - API surface: `skills/api-docs/SKILL.md`.
    - UI or mobile screens: `skills/ui-screenshots/SKILL.md`.
    - Compatibility, upgrade, or release behavior: `skills/release-docs/SKILL.md`.
-   - Diagrams: before adding any diagram task, run
-     `python .specify/extensions/user-manual/scripts/deps.py ensure illustrate`. On a zero exit,
-     load the installed `.specify/extensions/illustrate/skill/SKILL.md` and the matching type
-     reference only at that point, right before adding the task — this direct resource path works
-     in the current run even if the agent only discovers newly registered skills in a new
-     conversation. A trailing "newer compatible release available" note does not block adding the
-     task; pass it on to the user. On a non-zero exit, report the script's one-line result and skip
-     diagram tasks instead of inventing one; if the result names a `specify extension add/update
-     illustrate` recipe and the user approves, re-run
-     `python .specify/extensions/user-manual/scripts/deps.py ensure illustrate --approve` (under a
-     `manual` policy, the user runs the printed `specify extension …` command themselves instead,
-     then this command can simply be re-run).
+   - Diagrams: run `python .specify/extensions/user-manual/scripts/deps.py ensure illustrate`
+     first; on a non-zero exit report its line and add no diagram task (when it prints a
+     `specify extension` recipe and the user approves, re-run with `--approve`; under a `manual`
+     policy the user runs the printed command, then re-runs this command). On a zero exit, pass on
+     any "newer compatible release available" note, read
+     `.specify/extensions/illustrate/skill/references/type-index.md`, choose the type, read its
+     `type-*.md`, and read `SKILL.md` only when the diagram is created outside that recipe.
 6. Add concrete tasks for affected audience pages, English content, optional Arabic updates,
    tutorials/how-to/reference/explanation, deterministic screenshots, API bundles/examples,
    architecture/infrastructure/ER diagrams, data dictionary changes, release notes, migration

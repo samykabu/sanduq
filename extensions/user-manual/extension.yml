@@ -28,16 +28,16 @@ provides:
   commands:
     - name: speckit.user-manual.init
       file: commands/speckit.user-manual.init.md
-      description: "Interview the project, discover and approve its module map, and scaffold User-Manual"
+      description: "Discovers the application, proposes a module map for approval and scaffolds the bilingual-ready, audience-aware User Manual. Use when a project has no User-Manual/ yet or its module map needs a refresh; triggers: 'create a user manual', 'init the manual'."
     - name: speckit.user-manual.analyze
       file: commands/speckit.user-manual.analyze.md
-      description: "Add missing manual, API, screenshot, diagram, tutorial, release, and migration tasks for the active feature"
+      description: "Adds User Manual content and asset tasks for the active feature to tasks.md before implementation. Use when tasks.md exists and the manual must follow the feature; triggers: 'which manual pages does this feature touch', 'add documentation tasks'."
     - name: speckit.user-manual.update
       file: commands/speckit.user-manual.update.md
-      description: "Create a missing manual or incrementally update affected modules and build preview artifacts"
+      description: "Updates the affected User Manual modules for the implemented feature, audits them and builds a private preview. Use when a feature is implemented or the manual is missing; triggers: 'update the user manual', 'build the manual preview'."
     - name: speckit.user-manual.release
       file: commands/speckit.user-manual.release.md
-      description: "Finalize versioned audience/language HTML archives and PDFs for an application release"
+      description: "Builds versioned User Manual release notes, migration guides, HTML archives and PDFs per audience and language. Use when an application release is tagged or merged, never on a feature branch; triggers: 'release the manual', 'build the v3 manual PDFs'."
 
 hooks:
   after_tasks:

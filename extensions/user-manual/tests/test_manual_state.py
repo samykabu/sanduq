@@ -132,6 +132,37 @@ class ManualStateSummaryTests(ManualStateFixture, unittest.TestCase):
         self.assertEqual(default_proc.returncode, json_proc.returncode)
 
 
+class ManualStateChangedPathsTests(ManualStateFixture, unittest.TestCase):
+    """AS4: a stale status names the changed, new and deleted inputs and the changed outputs."""
+
+    def test_status_lists_changed_inputs_and_outputs(self):
+        self.checkpoint('develop')
+        (self.feature / 'plan.md').write_text('plan', encoding='utf-8')
+        result, proc = self.run_state('record')
+        self.assertTrue(result['current'], proc.stderr)
+        self.assertNotIn('changed_inputs', result)
+        (self.feature / 'spec.md').write_text('# Changed', encoding='utf-8')
+        (self.feature / 'plan.md').unlink()
+        (self.feature / 'notes.md').write_text('new', encoding='utf-8')
+        (self.root / 'User-Manual/guide.md').write_text('Guide v2', encoding='utf-8')
+        status, proc = self.run_state('status')
+        self.assertEqual(proc.returncode, 1)
+        self.assertEqual(status['reason'], 'stale-input-or-output')
+        self.assertEqual(status['changed_inputs'],
+                         ['specs/001-example/notes.md', 'specs/001-example/plan.md', 'specs/001-example/spec.md'])
+        self.assertEqual(status['changed_outputs'], ['User-Manual/guide.md'])
+        proc = subprocess.run([sys.executable, str(MANUAL_STATE), 'status', '--feature', str(self.feature),
+                               '--repo-root', str(self.root), '--output', 'User-Manual/guide.md', '--summary'],
+                              cwd=self.root, text=True, capture_output=True, encoding='utf-8')
+        self.assertEqual(proc.stdout.strip(), 'error action=status kind=manual outputs=1 '
+                         'reason=stale-input-or-output changed_inputs=3 changed_outputs=1')
+
+    def test_missing_state_carries_no_lists(self):
+        self.checkpoint('develop')
+        status, _ = self.run_state('status')
+        self.assertEqual(status, {'current': False, 'reason': 'missing'})
+
+
 class ManualStateSummaryWhitespaceTests(unittest.TestCase):
     """F6: a reason with embedded newlines/whitespace still prints as one
     line under --summary. Exercised by importing the module directly and

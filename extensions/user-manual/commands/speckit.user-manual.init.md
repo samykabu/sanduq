@@ -1,5 +1,5 @@
 ---
-description: "Discover the application, approve its module map, and initialize a bilingual-ready audience-aware User Manual."
+description: "Discovers the application, proposes a module map for approval and scaffolds the bilingual-ready, audience-aware User Manual. Use when a project has no User-Manual/ yet or its module map needs a refresh; triggers: 'create a user manual', 'init the manual'."
 ---
 
 # Initialize User Manual
@@ -22,18 +22,9 @@ Flags: `--non-interactive`, `--module <name>`, `--enable-arabic`, `--provider <i
    deployment units, specifications, and existing documentation. Exclude generated/vendor folders.
 3. Propose a module map with evidence paths. In interactive mode, ask the user to approve, rename,
    merge, or split modules. Never silently replace an already approved module map.
-4. Confirm only project-specific facts not already configured: product name, optional Arabic,
-   branding source, authorized development runtime, publishing provider, and edition visibility.
-   Preserve these agreed defaults:
-   - English required; Arabic optional; RTL always supported.
-   - End User public only after approval.
-   - Administrator/Operator authenticated and internal.
-   - Technical Reference private.
-   - Private CI preview on every feature PR.
-   - On public repositories, age-encrypt preview artifacts and require the safe public recipient in
-     the `USER_MANUAL_PREVIEW_AGE_RECIPIENT` GitHub Actions variable. Keep the private key outside
-     the repository and CI.
-   - Hosted ephemeral preview only through an explicitly approved provider.
+4. `init_manual.py` writes the agreed defaults (languages, audience visibility, private CI preview,
+   age-encrypted public previews, approved-provider rule, `lifecycle.impact_scope: all`); confirm
+   only product name, Arabic, branding source, development runtime, provider and edition visibility.
 5. Run:
 
    ```text

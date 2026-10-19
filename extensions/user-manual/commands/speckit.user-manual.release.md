@@ -1,5 +1,5 @@
 ---
-description: "Finalize versioned User Manual release notes, migration guides, HTML archives, and PDFs."
+description: "Builds versioned User Manual release notes, migration guides, HTML archives and PDFs per audience and language. Use when an application release is tagged or merged, never on a feature branch; triggers: 'release the manual', 'build the v3 manual PDFs'."
 ---
 
 # Release User Manual
@@ -23,8 +23,10 @@ Flags: `--version <value>`, `--from <ref>`, `--to <ref>`, `--module <id>`, `--dr
 3. Generate audience-specific release notes. Create migration guides only for user-visible,
    operational, API, configuration, infrastructure, or data compatibility changes.
 4. Update version metadata and navigation without rewriting unchanged historical releases.
-5. Run a full audit, all configured HTML builds, one PDF per edition/language, and requested
-   module-specific PDFs.
+5. Run `python .specify/extensions/user-manual/scripts/audit_manual.py`, then
+   `python .specify/extensions/user-manual/scripts/build_manual.py --all --version <value> --archive --pdf`
+   once (every configured audience and language, one PDF each), plus
+   `build_manual.py --audience <a> --language <l> --module <id> --pdf` for requested module PDFs.
 6. Place generated artifacts under `User-Manual/site/` and `User-Manual/pdf/` for CI collection.
    Do not commit build products unless the consuming project explicitly chooses that policy.
 7. Report exact artifact paths and any release-blocking documentation gaps.

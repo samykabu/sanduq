@@ -52,6 +52,9 @@ def manual_yaml(product: str, modules: list[dict[str, object]], arabic: bool, pr
     lines = [
         'schema_version: "1.0"',
         f"product_name: {q(product)}",
+        "lifecycle:",
+        "  # all: update and analyze read the whole manual; evidence: start from manual_impact.py's list.",
+        "  impact_scope: all",
         "languages:",
         "  required: [en]",
         f"  optional: {optional}",
