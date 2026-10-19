@@ -57,7 +57,7 @@ class FakeRunner:
 class PublishTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.root = Path(self.tmp.name)
+        self.root = Path(self.tmp.name).resolve()  # Windows runners hand out 8.3 short temp paths
         (self.root / 'specs/001-x').mkdir(parents=True)
         (self.root / 'docs/001-x').mkdir(parents=True)
         (self.root / 'specs/001-x/scope-source.json').write_text(
@@ -98,7 +98,7 @@ class PublishTests(unittest.TestCase):
         self.assertEqual(sorted(receipt), ['evidence', 'pr_body_file', 'pr_body_sha256', 'pr_lint_file', 'pr_url'])
         edit = next(c for c in runner.calls if c[:3] == ['gh', 'pr', 'edit'])
         self.assertEqual(edit[3:5], ['12', '--body-file'])
-        self.assertEqual(Path(edit[5]), self.root / receipt['pr_body_file'])
+        self.assertEqual(Path(edit[5]).resolve(), (self.root / receipt['pr_body_file']).resolve())
 
     def test_append_when_the_existing_body_has_no_markers(self):
         runner = FakeRunner(pr={'number': 12, 'url': 'https://github.com/acme/app/pull/12', 'body': 'Hand-written\n'})
