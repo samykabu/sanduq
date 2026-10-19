@@ -447,7 +447,7 @@ progress statusline [run|install|uninstall]
 ### hooks
 
 ```text
-progress hooks install   --host claude|codex [--scope project|user] [--python CMD] [--force-both]
+progress hooks install   --host claude|codex [--scope project|user] [--python CMD] [--force-both] [--post-tool-matcher REGEX]
 progress hooks uninstall --host claude|codex [--scope project|user]
 progress hooks status    [--host claude|codex]
 ```
@@ -458,7 +458,7 @@ Writes or removes the host's native hook entries that call `scripts/hook.py`. No
 | Host | Project scope file | User scope file | Events written |
 | --- | --- | --- | --- |
 | `claude` | `.claude/settings.json` | `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR`) | `SessionStart`, `PreToolUse` (matcher `Task\|Agent\|spawn_agent`), `PostToolUse`, `Stop`, `SessionEnd` |
-| `codex` | `.codex/hooks.json` | `~/.codex/hooks.json` (or `$CODEX_HOME`) | `SessionStart`, `PreToolUse` (same matcher), `PostToolUse`, `Stop`. No session end: Codex documents none, and `Stop` already forces a refresh |
+| `codex` | `.codex/hooks.json` | `~/.codex/hooks.json` (or `$CODEX_HOME`) | `SessionStart`, `PreToolUse` (same matcher), `PostToolUse`, `Stop`, `SessionEnd` (Codex documents none; it costs nothing, and `Stop` already forces a refresh) |
 
 Each entry has this shape and a 10 second timeout. The `--managed-by=progress-report` argument is the tag: it is how
 `uninstall` and `status` recognise exactly these entries.
@@ -473,6 +473,9 @@ Each entry has this shape and a 10 second timeout. The `--managed-by=progress-re
   again replaces its own entries and adds no duplicates. `uninstall` removes only tagged entries, then any group, event
   key or `hooks` key left empty. A file that is not valid JSON, or whose `hooks` is not an object, is never overwritten
   (`PROGRESS_HOOKS_SETTINGS`, exit 3).
+- **PostToolUse matcher.** `--post-tool-matcher REGEX` (for example `Bash|Task|Agent|spawn_agent`) writes it as the
+  `PostToolUse` matcher, so other tool calls start no hook; `last_event_at` then moves only on matching tools. Empty or
+  absent: no matcher, every tool call, as before.
 - **Paths.** Project scope never writes an absolute path into a file you commit: the command is repo-relative, as
   `${CLAUDE_PROJECT_DIR}/<path>` for Claude (the braced form is the one Claude Code rewrites in both bash and PowerShell) and `<path>` for Codex (Codex runs hooks in the session's working directory;
   **unverified**, so start Codex at the repository root). When the skill lives outside the repository (a plugin install),
@@ -508,7 +511,7 @@ Each entry has this shape and a 10 second timeout. The `--managed-by=progress-re
 $ progress hooks install --host claude
 progress: hooks installed claude project 5 entries in .claude/settings.json
 $ progress hooks status
-progress: hooks claude project 5/5 user 0/5; codex project 0/4 user 0/4; spec-kit no
+progress: hooks claude project 5/5 user 0/5; codex project 0/5 user 0/5; spec-kit no
 $ progress hooks uninstall --host claude
 progress: hooks removed claude project 5 entries from .claude/settings.json
 ```
@@ -518,7 +521,7 @@ hooks are present. For Codex it also reads the user's Codex config (read-only) a
 scope, reports `N/M registered, K/M approved` and `project untrusted` when the project is not trusted, ending with
 `(approve the hooks in Codex)` when something is unapproved. Spec Kit hooks in the project's `.codex/config.toml` count
 too. Codex skips unapproved hooks silently; see [Hosts](hosts.md#codex-trust-and-hook-approval-verified-on-a-real-codex-session-2026-10-16).
-Example: `progress: hooks codex project 5/5 registered, 0/5 approved, project untrusted; user 0/4 (approve the hooks in Codex); spec-kit no`.
+Example: `progress: hooks codex project 5/5 registered, 0/5 approved, project untrusted; user 0/5 (approve the hooks in Codex); spec-kit no`.
 `install --host codex` prints a reminder that Codex must trust the project and approve the hooks before they run. When no
 Codex session is bound and the hooks are unapproved, `progress status` ends with `no bound session (codex hooks not approved?)`. Errors: `PROGRESS_USAGE` (2: no `--host`, unsafe `--python`), `PROGRESS_HOOKS_SPECKIT`,
 `PROGRESS_HOOKS_SETTINGS`, `PROGRESS_HOOKS_PATH`, `PROGRESS_HOOKS_DUPLICATE`, `PROGRESS_HOOKS_CONFLICT`,

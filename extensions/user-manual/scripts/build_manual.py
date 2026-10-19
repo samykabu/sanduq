@@ -217,20 +217,11 @@ def resolve_theme(manual: dict, renderer: str) -> tuple[str, dict]:
     return name, options
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--root", type=Path, default=Path("User-Manual"))
-    parser.add_argument("--audience", choices=("end-user", "administrator", "technical"), required=True)
-    parser.add_argument("--language", required=True)
-    parser.add_argument("--version", default="preview")
-    parser.add_argument("--module", help="Build only one module plus shared system pages")
-    parser.add_argument("--renderer", choices=("material", "zensical"), default="material")
-    parser.add_argument("--pdf", action="store_true")
-    parser.add_argument("--archive", action="store_true")
-    args = parser.parse_args()
+AUDIENCES = ("end-user", "administrator", "technical")
 
-    root = args.root.resolve()
-    manual = yaml.safe_load((root / "manual.yml").read_text(encoding="utf-8")) or {}
+
+def build_edition(args: argparse.Namespace, root: Path, manual: dict) -> tuple[Path, Path | None, Path | None]:
+    """Build one audience/language edition; returns (site_dir, archive or None, pdf or None)."""
     source = root / "docs" / args.language
     if not source.is_dir():
         raise SystemExit(f"language source not found: {source}")
@@ -317,6 +308,7 @@ def main() -> None:
                 raise SystemExit(f"PDF renderer did not create {staged_pdf}")
             shutil.copy2(staged_pdf, pdf_path)
 
+    archive = None
     if args.archive:
         archive = root / "site" / args.version / f"{edition}.zip"
         archive.parent.mkdir(parents=True, exist_ok=True)
@@ -324,10 +316,47 @@ def main() -> None:
             for path in sorted(site_dir.rglob("*")):
                 if path.is_file():
                     bundle.write(path, path.relative_to(site_dir))
-        print(archive)
-    print(site_dir)
-    if args.pdf:
-        print(pdf_path)
+    return site_dir, archive, pdf_path if args.pdf else None
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--root", type=Path, default=Path("User-Manual"))
+    parser.add_argument("--audience", choices=AUDIENCES)
+    parser.add_argument("--language")
+    parser.add_argument("--all", action="store_true",
+                        help="Build every audience for each manual.yml language that has a docs/<lang>/ directory")
+    parser.add_argument("--version", default="preview")
+    parser.add_argument("--module", help="Build only one module plus shared system pages")
+    parser.add_argument("--renderer", choices=("material", "zensical"), default="material")
+    parser.add_argument("--pdf", action="store_true")
+    parser.add_argument("--archive", action="store_true")
+    args = parser.parse_args()
+    if args.all and (args.audience or args.language or args.module):
+        parser.error("--all takes no --audience, --language or --module")
+    if not args.all and not (args.audience and args.language):
+        parser.error("--audience and --language are required without --all")
+
+    root = args.root.resolve()
+    manual = yaml.safe_load((root / "manual.yml").read_text(encoding="utf-8")) or {}
+    if not args.all:
+        site_dir, archive, pdf_path = build_edition(args, root, manual)
+        if archive:
+            print(archive)
+        print(site_dir)
+        if pdf_path:
+            print(pdf_path)
+        return
+    languages = manual.get("languages") or {}
+    wanted = [str(code) for key in ("required", "optional") for code in languages.get(key) or []]
+    present = [code for code in dict.fromkeys(wanted) if (root / "docs" / code).is_dir()]
+    if not present:
+        raise SystemExit(f"no language directory under {root / 'docs'} for manual.yml languages {wanted}")
+    for language in present:
+        for audience in AUDIENCES:
+            edition_args = argparse.Namespace(**{**vars(args), "audience": audience, "language": language})
+            site_dir, archive, pdf_path = build_edition(edition_args, root, manual)
+            print(f"{audience} {language}: {site_dir}" + (f" {archive}" if archive else "") + (f" {pdf_path}" if pdf_path else ""))
 
 
 if __name__ == "__main__":

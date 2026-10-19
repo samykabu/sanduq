@@ -34,14 +34,8 @@ jobs:
           set -euo pipefail
           version="${GITHUB_REF_NAME}"
           python .specify/extensions/user-manual/scripts/audit_manual.py --root User-Manual
-          for audience in end-user administrator technical; do
-            python .specify/extensions/user-manual/scripts/build_manual.py \
-              --root User-Manual --audience "$audience" --language en --version "$version" --archive --pdf
-            if [ -d User-Manual/docs/ar ]; then
-              python .specify/extensions/user-manual/scripts/build_manual.py \
-                --root User-Manual --audience "$audience" --language ar --version "$version" --archive --pdf
-            fi
-          done
+          python .specify/extensions/user-manual/scripts/build_manual.py \
+            --root User-Manual --all --version "$version" --archive --pdf
       - name: Upload release build artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

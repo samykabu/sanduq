@@ -6,7 +6,7 @@ Waterfall is its own grammar, not a bar variant. Three constraints *are* the fig
 
 **Not this type:**
 
-- Two endpoints where only the *gap* matters → **dumbbell** (a Bar variant, `type-bar.md`). A dumbbell states two values and their distance; a waterfall states a path of signed steps that must reconcile. The types look adjacent but make opposite claims: the dumbbell hides what happened in between, the waterfall *is* what happened in between.
+- Two endpoints where only the *gap* matters → **dumbbell** (a Bar variant, `type-dumbbell.md`). A dumbbell states two values and their distance; a waterfall states a path of signed steps that must reconcile. The types look adjacent but make opposite claims: the dumbbell hides what happened in between, the waterfall *is* what happened in between.
 - Independent category comparisons → **bar** (`type-bar.md`).
 - One quantity splitting and merging across stages → **Sankey** (`type-sankey.md`). A waterfall is strictly sequential and one-dimensional; the bars never branch.
 - Ordered drop-off through stages of one funnel → **pyramid / funnel** (`type-pyramid.md`).
@@ -56,7 +56,7 @@ Literals are the default palette; substitute the resolved theme roles.
 
 - **A floating bar with no carry.** The connector is the claim that the total is conserved across the gap; without it the chart is bars at odd heights.
 - **Sign by hue alone** (green up / red down, or accent on every decrease). Hue is the one channel that does not survive greyscale or CVD; fill weight and geometry carry the sign here, and the accent stays editorial.
-- **A truncated value axis.** The domain follows the data's range, never its observed extremes — the same rule, cases, and all-zero fallback as the dumbbell (`type-bar.md` § Dumbbell honesty rules). A waterfall on a clipped domain inflates every bridge.
+- **A truncated value axis.** The domain follows the data's range, never its observed extremes — the same rule, cases, and all-zero fallback as the dumbbell (`type-dumbbell.md` § Dumbbell honesty rules). A waterfall on a clipped domain inflates every bridge.
 - **More than one subtotal.** A walk that needs several resting points is two walks; split it.
 - **Mixing units mid-walk.** Every bar is in the start total's unit or the reconciliation is fiction.
 - **3-D, shadows, rounded bridge bars** — same editorial rules as every chart here.

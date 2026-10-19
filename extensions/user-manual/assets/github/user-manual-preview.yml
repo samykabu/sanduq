@@ -35,14 +35,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for audience in end-user administrator technical; do
-            python .specify/extensions/user-manual/scripts/build_manual.py \
-              --root User-Manual --audience "$audience" --language en --version "pr-${{ github.event.pull_request.number }}" --archive
-            if [ -d User-Manual/docs/ar ]; then
-              python .specify/extensions/user-manual/scripts/build_manual.py \
-                --root User-Manual --audience "$audience" --language ar --version "pr-${{ github.event.pull_request.number }}" --archive
-            fi
-          done
+          python .specify/extensions/user-manual/scripts/build_manual.py \
+            --root User-Manual --all --version "pr-${{ github.event.pull_request.number }}" --archive
       - name: Protect preview bundle
         env:
           REPOSITORY_PRIVATE: ${{ github.event.repository.private }}

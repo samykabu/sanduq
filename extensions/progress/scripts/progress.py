@@ -135,6 +135,8 @@ def build_parser():
     s.add_argument('--scope', choices=('project', 'user'), default='project')
     s.add_argument('--force-both', action='store_true', help='install even when this installer already registered the hooks in the other scope')
     s.add_argument('--python', help='interpreter command written into the hook (default: python on Windows, python3 elsewhere)')
+    s.add_argument('--post-tool-matcher', default='', metavar='REGEX',
+                   help='tool names the PostToolUse hook runs for, e.g. "Bash|Task|Agent|spawn_agent" (default: every tool)')
     return p
 
 

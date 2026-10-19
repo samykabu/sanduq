@@ -14,8 +14,7 @@ class RecipeTests(unittest.TestCase):
     def test_every_named_skill_file_exists(self):
         named = set(re.findall(r'<skill>/((?:references|scripts)/[\w.-]+\.(?:md|py))', RECIPE))
         self.assertIn('references/type-index.md', named)
-        # shortcut: type-index.md arrives with the upstream IL3 vendor drop; check it once it is vendored
-        missing = [n for n in named if not (SKILL / n).is_file() and not (n == 'references/type-index.md')]
+        missing = [n for n in named if not (SKILL / n).is_file()]
         self.assertEqual(missing, [])
 
     def test_recipe_lists_no_types_and_the_command_loads_it(self):

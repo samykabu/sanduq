@@ -51,11 +51,13 @@ Don't use the dot pattern when the diagram sits inside a product page, slide, or
 
 **Draw arrows before boxes** so z-order puts lines behind nodes.
 
+`template-motion.html` and `template-motion-dark.html` define only their own prefixed marker; add the other markers from this section when a motion diagram needs them.
+
 ## Mandatory connector rules
 
-These seven rules are **non-negotiable**. Run the pre-output checklist (SKILL.md §9) to verify before producing any diagram.
+These seven rules are **non-negotiable**. Verify them with the taste gate ([taste-gate.md](taste-gate.md), SKILL.md §9) before producing any diagram.
 
-1. **Rounded right-angle (orthogonal) connectors are mandatory.** Never use diagonal `<line>` or straight slanted paths between nodes that don't share an x or y axis. Every bend must be a quarter-arc with `r=8` (or `r=6` minimum for tight layouts). See `references/type-architecture.md` for the elbow-path formula. Reserve plain straight `<line>` only for connections whose endpoints share the same x or y coordinate. Diagonal connectors are an automatic fail.
+1. **Rounded right-angle (orthogonal) connectors are mandatory.** Never use diagonal `<line>` or straight slanted paths between nodes that don't share an x or y axis. Every bend must be a quarter-arc with `r=8` (or `r=6` minimum for tight layouts). See `references/type-architecture.md` for the elbow-path formula. Reserve plain straight `<line>` only for connections whose endpoints share the same x or y coordinate. Diagonal connectors are an automatic fail. Verify with `python scripts/verify-geometry.py --orthogonal <file>` (`self_check.py --strict` runs it too).
 
 2. **Label-to-connector margin: 6–10px gap, always.** A label must never sit *on* its arrow — the connector must remain visible. Place the label centered above (or beside, for vertical segments) the line with a **minimum 6px gap** between the bottom of the label's mask rect and the connector stroke. The opaque mask rect prevents the arrow from bleeding through, but the *visible* gap between mask edge and line preserves the reader's ability to trace the connection. If the label is large enough that 6px feels cramped, push it to 8–10px. Never let the mask rect touch or overlap the stroke.
 
@@ -137,7 +139,7 @@ Expand SVG `viewBox` height by ~60px.
 
 ## Accessible SVG contract
 
-SKILL.md §11 lists these six points one line each; this is the long form.
+SKILL.md §12 keeps a three-line digest of these six points; this is the long form.
 
 Every diagram is an accessible figure by default:
 

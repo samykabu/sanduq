@@ -15,7 +15,7 @@ initialize, select, or create a theme, see [`theme-initialization.md`](theme-ini
 
 ### Semantic roles
 
-Every token is referred to by **semantic role**, not by its hex value. Type references (`type-*.md`) and SKILL.md say `accent`, not `#f7591f`.
+Every token is referred to by **semantic role**, not by its hex value. Type references (`type-*.md`) and SKILL.md say `accent`, not `#f7591f`. When a spec or type reference names a role, use the current resolver output; resolved project tokens override every literal color or font in a historical example.
 
 | Role | Purpose | Default (light) | Default (dark) |
 |---|---|---|---|
@@ -30,6 +30,8 @@ Every token is referred to by **semantic role**, not by its hex value. Type refe
 | `accent` | Focal / 1–2 max per diagram | `#2563eb` | `#6ea0ff` |
 | `accent-tint` | Fill for accent-bordered boxes | `rgba(37,99,235,0.09)` | `rgba(110,160,255,0.14)` |
 | `link` | HTTP/API calls, external arrows | `#1d4ed8` | `#8ab4ff` |
+
+**Focal rule:** `accent` goes on 1–2 elements max. Everything else is `ink` / `muted` / `soft`. If you're tempted to accent 4 things, you haven't decided what's focal yet.
 
 > **Preset source:** these values are the `cobalt` preset. Do not copy them into a consumer project
 > unless defining a custom derivative; selecting `cobalt` is enough.
@@ -85,6 +87,9 @@ A self-contained palette for the terminal-window primitive (see [primitive-termi
 | `eyebrow` | Resolved `mono` | 7–8px | 500, tracked 0.18em, uppercase | Type tags, axis labels |
 | `arrow-label` | Resolved `mono` | 8px | 400, tracked 0.06em | Arrow annotations |
 | `callout` | Resolved `serif` *italic* | 14px | 400 | Editorial asides only |
+
+The SVG sizes above are the standard ramp (name 12, sublabel 9, arrow label and eyebrow 8); slide,
+social and print presets scale them: [output-spec.md § Type ramp](output-spec.md#type-ramp-per-size-class).
 
 ### Font stack
 

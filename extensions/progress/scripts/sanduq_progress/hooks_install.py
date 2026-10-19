@@ -30,10 +30,11 @@ TIMEOUT = 10
 SUBAGENT_MATCHER = 'Task|Agent|spawn_agent'
 HOOK_SCRIPT = Path(__file__).resolve().parent.parent / 'hook.py'
 
-# (host event name, hook.py event, matcher). Codex documents no session end event: its Stop already forces a final refresh.
+# (host event name, hook.py event, matcher). Both hosts get the same five, as Spec Kit's dispatcher does; a Codex SessionEnd
+# that never fires costs nothing, and Stop still forces the final refresh.
 CLAUDE_EVENTS = (('SessionStart', 'session_start', None), ('PreToolUse', 'pre_tool_use', SUBAGENT_MATCHER),
                  ('PostToolUse', 'post_tool_use', None), ('Stop', 'stop', None), ('SessionEnd', 'session_end', None))
-CODEX_EVENTS = tuple(e for e in CLAUDE_EVENTS if e[0] != 'SessionEnd')
+CODEX_EVENTS = CLAUDE_EVENTS
 EVENTS = {'claude': CLAUDE_EVENTS, 'codex': CODEX_EVENTS}
 
 
@@ -262,7 +263,7 @@ def check_registrations(root, host, scope, target_data, force_both=False):
             raise refused('PROGRESS_HOOKS_DUPLICATE', f'hooks are already installed in {shown(root, found)}; uninstall them there first, or pass --force-both')
 
 
-def install(root, host, scope, python, force_both=False):
+def install(root, host, scope, python, force_both=False, post_tool_matcher=''):
     path = settings_path(root, host, scope)
     commands = [command_for(root, host, scope, event, python) for _, event, _ in EVENTS[host]]
 
@@ -271,6 +272,8 @@ def install(root, host, scope, python, force_both=False):
         strip_own(data)
         hooks = data.setdefault('hooks', {})
         for (name, _, matcher), command in zip(EVENTS[host], commands):
+            if name == 'PostToolUse' and post_tool_matcher:
+                matcher = post_tool_matcher  # opt-in: an empty matcher keeps every tool call, as before
             group = {'matcher': matcher} if matcher else {}
             group['hooks'] = [{'type': 'command', 'command': command, 'timeout': TIMEOUT}]
             hooks.setdefault(name, [])
@@ -435,7 +438,7 @@ def execute(a, root):
     if not a.host:
         raise ProgressError('PROGRESS_USAGE', f'hooks {a.action} needs --host claude|codex', 2)
     if a.action == 'install':
-        return install(root, a.host, a.scope, python_command(a.python), a.force_both)
+        return install(root, a.host, a.scope, python_command(a.python), a.force_both, getattr(a, 'post_tool_matcher', '') or '')
     return uninstall(root, a.host, a.scope)
 
 

@@ -10,8 +10,10 @@ and `specify_cli/integrations/base.py`), https://code.claude.com/docs/en/hooks a
 
 ## Native hook files (`progress hooks install`)
 
-`progress hooks install --host claude|codex [--scope project|user]` writes the same five events (four for Codex) into the
-host's own hook file, each command ending in `--managed-by=progress-report` so `uninstall` removes exactly those entries.
+`progress hooks install --host claude|codex [--scope project|user] [--post-tool-matcher REGEX]` writes the same five events
+into the host's own hook file, each command ending in `--managed-by=progress-report` so `uninstall` removes exactly those
+entries. `--post-tool-matcher` (for example `Bash|Task|Agent|spawn_agent`) limits the `PostToolUse` hook to matching tools;
+without it every tool call is observed, as before.
 It reads the file as JSON, keeps everything else, and refuses a second registration when Spec Kit's `speckit.progress.hook`
 entries are present. The command reference lists the files, paths and exit codes.
 
@@ -22,7 +24,7 @@ entries are present. The command reference lists the files, paths and exit codes
 | `${CLAUDE_PROJECT_DIR}` is set for hook commands and rewritten in the command (only the braced form; the bare form is `$null` in PowerShell), so a project-scope command can be repo-relative | **Verified** from the documentation |
 | Codex reads `hooks.json` from `.codex/` (project) and `~/.codex/` or `$CODEX_HOME` (user) with the same shape | **Unverified** against a running Codex; written from the documented schema |
 | Codex hooks need the experimental `codex_hooks` feature turned on | **Unverified**; the installer does not edit Codex's config |
-| Codex has no session end event; `Stop` stands in for it | **Unverified**: none is documented |
+| Codex documents no session end event; the installer still writes `SessionEnd` (the same five as Spec Kit) and `Stop` forces the final refresh | **Unverified**: none is documented |
 | Codex runs project hooks with the session's working directory, so a repo-relative command needs Codex started at the repository root | **Unverified** |
 | The Codex `PreToolUse` matcher `spawn_agent` matches the sub-agent launch tool | **Unverified**; the same matcher string is used for both hosts |
 
@@ -45,7 +47,7 @@ approving it again (Progress does not compute or check the hash). Progress only 
 trust or approval entries. `progress hooks status --host codex` reports registered and approved counts per scope and
 whether the project is trusted. It compares keys ignoring case and `\` versus `/`.
 
-The five hooks (four from the installer: Codex has no session end):
+The five hooks (the installer and Spec Kit write the same five):
 
 | Event | Matcher | Installer command (`.codex/hooks.json`) | Spec Kit command (`.codex/config.toml`) |
 | --- | --- | --- | --- |
@@ -53,7 +55,7 @@ The five hooks (four from the installer: Codex has no session end):
 | `pre_tool_use` | `Task\|Agent\|spawn_agent` | `... pre_tool_use ...` | `speckit.progress.hook pre_tool_use 10` |
 | `post_tool_use` | | `... post_tool_use ...` | `speckit.progress.hook post_tool_use 10` |
 | `stop` | | `... stop ...` | `speckit.progress.hook stop 10` |
-| `session_end` | | not installed for Codex | `speckit.progress.hook session_end 10` |
+| `session_end` | | `... session_end ...` | `speckit.progress.hook session_end 10` |
 
 Spec Kit writes its hooks into the project's `.codex/config.toml` (`[[hooks.<Event>]]` groups); `hooks status` counts
 those that name `speckit.progress.hook` and checks their approval under the `config.toml` path.

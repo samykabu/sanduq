@@ -6,7 +6,7 @@ Convert a generated diagram HTML file into a portable `.svg` and/or `.png` next 
 
 Load this file when:
 
-- The user invokes the packaged export command with an HTML file.
+- The user invokes an export command (such as Sanduq's `speckit.illustrate.export`) with an HTML file.
 - The user asks in natural language to export, save, rasterize, convert, or download a diagram in `.svg` or `.png` form. Typical phrasings:
   - "export this as PNG"
   - "save as SVG"
@@ -169,6 +169,9 @@ Default `device_scale_factor=2` for crisp output. Accept `1` for compact assets 
 
 ## Edge cases
 
+- **No source path given**: ask which `.html` file to export. Don't guess.
+- **`--scale` outside {1, 2, 3}**: reject it and name the valid values.
+- **Block metadata requested** (`--registry`, a Traceable block decomposition): follow [`export-registry.md`](export-registry.md); the sidecar is `<name>.registry.json`.
 - **Source is `assets/index.html`** (the gallery, multiple SVGs in one file): refuse the export and ask the user which specific diagram file they meant. Don't guess.
 - **No `<svg>` block found**: the source isn't a diagram file. Tell the user; don't write anything.
 - **Surrounding HTML matters to the user**: they want cards/header in the image. Tell them this skill exports diagrams only, and recommend a browser-based full-page screenshot (or a separate PDF print).
@@ -177,6 +180,8 @@ Default `device_scale_factor=2` for crisp output. Accept `1` for compact assets 
 ## What this command never does
 
 - Modifies the source HTML.
-- Adds export buttons or `<script>` tags to generated diagrams (the "no JS in deliverables" rule in §11 still stands).
+- Adds export buttons or `<script>` tags to generated diagrams (the "no JS in deliverables" rule in SKILL.md §12 still stands).
 - Auto-emits `.svg` or `.png` alongside HTML generation. Manual on every call.
 - Embeds an HTML wrapper (cards, headers) into the SVG via `foreignObject`. Too fragile across renderers.
+
+After producing the outputs, report the file paths and sizes back to the user.
