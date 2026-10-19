@@ -53,11 +53,13 @@ applies the diagram type's rules, checks the HTML, and embeds the reviewed outpu
 
 ## Post-write check
 
-Set `illustrate.hooks.self_check: true` in `.specify/workflow.yml` and the extension's `PostToolUse`
-hook checks every HTML file the agent writes or edits that contains an inline SVG: it runs the skill's
-`self_check.py`, `verify-geometry.py` and `illustration_theme.py validate` and hands the first failure
-back to the agent. Without the key the hook does nothing. On Codex, approve the project hook in `/hooks`
-once.
+Set `illustrate.hooks.self_check: true` in `.specify/workflow.yml` and a `PostToolUse` hook checks every
+HTML file the agent writes or edits that contains an inline SVG (on Codex, every file an `apply_patch` adds,
+updates or moves): it runs the skill's `self_check.py`, `verify-geometry.py` and `illustration_theme.py
+validate` and hands the first failure back to the agent. Spec Kit does not register the hook. The Workflow
+installer adds it when the key is true and removes it when the key is false. Without Workflow, run
+`python .specify/extensions/illustrate/hooks/self_check_hook.py install --host claude|codex --root .`
+yourself, and `uninstall` before you remove the extension. On Codex, approve the hook in `/hooks` once.
 
 ## Limits
 

@@ -31,12 +31,6 @@ provides:
       file: commands/speckit.illustrate.import.md
       description: 'Redraws a draw.io, Mermaid or Excalidraw file as a themed Illustrate diagram with a fidelity ledger. Use when asked to "import this .drawio".'
 
-events:
-  post_tool_use:
-    command: speckit.illustrate.hook
-    matcher: "Write|Edit"
-    timeout: 60
-
 tags:
   - "diagram"
   - "architecture"

@@ -97,10 +97,11 @@ visual identity.
 
 ## Post-write check (opt-in)
 
-The extension ships a `PostToolUse` hook for Claude Code and Codex (`hooks/self_check_hook.py`,
-registered through the manifest's `events:` entry). After a Write or Edit of an `.html` file that contains `<svg`,
-it runs the skill's `self_check.py`, `verify-geometry.py` and `illustration_theme.py validate` and
-returns the first failure to the agent. It stays a no-op until `.specify/workflow.yml` sets:
+The extension ships a `PostToolUse` hook for Claude Code and Codex (`hooks/self_check_hook.py`).
+After a Claude Write, Edit or MultiEdit, or a Codex `apply_patch` (every file it adds, updates or moves), each
+written `.html` file that contains `<svg` gets the skill's `self_check.py`, `verify-geometry.py` and
+`illustration_theme.py validate`, and the first failure goes back to the agent. It is off until
+`.specify/workflow.yml` sets:
 
 ```yaml
 illustrate:
@@ -108,8 +109,23 @@ illustrate:
     self_check: true
 ```
 
-With the key missing or false, or without that file, the hook exits at once. Codex runs project hooks
-only after you approve them in `/hooks`.
+With the key missing or false, or without that file, the hook exits at once.
+
+Spec Kit does not register this hook. The Workflow installer wires it when the key is true and removes it
+when the key is false, on every apply and upgrade. Without Workflow, wire it yourself once per host:
+
+```bash
+python .specify/extensions/illustrate/hooks/self_check_hook.py install --host claude --root .
+python .specify/extensions/illustrate/hooks/self_check_hook.py install --host codex --root .
+```
+
+`install` writes one native entry that runs the script through a one-line launcher (`.claude/settings.json`, or
+`.codex/hooks.json` with a matcher that includes `apply_patch`); `uninstall` removes it and `status` reports
+it. Both also remove the dispatcher entry that Illustrate 2.5.0 and earlier registered through Spec Kit, keep
+every other hook, and change nothing on a rerun. Each prints `host`, `file`, `added`, `removed` and
+`needs_approval` (`--json` for one JSON object). Codex runs a new hook only after you approve it in `/hooks`.
+Run `uninstall` for each host before `specify extension remove illustrate`: Spec Kit does not know the entry.
+If you forget, the launcher finds the script gone and exits 0, so the leftover entry does nothing.
 
 ## Install and update
 
