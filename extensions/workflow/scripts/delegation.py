@@ -1054,7 +1054,8 @@ def install_skill_locked(root, host, scope, force_scope):
     # failed or interrupted install never leaves a partial skill behind.
     staging = backups / ('.staging-' + uuid.uuid4().hex)
     try:
-        shutil.copytree(source, staging, ignore=shutil.ignore_patterns('test', 'runs', 'node_modules'))
+        # Runtime only (W7): the README images in assets/ and the READMEs stay in the package, not the skill folder.
+        shutil.copytree(source, staging, ignore=shutil.ignore_patterns('test', 'runs', 'node_modules', 'assets', 'README*'))
         problem, reason = check_copy(staging, node)
         require(problem is None, 'DELEGATE_SKILL_INSTALL_FAILED: ' + str(reason or problem))
     except Exception:
