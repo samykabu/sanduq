@@ -21,7 +21,7 @@ Fixed tool framing is identical across approaches and is not counted. Setup cost
 - `cl100k_base` is shown as a second exact count for an older encoding.
 - **Claude: UNVERIFIED.** There is no exact local Claude tokenizer. No Claude figure is claimed. `counting.claude_estimate` can label an ESTIMATED count when `ANTHROPIC_API_KEY` and the `anthropic` SDK are present; it is not part of this table.
 - Bytes are a diagnostic, not a cost.
-- Measured usage from real runs belongs in `scripts/live_ab.py`, which reports the harness's own token usage.
+- Measured usage from real runs belongs in `tests/live_ab.py`, which reports the harness's own token usage.
 
 ## Assumptions that favour neither side
 

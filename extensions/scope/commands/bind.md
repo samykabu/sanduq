@@ -1,5 +1,5 @@
 ---
-description: "Binds a newly written specification to its validated source GitHub issue, writes scope-source.json and sets Feature Specification before Project sync. Runs as the mandatory after_specify hook right after Specify; it never creates a second issue."
+description: "Runs as the after_specify hook: binds the new spec to its source issue. Use when asked to bind a spec after Specify."
 ---
 
 # Bind source issue

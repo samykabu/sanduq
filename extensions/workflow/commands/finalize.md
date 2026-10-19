@@ -1,5 +1,5 @@
 ---
-description: "Verifies readiness and creates or updates the single pull request for an issue-bound feature, with inline visuals, then verifies the merge when reported. Use when asked to finish, finalize, open or update the PR, or check a merged feature."
+description: 'Checks readiness and creates or updates the feature''s single pull request, then verifies the merge. Use when the feature is ready, or for "open the PR".'
 ---
 
 # Sanduq Workflow: finalize

@@ -7,7 +7,8 @@ description: "Drives an issue-bound feature through the Spec Kit lifecycle, from
 
 Runtime: `python .specify/extensions/workflow/scripts/workflow.py` (argument arrays or quoted
 paths; missing dependencies only from the pinned `requirements.txt`). Read this file,
-receipt-rules.md, dispatcher-operations.md and delegation-and-decisions.md once per session.
+receipt-rules.md, dispatcher-operations.md and delegation-and-decisions.md once per session, and
+delegation.md once a claim carries `delegation` or `environment`.
 
 ## Entry points
 
@@ -26,13 +27,14 @@ receipt-rules.md, dispatcher-operations.md and delegation-and-decisions.md once 
    again. Each stage reference is self-sufficient. The claim may add `mode` (`revalidate`,
    `bind-only`), `merged`, `profile`, `side_effects` and `project_sync`. Handoff and GitHub rules:
    [interruption-and-github-behavior](references/dispatcher-operations.md#interruption-and-github-behavior).
-4. Invoke the command through its installed skill, or its delegation route when
-   `delegation.enabled` ([delegation-and-decisions.md](references/delegation-and-decisions.md));
+4. Invoke the command through its installed skill
+   ([delegation-and-decisions.md](references/delegation-and-decisions.md)), or its delegation route
+   when the claim carries one ([delegation.md](references/delegation.md));
    material choices go to the GitHub issue. `workflow:*` commands are runtime stages you run
    yourself, as their reference says. Retest after every fix.
 5. Before writing any receipt, read [receipt-rules.md](references/receipt-rules.md) (once per
-   session): failed, skipped or pending work cannot pass and a pending decision blocks. Add the
-   stage fields its reference names. Drift: [recovery.md](references/recovery.md).
+   session): failed, skipped or pending work cannot pass and a pending decision blocks. Start
+   from the claim's `receipt_template`. Drift: [recovery.md](references/recovery.md).
 6. `complete --feature ... --token ... --receipt <file>` prints `{ok, stage, next}`; claim the
    next stage without asking. When blocked, `pause --reason` and report the actual question or
    failure. Keep required human review and deployment gates.

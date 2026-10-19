@@ -15,7 +15,7 @@
     h1 { font-family: var(--font-serif); font-size: clamp(1.75rem, 3vw + 1rem, 2.5rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; margin-bottom: 0.5rem; }
     .subtitle { font-size: 1rem; line-height: 1.55; color: var(--color-muted); max-width: 64ch; }
     .diagram-container { background: var(--color-paper-2); border-radius: 8px; border: 1px solid var(--color-rule); padding: 1.5rem; overflow-x: auto; }
-    svg { width: 100%; min-width: 960px; display: block; }
+    svg { width: 100%; min-width: 1000px; display: block; }
     .cards { display: grid; grid-template-columns: 1.1fr 1fr 1fr 0.9fr; gap: 1rem; margin-top: 1.5rem; }
     @media (max-width: 980px) { .cards { grid-template-columns: 1fr 1fr; } }
     @media (max-width: 600px) { .cards { grid-template-columns: 1fr; } }
@@ -43,7 +43,9 @@
     </div>
 
     <div class="diagram-container">
-      <svg viewBox="0 0 1000 488" xmlns="http://www.w3.org/2000/svg">
+      <svg viewBox="0 0 1000 488" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="datalake-full-title datalake-full-desc">
+        <title id="datalake-full-title">Open data lake end-to-end stack</title>
+        <desc id="datalake-full-desc">Data lake stack in which app servers and databases feed Apache NiFi, Airflow schedules the pipelines, MinIO stores the objects, and Trino and StarRocks serve queries to consumers.</desc>
         <defs>
           <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
             <circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"/>

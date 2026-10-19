@@ -20,21 +20,20 @@ Supported flags:
 
 ## Instructions
 
-1. Load `.specify/extensions/assure/skills/assure/SKILL.md`.
-2. Explain the two policies in plain language:
-   - `integrated`: `Assure.Analyze` is mandatory before `speckit.implement`, and the sanduq PR
-     workflow must run `Assure.Document` when its feature evidence is missing or stale.
+1. Explain the two policies in plain language:
+   - `integrated`: `speckit.assure.analyze` is mandatory before `speckit.implement`, and the sanduq
+     PR workflow must run `speckit.assure.document` when its feature evidence is missing or stale.
    - `manual`: both commands remain available, but their lifecycle hooks are optional.
-3. If `--mode` is absent and the session is interactive, ask which policy to use. Recommend
+2. If `--mode` is absent and the session is interactive, ask which policy to use. Recommend
    `integrated`. In a non-interactive first run, default to `manual`.
-4. Run the installed script from the repository root:
+3. Run the installed script from the repository root:
 
    ```text
    python .specify/extensions/assure/scripts/assure_init.py --mode <integrated|manual>
    ```
 
    Forward `--dry-run` when supplied.
-5. Verify that `.specify/extensions/assure/assure-config.yml` and `.specify/extensions.yml` reflect the
+4. Verify that `.specify/extensions/assure/assure-config.yml` and `.specify/extensions.yml` reflect the
    selected mode. Tell the user to commit both files so every checkout uses the same policy.
 
 Never claim that direct `gh pr create` or the GitHub web UI can execute agent commands. The

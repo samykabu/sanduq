@@ -93,6 +93,10 @@ def upgrade(root, version, apply=False, packages=None, runner=command, preserve_
                 installed = {}
             result['replaced_unrecognized_aliases'] = (installed.get('replaced_unrecognized_aliases') or []
                                                        if isinstance(installed, dict) else [])
+            # The new installer reconciled Illustrate's hook; surface its record and any Codex /hooks step.
+            for key in ('illustrate', 'illustrate_hook_approval', 'codex_hook_approval'):
+                if isinstance(installed, dict) and installed.get(key):
+                    result[key] = installed[key]
             result.update(applied=True, backup=str(backup), commands=log)
             write(backup / 'result.json', {'ok': True, **result})
             return result
@@ -116,8 +120,10 @@ if __name__ == '__main__':
                         help='Also install an optional extension (for example: progress) while upgrading')
     args = parser.parse_args()
     try:
-        print(json.dumps(upgrade(args.root, args.version, args.apply, args.packages, preserve_ci=args.preserve_ci,
-                                 replace_unrecognized_aliases=args.replace_unrecognized_aliases,
-                                 with_optional=args.with_optional), indent=2))
+        result = upgrade(args.root, args.version, args.apply, args.packages, preserve_ci=args.preserve_ci,
+                         replace_unrecognized_aliases=args.replace_unrecognized_aliases, with_optional=args.with_optional)
+        print(json.dumps(result, indent=2))
+        for key in ('codex_hook_approval', 'illustrate_hook_approval'):
+            if result.get(key): print(result[key], file=sys.stderr)
     except (WorkflowError, ValueError, OSError, KeyError) as error:
         print(json.dumps({'ok': False, 'error': str(error)})); sys.exit(1)

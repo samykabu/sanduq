@@ -6,9 +6,6 @@ Build a coverage matrix for every acceptance scenario. Check for applicable unit
 API-contract, screenshot, accessibility, fixture, and diagram work. Add concrete tasks to `tasks.md`
 inside marker-delimited sections so reruns replace rather than duplicate generated tasks.
 
-In lifecycle-integrated mode, analysis is a gate: finish with no unexplained critical gaps, then
-record freshness with the `assure_state.py record` call in the command's last step.
-
 ## Task block rules
 
 - Preserve the existing Spec Kit task format: `- [ ] T### [P?] [US#?] Description with file path`.

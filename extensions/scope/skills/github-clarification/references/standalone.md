@@ -7,8 +7,9 @@ Applies without `.specify/workflow.yml`.
 On `CLARIFICATION_WAITING`, STOP immediately. Ask the user to answer the individual comments on
 the GitHub issue (tick one option or reply with the question ID), then move the card to
 **Feature Specification** and rerun. Do not post more questions, move the card, spend a round,
-edit the spec or wait in chat. Mermaid `diagram` source or an Illustrate `diagram_image` are
-both allowed.
+edit the spec or wait in chat. Diagrams:
+`.specify/extensions/scope/references/clarification-diagrams.md`, read only when a question
+carries one.
 
 ## Automatic Plan handoff
 

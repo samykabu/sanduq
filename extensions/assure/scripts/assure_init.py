@@ -50,27 +50,23 @@ def update_hooks(text: str, integrated: bool) -> tuple[str, int]:
     return output, changed
 
 
-# Folders assure_scan.py prunes by default (its DEFAULT_EXCLUDE); users edit the written list.
-SCAN_EXCLUDE = ('.git', 'node_modules', 'bin', 'obj', 'dist', 'build', '.next', '.nuxt', '.turbo',
-                '.expo', 'coverage', '.cache')
+TEMPLATE = Path(__file__).resolve().parents[1] / "assure-config.template.yml"
 
 
 def config_text(mode: str) -> str:
-    integrated = mode == "integrated"
-    enabled = str(integrated).lower()
-    return f'''schema_version: "1.0"
-lifecycle:
-  mode: {mode}
-  require_analyze_before_implement: {enabled}
-  require_document_before_pr: {enabled}
-freshness:
-  policy: feature-inputs-and-working-tree
-  state_directory: .specify/extensions/assure/state
-output:
-  directory_name: qa
-scan:
-  exclude:
-''' + ''.join(f'    - {name}\n' for name in SCAN_EXCLUDE)
+    """The packaged template (manual mode; it holds the default scan.exclude list) with the mode applied."""
+    enabled = str(mode == "integrated").lower()
+    text = TEMPLATE.read_text(encoding="utf-8")
+    for old, new in (("  mode: manual\n", f"  mode: {mode}\n"),
+                     ("  require_analyze_before_implement: false\n", f"  require_analyze_before_implement: {enabled}\n"),
+                     ("  require_document_before_pr: false\n", f"  require_document_before_pr: {enabled}\n")):
+        text = text.replace(old, new, 1)
+    lifecycle = (yaml.safe_load(text) or {}).get("lifecycle")
+    expected = {"mode": mode, "require_analyze_before_implement": enabled == "true",
+                "require_document_before_pr": enabled == "true"}
+    if lifecycle != expected:
+        raise SystemExit(f"{TEMPLATE} no longer has the expected lifecycle block; reinstall the assure extension")
+    return text
 
 
 def main() -> None:

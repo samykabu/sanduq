@@ -14,14 +14,11 @@ handoff.
 - Return the outcome to the workflow dispatcher when it holds the clarification claim; never
   dispatch Plan yourself. Without an active claim, continue through the workflow entry point for
   the same bound feature. Never run the legacy interactive chat loop.
-- Diagrams: a Mermaid `diagram` (raw source, no fences) is rendered as a mermaid block. An
-  Illustrate PNG is optional: export it, commit and push it, and supply `diagram_image` with
-  `diagram_text`; the runtime embeds it through a commit-pinned GitHub URL or posts the text
-  with the reason (`.specify/extensions/scope/references/illustrate-plan.md`). Never expose
-  private assets.
-- Question cap: with `clarification.max_questions_per_round`, publish refuses a larger round with
-  `CLARIFICATION_TOO_MANY_QUESTIONS: <n> > <cap>; defer <keys>`. Give questions an integer
-  `priority` (1 is most important) and move the named keys to a later round.
+- Diagrams: read `.specify/extensions/scope/references/clarification-diagrams.md` only when a
+  question carries one.
+- Question cap: give questions an integer `priority` (1 is most important); over
+  `clarification.max_questions_per_round`, move the keys `CLARIFICATION_TOO_MANY_QUESTIONS` names
+  to a later round.
 
 ## In-session first round
 

@@ -91,29 +91,23 @@ def progress_version(root):
     return None
 
 
-def progress_at_least(root, minimum):
-    """True only when the installed Progress is known to be at least `minimum` (a tuple)."""
-    version = progress_version(root)
-    return version is not None and version >= tuple(minimum)
-
-
 def _off(data):
     """True when a config object is itself switched off (`enabled: false` or `disabled: true`)."""
     return data.get('enabled') is False or data.get('disabled') is True
 
 
-def _json_hooks(data):
-    """True when a parsed host config holds an enabled command entry that runs a Progress hook. A disabled object
-    disables everything beneath it, so the walk does not descend into it."""
+def _json_hooks(data, markers=HOOK_MARKERS):
+    """True when a parsed host config holds an enabled command entry that runs a hook carrying one of `markers` (a
+    Progress hook by default). A disabled object disables everything beneath it, so the walk does not descend."""
     if isinstance(data, dict):
         if _off(data):
             return False
         command = data.get('command')
-        if isinstance(command, str) and any(m in command for m in HOOK_MARKERS):
+        if isinstance(command, str) and any(m in command for m in markers):
             return True
-        return any(_json_hooks(v) for v in data.values())
+        return any(_json_hooks(v, markers) for v in data.values())
     if isinstance(data, list):
-        return any(_json_hooks(v) for v in data)
+        return any(_json_hooks(v, markers) for v in data)
     return False
 
 
@@ -154,7 +148,7 @@ def _norm_path(value):
     return text.lower() if os.name == 'nt' else text
 
 
-def _hook_slots(data):
+def _hook_slots(data, markers=HOOK_MARKERS):
     """Yield (event, group index, hook index) for each enabled Progress hook in a parsed Codex hooks config.
     Nested groups (`hooks.Event[i].hooks[j]`) and flat groups (the entry itself is the hook, index 0) are accepted."""
     hooks = data.get('hooks') if isinstance(data, dict) else None
@@ -169,7 +163,7 @@ def _hook_slots(data):
             inner = group.get('hooks')
             entries = inner if isinstance(inner, list) else [group]
             for hi, entry in enumerate(entries):
-                if _json_hooks(entry):
+                if _json_hooks(entry, markers):
                     yield _snake(event), gi, hi
 
 
@@ -198,7 +192,7 @@ def _codex_approvals(user):
     return keys
 
 
-def _codex_active(root, configs, user_toml, user_files):
+def _codex_active(root, configs, user_toml, user_files, markers=HOOK_MARKERS):
     """(active, registered). A Progress hook is active only when Codex will run it: project-defined hooks need the
     project trusted and an approval entry for that exact file, event, group and hook index; user-level hooks need the
     approval entry."""
@@ -208,7 +202,7 @@ def _codex_active(root, configs, user_toml, user_files):
     sources = [(Path(root) / n, configs[n], True) for n in HOST_FILES['codex'] if n in configs]
     sources += [(p, d, False) for p, d in user_files]
     for path, data, project in sources:
-        for event, gi, hi in _hook_slots(data):
+        for event, gi, hi in _hook_slots(data, markers):
             registered = True
             if (not project or trusted) and (_norm_path(path), event, str(gi), str(hi)) in approvals:
                 return True, True
@@ -261,10 +255,8 @@ def hooks_registered(root, host):
     return hooks_state(root, host)[0]
 
 
-def hooks_state(root, host):
-    """(active, unapproved). `unapproved` is True when Codex hooks are registered but Codex would skip them."""
-    if host not in HOSTS or not extension_enabled(root):
-        return False, False
+def _project_configs(root):
+    """The project's parsed host configs; an absent or unreadable one is left out."""
     configs = {}
     for name in [n for files in HOST_FILES.values() for n in files]:
         try:
@@ -274,6 +266,26 @@ def hooks_state(root, host):
             configs[name] = tomllib.loads(text) if name.endswith('.toml') else json.loads(text)
         except Exception:  # absent or unreadable config is not evidence of collection
             continue
+    return configs
+
+
+def codex_hook_state(root, markers):
+    """(registered, active) for Codex hooks whose command carries one of `markers`: active only when Codex will run
+    one (hooks not switched off, the project trusted for a project hook, and an approval entry for that exact hook).
+    Like `hooks_state`, the stored hash is not verified, so an approval gone stale after an edit is not detected."""
+    configs, user = _project_configs(root), _user_configs()
+    active, registered = _codex_active(root, configs, user.get('codex'), _user_codex_files(user.get('codex')), markers)
+    if (any(_globally_disabled(configs.get(n)) for n in HOST_FILES['codex'])
+            or bool(_globally_disabled(user.get('codex')))):
+        active = False
+    return registered, active
+
+
+def hooks_state(root, host):
+    """(active, unapproved). `unapproved` is True when Codex hooks are registered but Codex would skip them."""
+    if host not in HOSTS or not extension_enabled(root):
+        return False, False
+    configs = _project_configs(root)
     user = _user_configs()
     if host == 'claude':
         # Local settings override project settings, which override user settings, when they state the switch.

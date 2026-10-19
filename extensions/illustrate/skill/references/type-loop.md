@@ -162,6 +162,7 @@ SKILL.md §6 applies in full except for the two Loop-specific connector primitiv
 
 - Ring arrows are same-radius circular arcs, solid, and clockwise. Every path uses `A R R 0 0 1`; destination markers land on station edges and no connector ends at a center point.
 - Spokes are dashed and point inward. A solid spoke destroys the visual distinction between operating flow and write-back.
+- Mark ring paths `class="ring"` (one `M … A R R 0 0 1 …` arc each) and spokes `class="spoke"` (one `M … L …` segment each): `self_check.py --strict` accepts exactly those shapes as this exception and checks every other connector against rule 1.
 - Labels use opaque masks and maintain a visible 6–10px connector gap. Never place text on the stroke.
 - No ring connector or spoke may overlap another connector. Ring paths remain outside the hub; spokes occupy distinct radial routes.
 - When two spokes must leave the same station edge, fan their attach points by the §6 formula with at least 12px separation. The normal Loop has one spoke per station; use a second only when the semantics cannot be merged.

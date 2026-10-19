@@ -15,8 +15,8 @@
         "source": "git-subdir",
         "url": "https://github.com/samykabu/sanduq-skills.git",
         "path": "skills/illustration-tools",
-        "ref": "illustration-tools-v3.5.0",
-        "sha": "f260c7b5f68444674dd77d5a4a4846fb86b939fc"
+        "ref": "illustration-tools-v3.6.0",
+        "sha": "f12b80a335910da88668724d5a17f74f23ca1e9c"
       },
       "description": "Generate, import, and export forty-four kinds of technical, product, architecture, process, and data illustrations through one unified skill.",
       "author": {
@@ -73,8 +73,8 @@
         "source": "git-subdir",
         "url": "https://github.com/samykabu/sanduq-skills.git",
         "path": "skills/agent-tools",
-        "ref": "agent-tools-v1.5.0",
-        "sha": "f260c7b5f68444674dd77d5a4a4846fb86b939fc"
+        "ref": "agent-tools-v1.6.0",
+        "sha": "f12b80a335910da88668724d5a17f74f23ca1e9c"
       },
       "description": "Delegate one task to an external agent CLI and get back a measured result: status with provenance, git-measured file changes, and normalised token usage.",
       "author": {

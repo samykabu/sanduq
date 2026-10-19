@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.4.0] - 2026-10-20
+
+Optimization round 3 (fixes to 4.3.0).
+
+- `pr_publish.py`: a failed PR lookup is an error, not "no PR"; unpaired, repeated or reversed markers are refused; relative images become pinned blob URLs verified at HEAD before the lint, so the published body's images resolve and the lint hash covers the final body.
+
 ## [4.3.0] - 2026-10-19
 
 Optimization round 2.

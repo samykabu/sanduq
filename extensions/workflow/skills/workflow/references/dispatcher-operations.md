@@ -46,10 +46,9 @@ invent percentages, stop on an estimate, or ask for a new session because usage 
 ## Project Sync and task-issue sync
 
 `claim` prints `project_sync: false`, or `{"phase": ..., "command": ...}` at a
-`project_sync.points` stage (absent: all six). Stage to phase: Specify `open`, Plan `analysis`,
-Analyze `engineer-review`, Tasks-to-Issues `ready`, before Execute `in-progress`, after PR
-`in-review`. When a GitHub Project is configured, run the `command` as printed (it ends in
-`--summary`) at that point instead of opening the sync command; when false, skip it. Managed
+`project_sync.points` stage (absent: all six). When a GitHub Project is configured, run the
+`command` as printed (it ends in `--summary`) after the stage, or for Execute before
+implementation starts, instead of opening the sync command; when false, skip it. Managed
 Project 2.1+ uses the bound parent and never writes task issues. When policy requires board
 sync, require actual success; a graceful skip is not success. Native task-issue state syncs
 once per phase ([execution-report.md](execution-report.md)). Never infer human-review

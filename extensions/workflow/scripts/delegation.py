@@ -690,11 +690,6 @@ def ledger_trust_state(root, feature):
     return 'trusted' if recorded == ledger_bytes_digest(ledger_path(root, feature)) else 'untrusted'
 
 
-def ledger_state_trusted(root, feature):
-    """Back-compat boolean: ``True`` unless the tri-state read is ``'untrusted'``."""
-    return ledger_trust_state(root, feature) != 'untrusted'
-
-
 def latest_attempt(root, feature, identity):
     """The final attempt in the reassignment chain for one identity, else None.
 
@@ -1054,7 +1049,8 @@ def install_skill_locked(root, host, scope, force_scope):
     # failed or interrupted install never leaves a partial skill behind.
     staging = backups / ('.staging-' + uuid.uuid4().hex)
     try:
-        shutil.copytree(source, staging, ignore=shutil.ignore_patterns('test', 'runs', 'node_modules'))
+        # Runtime only (W7): the README images in assets/ and the READMEs stay in the package, not the skill folder.
+        shutil.copytree(source, staging, ignore=shutil.ignore_patterns('test', 'runs', 'node_modules', 'assets', 'README*'))
         problem, reason = check_copy(staging, node)
         require(problem is None, 'DELEGATE_SKILL_INSTALL_FAILED: ' + str(reason or problem))
     except Exception:

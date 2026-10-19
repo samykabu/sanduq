@@ -1,5 +1,5 @@
 ---
-description: Processes pending merged archives at session start and resumes an interrupted run (before_specify hook). Use when asked to "process archives".
+description: Processes merged pending archives and resumes interrupted runs. Use when asked to "process archives".
 ---
 
 # Pending archive session

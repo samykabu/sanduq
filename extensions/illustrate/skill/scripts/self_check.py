@@ -22,6 +22,13 @@ excepted), the font role per element class (the terminal variant excepted), no
 pure black, and orthogonal connectors (`verify-geometry.py --orthogonal`).
 `lint-skin.py` imports the skin checks (pure black, scripts, external assets)
 from here. Without `--strict` the run is unchanged.
+
+`--profile technical-color` is the check for the technical-color family, whose
+references require a built-in export toolbar: it runs the default checks but
+allows exactly the two SRI-pinned CDN scripts, the toolbar's four `onclick`
+handlers on `<button>`, and one inline toolbar script equal to the one in
+`assets/technical-color/architecture/templates/template.html` (theme colour and
+download file name aside). Nothing else is relaxed.
 """
 
 from __future__ import annotations
@@ -37,6 +44,18 @@ from urllib.parse import urlparse
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
 MOTION_TEMPLATE = SKILL_DIR / "assets" / "template-motion.html"
+TOOLBAR_TEMPLATE = SKILL_DIR / "assets" / "technical-color" / "architecture" / "templates" / "template.html"
+# references/technical-color-common.md#export-toolbar pins these; a version bump changes both URL and hash.
+TOOLBAR_CDN = {
+    "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js":
+        "sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H",
+    "https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js":
+        "sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/",
+}
+TOOLBAR_HANDLERS = {
+    "copyAsImage(this)", "downloadPNG(this)", "downloadPDF(this)", "this.parentElement.classList.toggle('expanded')",
+}
+PROFILES = ("editorial", "technical-color")
 THEME_REGISTRY = SKILL_DIR / "assets" / "illustration-themes.yml"
 MODES = {"none", "reveal", "step", "loop"}
 ACTIONS = {"play", "pause", "replay", "prev", "next"}
@@ -86,6 +105,7 @@ class DiagramParser(HTMLParser):
         self.css_attributes: list[str] = []
         self.svgs: list[dict[str, object]] = []
         self.unsafe: list[str] = []
+        self.handlers: list[tuple[str, str, str]] = []  # (tag, attribute, value) of every on* attribute
         self.references: list[tuple[str, str, str]] = []
         self._svg_depth = 0
         self._current_svg: dict[str, object] | None = None
@@ -106,7 +126,7 @@ class DiagramParser(HTMLParser):
             self.unsafe.append(f"<{tag}> is not allowed in a diagram file")
         for key, value in normalized_attrs:
             if key.startswith("on"):
-                self.unsafe.append(f"executable attribute {key} on <{tag}>")
+                self.handlers.append((tag, key, value))
             if key == "srcdoc":
                 self.unsafe.append(f"srcdoc attribute on <{tag}>")
             if key in REFERENCE_ATTRS:
@@ -289,6 +309,59 @@ def canonical_controller() -> str:
     body = parser.scripts[0]["body"]
     assert isinstance(body, list)
     return normalized_controller("".join(body))
+
+
+def normalized_toolbar(body: str) -> str:
+    """The toolbar script with its theme colour, download names and layout whitespace masked."""
+    # shortcut: whitespace around punctuation is dropped, so an ASI-only difference would compare equal;
+    # tokenize the script if a hostile file ever needs telling apart from the template.
+    body = re.sub(r"backgroundColor:\s*'#[0-9a-fA-F]{3,8}'", "backgroundColor:BG", body)
+    body = re.sub(r"(link\.download\s*=\s*|pdf\.save\()'[\w.-]+\.(?:png|pdf)'", r"\1NAME", body)
+    return re.sub(r"\s*([{}()\[\];,:=<>+*/?&|!.-])\s*", r"\1", re.sub(r"\s+", " ", body)).strip()
+
+
+def canonical_toolbar() -> str:
+    if not TOOLBAR_TEMPLATE.is_file():
+        raise RuntimeError(f"cannot find the technical-color toolbar at {TOOLBAR_TEMPLATE}")
+    inline = [s for s in parsed_document(TOOLBAR_TEMPLATE.read_text(encoding="utf-8")).scripts if not s["attrs"]]
+    if len(inline) != 1:
+        raise RuntimeError("the technical-color template must contain one inline toolbar script")
+    return normalized_toolbar("".join(inline[0]["body"]))  # type: ignore[arg-type]
+
+
+def toolbar_script(script: dict[str, object], toolbar: str) -> bool:
+    """True for a pinned CDN script or the canonical inline toolbar script of the technical-color family."""
+    attrs = script["attrs"]
+    assert isinstance(attrs, dict)
+    if not script["closed"]:
+        return False
+    if attrs:
+        src = attrs.get("src", "")
+        return (
+            set(script["attr_names"]) == {"src", "integrity", "crossorigin"}  # type: ignore[arg-type]
+            and len(script["attr_names"]) == 3  # type: ignore[arg-type]
+            and TOOLBAR_CDN.get(src) == attrs.get("integrity")
+            and attrs.get("crossorigin") == "anonymous"
+            and not "".join(script["body"]).strip()  # type: ignore[arg-type]
+        )
+    return normalized_toolbar("".join(script["body"])) == toolbar  # type: ignore[arg-type]
+
+
+def apply_technical_color(parser: DiagramParser, errors: list[str]) -> None:
+    """Take the export toolbar the technical-color references require out of the checks; refuse a second copy."""
+    try:
+        toolbar = canonical_toolbar()
+    except RuntimeError as exc:
+        errors.append(str(exc))
+        return
+    allowed = [s for s in parser.scripts if toolbar_script(s, toolbar)]
+    sources = [s["attrs"].get("src", "inline") for s in allowed]  # type: ignore[union-attr]
+    if len(sources) != len(set(sources)):
+        errors.append("technical-color toolbar scripts may appear once each")
+    parser.scripts = [s for s in parser.scripts if not any(s is a for a in allowed)]
+    pinned = {s["attrs"].get("src") for s in allowed if s["attrs"]}  # type: ignore[union-attr]
+    parser.references = [r for r in parser.references if not (r[0] == "script" and r[2] in pinned)]
+    parser.handlers = [h for h in parser.handlers if not (h[0] == "button" and h[1] == "onclick" and h[2] in TOOLBAR_HANDLERS)]
 
 
 def check_svgs(parser: DiagramParser, errors: list[str]) -> None:
@@ -818,11 +891,16 @@ def strict_errors(source: str) -> list[str]:
     return errors
 
 
-def verify(path: Path, strict: bool = False) -> list[str]:
+def verify(path: Path, strict: bool = False, profile: str = "editorial") -> list[str]:
+    if profile not in PROFILES:
+        raise ValueError(f"unknown profile {profile!r}; choose one of {', '.join(PROFILES)}")
     source = path.read_text(encoding="utf-8")
     parser = parsed_document(source)
     errors: list[str] = []
+    if profile == "technical-color":
+        apply_technical_color(parser, errors)
     errors.extend(parser.unsafe)
+    errors.extend(f"executable attribute {key} on <{tag}>" for tag, key, _value in parser.handlers)
     check_css_references(parser, errors)
     for tag, rel, value in parser.references:
         finding = reference_error(tag, rel, value)
@@ -844,11 +922,17 @@ def main() -> int:
     argument_parser.add_argument(
         "--strict", action="store_true", help="also run the mechanical taste-gate checks (references/taste-gate.md)"
     )
+    argument_parser.add_argument(
+        "--profile", choices=PROFILES, default="editorial",
+        help="technical-color allows that family's pinned export toolbar (and is not combined with --strict)",
+    )
     args = argument_parser.parse_args()
+    if args.strict and args.profile != "editorial":
+        argument_parser.error("--strict is the editorial taste gate; run technical-color files with --profile alone")
     failed = False
     for path in args.files:
         try:
-            errors = verify(path, strict=args.strict)
+            errors = verify(path, strict=args.strict, profile=args.profile)
         except (OSError, UnicodeError) as exc:
             errors = [str(exc)]
         if errors:

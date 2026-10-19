@@ -48,7 +48,7 @@
       margin-bottom: 1.5rem;
     }
 
-    svg { width: 100%; min-width: 900px; display: block; }
+    svg { width: 100%; min-width: 1000px; display: block; }
   </style>
 </head>
 <body>
@@ -56,7 +56,9 @@
     <p class="eyebrow">Sequence · Illustrate · Hand</p>
     <h1>Article request, cold cache</h1>
 
-    <svg viewBox="0 0 1000 584" xmlns="http://www.w3.org/2000/svg">
+    <svg viewBox="0 0 1000 584" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="sequence-title sequence-desc">
+        <title id="sequence-title">Article request, cold cache</title>
+        <desc id="sequence-desc">Sequence of a reader's browser requesting an article from the Cloudflare edge, which misses its cache, fetches the rendered MDX page from the Astro origin, returns it and sends an async pageview beacon to analytics.</desc>
         <defs>
           <!-- Dot grid background -->
           <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">

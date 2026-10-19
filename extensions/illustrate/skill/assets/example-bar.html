@@ -20,7 +20,7 @@
     .frame { max-width: 1200px; width: 100%; }
     .eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem; }
     h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 1.5rem; }
-    svg { width: 100%; min-width: 760px; display: block; }
+    svg { width: 100%; min-width: 1000px; display: block; }
   </style>
 </head>
 <body>
@@ -28,7 +28,9 @@
     <p class="eyebrow">Bar · Illustrate</p>
     <h1>Sprint velocity · 8-sprint view</h1>
 
-    <svg viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg">
+    <svg viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="bar-title bar-desc">
+      <title id="bar-title">Sprint velocity over eight sprints</title>
+      <desc id="bar-desc">Bar chart of story points completed in sprints 1 to 8, with sprint 5 the record high at 110 points.</desc>
       <defs>
         <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
           <circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"/>
@@ -63,43 +65,43 @@
 
       <!-- ─── BARS (pitch=110, width=72, pad=19) ─── -->
       <!-- S1: v=72, h=228, y=192 -->
-      <rect x="99" y="192" width="72" height="228" fill="#f5f5f5"/>
-      <rect x="99" y="192" width="72" height="228" fill="rgba(79,93,117,0.15)" stroke="#4f5d75" stroke-width="1"/>
+      <rect x="99" data-value="72" y="192" width="72" height="228" fill="#f5f5f5"/>
+      <rect x="99" data-value="72" y="192" width="72" height="228" fill="rgba(79,93,117,0.15)" stroke="#4f5d75" stroke-width="1"/>
       <text x="135" y="184" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">72</text>
 
       <!-- S2: v=88, h=280, y=140 -->
-      <rect x="209" y="140" width="72" height="280" fill="#f5f5f5"/>
-      <rect x="209" y="140" width="72" height="280" fill="rgba(79,93,117,0.15)" stroke="#4f5d75" stroke-width="1"/>
+      <rect x="209" data-value="88" y="140" width="72" height="280" fill="#f5f5f5"/>
+      <rect x="209" data-value="88" y="140" width="72" height="280" fill="rgba(79,93,117,0.15)" stroke="#4f5d75" stroke-width="1"/>
       <text x="245" y="132" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">88</text>
 
       <!-- S3: v=95, h=300, y=120 -->
-      <rect x="319" y="120" width="72" height="300" fill="#f5f5f5"/>
-      <rect x="319" y="120" width="72" height="300" fill="rgba(79,93,117,0.15)" stroke="#4f5d75" stroke-width="1"/>
+      <rect x="319" data-value="95" y="120" width="72" height="300" fill="#f5f5f5"/>
+      <rect x="319" data-value="95" y="120" width="72" height="300" fill="rgba(79,93,117,0.15)" stroke="#4f5d75" stroke-width="1"/>
       <text x="355" y="112" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">95</text>
 
       <!-- S4: v=78, h=248, y=172 -->
-      <rect x="429" y="172" width="72" height="248" fill="#f5f5f5"/>
-      <rect x="429" y="172" width="72" height="248" fill="rgba(79,93,117,0.15)" stroke="#4f5d75" stroke-width="1"/>
+      <rect x="429" data-value="78" y="172" width="72" height="248" fill="#f5f5f5"/>
+      <rect x="429" data-value="78" y="172" width="72" height="248" fill="rgba(79,93,117,0.15)" stroke="#4f5d75" stroke-width="1"/>
       <text x="465" y="164" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">78</text>
 
       <!-- S5 FOCAL: v=110, h=348, y=72 -->
-      <rect x="539" y="72" width="72" height="348" fill="#f5f5f5"/>
-      <rect x="539" y="72" width="72" height="348" fill="rgba(235,108,54,0.12)" stroke="#eb6c36" stroke-width="1"/>
+      <rect x="539" data-value="110" y="72" width="72" height="348" fill="#f5f5f5"/>
+      <rect x="539" data-value="110" y="72" width="72" height="348" fill="rgba(235,108,54,0.12)" stroke="#eb6c36" stroke-width="1"/>
       <text x="575" y="64" fill="#eb6c36" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">110</text>
 
       <!-- S6: v=102, h=324, y=96 -->
-      <rect x="649" y="96" width="72" height="324" fill="#f5f5f5"/>
-      <rect x="649" y="96" width="72" height="324" fill="rgba(79,93,117,0.15)" stroke="#4f5d75" stroke-width="1"/>
+      <rect x="649" data-value="102" y="96" width="72" height="324" fill="#f5f5f5"/>
+      <rect x="649" data-value="102" y="96" width="72" height="324" fill="rgba(79,93,117,0.15)" stroke="#4f5d75" stroke-width="1"/>
       <text x="685" y="88" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">102</text>
 
       <!-- S7: v=85, h=268, y=152 -->
-      <rect x="759" y="152" width="72" height="268" fill="#f5f5f5"/>
-      <rect x="759" y="152" width="72" height="268" fill="rgba(79,93,117,0.15)" stroke="#4f5d75" stroke-width="1"/>
+      <rect x="759" data-value="85" y="152" width="72" height="268" fill="#f5f5f5"/>
+      <rect x="759" data-value="85" y="152" width="72" height="268" fill="rgba(79,93,117,0.15)" stroke="#4f5d75" stroke-width="1"/>
       <text x="795" y="144" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">85</text>
 
       <!-- S8: v=93, h=296, y=124 -->
-      <rect x="869" y="124" width="72" height="296" fill="#f5f5f5"/>
-      <rect x="869" y="124" width="72" height="296" fill="rgba(79,93,117,0.15)" stroke="#4f5d75" stroke-width="1"/>
+      <rect x="869" data-value="93" y="124" width="72" height="296" fill="#f5f5f5"/>
+      <rect x="869" data-value="93" y="124" width="72" height="296" fill="rgba(79,93,117,0.15)" stroke="#4f5d75" stroke-width="1"/>
       <text x="905" y="116" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">93</text>
 
       <!-- X-axis category labels -->

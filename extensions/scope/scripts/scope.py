@@ -158,6 +158,37 @@ def effort(dimensions):
     return next(score for limit, score in [(1, 1), (3, 2), (5, 3), (7, 5), (10, 8), (13, 13), (15, 21)] if total <= limit)
 
 
+def fill_scores(node):
+    """Give every tree node without a `score` the rubric score of its dimensions; a declared score is left to validation."""
+    if not isinstance(node, dict):
+        return
+    if 'score' not in node:
+        try:
+            node['score'] = effort(node.get('dimensions') or {})
+        except ScopeError:
+            pass  # validation reports the invalid dimensions
+    for child in node.get('children') or []:
+        fill_scores(child)
+
+
+def read_analysis(path):
+    """An analysis file with missing node scores filled from the dimensions, so every hash sees one form."""
+    analysis = read_json(Path(path))
+    if isinstance(analysis, dict):
+        fill_scores(analysis.get('tree'))
+    return analysis
+
+
+def skeleton(snapshot):
+    """The analysis fields copied from an inspect snapshot; images start unviewed, so it cannot be published as is."""
+    return {'issue': snapshot['issue']['number'], 'fingerprint': snapshot['fingerprint'],
+            'images': [{'url': url, 'viewed': False, 'observations': ''} for url in snapshot.get('images', [])],
+            'requirements': [], 'alignment': '', 'evidence': [],
+            'tree': {'key': 'root', 'title': snapshot['issue']['title'], 'scope': '', 'out_of_scope': '',
+                     'acceptance': [], 'covers': [], 'evidence': [], 'rationale': '',
+                     'dimensions': dict.fromkeys(DIMENSIONS), 'specify_prompt': ''}}
+
+
 def images(text):
     urls = re.findall(r'!\[[^\]]*\]\(<?([^\s)>]+)', text or '')
     urls += re.findall(r'<img\b[^>]*\bsrc=["\']([^"\']+)', text or '', re.I)
@@ -504,6 +535,10 @@ class Scope:
         self._board = None
         self._board_cached = None  # None: not read yet in this process; True: read from the shared cache
         self.snapshot_reused = None
+        # Per-process read caches (SC3): repository labels, Project fields, immutable issue database IDs.
+        self._labels = None
+        self._fields = None
+        self._ids = {}
 
     def board_ttl(self):
         return float(workflow_policy.setting(self.root, 'scope', 'board_cache_seconds', 300))
@@ -546,10 +581,11 @@ class Scope:
         self._board, self._board_cached = None, False
         return True
 
-    def load_snapshot(self, value, path=None, issue=None):
+    def load_snapshot(self, value, path=None, issue=None, evidence=True):
         """A saved `inspect --output` file when it is younger than the board cache TTL and its fingerprint matches
-        one fresh fetch of the issue; otherwise a full inspect. Sets `snapshot_reused`."""
-        self.snapshot_reused = False
+        one fresh fetch of the issue; otherwise an inspect (prerequisites only when `evidence` is False).
+        Sets `snapshot_reused`."""
+        self.snapshot_reused = False if path else None
         if path:
             issue = issue or self.resolve(value)
             try:
@@ -563,16 +599,30 @@ class Scope:
                 self.snapshot_reused = True
                 # The fingerprint ignores the managed block, so the receipt and labels come from the fresh issue.
                 return dict(saved, issue=issue)
-        return self.inspect(value)
+        return self.inspect(issue or value, evidence)
+
+    def default_snapshot(self, value, path):
+        """`path`, or the analyst's `.specify/scope/issue-<n>-snapshot.json` when it exists (SC4)."""
+        if path or not re.fullmatch(r'#?[1-9]\d*', str(value or '').strip()):
+            return path
+        saved = self.root / '.specify/scope' / f'issue-{str(value).strip().lstrip("#")}-snapshot.json'
+        return saved if saved.is_file() else None
 
     def issue(self, number):
         issue = self.gh.api(f'{self.base}/{number}')
         require('pull_request' not in issue, 'A pull request is not a scopeable issue.')
+        self._ids[issue['number']] = issue['id']
         return issue
 
+    def issue_id(self, number):
+        """The issue's database ID; immutable, so read at most once per process."""
+        return self._ids.get(number) or self.issue(number)['id']
+
     def resolve(self, value):
+        if isinstance(value, dict):
+            return value  # already fetched in this process
         value = (value or '').strip()
-        require(value, 'SCOPE_ISSUE_REQUIRED: supply a GitHub issue number or exact title. Run /speckit-scope <issue>.')
+        require(value, 'SCOPE_ISSUE_REQUIRED: supply a GitHub issue number or exact title. Run /speckit-scope-run <issue>.')
         if re.fullmatch(r'#?[1-9]\d*', value):
             return self.issue(int(value.lstrip('#')))
         rows = self.gh.api(self.base + '?state=all&per_page=100', pages=True)
@@ -607,23 +657,42 @@ class Scope:
         require(not meaningful or refs, f'Unresolved prerequisite description: {text[:160]}')
         return refs
 
-    def dependencies(self, issue):
-        rows = self.gh.api(f'{self.base}/{issue["number"]}/dependencies/blocked_by?per_page=100', pages=True)
-        for row in rows:
-            require(row['repository_url'].endswith('/' + self.repo), 'Cross-repository prerequisite is unsupported; scope rejected.')
-        refs = {x['number'] for x in rows}
-        refs |= self.refs(dependency_text(issue.get('body', '')))
+    def declared_dependencies(self, issue):
+        """Prerequisites named outside native links: body text, scope receipt, board Blocked by, catalogue. No GitHub call."""
+        refs = self.refs(dependency_text(issue.get('body', '')))
         refs |= set(metadata(issue.get('body')).get('dependencies', []))
         item = self.board().get(issue['number'], {})
         refs |= self.refs(str(item.get('blocked by', '') or ''))
         for entry in self.catalog['issues']:
             if self.keymap.get(entry['key']) == issue['number']:
                 refs |= self.refs(', '.join(entry.get('blockedBy', [])))
+        return refs
+
+    def dependencies(self, issue):
+        rows = self.gh.api(f'{self.base}/{issue["number"]}/dependencies/blocked_by?per_page=100', pages=True)
+        for row in rows:
+            require(row['repository_url'].endswith('/' + self.repo), 'Cross-repository prerequisite is unsupported; scope rejected.')
+        refs = {x['number'] for x in rows} | self.declared_dependencies(issue)
         require(issue['number'] not in refs, 'Dependency cycle: issue depends on itself.')
         return sorted(refs)
 
-    def prerequisite_report(self, issue):
+    def dependents(self, parent, issues, keep=()):
+        """The issues that may depend on `parent`: its native `dependencies/blocking` list, every issue whose declared
+        dependencies name it, and `keep`. Falls back to all `issues` when the blocking list cannot be read (SC3)."""
+        try:
+            rows = self.gh.api(f'{self.base}/{parent["number"]}/dependencies/blocking?per_page=100', pages=True)
+            require(isinstance(rows, list) and all(isinstance(x, dict) and 'number' in x for x in rows), 'unexpected response')
+        except ScopeError as error:
+            print(f'[scope] dependencies/blocking unreadable ({str(error)[:200]}); checking every issue.', file=sys.stderr)
+            return list(issues)
+        blocking = {x['number'] for x in rows}
+        return [x for x in issues if x['number'] in blocking or str(x['number']) in keep
+                or parent['number'] in self.declared_dependencies(x)]
+
+    def prerequisite_report(self, issue, found=None):
+        """Transitive prerequisites; `found` receives each visited issue's direct dependencies."""
         seen, stack, all_deps = set(), set(), {}
+        found = {} if found is None else found
 
         def visit(current):
             n = current['number']
@@ -631,7 +700,8 @@ class Scope:
             if n in seen:
                 return
             stack.add(n)
-            for dep in self.dependencies(current):
+            found[n] = self.dependencies(current)
+            for dep in found[n]:
                 obj = self.issue(dep)
                 all_deps[dep] = obj
                 visit(obj)
@@ -652,19 +722,21 @@ class Scope:
                 if x.get('issue') == number and type(x.get('prerequisite')) is int and
                 x.get('reason') and x.get('approved_by') and x.get('approval_text')}
 
-    def inspect(self, value):
+    def inspect(self, value, evidence=True):
+        """Prerequisites, then (with `evidence`) comments, images and prerequisite timelines."""
         issue = self.resolve(value)
-        deps = self.prerequisite_report(issue)
+        direct = {}
+        deps = self.prerequisite_report(issue, direct)
         overrides = self.prerequisite_overrides(issue['number'])
         unready = [{k: d[k] for k in ('number', 'title', 'status')} for d in deps if d['status'] not in READY]
         blocked = [d for d in unready if d['number'] not in overrides]
         overridden = [dict(d, **{k: overrides[d['number']].get(k) for k in ('reason', 'approved_by', 'approval_text', 'approved_at')})
                       for d in unready if d['number'] in overrides]
         result = {'schema_version': 1, 'repo': self.repo, 'issue': issue,
-                  'fingerprint': fingerprint(issue), 'dependencies': self.dependencies(issue),
+                  'fingerprint': fingerprint(issue), 'dependencies': direct[issue['number']],
                   'prerequisites': deps, 'blocked': blocked, 'overridden': overridden, 'ready': not blocked}
-        # Do not analyze implementation or images when prerequisites fail.
-        if blocked:
+        # Do not analyze implementation or images when prerequisites fail; gate and bind need no evidence.
+        if blocked or not evidence:
             return result
         comments = self.gh.api(f'{self.base}/{issue["number"]}/comments?per_page=100', pages=True)
         result['comments'] = comments
@@ -682,10 +754,10 @@ class Scope:
         return result
 
     def gate(self, value, required_status='Backlog', *, feature=None, token=None, session=None, analysis=None, analysis_path=None,
-             snapshot_path=None):
+             snapshot_path=None, initial=None):
         require(re.fullmatch(r'#?[1-9]\d*', (value or '').strip()),
-                'SCOPE_REQUIRED: Specify requires a GitHub issue number and current effort score. Run /speckit-scope <issue> first.')
-        initial = self.resolve(value)
+                'SCOPE_REQUIRED: Specify requires a GitHub issue number and current effort score. Run /speckit-scope-run <issue> first.')
+        initial = initial or self.resolve(value)
         revalidation = workflow_policy.bound_claim(self.root, self.repo, initial['number'], {'scope', 'specify'})
         fresh = workflow_policy.fresh_claim(self.root, self.repo, initial['number'], feature, token, session) if any((feature, token, session)) else None
 
@@ -696,27 +768,28 @@ class Scope:
             return status == required_status or continued or fresh_continued
         require(allowed() or (self.drop_cached_board() and allowed()),
                 f'SPECIFY_STATE: Specify requires {required_status}; #{initial["number"]} is {self.status(initial)}.')
-        snapshot = self.load_snapshot(value, snapshot_path, initial)
+        # The fresh path validates the analysis against the issue's images, so only it needs the full evidence.
+        snapshot = self.load_snapshot(value, self.default_snapshot(value, snapshot_path), initial, evidence=bool(fresh))
         issue = snapshot['issue']
         receipt = metadata(issue.get('body'))
         require(not receipt.get('children'), 'SCOPE_PARENT: do not specify this aggregate issue; select a scoped leaf sub-issue.')
         version, score = receipt.get('version'), receipt.get('score')
         require((version == 1 and score in (1, 2, 3, 5)) or (version == 2 and score in EFFORTS),
-                'SCOPE_REQUIRED: missing approved scope score; run /speckit-scope first.')
+                'SCOPE_REQUIRED: missing approved scope score; run /speckit-scope-run first.')
         if version == 2:
             approved = receipt.get('approval', {})
             require(approved.get('approved_by') and approved.get('approved_at') and
                     re.fullmatch(r'[a-f0-9]{64}', approved.get('analysis_sha256', '')),
                     'SCOPE_REQUIRED: missing user approval provenance.')
-        require(receipt.get('fingerprint') == fingerprint(issue), 'SCOPE_STALE: requirements changed; run /speckit-scope again.')
-        require(receipt.get('dependencies') == snapshot['dependencies'], 'SCOPE_STALE: prerequisites changed; run /speckit-scope again.')
+        require(receipt.get('fingerprint') == fingerprint(issue), 'SCOPE_STALE: requirements changed; run /speckit-scope-run again.')
+        require(receipt.get('dependencies') == snapshot['dependencies'], 'SCOPE_STALE: prerequisites changed; run /speckit-scope-run again.')
         pending = read_json(self.root / '.specify/scope/plan-pending.json', {})
         require(pending.get('operation') != receipt.get('operation'),
                 'SCOPE_PLAN_PENDING: finish /speckit-scope-plan before specifying a newly decomposed issue.')
         labels = {x['name'] for x in issue.get('labels', [])}
-        require(f'effort:{receipt["score"]}' in labels and 'scope:parent' not in labels, 'SCOPE_REQUIRED: effort label is missing or inconsistent; run /speckit-scope first.')
+        require(f'effort:{receipt["score"]}' in labels and 'scope:parent' not in labels, 'SCOPE_REQUIRED: effort label is missing or inconsistent; run /speckit-scope-run first.')
         require(not snapshot['blocked'], rejection(snapshot['blocked']))
-        require(receipt.get('prompt'), 'SCOPE_REQUIRED: missing Specify prompt; run /speckit-scope first.')
+        require(receipt.get('prompt'), 'SCOPE_REQUIRED: missing Specify prompt; run /speckit-scope-run first.')
         result = {'issue': issue['number'], 'score': receipt['score'], 'prompt': receipt['prompt'], 'fingerprint': receipt['fingerprint']}
         if fresh:
             require(initial.get('state') == 'open', 'SCOPE_FRESH_OPEN_ISSUE_REQUIRED')
@@ -742,7 +815,7 @@ class Scope:
                 require(analysis_path is not None, 'SCOPE_RESOLVED_ANALYSIS_EVIDENCE_REQUIRED')
                 artifact = (self.root / analysis_path).resolve()
                 require(artifact.is_relative_to((self.root / fresh['feature']).resolve())
-                        and artifact.is_file() and read_json(artifact) == analysis,
+                        and artifact.is_file() and read_analysis(artifact) == analysis,
                         'SCOPE_RESOLVED_ANALYSIS_EVIDENCE_MISMATCH')
                 artifact_sha = hashlib.sha256(artifact.read_bytes()).hexdigest()
                 require(fresh['decision_evidence'].get(artifact.relative_to(self.root).as_posix()) == artifact_sha,
@@ -758,6 +831,7 @@ class Scope:
     def validate_analysis(self, snapshot, analysis):
         require(not snapshot['blocked'], rejection(snapshot['blocked']))
         require(analysis.get('issue') == snapshot['issue']['number'] and analysis.get('fingerprint') == snapshot['fingerprint'], 'Analysis does not match current issue requirements.')
+        fill_scores(analysis.get('tree'))
         require(analysis.get('requirements') and all(isinstance(x, str) and x.strip() for x in analysis['requirements']), 'List the source requirements as stable coverage IDs.')
         require(analysis.get('alignment') and analysis.get('evidence'), 'Supply implementation alignment and source evidence.')
         observations = {x['url']: x for x in analysis.get('images', [])}
@@ -900,14 +974,19 @@ class Scope:
         write_json(self.approval_path(analysis), carried)
         return carried
 
-    def set_labels(self, issue, score, parent=False):
+    def set_labels(self, issue, score, parent=False, current=None):
+        """`current`: the issue's labels from a response read after the last write to it; reread when absent."""
         wanted = [f'effort:{score}', 'scope:parent' if parent else ('scope:small' if score <= 2 else 'scope:medium' if score <= 5 else 'scope:large')]
+        if self._labels is None:
+            self._labels = {x['name'] for x in self.gh.api(f'repos/{self.repo}/labels?per_page=100', pages=True)}
         for label in wanted:
             # gh label create --force would overwrite existing label metadata; use REST read/create.
-            existing = self.gh.api(f'repos/{self.repo}/labels?per_page=100', pages=True)
-            if label not in {x['name'] for x in existing}:
+            if label not in self._labels:
                 self.gh.api(f'repos/{self.repo}/labels', 'POST', {'name': label, 'color': 'BFD4F2', 'description': 'Managed by Speckit Scope'})
-        current = {x['name'] for x in self.issue(issue['number']).get('labels', [])}
+                self._labels.add(label)
+        if current is None:
+            current = self.issue(issue['number']).get('labels', [])
+        current = {x['name'] for x in current}
         for label in sorted(current):
             if (label.startswith('effort:') or label in {'scope:small', 'scope:medium', 'scope:large', 'scope:parent'}) and label not in wanted:
                 from urllib.parse import quote
@@ -917,28 +996,49 @@ class Scope:
 
     def add_to_board(self, issue):
         item = self.gh.command(['project', 'item-add', str(self.cfg['projectNumber']), '--owner', self.cfg['owner'], '--url', issue['html_url'], '--format', 'json'])['id']
-        self.invalidate_board()
+        # Absent from a live read in this process: the new item has no field values, which is what item-list would
+        # return, so record it instead of rereading the board. Otherwise (cached board, or the issue was there) reload.
+        known = self._board is not None and not self._board_cached and issue['number'] not in self._board
+        self.invalidate_board(memory=not known)
+        if known:
+            self._board[issue['number']] = {'id': item, 'content': {'number': issue['number'], 'repository': self.repo, 'type': 'Issue'}}
         return item
+
+    def board_item(self, issue):
+        """The issue's Project item ID; `item-add` only when the board has no item for it."""
+        item = self.board().get(issue['number'])
+        return item['id'] if item else self.add_to_board(issue)
+
+    def edit_item(self, issue, field_id, key, value, option=None):
+        """Set one Project field (single-select `option`, else text `value`) and mirror it in this process's board row."""
+        item_id = self.board_item(issue)
+        flag, raw = ('--single-select-option-id', option) if option else ('--text', value)
+        self.gh.command(['project', 'item-edit', '--id', item_id, '--project-id', self.cfg['projectId'], '--field-id', field_id, flag, raw])
+        self.invalidate_board(memory=False)
+        row = (self._board or {}).get(issue['number'])
+        if row is not None:
+            if value:
+                row[key] = value
+            else:
+                row.pop(key, None)  # item-list omits an empty field
+
+    def project_fields(self):
+        if self._fields is None:
+            self._fields = self.gh.command(['project', 'field-list', str(self.cfg['projectNumber']), '--owner', self.cfg['owner'], '--format', 'json', '--limit', '100'])['fields']
+        return self._fields
 
     def set_status(self, issue, status):
         status = self.actual_status(status)
         require(status in self.cfg['statusOptions'], f'Missing Project status: {status}')
-        item = self.board().get(issue['number'])
-        item_id = item['id'] if item else self.add_to_board(issue)
-        self.gh.command(['project', 'item-edit', '--id', item_id, '--project-id', self.cfg['projectId'], '--field-id', self.cfg['statusFieldId'], '--single-select-option-id', self.cfg['statusOptions'][status]])
-        self.invalidate_board()
+        self.edit_item(issue, self.cfg['statusFieldId'], 'status', status, self.cfg['statusOptions'][status])
 
     def actual_status(self, status):
         return workflow_policy.statuses(self.root).get(status, status)
 
     def sync_dependency_fields(self, issue, deps):
-        fields = self.gh.command(['project', 'field-list', str(self.cfg['projectNumber']), '--owner', self.cfg['owner'], '--format', 'json', '--limit', '100'])['fields']
-        field = next((f for f in fields if f['name'] == 'Blocked by'), None)
+        field = next((f for f in self.project_fields() if f['name'] == 'Blocked by'), None)
         if field:
-            item = self.board().get(issue['number'])
-            item_id = item['id'] if item else self.add_to_board(issue)
-            self.gh.command(['project', 'item-edit', '--id', item_id, '--project-id', self.cfg['projectId'], '--field-id', field['id'], '--text', ', '.join(f'#{n}' for n in deps)])
-            self.invalidate_board()
+            self.edit_item(issue, field['id'], 'blocked by', ', '.join(f'#{n}' for n in deps))
 
     def publish(self, snapshot, analysis, apply=False):
         root_issue = snapshot['issue']
@@ -983,6 +1083,7 @@ class Scope:
         write_json(journal_path, journal)
         existing = self.gh.api(self.base + '?state=all&per_page=100', pages=True)
         inherited_images = snapshot.get('images', [])
+        native_children = {}  # parent number -> its native sub-issue numbers, read once per parent
 
         def create(node, parent=None):
             marker = f'<!-- speckit-scope:node {root_issue["number"]}:{node["key"]} -->'
@@ -1002,19 +1103,23 @@ class Scope:
                     body += '\n\n## Source\n\n' + root_issue['html_url']
                     issue = self.gh.api(self.base, 'POST', {'title': node['title'], 'body': body})
                     existing.append(issue)
-                current_children = self.gh.api(f'{self.base}/{parent["number"]}/sub_issues?per_page=100', pages=True)
-                if issue['number'] not in {x['number'] for x in current_children}:
+                if parent['number'] not in native_children:
+                    native_children[parent['number']] = {x['number'] for x in self.gh.api(f'{self.base}/{parent["number"]}/sub_issues?per_page=100', pages=True)}
+                if issue['number'] not in native_children[parent['number']]:
                     self.gh.api(f'{self.base}/{parent["number"]}/sub_issues', 'POST', {'sub_issue_id': issue['id']})
+                    native_children[parent['number']].add(issue['number'])
+            self._ids[issue['number']] = issue['id']
             journal['nodes'][node['key']] = issue['number']
             write_json(journal_path, journal)
-            self.add_to_board(issue)
+            self.board_item(issue)
             if not self.board().get(issue['number'], {}).get('status'):
                 self.set_status(issue, 'Backlog')
             if node.get('children'):
-                native_children = self.gh.api(f'{self.base}/{issue["number"]}/sub_issues?per_page=100', pages=True)
+                current = self.gh.api(f'{self.base}/{issue["number"]}/sub_issues?per_page=100', pages=True)
+                native_children[issue['number']] = {x['number'] for x in current}
                 proposed_markers = {f'<!-- speckit-scope:node {root_issue["number"]}:{c["key"]} -->' for c in node['children']}
-                new_count = sum(not any(mark in (x.get('body') or '') for x in native_children) for mark in proposed_markers)
-                require(len(native_children) + new_count <= 100, 'Native parent would exceed GitHub\'s 100 direct sub-issue limit; restructure the proposed tree.')
+                new_count = sum(not any(mark in (x.get('body') or '') for x in current) for mark in proposed_markers)
+                require(len(current) + new_count <= 100, 'Native parent would exceed GitHub\'s 100 direct sub-issue limit; restructure the proposed tree.')
             for child in node.get('children', []):
                 create(child, issue)
         create(analysis['tree'])
@@ -1025,10 +1130,10 @@ class Scope:
             write_json(journal_path, journal)
             children = [mapping[n['key']] for n in node.get('children', [])]
             deps = [] if children else sorted(set(snapshot['dependencies'] + [mapping[x] for x in node.get('depends_on', [])]))
+            native = {x['number'] for x in self.gh.api(f'{self.base}/{issue["number"]}/dependencies/blocked_by?per_page=100', pages=True)} if deps else set()
             for dep in deps:
-                native = self.gh.api(f'{self.base}/{issue["number"]}/dependencies/blocked_by?per_page=100', pages=True)
-                if dep not in {x['number'] for x in native}:
-                    self.gh.api(f'{self.base}/{issue["number"]}/dependencies/blocked_by', 'POST', {'issue_id': self.issue(dep)['id']})
+                if dep not in native:
+                    self.gh.api(f'{self.base}/{issue["number"]}/dependencies/blocked_by', 'POST', {'issue_id': self.issue_id(dep)})
             source_body = retire_prompts(issue.get('body', ''))
             changed = dict(issue, body=source_body)
             prompt = '' if children else f'GitHub issue #{issue["number"]}\nEffort: {node["score"]}\n\n{node["specify_prompt"]}'
@@ -1048,8 +1153,9 @@ class Scope:
             else:
                 block += '\n\n### Speckit Specify prompt\n\n```text\n' + prompt + '\n```'
             block += '\n\n<!-- speckit-scope:metadata ' + json.dumps(receipt, ensure_ascii=True) + ' -->'
-            self.gh.api(f'{self.base}/{issue["number"]}', 'PATCH', {'body': replace_block(source_body, block)})
-            self.set_labels(issue, node['score'], bool(children))
+            updated = self.gh.api(f'{self.base}/{issue["number"]}', 'PATCH', {'body': replace_block(source_body, block)})
+            labels = updated.get('labels') if isinstance(updated, dict) else None
+            self.set_labels(issue, node['score'], bool(children), labels if isinstance(labels, list) else None)
             self.sync_dependency_fields(issue, deps)
         if analysis['tree'].get('children'):
             self.rewire(root_issue, [mapping[k] for k, n in nodes.items() if not n.get('children')], journal, journal_path)
@@ -1065,10 +1171,9 @@ class Scope:
         return result
 
     def rewire(self, parent, leaves, journal, journal_path):
-        all_issues = self.gh.api(self.base + '?state=all&per_page=100', pages=True)
-        for issue in all_issues:
-            if 'pull_request' in issue or issue['number'] in journal['nodes'].values():
-                continue
+        all_issues = [x for x in self.gh.api(self.base + '?state=all&per_page=100', pages=True)
+                      if 'pull_request' not in x and x['number'] not in journal['nodes'].values()]
+        for issue in self.dependents(parent, all_issues, journal.get('dependencies_before', {})):
             deps = self.dependencies(issue)
             if parent['number'] not in deps and str(issue['number']) not in journal.get('dependencies_before', {}):
                 continue
@@ -1080,7 +1185,7 @@ class Scope:
             # Add replacements before removing the original blocker, so interruption fails closed.
             for dep in replacement:
                 if dep not in {x['number'] for x in native}:
-                    self.gh.api(f'{self.base}/{issue["number"]}/dependencies/blocked_by', 'POST', {'issue_id': self.issue(dep)['id']})
+                    self.gh.api(f'{self.base}/{issue["number"]}/dependencies/blocked_by', 'POST', {'issue_id': self.issue_id(dep)})
             if parent['number'] in {x['number'] for x in native}:
                 self.gh.api(f'{self.base}/{issue["number"]}/dependencies/blocked_by/{parent["id"]}', 'DELETE')
             source = re.sub(r'(?ims)^#{1,6}\s+(?:blocked by|depends on|dependencies|prerequisites)\s*\n.*?(?=^#{1,6}\s|\Z)', '', unscoped(issue.get('body')))
@@ -1133,8 +1238,7 @@ class Scope:
             for dep in item['dependencies']:
                 reverse.setdefault(dep, []).append(item['number'])
         # Keep reverse catalogue and Project fields consistent with native blockers.
-        fields = self.gh.command(['project', 'field-list', str(self.cfg['projectNumber']), '--owner', self.cfg['owner'], '--format', 'json', '--limit', '100'])['fields']
-        blocks_field = next((f for f in fields if f['name'] == 'Blocks'), None)
+        blocks_field = next((f for f in self.project_fields() if f['name'] == 'Blocks'), None)
         for entry in self.catalog['issues']:
             number = self.keymap.get(entry['key'])
             blocks = sorted(reverse.get(number, []))
@@ -1142,7 +1246,7 @@ class Scope:
             item = self.board().get(number)
             value = ', '.join(f'#{n}' for n in blocks)
             if blocks_field and item and item.get('blocks', '') != value:
-                self.gh.command(['project', 'item-edit', '--id', item['id'], '--project-id', self.cfg['projectId'], '--field-id', blocks_field['id'], '--text', value])
+                self.edit_item({'number': number}, blocks_field['id'], 'blocks', value)
             issue = next((x for x in rows if x['number'] == number), None)
             if issue:
                 body = issue.get('body') or ''
@@ -1159,7 +1263,14 @@ class Scope:
                 entry['body'] = updated
         write_json(self.catalog_path, self.catalog)
         write_json(self.map_path, self.keymap)
-        write_json(self.artifact_directory / 'scope-dependencies.json', {'repo': self.repo, 'issues': graph})
+        waves, critical_path, cyclic = plan_waves(graph)
+        dependencies_path = self.artifact_directory / 'scope-dependencies.json'
+        write_json(dependencies_path, {'repo': self.repo, 'issues': graph, 'waves': waves,
+                                       'critical_path': critical_path, 'cyclic': cyclic})
+        # Draft wave mapping for the plan diagram; accept_plan.py still checks it against the drawn HTML.
+        write_json(self.artifact_directory / 'implementation-plan.mapping.json',
+                   {'graph_sha256': hashlib.sha256(dependencies_path.read_bytes()).hexdigest(),
+                    'issue_to_node': {str(n): wave['id'] for wave in waves for n in wave['issues']}})
         report = '# Implementation dependencies\n\nGenerated by Speckit Scope. Aggregate issues are tracking containers.\n\n| Issue | Title | Prerequisites |\n| --- | --- | --- |\n'
         report += '\n'.join(f'| #{x["number"]} | {x["title"].replace("|", "/")} | {", ".join("#" + str(n) for n in x["dependencies"]) or "None"} |' for x in graph)
         (self.artifact_directory / 'DEPENDENCIES.md').write_text(report + '\n', encoding='utf-8')
@@ -1173,7 +1284,7 @@ class Scope:
                 'SCOPE_RENDER_FEATURE_REQUIRED: pass --feature specs/<feature> inside this checkout.')
         require(analysis_path and Path(analysis_path).is_file(), '--analysis <analysis.json> is required.')
         raw = Path(analysis_path).read_bytes()
-        analysis = json.loads(raw.decode('utf-8-sig'))
+        analysis = read_analysis(analysis_path)
         tree = analysis.get('tree') or {}
         issue = self.resolve(value)
         require(analysis.get('issue') == issue['number'], 'SCOPE_RENDER_MISMATCH: the analysis is for another issue.')
@@ -1227,21 +1338,22 @@ class Scope:
         path = (self.root / directory).resolve()
         require(path.is_relative_to(self.root / 'specs') and (path / 'spec.md').is_file(), 'Feature must contain specs/<slug>/spec.md inside this checkout.')
         existing_source = read_json(path / 'scope-source.json', {})
+        initial = self.resolve(value)  # one read serves the resume check, the gate and the binding
         resuming = (existing_source.get('issue') == int(str(value).lstrip('#')) and
                     existing_source.get('repo') == self.repo and
-                    self.status(self.resolve(value)) == 'Feature Specification')
+                    self.status(initial) == 'Feature Specification')
         require(not existing_source or (existing_source.get('issue'), existing_source.get('repo')) == (int(str(value).lstrip('#')), self.repo), 'SCOPE_BINDING_MISMATCH')
         checked = self.gate(value, 'Feature Specification' if resuming else 'Backlog',
                             feature=feature, token=token, session=session, analysis=analysis, analysis_path=analysis_path,
-                            snapshot_path=snapshot_path)
-        issue = self.issue(checked['issue'])
+                            snapshot_path=snapshot_path, initial=initial)
+        issue = initial
         state_path = self.root / self.cfg['stateFile']
         state = read_json(state_path, {})
         slug = path.name
         current = state.get(slug, {})
         require(not current.get('issue') or current['issue'] == issue['number'], 'Feature already bound to a different issue.')
         if apply:
-            item_id = self.add_to_board(issue)
+            item_id = self.board_item(issue)
             current.update(issue=issue['number'], issueNodeId=issue['node_id'], itemId=item_id, status=self.status(issue))
             current.setdefault('subIssues', {})
             state[slug] = current
@@ -1304,6 +1416,34 @@ class Scope:
         return result
 
 
+def plan_waves(graph):
+    """Topological waves and the critical path over executable issues (no scope aggregates, no `kind: epic`).
+
+    Returns `(waves, critical_path, cyclic)`: waves `[{id: "W1", issues: [...]}, ...]` where every dependency of an
+    issue sits in an earlier wave; the longest dependency chain, first issue first; and the issues left unscheduled
+    by a cycle. Dependencies on non-executable or unknown issues are ignored here; acceptance refuses them.
+    """
+    work = {x['number']: x for x in graph if not x.get('children') and x.get('kind') != 'epic'}
+    deps = {n: sorted(d for d in set(x['dependencies']) if d in work and d != n) for n, x in work.items()}
+    level, remaining = {}, set(work)
+    while remaining:
+        ready = sorted(n for n in remaining if all(d in level for d in deps[n]))
+        if not ready:
+            break
+        for n in ready:
+            level[n] = 1 + max((level[d] for d in deps[n]), default=-1)
+        remaining -= set(ready)
+    waves = [{'id': f'W{i + 1}', 'issues': sorted(n for n, lv in level.items() if lv == i)}
+             for i in range(max(level.values(), default=-1) + 1)]
+    path = []
+    if level:
+        current = min(n for n, lv in level.items() if lv == max(level.values()))
+        while current is not None:
+            path.append(current)
+            current = min((d for d in deps[current] if level[d] == level[current] - 1), default=None)
+    return waves, path[::-1], sorted(remaining)
+
+
 def with_transport(result, gh):
     """Name the transport that served Project operations (stdout only; saved files are unchanged)."""
     transport = getattr(gh, 'project_transport', None)
@@ -1323,6 +1463,7 @@ def main(argv=None):
     parser.add_argument('--root', default='.')
     parser.add_argument('--analysis', type=Path)
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--skeleton', type=Path, help='inspect: also write a new analysis JSON skeleton from the snapshot')
     parser.add_argument('--feature')
     parser.add_argument('--token')
     parser.add_argument('--session')
@@ -1337,7 +1478,7 @@ def main(argv=None):
     try:
         # Fail on missing identity before any GitHub/network access.
         if args.command in {'inspect', 'gate', 'approve', 'publish', 'bind', 'render-spec'}:
-            require(args.issue and args.issue.strip(), 'SCOPE_ISSUE_REQUIRED: supply a GitHub issue number or exact title. Run /speckit-scope <issue> first.')
+            require(args.issue and args.issue.strip(), 'SCOPE_ISSUE_REQUIRED: supply a GitHub issue number or exact title. Run /speckit-scope-run <issue> first.')
         app = Scope(args.root)
         if args.command == 'bind' and any((args.feature, args.token, args.session)):
             # Phase/ownership check precedes even the CLI's local mutation lock.
@@ -1354,24 +1495,28 @@ def main(argv=None):
                 handle.write(str(os.getpid()))
             lock = candidate
         if args.command == 'inspect':
+            require(not (args.skeleton and args.skeleton.exists()),
+                    f'SCOPE_SKELETON_EXISTS: {args.skeleton} exists; remove it or name a new file.')
             result = app.inspect(args.issue)
             if args.output:
                 write_json(args.output, result)
             require(not result['blocked'], rejection(result['blocked']))
+            if args.skeleton:
+                write_json(args.skeleton, skeleton(result))
         elif args.command == 'gate':
             result = app.gate(args.issue, feature=args.feature, token=args.token, session=args.session,
-                              analysis=read_json(args.analysis) if args.analysis else None, analysis_path=args.analysis,
+                              analysis=read_analysis(args.analysis) if args.analysis else None, analysis_path=args.analysis,
                               snapshot_path=args.snapshot)
         elif args.command == 'approve':
             require(args.analysis and args.analysis.is_file(), '--analysis <analysis.json> is required.')
-            result = app.approve(app.load_snapshot(args.issue, args.snapshot), read_json(args.analysis), args.child_count,
+            result = app.approve(app.load_snapshot(args.issue, args.snapshot), read_analysis(args.analysis), args.child_count,
                                  args.approved_by, args.approval_text)
         elif args.command == 'publish':
             require(args.analysis and args.analysis.is_file(), '--analysis <analysis.json> is required.')
-            result = app.publish(app.load_snapshot(args.issue, args.snapshot), read_json(args.analysis), args.apply)
+            result = app.publish(app.load_snapshot(args.issue, args.snapshot), read_analysis(args.analysis), args.apply)
         elif args.command == 'bind':
             result = app.bind(args.issue, args.apply, feature=args.feature, token=args.token, session=args.session,
-                              analysis=read_json(args.analysis) if args.analysis else None, analysis_path=args.analysis,
+                              analysis=read_analysis(args.analysis) if args.analysis else None, analysis_path=args.analysis,
                               snapshot_path=args.snapshot)
         elif args.command == 'reconcile':
             result = app.reconcile(args.apply)
@@ -1380,7 +1525,7 @@ def main(argv=None):
         else:
             require(args.apply, 'export-plan requires --apply because it updates local plan data.')
             result = app.export_plan()
-        if args.snapshot and args.command in {'gate', 'approve', 'publish', 'bind'}:
+        if getattr(app, 'snapshot_reused', None) is not None and args.command in {'gate', 'approve', 'publish', 'bind'}:
             result = dict(result, snapshot_reused=bool(app.snapshot_reused))
         if args.output:
             write_json(args.output, result)

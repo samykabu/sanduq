@@ -30,6 +30,45 @@ def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+class WaveTests(unittest.TestCase):
+    """SC5: export-plan computes the waves, critical path and draft mapping that acceptance checks."""
+
+    def waves(self, deps, extra=None):
+        import test_scope
+        graph = [dict({'number': n, 'dependencies': d, 'children': [], 'kind': 'scope'}, **(extra or {}).get(n, {}))
+                 for n, d in deps.items()]
+        return test_scope.m.plan_waves(graph)
+
+    def test_chain_and_diamond(self):
+        self.assertEqual(self.waves({1: [], 2: [1], 3: [2]}),
+                         ([{'id': 'W1', 'issues': [1]}, {'id': 'W2', 'issues': [2]}, {'id': 'W3', 'issues': [3]}], [1, 2, 3], []))
+        waves, path, cyclic = self.waves({1: [], 2: [1], 3: [1], 4: [2, 3]})
+        self.assertEqual([w['issues'] for w in waves], [[1], [2, 3], [4]])
+        self.assertEqual((path, cyclic), ([1, 2, 4], []))
+
+    def test_aggregates_epics_and_cycles(self):
+        waves, path, cyclic = self.waves({1: [], 2: [1, 9], 5: [], 6: [7], 7: [6], 9: []},
+                                         {5: {'kind': 'epic'}, 9: {'children': [1]}})
+        self.assertEqual([w['issues'] for w in waves], [[1], [2]])
+        self.assertEqual((path, cyclic), ([1, 2], [6, 7]))
+
+    def test_exported_mapping_passes_acceptance_unchanged(self):
+        import test_scope
+        case = test_scope.ScopeTests('test_split_links_scores_rewire_and_gate')
+        case.setUp()
+        self.addCleanup(case.tearDown)
+        snap, analysis = case.analysis(True)
+        case.publish_approved(snap, analysis)
+        artifacts = case.app.artifact_directory
+        graph_path = artifacts / 'scope-dependencies.json'
+        graph = json.loads(graph_path.read_text(encoding='utf-8'))
+        mapping = json.loads((artifacts / 'implementation-plan.mapping.json').read_text(encoding='utf-8'))
+        ids = [w['id'] for w in graph['waves']]
+        self.assertEqual(ids, ['W1', 'W2'])
+        diagram = {'nodes': [{'id': i} for i in ids], 'edges': [{'from': 'W1', 'to': 'W2'}]}
+        m.check_graph_mapping(graph, diagram, mapping, digest(graph_path))
+
+
 class GraphMappingTests(unittest.TestCase):
     def setUp(self):
         self.graph = {'issues': [{'number': 1, 'dependencies': [], 'children': []},

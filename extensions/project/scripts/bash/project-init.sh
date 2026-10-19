@@ -71,7 +71,8 @@ if [ -f "$ROOT/.specify/workflow.yml" ]; then
 fi
 
 gh auth status >/dev/null 2>&1 || die "gh not authenticated - run: gh auth login"
-gh auth status 2>&1 | grep -q "project" || die "gh token lacks 'project' scope - run: gh auth refresh -h github.com -s project,read:project"
+# 'project' as a whole scope: 'read:project' alone cannot write the board
+gh auth status 2>&1 | grep -Eq "(^|[^:[:alnum:]_-])project([^:[:alnum:]_-]|$)" || die "gh token lacks 'project' scope - run: gh auth refresh -h github.com -s project,read:project"
 
 [ -z "$OWNER" ] && OWNER="$(gh api user --jq .login)"
 [ -z "$OWNER" ] && die "could not resolve owner - pass --owner"
@@ -85,7 +86,7 @@ if [ "$NUMBER" -le 0 ] 2>/dev/null; then
   COUNT="$(echo "$LIST" | jq '.projects | length')"
   [ "$COUNT" -eq 0 ] && die "no projects for $OWNER - create one or pass --number"
   if [ "$COUNT" -eq 1 ]; then NUMBER="$(echo "$LIST" | jq -r '.projects[0].number')"
-  elif [ "$NONINT" = 1 ]; then die "multiple projects; pass --number in non-interactive mode"
+  elif [ "$NONINT" = 1 ]; then die "multiple projects for $OWNER: $(echo "$LIST" | jq -r '[.projects[] | "#\(.number) \(.title)"] | join(", ")') - ask which one and rerun with --number <n>"
   else
     info "Select a project:"
     echo "$LIST" | jq -r '.projects | to_entries[] | "  [\(.key)] #\(.value.number)  \(.value.title)"'
@@ -131,7 +132,7 @@ for phase in $PHASES; do
       [[ "$ans" =~ ^[yY] ]] && do_create=1
     fi
     if [ "$do_create" = 1 ]; then CREATE_NAMES+=("$wanted"); CREATE_COLORS+=("${PALETTE[$((i % 7))]}"); PHASE2STATUS[$phase]="$wanted"
-    else warn "phase '$phase' has no column - that transition will be a no-op until mapped"; fi
+    else warn "phase '$phase' has no column (wanted '$wanted') - that transition is a no-op until mapped; rerun with --auto-create-columns to create it, or add the column on the board and rerun"; fi
   fi
   i=$((i+1))
 done
@@ -166,7 +167,7 @@ if [ -z "$HOOKS_MODE" ]; then
   if [ "$NONINT" = 1 ]; then
     [ -f "$EXT_DIR/config.json" ] && HOOKS_MODE="$(jq -r '.hookMode // empty' "$EXT_DIR/config.json")"
     [ "$HOOKS_MODE" = "optional" ] || [ "$HOOKS_MODE" = "required" ] || HOOKS_MODE="optional"
-    info "hook mode not supplied in non-interactive mode; using $HOOKS_MODE"
+    info "hook mode not supplied in non-interactive mode; using $HOOKS_MODE (rerun with --hooks-mode optional|required to choose)"
   else
     while :; do
       read -r -p "[project-init] Project sync hooks: 'required' runs sync automatically; 'optional' offers manual execution [optional]: " HOOKS_MODE

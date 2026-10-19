@@ -1,55 +1,15 @@
 # Implementation orchestration: assign
 
-With `lean_execution.enabled: true`, the existing lifecycle coordinator does all
-assignments, integration, reporting calls (`reporting.md`) and authorized Git operations;
-do not create the additional orchestration agent below. Dispatch only concrete
-deliverables with acceptance criteria (`--deliverable`, `--correction-plan`, then
-`--diagnosis`, as in `delegation-and-decisions.md#opt-in-lean-execution`). Finish all
-coding and testing before the independent coding review; `[artifact-analysis]` marks
-artifact analysis, which may run earlier.
-
 Core Implement and SuperSpec Execute both follow this protocol. The dispatcher keeps the
-Execute claim and alone chooses lifecycle stages. This half covers starting, resuming and
-assigning work; [`execution-report.md`](execution-report.md) covers finishing phases, the
-legacy reporter calls and delivery. Reporting is decided only in [`reporting.md`](reporting.md);
-no agent exists solely for it.
+Execute claim and alone chooses lifecycle stages. This half covers assigning work;
+[`execution-report.md`](execution-report.md) covers finishing phases and delivery. The claim adds
+the parts for its mode from `execute/`: who owns orchestration (lean or a dedicated orchestration
+agent), delegation when enabled, and the reporting calls ([`reporting.md`](reporting.md), or the
+legacy reporter); no agent exists solely for reporting.
 
-## Start and resume
-
-Create a dedicated orchestration agent for scheduling and integration before
-implementation starts. It is not a reporting agent. Give it the
-bound feature, repository, branch, issue, current claim identity, task list,
-approved decisions and project instructions. Record its actual host agent ID in
-the feature handoff. On resume, inspect that handle and reuse it while it is live.
-An observation timeout alone does not prove an agent has stopped. Recover a
-terminal or missing agent from the handoff before assigning new work.
-
-Use the host's real agent spawn, message and status tools; do not invent tool names or
-assume a child can spawn workers. If nested spawning
-is unavailable, the dispatcher creates workers on the orchestration agent's
-behalf and forwards results. If the only duty left for that layer would be
-reporting, drop it and let the dispatcher assign workers directly. Where this fallback applies, the dispatcher
-spawns the batch with blocking calls and forwards each structured result once,
-unchanged, the same as the orchestration agent would; it does not relay,
-re-summarise or add commentary. The orchestration agent still controls assignments.
-Reserve capacity for the dispatcher and, while it does real coordination work, the
-orchestration agent; never reserve any for reporting. Release idle workers when needed.
-If the host has no usable subagent support or cannot fit a worker, record that
-specific blocker and request a supported host/configuration. Do not report a
-simulated role or serial parent execution as agent delegation.
-
-The current coordinator creates the report before assigning the first task, using
-the idempotent `progress init` or the legacy `init` call that
-[`reporting.md`](reporting.md) names for the mode. In `legacy` mode only, the
-call is:
-
-```text
-python .specify/extensions/workflow/scripts/progress.py init --tasks specs/<feature>/tasks.md --output specs/<feature>/workflow/progress --summary
-```
-
-Record phase results under the exact phase heading from `tasks.md`. Open the report once
-when that helps the human: `specs/<feature>/progress/.view/index.html`
-(`specs/<feature>/workflow/progress/index.html` in legacy mode); it reloads by itself. Do not
+The current coordinator creates the progress report before assigning the first task, with the
+call the reporting part names. Record phase results under the exact phase heading from
+`tasks.md`. Open the report once when that helps the human; it reloads by itself. Do not
 re-open or re-verify it in a loop. Without browser control, give the absolute file link and do
 not claim to have opened it. Keep the report local unless publication is authorized, and keep
 credentials and transcripts out of notes.
@@ -71,42 +31,13 @@ are ledger-trust decisions the orchestration agent alone makes. The one
 exception is the delegated Execute stage itself: it runs with an orchestrator
 scope over its own feature's `T###` tasks and legitimately calls `start`,
 `collect`, `accept`, `reassign` and `adopt` for them; `trust-reset` stays
-forbidden even for it (see "Light-tier collection results" in
-execution-report.md). An ordinary task worker never has that scope. Staging
+forbidden even for it. An ordinary task worker never has that scope. Staging
 stays with the orchestration agent, which stages a worker's owned paths by
-explicit name.
+explicit name. The guard hook also refuses these commands where it runs; on
+Codex it runs only once approved (`workflow.py doctor` reports it), so this
+rule holds either way.
 
-When `.specify/workflow.yml` enables delegation, start each ready `T###` worker
-with `python .specify/extensions/workflow/scripts/delegate_dispatch.py start
---feature specs/<feature> --id T###`. Pass `--task-file <path>` with its bounded
-assignment, owned paths, dependencies and acceptance checks. Pass `--cwd
-<isolated-worktree>` for concurrent writers. Collect the returned run ID with
-`delegate_dispatch.py collect`; follow any `replacement` ID and review the final
-result before accepting work. The adapter snapshots the route and driver copy
-at start, records unavailable candidates, rejected models and fallbacks, and
-refuses a second start of a task that is already starting or running. It makes
-one automatic stronger retry (`delegation.stronger_retry`) only for failed work
-whose measurement shows no edits: empty `dirty_paths_changed`, unchanged HEAD
-and index, and `coverage_complete: true`. Unknown or incomplete measurement means
-no automatic retry, so
-review the worktree yourself. Do not reassign a running run when YAML changes.
-For a terminal result that is still too complex or incomplete, the orchestrator
-can run `delegate_dispatch.py reassign --feature specs/<feature> --run-id <id>
---reason "<specific gap>"`; this starts at most one stronger attempt within the
-same limit and records the reason. Review partial edits before choosing that
-path.
-
-When a start fails with `DELEGATION_ROUTES_UNAVAILABLE`, no candidate could start or each
-was proved never launched; the attempt is `blocked`: fix the CLI or route (`workflow.py doctor
---project`) and start again. `DELEGATION_START_UNCERTAIN` and `DELEGATION_LEDGER_BUSY` follow
-[delegation-and-decisions.md](delegation-and-decisions.md#delegation): recover or abandon the
-intent, never start the task again or hand it to another worker; `abandon` refuses for 300
-seconds after a start that recorded no outcome.
-
-Record each abandoned intent's reason in the handoff. The ledger keeps it too.
-Treat routing type as model choice only: a delegated run is writable unless you
-isolate it yourself.
-When delegation is disabled, ignore routing comments and use the user's selected
+Without delegation, routing comments in `tasks.md` are ignored: use the user's selected
 model with the existing worker tools.
 
 Fill available worker slots with ready, independent tasks. Reconsider the queue
@@ -125,21 +56,14 @@ Never invent extra work merely to occupy slots. The orchestration agent reviews
 worker results, integrates changes, checks acceptance evidence and requests fixes.
 Unverified worker claims remain pending.
 
-## Spawn pattern, blocking waits and turn budgets (F1, F2, T0)
+## Spawn pattern, blocking waits and turn budgets
 
 Spawn a batch of ready workers with several tool calls in the same message,
 blocking rather than backgrounded: every worker in the batch runs concurrently,
 and each worker's own result is delivered straight to the orchestration agent
 that spawned it. Never route a worker's result to the dispatcher for relay and
 re-summarising; the dispatcher hears from the orchestration agent only at batch
-boundaries (tasks accepted, the phase commit SHA, a blocker). This applies
-whether the batch runs in-session or through `delegate_dispatch.py`. When the
-Execute stage itself is delegated (`delegate_dispatch.py start --id
-stage:execute`), its orchestrator-scoped process is the orchestration agent
-for this purpose: it spawns and collects its own feature's task workers
-directly, through its own `start`/`collect` calls, and reports to the
-dispatcher only at batch boundaries, the same as an in-session orchestration
-agent.
+boundaries (tasks accepted, the phase commit SHA, a blocker).
 
 No agent in this protocol, dispatcher, orchestration agent or worker, ends its
 turn while it still owns background work that is running. Block on it (a
@@ -158,16 +82,8 @@ because turn count, not what a worker reads at the start, explains almost all of
 its token cost. Each figure below is a policy budget on fresh input plus output
 tokens only; it excludes cache reads, which are about 96% of a worker's total
 token volume and are not part of the budget. It is not a hard stop: when
-accepting a task, the coordinator logs any overrun instead of cutting the
-worker off mid-task. In `legacy` mode the orchestration agent compares the task's recorded `progress.py usage` figure against its class budget and logs the overrun. In `projection` and `refresh` mode the figure is collected
-automatically from the run and the log is a note:
-
-```text
-python .specify/extensions/progress/scripts/progress.py note "Budget overrun T###: <class> <figure>/<budget>: <reason>" --target T###
-```
-
-In `legacy` mode the figure is the `progress.py usage` entry and the log is the
-`event` call in `execution-report.md`.
+accepting a task, the coordinator logs any overrun, as the reporting part says,
+instead of cutting the worker off mid-task.
 
 | Task class | Turn budget (fresh + output) | Notes |
 | --- | --- | --- |

@@ -15,7 +15,7 @@
     h1 { font-family: var(--font-serif); font-size: clamp(1.75rem, 3vw + 1rem, 2.5rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; margin-bottom: 0.5rem; }
     .subtitle { font-size: 1rem; line-height: 1.55; color: var(--color-muted); max-width: 58ch; }
     .diagram-container { background: var(--color-paper-2); border-radius: 8px; border: 1px solid var(--color-rule); padding: 1.5rem; overflow-x: auto; }
-    svg { width: 100%; min-width: 760px; display: block; }
+    svg { width: 100%; min-width: 1000px; display: block; }
     .cards { display: grid; grid-template-columns: 1.1fr 1fr 0.9fr; gap: 1rem; margin-top: 1.5rem; }
     @media (max-width: 720px) { .cards { grid-template-columns: 1fr; } }
     .card { background: #fff; border-radius: 6px; border: 1px solid var(--color-rule); padding: 1.25rem; }
@@ -36,7 +36,9 @@
       <p class="subtitle">Three phases from research through launch. Design review in week 8 is the critical gate — development doesn't continue until sign-off.</p>
     </div>
     <div class="diagram-container">
-      <svg viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg">
+      <svg viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="gantt-full-title gantt-full-desc">
+        <title id="gantt-full-title">Q2 product launch, 12-week plan</title>
+        <desc id="gantt-full-desc">Gantt chart of a twelve-week launch from April to June across discovery, design and launch phases, with the design review as the critical gate before development and beta testing.</desc>
         <defs><pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"/></pattern></defs>
         <rect width="100%" height="100%" fill="#f5f5f5"/>
         <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"/>

@@ -24,6 +24,7 @@ class FakeGitHub:
         self.labels = set()
         self.writes = []
         self.fail_once = None
+        self.blocking_unavailable = False
 
     def add(self, n, title=None, body='', status='Backlog'):
         self.issues[n] = {'number': n, 'id': n * 100, 'node_id': f'I{n}', 'title': title or f'Issue {n}',
@@ -74,6 +75,10 @@ class FakeGitHub:
         suffix = '/'.join(parts[5:])
         if suffix in ('comments', 'timeline'):
             return []
+        if suffix == 'dependencies/blocking':
+            if self.blocking_unavailable:
+                raise m.ScopeError('HTTP 404: Not Found')
+            return [copy.deepcopy(self.issues[d]) for d in sorted(d for d, blockers in self.deps.items() if n in blockers)]
         if suffix.startswith('dependencies/blocked_by'):
             deps = self.deps.setdefault(n, set())
             if method == 'POST':
@@ -245,6 +250,37 @@ class ScopeTests(unittest.TestCase):
         snap['images'] = ['https://a/image.png']
         with self.assertRaisesRegex(m.ScopeError, 'visually inspected'):
             self.app.validate_analysis(snap, analysis)
+
+    def test_skeleton_is_publishable_only_after_images_are_viewed(self):
+        snap, analysis = self.analysis()
+        snap['images'] = ['https://a/image.png']
+        skeleton = m.skeleton(snap)
+        self.assertEqual((skeleton['issue'], skeleton['fingerprint']), (1, snap['fingerprint']))
+        self.assertEqual(skeleton['images'], [{'url': 'https://a/image.png', 'viewed': False, 'observations': ''}])
+        self.assertEqual(skeleton['tree']['dimensions'], dict.fromkeys(m.DIMENSIONS))
+        filled = dict(skeleton, requirements=['AC-1'], alignment='Reuses tested behavior', evidence=['src/a.py:1'],
+                      tree=dict(node(), dimensions=analysis['tree']['dimensions']))
+        del filled['tree']['score']
+        with self.assertRaisesRegex(m.ScopeError, 'visually inspected'):
+            self.app.validate_analysis(snap, filled)
+        filled['images'] = [{'url': 'https://a/image.png', 'viewed': True, 'observations': 'A form with one field.'}]
+        self.app.validate_analysis(snap, filled)
+        self.assertEqual(filled['tree']['score'], 3)  # filled from the dimensions
+        filled['tree']['score'] = 5
+        with self.assertRaisesRegex(m.ScopeError, 'does not match rubric'):
+            self.app.validate_analysis(snap, filled)
+
+    def test_inspect_cli_writes_a_skeleton_and_never_overwrites_one(self):
+        target = self.root / 'analysis.json'
+        with patch.object(m, 'Scope', return_value=self.app), patch('sys.stdout'):
+            self.assertEqual(m.main(['inspect', '1', '--root', str(self.root), '--skeleton', str(target)]), 0)
+            self.assertEqual(m.read_json(target)['tree']['key'], 'root')
+            with patch('sys.stderr'):
+                self.assertEqual(m.main(['inspect', '1', '--root', str(self.root), '--skeleton', str(target)]), 2)
+        missing = dict(m.read_json(target), tree=node())
+        del missing['tree']['score']
+        m.write_json(target, missing)
+        self.assertEqual(m.read_analysis(target)['tree']['score'], 3)
 
     def test_effort_boundaries(self):
         self.assertEqual(m.effort(dict.fromkeys(m.DIMENSIONS, 0)), 1)

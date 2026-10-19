@@ -117,6 +117,37 @@ class GuardTests(unittest.TestCase):
                 self.assertEqual(self.run_guard(claude(edit), {'CLAUDE_PROJECT_DIR': str(root)})[0], 0)
             self.assertEqual(self.run_guard(claude('gh pr view --json body'), {'CLAUDE_PROJECT_DIR': '/missing'})[0], 0)
 
+    def test_inline_pr_body_is_denied_in_a_managed_project_only(self):
+        commands = ('gh pr edit 12 --body "Closes #10"', 'gh pr edit 12 -b x', 'gh pr create --title T --body=x',
+                    'git status && gh pr create -t T -b "Fixes other/repo#1"', 'gh pr edit 12 --body ""')
+        with patch.object(guard, 'on_default_branch', return_value=False):
+            for managed, expected in ((True, 2), (False, 0)):
+                with tempfile.TemporaryDirectory() as folder:
+                    root = self.pr_project(folder, managed=managed)
+                    for shape in (claude, codex):
+                        for command in commands:
+                            code, reason = self.run_guard(shape(command), {'CLAUDE_PROJECT_DIR': str(root)})
+                            self.assertEqual(code, expected, (managed, command, reason))
+                            if expected:
+                                self.assertIn('pr_publish.py', reason)
+                                self.assertEqual(reason.count(chr(10)), 1, reason)
+                    self.assertEqual(self.run_guard(claude('gh pr edit 12 --body-file specs/001-x/evidence/pr-body.md'),
+                                                    {'CLAUDE_PROJECT_DIR': str(root)})[0], 0)
+
+    def test_pr_create_without_a_linted_body_file_is_denied_in_a_managed_project_only(self):
+        commands = ('gh pr create --fill', 'gh pr create --fill-first --title T', 'gh pr create -t T')
+        with patch.object(guard, 'on_default_branch', return_value=False):
+            for managed, expected in ((True, 2), (False, 0)):
+                with tempfile.TemporaryDirectory() as folder:
+                    root = self.pr_project(folder, managed=managed)
+                    for shape in (claude, codex):
+                        for command in commands:
+                            code, reason = self.run_guard(shape(command), {'CLAUDE_PROJECT_DIR': str(root)})
+                            self.assertEqual(code, expected, (managed, command, reason))
+                            if expected:
+                                self.assertIn('pr_publish.py', reason)
+                    self.assertEqual(self.run_guard(claude('gh pr edit 12 --title T'), {'CLAUDE_PROJECT_DIR': str(root)})[0], 0)
+
     def test_pr_create_is_denied_on_the_default_branch_only(self):
         create, edit = 'gh pr create --fill', 'gh pr edit 12 --title T'
         for head, default, expected in (('main', 'origin/main', 2), ('feat/x', 'origin/main', 0), ('main', '', 0), ('', 'origin/main', 0)):

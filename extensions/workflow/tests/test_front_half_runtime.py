@@ -3,6 +3,7 @@ the resume contract, revalidate-upstream, the bind-only Specify hook and phase-l
 import copy
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -272,6 +273,122 @@ class ClaimOutputTests(Base):
                                                  self.feature + '/checklists/*.md'])
         self.assertFalse(claim['project_sync'])
 
+    FRAGMENTS = ('execute/lean.md', 'execute/orchestrator.md', 'execute/delegated-workers.md',
+                 'execute/reporting-legacy.md', 'reporting.md')
+    WORKER_RULE = '`git stash` and `git add -A`/`git add .` are forbidden for a task worker'
+
+    def test_execute_protocol_carries_only_the_parts_of_its_mode(self):
+        references = SCRIPT.parents[1] / 'skills/workflow/references'
+        heading = {name: (references / name).read_text(encoding='utf-8').splitlines()[0] for name in self.FRAGMENTS}
+        used = set()
+        for lean in (True, False):
+            for delegation in (True, False):
+                for reporting in ('projection', 'refresh', 'legacy'):
+                    policy = copy.deepcopy(self.policy)
+                    policy['lean_execution'] = {'enabled': lean}
+                    policy['delegation']['enabled'] = delegation
+                    parts = w.execute_protocol(policy, 'full', reporting)
+                    expected = {'execute/lean.md' if lean else 'execute/orchestrator.md',
+                                'execute/reporting-legacy.md' if reporting == 'legacy' else 'reporting.md'}
+                    if delegation:
+                        expected.add('execute/delegated-workers.md')
+                    self.assertEqual(parts[:2], ['execution-assign.md', 'execution-report.md'])
+                    self.assertEqual(set(parts[2:]), expected)
+                    text = w.reference_text(self.root, 'execute', parts)
+                    self.assertTrue(text.startswith('# Stage reference: execute'))
+                    for name in self.FRAGMENTS:
+                        self.assertEqual(heading[name] in text, name in expected, (lean, delegation, reporting, name))
+                    # worker prohibitions stay in the text whatever the guard hook does
+                    self.assertIn(self.WORKER_RULE, re.sub(r'\s+', ' ', text))
+                    used.update(parts)
+        self.assertTrue(set(self.FRAGMENTS) <= used)
+
+    def test_execute_claim_prints_its_reporting_mode_and_composed_protocol(self):
+        run = self.run_object()
+        self.advance(run, 'taskstoissues')
+        legacy = ['execution-assign.md', 'execution-report.md', 'execute/orchestrator.md', 'execute/reporting-legacy.md']
+
+        def reclaim(**kwargs):
+            state = run.load()
+            state['active'] = None
+            run.save(state)
+            return run.claim(self.usage(), **kwargs)
+
+        claim = run.claim(self.usage())  # first claim: the full protocol
+        self.assertEqual(claim['stage'], 'execute')
+        self.assertEqual(claim['reporting']['mode'], 'legacy')  # Progress is not installed in the fixture
+        protocol = claim['execute_protocol']
+        self.assertEqual((protocol['files'], protocol['printed']), (legacy, True))
+        self.assertEqual(claim['reference_text'], w.reference_text(self.root, 'execute', legacy))
+        self.assertIn('## Legacy reporter calls (mode legacy only)', claim['reference_text'])
+        self.assertEqual(run.load()['execute_protocol']['digest'], protocol['digest'])
+        checkpoint_validator().validate(run.load())
+
+        claim = reclaim()  # unchanged: named, not printed
+        self.assertEqual(claim['execute_protocol']['digest'], protocol['digest'])
+        self.assertIs(claim['execute_protocol']['printed'], False)
+        self.assertIn('context was reset', claim['execute_protocol']['note'])
+        self.assertEqual(claim['reference_text'], w.reference_text(self.root, 'execute'))
+
+        self.assertIs(reclaim(verbose=True)['execute_protocol']['printed'], True)  # --verbose always prints
+
+        with patch('progress_bridge.mode', return_value={'mode': 'projection', 'source': 'hooks registered'}):
+            claim = reclaim()  # mode change
+        self.assertEqual(claim['reporting'], {'mode': 'projection', 'reason': 'hooks registered'})
+        self.assertEqual((claim['execute_protocol']['files'][-1], claim['execute_protocol']['printed']),
+                         ('reporting.md', True))
+        self.assertNotIn('## Legacy reporter calls', claim['reference_text'])
+        self.assertIs(reclaim()['execute_protocol']['printed'], True)  # back to legacy: changed again
+
+        real = w.reference_text
+        edited = lambda root, stage, parts=(): real(root, stage, parts) + ('One more rule.' + chr(10) if parts else '')
+        with patch.object(w, 'reference_text', edited):
+            claim = reclaim()  # content change
+        self.assertIs(claim['execute_protocol']['printed'], True)
+        self.assertIn('One more rule.', claim['reference_text'])
+
+    def test_cli_verbose_claim_prints_the_protocol_again(self):
+        run = self.run_object()
+        self.advance(run, 'taskstoissues')
+        run.claim(self.usage())
+        state = run.load()
+        state['active'] = None
+        run.save(state)
+        usage = self.root / 'usage.json'
+        w.write(usage, self.usage())
+        code, claim = self.cli('claim', '--feature', self.feature, '--usage', str(usage), '--verbose')
+        self.assertEqual(code, 0)
+        self.assertIs(claim['execute_protocol']['printed'], True)
+        self.assertIn('## Legacy reporter calls', claim['reference_text'])
+
+    def test_receipt_template_completes_every_stage_and_each_stage_field_is_required(self):
+        self.profiles()
+        self.policy['issue_sync'] = {'taskstoissues': 'phase-lazy', 'parent_link': 'native-subissue'}
+        self.configure()
+        fills = {'effort_score': 13, 'lint': {'ok': True, 'findings': 0},
+                 'pr_url': 'https://github.com/acme/app/pull/11'}
+        base = {'stage', 'outcome', 'summary', 'inputs', 'evidence'}
+        run = self.run_object()
+        seen = set()
+        while True:
+            claim = run.claim(self.usage(), finalize=True)
+            stage = claim['stage']
+            template = claim['receipt_template']
+            fixture = self.receipt(stage)
+            receipt = {**template, 'summary': fixture['summary'], 'evidence': fixture['evidence'],
+                       'inputs': template['inputs'] + fixture['inputs']}
+            receipt.update({key: fills[key] for key in template if key in fills})
+            self.assertFalse([key for key, value in receipt.items() if '<' in json.dumps(value)], stage)
+            for field in sorted(set(template) - base):
+                with self.subTest(stage=stage, field=field), self.assertRaises(w.WorkflowError):
+                    run.complete(claim['token'], {key: value for key, value in receipt.items() if key != field})
+                seen.add(field)
+            run.complete(claim['token'], receipt)  # the filled template is enough
+            if stage == 'pr':
+                break
+        self.assertTrue({'effort_score', 'unresolved', 'answers_applied', 'parent_issue', 'native_links_verified',
+                         'lazy', 'blocking_findings', 'pr_url', 'images_verified'} <= seen)
+
     def test_cli_claim_omits_baseline_and_complete_is_compact_unless_verbose(self):
         run = self.run_object()
         usage = self.root / 'usage.json'
@@ -407,6 +524,140 @@ class WriteRetryTests(unittest.TestCase):
                 with self.assertRaises(PermissionError):
                     w.write(target, {'ok': False})
             self.assertEqual(sleep.call_count, 9)
+
+
+class GuardApprovalTests(Base):
+    """Doctor and status say when Codex would skip the workflow guard hook (not trusted or not approved)."""
+    GUARD = 'python .specify/extensions/workflow/hooks/guard.py'
+
+    def setUp(self):
+        super().setUp()
+        self.codex_home = self.root / 'codex-home'
+        self.codex_home.mkdir()
+        environment = patch.dict(os.environ, {'CODEX_HOME': str(self.codex_home)})
+        environment.start()
+        self.addCleanup(environment.stop)
+        self.hooks = self.root / '.codex/hooks.json'
+        self.hooks.parent.mkdir(parents=True, exist_ok=True)
+        self.hooks.write_text(json.dumps({'hooks': {'PreToolUse': [
+            {'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': self.GUARD}]}]}}), encoding='utf-8')
+
+    def warnings(self):
+        return [item for item in w.doctor(self.root, self.policy)['warnings'] if item.startswith('GUARD_HOOK_UNAPPROVED')]
+
+    def approve(self, trusted=True):
+        key = (str(self.hooks) + ':pre_tool_use:0:0').replace('\\', '\\\\')
+        project = str(self.root).lower().replace('\\', '\\\\')
+        text = f'[hooks.state."{key}"]\ntrusted_hash = "sha256:abc"\n'
+        if trusted:
+            text = f'[projects."{project}"]\ntrust_level = "trusted"\n\n' + text
+        (self.codex_home / 'config.toml').write_text(text, encoding='utf-8')
+
+    def test_unapproved_guard_warns_in_doctor_and_status_with_the_hooks_step(self):
+        warnings = self.warnings()
+        self.assertEqual(len(warnings), 1)
+        self.assertIn('/hooks', warnings[0])
+        run = self.run_object()
+        status = w.native_run_status(self.root, run.relative, run.load(), [])
+        self.assertEqual(status['warnings'], warnings)
+        self.approve(trusted=False)  # approved hook in an untrusted project still does not run
+        self.assertEqual(len(self.warnings()), 1)
+
+    def test_approved_guard_in_a_trusted_project_does_not_warn(self):
+        self.approve()
+        self.assertEqual(self.warnings(), [])
+
+    def test_claude_only_project_never_warns(self):
+        w.write(self.root / '.specify/init-options.json', {'integration': 'claude', 'ai_skills': True})
+        self.assertEqual(self.warnings(), [])
+
+
+class OperationCacheTests(Base):
+    """One git and fingerprint pass per command: memoised inside `operation()`, dropped by the runtime's writes."""
+
+    def git_calls(self):
+        calls, real = [], subprocess.run
+
+        def run(cmd, *args, **kwargs):
+            if isinstance(cmd, (list, tuple)) and cmd and cmd[0] == 'git':
+                calls.append(list(cmd[1:]))
+            return real(cmd, *args, **kwargs)
+        return calls, patch.object(subprocess, 'run', run)
+
+    @staticmethod
+    def count(calls, *prefix):
+        return sum(call[:len(prefix)] == list(prefix) for call in calls)
+
+    def test_source_inventory_is_memoised_until_the_runtime_writes_a_source_path(self):
+        self.write('src/app.py', 'print(1)\n')
+        calls, counting = self.git_calls()
+        with counting:
+            with w.operation():
+                first = w.source_fingerprints(self.root)
+                self.assertEqual(w.source_fingerprints(self.root), first)
+                w.write(self.root / self.feature / 'workflow/note.json', {})  # operational: kept
+                w.source_fingerprints(self.root)
+                self.assertEqual(self.count(calls, 'ls-files', '--cached'), 1)
+                w.write(self.root / 'src/settings.json', {'a': 1})  # a source path: dropped
+                self.assertIn('src/settings.json', w.source_fingerprints(self.root))
+                self.assertEqual(self.count(calls, 'ls-files', '--cached'), 2)
+            w.source_fingerprints(self.root)
+            w.source_fingerprints(self.root)
+        self.assertEqual(self.count(calls, 'ls-files', '--cached'), 4)  # nothing is memoised outside an operation
+
+    def test_attributes_are_asked_once_per_path_and_dropped_by_a_gitattributes_write(self):
+        self.write('src/a.py', 'a\n')
+        self.write('src/b.py', 'b\n')
+        calls, counting = self.git_calls()
+        with counting, w.operation():
+            w.fingerprint_files(self.root, ['src/a.py'])
+            w.fingerprint_files(self.root, ['src/a.py', 'src/b.py'])
+            w.fingerprint_files(self.root, ['src/b.py'])
+            self.assertEqual(self.count(calls, 'check-attr'), 2)  # a, then only b
+            target = self.root / '.gitattributes'
+            temp = self.root / 'attributes.tmp'
+            temp.write_text('*.py -text\n', encoding='utf-8')
+            w.replace_file(temp, target)
+            w.fingerprint_files(self.root, ['src/a.py'])
+            self.assertEqual(self.count(calls, 'check-attr'), 3)
+
+    def test_identity_is_memoised_and_a_mutating_git_call_drops_it(self):
+        calls, counting = self.git_calls()
+        with counting, w.operation():
+            self.assertEqual(w.normalized_remote(self.root), 'github.com/acme/app')
+            self.assertEqual(w.github_repository(self.root), 'acme/app')
+            self.assertEqual(self.count(calls, 'config', '--get', 'remote.origin.url'), 1)
+            w.git(self.root, 'remote', 'set-url', 'origin', 'https://github.com/acme/other.git')
+            self.assertEqual(w.normalized_remote(self.root), 'github.com/acme/other')
+        subprocess.run(['git', 'remote', 'set-url', 'origin', 'https://github.com/acme/third.git'], cwd=self.root,
+                       check=True)
+        self.assertEqual(w.normalized_remote(self.root), 'github.com/acme/third')
+
+    def test_load_with_a_recorded_root_commit_skips_the_history_walk(self):
+        run = self.run_object()
+        calls, counting = self.git_calls()
+        with counting:
+            run.load()
+        self.assertEqual(self.count(calls, 'rev-list'), 0)
+        self.assertEqual(self.count(calls, 'merge-base', '--is-ancestor'), 1)
+        state = run.load()
+        state['repo_identity']['root_commit'] = 'b' * 40  # unreachable: the full walk decides, and refuses
+        run.path.write_text(json.dumps(state), encoding='utf-8')
+        with counting, self.assertRaisesRegex(w.WorkflowError, 'CHECKPOINT_IDENTITY_MISMATCH'):
+            run.load()
+        self.assertEqual(self.count(calls, 'rev-list'), 1)
+
+    def test_claim_after_ready_hashes_the_source_tree_once_and_asks_attributes_once(self):
+        self.write('src/app.py', 'print(1)\n')
+        run = self.run_object()
+        self.advance(run, 'ready')
+        calls, counting = self.git_calls()
+        with counting:
+            claim = run.claim(self.usage(), finalize=True)
+        self.assertEqual(claim['stage'], 'pr')
+        self.assertEqual(self.count(calls, 'ls-files', '--cached'), 1)
+        # the package digest, one prefetch over every receipt's paths, and the source inventory
+        self.assertEqual(self.count(calls, 'check-attr'), 3)
 
 
 class InventoryAndHandoffTests(Base):

@@ -11,22 +11,28 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
+from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import pr_publish  # noqa: E402
 
 BODY = 'Fixes #10\n'
+SHA = 'a' * 40
 SECTION_OLD = pr_publish.START + '\n## Old\n\nold text\n' + pr_publish.END
 
 
 class FakeRunner:
-    def __init__(self, pr=None, branch='feat/x', default='origin/main', upstream=True):
+    def __init__(self, pr=None, branch='feat/x', default='origin/main', upstream=True, view_error=None,
+                 uncommitted=(), unpushed=()):
         self.pr, self.branch, self.default, self.upstream, self.calls = pr, branch, default, upstream, []
+        self.view_error, self.uncommitted, self.unpushed = view_error, uncommitted, unpushed
 
     def __call__(self, args, cwd):
         self.calls.append(args)
         key = ' '.join(args[:3])
+        if key == 'gh pr view' and 'number,url,body' in args and self.view_error:
+            return self.fail(self.view_error)
         if key == 'gh pr view' and 'number,url,body' in args:
             return self.done(json.dumps(self.pr)) if self.pr else self.fail('no pull requests found')
         if key == 'gh pr view':
@@ -38,7 +44,13 @@ class FakeRunner:
                 return self.done(self.branch)
             return self.done(self.default) if self.default else self.fail('no origin/HEAD')
         if key == 'gh repo view':
-            return self.done('main')
+            return self.done('acme/app' if 'nameWithOwner' in args else 'main')
+        if key == 'git rev-parse HEAD':
+            return self.done(SHA + '\n')
+        if key == 'git cat-file -e':
+            return self.fail('missing') if args[3].split(':', 1)[1] in self.uncommitted else self.done('')
+        if key.startswith('gh api repos/acme/app/contents/'):
+            return self.fail('HTTP 404: Not Found') if any(quote(p) in args[2] for p in self.unpushed) else self.done('')
         if key == 'git rev-parse --abbrev-ref':
             return self.done('origin/' + self.branch) if self.upstream else self.fail('no upstream')
         if key == 'git push --set-upstream':
@@ -153,6 +165,60 @@ class PublishTests(unittest.TestCase):
         body = 'Closes #10, fixes #9, resolves other/repo#4 `closes #99`\n```\nfixes #98\n```\n'
         self.assertEqual(pr_publish.lint(self.root, body, 'Acme/App', 10, [9]),
                          execution_tools.pr_lint(body, 'Acme/App', 10, [9]))
+
+    def test_a_failed_pr_lookup_is_an_error_not_a_missing_pr(self):
+        runner = FakeRunner(pr=None, upstream=False, view_error='HTTP 401: Bad credentials (https://api.github.com/graphql)')
+        code, result = self.run_script(runner)
+        self.assertEqual(code, 3)
+        self.assertIn('Bad credentials', result['error'])
+        self.assertEqual([c[:3] for c in runner.calls], [['gh', 'pr', 'view']])  # no push, no create
+
+    def test_unpaired_or_repeated_markers_are_refused(self):
+        for body in ('Intro\n' + pr_publish.START + '\nhand edit\n', 'x\n' + pr_publish.END + '\n',
+                     SECTION_OLD + '\n' + SECTION_OLD + '\n', pr_publish.END + '\n' + pr_publish.START + '\n'):
+            runner = FakeRunner(pr={'number': 12, 'url': 'u', 'body': body})
+            code, result = self.run_script(runner)
+            self.assertEqual(code, 2, body)
+            self.assertIn('markers', result['error'])
+            self.assertFalse(any(c[:3] == ['gh', 'pr', 'edit'] for c in runner.calls))
+        self.explained.write_text('# X\n\n' + pr_publish.END + '\n', encoding='utf-8')
+        self.assertEqual(self.run_script(FakeRunner(pr={'number': 12, 'url': 'u', 'body': ''}))[0], 2)
+
+    IMAGES = ('# Feature X\n\n![Flow](images/flow%20one.png "Flow") <img alt="s" src="../../assets/shot.png">\n'
+              '![Ext](https://example.com/a.png) ![Same](images/flow%20one.png)\n'
+              '```\n![Code](images/code.png)\n```\n')
+
+    def test_relative_images_are_pinned_and_verified_before_the_lint(self):
+        self.explained.write_text(self.IMAGES, encoding='utf-8')
+        runner = FakeRunner(pr=None, upstream=False)
+        code, receipt = self.run_script(runner)
+        self.assertEqual(code, 0, receipt)
+        body, lint = self.body_and_lint(receipt)
+        text = body.decode('utf-8')
+        pinned = 'https://github.com/acme/app/blob/' + SHA + '/'
+        self.assertIn('![Flow](' + pinned + 'docs/001-x/images/flow%20one.png?raw=true "Flow")', text)
+        self.assertIn('![Same](' + pinned + 'docs/001-x/images/flow%20one.png?raw=true)', text)
+        self.assertIn('src="' + pinned + 'assets/shot.png?raw=true"', text)
+        self.assertIn('![Ext](https://example.com/a.png)', text)
+        self.assertIn('```\n![Code](images/code.png)\n```', text)
+        self.assertEqual(lint['body_sha256'], hashlib.sha256(body).hexdigest())
+        self.assertEqual(receipt['pr_body_sha256'], lint['body_sha256'])
+        order = [' '.join(c[:3]) for c in runner.calls]
+        self.assertLess(order.index('git push --set-upstream'), next(i for i, c in enumerate(order) if c.startswith('gh api')))
+        self.assertEqual(sum(c.startswith('gh api') for c in order), 2)
+        self.assertEqual(sum(c == 'git push --set-upstream' for c in order), 1)
+        self.assertIn('gh pr create', order)
+
+    def test_an_image_that_cannot_be_verified_fails_explicitly(self):
+        self.explained.write_text(self.IMAGES, encoding='utf-8')
+        for runner, expected in ((FakeRunner(pr={'number': 12, 'url': 'u', 'body': ''}, uncommitted={'assets/shot.png'}), 2),
+                                 (FakeRunner(pr={'number': 12, 'url': 'u', 'body': ''}, unpushed={'docs/001-x/images/flow one.png'}), 3)):
+            code, result = self.run_script(runner)
+            self.assertEqual(code, expected, result)
+            self.assertIn('image', result['error'])
+            self.assertFalse(any(c[:3] in (['gh', 'pr', 'edit'], ['git', 'push', '--set-upstream']) for c in runner.calls))
+        self.explained.write_text('![x](../../../outside.png)\n', encoding='utf-8')
+        self.assertEqual(self.run_script(FakeRunner(pr={'number': 12, 'url': 'u', 'body': ''}))[0], 2)
 
     def test_missing_document_exits_2(self):
         self.explained.unlink()

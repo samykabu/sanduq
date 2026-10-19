@@ -4,7 +4,7 @@ Follow `.specify/extensions/scope/references/analysis-contract.md` for the schem
 formula. The analysis must also:
 
 - carry the snapshot fingerprint from `inspect`;
-- give every image a `viewed: true` observation backed by actual visual inspection;
+- set each image's `viewed: true` and `observations` only after actually looking at it;
 - give every node scope, exclusions, evidence, rationale, acceptance, coverage IDs and a score;
 - give each Specify prompt the WHAT and WHY, the source issue identity and score, and the useful
   constraints learned from implemented prerequisites, keeping engineering evidence apart from

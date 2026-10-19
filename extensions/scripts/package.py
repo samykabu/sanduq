@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import re
 import zipfile
 from pathlib import Path
 
@@ -13,8 +14,28 @@ EXCLUDE = {'.git', '__pycache__', 'node_modules', '.specify', '.specify-dev', 't
            # Caches and reports a local test or lint run leaves behind, never package content.
            '.pytest_cache', '.mypy_cache', '.ruff_cache', '.hypothesis', '.tox', '.nox', 'htmlcov',
            '.coverage', '.nyc_output', 'coverage'}
-# Folders of one extension that stay in the repository: Progress's README screenshots (linked by URL, 257 KB).
-EXCLUDE_PATHS = {'progress': ('docs/assets',)}
+# The one list of source files and folders (`<extension>/<path>`) that stay in the repository: nothing a
+# consumer runs or an agent route names. A README link to one of them is rewritten to its GitHub URL.
+EXCLUDE_PATHS = (
+    # Progress: human reference docs (verbs.md calls them "not needed to run a verb") and their screenshots.
+    'progress/docs',
+    # Illustrate: preview PNGs and gallery variants nothing names, and the icon builder with its sources.
+    'illustrate/skill/assets/technical-color/process-flow/examples/images',
+    'illustrate/skill/assets/index-variation-1.html',
+    'illustrate/skill/assets/index-variation-2.html',
+    'illustrate/skill/scripts/vendor',
+    'illustrate/skill/scripts/build-icons.py',
+    'illustrate/skill/scripts/fix-mojibake.py',
+    # Workflow: delegate-task's READMEs and their images; delegation needs SKILL.md, the .mjs drivers and contracts/.
+    'workflow/assets/delegate-task/README.md',
+    'workflow/assets/delegate-task/README.ar.md',
+    'workflow/assets/delegate-task/assets',
+)
+BLOB = 'https://github.com/samykabu/sanduq/blob/main/extensions/'
+
+
+def excluded(name):
+    return any(name == path or name.startswith(path + '/') for path in EXCLUDE_PATHS)
 
 
 def package(extension, output=None, root=ROOT):
@@ -31,8 +52,14 @@ def package(extension, output=None, root=ROOT):
                 # cannot install them from this repository; the package restores the real name.
                 files[name[:-len('SKILL.ext.md')] + 'SKILL.md' if name.endswith('/SKILL.ext.md') else name] = path.read_bytes()
     include(source, Path())
-    for folder in EXCLUDE_PATHS.get(extension, ()):
-        files = {name: value for name, value in files.items() if not name.startswith(f'{extension}/{folder}/')}
+    files = {name: value for name, value in files.items() if not excluded(name)}
+    readme = extension + '/README.md'
+    if readme in files:
+        text = files[readme].decode('utf-8')
+        for path in EXCLUDE_PATHS:
+            if path.startswith(extension + '/'):
+                text = re.sub(r'\]\(' + re.escape(path[len(extension) + 1:]) + r'(?=[/)#])', '](' + BLOB + path, text)
+        files[readme] = re.sub(r'(\]\([^)\s]*/)SKILL\.ext\.md(?=[)#])', r'\1SKILL.md', text).encode('utf-8')
     for preset in PRESETS.get(extension, ()):
         include(root / 'presets' / preset, Path('presets') / preset)
     shared = root / 'extensions/scripts/shared/sanduq_freshness.py'

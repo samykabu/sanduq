@@ -14,6 +14,7 @@ stored as `SKILL.ext.md` and restored to `SKILL.md` by `extensions/scripts/packa
 | --- | --- |
 | `user-manual/scripts/audit_manual.py` | `scripts/audit_manual.py` |
 | `user-manual/scripts/build_manual.py` | `scripts/build_manual.py` |
+| `user-manual/tests/test_build_manual.py` | `tests/test_build_manual.py` |
 | `user-manual/assets/scaffold/**` | `assets/scaffold/**` |
 | `user-manual/assets/user-manual-config.template.yml` | `user-manual-config.template.yml` |
 | `user-manual/references/*.md` | `skills/user-manual/references/*.md` |
@@ -36,12 +37,11 @@ stored as `SKILL.ext.md` and restored to `SKILL.md` by `extensions/scripts/packa
 | --- | --- | --- |
 | `scripts/init_manual.py` | `user-manual/scripts/init_manual.py` | Imports Workflow's canonical `sanduq_ci` (with a `sys.path` fallback to `../workflow/scripts`), calls `load_ci(root)` instead of taking `--ci-policy`, names its root `extension_root`, and copies no scripts into `User-Manual/tools/` because the extension runs them from `.specify/extensions/user-manual/scripts/`. Structural differences, so it is owned here rather than rewritten |
 | `scripts/manual_state.py` | `user-manual/scripts/manual_state.py` | Extension delegates to the shared `sanduq_freshness` helper (Spec Kit feature dirs, Workflow checkpoint `target_branch` default for `--base-ref`, `.specify/` and `workflow/`/`evidence/` exclusions, `tasks.md` checkbox normalization, `sanduq_hash.portable_files` EOL handling). Portable is a self-contained equivalent with the same CLI (`record`/`status`, `--feature`, `--repo-root`, `--base-ref`, `--output`, `--summary`, `--json`), state schema 2 shape and exit codes |
-| `skills/user-manual/SKILL.md` | `user-manual/SKILL.md` | Front matter `description` names `UserManual.Init/Analyze/Update/Release`; routes to companions by `../api-docs/SKILL.md` etc.; no standalone/workflow section, no example, rule 7 names Illustrate. Portable is standalone, routes to `user-manual-*` skills, documents `scripts/*.py`, `User-Manual/tools/` and has rule 9 (cross-audience links) |
+| `skills/user-manual/SKILL.md` | `user-manual/SKILL.md` | Front matter `description` names `speckit.user-manual.init/analyze/update/release`; routes to companions by `../api-docs/SKILL.md` etc.; no standalone/workflow section, no example, rule 7 names Illustrate. Portable is standalone, routes to `user-manual-*` skills, documents `scripts/*.py`, `User-Manual/tools/` and has rule 9 (cross-audience links) |
 | `skills/api-docs/SKILL.md` | `user-manual-api-docs/SKILL.md` | `name: api-docs`; Spec Kit wording ("add a task"); no example |
 | `skills/preview-publishing/SKILL.md` | `user-manual-preview-publishing/SKILL.md` | `name: preview-publishing`; no example |
 | `skills/release-docs/SKILL.md` | `user-manual-release-docs/SKILL.md` | `name: release-docs`; grounds items in Spec Kit artifacts; no example |
 | `skills/ui-screenshots/SKILL.md` | `user-manual-ui-screenshots/SKILL.md` | `name: ui-screenshots`; no example |
-| `tests/test_build_manual.py` | `user-manual/tests/test_build_manual.py` | Same tests except portable adds `test_one_audiences_assets_do_not_leak_into_another_edition` and a different module docstring; can be generated from portable once accepted |
 | `tests/test_manual_state.py` | `user-manual/tests/test_manual_state.py` | Tests the checkpoint `--base-ref` default (Spec Kit only) |
 
 ## 4. Portable-only files (drop in the extension build)

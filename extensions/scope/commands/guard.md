@@ -1,5 +1,5 @@
 ---
-description: "Blocks Specify before any side effect unless one explicit GitHub issue has a fresh approved Scope receipt and eligible prerequisites, and returns the scoped prompt Specify must use. Runs as the mandatory before_specify hook; use it when Specify starts for an issue."
+description: "Runs as the before_specify hook: blocks Specify unless the issue has a fresh approved scope. Use when asked to specify an issue."
 ---
 
 # Scope prerequisite guard
@@ -10,7 +10,7 @@ Extract one explicit GitHub issue number from this Specify invocation, such as
 `#8`, `GitHub issue #8`, or a same-repository issue URL. Never infer it from other
 numbers, the active feature, branch, a previous invocation, or a stale local cache.
 If missing or ambiguous, STOP with `SCOPE_REQUIRED: provide a GitHub issue number
-and run /speckit-scope <issue> first.` Do not create or edit a specification.
+and run /speckit-scope-run <issue> first.` Do not create or edit a specification.
 
 Run `python .specify/extensions/scope/scripts/scope.py gate <number>`.
 Standalone work requires **Backlog** before branch creation or specification writes.

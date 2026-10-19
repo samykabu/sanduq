@@ -109,6 +109,30 @@ modules the changed inputs touch; `assure-config.yml` takes `scan.exclude`; Memo
 `specify extension` command, which restores Spec Kit's own entries. Each package changelog lists the
 details.
 
+## Upgrade to Workflow 1.15.0
+
+Workflow 1.15.0 pins Scope 1.9.0, Project 2.4.0, PR 4.4.0 and Illustrate 2.6.0, and selects Assure
+2.5.0, User Manual 1.7.0 and Progress 1.4.0; the transactional upgrade installs them together.
+Nothing is renamed and no policy key is added. What you notice after the upgrade:
+
+- **Illustrate hook.** 2.5.0 registered its post-write hook in every project, so each Write or Edit paid
+  for a no-op. The upgrade removes those entries from `.claude/settings.json` and `.codex/config.toml`
+  and installs a native entry only when `illustrate.hooks.self_check: true` is set; `install-lock.json`
+  records what was done per host. Projects without Workflow run
+  `python .specify/extensions/illustrate/hooks/self_check_hook.py install --host claude --root .`
+  (or `uninstall`) themselves.
+- **Codex approvals.** The guard hook changed (it now refuses an unlinted pull-request body in a
+  managed project). Approve it once in `/hooks`; `doctor` and `status` report `GUARD_HOOK_UNAPPROVED`
+  until you do.
+- **Assure gate.** A config that says `require_document_before_pr: false` is off even when a comment on
+  that line mentions `true`. The rendered `documentation-gates.yml` changes on upgrade.
+- **Pull requests.** `pr_publish.py` rewrites relative image paths to pinned URLs before the lint and
+  refuses to publish when it cannot read the existing pull request.
+- **Project sync.** Repository names with dots, remotes with ports and differently cased owners now
+  match; the token needs the full `project` scope.
+- **Faster runtime.** Each Workflow command reads git once, and Scope makes far fewer GitHub calls.
+  Nothing to configure.
+
 ## Moved documentation
 
 Pages moved in this release keep a forwarding stub at the old path for one release cycle:

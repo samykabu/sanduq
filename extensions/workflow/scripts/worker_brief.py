@@ -153,26 +153,26 @@ def spawn_and_wait_rules():
     """F1 (route results straight to the spawner, blocking not backgrounded) and F2 (never end
     a turn owning running background work), the first two paragraphs of their shared section."""
     text = read_text(REFERENCES / 'execution-assign.md')
-    heading = 'Spawn pattern, blocking waits and turn budgets (F1, F2, T0)'
+    heading = 'Spawn pattern, blocking waits and turn budgets'
     return section_paragraph(text, heading, 0), section_paragraph(text, heading, 1)
 
 
 def report_on_state_change_rule():
     """F3: no message beyond the minimum unless something actually changed."""
     text = read_text(REFERENCES / 'execution-report.md')
-    return section_body(text, 'Report only on state change (F3)')
+    return section_body(text, 'Report only on state change')
 
 
 def read_summary_first_rule():
     """T8: read a verification summary before opening any raw reporter output."""
     text = read_text(REFERENCES / 'execution-report.md')
-    return section_body(text, 'Read verification summaries before raw output (T8)')
+    return section_body(text, 'Read verification summaries before raw output')
 
 
 def t7_template():
     """The exact ten-line structured-result fence from execution-report.md."""
     text = read_text(REFERENCES / 'execution-report.md')
-    match = re.search(r'## Structured worker results \(T7\)\n\n.*?```text\n(.*?)```', text, re.S)
+    match = re.search(r'## Structured worker results\n\n.*?```text\n(.*?)```', text, re.S)
     return match.group(1).strip() if match else None
 
 

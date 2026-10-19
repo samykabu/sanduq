@@ -2,11 +2,12 @@
 
 Start from `.specify/extensions/scope/examples/clarification.json`. Top level: `version: 1`, `issue`, `snapshot_digest`
 from inspect, `engine`, `coverage` (category map), `summary`, `answers`, `questions`,
-`spec_edits`.
+`spec_edits`. Copy inspect's `suggested_answers` (a single checked option with no reply) into
+`answers` and add each `explanation`, or override one when other evidence changes it.
 
 Each answer: `question_id`, `disposition` (`answered`, `superseded` or `unresolved`),
-`comment_ids` with actual human reply evidence, and `explanation`. Every historical question
-appears exactly once. A `superseded` disposition needs a real explanation and comment evidence.
+`comment_ids` with actual human reply evidence, and `explanation`. A `superseded` disposition
+needs a real explanation and comment evidence.
 Correlate unmatched comments explicitly or ask a focused follow-up; never drop a hard question.
 
 Each question: unique lowercase `key`, `question` (a standalone English interrogative), `why`,
@@ -19,8 +20,9 @@ needed terms; do not force a fixed number of options. A diagram shows the actual
 never decoration. The runtime renders lettered, unchecked checkboxes, appends **(Recommended)**,
 keeps a short reason visible and folds details and diagrams into a collapsible section. Users
 tick one box or reply `C1Q1: A`; custom answers are welcome. Never edit question checkboxes for
-the user. Publish results list images that could not be hosted under `image_fallbacks`.
+the user.
 
 Each spec edit: exact nonempty `before` and `after` strings, no file paths. Update requirements,
 acceptance and edge cases, remove contradictions, keep unrelated text, and cite the human answer
-comment IDs.
+comment IDs. The runtime appends the round's review log (question, answer, evidence links) to the
+spec; do not write a separate Q/A list.

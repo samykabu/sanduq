@@ -1,5 +1,5 @@
 ---
-description: "Starts the mandatory clarification round after Specify: dispatches SuperSpec Brainstorm when installed and enabled, otherwise Clarify, for the issue just bound. Runs as an after_specify hook; never waits in chat for answers."
+description: "Runs as an after_specify hook: starts the clarification round for the bound issue. Use when asked to clarify after Specify."
 ---
 
 # Mandatory post-Specify clarification

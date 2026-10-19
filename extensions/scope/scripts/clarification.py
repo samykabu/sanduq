@@ -245,6 +245,29 @@ def reply_answer(text, options):
     return 'text', text[:VALUE_LIMIT]
 
 
+def suggested_answers(prior):
+    """`answered` dispositions the model may copy: one cleanly ticked option and no reply that could override it."""
+    suggestions = []
+    for qid, question in prior['questions'].items():
+        candidates = prior['reply_candidates'].get(qid, [])
+        if question['selection']['state'] == 'selected' and [c['id'] for c in candidates] == [question['comment_id']]:
+            suggestions.append({'question_id': qid, 'disposition': 'answered', 'comment_ids': [question['comment_id']],
+                                'option': question['selection']['labels'][0] + ' — ' + question['selection']['options'][0]})
+    return suggestions
+
+
+def answer_text(question, answer, comments):
+    """The chosen answer for the spec's review log: the option letter and text, or the reply text."""
+    chosen = answer_record(question, answer, comments)[0]
+    if not chosen:
+        return answer['disposition']
+    if chosen['kind'] == 'text':
+        return chosen['value']
+    names = {option_label(i): text for i, text in enumerate(question.get('options') or [], 1)}
+    labels = chosen['value'] if chosen['kind'] == 'multiple' else [chosen['value']]
+    return ', '.join(f'{label} — {names[label]}' if label in names else label for label in labels)
+
+
 def answer_record(question, answer, comments):
     """(answer, editor, answered_at, evidence) for one prior question, from recorded human evidence only.
 
@@ -481,7 +504,8 @@ class Clarification:
                    [r.get('round', 1) for r in prior['rounds'] if r['kind'] == 'round-in-session'])
         result = {'version': 1, 'issue': issue, 'creator': creator, 'spec_path': str(path.relative_to(self.root)),
                   'spec': path.read_text(encoding='utf-8-sig'), 'comments': comments, 'history': prior,
-                  'policy': policy, 'next_round': used + 1, 'limit_reached': used >= policy['max_rounds']}
+                  'policy': policy, 'next_round': used + 1, 'limit_reached': used >= policy['max_rounds'],
+                  'suggested_answers': suggested_answers(prior)}
         result['snapshot_digest'] = snapshot_digest(result)
         return result
 
@@ -725,10 +749,13 @@ class Clarification:
         spec = apply_edits(snapshot['spec'], analysis.get('spec_edits', []))
         log = '\n\n<!-- speckit-clarification:spec ' + batch + ' -->\n'
         log += f'### GitHub clarification review {round_number}\n\n'
+        thread = {c['id']: c for c in snapshot['comments']}
         for answer in analysis.get('answers', []):
             links = ', '.join(f'https://github.com/{self.app.repo}/issues/{number}#issuecomment-{i}' for i in answer.get('comment_ids', []))
             log += f'- {answer["question_id"]}: {answer["disposition"]}. {answer["explanation"]}' + (f' Evidence: {links}' if links else '') + '\n'
-            choice = snapshot['history']['questions'][answer['question_id']].get('selection', {})
+            asked = snapshot['history']['questions'][answer['question_id']]
+            log += f'  Q: {asked["question"]} → A: {answer_text(asked, answer, thread)}\n'
+            choice = asked.get('selection', {})
             if choice.get('state') == 'selected':
                 log += f'  Checkbox selection observed: {choice["labels"][0]} — {choice["options"][0]}.\n'
         if outcome == 'closed':
@@ -770,9 +797,9 @@ class Clarification:
         fresh = self.inspect(value)
         normalized_spec = snapshot['spec'] if fresh['spec'] == journal['expected_spec'] else fresh['spec']
         require(snapshot_digest(fresh, batch, normalized_spec) == snapshot['snapshot_digest'], 'CLARIFICATION_STALE: discussion changed before posting.')
-        for qid, body in prepared + [('summary', summary_body)]:
-            # Reread between writes for a recoverable lost HTTP response.
-            existing = self.gh.api(f'{self.app.base}/{number}/comments?per_page=100', pages=True)
+        for index, (qid, body) in enumerate(prepared + [('summary', summary_body)]):
+            # Reread between writes for a recoverable lost HTTP response; the first post uses the thread just read.
+            existing = fresh['comments'] if index == 0 else self.gh.api(f'{self.app.base}/{number}/comments?per_page=100', pages=True)
             current_thread = dict(snapshot, comments=existing)
             require(snapshot_digest(current_thread, batch) == snapshot['snapshot_digest'],
                     'CLARIFICATION_STALE: new human input arrived while posting. Reread and reevaluate before continuing.')
@@ -796,12 +823,13 @@ class Clarification:
             temporary = path.with_suffix('.clarification.tmp')
             temporary.write_text(spec, encoding='utf-8')
             temporary.replace(path)
-        self.app._board = None
-        self.gate(self.app.issue(number))
+        # final_snapshot read the issue and the live board just now; only the local spec changed since.
+        issue = final_snapshot['issue']
+        self.gate(issue)
         # Recorded before the move, so a retry can tell an unfinished publication from a new one.
         journal['transitioning'] = result['status']
         write_json(journal_path, journal)
-        self.transition(self.app.issue(number), result['status'])
+        self.transition(issue, result['status'])
         # Only now: the spec is replaced and the transition succeeded. Written before the journal is marked
         # complete, so an interrupted publication repairs the file when it is rerun.
         persist_clarifications(self.root / Path(snapshot['spec_path']).parent / CLARIFICATIONS_FILE,
@@ -924,8 +952,9 @@ class Clarification:
                                                    Path(snapshot['spec_path']).as_posix(), datetime.now(timezone.utc).isoformat(),
                                                    in_session=given), batch)
         self.app._board = None
-        self.gate(self.app.issue(number))
-        self.transition(self.app.issue(number), 'Ready')
+        issue = self.app.issue(number)
+        self.gate(issue)
+        self.transition(issue, 'Ready')
         self.plan_gate(str(number))
         return dict(result, comment_ids={'summary': posted['id']},
                     next_action={'command': '/speckit-plan', 'issue': number, 'spec_path': str(path.resolve()),

@@ -1,5 +1,5 @@
 ---
-description: "Sets up the Sanduq workflow in a Spec Kit project: selects QA and User Manual processes, decision reviewers, delegation, CI runners and evidence gate, then installs and checks the managed packages. Use once per project, or when asked to initialize, configure or reconfigure the workflow."
+description: 'Sets up the Sanduq workflow in a Spec Kit project: processes, decision reviewers, delegation, CI runners and evidence gate. Use when configuring a project, or for "initialize the workflow".'
 ---
 
 # Sanduq Workflow: init

@@ -18,16 +18,19 @@ Flags: `--feature <path>`, `--full`, `--module <id>`, `--skip-runtime`, `--no-bu
 
 1. Load `.specify/extensions/user-manual/skills/user-manual/SKILL.md`. If `User-Manual/manual.yml`
    is absent, follow the initialization workflow instead of producing disconnected pages.
-2. Resolve the active feature and run
-   `python .specify/extensions/user-manual/scripts/manual_state.py status --feature <feature-path>`.
-   On `stale-input-or-output`, read its `changed_inputs` and the affected manual pages; otherwise
-   (`missing`, legacy state, or `--full`) read the full set: specifications, plan, tasks, contracts,
-   data model, quickstart, implementation diff, tests, and existing manual state.
-3. When `lifecycle.impact_scope` in `manual.yml` is `evidence`, run
-   `python .specify/extensions/user-manual/scripts/manual_impact.py --feature <feature-path>` and
-   work from its `modules`, `pages` and `audiences`; its `unmatched` paths are module candidates.
-   Verify new module candidates against source evidence and add them with `status: proposed`;
-   require user approval before making them part of the stable navigation.
+2. Resolve the active feature and run, once,
+   `python .specify/extensions/user-manual/scripts/manual_impact.py --feature <feature-path>`. It
+   computes the freshness status and joins its changes with the manual's evidence as
+   `lifecycle.impact_scope` says, printing `current`, `reason`, `changed_inputs`, `changed_outputs`,
+   `modules`, `pages`, `audiences` and `unmatched`. By `reason`:
+   - `--full` given, `missing`, or legacy state: read the full set: specifications, plan, tasks,
+     contracts, data model, quickstart, implementation diff, tests, and existing manual state.
+   - `stale-input-or-output`: read its `changed_inputs`, `changed_outputs` and `pages`, and work
+     from its `modules`, `pages` and `audiences`.
+   - `current`: nothing changed since the last record. Unless `--module` or the user asked for a
+     specific refresh, report the manual current with that line and stop; otherwise refresh only that.
+3. Treat `unmatched` paths as module candidates. Verify them against source evidence and add them
+   with `status: proposed`; require user approval before making them part of the stable navigation.
 4. Update affected content using the three audience contracts:
    - End User: goals, prerequisites, simple steps, outcomes, common problems, and no unnecessary
      implementation vocabulary.
@@ -42,10 +45,11 @@ Flags: `--feature <path>`, `--full`, `--module <id>`, `--skip-runtime`, `--no-bu
    diagram, run `python .specify/extensions/user-manual/scripts/deps.py ensure illustrate` first; on
    a non-zero exit report its line and generate no diagram (when it prints a `specify extension`
    recipe and the user approves, re-run with `--approve`; under a `manual` policy the user runs the
-   printed command, then re-runs this command). On a zero exit, pass on any "newer compatible
-   release available" note, read `.specify/extensions/illustrate/skill/references/type-index.md`,
-   choose the type, read its `type-*.md`, and read `SKILL.md` only when the diagram is created
-   outside that recipe. Capture screenshots with deterministic synthetic fixtures; never use
+   printed command, then re-runs this command). When it exits zero, pass on any "newer compatible
+   release available" note and draw with the procedure in `.specify/extensions/illustrate/skill/SKILL.md`:
+   the §0 theme gate first, then §10 (choose the type from `references/type-index.md`, read its
+   `type-*.md`, apply and validate the theme, and run the step 7 checks); its `scripts/` are under
+   `.specify/extensions/illustrate/skill/scripts/`, run from the repository root. Capture screenshots with deterministic synthetic fixtures; never use
    production data.
 7. Update `User-Manual/.state/coverage.json`, including source evidence, affected modules, pages,
    audiences, languages, assets, and known gaps (`manual_impact.py` records its list under `impact`).

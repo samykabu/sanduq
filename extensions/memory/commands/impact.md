@@ -1,5 +1,5 @@
 ---
-description: Consults product memory for the capabilities a change touches, in a token budget (before_analyze hook). Use when asked to "consult memory".
+description: Consults product memory for the capabilities a change touches. Use when asked to "consult memory".
 ---
 
 # Consult project memory

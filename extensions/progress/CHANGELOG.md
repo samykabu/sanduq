@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.4.0] - 2026-10-20
+
+Optimization round 3. Vendors agent-tools 1.6.0.
+
+- The package leaves out the maintainer docs and screenshots (216 to 158 KB); `live_ab.py` now lives with its tests upstream.
+
 ## [1.3.0] - 2026-10-19
 
 Optimization round 2. Vendors agent-tools 1.5.0, which this release needs.

@@ -1,5 +1,5 @@
 ---
-description: Configures Sanduq Memory hooks, checks, wrappers and guards without enabling automatic archiving. Use when asked to "set up project memory".
+description: Sets up memory hooks, checks and guards with archiving off. Use when asked to "set up project memory".
 ---
 
 # Initialize project memory

@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.0] - 2026-10-20
+
+Optimization round 3 (fixes to 2.3.0).
+
+- `project_sync.py` normalises remotes like Workflow (dots in names, ports, case, ssh and https), checks the full `project` scope, times out `gh` and `git` after 120 s, and makes one gh call fewer per sync.
+- Init runs the scripts non-interactively, no longer forces an interactive `gh auth refresh`, and names each missing choice with its flag.
+
 ## [2.3.0] - 2026-10-19
 
 Optimization round 2.

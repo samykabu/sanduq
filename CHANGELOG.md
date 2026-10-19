@@ -1,15 +1,23 @@
 # Changelog
 
-## 2026-10-19 — Workflow 1.14.0, Assure 2.4.0, User Manual 1.6.0, PR 4.3.0, Project 2.3.0, Illustrate 2.5.0, Memory 2.3.0, Progress 1.3.0, Scope 1.8.1 (pending release)
+All notable changes to sanduq extensions/plugins are recorded here.
+Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
+independently via `<extension>-vX.Y.Z` tags.
+
+## 2026-10-20 — Workflow 1.15.0, Scope 1.9.0, Assure 2.5.0, User Manual 1.7.0, PR 4.4.0, Project 2.4.0, Illustrate 2.6.0, Memory 2.4.0, Progress 1.4.0 (pending release)
+
+- Optimization round 3, reviewed jointly with Codex: fixes to round-2 behaviour (Assure gate parsing and QA audit, the always-registered Illustrate hook, PR image paths and lookups, Project remote parsing), one git pass per Workflow command (744 to 316 git calls per lifecycle), Scope GitHub calls cut by up to 78%, Execute text per mode, shipped Illustrate assets passing their own checks, host-visible descriptions under Codex's 8,000-character budget (8,604 to 6,430), smaller packages, faster CI selection and release tooling (`release.py bump`). No renames; no new policy keys.
+
+## 2026-10-19 — Workflow 1.14.0, Assure 2.4.0, User Manual 1.6.0, PR 4.3.0, Project 2.3.0, Illustrate 2.5.0, Memory 2.3.0, Progress 1.3.0, Scope 1.8.1
 
 - Optimization round 2 over the companion extensions: scripts take over the Assure inventory and QA audit, the PR body and lint receipt, the CHANGELOG facts, the project sync (one Python script) and the memory hashes; the Illustrate skill is procedure-first with a type index (illustration-tools 3.5.0); commands are trimmed and every description follows the catalog rules. Instruction bytes per invocation fall about 41 percent; see `docs/internal/benchmarks/`.
 - Opt-in: native Progress hook wiring and a PostToolUse matcher, an Illustrate post-write check, a Memory archive guard, evidence-scoped User Manual updates. Vendors dev-tools 1.2.0 and agent-tools 1.5.0.
 
-## 2026-10-19 — Workflow 1.13.1, Assure 2.3.4, User Manual 1.5.4 (pending release)
+## 2026-10-19 — Workflow 1.13.1, Assure 2.3.4, User Manual 1.5.4
 
 - Issue #94: evidence snapshots validate in a fresh CI checkout by commit ancestry; the shipped gate templates skip fork pull requests on self-hosted runners, take the base ref through `env`, and pin every action by commit with a version comment.
 
-## 2026-10-18 — Workflow 1.13.0, Scope 1.8.0 (pending release)
+## 2026-10-18 — Workflow 1.13.0, Scope 1.8.0
 
 - Front-half rebuild: effort-tiered profiles, deterministic `workflow:lint`, merged plan and tasks, batch upstream revalidation, declared side effects, cached doctor, inventory side files and a status-based resume contract.
 - Scope renders the spec from the approved analysis, answers the first clarification round in session, allows Mermaid questions, caps questions per round and caches the board.
@@ -21,10 +29,6 @@
 - Add conservative opt-in check reuse and immutable verification/evidence records.
 - Stage native argv check batches, explicit retries and bounded collection from agent-tools 1.3.0.
 - Illustrate render verification pauses JavaScript clocks between captures and restores styles exactly.
-
-All notable changes to sanduq extensions/plugins are recorded here.
-Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
-independently via `<extension>-vX.Y.Z` tags.
 
 ## Hook command is not a skill — progress 1.1.2 — 2026-10-16
 
@@ -278,7 +282,7 @@ independently via `<extension>-vX.Y.Z` tags.
   and marketplace versions so existing installations can discover the update.
 - Refresh the documented driver test count to 172 passing cases.
 
-## Model-aware delegation — workflow 1.5.0, delegate-task driver contract
+## Model-aware delegation — workflow 1.5.0, delegate-task driver contract — 2026-09-26
 
 ### Added
 
@@ -489,7 +493,7 @@ independently via `<extension>-vX.Y.Z` tags.
   reaches the ceiling". It fires on a fresh, reliable measurement crossing the checkpoint fraction;
   the diagram transition now reads MEASURED LIMIT.
 
-## Coordinated workflow release (unreleased)
+## Coordinated workflow release — workflow 1.0.0, scope 1.4.0 — 2026-09-20
 
 - Add Workflow 1.0.0 and migrate Scope 1.4.0 with canonical GitHub presets into Sanduq.
 - Add independent QA/manual selections, automatic stage dispatch, native task sub-issues,

@@ -39,8 +39,7 @@ change implementation or validation; leave questions that belong to planning for
 
 ## Applying answers
 
-Express each accepted answer as `spec_edits`. Keep a `## Clarifications` section with a
-`### Session YYYY-MM-DD` subheading and one `- Q: <question> → A: <answer>` bullet per answer.
+Express each accepted answer as `spec_edits`; the runtime appends the question and answer log.
 Apply each answer where it belongs: functional ambiguity to Functional Requirements, actors to
 the user stories, data shape to the data model, non-functional constraints to measurable success
 criteria, edge cases to Edge Cases, and terminology across the whole spec. Replace an invalidated

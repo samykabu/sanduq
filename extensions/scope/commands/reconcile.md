@@ -1,5 +1,5 @@
 ---
-description: "Refreshes native Scope parent progress after child issues change state, closing a parent only when every descendant is Done and reopening ancestors of a reopened child. Runs after implementation; use when parent progress looks stale."
+description: "Runs as the after_implement hook: refreshes Scope parent progress. Use when asked to update stale parent progress."
 ---
 
 # Reconcile scope parents

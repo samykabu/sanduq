@@ -166,6 +166,7 @@ reviewed extension versions in `extensions/pending-releases.json`; do not advert
 asset through the catalogs.
 
 ```bash
+python extensions/scripts/release.py bump <id> <version>   # writes every copy of the version
 python extensions/scripts/release.py prepare --development
 python extensions/scripts/release.py publish
 ```

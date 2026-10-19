@@ -11,6 +11,7 @@ import json
 import ntpath
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -595,6 +596,36 @@ def edit_speckit_progress_toml(path, remove=False, matcher=''):
     return touched
 
 
+SLOW_DISPATCHER_HINT = ("Progress hooks cost about 1.4 s per tool call through Spec Kit's dispatcher in this project; "
+                        'set progress.hook_wiring: native in .specify/workflow.yml (about 0.13 s).')
+
+
+def dispatcher_cost(root, host, probed):
+    """The Spec Kit dispatcher entry Progress runs through on ``host``: its interpreter, and whether that interpreter
+    imports specify_cli (the dispatcher then loads specify_cli.events on every tool call, about 1.4 s, not 0.2 s)."""
+    path = root / PROGRESS_HOST_FILES[host]
+    text = path.read_text(encoding='utf-8-sig') if path.is_file() else ''
+    if host == 'claude':
+        groups = (json.loads(text) if text.strip() else {}).get('hooks') or {}
+        commands = [h.get('command', '') for event in groups.values() if isinstance(event, list) for g in event
+                    if isinstance(g, dict) for h in g.get('hooks') or [] if _is_speckit_progress(h)]
+    else:  # a TOML basic string is valid JSON for the escapes Spec Kit writes
+        commands = [json.loads(value) for value in re.findall(r'(?m)^\s*command\s*=\s*(".*")\s*$', text) if SPECKIT_PROGRESS in value]
+    if not commands:
+        return None
+    try:
+        interpreter = shlex.split(commands[0])[0]  # Spec Kit POSIX-quotes the interpreter (events._shell_quote)
+    except (ValueError, IndexError):
+        return {'path': '.specify/events.py', 'interpreter': None, 'imports_specify_cli': None}
+    if interpreter not in probed:
+        try:
+            probed[interpreter] = subprocess.run([interpreter, '-c', 'import specify_cli.events'], cwd=str(root),
+                                                 capture_output=True, timeout=5).returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            probed[interpreter] = None  # unknown: the probe could not run
+    return {'path': '.specify/events.py', 'interpreter': interpreter, 'imports_specify_cli': probed[interpreter]}
+
+
 def progress_accepts(script, flag):
     done = subprocess.run([sys.executable, str(script), 'hooks', '--help'], capture_output=True, text=True, encoding='utf-8')
     return flag in (done.stdout or '')
@@ -606,6 +637,7 @@ def wire_progress(root, policy, hosts):
     `progress hooks install --host <host>` write entries that run scripts/hook.py directly."""
     wanted = progress_policy(policy)
     record = {**wanted, 'hosts': {}}
+    probed = {}
     script = root / PROGRESS_SCRIPT
     if not script.is_file():
         return record
@@ -634,8 +666,56 @@ def wire_progress(root, policy, hosts):
                 entry['native_entries_removed'] = done.stdout.strip()
             if wanted['post_tool_matcher']:
                 entry['matcher_applied'] = edit(path, matcher=wanted['post_tool_matcher']) > 0
+            entry['dispatcher'] = dispatcher_cost(root, host, probed)
+            if (entry['dispatcher'] or {}).get('imports_specify_cli'):
+                record['hint'] = SLOW_DISPATCHER_HINT
+        entry['cost_class'] = ('native' if wanted['hook_wiring'] == 'native' else
+                               'dispatcher-specify-cli' if (entry.get('dispatcher') or {}).get('imports_specify_cli') else
+                               'dispatcher')
         record['hosts'][host] = entry
     return record
+
+
+# Illustrate's opt-in self-check hook (`illustrate.hooks.self_check`). Illustrate owns the entry: its hook script's
+# management CLI writes or removes one native entry per host and drops the Spec Kit dispatcher entry a 2.5.0 install
+# rendered. Spec Kit never touches these unmarked entries, so this runs after the last Spec Kit call.
+ILLUSTRATE_HOOK = '.specify/extensions/illustrate/hooks/self_check_hook.py'
+ILLUSTRATE_HOOK_APPROVAL = ('Codex runs the Illustrate self-check only after you approve it: open Codex here, run /hooks '
+                            'and approve the Illustrate hook (.codex/hooks.json).')
+
+
+def wire_illustrate(root, policy, hosts):
+    """Install the hook on every host when the key is true, uninstall it otherwise; the record goes into
+    install-lock.json and the receipt."""
+    section = policy.get('illustrate') if isinstance(policy.get('illustrate'), dict) else {}
+    hooks = section.get('hooks') if isinstance(section.get('hooks'), dict) else {}
+    action = 'install' if hooks.get('self_check') is True else 'uninstall'
+    record = {'self_check': action == 'install', 'action': action, 'hosts': {}}
+    script = root / ILLUSTRATE_HOOK
+    if not script.is_file():
+        require(action == 'uninstall', 'ILLUSTRATE_HOOK_SCRIPT_MISSING: ' + ILLUSTRATE_HOOK)
+        record['skipped'] = 'hook script not installed'
+        return record
+    for host in (h for h in hosts if h in ('claude', 'codex')):
+        done = subprocess.run([sys.executable, str(script), action, '--host', host, '--root', str(root), '--json'],
+                              cwd=str(root), stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding='utf-8')
+        try:
+            entry = json.loads(done.stdout) if done.returncode == 0 else None
+        except ValueError:
+            entry = None
+        # An Illustrate older than the management CLI reads stdin and prints nothing; that is a failure too.
+        require(isinstance(entry, dict), f'ILLUSTRATE_HOOK_{action.upper()}_FAILED: {host}: ' +
+                ((done.stdout or '') + (done.stderr or '')).strip()[-400:])
+        record['hosts'][host] = {key: entry.get(key) for key in ('file', 'added', 'removed', 'needs_approval')}
+    return record
+
+
+def preset_digest(folder):
+    """sha256 over a bundled preset's files (paths and LF-normalised bytes), to tell a changed preset from the last apply's."""
+    digest = hashlib.sha256()
+    for path in sorted(p for p in folder.rglob('*') if p.is_file() and '__pycache__' not in p.parts):
+        digest.update(path.relative_to(folder).as_posix().encode() + b'\0' + path.read_bytes().replace(b'\r\n', b'\n') + b'\0')
+    return digest.hexdigest()
 
 
 def install(root, apply=False, packages=None, package_root=PACKAGE, runner=command, upgrade_owner=None, preserve_ci=False,
@@ -691,11 +771,20 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
     for name, priority in (('scope-gate','2'),('scope-brainstorm','2'),('workflow','1')):
         source = package_root / 'presets' / name
         require((source / 'preset.yml').is_file(), 'BUNDLED_PRESET_MISSING: build/install the workflow archive first')
-        preset_ops.append({'name':name,'source':str(source),'priority':priority})
+        preset_ops.append({'name':name,'source':str(source),'priority':priority,'sha256':preset_digest(source)})
+    # Re-add a preset only when it changed since the last apply. An extension update re-renders the commands a preset
+    # replaces, so any extension operation still re-adds every preset.
+    last = read(root / '.specify/workflow/install-lock.json', {}).get('presets') or {}
+    skipped_presets = [] if operations else [
+        op['name'] for op in preset_ops
+        if (root / '.specify/presets' / op['name'] / 'preset.yml').is_file()
+        and (last.get(op['name']) or {}).get('source_sha256') == op['sha256']
+        and str((last.get(op['name']) or {}).get('priority')) == op['priority']]
     # Spec Kit registers extension skills only for the default integration, so
     # every other installed host is re-registered after the packages change.
     default_host, hosts = active_host(root), installed_hosts(root)
-    result = {'applied':False,'extensions':operations,'retained_newer':retained,'presets':preset_ops,'processes':policy['processes'],
+    result = {'applied':False,'extensions':operations,'retained_newer':retained,'presets':preset_ops,
+              'skipped_presets':skipped_presets,'processes':policy['processes'],
               'optional_extensions': chosen,
               'hosts': {'default': default_host, 'installed': hosts,
                         're_register': [['specify', 'integration', 'use', host] for host in hosts if host != default_host] +
@@ -745,7 +834,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                 folder = root / '.specify/extensions' / operation['extension']
                 for name, content in preserved.items():
                     p = folder / name; p.parent.mkdir(parents=True, exist_ok=True); p.write_bytes(content)
-            for operation in preset_ops:
+            for operation in (op for op in preset_ops if op['name'] not in skipped_presets):
                 if (root / '.specify/presets' / operation['name'] / 'preset.yml').exists():
                     runner(root, ['specify','preset','remove',operation['name']], log)
                 runner(root, ['specify','preset','add','--dev',operation['source'],'--priority',operation['priority']], log)
@@ -760,6 +849,9 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
             result['host_files'] = reconcile(root, apply=True).get('host_files')
             if 'progress' in chosen:
                 result['progress'] = wire_progress(root, policy, hosts)
+            result['illustrate'] = wire_illustrate(root, policy, hosts)
+            if any(entry.get('needs_approval') for entry in result['illustrate']['hosts'].values()):
+                result['illustrate_hook_approval'] = ILLUSTRATE_HOOK_APPROVAL
             host_errors = skill_errors(skill_report(root, hosts))
             # Nothing may rewrite an alias after it is written (Spec Kit ran above).
             host_errors += ['ALIAS_NOT_RESTORED: ' + key for key, value in alias_hashes.items()
@@ -804,6 +896,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
             health = doctor(root, policy, preserved_ci=(result['preserved_ci'] or {}).get('path'))
             require(health['ok'], '; '.join(health['errors']))
             installed = registry(root)
+            digests = {op['name']: op['sha256'] for op in preset_ops}
             inventory = {}
             for name in sorted(set(selected) | {'workflow'}):
                 entry = installed.get(name, {})
@@ -816,10 +909,12 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                 'optional_extensions': chosen, 'extensions': inventory, 'dependency_digest': package_digest(root),
                 'aliases': alias_hashes, 'with_aliases': aliases_on,
                 'progress': result['progress'],
+                'illustrate': result['illustrate'],
                 # Tracked, unlike the receipt, so fresh clones and worktrees
                 # still treat a preserved CI file as project-owned.
                 'preserved_ci': {'path': result['preserved_ci']['path']} if result['preserved_ci'] else None,
-                'presets': {name: {key: entry.get(key) for key in ('version', 'enabled', 'priority', 'manifest_hash')}
+                'presets': {name: {**{key: entry.get(key) for key in ('version', 'enabled', 'priority', 'manifest_hash')},
+                                   **({'source_sha256': digests[name]} if name in digests else {})}
                             for name, entry in read(root / '.specify/presets/.registry', {}).get('presets', {}).items()},
                 'tested_compatibility': {'spec_kit': lock.get('tested_spec_kit', {}), 'upstream_optional': lock.get('upstream_optional', {})},
             })
@@ -857,6 +952,8 @@ if __name__ == '__main__':
                          replace_unrecognized_aliases=args.replace_unrecognized_aliases,with_optional=args.with_optional,
                          with_aliases=args.with_aliases)
         print(json.dumps(result,indent=2))
-        if result.get('codex_hook_approval'): print(result['codex_hook_approval'], file=sys.stderr)
+        for key in ('codex_hook_approval', 'illustrate_hook_approval'):
+            if result.get(key): print(result[key], file=sys.stderr)
+        if (result.get('progress') or {}).get('hint'): print(result['progress']['hint'], file=sys.stderr)
     except (WorkflowError, ValueError, OSError, KeyError) as exc:
         print(json.dumps({'ok':False,'error':str(exc)})); sys.exit(1)

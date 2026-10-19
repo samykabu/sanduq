@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.5.0] - 2026-10-20
+
+Optimization round 3 (fixes to 2.4.0).
+
+- The documentation gate: a parsed config value is final, so `false  # set to true` is off; a config neither reader understands turns the gate on with one message. The rendered `documentation-gates.yml` passes the feature path through `env`.
+- `audit_qa.py` shares the User Manual placeholder allowlist and resolves encoded and root-relative links.
+- The scanner keeps its date unless the inventory changed (a rerun on another day no longer stales the manual) and reads its exclude list from the packaged template only.
+- Diagram steps follow Illustrate's theme gate and checks again. Analyze stops early on an unchanged state. One freshness CLI shared with User Manual.
+
 ## [2.4.0] - 2026-10-19
 
 Optimization round 2, measured with `extensions/scripts/benchmark_instructions.py`.

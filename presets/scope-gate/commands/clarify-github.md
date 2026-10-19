@@ -29,5 +29,5 @@ the issue creator, with simple English and a highlighted justified AI recommenda
 When clarification resolves and the shared workflow returns a Plan handoff, actually
 execute `$speckit-plan` automatically for the same issue and spec as instructed there.
 After that shared workflow (including any Plan handoff) returns, STOP this skill. Do not continue the upstream
-five-question flow or ask clarification questions in the Codex conversation.
+five-question flow or ask clarification questions in the conversation.
 <!-- scope-clarify-overlay:end -->

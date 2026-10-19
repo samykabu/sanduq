@@ -3,7 +3,7 @@ schema_version: "1.0"
 extension:
   id: illustrate
   name: "Illustrate"
-  version: "2.5.0"
+  version: "2.6.0"
   description: "Generate, import, and export forty-four technical, product, architecture, process, and quantitative illustration types with tracked project-level light/dark color and font themes."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
@@ -30,12 +30,6 @@ provides:
     - name: speckit.illustrate.import
       file: commands/speckit.illustrate.import.md
       description: 'Redraws a draw.io, Mermaid or Excalidraw file as a themed Illustrate diagram with a fidelity ledger. Use when asked to "import this .drawio".'
-
-events:
-  post_tool_use:
-    command: speckit.illustrate.hook
-    matcher: "Write|Edit"
-    timeout: 60
 
 tags:
   - "diagram"

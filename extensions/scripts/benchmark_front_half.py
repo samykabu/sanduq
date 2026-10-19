@@ -44,6 +44,9 @@ STAGE_EXTRAS = {
     'execute': [WORKFLOW_SKILL + 'references/execution-assign.md', WORKFLOW_SKILL + 'references/execution-report.md',
                 WORKFLOW_SKILL + 'references/reporting.md'],
 }
+# Workflow 1.15 prints the Execute protocol for the claimed mode inside the claim (`execute_protocol`), so
+# those files are already counted in claim stdout and must not be counted again as static reads.
+PROTOCOL_IN_CLAIM = {'execute'}
 POINTER_SET = [WORKFLOW_SKILL + 'references/dispatcher-operations.md',
                WORKFLOW_SKILL + 'references/delegation-and-decisions.md']
 LINK = re.compile(r'[A-Za-z0-9_./-]*references/[A-Za-z0-9_.-]+\.md')
@@ -214,7 +217,8 @@ class Bench:
         if 'token' not in claim:
             raise RuntimeError('claim returned no token: ' + json.dumps(claim)[:500])
         command = claim.get('command') or ''
-        self.claimed.append({'phase': phase, 'stage': stage, 'command': command, 'merged': claim.get('merged') or []})
+        self.claimed.append({'phase': phase, 'stage': stage, 'command': command, 'merged': claim.get('merged') or [],
+                             'protocol_in_claim': 'execute_protocol' in claim})
         receipt = self.receipt(stage, claim.get('merged') or ())
         if stage == 'pr' and 'environment' in claim:
             receipt.update(self.lean_pr_evidence())
@@ -344,8 +348,9 @@ def instruction_load(repo, claimed):
         stage, command = item['stage'], item['command']
         if stage in per_stage or stage == 'revalidate-upstream':
             continue
+        extras = [] if stage in PROTOCOL_IN_CLAIM and item.get('protocol_in_claim') else STAGE_EXTRAS.get(stage, [])
         names = [WORKFLOW_SKILL + 'SKILL.ext.md', WORKFLOW_SKILL + 'references/stage-' + stage + '.md',
-                 WORKFLOW_SKILL + 'references/receipt-rules.md', *STAGE_EXTRAS.get(stage, [])]
+                 WORKFLOW_SKILL + 'references/receipt-rules.md', *extras]
         overlay = 'presets/workflow/commands/' + command + '.md'
         if (repo / overlay).is_file(): names.append(overlay)
         files = {}

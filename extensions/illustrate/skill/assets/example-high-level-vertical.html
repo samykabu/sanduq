@@ -44,7 +44,7 @@
       line-height: 1.15;
       margin-bottom: 1.5rem;
     }
-    svg { width: 100%; min-width: 960px; display: block; }
+    svg { width: 100%; min-width: 1000px; display: block; }
   </style>
 </head>
 <body>
@@ -52,7 +52,9 @@
     <p class="eyebrow">Architecture · Illustrate · Parametric</p>
     <h1>High-level architecture · Vertical Orchestration + Security</h1>
 
-    <svg viewBox="0 0 1000 600" xmlns="http://www.w3.org/2000/svg">
+    <svg viewBox="0 0 1000 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="high-level-vertical-title high-level-vertical-desc">
+      <title id="high-level-vertical-title">High-level architecture with orchestration and security</title>
+      <desc id="high-level-vertical-desc">High-level architecture in which PostgreSQL, SFTP, web form and legacy sources flow through ingestion, storage, transformation and visualization, with orchestration, security and observability running alongside every stage.</desc>
       <defs>
         <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
           <circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"/>
@@ -146,7 +148,7 @@
       <path d="M 556,256 H 576 Q 580,256 580,248 V 164 Q 580,160 584,160 H 596" fill="none" stroke="#eb6c36" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
 
       <!-- Notebooks → Superset (secondary, straight at cy=160) -->
-      <line x1="748" y1="160" x2="790" y2="160" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+      <line x1="748" y1="160" x2="792" y2="160" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
 
       <!-- ═══════════════════════════════════════════
            SOURCE NODES  (w=176, h=64, x=8)
@@ -254,10 +256,10 @@
       <text x="672" y="178" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">Jupyter · Python · R</text>
 
       <!-- Superset (Visualization, cx=866) -->
-      <rect x="790" y="120" width="152" height="80" rx="6" fill="white" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
-      <rect x="798" y="126" width="28" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.28)" stroke-width="0.8"/>
-      <text x="812" y="135" fill="rgba(45,49,66,0.55)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">DASH</text>
-      <svg x="910" y="126" width="24" height="24" viewBox="0 0 24 24" fill="#2d3142">
+      <rect x="792" y="120" width="148" height="80" rx="6" fill="white" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
+      <rect x="800" y="126" width="28" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.28)" stroke-width="0.8"/>
+      <text x="814" y="135" fill="rgba(45,49,66,0.55)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">DASH</text>
+      <svg x="908" y="126" width="24" height="24" viewBox="0 0 24 24" fill="#2d3142">
         <path d="M6.168 6.045C2.603 6.045 0 8.579 0 12.014c0 3.434 2.603 5.941 6.168 5.941 2.184 0 3.888-1.026 5.775-3.078 1.53 2.033 4.037 3.136 5.89 3.078 3.566 0 6.167-2.503 6.167-5.941 0-3.438-2.601-5.97-6.168-5.97-2.864 0-5.138 2.425-5.771 3.173-.76-.9-1.674-1.665-2.682-2.274-1.019-.588-2.084-.898-3.211-.898z"/>
       </svg>
       <text x="866" y="166" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Superset</text>

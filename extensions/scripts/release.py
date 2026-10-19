@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Prepare immutable pending releases, publish/verify assets, then promote catalogs.
+"""Bump source versions, prepare immutable pending releases, publish/verify assets, then promote catalogs.
 
-No command changes source manifest versions. Maintainers review versions in
-extensions/pending-releases.json before CI. Public catalogs change only in promote,
-following successful remote asset verification.
+Only `bump <id> <version>` changes source versions: it writes every copy (extension.yml, the
+extensions/README.md row, Workflow's dependencies.json pins, pending-releases.json) and leaves
+status `ready` to a maintainer. Public catalogs change only in promote, following successful
+remote asset verification; promote also drops "(pending release)" from the root CHANGELOG
+headings that name a promoted version.
 """
 from __future__ import annotations
 import argparse
@@ -36,7 +38,86 @@ def read(path):
 
 def write(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+    path.write_bytes(dumps(value).encode('utf-8'))  # LF on every OS
+
+
+def dumps(value):
+    return json.dumps(value, indent=2, ensure_ascii=False) + '\n'
+
+
+PENDING_MARK = ' (pending release)'
+NAMED_VERSION = re.compile(r'([A-Za-z][A-Za-z-]*(?: [A-Z][A-Za-z-]*)*) (\d+\.\d+\.\d+)\b')
+
+
+def heading_versions(heading):
+    """{extension id: version} named in a changelog heading ("User Manual 1.6.0" -> user-manual)."""
+    return {name.lower().replace(' ', '-'): version for name, version in NAMED_VERSION.findall(heading)}
+
+
+def bump(name, version, root=ROOT):
+    """Write `version` into every source copy of extension `name`; all files or none."""
+    require(re.fullmatch(r'[a-z][a-z0-9-]*', name or ''), 'Invalid extension ID')
+    require(re.fullmatch(r'\d+\.\d+\.\d+', version or ''), 'Bump requires X.Y.Z version')
+    manifest_path = root / 'extensions' / name / 'extension.yml'
+    require(manifest_path.is_file(), 'Unknown extension: ' + name)
+    text = manifest_path.read_bytes().decode('utf-8')
+    old = str(yaml.safe_load(text)['extension']['version'])
+    require(Version(version) >= Version(old), f'{name}: {version} is lower than the source version {old}')
+    # Replace only the value on the extension block's version line, so comments and key order survive.
+    block = re.search(r'^extension:\n(?:[ \t]+.*\n|\n)*', text, re.M)
+    require(block, f'{manifest_path}: no extension block')
+    line = re.compile(r'^([ \t]+version:[ \t]*)(["\']?)' + re.escape(old) + r'\2', re.M)
+    new_block, count = line.subn(lambda m: m.group(1) + m.group(2) + version + m.group(2), block.group(0), count=1)
+    require(count == 1, f'{manifest_path}: version line not found')
+    changes = {manifest_path: text[:block.start()] + new_block + text[block.end():]}
+    require(str(yaml.safe_load(changes[manifest_path])['extension']['version']) == version, 'Manifest rewrite failed')
+    index = root / 'extensions/README.md'
+    if index.is_file():
+        row = re.compile(r'^(\| \[' + re.escape(name) + r'\]\(' + re.escape(name) + r'/README\.md\) \| )[^|]+( \|)', re.M)
+        changes[index], count = row.subn(lambda m: m.group(1) + version + m.group(2), index.read_bytes().decode('utf-8'))
+        require(count == 1, f'{index}: no version row for {name}')
+    deps_path = root / 'extensions/workflow/dependencies.json'
+    if deps_path.is_file():
+        deps = read(deps_path)
+
+        def pin(node):
+            for key, value in node.items():
+                if isinstance(value, dict):
+                    pin(value)
+                elif key == name and isinstance(value, str):
+                    node[key] = version
+        for section in ('required', 'selected', 'optional'):
+            pin(deps.get(section) or {})
+        changes[deps_path] = dumps(deps)
+    pending_path = root / 'extensions/pending-releases.json'
+    pending = read(pending_path)
+    pending['versions'][name] = version
+    if pending.get('status') in ('ready', 'released'):
+        pending['status'] = 'implementation-in-progress'  # a new version needs review before `ready`
+    changes[pending_path] = dumps(pending)
+    written = []
+    for path, content in changes.items():
+        if path.read_bytes() != content.encode('utf-8'):
+            path.write_bytes(content.encode('utf-8'))
+            written.append(path.relative_to(root).as_posix())
+    return {'id': name, 'from': old, 'to': version, 'written': written}
+
+
+def clear_pending_headings(released, root=ROOT):
+    """Drop the pending marker from root CHANGELOG headings that name a version in `released`."""
+    path = root / 'CHANGELOG.md'
+    if not path.is_file():
+        return []
+    lines = path.read_bytes().decode('utf-8').split('\n')
+    cleared = []
+    for i, line in enumerate(lines):
+        if line.startswith('## ') and line.endswith(PENDING_MARK) and \
+                set(heading_versions(line).items()) & set(released.items()):
+            lines[i] = line[:-len(PENDING_MARK)]
+            cleared.append(lines[i])
+    if cleared:
+        path.write_bytes('\n'.join(lines).encode('utf-8'))
+    return cleared
 
 
 def command(args, root=ROOT):
@@ -145,17 +226,20 @@ def promote(root=ROOT, verifier=verify_asset):
     for release in plan['releases']: pending['versions'].pop(release['id'])
     pending['status']='released' if not pending['versions'] else 'pending'
     write(root/'extensions/pending-releases.json',pending)
-    return {'promoted':[r['tag'] for r in plan['releases']]}
+    cleared=clear_pending_headings({r['id']:r['version'] for r in plan['releases']},root)
+    return {'promoted':[r['tag'] for r in plan['releases']],'changelog_headings_released':cleared}
 
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action',choices=('prepare','publish','promote'))
+    parser.add_argument('action',choices=('bump','prepare','publish','promote'))
+    parser.add_argument('target',nargs='*',metavar='ID VERSION',help='bump only: extension id and new X.Y.Z version')
     parser.add_argument('--apply',action='store_true')
     parser.add_argument('--development',action='store_true',help='Prepare a preview which cannot be published')
     args=parser.parse_args()
     try:
-        result=prepare(development=args.development) if args.action=='prepare' else publish(apply=args.apply) if args.action=='publish' else promote()
+        require(len(args.target)==(2 if args.action=='bump' else 0),'bump takes an extension id and a version; other actions take none')
+        result=bump(*args.target) if args.action=='bump' else prepare(development=args.development) if args.action=='prepare' else publish(apply=args.apply) if args.action=='publish' else promote()
         print(json.dumps({k:v for k,v in result.items() if k!='catalog'},indent=2))
     except (ValueError,OSError,KeyError) as exc:
         print(json.dumps({'ok':False,'error':str(exc)}));raise SystemExit(1)

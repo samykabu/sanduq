@@ -7,7 +7,7 @@
   </picture>
 </p>
 
-[![Spec Kit extensions](https://img.shields.io/badge/Spec_Kit-8_extensions-233C32)](docs/README.md#extensions)
+[![Spec Kit extensions](https://img.shields.io/badge/Spec_Kit-9_extensions-233C32)](docs/README.md#extensions)
 [![Portable skills](https://img.shields.io/badge/Agent_skills-7-C65B36)](https://github.com/samykabu/sanduq-skills)
 [![License](https://img.shields.io/badge/license-PolyForm_NC_and_MIT-7b2d26)](#can-i-use-this)
 
@@ -26,7 +26,7 @@ available as portable agent skills in [sanduq-skills](https://github.com/samykab
 
 ## Products
 
-![Product map: eight Spec Kit extensions in this repository. Scope requires Workflow and Illustrate; Assure, PR and User Manual require Illustrate; PR uses Assure and User Manual when installed; Project and Memory stand alone. The sanduq-skills repository supplies the Illustrate, User Manual and Delegate Task skills, copied into extensions and listed by the sanduq marketplace.](docs/diagrams/product-map.animated.svg)
+![Product map: nine Spec Kit extensions in this repository. Scope requires Workflow and Illustrate; Assure, PR and User Manual require Illustrate; PR uses Assure and User Manual when installed; Workflow uses Progress when installed; Project, Memory and Progress stand alone. The sanduq-skills repository supplies the Illustrate, User Manual and Delegate Task skills, copied into extensions and listed by the sanduq marketplace.](docs/diagrams/product-map.animated.svg)
 
 The map shows each extension and what it requires; arrows point to the dependency.
 [Editable source](docs/diagrams/product-map.html) and [static version](docs/diagrams/product-map.svg).
@@ -151,6 +151,22 @@ Nothing new is switched on by the upgrade. The opt-in keys are listed in
 [upgrades](docs/start/upgrades.md#adopt-the-round-2-releases); the one most projects want is
 `progress.hook_wiring: native`, which roughly halves the Progress hook's cost on every tool call. On
 Codex, approve the changed guard hook once in `/hooks`.
+
+## Upgrade to Workflow 1.15.0 (round 3)
+
+Workflow 1.15.0 ships with Scope 1.9.0, Assure 2.5.0, User Manual 1.7.0, PR 4.4.0, Project 2.4.0,
+Illustrate 2.6.0, Memory 2.4.0 and Progress 1.4.0. It fixes behaviour introduced in 1.14.0 and makes the
+runtime faster. Nothing is renamed and no policy key is added:
+
+```bash
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.15.0 --apply
+python .specify/extensions/workflow/scripts/workflow.py doctor --project
+```
+
+The upgrade removes the Illustrate post-write hook that 2.5.0 registered for every project, and
+re-adds it only where `illustrate.hooks.self_check: true` is set. On Codex, approve the changed guard
+hook once in `/hooks`; `doctor` now says when that approval is missing. See
+[upgrades](docs/start/upgrades.md#upgrade-to-workflow-1150) for what changes.
 
 ## Can I use this?
 

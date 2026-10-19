@@ -42,7 +42,7 @@ Its mode is `disabled`, `advisory` or `required`. It does not run your applicati
 ## Extension
 
 A versioned Spec Kit package that adds commands and, often, hooks. You install it with
-`specify extension add <id>`. Sanduq has eight extensions.
+`specify extension add <id>`. Sanduq has nine extensions.
 
 ## Feature
 

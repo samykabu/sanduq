@@ -2,12 +2,14 @@
 
 Pulls SVGs from Tabler Icons (MIT), Simple Icons (CC0), log-z/logos (MIT),
 and Devicon (MIT), normalizes them to a 24x24 viewBox using `currentColor`
-so they inherit ink from context, and emits two artifacts:
+so they inherit ink from context, and emits three artifacts:
 
-  - references/primitive-icons.md  (catalog with snippets)
+  - references/primitive-icons.md  (name index; one line per icon)
+  - scripts/icons.json              (the snippets, read by scripts/icon_lookup.py)
   - assets/icons.html               (visual gallery)
 
 Run:    python scripts/build-icons.py
+        python scripts/build-icons.py --check   (offline: the committed files match the vendored SVGs)
 Reqs:   stdlib only (urllib, re, pathlib)
 
 Re-run any time the manifest below changes. The generated files are
@@ -16,6 +18,7 @@ committed; users of the skill never need to run this script.
 
 from __future__ import annotations
 
+import json
 import pathlib
 import re
 import sys
@@ -25,6 +28,7 @@ import urllib.error
 SKILL_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 MD_OUT = SKILL_ROOT / "references" / "primitive-icons.md"
+JSON_OUT = SKILL_ROOT / "scripts" / "icons.json"
 HTML_OUT = SKILL_ROOT / "assets" / "icons.html"
 VENDOR_DIR = SKILL_ROOT / "scripts" / "vendor" / "icons"
 
@@ -320,25 +324,31 @@ def normalize_logz(raw: str) -> str:
     )
 
 
-def build() -> tuple[list[str], list[str]]:
+def build(offline: bool = False) -> tuple[list[str], list[str], list[str], dict[str, dict[str, str]]]:
     md_chunks: list[str] = []
     gallery_chunks: list[str] = []
     misses: list[str] = []
+    entries: dict[str, dict[str, str]] = {}
 
+    total = sum(len(items) for items in ICONS.values())
     md_chunks.append(
         "# Icons (primitive)\n\n"
-        "A monochrome 24×24 icon library for IT/cloud diagrams. Each icon "
+        f"A monochrome 24×24 library of {total} icons for IT/cloud diagrams. Each icon "
         "uses `currentColor` so it inherits ink from its parent SVG and "
         "adapts to the editorial skin or any user-onboarded brand palette.\n\n"
         "## Usage\n\n"
-        "Find the icon by name (the `### name` headings below). Copy the "
-        "fenced `<svg>` snippet into your diagram. Default size is 24×24; "
+        "Pick names from the index below, then print their snippets: "
+        "`python scripts/icon_lookup.py laptop server` (exact names), or "
+        "`python scripts/icon_lookup.py storage` (every icon whose name, group "
+        "or description mentions the word). Copy the printed `<svg>` into your "
+        "diagram. Default size is 24×24; "
         "wrap in `<g transform=\"translate(x,y) scale(s)\">` to position and "
         "resize. Set `color`, `fill`, or `stroke` on the parent group/SVG to "
-        "control color.\n\n"
+        "control color. An unknown name exits 2 and lists the nearest names.\n\n"
         "Generic icons are stroked (1.5px, hairline, like the rest of the "
         "skill); brand silhouettes are filled. Don't mix the two styles in "
-        "the same diagram unnecessarily.\n\n"
+        "the same diagram unnecessarily. The visual gallery is "
+        "[`assets/icons.html`](../assets/icons.html).\n\n"
     )
 
     for category, items in ICONS.items():
@@ -369,8 +379,11 @@ def build() -> tuple[list[str], list[str]]:
                 raise ValueError(f"unknown source: {source}")
 
             if vpath.exists():
-                print(f"  local   {source}/{source_id} -> {slot}", file=sys.stderr)
+                if not offline:
+                    print(f"  local   {source}/{source_id} -> {slot}", file=sys.stderr)
                 raw = vpath.read_text(encoding="utf-8")
+            elif offline:
+                raw = None
             else:
                 print(f"  fetching {source}/{source_id} -> {slot}", file=sys.stderr)
                 if source == "tabler":
@@ -390,9 +403,7 @@ def build() -> tuple[list[str], list[str]]:
 
             if raw is None:
                 misses.append(f"{slot} <- {source}/{source_id}")
-                md_chunks.append(
-                    f"### {slot}\n_NOT FOUND — please pick a fallback_\n\n"
-                )
+                md_chunks.append(f"- `{slot}`: _NOT FOUND, pick a fallback_\n")
                 gallery_chunks.append(
                     f'<div class="cell missing"><div class="icon">∅</div>'
                     f'<div class="name">{slot}</div></div>'
@@ -405,16 +416,14 @@ def build() -> tuple[list[str], list[str]]:
                 misses.append(f"{slot} <- {source}/{source_id} (parse: {e})")
                 continue
 
-            md_chunks.append(
-                f"### {slot}\n{blurb}\n\n"
-                f"```svg\n{snippet}\n```\n\n"
-                f"Source: {attribution}\n\n"
-            )
+            md_chunks.append(f"- `{slot}`: {blurb}\n")
+            entries[slot] = {"group": category, "description": blurb, "svg": snippet, "source": attribution}
             gallery_chunks.append(
                 f'<div class="cell"><div class="icon">{snippet}</div>'
                 f'<div class="name">{slot}</div></div>'
             )
 
+        md_chunks.append("\n")
         gallery_chunks.append("</div></section>")
 
     md_chunks.append(
@@ -427,10 +436,11 @@ def build() -> tuple[list[str], list[str]]:
         "All libraries' licenses permit redistribution, including in this "
         "repository under their upstream licenses. Brand logos retain their "
         "respective trademarks; this set is for documentation and "
-        "illustrative use only.\n"
+        "illustrative use only. Each icon's source is printed with its "
+        "snippet by `icon_lookup.py`.\n"
     )
 
-    return md_chunks, gallery_chunks, misses
+    return md_chunks, gallery_chunks, misses, entries
 
 
 GALLERY_TEMPLATE = """<!DOCTYPE html>
@@ -556,21 +566,34 @@ GALLERY_TEMPLATE = """<!DOCTYPE html>
 """
 
 
-def main() -> int:
-    print("Building icon library…", file=sys.stderr)
-    md_chunks, gallery_chunks, misses = build()
-
-    MD_OUT.parent.mkdir(parents=True, exist_ok=True)
-    MD_OUT.write_text("".join(md_chunks), encoding="utf-8")
-
-    HTML_OUT.parent.mkdir(parents=True, exist_ok=True)
+def outputs(offline: bool = False) -> tuple[dict[pathlib.Path, str], list[str]]:
+    md_chunks, gallery_chunks, misses, entries = build(offline)
     html = GALLERY_TEMPLATE.replace("{SECTIONS}", "\n".join(gallery_chunks))
-    HTML_OUT.write_text(html, encoding="utf-8")
+    data = json.dumps(entries, indent=1, ensure_ascii=False) + "\n"
+    return {MD_OUT: "".join(md_chunks), JSON_OUT: data, HTML_OUT: html}, misses
+
+
+def main() -> int:
+    if sys.argv[1:] == ["--check"]:
+        files, misses = outputs(offline=True)
+        stale = [str(p.relative_to(SKILL_ROOT)) for p, text in files.items()
+                 if not p.is_file() or p.read_bytes() != text.encode("utf-8")]
+        for message in misses:
+            print(f"missing vendored icon: {message}", file=sys.stderr)
+        for name in stale:
+            print(f"stale generated file: {name} (run python scripts/build-icons.py)", file=sys.stderr)
+        return 1 if stale or misses else 0
+
+    print("Building icon library…", file=sys.stderr)
+    files, misses = outputs()
+    for path, text in files.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(text.encode("utf-8"))  # LF on every OS, so --check is byte-stable
 
     total = sum(len(items) for items in ICONS.values())
     print(f"\nDone. {total - len(misses)}/{total} fetched.", file=sys.stderr)
-    print(f"  primitive-icons.md: {MD_OUT}", file=sys.stderr)
-    print(f"  icons.html:         {HTML_OUT}", file=sys.stderr)
+    for path in files:
+        print(f"  {path.name}: {path}", file=sys.stderr)
     if misses:
         print(f"\n  {len(misses)} miss(es) — review and pick fallbacks:", file=sys.stderr)
         for m in misses:

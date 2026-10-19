@@ -43,7 +43,7 @@ specify init --here --integration codex
 specify extension catalog add --name sanduq --priority 10 --install-allowed https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
 ```
 
-Then add extensions. To add all eight, use the [dependency-ordered block](#all-eight-extensions).
+Then add extensions. To add all nine extensions, use the [dependency-ordered block](#all-nine-extensions).
 
 **Command syntax.** Skills: `$user-manual`. Extension commands: `$speckit-assure-analyze`.
 
@@ -75,7 +75,7 @@ specify init --here --integration claude
 specify extension catalog add --name sanduq --priority 10 --install-allowed https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
 ```
 
-Then add extensions. To add all eight, use the [dependency-ordered block](#all-eight-extensions).
+Then add extensions. To add all nine extensions, use the [dependency-ordered block](#all-nine-extensions).
 
 **Command syntax.** Plugin skills: `/dev-tools:user-manual`. Skills from `npx skills`: `/user-manual`.
 Extension commands: `/speckit-assure-analyze`.
@@ -95,7 +95,7 @@ that need Python, Node.js or Playwright run only where Claude Desktop can run th
 
 </details>
 
-## All eight extensions
+## All nine extensions
 
 Run these after registering the catalog. The order installs each dependency before the extension
 that needs it.
@@ -106,6 +106,7 @@ specify extension add assure
 specify extension add user-manual
 specify extension add pr
 specify extension add project
+specify extension add progress
 specify extension add workflow
 specify extension add scope    # requires workflow; another catalog uses the same ID
 specify extension add memory

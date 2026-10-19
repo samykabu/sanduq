@@ -1,5 +1,5 @@
 ---
-description: Reports policy approval, pending or blocked features, the archive phase and the next command. Use when asked "what is the archive status".
+description: Reports archive approval, pending work and the next command. Use when asked "what is the archive status".
 ---
 
 # Archive status

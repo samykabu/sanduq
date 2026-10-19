@@ -1,6 +1,8 @@
+import atexit
 import copy
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -15,14 +17,30 @@ w = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(w)
 
 
+_TEMPLATE = []
+
+
+def template_git():
+    """One fixture repository per process (init, identity, empty commit, origin); each test copies its `.git`."""
+    if not _TEMPLATE:
+        holder = tempfile.TemporaryDirectory()
+        atexit.register(holder.cleanup)
+        root = Path(holder.name)
+        for args in [('init', '-q'), ('config', 'user.name', 'Test'), ('config', 'user.email', 'test@example.invalid'),
+                     ('commit', '--allow-empty', '-qm', 'init'),
+                     ('remote', 'add', 'origin', 'https://github.com/acme/app.git')]:
+            subprocess.run(['git', *args], cwd=root, check=True, capture_output=True)
+        shutil.rmtree(root / '.git/hooks', ignore_errors=True)  # sample hooks only; never run
+        _TEMPLATE.append(root / '.git')
+    return _TEMPLATE[0]
+
+
 class WorkflowTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name).resolve()
-        for args in [('init', '-q'), ('config', 'user.name', 'Test'), ('config', 'user.email', 'test@example.invalid'), ('commit', '--allow-empty', '-qm', 'init')]:
-            subprocess.run(['git', *args], cwd=self.root, check=True, capture_output=True)
-        subprocess.run(['git','remote','add','origin','https://github.com/acme/app.git'],cwd=self.root,check=True)
+        shutil.copytree(template_git(), self.root / '.git')
         self.feature = 'specs/001-example'
         self.policy = w.default_policy(True, True)
         self.configure()

@@ -19,7 +19,7 @@ conflicts with an existing Spec Kit community extension.
 | `speckit.assure.analyze` | `/speckit-assure-analyze` | Add missing test and evidence work before implementation |
 | `speckit.assure.document` | `/speckit-assure-document` | Generate or refresh the implemented feature's QA test manual |
 
-`Assure.Init` recommends integrated mode. It makes analysis mandatory before implementation and tells
+`speckit.assure.init` recommends integrated mode. It makes analysis mandatory before implementation and tells
 the sanduq PR workflow to generate QA documentation when feature evidence is missing or stale.
 
 ```text

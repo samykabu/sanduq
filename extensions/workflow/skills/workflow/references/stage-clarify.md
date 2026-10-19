@@ -19,13 +19,8 @@ spec. Unchanged unanswered discussions wait without new posts. Receipt: `unresol
 The claim's `side_effects` lists what this stage may edit (spec.md, project-sync-state.json,
 checklists).
 
-- In-session first round: when `clarification.in_session_first_round` is true and this is round
-  1, the skill may ask the issue creator in this session and publish the answers with
-  `clarification.py publish <issue> --analysis <file> --answers <answers.json> --apply`; the
-  issue goes straight to Ready.
-- `clarification.max_questions_per_round` caps one round; give questions a `priority` (1 is most
-  important) and defer the keys `CLARIFICATION_TOO_MANY_QUESTIONS` names.
-- A Mermaid `diagram` is allowed in managed projects; an Illustrate `diagram_image` is optional.
+The skill's managed reference carries the in-session first round, the per-round question cap
+and diagrams.
 
 Return to the dispatcher; never call Plan from here. With SuperSpec Brainstorm under
 `required-only` checkpoints, also follow [superspec-checkpoints.md](superspec-checkpoints.md).

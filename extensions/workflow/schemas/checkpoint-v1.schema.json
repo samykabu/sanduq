@@ -91,6 +91,16 @@
       "items": {"type": "object", "required": ["v", "event_id", "workflow_run_id", "generation", "at", "stage", "event", "episode_id", "claim_id", "delegation_run_ids", "reason"]}
     },
     "updated_at": {"type": "string", "format": "date-time"},
-    "head": {"type": "string"}
+    "head": {"type": "string"},
+    "execute_protocol": {
+      "description": "The Execute protocol last printed in full by a claim: its files and the digest of their content. An Execute claim with the same digest names the files instead of printing them (1.15.0+).",
+      "type": "object",
+      "required": ["files", "digest", "printed_at"],
+      "properties": {
+        "files": {"type": "array", "items": {"type": "string"}},
+        "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "printed_at": {"type": "string", "format": "date-time"}
+      }
+    }
   }
 }
