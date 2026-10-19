@@ -16,15 +16,17 @@ requires:
       required: false
     - name: gh
       required: false   # graceful skip if gh/scope/remote preconditions are not met
+    - name: python
+      required: true    # scripts/project_sync.py (stdlib only)
 
 provides:
   commands:
     - name: speckit.project.init
       file: commands/speckit.project.init.md
-      description: "One-time setup: choose required or optional lifecycle hooks, discover the GitHub Project, map phases to the board's Status columns, and write the repo configuration."
+      description: "Sets up GitHub Project sync once per repository: discovers the board, maps lifecycle phases to its Status columns, chooses required or optional hooks and writes the config. Use when asked to 'connect the project board', 'set up project sync' or before the first managed feature."
     - name: speckit.project.sync
       file: commands/speckit.project.sync.md
-      description: "Advance the feature's parent issue on the configured GitHub Project to the phase's Status, create/close task sub-issues, keeping the board in step with the branch."
+      description: "Advances the feature's parent issue on the configured GitHub Project to a lifecycle phase and creates or closes task sub-issues. Use when asked to 'move the card', 'sync the board' or when a lifecycle hook names a phase."
 
 # Lifecycle wiring. Hooks install as optional, then `speckit.project.init` applies the project's
 # selected optional/manual or required/automatic policy in `.specify/extensions.yml`. Each prompt

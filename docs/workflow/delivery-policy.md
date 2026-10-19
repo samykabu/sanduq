@@ -150,6 +150,25 @@ python .specify/extensions/workflow/scripts/workflow.py decisions --owner review
 python .specify/extensions/workflow/scripts/workflow.py decisions --show
 ```
 
+## Optional hook keys
+
+Two optional sections in `.specify/workflow.yml` control extension hooks. Leave them out to keep
+the current behaviour; an unknown key or a wrong type stops the workflow with
+`PROGRESS_POLICY_INVALID` or `ILLUSTRATE_POLICY_INVALID`.
+
+```yaml
+progress:
+  hook_wiring: speckit      # speckit (default) runs through Spec Kit's dispatcher; native runs scripts/hook.py directly
+  post_tool_matcher: ""     # tools the per-tool-call hook matches; "" (default) matches every tool
+illustrate:
+  hooks:
+    self_check: false       # true checks every written diagram HTML (self_check, geometry, theme)
+```
+
+The Workflow installer applies the `progress` keys; see [Progress](../extensions/progress.md) and
+[Illustrate](../extensions/illustrate.md). These keys change no stage, so editing them never
+invalidates receipts.
+
 ## Small bug fixes and other work outside Sanduq features
 
 Use a normal Git branch, run the relevant product tests, and open a normal PR.

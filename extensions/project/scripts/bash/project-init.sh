@@ -202,5 +202,5 @@ CONFIG="$(jq -n \
 OUT="$EXT_DIR/config.json"
 if [ "$DRYRUN" = 1 ]; then info "DRYRUN would write $OUT:"; echo "$CONFIG";
 else mkdir -p "$EXT_DIR"; echo "$CONFIG" > "$OUT"; info "wrote $OUT"; fi
-info "done. Next: commit config.json, then dry-run: bash $EXT_DIR/scripts/bash/project-sync.sh --phase open --dry-run"
+info "done. Next: commit config.json, then dry-run: python $EXT_DIR/scripts/project_sync.py --phase open --dry-run"
 [ "$JSON" = 1 ] && echo "$CONFIG" | jq -c .
