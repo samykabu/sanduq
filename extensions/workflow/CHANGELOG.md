@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.14.0] - 2026-10-19
+
+Optimization round 2 (cross-cutting parts). Every new key is opt-in.
+
+- `claim` prints `project_sync: {"phase": ..., "command": "python .specify/extensions/project/scripts/project_sync.py --phase <phase> --summary"}` instead of `true`, from one stage-to-phase map, and `false` where no sync runs.
+- `validate_policy` accepts `progress: {hook_wiring: speckit | native, post_tool_matcher: <regex>}` and `illustrate: {hooks: {self_check: <bool>}}`; absent keys keep today's behaviour.
+- The installer applies `progress.hook_wiring: native` and `progress.post_tool_matcher` per host and records them in `install-lock.json`; `.codex/config.toml` joins the rollback set.
+- The guard hook refuses `gh pr create|edit --body-file <f>` in a managed project when the lint receipt for `<f>` is missing or does not match, and `gh pr create` on the default branch. Codex users approve the changed hook once in `/hooks`.
+- The PR stage reference points at PR 4.3.0's `pr_publish.py`, and reporting states the never-spawn rule once.
+- Required pins: Scope 1.8.1, Project 2.3.0, PR 4.3.0, Illustrate 2.5.0; selected Assure 2.4.0 and User Manual 1.6.0; optional Progress 1.3.0.
+
 ## [1.13.1] - 2026-10-19
 
 Fixes for issue #94 (the shipped workflow gate in CI). Rendered CI files are tracked in `install-lock.json`; an upgrade re-renders them.

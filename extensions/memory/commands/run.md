@@ -1,5 +1,5 @@
 ---
-description: Archives selected verified feature folders into project memory through a checkpoint, a reviewed delta candidate and a scoped final commit. Use when asked to "archive the feature" or "run the memory archive", or when the session handoff returns speckit.memory.run.
+description: Archives verified features into project memory via a checkpoint, a reviewed delta and a scoped commit. Use when asked to "archive the feature".
 ---
 
 # Archive feature specifications

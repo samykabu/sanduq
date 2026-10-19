@@ -1,5 +1,5 @@
 ---
-description: "Forces one progress report snapshot now; the host hooks already refresh it, and a snapshot never marks the feature complete. Use when implementation ends, or when asked to 'refresh the progress report' or 'take a final progress snapshot'."
+description: "Forces one progress snapshot now (hooks already refresh it); never marks the feature complete. Use when asked to 'refresh the progress report'."
 ---
 
 Run from the repository root:

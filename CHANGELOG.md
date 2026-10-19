@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-19 — Workflow 1.14.0, Assure 2.4.0, User Manual 1.6.0, PR 4.3.0, Project 2.3.0, Illustrate 2.5.0, Memory 2.3.0, Progress 1.3.0, Scope 1.8.1 (pending release)
+
+- Optimization round 2 over the companion extensions: scripts take over the Assure inventory and QA audit, the PR body and lint receipt, the CHANGELOG facts, the project sync (one Python script) and the memory hashes; the Illustrate skill is procedure-first with a type index (illustration-tools 3.5.0); commands are trimmed and every description follows the catalog rules. Instruction bytes per invocation fall about 41 percent; see `docs/internal/benchmarks/`.
+- Opt-in: native Progress hook wiring and a PostToolUse matcher, an Illustrate post-write check, a Memory archive guard, evidence-scoped User Manual updates. Vendors dev-tools 1.2.0 and agent-tools 1.5.0.
+
 ## 2026-10-19 — Workflow 1.13.1, Assure 2.3.4, User Manual 1.5.4 (pending release)
 
 - Issue #94: evidence snapshots validate in a fresh CI checkout by commit ancestry; the shipped gate templates skip fork pull requests on self-hosted runners, take the base ref through `env`, and pin every action by commit with a version comment.

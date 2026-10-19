@@ -1,5 +1,5 @@
 ---
-description: "Creates the live progress report for the active Spec Kit feature, binds this session to it and can install the Claude status line. Use when tasks.md exists and reporting should start, or when asked to 'start the progress report' or 'track progress for this feature'."
+description: "Creates the live progress report for the active feature and can install the Claude status line. Use when asked to 'track progress'."
 ---
 
 Load `.specify/extensions/progress/skills/progress/SKILL.md` (record lanes, blockers and notes later with the

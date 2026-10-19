@@ -72,6 +72,43 @@ Codex can now install the portable plugin bundles from the same marketplace
 (`codex plugin marketplace add samykabu/sanduq`, then `codex plugin add <bundle>@sanduq`); that path
 is published but has not been exercised yet, so report what you see.
 
+## Adopt the round-2 releases
+
+Workflow 1.14.0 pins Scope 1.8.1, Project 2.3.0, PR 4.3.0 and Illustrate 2.5.0, and selects Assure
+2.4.0, User Manual 1.6.0 and Progress 1.3.0; the transactional upgrade installs them together. What
+changes without any policy key:
+
+- **Project.** Sync is one Python script (`project_sync.py`); Python is now required. The claim
+  prints the exact sync command, so the agent no longer rereads the sync command file.
+- **PR.** `pr_publish.py` writes the body, runs pr-lint and publishes; the receipt fields come from its
+  output. The guard hook refuses a `gh pr create|edit --body-file` whose lint receipt does not match
+  and a `gh pr create` on the default branch. Approve the changed hook once in Codex with `/hooks`.
+- **Assure.** `documentation-gates.yml` is re-rendered: the gate reads the config through
+  `assure_state.py status --gate`, and a reformatted config can no longer skip it. A project that kept
+  its own copy with `--preserve-ci` should compare it with the shipped one.
+- **Illustrate and its consumers.** Diagram steps read the type index plus one type reference; the
+  skill's entry file is 11.7 KB instead of 34.7 KB.
+- **Memory.** `run.md` reads its references by step; `status` returns the next command.
+
+Opt-in keys, each off or unchanged until set:
+
+```yaml
+# .specify/workflow.yml
+progress:
+  hook_wiring: native            # default speckit; the installer writes hooks that run hook.py directly
+  post_tool_matcher: "Bash|Task|Agent|spawn_agent"   # default "" (every tool); fewer activity updates
+illustrate:
+  hooks:
+    self_check: true             # default false; checks every written diagram HTML
+```
+
+`User-Manual/manual.yml` takes `lifecycle.impact_scope: evidence` (default `all`) to update only the
+modules the changed inputs touch; `assure-config.yml` takes `scan.exclude`; Memory's
+`archive-policy.json` takes `guard_hooks: true` (default false). After setting a Progress key, rerun
+`install.py` so the host hooks are rewritten; with `native` wiring, run it again after any later
+`specify extension` command, which restores Spec Kit's own entries. Each package changelog lists the
+details.
+
 ## Moved documentation
 
 Pages moved in this release keep a forwarding stub at the old path for one release cycle:

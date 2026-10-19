@@ -3,7 +3,7 @@ schema_version: "1.0"
 extension:
   id: illustrate
   name: "Illustrate"
-  version: "2.4.2"
+  version: "2.5.0"
   description: "Generate, import, and export forty-four technical, product, architecture, process, and quantitative illustration types with tracked project-level light/dark color and font themes."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
@@ -20,16 +20,16 @@ provides:
   commands:
     - name: speckit.illustrate.generate
       file: commands/speckit.illustrate.generate.md
-      description: 'Draws one of 44 diagram types (architecture, sequence, flowchart, ER, Gantt, Sankey, charts) as themed HTML with inline SVG using the installed Illustrate skill. Use when asked to "draw a diagram", "chart this" or "visualize" something for a spec, doc or PR.'
+      description: 'Draws 44 diagram and chart types (architecture, sequence, ER, Gantt) as themed HTML with inline SVG. Use when asked to "draw a diagram".'
     - name: speckit.illustrate.export
       file: commands/speckit.illustrate.export.md
-      description: 'Exports an Illustrate HTML diagram to standalone SVG, transparent PNG, animated SVG or GIF with the bundled exporter, keeping the HTML as the source. Use when asked to "export the diagram" or "make a PNG of this chart".'
+      description: 'Exports an Illustrate diagram to SVG, transparent PNG, animated SVG or GIF; the HTML stays the source. Use when asked to "export the diagram".'
     - name: speckit.illustrate.theme
       file: commands/speckit.illustrate.theme.md
-      description: 'Initializes, selects, validates or creates the tracked Illustrate color and font theme of a project in .github/illustration-theme.yml. Use when asked to "set the diagram theme", "use the dark theme" or "create a brand theme".'
+      description: 'Initializes, selects, validates or creates the project Illustrate color and font theme. Use when asked to "set the diagram theme".'
     - name: speckit.illustrate.import
       file: commands/speckit.illustrate.import.md
-      description: 'Redraws a draw.io, Mermaid or Excalidraw source as an Illustrate diagram in the project theme and reports a fidelity ledger. Use when asked to "import this .drawio", "redraw the Mermaid diagram" or "convert an .excalidraw file".'
+      description: 'Redraws a draw.io, Mermaid or Excalidraw file as a themed Illustrate diagram with a fidelity ledger. Use when asked to "import this .drawio".'
 
 events:
   post_tool_use:

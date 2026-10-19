@@ -1,5 +1,5 @@
 ---
-description: "Prints the one-line state of the Sanduq progress report (stage, lanes, blockers, decisions), or its JSON projection with --json. Use when asked 'where are we' or 'progress status', or to show the report state."
+description: "Prints the one-line progress state (stage, lanes, blockers, decisions), or JSON with --json. Use when asked to 'show progress status'."
 ---
 
 Run from the repository root:

@@ -1,5 +1,5 @@
 ---
-description: "Discovers the application, proposes a module map for approval and scaffolds the bilingual-ready, audience-aware User Manual. Use when a project has no User-Manual/ yet or its module map needs a refresh; triggers: 'create a user manual', 'init the manual'."
+description: "Discovers the app, proposes a module map and scaffolds the audience-aware User Manual. Use when asked to 'create a user manual'."
 ---
 
 # Initialize User Manual

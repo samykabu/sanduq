@@ -1,5 +1,5 @@
 ---
-description: 'Initializes, selects, validates or creates the tracked Illustrate color and font theme of a project in .github/illustration-theme.yml. Use when asked to "set the diagram theme", "use the dark theme" or "create a brand theme".'
+description: 'Initializes, selects, validates or creates the project Illustrate color and font theme. Use when asked to "set the diagram theme".'
 ---
 
 # Manage the Illustration Theme

@@ -1,5 +1,5 @@
 ---
-description: 'Redraws a draw.io, Mermaid or Excalidraw source as an Illustrate diagram in the project theme and reports a fidelity ledger. Use when asked to "import this .drawio", "redraw the Mermaid diagram" or "convert an .excalidraw file".'
+description: 'Redraws a draw.io, Mermaid or Excalidraw file as a themed Illustrate diagram with a fidelity ledger. Use when asked to "import this .drawio".'
 ---
 
 # Import a Diagram

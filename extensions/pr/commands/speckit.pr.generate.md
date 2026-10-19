@@ -1,5 +1,5 @@
 ---
-description: "Generates the feature CHANGELOG and the plain-English feature-details document with inline diagrams, then creates or updates the branch's pull request. Use when asked to 'open the PR', 'update the PR description' or after implementation finishes; never merges."
+description: "Generates the feature CHANGELOG and details doc, then opens or updates the pull request; never merges. Use when asked to 'open the PR'."
 ---
 
 # Generate a Detailed PR

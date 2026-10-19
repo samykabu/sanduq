@@ -1,5 +1,5 @@
 ---
-description: "Updates the affected User Manual modules for the implemented feature, audits them and builds a private preview. Use when a feature is implemented or the manual is missing; triggers: 'update the user manual', 'build the manual preview'."
+description: "Updates the User Manual modules a feature affects, audits them and builds a private preview. Use when asked to 'update the manual'."
 ---
 
 # Update User Manual

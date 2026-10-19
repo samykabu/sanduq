@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.0] - 2026-10-19
+
+Optimization round 2. Vendors agent-tools 1.5.0, which this release needs.
+
+- The hook command runs `scripts/hook.py` directly, which reads the event from the payload; `hooks/dispatch.py` is gone, one Python process fewer per event.
+- Opt-in `progress.hook_wiring: native` in `.specify/workflow.yml`: the Workflow installer writes the host hooks itself, so each event runs `hook.py` without Spec Kit's dispatcher (87 to 137 ms per tool call instead of 200 to 251 ms on the reviewed machine). The default `speckit` keeps today's wiring. Codex gets SessionEnd on both paths.
+- Opt-in `progress.post_tool_matcher` narrows the PostToolUse hook to matching tools. Setting it makes the report's activity time move less often; the default (empty) keeps every tool.
+- Status, export, theme and refresh no longer load the skill. One description per command. The unused vendored `assets/skill/SKILL.md` and the packaged documentation screenshots are dropped.
+
 ## [1.2.0] - 2026-10-18
 
 - Vendors `progress-report` from `agent-tools-v1.4.2`. The report becomes the Timeline page: what needs attention, the

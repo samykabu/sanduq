@@ -3,7 +3,7 @@ schema_version: "1.0"
 extension:
   id: project
   name: "GitHub Project Lifecycle Sync"
-  version: "2.2.2"
+  version: "2.3.0"
   description: "Mirror each Spec Kit feature onto a GitHub Project (v2): create a parent feature issue, advance its Status column through the Spec Kit lifecycle (open -> analysis -> engineer-review -> ready -> in-progress -> in-review -> done), create one native sub-issue per task, and close sub-issues as their tasks are checked off. Board-agnostic initialization lets each repo choose required/automatic or optional/manual sync hooks. Idempotent and no-regress."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
@@ -23,10 +23,10 @@ provides:
   commands:
     - name: speckit.project.init
       file: commands/speckit.project.init.md
-      description: "Sets up GitHub Project sync once per repository: discovers the board, maps lifecycle phases to its Status columns, chooses required or optional hooks and writes the config. Use when asked to 'connect the project board', 'set up project sync' or before the first managed feature."
+      description: "Sets up GitHub Project sync once per repository, mapping lifecycle phases to Status columns. Use when asked to 'connect the project board'."
     - name: speckit.project.sync
       file: commands/speckit.project.sync.md
-      description: "Advances the feature's parent issue on the configured GitHub Project to a lifecycle phase and creates or closes task sub-issues. Use when asked to 'move the card', 'sync the board' or when a lifecycle hook names a phase."
+      description: "Moves the feature issue to a lifecycle phase on the GitHub Project and creates or closes task sub-issues. Use when asked to 'sync the board'."
 
 # Lifecycle wiring. Hooks install as optional, then `speckit.project.init` applies the project's
 # selected optional/manual or required/automatic policy in `.specify/extensions.yml`. Each prompt

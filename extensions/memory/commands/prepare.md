@@ -1,5 +1,5 @@
 ---
-description: Queues an implemented feature for archival after merge without deleting it; also the after_implement hook. Use when the Execute handoff returns speckit.memory.prepare or when asked to "queue this feature for archival".
+description: Queues an implemented feature for archival after merge without deleting it (after_implement hook). Use when asked to "queue it for archival".
 ---
 
 # Prepare pending archive work

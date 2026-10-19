@@ -1,5 +1,5 @@
 ---
-description: Configures whether QA analysis and the QA manual are required lifecycle gates or manual steps for this Spec Kit project. Use when setting up Assure or changing its policy, on requests such as "set up QA" or "make QA mandatory".
+description: 'Sets whether QA analysis and the QA manual are lifecycle gates or manual steps. Use when setting up Assure or asked to "make QA mandatory".'
 ---
 
 # Initialize QA

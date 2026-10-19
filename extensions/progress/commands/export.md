@@ -1,5 +1,5 @@
 ---
-description: "Writes the current progress projection as deterministic Markdown or JSON, the same data as the live view at no model cost. Use when a static copy is needed, or when asked to 'export the progress report' or 'save the report as Markdown'."
+description: "Writes the progress projection as deterministic Markdown or JSON at no model cost. Use when asked to 'export the progress report'."
 ---
 
 Run from the repository root:

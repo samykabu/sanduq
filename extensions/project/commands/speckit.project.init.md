@@ -1,5 +1,5 @@
 ---
-description: "Sets up GitHub Project sync once per repository: discovers the board, maps lifecycle phases to its Status columns, chooses required or optional hooks and writes the config. Use when asked to 'connect the project board', 'set up project sync' or before the first managed feature."
+description: "Sets up GitHub Project sync once per repository, mapping lifecycle phases to Status columns. Use when asked to 'connect the project board'."
 ---
 
 # Initialise GitHub Project sync

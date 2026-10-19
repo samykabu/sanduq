@@ -1,5 +1,5 @@
 ---
-description: "Sets the progress report's look from a preset (sanduq, cobalt, emerald, classic), the project's Illustrate theme or a theme file, or shows the active theme. Use when asked to 'change the report theme' or 'match the Illustrate colors'."
+description: "Sets the progress report look from a preset, the Illustrate theme or a theme file, or shows it. Use when asked to 'change the report theme'."
 ---
 
 Run from the repository root:

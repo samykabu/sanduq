@@ -1,5 +1,5 @@
 ---
-description: Processes pending merged archives at the start of a local session and resumes an interrupted run; also the before_specify hook. Use when the session handoff returns speckit.memory.session or when asked to "process pending archives".
+description: Processes pending merged archives at session start and resumes an interrupted run (before_specify hook). Use when asked to "process archives".
 ---
 
 # Pending archive session

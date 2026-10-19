@@ -1,5 +1,5 @@
 ---
-description: "Advances the feature's parent issue on the configured GitHub Project to a lifecycle phase and creates or closes task sub-issues. Use when asked to 'move the card', 'sync the board' or when a lifecycle hook names a phase."
+description: "Moves the feature issue to a lifecycle phase on the GitHub Project and creates or closes task sub-issues. Use when asked to 'sync the board'."
 ---
 
 # Sync the feature to the GitHub Project

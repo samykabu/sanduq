@@ -1,5 +1,16 @@
 # Changelog
 
+## [4.3.0] - 2026-10-19
+
+Optimization round 2.
+
+- `scripts/pr_publish.py` splices the PR body, runs Workflow's pr-lint, refuses on findings, creates or edits the PR and prints the receipt fields the PR stage verifies. Exit codes: 0 published, 1 lint findings, 2 bad input, 3 gh or git failed.
+- `scripts/pr_changelog.py` seeds the feature CHANGELOG from git, tasks, progress and evidence inside a regenerated facts block; the model writes the prose around it.
+- `speckit.pr.generate.md` is 11,183 bytes instead of 18,060. Diagrams load `references/pr-diagram-recipe.md` plus one Illustrate type reference instead of the whole Illustrate skill, so one PR run reads 22.7 KB of instructions instead of 72.6 KB.
+- Image verification has two tiers, `api` and `browser`, recorded as `image_verification` in the receipt, so a host without a browser verifies through the API.
+- Workflow's guard hook refuses `gh pr create|edit --body-file` whose lint receipt does not match the body, and `gh pr create` on the default branch.
+- One description per command.
+
 ## [4.2.3] - 2026-10-15
 
 - Add the lean Workflow pre-publication check for closing references, binding the prepared body to its issue and prerequisites. Standalone PR use remains supported.

@@ -1,5 +1,5 @@
 ---
-description: "Adds User Manual content and asset tasks for the active feature to tasks.md before implementation. Use when tasks.md exists and the manual must follow the feature; triggers: 'which manual pages does this feature touch', 'add documentation tasks'."
+description: "Adds the feature's User Manual content and asset tasks to tasks.md. Use before implementation or when asked to 'add manual tasks'."
 ---
 
 # Analyze User Manual Impact

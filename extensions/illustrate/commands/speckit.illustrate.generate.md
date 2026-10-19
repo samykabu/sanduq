@@ -1,5 +1,5 @@
 ---
-description: 'Draws one of 44 diagram types (architecture, sequence, flowchart, ER, Gantt, Sankey, charts) as themed HTML with inline SVG using the installed Illustrate skill. Use when asked to "draw a diagram", "chart this" or "visualize" something for a spec, doc or PR.'
+description: 'Draws 44 diagram and chart types (architecture, sequence, ER, Gantt) as themed HTML with inline SVG. Use when asked to "draw a diagram".'
 ---
 
 # Generate an Illustration

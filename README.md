@@ -134,6 +134,24 @@ instruction load, not generated tokens. Codex installs of the portable plugin bu
 marketplace are published but not yet exercised. See [upgrades](docs/start/upgrades.md#adopt-workflow-1130-profiles)
 for the details and the [workflow changelog](extensions/workflow/CHANGELOG.md) for every policy key.
 
+## Adopt the round-2 releases (Workflow 1.14.0 and the companion extensions)
+
+Workflow 1.14.0 ships with Assure 2.4.0, User Manual 1.6.0, PR 4.3.0, Project 2.3.0, Illustrate
+2.5.0, Memory 2.3.0, Progress 1.3.0 and Scope 1.8.1. The commands read less (about 41 percent fewer
+instruction bytes per invocation in the repository benchmark) and hand deterministic work to scripts:
+the QA inventory, the PR body and lint receipt, the project sync command, the memory hashes. Receipts,
+gates and GitHub decisions are unchanged. Upgrade the same way, substituting 1.14.0:
+
+```bash
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.14.0 --apply
+python .specify/extensions/workflow/scripts/workflow.py doctor --project
+```
+
+Nothing new is switched on by the upgrade. The opt-in keys are listed in
+[upgrades](docs/start/upgrades.md#adopt-the-round-2-releases); the one most projects want is
+`progress.hook_wiring: native`, which roughly halves the Progress hook's cost on every tool call. On
+Codex, approve the changed guard hook once in `/hooks`.
+
 ## Can I use this?
 
 | Package | License | Commercial use |

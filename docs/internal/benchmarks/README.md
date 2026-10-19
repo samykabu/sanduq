@@ -121,3 +121,16 @@ Measured files: every `provides.commands[].file`, every skill file (`skills/*/SK
 - **Totals.** Per extension, sums over the unique set of measured files (a skill loaded by four commands
   is counted once; a file linked by two extensions is counted in each). `catalog_entries` is the number
   of `provides.commands`; `catalog_chars` the sum of their description lengths.
+
+### Round 2 results
+
+`instructions-after.json` and `.md` were measured at the release commit of round 2; `instructions-compare.md`
+is the `--compare` output against `instructions-before.json`. Per invocation (the sum of each
+extension's commands' `instruction_bytes`) the seven extensions read 244,178 bytes instead of 413,968
+(-41 percent). Two figures need reading with the harness's one-level rule in mind: memory's `run.md`
+names all six step references, so the harness counts them all (36,015 bytes) although a small v2
+archive reads the procedure plus `candidate-v2.md` and `review-and-publish.md` (about 14.3 KB instead
+of 21.2 KB); and the before figure for `user-manual.update` did not count the 34.7 KB Illustrate
+skill its old wording loaded, because the harness could not resolve that phrase. Host-visible
+description text is 3,725 characters across the 27 commands (2,119 before, most of it failing the
+catalog rules; 6,475 in the first draft of this round, trimmed before release).

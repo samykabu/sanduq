@@ -3,7 +3,7 @@ schema_version: "1.0"
 extension:
   id: assure
   name: "Assure"
-  version: "2.3.4"
+  version: "2.4.0"
   description: "Make QA part of the Spec Kit lifecycle: initialize project policy, require feature test-readiness analysis before implementation, and generate a current QA test manual before pull-request creation."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
@@ -26,13 +26,13 @@ provides:
   commands:
     - name: speckit.assure.init
       file: commands/speckit.assure.init.md
-      description: Configures whether QA analysis and the QA manual are required lifecycle gates or manual steps for this Spec Kit project. Use when setting up Assure or changing its policy, on requests such as "set up QA" or "make QA mandatory".
+      description: 'Sets whether QA analysis and the QA manual are lifecycle gates or manual steps. Use when setting up Assure or asked to "make QA mandatory".'
     - name: speckit.assure.analyze
       file: commands/speckit.assure.analyze.md
-      description: Audits the active feature's tasks.md for missing E2E, screenshot, API sample, diagram and accessibility work and adds the tasks. Use when tasks.md exists and implementation has not started, on requests such as "check QA readiness" or "add the test tasks", or as the managed qa_analyze stage.
+      description: 'Adds missing E2E, screenshot, API sample, diagram and accessibility tasks to tasks.md. Use when asked to "check QA readiness" before implementation.'
     - name: speckit.assure.document
       file: commands/speckit.assure.document.md
-      description: Generates or refreshes the development-only QA test manual for the implemented feature from real evidence and records its freshness. Use when implementation is done and the tests pass, on requests such as "write the QA manual" or "document the test steps", or as the managed qa_document stage.
+      description: 'Generates or refreshes the development-only QA test manual from real evidence. Use when asked to "write the QA manual" after the tests pass.'
 
 hooks:
   after_tasks:

@@ -3,7 +3,7 @@ schema_version: "1.0"
 extension:
   id: pr
   name: "Pull Request Workflow"
-  version: "4.2.3"
+  version: "4.3.0"
   description: "Generate or update pull requests from Spec Kit artifacts, enforce installed QA and User Manual freshness policies, then process review feedback through an approval-gated fix and reply workflow."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
@@ -34,17 +34,17 @@ provides:
   commands:
     - name: speckit.pr.generate
       file: commands/speckit.pr.generate.md
-      description: "Generates the feature CHANGELOG and the plain-English feature-details document with inline diagrams, then creates or updates the branch's pull request. Use when asked to 'open the PR', 'update the PR description' or after implementation finishes; never merges."
+      description: "Generates the feature CHANGELOG and details doc, then opens or updates the pull request; never merges. Use when asked to 'open the PR'."
     - name: speckit.pr.review-feedback
       file: commands/speckit.pr.review-feedback.md
-      description: "Processes unresolved GitHub pull request review comments through an approval-gated classify, fix or reply, push and resolve workflow. Use when asked to 'address review comments', 'process reviewer feedback' or 'resolve the threads'."
+      description: "Fixes or answers unresolved PR review comments after approval, then pushes and resolves threads. Use when asked to 'address review comments'."
 
 hooks:
   after_implement:
     command: speckit.pr.generate
     optional: true
     prompt: "Generate the feature CHANGELOG + feature-details doc, diagram assets if needed, and update the PR description?"
-    description: "Generates the feature CHANGELOG and the plain-English feature-details document with inline diagrams, then creates or updates the branch's pull request. Use when asked to 'open the PR', 'update the PR description' or after implementation finishes; never merges."
+    description: "Generates the feature CHANGELOG and details doc, then opens or updates the pull request; never merges. Use when asked to 'open the PR'."
 
 tags:
   - "pr"

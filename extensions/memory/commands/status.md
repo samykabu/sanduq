@@ -1,5 +1,5 @@
 ---
-description: Reports policy approval, pending or blocked features, the active archive phase and the next command to run. Use when asked "what is the archive status" or "is a memory run stuck".
+description: Reports policy approval, pending or blocked features, the archive phase and the next command. Use when asked "what is the archive status".
 ---
 
 # Archive status

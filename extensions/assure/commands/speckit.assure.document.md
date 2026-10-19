@@ -1,5 +1,5 @@
 ---
-description: Generates or refreshes the development-only QA test manual for the implemented feature from real evidence and records its freshness. Use when implementation is done and the tests pass, on requests such as "write the QA manual" or "document the test steps", or as the managed qa_document stage.
+description: 'Generates or refreshes the development-only QA test manual from real evidence. Use when asked to "write the QA manual" after the tests pass.'
 ---
 
 # Generate QA Manual

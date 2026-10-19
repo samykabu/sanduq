@@ -1,5 +1,5 @@
 ---
-description: Audits the active feature's tasks.md for missing E2E, screenshot, API sample, diagram and accessibility work and adds the tasks. Use when tasks.md exists and implementation has not started, on requests such as "check QA readiness" or "add the test tasks", or as the managed qa_analyze stage.
+description: 'Adds missing E2E, screenshot, API sample, diagram and accessibility tasks to tasks.md. Use when asked to "check QA readiness" before implementation.'
 ---
 
 # Analyze QA Coverage

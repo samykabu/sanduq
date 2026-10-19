@@ -1,5 +1,5 @@
 ---
-description: "Builds versioned User Manual release notes, migration guides, HTML archives and PDFs per audience and language. Use when an application release is tagged or merged, never on a feature branch; triggers: 'release the manual', 'build the v3 manual PDFs'."
+description: "Builds versioned User Manual release notes, migration guides, HTML and PDFs. Use when asked to 'release the manual', never on a feature branch."
 ---
 
 # Release User Manual
