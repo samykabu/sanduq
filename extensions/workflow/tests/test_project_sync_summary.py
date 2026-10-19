@@ -1,409 +1,214 @@
-"""B7: project-sync (Bash and PowerShell) --summary/--json contract.
+"""PJ4: project_sync.py (one stdlib script, replacing the bash and PowerShell twins).
 
-project-sync.sh/.ps1 have no dedicated tests/ directory (the `project`
-extension is not in ci.yml's `python -m unittest discover` matrix), so their
-CLI is exercised here, matching the established pattern for assure_state.py
-and manual_state.py above.
-
-Both scripts degrade gracefully (log + exit 0) before ever touching GitHub
-when a precondition is missing (`gh`/`jq` not installed, not authenticated,
-or no `config.json`). A fresh git repository with no `.specify` config
-guarantees that graceful-skip path regardless of which precondition is the
-first to be missing on the machine running the test, so these tests assert
-the *shape* of the skip line rather than its exact reason text.
-
-Under `--summary`/`-Summary`, stdout must be exactly one line: the run log
-(bash `log`/`warn`, PowerShell `Write-Log`) moves off stdout — even with
-`$VerbosePreference = 'Continue'`, since PowerShell's `Write-Verbose` is not
-enough on its own — a graceful skip prints `skipped reason=...` (never `ok`
-— a skip is not success), a genuine mid-run failure (bash `set -e`,
-PowerShell `$ErrorActionPreference = 'Stop'`) is caught and reported as one
-`error reason=<msg>` line (bash additionally carries `exit=<rc>` and, when
-known, `line=<n>`), and a real success prints
-`ok issue=<n> status=<status> created=<n> closed=<n>`.
+The --summary/--json contract the twins had is kept: under --summary stdout is exactly one line,
+`ok issue=<n> status=<status> created=<n> closed=<n>`, `skipped reason=<why>` (a skip is never `ok`)
+or `error exit=<rc> reason=<message>`; the run log goes to stderr. Behaviour tests run the script
+in-process inside a real temporary git repository with `gh` replaced by FakeGh, so nothing reaches
+GitHub: create, advance, no-regress, --force, sub-issue create and close, in-review on an open PR,
+dry run, and the GraphQL-to-REST fallback.
 """
-import functools
+import contextlib
+import io
+import json
 import os
-import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
-SH = ROOT / 'project/scripts/bash/project-sync.sh'
-PS1 = ROOT / 'project/scripts/powershell/project-sync.ps1'
+SCRIPT = ROOT / 'project/scripts/project_sync.py'
+sys.path.insert(0, str(SCRIPT.parent))
+import project_sync  # noqa: E402
 
-# A minimal but complete project config; the exact ids/columns do not matter,
-# only that config.json is valid enough to pass the "not configured" skip
-# gate and drive a real (fake-gh-backed) run through to the final summary.
-CONFIG_JSON = """{
-  "projectNumber": 1, "projectId": "PVT_1", "owner": "acme", "ownerType": "org",
-  "statusFieldId": "F1", "stateFile": ".specify/project-sync-state.json",
-  "statusOrder": ["Backlog", "Ready", "Done"],
-  "statusOptions": {"Backlog": "OPT_0", "Ready": "OPT_1", "Done": "OPT_2"},
-  "phaseToStatus": {"open": "Backlog", "ready": "Ready", "done": "Done"},
-  "subIssues": {"enabled": false, "maxCount": 0, "warnAboveCount": 0, "labels": [],
-                "titleTemplate": "{slug} {taskId}: {desc}"},
-  "parentIssue": {"labels": ["spec-feature"], "titleTemplate": "[{slug}] {title}"}
+STATUSES = ['Backlog', 'Analysis', 'Ready', 'In progress', 'In review', 'Done']
+PHASES = {'open': 'Backlog', 'analysis': 'Analysis', 'ready': 'Ready', 'in-progress': 'In progress',
+          'in-review': 'In review', 'done': 'Done'}
+CONFIG = {
+    'projectNumber': 1, 'projectId': 'PVT_1', 'owner': 'acme', 'ownerType': 'org', 'statusFieldId': 'F1',
+    'stateFile': '.specify/project-sync-state.json', 'statusOrder': STATUSES,
+    'statusOptions': {name: 'OPT_' + str(i) for i, name in enumerate(STATUSES)}, 'phaseToStatus': PHASES,
+    'subIssues': {'enabled': False, 'maxCount': 0, 'warnAboveCount': 0, 'labels': ['spec-task'],
+                  'titleTemplate': '{slug} {taskId}: {desc}'},
+    'parentIssue': {'labels': ['spec-feature'], 'titleTemplate': '[{slug}] {title}'},
 }
-"""
-
-# A fake `gh` (bash script) covering exactly the subcommands a `--phase open`
-# run makes on a brand new feature with no prior state: auth check, the
-# GraphQL-budget probe, the parent-issue search/create, and the Project
-# item-add/item-edit. Nothing here mutates real GitHub; there is no GitHub.
-FAKE_GH_SH = """#!/usr/bin/env bash
-a1="$1"; a2="$2"
-if [ "$a1" = "auth" ] && [ "$a2" = "status" ]; then echo "Logged in to github.com as fixture"; echo "Token scopes: 'project', 'repo'"; exit 0; fi
-if [ "$a1" = "issue" ] && [ "$a2" = "list" ]; then echo "[]"; exit 0; fi
-if [ "$a1" = "label" ] && [ "$a2" = "create" ]; then exit 0; fi
-if [ "$a1" = "issue" ] && [ "$a2" = "create" ]; then echo "https://github.com/acme/app/issues/42"; exit 0; fi
-if [ "$a1" = "issue" ] && [ "$a2" = "view" ]; then echo '{"id":"NODE_42"}'; exit 0; fi
-if [ "$a1" = "project" ] && [ "$a2" = "item-add" ]; then echo '{"id":"ITEM_1"}'; exit 0; fi
-if [ "$a1" = "project" ] && [ "$a2" = "item-edit" ]; then exit 0; fi
-exit 1
-"""
-
-# Same fixture as FAKE_GH_SH, but as a PowerShell function overriding `gh` in
-# the current scope: portable across Windows/Linux pwsh (a `.cmd`/`.sh` fake
-# executable is not), and it is the same technique this repo's own
-# smoke_project_init.py already uses for project-init.ps1.
-FAKE_GH_PS1_FUNCTION = """
-function global:gh {
-    $global:LASTEXITCODE = 0
-    $a = $args
-    if ($a[0] -eq 'auth' -and $a[1] -eq 'status') { 'Logged in to github.com as fixture'; "Token scopes: 'project', 'repo'"; return }
-    if ($a[0] -eq 'api' -and $a[1] -eq 'graphql') { '5000'; return }
-    if ($a[0] -eq 'issue' -and $a[1] -eq 'list') { '[]'; return }
-    if ($a[0] -eq 'label' -and $a[1] -eq 'create') { return }
-    if ($a[0] -eq 'issue' -and $a[1] -eq 'create') { 'https://github.com/acme/app/issues/42'; return }
-    if ($a[0] -eq 'issue' -and $a[1] -eq 'view') { '{"id":"NODE_42"}'; return }
-    if ($a[0] -eq 'project' -and $a[1] -eq 'item-add') { '{"id":"ITEM_1"}'; return }
-    if ($a[0] -eq 'project' -and $a[1] -eq 'item-edit') { return }
-    $global:LASTEXITCODE = 1
-}
-"""
 
 
-def _git_bash_candidates():
-    """Windows-only Git-Bash locations to try, ahead of a bare 'bash' lookup.
+class FakeGh:
+    """`gh` for one run: GraphQL-backed subcommands, or the REST paths once the budget is 0."""
 
-    A bare `['bash', ...]` subprocess call on Windows is resolved by
-    CreateProcess's own search order (the calling process's directory,
-    the current directory, the Windows system directory, the Windows
-    directory, and only then PATH) rather than by walking PATH the way a
-    shell would. `C:\\Windows\\System32\\bash.exe` -- the WSL launcher --
-    sits in that system directory, so it wins over Git Bash even when Git
-    Bash is earlier on PATH from a shell's own point of view. Passing an
-    *absolute* path instead of a bare name sidesteps that search entirely.
-    """
-    candidates = [r'C:\Program Files\Git\bin\bash.exe']
-    exec_path = subprocess.run(['git', '--exec-path'], capture_output=True, text=True)
-    if exec_path.returncode == 0 and exec_path.stdout.strip():
-        # git --exec-path is typically .../mingw64/libexec/git-core; the
-        # matching bash.exe is two levels up, under bin/.
-        sibling = Path(exec_path.stdout.strip()) / '..' / '..' / 'bin' / 'bash.exe'
-        candidates.append(str(sibling))
-    return candidates
+    def __init__(self, budget='5000', open_pr=False):
+        self.budget, self.open_pr, self.calls, self.next_issue = budget, open_pr, [], 42
 
+    def __call__(self, args, stdin=None):
+        self.calls.append(list(args))
+        head = args[:2]
+        if head == ['auth', 'status']:
+            return 0, "Logged in to github.com as fixture\nToken scopes: 'project', 'repo'"
+        if head == ['api', 'graphql']:
+            return (0, self.budget) if any('rateLimit' in arg for arg in args) else (0, '{}')
+        if head == ['issue', 'create']:
+            return 0, 'https://github.com/acme/app/issues/' + str(self.new_issue())
+        answers = {('issue', 'list'): '[]', ('label', 'create'): '', ('issue', 'close'): '',
+                   ('project', 'item-add'): '{"id":"ITEM_1"}', ('project', 'item-edit'): '',
+                   ('pr', 'list'): '[{"number":7}]' if self.open_pr else '[]'}
+        if tuple(head) in answers:
+            return 0, answers[tuple(head)]
+        if head == ['issue', 'view']:
+            return 0, json.dumps({'id': 'NODE_' + args[2]})
+        if args[0] == 'api':
+            return 0, json.dumps(self.rest(args[1], args[args.index('--method') + 1] if '--method' in args else 'GET'))
+        return 1, 'unexpected gh call'
 
-def _is_system32_bash(path):
-    """True when `path` resolves to the WSL launcher shim, which must never
-    be picked even if it happens to run (e.g. a real distro is installed):
-    it is a different OS userland, not the Windows POSIX environment
-    (jq/PATH/filesystem) these tests set up and depend on."""
-    system_root = os.environ.get('SystemRoot', r'C:\Windows')
-    system32_bash = os.path.normcase(os.path.join(system_root, 'System32', 'bash.exe'))
-    try:
-        return os.path.normcase(os.path.abspath(path)) == system32_bash
-    except (OSError, ValueError):
-        return False
+    def new_issue(self):
+        self.next_issue += 1
+        return self.next_issue - 1
 
+    def rest(self, path, method):
+        base = 'orgs/acme/projectsV2/1/'
+        if path.startswith('repos/acme/app/issues?'):
+            return [[]]
+        if path == 'repos/acme/app/issues' and method == 'POST':
+            return {'html_url': 'https://github.com/acme/app/issues/' + str(self.new_issue())}
+        if path.startswith('repos/acme/app/issues/') and method == 'GET':
+            number = path.rsplit('/', 1)[1]
+            return {'node_id': 'NODE_' + number, 'id': int(number) * 100}
+        if path == base + 'items' and method == 'POST':
+            return {'node_id': 'ITEM_1'}
+        if path.startswith(base + 'items?'):
+            return [[{'id': 11, 'node_id': 'ITEM_1'}]]
+        if path.startswith(base + 'fields?'):
+            return [[{'id': 5, 'node_id': 'F1'}]]
+        return {}
 
-@functools.lru_cache(maxsize=1)
-def find_bash():
-    """A real, working POSIX bash -- never `C:\\Windows\\System32\\bash.exe`.
-
-    Candidates are resolved to absolute paths and verified by actually
-    running `<bash> -c 'echo ok'`, not merely by name: a WSL distro being
-    installed would make the System32 launcher "work", but it would still
-    be the wrong bash for these tests (see `_is_system32_bash`). Returns
-    None, with no candidate found or working, so callers can skip with a
-    clear reason instead of failing on the wrong shell.
-    """
-    candidates = list(_git_bash_candidates()) if os.name == 'nt' else []
-    candidates.append('bash')  # last resort: POSIX hosts, or whatever PATH gives
-    seen = set()
-    for candidate in candidates:
-        resolved = candidate if os.path.isabs(candidate) else shutil.which(candidate)
-        if not resolved or os.path.normcase(resolved) in seen:
-            continue
-        seen.add(os.path.normcase(resolved))
-        if not os.path.isfile(resolved) or _is_system32_bash(resolved):
-            continue
-        try:
-            probe = subprocess.run([resolved, '-c', 'echo ok'], capture_output=True, text=True, timeout=10)
-        except OSError:
-            continue
-        if probe.returncode == 0 and probe.stdout.strip() == 'ok':
-            return resolved
-    return None
+    def used(self, *prefix):
+        return [call for call in self.calls if call[:len(prefix)] == list(prefix)]
 
 
-def run_bash_script(script, args, cwd, env=None):
-    bash = find_bash()
-    if bash is None:
-        return None
-    return subprocess.run([bash, script.as_posix(), *args], cwd=cwd, text=True, capture_output=True, env=env)
-
-
-def write_script(path, text):
-    """Write an executable fake tool with LF-only line endings, regardless of
-    host OS: a native Windows Python's default text-mode write translates
-    '\\n' to '\\r\\n', which corrupts the shebang line ('#!/usr/bin/env
-    bash\\r') and makes the interpreter unresolvable ("bash\\r: No such file
-    or directory")."""
-    with open(path, 'w', encoding='utf-8', newline='\n') as stream:
-        stream.write(text)
-    path.chmod(0o755)
-
-
-def prepend_path(fakebin):
-    """The real environment with `fakebin` prepended to PATH, so a fake `gh`
-    is found first while every other tool (jq, git, ...) still resolves
-    normally — replacing the environment outright risks breaking whatever
-    PATH-translation the host's `bash` on PATH relies on internally."""
-    env = dict(os.environ)
-    env['PATH'] = str(fakebin) + os.pathsep + env.get('PATH', '')
-    return env
-
-
-def bash_has(cwd, tool):
-    """Whether the *bash actually used to run the script* (the one `find_bash`
-    resolves, which, depending on the host, may see a different PATH than
-    this Python process) sees `tool` on its own PATH."""
-    bash = find_bash()
-    if bash is None:
-        return False
-    result = subprocess.run([bash, '-lc', f'command -v {tool}'], cwd=cwd, text=True, capture_output=True)
-    return result.returncode == 0
-
-
-class ProjectSyncSummaryTests(unittest.TestCase):
+class ProjectSyncTests(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name).resolve()
-        subprocess.run(['git', 'init', '-q'], cwd=self.root, check=True, capture_output=True)
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        cwd = os.getcwd()
+        self.addCleanup(os.chdir, cwd)
+        self.root = Path(tmp.name).resolve()
+        for args in (['init', '-q', '-b', '001-refunds'], ['remote', 'add', 'origin', 'https://github.com/acme/app.git'],
+                     ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-q', '--allow-empty', '-m', 'init']):
+            subprocess.run(['git', *args], cwd=self.root, check=True, capture_output=True)
+        os.chdir(self.root)
 
-    # -- flag conflict -----------------------------------------------------
+    def configure(self, **changes):
+        config = json.loads(json.dumps(CONFIG))
+        for key, value in changes.items():
+            config[key] = value
+        path = self.root / '.specify/extensions/project/config.json'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(config), encoding='utf-8')
 
-    def test_bash_summary_and_json_together_is_rejected(self):
-        if not find_bash():
-            self.skipTest('no working POSIX bash found (Git Bash absent; never the WSL System32 launcher)')
-        result = run_bash_script(SH, ['--phase', 'open', '--summary', '--json'], self.root)
-        self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertEqual(result.stdout.strip(), 'error exit=2 reason=--summary and --json cannot be combined')
+    def state(self, value=None):
+        path = self.root / '.specify/project-sync-state.json'
+        if value is not None:
+            path.write_text(json.dumps(value), encoding='utf-8')
+        return json.loads(path.read_text(encoding='utf-8')) if path.is_file() else None
 
-    def test_pwsh_summary_and_json_together_is_rejected(self):
-        if not shutil.which('pwsh'):
-            self.skipTest('pwsh not available')
-        result = subprocess.run(['pwsh', '-NoProfile', '-File', str(PS1), '-Phase', 'open', '-Summary', '-Json'],
-                                 cwd=self.root, text=True, capture_output=True)
-        self.assertEqual(result.returncode, 2, result.stderr)
-        # F11: the same `error reason=<msg>` shape as bash (which additionally
-        # carries `exit=<rc>`); the message names ps1's own -Summary/-Json.
-        self.assertEqual(result.stdout.strip(), 'error reason=-Summary and -Json cannot be combined')
+    def tasks(self, text):
+        path = self.root / 'specs/001-refunds/tasks.md'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding='utf-8')
 
-    def test_bash_unknown_arg_warning_goes_to_stderr(self):
-        # F11: an unrecognised flag is a diagnostic, not summary output, so it
-        # must never land on stdout regardless of --summary/--json/neither.
-        if not find_bash():
-            self.skipTest('no working POSIX bash found (Git Bash absent; never the WSL System32 launcher)')
-        result = run_bash_script(SH, ['--phase', 'open', '--bogus-flag', '--summary'], self.root)
-        self.assertNotIn('unknown arg', result.stdout)
-        self.assertIn('unknown arg: --bogus-flag', result.stderr)
+    def sync(self, *args, gh=None):
+        gh = gh or FakeGh()
+        out, err = io.StringIO(), io.StringIO()
+        with patch.object(project_sync, 'gh_raw', gh), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = project_sync.main(list(args))
+        return code, out.getvalue().splitlines(), err.getvalue(), gh
 
-    # -- graceful skip: exactly one stdout line, never "ok" -----------------
+    # -- the --summary/--json contract ------------------------------------
 
-    def test_bash_summary_skip_is_one_line_and_never_ok(self):
-        if not find_bash():
-            self.skipTest('no working POSIX bash found (Git Bash absent; never the WSL System32 launcher)')
-        result = run_bash_script(SH, ['--phase', 'open', '--summary'], self.root)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        lines = result.stdout.splitlines()
-        self.assertEqual(len(lines), 1, result.stdout)
-        self.assertRegex(lines[0], r'^skipped reason=.+$')
+    def test_cli_rejects_summary_with_json_and_skips_without_config(self):
+        run = lambda *a: subprocess.run([sys.executable, str(SCRIPT), *a], cwd=self.root, text=True, capture_output=True)
+        both = run('--phase', 'open', '--summary', '--json')
+        self.assertEqual((both.returncode, both.stdout.strip()), (2, 'error exit=2 reason=--summary and --json cannot be combined'))
+        skip = run('--phase', 'open', '--summary', '--bogus-flag')
+        self.assertEqual(skip.returncode, 0, skip.stderr)
+        self.assertEqual(len(skip.stdout.splitlines()), 1, skip.stdout)
+        self.assertRegex(skip.stdout.strip(), r'^skipped reason=not configured')
+        self.assertIn('unknown arg: --bogus-flag', skip.stderr)
 
-    def test_pwsh_summary_skip_is_one_line_and_never_ok(self):
-        if not shutil.which('pwsh'):
-            self.skipTest('pwsh not available')
-        result = subprocess.run(['pwsh', '-NoProfile', '-File', str(PS1), '-Phase', 'open', '-Summary'],
-                                 cwd=self.root, text=True, capture_output=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        lines = result.stdout.splitlines()
-        self.assertEqual(len(lines), 1, result.stdout)
-        self.assertRegex(lines[0], r'^skipped reason=.+$')
+    def test_missing_scope_is_a_skip_and_json_reports_it(self):
+        self.configure()
+        code, out, _, _ = self.sync('--phase', 'open', '--json', gh=lambda args, stdin=None: (0, 'Logged in'))
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(out[-1])['skipped'], True)
+        self.assertIn("lacks 'project' scope", json.loads(out[-1])['reason'])
 
-    def test_pwsh_summary_stdout_is_one_line_even_with_verbose_preference(self):
-        # F10: Write-Verbose alone is not enough — it still reaches stdout
-        # when the caller sets -Verbose or $VerbosePreference = 'Continue'.
-        # Write-Log must route to [Console]::Error instead, which neither can
-        # affect, so stdout stays exactly the one summary line regardless.
-        if not shutil.which('pwsh'):
-            self.skipTest('pwsh not available')
-        wrapper = self.root / '_verbose_wrapper.ps1'
-        wrapper.write_text(
-            "$VerbosePreference = 'Continue'\n"
-            f"& '{PS1.as_posix()}' -Phase open -Summary\n",
-            encoding='utf-8')
-        result = subprocess.run(['pwsh', '-NoProfile', '-File', str(wrapper)],
-                                 cwd=self.root, text=True, capture_output=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        lines = result.stdout.splitlines()
-        self.assertEqual(len(lines), 1, result.stdout)
-        self.assertRegex(lines[0], r'^skipped reason=.+$')
+    def test_open_creates_the_parent_and_prints_one_ok_line(self):
+        self.configure()
+        code, out, err, gh = self.sync('--phase', 'open', '--summary')
+        self.assertEqual((code, out), (0, ['ok issue=42 status=Backlog created=0 closed=0']), err)
+        self.assertIn('[project]', err)
+        self.assertEqual(self.state()['001-refunds']['itemId'], 'ITEM_1')
+        self.assertEqual(gh.used('project', 'item-edit')[0][-1], 'OPT_0')
+        code, out, _, _ = self.sync('--phase', 'open', '--json')
+        payload = json.loads(out[-1])
+        self.assertEqual((payload['issue'], payload['status'], payload['transport']), (42, 'Backlog', 'graphql'))
 
-    # -- mid-run failure: exactly one "error ..." line, never "ok" ----------
+    def test_mid_run_failures_are_one_error_line(self):
+        (self.root / '.specify/extensions/project').mkdir(parents=True)
+        (self.root / '.specify/extensions/project/config.json').write_text('not json{', encoding='utf-8')
+        code, out, _, _ = self.sync('--phase', 'open', '--summary')
+        self.assertEqual(code, 1)
+        self.assertEqual(len(out), 1)
+        self.assertRegex(out[0], r'^error exit=1 reason=.+')
+        self.configure()
+        (self.root / '.specify/workflow.yml').write_text('schema: 1\n', encoding='utf-8')
+        code, out, _, _ = self.sync('--phase', 'open', '--summary')
+        self.assertEqual((code, out), (1, ['error exit=1 reason=Managed workflow requires scope-source.json']))
 
-    def test_bash_summary_mid_run_failure_is_one_error_line(self):
-        # A broken (but present) jq fails on the first real config read, a
-        # raw command failure with no preceding warn(): reason falls back to
-        # "unknown" and the ERR trap still knows the failing line.
-        if not find_bash():
-            self.skipTest('no working POSIX bash found (Git Bash absent; never the WSL System32 launcher)')
-        subprocess.run(['git', 'remote', 'add', 'origin', 'https://github.com/acme/app.git'],
-                        cwd=self.root, check=True, capture_output=True)
-        config = self.root / '.specify/extensions/project/config.json'
-        config.parent.mkdir(parents=True)
-        config.write_text('{}', encoding='utf-8')
-        fakebin = Path(tempfile.mkdtemp())
-        write_script(fakebin / 'gh', FAKE_GH_SH)
-        write_script(fakebin / 'jq', '#!/usr/bin/env bash\nexit 1\n')
-        result = run_bash_script(SH, ['--phase', 'open', '--summary'], self.root, env=prepend_path(fakebin))
-        self.assertNotEqual(result.returncode, 0, result.stdout)
-        lines = result.stdout.splitlines()
-        self.assertEqual(len(lines), 1, result.stdout)
-        self.assertRegex(lines[0], r'^error exit=\d+ reason=unknown line=\d+$')
-        self.assertNotIn('ok ', result.stdout)
+    # -- board behaviour ---------------------------------------------------
 
-    def test_bash_summary_warn_then_exit_reports_last_warn_as_reason(self):
-        # F9: `warn "..."; exit 1` (e.g. project-sync.sh's managed-mode
-        # parent-binding checks) has no failing command for the ERR trap to
-        # see, so line stays unknown — but LAST_WARN (set by warn() right
-        # before the exit) still supplies a real reason, not "unknown".
-        # Reaching this branch needs config.json parsed for real (managed
-        # mode is checked only after PROJ_NUM/PROJ_ID/... are read), so this
-        # needs a genuine jq like the success-path tests above.
-        if not find_bash():
-            self.skipTest('no working POSIX bash found (Git Bash absent; never the WSL System32 launcher)')
-        if not bash_has(self.root, 'jq'):
-            self.skipTest('a real jq is required to reach the managed-mode check')
-        self.configure_repo()
-        (self.root / '.specify').mkdir(exist_ok=True)
-        (self.root / '.specify/workflow.yml').write_text('schema: 1\n', encoding='utf-8')  # -> MANAGED=1
-        # No specs/<feature>/scope-source.json: the managed branch's first
-        # check ("Managed workflow requires scope-source.json") fires.
-        fakebin = Path(tempfile.mkdtemp())
-        write_script(fakebin / 'gh', FAKE_GH_SH)
-        result = run_bash_script(SH, ['--phase', 'open', '--summary', '--feature', 'example'],
-                                  self.root, env=prepend_path(fakebin))
-        self.assertNotEqual(result.returncode, 0, result.stdout)
-        lines = result.stdout.splitlines()
-        self.assertEqual(len(lines), 1, result.stdout)
-        self.assertEqual(lines[0], 'error exit=1 reason=Managed workflow requires scope-source.json')
+    def test_no_regress_unless_forced_and_dry_run_mutates_nothing(self):
+        self.configure()
+        self.state({'001-refunds': {'issue': 42, 'issueNodeId': 'NODE_42', 'itemId': 'ITEM_1', 'status': 'Done', 'subIssues': {}}})
+        code, out, _, gh = self.sync('--phase', 'open', '--summary')
+        self.assertEqual(out, ['ok issue=42 status=Done created=0 closed=0'])
+        self.assertFalse(gh.used('project', 'item-edit'))
+        _, out, err, gh = self.sync('--phase', 'open', '--summary', '--force', '--dry-run')
+        self.assertIn('DRYRUN gh project item-edit', err)
+        self.assertFalse(gh.used('project', 'item-edit'))
+        self.assertEqual(self.state()['001-refunds']['status'], 'Done')
+        _, out, _, _ = self.sync('--phase', 'open', '--summary', '--force')
+        self.assertEqual(out, ['ok issue=42 status=Backlog created=0 closed=0'])
 
-    def test_pwsh_summary_mid_run_failure_is_one_error_line(self):
-        if not shutil.which('pwsh'):
-            self.skipTest('pwsh not available')
-        # A malformed config.json passes the "not configured" existence
-        # check (Test-Path) but fails ConvertFrom-Json, a genuine mid-run
-        # terminating error under $ErrorActionPreference = 'Stop' — no fake
-        # gh needed, since config parsing happens before any gh call.
-        config = self.root / '.specify/extensions/project/config.json'
-        config.parent.mkdir(parents=True)
-        config.write_text('not valid json{', encoding='utf-8')
-        result = subprocess.run(['pwsh', '-NoProfile', '-File', str(PS1), '-Phase', 'open', '-Summary'],
-                                 cwd=self.root, text=True, capture_output=True)
-        self.assertNotEqual(result.returncode, 0, result.stdout)
-        lines = result.stdout.splitlines()
-        self.assertEqual(len(lines), 1, result.stdout)
-        # F11: same `error reason=<msg>` shape as bash.
-        self.assertTrue(lines[0].startswith('error reason='), result.stdout)
-        self.assertNotIn('ok ', result.stdout)
+    def test_ready_creates_sub_issues_and_in_progress_closes_checked_ones(self):
+        self.configure(subIssues={**CONFIG['subIssues'], 'enabled': True})
+        self.tasks('- [ ] T001 [P] Add refund model\n- [ ] **T002** Wire the API\n')
+        _, out, _, gh = self.sync('--phase', 'ready', '--summary')
+        self.assertEqual(out, ['ok issue=42 status=Ready created=2 closed=0'])
+        self.assertEqual(len(gh.used('api', 'graphql', '-H')), 2)
+        self.assertEqual(sorted(self.state()['001-refunds']['subIssues']), ['T001', 'T002'])
+        _, out, _, _ = self.sync('--phase', 'ready', '--summary', '--no-sub-issues')
+        self.assertEqual(out, ['ok issue=42 status=Ready created=0 closed=0'])
+        self.tasks('- [x] T001 Add refund model\n- [ ] T002 Wire the API\n')
+        _, out, _, gh = self.sync('--phase', 'in-progress', '--summary')
+        self.assertEqual(out, ['ok issue=42 status=In progress created=0 closed=1'])
+        self.assertEqual(gh.used('issue', 'close')[0][2], '43')
 
-    # -- real success: one "ok ..." line with counts (bash/ps1 parity) ------
+    def test_an_open_pr_advances_in_progress_to_in_review(self):
+        self.configure()
+        _, out, _, _ = self.sync('--phase', 'in-progress', '--summary', gh=FakeGh(open_pr=True))
+        self.assertEqual(out, ['ok issue=42 status=In review created=0 closed=0'])
 
-    def configure_repo(self):
-        subprocess.run(['git', 'config', 'user.name', 'test'], cwd=self.root, check=True, capture_output=True)
-        subprocess.run(['git', 'config', 'user.email', 'test@example.invalid'], cwd=self.root, check=True, capture_output=True)
-        subprocess.run(['git', 'remote', 'add', 'origin', 'https://github.com/acme/app.git'],
-                        cwd=self.root, check=True, capture_output=True)
-        config = self.root / '.specify/extensions/project/config.json'
-        config.parent.mkdir(parents=True)
-        config.write_text(CONFIG_JSON, encoding='utf-8')
-
-    def test_bash_summary_success_reports_counts(self):
-        if not find_bash():
-            self.skipTest('no working POSIX bash found (Git Bash absent; never the WSL System32 launcher)')
-        if not bash_has(self.root, 'jq'):
-            self.skipTest('a real jq is required to drive a full (fake-gh-backed) success run; '
-                           'the flag-conflict, skip and mid-run-failure paths above do not need one')
-        self.configure_repo()
-        fakebin = Path(tempfile.mkdtemp())
-        write_script(fakebin / 'gh', FAKE_GH_SH)
-        result = run_bash_script(SH, ['--phase', 'open', '--summary'], self.root, env=prepend_path(fakebin))
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        lines = result.stdout.splitlines()
-        self.assertEqual(len(lines), 1, result.stdout)
-        self.assertEqual(lines[0], 'ok issue=42 status=Backlog created=0 closed=0')
-
-    def test_pwsh_summary_success_reports_counts(self):
-        if not shutil.which('pwsh'):
-            self.skipTest('pwsh not available')
-        self.configure_repo()
-        wrapper = self.root / '_wrapper.ps1'
-        wrapper.write_text(FAKE_GH_PS1_FUNCTION + f"\n& '{PS1.as_posix()}' -Phase open -Summary\n", encoding='utf-8')
-        result = subprocess.run(['pwsh', '-NoProfile', '-File', str(wrapper)],
-                                 cwd=self.root, text=True, capture_output=True)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        lines = result.stdout.splitlines()
-        self.assertEqual(len(lines), 1, result.stdout)
-        self.assertEqual(lines[0], 'ok issue=42 status=Backlog created=0 closed=0')
-
-    def test_pwsh_json_reports_the_same_real_run(self):
-        if not shutil.which('pwsh'):
-            self.skipTest('pwsh not available')
-        self.configure_repo()
-        wrapper = self.root / '_wrapper.ps1'
-        wrapper.write_text(FAKE_GH_PS1_FUNCTION + f"\n& '{PS1.as_posix()}' -Phase open -Json\n", encoding='utf-8')
-        result = subprocess.run(['pwsh', '-NoProfile', '-File', str(wrapper)],
-                                 cwd=self.root, text=True, capture_output=True)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        import json
-        payload = json.loads(result.stdout.splitlines()[-1])
-        self.assertEqual(payload['issue'], 42)
-        self.assertEqual(payload['status'], 'Backlog')
-
-    def test_bash_json_summary_unaffected_by_this_session(self):
-        # F8 parity: the sibling test above exercises -Json for pwsh on the
-        # same fixture; this confirms the bash --json branch still reports
-        # the same real run, unchanged by this session's --summary/error-trap
-        # work (--json's own output format was never touched).
-        if not find_bash():
-            self.skipTest('no working POSIX bash found (Git Bash absent; never the WSL System32 launcher)')
-        if not bash_has(self.root, 'jq'):
-            self.skipTest('a real jq is required to drive a full (fake-gh-backed) success run')
-        self.configure_repo()
-        fakebin = Path(tempfile.mkdtemp())
-        write_script(fakebin / 'gh', FAKE_GH_SH)
-        result = run_bash_script(SH, ['--phase', 'open', '--json'], self.root, env=prepend_path(fakebin))
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        import json
-        payload = json.loads(result.stdout.splitlines()[-1])
-        self.assertEqual(payload['issue'], 42)
-        self.assertEqual(payload['status'], 'Backlog')
+    def test_exhausted_graphql_falls_back_to_rest(self):
+        self.configure()
+        code, out, err, gh = self.sync('--phase', 'open', '--json', gh=FakeGh(budget='0'))
+        self.assertEqual(code, 0, err)
+        payload = json.loads(out[-1])
+        self.assertEqual((payload['issue'], payload['status'], payload['transport']), (42, 'Backlog', 'rest'))
+        self.assertFalse(gh.used('issue', 'create') or gh.used('project'))
+        self.assertTrue([c for c in gh.calls if c[:2] == ['api', 'orgs/acme/projectsV2/1/items/11']])
 
 
 if __name__ == '__main__':

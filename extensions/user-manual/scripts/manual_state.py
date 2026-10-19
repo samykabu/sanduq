@@ -40,6 +40,8 @@ def main():
         # summary line must still be exactly one line.
         reason = ' '.join(str(result.get('reason', 'n/a')).split())
         detail = ' recorded=1' if result.get('recorded') else f' reason={reason}'
+        if 'changed_inputs' in result:
+            detail += f" changed_inputs={len(result['changed_inputs'])} changed_outputs={len(result['changed_outputs'])}"
         print(f'{word} action={args.action} kind={kind} outputs={len(outputs)}{detail}')
     else:
         print(json.dumps(result))

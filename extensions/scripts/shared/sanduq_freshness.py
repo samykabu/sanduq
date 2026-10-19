@@ -116,6 +116,13 @@ def record_or_status(root, feature, kind, state_path, action, outputs, base=None
         return {'current': True, 'recorded': True, 'state': relative(root, state_path)}
     if not saved: return {'current': False, 'reason': 'missing'}
     if saved.get('schemaVersion') != 2: return {'current': False, 'reason': 'legacy-state-regenerate'}
+    saved_outputs = saved.get('outputs') or {}
+    current_outputs = fingerprints(root, saved_outputs)
     matches = (saved.get('feature') == feature and saved.get('kind') == kind and saved.get('inputs') == current
-               and bool(saved.get('outputs')) and fingerprints(root, saved['outputs']) == saved['outputs'])
-    return {'current': matches, 'reason': 'current' if matches else 'stale-input-or-output'}
+               and bool(saved_outputs) and current_outputs == saved_outputs)
+    if matches: return {'current': True, 'reason': 'current'}
+    # Sorted repository-relative paths that are new, changed or deleted since `record`.
+    delta = lambda before, after: sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k))
+    return {'current': False, 'reason': 'stale-input-or-output',
+            'changed_inputs': delta(saved.get('inputs', {}).get('files', {}), current['files']),
+            'changed_outputs': delta(saved_outputs, current_outputs)}

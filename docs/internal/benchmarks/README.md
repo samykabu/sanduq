@@ -70,3 +70,67 @@ python extensions/scripts/benchmark_compare.py --before docs/internal/benchmarks
 
 `../sanduq-baseline` is the read-only worktree of `main` at 105508f. Each run takes a few minutes with
 750 source files; `--source-files 50` is enough for a smoke check.
+
+## Instruction benchmark (round 2)
+
+`extensions/scripts/benchmark_instructions.py` measures the static instruction load of `assure`,
+`user-manual`, `pr`, `project`, `illustrate`, `memory` and `progress` (stream B0 of
+`docs/internal/round-2-plan.md`). No model is called; it reads each `extensions/<id>/extension.yml`
+and the files it points at. `instructions-before.json` and `instructions-before.md` are the BEFORE
+numbers on `feat/round-2` at its base commit 6bff750.
+
+```text
+python extensions/scripts/benchmark_instructions.py --repo . --out docs/internal/benchmarks/instructions-before.json --md docs/internal/benchmarks/instructions-before.md
+python extensions/scripts/benchmark_instructions.py --repo . --out docs/internal/benchmarks/instructions-after.json --md docs/internal/benchmarks/instructions-after.md --compare docs/internal/benchmarks/instructions-before.json
+```
+
+`--extensions a,b` narrows the set. `--compare` prints a delta table over every numeric total, every
+per-extension total and every command's `instruction_bytes`, in the shape of `benchmark_compare.py`.
+
+Measured files: every `provides.commands[].file`, every skill file (`skills/*/SKILL.ext.md`,
+`skill/SKILL.md`, `assets/skill/SKILL.md`), and the files those tell the agent to read, one level deep.
+
+- **Links.** Candidates are backticked tokens and Markdown link targets that end in `.md`, `.yml`,
+  `.yaml`, `.json` or `.py`, or contain `references/`, `skills/`, `docs/` or `.specify/extensions/`.
+  A script named right after `python`, `python3`, `node`, `bash`, `sh` or `pwsh` is an invocation, not
+  a read, and is dropped. `.specify/extensions/<id>/X` resolves to `extensions/<id>/X`; other paths are
+  tried against the file's own folder, the extension root and the repo root; `SKILL.md` also matches the
+  source tree's `SKILL.ext.md`. Each resolved file counts once per command (`linked`, bytes);
+  resolved `.py` files are listed under `scripts` but not counted; unresolved mentions go to `missing`
+  (consumer files such as `tasks.md` or `manual.yml` land there by design). Linked files are not
+  followed further. A bare name that happens to exist at the extension root (`CHANGELOG.md` in
+  `pr.generate` means the feature changelog) is a known false positive.
+- **Bytes, tokens.** `bytes` is the file size on disk; `instruction_bytes` = command bytes plus linked
+  bytes; tokens = bytes / 4. A skill also records `references_bytes`, the sum of every
+  `references/*.md` beside it (and their count), whether linked or not.
+- **Prohibitions.** `\b(never|do not|don't|must not|not allowed|forbidden|refuse[sd]?|prohibited|under no circumstances)\b`,
+  case-insensitive, over the whole file; `prohibitions_per_100_words` divides by whitespace words.
+- **Script calls.** Lines inside a fence, or code spans, whose first token is `python`, `python3`,
+  `node`, `bash`, `sh`, `pwsh`, `gh` or `git`. **Prose steps** are lines matching `^\s*\d+[.)]\s`
+  outside fences.
+- **Descriptions** (the `extension.yml` text, the catalog both hosts render): `chars`, `under_1024`,
+  `third_person` (the first word is not in the script's `IMPERATIVE` set: generate, create, run,
+  write, ... audit, choose, select, redraw; a heuristic, extend the set when a new verb appears),
+  `has_what` (five or more words), `has_when` (`use when`, `when`, `after`, `before`), `has_triggers`
+  (a double-quoted phrase or "asked to"). `failing` lists the checks that failed; `descriptions_failing`
+  counts commands with any. `hook_only` is true when the command is named under `hooks:` or `events:`
+  and its description has neither `has_when` nor `has_triggers`.
+- **Duplicates.** Blank-line separated paragraphs of 25 or more words, normalised (lowercase,
+  backticks stripped, whitespace collapsed), that appear in two or more measured files across all
+  extensions; sorted by files x words.
+- **Totals.** Per extension, sums over the unique set of measured files (a skill loaded by four commands
+  is counted once; a file linked by two extensions is counted in each). `catalog_entries` is the number
+  of `provides.commands`; `catalog_chars` the sum of their description lengths.
+
+### Round 2 results
+
+`instructions-after.json` and `.md` were measured at the release commit of round 2; `instructions-compare.md`
+is the `--compare` output against `instructions-before.json`. Per invocation (the sum of each
+extension's commands' `instruction_bytes`) the seven extensions read 244,178 bytes instead of 413,968
+(-41 percent). Two figures need reading with the harness's one-level rule in mind: memory's `run.md`
+names all six step references, so the harness counts them all (36,015 bytes) although a small v2
+archive reads the procedure plus `candidate-v2.md` and `review-and-publish.md` (about 14.3 KB instead
+of 21.2 KB); and the before figure for `user-manual.update` did not count the 34.7 KB Illustrate
+skill its old wording loaded, because the harness could not resolve that phrase. Host-visible
+description text is 3,725 characters across the 27 commands (2,119 before, most of it failing the
+catalog rules; 6,475 in the first draft of this round, trimmed before release).

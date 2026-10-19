@@ -78,17 +78,27 @@ class PolicyKeyTests(Base):
         policy['issue_sync']['taskstoissues'] = 'phase-lazy'
         policy['project_sync'] = {'points': ['specify', 'execute', 'pr']}
         policy['scope'] = {'board_cache_seconds': 300}
+        policy['progress'] = {'hook_wiring': 'native', 'post_tool_matcher': 'Edit|Write'}
+        policy['illustrate'] = {'hooks': {'self_check': True}}
         return policy
 
     def test_new_keys_validate_and_absent_keys_keep_defaults(self):
         policy = w.validate_policy(self.full_policy())
         self.assertEqual(policy['issue_sync']['taskstoissues'], 'phase-lazy')
         default = w.validate_policy(copy.deepcopy(self.policy))
-        for key in ('profiles', 'artifacts', 'project_sync'):
+        for key in ('profiles', 'artifacts', 'project_sync', 'progress', 'illustrate'):
             self.assertNotIn(key, default)
+        for partial in ({'progress': {}}, {'progress': {'hook_wiring': 'speckit'}}, {'illustrate': {}},
+                        {'illustrate': {'hooks': {}}}):
+            w.validate_policy({**copy.deepcopy(self.policy), **partial})
         self.assertEqual(w.stages(default), w.BASE_STAGES)
         self.assertTrue(all(w.project_sync(default, stage) for stage in w.PROJECT_SYNC_POINTS))
         self.assertFalse(w.project_sync(default, 'clarify'))
+        self.assertEqual(w.project_sync(default, 'execute'), {
+            'phase': 'in-progress',
+            'command': 'python .specify/extensions/project/scripts/project_sync.py --phase in-progress --summary'})
+        self.assertEqual({stage: w.project_sync(default, stage)['phase'] for stage in w.PROJECT_SYNC_POINTS},
+                         w.PROJECT_SYNC_PHASES)
 
     def test_schema_accepts_the_new_keys(self):
         from jsonschema import Draft202012Validator
@@ -110,6 +120,14 @@ class PolicyKeyTests(Base):
             (lambda p: p.update(project_sync={'points': ['clarify']}), 'PROJECT_SYNC_POLICY_INVALID'),
             (lambda p: p.update(project_sync={'points': ['pr'], 'extra': 1}), 'PROJECT_SYNC_POLICY_INVALID'),
             (lambda p: p.update(scope={'board_cache_seconds': -1}), 'SCOPE_BOARD_CACHE_INVALID'),
+            (lambda p: p.update(progress={'hook_wiring': 'hooks'}), 'PROGRESS_POLICY_INVALID'),
+            (lambda p: p.update(progress={'post_tool_matcher': 1}), 'PROGRESS_POLICY_INVALID'),
+            (lambda p: p.update(progress={'matcher': ''}), 'PROGRESS_POLICY_INVALID'),
+            (lambda p: p.update(progress='native'), 'PROGRESS_POLICY_INVALID'),
+            (lambda p: p.update(illustrate={'hooks': {'self_check': 'yes'}}), 'ILLUSTRATE_POLICY_INVALID'),
+            (lambda p: p.update(illustrate={'hooks': {'verify': True}}), 'ILLUSTRATE_POLICY_INVALID'),
+            (lambda p: p.update(illustrate={'theme': {}}), 'ILLUSTRATE_POLICY_INVALID'),
+            (lambda p: p.update(illustrate={'hooks': True}), 'ILLUSTRATE_POLICY_INVALID'),
             (lambda p: p['issue_sync'].update(taskstoissues='optional'), 'TASK_ISSUES_REQUIRED'),
         ]
         for mutate, code in cases:
@@ -130,6 +148,8 @@ class PolicyKeyTests(Base):
         self.assertEqual(cutoff(lambda p: p['issue_sync'].update(taskstoissues='phase-lazy')),
                          w.BASE_STAGES.index('taskstoissues'))
         for operational in (lambda p: p.update(project_sync={'points': ['pr']}),
+                            lambda p: p.update(progress={'hook_wiring': 'native'}),
+                            lambda p: p.update(illustrate={'hooks': {'self_check': True}}),
                             lambda p: p.update(scope={'board_cache_seconds': 0}),
                             lambda p: p['clarification'].update(max_questions_per_round=3, in_session_first_round=True)):
             self.assertEqual(cutoff(operational), len(w.BASE_STAGES))
@@ -239,7 +259,11 @@ class ClaimOutputTests(Base):
         self.policy['project_sync'] = {'points': ['specify', 'execute', 'pr']}
         self.configure()
         run = self.run_object()
-        self.advance(run, 'specify')
+        self.advance(run, 'scope')
+        claim = run.claim(self.usage(), finalize=True)
+        self.assertEqual((claim['stage'], claim['project_sync']), ('specify', {
+            'phase': 'open', 'command': 'python .specify/extensions/project/scripts/project_sync.py --phase open --summary'}))
+        run.complete(claim['token'], self.receipt('specify'))
         claim = run.claim(self.usage())
         self.assertEqual(claim['stage'], 'clarify')
         reference = SCRIPT.parents[1] / 'skills/workflow/references/stage-clarify.md'

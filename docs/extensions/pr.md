@@ -29,7 +29,10 @@ $speckit-pr-review-feedback example-org/booking-app#438 Classify unresolved feed
 ```
 
 Generate writes `docs/<feature-slug>/CHANGELOG.md`, a feature explanation and diagrams, then updates a
-marked section of the PR description. Add `--no-pr` to write the documents only.
+marked section of the PR description. Add `--no-pr` to write the documents only. Two scripts do the
+fixed parts: `pr_changelog.py` seeds the changelog from tasks, commits, progress and evidence, and
+`pr_publish.py` writes the exact body, lints its closing references, publishes it with `gh` and
+prints the receipt fields Workflow checks.
 
 ## How it runs
 
@@ -44,6 +47,10 @@ or resolves threads. In the managed Workflow, Finalize runs Generate.
 
 - Without `git`, `gh`, authentication or a remote, Generate still writes the documents and reports
   why it skipped the PR.
+- Image checks record how they were done: `api` on every host, `browser` when the host has a
+  browser tool.
+- In the managed Workflow, the guard hook refuses a `gh pr` publish whose body has no matching lint
+  file, and `gh pr create` from the default branch.
 - The old `pr-review` extension is retired. Use `review-feedback`.
 
 Package details: [PR README](../../extensions/pr/README.md).

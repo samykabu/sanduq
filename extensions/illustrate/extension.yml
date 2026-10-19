@@ -3,7 +3,7 @@ schema_version: "1.0"
 extension:
   id: illustrate
   name: "Illustrate"
-  version: "2.4.2"
+  version: "2.5.0"
   description: "Generate, import, and export forty-four technical, product, architecture, process, and quantitative illustration types with tracked project-level light/dark color and font themes."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
@@ -20,16 +20,22 @@ provides:
   commands:
     - name: speckit.illustrate.generate
       file: commands/speckit.illustrate.generate.md
-      description: "Select and generate the right illustration from forty-four technical, product, data, process, and quantitative visual types"
+      description: 'Draws 44 diagram and chart types (architecture, sequence, ER, Gantt) as themed HTML with inline SVG. Use when asked to "draw a diagram".'
     - name: speckit.illustrate.export
       file: commands/speckit.illustrate.export.md
-      description: "Export an Illustrate HTML source to standalone SVG and/or transparent PNG"
+      description: 'Exports an Illustrate diagram to SVG, transparent PNG, animated SVG or GIF; the HTML stays the source. Use when asked to "export the diagram".'
     - name: speckit.illustrate.theme
       file: commands/speckit.illustrate.theme.md
-      description: "Initialize, select, validate, or create a tracked project color and font theme"
+      description: 'Initializes, selects, validates or creates the project Illustrate color and font theme. Use when asked to "set the diagram theme".'
     - name: speckit.illustrate.import
       file: commands/speckit.illustrate.import.md
-      description: "Redraw an existing draw.io, Mermaid, or Excalidraw source as an Illustrate diagram in the active project theme"
+      description: 'Redraws a draw.io, Mermaid or Excalidraw file as a themed Illustrate diagram with a fidelity ledger. Use when asked to "import this .drawio".'
+
+events:
+  post_tool_use:
+    command: speckit.illustrate.hook
+    matcher: "Write|Edit"
+    timeout: 60
 
 tags:
   - "diagram"

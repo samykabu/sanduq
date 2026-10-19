@@ -6,7 +6,7 @@ Emit a machine-readable `.registry.json` sidecar of a Traceable block decomposit
 
 Load this file when:
 
-- The user asks to export a diagram with `--registry` (via [`commands/export-diagram.md`](../commands/export-diagram.md) or `speckit.illustrate.export`), alone or combined with SVG/PNG output.
+- The user asks to export a diagram with `--registry` (via [`export.md`](export.md) or `speckit.illustrate.export`), alone or combined with SVG/PNG output.
 - The user asks in natural language for the block metadata, ID list, registry, or traceability data behind a Traceable block decomposition diagram (see [`semantic-patterns.md` § 8](semantic-patterns.md)) as structured data rather than a picture.
 
 This reference governs `--registry` only. SVG/PNG rasterization is a separate procedure — see [`export.md`](export.md). The two can run in the same command invocation but share no logic; treat this as independent, not an extension of that one.

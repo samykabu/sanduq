@@ -1,4 +1,6 @@
-"""E4: the PreToolUse guard denies coordinator-only commands for workers on Claude Code and Codex."""
+"""E4: the PreToolUse guard denies coordinator-only commands for workers on Claude Code and Codex,
+and (PR6) PR publication without a matching lint receipt or from the default branch."""
+import hashlib
 import io
 import json
 import os
@@ -7,6 +9,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 HOOKS = Path(__file__).resolve().parents[1] / 'hooks'
 sys.path.insert(0, str(HOOKS))
@@ -79,6 +82,54 @@ class GuardTests(unittest.TestCase):
         for payload in ('', 'not json', '[]', '{"tool_input": "git add -A"}', '{"tool_input": {"command": 7}}',
                         json.dumps({'tool_name': 'Edit', 'tool_input': {'file_path': 'a'}}), 'git add "unclosed'):
             self.assertEqual(self.run_guard(payload)[0], 0, payload)
+
+    def pr_project(self, folder, managed=True, lint='match'):
+        root = Path(folder)
+        if managed:
+            (root / '.specify').mkdir()
+            (root / '.specify/workflow.yml').write_text('version: 1\n', encoding='utf-8')
+        body = root / 'specs/001-x/evidence/pr-body.md'
+        body.parent.mkdir(parents=True)
+        body.write_bytes(b'Closes #10\n')
+        if lint:
+            sha = hashlib.sha256(b'Closes #10\n').hexdigest() if lint == 'match' else '0' * 64
+            body.with_suffix('.lint.json').write_text(json.dumps({'ok': True, 'body_sha256': sha}), encoding='utf-8')
+        return root
+
+    def test_pr_body_file_needs_a_matching_lint_receipt_in_a_managed_project(self):
+        edit = 'gh pr edit 12 --body-file specs/001-x/evidence/pr-body.md'
+        create = 'gh pr create --base main --head feat/x --title T --body-file=specs/001-x/evidence/pr-body.md'
+        with patch.object(guard, 'on_default_branch', return_value=False):
+            for lint, expected in (('match', 0), ('mismatch', 2), (None, 2)):
+                with tempfile.TemporaryDirectory() as folder:
+                    root = self.pr_project(folder, lint=lint)
+                    for shape in (claude, codex):
+                        for command in (edit, create, 'git status && ' + edit):
+                            env_code, reason = self.run_guard(shape(command), {'CLAUDE_PROJECT_DIR': str(root)})
+                            self.assertEqual(env_code, expected, (lint, command, reason))
+                            cwd_code = self.run_guard({**shape(command), 'cwd': str(root)})[0]
+                            self.assertEqual(cwd_code, expected, (lint, command))
+                            if expected:
+                                self.assertIn('pr-body.lint.json', reason)
+                                self.assertEqual(reason.count('\n'), 1, reason)
+            with tempfile.TemporaryDirectory() as folder:  # unmanaged: no lint rule
+                root = self.pr_project(folder, managed=False, lint=None)
+                self.assertEqual(self.run_guard(claude(edit), {'CLAUDE_PROJECT_DIR': str(root)})[0], 0)
+            self.assertEqual(self.run_guard(claude('gh pr view --json body'), {'CLAUDE_PROJECT_DIR': '/missing'})[0], 0)
+
+    def test_pr_create_is_denied_on_the_default_branch_only(self):
+        create, edit = 'gh pr create --fill', 'gh pr edit 12 --title T'
+        for head, default, expected in (('main', 'origin/main', 2), ('feat/x', 'origin/main', 0), ('main', '', 0), ('', 'origin/main', 0)):
+            with patch.object(guard, 'git_output', side_effect=lambda root, *args: head if args[-1] == 'HEAD' else default):
+                code, reason = self.run_guard(claude(create))
+                self.assertEqual(code, expected, (head, default, reason))
+                self.assertEqual(self.run_guard(codex(edit))[0], 0)
+                if expected:
+                    self.assertIn('default branch', reason)
+                self.assertEqual(self.run_guard(claude('gh pr create --head feat/y --fill'))[0], 0)
+            with patch.object(guard, 'git_output', return_value='origin/main'):  # on any branch, --head main is denied
+                self.assertEqual(self.run_guard(claude('gh pr create --head main --fill'))[0], 2)
+                self.assertEqual(self.run_guard(claude('gh pr create -H feat/y -F b.md'))[0], 0)
 
     def test_hook_command_runs_the_guard_and_tolerates_a_missing_script(self):
         command = json.loads((HOOKS / 'hooks.json').read_text(encoding='utf-8'))['hooks']['PreToolUse'][0]['hooks'][0]['command']

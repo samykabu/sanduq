@@ -371,7 +371,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: project-sync degrades gracefully without config/gh
-        shell: pwsh
         run: |
           # No config.json + no gh scope -> must exit 0 with a logged skip, never throw.
-          pwsh extensions/project/scripts/powershell/project-sync.ps1 -Phase open -DryRun -Json
+          python3 extensions/project/scripts/project_sync.py --phase open --dry-run --json

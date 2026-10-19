@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Verify the two dumbbell rules that live in a formula rather than in a drawing.
 
-Both rules in `references/type-bar.md` are formula-level: a generator implements
+Both rules in `references/type-dumbbell.md` are formula-level: a generator implements
 them arithmetically, and both fail in ways that render perfectly. Prose alone
 cannot defend either, so both are executable here and the reference is checked
 against this module rather than the other way round.
@@ -30,7 +30,7 @@ find, is a finding - never a silent pass.
 
 Usage:
     python scripts/verify-dumbbell.py
-    python scripts/verify-dumbbell.py --reference path/to/type-bar.md
+    python scripts/verify-dumbbell.py --reference path/to/type-dumbbell.md
 
 Exit: 0 clean, 1 findings, 2 usage.
 """
@@ -44,7 +44,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-REFERENCE = ROOT / "references/type-bar.md"
+REFERENCE = ROOT / "references/type-dumbbell.md"
 
 # --- composition constants, quoted from the reference -----------------------
 PLOT_X0 = 200          # left edge of the plot area
@@ -263,7 +263,7 @@ def main(argv=None) -> int:
     )
     parser.add_argument(
         "--reference", type=Path, default=REFERENCE,
-        help="path to type-bar.md (default: the shipped reference)",
+        help="path to type-dumbbell.md (default: the shipped reference)",
     )
     args = parser.parse_args(argv)
 

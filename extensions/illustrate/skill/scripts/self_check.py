@@ -12,6 +12,16 @@ markup is present — the structural motion contract, plus straight arrow
 ends (`verify-arrow-ends.py`, shipped beside this script). This is a distilled
 subset of the repository gates (`lint-skin.py`, `verify-motion.py`), which
 remain the authority for contributions to the repository itself.
+
+`--strict` adds the mechanical half of the taste gate (references/taste-gate.md):
+accent on at most two node-sized shapes, the legend strip below every node and
+inside the viewBox, the svg `min-width` equal to the viewBox width, no
+`writing-mode`, no `box-shadow`, `rx` at most 10 (full pills excepted), node and
+zone rects on the 4px grid (`.5` stroke offsets and data-bound `data-*` rects
+excepted), the font role per element class (the terminal variant excepted), no
+pure black, and orthogonal connectors (`verify-geometry.py --orthogonal`).
+`lint-skin.py` imports the skin checks (pure black, scripts, external assets)
+from here. Without `--strict` the run is unchanged.
 """
 
 from __future__ import annotations
@@ -27,6 +37,7 @@ from urllib.parse import urlparse
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
 MOTION_TEMPLATE = SKILL_DIR / "assets" / "template-motion.html"
+THEME_REGISTRY = SKILL_DIR / "assets" / "illustration-themes.yml"
 MODES = {"none", "reveal", "step", "loop"}
 ACTIONS = {"play", "pause", "replay", "prev", "next"}
 ASCII_DECIMAL_RE = re.compile(r"^[0-9]+$")
@@ -419,17 +430,395 @@ def check_motion(parser: DiagramParser, source: str, errors: list[str]) -> None:
             errors.append("motion file needs a <noscript> explanation of the complete static frame")
 
 
-def arrow_end_errors(source: str) -> list[str]:
-    script = Path(__file__).resolve().parent / "verify-arrow-ends.py"
-    spec = importlib.util.spec_from_file_location("verify_arrow_ends", script)
-    if spec is None or spec.loader is None:
-        return [f"cannot load {script.name}; run self_check.py from its shipped location inside the skill"]
+def _sibling(filename: str):
+    """A verifier shipped beside this script, or the error line naming it."""
+    script = Path(__file__).resolve().parent / filename
+    spec = importlib.util.spec_from_file_location(filename.removesuffix(".py").replace("-", "_"), script)
+    if spec is None or spec.loader is None or not script.is_file():
+        return f"cannot load {script.name}; run self_check.py from its shipped location inside the skill"
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module.check_source(source, "arrow")
+    return module
 
 
-def verify(path: Path) -> list[str]:
+def arrow_end_errors(source: str) -> list[str]:
+    module = _sibling("verify-arrow-ends.py")
+    return [module] if isinstance(module, str) else module.check_source(source, "arrow")
+
+
+def orthogonal_errors(source: str) -> list[str]:
+    module = _sibling("verify-geometry.py")
+    return [module] if isinstance(module, str) else module.orthogonal_findings(source, "connector")
+
+
+# --- skin checks shared with lint-skin.py --------------------------------------
+
+HEX_RE = re.compile(
+    r"(?<![\w-])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?![0-9a-fA-F])"
+)
+BLACK_RGB_RE = re.compile(r"rgb\(\s*0\s*,\s*0\s*,\s*0\s*\)", re.IGNORECASE)
+SCRIPT_RE = re.compile(r"<script\b", re.IGNORECASE)
+SRC_HTTP_RE = re.compile(r"\bsrc\s*=\s*(['\"])\s*https?://", re.IGNORECASE)
+IMPORT_HTTP_RE = re.compile(r"@import\s+(?:url\(\s*)?(?:['\"]\s*)?https?://", re.IGNORECASE)
+URL_HTTP_RE = re.compile(r"url\(\s*(?:['\"]\s*)?https?://", re.IGNORECASE)
+LINK_RE = re.compile(r"<link\b[^>]*>", re.IGNORECASE | re.DOTALL)
+HREF_RE = re.compile(r"\bhref\s*=\s*(['\"])(.*?)\1", re.IGNORECASE | re.DOTALL)
+
+
+def normalize_hex(value: str) -> str:
+    value = value.lower()
+    if len(value) == 4:
+        return "#" + "".join(character * 2 for character in value[1:])
+    return value
+
+
+def canonical_motion_script(text: str) -> bool:
+    """True when the file's only script is the pinned motion controller (template-motion.html)."""
+    parser = parsed_document(text)
+    errors: list[str] = []
+    check_scripts(parser, errors)
+    return len(parser.scripts) == 1 and not errors
+
+
+def skin_findings(text: str) -> list[tuple[int, str, str]]:
+    """(offset, category, message) for pure black, stray scripts and external HTTP(S) assets."""
+    findings: list[tuple[int, str, str]] = []
+    for match in HEX_RE.finditer(text):
+        if normalize_hex(match.group()) == "#000000":
+            findings.append((match.start(), "pure-black", f"pure black {match.group()} is not allowed"))
+    for match in BLACK_RGB_RE.finditer(text):
+        findings.append((match.start(), "pure-black", "pure black rgb(0,0,0) is not allowed"))
+    if not canonical_motion_script(text):
+        for match in SCRIPT_RE.finditer(text):
+            findings.append((match.start(), "script", "<script> tags are not allowed (except the pinned motion controller)"))
+    for match in SRC_HTTP_RE.finditer(text):
+        findings.append((match.start(), "external-asset", "external HTTP(S) src is not allowed"))
+    import_spans = []
+    for match in IMPORT_HTTP_RE.finditer(text):
+        import_spans.append(match.span())
+        findings.append((match.start(), "external-asset", "external HTTP(S) @import is not allowed"))
+    for match in URL_HTTP_RE.finditer(text):
+        if any(start <= match.start() < end for start, end in import_spans):
+            continue
+        findings.append((match.start(), "external-asset", "external HTTP(S) url() is not allowed"))
+    for link_match in LINK_RE.finditer(text):
+        href_match = HREF_RE.search(link_match.group())
+        if not href_match:
+            continue
+        href = href_match.group(2).strip()
+        if href.lower().startswith("https://fonts.googleapis.com"):
+            continue
+        if href.lower().startswith(("http://", "https://")):
+            findings.append((link_match.start() + href_match.start(2), "external-asset", "external HTTP(S) <link> is not allowed"))
+    return findings
+
+
+# --- strict: the mechanical taste-gate boxes -----------------------------------
+
+SHAPES = {"rect", "circle", "ellipse", "path", "line", "polyline", "polygon"}
+NODE_MIN_W, NODE_MIN_H = 60.0, 40.0  # the node heuristic verify-geometry.py uses
+MAX_RADIUS = 10.0
+NODE_MIN_RADIUS = 20.0
+ACCENT_YML_RE = re.compile(r"^\s*accent:\s*['\"]?(#[0-9a-fA-F]{3,8})", re.MULTILINE)
+ACCENT_VAR_RE = re.compile(r"--(?:color-)?accent\s*:\s*(#[0-9a-fA-F]{3,8})")
+ACCENT_USE_RE = re.compile(r"var\(\s*--(?:color-)?accent\s*\)", re.IGNORECASE)
+CSS_RULE_RE = re.compile(r"([^{}]+)\{([^{}]*)\}")
+CSS_FAMILY_RE = re.compile(r"(?:^|[;\s])font(?:-family)?\s*:\s*([^;}]+)", re.IGNORECASE)
+CLASS_RE = re.compile(r"\.([\w-]+)")
+MIN_WIDTH_RE = re.compile(r"min-width\s*:\s*([\d.]+)px", re.IGNORECASE)
+TRANSLATE_RE = re.compile(r"translate\(\s*([-\d.]+)[\s,]*([-\d.]*)\s*\)")
+NUMBER_RE = re.compile(r"^-?[\d.]+$")
+FONT_ROLES = {"node-name": "sans", "sublabel": "mono", "arrow-label": "mono", "eyebrow": "mono", "callout": "serif"}
+
+
+class StrictParser(HTMLParser):
+    """Elements of the first accessible SVG with their line, defs ancestry and translate-y offset."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.svg_attrs: dict[str, str] | None = None
+        self.elements: list[dict[str, object]] = []
+        self.legend_at: int | None = None  # index into elements where the legend strip begins
+        self.styles: list[str] = []
+        self._stack: list[tuple[str, float, bool]] = []  # (tag, translate-y, aria-hidden or decorative)
+        self._done = False
+        self._in_style = False
+        self._text_target: dict[str, object] | None = None
+
+    def _start(self, tag: str, raw, closes: bool) -> None:
+        tag = tag.casefold()
+        attrs = {k.casefold(): (v or "") for k, v in raw}
+        if tag == "style":
+            self._in_style = True
+        if self._done:
+            return
+        if self.svg_attrs is None:
+            if tag == "svg" and attrs.get("aria-hidden", "").casefold() != "true":
+                self.svg_attrs = attrs
+                self._stack = [("svg", 0.0, False)]
+            return
+        ty = self._stack[-1][1] if self._stack else 0.0
+        hidden = (self._stack[-1][2] if self._stack else False) or attrs.get("aria-hidden", "").casefold() == "true"
+        hidden = hidden or "data-motion-decorative" in attrs
+        match = TRANSLATE_RE.search(attrs.get("transform", ""))
+        if match and match.group(2):
+            ty += float(match.group(2))
+        tags = [entry[0] for entry in self._stack]
+        element: dict[str, object] = {
+            "tag": tag, "attrs": attrs, "line": self.getpos()[0], "ty": ty,
+            "in_defs": "defs" in tags or "marker" in tags, "hidden": hidden, "text": "",
+        }
+        self.elements.append(element)
+        if tag == "text":
+            self._text_target = element
+        ident = (attrs.get("class", "") + " " + attrs.get("id", "")).casefold()
+        if self.legend_at is None and "legend" in ident:
+            self.legend_at = len(self.elements) - 1
+        if not closes:
+            self._stack.append((tag, ty, hidden))
+
+    def handle_starttag(self, tag, attrs):
+        self._start(tag, attrs, False)
+
+    def handle_startendtag(self, tag, attrs):
+        self._start(tag, attrs, True)
+
+    def handle_endtag(self, tag):
+        tag = tag.casefold()
+        if tag == "style":
+            self._in_style = False
+        if tag == "text":
+            self._text_target = None
+        if self.svg_attrs is None or self._done:
+            return
+        for index in range(len(self._stack) - 1, -1, -1):
+            if self._stack[index][0] == tag:
+                del self._stack[index:]
+                break
+        if tag == "svg" and not self._stack:
+            self._done = True
+
+    def handle_comment(self, data):
+        if self.svg_attrs is not None and not self._done and self.legend_at is None:
+            if data.strip().casefold().startswith("legend"):
+                self.legend_at = len(self.elements)
+
+    def handle_data(self, data):
+        if self._in_style:
+            self.styles.append(data)
+        if self._text_target is not None:
+            self._text_target["text"] = str(self._text_target["text"]) + data
+            if self.legend_at is None and data.strip().casefold() == "legend":
+                self.legend_at = self.elements.index(self._text_target)
+
+
+def _num(value: str) -> float | None:
+    value = value.strip().removesuffix("px")
+    return float(value) if NUMBER_RE.match(value) else None
+
+
+def _rect(attrs: dict[str, str]) -> tuple[float, float, float, float] | None:
+    values = [_num(attrs.get(key, "")) for key in ("x", "y", "width", "height")]
+    if any(v is None for v in values):
+        return None
+    return values[0], values[1], values[2], values[3]  # type: ignore[return-value]
+
+
+def family_kind(value: str) -> str | None:
+    lowered = value.casefold().replace("sans-serif", "")
+    if any(token in lowered for token in ("mono", "code")):
+        return "mono"
+    if "serif" in lowered:
+        return "serif"
+    if any(token in lowered for token in ("sans", "system-ui", "geist", "inter", "helvetica", "arial")):
+        return "sans"
+    return None
+
+
+def class_families(styles: str) -> dict[str, str]:
+    """CSS class -> font family kind, from every rule that sets font or font-family."""
+    families: dict[str, str] = {}
+    for selector, body in CSS_RULE_RE.findall(styles):
+        match = CSS_FAMILY_RE.search(body)
+        if not match:
+            continue
+        kind = family_kind(match.group(1))
+        if kind:
+            for name in CLASS_RE.findall(selector):
+                families[name] = kind
+    return families
+
+
+def accent_literals(styles: str) -> set[str]:
+    """Upstream default accents, every preset accent, and the file's own --accent variable."""
+    literals = {"#eb6c36", "#f08a59"}
+    if THEME_REGISTRY.is_file():
+        literals.update(normalize_hex(m) for m in ACCENT_YML_RE.findall(THEME_REGISTRY.read_text(encoding="utf-8")))
+    literals.update(normalize_hex(m) for m in ACCENT_VAR_RE.findall(styles))
+    return literals
+
+
+def _uses_accent(attrs: dict[str, str], literals: set[str], accent_classes: list[set[str]]) -> bool:
+    paint = " ".join(attrs.get(key, "") for key in ("fill", "stroke", "style")).casefold()
+    if ACCENT_USE_RE.search(paint):
+        return True
+    if any(normalize_hex(m) in literals for m in HEX_RE.findall(paint)):
+        return True
+    classes = set(attrs.get("class", "").split())
+    return any(compound <= classes for compound in accent_classes)
+
+
+WRITING_MODE_RE = re.compile(r"writing-mode\s*[:=]", re.IGNORECASE)
+BOX_SHADOW_RE = re.compile(r"box-shadow\s*:(?!\s*none\b)", re.IGNORECASE)
+TERMINAL_RE = re.compile(r"class\s*=\s*['\"][^'\"]*\bterminal\b", re.IGNORECASE)
+SVG_SELECTOR_RE = re.compile(r"(?<![\w-])svg(?![\w-])", re.IGNORECASE)
+GRID_EXEMPT_DATA = ("data-motion", "data-step")  # motion hooks are not data; any other data-* marks a data-bound rect
+
+
+def _node_sized(element: dict[str, object]) -> bool:
+    attrs = element["attrs"]
+    assert isinstance(attrs, dict)
+    if element["tag"] == "rect":
+        box = _rect(attrs)
+        return box is not None and box[2] >= NODE_MIN_W and box[3] >= NODE_MIN_H
+    if element["tag"] in {"circle", "ellipse"}:
+        radii = [_num(attrs.get(key, "")) for key in ("r", "rx", "ry")]
+        return any(r is not None and r >= NODE_MIN_RADIUS for r in radii)
+    return False
+
+
+def strict_errors(source: str) -> list[str]:
+    """The mechanical taste-gate boxes; each finding is one line naming the rule and the fix."""
+    errors: list[str] = []
+    for _offset, category, message in skin_findings(source):
+        if category == "pure-black":  # scripts and external assets: the default run is already stricter
+            errors.append(f"{category}: {message}")
+    if WRITING_MODE_RE.search(source):
+        errors.append("writing-mode is not allowed; stack separate <text> lines instead")
+    if BOX_SHADOW_RE.search(source):
+        errors.append("box-shadow is not allowed; use a 1px hairline border")
+
+    parser = StrictParser()
+    parser.feed(source)
+    parser.close()
+    if parser.svg_attrs is None:
+        return errors
+    styles = "\n".join(parser.styles)
+    body = [e for e in parser.elements if not e["in_defs"] and not e["hidden"]]
+    legend = parser.elements[parser.legend_at:] if parser.legend_at is not None else []
+    legend_ids = {id(e) for e in legend}
+    drawing = [e for e in body if id(e) not in legend_ids]
+
+    view_box = [_num(v) for v in parser.svg_attrs.get("viewbox", "").replace(",", " ").split()]
+    vb_w, vb_h = (view_box[2], view_box[3]) if len(view_box) == 4 and None not in view_box else (None, None)
+
+    def rect_of(element: dict[str, object]) -> tuple[float, float, float, float] | None:
+        attrs = element["attrs"]
+        assert isinstance(attrs, dict)
+        return _rect(attrs) if element["tag"] == "rect" else None
+
+    def is_node(box: tuple[float, float, float, float] | None) -> bool:
+        if box is None or box[2] < NODE_MIN_W or box[3] < NODE_MIN_H:
+            return False
+        return vb_w is None or vb_h is None or box[2] < vb_w or box[3] < vb_h  # the paper background is not a node
+
+    # Accent on at most two node-sized shapes (rects of 60x40 or more, circles and ellipses of radius 20 or
+    # more). Connectors (the headline path), series dots, chips, text, markers, legend swatches and
+    # aria-hidden or decorative motion shapes do not count.
+    literals = accent_literals(styles)
+    accent_classes: list[set[str]] = []  # the class compound of each selector's last step, e.g. {station, focal}
+    for selector, rule in CSS_RULE_RE.findall(styles):
+        if ACCENT_USE_RE.search(rule) or any(normalize_hex(m) in literals for m in HEX_RE.findall(rule)):
+            for part in selector.split(","):
+                steps = part.split()
+                compound = set(CLASS_RE.findall(steps[-1])) if steps else set()
+                if compound:
+                    accent_classes.append(compound)
+    accented = [
+        e for e in drawing
+        if _node_sized(e) and _uses_accent(e["attrs"], literals, accent_classes)  # type: ignore[arg-type]
+    ]
+    if len(accented) > 2:
+        lines = ", ".join(str(e["line"]) for e in accented[:6])
+        errors.append(f"accent is used on {len(accented)} shapes (max 2); lines {lines}")
+
+    # rx <= 10 on every rect (a full pill, rx >= height/2, is a terminator); node and zone rects on the
+    # 4px grid, except .5 stroke offsets and data-bound rects (layout-budget.md lists both exceptions).
+    for element in drawing:
+        if element["tag"] != "rect":
+            continue
+        box = rect_of(element)
+        attrs = element["attrs"]
+        assert isinstance(attrs, dict)
+        rx = _num(attrs.get("rx", "") or "0")
+        if rx is not None and rx > MAX_RADIUS and (box is None or rx * 2 < box[3] - 0.5):
+            errors.append(f"line {element['line']}: rx={rx:g} exceeds {MAX_RADIUS:g}")
+        if not is_node(box) or any(k.startswith("data-") and not k.startswith(GRID_EXEMPT_DATA) for k in attrs):
+            continue
+        assert box is not None
+        off = [f"{k}={v:g}" for k, v in zip("xywh", box) if v % 4 not in (0.0, 0.5)]
+        if off:
+            errors.append(f"line {element['line']}: rect off the 4px grid ({', '.join(off)})")
+
+    # min-width on the svg equals the viewBox width; the legend strip sits below every node and inside the viewBox.
+    if vb_w is not None:
+        svg_css = [chunk for selector, chunk in CSS_RULE_RE.findall(styles) if SVG_SELECTOR_RE.search(selector)]
+        svg_css.append(parser.svg_attrs.get("style", ""))
+        widths = {float(w) for chunk in svg_css for w in MIN_WIDTH_RE.findall(chunk)}
+        if not widths:
+            errors.append(f"no min-width on the svg; set min-width: {vb_w:g}px")
+        elif vb_w not in widths:
+            shown = ", ".join(f"{w:g}" for w in sorted(widths))
+            errors.append(f"svg min-width {shown}px does not equal the viewBox width {vb_w:g}")
+    if legend:
+        tops: list[float] = []
+        bottoms: list[float] = []
+        for element in legend:
+            attrs = element["attrs"]
+            assert isinstance(attrs, dict)
+            ty = float(element["ty"])  # type: ignore[arg-type]
+            for key in ("y", "y1", "y2", "cy"):
+                value = _num(attrs.get(key, ""))
+                if value is None:
+                    continue
+                extent = _num(attrs.get("height", "")) if key == "y" else _num(attrs.get("r", "")) if key == "cy" else None
+                tops.append(value + ty)
+                bottoms.append(value + ty + (extent or 0.0))
+        node_bottom = max(
+            (box[1] + box[3] + float(e["ty"]) for e in drawing for box in [rect_of(e)] if is_node(box)),  # type: ignore[arg-type]
+            default=None,
+        )
+        if tops and node_bottom is not None and min(tops) < node_bottom:
+            errors.append(
+                f"legend starts at y={min(tops):g}, above the lowest node bottom y={node_bottom:g}; move it below every node"
+            )
+        if bottoms and vb_h is not None and max(bottoms) > vb_h:
+            errors.append(f"legend reaches y={max(bottoms):g} but the viewBox height is {vb_h:g}; expand the viewBox")
+
+    # Font role per element class (an inline font-family wins over the class rule); the terminal variant is mono by design.
+    if TERMINAL_RE.search(source):
+        return errors
+    families = class_families(styles)
+    for element in body:
+        attrs = element["attrs"]
+        assert isinstance(attrs, dict)
+        if element["tag"] not in {"text", "tspan"}:
+            continue
+        classes = attrs.get("class", "").split()
+        role_class = next((c for c in classes if c in FONT_ROLES), None)
+        if role_class is None:
+            continue
+        inline = attrs.get("font-family", "")
+        if not inline:
+            match = CSS_FAMILY_RE.search(attrs.get("style", ""))
+            inline = match.group(1) if match else ""
+        kind = family_kind(inline) if inline else next((families[c] for c in classes if c in families), None)
+        if kind and kind != FONT_ROLES[role_class]:
+            errors.append(f"line {element['line']}: .{role_class} must use the {FONT_ROLES[role_class]} family, not {kind}")
+    return errors
+
+
+def verify(path: Path, strict: bool = False) -> list[str]:
     source = path.read_text(encoding="utf-8")
     parser = parsed_document(source)
     errors: list[str] = []
@@ -443,17 +832,23 @@ def verify(path: Path) -> list[str]:
     check_scripts(parser, errors)
     check_motion(parser, source, errors)
     errors.extend(arrow_end_errors(source))
+    if strict:
+        errors.extend(strict_errors(source))
+        errors.extend(orthogonal_errors(source))
     return errors
 
 
 def main() -> int:
     argument_parser = argparse.ArgumentParser(description=__doc__)
     argument_parser.add_argument("files", nargs="+", type=Path)
+    argument_parser.add_argument(
+        "--strict", action="store_true", help="also run the mechanical taste-gate checks (references/taste-gate.md)"
+    )
     args = argument_parser.parse_args()
     failed = False
     for path in args.files:
         try:
-            errors = verify(path)
+            errors = verify(path, strict=args.strict)
         except (OSError, UnicodeError) as exc:
             errors = [str(exc)]
         if errors:

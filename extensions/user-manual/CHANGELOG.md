@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.6.0] - 2026-10-19
+
+Optimization round 2.
+
+- Freshness `status` reports `changed_inputs` and `changed_outputs` when stale, and `--summary` adds their counts. Update reads only the changed inputs on a rerun.
+- `scripts/manual_impact.py` lists the affected modules, pages and audiences from the changed inputs and the manual's evidence paths. It runs when `User-Manual/manual.yml` sets `lifecycle.impact_scope: evidence`; the default `all` keeps today's behaviour.
+- Vendors dev-tools 1.2.0: `build_manual.py --all` builds every configured audience and language in one call, and Update, Release and both CI workflows use it.
+- Diagrams use Illustrate's type index. The commands are trimmed to the scripts they call. One description per command; the unused `agents/openai.yaml` files are removed.
+
 ## [1.5.4] - 2026-10-19
 
 - Vendors dev-tools 1.1.3: the preview workflow skips fork pull requests when the project's linux

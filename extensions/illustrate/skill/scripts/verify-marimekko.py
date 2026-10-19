@@ -79,7 +79,7 @@ WHAT THIS DOES NOT CHECK, deliberately:
   the same factor everywhere is self-consistent and passes. The source line is
   where the unit and the period are stated to a reader, and prose is not parsed.
 - **The column and series budgets.** 3-8 columns and 2-5 series are editorial
-  guidance in type-treemap.md, not geometry.
+  guidance in type-marimekko.md, not geometry.
 - **Colour.** The accent-plus-ramp rule is `lint-skin.py`'s beat; only the
   accent COUNT is read here, off the stroke, as verify-beeswarm.py does.
 - **Scenery.** A <rect> that declares no data-segment is decoration by

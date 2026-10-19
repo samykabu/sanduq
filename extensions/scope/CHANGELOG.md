@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.8.1] - 2026-10-19
+
+- The clarification diagram reference reads Illustrate's type index plus the chosen type reference instead of the whole Illustrate skill.
+
 ## [1.8.0] - 2026-10-18
 
 - `scope.py render-spec <issue> --analysis <file> --feature specs/<f> [--apply] [--force]` writes spec.md from an approved single-leaf analysis, starting with `<!-- sanduq-scope:rendered <sha256> -->`, so Workflow 1.13.0 can bind without a model pass (`SCOPE_RENDER_UNAPPROVED`, `SCOPE_RENDER_LEAF_REQUIRED`, `SCOPE_RENDER_EXISTS`). Analyses may list `uncertainty` items, rendered as `[NEEDS CLARIFICATION: ...]`.

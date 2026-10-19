@@ -1,0 +1,1201 @@
+{
+  "meta": {
+    "repo": "D:\\Projects\\Personal\\sanduq-round2",
+    "commit": "5deca65",
+    "measured_at": "2026-10-19T16:58:42.282382+00:00",
+    "extensions": [
+      "assure",
+      "user-manual",
+      "pr",
+      "project",
+      "illustrate",
+      "memory",
+      "progress"
+    ]
+  },
+  "extensions": {
+    "assure": {
+      "version": "2.4.0",
+      "catalog_entries": 3,
+      "catalog_chars": 427,
+      "hooks": [
+        "after_implement",
+        "after_tasks",
+        "before_implement"
+      ],
+      "events": [],
+      "commands": {
+        "speckit.assure.init": {
+          "bytes": 1483,
+          "words": 199,
+          "prohibitions": 1,
+          "prohibitions_per_100_words": 0.5,
+          "script_calls": 2,
+          "prose_steps": 5,
+          "linked": {
+            "extensions/assure/skills/assure/SKILL.ext.md": 1974
+          },
+          "scripts": {},
+          "missing": [
+            ".specify/extensions.yml",
+            ".specify/extensions/assure/assure-config.yml"
+          ],
+          "instruction_bytes": 3457,
+          "description": {
+            "text": "Sets whether QA analysis and the QA manual are lifecycle gates or manual steps. Use when setting up Assure or asked to \"make QA mandatory\".",
+            "chars": 139,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        },
+        "speckit.assure.analyze": {
+          "bytes": 5909,
+          "words": 858,
+          "prohibitions": 8,
+          "prohibitions_per_100_words": 0.93,
+          "script_calls": 3,
+          "prose_steps": 0,
+          "linked": {
+            "extensions/assure/skills/assure/SKILL.ext.md": 1974,
+            "extensions/illustrate/skill/references/type-index.md": 6530
+          },
+          "scripts": {},
+          "missing": [
+            "SKILL.md",
+            "data-model.md",
+            "plan.md",
+            "quickstart.md",
+            "references/analysis.md",
+            "research.md",
+            "spec.md",
+            "tasks.md"
+          ],
+          "instruction_bytes": 14413,
+          "description": {
+            "text": "Adds missing E2E, screenshot, API sample, diagram and accessibility tasks to tasks.md. Use when asked to \"check QA readiness\" before implementation.",
+            "chars": 148,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        },
+        "speckit.assure.document": {
+          "bytes": 9458,
+          "words": 1268,
+          "prohibitions": 7,
+          "prohibitions_per_100_words": 0.55,
+          "script_calls": 5,
+          "prose_steps": 6,
+          "linked": {
+            "extensions/assure/skills/assure/SKILL.ext.md": 1974,
+            "extensions/illustrate/skill/references/type-index.md": 6530
+          },
+          "scripts": {},
+          "missing": [
+            ".github/memory/project-memory.md",
+            "SKILL.md",
+            "data-model.md",
+            "plan.md",
+            "quickstart.md",
+            "references/documentation.md",
+            "references/export.md",
+            "research.md",
+            "scripts/export_diagram.py",
+            "spec.md",
+            "tasks.md"
+          ],
+          "instruction_bytes": 17962,
+          "description": {
+            "text": "Generates or refreshes the development-only QA test manual from real evidence. Use when asked to \"write the QA manual\" after the tests pass.",
+            "chars": 140,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        }
+      },
+      "skills": {
+        "extensions/assure/skills/assure/SKILL.ext.md": {
+          "bytes": 1974,
+          "words": 258,
+          "prohibitions": 4,
+          "prohibitions_per_100_words": 1.55,
+          "script_calls": 0,
+          "prose_steps": 7,
+          "linked": {
+            "extensions/assure/skills/assure/references/analysis.md": 2499,
+            "extensions/assure/skills/assure/references/documentation.md": 759
+          },
+          "scripts": {
+            "extensions/assure/scripts/assure_state.py": 4011
+          },
+          "missing": [
+            ".specify/feature.json",
+            "assure-config.yml",
+            "tasks.md"
+          ],
+          "instruction_bytes": 5232,
+          "references": 2,
+          "references_bytes": 3258
+        }
+      },
+      "totals": {
+        "instruction_bytes": 28612,
+        "instruction_tokens": 7153,
+        "words": 3720,
+        "prohibitions": 23,
+        "prohibitions_per_100_words": 0.62,
+        "script_calls": 10,
+        "prose_steps": 18,
+        "descriptions_failing": 0,
+        "files": 7
+      }
+    },
+    "user-manual": {
+      "version": "1.6.0",
+      "catalog_entries": 4,
+      "catalog_chars": 532,
+      "hooks": [
+        "after_implement",
+        "after_tasks"
+      ],
+      "events": [],
+      "commands": {
+        "speckit.user-manual.init": {
+          "bytes": 2424,
+          "words": 295,
+          "prohibitions": 4,
+          "prohibitions_per_100_words": 1.36,
+          "script_calls": 1,
+          "prose_steps": 9,
+          "linked": {
+            "extensions/user-manual/skills/user-manual/SKILL.ext.md": 2384,
+            "extensions/user-manual/skills/preview-publishing/SKILL.ext.md": 1423
+          },
+          "scripts": {},
+          "missing": [
+            "audit_manual.py",
+            "init_manual.py",
+            "manual.yml",
+            "references/discovery.md"
+          ],
+          "instruction_bytes": 6231,
+          "description": {
+            "text": "Discovers the app, proposes a module map and scaffolds the audience-aware User Manual. Use when asked to 'create a user manual'.",
+            "chars": 128,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        },
+        "speckit.user-manual.analyze": {
+          "bytes": 2588,
+          "words": 311,
+          "prohibitions": 3,
+          "prohibitions_per_100_words": 0.96,
+          "script_calls": 2,
+          "prose_steps": 8,
+          "linked": {
+            "extensions/illustrate/skill/references/type-index.md": 6530,
+            "extensions/user-manual/skills/user-manual/SKILL.ext.md": 2384,
+            "extensions/user-manual/skills/api-docs/SKILL.ext.md": 1195,
+            "extensions/user-manual/skills/release-docs/SKILL.ext.md": 946,
+            "extensions/user-manual/skills/ui-screenshots/SKILL.ext.md": 1128
+          },
+          "scripts": {},
+          "missing": [
+            ".specify/feature.json",
+            "SKILL.md",
+            "User-Manual/manual.yml",
+            "references/incremental-update.md",
+            "tasks.md"
+          ],
+          "instruction_bytes": 14771,
+          "description": {
+            "text": "Adds the feature's User Manual content and asset tasks to tasks.md. Use before implementation or when asked to 'add manual tasks'.",
+            "chars": 130,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        },
+        "speckit.user-manual.update": {
+          "bytes": 3921,
+          "words": 450,
+          "prohibitions": 2,
+          "prohibitions_per_100_words": 0.44,
+          "script_calls": 6,
+          "prose_steps": 10,
+          "linked": {
+            "extensions/illustrate/skill/references/type-index.md": 6530,
+            "extensions/user-manual/skills/user-manual/SKILL.ext.md": 2384,
+            "extensions/user-manual/skills/preview-publishing/SKILL.ext.md": 1423
+          },
+          "scripts": {},
+          "missing": [
+            "SKILL.md",
+            "User-Manual/.state/coverage.json",
+            "User-Manual/manual.yml",
+            "manual.yml",
+            "manual_impact.py"
+          ],
+          "instruction_bytes": 14258,
+          "description": {
+            "text": "Updates the User Manual modules a feature affects, audits them and builds a private preview. Use when asked to 'update the manual'.",
+            "chars": 131,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        },
+        "speckit.user-manual.release": {
+          "bytes": 1582,
+          "words": 191,
+          "prohibitions": 4,
+          "prohibitions_per_100_words": 2.09,
+          "script_calls": 2,
+          "prose_steps": 7,
+          "linked": {
+            "extensions/user-manual/skills/release-docs/SKILL.ext.md": 946,
+            "extensions/user-manual/skills/user-manual/SKILL.ext.md": 2384
+          },
+          "scripts": {},
+          "missing": [
+            "build_manual.py"
+          ],
+          "instruction_bytes": 4912,
+          "description": {
+            "text": "Builds versioned User Manual release notes, migration guides, HTML and PDFs. Use when asked to 'release the manual', never on a feature branch.",
+            "chars": 143,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        }
+      },
+      "skills": {
+        "extensions/user-manual/skills/api-docs/SKILL.ext.md": {
+          "bytes": 1195,
+          "words": 152,
+          "prohibitions": 1,
+          "prohibitions_per_100_words": 0.66,
+          "script_calls": 0,
+          "prose_steps": 6,
+          "linked": {
+            "extensions/user-manual/skills/api-docs/references/openapi.md": 753
+          },
+          "scripts": {},
+          "missing": [],
+          "instruction_bytes": 1948,
+          "references": 1,
+          "references_bytes": 753
+        },
+        "extensions/user-manual/skills/preview-publishing/SKILL.ext.md": {
+          "bytes": 1423,
+          "words": 183,
+          "prohibitions": 2,
+          "prohibitions_per_100_words": 1.09,
+          "script_calls": 0,
+          "prose_steps": 7,
+          "linked": {
+            "extensions/user-manual/skills/preview-publishing/references/provider-contract.md": 1018
+          },
+          "scripts": {},
+          "missing": [
+            "User-Manual/manual.yml"
+          ],
+          "instruction_bytes": 2441,
+          "references": 1,
+          "references_bytes": 1018
+        },
+        "extensions/user-manual/skills/release-docs/SKILL.ext.md": {
+          "bytes": 946,
+          "words": 107,
+          "prohibitions": 1,
+          "prohibitions_per_100_words": 0.93,
+          "script_calls": 0,
+          "prose_steps": 0,
+          "linked": {
+            "extensions/user-manual/skills/release-docs/references/migration-guides.md": 591,
+            "extensions/user-manual/skills/release-docs/references/release-notes.md": 318
+          },
+          "scripts": {},
+          "missing": [],
+          "instruction_bytes": 1855,
+          "references": 2,
+          "references_bytes": 909
+        },
+        "extensions/user-manual/skills/ui-screenshots/SKILL.ext.md": {
+          "bytes": 1128,
+          "words": 147,
+          "prohibitions": 1,
+          "prohibitions_per_100_words": 0.68,
+          "script_calls": 0,
+          "prose_steps": 0,
+          "linked": {
+            "extensions/user-manual/skills/ui-screenshots/references/capture-matrix.md": 759
+          },
+          "scripts": {},
+          "missing": [],
+          "instruction_bytes": 1887,
+          "references": 1,
+          "references_bytes": 759
+        },
+        "extensions/user-manual/skills/user-manual/SKILL.ext.md": {
+          "bytes": 2384,
+          "words": 273,
+          "prohibitions": 2,
+          "prohibitions_per_100_words": 0.73,
+          "script_calls": 0,
+          "prose_steps": 8,
+          "linked": {
+            "extensions/user-manual/skills/api-docs/SKILL.ext.md": 1195,
+            "extensions/user-manual/skills/preview-publishing/SKILL.ext.md": 1423,
+            "extensions/user-manual/skills/release-docs/SKILL.ext.md": 946,
+            "extensions/user-manual/skills/ui-screenshots/SKILL.ext.md": 1128,
+            "extensions/user-manual/skills/user-manual/references/audience-language.md": 1114,
+            "extensions/user-manual/skills/user-manual/references/content-model.md": 890,
+            "extensions/user-manual/skills/user-manual/references/data-reference.md": 924,
+            "extensions/user-manual/skills/user-manual/references/discovery.md": 811,
+            "extensions/user-manual/skills/user-manual/references/incremental-update.md": 729,
+            "extensions/user-manual/skills/user-manual/references/publishing.md": 1913
+          },
+          "scripts": {},
+          "missing": [
+            "User-Manual/manual.yml"
+          ],
+          "instruction_bytes": 13457,
+          "references": 6,
+          "references_bytes": 6381
+        }
+      },
+      "totals": {
+        "instruction_bytes": 33941,
+        "instruction_tokens": 8485,
+        "words": 4106,
+        "prohibitions": 26,
+        "prohibitions_per_100_words": 0.63,
+        "script_calls": 11,
+        "prose_steps": 55,
+        "descriptions_failing": 0,
+        "files": 21
+      }
+    },
+    "pr": {
+      "version": "4.3.0",
+      "catalog_entries": 2,
+      "catalog_chars": 276,
+      "hooks": [
+        "after_implement"
+      ],
+      "events": [],
+      "commands": {
+        "speckit.pr.generate": {
+          "bytes": 11058,
+          "words": 1575,
+          "prohibitions": 15,
+          "prohibitions_per_100_words": 0.95,
+          "script_calls": 10,
+          "prose_steps": 19,
+          "linked": {
+            "extensions/pr/references/pr-diagram-recipe.md": 1694,
+            "extensions/pr/references/pr-image-embedding.md": 3507,
+            "extensions/pr/CHANGELOG.md": 7381
+          },
+          "scripts": {},
+          "missing": [
+            ".specify/extensions/assure/assure-config.yml",
+            ".specify/feature.json",
+            ".specify/workflow.yml",
+            "SKILL.md",
+            "User-Manual/manual.yml",
+            "data-model.md",
+            "execution_tools.py",
+            "export.md",
+            "plan.md",
+            "pr-body.lint.json",
+            "progress.yml",
+            "quickstart.md",
+            "research.md",
+            "scope-source.json"
+          ],
+          "instruction_bytes": 23640,
+          "description": {
+            "text": "Generates the feature CHANGELOG and details doc, then opens or updates the pull request; never merges. Use when asked to 'open the PR'.",
+            "chars": 135,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        },
+        "speckit.pr.review-feedback": {
+          "bytes": 5518,
+          "words": 790,
+          "prohibitions": 3,
+          "prohibitions_per_100_words": 0.38,
+          "script_calls": 11,
+          "prose_steps": 14,
+          "linked": {},
+          "scripts": {},
+          "missing": [],
+          "instruction_bytes": 5518,
+          "description": {
+            "text": "Fixes or answers unresolved PR review comments after approval, then pushes and resolves threads. Use when asked to 'address review comments'.",
+            "chars": 141,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        }
+      },
+      "skills": {},
+      "totals": {
+        "instruction_bytes": 29158,
+        "instruction_tokens": 7289,
+        "words": 4065,
+        "prohibitions": 28,
+        "prohibitions_per_100_words": 0.69,
+        "script_calls": 27,
+        "prose_steps": 38,
+        "descriptions_failing": 0,
+        "files": 5
+      }
+    },
+    "project": {
+      "version": "2.3.0",
+      "catalog_entries": 2,
+      "catalog_chars": 280,
+      "hooks": [
+        "after_analyze",
+        "after_implement",
+        "after_plan",
+        "after_specify",
+        "after_tasks",
+        "before_implement"
+      ],
+      "events": [],
+      "commands": {
+        "speckit.project.init": {
+          "bytes": 2279,
+          "words": 283,
+          "prohibitions": 1,
+          "prohibitions_per_100_words": 0.35,
+          "script_calls": 4,
+          "prose_steps": 5,
+          "linked": {},
+          "scripts": {},
+          "missing": [
+            ".specify/extensions.yml",
+            ".specify/extensions/project/config.json",
+            "config.json"
+          ],
+          "instruction_bytes": 2279,
+          "description": {
+            "text": "Sets up GitHub Project sync once per repository, mapping lifecycle phases to Status columns. Use when asked to 'connect the project board'.",
+            "chars": 139,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        },
+        "speckit.project.sync": {
+          "bytes": 1323,
+          "words": 212,
+          "prohibitions": 1,
+          "prohibitions_per_100_words": 0.47,
+          "script_calls": 2,
+          "prose_steps": 3,
+          "linked": {},
+          "scripts": {},
+          "missing": [
+            "config.json"
+          ],
+          "instruction_bytes": 1323,
+          "description": {
+            "text": "Moves the feature issue to a lifecycle phase on the GitHub Project and creates or closes task sub-issues. Use when asked to 'sync the board'.",
+            "chars": 141,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        }
+      },
+      "skills": {},
+      "totals": {
+        "instruction_bytes": 3602,
+        "instruction_tokens": 900,
+        "words": 495,
+        "prohibitions": 2,
+        "prohibitions_per_100_words": 0.4,
+        "script_calls": 6,
+        "prose_steps": 8,
+        "descriptions_failing": 0,
+        "files": 2
+      }
+    },
+    "illustrate": {
+      "version": "2.5.0",
+      "catalog_entries": 4,
+      "catalog_chars": 549,
+      "hooks": [],
+      "events": [
+        "post_tool_use"
+      ],
+      "commands": {
+        "speckit.illustrate.generate": {
+          "bytes": 1526,
+          "words": 205,
+          "prohibitions": 1,
+          "prohibitions_per_100_words": 0.49,
+          "script_calls": 0,
+          "prose_steps": 5,
+          "linked": {
+            ".github/illustration-theme.yml": 107,
+            "extensions/illustrate/skill/SKILL.md": 11730
+          },
+          "scripts": {},
+          "missing": [
+            "references/export.md",
+            "references/type-index.md",
+            "scripts/export_diagram.py",
+            "scripts/illustration_theme.py"
+          ],
+          "instruction_bytes": 13363,
+          "description": {
+            "text": "Draws 44 diagram and chart types (architecture, sequence, ER, Gantt) as themed HTML with inline SVG. Use when asked to \"draw a diagram\".",
+            "chars": 136,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        },
+        "speckit.illustrate.export": {
+          "bytes": 1506,
+          "words": 205,
+          "prohibitions": 3,
+          "prohibitions_per_100_words": 1.46,
+          "script_calls": 0,
+          "prose_steps": 6,
+          "linked": {
+            "extensions/illustrate/skill/references/export.md": 10180
+          },
+          "scripts": {
+            "extensions/illustrate/skill/scripts/export_diagram.py": 17236
+          },
+          "missing": [],
+          "instruction_bytes": 11686,
+          "description": {
+            "text": "Exports an Illustrate diagram to SVG, transparent PNG, animated SVG or GIF; the HTML stays the source. Use when asked to \"export the diagram\".",
+            "chars": 142,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        },
+        "speckit.illustrate.theme": {
+          "bytes": 920,
+          "words": 118,
+          "prohibitions": 0,
+          "prohibitions_per_100_words": 0.0,
+          "script_calls": 0,
+          "prose_steps": 5,
+          "linked": {
+            ".github/illustration-theme.yml": 107,
+            "extensions/illustrate/skill/references/theme-initialization.md": 7990
+          },
+          "scripts": {
+            "extensions/illustrate/skill/scripts/illustration_theme.py": 32453
+          },
+          "missing": [],
+          "instruction_bytes": 9017,
+          "description": {
+            "text": "Initializes, selects, validates or creates the project Illustrate color and font theme. Use when asked to \"set the diagram theme\".",
+            "chars": 130,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        },
+        "speckit.illustrate.import": {
+          "bytes": 2204,
+          "words": 259,
+          "prohibitions": 6,
+          "prohibitions_per_100_words": 2.32,
+          "script_calls": 0,
+          "prose_steps": 8,
+          "linked": {
+            "extensions/illustrate/skill/references/import-drawio.md": 13896,
+            "extensions/illustrate/skill/references/import-excalidraw.md": 11337,
+            "extensions/illustrate/skill/references/import-mermaid.md": 9990,
+            "extensions/illustrate/skill/references/output-spec.md": 15724,
+            "extensions/illustrate/skill/references/theme-initialization.md": 7990
+          },
+          "scripts": {
+            "extensions/illustrate/skill/scripts/illustration_theme.py": 32453
+          },
+          "missing": [
+            ".excalidraw.json",
+            "drawio_extract.py",
+            "excalidraw_extract.py",
+            "illustration_theme.py",
+            "mermaid_extract.py"
+          ],
+          "instruction_bytes": 61141,
+          "description": {
+            "text": "Redraws a draw.io, Mermaid or Excalidraw file as a themed Illustrate diagram with a fidelity ledger. Use when asked to \"import this .drawio\".",
+            "chars": 141,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        }
+      },
+      "skills": {
+        "extensions/illustrate/skill/SKILL.md": {
+          "bytes": 11730,
+          "words": 1480,
+          "prohibitions": 10,
+          "prohibitions_per_100_words": 0.68,
+          "script_calls": 4,
+          "prose_steps": 15,
+          "linked": {
+            ".github/illustration-theme.yml": 107,
+            "extensions/illustrate/skill/references/animation.md": 13418,
+            "extensions/illustrate/skill/references/export-registry.md": 6599,
+            "extensions/illustrate/skill/references/export.md": 10180,
+            "extensions/illustrate/skill/references/import-drawio.md": 13896,
+            "extensions/illustrate/skill/references/import-excalidraw.md": 11337,
+            "extensions/illustrate/skill/references/import-mermaid.md": 9990,
+            "extensions/illustrate/skill/references/layout-budget.md": 4647,
+            "extensions/illustrate/skill/references/onboarding.md": 10735,
+            "extensions/illustrate/skill/references/output-spec.md": 15724,
+            "extensions/illustrate/skill/references/primitive-annotation.md": 1708,
+            "extensions/illustrate/skill/references/primitive-icons.md": 81851,
+            "extensions/illustrate/skill/references/primitive-sketchy.md": 3059,
+            "extensions/illustrate/skill/references/primitive-terminal.md": 3911,
+            "extensions/illustrate/skill/references/primitives-core.md": 13739,
+            "extensions/illustrate/skill/references/semantic-patterns.md": 17343,
+            "extensions/illustrate/skill/references/style-guide.md": 9123,
+            "extensions/illustrate/skill/references/taste-gate.md": 5864,
+            "extensions/illustrate/skill/references/technical-color-architecture.md": 12160,
+            "extensions/illustrate/skill/references/technical-color-process-flow.md": 21669,
+            "extensions/illustrate/skill/references/theme-initialization.md": 7990,
+            "extensions/illustrate/skill/references/type-index.md": 6530,
+            "extensions/illustrate/skill/references/variants.md": 2397
+          },
+          "scripts": {
+            "extensions/illustrate/skill/scripts/drawio_extract.py": 32093,
+            "extensions/illustrate/skill/scripts/excalidraw_extract.py": 25932,
+            "extensions/illustrate/skill/scripts/mermaid_extract.py": 51576
+          },
+          "missing": [
+            "illustration_theme.py",
+            "self_check.py",
+            "verify-arrow-ends.py",
+            "verify-geometry.py",
+            "verify-motion.py"
+          ],
+          "instruction_bytes": 295707,
+          "references": 74,
+          "references_bytes": 726423
+        }
+      },
+      "totals": {
+        "instruction_bytes": 301863,
+        "instruction_tokens": 75465,
+        "words": 39315,
+        "prohibitions": 180,
+        "prohibitions_per_100_words": 0.46,
+        "script_calls": 53,
+        "prose_steps": 170,
+        "descriptions_failing": 0,
+        "files": 28
+      }
+    },
+    "memory": {
+      "version": "2.3.0",
+      "catalog_entries": 7,
+      "catalog_chars": 983,
+      "hooks": [
+        "after_implement",
+        "before_analyze",
+        "before_specify"
+      ],
+      "events": [],
+      "commands": {
+        "speckit.memory.init": {
+          "bytes": 1715,
+          "words": 216,
+          "prohibitions": 2,
+          "prohibitions_per_100_words": 0.93,
+          "script_calls": 0,
+          "prose_steps": 0,
+          "linked": {},
+          "scripts": {},
+          "missing": [
+            ".specify/memory-policy.json"
+          ],
+          "instruction_bytes": 1715,
+          "description": {
+            "text": "Configures Sanduq Memory hooks, checks, wrappers and guards without enabling automatic archiving. Use when asked to \"set up project memory\".",
+            "chars": 140,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        },
+        "speckit.memory.prepare": {
+          "bytes": 1723,
+          "words": 226,
+          "prohibitions": 4,
+          "prohibitions_per_100_words": 1.77,
+          "script_calls": 1,
+          "prose_steps": 6,
+          "linked": {},
+          "scripts": {},
+          "missing": [],
+          "instruction_bytes": 1723,
+          "description": {
+            "text": "Queues an implemented feature for archival after merge without deleting it (after_implement hook). Use when asked to \"queue it for archival\".",
+            "chars": 141,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        },
+        "speckit.memory.run": {
+          "bytes": 4620,
+          "words": 618,
+          "prohibitions": 11,
+          "prohibitions_per_100_words": 1.78,
+          "script_calls": 1,
+          "prose_steps": 10,
+          "linked": {
+            "extensions/memory/references/candidate-v2.md": 6854,
+            "extensions/memory/references/large-runs.md": 3219,
+            "extensions/memory/references/recovery.md": 2145,
+            "extensions/memory/references/review-and-publish.md": 2749,
+            "extensions/memory/references/verification-override.md": 2008
+          },
+          "scripts": {},
+          "missing": [
+            ".specify/memory-policy.json",
+            "candidate.json",
+            "specs/memory/INDEX.md"
+          ],
+          "instruction_bytes": 21595,
+          "description": {
+            "text": "Archives verified features into project memory via a checkpoint, a reviewed delta and a scoped commit. Use when asked to \"archive the feature\".",
+            "chars": 143,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        },
+        "speckit.memory.session": {
+          "bytes": 2176,
+          "words": 305,
+          "prohibitions": 6,
+          "prohibitions_per_100_words": 1.97,
+          "script_calls": 1,
+          "prose_steps": 0,
+          "linked": {
+            "extensions/memory/references/recovery.md": 2145
+          },
+          "scripts": {},
+          "missing": [
+            "archive.py"
+          ],
+          "instruction_bytes": 4321,
+          "description": {
+            "text": "Processes pending merged archives at session start and resumes an interrupted run (before_specify hook). Use when asked to \"process archives\".",
+            "chars": 142,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        },
+        "speckit.memory.enable": {
+          "bytes": 1252,
+          "words": 170,
+          "prohibitions": 1,
+          "prohibitions_per_100_words": 0.59,
+          "script_calls": 2,
+          "prose_steps": 0,
+          "linked": {},
+          "scripts": {},
+          "missing": [
+            "archive.py"
+          ],
+          "instruction_bytes": 1252,
+          "description": {
+            "text": "Reviews the archive policy with the owner and records its approval so archives run automatically. Use when asked to \"enable auto-archiving\".",
+            "chars": 140,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        },
+        "speckit.memory.impact": {
+          "bytes": 2573,
+          "words": 377,
+          "prohibitions": 3,
+          "prohibitions_per_100_words": 0.8,
+          "script_calls": 2,
+          "prose_steps": 4,
+          "linked": {},
+          "scripts": {},
+          "missing": [
+            ".github/memory/project-memory.md",
+            "specs/memory/INDEX.md",
+            "specs/project-memory.md"
+          ],
+          "instruction_bytes": 2573,
+          "description": {
+            "text": "Consults product memory for the capabilities a change touches, in a token budget (before_analyze hook). Use when asked to \"consult memory\".",
+            "chars": 139,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        },
+        "speckit.memory.status": {
+          "bytes": 691,
+          "words": 90,
+          "prohibitions": 1,
+          "prohibitions_per_100_words": 1.11,
+          "script_calls": 1,
+          "prose_steps": 0,
+          "linked": {
+            "extensions/memory/references/recovery.md": 2145
+          },
+          "scripts": {},
+          "missing": [],
+          "instruction_bytes": 2836,
+          "description": {
+            "text": "Reports policy approval, pending or blocked features, the archive phase and the next command. Use when asked \"what is the archive status\".",
+            "chars": 138,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        }
+      },
+      "skills": {},
+      "totals": {
+        "instruction_bytes": 31725,
+        "instruction_tokens": 7931,
+        "words": 4282,
+        "prohibitions": 50,
+        "prohibitions_per_100_words": 1.17,
+        "script_calls": 11,
+        "prose_steps": 27,
+        "descriptions_failing": 0,
+        "files": 12
+      }
+    },
+    "progress": {
+      "version": "1.3.0",
+      "catalog_entries": 5,
+      "catalog_chars": 678,
+      "hooks": [
+        "after_implement",
+        "after_tasks"
+      ],
+      "events": [
+        "post_tool_use",
+        "pre_tool_use",
+        "session_end",
+        "session_start",
+        "stop"
+      ],
+      "commands": {
+        "speckit.progress.init": {
+          "bytes": 496,
+          "words": 68,
+          "prohibitions": 1,
+          "prohibitions_per_100_words": 1.47,
+          "script_calls": 1,
+          "prose_steps": 0,
+          "linked": {
+            "extensions/progress/skills/progress/SKILL.ext.md": 2154
+          },
+          "scripts": {},
+          "missing": [],
+          "instruction_bytes": 2650,
+          "description": {
+            "text": "Creates the live progress report for the active feature and can install the Claude status line. Use when asked to 'track progress'.",
+            "chars": 131,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        },
+        "speckit.progress.refresh": {
+          "bytes": 427,
+          "words": 58,
+          "prohibitions": 1,
+          "prohibitions_per_100_words": 1.72,
+          "script_calls": 1,
+          "prose_steps": 0,
+          "linked": {},
+          "scripts": {},
+          "missing": [],
+          "instruction_bytes": 427,
+          "description": {
+            "text": "Forces one progress snapshot now (hooks already refresh it); never marks the feature complete. Use when asked to 'refresh the progress report'.",
+            "chars": 143,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        },
+        "speckit.progress.status": {
+          "bytes": 355,
+          "words": 47,
+          "prohibitions": 0,
+          "prohibitions_per_100_words": 0.0,
+          "script_calls": 1,
+          "prose_steps": 0,
+          "linked": {},
+          "scripts": {},
+          "missing": [],
+          "instruction_bytes": 355,
+          "description": {
+            "text": "Prints the one-line progress state (stage, lanes, blockers, decisions), or JSON with --json. Use when asked to 'show progress status'.",
+            "chars": 134,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        },
+        "speckit.progress.theme": {
+          "bytes": 416,
+          "words": 56,
+          "prohibitions": 0,
+          "prohibitions_per_100_words": 0.0,
+          "script_calls": 1,
+          "prose_steps": 0,
+          "linked": {},
+          "scripts": {},
+          "missing": [],
+          "instruction_bytes": 416,
+          "description": {
+            "text": "Sets the progress report look from a preset, the Illustrate theme or a theme file, or shows it. Use when asked to 'change the report theme'.",
+            "chars": 140,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        },
+        "speckit.progress.export": {
+          "bytes": 344,
+          "words": 48,
+          "prohibitions": 0,
+          "prohibitions_per_100_words": 0.0,
+          "script_calls": 1,
+          "prose_steps": 0,
+          "linked": {},
+          "scripts": {},
+          "missing": [],
+          "instruction_bytes": 344,
+          "description": {
+            "text": "Writes the progress projection as deterministic Markdown or JSON at no model cost. Use when asked to 'export the progress report'.",
+            "chars": 130,
+            "under_1024": true,
+            "third_person": true,
+            "has_what": true,
+            "has_when": true,
+            "has_triggers": true,
+            "failing": []
+          },
+          "hook_only": false
+        }
+      },
+      "skills": {
+        "extensions/progress/skills/progress/SKILL.ext.md": {
+          "bytes": 2154,
+          "words": 360,
+          "prohibitions": 5,
+          "prohibitions_per_100_words": 1.39,
+          "script_calls": 1,
+          "prose_steps": 4,
+          "linked": {
+            "extensions/progress/skills/progress/references/verbs.md": 5003
+          },
+          "scripts": {},
+          "missing": [
+            "tasks.md"
+          ],
+          "instruction_bytes": 7157,
+          "references": 1,
+          "references_bytes": 5003
+        }
+      },
+      "totals": {
+        "instruction_bytes": 9195,
+        "instruction_tokens": 2298,
+        "words": 1387,
+        "prohibitions": 15,
+        "prohibitions_per_100_words": 1.08,
+        "script_calls": 6,
+        "prose_steps": 4,
+        "descriptions_failing": 0,
+        "files": 7
+      }
+    }
+  },
+  "duplicates": [
+    {
+      "text": "when generating a new diagram, keep these intact in the template: - the two cdn ",
+      "words": 131,
+      "files": [
+        "extensions/illustrate/skill/references/technical-color-architecture.md",
+        "extensions/illustrate/skill/references/technical-color-process-flow.md"
+      ]
+    },
+    {
+      "text": "every diagram ships with a single unobtrusive \u22ef toggle in the header. click it t",
+      "words": 91,
+      "files": [
+        "extensions/illustrate/skill/references/technical-color-architecture.md",
+        "extensions/illustrate/skill/references/technical-color-process-flow.md"
+      ]
+    },
+    {
+      "text": "caveats: clipboard api needs a user gesture and a secure context (https/file/loc",
+      "words": 36,
+      "files": [
+        "extensions/illustrate/skill/references/technical-color-architecture.md",
+        "extensions/illustrate/skill/references/technical-color-process-flow.md"
+      ]
+    },
+    {
+      "text": "set --format, --size, --detail, and --audience from [output-spec.md](output-spec",
+      "words": 36,
+      "files": [
+        "extensions/illustrate/skill/references/import-excalidraw.md",
+        "extensions/illustrate/skill/references/import-mermaid.md"
+      ]
+    }
+  ],
+  "totals": {
+    "instruction_bytes": 438096,
+    "instruction_tokens": 109521,
+    "words": 57370,
+    "prohibitions": 324,
+    "script_calls": 124,
+    "prose_steps": 320,
+    "descriptions_failing": 0,
+    "files": 82,
+    "prohibitions_per_100_words": 0.56,
+    "catalog_entries": 27,
+    "catalog_chars": 3725,
+    "duplicate_paragraphs": 4
+  }
+}

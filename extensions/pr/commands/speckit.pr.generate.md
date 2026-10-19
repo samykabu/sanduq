@@ -1,5 +1,5 @@
 ---
-description: "Generate the feature CHANGELOG + plain-English feature-details doc, then create or update the PR description with the feature details under a review heading."
+description: "Generates the feature CHANGELOG and details doc, then opens or updates the pull request; never merges. Use when asked to 'open the PR'."
 ---
 
 # Generate a Detailed PR
@@ -15,10 +15,8 @@ pull-request description:
 appears in its description under the heading **"What have been developed and how to review it"**.
 
 This command is **idempotent and context-aware**: run it as an `after_implement` hook or manually at
-PR time — it converges on the same result and never duplicates.
-
-- You can run it **before the PR exists**; it will generate the docs and create the PR by default.
-- You can run it **after the PR exists**; it will update the PR body with the latest feature-details content.
+PR time — it converges on the same result and never duplicates. Before the PR exists it generates
+the docs and creates the PR; after, it updates the PR body with the latest feature-details content.
 
 ## User Input
 
@@ -33,7 +31,7 @@ Optional flags the user may pass:
 
 ## Behavior Overview
 
-```
+```text
 resolve feature -> documentation preflights -> gather ground truth -> generate diagrams -> write docs -> handle PR -> report
 ```
 
@@ -41,33 +39,14 @@ resolve feature -> documentation preflights -> gather ground truth -> generate d
 
 ### 0. Ensure the Illustrate dependency
 
-Before resolving the feature, ensure the `illustrate` dependency declared in
-`.specify/extensions/pr/dependencies.yml` is installed, enabled, and within its declared SemVer
-range:
-
 ```text
 python .specify/extensions/pr/scripts/deps.py ensure illustrate
 ```
 
-The script performs the same checks this step used to spell out: it reads the installed-version
-registry, follows the project's `update_policy` (`prompt` default/`auto`/`manual`) without ever
-mutating dependencies under `prompt` without explicit approval, rate-limits the catalog freshness
-probe by `check_interval_hours`, and records the check. It prints one line and exits non-zero only
-when the dependency is missing or incompatible and cannot be brought into range under the current
-policy.
-
-- Exit `0`: the dependency is ready. Do **not** load `.specify/extensions/illustrate/skill/SKILL.md`
-  yet — defer that to step 4, and only when a diagram is actually going to be generated there; this
-  direct resource path works in the current run even if the agent only discovers newly registered
-  skills in a new conversation. If the one-line result also names a "newer compatible release
-  available", pass that note on to the user — it did not block this run.
-- Non-zero exit: report the script's one-line result verbatim, continue the non-diagram work,
-  explicitly skip diagram generation, and do not silently use another diagram system. If the result
-  names a `specify extension add/update illustrate` recipe, surface it to the user; if they approve,
-  re-run `python .specify/extensions/pr/scripts/deps.py ensure illustrate --approve` (under a
-  `manual` policy, the user runs the printed `specify extension …` command themselves instead, then
-  this command can simply be re-run).
-
+Exit 0: continue (pass on a "newer compatible release available" note if printed). Nonzero: report
+the printed line verbatim, continue the non-diagram work and skip diagram generation; if the line
+names a `specify extension add/update illustrate` recipe and the user approves, re-run with
+`--approve` and then this command.
 
 ### 1. Resolve the active feature
 
@@ -79,19 +58,9 @@ policy.
 
 ### 2. Enforce project-selected documentation preflights
 
-When `.specify/workflow.yml` exists, parse and validate it with the workflow runtime.
-Its explicit `processes.qa` and `processes.user_manual` selections govern the two
-preflights below. Installation alone does not enable either process. A selected
-but unavailable dependency blocks Finalize; an unselected process is reported as
-not selected, never as passed. Preserve legacy behavior below for unmanaged projects.
-Use the explicit checkpoint feature binding in managed mode; never choose the most
-recently modified spec. Run the workflow CI gate for that feature before PR creation.
-The managed dispatcher runs missing domain stages and retains their receipts; do not
-silently repair documentation without updating the workflow evidence.
-
-
 Skip this section only when `--no-pr` was supplied. Run it before writing PR documentation or
-creating/updating the PR.
+creating/updating the PR. When `.specify/workflow.yml` exists, its `processes.qa` and
+`processes.user_manual` selections govern the two preflights; installation alone enables neither.
 
 #### QA
 
@@ -120,85 +89,46 @@ from this command; enforce them only when the project has installed/configured t
 
 ### 3. Gather ground truth (never invent)
 
-Read whatever exists for the feature so all generated content traces to real artifacts:
+Seed the technical record from facts first:
 
-- `<feature_dir>/spec.md` (user stories, requirements, acceptance scenarios, edge cases, scope, assumptions, open questions)
-- `<feature_dir>/plan.md`, `data-model.md`, `tasks.md`, `quickstart.md`, `research.md`, `contracts/*`
-- Any existing `<feature_dir>/CHANGELOG.md` or `progress.yml` (reuse delivery facts: tests, coverage, commits, issue/PR numbers)
-- `git log` for the branch (commit subjects, scope)
+```text
+python .specify/extensions/pr/scripts/pr_changelog.py --feature <feature-dir>
+```
 
-If something is unknown, **omit it** — do not fabricate test counts, coverage, issue numbers, or behavior.
+It writes `docs/<feature-slug>/CHANGELOG.md` with the header (spec, branch, issue, PR), the commit
+subjects, the checked tasks by phase, `progress.yml` entries, stage receipts and evidence files
+inside a marked block; a rerun regenerates only that block. Then read `<feature_dir>/spec.md`,
+`plan.md`, `data-model.md`, `quickstart.md`, `research.md` and `contracts/*` for the narrative. If
+something is unknown, **omit it** — do not fabricate test counts, coverage, issue numbers, or behavior.
 
 ### 4. Select and generate useful Illustrate assets
 
 Decide first, from the gathered evidence, whether any visual would teach the reviewer more than
-prose or a table. Only if step 0 confirmed `illustrate` is ready and at least one diagram looks
-warranted, load `.specify/extensions/illustrate/skill/SKILL.md` now (resolve its references/assets
-relative to that skill directory) and use its selection guide to decide among the types below. If no
-diagram is warranted, skip loading the skill entirely — it is not needed to write the two documents.
-Choose only types supported by the evidence:
+prose or a table. If none is warranted, skip this step; if step 0 failed, skip it and say so. Otherwise
+load `.specify/extensions/pr/references/pr-diagram-recipe.md` and follow it: it names the type index
+to choose from, the one `type-*.md` to load per diagram, the output paths, the export command and the
+complexity budget. Do not load the whole Illustrate `SKILL.md` or `export.md` here.
 
-- **Architecture** for components, boundaries, integrations, infrastructure, security zones, or
-  deployment topology.
-- **Flowchart** for branching validation or decision logic.
-- **Sequence** for time-ordered messages between users, services, jobs, or external systems.
-- **State machine** for lifecycle states, transitions, guards, or status behavior.
-- **ER/data model** for entities, important fields, and relationships.
-- **Timeline** for releases, migrations, events, or phased behavior over time.
-- **Swimlane** for cross-functional processes and ownership handoffs.
-- **Quadrant** for two-axis prioritization or positioning grounded in feature decisions.
-- **Nested** for containment, scope, tenancy, or boundary hierarchy.
-- **Tree** for parent-child relationships or branching hierarchy.
-- **Org chart** for human/agent/team ownership, routing, reporting, or escalation.
-- **Layer stack** for abstraction levels or ordered platform layers.
-- **Venn** for meaningful overlap between no more than three sets.
-- **Pyramid/funnel** for ranked hierarchy, maturity, or conversion/drop-off.
-- **Radar/spider** for comparing entities across three to five quantitative criteria.
-- **Loop/flywheel** for reinforcing cycles around shared accumulated state.
-- **Bar** for categorical quantitative comparison; **line** for continuous trends; **scatter** for
-  distribution/correlation; **Gantt** for scheduled tasks and phases.
-- **High-level** for an end-to-end platform or data stack on a cluster.
-- **IT current-state** for a legacy landscape grouped by phase or department.
-- **Process** for multi-actor sequential work with data handoffs.
-- **Medallion** for tiered data storage, quality levels, and access policy.
-- **Data flow** for role-scoped pipeline steps; **DP integration** for source-to-core-to-consumer
-  topology; **DP security matrix** for per-role or per-component access permissions.
-
-For each applicable diagram:
-
-1. Load the matching `.specify/extensions/illustrate/skill/references/type-*.md` and generate
-   the source HTML using the selected Illustrate template/variant.
-2. Write source files under `docs/<feature-slug>/assets/diagrams/`, using names such as
-   `<feature-slug>-architecture.html`, `<feature-slug>-sequence.html`, or
-   `<feature-slug>-state-machine.html`.
-3. Export a PNG beside each HTML file with the installed Illustrate
-   `.specify/extensions/illustrate/skill/scripts/export_diagram.py` utility and
-   `.specify/extensions/illustrate/skill/references/export.md` contract. Resolve
-   these from the project root, not from the PR extension directory.
-4. Embed the PNG in `<Feature>-Explained.md` and link to the HTML source for inspection/export.
-5. Follow the skill's complexity budget and split an overloaded diagram into overview/detail assets.
-6. If no supported visual materially improves comprehension, omit diagrams. Do not invent one.
-7. If PNG export is unavailable, keep the HTML source, add a clear "PNG export pending" note in the
-   doc, and report the follow-up. Do not embed a broken image.
-8. **Mandatory inline visuals, including private repositories.** If this PR has any reviewer-facing
-   diagram or screenshot (from this step or from an installed QA/User Manual extension), load
-   `.specify/extensions/pr/references/pr-image-embedding.md` now — before writing or updating the PR
-   body in step 6 — and follow it exactly. If the PR has no visuals at all, skip loading it.
+Then: embed each PNG in `<Feature>-Explained.md` and link its HTML source; if PNG export is
+unavailable, keep the HTML, add a "PNG export pending" note and report the follow-up, never a broken
+image. **If this PR has any reviewer-facing diagram or screenshot** (from this step or from an
+installed QA/User Manual extension), load `.specify/extensions/pr/references/pr-image-embedding.md`
+before step 6 and follow it exactly; with no visuals, skip it.
 
 ### 5. Write the two documents under `docs/<feature-slug>/`
 
 Create the folder if needed. The folder name **matches the spec folder name** so it can drop into a
 wiki cleanly.
 
-#### 4a. `docs/<feature-slug>/CHANGELOG.md`
+#### 5a. `docs/<feature-slug>/CHANGELOG.md`
 
-A [Keep a Changelog](https://keepachangelog.com/)–style technical record. Header block with spec
-path, branch, tracking issue/PR (if known), and what it builds on. Then a single dated version
-section grouping changes under: **Added**, **Changed**, **Architecture & boundaries** (if relevant),
-**Migration** (if relevant), **Tests & quality**, **Scope (not in this phase)**, **Open items**.
-Be concrete and accurate; map functional requirements / acceptance criteria to what shipped.
+Complete the skeleton from step 3 into a [Keep a Changelog](https://keepachangelog.com/)–style
+record: leave the facts block as generated (a rerun regenerates it), and write the narrative,
+**Architecture & boundaries**, **Migration** and **Scope (not in this phase)** outside it from spec
+and plan. Keep **Added**, **Changed**, **Tests &
+quality** and **Open items** concrete; map functional requirements / acceptance criteria to what shipped.
 
-#### 4b. `docs/<feature-slug>/<Feature>-Explained.md`
+#### 5b. `docs/<feature-slug>/<Feature>-Explained.md`
 
 The **plain-English, business/PM-facing narrative**. Audience: a product manager or commercial
 stakeholder, _not_ an engineer. Friendly and descriptive; light humor and real-world analogies are
@@ -229,58 +159,28 @@ Footer: link back to `CHANGELOG.md`, the `specs/<feature-slug>/` spec, and any d
 
 ### 6. Handle the pull request
 
-Unless `--no-pr` was passed:
+```text
+python .specify/extensions/pr/scripts/pr_publish.py --feature <feature-dir> --explained docs/<feature-slug>/<Feature>-Explained.md [--heading "<text>"] [--no-pr]
+```
 
-- Detect the PR for the current branch:
-  `gh pr view --json number,url,body` (or `gh pr list --head <branch> --json number,url,body`).
-- Build the **section content**: the heading (default **`## What have been developed and how to
-review it`**), then the full feature-details narrative (the body of `<Feature>-Explained.md`),
-  wrapped in idempotency markers:
-
-  ```
-  <!-- speckit-pr:start -->
-  ## What have been developed and how to review it
-
-  …feature-details content…
-  <!-- speckit-pr:end -->
-  ```
-
-- **When `.specify/extensions/workflow/scripts/execution_tools.py` exists (Workflow 1.10.0 or later), lint closing references before any GitHub write.** If the file is absent (older or no Workflow), skip this lint and continue; standalone PR use is unchanged. Write the final body (the whole body
-  that `gh` will receive, not just the marked section) to `<tmpfile>`, then run:
-  `python .specify/extensions/workflow/scripts/execution_tools.py pr-lint --repo <owner/repo> --issue <bound-issue> [--prerequisite <n> ...] --body-file <tmpfile> --output <lint.json>`.
-  Take `<owner/repo>` and `<bound-issue>` from `specs/<feature>/scope-source.json` (`repo`, `issue`),
-  and pass every prerequisite issue the Scope receipt lists, one `--prerequisite` each. Exit 1 means the
-  body closes a foreign repository's issue, a prerequisite, or an issue other than the bound one: stop,
-  fix the body, and lint again. Exit 2 means the input was malformed. Never run `gh pr create` or
-  `gh pr edit` after a nonzero exit, and never change the body after linting. The body in
-  `<lint.json>` (`body_sha256`) must match the body file that you send.
-  For native lean Workflow, include `pr_body_file`, `pr_lint_file`, and
-  `pr_body_sha256` in the PR receipt, and list both files under `evidence`.
-  Workflow recomputes lint from its bound repository/issue and Scope dependencies;
-  a caller-written `ok: true` does not satisfy completion. Save the exact body
-  as UTF-8/LF before linting and publication. When Workflow is absent, retain
-  standalone PR behavior: manually check closing references against the selected
-  issue and prerequisites; do not require or install Workflow merely for linting.
-- **If a PR exists:**
-  - If the body already contains `<!-- speckit-pr:start -->`…`<!-- speckit-pr:end -->`, **replace
-    everything between the markers** (preserve all other PR body content above/below). Never append
-    a second copy.
-  - Otherwise, append the marked section to the end of the existing body (keep the existing body intact).
-  - Apply with `gh pr edit <number> --body-file <tmpfile>`.
-- **If no PR exists:**
-  - Resolve the repository's default branch. Never create a PR from the default branch itself.
-  - If the current branch has no upstream or remote head, push it with
-    `git push --set-upstream origin <branch>` so GitHub can use it as the PR head.
-  - Create the PR without asking: `gh pr create --base <default-branch> --head <branch>
---title "<feature title>" --body-file <tmpfile>` (body = a short summary + the marked section).
-  - `--create-pr` may still be supplied by existing callers, but does not change this default.
+The script detects the branch's PR, replaces the text between `<!-- speckit-pr:start -->` and
+`<!-- speckit-pr:end -->` (or appends the marked section), writes the exact UTF-8/LF body to
+`<feature-dir>/evidence/pr-body.md`, lints its closing references against the bound issue and its
+prerequisites from `scope-source.json` with Workflow's `execution_tools.py pr-lint` rule into
+`pr-body.lint.json` beside it, and only then runs `gh pr edit`, or pushes the branch and runs
+`gh pr create`; it never publishes after a nonzero exit. When Workflow is absent, the script applies
+the same closing-reference check on its own, so standalone PR use is unchanged and Workflow is never
+required or installed merely for linting. It prints the PR receipt fragment (`pr_url`,
+`pr_body_file`, `pr_lint_file`, `pr_body_sha256`, `evidence`): copy it into the receipt as printed.
+Exit codes: 0 published; 1 the body closes a foreign, prerequisite or unbound issue: fix the
+document and rerun; 2 bad input; 3 `gh` or `git` failed: report that the PR step was skipped and
+why. With `--no-pr` it stops after the lint.
 
 ### 7. Report
 
 Summarize: the doc paths written, diagram HTML/PNG assets generated, whether the PR was created or
 updated (with its URL), and any follow-ups (for example, PR handling skipped because `gh` is not
-authenticated). State
-test/coverage figures only if you sourced them from real artifacts.
+authenticated). State test/coverage figures only if you sourced them from real artifacts.
 
 ## Idempotency
 

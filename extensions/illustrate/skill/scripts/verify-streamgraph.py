@@ -78,7 +78,7 @@ WHAT THIS DOES NOT CHECK, deliberately:
   constant factor everywhere is self-consistent and passes. The source line is
   where scale and bucket size are stated to a reader, and prose is not parsed.
 - **The layer and period budgets.** 2-6 layers and 3-24 periods are editorial
-  guidance in type-line.md, not geometry; a 30-period stream that tiles
+  guidance in type-streamgraph.md, not geometry; a 30-period stream that tiles
   honestly is honest.
 - **Colour.** The accent-plus-ramp rule is `lint-skin.py`'s beat.
 - **Scenery.** A <path> that declares no data-layer is decoration by contract

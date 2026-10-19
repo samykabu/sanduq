@@ -57,35 +57,27 @@ scripts/bash/project-init.sh --hooks-mode required --non-interactive
 ## Usage
 
 ```bash
-pwsh scripts/powershell/project-sync.ps1 -Phase <phase> [-DryRun] [-NoSubIssues] [-Force] [-Json] [-Summary]
-scripts/bash/project-sync.sh --phase <phase> [--dry-run] [--no-sub-issues] [--force] [--json] [--summary]
+python scripts/project_sync.py --phase <phase> [--dry-run] [--no-sub-issues] [--force] [--json] [--summary]
 ```
 
+One stdlib Python script on every host and OS (installed at
+`.specify/extensions/project/scripts/project_sync.py`); it needs `python` and `gh`, not `jq`.
 `<phase>` ∈ `open | analysis | engineer-review | ready | in-progress | in-review | done | auto`.
 
-`-Summary`/`--summary` prints exactly one line to stdout instead of the full
-`-Json`/`--json` summary: `ok issue=<n> status=<status> created=<n> closed=<n>`
-on success, `skipped reason=<reason>` on a graceful degradation (never `ok` — a
-skip is not success), or `error reason=<message>` on a usage error (for
-example when `-Summary`/`--summary` and `-Json`/`--json` are both given) or a
-mid-run failure — Bash additionally carries `exit=<rc>` right after `error`
-and, when the failing command is known, ` line=<n>` at the end (e.g. `error
-exit=1 reason=Managed parent binding mismatch line=172`; `reason=unknown`
-when nothing more specific was recorded). Under `-Summary`/`--summary` the
-run log moves off stdout — Bash to stderr; PowerShell to the real stderr
-stream via `[Console]::Error`, not `Write-Verbose`, which still leaks to
-stdout under `-Verbose`/`$VerbosePreference = 'Continue'` — so stdout is
-exactly the one line above regardless of caller-set verbosity; without the
-flag the run log is unchanged. An unrecognised argument is always a stderr
-diagnostic, never stdout output. Exit codes are unchanged by
-`-Summary`/`--summary`.
+`--summary` prints exactly one line to stdout instead of the `--json` summary:
+`ok issue=<n> status=<status> created=<n> closed=<n>` on success, `skipped reason=<reason>` on a
+graceful degradation (never `ok`: a skip is not success), or `error exit=<rc> reason=<message>` on a
+usage error (`--summary` with `--json`, exit 2) or a mid-run failure (exit 1). Under `--summary` the
+run log goes to stderr; an unrecognised argument is always a stderr warning. GraphQL (`gh project`,
+`gh issue`, `gh pr`) is preferred; once its budget is exhausted the same operations use the REST
+API, and `--json` reports the `transport`.
 
 ## Files
 
 - `config.default.json` — DEFAULT phase→column names + sub-issue policy (no ids).
 - `config.json` — written by `project init` (board ids + mapping); **committed per repo**.
 - `scripts/{powershell,bash}/project-init.*` — one-time board discovery + mapping.
-- `scripts/{powershell,bash}/project-sync.*` — the lifecycle engine.
+- `scripts/project_sync.py` — the lifecycle engine.
 - `commands/*.md` — command sources (rendered into each assistant target on install).
 - State (runtime, committed): `.specify/project-sync-state.json`.
 
@@ -93,7 +85,7 @@ diagnostic, never stdout output. Exit codes are unchanged by
 
 If `gh` is missing/unauthenticated/lacks `project` scope, `origin` isn't GitHub, or
 `config.json` is absent, the engine logs the reason and exits 0 — it never blocks a hook.
-Re-run `-Phase auto` after fixing the precondition to reconcile.
+Re-run `--phase auto` after fixing the precondition to reconcile.
 
 ## Safety
 

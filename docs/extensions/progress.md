@@ -62,6 +62,11 @@ operations guide. Details:
   `--json` and `init --title` have no faithful mapping and fail with a compatibility error.
 - Legacy usage is stored as an attempt labelled `legacy`. It never overrides the delegation ledger.
 - Workflow's lean run status reads `progress runs --json` (schema `progress.runs.v1`).
+- Two optional `progress:` keys in `.specify/workflow.yml`, applied by the installer: `hook_wiring: native` writes
+  hooks that run `scripts/hook.py` directly instead of through Spec Kit's dispatcher (about half the time per tool
+  call), and `post_tool_matcher` limits the per-tool-call hook to the tools it matches, at the cost of a coarser stale
+  banner. Defaults keep today's wiring; the
+  [package README](../../extensions/progress/README.md#how-it-plugs-in) has the details.
 
 ## Plans outside Spec Kit
 
@@ -73,9 +78,8 @@ Progress also tracks a plain Markdown plan: `progress init --plan docs/plan.md` 
 ## Vendored code
 
 The scripts, report page and reference docs come from the MIT `progress-report` skill in
-[sanduq-skills](https://github.com/samykabu/sanduq-skills), pinned at `agent-tools-v1.2.0` in `vendor.lock.json`.
-`extensions/progress/assets/skill/SKILL.md` is a reference copy of that skill's entry point; this extension's own entry
-point stays `extensions/progress/skills/progress/SKILL.ext.md`.
+[sanduq-skills](https://github.com/samykabu/sanduq-skills), pinned in `vendor.lock.json`. This extension's own entry point is `extensions/progress/skills/progress/SKILL.ext.md`; the
+skill's upstream `SKILL.md` is not vendored. The README screenshots stay in the repository and are not packaged.
 
 ## Limits
 

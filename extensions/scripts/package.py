@@ -13,6 +13,8 @@ EXCLUDE = {'.git', '__pycache__', 'node_modules', '.specify', '.specify-dev', 't
            # Caches and reports a local test or lint run leaves behind, never package content.
            '.pytest_cache', '.mypy_cache', '.ruff_cache', '.hypothesis', '.tox', '.nox', 'htmlcov',
            '.coverage', '.nyc_output', 'coverage'}
+# Folders of one extension that stay in the repository: Progress's README screenshots (linked by URL, 257 KB).
+EXCLUDE_PATHS = {'progress': ('docs/assets',)}
 
 
 def package(extension, output=None, root=ROOT):
@@ -29,6 +31,8 @@ def package(extension, output=None, root=ROOT):
                 # cannot install them from this repository; the package restores the real name.
                 files[name[:-len('SKILL.ext.md')] + 'SKILL.md' if name.endswith('/SKILL.ext.md') else name] = path.read_bytes()
     include(source, Path())
+    for folder in EXCLUDE_PATHS.get(extension, ()):
+        files = {name: value for name, value in files.items() if not name.startswith(f'{extension}/{folder}/')}
     for preset in PRESETS.get(extension, ()):
         include(root / 'presets' / preset, Path('presets') / preset)
     shared = root / 'extensions/scripts/shared/sanduq_freshness.py'

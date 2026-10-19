@@ -75,8 +75,11 @@ LITE_OPTIONAL_INPUTS = ('research.md', 'data-model.md', 'quickstart.md')
 LINT_COMMAND = 'workflow:lint'
 ARTIFACT_BUDGETS = ('spec_kb', 'plan_kb', 'research_kb', 'tasks_detail_lines')
 ARTIFACT_ENFORCE = ('lite-standard', 'all', 'warn')
-# Stages after which (execute: before which) the dispatcher runs Project Sync; `project_sync.points` narrows it.
-PROJECT_SYNC_POINTS = ('specify', 'plan', 'analyze', 'taskstoissues', 'execute', 'pr')
+# Stage -> Project Sync phase, run after the stage (execute: before it); `project_sync.points` narrows the stages.
+PROJECT_SYNC_PHASES = {'specify': 'open', 'plan': 'analysis', 'analyze': 'engineer-review',
+                       'taskstoissues': 'ready', 'execute': 'in-progress', 'pr': 'in-review'}
+PROJECT_SYNC_POINTS = tuple(PROJECT_SYNC_PHASES)
+PROJECT_SYNC_SCRIPT = '.specify/extensions/project/scripts/project_sync.py'
 TASK_ISSUE_MODES = ('required', 'phase-lazy')
 # Files a stage may change although earlier receipts depend on them (glob `*` stays within one folder).
 # The lineage records each such change; anything else changed during a stage refuses the completion.
@@ -786,6 +789,19 @@ def validate_policy(policy, root=None):
                     and all(type(value) is int and value > 0 for value in overrides.values()),
                     'SKILL_INVENTORY_THRESHOLDS_INVALID: expected positive integers for '
                     + ', '.join(sorted(skill_inventory.DEFAULT_THRESHOLDS)))
+    # Read by the progress and illustrate extensions (PyYAML); absent keys keep today's behaviour.
+    progress = policy.get('progress')
+    if progress is not None:
+        require(isinstance(progress, dict) and set(progress) <= {'hook_wiring', 'post_tool_matcher'}
+                and progress.get('hook_wiring', 'speckit') in ('speckit', 'native')
+                and isinstance(progress.get('post_tool_matcher', ''), str),
+                'PROGRESS_POLICY_INVALID: hook_wiring is speckit or native; post_tool_matcher is a string')
+    illustrate = policy.get('illustrate')
+    if illustrate is not None:
+        hooks = illustrate.get('hooks', {}) if isinstance(illustrate, dict) else None
+        require(isinstance(illustrate, dict) and set(illustrate) <= {'hooks'} and isinstance(hooks, dict)
+                and set(hooks) <= {'self_check'} and type(hooks.get('self_check', False)) is bool,
+                'ILLUSTRATE_POLICY_INVALID: hooks.self_check is a boolean')
     scope = policy.get('scope', {})
     require(isinstance(scope, dict), 'POLICY_SECTION_INVALID: scope')
     status_names = scope.get('statuses', {})
@@ -887,8 +903,11 @@ def skipped_stages(policy, tier_name):
 
 
 def project_sync(policy, stage):
-    """Whether the dispatcher runs Project Sync for this stage (`project_sync.points`)."""
-    return stage in (policy.get('project_sync') or {}).get('points', PROJECT_SYNC_POINTS)
+    """The claim's Project Sync field: `{phase, command}` at a `project_sync.points` stage, else False."""
+    if stage not in (policy.get('project_sync') or {}).get('points', PROJECT_SYNC_POINTS):
+        return False
+    phase = PROJECT_SYNC_PHASES[stage]
+    return {'phase': phase, 'command': 'python ' + PROJECT_SYNC_SCRIPT + ' --phase ' + phase + ' --summary'}
 
 
 def task_issue_mode(policy):

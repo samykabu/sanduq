@@ -36,6 +36,18 @@ Spec Kit section and preserves the rest of the body. If none exists, it pushes t
 needed and creates the PR by default. Re-running the command refreshes the same files and PR section
 without duplicating content.
 
+Two standard-library scripts do the mechanical parts. `scripts/pr_changelog.py --feature <dir>`
+seeds `CHANGELOG.md` from `scope-source.json`, `gh pr view`, `git log <base>..HEAD`, the checked
+tasks by phase, `progress.yml`, stage receipts and `evidence/` files inside a marked facts block;
+a rerun regenerates only that block. `scripts/pr_publish.py --feature <dir> --explained <doc>`
+splices the marked section into the PR body, writes `<dir>/evidence/pr-body.md` (UTF-8, LF) and
+`pr-body.lint.json`, lints closing references (Workflow's `pr_lint` when installed, the same rule
+otherwise), refuses on findings, runs `gh pr edit` or `gh pr create`, and prints the Workflow PR
+receipt fragment (`pr_url`, `pr_body_file`, `pr_lint_file`, `pr_body_sha256`, `evidence`). Exit
+codes: 0 published, 1 lint findings, 2 bad input, 3 `gh` or `git` failed. Diagrams follow
+`references/pr-diagram-recipe.md`, which reads Illustrate's type index and one type reference
+instead of the whole Illustrate skill.
+
 Before PR creation or update, the command enforces configured QA documentation freshness and an
 installed User Manual's feature freshness. Missing or stale documentation is refreshed through the
 owning extension; a failed audit stops the PR handoff.
@@ -77,8 +89,9 @@ reviewers or bots have commented on an open PR.
 ## Requirements
 
 - `git` and an authenticated `gh` CLI are required for review feedback and PR creation/update.
-- `python` is now required (previously `pr` shipped no scripts at all): `scripts/deps.py` runs the
-  illustrate dependency check that used to be inline instructions. It has no third-party
+- `python` is required: `scripts/deps.py` runs the illustrate dependency check, and
+  `scripts/pr_changelog.py` and `scripts/pr_publish.py` seed the changelog and publish the PR. None
+  has a third-party
   dependency — nothing in the install/upgrade path installs a package's `requirements.txt` before
   its commands run, so `deps.py` parses `dependencies.yml` with a small built-in reader instead of
   requiring PyYAML.
@@ -88,13 +101,16 @@ reviewers or bots have commented on an open PR.
   `python .specify/extensions/pr/scripts/deps.py ensure illustrate`, which checks Spec Kit's
   registry and follows the project's `.specify/extension-dependencies.yml` policy
   (`prompt`/`auto`/`manual`) before installing or updating it, printing one line and failing closed
-  when the dependency cannot be brought into range. The illustrate `SKILL.md` itself is loaded only
-  later, when a diagram is actually about to be generated — never eagerly at step 0.
+  when the dependency cannot be brought into range. Nothing from Illustrate is loaded at step 0.
 - `assure` and `user-manual` are optional integrations. The PR command never installs them implicitly,
   but enforces their configured policies when a target project has installed them.
 - The PR image-embedding rules (commit-pinned `?raw=true` links, never `raw.githubusercontent.com`,
   contents-API verification) live in `references/pr-image-embedding.md` and are loaded only when the
-  generated PR actually has a diagram or screenshot to embed.
+  generated PR actually has a diagram or screenshot to embed. Verification has two tiers, recorded
+  in the receipt as `image_verification`: `api` (rendered `body_html` plus the contents API, both
+  hosts) and `browser` (also loading in an authenticated browser, when the host has a browser tool).
+- In a managed project the Workflow guard hook refuses `gh pr create|edit --body-file` without a
+  matching sibling `.lint.json`, and `gh pr create` from the default branch.
 
 ## Migrating from `pr-review`
 

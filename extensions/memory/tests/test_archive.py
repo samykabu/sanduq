@@ -85,6 +85,12 @@ class ArchiveIntegrationTests(unittest.TestCase):
             "candidate_sha256": digest((directory / "candidate.json").read_bytes()),
             "reviewer": "independent test reviewer", "passed": True, "summary": "Inputs and repairs independently reviewed", "findings": []})
 
+    def test_format_1_prepare_names_its_memory_format_and_reference(self):
+        prepared = self.prepare()
+        self.assertEqual(1, prepared["memory_format"])
+        self.assertEqual(".specify/extensions/memory/references/format-1.md", prepared["reference"])
+        self.assertTrue((Path(__file__).resolve().parents[1] / "references/format-1.md").is_file())
+
     def test_manual_override_archives_despite_failing_checks_and_records_reason(self):
         self.write("tests/consumer.py", (self.root / "tests/consumer.py").read_text() + "raise SystemExit(17)\n")
         self.git("add", "tests/consumer.py")

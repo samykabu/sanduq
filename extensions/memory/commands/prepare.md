@@ -1,5 +1,5 @@
 ---
-description: Queue an implemented feature without deleting it
+description: Queues an implemented feature for archival after merge without deleting it (after_implement hook). Use when asked to "queue it for archival".
 ---
 
 # Prepare pending archive work

@@ -38,11 +38,27 @@ Both analysis and documentation use feature-scoped freshness manifests under
 `.specify/extensions/assure/state/`. The existence of an old manual is not enough to pass a lifecycle
 gate.
 
-The extension depends on `illustrate >=2.0.0,<3.0.0` for applicable diagrams. Both
-`speckit.assure.analyze` and `speckit.assure.document` ensure it with
-`python .specify/extensions/assure/scripts/deps.py ensure illustrate` before touching the feature;
-the script checks the Spec Kit registry, follows `.specify/extension-dependencies.yml`'s
-`update_policy` (`prompt`/`auto`/`manual`) without mutating dependencies under `prompt` without
-explicit approval, and prints one line, failing closed when illustrate cannot be brought into
-range. Its `SKILL.md` itself is loaded later, only when a diagram is actually about to be added or
-generated.
+## Lifecycle phase outside the managed Workflow
+
+The managed Workflow maps `qa_analyze` and `qa_document` to these commands, so this section applies
+only to projects that run them through Spec Kit hooks or by hand.
+
+- Run `speckit.assure.analyze` at `after_tasks` (recommended): `spec.md`, `plan.md` and `tasks.md`
+  exist and implementation has not started, so missing tests are added before developers begin.
+- `before_implement` is the alternative for teams that want a final gate right before coding.
+- Do not use `after_implement` for analysis; by then missing E2E work is usually rework.
+
+The phase comes from the hook configuration in `.specify/extensions.yml`, which `speckit.assure.init`
+writes. The commands no longer take a `--phase` flag.
+
+## Scripts
+
+| Script | Used by | What it does |
+|---|---|---|
+| `scripts/deps.py ensure illustrate` | analyze, document | Checks that `illustrate >=2.0.0,<3.0.0` is installed, follows the project's `update_policy`, prints one line and fails closed. The Illustrate references load only when a diagram is added or generated. |
+| `scripts/assure_scan.py` | analyze (`--check`), document | Walks the repository, skipping `scan.exclude` from `assure-config.yml`, classifies projects as web, mobile, backend, infrastructure or tooling, prints one line per project, and rewrites the block between `<!-- assure-scan:start -->` and `<!-- assure-scan:end -->` in `.github/memory/project-memory.md` with a `Last scanned` date. `--check` prints without writing; text outside the markers is kept. |
+| `scripts/audit_qa.py <manual.html>...` | document | Fails on an `<img>` without `alt` or `<figcaption>`, a relative `src` or `href` that does not resolve, a missing "Development-only draft" marker, or a secret-shaped value. |
+| `scripts/assure_state.py record\|status` | analyze, document, PR, CI | Records and checks feature-scoped freshness. `status` lists `changed_inputs` and `changed_outputs` when the state is stale. `status --gate` prints `skipped gate=off` and exits 0 unless `lifecycle.require_document_before_pr` is true. |
+
+`scan.exclude` defaults to `.git`, `node_modules`, `bin`, `obj`, `dist`, `build`, `.next`, `.nuxt`,
+`.turbo`, `.expo`, `coverage` and `.cache`; `assure_init.py` writes that list, and you can edit it.

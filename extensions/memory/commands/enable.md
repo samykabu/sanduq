@@ -1,5 +1,5 @@
 ---
-description: Review and enable the current automatic archive policy
+description: Reviews the archive policy with the owner and records its approval so archives run automatically. Use when asked to "enable auto-archiving".
 ---
 
 # Enable automatic archival

@@ -33,6 +33,8 @@ except ModuleNotFoundError:
     import bounded_json
 
 EXTENSION = ".specify/extensions/memory"
+HELPER = "python " + EXTENSION + "/scripts/archive.py"
+FORMAT_1_REFERENCE = EXTENSION + "/references/format-1.md"
 STUB = """# Project memory
 
 Project memory moved to [`specs/memory/`](memory/INDEX.md): one file per entry, a domain catalog for browsing, and
@@ -90,6 +92,8 @@ class Archive:
         if not isinstance(branch, str) or not branch or branch.startswith("-"):
             raise ArchiveError("Configure a valid target_branch in .specify/memory-policy.json.")
         self.repo.git("check-ref-format", "--branch", branch)
+        if not isinstance(self.policy.get("guard_hooks", False), bool):
+            raise ArchiveError("guard_hooks in .specify/memory-policy.json must be true or false.")
         self.product_prefixes = tuple(self.policy.get("product_prefixes", PRODUCT_PREFIXES))
         self.product_files = tuple(self.policy.get("product_files", PRODUCT_FILES))
         for prefix in self.product_prefixes:
@@ -715,7 +719,8 @@ class Archive:
         write_json(self.run_path(run_id) / "candidate.json", candidate)
         return {"run_id": run_id, "checkpoint": checkpoint, "units": str(self.run_path(run_id) / "journal.json"),
                 "candidate": str(self.run_path(run_id) / "candidate.json"), "references": references,
-                "phase": run["phase"], "verification": verification}
+                "phase": run["phase"], "verification": verification, "memory_format": 2 if v2 else 1,
+                **({} if v2 else {"reference": FORMAT_1_REFERENCE})}
 
     def require_checks(self, names: list[str], paths: list[str]) -> None:
         if not names or len(set(names)) != len(names) or any(name not in self.policy.get("checks", {}) for name in names):
@@ -1014,7 +1019,7 @@ class Archive:
         if run["phase"] == "done":
             self.cleanup_terminal(run)
             return {"run_id": run_id, "phase": "done", "checkpoint": run["checkpoint"], "final_commit": run["final_commit"],
-                    "verification": verification_report(run)}
+                    "verification": verification_report(run), "next": self.next_step(run)}
         if self.active_id() != run_id:
             raise ArchiveError("This is not the active archive run.")
         if run["automatic"]:
@@ -1129,7 +1134,7 @@ class Archive:
             self.save(run)
             self.cleanup_terminal(run)
         return {"run_id": run_id, "phase": run["phase"], "checkpoint": run["checkpoint"], "final_commit": run.get("final_commit"),
-                "verification": verification_report(run)}
+                "verification": verification_report(run), "next": self.next_step(run)}
 
     def memory_format(self) -> int:
         return load(self.repo.path(REGISTRY), {}).get("memory_format", 1)
@@ -1199,10 +1204,35 @@ class Archive:
                 "files": len(outputs), "legacy_memory_sha256": legacy_sha,
                 "memory_root": memory_store.memory_root(self.repo.root)}
 
+    def next_step(self, run: dict | None, review_status: str | None = None) -> dict:
+        """The command to run next for ``run`` and why, from its phase and review.json; nothing new is stored."""
+        if not run:
+            return {"command": None, "reason": "No archive run is active."}
+        phase, rid = run.get("phase"), run.get("run_id")
+        command = lambda verb: f"{HELPER} {verb} --run {rid}"
+        if phase == "checkpoint":
+            return {"command": command("finalize"), "reason": "Recover the recorded checkpoint, then author the candidate."}
+        if phase == "synthesis":
+            if review_status == "passed":
+                return {"command": command("finalize"), "reason": "The review binds this exact result; publish it."}
+            if review_status is not None:
+                return {"command": command("validate"),
+                        "reason": "Resolve data.review.problems with the independent reviewer, then validate again."}
+            if (self.run_path(rid) / "review.json").exists():
+                return {"command": command("validate"), "reason": "review.json exists; check that it binds this exact result."}
+            return {"command": command("preflight"),
+                    "reason": "Until candidate guards pass; then the independent review writes review.json."}
+        if phase in ("publishing", "checking", "committing"):
+            return {"command": command("finalize"), "reason": f"Resume publication from phase {phase}."}
+        if phase == "rolling-back":
+            return {"command": command("rollback"), "reason": "Resume the interrupted rollback."}
+        return {"command": None, "reason": f"Run is {phase}; report its checkpoint and final commit."}
+
     def status(self) -> dict:
         run_id = self.active_id()
-        return {"policy_hash": self.policy_hash(), "pending": self.pending(),
-                "active": self.journal(run_id) if run_id else None}
+        active = self.journal(run_id) if run_id else None
+        return {"policy_hash": self.policy_hash(), "pending": self.pending(), "active": active,
+                "next": self.next_step(active)}
 
     def inspect(self, view, run_id=None, *, max_bytes=16384, cursor=None):
         run = self.journal(run_id) if run_id else None
@@ -1214,7 +1244,8 @@ class Archive:
             records = [{'type': 'status', 'run_id': active, 'phase': current.get('phase'),
                         'memory_format': current.get('memory_format', self.memory_format()),
                         'verification': verification_report(current),
-                        'spec_count': len(current.get('specs', [])), 'unit_count': len(current.get('units', []))}]
+                        'spec_count': len(current.get('specs', [])), 'unit_count': len(current.get('units', [])),
+                        'next': self.next_step(current or None)}]
         elif view == 'inventory':
             records = [{'type': 'unit', **u} for u in run.get('units', [])]
         elif view == 'checks':
@@ -1246,17 +1277,10 @@ def memory_cli_read(archive: Archive, args) -> str | None:
         for item in result["entries"]:
             item.pop("markdown")
             item["text"] = store.entries[item["id"]]["text"]
+            item["expected_hash"] = memory_query.expected_hash(archive.repo.root, item["id"])
         return json.dumps({"success": True, "data": result}, ensure_ascii=False) + "\n"
     if args.memory_verb == "show":
-        missing = [i for i in args.id if i not in store.entries]
-        if missing:
-            raise ArchiveError(f"Unknown memory id(s): {missing}")
-        blocks = []
-        for eid in args.id:
-            relations = store.entries[eid].get("relations", [])
-            blocks.append(memory_query.render_entry(store, eid)
-                          + (f"\nRelated: {', '.join(relations)}\n" if relations else ""))
-        return "\n".join(blocks)
+        return memory_query.show(store, archive.repo.root, args.id)
     if args.memory_verb == "provenance":
         if args.id not in store.entries and args.id not in store.retired:
             raise ArchiveError(f"Unknown memory id: {args.id}")
@@ -1435,7 +1459,8 @@ def main() -> int:
                     outputs, report = archive.materialize(run)
                 else:
                     outputs, report = archive.validate(run)
-                result = {"valid": True, **(report or {}), "paths": sorted(outputs)}
+                result = {"valid": True, **(report or {}), "paths": sorted(outputs),
+                          "next": archive.next_step(run, (report or {"review": {"status": "passed"}})["review"]["status"])}
             elif args.verb in ("packets", "fragment-check", "merge", "review-packets"):
                 run, run_dir = archive.journal(args.run), archive.run_path(args.run)
                 retired = set(load(archive.repo.path(REGISTRY), {}).get("retired_memory_ids", {}))

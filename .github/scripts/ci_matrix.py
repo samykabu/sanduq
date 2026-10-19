@@ -16,7 +16,7 @@ import os
 import subprocess
 import sys
 
-SUITES = ["workflow", "scope", "user-manual", "memory", "illustrate", "progress"]
+SUITES = ["workflow", "scope", "user-manual", "memory", "illustrate", "progress", "assure", "pr"]
 OSES = ["ubuntu-latest", "windows-latest"]
 # Events that run the Windows workflow suite. It is slow, so pushes to main skip it;
 # pull requests and the nightly schedule still cover it.
@@ -29,7 +29,10 @@ ALWAYS_ALL = {"schedule", "workflow_dispatch"}
 #                      (extensions/scope/scripts/workflow_policy.py).
 #   scope -> workflow: workflow's ScopeCommandTests import Scope's real parser and main()
 #                      (extensions/workflow/tests/test_execution_tools.py).
-DEPENDENTS = {"progress": ["workflow"], "workflow": ["scope"], "scope": ["workflow"]}
+#   assure -> workflow: workflow tests render documentation-gates.yml and run assure_state.py.
+#   pr -> workflow: workflow tests lint PR bodies and the guard hook covers gh pr.
+DEPENDENTS = {"progress": ["workflow"], "workflow": ["scope"], "scope": ["workflow"],
+              "assure": ["workflow"], "pr": ["workflow"]}
 
 # docs/ paths that a regression suite reads as real inputs (not fixtures). Other docs/ changes only need lint.
 #   docs/examples/: illustrate validates booking-illustration-theme.yml (test_illustration_theme.py);

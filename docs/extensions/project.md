@@ -8,7 +8,7 @@ moves its Status column through the lifecycle, and creates one sub-issue per tas
 | Lifecycle phase | After `specify`, `plan`, `analyze` and `tasks`; before and after `implement` |
 | Hooks | Six optional hooks; Project Init can make them mandatory ([hooks](../reference/hooks.md)) |
 | Commands | `init`, `sync` ([reference](../reference/commands.md#project)) |
-| Requires | Nothing; uses `gh` when available |
+| Requires | Python 3 (Init also needs PowerShell or bash); uses `gh` when available |
 | Standalone | Yes |
 | License | PolyForm Noncommercial 1.0.0 |
 
@@ -32,15 +32,18 @@ phase to a real board column and writes `config.json`. Commit it with `.specify/
 $speckit-project-sync Synchronize the refund parent and completed task IDs without duplicate sub-issues.
 ```
 
-For a dry run, use the package's sync helper: `project-sync.ps1 -Phase auto -DryRun` or
-`project-sync.sh --phase auto --dry-run`.
+For a dry run, call the sync script directly:
+`python .specify/extensions/project/scripts/project_sync.py --phase auto --dry-run`. Add
+`--summary` for one result line (`ok`, `skipped` or `error`).
 
 ## How it runs
 
 ![Project sequence: project.init discovers and approves the board mapping and sync policy (required, optional or manual); when a Spec Kit phase completes, project.sync reconciles the actual board columns and records the result, and a skipped sync does not count as complete.](../diagrams/extension-project.animated.svg)
 
 Required sync runs automatically at each phase. Optional hooks ask first. In the managed Workflow,
-Workflow requires automatic sync and its own adapter creates and closes task sub-issues.
+Workflow requires automatic sync and its own adapter creates and closes task sub-issues. Each
+Workflow claim names the phase and the exact sync command, so the dispatcher runs it without
+opening the sync command file.
 [Editable source](../diagrams/extension-project.html).
 
 ## Limits

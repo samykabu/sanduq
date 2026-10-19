@@ -28,5 +28,6 @@
   ],
   "default_checks": [],
   "project_checks": [],
-  "checks": {}
+  "checks": {},
+  "guard_hooks": false
 }

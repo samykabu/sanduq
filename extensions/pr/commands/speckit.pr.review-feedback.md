@@ -1,5 +1,5 @@
 ---
-description: "Process GitHub pull request review comments through an approval-gated fix/reply workflow."
+description: "Fixes or answers unresolved PR review comments after approval, then pushes and resolves threads. Use when asked to 'address review comments'."
 ---
 
 # Process PR Review Feedback

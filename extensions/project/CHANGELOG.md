@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.0] - 2026-10-19
+
+Optimization round 2.
+
+- `scripts/project_sync.py` (Python, standard library) replaces the bash and PowerShell sync scripts with the same flags, summary lines and GraphQL-to-REST fallback. Python is now a required tool; init keeps its shell pair.
+- Workflow 1.14.0's claim prints the exact sync command, and the sync command file is 1.4 KB instead of 2.7 KB.
+- Both commands have frontmatter descriptions; hosts listed them as "Extension command: ..." before. Init no longer asks to record the owner in a memory file.
+
 ## [2.2.2] - 2026-10-10
 
 - README links point to the new extension page, install-by-host page and command reference.

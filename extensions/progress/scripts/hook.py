@@ -136,9 +136,22 @@ def relevant(root, event, payload):
     return False
 
 
+EVENTS = ('session_start', 'pre_tool_use', 'post_tool_use', 'stop', 'session_end')
+
+
+def sniff_event(raw):
+    """The payload's `hook_event_name` as the snake_case event, '' when absent or unknown. Spec Kit's dispatcher runs the
+    hook without an event argument; only the fast path needs the name (`handle` derives it itself). String tests only."""
+    _, found, tail = raw.partition('"hook_event_name"')
+    name = tail.split('"', 2)[1] if found and tail.count('"') >= 2 else ''
+    name = ''.join('_' + c.lower() if c.isupper() and i else c.lower() for i, c in enumerate(name)).replace('-', '_')
+    return name if name in EVENTS else ''
+
+
 def main(argv):
     event = argv[1] if len(argv) > 1 else ''
     raw = '' if sys.stdin is None or sys.stdin.isatty() else sys.stdin.read()
+    event = event or sniff_event(raw)
     root = find_root()
     if quick_unbound(root, event, raw):
         return 0

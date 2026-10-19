@@ -30,7 +30,9 @@ except ImportError:  # Python < 3.11: TOML host configs cannot be read
 
 SCRIPT_ENV = 'SANDUQ_PROGRESS_SCRIPT'  # tests and source-tree use; normally the installed path is used
 RELATIVE = Path('.specify/extensions/progress/scripts/progress.py')
-HOOK_MARKERS = ('speckit.progress.hook', 'progress.py hook', 'progress.py" hook')
+# The last two match native wiring (`progress hooks install`: hook.py runs without Spec Kit's dispatcher, tagged).
+HOOK_MARKERS = ('speckit.progress.hook', 'progress.py hook', 'progress.py" hook', 'progress/scripts/hook.py',
+                '--managed-by=progress-report')
 HOST_FILES = {'claude': ('.claude/settings.json', '.claude/settings.local.json'),
               'codex': ('.codex/hooks.json', '.codex/config.toml')}
 HOSTS = tuple(HOST_FILES)

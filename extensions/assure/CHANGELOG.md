@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.4.0] - 2026-10-19
+
+Optimization round 2, measured with `extensions/scripts/benchmark_instructions.py`.
+
+- `scripts/assure_scan.py` writes the project inventory block in `.github/memory/project-memory.md` (Analyze runs it with `--check`, Document writes). The excluded folders are `scan.exclude` in `assure-config.yml`; the default is the list the commands used before.
+- `scripts/audit_qa.py` checks the generated QA manual: image alt text and captions, relative links, the development-only marker and secret-looking values.
+- `assure_state.py status --gate` decides the documentation gate from the parsed config (PyYAML when available, a narrow reader otherwise, failing closed on a layout neither understands). The rendered `documentation-gates.yml` changes on upgrade: one line per freshness step, with the feature path passed through `env`.
+- The two commands moved their shared contract into the skill references: Analyze is 6,050 bytes instead of 14,031, Document 9,609 instead of 14,620. Diagrams use Illustrate's type index instead of the whole skill. `--phase` is gone; the hook configuration sets the phase.
+- On a rerun, Document reads the `changed_inputs` and `changed_outputs` that freshness now reports.
+- One description per command, the same in the command file and `extension.yml`. The unused `agents/openai.yaml` is removed.
+
 ## [2.3.4] - 2026-10-19
 
 - `documentation-gates.yml` skips fork pull requests when the project's linux runner is self-hosted

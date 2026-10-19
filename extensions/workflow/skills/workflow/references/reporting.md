@@ -2,11 +2,11 @@
 
 The one place that decides how the progress report is maintained. Other references link here; they do not repeat it.
 
-**Never spawn, retain, message or poll an additional agent solely for reporting.** This holds in every mode. The current
-coordinator (the dispatcher, or the orchestration agent only when it already does real scheduling and integration work)
-makes the few calls below as part of its own turn. Opening the report once for the human is fine. Re-opening it,
-re-verifying it or waiting to see it refresh is not. Waiting for a worker to finish is a different thing and stays: block
-on `delegate_dispatch.py collect` with a bounded loop.
+**Never spawn, retain, message or poll an additional agent solely for reporting.** This is the Progress skill's rule
+(`.specify/extensions/progress/skills/progress/SKILL.md`), in every mode. The current coordinator (the dispatcher, or the
+orchestration agent only when it already does real scheduling and integration work) makes the few calls below as part of
+its own turn. Opening the report once for the human is fine; re-opening, re-verifying or watching it refresh is not.
+Waiting for a worker stays: block on `delegate_dispatch.py collect` with a bounded loop.
 
 Pick the mode once per Execute claim or resume:
 
@@ -19,11 +19,9 @@ The host is detected from the environment and an unknown host selects `refresh`.
 
 It prints `reporting: projection`, `reporting: refresh` or `reporting: legacy`. On Codex, registered Progress hooks that the
 user has not approved print `reporting: refresh (codex hooks not approved)` (`--json` has a `reason` field): Codex skips
-untrusted projects and unapproved hooks. Tell the user to approve the five Progress hooks in Codex (SessionStart, PreToolUse
-matcher `Task|Agent|spawn_agent`, PostToolUse, Stop, SessionEnd; each runs
-`python3 .specify/events.py speckit.progress.hook <event> 10`) and to trust the project. A hook changed after
-approval may need approving again; the bridge cannot detect a stale approval. In the commands below `progress` stands
-for `python .specify/extensions/progress/scripts/progress.py`; every verb prints one line.
+untrusted projects and unapproved hooks. Ask the user to trust the project and approve the Progress hooks as the
+[Workflow README](../../../README.md#progress-reporting) describes. In the commands below `progress` stands for
+`python .specify/extensions/progress/scripts/progress.py`; every verb prints one line.
 
 | Mode | When | Coordinator does |
 | --- | --- | --- |

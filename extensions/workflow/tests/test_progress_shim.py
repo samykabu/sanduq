@@ -354,6 +354,87 @@ class ReportingModes(Project):
                               capture_output=True, text=True, env=os.environ.copy())
         self.assertEqual((done.returncode, done.stdout.strip()), (0, 'reporting: refresh'))
 
+    def test_native_hook_py_entries_mean_projection(self):
+        """`progress hooks install` (progress.hook_wiring: native) writes hook.py entries without the Spec Kit command."""
+        self._claude({'type': 'command', 'timeout': 10, 'command': 'python "${CLAUDE_PROJECT_DIR}/.specify/extensions/progress/'
+                      'scripts/hook.py" stop --managed-by=progress-report; exit 0'})
+        self.assertEqual(self.mode()['mode'], 'projection')
+
+
+SPECKIT_CLAUDE = {'hooks': {
+    'PostToolUse': [{'matcher': '', 'hooks': [
+        {'type': 'command', 'command': '"${CLAUDE_PROJECT_DIR}"/.specify/events.py speckit.progress.hook post_tool_use 10',
+         'timeout': 15, '__speckit_event__': True},
+        {'type': 'command', 'command': 'python other.py'}]}],
+    'Stop': [{'hooks': [{'type': 'command', 'command': '"${CLAUDE_PROJECT_DIR}"/.specify/events.py speckit.progress.hook stop 10',
+                         'timeout': 15, '__speckit_event__': True}]}]}}
+SPECKIT_CODEX = ''.join(
+    f'[[hooks.{event}]]\nmatcher = "*"\n\n[[hooks.{event}.hooks]]\ntype = "command"\n'
+    f'command = "python3 .specify/events.py speckit.progress.hook {name} 10"\ntimeout = 15\nspeckit_marker = true\n\n'
+    for event, name in (('PostToolUse', 'post_tool_use'), ('Stop', 'stop')))
+
+
+class ProgressWiring(Project):
+    """install.wire_progress: the `progress:` policy applied to the host files after Spec Kit rendered its entries."""
+
+    def setUp(self):
+        super().setUp()
+        import install
+        self.install = install
+        shutil.copytree(PROGRESS_SCRIPT.parent, self.root / '.specify/extensions/progress/scripts',
+                        ignore=shutil.ignore_patterns('__pycache__'))
+        (self.root / '.claude').mkdir()
+        (self.root / '.codex').mkdir()
+        self.claude = self.root / '.claude/settings.json'
+        self.codex = self.root / '.codex/config.toml'
+        self.claude.write_text(json.dumps(SPECKIT_CLAUDE, indent=2), encoding='utf-8')
+        self.codex.write_text(SPECKIT_CODEX, encoding='utf-8')
+
+    def wire(self, **progress):
+        return self.install.wire_progress(self.root, {'progress': progress} if progress else {}, ['claude', 'codex'])
+
+    def test_defaults_leave_the_spec_kit_entries_alone(self):
+        record = self.wire()
+        self.assertEqual((record['hook_wiring'], record['post_tool_matcher']), ('speckit', ''))
+        self.assertEqual(json.loads(self.claude.read_text(encoding='utf-8')), SPECKIT_CLAUDE)
+        self.assertEqual(self.codex.read_text(encoding='utf-8'), SPECKIT_CODEX)
+
+    def test_speckit_matcher_is_set_on_both_hosts(self):
+        record = self.wire(post_tool_matcher='Bash|Task')
+        self.assertTrue(record['hosts']['claude']['matcher_applied'] and record['hosts']['codex']['matcher_applied'])
+        groups = json.loads(self.claude.read_text(encoding='utf-8'))['hooks']['PostToolUse']
+        self.assertEqual([(g['matcher'], [h['command'] for h in g['hooks']]) for g in groups],
+                         [('', ['python other.py']), ('Bash|Task', [SPECKIT_CLAUDE['hooks']['PostToolUse'][0]['hooks'][0]['command']])])
+        hooks = __import__('tomllib').loads(self.codex.read_text(encoding='utf-8'))['hooks']
+        self.assertEqual((hooks['PostToolUse'][0]['matcher'], hooks['Stop'][0]['matcher']), ('Bash|Task', '*'))
+
+    def test_native_replaces_the_spec_kit_entries_and_records_it(self):
+        record = self.wire(hook_wiring='native', post_tool_matcher='Bash|Task')
+        self.assertEqual([record['hosts'][h]['speckit_entries_removed'] for h in ('claude', 'codex')], [2, 2])
+        self.assertNotIn('speckit.progress.hook', self.claude.read_text(encoding='utf-8') + self.codex.read_text(encoding='utf-8'))
+        settings = json.loads(self.claude.read_text(encoding='utf-8'))['hooks']
+        commands = [h['command'] for groups in settings.values() for g in groups for h in g['hooks']]
+        self.assertIn('python other.py', commands)
+        self.assertTrue(all('scripts/hook.py' in c for c in commands if c != 'python other.py'))
+        self.assertTrue((self.root / '.codex/hooks.json').is_file())
+        self.assertEqual(record['hosts']['codex']['file'], '.codex/hooks.json')
+        script = self.root / self.install.PROGRESS_SCRIPT
+        accepted = self.install.progress_accepts(script, '--post-tool-matcher')
+        self.assertEqual(record['hosts']['claude']['matcher_applied'], accepted)
+        if accepted:
+            self.assertIn('Bash|Task', [g.get('matcher') for g in settings['PostToolUse']])
+        else:
+            self.assertIn('post_tool_matcher not applied', record['hosts']['claude']['note'])
+        self.assertEqual(self.mode(), 'projection')
+        # Back to the default: hook.py's entries go (Spec Kit renders its own again when install() re-adds progress).
+        back = self.wire()
+        self.assertIn('removed', back['hosts']['claude']['native_entries_removed'])
+        self.assertNotIn('--managed-by=progress-report', self.claude.read_text(encoding='utf-8'))
+        self.assertNotIn('--managed-by=progress-report', (self.root / '.codex/hooks.json').read_text(encoding='utf-8'))
+
+    def mode(self):
+        return bridge.mode(self.root, FEATURE, host='claude')['mode']
+
 
 class AbsentProgress(Project):
     installed = False

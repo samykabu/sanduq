@@ -14,8 +14,8 @@ Spec Kit feature is implemented.
 |---|---|---|
 | `speckit.user-manual.init` | `/speckit-user-manual-init` | Interview, discover modules, approve the map, and scaffold the manual |
 | `speckit.user-manual.analyze` | `/speckit-user-manual-analyze` | Add feature-specific documentation and asset tasks |
-| `speckit.user-manual.update` | `/speckit-user-manual-update` | Update affected modules and create a private preview |
-| `speckit.user-manual.release` | `/speckit-user-manual-release` | Build versioned HTML archives and PDFs |
+| `speckit.user-manual.update` | `/speckit-user-manual-update` | Update affected modules, then `build_manual.py --all --archive` for the private preview |
+| `speckit.user-manual.release` | `/speckit-user-manual-release` | `build_manual.py --all --version <v> --archive --pdf` for versioned HTML archives and PDFs |
 
 The committed source of truth lives under `User-Manual/`. English is required. Arabic is optional
 per project, but the theme, navigation, diagrams, and PDFs support RTL from the first build.
@@ -42,13 +42,21 @@ and general manual structure remain in the core User Manual skill. HTML/PDF rend
 deterministic build step, including module-specific PDFs through
 `build_manual.py --module <id> --pdf`.
 
-Diagrams depend on `illustrate >=2.0.0,<3.0.0`. Before adding or generating one,
-`speckit.user-manual.analyze` and `speckit.user-manual.update` run
-`python .specify/extensions/user-manual/scripts/deps.py ensure illustrate`, which checks the Spec
-Kit registry, follows `.specify/extension-dependencies.yml`'s `update_policy`
-(`prompt`/`auto`/`manual`) without mutating dependencies under `prompt` without explicit approval,
-and prints one line, failing closed when illustrate cannot be brought into range. Its `SKILL.md` is
-loaded only at that point, never eagerly.
+Diagrams depend on `illustrate >=2.0.0,<3.0.0`: `analyze` and `update` run
+`python .specify/extensions/user-manual/scripts/deps.py ensure illustrate` first, which prints one
+line and fails closed, and load the Illustrate type reference only after it passes.
+
+## Reruns
+
+`manual_state.py status --feature <path>` compares the feature's inputs and the manual with the
+state the last `record` saved; when stale, its JSON carries `changed_inputs` and `changed_outputs`
+(sorted repository-relative paths: new, changed or deleted) and `--summary` appends
+`changed_inputs=N changed_outputs=M`. The `current` key and exit codes are unchanged.
+`manual_impact.py --feature <path>` joins those changed inputs with the `evidence` paths of each
+module in `manual.yml` and each page's `source_evidence`, prints the affected modules, pages and
+audiences plus the unmatched changed paths, and records the list under `impact` in
+`User-Manual/.state/coverage.json`. Set `lifecycle.impact_scope: evidence` in `manual.yml` to make
+`analyze` and `update` start from that list; the default `all` keeps today's full read.
 
 ## Builds
 

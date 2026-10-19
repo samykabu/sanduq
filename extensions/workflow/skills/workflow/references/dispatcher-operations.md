@@ -45,14 +45,15 @@ invent percentages, stop on an estimate, or ask for a new session because usage 
 
 ## Project Sync and task-issue sync
 
-`claim` prints `project_sync: true|false` for the stage, from `project_sync.points` (absent:
-specify, plan, analyze, taskstoissues, execute, pr). When true and a GitHub Project is
-configured, invoke Project Sync for that point: Specify (open), Plan (analysis), Analyze
-(engineer-review), Tasks-to-Issues (ready), before Execute (in-progress), after PR (in-review).
-When false, skip it. Managed Project 2.1+ uses the bound parent and never writes task issues.
-When policy requires board sync, require actual success; a graceful skip is not success.
-Native task-issue state syncs once per phase ([execution-report.md](execution-report.md)).
-Never infer human-review completion from generated evidence.
+`claim` prints `project_sync: false`, or `{"phase": ..., "command": ...}` at a
+`project_sync.points` stage (absent: all six). Stage to phase: Specify `open`, Plan `analysis`,
+Analyze `engineer-review`, Tasks-to-Issues `ready`, before Execute `in-progress`, after PR
+`in-review`. When a GitHub Project is configured, run the `command` as printed (it ends in
+`--summary`) at that point instead of opening the sync command; when false, skip it. Managed
+Project 2.1+ uses the bound parent and never writes task issues. When policy requires board
+sync, require actual success; a graceful skip is not success. Native task-issue state syncs
+once per phase ([execution-report.md](execution-report.md)). Never infer human-review
+completion from generated evidence.
 
 Run `delegation.py annotate --feature specs/<feature>` to refresh pending task metadata after an
 opt-in or route edit; a task the type rules misread takes an `[Impl]` (or `[QA]`, `[Docs]`,

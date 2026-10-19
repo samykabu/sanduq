@@ -253,5 +253,5 @@ else {
 }
 
 Info 'done. Next: commit config.json, then run a dry-run sync:'
-Info '  pwsh .specify/extensions/project/scripts/powershell/project-sync.ps1 -Phase open -DryRun'
+Info '  python .specify/extensions/project/scripts/project_sync.py --phase open --dry-run'
 if ($Json) { $config | ConvertTo-Json -Depth 10 -Compress }

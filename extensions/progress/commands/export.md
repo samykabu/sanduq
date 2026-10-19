@@ -1,8 +1,8 @@
 ---
-description: Write the progress projection as deterministic Markdown or JSON
+description: "Writes the progress projection as deterministic Markdown or JSON at no model cost. Use when asked to 'export the progress report'."
 ---
 
-Load `.specify/extensions/progress/skills/progress/SKILL.md`, then run from the repository root:
+Run from the repository root:
 
 ```bash
 python .specify/extensions/progress/scripts/progress.py export $ARGUMENTS

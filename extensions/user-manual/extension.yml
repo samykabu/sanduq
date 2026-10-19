@@ -3,7 +3,7 @@ schema_version: "1.0"
 extension:
   id: user-manual
   name: "User Manual"
-  version: "1.5.4"
+  version: "1.6.0"
   description: "Create and incrementally maintain bilingual-ready, audience-aware application manuals in Markdown, themeable MkDocs HTML (Material, ReadTheDocs, or any installed theme), and PDF, including modules, interfaces, tutorials, screenshots, APIs, releases, migrations, infrastructure, architecture, and complete data dictionaries."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
@@ -28,16 +28,16 @@ provides:
   commands:
     - name: speckit.user-manual.init
       file: commands/speckit.user-manual.init.md
-      description: "Interview the project, discover and approve its module map, and scaffold User-Manual"
+      description: "Discovers the app, proposes a module map and scaffolds the audience-aware User Manual. Use when asked to 'create a user manual'."
     - name: speckit.user-manual.analyze
       file: commands/speckit.user-manual.analyze.md
-      description: "Add missing manual, API, screenshot, diagram, tutorial, release, and migration tasks for the active feature"
+      description: "Adds the feature's User Manual content and asset tasks to tasks.md. Use before implementation or when asked to 'add manual tasks'."
     - name: speckit.user-manual.update
       file: commands/speckit.user-manual.update.md
-      description: "Create a missing manual or incrementally update affected modules and build preview artifacts"
+      description: "Updates the User Manual modules a feature affects, audits them and builds a private preview. Use when asked to 'update the manual'."
     - name: speckit.user-manual.release
       file: commands/speckit.user-manual.release.md
-      description: "Finalize versioned audience/language HTML archives and PDFs for an application release"
+      description: "Builds versioned User Manual release notes, migration guides, HTML and PDFs. Use when asked to 'release the manual', never on a feature branch."
 
 hooks:
   after_tasks:

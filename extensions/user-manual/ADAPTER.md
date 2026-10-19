@@ -41,7 +41,6 @@ stored as `SKILL.ext.md` and restored to `SKILL.md` by `extensions/scripts/packa
 | `skills/preview-publishing/SKILL.md` | `user-manual-preview-publishing/SKILL.md` | `name: preview-publishing`; no example |
 | `skills/release-docs/SKILL.md` | `user-manual-release-docs/SKILL.md` | `name: release-docs`; grounds items in Spec Kit artifacts; no example |
 | `skills/ui-screenshots/SKILL.md` | `user-manual-ui-screenshots/SKILL.md` | `name: ui-screenshots`; no example |
-| `skills/*/agents/openai.yaml` (5 files) | `user-manual*/agents/openai.yaml` | `display_name`, `short_description` and `default_prompt` use the extension skill names (`$api-docs`, ...) |
 | `tests/test_build_manual.py` | `user-manual/tests/test_build_manual.py` | Same tests except portable adds `test_one_audiences_assets_do_not_leak_into_another_edition` and a different module docstring; can be generated from portable once accepted |
 | `tests/test_manual_state.py` | `user-manual/tests/test_manual_state.py` | Tests the checkpoint `--base-ref` default (Spec Kit only) |
 

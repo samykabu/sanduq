@@ -17,11 +17,15 @@ manual; that belongs to the `user-manual` extension.
 
 ## Rules
 
-1. Resolve the active feature from `--feature`, then `.specify/feature.json`.
+1. Resolve the active feature from `--feature`, then `feature_directory` in `.specify/feature.json`,
+   then the most recently modified directory under `specs/` only when it is unambiguous; otherwise
+   ask the user for the feature path.
 2. Ground every step, expected result, endpoint, and screenshot in specifications, contracts,
    implementation, tests, or observed development behavior. Never invent evidence.
 3. Keep QA material development-only and separate from `User-Manual/`.
-4. Redact credentials, tokens, cookies, connection strings, private keys, and production data.
+4. Redact credentials, tokens, cookies, connection strings, private keys, and production data: never
+   include plaintext passwords, API keys, bearer or refresh tokens, session IDs, OAuth codes, database
+   URLs, or full `.env` values.
 5. Prefer plain language that a tester can follow without knowing the implementation.
 6. Reuse the installed Illustrate skill only when a diagram materially improves verification.
 7. Use `scripts/assure_state.py` to determine freshness; do not treat a file's existence as proof that it

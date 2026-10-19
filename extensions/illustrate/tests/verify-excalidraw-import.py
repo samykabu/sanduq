@@ -27,7 +27,8 @@ SKILL_DIR = ROOT / "skill"
 SKILL = SKILL_DIR / "SKILL.md"
 EXTRACT = SKILL_DIR / "scripts/excalidraw_extract.py"
 IMPORT_REF = SKILL_DIR / "references/import-excalidraw.md"
-COMMAND = SKILL_DIR / "commands/import-excalidraw.md"
+# The skill-local commands/ files were removed in 3.5.0; the reference still names this trigger.
+SLASH_COMMAND = "/illustrate:import-excalidraw"
 WHITEBOARD = ROOT / "tests/fixtures/sample-whiteboard.excalidraw"
 ADVERSARIAL = ROOT / "tests/fixtures/sample-adversarial.excalidraw"
 EXAMPLE = SKILL_DIR / "assets/example-import-excalidraw.html"
@@ -122,7 +123,6 @@ def check_files() -> None:
         SKILL,
         EXTRACT,
         IMPORT_REF,
-        COMMAND,
         WHITEBOARD,
         ADVERSARIAL,
         EXAMPLE,
@@ -597,7 +597,7 @@ def check_legacy_stdout_encoding(tmp: Path) -> None:
 
 def check_docs_and_wiring() -> None:
     import_text = IMPORT_REF.read_text(encoding="utf-8")
-    expected_slash_command = f"/illustrate:{COMMAND.stem}"
+    expected_slash_command = SLASH_COMMAND
     documented_slash_commands = set(
         re.findall(r"`(/illustrate:[a-z0-9-]+)`", import_text)
     )
@@ -605,7 +605,7 @@ def check_docs_and_wiring() -> None:
         rendered = ", ".join(sorted(documented_slash_commands)) or "none"
         fail(
             "import-excalidraw.md slash command does not match "
-            f"{COMMAND.name}: expected {expected_slash_command}, found {rendered}"
+            f"expected {expected_slash_command}, found {rendered}"
         )
     for needle in (
         "excalidraw_extract.py",
@@ -643,7 +643,6 @@ def check_docs_and_wiring() -> None:
     if ".excalidraw" not in skill_text.split("---")[1]:
         fail("SKILL.md frontmatter description does not mention Excalidraw import")
 
-    command_text = COMMAND.read_text(encoding="utf-8")
     reference_flags = (
         "--format",
         "--size",
@@ -654,10 +653,10 @@ def check_docs_and_wiring() -> None:
         "--output",
     )
     for flag in reference_flags:
-        if flag not in command_text or flag not in import_text:
-            fail(f"command/reference flag drift: {flag}")
+        if flag not in import_text:
+            fail(f"import-excalidraw.md missing flag {flag}")
     for selector in ("--page", "--diagram"):
-        if selector in command_text or selector in import_text:
+        if selector in import_text:
             fail(
                 f"{selector} leaked into the Excalidraw surfaces — a scene has "
                 "no page or diagram selector"

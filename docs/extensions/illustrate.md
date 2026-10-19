@@ -6,7 +6,7 @@ color and font theme. It supports 44 diagram types and exports SVG and PNG on re
 | | |
 | --- | --- |
 | Lifecycle phase | Any; runs only when you ask |
-| Hooks | None |
+| Hooks | Post-write diagram check, opt-in (`illustrate.hooks.self_check: true` in `.specify/workflow.yml`) |
 | Commands | `generate`, `export`, `theme`, `import` ([reference](../reference/commands.md#illustrate)) |
 | Requires | Nothing |
 | Required by | Assure, PR, User Manual (Illustrate 2.x) |
@@ -50,6 +50,14 @@ The [process and theme gallery](../illustrate-examples.md) shows the presets and
 You choose the theme, ask for the diagram, and ask for exports. The agent resolves the theme tokens,
 applies the diagram type's rules, checks the HTML, and embeds the reviewed output.
 [Editable source](../diagrams/extension-illustrate.html).
+
+## Post-write check
+
+Set `illustrate.hooks.self_check: true` in `.specify/workflow.yml` and the extension's `PostToolUse`
+hook checks every HTML file the agent writes or edits that contains an inline SVG: it runs the skill's
+`self_check.py`, `verify-geometry.py` and `illustration_theme.py validate` and hands the first failure
+back to the agent. Without the key the hook does nothing. On Codex, approve the project hook in `/hooks`
+once.
 
 ## Limits
 

@@ -2,7 +2,7 @@ schema_version: '1.0'
 extension:
   id: memory
   name: Sanduq Memory
-  version: "2.2.1"
+  version: "2.3.0"
   description: Reconcile verified feature specifications into current project memory,
     migrate required fixtures, and archive through scoped recoverable Git commits.
   author: Samy K. Abushanab
@@ -22,29 +22,28 @@ provides:
   commands:
   - name: speckit.memory.init
     file: commands/init.md
-    description: Configure project policy, checks and lifecycle integrations
+    description: 'Configures Sanduq Memory hooks, checks, wrappers and guards without enabling automatic archiving. Use when asked to "set up project memory".'
   - name: speckit.memory.prepare
     file: commands/prepare.md
-    description: Queue implemented work for archival after merge
+    description: 'Queues an implemented feature for archival after merge without deleting it (after_implement hook). Use when asked to "queue it for archival".'
   - name: speckit.memory.run
     file: commands/run.md
-    description: Archive selected verified specs through checkpoint, reconciliation
-      and final commit
+    description: 'Archives verified features into project memory via a checkpoint, a reviewed delta and a scoped commit. Use when asked to "archive the feature".'
   - name: speckit.memory.session
     file: commands/session.md
-    description: Process approved pending archives in the next local session
+    description: 'Processes pending merged archives at session start and resumes an interrupted run (before_specify hook). Use when asked to "process archives".'
   - name: speckit.memory.enable
     file: commands/enable.md
-    description: Review and enable automatic archiving for the current policy and
-      implementation
+    description: 'Reviews the archive policy with the owner and records its approval so archives run automatically. Use when asked to "enable auto-archiving".'
   - name: speckit.memory.impact
     file: commands/impact.md
-    description: Consult relevant current product knowledge during specification and
-      impact analysis
+    description: 'Consults product memory for the capabilities a change touches, in a token budget (before_analyze hook). Use when asked to "consult memory".'
   - name: speckit.memory.status
     file: commands/status.md
-    description: Inspect policy approval, pending work and an interrupted archive
+    description: 'Reports policy approval, pending or blocked features, the archive phase and the next command. Use when asked "what is the archive status".'
 hooks:
+  # init also binds speckit.memory.impact to before_specify (after session): this manifest holds one
+  # command per event, so scripts/install.py HOOKS is the full list of four registrations.
   after_implement:
     command: speckit.memory.prepare
     optional: false

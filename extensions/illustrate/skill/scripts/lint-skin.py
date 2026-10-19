@@ -20,22 +20,11 @@ sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 import illustration_theme  # noqa: E402
 import self_check  # noqa: E402
 
-HEX_RE = re.compile(
-    r"(?<![\w-])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?![0-9a-fA-F])"
-)
+HEX_RE = self_check.HEX_RE
 RGBA_RE = re.compile(
     r"rgba\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*([^)]+)\)",
     re.IGNORECASE,
 )
-BLACK_RGB_RE = re.compile(r"rgb\(\s*0\s*,\s*0\s*,\s*0\s*\)", re.IGNORECASE)
-SCRIPT_RE = re.compile(r"<script\b", re.IGNORECASE)
-SRC_HTTP_RE = re.compile(r"\bsrc\s*=\s*(['\"])\s*https?://", re.IGNORECASE)
-IMPORT_HTTP_RE = re.compile(
-    r"@import\s+(?:url\(\s*)?(?:['\"]\s*)?https?://", re.IGNORECASE
-)
-URL_HTTP_RE = re.compile(r"url\(\s*(?:['\"]\s*)?https?://", re.IGNORECASE)
-LINK_RE = re.compile(r"<link\b[^>]*>", re.IGNORECASE | re.DOTALL)
-HREF_RE = re.compile(r"\bhref\s*=\s*(['\"])(.*?)\1", re.IGNORECASE | re.DOTALL)
 FONT_CSS_RE = re.compile(r"font-family\s*:\s*([^;}]+)", re.IGNORECASE)
 FONT_ATTR_RE = re.compile(
     r"\bfont-family\s*=\s*(['\"])(.*?)\1", re.IGNORECASE | re.DOTALL
@@ -62,11 +51,8 @@ ALLOWED_FONTS = {
 CSS_FONT_KEYWORDS = {"inherit", "initial", "revert", "revert-layer", "unset"}
 
 
-def normalize_hex(value):
-    value = value.lower()
-    if len(value) == 4:
-        return "#" + "".join(character * 2 for character in value[1:])
-    return value
+# Pure black, scripts and external assets are shared with self_check.py --strict (one implementation).
+normalize_hex = self_check.normalize_hex
 
 
 def table_hexes(markdown, heading):
@@ -152,14 +138,6 @@ def allowed_fonts(project_root="."):
     return fonts
 
 
-def canonical_motion_script(text):
-    """True when the file's only script is the pinned motion controller (template-motion.html)."""
-    parser = self_check.parsed_document(text)
-    errors = []
-    self_check.check_scripts(parser, errors)
-    return len(parser.scripts) == 1 and not errors
-
-
 def named_families(value, fonts=ALLOWED_FONTS):
     families = []
     for raw_family in value.split(","):
@@ -181,9 +159,7 @@ def lint_text(text, colors, rgb_triplets, fonts=ALLOWED_FONTS):
     for match in HEX_RE.finditer(text):
         value = match.group()
         normalized = normalize_hex(value)
-        if normalized == "#000000":
-            add(match.start(), "pure-black", f"pure black {value} is not allowed")
-        elif normalized not in colors:
+        if normalized != "#000000" and normalized not in colors:  # pure black comes from skin_findings
             add(match.start(), "color", f"{value} is not in the style-guide palette")
 
     for match in RGBA_RE.finditer(text):
@@ -195,36 +171,8 @@ def lint_text(text, colors, rgb_triplets, fonts=ALLOWED_FONTS):
                 f"{match.group()} is not derived from an allowed palette color",
             )
 
-    for match in BLACK_RGB_RE.finditer(text):
-        add(match.start(), "pure-black", "pure black rgb(0,0,0) is not allowed")
-
-    if not canonical_motion_script(text):
-        for match in SCRIPT_RE.finditer(text):
-            add(match.start(), "script", "<script> tags are not allowed (except the pinned motion controller)")
-
-    for match in SRC_HTTP_RE.finditer(text):
-        add(match.start(), "external-asset", "external HTTP(S) src is not allowed")
-
-    import_spans = []
-    for match in IMPORT_HTTP_RE.finditer(text):
-        import_spans.append(match.span())
-        add(match.start(), "external-asset", "external HTTP(S) @import is not allowed")
-
-    for match in URL_HTTP_RE.finditer(text):
-        if any(start <= match.start() < end for start, end in import_spans):
-            continue
-        add(match.start(), "external-asset", "external HTTP(S) url() is not allowed")
-
-    for link_match in LINK_RE.finditer(text):
-        href_match = HREF_RE.search(link_match.group())
-        if not href_match:
-            continue
-        href = href_match.group(2).strip()
-        if href.lower().startswith("https://fonts.googleapis.com"):
-            continue
-        if href.lower().startswith(("http://", "https://")):
-            href_offset = link_match.start() + href_match.start(2)
-            add(href_offset, "external-asset", "external HTTP(S) <link> is not allowed")
+    for offset, category, message in self_check.skin_findings(text):
+        add(offset, category, message)
 
     for match in FONT_CSS_RE.finditer(text):
         unsupported = named_families(match.group(1), fonts)

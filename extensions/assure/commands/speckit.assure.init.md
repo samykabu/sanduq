@@ -1,5 +1,5 @@
 ---
-description: "Configure whether QA analysis and documentation are required parts of the project lifecycle."
+description: 'Sets whether QA analysis and the QA manual are lifecycle gates or manual steps. Use when setting up Assure or asked to "make QA mandatory".'
 ---
 
 # Initialize QA

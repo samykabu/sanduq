@@ -1,7 +1,7 @@
 # Progress verbs
 
 Output is one line (`refresh` prints nothing without `--verbose`). Exit codes: 0 ok, 2 usage or not found, 3 refused (authority, binding, hook installer), 4 lock busy (retried 3 times first).
-Error lines start with `progress: error CODE`. The full contract is `docs/contracts.md`; every flag and example is in `docs/commands.md`.
+Error lines start with `progress: error CODE`. `docs/contracts.md` (the full contract) and `docs/commands.md` (every flag and example) are human references, not needed to run a verb.
 
 **Which report.** Every verb below except `init`, `runs`, `theme` and `hooks` takes `--plan NAME|PATH` (plan mode) or `--feature DIR` (Spec Kit). Put the flag right after the verb. With exactly one initialised plan or feature it can be left out; otherwise the error `PROGRESS_NO_FEATURE` lists the candidates.
 
@@ -20,7 +20,7 @@ Error lines start with `progress: error CODE`. The full contract is `docs/contra
 | `note "text" [--target P005]` | `facts.jsonl` | Retries and failures worth a human's attention. |
 | `attempt record (--lane L1 \| --overhead LABEL) --run ID --status S [--started T] [--ended T] [--usage-json PATH]` | `facts.jsonl` | Integration verb for the Workflow legacy shim. Writes a `kind:"attempt"` fact with origin `legacy`; it never overrides a producer's attempt or lane status. |
 | `runs [--json] [--runs-dir DIR]...` | nothing | `progress.runs.v1`: normalized `.delegate/runs` projections for other tools. Needs no initialised report. |
-| `hooks install\|uninstall --host claude\|codex [--scope project\|user] [--python CMD] [--force-both]` | the host's hook file | Tagged entries only; other settings kept. Commands end in `; exit 0`. Refuses (exit 3): Spec Kit's Progress hooks registered (`PROGRESS_HOOKS_SPECKIT`), target file not valid JSON (`_SETTINGS`), project scope needing an absolute path (`_PATH`), entries already in the other scope unless `--force-both` (`_DUPLICATE`), a file changing twice or locked (`_CONFLICT`), a symlinked settings file (`PROGRESS_UNSAFE_TARGET`). Appends `bind=<nonce>` when one report exists. |
+| `hooks install\|uninstall --host claude\|codex [--scope project\|user] [--python CMD] [--force-both] [--post-tool-matcher REGEX]` | the host's hook file | Tagged entries only; other settings kept. `--post-tool-matcher` limits the PostToolUse hook to matching tools (default: every tool). Commands end in `; exit 0`. Refuses (exit 3): Spec Kit's Progress hooks registered (`PROGRESS_HOOKS_SPECKIT`), target file not valid JSON (`_SETTINGS`), project scope needing an absolute path (`_PATH`), entries already in the other scope unless `--force-both` (`_DUPLICATE`), a file changing twice or locked (`_CONFLICT`), a symlinked settings file (`PROGRESS_UNSAFE_TARGET`). Appends `bind=<nonce>` when one report exists. |
 | `hooks status [--host claude\|codex]` | nothing | One line: tagged entries per host and scope, and whether Spec Kit's hooks exist. |
 | `statusline [install\|uninstall\|run]` | Claude `settings.json` | Chains the previous status line command and restores it on uninstall. |
 | `theme --preset sanduq\|cobalt\|emerald\|classic \| --from-illustrate \| --file theme.json \| --show` | project `theme.json` | |

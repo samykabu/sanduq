@@ -122,6 +122,19 @@ In Codex, call each command as `$speckit-workflow-<cmd>`. In Claude Code, use
 Worked examples for every command are in the
 [commands reference](https://github.com/samykabu/sanduq/blob/main/docs/reference/commands.md).
 
+## Guard hook
+
+The installer registers `hooks/guard.py` as a PreToolUse hook for Claude Code and Codex (Codex runs
+it after you approve it in `/hooks`). It refuses, with a one-line reason:
+
+- `git add -A`, `git add .` and `git stash` unless `SANDUQ_ROLE=coordinator`;
+- `delegate_dispatch.py trust-reset|accept|reassign|adopt` in a worker or subagent context;
+- in a managed project (`.specify/workflow.yml` present), `gh pr create|edit --body-file <f>` when the
+  sibling `<f without extension>.lint.json` that `pr_publish.py` writes is missing or its
+  `body_sha256` is not the hash of `<f>`;
+- `gh pr create` when its head (`--head`, else the current branch) is the repository default branch
+  (`origin/HEAD`). A branch the guard cannot resolve allows the call.
+
 ## Progress reporting
 
 Workflow works without any report extension. If you install the optional

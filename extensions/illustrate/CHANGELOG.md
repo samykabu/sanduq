@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.5.0] - 2026-10-19
+
+Optimization round 2.
+
+- Vendors illustration-tools 3.5.0. SKILL.md is procedure-first, 11.7 KB instead of 34.7 KB, with `references/type-index.md` (one line per type and variant), `taste-gate.md` and `variants.md`. Four oversize type references are split into eight variant files. `self_check.py --strict` and `verify-geometry.py --orthogonal` add the mechanical checks. One diagram's minimal read is about 29 KB instead of 52 KB.
+- The commands use the type index; `generate.md` no longer repeats the type list and `theme.md` no longer restates the script's dialogue.
+- Opt-in post-write check: with `illustrate.hooks.self_check: true` in `.specify/workflow.yml`, a PostToolUse hook runs the three checks on written diagram HTML and returns the first failure. It is off by default.
+- One description per command.
+
 ## [2.4.2] - 2026-10-17
 
 - Vendors illustration-tools 3.4.2. Render verification pauses JavaScript clocks between captures and restores SVG and ancestor styles exactly after capture.

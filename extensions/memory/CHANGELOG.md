@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.3.0] - 2026-10-19
+
+Optimization round 2.
+
+- `run.md` is a 4.7 KB procedure (21.2 KB before) with references read by step from `.specify/extensions/memory/references/`: candidate format, verification override, large runs, format 1, review and publish, recovery. A small archive's common path reads about 14 KB.
+- `memory show` and `memory query --format json` print `expected_hash`; `status`, `inspect --view status`, `validate` and `finalize` return `next: {command, reason}`.
+- Descriptions come from the command frontmatter only. `prepare` and `session` are hidden from the Claude menu (`user-invocable: false`). The registry records the manifest version.
+- Opt-in guard hook: with `guard_hooks: true` in `archive-policy.json`, an active archive refuses `git push|stash|reset|clean` and writes under `specs/memory/`. It is off by default.
+- The standing SESSION block is four lines.
+
 ## [2.2.1] - 2026-10-18
 
 - Archive prepare and finalize no longer fail when a scope names files that are tracked under an ignored parent such as `artifacts/`. The expected tree stages tracked edits and deletions with `git add -u` and adds new unignored files by name. Untracked ignored files stay out of the commit, and one named exactly as a scope is still refused.
