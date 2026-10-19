@@ -45,7 +45,7 @@ Flags: `--feature <path>`, `--full`, `--module <id>`, `--skip-runtime`, `--no-bu
    diagram, run `python .specify/extensions/user-manual/scripts/deps.py ensure illustrate` first; on
    a non-zero exit report its line and generate no diagram (when it prints a `specify extension`
    recipe and the user approves, re-run with `--approve`; under a `manual` policy the user runs the
-   printed command, then re-runs this command). On a zero exit, pass on any "newer compatible
+   printed command, then re-runs this command). When it exits zero, pass on any "newer compatible
    release available" note and draw with the procedure in `.specify/extensions/illustrate/skill/SKILL.md`:
    the §0 theme gate first, then §10 (choose the type from `references/type-index.md`, read its
    `type-*.md`, apply and validate the theme, and run the step 7 checks); its `scripts/` are under

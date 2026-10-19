@@ -32,7 +32,7 @@ Flags: `--feature <path>`, `--report-only`.
    - Diagrams: run `python .specify/extensions/user-manual/scripts/deps.py ensure illustrate`
      first; on a non-zero exit report its line and add no diagram task (when it prints a
      `specify extension` recipe and the user approves, re-run with `--approve`; under a `manual`
-     policy the user runs the printed command, then re-runs this command). On a zero exit, pass on
+     policy the user runs the printed command, then re-runs this command). When it exits zero, pass on
      any "newer compatible release available" note, read
      `.specify/extensions/illustrate/skill/references/type-index.md`, choose the type, and name it
      in the task; the stage that draws follows Illustrate's full procedure.
