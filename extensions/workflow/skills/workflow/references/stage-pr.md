@@ -11,17 +11,21 @@ replacement PR or claim the old readiness receipt verifies new source.
 
 ## Required work and evidence
 
-Run the PR extension, include every relevant visual inline, verify authenticated loading, and
-reuse an existing PR. Receipt: `pr_url`, `images_verified: true` and actual evidence; when no
-visuals apply, record that inventory result. In lean mode the coordinator owns PR mechanics,
+Run the PR extension, include every relevant visual inline, verify them, and reuse an existing
+PR. Receipt: `pr_url`, `images_verified: true`, `image_verification: api` (rendered `body_html`
+plus the contents API per pinned commit, both hosts) or `browser` (those checks plus loading in an
+authenticated browser, when the host has a browser tool), and actual evidence; when no visuals
+apply, record that inventory result. In lean mode the coordinator owns PR mechanics,
 including reuse of unchanged evidence, with no model dispatch; claim tokens, publication
 evidence, human decisions and project checks stay enforced.
 
-Before publication, lint the exact UTF-8/LF body with `execution_tools.py pr-lint --repo
-<bound-repo> --issue <bound-issue> [--prerequisite <n> ...] --body-file <body.md> --output
-<lint.json>`, deriving identity and prerequisites from `scope-source.json`, not PR prose. The
-lean PR receipt includes `pr_body_file`, `pr_lint_file`, `pr_body_sha256` and both files as
-evidence; completion recomputes the lint. Keep the actual publication evidence and body bytes.
+Publish with `python .specify/extensions/pr/scripts/pr_publish.py --feature specs/<feature>
+--explained docs/<slug>/<Feature>-Explained.md`: it writes the exact UTF-8/LF body, lints it with
+`execution_tools.pr_lint` against the bound issue and prerequisites from `scope-source.json` (not
+PR prose), refuses on findings (exit 1), and prints `pr_url`, `pr_body_file`, `pr_lint_file`,
+`pr_body_sha256` and `evidence`; copy them into the receipt as printed. Completion recomputes the
+lint; the guard hook refuses `gh pr create|edit --body-file` without a matching sibling
+`.lint.json`. Keep the actual publication evidence and body bytes.
 
 For source-only PRs, write the affected features to `.specify/workflow/pr-features.json` as
 `{"features": ["specs/001-example"]}` and include it in the PR. CI uses it in addition to the

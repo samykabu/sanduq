@@ -28,10 +28,14 @@ A file link, HTML-source link, or link to the explanation document does not sati
   elements against the inventory. GitHub may proxy/rewrite URLs; do not require literal equality
   to one hard-coded `<img src>` string. Verify with the contents API, per path and pinned commit:
   `gh api repos/<o>/<r>/contents/<path>?ref=<sha>`.
-- Verify actual image loading in an authenticated browser with repository access. The presence
-  of `<img>` elements alone is not proof of successful loading. Repair broken embeds and recheck;
-  if verification is unavailable, report PR creation separately from unverified image visibility.
-  Do not report the full generation task complete until required visuals are verified.
+- Verify at the highest tier the host offers and name it. **`api`** (both hosts): every inventory
+  image appears in the rendered `body_html` and every repository-backed path resolves through the
+  contents API at its pinned commit. **`browser`** (when a browser tool with repository access
+  exists): the `api` checks plus actual image loading in an authenticated browser, since `<img>`
+  elements alone are not proof of loading. Repair broken embeds and recheck. The receipt records
+  `images_verified: true` and `image_verification: api` or `browser`; if neither tier passes,
+  report PR creation separately from unverified image visibility and do not report the
+  generation task complete.
 - Preserve existing unrelated PR content and avoid duplicate image sections on retry. If upload,
   export, permissions, or PR body limits prevent complete embedding, record the missing assets
   and recovery action; do not silently replace them with links or discard visuals.

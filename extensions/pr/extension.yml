@@ -34,17 +34,17 @@ provides:
   commands:
     - name: speckit.pr.generate
       file: commands/speckit.pr.generate.md
-      description: "Generate the feature CHANGELOG + plain-English feature-details doc with diagram assets when relevant, then create or update the PR description with the feature details"
+      description: "Generates the feature CHANGELOG and the plain-English feature-details document with inline diagrams, then creates or updates the branch's pull request. Use when asked to 'open the PR', 'update the PR description' or after implementation finishes; never merges."
     - name: speckit.pr.review-feedback
       file: commands/speckit.pr.review-feedback.md
-      description: "Process unresolved PR review feedback through a classify, approve, fix or reply, push, and resolve workflow"
+      description: "Processes unresolved GitHub pull request review comments through an approval-gated classify, fix or reply, push and resolve workflow. Use when asked to 'address review comments', 'process reviewer feedback' or 'resolve the threads'."
 
 hooks:
   after_implement:
     command: speckit.pr.generate
     optional: true
     prompt: "Generate the feature CHANGELOG + feature-details doc, diagram assets if needed, and update the PR description?"
-    description: "Produce reviewer-facing docs, generate diagram assets when relevant, and inject the feature details into the PR description after implementation"
+    description: "Generates the feature CHANGELOG and the plain-English feature-details document with inline diagrams, then creates or updates the branch's pull request. Use when asked to 'open the PR', 'update the PR description' or after implementation finishes; never merges."
 
 tags:
   - "pr"
