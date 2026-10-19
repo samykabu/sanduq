@@ -1,5 +1,5 @@
 ---
-description: "Resumes an issue-bound feature at its earliest unfinished or stale stage from the workflow checkpoint and runs the remaining stages. Use in a new session, after an interruption or pause, or when asked to continue, resume or pick up a feature."
+description: 'Resumes an issue-bound feature at its earliest unfinished or stale stage. Use when a session was interrupted or paused, or for "continue the feature".'
 ---
 
 # Sanduq Workflow: continue

@@ -25,7 +25,7 @@ def flat(path):
 
 class ReportingInstructions(unittest.TestCase):
     def references(self):
-        found = sorted(REFERENCES.glob('*.md'))
+        found = sorted(REFERENCES.rglob('*.md'))  # the Execute claim's parts live in references/execute/
         self.assertTrue(found)
         return found
 
@@ -90,18 +90,14 @@ class ReportingInstructions(unittest.TestCase):
             hits = [m.start() for m in legacy_call.finditer(text)]
             if not hits:
                 continue
-            if path.name == 'execution-assign.md':  # only the init call, introduced as legacy-only
-                self.assertTrue(all('legacy' in text[max(0, h - 300):h] and text[h:h + 80].split()[1:2] == ['init']
-                                    for h in hits))
-                continue
-            self.assertEqual(path.name, 'execution-report.md', path.name + ' carries a legacy reporter call')
+            self.assertEqual(path.name, 'reporting-legacy.md', path.name + ' carries a legacy reporter call')
             self.assertIn(LEGACY_HEADING, text)
             self.assertGreater(min(hits), text.index(LEGACY_HEADING))
 
     def test_the_legacy_anchor_that_reporting_links_to_exists(self):
         anchor = '#legacy-reporter-calls-mode-legacy-only'
-        self.assertIn('execution-report.md' + anchor, (REFERENCES / 'reporting.md').read_text(encoding='utf-8'))
-        self.assertIn(LEGACY_HEADING, (REFERENCES / 'execution-report.md').read_text(encoding='utf-8'))
+        self.assertIn('execute/reporting-legacy.md' + anchor, (REFERENCES / 'reporting.md').read_text(encoding='utf-8'))
+        self.assertIn(LEGACY_HEADING, (REFERENCES / 'execute/reporting-legacy.md').read_text(encoding='utf-8'))
 
     def test_waiting_for_workers_stays_and_watching_the_report_is_forbidden(self):
         assign = flat(REFERENCES / 'execution-assign.md')
@@ -110,10 +106,9 @@ class ReportingInstructions(unittest.TestCase):
         self.assertIn('Do not re-open or re-verify it in a loop', assign)
 
     def test_lean_and_delegated_modes_agree_that_no_agent_exists_for_reporting(self):
-        execute = flat(REFERENCES / 'stage-execute.md')
-        self.assertIn('no agent exists solely for it', execute)
-        self.assertIn('it has no reporting duty', execute)
-        self.assertIn('Do not create the additional orchestration agent', execute)  # lean text is unchanged
+        self.assertIn('no agent exists solely for it', flat(REFERENCES / 'stage-execute.md'))
+        self.assertIn('it has no reporting duty', flat(REFERENCES / 'execute/orchestrator.md'))
+        self.assertIn('Do not create the additional orchestration agent', flat(REFERENCES / 'execute/lean.md'))
 
     def test_dispatcher_status_appends_the_one_line_and_makes_synthesis_optional(self):
         status = flat(REFERENCES / 'dispatcher-operations.md')

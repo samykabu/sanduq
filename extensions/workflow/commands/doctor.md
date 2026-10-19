@@ -1,5 +1,5 @@
 ---
-description: "Checks the workflow's dependencies, policy, installed host commands and skills, board configuration and package lock, reporting every missing or broken item. Use after installing or upgrading, when a claim fails on setup, or when asked to diagnose the workflow."
+description: 'Checks the workflow''s dependencies, policy, host commands, hooks and board setup. Use when a claim fails on setup or after an upgrade, or for "diagnose the workflow".'
 ---
 
 # Sanduq Workflow: doctor

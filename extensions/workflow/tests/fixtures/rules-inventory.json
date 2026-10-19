@@ -56,7 +56,7 @@
  },
  {
   "file": "extensions/workflow/skills/workflow/references/receipt-rules.md",
-  "rule": "Reread the issue decision ledger before completion and include it in the stage inputs.",
+  "rule": "Reread the issue decision ledger before completion.",
   "reason": "decision ledger is a stage input"
  },
  {
@@ -130,12 +130,12 @@
   "reason": "handoff hygiene"
  },
  {
-  "file": "extensions/workflow/skills/workflow/references/delegation-and-decisions.md",
+  "file": "extensions/workflow/skills/workflow/references/delegation.md",
   "rule": "A successful delegate result is candidate evidence, not a passed stage",
   "reason": "delegated output is reviewed before a receipt"
  },
  {
-  "file": "extensions/workflow/skills/workflow/references/delegation-and-decisions.md",
+  "file": "extensions/workflow/skills/workflow/references/delegation.md",
   "rule": "On `DELEGATION_START_UNCERTAIN`, never start again",
   "reason": "no duplicate delegated runs"
  },

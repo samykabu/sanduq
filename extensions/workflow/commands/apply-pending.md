@@ -1,5 +1,5 @@
 ---
-description: "Applies the proposed wording queued in workflow/pending-artifact-updates.md to the feature's contracts, data model or research, and names any receipts that became stale. Use at the end of Execute and of Review, or when asked to apply pending artifact updates."
+description: 'Applies queued pending artifact updates to contracts, data model or research. Use when Execute or Review ends, or for "apply pending updates".'
 ---
 
 # Sanduq Workflow: apply-pending

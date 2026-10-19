@@ -1,5 +1,5 @@
 ---
-description: "Runs only the feature's affected test lanes locally, from the project's affected-lane hook, into the CI results.json format; the result is local evidence, never CI evidence. Use before pushing, or when asked to test what a change affects."
+description: 'Runs the feature''s affected test lanes locally as local evidence, never CI evidence. Use when testing before a push, or for "test what changed".'
 ---
 
 # Sanduq Workflow: verify-affected

@@ -4,6 +4,7 @@ delegate_dispatch's own S6/QA_COLLECT_ADDENDUM constants (review round 1, findin
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
@@ -129,9 +130,13 @@ class WorkerBriefTests(unittest.TestCase):
     def test_oversized_contract_excerpt_is_dropped_to_stay_in_budget(self):
         (self.directory / 'contracts').mkdir()
         (self.directory / 'contracts/pool.md').write_text('pool contract\n' + ('x' * 10_000), encoding='utf-8')
-        brief, _, oversized = wb.build(self.root, self.feature, 'T001')
-        self.assertFalse(oversized)
-        self.assertLessEqual(len(brief.encode('utf-8')), wb.MAX_BYTES)
+        full, _, _ = wb.build(self.root, self.feature, 'T001')
+        self.assertIn('## Contract excerpt', full)
+        # The budget sits just below the brief with its excerpt, whatever the protocol text weighs today.
+        with mock.patch.object(wb, 'MAX_BYTES', len(full.encode('utf-8')) - 1):
+            brief, _, oversized = wb.build(self.root, self.feature, 'T001')
+            self.assertFalse(oversized)
+            self.assertLessEqual(len(brief.encode('utf-8')), wb.MAX_BYTES)
         self.assertNotIn('## Contract excerpt', brief)
 
     def test_still_oversized_without_contract_is_reported_not_hidden(self):

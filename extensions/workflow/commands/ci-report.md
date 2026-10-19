@@ -1,5 +1,5 @@
 ---
-description: "Summarizes the last N runs of a GitHub Actions workflow into per-job durations, wall-clock spans and fixed overhead versus test time. Use before changing CI lanes or runners, or when asked why CI is slow or how often runs are cancelled."
+description: 'Summarizes recent GitHub Actions runs into job durations and fixed overhead. Use when CI is slow or runners change, or for "why is CI slow".'
 ---
 
 # Sanduq Workflow: ci-report

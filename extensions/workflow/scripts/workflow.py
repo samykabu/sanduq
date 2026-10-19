@@ -23,7 +23,7 @@ from types import SimpleNamespace
 
 # Also supports importlib loading directly from the canonical source tree.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from sanduq_hash import eol_drift, portable_files
+from sanduq_hash import eol_drift, portable_files, text_attributes
 import sanduq_ci
 import skill_inventory
 import source_key as sk
@@ -108,13 +108,31 @@ def stage_reference(stage):
     return WORKFLOW_PACKAGE_PREFIX + 'skills/workflow/references/stage-' + stage + '.md'
 
 
-def reference_text(root, stage):
-    """The stage reference's content, from the installed package, else from this package's own tree."""
-    relative = stage_reference(stage)
-    for path in (Path(root) / relative, Path(__file__).resolve().parents[1] / relative[len(WORKFLOW_PACKAGE_PREFIX):]):
-        if path.is_file():
-            return path.read_text(encoding='utf-8-sig')
-    return None
+def reference_text(root, stage, parts=()):
+    """The stage reference's content followed by `parts` (names relative to the references folder), each from the
+    installed package, else from this package's own tree."""
+    folder = WORKFLOW_PACKAGE_PREFIX + 'skills/workflow/references/'
+    texts = []
+    for relative in [stage_reference(stage)] + [folder + part for part in parts]:
+        for path in (Path(root) / relative, Path(__file__).resolve().parents[1] / relative[len(WORKFLOW_PACKAGE_PREFIX):]):
+            if path.is_file():
+                texts.append(path.read_text(encoding='utf-8-sig'))
+                break
+        else:
+            if not texts:
+                return None
+    return texts[0] if len(texts) == 1 else '\n'.join(text.rstrip('\n') + '\n' for text in texts)
+
+
+def execute_protocol(policy, tier, reporting):
+    """The Execute protocol parts that apply: the core, lean or a dedicated orchestration agent, delegated workers
+    when delegation is on, and the calls of the reporting mode."""
+    parts = ['execution-assign.md', 'execution-report.md',
+             'execute/lean.md' if lean_policy.enabled(policy, tier) else 'execute/orchestrator.md']
+    if policy['delegation']['enabled']:
+        parts.append('execute/delegated-workers.md')
+    parts.append('execute/reporting-legacy.md' if reporting == 'legacy' else 'reporting.md')
+    return parts
 
 
 class WorkflowError(Exception):
@@ -170,6 +188,7 @@ def checkpoint_policy_digest(state, policy):
 def replace_file(source, target, attempts=10):
     """`os.replace` with a short bounded retry: on Windows another process (an indexer, a scanner, a
     concurrent reader) can hold the target for a moment and the rename fails with PermissionError."""
+    _wrote(target)
     for attempt in range(attempts):
         try:
             return os.replace(source, target)
@@ -188,7 +207,7 @@ def write(path, value):
 
 def inside(root, relative):
     path = (root / relative).resolve()
-    require(path.is_relative_to(root.resolve()), 'PATH_OUTSIDE_PROJECT: ' + str(relative))
+    require(path.is_relative_to(_memo('resolved', root, root.resolve)), 'PATH_OUTSIDE_PROJECT: ' + str(relative))
     return path
 
 
@@ -215,8 +234,72 @@ def canonical_path(root, label):
 
 def git(root, *args):
     result = subprocess.run(['git', *args], cwd=root, capture_output=True, text=True, encoding='utf-8')
+    if args and args[0] not in ('rev-parse', 'branch', 'ls-files', 'config', 'rev-list', 'merge-base'):
+        _wrote(None)  # anything else may move HEAD, the index or the configuration
+    elif args[:1] == ('config',) and '--get' not in args and len(args) > 2:
+        _wrote(None)
     require(result.returncode == 0, 'GIT_ERROR: ' + result.stderr.strip())
     return result.stdout.strip()
+
+
+# Operation-scoped memo: one CLI command reads the origin URL, shallowness, git text attributes and the
+# source inventory once. Outside `operation()` nothing is memoised, so a long-lived importer (a test, Scope)
+# always reads live values. Anything the runtime itself writes drops what that write could change (`_wrote`).
+_OPERATION = None
+OPERATIONAL_DIRS = ('.specify', '.agents', '.claude', '.codex', 'specs', 'User-Manual', 'docs', 'graphify-out',
+                    'keys_cert')
+
+
+@contextmanager
+def operation():
+    global _OPERATION
+    if _OPERATION is not None:
+        yield  # nested: share the outer command's memo
+        return
+    _OPERATION = {}
+    try:
+        yield
+    finally:
+        _OPERATION = None
+
+
+def clear_caches():
+    """Drop the current operation's memo (no-op outside one)."""
+    if _OPERATION is not None:
+        _OPERATION.clear()
+
+
+def _memo(kind, root, compute):
+    if _OPERATION is None:
+        return compute()
+    key = (kind, os.path.normcase(os.path.abspath(root)))
+    if key not in _OPERATION:
+        _OPERATION[key] = compute()
+    return _OPERATION[key]
+
+
+def _wrote(path):
+    """The runtime wrote `path` (None: an unknown change). Keeps only memos the write cannot affect: identity is
+    git configuration, attributes change with `.gitattributes` or `.git/info`, and the source inventory ignores
+    the operational folders."""
+    if _OPERATION is None:
+        return
+    if path is None:
+        return _OPERATION.clear()
+    target = os.path.normcase(os.path.abspath(path))
+    for key in list(_OPERATION):
+        kind, root = key
+        if kind in ('origin', 'shallow', 'root_commit', 'resolved'):
+            continue
+        relative = os.path.relpath(target, root) if target.startswith(root) else None
+        parts = Path(relative).parts if relative else ()
+        if not parts or parts[0] == '..':
+            continue
+        if kind == 'attributes' and not (parts[-1] == '.gitattributes' or parts[:2] == ('.git', 'info')):
+            continue
+        if kind == 'source' and parts[0] in OPERATIONAL_DIRS:
+            continue
+        del _OPERATION[key]
 
 
 def github_repository(root):
@@ -233,7 +316,8 @@ def github_repository(root):
     case sensitive, so compare the result with `same_github_repository`,
     never `==`.
     """
-    remote = git(root, 'config', '--get', 'remote.origin.url')
+    remote = origin_url(root)
+    require(remote is not None, 'GIT_ERROR: no remote.origin.url')
     normalized = normalize_remote_url(remote)
     match = re.fullmatch(r'github\.com(?::\d+)?/([^/]+/[^/]+)', normalized)
     require(match, 'GITHUB_REMOTE_REQUIRED')
@@ -357,10 +441,17 @@ def normalized_remote(root):
     tarball checkout, a throwaway CI scratch clone) is a supported, if
     less strongly identified, state -- see `repo_identity`.
     """
-    result = subprocess.run(['git', 'config', '--get', 'remote.origin.url'], cwd=root,
-                            capture_output=True, text=True, encoding='utf-8')
-    url = result.stdout.strip()
-    return normalize_remote_url(url) if result.returncode == 0 and url else None
+    url = origin_url(root)
+    return normalize_remote_url(url) if url else None
+
+
+def origin_url(root):
+    """The raw `remote.origin.url`, or None when it is not configured (memoised per operation)."""
+    def read_url():
+        result = subprocess.run(['git', 'config', '--get', 'remote.origin.url'], cwd=root,
+                                capture_output=True, text=True, encoding='utf-8')
+        return result.stdout.strip() if result.returncode == 0 else None
+    return _memo('origin', root, read_url)
 
 
 def root_commit_sha(root):
@@ -374,26 +465,27 @@ def root_commit_sha(root):
     a shallow CI checkout of a repository that has a remote is identified by
     that remote instead, so the truncated history never matters there.
     """
-    result = subprocess.run(['git', 'rev-list', '--max-parents=0', '--reverse', 'HEAD'], cwd=root,
-                            capture_output=True, text=True, encoding='utf-8')
-    if result.returncode != 0:
-        return None
-    shas = [line for line in result.stdout.split() if line]
-    # Reverse chronological order puts the true earliest root first; with
-    # more than one root (unrelated histories merged -- rare), that first
-    # entry is still a deterministic, reproducible choice.
-    return shas[0] if shas else None
+    def walk():
+        result = subprocess.run(['git', 'rev-list', '--max-parents=0', '--reverse', 'HEAD'], cwd=root,
+                                capture_output=True, text=True, encoding='utf-8')
+        if result.returncode != 0:
+            return None
+        shas = [line for line in result.stdout.split() if line]
+        # Reverse chronological order puts the true earliest root first; with
+        # more than one root (unrelated histories merged -- rare), that first
+        # entry is still a deterministic, reproducible choice.
+        return shas[0] if shas else None
+    return _memo('root_commit', root, walk)
 
 
 def is_shallow_clone(root):
     """True/False, or None when Git cannot say (an old Git, or any other
     failure -- treated as "don't know", never as a mismatch)."""
-    result = subprocess.run(['git', 'rev-parse', '--is-shallow-repository'], cwd=root,
-                            capture_output=True, text=True, encoding='utf-8')
-    if result.returncode != 0:
-        return None
-    value = result.stdout.strip()
-    return {'true': True, 'false': False}.get(value)
+    def ask():
+        result = subprocess.run(['git', 'rev-parse', '--is-shallow-repository'], cwd=root,
+                                capture_output=True, text=True, encoding='utf-8')
+        return {'true': True, 'false': False}.get(result.stdout.strip()) if result.returncode == 0 else None
+    return _memo('shallow', root, ask)
 
 
 def repo_identity(root):
@@ -406,6 +498,16 @@ def repo_identity(root):
     would otherwise make.
     """
     return {'remote': normalized_remote(root), 'root_commit': root_commit_sha(root), 'shallow': is_shallow_clone(root)}
+
+
+def current_identity(root, recorded):
+    """`repo_identity(root)` for comparison with `recorded`. A recorded root commit still reachable from HEAD stands
+    in for the current one, which `identity_matches` accepts either way, so the full-history `rev-list` runs only
+    when one `merge-base --is-ancestor` cannot answer."""
+    if root_commit_still_reachable(root, recorded.get('root_commit')):
+        return {'remote': normalized_remote(root), 'root_commit': recorded['root_commit'],
+                'shallow': is_shallow_clone(root)}
+    return repo_identity(root)
 
 
 def root_commit_still_reachable(root, commit_sha):
@@ -530,7 +632,8 @@ def verify_checkpoint_identity(root, state, relative):
     require_issue_repository_binding(root, state, relative)
     if 'repo_identity' in state:
         recorded = state['repo_identity']
-        require(isinstance(recorded, dict) and identity_matches(recorded, repo_identity(root), current_root=root),
+        require(isinstance(recorded, dict) and identity_matches(recorded, current_identity(root, recorded),
+                                                                current_root=root),
                 'CHECKPOINT_IDENTITY_MISMATCH: this checkpoint belongs to a different repository. If this is '
                 'the same project relocated (a fork, a renamed remote, a migrated org), run: workflow.py '
                 'relocate --feature ' + relative + ' --reason "<why>"')
@@ -1179,6 +1282,17 @@ def host_warnings(root):
     return [problem + '; run "' + repair + '" to re-register every installed host' for problem in problems]
 
 
+def guard_approval_warnings(root):
+    """On Codex the guard hook runs only in a trusted project after `/hooks` approval; warn where it would not run.
+    A warning, not an error: the worker prohibitions stay in the Execute text either way."""
+    import hosts
+    import progress_bridge
+    if 'codex' not in hosts.installed_hosts(root):
+        return []
+    registered, active = progress_bridge.codex_hook_state(root, (hosts.GUARD_MARK,))
+    return ['GUARD_HOOK_UNAPPROVED: ' + hosts.CODEX_HOOK_APPROVAL] if registered and not active else []
+
+
 def doctor_cache_key(root, policy, dependency_digest=None):
     """What a cached green doctor result is valid for: packages, policy and the registration files' mtimes."""
     mtimes = {}
@@ -1262,7 +1376,7 @@ def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True
             errors.append('PRESET_NOT_ENABLED: ' + preset)
     errors += ci_errors(root, policy, preserved_ci)
     if project: errors += project_errors(root, policy)
-    warnings = host_warnings(root)
+    warnings = host_warnings(root) + guard_approval_warnings(root)
     # E9: AGENTS.md is the standing file; CLAUDE.md should import it, not repeat it.
     claude_md = root / 'CLAUDE.md'
     if (root / 'AGENTS.md').is_file() and claude_md.is_file() and \
@@ -1403,6 +1517,9 @@ def native_run_status(root, feature, state, roots):
     for key in ('profile', 'skipped', 'pause'):
         if state.get(key):
             result[key] = state[key]
+    warnings = guard_approval_warnings(root)
+    if warnings:
+        result['warnings'] = warnings
     return result
 
 
@@ -1455,7 +1572,7 @@ def fingerprint_files(root, paths, normalize=False):
     # canonical path. Labels naming one file each keep their own entry (and the same hash); conflicting role
     # data for such labels is refused when a receipt is ingested (`canonical_receipt`).
     canonical = {relative: canonical_path(root, relative) for relative in paths}
-    contents = portable_files(root, sorted(set(canonical.values())))
+    contents = portable_files(root, sorted(set(canonical.values())), attributes=git_text_attributes)
     # Byte-sensitive files read as their committed blob when the working tree
     # differs only by checkout conversion, so a Windows autocrlf checkout and a
     # clean CI checkout of the same commit fingerprint identically.
@@ -1480,6 +1597,30 @@ def fingerprint_files(root, paths, normalize=False):
         else:
             result[relative] = None
     return result
+
+
+def git_text_attributes(root, paths):
+    """`text_attributes`, asking git only about paths this operation has not asked about yet."""
+    if _OPERATION is None:
+        return text_attributes(root, paths)
+    known = _memo('attributes', root, dict)
+    missing = sorted(set(paths) - set(known))
+    if missing:
+        known.update(text_attributes(root, missing))
+    return {path: known[path] for path in paths if path in known}
+
+
+def prefetch_attributes(root, labels):
+    """One `check-attr` for every label a command is about to fingerprint, instead of one per receipt."""
+    if _OPERATION is None:
+        return
+    canonical = set()
+    for label in labels:
+        try:
+            canonical.add(canonical_path(root, label))
+        except WorkflowError:
+            pass  # the fingerprint itself reports an invalid label
+    git_text_attributes(root, canonical)
 
 
 def required_inputs(root, feature, stage, tier=None):
@@ -1510,17 +1651,18 @@ def required_inputs(root, feature, stage, tier=None):
 
 
 def source_fingerprints(root):
-    """Inventory code and build inputs, including additions and deletion tombstones."""
-    paths = git(root, 'ls-files', '--cached', '--others', '--exclude-standard', '-z').split('\0')
-    excluded = {'.git', 'node_modules', '__pycache__', 'dist', 'build', 'coverage', 'obj'}
-    operational = {'.specify', '.agents', '.claude', '.codex', 'specs', 'User-Manual', 'docs', 'graphify-out', 'keys_cert'}
-    selected = []
-    for path in filter(None, paths):
-        parts = Path(path).parts
-        if parts[0] in operational or any(p in excluded for p in parts): continue
-        if Path(path).name.startswith('.env') or Path(path).suffix.lower() in ('.pem', '.key', '.p12', '.pfx'): continue
-        selected.append(path)
-    return fingerprint_files(root, selected)
+    """Inventory code and build inputs, including additions and deletion tombstones (once per operation)."""
+    def inventory():
+        paths = git(root, 'ls-files', '--cached', '--others', '--exclude-standard', '-z').split('\0')
+        excluded = {'.git', 'node_modules', '__pycache__', 'dist', 'build', 'coverage', 'obj'}
+        selected = []
+        for path in filter(None, paths):
+            parts = Path(path).parts
+            if parts[0] in OPERATIONAL_DIRS or any(p in excluded for p in parts): continue
+            if Path(path).name.startswith('.env') or Path(path).suffix.lower() in ('.pem', '.key', '.p12', '.pfx'): continue
+            selected.append(path)
+        return fingerprint_files(root, selected)
+    return dict(_memo('source', root, inventory))
 
 
 def inventory_label(stage, claim_id, suffix=None):
@@ -2192,6 +2334,7 @@ def ensure_local_excludes(root):
                 '/specs/*/workflow/progress/', '/.delegate/')
     missing = [pattern for pattern in patterns if pattern not in current.splitlines()]
     if missing:
+        _wrote(None)  # the exclude file may live in a common git dir outside the root
         path.write_text(current.rstrip('\n') + '\n# Sanduq local backups and runtime\n' + '\n'.join(missing) + '\n', encoding='utf-8')
 
 
@@ -3008,6 +3151,8 @@ class Run:
             return saved[2]
         policy_changed = state['policy_digest'] != checkpoint_policy_digest(state, self.policy)
         cutoff = policy_cutoff(state.get('policy'), self.policy) if policy_changed else len(BASE_STAGES)
+        prefetch_attributes(self.root, [path for receipt in state['receipts'].values()
+                                        for path in receipt.get('fingerprints') or {}])
         for stage in stages(self.policy, state_tier(state)):
             receipt = state['receipts'].get(stage)
             if receipt and BASE_STAGES.index(stage) >= cutoff:
@@ -3024,7 +3169,7 @@ class Run:
         return {'stage': None, 'status': 'pr_open'}
 
     def claim(self, usage, finalize=False):
-        with locked(self.root / '.specify/workflow/runtime/dispatch.lock'), locked(self.lock):
+        with operation(), locked(self.root / '.specify/workflow/runtime/dispatch.lock'), locked(self.lock):
             require(not (self.root / '.specify/workflow/runtime/upgrade.lock').exists(), 'WORKFLOW_UPGRADE_IN_PROGRESS')
             state = self.load()
             require(not state['active'], 'STAGE_ALREADY_ACTIVE: recover or finish the recorded claim')
@@ -3112,10 +3257,19 @@ class Run:
             state['status'] = 'in-progress'
             write(self.root / '.specify/feature.json', {'feature_directory': self.relative})
             self.save(state)
+            parts, reporting = (), None
+            if stage == 'execute':
+                import progress_bridge
+                decided = progress_bridge.mode(self.root, host=progress_bridge.detect_host() or active_host(self.root))
+                reporting = {'mode': decided['mode'], 'reason': decided.get('reason') or decided.get('source')}
+                parts = execute_protocol(self.policy, state_tier(state), reporting['mode'])
             claimed = {**state['active'], 'command': state['commands'][stage], 'feature': self.relative, 'issue': state['issue'],
-                       'reference': stage_reference(stage), 'reference_text': reference_text(self.root, stage),
+                       'reference': stage_reference(stage), 'reference_text': reference_text(self.root, stage, parts),
                        'side_effects': side_effects(self.policy, self.relative, stage),
                        'project_sync': project_sync(self.policy, stage)}
+            claimed['receipt_template'] = self.receipt_template(state, stage)
+            if reporting:
+                claimed['reporting'], claimed['execute_protocol'] = reporting, list(parts)
             if stage == 'plan' and state_tier(state) in ('lite', 'standard'):
                 claimed['merged'] = ['tasks']
                 claimed['profile'] = state['profile']
@@ -3155,7 +3309,7 @@ class Run:
         state['commands'] = resolve_commands(self.root, self.policy, fixed)
 
     def complete(self, token, receipt):
-        with locked(self.lock):
+        with operation(), locked(self.lock):
             state = self.load()
             active = state['active']
             require(active and active['token'] == token, 'CLAIM_TOKEN_MISMATCH')
@@ -3204,6 +3358,30 @@ class Run:
             require(inside(self.root, path).is_file(), 'EVIDENCE_MISSING: ' + path)
         validate_evidence_snapshots(self.root, receipt)
         return receipt
+
+    def receipt_template(self, state, stage):
+        """The receipt skeleton `claim` prints: the fields `_check_receipt` and `_check_stage_rules` require for this
+        stage and tier. Inputs the runtime adds itself (`_stamp`: required artifacts, the decision ledger) are left
+        out; `<...>` values are placeholders to replace."""
+        template = {'stage': stage, 'outcome': 'passed', 'summary': '', 'inputs': [], 'evidence': []}
+        if stage == 'scope' and (self.policy.get('profiles') or {}).get('enabled'):
+            template['effort_score'] = '<one of ' + ', '.join(map(str, EFFORT_SCORES)) + '>'
+        if stage == 'clarify':
+            template.update(unresolved=0, answers_applied=True)
+        if stage == 'plan' and state_tier(state) in ('lite', 'standard'):
+            template['inputs'] = [self.relative + '/tasks.md']
+        if stage == 'analyze' and state['commands'].get(stage) == LINT_COMMAND:
+            template['lint'] = {'ok': True, 'findings': '<count lint.py reported>'}
+        if stage == 'taskstoissues':
+            template.update(parent_issue=state['issue'], native_links_verified=True)
+            if task_issue_mode(self.policy) == 'phase-lazy':
+                template['lazy'] = True
+        if stage in SOURCE_STAGES:
+            template['blocking_findings'] = 0
+        if stage == 'pr':
+            template.update(pr_url='https://github.com/' + state['issue'].split('#')[0] + '/pull/<number>',
+                            images_verified=True)
+        return template
 
     def _check_stage_rules(self, state, stage, receipt, token=None, session_id=None):
         """Binding, the decisions ledger and each stage's own fields (complete and revalidate-upstream)."""
@@ -3580,6 +3758,12 @@ def main():
             cmd.add_argument('--reason', help='Recorded with the revalidation; never sufficient on its own')
             cmd.add_argument('--actor', help='Defaults to the Git user name')
     args = parser.parse_args()
+    with operation():
+        return run_command(args)
+
+
+def run_command(args):
+    """One parsed CLI command, inside the operation scope `main` opens."""
     root = args.root.resolve()
     try:
         if args.action == 'memory-handoff':

@@ -98,11 +98,13 @@ def committed_blobs(root, contents):
     return result
 
 
-def portable_files(root, paths):
-    """Read root-relative paths as checkout-independent bytes; None marks a missing file."""
+def portable_files(root, paths, attributes=None):
+    """Read root-relative paths as checkout-independent bytes; None marks a missing file.
+
+    `attributes` is a callable standing in for `text_attributes` (a caller that memoises them)."""
     root = Path(root)
     paths = sorted(set(paths))
-    attributes = text_attributes(root, paths)
+    attributes = (attributes or text_attributes)(root, paths)
     raw = {p: (root / p).read_bytes() if (root / p).is_file() else None for p in paths}
     sensitive = {p: c for p, c in raw.items() if c is not None and byte_sensitive(p, c, attributes.get(p))}
     committed = committed_blobs(root, sensitive)

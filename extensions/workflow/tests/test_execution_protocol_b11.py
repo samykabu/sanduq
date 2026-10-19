@@ -219,9 +219,15 @@ class ExecutionProtocolB11Tests(unittest.TestCase):
                     'workflow/skills/workflow/references/execution-report.md').decode('utf-8')
                 cls.dispatcher_ops = normalize(archive.read(
                     'workflow/skills/workflow/references/dispatcher-operations.md').decode('utf-8'))
-                cls.assign = normalize(cls.raw_assign)
-                cls.report = normalize(cls.raw_report)
                 reference_prefix = 'workflow/skills/workflow/references/'
+                # The Execute claim composes these two with its mode's parts (references/execute/*.md and
+                # reporting.md), so a rule may live in any of them; every rule must still ship.
+                cls.parts = {name[len(reference_prefix):]: archive.read(name).decode('utf-8')
+                             for name in archive.namelist()
+                             if name.startswith(reference_prefix + 'execute/') or name == reference_prefix + 'reporting.md'}
+                protocol = '\n'.join(cls.parts[name] for name in sorted(cls.parts))
+                cls.assign = normalize(cls.raw_assign + '\n' + protocol)
+                cls.report = normalize(cls.raw_report + '\n' + protocol)
                 core_path = 'workflow/skills/workflow/SKILL.md'
                 cls.all_reference_texts = {
                     name: archive.read(name).decode('utf-8')
@@ -269,17 +275,18 @@ class ExecutionProtocolB11Tests(unittest.TestCase):
 
     def test_consumers_checklist_has_all_six_bullets(self):
         start = self.raw_report.index('## Consumers checklist after a fix')
-        end = self.raw_report.index('## Light-tier collection results', start)
-        section = self.raw_report[start:end]
+        end = self.raw_report.find('\n## ', start + 1)
+        section = self.raw_report[start:end if end > 0 else None]
         bullets = [ln[2:].strip() for ln in section.splitlines() if ln.startswith('- ')]
         self.assertEqual(bullets, F11_BULLETS,
                           f'F11 consumers checklist bullets changed or incomplete: {bullets}')
 
     def test_b12_section_matches_the_consensus_text_exactly(self):
         heading = '## Light-tier collection results'
-        start = self.raw_report.index(heading) + len(heading)
-        end = self.raw_report.index('## Continue through delivery', start)
-        body = normalize(self.raw_report[start:end])
+        text = self.parts['execute/delegated-workers.md']
+        start = text.index(heading) + len(heading)
+        end = text.find('\n## ', start)
+        body = normalize(text[start:end if end > 0 else None])
         self.assertEqual(body, normalize(B12_TEXT),
                           'The B12 section no longer matches the consensus text exactly '
                           '(a word was dropped, reworded or reordered).')

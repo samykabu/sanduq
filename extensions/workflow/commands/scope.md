@@ -1,5 +1,5 @@
 ---
-description: "Scopes an explicit GitHub issue and continues the managed lifecycle into Specify, Clarify and Plan once no decision is pending. Use to start work on an issue by number or title, or when asked to scope, size or begin a feature from an issue."
+description: 'Scopes a GitHub issue and runs the managed lifecycle through Specify, Clarify and Plan. Use when starting work on an issue, or for "scope issue 42".'
 ---
 
 # Sanduq Workflow: scope

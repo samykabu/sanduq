@@ -5,12 +5,13 @@ changes, drift and `STALE_RECEIPT`: [recovery.md](recovery.md).
 
 ## Recording the receipt
 
-JSON: `stage`, `outcome: passed`, `summary`, `inputs` (every project-relative path relied on),
-`evidence` (existing proof files) and the stage fields its reference names. Do not include
-checkpoint files in input manifests. A generated report or checklist is not test execution;
-keep command output and reviewer evidence. Failed, skipped or pending work cannot receive a
-passed receipt. A pending or conflicted issue decision blocks a passed receipt. Reread the
-issue decision ledger before completion and include it in the stage inputs.
+Start from the claim's `receipt_template` (the fields the runtime checks for this stage). Fill
+`summary`, `inputs` (other paths relied on; the runtime adds required artifacts and the decision
+ledger), `evidence` (existing proof files) and every `<...>` value. Do not include checkpoint
+files in input manifests. A generated report or checklist is not test
+execution; keep command output and reviewer evidence. Failed, skipped or pending work cannot
+receive a passed receipt. A pending or conflicted issue decision blocks a passed receipt. Reread
+the issue decision ledger before completion.
 
 `input_roles` (optional) maps an input to `{"role": "dependency"}` or `{"role": "consulted",
 "because": "<one line>"}` (read for context only; when in doubt it is a dependency; evidence and

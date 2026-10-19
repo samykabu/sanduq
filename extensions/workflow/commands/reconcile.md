@@ -1,5 +1,5 @@
 ---
-description: "Installs or repairs the workflow's managed hooks and presets from policy through Spec Kit, without changing unrelated integrations. Use after editing .specify/workflow.yml, after an upgrade, or when doctor reports drifted hook or preset ownership."
+description: 'Repairs the workflow''s managed hooks and presets from policy through Spec Kit. Use when doctor reports drift or after editing workflow.yml, or for "reconcile the workflow".'
 ---
 
 # Sanduq Workflow: reconcile

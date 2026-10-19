@@ -690,11 +690,6 @@ def ledger_trust_state(root, feature):
     return 'trusted' if recorded == ledger_bytes_digest(ledger_path(root, feature)) else 'untrusted'
 
 
-def ledger_state_trusted(root, feature):
-    """Back-compat boolean: ``True`` unless the tri-state read is ``'untrusted'``."""
-    return ledger_trust_state(root, feature) != 'untrusted'
-
-
 def latest_attempt(root, feature, identity):
     """The final attempt in the reassignment chain for one identity, else None.
 
