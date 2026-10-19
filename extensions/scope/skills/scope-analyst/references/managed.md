@@ -4,9 +4,6 @@ Applies when `.specify/workflow.yml` exists. These rules take precedence over th
 confirmation flow.
 
 - Resolve logical status names through `scope.statuses` before showing instructions.
-- Reuse the `inspect` snapshot: pass it as `--snapshot <file>` to `gate`, `approve`, `publish`
-  and `bind`; the runtime reuses it (one issue fetch, `snapshot_reused` in the output) while its
-  fingerprint matches the live issue and it is within `scope.board_cache_seconds`.
 - Read the scope preference before proposing a decomposition. A configured keep-together band
   settles the count: keep a matching issue as one leaf with its full scope, acceptance and
   enriched Specify prompt. The publisher records a project-policy decision instead of a new

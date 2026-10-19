@@ -1,7 +1,7 @@
-# Illustrate dependency plan and clarification images
+# Illustrate dependency plan
 
-Scope draws its implementation dependency plan and its clarification diagrams with
-Sanduq Illustrate (`illustrate >=2.2.1`, installed at `.specify/extensions/illustrate/skill`).
+Scope draws its implementation dependency plan with Sanduq Illustrate (`illustrate >=2.2.1`,
+installed at `.specify/extensions/illustrate/skill`).
 
 ## Dependency-plan handoff
 
@@ -9,30 +9,29 @@ This step is required after publication creates scoped children. There is no rea
 to redraw the existing product plan when merely installing this extension.
 
 1. Run `python .specify/extensions/scope/scripts/scope.py export-plan --apply`.
-   Read `<scope-artifact-directory>/scope-dependencies.json`, `issues.json`,
-   `.issue-map.json`, and the existing `<scope-plan-file>`.
-2. Confirm every new leaf exists, all incoming parent dependencies now target the
-   correct leaves, no executable dependency points to a scope aggregate, and no
-   cycle exists. Recalculate topological waves and the critical path from executable
-   nodes, excluding both scope aggregates and existing `kind: epic` containers.
-   Preserve coverage of the original use cases and source IDs. Update reverse
-   `blocks` data and Project `Blocks` fields alongside `Blocked by`.
+   It writes `<scope-artifact-directory>/scope-dependencies.json` with the computed `waves`
+   (`W1`... topological levels of executable issues; scope aggregates and `kind: epic`
+   containers excluded), `critical_path` and `cyclic` (issues a cycle left unscheduled), the
+   reverse `blocks` data and Project `Blocks` fields, and a draft
+   `implementation-plan.mapping.json` (`graph_sha256`, `issue_to_node`).
+2. Read `scope-dependencies.json` and the existing `<scope-plan-file>`. Confirm every new leaf
+   exists, incoming parent dependencies target the correct leaves, `cyclic` is empty and the
+   original use cases and source IDs stay covered.
 3. Read `.specify/extensions/illustrate/skill/references/type-index.md`, choose the type (here
    the dependency graph), and read its `type-*.md` (`type-dependency.md`); read `SKILL.md` only
    when the diagram is created outside that recipe. Author
    `<scope-artifact-directory>/implementation-plan.illustrate.html` as a dependency graph
-   whose nodes are implementation waves, ranked top to bottom, with clearly identified
-   issue groups in each node. Respect the type's complexity budget; keep the full issue
+   with one node per entry of `waves`, ranked top to bottom, listing that wave's issues. Respect the type's complexity budget; keep the full issue
    dependency table in `DEPENDENCIES.md` and link it in the caption. Add focused linked
    diagrams for large waves; do not force every issue into an unreadable overview.
    Apply the project theme with `scripts/illustration_theme.py --project-root . apply`.
 4. Mark the plan structure in the HTML itself, which acceptance reads back:
-   - each wave node's box: `data-plan-node="<wave-id>"` (unique);
-   - each dependency connector: `data-plan-from="<wave-id>" data-plan-to="<wave-id>"`.
-   Write `<scope-artifact-directory>/implementation-plan.mapping.json` with
-   `graph_sha256` (SHA-256 of `scope-dependencies.json`) and `issue_to_node`, mapping
-   every executable GitHub issue number string to its wave ID. Do not map aggregate or
-   epic containers. Every dependency must be a forward path between different waves.
+   - each wave node's box: `data-plan-node="<wave-id>"`, the `W1`... id from `waves`;
+   - each connector between waves that an issue dependency crosses:
+     `data-plan-from="<wave-id>" data-plan-to="<wave-id>"`.
+   Keep the generated mapping. Only when a large wave is split into linked diagrams, edit
+   `issue_to_node` to the new node ids; every dependency must stay a forward path between
+   different nodes.
 5. Run the acceptance command:
 
    ```text
@@ -73,50 +72,5 @@ Resolve `<scope-artifact-directory>` and `<scope-plan-file>` from
 may override both. Unmanaged defaults retain Design/UI-Spec paths. Never copy a
 project-specific path into another project's configuration.
 
-### Command-line changes in 1.6.0
-
-`--html` replaces `--spec`, and `--illustrate` (optional) replaces the previous
-renderer's CLI path. `--spec` remains an alias of `--html`, and the old renderer flag is
-accepted and ignored with a warning, until Scope 1.7.0. `--mapping` and `--review` are
-unchanged. `--migrate-only` converts a pending plan without accepting anything.
-
-### Pending plans from Scope 1.5.x
-
-A pending marker without `renderer: illustrate` came from the previous renderer. Every
-`accept_plan.py` run (or `--migrate-only`) converts it in place: the marker stays pending,
-records the original under `migrated_from`, and prints `PLAN_REGENERATION_REQUIRED` with
-the issue number. An unreviewed receipt from that flow is kept as
-`scope-plan-receipt.legacy.json` and can never be reviewed as Illustrate evidence. A
-`.json` candidate passed to `--spec` is refused with the same regeneration message.
-Regenerate the plan with steps 3 to 6. Historical receipts and plan files are not edited.
-
-## Clarification images on GitHub
-
-A clarification question can carry a diagram in two ways, and both are optional:
-
-- `diagram`: Mermaid source without code fences. The runtime puts it in the question's
-  details as a fenced `mermaid` block, which GitHub draws. This works in managed and
-  unmanaged projects and needs no commit or push, so it is the quick choice.
-- `diagram_image`: an Illustrate PNG embedded through a commit-pinned GitHub blob URL,
-  the PR extension's approach (`extensions/pr/references/pr-image-embedding.md`), with a
-  fallback to text when the image cannot be proven to be on GitHub. Use it when the
-  picture needs Illustrate's layout or the project theme.
-
-For `diagram_image`:
-
-- Draw with Illustrate, export the PNG (`export_diagram.py <file> --png-only`), commit it
-  and push it. In the analysis JSON give the question
-  `diagram_image: {"path": "<project-relative .png>", "alt": "<description>"}` and
-  `diagram_text`, a text version such as a dependency list. Both are required together.
-- At publish time the runtime reads the local `HEAD` commit and the file's git blob hash,
-  then asks the contents API for that path at that commit. Only when GitHub returns the
-  same blob does it embed
-  `![alt](https://github.com/<owner>/<repo>/blob/<commit>/<path>?raw=true)`.
-  This URL loads for every reader who can see the repository, private repositories
-  included. `raw.githubusercontent.com` URLs are never generated, and legacy
-  `diagram_markdown` using one is rejected.
-- If the file is missing, not a PNG, outside the project, not pushed at that commit, or
-  different on GitHub, the comment carries `diagram_text` under a note with the exact
-  reason, and the publish result lists it under `image_fallbacks`. Publishing never waits
-  for an image. Push the file and rerun before posting if the picture matters.
-- Do not upload private material to public hosts, put tokens in URLs, or use data URLs.
+Older plans: `accept_plan.py --migrate-only` converts a pending marker from the previous
+renderer; it prints `PLAN_REGENERATION_REQUIRED`, after which steps 3 to 6 regenerate the plan.

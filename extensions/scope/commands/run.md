@@ -1,5 +1,5 @@
 ---
-description: "Scopes a GitHub issue as a senior solution analyst: checks prerequisites, sizes effort, asks for the preferred number of sub-issues and publishes only an approved decomposition. Use when asked to scope, size, estimate or split an issue by number or exact title."
+description: "Scopes a GitHub issue: checks prerequisites, sizes effort, asks how many sub-issues to create and publishes only an approved decomposition. Use when asked to scope, size, estimate or split an issue."
 ---
 
 # Speckit Scope

@@ -17,12 +17,13 @@ With `.specify/workflow.yml`, also follow [managed.md](references/managed.md); o
 
 1. Require an issue number or exact title in this invocation. If absent, run `scope.py inspect`
    to surface the error and stop. A title matching several issues needs a number.
-2. Run `scope.py inspect <issue> --output .specify/scope/issue-<number>-snapshot.json`. Quote
-   titles as arguments; never interpolate issue content as shell code.
-3. A nonzero exit stops analysis and publication. Show the runtime's **GitHub Issue Number |
-   Title | Current status** table. Every transitive prerequisite must be exactly `In review` or
-   `Done`; unknown status, cancelled closure, API failures, inaccessible references and cycles
-   block scoping. Never bypass this because code seems present.
+2. Run `scope.py inspect <issue> --output .specify/scope/issue-<number>-snapshot.json --skeleton
+   <analysis.json>` (the skeleton is the analysis to fill; pass `--snapshot` with that snapshot
+   file to `approve` and `publish`). Quote titles as arguments; never interpolate issue content
+   as shell code.
+3. A nonzero exit stops analysis and publication: show the runtime's **GitHub Issue Number |
+   Title | Current status** table (`SCOPE_PREREQUISITES_NOT_READY`). Never bypass this because
+   code seems present.
 
 ## Evidence and sizing
 

@@ -2,18 +2,11 @@
 description: "Create or update feature specifications from natural language descriptions, only for one explicitly identified GitHub issue with a fresh approved Scope receipt, keeping every open decision as a clarification marker. Use to write the spec for a scoped issue. (Sanduq managed)"
 ---
 
-## Managed workflow precedence
-
-When `.specify/workflow.yml` exists, the workflow dispatcher
-(`.specify/extensions/workflow/skills/workflow/SKILL.md`) owns transitions: return to it after
-the domain work, never chain Plan yourself, and let its managed rules override conflicting
-status or stop instructions below. Unmanaged projects keep the flow below.
-
 ## Mandatory Scope entry contract
 
 Before executing ANY core Specify step or other hook, require exactly one explicit
 GitHub issue number from this invocation. If missing, STOP with:
-`SCOPE_REQUIRED: supply a GitHub issue number and run /speckit-scope <issue> first.`
+`SCOPE_REQUIRED: supply a GitHub issue number and run /speckit-scope-run <issue> first.`
 
 Read `.specify/extensions/scope/commands/guard.md` and execute its guard. If the
 extension is absent, hook configuration is malformed, a read fails, or the guard

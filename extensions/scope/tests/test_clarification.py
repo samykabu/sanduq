@@ -175,6 +175,33 @@ class ClarificationTests(unittest.TestCase):
         self.assertEqual(self.gh.statuses[1], 'Ready')
         self.assertIn('Checkbox selection observed: A — Retry.', (self.feature / 'spec.md').read_text(encoding='utf-8'))
 
+    def test_a_single_checked_option_is_suggested_and_logged_with_its_question(self):
+        self.app.publish('1', self.analysis([question(), question('second')]), True)
+        first, second = self.gh.comments[0], self.gh.comments[1]
+        first['body'] = first['body'].replace('- [ ] **A.**', '- [x] **A.**')
+        second['body'] = second['body'].replace('- [ ] **B.**', '- [x] **B.**')
+        self.gh.comment('C1Q2: A - keep the form')  # a reply can override the checkbox: no suggestion
+        self.move(m.FEATURE)
+        suggested = self.app.inspect('1')['suggested_answers']
+        self.assertEqual(suggested, [{'question_id': 'C1Q1', 'disposition': 'answered', 'comment_ids': [first['id']],
+                                      'option': 'A \u2014 Retry'}])
+        reply = self.gh.comments[-1]['id']
+        answers = [dict(suggested[0], explanation='Retry was selected.'),
+                   {'question_id': 'C1Q2', 'disposition': 'answered', 'comment_ids': [reply], 'explanation': 'Replied A.'}]
+        for answer in answers:
+            answer.pop('option', None)
+        self.app.publish('1', self.analysis(answers=answers), True)
+        spec = (self.feature / 'spec.md').read_text(encoding='utf-8')
+        self.assertIn('  Q: What should happen if the request fails? \u2192 A: A \u2014 Retry\n', spec)
+        self.assertEqual(spec.count('\u2192 A: A \u2014 Retry'), 2)  # C1Q2's reply chose A too
+
+    def test_ambiguous_or_edited_checkboxes_are_not_suggested(self):
+        self.app.publish('1', self.analysis([question(), question('second')]), True)
+        self.gh.comments[0]['body'] = self.gh.comments[0]['body'].replace('- [ ]', '- [x]')
+        self.gh.comments[1]['body'] = self.gh.comments[1]['body'].replace('**B.** Start again', '**B.** Start over').replace('- [ ] **A.**', '- [x] **A.**')
+        self.move(m.FEATURE)
+        self.assertEqual(self.app.inspect('1')['suggested_answers'], [])
+
     def test_selected_followup_resolves_ambiguous_parent_but_not_unrelated(self):
         self.app.publish('1', self.analysis([question('parent'), question('unrelated')]), True)
         self.gh.comments[0]['body'] = self.gh.comments[0]['body'].replace('- [ ]', '- [x]')

@@ -14,7 +14,8 @@ refuses a partial set. To revalidate an existing claim use `--mode revalidate` w
 alone: Scope finds that claim from the selected feature and its checkpoint, and any feature,
 token or session flag would push it onto the fresh path, so the helper rejects them. Bind forms
 append `--apply`. The helper exits 2 on a missing or non-numeric issue. Run the printed command
-unchanged.
+unchanged: gate and bind reuse the analyst's `.specify/scope/issue-<number>-snapshot.json` by
+themselves while it is current (`snapshot_reused` in the output).
 
 ## Fresh managed clarification return
 
