@@ -302,7 +302,7 @@ class ProjectInitTests(unittest.TestCase):
                                          fake.as_posix() + '" "$@"\n', encoding='utf-8', newline='\n')
             (root / 'bin/gh').chmod(0o755)
             env = dict(os.environ, PATH=str(root / 'bin') + os.pathsep + os.environ.get('PATH', ''))
-            args = ['bash', '-c', 'export PATH="$(cygpath -u "$1" 2>/dev/null || echo "$1"):$PATH"; shift; exec bash "$@"',
+            args = [shutil.which('bash'), '-c', 'export PATH="$(cygpath -u "$1" 2>/dev/null || echo "$1"):$PATH"; shift; exec bash "$@"',
                     '_', str(root / 'bin'), (scripts / 'bash/project-init.sh').as_posix(), '--non-interactive', '--dry-run']
         else:
             wrapper = root / 'run.ps1'
@@ -313,7 +313,10 @@ class ProjectInitTests(unittest.TestCase):
         return done.returncode, done.stdout + done.stderr
 
     def shells(self):
-        found = [shell for shell in ('bash', 'pwsh') if shutil.which(shell) and (shell != 'bash' or shutil.which('jq'))]
+        # Windows' System32 bash.exe is the WSL launcher, not a POSIX shell the init script can run in.
+        posix_bash = shutil.which('bash') and 'system32' not in shutil.which('bash').lower()
+        found = [shell for shell in ('bash', 'pwsh') if (posix_bash if shell == 'bash' else shutil.which(shell))
+                 and (shell != 'bash' or shutil.which('jq'))]
         if not found:
             self.skipTest('neither bash with jq nor pwsh is installed')
         return found
