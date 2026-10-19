@@ -17,10 +17,8 @@ EXCLUDE = {'.git', '__pycache__', 'node_modules', '.specify', '.specify-dev', 't
 # The one list of source files and folders (`<extension>/<path>`) that stay in the repository: nothing a
 # consumer runs or an agent route names. A README link to one of them is rewritten to its GitHub URL.
 EXCLUDE_PATHS = (
-    # Progress: human reference docs (verbs.md calls them "not needed to run a verb") and their
-    # screenshots, and the A/B tool that imports `bench` from tests/, which never ships.
+    # Progress: human reference docs (verbs.md calls them "not needed to run a verb") and their screenshots.
     'progress/docs',
-    'progress/scripts/live_ab.py',
     # Illustrate: preview PNGs and gallery variants nothing names, and the icon builder with its sources.
     'illustrate/skill/assets/technical-color/process-flow/examples/images',
     'illustrate/skill/assets/index-variation-1.html',
