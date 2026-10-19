@@ -1,4 +1,5 @@
 import json
+import re
 import subprocess
 import sys
 import unittest
@@ -208,7 +209,8 @@ class MergeCandidateTemplateTests(unittest.TestCase):
         # (which clones every branch and tag in the remote), in both modes.
         self.assertNotIn('fetch-depth: 0', merged)
         self.assertIn('fetch-depth: ${{ github.event.pull_request.commits + 1 }}', merged)
-        self.assertIn('git fetch --no-tags --prune origin "${{ github.event.pull_request.base.ref }}"', merged)
+        self.assertIn('git fetch --no-tags --prune origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"', merged)
+        self.assertIn('BASE_REF: ${{ github.event.pull_request.base.ref }}', merged)
 
 
 class GateJobHygieneTests(unittest.TestCase):
@@ -234,11 +236,49 @@ class GateJobHygieneTests(unittest.TestCase):
         steps = document['jobs']['workflow-evidence']['steps']
         names = [step.get('uses') or step.get('name') or step.get('run') for step in steps]
         fetch_index = next(i for i, step in enumerate(steps)
-                           if 'fetch' in (step.get('run') or '') and 'base.ref' in (step.get('run') or ''))
+                           if 'fetch' in (step.get('run') or '') and 'base.ref' in (step.get('env') or {}).get('BASE_REF', ''))
         gate_index = next(i for i, step in enumerate(steps) if 'ci_gate.py' in (step.get('run') or ''))
-        checkout_index = names.index('actions/checkout@v4')
+        checkout_index = next(i for i, name in enumerate(names) if name.startswith('actions/checkout@'))
         self.assertLess(checkout_index, fetch_index, names)
         self.assertLess(fetch_index, gate_index, names)
+
+    def test_no_expression_is_interpolated_into_a_gate_shell_command(self):
+        # Event data reaches run: only through env, never spliced into the script text.
+        for selection in (ci.default_ci(), self_hosted()):
+            document = yaml.safe_load(ci.render(ASSETS['workflow-gates.yml'].read_bytes(), selection).decode())
+            for step in document['jobs']['workflow-evidence']['steps']:
+                self.assertNotIn('${{', step.get('run') or '', step)
+
+
+# The PR-triggered assets that carry the fork guard; add user-manual-preview.yml once
+# the vendored template ships the block.
+FORK_GUARDED = ('workflow-gates.yml', 'documentation-gates.yml')
+FORK_GUARD = 'github.event.pull_request.head.repo.full_name == github.repository'
+PINNED = ('workflow-gates.yml', 'documentation-gates.yml')
+
+
+class ForkGuardTests(unittest.TestCase):
+    def test_a_self_hosted_runner_never_runs_a_fork_pull_request(self):
+        for name in FORK_GUARDED:
+            with self.subTest(asset=name):
+                document = yaml.safe_load(ci.render(ASSETS[name].read_bytes(), self_hosted()).decode())
+                for job in document['jobs'].values():
+                    self.assertEqual(job.get('if'), FORK_GUARD)
+
+    def test_github_hosted_jobs_carry_no_condition(self):
+        for name, path in ASSETS.items():
+            with self.subTest(asset=name):
+                document = yaml.safe_load(ci.render(path.read_bytes(), ci.default_ci()).decode())
+                for job in document['jobs'].values():
+                    self.assertNotIn('if', job)
+
+    def test_every_action_is_pinned_to_a_commit_with_its_version(self):
+        for name in PINNED:
+            with self.subTest(asset=name):
+                uses = re.findall(r'^\s*-?\s*uses:.*$', ASSETS[name].read_text(encoding='utf-8-sig'), re.M)
+                self.assertTrue(uses)
+                for line in uses:
+                    self.assertRegex(line, r'uses: [\w.-]+/[\w./-]+@[0-9a-f]{40} # v\d+\.\d+\.\d+$')
 
 
 class ExceptionTests(unittest.TestCase):

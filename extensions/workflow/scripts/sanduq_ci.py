@@ -250,11 +250,12 @@ ENDIF = re.compile(r'^\s*#\s*sanduq:endif\s*$')
 
 
 def flags(ci):
-    """The named booleans a template may branch on."""
+    """The named booleans a template may branch on; `self_hosted` guards PR jobs against fork code."""
     capabilities = ci['capabilities']
     return {'system_packages_apt': capabilities['system_packages'] == 'sudo-apt',
             'python_setup_action': capabilities['python'] == 'setup-action',
-            'candidate_merge': gate_config(ci)['rules']['candidate_merge']}
+            'candidate_merge': gate_config(ci)['rules']['candidate_merge'],
+            'self_hosted': not hosted(ci['runners']['linux'])}
 
 
 def runs_on(labels):
