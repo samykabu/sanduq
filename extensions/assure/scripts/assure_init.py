@@ -50,6 +50,11 @@ def update_hooks(text: str, integrated: bool) -> tuple[str, int]:
     return output, changed
 
 
+# Folders assure_scan.py prunes by default (its DEFAULT_EXCLUDE); users edit the written list.
+SCAN_EXCLUDE = ('.git', 'node_modules', 'bin', 'obj', 'dist', 'build', '.next', '.nuxt', '.turbo',
+                '.expo', 'coverage', '.cache')
+
+
 def config_text(mode: str) -> str:
     integrated = mode == "integrated"
     enabled = str(integrated).lower()
@@ -63,7 +68,9 @@ freshness:
   state_directory: .specify/extensions/assure/state
 output:
   directory_name: qa
-'''
+scan:
+  exclude:
+''' + ''.join(f'    - {name}\n' for name in SCAN_EXCLUDE)
 
 
 def main() -> None:

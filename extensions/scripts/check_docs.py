@@ -29,6 +29,8 @@ INTERNAL = DOCS / 'internal'
 BANNED = ('simply', 'just', 'obviously', 'seamless', 'seamlessly', 'leverage', 'effortless')
 START, END = '<!-- generated:hooks:start -->', '<!-- generated:hooks:end -->'
 PHASES = ('specify', 'clarify', 'plan', 'tasks', 'analyze', 'taskstoissues', 'implement')
+# Extensions whose command frontmatter and extension.yml must carry one identical description.
+SAME_DESCRIPTION = ('assure', 'user-manual', 'pr', 'project', 'illustrate', 'memory', 'progress')
 FENCE = re.compile(r'^```.*?^```\s*$', re.M | re.S)
 
 
@@ -175,6 +177,10 @@ def check():
         entries = manifest['provides']['commands']
         commands += len(entries)
         for entry in entries:
+            if meta['id'] in SAME_DESCRIPTION:
+                front = (path.parent / entry['file']).read_text(encoding='utf-8').split('---', 2)[1]
+                if yaml.safe_load(front).get('description') != entry.get('description'):
+                    errors.append(f'{entry["name"]}: extension.yml description differs from {entry["file"]} frontmatter')
             name = '$' + entry['name'].replace('.', '-')
             if re.search(re.escape(name) + r'(?![\w-])', reference):
                 documented += 1

@@ -26,13 +26,13 @@ provides:
   commands:
     - name: speckit.assure.init
       file: commands/speckit.assure.init.md
-      description: "Choose whether QA is part of the project lifecycle and configure required or manual hooks"
+      description: Configures whether QA analysis and the QA manual are required lifecycle gates or manual steps for this Spec Kit project. Use when setting up Assure or changing its policy, on requests such as "set up QA" or "make QA mandatory".
     - name: speckit.assure.analyze
       file: commands/speckit.assure.analyze.md
-      description: "Audit the active feature for missing E2E, API, screenshot, diagram, accessibility, and QA-documentation work"
+      description: Audits the active feature's tasks.md for missing E2E, screenshot, API sample, diagram and accessibility work and adds the tasks. Use when tasks.md exists and implementation has not started, on requests such as "check QA readiness" or "add the test tasks", or as the managed qa_analyze stage.
     - name: speckit.assure.document
       file: commands/speckit.assure.document.md
-      description: "Generate or update the QA test manual and record feature-scoped freshness evidence"
+      description: Generates or refreshes the development-only QA test manual for the implemented feature from real evidence and records its freshness. Use when implementation is done and the tests pass, on requests such as "write the QA manual" or "document the test steps", or as the managed qa_document stage.
 
 hooks:
   after_tasks:

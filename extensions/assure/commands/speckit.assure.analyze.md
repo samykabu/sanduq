@@ -1,19 +1,12 @@
 ---
-description: "Analyze Spec Kit plan/tasks for missing E2E, screenshot-capture, and API sample tasks, and create reusable project memory for QA documentation."
+description: Audits the active feature's tasks.md for missing E2E, screenshot, API sample, diagram and accessibility work and adds the tasks. Use when tasks.md exists and implementation has not started, on requests such as "check QA readiness" or "add the test tasks", or as the managed qa_analyze stage.
 ---
 
 # Analyze QA Coverage
 
-Review the active Spec Kit feature before implementation, create or refresh the reusable workspace
-project memory, and make sure `tasks.md` contains the E2E, UI screenshot-capture, API sample,
-frontend, and documentation-readiness work needed for the later QA manual.
-
-Recommended lifecycle phase: `after_tasks`. At this point `spec.md`, `plan.md`, and `tasks.md`
-exist, but implementation has not started, so missing tests can be added before developers begin.
-
-Alternative phase: `before_implement` if a team prefers a final gate immediately before coding. Do
-not use `after_implement` as the primary hook for this command because by then missing E2E work is
-usually rework.
+Review the active Spec Kit feature before implementation and make sure `tasks.md` contains the E2E,
+UI screenshot-capture, API sample, frontend, and documentation-readiness work needed for the later
+QA manual.
 
 ## User Input
 
@@ -25,158 +18,66 @@ Optional flags:
 
 - `--feature <path>` - override feature directory detection, e.g. `specs/006-user-management`.
 - `--report-only` - report missing tasks without editing `tasks.md`.
-- `--phase after_tasks|before_implement|manual` - record the user's selected lifecycle phase in the
-  report. The recommendation remains `after_tasks`.
-
-## Behavior Overview
-
-```text
-resolve feature -> load artifacts -> scan workspace -> update project memory -> map impacted projects -> audit tasks -> patch tasks.md -> report
-```
 
 ## Instructions
 
 ### 0. Load the QA contract
 
-Read `.specify/extensions/assure/skills/assure/SKILL.md` and its `references/analysis.md`. If the project
-uses lifecycle-integrated mode, this command is a gate: do not report success while critical
-acceptance scenarios lack concrete test or evidence tasks.
+Read `.specify/extensions/assure/skills/assure/SKILL.md` and its `references/analysis.md` (feature
+resolution, task block format, report shape). In lifecycle-integrated mode this command is a gate: do
+not report success while critical acceptance scenarios lack concrete test or evidence tasks.
 
 ### 0a. Ensure the Illustrate dependency
-
-Before resolving the feature, ensure the `illustrate` dependency declared in
-`.specify/extensions/assure/dependencies.yml` is installed, enabled, and within its declared SemVer
-range:
 
 ```text
 python .specify/extensions/assure/scripts/deps.py ensure illustrate
 ```
 
-The script performs the checks this step used to spell out: it reads the installed-version
-registry, follows the project's `update_policy` (`prompt` default/`auto`/`manual`) without ever
-mutating dependencies under `prompt` without explicit approval, rate-limits the catalog freshness
-probe by `check_interval_hours`, and records the check. It prints one line and exits non-zero only
-when the dependency is missing or incompatible and cannot be brought into range under the current
-policy.
+- Exit `0`: the dependency is ready. Load the Illustrate references only in step 3, immediately before
+  adding a diagram task. Pass a "newer compatible release available" note on to the user.
+- Non-zero exit: report the script's one-line result verbatim, continue the non-diagram analysis, skip
+  the diagram bullet in step 3, and do not silently use another diagram system. If the line names a
+  `specify extension add/update illustrate` recipe and the user approves it, re-run with `--approve`
+  (under a `manual` policy the user runs the printed command themselves, then re-run this command).
 
-- Exit `0`: the dependency is ready. Do **not** load `.specify/extensions/illustrate/skill/SKILL.md`
-  yet — defer that to step 4, and only immediately before adding a diagram task to the coverage
-  matrix; this direct resource path works in the current run even if the agent only discovers newly
-  registered skills in a new conversation. If the one-line result also names a "newer compatible
-  release available", pass that note on to the user — it did not block this run.
-- Non-zero exit: report the script's one-line result verbatim, continue the non-diagram analysis,
-  explicitly skip Illustrate coverage checks in step 4, and do not silently use another diagram
-  system. If the result names a `specify extension add/update illustrate` recipe, surface it to the
-  user; if they approve, re-run
-  `python .specify/extensions/assure/scripts/deps.py ensure illustrate --approve` (under a `manual`
-  policy, the user runs the printed `specify extension …` command themselves instead, then this
-  command can simply be re-run).
+### 1. Resolve the feature and scan the workspace
 
+Resolve the active feature as the contract says. Read `spec.md`, `plan.md` and `tasks.md` (required),
+then `quickstart.md`, `data-model.md`, `contracts/*`, `research.md` and the recent git diff when they
+exist.
 
-### 1. Resolve the active feature
+Run the workspace scan in check mode; this stage reads the inventory and must not write the memory
+file (Document writes it):
 
-- If `--feature` is supplied, use it.
-- Otherwise read `.specify/feature.json` and use `feature_directory`.
-- If feature detection fails, use the most recently modified directory under `specs/` only when it is
-  unambiguous. If still ambiguous, ask the user for the feature path.
+```text
+python .specify/extensions/assure/scripts/assure_scan.py --check
+```
 
-Required files:
+Read the printed inventory (one line per detected project, then the memory block) instead of walking
+the tree. A frontend that the feature artifacts describe but the scan did not detect is
+`planned/spec-only`, never detected implementation.
 
-- `<feature_dir>/spec.md`
-- `<feature_dir>/plan.md`
-- `<feature_dir>/tasks.md`
+### 2. Identify impacted projects
 
-Optional but important files:
+Map the feature to projects from the inventory plus the plan, task file paths, contracts, routes, menu
+names, UI screens, mobile flows, backend endpoints, changed files, and tests. Use the frontend rows to
+decide where E2E, screenshot capture, QA assets, and manual index tasks go. When a feature affects a
+planned frontend path that is not implemented yet, add tasks against the planned path and report the
+project as `planned/spec-only`.
 
-- `<feature_dir>/quickstart.md`
-- `<feature_dir>/data-model.md`
-- `<feature_dir>/contracts/*`
-- `<feature_dir>/research.md`
-- `.github/memory/project-memory.md` (create or refresh before impact analysis)
-- Recent git diff and changed files, if available
+### 3. Build the documentation coverage matrix
 
-### 2. Scan workspace and update project memory
-
-Create or refresh `.github/memory/project-memory.md` before mapping feature impact. This command owns
-the memory initialization pass; do not tell the user to run another command just to create the file.
-
-Scan deeply from the workspace root while excluding generated/vendor folders such as `.git/`,
-`node_modules/`, `bin/`, `obj/`, `dist/`, `build/`, `.next/`, `.nuxt/`, `.turbo/`, `.expo/`,
-`coverage/`, `.cache/`, package-manager caches, and generated QA assets.
-
-Use the existing memory file as a hint only. Compare it with the current marker scan, update stale
-entries, add new projects, and add `Last scanned: <YYYY-MM-DD>`.
-
-Detect project markers:
-
-- Workspace/package boundaries: root `package.json` workspaces, `pnpm-workspace.yaml`, `nx.json`,
-  `turbo.json`, `lerna.json`, `rush.json`, solution files, and package/app folders.
-- Web frontend: `package.json` dependencies or scripts for React, Next.js, Vite, CRA, Angular, Vue,
-  Nuxt, Svelte, SvelteKit, Remix, Astro, TanStack Router, React Router, Storybook, Playwright, or
-  Cypress; plus `public/`, `pages/`, `app/`, `src/routes`, `src/pages`, `src/main.*`,
-  `src/App.*`, `vite.config.*`, `next.config.*`, `angular.json`, `astro.config.*`, or
-  `svelte.config.*`.
-- Mobile frontend: React Native, Expo, `app.json`, `app.config.*`, `android/`, `ios/`,
-  `metro.config.*`, `expo-router`, Detox, Maestro, or Appium.
-- Backend/API: `*.csproj`, `*.sln`, `pyproject.toml`, `go.mod`, `Cargo.toml`, OpenAPI contracts,
-  controllers, routers, API gateways, generated clients, or API test folders.
-- Deployment/infrastructure: Docker, Compose, Helm, Terraform, Pulumi, ArgoCD, Kubernetes manifests,
-  GitHub Actions, and deployment scripts.
-- Tooling/documentation: plugin manifests, extension manifests, docs-only packages, templates,
-  scripts, command specs, and generated agent/prompt files.
-
-Also inspect `spec.md`, `plan.md`, `quickstart.md`, and contracts for planned project structure. If a
-frontend is described in feature artifacts but no implementation marker exists yet, record it as
-`planned/spec-only`, not as detected implementation.
-
-The memory file must include these sections:
-
-- `Frontend Coverage Summary`: state whether implemented web and mobile frontends were detected,
-  whether only planned/spec frontend context exists, and which frontend paths are reusable for later
-  documentation.
-- `Frontend Project Inventory`: one row per web or mobile frontend, including project name, relative
-  path, status (`implemented`, `planned/spec-only`, or `stale`), platform, framework/build tool,
-  router or app shell evidence, public/assets directory, QA root, screenshot runner, key
-  dev/build/test commands, and evidence source paths.
-- `Detected Projects`: all other projects and workspace-level tooling, including role, stack
-  markers, commands when discoverable, documentation root, QA output root, and notes.
-- `Scan Markers`: marker files found or explicitly not found, especially frontend markers.
-- `Maintenance Rules`: remind later commands to reuse the memory, verify it against current marker
-  files, and update it when frontend markers appear or disappear.
-
-If no web or mobile frontend is detected, state that explicitly in both `Frontend Coverage Summary`
-and `Frontend Project Inventory` instead of leaving an empty section. If planned frontend context is
-found, reference the source spec/plan/quickstart paths so the later document command can reuse that
-context without guessing.
-
-### 3. Identify impacted projects
-
-Identify impacted projects from the freshly updated project memory plus the feature plan, task file
-paths, contracts, routes, menu names, UI screens, mobile flows, backend endpoints, changed files, and
-tests.
-
-Pay special attention to web and mobile frontends. Use the `Frontend Project Inventory` to decide
-where E2E, screenshot capture, QA assets, and manual index tasks should be added. When a
-feature affects a planned frontend path that is not implemented yet, add tasks against the planned
-path and mark the project status in the report as `planned/spec-only`.
-
-### 4. Build the documentation coverage matrix
-
-For each user story and scenario in `spec.md`, determine whether the later QA manual will
-need one or more of the following:
+For each user story and scenario in `spec.md`, determine whether the later QA manual will need:
 
 - Web E2E test for the main user journey.
 - Mobile E2E test for the main user journey.
 - Screenshot-capture test for each screen, form, dialog, menu entry, validation state, permission
   state, empty state, error state, loading state, and expected result.
-- An Illustrate generation/export task for every useful visual supported by the feature evidence:
-  architecture, IT current-state, flowchart, sequence, state machine, ER/data model, timeline,
-  swimlane, quadrant, radar, loop, nested, tree, org chart, layers, venn, pyramid, bar, line, Gantt,
-  scatter, high-level, process, medallion, data flow, DP integration, or DP security matrix. Only if
-  step 0a confirmed `illustrate` is ready and this scenario's evidence actually warrants one, load
-  `.specify/extensions/illustrate/skill/SKILL.md` now and use its selection guide and matching type
-  reference; do not add a visual merely to fill a checklist, and do not evaluate this bullet at all
-  if step 0a reported the dependency unavailable.
+- An Illustrate generation/export task for every visual the feature evidence warrants. Only if step 0a
+  confirmed `illustrate` is ready and the scenario warrants a visual: read
+  `.specify/extensions/illustrate/skill/references/type-index.md`, choose the type, and read its
+  `type-*.md`; read `SKILL.md` only when the diagram is created outside that recipe. Do not add a
+  visual merely to fill a checklist.
 - API contract or integration test that proves request and response bodies for API-only scenarios.
 - Fixture or mock data task for deterministic screenshots and stable examples.
 - Accessibility smoke test for generated manual pages and UI screenshots.
@@ -186,56 +87,20 @@ Treat these as missing coverage when tasks are absent or too vague:
 
 - A UI user story has no named E2E task.
 - A new route, menu item, form, or validation flow has no screenshot-capture task.
-- A materially useful architecture, decision, interaction, lifecycle, data-model, timeline,
-  cross-role, hierarchy, ownership, layering, overlap, prioritization, funnel, quantitative,
-  scheduling, loop, platform, process, or data-platform visual has no named Illustrate HTML +
-  PNG export task.
+- A visual the feature evidence warrants has no named Illustrate HTML + PNG export task.
 - A backend/API-only scenario has no request/response sample validation task.
 - A mobile-accessible scenario has only a web E2E task.
 - A scenario is intentionally not available on mobile but no task records that limitation in the
   manual.
 - A test task says only "add tests" without path, runner, scenario, or expected result.
 
-### 5. Patch `tasks.md`
+### 4. Patch `tasks.md`
 
-Unless `--report-only` was supplied, update `tasks.md`.
+Unless `--report-only` was supplied, add the missing tasks following the task block rules and wording
+examples in `references/analysis.md`. Ground every task in the spec, plan, contracts, or project
+structure; do not invent screens, endpoints, or request/response bodies.
 
-Rules:
-
-- Preserve the existing Spec Kit task format:
-  `- [ ] T### [P?] [US#?] Description with file path`
-- Preserve existing task order and content.
-- Do not duplicate existing E2E, screenshot, diagram, API sample, or documentation tasks.
-- Continue numbering from the highest existing `T###`.
-- Put user-story-specific gaps in that user story's `### Tests` section when one exists. If the
-  story has no tests section, create `### QA readiness tasks` inside that story phase.
-- Put cross-project or cross-cutting gaps in the final Polish/Cross-Cutting phase.
-- Mark tasks `[P]` only when they write different files and do not depend on each other.
-- Include exact target paths. If a path is inferred from plan structure, use the planned project
-  root and keep it specific.
-- If replacing a previous readiness block, refresh it idempotently. Prefer a markdown block with
-  these markers when you create a dedicated section:
-
-```markdown
-<!-- qa-prepare:start -->
-### QA readiness tasks
-
-- [ ] T123 [P] [US1] Add Playwright E2E test for ...
-
-<!-- qa-prepare:end -->
-```
-
-Task wording examples:
-
-```markdown
-- [ ] T041 [P] [US1] Add Playwright E2E test for admin password reset happy path in frontend/e2e/user-management/password-reset.spec.ts
-- [ ] T042 [P] [US1] Add screenshot capture for User Management password reset states in frontend/e2e/qa/user-management-password-reset.capture.spec.ts
-- [ ] T043 [P] [US1] Add API request/response fixture coverage for POST /api/users/{id}/password-reset in backend/tests/contracts/user-management-password-reset.test.ts
-- [ ] T044 [P] [US1] Generate Illustrate sequence HTML and PNG assets for the password reset interaction in frontend/public/qa/assets/user-management/diagrams/user-management-password-reset-sequence.html
-- [ ] T045 [US1] Update User Management QA documentation index under frontend/public/qa/features/user-management/index.html
-```
-
-### 6. Record freshness and report
+### 5. Record freshness and report
 
 After all edits and validation succeed, record the analysis against the final feature and working
 tree state:
@@ -246,21 +111,10 @@ python .specify/extensions/assure/scripts/assure_state.py record --kind analyze 
 
 Do not record successful evidence in `--report-only` mode or while critical gaps remain unresolved.
 
-Report:
-
-- Feature path audited.
-- Selected lifecycle phase and recommendation. If the user did not select a phase, state
-  `after_tasks` as the recommendation.
-- Project memory path written and frontend inventory summary.
-- Impacted projects.
-- Missing coverage found.
-- Tasks added, with task IDs.
-- If `--report-only` was used, list the tasks that should be added.
-- Any unresolved ambiguity, especially parent feature routing or mobile availability.
-
-Do not claim tests exist unless they are present in `tasks.md` or the workspace. Do not invent
-screens, endpoints, or request/response bodies. Ground every task in the spec, plan, contracts, or
-project structure.
+Report the contract's shape plus: missing coverage found; tasks added with their IDs (or, under
+`--report-only`, the tasks that should be added); any unresolved ambiguity, especially parent feature
+routing or mobile availability. Do not claim tests exist unless they are present in `tasks.md` or the
+workspace.
 
 ## Quality Bar
 

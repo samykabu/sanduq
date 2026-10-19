@@ -1,18 +1,13 @@
 ---
-description: "Generate or update the QA test manual for a completed Spec Kit feature."
+description: Generates or refreshes the development-only QA test manual for the implemented feature from real evidence and records its freshness. Use when implementation is done and the tests pass, on requests such as "write the QA manual" or "document the test steps", or as the managed qa_document stage.
 ---
 
 # Generate QA Manual
 
-Produce or update an internal QA test manual for the completed active Spec Kit
-feature. The manual is a development-only human walkthrough, not a replacement for automated tests.
-
-Recommended lifecycle phase: `after_implement`.
-
-Run this after implementation completion validation and the full relevant test suite. If the target
-Spec Kit project has an implementation-review hook, run this command after that review. If no review
-hook exists, run it at `after_implement` before PR handoff or human QA review so the reviewer gets
-fresh screenshots, API examples, and manual validation steps.
+Produce or update an internal QA test manual for the completed active Spec Kit feature. The manual is
+a development-only human walkthrough, not a replacement for automated tests. Run it after
+implementation, the full relevant test suite and any implementation review, before PR handoff or
+human QA review.
 
 ## User Input
 
@@ -26,153 +21,81 @@ Optional flags:
 - `--project <path>` - limit manual generation to one impacted project after the workspace scan.
 - `--skip-screenshots` - allowed only when the feature has no UI or screenshot tooling is missing;
   document the reason in the manual.
-- `--phase after_implement|after_review|before_review|manual` - record when the command was run.
-
-## Behavior Overview
-
-```text
-resolve feature -> scan workspace -> update project memory -> find impacted projects -> generate diagram assets -> generate manual -> capture screenshots/API samples -> update indexes -> report
-```
 
 ## Instructions
 
 ### 0. Load the QA contract
 
-Read `.specify/extensions/assure/skills/assure/SKILL.md` and its `references/documentation.md`. Keep this
-tester-facing artifact separate from the audience-aware application documentation under
+Read `.specify/extensions/assure/skills/assure/SKILL.md` and its `references/documentation.md`. Keep
+this tester-facing artifact separate from the audience-aware application documentation under
 `User-Manual/`.
 
 ### 0a. Ensure the Illustrate dependency
-
-Before resolving the feature, ensure the `illustrate` dependency declared in
-`.specify/extensions/assure/dependencies.yml` is installed, enabled, and within its declared SemVer
-range:
 
 ```text
 python .specify/extensions/assure/scripts/deps.py ensure illustrate
 ```
 
-The script performs the checks this step used to spell out: it reads the installed-version
-registry, follows the project's `update_policy` (`prompt` default/`auto`/`manual`) without ever
-mutating dependencies under `prompt` without explicit approval, rate-limits the catalog freshness
-probe by `check_interval_hours`, and records the check. It prints one line and exits non-zero only
-when the dependency is missing or incompatible and cannot be brought into range under the current
-policy.
+- Exit `0`: the dependency is ready. Load the Illustrate references only in step 5, when a diagram is
+  actually going to be generated. Pass a "newer compatible release available" note on to the user.
+- Non-zero exit: report the script's one-line result verbatim, continue the non-diagram work, skip
+  diagram generation, and do not silently use another diagram system. If the line names a
+  `specify extension add/update illustrate` recipe and the user approves it, re-run with `--approve`
+  (under a `manual` policy the user runs the printed command themselves, then re-run this command).
 
-- Exit `0`: the dependency is ready. Do **not** load `.specify/extensions/illustrate/skill/SKILL.md`
-  yet — defer that to step 6, and only when a diagram is actually going to be generated there; this
-  direct resource path works in the current run even if the agent only discovers newly registered
-  skills in a new conversation. If the one-line result also names a "newer compatible release
-  available", pass that note on to the user — it did not block this run.
-- Non-zero exit: report the script's one-line result verbatim, continue the non-diagram work,
-  explicitly skip diagram generation, and do not silently use another diagram system. If the result
-  names a `specify extension add/update illustrate` recipe, surface it to the user; if they approve,
-  re-run
-  `python .specify/extensions/assure/scripts/deps.py ensure illustrate --approve` (under a `manual`
-  policy, the user runs the printed `specify extension …` command themselves instead, then this
-  command can simply be re-run).
+### 1. Resolve the feature and read its inputs
 
+Resolve the active feature as the contract says and derive `feature-slug` from the final directory
+segment. Then check for an earlier run:
 
-### 1. Resolve the active feature
+```text
+python .specify/extensions/assure/scripts/assure_state.py status --kind document --feature <feature-path>
+```
 
-- If `--feature` is supplied, use it.
-- Otherwise read `.specify/feature.json` and use `feature_directory`.
-- If feature detection fails, use the most recently modified directory under `specs/` only when it is
-  unambiguous. If still ambiguous, ask the user for the feature path.
-- Derive `feature-slug` from the final feature directory segment.
-
-Read all available feature artifacts:
-
-- `spec.md`
-- `plan.md`
-- `tasks.md`
-- `quickstart.md`
-- `data-model.md`
-- `research.md`
-- `contracts/*`
-- existing docs under `docs/<feature-slug>/`
-- recent git diff/log for the branch
+- State missing: read the full set: `spec.md`, `plan.md`, `tasks.md`, `quickstart.md`,
+  `data-model.md`, `research.md`, `contracts/*`, existing docs under `docs/<feature-slug>/`, and the
+  recent git diff/log for the branch.
+- State present and `current: false`: read the `changed_inputs` and `changed_outputs` it lists and
+  the existing manual; update only what they affect. `current: true`: nothing changed since the last
+  record; refresh only what the user asked for.
 
 Never invent behavior, screens, endpoints, examples, test counts, or coverage.
 
 ### 2. Verify readiness
 
-- Confirm implementation tasks relevant to the feature are complete or clearly mark the manual as a
+- Confirm implementation tasks relevant to the feature are complete, or clearly mark the manual as a
   draft when completion evidence is missing.
 - Check for E2E, screenshot-capture, API contract/integration, and manual smoke-test tasks in
-  `tasks.md` or the workspace.
-- If important coverage is missing, report it and suggest running `/speckit-assure-analyze`.
-  Continue only if enough evidence exists to generate an honest draft.
+  `tasks.md` or the workspace. If important coverage is missing, report it and suggest running
+  `speckit.assure.analyze`. Continue only if enough evidence exists to generate an honest draft.
 
-### 3. Scan workspace and update project memory
+### 3. Scan the workspace and refresh project memory
 
-Create or refresh `.github/memory/project-memory.md`.
+```text
+python .specify/extensions/assure/scripts/assure_scan.py
+```
 
-Scan deeply from the workspace root while excluding generated/vendor folders such as `.git/`,
-`node_modules/`, `bin/`, `obj/`, `dist/`, `build/`, `.next/`, `.nuxt/`, `.turbo/`, `.expo/`,
-`coverage/`, `.cache/`, package-manager caches, and generated QA assets.
-
-If `/speckit-assure-analyze` already created `.github/memory/project-memory.md`, reuse it as
-the starting point, then verify it against the current marker scan before writing manuals. Never
-trust stale memory blindly.
-
-Detect project markers:
-
-- Workspace/package boundaries: root `package.json` workspaces, `pnpm-workspace.yaml`, `nx.json`,
-  `turbo.json`, `lerna.json`, `rush.json`, solution files, and package/app folders.
-- Web frontend: React, Next.js, Vite, CRA, Angular, Vue, Nuxt, Svelte, SvelteKit, Remix, Astro,
-  TanStack Router, React Router, `public/`, `pages/`, `app/`, `src/routes`, `src/pages`,
-  `src/main.*`, `src/App.*`, `vite.config.*`, `next.config.*`, `angular.json`,
-  `astro.config.*`, `svelte.config.*`.
-- Mobile frontend: React Native, Expo, `app.json`, `app.config.*`, `android/`, `ios/`,
-  `metro.config.*`, `expo-router`.
-- Backend/API: `*.csproj`, `*.sln`, `pyproject.toml`, `go.mod`, `Cargo.toml`, OpenAPI contracts,
-  controllers, routers, API gateways.
-- Deployment/infrastructure: Docker, Compose, Helm, Terraform, Pulumi, ArgoCD, GitHub Actions.
-- Tooling/documentation: plugin manifests, extension manifests, docs-only packages, templates,
-  scripts.
-
-Also inspect the active feature's `spec.md`, `plan.md`, `quickstart.md`, and contracts for planned
-project structure. If a frontend is described in feature artifacts but no implementation marker
-exists yet, record it as `planned/spec-only`, not as detected implementation.
-
-For each project, record name, relative path, role, stack markers, run/test commands when
-discoverable, documentation root, QA output root, and screenshot runner.
-
-The memory file must keep the same reusable shape as the analyze command:
-
-- `Frontend Coverage Summary`.
-- `Frontend Project Inventory` with one row per web or mobile frontend, including status,
-  framework/build tool, public/assets directory, QA root, screenshot runner, commands, and
-  evidence source paths.
-- `Detected Projects`.
-- `Scan Markers`.
-- `Maintenance Rules`.
-
-If no web or mobile frontend is detected, say so explicitly. If only planned/spec frontend context
-exists, reference the source feature artifacts so this command can generate an honest draft without
-pretending implementation files exist.
+The script rewrites the block between `<!-- assure-scan:start -->` and `<!-- assure-scan:end -->` in
+`.github/memory/project-memory.md` (this stage's permitted side effect) and prints the inventory. Read
+the printed inventory instead of walking the tree. When the feature artifacts describe a frontend the
+scan did not detect, add a `planned/spec-only` row below the end marker with the source spec, plan or
+quickstart path; the script keeps text outside its markers.
 
 ### 4. Determine impacted projects and parent feature
 
-Map the feature to all impacted projects using `project-memory.md`, feature artifacts, changed files,
+Map the feature to all impacted projects using the inventory, feature artifacts, changed files,
 routes, menu definitions, form schemas, validators, API contracts, generated clients, mobile
-navigation, deployment/config changes, and tests.
-
-Pay special attention to:
-
-- UI screens, dialogs, forms, menu items, navigation, empty/loading/error states, validation
-  messages, permission states, and role gates.
-- Mobile screens or the explicit absence of mobile access.
-- Backend/API endpoints, jobs, events, integrations, data migrations, and permission checks.
+navigation, deployment/config changes, and tests. Pay special attention to UI screens, dialogs,
+forms, menu items, navigation, empty/loading/error states, validation messages, permission states and
+role gates; mobile screens or the explicit absence of mobile access; backend/API endpoints, jobs,
+events, integrations, data migrations, and permission checks.
 
 Route documentation under the product parent that a real user would recognize:
 
 - New feature: `<qa-root>/features/<feature-slug>/index.html`.
 - Enhancement: update the existing parent feature page or add a child page, e.g.
-  `features/user-management/password-reset.html`.
-- Do not create a disconnected top-level feature page for a sub-feature. For example, password reset
-  belongs under User Management.
+  `features/user-management/password-reset.html`. Do not create a disconnected top-level page for a
+  sub-feature.
 
 If parent routing is ambiguous, inspect existing docs, route names, menu labels, and spec language.
 Ask the user only when evidence conflicts.
@@ -184,12 +107,10 @@ multi-project workspaces, update `<workspace-root>/qa/index.html` as the aggrega
 
 Output conventions:
 
-- Web frontend: `<public-dir>/qa/features/<parent-feature>/index.html` or child page under
-  that parent, assets in `<public-dir>/qa/assets/<parent-feature>/`.
-- Mobile frontend: `<project-root>/qa/features/<parent-feature>/index.html` or child page,
-  assets in `<project-root>/qa/assets/<parent-feature>/`.
-- Generic/backend/tooling: `<project-root>/qa/features/<parent-feature>/index.html` or
-  child page, assets in `<project-root>/qa/assets/<parent-feature>/`.
+- Web frontend: `<public-dir>/qa/features/<parent-feature>/index.html` or a child page under that
+  parent, assets in `<public-dir>/qa/assets/<parent-feature>/`.
+- Mobile, generic, backend or tooling project: `<project-root>/qa/features/<parent-feature>/index.html`
+  or a child page, assets in `<project-root>/qa/assets/<parent-feature>/`.
 - Diagram sources: `<assets-dir>/diagrams/*.html` with PNG exports beside them.
 
 Manual content, in order:
@@ -197,48 +118,29 @@ Manual content, in order:
 1. Cover and TOC, marked "Development-only draft".
 2. Prerequisites and dev tooling: start commands, dev URLs, dashboards, environment variable names
    only, and redacted test-account guidance.
-3. Illustrate visuals where applicable:
-   - If step 0a confirmed `illustrate` is ready and a visual looks warranted, load
-     `.specify/extensions/illustrate/skill/SKILL.md` now (not before) and use its selection guide to
-     choose among all twenty-seven types:
-     architecture, IT current-state, flowchart, sequence, state machine, ER/data model, timeline,
-     swimlane, quadrant, radar, loop, nested, tree, org chart, layers, venn, pyramid, bar, line,
-     Gantt, scatter, high-level, process, medallion, data flow, DP integration, and DP security
-     matrix.
-   - Match the visual grammar to the evidence: components/connections use architecture; branching
-     logic uses flowchart; ordered messages use sequence; lifecycle transitions use state machine;
-     entities/relationships use ER; dated events use timeline; cross-role handoffs use swimlane;
-     containment/hierarchy uses nested or tree; ownership/escalation uses org chart; abstractions use
-     layers; overlap uses venn; rank/drop-off uses pyramid/funnel; two-axis positioning uses
-     quadrant; quantitative comparison/trends/distribution use bar, line, radar, or scatter;
-     schedules use Gantt; reinforcing cycles use loop; legacy landscapes use IT current-state;
-     platform/data topology uses high-level, medallion, data flow, DP integration, or DP security
-     matrix; multi-actor data handoffs use process.
-   - Save source HTML under `<assets-dir>/diagrams/`, export PNG beside it, embed the PNG in the
-     manual, and link to the HTML source for inspection/export.
-   - If no supported visual improves the manual, say no diagram was needed; do not invent one.
-4. One plain-English section per user story or use case. Each section must include a real-life user
-   scenario, preconditions, numbered tester steps, expected result after meaningful actions, and
+3. Illustrate visuals where applicable. Only if step 0a confirmed `illustrate` is ready and a visual
+   improves verification: read `.specify/extensions/illustrate/skill/references/type-index.md`,
+   choose the type, and read its `type-*.md`; read `SKILL.md` only when the diagram is created
+   outside that recipe. Save source HTML under `<assets-dir>/diagrams/`, export PNG beside it, embed
+   the PNG, and link the HTML source. If no visual improves the manual, say no diagram was needed.
+4. One plain-English section per user story or use case: a real-life user scenario, preconditions,
+   numbered tester steps, expected result after meaningful actions, and
    validation/error/empty/loading/permission states when applicable.
-5. Screenshots for every form, screen, page, dialog, menu entry, and important state. Each image must
-   include alt text and a one-line caption that names the scenario and expected result.
+5. Screenshots for every form, screen, page, dialog, menu entry, and important state. Each image is
+   a `<figure>` with non-empty `alt` text and a one-line `<figcaption>` naming the scenario and
+   expected result.
 6. Request/response samples for headless API endpoints, backend-only flows, or scenarios not
-   available from mobile. Include method, path, intended caller, redacted headers, request body,
-   response status, response body, and field explanations.
+   available from mobile: method, path, intended caller, redacted headers, request body, response
+   status, response body, and field explanations.
 
 ### 6. Generate diagrams, screenshots, and API samples
 
 Do not hand-take screenshots or diagram exports.
 
-- Diagrams: load the matching
-  `.specify/extensions/illustrate/skill/references/type-*.md` (from the SKILL.md already loaded in
-  step 5.3 for this diagram), generate source HTML from the selected Illustrate template/variant,
-  then export PNG with the installed `scripts/export_diagram.py` utility and `references/export.md`
-  contract. Keep HTML sources and PNGs together under
-  `<assets-dir>/diagrams/`, embed PNGs, and link the HTML sources.
-- If diagram PNG export cannot run, keep the HTML source, mark the PNG as pending in the manual, and
-  report the follow-up. Do not embed a broken image.
-
+- Diagrams: generate source HTML from the selected Illustrate type reference, then export PNG with
+  the installed `scripts/export_diagram.py` and the `references/export.md` contract. If PNG export
+  cannot run, keep the HTML source, mark the PNG as pending in the manual, and report the follow-up.
+  Do not embed a broken image.
 - Web UI: add or run a Playwright capture spec that mocks all backend endpoints the feature UI
   depends on with deterministic data. Capture full-page PNGs into the feature assets directory.
 - Mobile UI: use the project's existing mobile E2E runner (`Detox`, `Maestro`, `Appium`, Expo test
@@ -248,21 +150,22 @@ Do not hand-take screenshots or diagram exports.
   server behavior differs from the contract, mark `(mismatch)` and include the actual response with a
   note to update the contract.
 
-Apply redaction rules everywhere. Never include plaintext passwords, API keys, bearer tokens,
-refresh tokens, session IDs, cookies, private keys, OAuth codes, database URLs, connection strings,
-or full `.env` values.
+Apply the contract's redaction rule everywhere.
 
-### 7. Validate
+### 7. Audit
 
-- Smoke-test the generated HTML.
-- Verify every `<img>` has `alt` text and a caption.
-- Verify referenced assets exist.
-- Verify index links work.
-- Verify production builds do not ship or link development-only QA docs.
+```text
+python .specify/extensions/assure/scripts/audit_qa.py <manual-path> [<manual-path> ...]
+```
+
+The script checks that every `<img>` has non-empty `alt` text and a `<figcaption>`, that every
+relative `src` and `href` resolves, that the "Development-only draft" marker is present, and that no
+secret-shaped value survived redaction. Fix every finding, then confirm production builds do not
+ship or link development-only QA docs.
 
 ### 8. Record freshness and report
 
-After validation succeeds, record the document state and every generated manual path relative to the
+After the audit passes, record the document state and every generated manual path relative to the
 repository root:
 
 ```text
@@ -273,15 +176,7 @@ Repeat `--output` for every generated index, manual, or required evidence artifa
 successful state while the manual remains a draft because required tests, screenshots, or API
 samples are missing.
 
-Report:
-
-- Feature path and lifecycle phase used.
-- Impacted projects.
-- Manual paths written.
-- Diagram HTML/PNG assets written or omitted as not applicable.
-- Screenshot/API sample assets written.
-- Index files updated.
-- Any missing coverage, skipped screenshots, inferred API samples, mismatches, or follow-up tasks.
-
-State clearly when the manual is a draft because implementation review, screenshots, API samples, or
-tests were incomplete.
+Report the contract's shape plus: diagram HTML/PNG assets written or omitted as not applicable;
+screenshot/API sample assets written; index files updated; any missing coverage, skipped screenshots,
+inferred API samples, mismatches, or follow-up tasks. State clearly when the manual is a draft because
+implementation review, screenshots, API samples, or tests were incomplete.

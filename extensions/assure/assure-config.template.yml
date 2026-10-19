@@ -8,3 +8,17 @@ freshness:
   state_directory: .specify/extensions/assure/state
 output:
   directory_name: qa
+scan:
+  exclude:
+    - .git
+    - node_modules
+    - bin
+    - obj
+    - dist
+    - build
+    - .next
+    - .nuxt
+    - .turbo
+    - .expo
+    - coverage
+    - .cache

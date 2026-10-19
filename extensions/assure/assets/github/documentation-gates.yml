@@ -23,19 +23,7 @@ jobs:
           echo "path=$feature" >> "$GITHUB_OUTPUT"
       - name: Verify QA analysis and documentation freshness
         if: ${{ hashFiles('.specify/extensions/assure/assure-config.yml') != '' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if grep -Eq '^  require_document_before_pr: true$' .specify/extensions/assure/assure-config.yml; then
-            result="$(python .specify/extensions/assure/scripts/assure_state.py status --kind document --feature '${{ steps.feature.outputs.path }}')"
-            echo "$result"
-            RESULT="$result" python -c "import json, os, sys; sys.exit(0 if json.loads(os.environ['RESULT'])['current'] else 1)"
-          fi
+        run: python .specify/extensions/assure/scripts/assure_state.py status --gate --summary --kind document --feature '${{ steps.feature.outputs.path }}'
       - name: Verify User Manual freshness
         if: ${{ hashFiles('User-Manual/manual.yml') != '' && hashFiles('.specify/extensions/user-manual/scripts/manual_state.py') != '' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          result="$(python .specify/extensions/user-manual/scripts/manual_state.py status --feature '${{ steps.feature.outputs.path }}')"
-          echo "$result"
-          RESULT="$result" python -c "import json, os, sys; sys.exit(0 if json.loads(os.environ['RESULT'])['current'] else 1)"
+        run: python .specify/extensions/user-manual/scripts/manual_state.py status --summary --feature '${{ steps.feature.outputs.path }}'
