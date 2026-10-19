@@ -8,7 +8,8 @@
   `agent_type` (both hosts add these in subagent sessions). The top-level session runs them.
 - `gh pr create|edit --body-file <f>` is refused in a managed project (`.specify/workflow.yml`
   present) when the sibling lint `<f minus suffix>.lint.json` (what `pr_publish.py` writes) is
-  missing or its `body_sha256` is not the file's hash; `gh pr create` is refused when its head
+  missing or its `body_sha256` is not the file's hash; an inline `--body`/`-b` is refused there too
+  (no lint receipt can cover it); `gh pr create` is refused when its head
   (`--head`, else the current branch) is the repository default branch (`origin/HEAD`), in every
   project. An unresolvable branch allows.
 
@@ -64,8 +65,15 @@ def pr_findings(tokens, root):
     found = []
     if tokens[2] == 'create' and on_default_branch(root, option(tokens[3:], '--head', '-H')):
         found.append(('pr', 'gh pr create on the repository default branch; create the PR from a feature branch'))
+    managed = os.path.isfile(os.path.join(root, '.specify/workflow.yml'))
+    if managed and any(t in ('--body', '-b') or t.startswith('--body=') for t in tokens[3:]):
+        found.append(('pr', 'an inline --body cannot carry a lint receipt in a managed project; publish through '
+                            '.specify/extensions/pr/scripts/pr_publish.py (or pass --body-file with its lint)'))
     body = option(tokens[3:], '--body-file', '-F')
-    if body and os.path.isfile(os.path.join(root, '.specify/workflow.yml')):
+    if managed and tokens[2] == 'create' and not body:  # --fill, a template or an editor body: none carries a lint
+        found.append(('pr', 'gh pr create needs a linted --body-file in a managed project; publish through '
+                            '.specify/extensions/pr/scripts/pr_publish.py'))
+    if body and managed:
         path = os.path.join(root, body)
         lint = os.path.splitext(path)[0] + '.lint.json'
         try:

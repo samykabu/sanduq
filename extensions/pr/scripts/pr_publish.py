@@ -6,7 +6,11 @@
         [--repo owner/repo --issue N] [--prerequisite N ...] [--base <branch>] [--no-pr]
 
 Fetches the existing PR body (`gh pr view`), replaces the text between `<!-- speckit-pr:start -->`
-and `<!-- speckit-pr:end -->` or appends the marked section, writes the exact UTF-8/LF body to
+and `<!-- speckit-pr:end -->` or appends the marked section (a body whose markers are unpaired or
+repeated is refused, never appended to), rewrites each relative image path to the commit-pinned
+`https://github.com/<repo>/blob/<HEAD sha>/<path>?raw=true` after checking the file is committed at
+HEAD and readable through the contents API at that commit (pushing a new branch first when it has no
+upstream), writes the exact UTF-8/LF body to
 `specs/<slug>/evidence/pr-body.md`, lints closing references (Workflow's `pr_lint` when installed,
 else the same rule against the bound issue only) into the sibling `pr-body.lint.json`, refuses on
 findings, then `gh pr edit` or `gh pr create`. Prints the PR receipt fragment as JSON on stdout:
@@ -14,16 +18,20 @@ findings, then `gh pr edit` or `gh pr create`. Prints the PR receipt fragment as
 
 Exit codes: 0 published (or linted only with --no-pr); 1 the body closes a foreign, prerequisite or
 unbound issue (fix the document, rerun); 2 malformed input or a missing file; 3 gh or git failed
-(the docs are written; report that the PR step was skipped and why). Standard library only.
+(the docs are written; report that the PR step was skipped and why), including a PR lookup that
+fails for any reason other than "no pull requests found" and an image that cannot be verified on
+the remote. Standard library only.
 """
 import argparse
 import hashlib
 import importlib.util
 import json
+import posixpath
 import re
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import quote, unquote
 
 START, END = '<!-- speckit-pr:start -->', '<!-- speckit-pr:end -->'
 DEFAULT_HEADING = 'What have been developed and how to review it'
@@ -34,6 +42,9 @@ CLOSE_REF = re.compile(
     r'(?:https?://github\.com/(?P<urepo>[\w.-]+/[\w.-]+)/issues/(?P<unum>\d+)|(?P<repo>[\w.-]+/[\w.-]+)?#(?P<num>\d+))',
     re.I)
 FENCE = re.compile(r'```.*?```|~~~.*?~~~|`[^`\n]*`', re.S)
+IMAGE = re.compile(r'(!\[[^\]]*\]\(\s*<?)([^)\s>]+)|(<img\b[^>]*?\bsrc=["\'])([^"\']+)', re.I)
+REMOTE = re.compile(r'[a-z][a-z0-9+.-]*:|//|#', re.I)
+NO_PR = 'no pull requests found'
 
 
 class Failure(Exception):
@@ -58,9 +69,13 @@ def gh(root, *args):
 
 
 def splice(existing, section):
+    starts, ends = existing.count(START), existing.count(END)
     start, end = existing.find(START), existing.find(END)
-    if start >= 0 and end > start:
+    if (starts, ends) == (1, 1) and end > start:
         return existing[:start] + section + existing[end + len(END):]
+    if starts or ends:
+        raise Failure(2, 'the PR body has %d start and %d end speckit-pr markers; leave exactly one pair (start '
+                         'before end) or none, then rerun' % (starts, ends))
     return (existing.rstrip('\n') + '\n\n' + section + '\n') if existing.strip() else section + '\n'
 
 
@@ -87,6 +102,36 @@ def lint(root, body, repo, issue, prerequisites):
             'bound': {'repo': repo.lower(), 'issue': int(issue)}, 'closes': closes, 'violations': violations}
 
 
+def pin_images(root, content, explained, push):
+    """Relative image paths (outside code) become commit-pinned GitHub URLs, each verified first."""
+    parts, fences = FENCE.split(content), FENCE.findall(content)
+    targets = sorted({m.group(2) or m.group(4) for part in parts for m in IMAGE.finditer(part)} - {''})
+    targets = [t for t in targets if not REMOTE.match(t)]
+    if not targets:
+        return content
+    push()
+    repo = gh(root, 'repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner').strip()
+    head = run(['git', 'rev-parse', 'HEAD'], root)
+    if head.returncode:
+        raise Failure(3, 'git rev-parse HEAD failed: ' + head.stderr.strip())
+    sha, folder, urls = head.stdout.strip(), posixpath.dirname(explained), {}
+    for target in targets:
+        clean = unquote(re.split(r'[?#]', target)[0])
+        path = posixpath.normpath(clean.lstrip('/') if clean.startswith('/') else posixpath.join(folder, clean))
+        if path == '..' or path.startswith('../'):
+            raise Failure(2, 'image ' + target + ' points outside the repository')
+        if run(['git', 'cat-file', '-e', sha + ':' + path], root).returncode:
+            raise Failure(2, 'image ' + target + ' (' + path + ') is not committed at HEAD; commit it and rerun')
+        check = run(['gh', 'api', 'repos/%s/contents/%s?ref=%s' % (repo, quote(path), sha), '--silent'], root)
+        if check.returncode:
+            raise Failure(3, 'image ' + path + ' is not readable on ' + repo + ' at ' + sha[:12] +
+                             ' (push the branch, then rerun): ' + (check.stderr or check.stdout).strip())
+        urls[target] = 'https://github.com/%s/blob/%s/%s?raw=true' % (repo, sha, quote(path))
+    pin = lambda m: (m.group(1) or m.group(3)) + urls.get(m.group(2) or m.group(4), m.group(2) or m.group(4))
+    pinned = [IMAGE.sub(pin, part) for part in parts]
+    return ''.join(text + (fences[i] if i < len(fences) else '') for i, text in enumerate(pinned))
+
+
 def branches(root):
     head = run(['git', 'symbolic-ref', '--short', 'HEAD'], root)
     if head.returncode:
@@ -97,6 +142,19 @@ def branches(root):
     else:
         default_name = default.stdout.strip().split('/', 1)[-1]
     return head.stdout.strip(), default_name
+
+
+def ensure_branch(root, args):
+    """(head, base) for a new PR; pushes the head when it has no upstream yet."""
+    head, default = branches(root)
+    base = args.base or default
+    if head == base:
+        raise Failure(3, 'current branch ' + head + ' is the base branch; create the PR from a feature branch')
+    if run(['git', 'rev-parse', '--abbrev-ref', '@{u}'], root).returncode:
+        push = run(['git', 'push', '--set-upstream', 'origin', head], root)
+        if push.returncode:
+            raise Failure(3, 'git push failed: ' + push.stderr.strip())
+    return head, base
 
 
 def publish(root, args):
@@ -112,11 +170,21 @@ def publish(root, args):
     if (repo is None) != (issue is None):
         raise Failure(2, '--repo and --issue go together')
     content = explained.read_text(encoding='utf-8-sig').replace('\r\n', '\n').strip('\n')
-    section = START + '\n## ' + args.heading + '\n\n' + content + '\n' + END
+    if START in content or END in content:
+        raise Failure(2, args.explained + ' contains a speckit-pr marker; remove it and rerun')
     existing = None
     if not args.no_pr:
         view = run(['gh', 'pr', 'view', '--json', 'number,url,body'], root)
+        if view.returncode and NO_PR not in (view.stderr + view.stdout).lower():
+            raise Failure(3, 'gh pr view failed: ' + (view.stderr or view.stdout).strip())
         existing = json.loads(view.stdout) if view.returncode == 0 else None
+    created = []  # a new PR's (head, base), pushed early when images must be verified on the remote
+
+    def push():
+        if not (args.no_pr or existing or created):
+            created.append(ensure_branch(root, args))
+    content = pin_images(root, content, Path(args.explained).as_posix(), push)
+    section = START + '\n## ' + args.heading + '\n\n' + content + '\n' + END
     body = splice(existing['body'] if existing else '', section).replace('\r\n', '\n')
     body_path = root / feature / 'evidence' / 'pr-body.md'
     lint_path = body_path.with_suffix('.lint.json')
@@ -138,14 +206,7 @@ def publish(root, args):
     if existing:
         gh(root, 'pr', 'edit', str(existing['number']), '--body-file', str(body_path))
         return 0, receipt
-    head, default = branches(root)
-    base = args.base or default
-    if head == base:
-        raise Failure(3, 'current branch ' + head + ' is the base branch; create the PR from a feature branch')
-    if run(['git', 'rev-parse', '--abbrev-ref', '@{u}'], root).returncode:
-        push = run(['git', 'push', '--set-upstream', 'origin', head], root)
-        if push.returncode:
-            raise Failure(3, 'git push failed: ' + push.stderr.strip())
+    head, base = created[0] if created else ensure_branch(root, args)
     title = args.title or next((line[2:].strip() for line in content.splitlines() if line.startswith('# ')), feature.name)
     gh(root, 'pr', 'create', '--base', base, '--head', head, '--title', title, '--body-file', str(body_path))
     receipt['pr_url'] = gh(root, 'pr', 'view', '--json', 'url', '-q', '.url').strip()

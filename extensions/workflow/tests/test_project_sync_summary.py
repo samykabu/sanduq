@@ -11,6 +11,7 @@ import contextlib
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -39,16 +40,18 @@ CONFIG = {
 class FakeGh:
     """`gh` for one run: GraphQL-backed subcommands, or the REST paths once the budget is 0."""
 
-    def __init__(self, budget='5000', open_pr=False):
-        self.budget, self.open_pr, self.calls, self.next_issue = budget, open_pr, [], 42
+    def __init__(self, budget='5000', open_pr=False, scopes="'project', 'repo'"):
+        self.budget, self.open_pr, self.calls, self.next_issue, self.scopes = budget, open_pr, [], 42, scopes
 
     def __call__(self, args, stdin=None):
         self.calls.append(list(args))
         head = args[:2]
         if head == ['auth', 'status']:
-            return 0, "Logged in to github.com as fixture\nToken scopes: 'project', 'repo'"
+            return 0, "Logged in to github.com as fixture\nToken scopes: " + self.scopes
         if head == ['api', 'graphql']:
             return (0, self.budget) if any('rateLimit' in arg for arg in args) else (0, '{}')
+        if self.budget == '0' and args[0] != 'api':  # GraphQL-backed gh subcommands fail once exhausted
+            return 1, 'GraphQL: API rate limit exceeded for user ID 1.'
         if head == ['issue', 'create']:
             return 0, 'https://github.com/acme/app/issues/' + str(self.new_issue())
         answers = {('issue', 'list'): '[]', ('label', 'create'): '', ('issue', 'close'): '',
@@ -151,6 +154,7 @@ class ProjectSyncTests(unittest.TestCase):
         self.assertIn('[project]', err)
         self.assertEqual(self.state()['001-refunds']['itemId'], 'ITEM_1')
         self.assertEqual(gh.used('project', 'item-edit')[0][-1], 'OPT_0')
+        self.assertFalse([c for c in gh.calls if any('rateLimit' in arg for arg in c)])  # no probe on the happy path
         code, out, _, _ = self.sync('--phase', 'open', '--json')
         payload = json.loads(out[-1])
         self.assertEqual((payload['issue'], payload['status'], payload['transport']), (42, 'Backlog', 'graphql'))
@@ -209,6 +213,123 @@ class ProjectSyncTests(unittest.TestCase):
         self.assertEqual((payload['issue'], payload['status'], payload['transport']), (42, 'Backlog', 'rest'))
         self.assertFalse(gh.used('issue', 'create') or gh.used('project'))
         self.assertTrue([c for c in gh.calls if c[:2] == ['api', 'orgs/acme/projectsV2/1/items/11']])
+
+
+    # -- remotes, scopes, timeouts (PM4) -----------------------------------
+
+    REMOTES = {'https://github.com/acme/my.app.git': 'acme/my.app', 'git@github.com:acme/my.app.git': 'acme/my.app',
+               'ssh://git@github.com:443/acme/app.git': 'acme/app', 'ssh://git@github.com:22/acme/app': 'acme/app',
+               'https://x-access-token:T@GitHub.com/Acme/App/': 'Acme/App', 'git@GITHUB.COM:Acme/App.GIT': 'Acme/App',
+               'https://github.com@evil.com/acme/app': None, 'https://gitlab.com/acme/app': None, '/srv/git/app.git': None}
+
+    def test_remote_parsing_matches_workflow_and_keeps_dots_and_ports(self):
+        sys.path.insert(0, str(ROOT / 'workflow/scripts'))
+        import workflow
+        for remote, repo in self.REMOTES.items():
+            self.assertEqual(project_sync.normalize_remote_url(remote), workflow.normalize_remote_url(remote), remote)
+            self.assertEqual(project_sync.github_repo(remote), repo, remote)
+        installed = self.root / project_sync.WORKFLOW  # an installed Workflow's parser is the one used
+        installed.parent.mkdir(parents=True)
+        installed.write_text('def normalize_remote_url(url):\n    return "github.com/via/workflow"\n', encoding='utf-8')
+        self.assertEqual(project_sync.github_repo('https://github.com/acme/app'), 'via/workflow')
+
+    def test_a_dotted_repository_syncs(self):
+        self.configure()
+        subprocess.run(['git', 'remote', 'set-url', 'origin', 'git@github.com:acme/my.app.git'], cwd=self.root, check=True)
+        code, out, err, gh = self.sync('--phase', 'open', '--json')
+        self.assertEqual((code, json.loads(out[-1])['repo']), (0, 'acme/my.app'), err)
+        self.assertEqual(gh.used('issue', 'list')[0][3], 'acme/my.app')
+
+    def test_a_managed_binding_that_differs_only_in_case_is_the_same_repository(self):
+        self.configure()
+        (self.root / '.specify/workflow.yml').write_text('schema: 1\n', encoding='utf-8')
+        (self.root / 'specs/001-refunds').mkdir(parents=True)
+        (self.root / 'specs/001-refunds/scope-source.json').write_text('{"repo": "Acme/App", "issue": 42}', encoding='utf-8')
+        code, out, err, _ = self.sync('--phase', 'open', '--summary')
+        self.assertEqual((code, out), (0, ['ok issue=42 status=Backlog created=0 closed=0']), err)
+
+    def test_a_read_project_only_token_is_a_skip(self):
+        self.configure()
+        code, out, _, gh = self.sync('--phase', 'open', '--summary', gh=FakeGh(scopes="'read:project', 'repo'"))
+        self.assertEqual(code, 0)
+        self.assertRegex(out[0], r"^skipped reason=gh token lacks 'project' scope")
+        self.assertEqual(gh.calls, [['auth', 'status']])
+
+    def test_a_hung_gh_is_an_error_line_and_a_missing_git_a_skip(self):
+        self.configure()
+        real = subprocess.run
+
+        def hung_gh(cmd, *a, **k):
+            if cmd[0] == 'gh':
+                self.assertEqual(k.get('timeout'), project_sync.TIMEOUT)
+                raise subprocess.TimeoutExpired(cmd, k['timeout'])
+            return real(cmd, *a, **k)
+        out = io.StringIO()
+        with patch.object(project_sync.subprocess, 'run', hung_gh), contextlib.redirect_stdout(out), \
+                contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(project_sync.main(['--phase', 'open', '--summary']), 1)
+        self.assertEqual(out.getvalue().splitlines(), ['error exit=1 reason=timeout: gh auth status gave no answer in 120 s'])
+        out = io.StringIO()
+        with patch.object(project_sync.subprocess, 'run', side_effect=FileNotFoundError('git')), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(project_sync.main(['--phase', 'open', '--summary']), 0)
+        self.assertEqual(out.getvalue().splitlines(), ['skipped reason=not a git repo'])
+
+
+FAKE_GH = """import json, sys
+args = sys.argv[1:]
+if args[:2] == ['auth', 'status']: print("Logged in to github.com\\n  - Token scopes: " + SCOPES)
+elif args[:2] == ['api', 'user']: print('acme')
+elif args[:2] == ['project', 'list']: print(json.dumps({'projects': [{'number': 1, 'title': 'Alpha'}, {'number': 3, 'title': 'Beta'}]}))
+else: raise SystemExit('unexpected gh ' + ' '.join(args))
+"""
+
+
+class ProjectInitTests(unittest.TestCase):
+    """PM4/PM5: both init scripts need the whole 'project' scope and name the choice they cannot make."""
+
+    def init(self, shell, scopes):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name).resolve()
+        subprocess.run(['git', 'init', '-q'], cwd=root, check=True)
+        fake = root / 'fake_gh.py'
+        fake.write_text('SCOPES = ' + repr(scopes) + '\n' + FAKE_GH, encoding='utf-8')
+        scripts = ROOT / 'project/scripts'
+        if shell == 'bash':
+            (root / 'bin').mkdir()
+            (root / 'bin/gh').write_text('#!/usr/bin/env bash\nexec "' + Path(sys.executable).as_posix() + '" "' +
+                                         fake.as_posix() + '" "$@"\n', encoding='utf-8', newline='\n')
+            (root / 'bin/gh').chmod(0o755)
+            env = dict(os.environ, PATH=str(root / 'bin') + os.pathsep + os.environ.get('PATH', ''))
+            args = ['bash', '-c', 'export PATH="$(cygpath -u "$1" 2>/dev/null || echo "$1"):$PATH"; shift; exec bash "$@"',
+                    '_', str(root / 'bin'), (scripts / 'bash/project-init.sh').as_posix(), '--non-interactive', '--dry-run']
+        else:
+            wrapper = root / 'run.ps1'
+            wrapper.write_text("function global:gh { & '" + sys.executable + "' '" + str(fake) + "' @args }\n& '" +
+                               str(scripts / 'powershell/project-init.ps1') + "' -NonInteractive -DryRun; exit $LASTEXITCODE\n", encoding='utf-8')
+            env, args = dict(os.environ), ['pwsh', '-NoProfile', '-File', str(wrapper)]
+        done = subprocess.run(args, cwd=root, env=env, input='', capture_output=True, text=True, encoding='utf-8', timeout=120)
+        return done.returncode, done.stdout + done.stderr
+
+    def shells(self):
+        found = [shell for shell in ('bash', 'pwsh') if shutil.which(shell) and (shell != 'bash' or shutil.which('jq'))]
+        if not found:
+            self.skipTest('neither bash with jq nor pwsh is installed')
+        return found
+
+    def test_read_project_alone_is_refused_with_the_refresh_command(self):
+        for shell in self.shells():
+            code, output = self.init(shell, "'read:project', 'repo'")
+            self.assertNotEqual(code, 0, (shell, output))
+            self.assertIn("lacks 'project' scope - run: gh auth refresh", output, shell)
+
+    def test_several_projects_are_listed_with_the_flag_to_pass(self):
+        for shell in self.shells():
+            code, output = self.init(shell, "'project', 'repo'")
+            self.assertNotEqual(code, 0, (shell, output))
+            self.assertIn('#1 Alpha, #3 Beta', output, shell)
+            self.assertIn('rerun with ' + ('--number' if shell == 'bash' else '-Number'), output, shell)
 
 
 if __name__ == '__main__':

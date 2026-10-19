@@ -86,7 +86,8 @@ if ($managedWorkflow) {
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { Die 'gh CLI not installed' }
 $auth = & gh auth status 2>&1 | Out-String
 if ($LASTEXITCODE -ne 0) { Die 'gh not authenticated - run: gh auth login' }
-if ($auth -notmatch 'project') { Die "gh token lacks 'project' scope - run: gh auth refresh -h github.com -s project,read:project" }
+# 'project' as a whole scope: 'read:project' alone cannot write the board
+if ($auth -notmatch '(^|[^:\w-])project([^:\w-]|$)') { Die "gh token lacks 'project' scope - run: gh auth refresh -h github.com -s project,read:project" }
 
 # ---- resolve owner ----
 if (-not $Owner) { $Owner = (gh api user --jq .login 2>$null); if (-not $Owner) { Die 'could not resolve owner - pass -Owner' } }
@@ -104,7 +105,9 @@ if ($Number -le 0) {
     if ($LASTEXITCODE -ne 0) { Die "could not list projects for $Owner : $listJson" }
     $projects = ($listJson | ConvertFrom-Json).projects
     if (-not $projects -or $projects.Count -eq 0) { Die "no projects found for $Owner - create one or pass -Number" }
-    if ($NonInteractive -and $projects.Count -gt 1) { Die 'multiple projects found; pass -Number in non-interactive mode' }
+    if ($NonInteractive -and $projects.Count -gt 1) {
+        Die ("multiple projects for $Owner" + ': ' + (($projects | ForEach-Object { '#{0} {1}' -f $_.number, $_.title }) -join ', ') + ' - ask which one and rerun with -Number <n>')
+    }
     if ($projects.Count -eq 1) { $Number = $projects[0].number }
     else {
         Info 'Select a project:'
@@ -163,7 +166,7 @@ foreach ($i in 0..($phases.Count - 1)) {
             $create = ($ans -match '^[yY]')
         }
         if ($create) { $toCreate += @{ phase = $phase; name = $wanted; color = $palette[$i % $palette.Count] } }
-        else { Warn "phase '$phase' has no column - the '$phase' transition will be a no-op until you map it" }
+        else { Warn "phase '$phase' has no column (wanted '$wanted') - the transition is a no-op until mapped; rerun with -AutoCreateColumns to create it, or add the column on the board and rerun" }
     }
 }
 
@@ -204,7 +207,7 @@ if (-not $HooksMode) {
             try { $HooksMode = (Get-Content $existingCfgPath -Raw | ConvertFrom-Json).hookMode } catch { $HooksMode = $null }
         }
         if ($HooksMode -notin @('optional', 'required')) { $HooksMode = 'optional' }
-        Info "hook mode not supplied in non-interactive mode; using $HooksMode"
+        Info "hook mode not supplied in non-interactive mode; using $HooksMode (rerun with -HooksMode optional|required to choose)"
     }
     else {
         do {

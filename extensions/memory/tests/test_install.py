@@ -172,6 +172,17 @@ class InstallTests(unittest.TestCase):
         install(self.root)
         self.assertEqual(claude, rendered.read_text(encoding="utf-8"))
 
+    def test_run_has_no_duplicate_preflight_and_the_catalog_stays_short(self):
+        run = (SOURCE / "commands/run.md").read_text(encoding="utf-8")
+        self.assertNotIn("preflight --spec", run)  # verify and prepare run the preflight themselves (PM7)
+        self.assertNotIn("data.ok", run)  # the preflight result is never false; failures raise
+        summaries = [re.search(r"^description: (.+)$", (SOURCE / "commands" / (name + ".md")).read_text(encoding="utf-8"),
+                               re.M).group(1) for name in COMMANDS]
+        self.assertLessEqual(sum(map(len, summaries)), 750)  # PM8: about 700 characters for all seven
+        for summary in summaries:
+            self.assertNotIn(" hook)", summary)
+            self.assertRegex(summary, r'^[A-Z][a-z]+s .*\bUse when asked\b.*"[^"]{3,}"')
+
     def test_registry_version_and_the_four_hook_registrations_follow_one_list(self):
         install(self.root)
         registry = json.loads((self.root / ".specify/extensions/.registry").read_text())

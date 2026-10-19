@@ -16,17 +16,21 @@ Usage: project_sync.py --phase <open|analysis|engineer-review|ready|in-progress|
 `skipped reason=<why>` or `error exit=<rc> reason=<message>`; the run log moves to stderr.
 """
 import argparse
+import importlib.util
 import json
 import os
 import re
 import subprocess
 import sys
+import urllib.parse
 from pathlib import Path
 from urllib.parse import quote
 
 PHASES = ('open', 'analysis', 'engineer-review', 'ready', 'in-progress', 'in-review', 'done', 'auto')
 CONFIG = Path('.specify/extensions/project/config.json')
 TASK_LINE = re.compile(r'^\s*-\s*\[([ xX])\]\s*\**(T\d+)\**\s*(.*)$')
+WORKFLOW = Path('.specify/extensions/workflow/scripts/workflow.py')
+TIMEOUT = 120
 SUB_ISSUE_MUTATION = 'mutation($p:ID!,$c:ID!){addSubIssue(input:{issueId:$p,subIssueId:$c}){subIssue{number}}}'
 
 
@@ -37,16 +41,87 @@ class Skip(Exception):
 def gh_raw(args, stdin=None):
     """(returncode, output) of `gh <args>`; stderr joins the output only on failure. 127: no gh."""
     try:
-        done = subprocess.run(['gh', *args], input=stdin, capture_output=True, text=True, encoding='utf-8')
+        done = subprocess.run(['gh', *args], input=stdin, capture_output=True, text=True, encoding='utf-8',
+                              timeout=TIMEOUT)
     except FileNotFoundError:
         return 127, 'gh CLI not installed'
+    except subprocess.TimeoutExpired:
+        raise RuntimeError('timeout: gh ' + ' '.join(args[:2]) + ' gave no answer in ' + str(TIMEOUT) + ' s') from None
     out = done.stdout.strip()
     return done.returncode, out if done.returncode == 0 else (out + '\n' + done.stderr.strip()).strip()
 
 
 def git(*args):
-    done = subprocess.run(['git', *args], capture_output=True, text=True, encoding='utf-8')
+    """Stripped stdout, or '' on failure or when git is missing (the run then skips)."""
+    try:
+        done = subprocess.run(['git', *args], capture_output=True, text=True, encoding='utf-8', timeout=TIMEOUT)
+    except FileNotFoundError:
+        return ''
+    except subprocess.TimeoutExpired:
+        raise RuntimeError('timeout: git ' + ' '.join(args[:2]) + ' gave no answer in ' + str(TIMEOUT) + ' s') from None
     return done.stdout.strip() if done.returncode == 0 else ''
+
+
+def _strip_dotgit(path):
+    return path[:-4] if path[-4:].lower() == '.git' else path
+
+
+def _normalize_path_remote(path):
+    path = path.replace('\\', '/')
+    while len(path) > 1 and path.endswith('/'):
+        path = path[:-1]
+    path = _strip_dotgit(path)
+    drive = re.match(r'[A-Za-z]:(?=/|$)', path)
+    return drive.group().lower() + path[drive.end():] if drive else path
+
+
+def normalize_remote_url(url):
+    """Copy of Workflow's `normalize_remote_url` (used instead when Workflow is installed): scheme,
+    credentials, host case, default ports and `.git` fold away; the repository path keeps its case."""
+    url = url.strip()
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme == 'file':
+        return _normalize_path_remote(parts.path or url)
+    if parts.scheme and parts.netloc:
+        try:
+            host = parts.hostname
+            if host is None:
+                raise ValueError('no host')
+            host = host.rstrip('.').lower()
+            port = parts.port
+            if port and port != {'ssh': 22, 'https': 443, 'http': 80}.get(parts.scheme):
+                host += ':' + str(port)
+            return host + '/' + _strip_dotgit(parts.path.strip('/'))
+        except ValueError:
+            pass
+    if '://' not in url:
+        scp = re.fullmatch(r'(?:[^@/\s]*@)?([^@/:\s]+):(.+)', url)
+        if scp:
+            host, path = scp.groups()
+            if not (len(host) == 1 and host.isalpha()):
+                return host.rstrip('.').lower() + '/' + _strip_dotgit(path.rstrip('/'))
+    return _normalize_path_remote(url)
+
+
+def github_repo(remote):
+    """`owner/repo` of a GitHub remote in any form, through Workflow's normaliser when installed."""
+    normalize = normalize_remote_url
+    if WORKFLOW.is_file():
+        try:
+            spec = importlib.util.spec_from_file_location('sanduq_workflow', WORKFLOW)
+            module = importlib.util.module_from_spec(spec)
+            sys.path.insert(0, str(WORKFLOW.parent.resolve()))
+            spec.loader.exec_module(module)
+            normalize = module.normalize_remote_url
+        except Exception:  # an unreadable Workflow install must not stop the sync: the copy is identical
+            pass
+    match = re.fullmatch(r'github\.com(?::\d+)?/([^/]+/[^/]+)', normalize(remote)) if remote else None
+    return match.group(1) if match else None
+
+
+def token_scopes(auth):
+    """The scopes on gh's `Token scopes:` lines, as a set ('project' is not 'read:project')."""
+    return {scope for line in auth.splitlines() if 'Token scopes:' in line for scope in re.findall(r"'([^']+)'", line)}
 
 
 def as_json(value, default):
@@ -153,7 +228,7 @@ class Sync:
                 raise RuntimeError('Managed workflow requires scope-source.json')
             binding = read_json(binding_path)
             bound = str(binding.get('issue', ''))
-            if binding.get('repo') != self.repo or not bound.isdigit() or int(bound) <= 0:
+            if str(binding.get('repo', '')).lower() != self.repo.lower() or not bound.isdigit() or int(bound) <= 0:
                 raise RuntimeError('Managed parent binding mismatch')
             if fs['issue'] and fs['issue'] != int(bound):
                 raise RuntimeError('Project state conflicts with Scope parent binding')
@@ -365,13 +440,12 @@ class Sync:
             raise Skip(auth)
         if rc != 0:
             raise Skip('gh not authenticated')
-        if 'project' not in auth:
+        if 'project' not in token_scopes(auth):
             raise Skip("gh token lacks 'project' scope - run: gh auth refresh -h github.com -s project,read:project")
         remote = git('config', '--get', 'remote.origin.url')
-        match = re.search(r'github\.com[:/]+([^/]+)/([^/.]+)', remote)
-        if not match:
+        self.repo = github_repo(remote)
+        if not self.repo:
             raise Skip(f'remote is not GitHub ({remote})')
-        self.repo = match.group(1) + '/' + match.group(2)
         owner_path = 'orgs' if cfg.get('ownerType') == 'org' else 'users'
         self.rest_base = f'{owner_path}/{cfg["owner"]}/projectsV2/{cfg["projectNumber"]}'
 
@@ -408,7 +482,6 @@ class Sync:
             if not isinstance(fs.get(key), type(default)):
                 fs[key] = default
 
-        self.use_rest()
         phase = args.phase
         self.log(f"feature '{self.slug}' -> repo {self.repo}, Project #{cfg['projectNumber']}, phase '{phase}'")
         self.ensure_parent()

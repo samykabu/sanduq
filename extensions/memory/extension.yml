@@ -22,25 +22,25 @@ provides:
   commands:
   - name: speckit.memory.init
     file: commands/init.md
-    description: 'Configures Sanduq Memory hooks, checks, wrappers and guards without enabling automatic archiving. Use when asked to "set up project memory".'
+    description: 'Sets up memory hooks, checks and guards with archiving off. Use when asked to "set up project memory".'
   - name: speckit.memory.prepare
     file: commands/prepare.md
-    description: 'Queues an implemented feature for archival after merge without deleting it (after_implement hook). Use when asked to "queue it for archival".'
+    description: 'Queues an implemented feature for archival after merge. Use when asked to "queue it for archival".'
   - name: speckit.memory.run
     file: commands/run.md
-    description: 'Archives verified features into project memory via a checkpoint, a reviewed delta and a scoped commit. Use when asked to "archive the feature".'
+    description: 'Archives verified features into project memory as a reviewed delta. Use when asked to "archive the feature".'
   - name: speckit.memory.session
     file: commands/session.md
-    description: 'Processes pending merged archives at session start and resumes an interrupted run (before_specify hook). Use when asked to "process archives".'
+    description: 'Processes merged pending archives and resumes interrupted runs. Use when asked to "process archives".'
   - name: speckit.memory.enable
     file: commands/enable.md
-    description: 'Reviews the archive policy with the owner and records its approval so archives run automatically. Use when asked to "enable auto-archiving".'
+    description: 'Records approval of the archive policy so archives run automatically. Use when asked to "enable auto-archiving".'
   - name: speckit.memory.impact
     file: commands/impact.md
-    description: 'Consults product memory for the capabilities a change touches, in a token budget (before_analyze hook). Use when asked to "consult memory".'
+    description: 'Consults product memory for the capabilities a change touches. Use when asked to "consult memory".'
   - name: speckit.memory.status
     file: commands/status.md
-    description: 'Reports policy approval, pending or blocked features, the archive phase and the next command. Use when asked "what is the archive status".'
+    description: 'Reports archive approval, pending work and the next command. Use when asked "what is the archive status".'
 hooks:
   # init also binds speckit.memory.impact to before_specify (after session): this manifest holds one
   # command per event, so scripts/install.py HOOKS is the full list of four registrations.

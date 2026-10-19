@@ -164,7 +164,8 @@ python .specify/extensions/pr/scripts/pr_publish.py --feature <feature-dir> --ex
 ```
 
 The script detects the branch's PR, replaces the text between `<!-- speckit-pr:start -->` and
-`<!-- speckit-pr:end -->` (or appends the marked section), writes the exact UTF-8/LF body to
+`<!-- speckit-pr:end -->` (or appends the marked section; unpaired or repeated markers are refused),
+pins each relative image path to a verified commit URL, writes the exact UTF-8/LF body to
 `<feature-dir>/evidence/pr-body.md`, lints its closing references against the bound issue and its
 prerequisites from `scope-source.json` with Workflow's `execution_tools.py pr-lint` rule into
 `pr-body.lint.json` beside it, and only then runs `gh pr edit`, or pushes the branch and runs
@@ -173,8 +174,9 @@ the same closing-reference check on its own, so standalone PR use is unchanged a
 required or installed merely for linting. It prints the PR receipt fragment (`pr_url`,
 `pr_body_file`, `pr_lint_file`, `pr_body_sha256`, `evidence`): copy it into the receipt as printed.
 Exit codes: 0 published; 1 the body closes a foreign, prerequisite or unbound issue: fix the
-document and rerun; 2 bad input; 3 `gh` or `git` failed: report that the PR step was skipped and
-why. With `--no-pr` it stops after the lint.
+document and rerun; 2 bad input (malformed markers, an image not committed); 3 `gh` or `git` failed,
+including a PR lookup that fails (it is never read as "no PR") and an image not on the remote: report
+that the PR step was skipped and why. With `--no-pr` it stops after the lint.
 
 ### 7. Report
 
