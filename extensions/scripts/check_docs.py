@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Check active documentation: links, command and skill coverage, version tables, banned terms,
-and the generated lifecycle hooks reference. `--write` regenerates docs/reference/hooks.md."""
+release facts (Workflow's dependency pins, extension counts, the add-all install block, root
+CHANGELOG headings) and the generated lifecycle hooks reference. `--write` regenerates
+docs/reference/hooks.md."""
 import ast
 import json
 import re
@@ -32,6 +34,14 @@ PHASES = ('specify', 'clarify', 'plan', 'tasks', 'analyze', 'taskstoissues', 'im
 # Extensions whose command frontmatter and extension.yml must carry one identical description.
 SAME_DESCRIPTION = ('assure', 'user-manual', 'pr', 'project', 'illustrate', 'memory', 'progress')
 FENCE = re.compile(r'^```.*?^```\s*$', re.M | re.S)
+CHANGELOG = ROOT / 'CHANGELOG.md'
+DEPENDENCIES = ROOT / 'extensions/workflow/dependencies.json'
+INSTALL_PAGE = DOCS / 'start/install-by-host.md'
+NUMBERS = ('zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen '
+           'sixteen seventeen eighteen nineteen twenty').split()
+# "nine extensions", "all nine Spec Kit extensions", the shields.io "Spec_Kit-9_extensions" badge.
+COUNT = re.compile(r'\b(' + '|'.join(NUMBERS) + r'|\d+)[\s_-]+(?:(?:spec[\s_-]kit|sanduq)[\s_-]+)?extensions\b', re.I)
+NAMED_VERSION = re.compile(r'([A-Za-z][A-Za-z-]*(?: [A-Z][A-Za-z-]*)*) (\d+\.\d+\.\d+)\b')
 
 
 def anchors(text):
@@ -139,6 +149,62 @@ def hooks_text(current):
     return head + START + '\n' + render_hooks() + END + rest.split(END, 1)[1]
 
 
+def version_key(version):
+    return tuple(int(part) for part in version.split('.'))
+
+
+def release_facts(manifests, texts):
+    """Version copies, extension counts and changelog headings that drift between releases."""
+    errors = []
+    versions = {m['extension']['id']: str(m['extension']['version']) for m in manifests}
+
+    def pins(node, where):
+        for key, value in node.items():
+            if isinstance(value, dict):
+                yield from pins(value, f'{where}.{key}')
+            else:
+                yield f'{where}.{key}', key, value
+    deps = json.loads(DEPENDENCIES.read_text(encoding='utf-8'))
+    for section in ('required', 'selected', 'optional'):
+        for where, name, pinned in pins(deps.get(section) or {}, section):
+            if versions.get(name) != pinned:
+                errors.append(f'{DEPENDENCIES.relative_to(ROOT)}: {where} pins {pinned}, extension.yml has '
+                              f'{versions.get(name, "no such extension")} (run release.py bump)')
+    for source, text in texts.items():
+        if source in SAMPLES:
+            continue
+        for number, line in ((m.group(1), text.count('\n', 0, m.start()) + 1) for m in COUNT.finditer(text)):
+            count = int(number) if number.isdigit() else NUMBERS.index(number.lower())
+            if count != len(versions):
+                errors.append(f'{source.relative_to(ROOT)}:{line}: says {number} extensions; there are {len(versions)}')
+    block = re.search(r'^## All \w+ extensions\n(.*?)(?=^## )', texts[INSTALL_PAGE], re.M | re.S)
+    added = set(re.findall(r'specify extension add ([a-z][a-z0-9-]*)', block.group(1))) if block else set()
+    if added != set(versions):
+        errors.append(f'{INSTALL_PAGE.relative_to(ROOT)}: the add-all block differs from the extensions: '
+                      f'missing {sorted(set(versions) - added)}, extra {sorted(added - set(versions))}')
+    catalog = {k: v['version'] for k, v in json.loads((ROOT / 'catalog.json').read_text(encoding='utf-8'))['extensions'].items()}
+    changelog = CHANGELOG.read_text(encoding='utf-8')
+    headings = [(n, line) for n, line in enumerate(changelog.splitlines(), 1) if line.startswith('## ')]
+    preamble = changelog.find('All notable changes')
+    if headings and (preamble < 0 or changelog.count('\n', 0, preamble) + 1 > headings[0][0]):
+        errors.append('CHANGELOG.md: the "All notable changes" preamble must come before the first entry')
+    for n, line in headings:
+        if not re.search(r'\b\d{4}-\d{2}-\d{2}\b', line):
+            errors.append(f'CHANGELOG.md:{n}: heading has no YYYY-MM-DD date')
+        if '(unreleased)' in line:
+            errors.append(f'CHANGELOG.md:{n}: use "(pending release)" at the end of the heading, not "(unreleased)"')
+        if '(pending release)' in line:
+            if not line.endswith(' (pending release)'):
+                errors.append(f'CHANGELOG.md:{n}: "(pending release)" must end the heading')
+            published = [f'{name} {v}' for name, v in NAMED_VERSION.findall(line)
+                         if name.lower().replace(' ', '-') in catalog
+                         and version_key(v) <= version_key(catalog[name.lower().replace(' ', '-')])]
+            if published:
+                errors.append(f'CHANGELOG.md:{n}: "(pending release)" but catalog.json already lists '
+                              f'{", ".join(published)} (release.py promote clears it)')
+    return errors
+
+
 def check():
     errors = []
     texts = {p: p.read_text(encoding='utf-8') for p in GUIDES}
@@ -171,8 +237,10 @@ def check():
     all_text = '\n'.join(texts.values())
     index = texts[ROOT / 'extensions/README.md']
     commands = documented = 0
+    manifests = []
     for path in sorted(ROOT.glob('extensions/*/extension.yml')):
         manifest = yaml.safe_load(path.read_text(encoding='utf-8'))
+        manifests.append(manifest)
         meta = manifest['extension']
         entries = manifest['provides']['commands']
         commands += len(entries)
@@ -205,6 +273,7 @@ def check():
                 for f in item['files']}
     portable = [p for p in skill_paths if any(f.startswith(p.parent.relative_to(ROOT).as_posix() + '/') for f in vendored)]
     portable_ok = sum(p.relative_to(ROOT).as_posix() in all_text for p in portable)
+    errors += release_facts(manifests, texts)
     hooks = HOOKS_PAGE.read_text(encoding='utf-8')
     if hooks_text(hooks) != hooks:
         errors.append(f'{HOOKS_PAGE.relative_to(ROOT)} is stale: run check_docs.py --write')
@@ -212,7 +281,7 @@ def check():
         raise SystemExit('\n'.join(errors))
     print(f'Documentation OK: {len(GUIDES)} guides, {documented} of {commands} commands, '
           f'{portable_ok} of {len(portable)} vendored portable skills, {len(skill_paths)} skill sources, '
-          f'both lifecycle views current, no banned terms, overlays, links, and versions.')
+          f'both lifecycle views current, no banned terms, overlays, links, versions, pins, counts and changelog headings.')
 
 
 if __name__ == '__main__':

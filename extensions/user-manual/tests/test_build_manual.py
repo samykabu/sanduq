@@ -1,5 +1,6 @@
-"""Edition staging: which pages an audience receives, and which assets follow them."""
+"""Portable build_manual: edition staging, asset privacy, theme selection and navigation."""
 import importlib.util
+import io
 import tempfile
 import unittest
 from unittest import mock
@@ -55,6 +56,18 @@ class CopyPagesTests(unittest.TestCase):
         builder.copy_pages(self.source, self.target, 'technical', None)
         self.assertFalse((self.target / 'assets/api/home/unused.json').exists())
 
+    def test_one_audiences_assets_do_not_leak_into_another_edition(self):
+        shot = self.source / 'modules/access-control/admin-console.png'
+        shot.write_bytes(b'png')
+        (self.docs / 'assets/api/home/refunds.json').write_text('{}', encoding='utf-8')
+        self.page('modules/access-control/admin.md', ['administrator'],
+                  '![Console](admin-console.png) [Refunds](../../../assets/api/home/refunds.json)')
+        self.page('modules/access-control/tech.md', ['technical'],
+                  'See [the sample](../../../assets/api/home/projects.json).')
+        builder.copy_pages(self.source, self.target, 'technical', None)
+        staged = {p.relative_to(self.target).as_posix() for p in self.target.rglob('*') if p.is_file()}
+        self.assertEqual({'modules/access-control/tech.md', 'assets/api/home/projects.json'}, staged)
+
     def test_a_missing_asset_fails_where_it_can_be_fixed(self):
         self.page('modules/access-control/tech.md', ['technical'],
                   'See [the sample](../../../assets/api/home/absent.json).')
@@ -86,8 +99,51 @@ class CopyPagesTests(unittest.TestCase):
         self.assertIn('tech.html', staged)
 
 
-if __name__ == '__main__':
-    unittest.main()
+
+class AllEditionsTests(unittest.TestCase):
+    """`--all` builds the three audiences for each manual.yml language whose docs/<lang>/ directory exists."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name).resolve()
+        (self.root / 'docs/en').mkdir(parents=True)
+        (self.root / 'manual.yml').write_text('languages:\n  required: [en]\n  optional: [ar]\n', encoding='utf-8')
+
+    def run_all(self, *extra):
+        calls = []
+
+        def fake(args, root, manual):
+            calls.append(args)
+            return root / 'site' / args.version / args.language / args.audience, None, root / 'x.pdf' if args.pdf else None
+
+        argv = ['build_manual.py', '--root', str(self.root), '--all', *extra]
+        with mock.patch.object(builder, 'build_edition', side_effect=fake), mock.patch('sys.argv', argv), \
+                mock.patch('sys.stdout', new_callable=io.StringIO) as out:
+            builder.main()
+        return calls, out.getvalue().splitlines()
+
+    def test_builds_only_languages_that_have_a_directory(self):
+        calls, lines = self.run_all()
+        self.assertEqual([(c.audience, c.language) for c in calls],
+                         [('end-user', 'en'), ('administrator', 'en'), ('technical', 'en')])
+        self.assertEqual(len(lines), 3)
+        self.assertTrue(lines[0].startswith('end-user en: '), lines[0])
+
+    def test_passes_version_archive_and_pdf_through_to_every_edition(self):
+        (self.root / 'docs/ar').mkdir()
+        calls, lines = self.run_all('--version', 'v1.2', '--archive', '--pdf')
+        self.assertEqual(len(calls), 6)
+        self.assertEqual({(c.version, c.archive, c.pdf) for c in calls}, {('v1.2', True, True)})
+        self.assertEqual([c.language for c in calls], ['en'] * 3 + ['ar'] * 3)
+        self.assertTrue(all(line.endswith('x.pdf') for line in lines), lines)
+
+    def test_all_refuses_a_single_edition_flag_and_an_empty_language_set(self):
+        with self.assertRaises(SystemExit):
+            self.run_all('--language', 'en')
+        (self.root / 'manual.yml').write_text('languages:\n  required: [fr]\n', encoding='utf-8')
+        with self.assertRaisesRegex(SystemExit, 'no language directory'):
+            self.run_all()
 
 
 class ThemeTests(unittest.TestCase):
@@ -183,3 +239,7 @@ class NavTests(unittest.TestCase):
         sections = builder.build_nav(self.docs, self.manual, 'en')[1]['Modules']
         self.assertEqual(['modules/payments/index.md', 'modules/payments/user-guide.md',
                           'modules/payments/technical.md'], sections[0]['Payments'])
+
+
+if __name__ == '__main__':
+    unittest.main()

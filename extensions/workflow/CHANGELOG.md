@@ -931,7 +931,7 @@ Front-half rebuild. Every item below is opt-in through `.specify/workflow.yml` u
 - Where CI runs is a project decision recorded under `ci:` in `.specify/workflow.yml`;
   shipped workflow assets are rendered from it instead of carrying a fixed runner.
 
-## 1.0.0 (unreleased)
+## 1.0.0
 
 - Review Home pilot hardening: shared portable UTF-8 hashes across Workflow,
   QA and manuals, respecting `-text`, binary data, SQL bytes and lone CR.

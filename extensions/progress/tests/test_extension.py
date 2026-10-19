@@ -54,7 +54,7 @@ class ExtensionLayout(unittest.TestCase):
             archive = Path(tmp) / 'progress.zip'
             package.package('progress', archive)
             names = zipfile.ZipFile(archive).namelist()
-        self.assertIn('progress/docs/commands.md', names)
+        self.assertNotIn('progress/docs/commands.md', names)  # docs are for maintainers; the package ships what runs
         self.assertFalse([n for n in names if n.startswith(('progress/docs/assets/', 'progress/assets/skill/'))])
         self.assertNotIn('docs/assets/', (EXT / 'README.md').read_text(encoding='utf-8').replace('/progress/docs/assets/', ''))
 

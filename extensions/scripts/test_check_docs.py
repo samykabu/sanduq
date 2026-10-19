@@ -37,4 +37,21 @@ fails_with(guide, original + '\nYou simply run it.\n', 'banned term "simply"')
 fails_with(guide, original + '\n[record](internal/workflow-pilot-review.md)\n', 'links to docs/internal')
 hooks = read_text(check_docs.HOOKS_PAGE, encoding='utf-8')
 fails_with(check_docs.HOOKS_PAGE, hooks.replace('| mandatory |', '| optional |', 1), 'hooks.md is stale')
+# Release facts: Workflow pins, extension counts, the add-all block and root CHANGELOG headings.
+deps = read_text(check_docs.DEPENDENCIES, encoding='utf-8')
+fails_with(check_docs.DEPENDENCIES, deps.replace('"pr": "', '"pr": "0.0.1-', 1), 'required.pr pins 0.0.1-')
+glossary = check_docs.DOCS / 'reference/glossary.md'
+fails_with(glossary, read_text(glossary, encoding='utf-8') + '\nSanduq ships eight extensions.\n', 'says eight extensions')
+readme = check_docs.ROOT / 'README.md'
+fails_with(readme, read_text(readme, encoding='utf-8').replace('Spec_Kit-9_extensions', 'Spec_Kit-8_extensions'),
+           'says 8 extensions')
+install = read_text(check_docs.INSTALL_PAGE, encoding='utf-8')
+fails_with(check_docs.INSTALL_PAGE, install.replace('specify extension add progress\n', '', 1), "missing ['progress']")
+changelog = read_text(check_docs.CHANGELOG, encoding='utf-8')
+first = changelog.index('\n## ') + 1
+fails_with(check_docs.CHANGELOG, changelog[:first] + '## 2026-10-19 — Workflow 1.14.0 (pending release)\n\n' + changelog[first:],
+           'catalog.json already lists Workflow 1.14.0')
+fails_with(check_docs.CHANGELOG, changelog[:first] + '## Undated entry\n\n' + changelog[first:], 'has no YYYY-MM-DD date')
+fails_with(check_docs.CHANGELOG, '# Changelog\n\n## 2026-10-20 — Workflow 9.0.0\n\n' + changelog.split('\n', 2)[2],
+           'preamble must come before the first entry')
 print('check_docs regression checks passed.')

@@ -14,6 +14,7 @@ stored as `SKILL.ext.md` and restored to `SKILL.md` by `extensions/scripts/packa
 | --- | --- |
 | `user-manual/scripts/audit_manual.py` | `scripts/audit_manual.py` |
 | `user-manual/scripts/build_manual.py` | `scripts/build_manual.py` |
+| `user-manual/tests/test_build_manual.py` | `tests/test_build_manual.py` |
 | `user-manual/assets/scaffold/**` | `assets/scaffold/**` |
 | `user-manual/assets/user-manual-config.template.yml` | `user-manual-config.template.yml` |
 | `user-manual/references/*.md` | `skills/user-manual/references/*.md` |
@@ -41,7 +42,6 @@ stored as `SKILL.ext.md` and restored to `SKILL.md` by `extensions/scripts/packa
 | `skills/preview-publishing/SKILL.md` | `user-manual-preview-publishing/SKILL.md` | `name: preview-publishing`; no example |
 | `skills/release-docs/SKILL.md` | `user-manual-release-docs/SKILL.md` | `name: release-docs`; grounds items in Spec Kit artifacts; no example |
 | `skills/ui-screenshots/SKILL.md` | `user-manual-ui-screenshots/SKILL.md` | `name: ui-screenshots`; no example |
-| `tests/test_build_manual.py` | `user-manual/tests/test_build_manual.py` | Same tests except portable adds `test_one_audiences_assets_do_not_leak_into_another_edition` and a different module docstring; can be generated from portable once accepted |
 | `tests/test_manual_state.py` | `user-manual/tests/test_manual_state.py` | Tests the checkpoint `--base-ref` default (Spec Kit only) |
 
 ## 4. Portable-only files (drop in the extension build)

@@ -570,6 +570,10 @@
           "extensions/user-manual/scripts/build_manual.py"
         ],
         [
+          "skills/dev-tools/skills/user-manual/tests/test_build_manual.py",
+          "extensions/user-manual/tests/test_build_manual.py"
+        ],
+        [
           "skills/dev-tools/skills/user-manual/assets/scaffold",
           "extensions/user-manual/assets/scaffold"
         ],
@@ -650,6 +654,7 @@
         "extensions/user-manual/skills/user-manual/references/discovery.md": "f03f42065f3dbc46a8ae072c680874bfe9cd7e28d81ca971824d19a9e242e5ac",
         "extensions/user-manual/skills/user-manual/references/incremental-update.md": "d66ef41177737e25365511719ffe7079e363a67ae42dc4c90338edcb3d33d0ed",
         "extensions/user-manual/skills/user-manual/references/publishing.md": "527fc14dc3d0ed36841b8746c562f6c04bdb4d66518ae96a72ecb2f8aa6d5ce3",
+        "extensions/user-manual/tests/test_build_manual.py": "915331ee63c8eae7a5193bb7181bf7148a22c20b1bccabbea0bd91a18cb3b5df",
         "extensions/user-manual/user-manual-config.template.yml": "ff23127565985917a112aa3587eea98c4bcd64280099fc032b95cb2e56af67e3"
       }
     },

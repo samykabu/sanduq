@@ -134,3 +134,39 @@ of 21.2 KB); and the before figure for `user-manual.update` did not count the 34
 skill its old wording loaded, because the harness could not resolve that phrase. Host-visible
 description text is 3,725 characters across the 27 commands (2,119 before, most of it failing the
 catalog rules; 6,475 in the first draft of this round, trimmed before release).
+
+## Instruction benchmark (round 3): alternatives and conditional reads
+
+Round 3 found that the one-level rule over-counted: the Illustrate import command names three
+`import-*.md` references and reads one, and several commands name a reference they read only in one case.
+From round 3 on, `benchmark_instructions.py` classifies each link of a measured file before counting it:
+
+- **Alternatives count once, as the largest.** A run of sibling list items that each route a case to at
+  most one file (`case → file` or `case -> file`; only the text after the arrow is searched, and an item
+  without a file, such as "anything else → stop", does not break the run) is one group, and so are the
+  links of one sentence that says "otherwise" ("with X, follow `managed.md`; otherwise `standalone.md`").
+  The agent reads one member, so `instruction_bytes` adds the largest one. The entry lists each group
+  under `alternatives` (`chosen` and every option's bytes); the Markdown description column says
+  "one of N".
+- **Conditional reads are reported apart.** A link in a clause (a sentence, split again at `;`) containing
+  `if`, `when`, `whenever`, `unless` or `otherwise` is conditional: it goes to the entry's `conditional`
+  map and `conditional_bytes`, not to `instruction_bytes`.
+- **A plain mention wins.** If the same file is also named outside any condition or group, it is an
+  ordinary linked read.
+- **Totals.** An extension's `instruction_bytes`, words, prohibitions, script calls, prose steps and
+  `files` sum the files some command or skill reads unconditionally (entry files, plain links, chosen
+  alternatives). Every other measured file (conditional only, or an alternative never chosen) is summed in
+  `conditional_bytes` and counted in `conditional_files`. `command_bytes` is the sum of the extension's
+  command `instruction_bytes`, the per-invocation figure the round 2 results quote.
+
+Known limits: the rules read wording, not intent. A condition phrased without those words ("For a large
+run, read `large-runs.md`") counts as a plain read, and task-routing lists written as `label: load X`
+(the user-manual skill) are plain reads, not alternatives.
+
+`round-3-before-v2-instructions.json` and `.md` are the round-3 BEFORE numbers re-measured with these
+rules on the read-only baseline worktree `sanduq-round3-base` at 7ad9135; compare AFTER numbers against them, not
+against `round-3-before-instructions.*`, which used the old count.
+
+```text
+python extensions/scripts/benchmark_instructions.py --repo D:\Projects\Personal\sanduq-round3-base --extensions workflow,scope,assure,user-manual,pr,project,illustrate,memory,progress --out docs/internal/benchmarks/round-3-before-v2-instructions.json --md docs/internal/benchmarks/round-3-before-v2-instructions.md
+```
