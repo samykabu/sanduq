@@ -1,5 +1,5 @@
 ---
-description: "Generate the most appropriate technical, product, architecture, or process illustration using the versioned Illustrate skill package."
+description: 'Draws one of 44 diagram types (architecture, sequence, flowchart, ER, Gantt, Sankey, charts) as themed HTML with inline SVG using the installed Illustrate skill. Use when asked to "draw a diagram", "chart this" or "visualize" something for a spec, doc or PR.'
 ---
 
 # Generate an Illustration
@@ -18,26 +18,13 @@ $ARGUMENTS
 3. Resolve `.github/illustration-theme.yml` with the packaged `scripts/illustration_theme.py`.
    Initialize Cobalt Light when the file is missing and the run is non-interactive; otherwise offer
    Cobalt, Emerald, Classic, or a custom light/dark theme and font set.
-4. Follow the skill's project-theme gate, type-selection guide, complexity budget, relevant
-   type reference, selected visual variant, and pre-output taste gate.
+4. Follow the skill's project-theme gate, complexity budget, the chosen type reference, selected
+   visual variant, and pre-output taste gate.
 5. Never silently substitute another diagram system if the package is missing or unreadable. Report
    the installation problem and stop.
 
-All forty-four types are supported: architecture, architecture delta, IT current-state, flowchart,
-sequence, state machine, ER/data model, database schema, UML class, timeline, swimlane, quadrant,
-radar/spider, polar, loop/flywheel, nested, tree, org chart, layer stack, exploded axonometric,
-axonometric plan, venn, pyramid/funnel, bar, waterfall, treemap, heatmap, line, Gantt, scatter,
-high-level, process, medallion, data flow, DP integration, DP security matrix, Sankey, fishbone,
-Wardley map, kanban, user journey, deployment, dependency graph, and story map. Variants include
-slopegraph, ridgeline, streamgraph, bump, bubble, beeswarm, dumbbell, marimekko, lifecycle phase
-maps, and block decomposition trees. Semantic patterns route behavior-heavy requests to a type.
-
-Available visual treatments include minimal light, minimal dark, full editorial, generated
-hand-drawn, terminal, consultant quadrant, icon, and annotation variants. Architecture and process
-flow also support technical-color light/dark templates with built-in Copy/PNG/PDF controls. Every
-core type has a committed `example-<type>-hand.html` reference. Optional motion (reveal, step,
-loop) is available from `assets/template-motion*.html` when explicitly requested. Editorial output
-is themed with `scripts/illustration_theme.py apply` and checked with `scripts/self_check.py`.
+The types and variants are listed in `references/type-index.md`: choose the type there, then read
+its `type-*.md`. Nothing in this command lists them.
 
 ## Output
 

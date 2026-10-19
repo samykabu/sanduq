@@ -17,8 +17,9 @@ to redraw the existing product plan when merely installing this extension.
    nodes, excluding both scope aggregates and existing `kind: epic` containers.
    Preserve coverage of the original use cases and source IDs. Update reverse
    `blocks` data and Project `Blocks` fields alongside `Blocked by`.
-3. Load the installed Illustrate skill and its dependency-graph type
-   (`references/type-dependency.md`). Author
+3. Read `.specify/extensions/illustrate/skill/references/type-index.md`, choose the type (here
+   the dependency graph), and read its `type-*.md` (`type-dependency.md`); read `SKILL.md` only
+   when the diagram is created outside that recipe. Author
    `<scope-artifact-directory>/implementation-plan.illustrate.html` as a dependency graph
    whose nodes are implementation waves, ranked top to bottom, with clearly identified
    issue groups in each node. Respect the type's complexity budget; keep the full issue

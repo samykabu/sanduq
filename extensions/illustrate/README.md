@@ -23,8 +23,8 @@ active project theme, and records what it kept and changed in a fidelity ledger.
 
 ## Supported diagram types
 
-Illustrate supports 44 diagram types. The skill's selection guide in
-[`skill/SKILL.md`](skill/SKILL.md) says when to use each one.
+Illustrate supports 44 diagram types. The skill's type index, `skill/references/type-index.md`, says
+when to use each one and which `type-*.md` reference to read.
 
 - Architecture
 - Architecture delta
@@ -94,6 +94,22 @@ Sanduq Classic are built in, and every preset includes a dark mode and English/A
 Custom themes define both light and dark semantic palettes plus sans, serif, and mono stacks. Font
 loading can be `remote`, `local`, or `system`. Commit the YAML so local runs and CI generate the same
 visual identity.
+
+## Post-write check (opt-in)
+
+The extension ships a `PostToolUse` hook for Claude Code and Codex (`hooks/self_check_hook.py`,
+registered through the manifest's `events:` entry). After a Write or Edit of an `.html` file that contains `<svg`,
+it runs the skill's `self_check.py`, `verify-geometry.py` and `illustration_theme.py validate` and
+returns the first failure to the agent. It stays a no-op until `.specify/workflow.yml` sets:
+
+```yaml
+illustrate:
+  hooks:
+    self_check: true
+```
+
+With the key missing or false, or without that file, the hook exits at once. Codex runs project hooks
+only after you approve them in `/hooks`.
 
 ## Install and update
 

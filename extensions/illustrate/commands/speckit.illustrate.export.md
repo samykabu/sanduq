@@ -1,5 +1,5 @@
 ---
-description: "Export an Illustrate HTML file to standalone SVG and/or transparent PNG using the version-matched bundled exporter."
+description: 'Exports an Illustrate HTML diagram to standalone SVG, transparent PNG, animated SVG or GIF with the bundled exporter, keeping the HTML as the source. Use when asked to "export the diagram" or "make a PNG of this chart".'
 ---
 
 # Export an Illustration

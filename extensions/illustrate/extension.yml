@@ -20,16 +20,22 @@ provides:
   commands:
     - name: speckit.illustrate.generate
       file: commands/speckit.illustrate.generate.md
-      description: "Select and generate the right illustration from forty-four technical, product, data, process, and quantitative visual types"
+      description: 'Draws one of 44 diagram types (architecture, sequence, flowchart, ER, Gantt, Sankey, charts) as themed HTML with inline SVG using the installed Illustrate skill. Use when asked to "draw a diagram", "chart this" or "visualize" something for a spec, doc or PR.'
     - name: speckit.illustrate.export
       file: commands/speckit.illustrate.export.md
-      description: "Export an Illustrate HTML source to standalone SVG and/or transparent PNG"
+      description: 'Exports an Illustrate HTML diagram to standalone SVG, transparent PNG, animated SVG or GIF with the bundled exporter, keeping the HTML as the source. Use when asked to "export the diagram" or "make a PNG of this chart".'
     - name: speckit.illustrate.theme
       file: commands/speckit.illustrate.theme.md
-      description: "Initialize, select, validate, or create a tracked project color and font theme"
+      description: 'Initializes, selects, validates or creates the tracked Illustrate color and font theme of a project in .github/illustration-theme.yml. Use when asked to "set the diagram theme", "use the dark theme" or "create a brand theme".'
     - name: speckit.illustrate.import
       file: commands/speckit.illustrate.import.md
-      description: "Redraw an existing draw.io, Mermaid, or Excalidraw source as an Illustrate diagram in the active project theme"
+      description: 'Redraws a draw.io, Mermaid or Excalidraw source as an Illustrate diagram in the project theme and reports a fidelity ledger. Use when asked to "import this .drawio", "redraw the Mermaid diagram" or "convert an .excalidraw file".'
+
+events:
+  post_tool_use:
+    command: speckit.illustrate.hook
+    matcher: "Write|Edit"
+    timeout: 60
 
 tags:
   - "diagram"
