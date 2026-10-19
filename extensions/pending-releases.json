@@ -1,6 +1,16 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Optimization round 2 (all 42 options from the options report): Assure scan and QA audit scripts and a script-read gate; freshness changed paths and an evidence impact list; pr_publish.py and pr_changelog.py with a diagram recipe; one Python project sync and the sync command in the claim; Illustrate 3.5.0 procedure-first skill with a type index; memory run.md split by step with helper-computed hashes; Progress direct hook wiring and matcher (opt-in); catalog-form descriptions everywhere. Bundles illustration-tools 3.5.0, dev-tools 1.2.0, agent-tools 1.5.0 vendored. Reviewed by the orchestrating session on 2026-10-19 (ten streams, full suites, smoke install on both hosts, benchmark comparison in docs/internal/benchmarks). Publish after main CI."
+  "versions": {
+    "workflow": "1.15.0",
+    "scope": "1.9.0",
+    "assure": "2.5.0",
+    "user-manual": "1.7.0",
+    "pr": "4.4.0",
+    "project": "2.4.0",
+    "illustrate": "2.6.0",
+    "memory": "2.4.0",
+    "progress": "1.4.0"
+  },
+  "status": "ready",
+  "note": "Optimization round 3 (fix-first and do items of docs/internal/round-3-final-plan.md, reviewed jointly with Codex gpt-6.1-sol; no renaming per the user): Assure gate and audit fixes, Illustrate hook registered per policy by the installer, PR publication and image fixes, Project remote parsing, one git pass per Workflow command, Execute text per mode, Scope GitHub call cuts, descriptions under the Codex budget, smaller packages, CI selection and sharding, release.py bump. Vendors illustration-tools 3.6.0 and agent-tools 1.6.0. Reviewed by the orchestrating session on 2026-10-20 (ten streams, full suites, two-host smoke install, benchmarks in docs/internal/benchmarks/round-3-*). Publish after main CI."
 }

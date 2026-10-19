@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.0] - 2026-10-20
+
+Optimization round 3.
+
+- Update follows Illustrate's procedure (theme gate and checks) when it draws, makes one impact call and handles an unchanged state.
+- One freshness CLI shared with Assure; the extension's build test is vendored from dev-tools.
+
 ## [1.6.0] - 2026-10-19
 
 Optimization round 2.

@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.6.0] - 2026-10-20
+
+Optimization round 3. Vendors illustration-tools 3.6.0.
+
+- The post-write check is registered only when `illustrate.hooks.self_check` is true: `hooks/self_check_hook.py install|uninstall|status --host claude|codex --root <project>` writes native entries (Workflow's installer runs it on every apply). 2.5.0 registered the hook for everyone, costing about 223 ms per Write or Edit even with the key off and never firing on Codex. The command is inert if the extension is removed without uninstall. Codex `apply_patch` payloads are understood; technical-color diagrams are checked with their profile.
+- Every shipped template and example passes the check the procedure requires (274 of 296 strict, all 18 technical-color files under `--profile technical-color`). `icon_lookup.py` replaces reading the 82 KB icon catalog. Export reads `export.md` only on failure.
+- The package leaves out preview images and gallery variants nothing uses (3.62 to 2.77 MB).
+
 ## [2.5.0] - 2026-10-19
 
 Optimization round 2.

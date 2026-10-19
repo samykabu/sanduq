@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.15.0] - 2026-10-20
+
+Optimization round 3. No policy key added; defaults unchanged.
+
+- Each runtime command reads git once: an operation-scoped cache holds the origin, the root commit, git attributes and the source inventory and drops what a write could change. A full lifecycle runs 316 git subprocesses instead of 744; claim and complete are about twice as fast.
+- The Execute claim carries the mode-neutral core plus only the text for its mode (lean or orchestrator, delegation on or off, Progress projection or the legacy reporter), 20 to 30 KB instead of 34.8 KB, and prints it in full once per mode and content (later claims name the files). Delegation text moved to `references/delegation.md`, read only when a claim routes through delegation.
+- `claim` prints a `receipt_template`; `receipt-rules.md` no longer asks for inputs the runtime adds.
+- `doctor` and `status` warn `GUARD_HOOK_UNAPPROVED` with the `/hooks` step when Codex has not approved the guard hook.
+- The guard hook refuses, in a managed project, `gh pr create|edit` with an inline body and `gh pr create` without a linted `--body-file`. Codex users approve the changed hook once.
+- The installer installs or removes Illustrate's post-write hook on every apply and upgrade, per `illustrate.hooks.self_check` (this removes the always-registered entries Illustrate 2.5.0 left), records it per host in `install-lock.json`, and rolls back both hosts' files on failure. It records the Progress hook's cost class with a hint at `progress.hook_wiring: native`, re-adds presets only when they changed, and installs only the runtime part of delegate-task.
+- Thirteen descriptions shortened to 1,995 characters in total.
+- Required pins: Scope 1.9.0, Project 2.4.0, PR 4.4.0, Illustrate 2.6.0; selected Assure 2.5.0 and User Manual 1.7.0; optional Progress 1.4.0.
+
 ## [1.14.0] - 2026-10-19
 
 Optimization round 2 (cross-cutting parts). Every new key is opt-in.

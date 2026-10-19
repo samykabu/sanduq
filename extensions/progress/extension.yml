@@ -3,7 +3,7 @@ schema_version: "1.0"
 extension:
   id: progress
   name: "Sanduq Progress Report"
-  version: "1.3.0"
+  version: "1.4.0"
   description: "A live, deterministic progress report for a Spec Kit feature: stages over time, workstreams, runs, blockers and decisions, collected from the host's native hooks and the feature files with no agent spent on upkeep."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"

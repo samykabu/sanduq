@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.0] - 2026-10-20
+
+Optimization round 3.
+
+- The run procedure drops the duplicate preflight step (verify and prepare run it) and the always-true `ok` check.
+- The seven descriptions total 724 characters (983 before).
+
 ## [2.3.0] - 2026-10-19
 
 Optimization round 2.

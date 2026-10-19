@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.9.0] - 2026-10-20
+
+Optimization round 3.
+
+- Far fewer GitHub calls: publishing a three-child split with 200 unrelated issues makes 62 calls instead of 290 (dependents come from the parent's blocking list, with a full-scan fallback when that read is incomplete); `bind --apply` 4 instead of 10; a six-question clarification publish 23 instead of 27.
+- `gate` and `bind` reuse a current inspect snapshot within the board cache window.
+- `export-plan` writes waves, the critical path and a draft mapping; clarification suggests clean answers for single checked options and logs each Q/A; `inspect --skeleton` writes the analysis skeleton.
+- Shorter instruction path (the plan step no longer reads the Illustrate skill); error messages name `/speckit-scope-run`; the seven descriptions total 969 characters.
+
 ## [1.8.1] - 2026-10-19
 
 - The clarification diagram reference reads Illustrate's type index plus the chosen type reference instead of the whole Illustrate skill.
