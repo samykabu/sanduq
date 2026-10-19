@@ -27,7 +27,11 @@ jobs:
           echo "path=$feature" >> "$GITHUB_OUTPUT"
       - name: Verify QA analysis and documentation freshness
         if: ${{ hashFiles('.specify/extensions/assure/assure-config.yml') != '' }}
-        run: python .specify/extensions/assure/scripts/assure_state.py status --gate --summary --kind document --feature '${{ steps.feature.outputs.path }}'
+        env:
+          FEATURE: ${{ steps.feature.outputs.path }}
+        run: python .specify/extensions/assure/scripts/assure_state.py status --gate --summary --kind document --feature "$FEATURE"
       - name: Verify User Manual freshness
         if: ${{ hashFiles('User-Manual/manual.yml') != '' && hashFiles('.specify/extensions/user-manual/scripts/manual_state.py') != '' }}
-        run: python .specify/extensions/user-manual/scripts/manual_state.py status --summary --feature '${{ steps.feature.outputs.path }}'
+        env:
+          FEATURE: ${{ steps.feature.outputs.path }}
+        run: python .specify/extensions/user-manual/scripts/manual_state.py status --summary --feature "$FEATURE"
