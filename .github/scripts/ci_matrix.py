@@ -7,21 +7,30 @@ Usage (from the `changes` job):
     ci_matrix.py --event schedule            # runs everything
     ci_matrix.py --event pull_request --files a b c   # offline / tests
 
-Prints `matrix=<json>`, `has_regression=<bool>` and `memory_install=<bool>` lines, written to
-$GITHUB_OUTPUT when set. When the changed files cannot be determined, everything runs.
+Prints `matrix=<json>`, `has_regression=<bool>`, `memory_install=<bool>`, `install_smoke=<bool>` and
+`illustrate_vendored=<bool>` lines, written to $GITHUB_OUTPUT when set. When the changed files cannot be
+determined, everything runs.
 """
 import argparse
 import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
-SUITES = ["workflow", "scope", "user-manual", "memory", "illustrate", "progress", "assure", "pr"]
+ROOT = Path(__file__).resolve().parents[2]
+SUITES = ["workflow", "scope", "user-manual", "memory", "illustrate", "progress", "assure", "pr", "project"]
 OSES = ["ubuntu-latest", "windows-latest"]
-# Events that run the Windows workflow suite. It is slow, so pushes to main skip it;
-# pull requests and the nightly schedule still cover it.
+# Suites whose Windows runs are slow (workflow 35-42 min, memory 14-16 min), so pushes to main skip
+# them; pull requests and the nightly schedule still cover them.
+WINDOWS_SLOW_SUITES = {"workflow", "memory"}
 WINDOWS_WORKFLOW_EVENTS = {"pull_request", "schedule", "workflow_dispatch"}
 ALWAYS_ALL = {"schedule", "workflow_dispatch"}
+# The Windows workflow suite runs as this many parallel jobs; Linux workflow stays one job.
+WINDOWS_WORKFLOW_SHARDS = 4
+# Suites whose tests live outside extensions/<suite>/tests: (folder, modules). Project has no tests
+# folder of its own; ci.yml also discovers extensions/project/tests once it exists.
+SUITE_TESTS = {"project": ("extensions/workflow/tests", "test_project_sync_summary")}
 
 # extensions/<key>/** also runs these suites. The mapping lists real dependencies only:
 #   progress -> workflow: workflow tests exercise the Progress integration.
@@ -39,15 +48,30 @@ DEPENDENTS = {"progress": ["workflow"], "workflow": ["scope"], "scope": ["workfl
 #                   the booking manual is the user-manual example.
 DOC_SUITES = {"docs/examples/": ["illustrate", "user-manual"]}
 
+# Release metadata and top-level prose: lint validates them (pending/manifest/catalog checks, check_docs
+# links), no suite reads them. Per-extension READMEs stay with their suite (progress tests read its README).
+LINT_ONLY = {"CHANGELOG.md", "README.md", "CONTRIBUTING.md", "extensions/README.md",
+             "extensions/pending-releases.json"}
+# What installation, upgrade, project-init and dryrun exercise (plus every extensions/<id>/extension.yml).
+INSTALL_PREFIXES = ("extensions/workflow/", "extensions/project/", "extensions/scripts/package.",
+                    "extensions/scripts/smoke_", "extensions/scripts/shared/", "presets/", "prototypes/",
+                    "vendor.lock.json", ".github/workflows/ci.yml", ".github/scripts/")
+# shortcut: any vendor.lock.json change counts as an Illustrate vendor bump, even one to another input;
+# parse the lock diff if those runs ever cost real time.
+ILLUSTRATE_VENDORED = ("vendor.lock.json", "extensions/illustrate/skill/")
+
+
+def normalized(files):
+    return [p for p in (raw.strip().replace("\\", "/") for raw in files) if p]
+
 
 def suites_for(files):
-    """Return the set of suites to run, or None when nothing needs regression."""
+    """Return the set of suites to run (empty when nothing needs regression)."""
     suites = set()
-    for raw in files:
-        path = raw.strip().replace("\\", "/")
-        if not path:
-            continue
+    for path in normalized(files):
         parts = path.split("/")
+        if path in LINT_ONLY:
+            continue
         if parts[0] == "docs":
             for prefix, dependents in DOC_SUITES.items():
                 if path.startswith(prefix):
@@ -58,26 +82,56 @@ def suites_for(files):
             suites.add(suite)
             suites.update(DEPENDENTS.get(suite, []))
         else:
-            # extensions/scripts, presets, catalogs, pending-releases.json, .github, root files, other extensions
+            # extensions/scripts, presets, catalogs, .github, other root files, other extensions
             return set(SUITES)
     return suites
 
 
+def install_smoke(files):
+    return any(p.startswith(INSTALL_PREFIXES) or (p.startswith("extensions/") and p.count("/") == 2
+                                                  and p.endswith("/extension.yml")) for p in normalized(files))
+
+
+def workflow_shards(count=WINDOWS_WORKFLOW_SHARDS):
+    """Split the workflow test modules (discover's test*.py) into `count` lists, largest module first
+    onto the lightest shard. shortcut: weighs modules by file size, not measured time; switch to
+    per-module seconds if a CI run shows one shard far slower than the others."""
+    shards, load = [[] for _ in range(count)], [0] * count
+    files = sorted((ROOT / "extensions/workflow/tests").glob("test*.py"), key=lambda p: (-p.stat().st_size, p.name))
+    for path in files:
+        i = load.index(min(load))
+        shards[i].append(path.stem)
+        load[i] += path.stat().st_size
+    return [sorted(s) for s in shards]
+
+
 def build(files, event):
-    suites = set(SUITES) if (files is None or event in ALWAYS_ALL) else suites_for(files)
+    everything = files is None or event in ALWAYS_ALL
+    suites = set(SUITES) if everything else suites_for(files)
+    if "workflow" in suites:
+        suites.discard("project")  # the workflow suite already runs the project module
     include = []
     for suite in SUITES:
         if suite not in suites:
             continue
+        tests, modules = SUITE_TESTS.get(suite, (f"extensions/{suite}/tests", ""))
         for os_name in OSES:
-            if suite == "workflow" and os_name == "windows-latest" and event not in WINDOWS_WORKFLOW_EVENTS:
+            windows = os_name == "windows-latest"
+            if windows and suite in WINDOWS_SLOW_SUITES and event not in WINDOWS_WORKFLOW_EVENTS:
                 continue
-            include.append({"os": os_name, "suite": suite})
+            if windows and suite == "workflow":
+                for n, shard in enumerate(workflow_shards(), 1):
+                    include.append({"os": os_name, "suite": suite, "tests": tests,
+                                    "shard": f"{n}/{WINDOWS_WORKFLOW_SHARDS}", "modules": " ".join(shard)})
+                continue
+            include.append({"os": os_name, "suite": suite, "tests": tests, "modules": modules})
     return {
         "matrix": {"include": include},
         "has_regression": bool(include),
         # smoke_memory_install.py only exercises extensions/memory (and shared tooling, which selects all).
         "memory_install": "memory" in suites,
+        "install_smoke": everything or install_smoke(files),
+        "illustrate_vendored": everything or any(p.startswith(ILLUSTRATE_VENDORED) for p in normalized(files)),
     }
 
 
@@ -102,9 +156,9 @@ def main(argv=None):
     a = p.parse_args(argv)
     files = a.files if a.files is not None else changed_files(a.event, a.base, a.head)
     result = build(files, a.event)
-    lines = [f"matrix={json.dumps(result['matrix'], separators=(',', ':'))}",
-             f"has_regression={str(result['has_regression']).lower()}",
-             f"memory_install={str(result['memory_install']).lower()}"]
+    lines = [f"matrix={json.dumps(result['matrix'], separators=(',', ':'))}"]
+    lines += [f"{key}={str(result[key]).lower()}"
+              for key in ("has_regression", "memory_install", "install_smoke", "illustrate_vendored")]
     print("\n".join(lines))
     if os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:

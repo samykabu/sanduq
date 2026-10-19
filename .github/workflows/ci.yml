@@ -18,6 +18,8 @@ jobs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       has_regression: ${{ steps.matrix.outputs.has_regression }}
       memory_install: ${{ steps.matrix.outputs.memory_install }}
+      install_smoke: ${{ steps.matrix.outputs.install_smoke }}
+      illustrate_vendored: ${{ steps.matrix.outputs.illustrate_vendored }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -178,11 +180,14 @@ jobs:
           $issues | Format-Table -AutoSize
           if ($issues | Where-Object Severity -eq 'Error') { throw 'PSScriptAnalyzer found errors' }
 
-  # Path-filtered: extensions/<suite>/** runs that suite (progress also runs workflow, workflow
-  # also runs scope); shared paths run all. Windows workflow runs on PRs and nightly only.
+  # Path-filtered by .github/scripts/ci_matrix.py: extensions/<suite>/** runs that suite (plus its
+  # dependents); release metadata and docs are lint-only; shared paths run all. Windows workflow and
+  # Windows memory run on PRs and nightly only; Windows workflow runs as four module shards.
+  # Progress runs its default (non-browser) set; Progress browser tests are not vendored here.
   regression:
     needs: changes
     if: needs.changes.outputs.has_regression == 'true'
+    name: regression (${{ matrix.os }}, ${{ matrix.suite }}${{ matrix.shard && format(', {0}', matrix.shard) || '' }})
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.changes.outputs.matrix) }}
@@ -200,19 +205,48 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+          cache: pip
+          cache-dependency-path: |
+            extensions/workflow/requirements.txt
+            extensions/*/test-requirements.txt
       - run: python -m pip install -r extensions/workflow/test-requirements.txt
       - name: Install Progress test requirements
         if: matrix.suite == 'progress'
         run: python -m pip install -r extensions/progress/test-requirements.txt
+      # The browser cache saves the download only; --with-deps still installs Chromium's OS
+      # libraries on every fresh runner.
+      - name: Cache the Playwright browser
+        if: matrix.suite == 'illustrate'
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.os == 'Windows' && '~/AppData/Local/ms-playwright' || '~/.cache/ms-playwright' }}
+          key: ms-playwright-1.63.0-chromium-${{ runner.os }}-${{ runner.arch }}
       - name: Install Playwright for Illustrate render checks
         if: matrix.suite == 'illustrate'
         shell: bash
         run: |
           python -m pip install playwright==1.63.0
           python -m playwright install --with-deps chromium
-      - run: python -m unittest discover -s extensions/${{ matrix.suite }}/tests -q
+      - name: Run the suite
+        shell: bash
+        env:
+          SUITE: ${{ matrix.suite }}
+          TESTS: ${{ matrix.tests }}
+          MODULES: ${{ matrix.modules }}
+        run: |
+          if [[ -n "$MODULES" ]]; then
+            # A shard or a module list: import the modules from the suite folder, as discover does.
+            PYTHONPATH="$TESTS" python -m unittest -q $MODULES
+          else
+            python -m unittest discover -s "$TESTS" -q
+          fi
+          if [[ "$SUITE" == project && -d extensions/project/tests ]]; then
+            python -m unittest discover -s extensions/project/tests -q
+          fi
+      # The vendored skill is byte-checked against vendor.lock.json in lint and verified upstream, so its
+      # builders, verifiers and render lint run only on a vendor bump, nightly and on demand.
       - name: Illustrate builders and verifiers
-        if: matrix.suite == 'illustrate'
+        if: matrix.suite == 'illustrate' && needs.changes.outputs.illustrate_vendored == 'true'
         shell: bash
         working-directory: extensions/illustrate/skill
         run: |
@@ -231,7 +265,7 @@ jobs:
           python scripts/verify-sequence-oauth.py
           python scripts/verify-block-registry.py --all
       - name: Illustrate rendered-layout lint
-        if: matrix.suite == 'illustrate'
+        if: matrix.suite == 'illustrate' && needs.changes.outputs.illustrate_vendored == 'true'
         shell: bash
         working-directory: extensions/illustrate/skill
         run: |
@@ -239,8 +273,10 @@ jobs:
           python scripts/lint-render.py --all
 
   # Memory install smoke only exercises extensions/memory, so it follows that path filter.
-  # installation, upgrade, project-init and dryrun stay always-on: they install the whole
-  # Spec Kit + workflow stack (or project-sync), so any extension or shared change can break them.
+  # installation, upgrade, project-init and dryrun run when an install-relevant path changed
+  # (workflow, project, extension manifests, packaging and smoke scripts, presets, vendor.lock.json,
+  # CI itself; see ci_matrix.py INSTALL_PREFIXES), and always nightly and on demand.
+  # Spec Kit installs by name so pip reuses its cached wheel of the pinned commit (no clone).
   memory-installation:
     needs: changes
     if: needs.changes.outputs.memory_install == 'true'
@@ -254,7 +290,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - run: python -m pip install 'git+https://github.com/github/spec-kit.git@8147943512404afb9d99c6252cb9bf84369fd0b0'
+          cache: pip
+          # ci.yml holds the Spec Kit pin, so a new pin gets a new pip cache.
+          cache-dependency-path: |
+            extensions/workflow/requirements.txt
+            .github/workflows/ci.yml
+      - run: python -m pip install 'specify-cli @ git+https://github.com/github/spec-kit.git@8147943512404afb9d99c6252cb9bf84369fd0b0'
       - run: python extensions/scripts/smoke_memory_install.py
       - uses: actions/upload-artifact@v4
         if: always()
@@ -264,6 +305,8 @@ jobs:
           if-no-files-found: ignore
 
   installation:
+    needs: changes
+    if: needs.changes.outputs.install_smoke == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -277,8 +320,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+          cache: pip
+          # ci.yml holds the Spec Kit pin, so a new pin gets a new pip cache.
+          cache-dependency-path: |
+            extensions/workflow/requirements.txt
+            .github/workflows/ci.yml
       - name: Install the tested Spec Kit build
-        run: python -m pip install 'git+https://github.com/github/spec-kit.git@8147943512404afb9d99c6252cb9bf84369fd0b0' -r extensions/workflow/requirements.txt
+        run: python -m pip install 'specify-cli @ git+https://github.com/github/spec-kit.git@8147943512404afb9d99c6252cb9bf84369fd0b0' -r extensions/workflow/requirements.txt
       - name: Verify isolated native workflow prototype contract
         run: python -m unittest discover -s prototypes/sanduq-delivery -p test_native_probe.py
       - name: Fetch the tested optional SuperSpec source
@@ -319,6 +367,8 @@ jobs:
           if-no-files-found: ignore
 
   upgrade:
+    needs: changes
+    if: needs.changes.outputs.install_smoke == 'true'
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || 'homek8-general' }}
     permissions:
       contents: read
@@ -327,7 +377,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - run: python -m pip install 'git+https://github.com/github/spec-kit.git@8147943512404afb9d99c6252cb9bf84369fd0b0' -r extensions/workflow/requirements.txt
+          cache: pip
+          # ci.yml holds the Spec Kit pin, so a new pin gets a new pip cache.
+          cache-dependency-path: |
+            extensions/workflow/requirements.txt
+            .github/workflows/ci.yml
+      - run: python -m pip install 'specify-cli @ git+https://github.com/github/spec-kit.git@8147943512404afb9d99c6252cb9bf84369fd0b0' -r extensions/workflow/requirements.txt
       - name: Verify actual version upgrade and failure rollback
         env:
           GH_TOKEN: ${{ github.token }}
@@ -345,6 +400,8 @@ jobs:
           if-no-files-found: ignore
 
   project-init:
+    needs: changes
+    if: needs.changes.outputs.install_smoke == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -355,6 +412,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+          cache: pip
+          cache-dependency-path: extensions/workflow/requirements.txt
       - run: python -m pip install -r extensions/workflow/requirements.txt
       - run: python extensions/scripts/smoke_project_init.py --shell ${{ matrix.shell }}
       - uses: actions/upload-artifact@v4
@@ -367,6 +426,8 @@ jobs:
           if-no-files-found: ignore
 
   dryrun:
+    needs: changes
+    if: needs.changes.outputs.install_smoke == 'true'
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || 'homek8-general' }}
     steps:
       - uses: actions/checkout@v4
