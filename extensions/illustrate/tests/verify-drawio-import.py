@@ -35,7 +35,8 @@ EXTRACT = SKILL_DIR / "scripts/drawio_extract.py"
 IMPORT_REF = SKILL_DIR / "references/import-drawio.md"
 OUTPUT_REF = SKILL_DIR / "references/output-spec.md"
 EXPORT_REF = SKILL_DIR / "references/export.md"
-COMMAND = SKILL_DIR / "commands/import-drawio.md"
+# The skill-local commands/ files were removed in 3.5.0; the reference still names this trigger.
+SLASH_COMMAND = "/illustrate:import-drawio"
 FIXTURE = ROOT / "tests/fixtures/sample-architecture.drawio"
 EXAMPLE = SKILL_DIR / "assets/example-import-drawio.html"
 
@@ -175,7 +176,7 @@ def png_chunk(ctype: bytes, data: bytes) -> bytes:
 
 
 def check_files() -> None:
-    for path in (SKILL, EXTRACT, IMPORT_REF, OUTPUT_REF, EXPORT_REF, COMMAND, FIXTURE, EXAMPLE):
+    for path in (SKILL, EXTRACT, IMPORT_REF, OUTPUT_REF, EXPORT_REF, FIXTURE, EXAMPLE):
         if not path.is_file():
             fail(f"missing {path.relative_to(ROOT)}")
     ok("all import artifacts present")
@@ -490,7 +491,7 @@ def check_security_and_limits(tmp: Path) -> None:
 
 def check_docs() -> None:
     import_text = IMPORT_REF.read_text(encoding="utf-8")
-    expected_slash_command = f"/illustrate:{COMMAND.stem}"
+    expected_slash_command = SLASH_COMMAND
     documented_slash_commands = set(
         re.findall(r"`(/illustrate:[a-z0-9-]+)`", import_text)
     )
@@ -498,7 +499,7 @@ def check_docs() -> None:
         rendered = ", ".join(sorted(documented_slash_commands)) or "none"
         fail(
             "import-drawio.md slash command does not match "
-            f"{COMMAND.name}: expected {expected_slash_command}, found {rendered}"
+            f"expected {expected_slash_command}, found {rendered}"
         )
     for needle in (
         "drawio_extract.py",
@@ -562,10 +563,9 @@ def check_docs() -> None:
     if ".drawio" not in skill_text.split("---")[1]:
         fail("SKILL.md frontmatter description does not mention draw.io import")
 
-    command_text = COMMAND.read_text(encoding="utf-8")
-    for flag in ("--format", "--size", "--detail", "--audience", "--page", "--variant"):
-        if flag not in command_text:
-            fail(f"import command missing {flag}")
+    # The four dials are checked in output-spec.md above; the page selector belongs to the reference.
+    if "--page" not in import_text:
+        fail("import-drawio.md missing --page")
     if "example-import-drawio.html" not in import_text:
         fail("import-drawio.md does not point at the worked example")
 

@@ -26,7 +26,6 @@ SKILL_DIR = ROOT / "skill"
 SKILL = SKILL_DIR / "SKILL.md"
 EXTRACT = SKILL_DIR / "scripts/mermaid_extract.py"
 IMPORT_REF = SKILL_DIR / "references/import-mermaid.md"
-COMMAND = SKILL_DIR / "commands/import-mermaid.md"
 FLOW = ROOT / "tests/fixtures/sample-flowchart.mmd"
 README_FIXTURE = ROOT / "tests/fixtures/sample-readme-with-mermaid.md"
 ADVERSARIAL = ROOT / "tests/fixtures/sample-adversarial.mmd"
@@ -151,7 +150,6 @@ def check_files() -> None:
         SKILL,
         EXTRACT,
         IMPORT_REF,
-        COMMAND,
         FLOW,
         README_FIXTURE,
         ADVERSARIAL,
@@ -1002,7 +1000,6 @@ def check_docs_and_wiring() -> None:
         if needle not in skill_text:
             fail(f"SKILL.md missing Mermaid router text {needle!r}")
 
-    command_text = COMMAND.read_text(encoding="utf-8")
     reference_flags = (
         "--format",
         "--size",
@@ -1014,8 +1011,8 @@ def check_docs_and_wiring() -> None:
         "--output",
     )
     for flag in reference_flags:
-        if flag not in command_text or flag not in import_text:
-            fail(f"command/reference flag drift: {flag}")
+        if flag not in import_text:
+            fail(f"import-mermaid.md missing flag {flag}")
 
     example = EXAMPLE.read_text(encoding="utf-8")
     if 'viewBox="0 0 960 600"' not in example:
