@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.4] - 2026-10-19
+
+- Vendors dev-tools 1.1.3: the preview workflow skips fork pull requests when the project's linux
+  runner is self-hosted, and both workflows pin `actions/checkout` v4.3.0, `actions/setup-python`
+  v5.6.0, `actions/upload-artifact` v4.6.2 and `actions/github-script` v7.1.0 by commit. Part of
+  samykabu/sanduq#94.
+
 ## [1.5.3] - 2026-10-18
 
 - Ship the reviewed shared freshness helper in the User Manual package. Generated Progress
