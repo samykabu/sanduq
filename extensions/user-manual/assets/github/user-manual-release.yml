@@ -12,9 +12,9 @@ jobs:
   release-manual:
     runs-on: __sanduq_runs_on_linux__
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
       # sanduq:if python_setup_action
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "__sanduq_python_version__"
           cache: pip
@@ -43,7 +43,7 @@ jobs:
             fi
           done
       - name: Upload release build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: user-manual-${{ github.ref_name }}
           path: |

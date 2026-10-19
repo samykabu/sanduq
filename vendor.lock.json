@@ -618,11 +618,11 @@
           ]
         ]
       },
-      "ref": "dev-tools-v1.1.2",
-      "sha": "1f0a7d886688e5fabc22a6c7cd1b8beb3e14ba68",
+      "ref": "dev-tools-v1.1.3",
+      "sha": "1a27b565861de4fcf3fbe883e9c94bef3499790f",
       "files": {
-        "extensions/user-manual/assets/github/user-manual-preview.yml": "bd9dcd2c83e00776f6a8e37c3f51b19e4530cc6a2680e468e34f8c65adcee636",
-        "extensions/user-manual/assets/github/user-manual-release.yml": "7cf68e6694ee9a36304905f3bdb15a31f5e7e27df4e959c8e1f6ff1ec645490d",
+        "extensions/user-manual/assets/github/user-manual-preview.yml": "6e83c4727e2621e87ff32c7dcc762968e3b1b05c06f6905f14c1cb794665d338",
+        "extensions/user-manual/assets/github/user-manual-release.yml": "35756958bbf2b81d0d3e81ae527fc1a95eded680a5e6e0130fc1119cdd4b97d3",
         "extensions/user-manual/assets/scaffold/mkdocs.yml": "4d6bafb26cc87fd8d7d85d3ee4e5432c6cd8a8c30b32ab06b55b6240069bc49a",
         "extensions/user-manual/assets/scaffold/requirements.lock": "9a98e75e93ce67646c539bdeda33700bdf71031487650e42dbc31b7acd441b3d",
         "extensions/user-manual/assets/scaffold/theme/extra.css": "3bace34e967f52f172a0bb2e3bd998274d832ec2fac3a4b04d968a53416d6ec9",

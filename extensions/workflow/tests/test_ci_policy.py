@@ -250,11 +250,10 @@ class GateJobHygieneTests(unittest.TestCase):
                 self.assertNotIn('${{', step.get('run') or '', step)
 
 
-# The PR-triggered assets that carry the fork guard; add user-manual-preview.yml once
-# the vendored template ships the block.
-FORK_GUARDED = ('workflow-gates.yml', 'documentation-gates.yml')
+# The PR-triggered assets that carry the fork guard, and the assets whose actions are pinned.
+FORK_GUARDED = ('workflow-gates.yml', 'documentation-gates.yml', 'user-manual-preview.yml')
 FORK_GUARD = 'github.event.pull_request.head.repo.full_name == github.repository'
-PINNED = ('workflow-gates.yml', 'documentation-gates.yml')
+PINNED = ('workflow-gates.yml', 'documentation-gates.yml', 'user-manual-preview.yml', 'user-manual-release.yml')
 
 
 class ForkGuardTests(unittest.TestCase):
