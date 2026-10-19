@@ -63,6 +63,7 @@ class EvidenceSnapshotTests(unittest.TestCase):
         value = json.loads((self.root / 'before.json').read_text(encoding='utf-8'))
         record = value['records'][0]
         retained = record['retention']
+        self.orphan_head()  # An ancestor of HEAD is accepted without its ref.
         self.git('update-ref', '-d', retained)
         with self.assertRaises(ValueError):
             evidence.resolve(self.root, 'before.json')
@@ -124,6 +125,15 @@ class EvidenceSnapshotTests(unittest.TestCase):
     def snapshot(self):
         return json.loads((self.root / 'before.json').read_text(encoding='utf-8'))
 
+    def orphan_head(self, root=None):
+        # An empty-tree root commit: HEAD no longer descends from any recorded commit.
+        root = root or self.root
+        tree = subprocess.run(['git', 'mktree'], cwd=root, input=b'', capture_output=True, check=True).stdout.decode('ascii').strip()
+        orphan = subprocess.run(['git', 'commit-tree', tree, '-m', 'Orphan'], cwd=root, capture_output=True,
+                                check=True).stdout.decode('ascii').strip()
+        subprocess.run(['git', 'update-ref', 'HEAD', orphan], cwd=root, capture_output=True, check=True)
+        return orphan
+
     def test_moved_repository_recovers_v1_proofs_without_rewriting_receipt(self):
         (self.root / 'dirty.md').write_bytes(b'changed\r\n')
         expected = {'clean.md': b'exact\n', 'dirty.md': b'changed\r\n'}
@@ -169,10 +179,12 @@ class EvidenceSnapshotTests(unittest.TestCase):
             self.assertEqual(workflow.receipt_status(self.root, 'specs/example', 'specify', receipt)['reason'],
                              'evidence-snapshot-unrecoverable')
 
+        self.orphan_head()  # An ancestor of HEAD is accepted without its ref.
         self.git('update-ref', '-d', record['retention'])
         refused()  # Original commit and blob still exist, but retention is mandatory.
         self.git('commit', '--allow-empty', '-m', 'Another commit')
         other = self.git('rev-parse', 'HEAD').decode('ascii').strip()
+        self.orphan_head()  # Keep `other` (which holds clean.md) off HEAD's ancestry.
         self.git('update-ref', record['retention'], other)
         refused()  # A valid ref pointing to the wrong commit is insufficient.
         self.git('update-ref', record['retention'], record['commit'])
@@ -190,6 +202,32 @@ class EvidenceSnapshotTests(unittest.TestCase):
         edited['records'][0]['commit'] = record['blob']
         self.write_snapshot(edited)
         refused()
+
+    def test_fresh_clone_validates_committed_snapshot_by_ancestry(self):
+        evidence.capture(self.root, ['clean.md'], 'before.json')
+        original = self.snapshot()
+        self.git('add', 'before.json')
+        self.git('commit', '-m', 'Commit snapshot')
+        clone = self.root.with_name('clone')
+        # Checkout-time config, as in setUp; retention refs are not cloned.
+        self.git('clone', '--quiet', '--no-hardlinks', '-c', 'core.autocrlf=false', '-c', 'commit.gpgsign=false',
+                 str(self.root), str(clone))
+        self.assertEqual(self.git('-C', str(clone), 'for-each-ref', 'refs/sanduq/'), b'')
+        receipt = {'evidence': ['before.json'], 'evidence_snapshots': ['before.json'],
+                   'fingerprints': {'before.json': evidence.file_digest(clone / 'before.json')}}
+        evidence.validate(clone, 'before.json')
+        self.assertEqual(evidence.resolve(clone, 'before.json'), {'clean.md': b'exact\n'})
+        workflow.validate_evidence_snapshots(clone, receipt)
+        with patch.object(workflow, 'required_inputs', return_value=['before.json']):
+            self.assertTrue(workflow.receipt_status(clone, 'specs/example', 'specify', receipt)['current'])
+        # A fetched commit that is not an ancestor of HEAD is still refused.
+        side = self.orphan_head()
+        self.git('-C', str(clone), 'fetch', '--quiet', 'origin', f'{side}:refs/remotes/origin/side')
+        edited = copy.deepcopy(original)
+        edited['records'][0]['commit'] = side
+        (clone / 'before.json').write_text(json.dumps(edited), encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'EVIDENCE_RETENTION_MISSING'):
+            evidence.validate(clone, 'before.json')
 
     def test_git_payload_content_is_verified_against_blob_identity(self):
         evidence.capture(self.root, ['clean.md'], 'before.json')

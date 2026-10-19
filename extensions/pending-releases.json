@@ -2,5 +2,5 @@
   "schema_version": 1,
   "versions": {},
   "status": "released",
-  "note": "Front-half rebuild: effort-tiered profiles, workflow:lint, merged plan and tasks, revalidate-upstream, side effects, doctor cache, inventory side files, bind-only Specify from a Scope-rendered spec, in-session first clarification round, Mermaid questions, board cache and snapshot reuse, question cap, phase-lazy task issues, guard hook and role agents for Claude Code and Codex, portable plugin manifests and a Codex marketplace, pruned instruction text (about 41 percent fewer instruction bytes per run). Benchmarks under docs/internal/benchmarks. Reviewed by the orchestrating session on 2026-10-18 (six implementation streams, full suites, smoke install on both hosts, benchmark comparison in docs/internal/benchmarks). Publish after main CI."
+  "note": "Issue #94: evidence snapshots validate in a fresh CI checkout by commit ancestry; fork-PR guard on self-hosted runners, base ref through env and pinned actions in the workflow, assure and user-manual CI templates (user-manual through dev-tools 1.1.3). Reviewed by the orchestrating session on 2026-10-19 (three streams, evidence, ci-policy, install and smoke tests, docs and skill gates). Publish after main CI."
 }

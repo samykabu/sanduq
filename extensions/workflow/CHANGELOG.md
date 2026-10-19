@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.13.1] - 2026-10-19
+
+Fixes for issue #94 (the shipped workflow gate in CI). Rendered CI files are tracked in `install-lock.json`; an upgrade re-renders them.
+
+- Evidence snapshots validate in a fresh checkout: a git record whose local retention ref (`refs/sanduq/evidence/*`) is absent or points elsewhere is accepted when its commit is an ancestor of `HEAD`; the blob and SHA-256 checks are unchanged. Before, the gate refused every feature that had recorded an evidence snapshot, because the refs are never pushed.
+- `workflow-gates.yml`: when the project's linux runner set is not GitHub-hosted, the job carries `if: github.event.pull_request.head.repo.full_name == github.repository` (new `self_hosted` flag in `sanduq_ci.py`), so a fork pull request never runs on a self-hosted runner. The base-ref fetch takes the ref through `env` with an explicit refspec instead of an expression inside `run`. `actions/checkout` is pinned to v4.3.0 and `actions/setup-python` to v5.6.0 by commit, with the version in a comment.
+- Selected pins move to Assure 2.3.4 and User Manual 1.5.4, whose templates carry the same guard and pins.
+
 ## [1.13.0] - 2026-10-18
 
 Front-half rebuild. Every item below is opt-in through `.specify/workflow.yml` unless it says otherwise; an absent key keeps the 1.12 behaviour. Measured on the scripted small feature in `docs/internal/benchmarks/`.

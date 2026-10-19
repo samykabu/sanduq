@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.3.4] - 2026-10-19
+
+- `documentation-gates.yml` skips fork pull requests when the project's linux runner is self-hosted
+  (rendered by Workflow's `self_hosted` template flag) and pins `actions/checkout` to v4.3.0 by
+  commit. Part of samykabu/sanduq#94.
+
 ## [2.3.3] - 2026-10-18
 
 - Ship the reviewed shared freshness helper in the Assure package. Generated Progress reports

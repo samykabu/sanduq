@@ -273,6 +273,11 @@ workflow still on a hosted runner needs its own dated entry:
 `CI_WORKFLOW_STALE` when a selection was changed but never re-installed. Under the default
 `hosted-allowed` nothing is required and nothing changes.
 
+When the `linux` runner set is not GitHub-hosted, the rendered pull request gates carry a job
+condition that skips pull requests opened from forks, so code from a fork never runs on your
+self-hosted runner. Every action these gates use is pinned to a commit, with its version in a
+comment beside the pin.
+
 ## Continuing in a fresh session
 
 Context policy lives in `.specify/workflow.yml` under `context.mode` and defaults to
