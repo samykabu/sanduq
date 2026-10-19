@@ -2,6 +2,7 @@
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import sys
@@ -9,29 +10,87 @@ import argparse
 
 from git_state import ArchiveError, Repository, atomic_write, write_json
 
-COMMANDS = {
-    "init": "Configure project memory, verification checks and lifecycle integrations",
-    "prepare": "Queue implemented work for archival after merge",
-    "run": "Archive selected verified feature specifications",
-    "session": "Process approved pending archives in this local session",
-    "enable": "Review and enable automatic archival policy",
-    "impact": "Consult current product knowledge for specification impact",
-    "status": "Inspect pending archival and recovery state",
-}
+# Descriptions come from each command file's frontmatter, the same text extension.yml carries.
+COMMANDS = ("init", "prepare", "run", "session", "enable", "impact", "status")
+# Only hooks and the dispatcher call these; on Claude they leave the slash menu but stay callable.
+HOOK_ONLY = ("prepare", "session")
+# (event, command, description, first). extension.yml lists one command per event, so impact's
+# before_specify binding lives only here. Order matters: templates iterate YAML order, not priority.
+HOOKS = (("before_specify", "impact", "Consult current product memory", True),
+         ("before_specify", "session", "Process merged pending archives", True),
+         ("before_analyze", "impact", "Consult current product memory", True),
+         ("after_implement", "prepare", "Queue implemented work for archival after merge", False))
+# Where each host reads project hooks, and the text that marks this extension's guard entry in them.
+HOOK_FILES = {"claude": ".claude/settings.json", "codex": ".codex/hooks.json"}
+GUARD_MARK = "memory/hooks/guard.py"
+# Command bodies name commands the Copilot way; skill hosts register them with hyphens.
+SKILL_NAMES = "Here `speckit.memory.<command>` is the skill `speckit-memory-<command>`.\n\n"
 SESSION = """\n<!-- SANDUQ MEMORY SESSION START -->
-At the start of each local agent session, run
-`python .specify/extensions/memory/scripts/archive.py pending` from the repository root.
-If enabled pending work or an interrupted run exists, follow
-`.specify/extensions/memory/commands/session.md` before starting a new specification.
-Automatic archival runs only after local merge into the configured target branch under the approved policy.
-Before a new specification, branch or broad staging/commit workflow, run
-`python .specify/extensions/memory/scripts/archive.py pending --gate`.
-A nonzero exit stops that workflow until archive recovery, a writer or number guards are resolved.
-For specification creation or impact analysis, follow
-`.specify/extensions/memory/commands/impact.md` to read relevant entries from `specs/memory/`.
+At session start run `python .specify/extensions/memory/scripts/archive.py pending`; when it reports pending work or an interrupted run, follow `.specify/extensions/memory/commands/session.md`.
+Before a new specification, branch or broad staging or commit workflow, `archive.py pending --gate` must pass.
+For specification or impact analysis, follow `.specify/extensions/memory/commands/impact.md`.
 Do not load project memory into ordinary implementation tasks.
 <!-- SANDUQ MEMORY SESSION END -->
 """
+
+
+def frontmatter(text: str) -> list[str]:
+    """The lines between a file's opening and closing --- fences, or [] without frontmatter."""
+    parts = text.replace("\r\n", "\n").split("---", 2)
+    return parts[1].strip("\n").split("\n") if text.startswith("---") and len(parts) == 3 else []
+
+
+def description(text: str, name: str) -> str:
+    for line in frontmatter(text):
+        if line.startswith("description:"):
+            return line.split(":", 1)[1].strip()
+    raise ArchiveError(f"Command {name} has no frontmatter description.")
+
+
+def spec_kit_keys(path: Path) -> list[str]:
+    """Spec Kit's argument-hint and metadata block from an earlier render of this wrapper."""
+    if not path.is_file() or path.is_symlink():
+        return []
+    kept, block = [], False
+    for line in frontmatter(path.read_text(encoding="utf-8")):
+        if line.startswith(("argument-hint:", "metadata:")):
+            kept.append(line)
+            block = line.startswith("metadata:")
+        elif block and line.startswith((" ", "\t")):
+            kept.append(line)
+        else:
+            block = False
+    return kept
+
+
+def guard_hook_outputs(repo: Repository, extension: Path) -> dict[str, bytes]:
+    """Each host's hook file with this extension's guard merged in, replacing only an earlier guard entry."""
+    python = "python" if os.name == "nt" else "python3"  # Windows' python3 is often the Store stub.
+    template = (extension / "hooks/hooks.json").read_text(encoding="utf-8").replace("{python}", python)
+    outputs = {}
+    for name in HOOK_FILES.values():
+        path = repo.path(name)
+        raw = path.read_text(encoding="utf-8-sig") if path.is_file() else ""
+        try:
+            data = json.loads(raw) if raw.strip() else {}
+        except ValueError:
+            data = None
+        if not isinstance(data, dict) or not isinstance(data.get("hooks", {}), dict):
+            raise ArchiveError(f"{name} is not a JSON object with a hooks object; fix it before enabling guard_hooks.")
+        hooks = data.setdefault("hooks", {})
+        for event, groups in json.loads(template)["hooks"].items():
+            kept = []
+            for group in hooks.get(event) if isinstance(hooks.get(event), list) else []:
+                inner = group.get("hooks") if isinstance(group, dict) else None
+                if isinstance(inner, list):
+                    inner = [h for h in inner if not (isinstance(h, dict) and GUARD_MARK in str(h.get("command", "")))]
+                    if not inner:
+                        continue
+                    group = {**group, "hooks": inner}
+                kept.append(group)
+            hooks[event] = kept + groups
+        outputs[name] = (json.dumps(data, indent=2) + "\n").encode()
+    return outputs
 
 
 def hook(command: str, description: str) -> str:
@@ -107,6 +166,9 @@ def install(root: Path, target_branch: str | None = None) -> dict:
         if path not in guards:
             raise ArchiveError(f"Previously installed guard is missing: {path}. Restore it before initialization.")
     policy["guard_paths"] = sorted(guards)
+    if not isinstance(policy.get("guard_hooks", False), bool):
+        raise ArchiveError("guard_hooks in .specify/memory-policy.json must be true or false.")
+    hook_files = guard_hook_outputs(repo, extension) if policy.get("guard_hooks") else {}
     config = repo.path(".specify/extensions.yml")
     text = config.read_text(encoding="utf-8").replace("\r\n", "\n") if config.exists() else "installed:\nhooks:\n"
     text = re.sub(r"^installed: \[\]$", "installed:", text, flags=re.M)
@@ -138,32 +200,35 @@ def install(root: Path, target_branch: str | None = None) -> dict:
                 repo.path(relative)
     for target in owned_links:
         target.unlink()
+    manifest = (extension / "extension.yml").read_text(encoding="utf-8")
+    version = re.search(r"^\s+version:\s*[\"']?([^\"'\s]+)", manifest, re.M)
+    if not version:
+        raise ArchiveError("extension.yml has no extension version.")
+    sources = {name: (extension / "commands" / (name + ".md")).read_text(encoding="utf-8") for name in COMMANDS}
+    summaries = {name: description(sources[name], name) for name in COMMANDS}
     for path, data in guards.items():
         atomic_write(repo.path(path), data)
     write_json(policy_path, policy)
-    for name, description in COMMANDS.items():
-        command = extension / "commands" / (name + ".md")
-        if not command.is_file():
-            raise ArchiveError(f"Missing command: {name}")
-        body = command.read_text(encoding="utf-8").split("---", 2)[2].strip() + "\n"
+    for path, data in hook_files.items():
+        atomic_write(repo.path(path), data)
+    for name in COMMANDS:
+        summary, body = summaries[name], sources[name].split("---", 2)[2].strip() + "\n"
         skill = "speckit-memory-" + name
-        wrapper = ("---\nname: " + skill + "\ndescription: " + description
-                   + "\ncompatibility: Spec Kit project with Python 3.11+ and Git\n---\n\n" + body)
         for host in (".agents", ".claude"):
-            atomic_write(repo.path(host + "/skills/" + skill + "/SKILL.md"), wrapper.encode())
+            path = repo.path(host + "/skills/" + skill + "/SKILL.md")
+            head = ["name: " + skill, "description: " + summary, "compatibility: Spec Kit project with Python 3.11+ and Git"]
+            head += spec_kit_keys(path) + (["user-invocable: false"] if host == ".claude" and name in HOOK_ONLY else [])
+            atomic_write(path, ("---\n" + "\n".join(head) + "\n---\n\n" + SKILL_NAMES + body).encode())
         agent = "speckit.memory." + name
         atomic_write(repo.path(".github/agents/" + agent + ".agent.md"),
-                     ("---\ndescription: " + description + "\n---\n\n<!-- Extension: memory -->\n" + body).encode())
+                     ("---\ndescription: " + summary + "\n---\n\n<!-- Extension: memory -->\n" + body).encode())
         atomic_write(repo.path(".github/prompts/" + agent + ".prompt.md"), ("---\nagent: " + agent + "\n---\n").encode())
-    # Order matters: templates iterate YAML order, not numeric priority.
-    text = add_hook(text, "before_specify", "impact", "Consult current product memory", first=True)
-    text = add_hook(text, "before_specify", "session", "Process merged pending archives", first=True)
-    text = add_hook(text, "before_analyze", "impact", "Consult current product memory", first=True)
-    text = add_hook(text, "after_implement", "prepare", "Queue implemented work for archival after merge", first=False)
+    for event, command, note, first in HOOKS:
+        text = add_hook(text, event, command, note, first=first)
     atomic_write(config, text.encode())
     registry["extensions"]["memory"] = {
         **registry["extensions"].get("memory", {}),
-        "version": "2.1.0", "enabled": True, "priority": 5,
+        "version": version.group(1), "enabled": True, "priority": 5,
         "manifest_hash": "sha256:" + hashlib.sha256((extension / "extension.yml").read_bytes()).hexdigest(),
         "registered_commands": {host: ["speckit.memory." + n for n in COMMANDS] for host in ("codex", "claude", "copilot")},
         "registered_skills": ["speckit-memory-" + n for n in COMMANDS],
@@ -180,7 +245,8 @@ def install(root: Path, target_branch: str | None = None) -> dict:
         else:
             atomic_write(path, (original.rstrip() + "\n" + SESSION).encode())
     from archive import Archive
-    return {"commands": list(COMMANDS), "hosts": ["codex", "claude", "copilot"], "automatic_enabled": Archive(root).pending()["enabled"], "policy": str(policy_path), "guards": list(guards)}
+    return {"commands": list(COMMANDS), "hosts": ["codex", "claude", "copilot"], "automatic_enabled": Archive(root).pending()["enabled"], "policy": str(policy_path), "guards": list(guards),
+            "guard_hooks": sorted(hook_files)}
 
 
 if __name__ == "__main__":

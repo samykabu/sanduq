@@ -105,6 +105,20 @@ same cursor with a larger budget. Full journals and recovery payloads remain int
 | Consult memory | `$speckit-memory-impact` | `/speckit-memory-impact` | `/speckit.memory.impact` |
 | Inspect recovery | `$speckit-memory-status` | `/speckit-memory-status` | `/speckit.memory.status` |
 
+`prepare` and `session` run from hooks and the dispatcher, so on Claude Code `init` marks them
+`user-invocable: false`: they leave the slash menu and stay callable. Each command's description is the one
+in its file's frontmatter, repeated verbatim in `extension.yml`. `run` is a short numbered procedure; it reads
+the references under `.specify/extensions/memory/references/` (candidate format, large runs, verification
+override, format 1, review and publication, recovery) only at the step that needs one.
+
+### Optional guard hook
+
+Set `"guard_hooks": true` in `.specify/memory-policy.json` and rerun `install.py` to register
+`hooks/guard.py` as a PreToolUse hook in `.claude/settings.json` and `.codex/hooks.json` (Codex runs project
+hooks only after you approve them in `/hooks`). While an archive run is active it refuses `git push`, `stash`,
+`reset` and `clean` and any Write or Edit under `specs/memory/`, naming the run's `candidate.json` and the
+recovery reference. The default is `false`: nothing is registered, and the hook exits at once when the key is off.
+
 ### Manual use
 
 For example, ask Codex: `$speckit-memory-run specs/412-refund-approval`. The agent verifies actual completion, including downstream QA/review/documentation, executes approved checks, then makes a real scoped checkpoint. It inventories every committed source unit and reconciles a local candidate with current memory. A separate reviewer critiques the exact candidate, source dispositions and fixture repairs before deterministic validation, publication, complete folder deletion, repeated checks and the final scoped commit.
@@ -141,7 +155,7 @@ python .specify/extensions/memory/scripts/archive.py memory export              
 ```
 
 An archive run writes a **delta candidate**: additions, full-entry updates and removals guarded by the sha256 of
-the current entry file, compact provenance grouped by path, tombstones, taxonomy changes and coverage grouped by
+the current entry file (`memory show` and `memory query --format json` print it as `expected_hash`), compact provenance grouped by path, tombstones, taxonomy changes and coverage grouped by
 path. An update that no unit of the run supports needs a written `reason` (a reviewed correction). `validate`
 rejects a changed base memory (no automatic rebase), materializes the whole result on a temporary copy and checks
 it; the reviewer binds the base and result memory roots. `finalize` writes the changed entries, one new ledger and
@@ -183,7 +197,12 @@ python .specify/extensions/memory/scripts/archive.py status
 python .specify/extensions/memory/scripts/archive.py pending --gate
 ```
 
-`finalize --run <id>` resumes unchanged transactions. `abandon --run <id>` retires unpublished stale proposals. Explicit `rollback --run <id>` restores recorded original bytes and scoped index after permanent publication/check failure, preserves the checkpoint and removes the failed queue entry. It refuses unexpected edits or an already-created final commit; interrupted rollback is resumable. Active archives gate new feature/branch/broad auto-commit workflows. Read-only state reports busy/stale writers without taking their lock; confirm the recorded process has exited before removing only a stale lock. No reset, clean, silent rollback or journal discard occurs. Coverage/provenance validation cannot prove semantic synthesis; a separate reviewer is essential.
+`status` (and `inspect --view status`, `validate`, `finalize`) returns `next: {command, reason}`, the command
+to run next for the active run's phase. `finalize --run <id>` resumes unchanged transactions, `abandon --run <id>`
+retires unpublished stale proposals and an explicit `rollback --run <id>` undoes a published run while its outputs
+are unchanged; the single text for these rules is [`references/recovery.md`](references/recovery.md). Active
+archives gate new feature/branch/broad auto-commit workflows. No reset, clean, silent rollback or journal discard
+occurs. Coverage/provenance validation cannot prove semantic synthesis; a separate reviewer is essential.
 
 ## Development checks
 
@@ -209,17 +228,10 @@ python .specify/extensions/memory/scripts/archive.py prepare --spec specs/412-re
 This skips fresh passing verification evidence and external post-deletion checks.
 It records `verification.status: skipped` and the reason in the archive index and
 both Git commits; it never reports the checks as passed. Use a nonempty printable single-line
-reason of at most 500 characters suitable for permanent repository history.
-The normal candidate synthesis, independent review, fixture migration/reference
-repair, scoped checkpoint/final commits and recovery still apply. The reviewer must
-acknowledge the exact reason via `verification_override` in `review.json`.
-
-Only explicit manual selections support this option. Automatic archiving and
-`--all-completed` still require verification. Unfinished tasks still require a
-separate explicit retirement decision. Named checks cannot be combined with the
-skip; explicit related implementation files may be checkpointed, but remain
-unverified. Consumer repairs will not be tested, so review their exact changes and
-retain meaningful unresolved limitations in memory. Existing transactions keep
-their original verification mode: abandon before publication or explicitly roll
-back after publication, then prepare a new override; do not edit a journal.
+reason of at most 500 characters suitable for permanent repository history. Only explicit
+manual selections support it; automatic archiving and `--all-completed` still require
+verification. Everything else (synthesis, independent review with `verification_override`
+in `review.json`, fixture and reference repairs, scoped commits, recovery) still applies;
+the agent's full rules are in
+[`references/verification-override.md`](references/verification-override.md).
 Updating this extension invalidates any previous automatic-policy approval.

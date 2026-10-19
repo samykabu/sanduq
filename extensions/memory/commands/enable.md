@@ -1,5 +1,5 @@
 ---
-description: Review and enable the current automatic archive policy
+description: Reviews the concrete archive policy with the owner and records approval of its hash so pending archives run automatically. Use when asked to "enable automatic archiving" or "review the memory policy".
 ---
 
 # Enable automatic archival

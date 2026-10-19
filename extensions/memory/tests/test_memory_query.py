@@ -188,6 +188,19 @@ class MemoryQueryTests(unittest.TestCase):
                                  encoding="utf-8").stdout
         self.assertIn("PM-member-otp", catalog)
 
+    def test_show_and_json_query_print_the_entry_file_sha256_as_expected_hash(self):
+        import hashlib
+        want = hashlib.sha256((self.root / ms.ENTRIES / "PM-upload-size-limit.md").read_bytes()).hexdigest()
+        self.assertIn("expected_hash: " + want + "\n", mq.show(self.store, self.root, ["PM-upload-size-limit"]))
+        self.assertEqual(want, mq.expected_hash(self.root, "PM-upload-size-limit"))
+        subprocess.run(["git", "init", "-q", "-b", "develop"], cwd=self.root, check=True)
+        (self.root / ".specify/extensions/memory").mkdir(parents=True)
+        (self.root / ".specify/memory-policy.json").write_bytes(json.dumps({"schema_version": 1, "target_branch": "develop"}).encode())
+        out = subprocess.run([sys.executable, str(SCRIPTS / "archive.py"), "--root", str(self.root), "memory", "query",
+                              "--id", "PM-upload-size-limit", "--format", "json"], capture_output=True, text=True, encoding="utf-8")
+        item = json.loads(out.stdout)["data"]["entries"][0]
+        self.assertEqual(want, item["expected_hash"])
+
 
 if __name__ == "__main__":
     unittest.main()

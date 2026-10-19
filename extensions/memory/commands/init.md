@@ -1,5 +1,5 @@
 ---
-description: Configure Sanduq Memory for this Spec Kit project
+description: Configures Sanduq Memory for a Spec Kit project (merge branch, verification checks, host wrappers, lifecycle hooks and script guards) without enabling automatic archiving. Use when asked to "set up project memory" or "initialize memory".
 ---
 
 # Initialize project memory

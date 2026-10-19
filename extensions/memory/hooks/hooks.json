@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Write|Edit|MultiEdit|apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{python} -c \"import os,runpy;p=os.path.join(os.environ.get('CLAUDE_PROJECT_DIR') or '.','.specify/extensions/memory/hooks/guard.py');os.path.isfile(p) and runpy.run_path(p,run_name='__main__')\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

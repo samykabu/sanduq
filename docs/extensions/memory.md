@@ -7,7 +7,7 @@ recoverable Git commits.
 | | |
 | --- | --- |
 | Lifecycle phase | Before `specify`, before `analyze`, after `implement`; next local session after merge |
-| Hooks | Three mandatory hooks ([hooks](../reference/hooks.md)) |
+| Hooks | Three mandatory hooks, `impact` also before `specify` ([hooks](../reference/hooks.md)); an optional guard hook |
 | Commands | `init`, `prepare`, `run`, `session`, `enable`, `impact`, `status` ([reference](../reference/commands.md#memory)) |
 | Requires | Nothing; Python 3.11 or later, Git, Spec Kit 1.x |
 | Standalone | Yes |
@@ -55,6 +55,21 @@ within a byte budget, so you can inspect a large journal without printing it in 
 Check reuse requires an explicit complete input declaration and intact passing evidence. Missing or
 unknown dependencies retain conservative freshness. Both memory formats and recovery data remain
 supported. See the [package contract and examples](../../extensions/memory/README.md).
+
+`archive.py status` names the next command for an active run (`next: {command, reason}`), and
+`memory show` and `memory query --format json` print each entry's `expected_hash`, so the agent
+copies the hash a delta update needs instead of computing it. The `run` command is a short
+procedure that reads its references (candidate format, large runs, verification override, format 1,
+review and publication, recovery) only at the step that needs one. On Claude Code, `prepare` and
+`session` leave the slash menu because hooks and the dispatcher call them.
+
+## Optional guard hook
+
+Set `"guard_hooks": true` in `.specify/memory-policy.json` and rerun `install.py`. It registers one
+PreToolUse hook for Claude Code (`.claude/settings.json`) and Codex (`.codex/hooks.json`; approve it
+in `/hooks`). While an archive run is active, the hook refuses `git push`, `stash`, `reset` and
+`clean` and any write under `specs/memory/`, and names the run's `candidate.json` and the recovery
+reference. It is off by default.
 
 ## How it runs
 

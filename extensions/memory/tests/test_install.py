@@ -1,6 +1,7 @@
 """Portability and non-destructive initialization in disposable projects."""
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -9,9 +10,9 @@ import unittest
 
 SOURCE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SOURCE / "scripts"))
-from archive import Archive, EXTENSION, POLICY
+from archive import Archive, EXTENSION, FORMAT_1_REFERENCE, POLICY
 from git_state import ArchiveError, write_json
-from install import COMMANDS, install
+from install import COMMANDS, GUARD_MARK, HOOK_FILES, HOOK_ONLY, HOOKS, SESSION, install
 
 
 class InstallTests(unittest.TestCase):
@@ -147,6 +148,84 @@ class InstallTests(unittest.TestCase):
             install(self.root)
         self.assertTrue(wrapper.is_symlink())
         self.assertEqual(before, self.snapshot())
+
+    def test_wrappers_take_frontmatter_descriptions_and_claude_hides_hook_only_commands(self):
+        rendered = self.root / ".claude/skills/speckit-memory-run/SKILL.md"
+        self.write(rendered.relative_to(self.root).as_posix(), "---\nname: speckit-memory-run\ndescription: old\n"
+                   "metadata:\n  author: sanduq\n  source: memory:commands/run.md\nargument-hint: \"<feature>\"\n---\n\nold\n")
+        install(self.root)
+        manifest = (SOURCE / "extension.yml").read_text(encoding="utf-8")
+        for name in COMMANDS:
+            source = (SOURCE / "commands" / (name + ".md")).read_text(encoding="utf-8")
+            summary = re.search(r"^description: (.+)$", source, re.M).group(1)
+            self.assertIn("    description: '" + summary + "'\n", manifest)
+            agents = (self.root / ".agents/skills" / ("speckit-memory-" + name) / "SKILL.md").read_text(encoding="utf-8")
+            claude = (self.root / ".claude/skills" / ("speckit-memory-" + name) / "SKILL.md").read_text(encoding="utf-8")
+            copilot = (self.root / ".github/agents" / ("speckit.memory." + name + ".agent.md")).read_text(encoding="utf-8")
+            for text in (agents, claude, copilot):
+                self.assertIn("description: " + summary + "\n", text)
+            self.assertNotIn("user-invocable", agents)
+            self.assertEqual(name in HOOK_ONLY, "user-invocable: false\n" in claude)
+        claude = rendered.read_text(encoding="utf-8")
+        self.assertIn("argument-hint: \"<feature>\"\n", claude)
+        self.assertIn("metadata:\n  author: sanduq\n  source: memory:commands/run.md\n", claude)
+        install(self.root)
+        self.assertEqual(claude, rendered.read_text(encoding="utf-8"))
+
+    def test_registry_version_and_the_four_hook_registrations_follow_one_list(self):
+        install(self.root)
+        registry = json.loads((self.root / ".specify/extensions/.registry").read_text())
+        version = re.search(r'^  version: "(.+)"$', (SOURCE / "extension.yml").read_text(), re.M).group(1)
+        self.assertEqual(version, registry["extensions"]["memory"]["version"])
+        self.assertEqual(4, len(HOOKS))
+        text = (self.root / ".specify/extensions.yml").read_text()
+        sections = dict(re.findall(r"^  ([a-z_]+):\n((?:(?!  [a-z_]+:).*\n?)*)", text, re.M))
+        for event, command, _, _ in HOOKS:
+            self.assertEqual(1, sections[event].count("command: speckit.memory." + command + "\n"), event)
+        self.assertEqual(len(HOOKS), text.count("extension: memory"))
+
+    def test_session_block_states_the_four_standing_facts(self):
+        install(self.root)
+        block = re.search(r"<!-- SANDUQ MEMORY SESSION START -->\n(.*)<!-- SANDUQ MEMORY SESSION END -->",
+                          (self.root / "CLAUDE.md").read_text(encoding="utf-8"), re.S).group(1)
+        self.assertEqual(4, len(block.strip().splitlines()))
+        for fact in ("archive.py pending`", "commands/session.md", "pending --gate", "commands/impact.md",
+                     "Do not load project memory into ordinary implementation tasks"):
+            self.assertIn(fact, block)
+
+    def test_guard_hooks_register_on_both_hosts_only_when_enabled(self):
+        install(self.root)
+        for name in HOOK_FILES.values():
+            self.assertFalse((self.root / name).exists())
+        self.assertIs(False, json.loads((self.root / POLICY).read_text())["guard_hooks"])
+        self.write(".claude/settings.json", json.dumps({"model": "x", "hooks": {"PreToolUse": [
+            {"matcher": "Bash", "hooks": [{"type": "command", "command": "owner-hook"}]}]}}))
+        policy = json.loads((self.root / POLICY).read_text())
+        policy["guard_hooks"] = "yes"
+        write_json(self.root / POLICY, policy)
+        with self.assertRaisesRegex(ArchiveError, "guard_hooks"):
+            install(self.root)
+        policy["guard_hooks"] = True
+        write_json(self.root / POLICY, policy)
+        self.assertEqual(sorted(HOOK_FILES.values()), install(self.root)["guard_hooks"])
+        install(self.root)
+        for name in HOOK_FILES.values():
+            data = json.loads((self.root / name).read_text())
+            commands = [h["command"] for g in data["hooks"]["PreToolUse"] for h in g["hooks"]]
+            self.assertEqual(1, sum(GUARD_MARK in c for c in commands), name)
+            self.assertNotIn("{python}", json.dumps(data))
+        claude = json.loads((self.root / ".claude/settings.json").read_text())
+        self.assertEqual("x", claude["model"])
+        self.assertEqual("owner-hook", claude["hooks"]["PreToolUse"][0]["hooks"][0]["command"])
+
+    def test_every_reference_is_named_by_a_command_or_reference_exists_and_stays_short(self):
+        references = {p.name for p in (SOURCE / "references").glob("*.md")}
+        named = {Path(FORMAT_1_REFERENCE).name}  # prepare returns it on a format-1 project
+        for page in [*(SOURCE / "commands").glob("*.md"), *(SOURCE / "references").glob("*.md")]:
+            named |= set(re.findall(r"\.specify/extensions/memory/references/([a-z0-9-]+\.md)", page.read_text(encoding="utf-8")))
+        self.assertEqual(references, named)
+        for name in references:
+            self.assertLess(len((SOURCE / "references" / name).read_text(encoding="utf-8").splitlines()), 500, name)
 
 
 if __name__ == "__main__":

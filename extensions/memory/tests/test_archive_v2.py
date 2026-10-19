@@ -136,6 +136,28 @@ class ArchiveV2Tests(unittest.TestCase):
         with self.assertRaisesRegex(ArchiveError, "unfinished"):
             self.archive.prepare([FEATURE], [], [], skip_verification=REASON)
 
+    def test_status_next_names_the_command_for_each_phase(self):
+        rid = self.prepared["run_id"]
+        self.assertEqual(2, self.prepared["memory_format"])
+        self.assertNotIn("reference", self.prepared)
+        command = lambda: self.archive.status()["next"]["command"]
+        self.assertTrue(command().endswith("archive.py preflight --run " + rid))
+        self.save(self.candidate(), review=False)
+        _, output = self.cli("validate", "--run", rid)
+        self.assertTrue(output["data"]["next"]["command"].endswith("validate --run " + rid))
+        self.save(self.candidate())
+        self.assertTrue(command().endswith("validate --run " + rid))
+        _, output = self.cli("validate", "--run", rid)
+        self.assertTrue(output["data"]["next"]["command"].endswith("finalize --run " + rid))
+        _, output = self.cli("inspect", "--view", "status")
+        self.assertEqual(command(), output["records"][0]["next"]["command"])
+        for phase, verb in (("checkpoint", "finalize"), ("publishing", "finalize"), ("checking", "finalize"),
+                            ("committing", "finalize"), ("rolling-back", "rollback")):
+            self.assertTrue(self.archive.next_step({**self.journal(), "phase": phase})["command"].endswith(verb + " --run " + rid))
+        result = self.archive.finalize(rid)
+        self.assertEqual(("done", None), (result["phase"], result["next"]["command"]))
+        self.assertIsNone(command())
+
     def test_full_transaction_publishes_delta_and_commits_scoped_result(self):
         before = {p: self.read(p) for p in (CURRENCY, f"{ms.ENTRIES}/PM-tenant-scope.md")}
         self.save(self.candidate())

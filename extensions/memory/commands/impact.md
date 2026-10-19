@@ -1,5 +1,5 @@
 ---
-description: Consult relevant current product knowledge for specification and impact analysis
+description: Consults current product memory for the capabilities a change touches, within a token budget; also the before_analyze hook. Use when specifying or analyzing a feature, or when asked to "consult memory" or "check the impact on existing behavior".
 ---
 
 # Consult project memory

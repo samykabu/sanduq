@@ -15,7 +15,7 @@ import re
 from collections import Counter
 from pathlib import Path
 
-from git_state import ArchiveError
+from git_state import ArchiveError, digest
 import memory_store as ms
 
 METHODS = "GET|POST|PUT|PATCH|DELETE|HEAD"
@@ -218,6 +218,23 @@ def render_entry(store: ms.Store, eid: str) -> str:
         ("Constrains", entry.get("constrains", [])), ("Constrained by", incoming["constrains"]),
         ("Supersedes", entry.get("supersedes", [])), ("Superseded by", incoming["supersedes"])) if ids]
     return head + entry["text"] + "\n" + ("\n" + "\n".join(lines) + "\n" if lines else "")
+
+
+def expected_hash(repo_root: Path, eid: str) -> str:
+    """sha256 of the entry file: what a candidate update or removal must carry (packets use the same digest)."""
+    return digest((Path(repo_root) / ms.ENTRIES / f"{eid}.md").read_bytes())
+
+
+def show(store: ms.Store, repo_root: Path, ids: list[str]) -> str:
+    missing = [i for i in ids if i not in store.entries]
+    if missing:
+        raise ArchiveError(f"Unknown memory id(s): {missing}")
+    blocks = []
+    for eid in ids:
+        relations = store.entries[eid].get("relations", [])
+        blocks.append(render_entry(store, eid) + (f"\nRelated: {', '.join(relations)}\n" if relations else "")
+                      + f"\nexpected_hash: {expected_hash(repo_root, eid)}\n")
+    return "\n".join(blocks)
 
 
 def evidence_status(store: ms.Store, eid: str, repo_root: Path) -> dict:

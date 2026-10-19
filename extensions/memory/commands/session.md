@@ -1,5 +1,5 @@
 ---
-description: Process pending merged archives in the next local agent session
+description: Processes pending merged archives at the start of a local session and resumes an interrupted run; also the before_specify hook. Use when the session handoff returns speckit.memory.session or when asked to "process pending archives".
 ---
 
 # Pending archive session
@@ -14,10 +14,9 @@ mode is disabled. Read-only state checks work while a writer is busy. If a stale
 lock is reported, confirm the recorded process has exited before removing that
 single lock. Never remove a busy or unknown lock automatically.
 
-If an active run exists, inspect `status` and complete/resume it before another
-archive. For a permanently failing published run, explicit `rollback --run <id>`
-restores its original recorded bytes and scoped index, preserves its checkpoint,
-and removes its automatic queue entry. Never discard an active transaction.
+If an active run exists, inspect `status` and complete or resume it before another archive;
+`.specify/extensions/memory/references/recovery.md` is the single recovery, rollback and abandon
+text. Never discard an active transaction.
 
 Before starting a new specification, branch, broad staging or commit workflow,
 run `... archive.py pending --gate`. A nonzero exit is a hard stop for that workflow.
