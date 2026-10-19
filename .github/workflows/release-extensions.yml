@@ -80,7 +80,8 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git add catalog.json extensions/catalog.json extensions/pending-releases.json
+          # promote also clears the root CHANGELOG's "(pending release)" headings for what it released.
+          git add catalog.json extensions/catalog.json extensions/pending-releases.json CHANGELOG.md
           if ! git diff --cached --quiet; then
             git commit -m 'chore(extensions): publish verified release catalog [skip ci]'
             git push origin HEAD:main

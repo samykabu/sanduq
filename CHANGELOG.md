@@ -4,7 +4,7 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
-## 2026-10-20 — Workflow 1.15.0, Scope 1.9.0, Assure 2.5.0, User Manual 1.7.0, PR 4.4.0, Project 2.4.0, Illustrate 2.6.0, Memory 2.4.0, Progress 1.4.0 (pending release)
+## 2026-10-20 — Workflow 1.15.0, Scope 1.9.0, Assure 2.5.0, User Manual 1.7.0, PR 4.4.0, Project 2.4.0, Illustrate 2.6.0, Memory 2.4.0, Progress 1.4.0
 
 - Optimization round 3, reviewed jointly with Codex: fixes to round-2 behaviour (Assure gate parsing and QA audit, the always-registered Illustrate hook, PR image paths and lookups, Project remote parsing), one git pass per Workflow command (744 to 316 git calls per lifecycle), Scope GitHub calls cut by up to 78%, Execute text per mode, shipped Illustrate assets passing their own checks, host-visible descriptions under Codex's 8,000-character budget (8,604 to 6,430), smaller packages, faster CI selection and release tooling (`release.py bump`). No renames; no new policy keys.
 
