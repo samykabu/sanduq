@@ -206,15 +206,20 @@ def _snapshot_plan(root, snapshot_path):
         if kind == 'git':
             ref = record['retention']
             # v1's absolute repository path is provenance, not a portable identity.
-            # Recovery in the current repository requires the exact retained ref,
-            # commit, blob, Git object content hash and SHA-256 below. Never rewrite
-            # the descriptor (and therefore never invalidate existing receipts).
+            # Recovery in the current repository requires the exact retained ref (or,
+            # since refs are never pushed, a commit that is an ancestor of HEAD, as in
+            # a fresh CI checkout), then the blob, Git object content hash and SHA-256
+            # below. Never rewrite the descriptor (and so never invalidate receipts).
             repo = record['repository']
             if (not isinstance(repo, str) or any(c in repo for c in '\0\n\r')
                     or not (PurePosixPath(repo).is_absolute() or PureWindowsPath(repo).is_absolute())
                     or not isinstance(ref, str) or not re.fullmatch(r'refs/sanduq/evidence/[0-9a-f]{32}', ref)):
                 raise InputIdentityError('EVIDENCE_REPOSITORY_OR_RETENTION_MISMATCH')
-            if git(root, 'rev-parse', '--verify', ref).decode('ascii').strip() != record['commit']:
+            commit = record['commit']
+            retained = subprocess.run(['git', 'rev-parse', '--verify', '--quiet', ref], cwd=root, capture_output=True)
+            if retained.stdout.decode('ascii').strip() != commit and not (
+                    isinstance(commit, str) and OID.fullmatch(commit) and subprocess.run(
+                        ['git', 'merge-base', '--is-ancestor', commit, 'HEAD'], cwd=root, capture_output=True).returncode == 0):
                 raise InputIdentityError('EVIDENCE_RETENTION_MISSING')
             oid, size = _blob_metadata(root, record['commit'], label)
             if oid != record['blob']:
