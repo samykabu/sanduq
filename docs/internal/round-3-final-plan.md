@@ -92,13 +92,14 @@ Migration design for `issue-scope` (and any other id the user picks), revised pe
    markers; X2 factual `check_docs` rules (pins, changelog headings, pending markers, extension counts);
    display names applied.
 9. **AU4** one freshness CLI for both state scripts (cheap deduplication only). **PM7** drop memory's
-   duplicate preflight step; **PM8** shorter memory descriptions.
+   duplicate preflight step; **PM8** shorter memory descriptions. **W8** remove the two uncalled functions, the
+   leftover review identifiers and the receipt rule that asks for runtime-added inputs.
 10. **Investigate PM6** (memory hooks against Workflow's handoff) with one managed run; change ownership
     only if duplication is shown.
 
 ## 4. Defer
 
-`scope` to `issue-scope` release (until the migration tests above pass; ships next), W9 split of
+W6 delegation probe cache (measure with delegation on first), `scope` to `issue-scope` release (until the migration tests above pass; ships next), W9 split of
 `workflow.py`, SC8 transport extraction, X9 shared I/O module, PM5 Python init rewrite (first pass the
 existing non-interactive flags, stop forcing interactive auth, and report missing choices actionably), SC2 preset consolidation, PM2 reply and
 resolve automation, X7 backup pruning (until recovery requirements for the rename are settled), PM9
