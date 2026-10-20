@@ -12,6 +12,7 @@ Use the [state, evidence, and runner reference](operations.md) for report usage,
 - [Daily entry points](#daily-entry-points)
 - [Scope preferences and GitHub answers](#scope-preferences-and-github-answers)
 - [Optional policy keys for a lighter front half](#optional-policy-keys-for-a-lighter-front-half)
+- [Adopting lean execution](#adopting-lean-execution)
 - [Provider and task ownership](#provider-and-task-ownership)
 - [Fresh-session continuation](#fresh-session-continuation)
 - [Updates and releases](#updates-and-releases)
@@ -146,6 +147,27 @@ scope:
 
 Clarification questions may include a Mermaid diagram in managed projects; an exported
 Illustrate image is optional.
+
+## Adopting lean execution
+
+With delegation enabled, lean execution keeps the mechanical stages with the lifecycle coordinator:
+Tasks-to-Issues, Execute, Ready and PR claims, and a Verify claim whose command exactly matches
+`delegation.fixed_collection_commands.verify`, carry `execution_owner: coordinator` and no model
+route. Execute's coding tasks still go to workers. Lean execution is already on for features whose
+[tier](stages.md#profiles-and-tiers) is `lite` or `standard` unless the policy sets
+`enabled: false`; to turn it on for every feature, add this to `.specify/workflow.yml`:
+
+```yaml
+lean_execution:
+  enabled: true
+```
+
+Change it only while no claim is active. A change to `lean_execution` reaches Execute: a feature that
+already holds an Execute receipt reports `policy-changed`, and its next claim re-runs Execute and
+drops the receipts after it, so adopt it between features or before a feature reaches Execute.
+Independent review, the selected QA and User Manual semantics, model allowlists, separate E2E
+authoring and collection, claim binding and candidate acceptance stay as they are, and every stage
+still records its receipt.
 
 ## Provider and task ownership
 

@@ -65,8 +65,9 @@ def base_ref(root, explicit=None):
     return git(root, 'merge-base', 'HEAD', ref).strip()
 
 
-def inputs(root, feature, kind, base=None):
+def inputs(root, feature, kind, base=None, outputs=()):
     feature = relative(root, feature)
+    outputs = {relative(root, p) for p in outputs}
     paths = {relative(root, p) for p in (root / feature).rglob('*') if p.is_file()}
     if kind != 'analyze':
         comparison = base_ref(root, base)
@@ -86,7 +87,7 @@ def inputs(root, feature, kind, base=None):
             '.specify/workflow/', '.specify/scope/', '.specify/extensions/',
             'graphify-out/', 'User-Manual/', 'docs/' + Path(feature).name + '/')) or Path(value).name in
             {'.env', 'workflow.yml', 'feature.json', 'project-sync-state.json'})
-    result = fingerprints(root, [p for p in paths if included(p)])
+    result = fingerprints(root, [p for p in paths if included(p) and p not in outputs])
     # Task completion bookkeeping is not a requirements change.
     task = feature + '/tasks.md'
     if task in result and (root / task).is_file():
@@ -104,13 +105,20 @@ def record_or_status(root, feature, kind, state_path, action, outputs, base=None
     # Pin the verified merge-base for repeatable local/CI comparisons, unless the
     # caller explicitly supplies a new target branch (which can invalidate state).
     comparison = base or ((saved or {}).get('inputs', {}).get('base_commit'))
-    current = inputs(root, feature, kind, comparison)
+    # Document kinds hash declared outputs as outputs only, never also as implicit inputs; Analyze keeps
+    # them (tasks.md is both). Status follows the saved rule, so a 1.15.0 state (no marker) compares unchanged.
+    if action == 'record':
+        exclude = outputs if kind != 'analyze' else ()
+    else:
+        exclude = (saved.get('outputs') or ()) if (saved or {}).get('outputsNotInputs') else ()
+    current = inputs(root, feature, kind, comparison, exclude)
     if action == 'record':
         if not outputs: raise ValueError('At least one actual output file is required.')
         output_hashes = fingerprints(root, outputs)
         if any(value is None for value in output_hashes.values()): raise ValueError('A declared output is missing.')
         payload = {'schemaVersion': 2, 'feature': feature, 'kind': kind, 'inputs': current, 'outputs': output_hashes,
                    'gitHead': git(root, 'rev-parse', 'HEAD').strip()}
+        if exclude: payload['outputsNotInputs'] = True
         state_path.parent.mkdir(parents=True, exist_ok=True)
         state_path.write_text(json.dumps(payload, indent=2) + '\n', encoding='utf-8')
         return {'current': True, 'recorded': True, 'state': relative(root, state_path)}

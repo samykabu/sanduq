@@ -124,6 +124,9 @@ python .specify/extensions/assure/scripts/assure_state.py record --kind analyze 
 ```
 
 Do not record successful evidence in `--report-only` mode or while critical gaps remain unresolved.
+Write any freshness log or status report to `.specify/extensions/assure/state/<feature-name>/reports/`
+(`<feature-name>` is the feature folder's name), which freshness never reads. A file added to the
+feature folder after `record` is a new input and makes the analysis stale.
 
 Report the contract's shape plus: missing coverage found; tasks added with their IDs (or, under
 `--report-only`, the tasks that should be added); any unresolved ambiguity, especially parent feature

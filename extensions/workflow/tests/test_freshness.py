@@ -211,6 +211,99 @@ class FreshnessTests(unittest.TestCase):
         self.call('record');(self.root/self.output).write_text('changed');self.assertFalse(self.call()['current'])
         self.call('record');(self.root/self.output).unlink();self.assertFalse(self.call()['current'])
 
+    def write(self, name, value='original'):
+        path = self.root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(value) if isinstance(value, bytes) else path.write_text(value, encoding='utf-8')
+
+    def test_reports_and_regenerated_outputs_do_not_stale_document_state(self):
+        # R5 (#99 F2): a declared output in the project qa/ tree is hashed as an output, not also as an input.
+        guide = 'qa/features/001-example/index.html'
+        semantic = ['src.txt', 'tests/test_behavior.py', self.feature + '/qa/acceptance-plan.md']
+        for name in semantic[1:] + [guide]:
+            self.write(name)
+        call = lambda action: f.record_or_status(self.root, self.feature, 'document', self.state, action, [guide], self.base)
+        call('record')
+        saved = json.loads((self.root / self.state).read_text(encoding='utf-8'))
+        self.assertNotIn(guide, saved['inputs']['files'])
+        self.write(guide)
+        self.write('.specify/extensions/assure/state/001-example/reports/status.log', 'record ok, status ok')
+        self.assertTrue(call('status')['current'])
+        self.write(guide, 'changed guide')
+        status = call('status')
+        self.assertEqual((status['current'], status['changed_inputs'], status['changed_outputs']), (False, [], [guide]))
+        self.write(guide)
+        # No blanket exclusion: a report written into the feature after record is a new input.
+        self.write(self.feature + '/qa/freshness.log', 'late report')
+        self.assertEqual(call('status')['changed_inputs'], [self.feature + '/qa/freshness.log'])
+        (self.root / self.feature / 'qa/freshness.log').unlink()
+        for name in semantic:
+            with self.subTest(path=name):
+                before = (self.root / name).read_bytes()
+                self.write(name, 'changed meaning')
+                self.assertEqual(call('status')['changed_inputs'], [name])
+                self.write(name, before)
+                self.assertTrue(call('status')['current'])
+
+    def test_declared_outputs_keep_integrity_wherever_they_live(self):
+        # R6: implicit-discovery exclusions never weaken output checks.
+        outputs = {'qa/features/001-example/index.html': 'guide', 'docs/001-example/shot.png': b'\x89PNG\0image',
+                   'User-Manual/guide.md': 'manual', self.feature + '/workflow/report.md': 'excluded'}
+        for name, value in outputs.items():
+            self.write(name, value)
+        for name, value in outputs.items():
+            with self.subTest(output=name):
+                call = lambda action: f.record_or_status(self.root, self.feature, 'document', self.state, action,
+                                                         list(outputs), self.base)
+                call('record')
+                self.write(name, b'\x89PNG\0corrupt' if isinstance(value, bytes) else 'modified')
+                self.assertEqual(call('status')['changed_outputs'], [name])
+                (self.root / name).unlink()
+                self.assertFalse(call('status')['current'])
+                with self.assertRaisesRegex(ValueError, 'missing'):
+                    call('record')
+                self.write(name, value)
+
+    def test_bookkeeping_stays_current_and_semantic_qa_json_stales(self):
+        # R7: checkbox, progress and graph churn stay current; requirements, task meaning and QA JSON do not.
+        self.write(self.feature + '/qa/scenarios.json', '{"scenario": "refund"}')
+        self.call('record')
+        self.write(self.feature + '/tasks.md', '- [x] T001 Behavior')
+        self.write(self.feature + '/progress/view.md', 'regenerated')
+        self.write('graphify-out/graph.json', '{}')
+        self.assertTrue(self.call()['current'])
+        for name, value in [(self.feature + '/qa/scenarios.json', '{"scenario": "void"}'),
+                            (self.feature + '/spec.md', '# Changed requirement'),
+                            (self.feature + '/tasks.md', '- [x] T001 Different behavior'), ('src.txt', 'new behavior')]:
+            with self.subTest(path=name):
+                before = (self.root / name).read_bytes()
+                self.write(name, value)
+                self.assertEqual(self.call()['changed_inputs'], [name])
+                self.write(name, before)
+        self.assertTrue(self.call()['current'])
+
+    def test_analyze_keeps_its_outputs_as_inputs(self):
+        state = '.specify/extensions/assure/state/001-example-analyze.json'
+        task = self.feature + '/tasks.md'
+        f.record_or_status(self.root, self.feature, 'analyze', state, 'record', [task])
+        saved = json.loads((self.root / state).read_text(encoding='utf-8'))
+        self.assertIn(task, saved['inputs']['files'])
+        self.assertNotIn('outputsNotInputs', saved)
+
+    def test_state_recorded_by_1_15_0_stays_current(self):
+        # R9: 1.15.0 hashed declared outputs as implicit inputs too and wrote no marker.
+        guide = 'qa/features/001-example/index.html'
+        self.write(guide)
+        legacy = {'schemaVersion': 2, 'feature': self.feature, 'kind': 'document',
+                  'inputs': f.inputs(self.root, self.feature, 'document', self.base),
+                  'outputs': f.fingerprints(self.root, [guide]), 'gitHead': self.base}
+        self.assertIn(guide, legacy['inputs']['files'])
+        self.write(self.state, json.dumps(legacy))
+        call = lambda: f.record_or_status(self.root, self.feature, 'document', self.state, 'status', [guide])
+        self.assertTrue(call()['current'])
+        self.write(guide, 'changed guide')
+        self.assertEqual(call()['changed_outputs'], [guide])
+
     def test_analysis_ignores_implementation_but_tracks_semantic_tasks(self):
         state='.specify/extensions/assure/state/001-example-analyze.json'
         call=lambda a:f.record_or_status(self.root,self.feature,'analyze',state,a,[self.feature+'/tasks.md'])
