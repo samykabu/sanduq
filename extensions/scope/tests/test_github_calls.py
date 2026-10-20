@@ -45,7 +45,7 @@ class Calls(unittest.TestCase):
 
     def new_process(self):
         (self.root / m.BOARD_CACHE).unlink(missing_ok=True)
-        with patch.object(subprocess, 'check_output', return_value='https://github.com/acme/app.git'):
+        with patch('sanduq_remote.origin_url', return_value='https://github.com/acme/app.git'):
             self.app = m.Scope(self.root, self.gh)
         self.gh.calls.clear()
 
@@ -91,8 +91,9 @@ class Calls(unittest.TestCase):
         self.app._board = None
         expected = sorted(n for n, x in gh.issues.items() if n != 1 and 1 in self.app.dependencies(x))
         self.assertEqual(expected, [2, 3, 4, 5])
-        targeted = sorted(x['number'] for x in self.app.dependents(gh.issues[1], list(gh.issues.values())))
-        self.assertEqual([n for n in targeted if n != 1], expected)
+        others = [x for x in gh.issues.values() if x['number'] != 1]
+        targeted = sorted(x['number'] for x, _ in self.app.rewire_candidates(gh.issues[1], others))
+        self.assertEqual(targeted, expected)
         snap, analysis = self.analysis(True)
         result = self.publish_approved(snap, analysis)
         leaves = {result['nodes']['first'], result['nodes']['second']}

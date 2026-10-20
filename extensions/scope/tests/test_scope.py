@@ -120,7 +120,7 @@ class ScopeTests(unittest.TestCase):
                      'owner': 'acme', 'statusFieldId': 'F', 'statusOptions': {x: x for x in ['Backlog', 'Feature Specification', 'Need Clarifications', 'Ready', 'In progress', 'In review', 'Done']}, 'stateFile': '.specify/project-sync-state.json'})
         self.gh = FakeGitHub()
         self.gh.add(1)
-        with patch.object(subprocess, 'check_output', return_value='https://github.com/acme/app.git'):
+        with patch('sanduq_remote.origin_url', return_value='https://github.com/acme/app.git'):
             self.app = m.Scope(self.root, self.gh)
 
     def tearDown(self):

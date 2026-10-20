@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+Round 4.
+
+- Scope reads the repository from `remote.origin.url` through the shared `sanduq_remote` helper, the same rule as Workflow and Project. It accepts every GitHub remote form Workflow accepts, compares `owner/repo` without case on the board, the board cache and native dependencies, refuses a look-alike such as `https://evil.example/github.com/acme/app`, and a missing origin is a message, not a traceback.
+- A split publish finds the issues to rewire before its first GitHub write. An unrelated issue whose "Depends on" text names no issue is skipped with one stderr line instead of failing the publish after the children exist. An issue tied to the parent with unparseable text still refuses, before any write.
+- A `gh` timeout in `clarification.py` (the `dispatch` and `plan-gate` hooks) exits 2 with a message. `accept_plan.py` stops an Illustrate step after 300 s and records it as failed.
+- `inspect --output` prints a summary under 1 KB; the snapshot keeps only the fields Scope reads (58 KB to 26 KB for one issue, three prerequisites and eight comments). Journal before-images use the same fields. Snapshots written by 1.9.0 still load.
+- A split publish lists the repository's issues once instead of three times; paginated reads time out after 120 s instead of 30 s.
+- `scope.py reconcile <issue> --apply` updates only that issue's Scope ancestors; the after_implement hook uses it. Plain `reconcile --apply` still sweeps every parent and no longer rereads a parent it did not change.
+- The scope-gate Specify overlay keeps only the rules for both modes. The Backlog rule and the after_specify chain moved to `references/specify-standalone.md`, read only without `.specify/workflow.yml`, so a managed Specify claim is no longer told to chain Clarify.
+- Snapshot reuse, the board cache and `render-spec` moved from the analysis contract to the README.
+
+### Migration
+
+- The after_implement reconcile hook reads the bound issue from `scope-source.json` by itself; no setting changes.
+- Unmanaged projects run `specify preset add` again for scope-gate. The Workflow installer re-adds it when its digest changes.
+
 ## [1.9.0] - 2026-10-20
 
 Optimization round 3.

@@ -198,8 +198,16 @@ def migrate_pending(pending, artifact_directory):
             f' It was converted and stays pending until an Illustrate plan is accepted.{note} {REQUIRED}')
 
 
+TOOL_TIMEOUT = 300  # an Illustrate export starts Chromium; a hung browser must not hang acceptance
+
+
 def run_tool(receipt, name, command):
-    run = subprocess.run(command, capture_output=True, text=True, encoding='utf-8')
+    try:
+        run = subprocess.run(command, capture_output=True, text=True, encoding='utf-8', timeout=TOOL_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        run = subprocess.CompletedProcess(command, 124, '', f'timed out after {TOOL_TIMEOUT} s')
+    except OSError as exc:
+        run = subprocess.CompletedProcess(command, 127, '', str(exc))
     receipt['commands'].append({'command': name, 'exit_code': run.returncode, 'stdout': run.stdout[-4000:], 'stderr': run.stderr[-4000:]})
     return run
 
@@ -222,7 +230,10 @@ def main(argv=None):
     p.add_argument('--review', type=Path, help='Perceptual review of the delivered HTML, with screenshot hashes')
     p.add_argument('--migrate-only', action='store_true', help='Only convert a pending plan left by an earlier Scope version')
     args = p.parse_args(argv)
-    root = Path(subprocess.check_output(['git', 'rev-parse', '--show-toplevel'], text=True).strip()).resolve()
+    try:
+        root = Path(subprocess.check_output(['git', 'rev-parse', '--show-toplevel'], text=True, timeout=30).strip()).resolve()
+    except (subprocess.SubprocessError, OSError) as exc:
+        raise SystemExit(f'Run accept_plan.py inside the project checkout: {exc}')
     pending = root / '.specify/scope/plan-pending.json'
     artifact_directory, output = paths(root)
     graph = artifact_directory / 'scope-dependencies.json'

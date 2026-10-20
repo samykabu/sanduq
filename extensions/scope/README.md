@@ -5,16 +5,15 @@ and the [scope page](https://github.com/samykabu/sanduq/blob/main/docs/extension
 Every command and its example is in the [command reference](https://github.com/samykabu/sanduq/blob/main/docs/reference/commands.md#scope).
 
 
-This README describes Scope 1.8.0. The [catalog](https://github.com/samykabu/sanduq/blob/main/catalog.json)
-lists the published version. Scope is MIT licensed; see [LICENSE](https://github.com/samykabu/sanduq/blob/main/extensions/scope/LICENSE).
+The [catalog](https://github.com/samykabu/sanduq/blob/main/catalog.json) lists the published version;
+the [changelog](CHANGELOG.md) says what each version changed. Scope is MIT licensed; see
+[LICENSE](https://github.com/samykabu/sanduq/blob/main/extensions/scope/LICENSE).
 
-Scope 1.8.0 shortens the managed front half: `scope.py render-spec` writes spec.md from an approved
-single-leaf analysis so Specify only binds; `clarification.py publish --answers` records a first
-round the issue creator answered in the session as one GitHub comment and moves the issue to Ready;
-`clarification.max_questions_per_round` caps a round; Mermaid diagrams are allowed in questions;
-Project board reads are cached for `scope.board_cache_seconds` and `--snapshot` reuses an inspect
-snapshot across `gate`, `approve`, `publish` and `bind`. Details are in
-[references/analysis-contract.md](references/analysis-contract.md) and the [changelog](CHANGELOG.md).
+In a managed project `scope.py render-spec` writes spec.md from an approved single-leaf analysis so
+Specify only binds; `clarification.py publish --answers` records a first round the issue creator
+answered in the session as one GitHub comment and moves the issue to Ready;
+`clarification.max_questions_per_round` caps a round; Mermaid diagrams are allowed in questions.
+The analysis schema and effort rubric are in [references/analysis-contract.md](references/analysis-contract.md).
 
 Build with `python extensions/scripts/package.py scope`; the archive bundles the
 scope-gate and scope-brainstorm presets. Install the extracted package through
@@ -68,3 +67,27 @@ Managed default artifacts are `.specify/scope/github/` and
 `scope.plan_file` can preserve existing project locations. Unmanaged projects retain
 legacy paths. All paths must stay inside the project. Read `references/analysis-contract.md`
 for the effort rubric and approval details.
+
+## Snapshots, board cache and spec rendering
+
+`scope.py inspect <issue> --output <file>` saves the snapshot and prints only a summary (issue,
+fingerprint, readiness, prerequisites and counts); read the file for the issue, comments and
+prerequisite bodies. `gate`, `approve`, `publish` and `bind` accept `--snapshot <file>` and reuse it
+when the file is younger than `scope.board_cache_seconds` (default 300; 0 disables) and its
+`fingerprint` matches one fresh fetch of the issue; the receipt and labels still come from that
+fresh fetch. Otherwise they inspect again (`gate` and `bind` read prerequisites only). Without
+`--snapshot`, `gate` and `bind` use `.specify/scope/issue-<number>-snapshot.json` when it exists.
+The output says which with `snapshot_reused`.
+
+Project board reads are cached in `.specify/scope/board-cache.json` (`{fetched_at, repo, items}`)
+for the same TTL. Every Scope or clarification write to the board or an issue removes the cache,
+and a gate that would refuse because of a cached status rereads the live board first.
+
+For an approved single-leaf analysis, `scope.py render-spec <issue> --analysis <file> --feature
+specs/<feature>` prints the Spec Kit spec (`text` in the JSON output); `--apply` writes
+`specs/<feature>/spec.md` with a `<!-- sanduq-scope:rendered <sha256> -->` first line. It refuses
+with `SCOPE_RENDER_UNAPPROVED`, `SCOPE_RENDER_LEAF_REQUIRED` or `SCOPE_RENDER_EXISTS` (replace an
+unmarked spec only with `--force`).
+
+`scope.py reconcile <issue> --apply` (the after_implement hook) rolls status up through that issue's
+Scope ancestors only; `scope.py reconcile --apply` sweeps every Scope parent.

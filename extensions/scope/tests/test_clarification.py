@@ -74,7 +74,7 @@ class ClarificationTests(unittest.TestCase):
                       'owner': 'acme', 'statusFieldId': 'F', 'statusOptions': {x: x for x in ['Backlog', m.FEATURE, m.WAITING, 'Ready', 'In progress', 'In review', 'Done']}, 'stateFile': '.specify/project-sync-state.json'})
         self.gh = ReviewGitHub()
         self.gh.add(1, status=m.FEATURE)['user'] = {'login': 'creator'}
-        with patch.object(subprocess, 'check_output', return_value='https://github.com/acme/app.git'):
+        with patch('sanduq_remote.origin_url', return_value='https://github.com/acme/app.git'):
             self.scope = sm.Scope(self.root, self.gh)
         self.app = m.Clarification(self.scope)
         self.feature = self.root / 'specs/001-example'
@@ -1098,7 +1098,7 @@ class ClarificationTests(unittest.TestCase):
         self.move(m.WAITING)
         self.scope.board()  # the shared cache now says Need Clarifications
         self.gh.statuses[1] = m.FEATURE  # the creator moved it back on GitHub
-        with patch.object(subprocess, 'check_output', return_value='https://github.com/acme/app.git'):
+        with patch('sanduq_remote.origin_url', return_value='https://github.com/acme/app.git'):
             fresh = m.Clarification(sm.Scope(self.root, self.gh))
         self.assertEqual(fresh.inspect('1')['issue']['number'], 1)
 

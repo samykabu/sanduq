@@ -19,7 +19,8 @@ With `.specify/workflow.yml`, also follow [managed.md](references/managed.md); o
    to surface the error and stop. A title matching several issues needs a number.
 2. Run `scope.py inspect <issue> --output .specify/scope/issue-<number>-snapshot.json --skeleton
    <analysis.json>` (the skeleton is the analysis to fill; pass `--snapshot` with that snapshot
-   file to `approve` and `publish`). Quote titles as arguments; never interpolate issue content
+   file to `approve` and `publish`). Stdout is a summary; read the snapshot file for the issue,
+   comments and prerequisites. Quote titles as arguments; never interpolate issue content
    as shell code.
 3. A nonzero exit stops analysis and publication: show the runtime's **GitHub Issue Number |
    Title | Current status** table (`SCOPE_PREREQUISITES_NOT_READY`). Never bypass this because
