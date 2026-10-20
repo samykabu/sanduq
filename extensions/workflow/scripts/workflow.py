@@ -1090,12 +1090,23 @@ def same_path(root, label, canonical):
         return False
 
 
-def committed_sync_fields(root, label, feature, old_hash, entry):
-    """Entry fields changed since the bytes `old_hash` names, when HEAD still holds them; else None."""
-    shown = subprocess.run(['git', 'show', 'HEAD:' + label], cwd=root, capture_output=True)
-    if shown.returncode or hashlib.sha256(shown.stdout).hexdigest() != old_hash:
-        return None
-    old = sync_entry(shown.stdout, feature)
+def recorded_sync_fields(root, label, feature, old_hash, entry):
+    """Entry fields changed since the bytes `old_hash` names, found in the working tree, HEAD or the last 50
+    commits that touched the state file. Refused when no version hashes to it: the old binding is unknown."""
+    if fingerprint_files(root, [label])[label] == old_hash:
+        old = (Path(root) / label).read_bytes()
+    else:
+        revs = subprocess.run(['git', 'rev-list', '-n', '50', 'HEAD', '--', label], cwd=root, capture_output=True,
+                              text=True).stdout.split()
+        old = None
+        for rev in ['HEAD'] + revs:
+            shown = subprocess.run(['git', 'show', rev + ':' + label], cwd=root, capture_output=True)
+            if not shown.returncode and hashlib.sha256(shown.stdout).hexdigest() == old_hash:
+                old = shown.stdout
+                break
+        require(old is not None, 'SYNC_BINDING_MISMATCH: no version of ' + label + ' matches the recorded hash; '
+                'the old binding is unknown, re-record the stage')
+    old = sync_entry(old, feature)
     old = old if isinstance(old, dict) else {}
     return sorted(key for key in set(old) | set(entry) if old.get(key) != entry.get(key))
 
@@ -2950,8 +2961,9 @@ class Run:
 
     def _amend_sync_binding(self, state, reason, via, actor=None):
         """Replace each legacy raw hash of the Project Sync state with the binding projection, once the entry is
-        verified (`verify_sync_binding`); the old and new values go to an `administrative-amendment` lineage record.
-        No other hash moves. Returns the record, or None when no receipt holds a raw hash."""
+        verified (`verify_sync_binding`) and the recorded bytes are found with only administrative fields changed
+        (`recorded_sync_fields`); the old and new values and those fields go to an `administrative-amendment` lineage
+        record. No other hash moves. Returns the record, or None when no receipt holds a raw hash."""
         label = sync_state_label(self.root)
         raw = {}
         for stage, receipt in state['receipts'].items():
@@ -2965,10 +2977,9 @@ class Run:
         record = {'kind': 'administrative-amendment', 'via': via, 'path': label, 'reason': reason.strip(),
                   'actor': actor or default_actor(self.root), 'at': now(), 'receipts': {}}
         for (stage, path), old in raw.items():
-            fields = committed_sync_fields(self.root, label, self.relative, old, entry)
-            changed = [field for field in fields or [] if not SYNC_ADMINISTRATIVE.fullmatch(field)]
+            fields = recorded_sync_fields(self.root, label, self.relative, old, entry)
+            changed = [field for field in fields if not SYNC_ADMINISTRATIVE.fullmatch(field)]
             require(not changed, 'SYNC_BINDING_MISMATCH: ' + stage + ' was recorded with other ' + ', '.join(changed))
-            # fields None: the recorded bytes are not in HEAD, so only the verified binding is known.
             record['receipts'][stage] = {'before': old, 'after': new, 'fields': fields}
         for stage, path in raw:  # only once every receipt passed
             state['receipts'][stage]['fingerprints'][path] = new
@@ -2992,14 +3003,17 @@ class Run:
 
     def sync_project(self, phase):
         """Run the Project script for `phase`, recording `project_sync` pending before the call and done or failed
-        after it. A phase already attempted whose state entry already shows that phase's status is done without
-        another call, so a retry after a lost result never repeats the remote write."""
+        after it. Done needs an `ok` line and the entry showing the phase's configured status. A pending or done
+        attempt at this phase whose entry already shows that status is done without another call, so a retry after
+        a lost result never repeats the remote write; a failed attempt always runs again."""
         require(phase in PROJECT_SYNC_STEPS, 'PROJECT_SYNC_PHASE_INVALID: ' + str(phase))
         with locked(self.lock):
             state = self.load()
-            applied = (state.get('project_sync') or {}).get('phase') == phase and self.sync_applied(phase)
+            record = state.get('project_sync') or {}
+            status, reached, targeted = self.sync_reached(phase)
+            applied = record.get('phase') == phase and record.get('state') in ('pending', 'done') and targeted and reached
             state['project_sync'] = {'phase': phase, 'state': 'done' if applied else 'pending', 'at': now(),
-                                     'summary': 'already applied: status ' + applied if applied else None}
+                                     'summary': 'already applied: status ' + status if applied else None}
             self.save(state)
         if applied:
             return {'ok': True, 'applied': False, 'project_sync': state['project_sync']}
@@ -3007,23 +3021,28 @@ class Run:
                                '--feature', self.feature.name, '--summary'],
                               cwd=self.root, capture_output=True, text=True, encoding='utf-8', errors='replace')
         lines = (done.stdout.strip() or done.stderr.strip() or 'error exit=' + str(done.returncode)).splitlines()
-        ok = done.returncode == 0 and lines[-1].startswith('ok ')
+        status, reached, _ = self.sync_reached(phase)
+        # An `ok` run can leave the status unchanged (an unmapped column, no project item): not done.
+        ok = done.returncode == 0 and lines[-1].startswith('ok ') and reached
+        summary = lines[-1] if reached else lines[-1] + ' (status ' + str(status) + ' is not the configured status)'
         with locked(self.lock):
             state = self.load()
             state['project_sync'] = {'phase': phase, 'state': 'done' if ok else 'failed', 'at': now(),
-                                     'summary': lines[-1][:500]}
+                                     'summary': summary[:500]}
             self.save(state)
         return {'ok': ok, 'applied': True, 'project_sync': state['project_sync']}
 
-    def sync_applied(self, phase):
-        """The status the bound entry shows when it is `phase`'s configured status, else None."""
-        config = read(self.root / '.specify/extensions/project/config.json', {})
+    def sync_reached(self, phase):
+        """(the entry's status, whether it is `phase`'s configured status, whether one is configured). With none
+        configured it counts as reached. In-progress also accepts the in-review status Project moves to on an open PR."""
+        phases = read(self.root / '.specify/extensions/project/config.json', {}).get('phaseToStatus') or {}
         try:
             status = read(self.root / sync_state_label(self.root), {}).get(self.feature.name, {}).get('status')
         except (ValueError, AttributeError):
-            return None
-        target = (config.get('phaseToStatus') or {}).get(phase)
-        return status if target and status == target else None
+            status = None
+        targets = {phases.get(phase)} | ({phases.get('in-review')} if phase == 'in-progress' else set())
+        targets.discard(None)
+        return status, status in targets if targets else True, bool(targets)
 
     def revalidate(self, stage, check_run=None, attempt=None, diff_reviewed=None, base_ref=None, reason=None,
                    actor=None, github=None):
@@ -3720,11 +3739,19 @@ class Run:
             state.setdefault('lineage', []).append({'stage': stage, 'advisory': True, 'consulted': {
                 p: {'before': active['baseline'][p], 'after': after[p]} for p in consulted}, 'at': now()})
         if changed:
-            state.setdefault('lineage', []).append({'stage': stage, 'changes': {p: {'before': active['baseline'][p], 'after': after[p]} for p in changed}, 'at': now()})
+            lineage = {'stage': stage, 'changes': {p: {'before': active['baseline'][p], 'after': after[p]} for p in changed}, 'at': now()}
+            state.setdefault('lineage', []).append(lineage)
             for name, prior in state['receipts'].items():
                 for path in changed:
                     if path in prior['fingerprints']:
-                        prior['fingerprints'][path] = after[path]
+                        value = after[path]
+                        if str(value).startswith(SYNC_BINDING_PREFIX) \
+                                and not str(prior['fingerprints'][path]).startswith(SYNC_BINDING_PREFIX):
+                            # A legacy raw hash stays byte-exact until migrate or sync-amend verifies the binding.
+                            value = fingerprint_files(self.root, [path])[path]
+                            lineage.setdefault('raw', {}).setdefault(name, {})[path] = {
+                                'before': prior['fingerprints'][path], 'after': value}
+                        prior['fingerprints'][path] = value
                 # Verify/Review also inventory this root-relative context file.
                 # Advance only the accepted QA-document transformation, retaining
                 # its old/new hashes in the same runtime-owned lineage above.

@@ -60,7 +60,8 @@ Receipts fingerprint the configured state file (`stateFile`) as the bound featur
 without `status` and timestamps (`sync-binding:v1:<sha256>`). A status-only sync therefore never
 stales a receipt or refuses a completion, before or after `complete`. A changed issue, node ID,
 item ID or sub-issue mapping, or a missing entry, still does; other features' entries do not
-count. Managed Project 2.1+ uses the bound parent and never writes task issues. Native
+count. This holds for a state file under `.specify/` (the default). A state file elsewhere is
+also source for Verify, Review and Ready, so a status write there is source drift. Managed Project 2.1+ uses the bound parent and never writes task issues. Native
 task-issue state syncs once per phase ([execution-report.md](execution-report.md)). Never infer
 human-review completion from generated evidence.
 
@@ -83,9 +84,12 @@ Recover within that order before dispatching another semantic agent:
 - A receipt recorded before 1.16.0 holds a raw hash of the state file and stays byte-exact, so a
   status write stales it. `migrate` converts it; so does `workflow.py sync-amend --feature <f>
   --reason <text>`, with no active claim. Both first check the entry's issue against
-  `scope-source.json` and its sub-issues against `workflow/task-issues.json`, refuse when they
-  differ, and record the old and new value in an `administrative-amendment` lineage entry. No
-  other hash moves.
+  `scope-source.json` and its sub-issues against `workflow/task-issues.json`, then find the
+  recorded bytes (working tree, HEAD, or the last 50 commits that touched the file). They refuse
+  when the binding differs, when the recorded bytes are not found, or when a field other than
+  `status` or a timestamp changed since; re-record the stage then. The old and new value and the
+  changed fields go to an `administrative-amendment` lineage entry. No other hash moves. A
+  Clarify change to the state file keeps such a receipt's hash raw.
 - Changed evidence: `amend`. Upstream documents edited after their stage: `revalidate-upstream`.
   Source drift: `revalidate` ([recovery.md](recovery.md)).
 - Re-record a stage only when none of those applies.

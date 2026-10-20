@@ -44,7 +44,9 @@ config = json.loads(Path('.specify/extensions/project/config.json').read_text())
 path = Path(config['stateFile'])
 state = json.loads(path.read_text()) if path.is_file() else {}
 entry = state.setdefault(slug, {'issue': 10, 'issueNodeId': 'I_10', 'itemId': 'PVTI_10', 'status': '', 'subIssues': {}})
-status = config['phaseToStatus'][phase]
+status = config['phaseToStatus']['in-review' if control.get('mode') == 'review' else phase]
+if control.get('mode') == 'no-status':  # Project's set_status skips an unmapped column or a missing item
+    status = entry['status']
 if entry['status'] != status:
     with open(logs / 'remote.jsonl', 'a') as f:
         f.write(json.dumps({'item': entry['itemId'], 'status': status}) + '\n')
@@ -235,6 +237,7 @@ class LegacyReceiptTests(Base):
     def test_sync_amend_refuses_a_binding_that_differs_from_scope_and_task_mapping(self):
         run = self.run_object()
         raw = self.legacy(run)
+        self.commit_all('recorded bytes')
         directory = self.root / self.feature
         mapping = {'repo': 'acme/app', 'parent': 10, 'feature': self.feature,
                    'tasks': {'T001': {'number': 11, 'linked': True}}}
@@ -247,16 +250,63 @@ class LegacyReceiptTests(Base):
                 with self.assertRaisesRegex(w.WorkflowError, 'SYNC_BINDING_MISMATCH'):
                     run.sync_amend('status only')
                 self.assertEqual(run.load()['receipts']['specify']['fingerprints'][self.state_file], raw)
-        self.write_sync(subIssues={'T001': {'number': 11, 'nodeId': 'I_11', 'closed': False}})
+        self.write_sync(status='Ready')
         w.write(directory / 'scope-source.json', {'repo': 'other/app', 'issue': 10})
         with self.assertRaisesRegex(w.WorkflowError, 'SYNC_BINDING_MISMATCH'):
             run.sync_amend('status only')
         w.write(directory / 'scope-source.json', {'repo': 'acme/app', 'issue': 10})
         self.assertEqual(run.sync_amend('status only')['amended'], ['specify'])
 
+    def test_review_fix_1_the_recorded_bytes_must_be_found(self):
+        run = self.run_object()
+        self.legacy(run)
+        # The recorded bytes are in no commit and the binding moved: nothing proves the old item id.
+        self.write_sync(status='Ready', itemId='PVTI_other')
+        self.commit_all()
+        with self.assertRaisesRegex(w.WorkflowError, 'SYNC_BINDING_MISMATCH: no version'):
+            run.sync_amend('status only')
+
+    def test_review_fix_1_history_names_the_fields(self):
+        run = self.run_object()
+        raw = self.legacy(run)
+        self.commit_all('recorded bytes')
+        self.write_sync(status='Ready')
+        self.commit_all('status only')
+        self.write_sync(status='In progress')  # neither HEAD nor the working tree holds the recorded bytes
+        result = run.sync_amend('status only')
+        self.assertEqual(result['amendment']['receipts']['specify']['fields'], ['status'])
+        self.assertEqual(result['amendment']['receipts']['specify']['before'], raw)
+
+    def test_review_fix_1_history_refuses_a_binding_change(self):
+        run = self.run_object()
+        raw = self.legacy(run)
+        self.commit_all('recorded bytes')
+        self.write_sync(itemId='PVTI_other')
+        self.commit_all('item moved')
+        with self.assertRaisesRegex(w.WorkflowError, 'SYNC_BINDING_MISMATCH: specify was recorded with other itemId'):
+            run.sync_amend('status only')
+        self.assertEqual(run.load()['receipts']['specify']['fingerprints'][self.state_file], raw)
+
+    def test_review_fix_2_clarify_restamp_keeps_a_legacy_hash_raw(self):
+        run = self.run_object()
+        raw = self.legacy(run)
+        claim = run.claim(self.usage())
+        self.assertEqual(claim['stage'], 'clarify')
+        self.write_sync(itemId='PVTI_moved')  # Clarify may change the state file
+        run.complete(claim['token'], self.receipt('clarify'))
+        state = run.load()
+        written = state['receipts']['specify']['fingerprints'][self.state_file]
+        self.assertEqual(written, w.fingerprint_files(self.root, [self.state_file])[self.state_file])
+        self.assertFalse(written.startswith(w.SYNC_BINDING_PREFIX))
+        self.assertEqual(state['lineage'][-1]['raw'], {'specify': {self.state_file: {'before': raw, 'after': written}}})
+        self.assertTrue(self.current(run)['specify'])
+        self.write_sync(status='Ready', itemId='PVTI_moved')
+        self.assertFalse(self.current(run)['specify'])  # still byte-exact until sync-amend
+
     def test_migrate_converts_a_verified_binding_and_keeps_a_differing_one_raw(self):
         run = self.run_object()
         raw = self.legacy(run)
+        self.commit_all('recorded bytes')
         self.write_sync(issue=11)
         result = run.migrate('upgrade to 1.16.0')
         self.assertEqual(result['sync_binding']['amended'], [])
@@ -272,6 +322,7 @@ class LegacyReceiptTests(Base):
     def test_sync_amend_command_line(self):
         run = self.run_object()
         self.legacy(run)
+        self.commit_all('recorded bytes')
         self.write_sync(status='Ready')
         done = subprocess.run([sys.executable, str(SCRIPTS / 'workflow.py'), '--root', str(self.root), 'sync-amend',
                                '--feature', self.feature, '--reason', 'status only'],
@@ -329,20 +380,22 @@ class ProjectSyncStepTests(Base):
         self.assertEqual(run.sync_project('open')['project_sync']['state'], 'failed')
         self.assertEqual(len(self.lines('remote.jsonl')), 1)
         self.assertEqual(len(self.lines('calls.jsonl')), 2)
-        # The retry finds the phase applied: done, with no second call and no second remote write.
+        # A failed attempt always runs again; the status is already set, so no second remote write.
         self.control(None)
         result = run.sync_project('open')
-        self.assertEqual((result['project_sync']['state'], result['applied']), ('done', False))
-        self.assertEqual((len(self.lines('calls.jsonl')), len(self.lines('remote.jsonl'))), (2, 1))
+        self.assertEqual((result['project_sync']['state'], result['applied']), ('done', True))
+        self.assertEqual((len(self.lines('calls.jsonl')), len(self.lines('remote.jsonl'))), (3, 1))
         self.assertNotIn('project_sync', run.next(run.load()))
-        self.assertEqual(run.sync_project('open')['project_sync']['state'], 'done')
-        self.assertEqual(len(self.lines('calls.jsonl')), 2)
+        # A done phase whose entry still shows its status is not run again.
+        result = run.sync_project('open')
+        self.assertEqual((result['project_sync']['state'], result['applied']), ('done', False))
+        self.assertEqual(len(self.lines('calls.jsonl')), 3)
         # The status write never staled the Specify receipt that depends on the state file.
         self.assertTrue(all(self.current(run).values()))
         # A later phase runs once and succeeds.
         result = run.sync_project('analysis')
         self.assertEqual((result['project_sync']['state'], result['applied']), ('done', True))
-        self.assertEqual((len(self.lines('calls.jsonl')), len(self.lines('remote.jsonl'))), (3, 2))
+        self.assertEqual((len(self.lines('calls.jsonl')), len(self.lines('remote.jsonl'))), (4, 2))
         checkpoint_validator().validate(run.load())
 
     def test_r4_failure_before_the_write_retries_once(self):
@@ -355,6 +408,40 @@ class ProjectSyncStepTests(Base):
         self.assertEqual(result['project_sync']['state'], 'done')
         self.assertIn('ok issue=10 status=Feature Specification', result['project_sync']['summary'])
         self.assertEqual((len(self.lines('calls.jsonl')), len(self.lines('remote.jsonl'))), (2, 1))
+
+    def test_pending_attempt_whose_status_is_set_is_done_without_a_call(self):
+        # The script wrote the status, then the runtime lost the result: the checkpoint still says pending.
+        run = self.run_object()
+        self.write_sync(status='Feature Specification')
+        state = run.load()
+        state['project_sync'] = {'phase': 'open', 'state': 'pending', 'at': w.now(), 'summary': None}
+        w.write(run.path, state)
+        result = run.sync_project('open')
+        self.assertEqual((result['project_sync']['state'], result['applied']), ('done', False))
+        self.assertEqual(self.lines('calls.jsonl'), [])
+
+    def test_review_fix_3_a_failed_attempt_is_never_reported_done_without_running(self):
+        run = self.run_object()
+        self.write_sync(status='Feature Specification')  # the entry already shows the open status
+        self.control('fail-before')  # e.g. Project refused the parent binding
+        self.assertEqual(run.sync_project('open')['project_sync']['state'], 'failed')
+        result = run.sync_project('open')
+        self.assertEqual((result['ok'], result['project_sync']['state']), (False, 'failed'))
+        self.assertEqual(len(self.lines('calls.jsonl')), 2)
+
+    def test_review_fix_4_ok_without_the_configured_status_is_failed(self):
+        run = self.run_object()
+        self.write_sync(status='Backlog')
+        self.control('no-status')
+        result = run.sync_project('open')
+        self.assertEqual((result['ok'], result['project_sync']['state']), (False, 'failed'))
+        self.assertIn('ok issue=10 status=Backlog', result['project_sync']['summary'])
+        self.assertIn('not the configured status', result['project_sync']['summary'])
+        # In-progress accepts the in-review status Project advances to when a PR is open.
+        self.control('review')
+        result = run.sync_project('in-progress')
+        self.assertEqual((result['ok'], result['project_sync']['state']), (True, 'done'))
+        self.assertEqual(w.read(self.root / self.state_file)[self.slug]['status'], 'In review')
 
     def test_unknown_phase_is_refused(self):
         run = self.run_object()
