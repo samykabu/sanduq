@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: the opt-in post-write check no longer passes silently when the hook's Python has no PyYAML. It reads
+  `illustrate.hooks.self_check` in block or flow form without PyYAML. When it cannot read the setting (invalid YAML,
+  or anchors, aliases, tags or merge keys without PyYAML), a written diagram fails with a message that says how to
+  fix it. A write that is not a diagram never reads the setting, and loads neither PyYAML nor `subprocess`.
+- Fixed: `speckit.illustrate.import` runs the SKILL.md step 7 checks on the redrawn diagram: `verify-geometry.py`,
+  `self_check.py --strict` (technical-color: `--profile technical-color`) and the type's verifier.
+- `speckit.illustrate.theme` reads `theme-initialization.md` only for `create` or a theme from a design source (about
+  1.2 KB read instead of 9 KB for `init`, `set`, `list`, `resolve` and `validate`). `speckit.illustrate.generate`
+  points to SKILL.md §12 for export, which reads `export.md` only on failure.
+
+### Migration
+
+- With `self_check: true`, a `.specify/workflow.yml` that the hook cannot read now blocks written diagrams with a
+  message. Install PyYAML for the hook's Python, write the key as plain block lines, or set it to false.
+
 ## [2.6.0] - 2026-10-20
 
 Optimization round 3. Vendors illustration-tools 3.6.0.

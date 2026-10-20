@@ -29,5 +29,5 @@ its `type-*.md`. Nothing in this command lists them.
 ## Output
 
 Write the self-contained HTML to the path requested by the caller. If the caller requests SVG or
-PNG, keep the HTML as the source of truth and use the bundled `scripts/export_diagram.py` behavior
-documented in `references/export.md`. Report every output path.
+PNG, keep the HTML as the source of truth and export with the bundled `scripts/export_diagram.py` as
+SKILL.md §12 says. Report every output path.

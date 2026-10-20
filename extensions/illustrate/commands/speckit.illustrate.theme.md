@@ -12,8 +12,10 @@ $ARGUMENTS
 
 ## Required package
 
-1. Read `.specify/extensions/illustrate/skill/references/theme-initialization.md` completely.
-2. Use `.specify/extensions/illustrate/skill/scripts/illustration_theme.py` with the project root.
+1. Use `.specify/extensions/illustrate/skill/scripts/illustration_theme.py` with the project root.
+   `init`, `set`, `list`, `resolve` and `validate` need only the script and its `--help`.
+2. Read `.specify/extensions/illustrate/skill/references/theme-initialization.md` completely only
+   when the request is `create` or a theme taken from a project design source.
 3. Store project policy only at `.github/illustration-theme.yml`.
 4. When no file exists, run `init`; the script asks for the preset, mode and font loading, or
    takes `--non-interactive` for Cobalt Light.

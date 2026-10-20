@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Deprecated: the v2 status document (`progress status --json --schema v2`) and the classic layout
+  (`progress theme --layout classic`). Both still work in this release and will be removed in a later one. Workflow
+  1.16.0 and earlier still ask for v2, so the removal waits until those versions are out of use.
+
+### Migration
+
+- Read `progress status --json` (`sanduq.progress.v3`) instead of `--schema v2`.
+- Switch a project on `layout: classic` to the default Timeline page: `progress theme --layout timeline`.
+
 ## [1.4.0] - 2026-10-20
 
 Optimization round 3. Vendors agent-tools 1.6.0.

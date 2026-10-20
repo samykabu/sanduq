@@ -109,7 +109,10 @@ illustrate:
     self_check: true
 ```
 
-With the key missing or false, or without that file, the hook exits at once.
+With the key missing or false, or without that file, the hook exits at once. The flow form
+`illustrate: {hooks: {self_check: true}}` works too, with or without PyYAML. If the hook cannot read the key (invalid
+YAML, or anchors, aliases or tags when its Python has no PyYAML), a written diagram fails with a message that says
+how to fix it, so the check is never silently off.
 
 Spec Kit does not register this hook. The Workflow installer wires it when the key is true and removes it
 when the key is false, on every apply and upgrade. Without Workflow, wire it yourself once per host:
