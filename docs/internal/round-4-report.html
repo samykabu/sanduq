@@ -109,7 +109,8 @@ ol.steps li{margin:.45rem 0}
 <header class="top">
   <div class="eyebrow">Review · nine Sanduq Spec Kit extensions and three presets · 20 October 2026</div>
   <h1>Sanduq Round 4 Review</h1>
-  <p class="lede">Phase 1 of round 4: do the names still fit, and should any extension or preset be merged, split or given another's work? You decide names and structure on this page. Your choice is saved with the page, and the optimization pass starts only after it.</p>
+  <p class="lede">Round 4 of the review: first whether the names still fit and whether any extension or preset should be merged, then the optimization plan. The names are decided. The plan is ready for your approval.</p>
+  <p class="note">Names decided on 20 October: the recommended set, so every id, display name, command and preset stays. Phase 2 is reviewed and cross-checked by Codex; <a href="#plan">approve the optimization plan</a> to start implementation.</p>
   <div class="meta">
     <span>Worktree <code>feat/round-4</code> at b482e06 (Workflow 1.16.0)</span>
     <span>Streams: N1 naming (<code>round-4-naming.md</code>), N2 structure (<code>round-4-structure.md</code>)</span>
@@ -214,13 +215,75 @@ ol.steps li{margin:.45rem 0}
   <p class="small">Sources: round-3-naming.md §5, round-3-final-plan.md §1, round-4-naming.md §8, round-4-structure.md §5. Tests for any rename run against the CI pin 8147943: both ids installed at once, locally edited skills, custom hook flags, both host defaults, a failure after removal, skipped releases and an idempotent re-run.</p>
 </section>
 
-<section id="next">
-  <h2>After your decision</h2>
+<section id="plan">
+  <h2>The optimization plan</h2>
+  <p>Six read-only reviews covered every extension, the presets and the shared machinery (<code>round-4-review-*.md</code>). Codex then checked the defects against the code and the designs for gaps (<code>round-4-codex-review.md</code>), and the two were reconciled into one plan (<code>round-4-final-plan.md</code>). Bugs come first. Every saving below is an estimate from the review that proposed it; none are added together, and each is remeasured on the same machine as its BEFORE number.</p>
+  <div class="tiles">
+    <div class="tile"><div class="n">26 + 3</div><div class="l">fix-first defects Codex checked: 26 verified, 3 partly right with narrower wording</div><div class="s">none found wrong</div></div>
+    <div class="tile"><div class="n">316 · 15</div><div class="l">git subprocesses and model passes for one full managed feature (lite: 226 · 9)</div><div class="s">BEFORE at 51043b8, <code>round-4-before-full.json</code></div></div>
+    <div class="tile"><div class="n">348,992</div><div class="l">bytes one invocation of each of the 47 commands reads, nine extensions</div><div class="s">descriptions 6,430 characters, 0 of 47 failing</div></div>
+    <div class="tile"><div class="n">11.6–18.7 min</div><div class="l">CI wall time per pull request after round 3 (was 46–47)</div><div class="s">cross-cutting review, last PR and main runs</div></div>
+  </div>
+  <h3>What Codex changed</h3>
+  <ul>
+    <li><b>Memory hooks (D3) became one gated migration.</b> Memory's approval hash covers the hooks’ <code>enabled:</code> line and does not bind the event at all, Memory's installer re-enables disabled hooks, and Spec Kit itself re-creates entries enabled. Done in the wrong order, automatic archiving stops silently or the next upgrade fails. The sequence is below.</li>
+    <li><b>The forwarder tests are not all deleted.</b> 35 of them test reporting modes and wiring that stay. Progress’s old v2 output gets a deprecation notice only, because older installed Workflow still asks for it.</li>
+    <li><b>The shared remote parser goes into Scope too,</b> with one way of reading the origin, so Scope’s four rejected remote forms and its look-alike binding are fixed in the same change.</li>
+    <li><b>New defect:</b> Project resets a malformed state file to empty and can then create duplicate task issues. It now refuses and recovers.</li>
+    <li><b>Moved to defer:</b> splitting <code>workflow.py</code>, the package-hash and path caches (they weaken drift and containment checks), the shared GitHub transport, wholesale overlay replacement and the Project init rewrite.</li>
+  </ul>
+  <h3>Items</h3>
+  <p class="small">Untick an item to leave it out, or tick a deferred one to pull it in. Your choices are saved with the approval.</p>
+  <div id="plangroups"></div>
+  <h3>Order for the Memory hook change (D3)</h3>
   <ol class="steps">
-    <li>Phase 2 reviews start from round 3's deferred list: W6 delegation probe cache, W9 split of <code>workflow.py</code> (now 4,137 lines, up from 3,719), SC8 and X9 shared GitHub and I/O code, X7 backup pruning, PM2 reply automation, PM5 project init, PM9 fixture speed-ups. The three description fixes and your chosen cards join them.</li>
-    <li>BEFORE numbers, the reviews, a Codex cross-check and a plan, published on this page for approval.</li>
-    <li>Implementation in parallel streams with one owner per shared surface, AFTER numbers with the same harness, and release notes with a Migration block for every card that needs one.</li>
+    <li>Reconcile accepts a fresh re-registration of a hook Workflow owns, and still refuses an entry someone edited (W10).</li>
+    <li>Memory’s approval hash binds each hook’s event, command, condition and priority, and leaves out <code>enabled:</code> only for the two hooks Workflow takes over. A hook block it cannot parse is refused, not skipped.</li>
+    <li>Memory’s installer keeps an existing <code>enabled: false</code>.</li>
+    <li>The Workflow runtime runs the session check inside the claim, under the lock it already holds, and stops on every blocked result. <code>session.md</code> and <code>prepare.md</code> get their managed branches.</li>
+    <li>Upgrade and doctor refuse while an archive run is active. Queued entries keep their approval; nothing is re-stamped.</li>
+    <li>Only then does reconcile switch the two hooks off in managed projects.</li>
+    <li>Gate: a scripted lifecycle on the pinned Spec Kit (Memory installed before and after Workflow, re-init, update, restore, automatic mode off, an interrupted archive) and one live managed run counted from its transcript.</li>
   </ol>
+  <h3>What installed projects see</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Change</th><th>What the consumer sees</th><th>How it is carried</th></tr></thead>
+    <tbody>
+      <tr><td>Memory hooks (D3)</td><td>Two Memory hooks become <code>enabled: false</code>; the claim runs the session check; Memory approval stays valid</td><td>Memory release first, then the Workflow upgrade’s reconcile; refused during an active archive</td></tr>
+      <tr><td>Assure CI gate (AU8)</td><td>The rendered <code>documentation-gates.yml</code> checks out the PR head</td><td>Re-rendered by <code>assure init</code> and the Workflow upgrade</td></tr>
+      <tr><td>Forwarder retired (D5)</td><td>A legacy reporting call with Progress installed exits 2 and names the Progress command</td><td>Changelog Migration block; the claim reprints the reporting protocol when the mode changes</td></tr>
+      <tr><td>Backup pruning (X19)</td><td>Only the three newest install backup zips are kept</td><td>Doctor reports their count and size</td></tr>
+      <tr><td>Project state (new)</td><td>A malformed <code>project-sync-state.json</code> stops the sync with a message instead of being reset</td><td>The message names the fix</td></tr>
+      <tr><td>Packages (X20)</td><td>No <code>CHANGELOG.md</code> inside <code>.specify/extensions/&lt;id&gt;/</code></td><td>Nothing to do</td></tr>
+      <tr><td>Shared remote parser (D4)</td><td>Remotes Scope refused now work; a look-alike remote fails; Project syncs about 0.3 s faster</td><td>Three package bumps</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Releases</h3>
+  <p>All nine extensions and the scope-gate preset change; scope-brainstorm and the workflow preset get text fixes. Upstream in sanduq-skills: dev-tools (the portable manual init fix, quiet builds, a template removal) and illustration-tools (import checks, a text fix, the hand-drawn route), then vendored. One item needs you rather than code: keeping Python in the self-hosted runners’ tool cache (X14) is a cluster setting, worth 10 to 16 runner-minutes per CI run.</p>
+  <h3>Risks to watch</h3>
+  <ol class="steps">
+    <li><b>Memory migration integrity.</b> Renewing approval can switch automation off, strand queued entries and block prepared archives.</li>
+    <li><b>Partial upgrades.</b> Packages updated one at a time can re-enable hooks or drop a schema an older Workflow still needs.</li>
+    <li><b>Remote writes before local completion.</b> Scope and Project write to GitHub first; a retry must recover what exists, not create it again.</li>
+  </ol>
+  <div class="summary" id="approvebox">
+    <div class="grid">
+      <div><div class="k">Plan status</div><div class="v" id="ap-state">Not approved</div></div>
+      <div><div class="k">Items included</div><div class="v" id="ap-count">0</div></div>
+      <div><div class="k">Changed from the plan</div><div class="v" id="ap-diff">0</div></div>
+    </div>
+    <div style="margin-top:.9rem">
+      <label for="ap-note" class="k">Notes for the implementation (order, exclusions, constraints)</label>
+      <textarea id="ap-note" placeholder="For example: ship the fixes first as their own release; leave the CI items for later."></textarea>
+    </div>
+    <div class="savebar">
+      <button id="ap-approve" type="button">Approve this plan</button>
+      <button id="ap-withdraw" type="button" class="ghost">Withdraw approval</button>
+      <button id="ap-copy" type="button" class="ghost">Copy as text</button>
+      <span class="status" id="ap-status">Not saved yet</span>
+    </div>
+    <pre class="copy" id="ap-text" hidden></pre>
+  </div>
 </section>
 
 <section id="selection">
@@ -474,6 +537,76 @@ async function initDb(){
   }catch(e){dbRef=null;applyPayload(localLoad());setStatus('Saved in this browser only');}
 }
 
+/* ---------- optimization plan (round-4-final-plan.md) ---------- */
+const PLAN=[
+ {g:'Fix first',def:true,items:[
+  ['F1','Workflow: reconcile accepts re-registered hooks; CRLF-safe history hash; timeouts on three gh calls','W10, W11, X21','S'],
+  ['F2','One shared remote parser in Workflow, Project and Scope; Project stops loading workflow.py; Scope accepts valid remotes, rejects look-alikes, compares case-insensitively','D4, W12, SC11, X10','S–M'],
+  ['F3','Scope: split publish finds rewire work before writing; messages instead of tracebacks; managed Specify no longer asks for the disabled chain','SC10, SC12, SC18, SC20','S'],
+  ['F4','Assure and User Manual: gate checks the PR head; init keeps config and pages; scan skips ignored folders; named task marker; text that survives rendering','AU8–AU13a','S'],
+  ['F5','PR and Project: never edit a merged PR; one default-branch rule; org owners and rerun settings kept; docs truth; malformed state refused and task issues recovered','PM10–PM13, P1','S–M'],
+  ['F6','Illustrate: the check hook fails closed with a message; imports run the required checks; CI runs Workflow’s hook tests on hook changes','IP11–IP13','S'],
+  ['F7','Docs: the reversed catalog-priority sentence, the community scope and memory note, and three version-drift checks','X12, D2, X18','S']]},
+ {g:'Do',def:true,items:[
+  ['D1','Three description fixes (finalize, status, Project, pr.generate)','W17, PM17','S'],
+  ['D3','Memory hooks owned by Workflow, as the gated seven-step migration','W13, W14, PM18, PM24','M'],
+  ['D5','Retire the progress forwarder; keep 35 bridge tests; contract tests for the seven Progress verbs; status reads Progress’s text line','W16, IP23, W21','S'],
+  ['SC-do','Scope: compact inspect output (about 53 KB to 22 KB per issue); one issue listing per process; reconcile only the implemented issue’s parents (about 101 to 4 calls at 50 parents); analyst contract trim','SC13, SC14, SC15, SC19','M'],
+  ['AU-do','Assure and User Manual: --show-block; archives only when published (40.6 s to 25.2 s build); quiet builds; rerun skip that survives the manual hook; dependency, skill, status and config trims; PR reads the gate through the script','AU13b–AU21','M'],
+  ['PM-do','PR, Project, Memory: fewer gh calls; PR URL from create; read-only feedback gather; Project tests in their own folder plus five; memory fixture template; one pr_lint source','PM16, PM23, PM2a, PM19, PM20, PM21','M'],
+  ['W-do','Workflow: delegation health cache (about 4.2 s per delegated claim on a hit); sync text out of the per-session reading; slow test fixtures once per class; small cleanups','W6, W20, W22, X25, W23','M'],
+  ['IP-do','Illustrate and Progress: Playwright only where used; no nightly rerun of upstream’s block; references only when needed; upstream text and hand-drawn route; doctor reports doubled Progress wiring','IP14–IP18a, IP20','S–M'],
+  ['X-do','CI and release: measured shard weights (memory sharded too); tooling path filter and actionlint; promote reports what it wrote; keep three backups; changelogs out of packages; actions pinned by SHA','X13, X15–X17, X19, X20, X24','S–M']]},
+ {g:'Defer',def:false,items:[
+  ['W9','Split workflow.py into modules (about 70 test patch sites, module globals, the AST docs reader)','W9','L'],
+  ['W18','Stat-keyed package-hash cache (about 5 s per feature, weakens drift detection) and per-directory path resolution','W18, W19','M'],
+  ['SC8','Shared GitHub transport across extensions','SC8, X22','M'],
+  ['SC17','Replace the scope-gate and scope-brainstorm overlays wholesale','SC17','S–M'],
+  ['PM5','Rewrite the Project init scripts in Python','PM5','M'],
+  ['IP22','Remove Progress’s v2 output and classic layout','IP22','M'],
+  ['other','SC16 prerequisite rule, SC21, PM2b reply automation, IP19, IP21, IP24, W24, W27, X23, AU22','various','–']]}
+];
+const DROP='W25, W26, a generic shared git() or I/O module, deleting the whole shim test module, a fail-open YAML fallback, SC2, and any added-together or guaranteed savings.';
+const plan={include:new Set(),approved:false,note:''};
+PLAN.forEach(g=>g.items.forEach(it=>{if(g.def)plan.include.add(it[0]);}));
+const defaultInclude=new Set(plan.include);
+const allIds=PLAN.flatMap(g=>g.items.map(it=>it[0]));
+function renderPlan(){
+  $('plangroups').innerHTML=PLAN.map(g=>`<h4 style="margin-top:1.2rem">${g.g} <span class="small">(${g.items.length})</span></h4>${g.items.map(it=>`<div class="choice"><input type="checkbox" id="pl-${it[0]}" data-plan="${it[0]}"><label for="pl-${it[0]}"><span class="ttl">${it[1]}</span><div class="tags">${badge(g.def?'b-info':'b-neutral',g.g)}${effortBadge(it[3]==='–'?'none':it[3])}<span class="small">${it[2]}</span></div></label></div>`).join('')}`).join('')+`<h4 style="margin-top:1.2rem">Drop</h4><p class="small">${DROP}</p>`;
+}
+function planDiff(){return allIds.filter(id=>plan.include.has(id)!==defaultInclude.has(id)).length;}
+function planUpdate(){
+  allIds.forEach(id=>{const c=$('pl-'+id);if(c)c.checked=plan.include.has(id);});
+  $('ap-count').textContent=plan.include.size+'/'+allIds.length;
+  $('ap-diff').textContent=planDiff();
+  $('ap-state').textContent=plan.approved?'Approved':'Not approved';
+}
+function planText(){return `Sanduq round 4 plan ${plan.approved?'APPROVED':'not approved'} (${new Date().toISOString().slice(0,10)})\nIncluded: ${allIds.filter(i=>plan.include.has(i)).join(', ')}\nLeft out: ${allIds.filter(i=>!plan.include.has(i)).join(', ')||'none'}\nNotes: ${plan.note||'(none)'}`;}
+let planRef=null,planTimer=null;
+const PLS='sanduq-round4-plan';
+function planPayload(){return {approved:plan.approved,include:allIds.filter(i=>plan.include.has(i)),exclude:allIds.filter(i=>!plan.include.has(i)),note:plan.note,savedAt:new Date().toISOString(),savedBy:userId||null,version:1};}
+function planApply(d){if(!d)return;if(Array.isArray(d.include))plan.include=new Set(d.include.filter(i=>allIds.includes(i)));plan.approved=!!d.approved;plan.note=typeof d.note==='string'?d.note:'';$('ap-note').value=plan.note;planUpdate();}
+function apStatus(t){$('ap-status').textContent=t;}
+function planSave(){
+  try{localStorage.setItem(PLS,JSON.stringify(planPayload()));}catch(e){}
+  if(!planRef){apStatus('Saved in this browser only');return;}
+  clearTimeout(planTimer);apStatus('Saving…');
+  planTimer=setTimeout(async()=>{try{await planRef.set(planPayload());apStatus((plan.approved?'Approval saved':'Saved')+' at '+new Date().toLocaleTimeString());}catch(e){apStatus('Could not save to the page ('+(e&&e.code||'error')+'); kept in this browser');}},500);
+}
+async function planInit(){
+  let local=null;try{const r=localStorage.getItem(PLS);local=r?JSON.parse(r):null;}catch(e){}
+  if(!(window.claude&&window.claude.use)){planApply(local);return;}
+  let db=null;try{db=await window.claude.use('db');}catch(e){}
+  if(!db){planApply(local);apStatus('Saved in this browser only');return;}
+  try{planRef=db.doc('plan/current');const s=await planRef.get();if(s.exists){planApply(s.data());apStatus('Loaded'+(s.data().approved?' the approval':' your plan choices'));}else{planApply(local);apStatus('Not approved yet');}}catch(e){planRef=null;planApply(local);}
+}
+renderPlan();planUpdate();
+$('plangroups').addEventListener('change',e=>{const t=e.target;if(!t||!t.dataset||!t.dataset.plan)return;if(t.checked)plan.include.add(t.dataset.plan);else plan.include.delete(t.dataset.plan);planUpdate();planSave();});
+$('ap-note').addEventListener('input',e=>{plan.note=e.target.value;clearTimeout(planTimer);planTimer=setTimeout(planSave,900);});
+$('ap-approve').addEventListener('click',()=>{plan.approved=true;planUpdate();planSave();});
+$('ap-withdraw').addEventListener('click',()=>{plan.approved=false;planUpdate();planSave();});
+$('ap-copy').addEventListener('click',async()=>{const t=planText(),pre=$('ap-text');pre.textContent=t;pre.hidden=false;try{await navigator.clipboard.writeText(t);apStatus('Copied to the clipboard');}catch(e){const r=document.createRange();r.selectNodeContents(pre);const s=getSelection();s.removeAllRanges();s.addRange(r);apStatus('Select the text below and copy it');}});
+
 /* ---------- boot ---------- */
 renderStatic();update(false);
 $('setcards').addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('button[data-set]');if(!b)return;state.picks=setChoices(b.dataset.set);state.set=b.dataset.set;update(true);});
@@ -481,6 +614,6 @@ $('choose').addEventListener('change',e=>{const t=e.target;if(!t||!t.dataset||!t
 $('note').addEventListener('input',e=>{state.note=e.target.value;clearTimeout(saveTimer);saveTimer=setTimeout(save,900);});
 $('btn-copy').addEventListener('click',async()=>{const t=selectionText(),pre=$('copytext');pre.textContent=t;pre.hidden=false;try{await navigator.clipboard.writeText(t);setStatus('Copied to the clipboard');}catch(e){const r=document.createRange();r.selectNodeContents(pre);const s=getSelection();s.removeAllRanges();s.addRange(r);setStatus('Select the text below and copy it');}});
 $('btn-clear').addEventListener('click',()=>{state.picks={};state.set='none';state.note='';$('note').value='';update(true);});
-initDb();
+initDb().then(planInit);
 })();
 </script>
