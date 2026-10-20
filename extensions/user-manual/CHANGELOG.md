@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.7.1] - 2026-10-20
+
+- The shared freshness helper hashes declared outputs as outputs only (see Assure 2.5.1). Update names `User-Manual/.state/features/<feature-name>/reports/` for freshness logs and status reports, written before the final `record`. Part of samykabu/sanduq#99.
+
 ## [1.7.0] - 2026-10-20
 
 Optimization round 3.

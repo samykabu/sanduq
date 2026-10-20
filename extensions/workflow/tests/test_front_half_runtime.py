@@ -95,9 +95,10 @@ class PolicyKeyTests(Base):
         self.assertEqual(w.stages(default), w.BASE_STAGES)
         self.assertTrue(all(w.project_sync(default, stage) for stage in w.PROJECT_SYNC_POINTS))
         self.assertFalse(w.project_sync(default, 'clarify'))
-        self.assertEqual(w.project_sync(default, 'execute'), {
+        self.assertEqual(w.project_sync(default, 'execute', 'specs/001-a'), {
             'phase': 'in-progress',
-            'command': 'python .specify/extensions/project/scripts/project_sync.py --phase in-progress --summary'})
+            'command': 'python .specify/extensions/workflow/scripts/workflow.py project-sync --feature specs/001-a '
+                       '--phase in-progress'})
         self.assertEqual({stage: w.project_sync(default, stage)['phase'] for stage in w.PROJECT_SYNC_POINTS},
                          w.PROJECT_SYNC_PHASES)
 
@@ -263,7 +264,8 @@ class ClaimOutputTests(Base):
         self.advance(run, 'scope')
         claim = run.claim(self.usage(), finalize=True)
         self.assertEqual((claim['stage'], claim['project_sync']), ('specify', {
-            'phase': 'open', 'command': 'python .specify/extensions/project/scripts/project_sync.py --phase open --summary'}))
+            'phase': 'open', 'command': 'python .specify/extensions/workflow/scripts/workflow.py project-sync '
+                                        '--feature ' + self.feature + ' --phase open'}))
         run.complete(claim['token'], self.receipt('specify'))
         claim = run.claim(self.usage())
         self.assertEqual(claim['stage'], 'clarify')

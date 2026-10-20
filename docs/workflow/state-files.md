@@ -280,3 +280,16 @@ changed.
   Ready (from the amended stage on) stale so they are re-recorded. A path that
   is not listed as that receipt's evidence is refused, as is an active claim.
   `ci_gate.py` accepts amended receipts and lists each amendment in its result.
+- **Project Sync binding (1.16.0).** A receipt dependency on the configured Project Sync state
+  file (`stateFile`, default `.specify/project-sync-state.json`) is recorded as
+  `sync-binding:v1:<sha256>` of the bound feature's entry without `status` and timestamp fields, so
+  a board status write never stales it while an issue, node, item or sub-issue change does. This
+  holds for a state file under `.specify/` (the default); a state file elsewhere is also source for
+  Verify, Review and Ready, so a status write there is source drift. A raw hash recorded before
+  1.16.0 stays byte-exact until `migrate` or `workflow.py sync-amend --feature specs/<feature>
+  --reason "<why>"` checks the entry against `scope-source.json` and `workflow/task-issues.json`,
+  finds the recorded bytes (working tree, HEAD or the last 50 commits that touched the file) with
+  only `status` or timestamp fields changed since, and replaces it, appending an
+  `administrative-amendment` record (old and new value, changed fields) to the checkpoint's
+  `lineage`. Otherwise it refuses and the stage is re-recorded. `workflow.py project-sync` records the last sync as `project_sync: {phase,
+  state: pending|done|failed, at, summary}`; `next` and `status` report a pending or failed one.

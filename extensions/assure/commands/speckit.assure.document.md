@@ -178,7 +178,13 @@ python .specify/extensions/assure/scripts/assure_state.py record --kind document
 
 Repeat `--output` for every generated index, manual, or required evidence artifact. Do not record a
 successful state while the manual remains a draft because required tests, screenshots, or API
-samples are missing.
+samples are missing. Each `--output` path is hashed as an output, not as an input: regenerating it
+unchanged keeps the state current, while a missing or changed output makes it stale.
+
+Write any freshness log or status report to `.specify/extensions/assure/state/<feature-name>/reports/`
+(`<feature-name>` is the feature folder's name), which freshness never reads. A report written after
+`record` into the feature folder or a `qa/` folder is a new input and makes the state stale; a report
+you declare with `--output` must be final before `record`.
 
 Report the contract's shape plus: diagram HTML/PNG assets written or omitted as not applicable;
 screenshot/API sample assets written; index files updated; any missing coverage, skipped screenshots,

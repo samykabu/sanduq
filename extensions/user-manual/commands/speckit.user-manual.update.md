@@ -65,4 +65,8 @@ Flags: `--feature <path>`, `--full`, `--module <id>`, `--skip-runtime`, `--no-bu
    python .specify/extensions/user-manual/scripts/manual_state.py record --feature <feature-path>
    ```
 
+   Write any freshness log or status report to `User-Manual/.state/features/<feature-name>/reports/`
+   (`<feature-name>` is the feature folder's name), which freshness never reads. A report written after
+   `record` into the feature folder or a `qa/` folder is a new input and makes the state stale.
+
 10. Report pages/assets changed, English and Arabic coverage, preview paths, and unresolved gaps.

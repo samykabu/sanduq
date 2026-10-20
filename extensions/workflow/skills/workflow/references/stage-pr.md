@@ -31,6 +31,16 @@ For source-only PRs, write the affected features to `.specify/workflow/pr-featur
 `{"features": ["specs/001-example"]}` and include it in the PR. CI uses it in addition to the
 changed feature directories, never instead. Refresh readiness evidence after source edits.
 
+## Order
+
+Code and affected tests, the independent review, documentation and portable evidence, and
+Ready come first. Then freeze the candidate, run the indexed and clean-candidate gates below,
+publish or reuse one PR with `pr_publish.py`, `complete` the claim, run the claim's
+`project-sync` (in-review), and check the exact final PR head. Syncing before `complete` is
+also safe: a status-only write does not touch receipts. On a stale receipt use the bounded
+recovery in [dispatcher-operations.md](dispatcher-operations.md#finalization-order)
+(`sync-amend`, `amend`, scoped revalidation) before dispatching another semantic agent.
+
 ## Publication preflight and post-merge verification
 
 Before the last Verify/Review/Ready pass, prepare portable evidence: prefer

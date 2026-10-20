@@ -23,5 +23,7 @@ outside `specs/<feature>/` and `.specify/memory/`.
 ## Side effects
 
 The claim's `side_effects` lists files this stage may change although earlier receipts depend on
-them (Clarify: `spec.md`, `.specify/project-sync-state.json`, `checklists/*.md`); the lineage
-records each change. Changing any other upstream input during the claim refuses the completion.
+them (Clarify: `spec.md`, the configured Project Sync state file, `checklists/*.md`); the
+lineage records each change. Changing any other upstream input during the claim refuses the
+completion. The state file counts as changed only when the bound feature's binding changes, never
+for a status write ([dispatcher-operations.md](dispatcher-operations.md#project-sync-and-task-issue-sync)).
