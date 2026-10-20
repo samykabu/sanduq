@@ -390,7 +390,9 @@ Workflow writes) mark the report dirty, and a refresh publishes the new fingerpr
 
 ## Projection (`sanduq.progress.v2`, compatibility)
 
-This is the document `progress status --json --schema v2` prints, and the one the Workflow shim, `progress export --schema v2`
+Deprecated: v2 and the `classic` layout will be removed in a later release. New readers use v3.
+
+This is the document `progress status --json --schema v2` prints, and the one older Workflow releases, `progress export --schema v2`
 and the `classic` layout read. Its contract has not changed. The one-line `progress status` summary still reads its keys.
 
 ```json
@@ -638,7 +640,7 @@ it, `stop`, or any verb performs the real refresh and clears the flag. Any excep
 ```
 
 `layout` picks the view. `timeline` (the default) is the v3 Timeline view and `data.js` carries the v3 document. `classic` is the v2
-lanes view for one more release, and `data.js` then carries the v2 document (`report.json` stays v3). `progress theme --layout classic|timeline`
+lanes view, deprecated and to be removed in a later release, and `data.js` then carries the v2 document (`report.json` stays v3). `progress theme --layout classic|timeline`
 changes only this key and keeps every other customization; picking a new preset or `--from-illustrate` keeps the layout. When the
 layout changes, the command also rebuilds each initialised report under its own report lock, so `data.js` carries the matching
 document at once. A report whose lock is busy is named on a second line and keeps its old `data.js` until the next refresh. The

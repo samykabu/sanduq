@@ -78,9 +78,10 @@ Work from the digest, not from sketch coordinates. In order:
 
 1. Write the self-contained HTML.
 2. Apply the project theme as the final authoring step: `python <skill-dir>/scripts/illustration_theme.py --project-root . apply <output.html>` maps any remaining default literals to the resolved tokens; then run `illustration_theme.py validate`.
-3. Run the SKILL.md §9 taste gate and [`output-spec.md` §6](output-spec.md) checklist.
-4. Export SVG/PNG only when requested, with `python scripts/export_diagram.py`; read [`export.md`](export.md) only if it fails.
-5. Report the fidelity ledger: source count, drawn count, and every merge, collapse, or drop — the extractor's `discarded:` line (freedraw strokes, image payloads, links, embeds, unknown elements) is the starting inventory.
+3. Run the SKILL.md step 7 checks: `python <skill-dir>/scripts/verify-geometry.py <output.html>` and `python <skill-dir>/scripts/self_check.py --strict <output.html>` (technical-color output: `--profile technical-color` instead of `--strict`), plus the type's `verify-<type>.py` when one exists. Fix and rerun until they pass.
+4. Run the SKILL.md §9 taste gate and [`output-spec.md` §6](output-spec.md) checklist.
+5. Export SVG/PNG only when requested, with `python scripts/export_diagram.py`; read [`export.md`](export.md) only if it fails.
+6. Report the fidelity ledger: source count, drawn count, and every merge, collapse, or drop — the extractor's `discarded:` line (freedraw strokes, image payloads, links, embeds, unknown elements) is the starting inventory.
 
 ---
 

@@ -146,6 +146,58 @@ class AllEditionsTests(unittest.TestCase):
             self.run_all()
 
 
+class BuildOutputTests(unittest.TestCase):
+    """The renderer's banner stays out of the caller's output; its error still shows when the build fails."""
+
+    BANNER = 'INFO    -  MkDocs 2.0 is coming, Material for MkDocs banner\nINFO    -  Cleaning site directory'
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name).resolve()
+        (self.root / 'docs/en').mkdir(parents=True)
+        (self.root / 'docs/en/index.md').write_text('---\naudiences: [end-user, administrator, technical]\n---\n# Home\n',
+                                                     encoding='utf-8')
+        (self.root / 'manual.yml').write_text('languages:\n  required: [en]\n', encoding='utf-8')
+        patcher = mock.patch.object(builder, 'installed_themes', return_value={'material'})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def build(self, returncode, log):
+        def fake_run(command, cwd, check, **kwargs):
+            (Path(cwd) / 'site').mkdir()
+            if kwargs.get('stdout') is None:  # an inherited stdout writes straight into the caller's output
+                print(log)
+                log_out = None
+            else:
+                log_out = log
+            return builder.subprocess.CompletedProcess(command, returncode, stdout=log_out)
+
+        argv = ['build_manual.py', '--root', str(self.root), '--all']
+        with mock.patch.object(builder.subprocess, 'run', side_effect=fake_run), mock.patch('sys.argv', argv), \
+                mock.patch('sys.stdout', new_callable=io.StringIO) as out, \
+                mock.patch('sys.stderr', new_callable=io.StringIO) as err:
+            try:
+                builder.main()
+            except SystemExit as exit_:
+                return out.getvalue(), err.getvalue(), exit_.code
+        return out.getvalue(), err.getvalue(), 0
+
+    def test_a_successful_build_prints_one_line_per_edition(self):
+        out, err, code = self.build(0, self.BANNER)
+        self.assertEqual(0, code)
+        self.assertEqual(['end-user en', 'administrator en', 'technical en'],
+                         [line.split(':')[0] for line in out.splitlines()])
+        self.assertNotIn('MkDocs 2.0', out + err)
+
+    def test_a_failing_build_shows_the_renderer_error(self):
+        out, err, code = self.build(1, self.BANNER + "\nERROR   -  Doc file 'index.md' contains a link to 'gone.md'")
+        self.assertEqual(1, code)
+        self.assertIn("contains a link to 'gone.md'", err)
+        self.assertIn('end-user-en', err)
+        self.assertEqual('', out)
+
+
 class ThemeTests(unittest.TestCase):
     """The renderer.theme selection: config per theme, locales and RTL styling.
 

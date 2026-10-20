@@ -10,8 +10,8 @@
       ],
       "internal": true,
       "exclusive": true,
-      "ref": "illustration-tools-v3.6.0",
-      "sha": "f12b80a335910da88668724d5a17f74f23ca1e9c",
+      "ref": "illustration-tools-v3.7.0",
+      "sha": "0e7a37372e9d35512324f7f0589f6a194191428d",
       "files": {
         "extensions/illustrate/skill/SKILL.md": "8ad69743ba0f5c3d2940f188cd8f75a444246345b32b7f97b10d9837299267c2",
         "extensions/illustrate/skill/agents/openai.yaml": "94f4c310ca3cfea9f74c10f98e9999f7510a4d896e64c3ea91838054e76b3e8d",
@@ -319,19 +319,19 @@
         "extensions/illustrate/skill/assets/template-terminal.html": "02a8125efbff47e98d40606eded828ea16c893989a46c9e9e993d7bc9994c383",
         "extensions/illustrate/skill/assets/template.html": "7b75aa1f0bf5ce8eb908e7a0bd8f0cdebb44149a72ffa3c65128f4d686dcc778",
         "extensions/illustrate/skill/package-lock.json": "8850a81ea8b75c31ccb7e1de9c2605658c75adf5d38820d615d8506ecfcf8e0c",
-        "extensions/illustrate/skill/package.json": "482fd4b4f227de8fa513b5fb6de5186aa221b066b1bd25429273fdfb2905a994",
+        "extensions/illustrate/skill/package.json": "9aaac14a5c9c4c18d405ff14b27bf0cf9bef27c20829daaee8fdbc9f1a37b8ce",
         "extensions/illustrate/skill/references/animation.md": "a75743fc74ccf5d4bee9163d53f4ab245f61ae0ce40a78d0fc909e5e4365aeb0",
         "extensions/illustrate/skill/references/export-registry.md": "bfab9e22092431c64513ff28a5c182f48004bc299994127328986d7680ba9875",
         "extensions/illustrate/skill/references/export.md": "bfa65001665f4d5edc0b358787a55e3e69b309ab7e7d249c1ea413ddf6733302",
-        "extensions/illustrate/skill/references/import-drawio.md": "3762c01abb08f10eb2cbce151db9cb8bc3db0e62c99014f6a05c00c839c09454",
-        "extensions/illustrate/skill/references/import-excalidraw.md": "bd8d87819e40b42cbb1b197fec55854b98f650ca78b64da0cf03fd8e9e96574d",
-        "extensions/illustrate/skill/references/import-mermaid.md": "b5a2e6f29b59f6321e69c1c6428db331b7a5766b93717bec250c2a9251518e48",
+        "extensions/illustrate/skill/references/import-drawio.md": "bea6e3b42625b99d69e34368f2797bfd672a2ecfa5f89368f71e4ff72560a34e",
+        "extensions/illustrate/skill/references/import-excalidraw.md": "803aa0fa9d702ed9ea48814e8e646d7837e2c2121b0706ac77bd7157b4e3cb38",
+        "extensions/illustrate/skill/references/import-mermaid.md": "ffc597a51ac54da5bc86516257525c07962dd534d47db0ba6f143dc23b772bae",
         "extensions/illustrate/skill/references/layout-budget.md": "43a6b3a30211d93a9e2c6100aae0c759e33f166e6a64ad5900e4b656455f4da8",
         "extensions/illustrate/skill/references/onboarding.md": "a103cbf1d03a377253da7bec64666654169d443d598930ea5c0177b1baa297df",
         "extensions/illustrate/skill/references/output-spec.md": "756c8573fc044f0b94a3881f9a39c1ff2f3c644e5f4c92e8a97cb677ffde9fff",
         "extensions/illustrate/skill/references/primitive-annotation.md": "f78cac0af423ead9b74926fa669e9227efc21f15d0f51ea46bc93e79c55a121a",
         "extensions/illustrate/skill/references/primitive-icons.md": "5db83e3ae669e65e563f1f5b4ee04a3f485d664f07d47c8b3c271a071c9755ca",
-        "extensions/illustrate/skill/references/primitive-sketchy.md": "59c9d69549a7da706f4fff6ebf5dcc55980a9b0dc8a475a53a63ef5cbefb15a2",
+        "extensions/illustrate/skill/references/primitive-sketchy.md": "e39dd5b5f534db53cb843f14a8024eaefc7707bcb8588f4e3036f56742fba847",
         "extensions/illustrate/skill/references/primitive-terminal.md": "865a4bd5e37331dcfa300a82cf2827a52b595a018036653bdfcc59bdfe4adebf",
         "extensions/illustrate/skill/references/primitives-core.md": "170e6dbf1df0973837b52685bd21eb2271f3aedb5af4b5b65149658b88053bc9",
         "extensions/illustrate/skill/references/semantic-patterns.md": "b182d531fc4bb8a5aa6c66804e22a1728d0c7611ced0b30082401476d34e81c4",
@@ -340,7 +340,7 @@
         "extensions/illustrate/skill/references/taste-gate.md": "29ff780b62a239a793d5b10fc2f48edb374651aa795ca7ca0c592d4a352eda00",
         "extensions/illustrate/skill/references/technical-color-architecture.md": "35d607827625aff2ce39d47a49cf7acbfba24f3871df26d44e8312aff276134a",
         "extensions/illustrate/skill/references/technical-color-common.md": "9cdbab6e0b932d4f55872fa21e1d521f0af6443891f810d98a393da9a8e7bd6e",
-        "extensions/illustrate/skill/references/technical-color-process-flow.md": "5e2fe72f833d2982cc0f07b63fc1c2ca83d5b952d0d37aa62b452cc0d1605908",
+        "extensions/illustrate/skill/references/technical-color-process-flow.md": "bf4ca5c4c34bfe2d919d043770bbebb1ae180e8b98334b7a184d7a372803b7d9",
         "extensions/illustrate/skill/references/theme-initialization.md": "90f977814f6966f53154917d5c83cfecc2dd5ca6eab1277dc55f3b94ee29586f",
         "extensions/illustrate/skill/references/type-architecture-delta.md": "8b077b43c2bd225f1a5570be36a2047aef8c68aa4d4fa2fa93bb86188a381a86",
         "extensions/illustrate/skill/references/type-architecture.md": "68cdca9de688560d65f0fe5597651a60d2a05fe238dff2dcff1b034b01aa9c6d",
@@ -395,7 +395,7 @@
         "extensions/illustrate/skill/references/type-venn.md": "f8d5d4f0506160e0502f932140306b12d25adea1d1f6f319fb38c2345b0c6b42",
         "extensions/illustrate/skill/references/type-wardley.md": "f66246a6ff247568827e910e1f3ae28c78cb3fddf5ccd98242ea9bc0cddb62bd",
         "extensions/illustrate/skill/references/type-waterfall.md": "497c1f42c835229b12e08b1a72a8ed810ed5c3d5f617a5fd9ea6af23bd79374f",
-        "extensions/illustrate/skill/references/variants.md": "6785752bb957cd20129882249460441118223113441e4c24d78c03a53e2cdda2",
+        "extensions/illustrate/skill/references/variants.md": "18ef58526eb091f1aa65196681e87a307428531c3de16bfb22fbabbe89cb1da9",
         "extensions/illustrate/skill/scripts/animate_export.py": "2089d79c98fbb50f7730bfd006491bdf5d941fb6cb116130df17db8ddd83d43c",
         "extensions/illustrate/skill/scripts/axonometry.py": "e640f65f702eb7237a8bf58594e4049a32b28ccefd7051b58c73732f61ec348e",
         "extensions/illustrate/skill/scripts/build-axonometric-plan-examples.py": "810eb81b6da0a69c99ab1be622abe62b746db19c4cef3691174b1eb9a239e553",
@@ -405,7 +405,7 @@
         "extensions/illustrate/skill/scripts/excalidraw_extract.py": "61b06675849fe2b8d17976822b2c6bc0ed967e6e05e76e3985a3c9a71177f461",
         "extensions/illustrate/skill/scripts/export_diagram.py": "f4c6264592b5cea386a62a64a70c0cf74c952a61011f09b0ca3fae3dcfe21162",
         "extensions/illustrate/skill/scripts/fix-mojibake.py": "3e2d5ead14088e6f3ccee3627146dd6dcc406b55554690c76251d6677a4dd5ee",
-        "extensions/illustrate/skill/scripts/generate-hand-variants.cjs": "93765fa47d0cb8c84351dcdf6c9497b85777e7d60702d20f7db62d8c7667486d",
+        "extensions/illustrate/skill/scripts/generate-hand-variants.cjs": "7c66c3aa506995bd093699e067ba2174d91c7a48d030676bd63aaaac797f6731",
         "extensions/illustrate/skill/scripts/icon_lookup.py": "292340bab422d63f4a1ade80c77788da8b22471ba647150ed2a7fc725f9ead70",
         "extensions/illustrate/skill/scripts/icons.json": "02be09cbbda85064a3e93ddb77c784d68a29f8884f30d5bbca42fede185e27e9",
         "extensions/illustrate/skill/scripts/illustration_theme.py": "658a3384b297d7764d49be982d9b91f6e9c955c2e94b3129f221625147b77279",
@@ -532,8 +532,8 @@
       ],
       "internal": true,
       "exclusive": true,
-      "ref": "agent-tools-v1.6.0",
-      "sha": "f12b80a335910da88668724d5a17f74f23ca1e9c",
+      "ref": "agent-tools-v1.6.1",
+      "sha": "0e7a37372e9d35512324f7f0589f6a194191428d",
       "files": {
         "extensions/workflow/assets/delegate-task/.gitignore": "247681cefffa8448d973f21147c92b38b63f492a98a50aca3b3c490bc97499e1",
         "extensions/workflow/assets/delegate-task/README.ar.md": "7c2cade9d85acab9c3da95d81c59d6bd44abbed9bdd465f92e6de81ed034ea12",
@@ -582,10 +582,6 @@
           "extensions/user-manual/assets/scaffold"
         ],
         [
-          "skills/dev-tools/skills/user-manual/assets/user-manual-config.template.yml",
-          "extensions/user-manual/user-manual-config.template.yml"
-        ],
-        [
           "skills/dev-tools/skills/user-manual/assets/github/user-manual-preview.yml",
           "extensions/user-manual/assets/github/user-manual-preview.yml"
         ],
@@ -632,8 +628,8 @@
           ]
         ]
       },
-      "ref": "dev-tools-v1.2.0",
-      "sha": "f260c7b5f68444674dd77d5a4a4846fb86b939fc",
+      "ref": "dev-tools-v1.3.0",
+      "sha": "0e7a37372e9d35512324f7f0589f6a194191428d",
       "files": {
         "extensions/user-manual/assets/github/user-manual-preview.yml": "88d70609f3f3b43672039aa69f5c58489e9e5d224b8f31db1b765a563bd47b90",
         "extensions/user-manual/assets/github/user-manual-release.yml": "638dc2f42c09a2cf458a0b1672eb72eb06e95a3a04f523195eb5307de2cfad96",
@@ -646,7 +642,7 @@
         "extensions/user-manual/assets/scaffold/theme/rtl.css": "94d07b18909b49b17d8d6f9a918f39cbc750d26f6be3cff7c11a86bfc371af14",
         "extensions/user-manual/assets/scaffold/theme/theme-readthedocs.css": "a02ecd1df0b52bfc2dc829845d54263176dd8205a751f28093d50eb4721316e2",
         "extensions/user-manual/scripts/audit_manual.py": "8850b645a531ce8f11402865e2140f2608d2a99bf6ee8536500472e644f3a9b5",
-        "extensions/user-manual/scripts/build_manual.py": "a30071c13ce470fd03e7b1116e1a1fb52179b0e1568e05520c03190aaf483b34",
+        "extensions/user-manual/scripts/build_manual.py": "e4371681f259add556194a6a2aca332b461d7f09f65efb090f6138b9b11e3df1",
         "extensions/user-manual/skills/api-docs/references/openapi.md": "d4ff6e032f9f7d5321008959fc67edd999b1fe60a72236abf80d4dcb944a29ab",
         "extensions/user-manual/skills/preview-publishing/references/provider-contract.md": "1609a1ba809049bfe7959dc727f34151edd3fda1db8c8c9211d0bdddab83ecb3",
         "extensions/user-manual/skills/release-docs/references/migration-guides.md": "4c3d0634a3871937cf8abe78bdc8d059162bdf9b822f536b9618e12d3e5aa01c",
@@ -658,8 +654,7 @@
         "extensions/user-manual/skills/user-manual/references/discovery.md": "f03f42065f3dbc46a8ae072c680874bfe9cd7e28d81ca971824d19a9e242e5ac",
         "extensions/user-manual/skills/user-manual/references/incremental-update.md": "d66ef41177737e25365511719ffe7079e363a67ae42dc4c90338edcb3d33d0ed",
         "extensions/user-manual/skills/user-manual/references/publishing.md": "527fc14dc3d0ed36841b8746c562f6c04bdb4d66518ae96a72ecb2f8aa6d5ce3",
-        "extensions/user-manual/tests/test_build_manual.py": "915331ee63c8eae7a5193bb7181bf7148a22c20b1bccabbea0bd91a18cb3b5df",
-        "extensions/user-manual/user-manual-config.template.yml": "ff23127565985917a112aa3587eea98c4bcd64280099fc032b95cb2e56af67e3"
+        "extensions/user-manual/tests/test_build_manual.py": "f731a418a5c73b217d97678ba1dc4e71f171c2e41cb13ad857e6ad61140abec0"
       }
     },
     "progress-report": {
@@ -683,8 +678,8 @@
       ],
       "internal": true,
       "exclusive": true,
-      "ref": "agent-tools-v1.6.0",
-      "sha": "f12b80a335910da88668724d5a17f74f23ca1e9c",
+      "ref": "agent-tools-v1.6.1",
+      "sha": "0e7a37372e9d35512324f7f0589f6a194191428d",
       "files": {
         "extensions/progress/assets/ui/base.css": "6c5e32f0ca4fb687ef681339957b1ed85805cfaf9f1fa551a3367127032585b0",
         "extensions/progress/assets/ui/blocks.js": "be84e638ca6d3e4a97a9e156739ece588628db5fe3ee95df9b78fdab124fe2cd",
@@ -692,8 +687,8 @@
         "extensions/progress/docs/assets/progress-dark.png": "d8192fd01c8993b333067742741332ba20bc41b2d63ddad050683fa8e8e6faf2",
         "extensions/progress/docs/assets/progress-light.png": "fa10b6bd15cd74be9dbf1924c611925a9ef859b7fd779f5ebf41bca863edfc4b",
         "extensions/progress/docs/assets/progress-narrow.png": "745c12dc118872760d001d2f5427c7a7a04fbe1445dbcfb550ab8c41cbe83814",
-        "extensions/progress/docs/commands.md": "240cfd9eff412d67ad4aef06705854805b39bd91d36c0d79342433adf6c9f0e7",
-        "extensions/progress/docs/contracts.md": "d10a4a39aa15542002c5ccce506c205e0d19ed08980682ab4519e588e9f24bf2",
+        "extensions/progress/docs/commands.md": "ccde441bcf41d88287b01dc2b118b46e3023034b5bea9a251225f78b47506607",
+        "extensions/progress/docs/contracts.md": "9557940d0f47b7c3b15092873d8659f0f09d625a954349bcf464d2dc7b4caab0",
         "extensions/progress/docs/hosts.md": "c37e61a555e5601dbc09ee9b621fc0b4acf12de32953adbef0de355070e82239",
         "extensions/progress/docs/token-benchmark.md": "c5475ab085cbc533364d756fa2d62509be4e03ebaac80299772c633c76fcd7e0",
         "extensions/progress/scripts/hook.py": "9f37234f08ed93868238185ba42b006449079ce948394c312ded16b380e254bb",

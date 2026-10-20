@@ -113,9 +113,10 @@ Fresh layout on the 4px grid, per the type reference and SKILL.md §6–§7. Exp
 
 1. Write the `.html`.
 2. Apply the project theme as the final authoring step: `python <skill-dir>/scripts/illustration_theme.py --project-root . apply <output.html>` maps any remaining default literals to the resolved tokens; then run `illustration_theme.py validate`.
-3. Run the SKILL.md §9 taste gate **and** the [`output-spec.md` §6](output-spec.md) checklist.
-4. Produce `svg` / `png` if the format dial asked for them — `python scripts/export_diagram.py` from the HTML; read [`export.md`](export.md) only if it fails.
-5. Report the fidelity ledger ([`output-spec.md` §5](output-spec.md)). Every import gets one; the user knows the source and will notice what's gone.
+3. Run the SKILL.md step 7 checks: `python <skill-dir>/scripts/verify-geometry.py <output.html>` and `python <skill-dir>/scripts/self_check.py --strict <output.html>` (technical-color output: `--profile technical-color` instead of `--strict`), plus the type's `verify-<type>.py` when one exists. Fix and rerun until they pass.
+4. Run the SKILL.md §9 taste gate **and** the [`output-spec.md` §6](output-spec.md) checklist.
+5. Produce `svg` / `png` if the format dial asked for them — `python scripts/export_diagram.py` from the HTML; read [`export.md`](export.md) only if it fails.
+6. Report the fidelity ledger ([`output-spec.md` §5](output-spec.md)). Every import gets one; the user knows the source and will notice what's gone.
 
 ---
 

@@ -1,11 +1,36 @@
 #!/usr/bin/env node
 const fs = require('node:fs');
 const path = require('node:path');
-const rough = require('roughjs');
-const { JSDOM } = require('jsdom');
-const { SVGPathData } = require('svg-pathdata');
 
 const ROOT = path.resolve(__dirname, '..');
+const USAGE = 'usage: generate-hand-variants.cjs [--in source.html --out target-hand.html [--seed N]]';
+
+function fail(message, code) {
+  console.error(message);
+  process.exit(code);
+}
+
+// Parsed before the dependencies load, so a bad call gets the usage line even without node_modules.
+const options = {};
+const argv = process.argv.slice(2);
+for (let i = 0; i < argv.length; i += 2) {
+  const [flag, value] = [argv[i], argv[i + 1]];
+  if (!['--in', '--out', '--seed'].includes(flag) || value === undefined) fail(USAGE, 2);
+  options[flag.slice(2)] = value;
+}
+if (argv.length && !(options.in && options.out)) fail(USAGE, 2);
+const seed = options.seed === undefined ? 5000 : Number(options.seed);
+if (!Number.isInteger(seed)) fail(USAGE, 2);
+
+let rough, JSDOM, SVGPathData;
+try {
+  rough = require('roughjs');
+  ({ JSDOM } = require('jsdom'));
+  ({ SVGPathData } = require('svg-pathdata'));
+} catch (error) {
+  if (error.code !== 'MODULE_NOT_FOUND') throw error;
+  fail(`The hand-drawn generator needs its Node packages. Run \`npm ci\` once in ${ROOT} (Node 18+, network access), then rerun.`, 1);
+}
 const ASSETS = path.join(ROOT, 'assets');
 const TYPES = [
   'architecture',
@@ -557,8 +582,8 @@ function stripOldHandFilter(document) {
 }
 
 function convertFile(sourceName, targetName, seedBase) {
-  const sourcePath = path.join(ASSETS, sourceName);
-  const targetPath = path.join(ASSETS, targetName);
+  const sourcePath = path.resolve(ASSETS, sourceName);
+  const targetPath = path.resolve(ASSETS, targetName);
   const dom = new JSDOM(fs.readFileSync(sourcePath, 'utf8'), { contentType: 'text/html' });
   const { document } = dom.window;
   const svg = document.querySelector('svg');
@@ -578,11 +603,18 @@ function convertFile(sourceName, targetName, seedBase) {
   fs.writeFileSync(targetPath, dom.serialize(), 'utf8');
 }
 
-let index = 1;
-for (const type of TYPES) {
-  convertFile(`example-${type}.html`, `example-${type}-hand.html`, 1000 + index * 101);
-  index += 1;
-}
-convertFile('template.html', 'template-hand.html', 5000);
+if (argv.length) {
+  const [source, target] = [path.resolve(options.in), path.resolve(options.out)];
+  if (!fs.existsSync(source)) fail(`No such file: ${source}`, 1);
+  convertFile(source, target, seed);
+  console.log(`Wrote ${target}`);
+} else {
+  let index = 1;
+  for (const type of TYPES) {
+    convertFile(`example-${type}.html`, `example-${type}-hand.html`, 1000 + index * 101);
+    index += 1;
+  }
+  convertFile('template.html', 'template-hand.html', 5000);
 
-console.log(`Generated ${TYPES.length} hand examples plus template-hand.html`);
+  console.log(`Generated ${TYPES.length} hand examples plus template-hand.html`);
+}

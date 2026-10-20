@@ -12,8 +12,10 @@ Routed from SKILL.md §10. Every first-class diagram ships in four core variants
 | **Technical-color architecture** | `assets/technical-color/architecture/` | Cloud, infrastructure, security, and topology illustrations with semantic component colors and built-in Copy/PNG/PDF. |
 | **Technical-color process flow** | `assets/technical-color/process-flow/` | Approval, automation, runbook, and decision workflows with numbered steps and built-in Copy/PNG/PDF. |
 
-**Hand-drawn generation** — see [primitive-sketchy.md](primitive-sketchy.md). The committed `-hand`
-files are generated from every minimal example with Rough.js; do not edit them manually.
+**Hand-drawn generation** — see [primitive-sketchy.md](primitive-sketchy.md). Convert your finished minimal light
+file with `node scripts/generate-hand-variants.cjs --in <file> --out <file>-hand.html` (Node 18+ and a one-time
+`npm ci`). Without Node, deliver the minimal variant and say so. The committed `-hand` files are generated from
+every minimal example with Rough.js; do not edit them manually.
 
 **Terminal variant** (optional, replaces any of the above) — see [primitive-terminal.md](primitive-terminal.md).
 `template-terminal.html`, `example-<type>-terminal.html`. Charcoal-black CLI-window chrome, monospace

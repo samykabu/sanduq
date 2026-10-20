@@ -4,15 +4,24 @@ Optional Rough.js-based conversion that turns every minimal example into a hand-
 
 Copyable gallery examples live beside each type as `assets/example-<type>-hand.html`, with `assets/template-hand.html` as the starter template. They show rough boxes, rough arrows, solid lines, dashed lines, label masks, and crisp text using the same layouts as the minimal examples.
 
-## Implementation
+## Make a hand-drawn version of your diagram
 
-The `-hand` files are generated, not manually edited. Run:
+Draw the minimal light version first and pass step 7. Then convert that file. Run from the skill folder (the
+folder with `SKILL.md`; in a Spec Kit project, `.specify/extensions/illustrate/skill/`):
 
 ```bash
-cd skills/illustration-tools/skills/illustrate
-npm install
-npm run generate:hand
+npm ci                                   # once; needs Node 18+ and network access
+node scripts/generate-hand-variants.cjs --in path/to/diagram.html --out path/to/diagram-hand.html
 ```
+
+`--seed N` changes the rough geometry; the same seed gives the same file. The conversion keeps layout and text; run
+`python scripts/self_check.py --strict` on the result. Without Node or network access the conversion cannot run: deliver
+the minimal variant and say that the hand-drawn one needs Node.
+
+## Implementation
+
+The `-hand` files are generated, not manually edited. To regenerate every shipped example, run `npm ci` and then
+`npm run generate:hand` in the skill folder.
 
 The generator is [`scripts/generate-hand-variants.cjs`](../scripts/generate-hand-variants.cjs). It follows the same design as `svg2roughjs`: parse the canonical SVG and emit Rough.js-generated SVG paths. We use Rough.js directly instead of runtime `svg2roughjs` so arrows and pointers are controlled by the skill:
 
