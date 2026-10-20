@@ -16,6 +16,8 @@ jobs:
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
+          # The recorded states describe the PR head, not GitHub's merge commit.
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
       - name: Resolve active feature
         id: feature

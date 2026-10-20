@@ -2,6 +2,7 @@
 import contextlib
 import io
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -79,7 +80,12 @@ class AssureScanTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertFalse(self.memory.exists())
         self.assertIn('memory: would write', out)
-        self.assertIn('Last scanned: ', out)
+        # AU13b: Analyze reads the inventory rows; the block is printed only on request.
+        self.assertNotIn('Last scanned: ', out)
+        _, shown = run('--root', str(self.root), '--check', '--show-block')
+        self.assertTrue(shown.startswith(out))
+        self.assertIn('Last scanned: ', shown)
+        self.assertFalse(self.memory.exists())
         run('--root', str(self.root))
         first = self.memory.read_bytes()
         _, out = run('--root', str(self.root))
@@ -116,6 +122,37 @@ class AssureScanTest(unittest.TestCase):
         self.assertTrue(text.startswith('Intro\n\n' + assure_scan.START))
         self.assertNotIn('\nold\n', text)
         self.assertIn('planned/spec-only | specs/001/plan.md', text)
+
+    def git(self, *args):
+        subprocess.run(['git', '-c', 'core.autocrlf=false', *args], cwd=self.root, check=True, capture_output=True)
+
+    def test_git_ignored_trees_are_skipped_and_untracked_projects_kept(self):
+        # AU11: a virtualenv's packages are not projects of the repository, even with no scan.exclude entry.
+        for name in ('.venv/Lib/site-packages/foo/pyproject.toml', 'out/target/svc/go.mod'):
+            (self.root / name).parent.mkdir(parents=True)
+            (self.root / name).write_text('x\n', encoding='utf-8')
+        (self.root / '.gitignore').write_text('.venv/\nout/\nnode_modules/\n', encoding='utf-8')
+        self.git('init', '-q')
+        self.git('add', 'web', 'api')
+        (self.root / 'svc').mkdir()
+        (self.root / 'svc/go.mod').write_text('module svc\n', encoding='utf-8')
+        projects, _ = assure_scan.scan(self.root, {'.git'})
+        paths = {p['path'] for p in projects}
+        self.assertFalse(any(p.startswith(('.venv', 'out')) for p in paths), paths)
+        self.assertTrue({'web', 'api', 'svc', 'mobile', 'generated'} <= paths, paths)
+        self.assertNotIn('node_modules/vite', paths)
+        # scan.exclude still applies inside git.
+        self.assertNotIn('generated', {p['path'] for p in assure_scan.scan(self.root, {'.git', 'generated'})[0]})
+
+    def test_outside_git_the_exclude_list_still_prunes(self):
+        (self.root / '.venv/lib/foo').mkdir(parents=True)
+        (self.root / '.venv/lib/foo/pyproject.toml').write_text('x\n', encoding='utf-8')
+        with mock.patch.object(assure_scan, 'git_folders', return_value=None):
+            paths = {p['path'] for p in assure_scan.scan(self.root, set(assure_scan.DEFAULT_EXCLUDE))[0]}
+            self.assertNotIn('.venv/lib/foo', paths)
+            self.assertIn('.venv/lib/foo', {p['path'] for p in assure_scan.scan(self.root, {'.git'})[0]})
+        for name in ('.venv', 'venv', 'target', 'vendor', 'Pods', '.gradle', '__pycache__'):
+            self.assertIn(name, assure_scan.DEFAULT_EXCLUDE)
 
     def test_no_frontend_is_stated(self):
         projects, found = assure_scan.scan(self.root / 'api', set())

@@ -8,13 +8,6 @@ description: Analyze test and documentation readiness for an active Spec Kit fea
 Use this skill for feature-specific verification material. Do not turn it into an application user
 manual; that belongs to the `user-manual` extension.
 
-## Route the request
-
-- For initialization, configure `assure-config.yml` and lifecycle hooks.
-- For analysis, read [analysis.md](references/analysis.md), audit `tasks.md`, and record analyze state.
-- For documentation, read [documentation.md](references/documentation.md), generate the QA test
-  manual from implemented behavior, validate its evidence, and record document state.
-
 ## Rules
 
 1. Resolve the active feature from `--feature`, then `feature_directory` in `.specify/feature.json`,
@@ -28,5 +21,5 @@ manual; that belongs to the `user-manual` extension.
    URLs, or full `.env` values.
 5. Prefer plain language that a tester can follow without knowing the implementation.
 6. Reuse the installed Illustrate skill only when a diagram materially improves verification.
-7. Use `scripts/assure_state.py` to determine freshness; do not treat a file's existence as proof that it
-   is current.
+7. Use `.specify/extensions/assure/scripts/assure_state.py` to determine freshness; do not treat a
+   file's existence as proof that it is current.

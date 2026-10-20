@@ -30,17 +30,16 @@ Flags: `--feature <path>`, `--report-only`.
    - UI or mobile screens: `skills/ui-screenshots/SKILL.md`.
    - Compatibility, upgrade, or release behavior: `skills/release-docs/SKILL.md`.
    - Diagrams: run `python .specify/extensions/user-manual/scripts/deps.py ensure illustrate`
-     first; on a non-zero exit report its line and add no diagram task (when it prints a
-     `specify extension` recipe and the user approves, re-run with `--approve`; under a `manual`
-     policy the user runs the printed command, then re-runs this command). When it exits zero, pass on
-     any "newer compatible release available" note, read
+     first; on a non-zero exit report its line, follow it and add no diagram task. When it exits
+     zero, pass on any "newer compatible release available" note, read
      `.specify/extensions/illustrate/skill/references/type-index.md`, choose the type, and name it
      in the task; the stage that draws follows Illustrate's full procedure.
 6. Add concrete tasks for affected audience pages, English content, optional Arabic updates,
    tutorials/how-to/reference/explanation, deterministic screenshots, API bundles/examples,
    architecture/infrastructure/ER diagrams, data dictionary changes, release notes, migration
-   guides, navigation, preview build, and validation. Use marker-delimited blocks and do not
-   duplicate tasks on rerun.
+   guides, navigation, preview build, and validation. Put them in one block between
+   `<!-- user-manual-tasks:start -->` and `<!-- user-manual-tasks:end -->`; on a rerun replace that
+   block instead of adding tasks again.
 7. In all writing tasks, explicitly require plain English or plain Arabic appropriate to the target
    audience. Do not reuse technical prose on end-user pages.
 8. In `--report-only` mode, report tasks without changing `tasks.md`; otherwise patch and validate it.

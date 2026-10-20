@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+Optimization round 4.
+
+- `init_manual.py` never overwrites an existing `docs/<lang>/index.md`, as it already did for module pages.
+- Analyze puts its tasks between `<!-- user-manual-tasks:start -->` and `<!-- user-manual-tasks:end -->` and replaces that block on a rerun. Assure's analyze state ignores the block.
+- Update builds with `build_manual.py --all` and adds `--archive` only when `manual.yml` names an approved provider. CI builds its own preview archive. On the 3-edition booking sample this cut the build from 16.1 s to 10.4 s.
+- `manual_state.py status` no longer walks `User-Manual/`; only `record` collects the default outputs.
+- Update's Illustrate step names full script paths (Spec Kit rewrote the bare `scripts/` token). `deps.py` names the next step in its one line; the commands say one sentence about it.
+
+### Migration
+
+- A local Update no longer writes `User-Manual/site/<version>/*.zip` unless an approved provider is configured. They were build output and are not committed.
+
 ## [1.7.1] - 2026-10-20
 
 - The shared freshness helper hashes declared outputs as outputs only (see Assure 2.5.1). Update names `User-Manual/.state/features/<feature-name>/reports/` for freshness logs and status reports, written before the final `record`. Part of samykabu/sanduq#99.
@@ -146,7 +160,7 @@ Optimization round 2.
 - Where CI runs is a project decision; the shipped workflow assets are rendered
   from the `ci:` selection in `.specify/workflow.yml`.
 
-## 1.1.0 (unreleased)
+## 1.1.0
 
 - Track source and output freshness without hashing workflow state or manual state into itself.
 

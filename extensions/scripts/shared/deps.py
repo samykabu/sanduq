@@ -465,7 +465,11 @@ def ensure(name, root, dependencies_file, checks_file=None, policy_file=None, ap
                 reason = 'disabled'
             else:
                 reason = 'installed ' + str(entry.get('version')) + ' is outside ' + range_expr
-            return False, (name + ': ' + reason + ' (policy ' + update_policy + '); run: ' + _recipe(name, bool(entry)))
+            # The line carries its own next step, so a command needs no per-policy instructions.
+            route = ('after the user agrees, re-run with --approve' if update_policy == 'prompt'
+                     else 'the user runs it, then re-runs the command')
+            return False, (name + ': ' + reason + ' (policy ' + update_policy + '); run: '
+                           + _recipe(name, bool(entry)) + '; ' + route)
         action = 'update' if entry else 'add'
         # 'update' always prompts "Update these extensions?" with no --yes equivalent; feed it
         # a confirmation since this branch only runs once the policy has authorised the change.

@@ -26,22 +26,16 @@ Optional flags:
 
 ### 0. Load the QA contract
 
-Read `.specify/extensions/assure/skills/assure/SKILL.md` and its `references/documentation.md`. Keep
-this tester-facing artifact separate from the audience-aware application documentation under
-`User-Manual/`.
+Read the rules in `.specify/extensions/assure/skills/assure/SKILL.md` and its
+`references/documentation.md`. Keep this tester-facing artifact separate from the audience-aware
+application documentation under `User-Manual/`.
 
 ### 0a. Ensure the Illustrate dependency
 
-```text
-python .specify/extensions/assure/scripts/deps.py ensure illustrate
-```
-
-- Exit `0`: the dependency is ready. Load the Illustrate references only in step 5, when a diagram is
-  actually going to be generated. Pass a "newer compatible release available" note on to the user.
-- Non-zero exit: report the script's one-line result verbatim, continue the non-diagram work, skip
-  diagram generation, and do not silently use another diagram system. If the line names a
-  `specify extension add/update illustrate` recipe and the user approves it, re-run with `--approve`
-  (under a `manual` policy the user runs the printed command themselves, then re-run this command).
+Run `python .specify/extensions/assure/scripts/deps.py ensure illustrate`. On exit `0`, pass on any
+"newer compatible release available" note and load Illustrate only in step 5, when a diagram is
+going to be generated. On a non-zero exit, report its line verbatim, follow it, skip diagrams and
+use no other diagram system.
 
 ### 1. Resolve the feature and read its inputs
 
@@ -121,8 +115,8 @@ Manual content, in order:
 3. Illustrate visuals where applicable. Only if step 0a confirmed `illustrate` is ready and a visual
    improves verification, draw it with the procedure in `.specify/extensions/illustrate/skill/SKILL.md`:
    the §0 theme gate first, then §10 (choose the type from `references/type-index.md`, read its
-   `type-*.md`, apply and validate the theme, and run the step 7 checks). Its `scripts/` are under
-   `.specify/extensions/illustrate/skill/scripts/`; run them from the repository root. Save source
+   `type-*.md`, apply and validate the theme, and run the step 7 checks). Run Illustrate's scripts
+   from the repository root as `python .specify/extensions/illustrate/skill/scripts/<script>`. Save source
    HTML under `<assets-dir>/diagrams/`, export PNG beside it, embed the PNG, and link the HTML source.
    If no visual improves the manual, say no diagram was needed.
 4. One plain-English section per user story or use case: a real-life user scenario, preconditions,

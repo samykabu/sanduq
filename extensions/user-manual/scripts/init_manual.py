@@ -169,13 +169,14 @@ def main() -> None:
     for language in (["en", "ar"] if args.enable_arabic else ["en"]):
         lang_root = manual_root / "docs" / language
         lang_root.mkdir(parents=True, exist_ok=True)
-        title = product if language == "en" else product
         body = (
             "Use this manual to understand the application and complete common tasks."
             if language == "en"
             else "استخدم هذا الدليل لفهم التطبيق وتنفيذ المهام الشائعة."
         )
-        (lang_root / "index.md").write_text(page(title, "system", language, body), encoding="utf-8")
+        home = lang_root / "index.md"
+        if not home.exists():
+            home.write_text(page(product, "system", language, body), encoding="utf-8")
         for module in modules:
             module_dir = lang_root / "modules" / str(module["id"])
             module_dir.mkdir(parents=True, exist_ok=True)

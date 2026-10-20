@@ -183,5 +183,27 @@ class ManualStateSummaryWhitespaceTests(unittest.TestCase):
         self.assertEqual(line.strip(), 'error action=status kind=manual outputs=1 reason=first line second line with tabs')
 
 
+class ManualStateStatusWalkTests(unittest.TestCase):
+    """AU19: status compares the saved outputs; only record walks User-Manual/ for the default list."""
+
+    def run_main(self, action):
+        argv = ['manual_state.py', action, '--feature', 'specs/001-example', '--summary']
+        walked = mock.Mock(return_value=['User-Manual/guide.md'])
+        record = mock.Mock(return_value={'current': True, 'recorded': action == 'record'})
+        with mock.patch.object(manual_state, 'manual_outputs', walked), \
+             mock.patch.object(manual_state, 'record_or_status', record), \
+             mock.patch.object(sys, 'argv', argv), contextlib.redirect_stdout(io.StringIO()):
+            manual_state.main()
+        return walked, record
+
+    def test_status_does_not_walk_the_manual(self):
+        walked, record = self.run_main('status')
+        walked.assert_not_called()
+        self.assertEqual(record.call_args.args[5], [])
+        walked, record = self.run_main('record')
+        walked.assert_called_once()
+        self.assertEqual(record.call_args.args[5], ['User-Manual/guide.md'])
+
+
 if __name__ == '__main__':
     unittest.main()
