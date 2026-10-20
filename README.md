@@ -168,6 +168,20 @@ re-adds it only where `illustrate.hooks.self_check: true` is set. On Codex, appr
 hook once in `/hooks`; `doctor` now says when that approval is missing. See
 [upgrades](docs/start/upgrades.md#upgrade-to-workflow-1150) for what changes.
 
+## Upgrade to Workflow 1.16.0 (issue #99)
+
+Workflow 1.16.0 ships with Assure 2.5.1 and User Manual 1.7.1. A board status write no longer
+stales receipts or refuses a completion, and generated documentation reports no longer stale the
+documentation state. Upgrade as before, then convert each feature that is already in progress:
+
+```bash
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.16.0 --apply
+python .specify/extensions/workflow/scripts/workflow.py migrate --feature specs/<feature> --reason "upgrade to 1.16.0"
+```
+
+The claim's `project_sync.command` is now `workflow.py project-sync`. See
+[upgrades](docs/start/upgrades.md#upgrade-to-workflow-1160) for what changes.
+
 ## Can I use this?
 
 | Package | License | Commercial use |

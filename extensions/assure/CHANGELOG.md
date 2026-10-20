@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.5.1] - 2026-10-20
+
+- Document freshness hashes each declared `--output` as an output only, not also as an implicit input, so a regenerated output no longer reports as a changed input; a missing or changed output still stales the state. States recorded by 2.5.0 compare as before until the next `record`. Analyze is unchanged.
+- Analyze and Document name `.specify/extensions/assure/state/<feature-name>/reports/` for freshness logs and status reports, written before the final `record`. Part of samykabu/sanduq#99.
+
 ## [2.5.0] - 2026-10-20
 
 Optimization round 3 (fixes to 2.4.0).

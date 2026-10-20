@@ -133,6 +133,30 @@ Nothing is renamed and no policy key is added. What you notice after the upgrade
 - **Faster runtime.** Each Workflow command reads git once, and Scope makes far fewer GitHub calls.
   Nothing to configure.
 
+## Upgrade to Workflow 1.16.0
+
+Workflow 1.16.0 selects Assure 2.5.1 and User Manual 1.7.1 and fixes issue #99. No policy key is
+added. What changes:
+
+- **Project Sync.** The claim's `project_sync.command` is
+  `python .specify/extensions/workflow/scripts/workflow.py project-sync --feature <f> --phase <p>`.
+  It runs the Project script, records the result in the checkpoint, and `next` and `status`
+  report a pending or failed sync with its retry command. Run it after `complete` (Execute: before
+  implementation, as before).
+- **Receipts bind the board entry, not its status.** A receipt that depends on the Project Sync
+  state file under `.specify/` records the feature's entry without its status, so a status write no
+  longer stales it. Receipts recorded before the upgrade keep the old byte hash until you run
+  `workflow.py migrate --feature specs/<feature> --reason "<why>"` (the step every in-progress
+  feature runs after an upgrade) or `workflow.py sync-amend --feature specs/<feature> --reason
+  "<why>"` with no active claim. Both check the entry against `scope-source.json` and
+  `workflow/task-issues.json` and refuse a changed binding; then re-record the stage.
+- **Documentation freshness.** Assure and User Manual write freshness logs and status reports to
+  their state folders (`.specify/extensions/assure/state/<feature-name>/reports/`,
+  `User-Manual/.state/features/<feature-name>/reports/`), and a regenerated declared output no
+  longer reports as a changed input. States recorded before the upgrade compare as before.
+- **Lean execution** is unchanged; the [operating guide](../workflow/operating-guide.md#adopting-lean-execution)
+  now says how to adopt it.
+
 ## Moved documentation
 
 Pages moved in this release keep a forwarding stub at the old path for one release cycle:

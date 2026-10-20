@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Optimization round 3 (fix-first and do items of docs/internal/round-3-final-plan.md, reviewed jointly with Codex gpt-6.1-sol; no renaming per the user): Assure gate and audit fixes, Illustrate hook registered per policy by the installer, PR publication and image fixes, Project remote parsing, one git pass per Workflow command, Execute text per mode, Scope GitHub call cuts, descriptions under the Codex budget, smaller packages, CI selection and sharding, release.py bump. Vendors illustration-tools 3.6.0 and agent-tools 1.6.0. Reviewed by the orchestrating session on 2026-10-20 (ten streams, full suites, two-host smoke install, benchmarks in docs/internal/benchmarks/round-3-*). Publish after main CI."
+  "versions": {
+    "workflow": "1.16.0",
+    "assure": "2.5.1",
+    "user-manual": "1.7.1"
+  },
+  "status": "ready",
+  "note": "Issue #99 (finalization loops): Project Sync binding projection in receipts, workflow.py project-sync and sync-amend, legacy raw hashes converted only after verification, document freshness keeps declared outputs out of its inputs, finalization order and lean adoption documented. Two Opus streams reviewed by the orchestrating session and by Codex gpt-6.1-sol (findings fixed) on 2026-10-20; full workflow suite (only the 18 known local failures), Assure, User Manual and scripts suites, two-host smoke install. Publish after main CI."
 }

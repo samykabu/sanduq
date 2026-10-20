@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.16.0] - 2026-10-20
+
+Fixes for issue #99 (finalization loops). New subcommands `project-sync` and `sync-amend`; the claim's `project_sync.command` changes.
+
+- Receipts fingerprint the configured Project Sync state file (`stateFile`, under `.specify/`) as `sync-binding:v1:<sha256>` of the bound feature's entry without `status` and timestamp fields. A board status write no longer stales an earlier receipt or refuses a completion with `UPSTREAM_INPUT_CHANGED_DURING_STAGE`; a changed issue, node ID, item ID or sub-issue mapping, or a missing entry, still does, and other features' entries no longer count.
+- A receipt recorded before 1.16.0 keeps its raw hash and is compared byte for byte. `migrate` and the new `workflow.py sync-amend --feature <f> --reason <text>` convert it once the entry matches `scope-source.json` and `workflow/task-issues.json` and the recorded bytes are found with only administrative fields changed; each conversion is an `administrative-amendment` record in the checkpoint's `lineage`. Clarify's permitted re-stamp keeps a raw hash raw.
+- The claim prints `project_sync.command` as `workflow.py project-sync --feature <f> --phase <p>`. It runs the Project script with `--summary` and records `project_sync: {phase, state, at, summary}` (pending, then done or failed); done needs the entry to show the phase's configured status. A retry after a lost result does not repeat the remote write. `next` and `status` report a pending or failed sync with its retry command.
+- `dispatcher-operations.md` and `stage-pr.md` state one finalization order (review, documentation, Ready, frozen candidate, gates, one PR, `complete`, `project-sync`, exact final head) and the bounded recovery before another semantic agent.
+- Selected pins move to Assure 2.5.1 and User Manual 1.7.1.
+
 ## [1.15.0] - 2026-10-20
 
 Optimization round 3. No policy key added; defaults unchanged.
