@@ -46,17 +46,49 @@ invent percentages, stop on an estimate, or ask for a new session because usage 
 ## Project Sync and task-issue sync
 
 `claim` prints `project_sync: false`, or `{"phase": ..., "command": ...}` at a
-`project_sync.points` stage (absent: all six). When a GitHub Project is configured, run the
-`command` as printed (it ends in `--summary`) after the stage, or for Execute before
-implementation starts, instead of opening the sync command; when false, skip it. Managed
-Project 2.1+ uses the bound parent and never writes task issues. When policy requires board
-sync, require actual success; a graceful skip is not success. Native task-issue state syncs
-once per phase ([execution-report.md](execution-report.md)). Never infer human-review
-completion from generated evidence.
+`project_sync.points` stage (absent: all six). The command is `workflow.py project-sync
+--feature <f> --phase <p>`. It runs the Project script with `--summary` and records
+`project_sync: {phase, state, at, summary}` in the checkpoint: `pending` before the call, `done`
+or `failed` after it. When a GitHub Project is configured, run it as printed after `complete`,
+or for Execute before implementation starts; when false, skip it. Never run the Project script
+directly. Policy requires board sync, so only `done` is success; a graceful skip is not success.
+`next` and `status` report a `pending` or `failed` sync with its `retry` command. A retry of a
+phase whose state entry already shows that phase's status records `done` without another
+remote write.
+
+Receipts fingerprint the configured state file (`stateFile`) as the bound feature's entry
+without `status` and timestamps (`sync-binding:v1:<sha256>`). A status-only sync therefore never
+stales a receipt or refuses a completion, before or after `complete`. A changed issue, node ID,
+item ID or sub-issue mapping, or a missing entry, still does; other features' entries do not
+count. Managed Project 2.1+ uses the bound parent and never writes task issues. Native
+task-issue state syncs once per phase ([execution-report.md](execution-report.md)). Never infer
+human-review completion from generated evidence.
 
 Run `delegation.py annotate --feature specs/<feature>` to refresh pending task metadata after an
 opt-in or route edit; a task the type rules misread takes an `[Impl]` (or `[QA]`, `[Docs]`,
 `[Review]`, `[Collect]`) marker.
+
+## Finalization order
+
+Finish a feature once, in this order: code and its affected tests; the independent
+implementation review; documentation and portable evidence, with generated reports finished
+before the final record; Ready with current prerequisites; freeze the publication candidate;
+`ci_gate.py --check-index` and the gate in a clean checkout of that candidate; publish or reuse
+one PR with `pr_publish.py`; `complete`; `project-sync`; then check the exact final PR head
+([stage-pr.md](stage-pr.md)). A substantive change reopens only the phase it affects. A prose
+fix or a board status write does not repeat the acceptance chain.
+
+Recover within that order before dispatching another semantic agent:
+
+- A receipt recorded before 1.16.0 holds a raw hash of the state file and stays byte-exact, so a
+  status write stales it. `migrate` converts it; so does `workflow.py sync-amend --feature <f>
+  --reason <text>`, with no active claim. Both first check the entry's issue against
+  `scope-source.json` and its sub-issues against `workflow/task-issues.json`, refuse when they
+  differ, and record the old and new value in an `administrative-amendment` lineage entry. No
+  other hash moves.
+- Changed evidence: `amend`. Upstream documents edited after their stage: `revalidate-upstream`.
+  Source drift: `revalidate` ([recovery.md](recovery.md)).
+- Re-record a stage only when none of those applies.
 
 ## Managed overlay contract
 

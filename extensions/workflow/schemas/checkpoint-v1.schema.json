@@ -91,6 +91,16 @@
       "items": {"type": "object", "required": ["v", "event_id", "workflow_run_id", "generation", "at", "stage", "event", "episode_id", "claim_id", "delegation_run_ids", "reason"]}
     },
     "updated_at": {"type": "string", "format": "date-time"},
+    "project_sync": {
+      "description": "The last workflow.py project-sync (1.16.0+): pending is written before the Project script runs, done or failed after it; next and status report pending or failed for retry.",
+      "type": "object", "required": ["phase", "state", "at"],
+      "properties": {"phase": {"type": "string"}, "state": {"enum": ["pending", "done", "failed"]},
+                     "at": {"type": "string", "format": "date-time"}, "summary": {"type": ["string", "null"]}}
+    },
+    "lineage": {
+      "description": "Runtime-owned records of accepted changes to recorded fingerprints: a stage's permitted side effects, advisory consulted drift, and administrative-amendment records (sync-amend or migrate) that replace a legacy raw Project Sync state hash with its binding projection.",
+      "type": "array", "items": {"type": "object"}
+    },
     "head": {"type": "string"},
     "execute_protocol": {
       "description": "The Execute protocol last printed in full by a claim: its files and the digest of their content. An Execute claim with the same digest names the files instead of printing them (1.15.0+).",

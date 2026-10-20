@@ -220,7 +220,7 @@ Legacy attempts carry origin `legacy` and never override the delegation ledger. 
 - Install locks, backups and runtime locks are under `.specify/workflow/`.
 
 Commit the feature state with the feature. Do not edit checkpoints by hand. Use `recover`,
-`migrate`, `amend`, `revalidate` and `relocate` instead. Details are in
+`migrate`, `amend`, `sync-amend`, `revalidate` and `relocate` instead. Details are in
 [state files](https://github.com/samykabu/sanduq/blob/main/docs/workflow/state-files.md).
 
 ## Upgrades

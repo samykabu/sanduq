@@ -80,6 +80,13 @@ PROJECT_SYNC_PHASES = {'specify': 'open', 'plan': 'analysis', 'analyze': 'engine
                        'taskstoissues': 'ready', 'execute': 'in-progress', 'pr': 'in-review'}
 PROJECT_SYNC_POINTS = tuple(PROJECT_SYNC_PHASES)
 PROJECT_SYNC_SCRIPT = '.specify/extensions/project/scripts/project_sync.py'
+# Phases `project-sync` runs: the scheduled ones and the post-merge `done`.
+PROJECT_SYNC_STEPS = tuple(PROJECT_SYNC_PHASES.values()) + ('done',)
+DEFAULT_SYNC_STATE = '.specify/project-sync-state.json'
+# A dependency on the configured Project Sync state is fingerprinted as the bound feature's entry without its
+# administrative fields (status, timestamps), so a board move never stales evidence while a binding change does.
+SYNC_BINDING_PREFIX = 'sync-binding:v1:'
+SYNC_ADMINISTRATIVE = re.compile(r'status|\w*(?:At|_at|[Tt]imestamp)')
 TASK_ISSUE_MODES = ('required', 'phase-lazy')
 # Files a stage may change although earlier receipts depend on them (glob `*` stays within one folder).
 # The lineage records each such change; anything else changed during a stage refuses the completion.
@@ -1005,21 +1012,104 @@ def skipped_stages(policy, tier_name):
     return skipped
 
 
-def project_sync(policy, stage):
+def project_sync(policy, stage, feature='<feature>'):
     """The claim's Project Sync field: `{phase, command}` at a `project_sync.points` stage, else False."""
     if stage not in (policy.get('project_sync') or {}).get('points', PROJECT_SYNC_POINTS):
         return False
     phase = PROJECT_SYNC_PHASES[stage]
-    return {'phase': phase, 'command': 'python ' + PROJECT_SYNC_SCRIPT + ' --phase ' + phase + ' --summary'}
+    return {'phase': phase, 'command': WORKFLOW_SCRIPT + ' project-sync --feature ' + feature + ' --phase ' + phase}
+
+
+def sync_state_label(root):
+    """The configured Project Sync state file (`stateFile`), root-relative; the default when unset or invalid."""
+    def label():
+        try:
+            config = read(Path(root) / '.specify/extensions/project/config.json', {})
+            return canonical_path(root, config['stateFile'])
+        except (ValueError, TypeError, KeyError, WorkflowError):
+            return DEFAULT_SYNC_STATE
+    return _memo('sync-state', root, label)
+
+
+def sync_entry(content, feature):
+    """The feature's entry in the state file bytes: None when absent, and the bytes themselves when unreadable."""
+    try:
+        state = json.loads(content.decode('utf-8-sig'))
+    except ValueError:
+        return content
+    return state.get(feature.rsplit('/', 1)[-1]) if isinstance(state, dict) else content
+
+
+def sync_projection(content, feature):
+    entry = sync_entry(content, feature)
+    if isinstance(entry, bytes):
+        return SYNC_BINDING_PREFIX + hashlib.sha256(entry).hexdigest()  # unreadable: every byte counts
+    if isinstance(entry, dict):
+        entry = {key: value for key, value in entry.items() if not SYNC_ADMINISTRATIVE.fullmatch(key)}
+    canonical = json.dumps(entry, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+    return SYNC_BINDING_PREFIX + hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def sync_binding(root, feature):
+    """The current binding fingerprint of the configured state file for `feature` (None when the file is missing)."""
+    label = sync_state_label(root)
+    return fingerprint_files(root, [label], feature=feature)[label]
+
+
+def verify_sync_binding(root, feature, state):
+    """The feature's state entry, refused unless it binds the issue scope-source.json binds for this checkpoint and
+    its sub-issues match the task mapping. Item and node ids cannot be checked offline; they stay in the projection."""
+    label, slug = sync_state_label(root), feature.rsplit('/', 1)[-1]
+    try:
+        entry = (read(Path(root) / label, {}) or {}).get(slug)
+    except (ValueError, AttributeError):
+        entry = None
+    require(isinstance(entry, dict), 'SYNC_BINDING_MISMATCH: ' + label + ' has no entry for ' + slug)
+    source = read(Path(root) / feature / 'scope-source.json', {})
+    require(f"{source.get('repo')}#{source.get('issue')}" == state['issue'],
+            'SYNC_BINDING_MISMATCH: scope-source.json does not bind ' + state['issue'])
+    require(str(entry.get('issue')) == str(source.get('issue')),
+            'SYNC_BINDING_MISMATCH: issue ' + str(entry.get('issue')) + ' in ' + label + ', ' + state['issue'] + ' bound')
+    subs = entry.get('subIssues') or {}
+    if subs:
+        mapping = read(Path(root) / feature / 'workflow/task-issues.json', {})
+        repo, parent = state['issue'].split('#')
+        require((mapping.get('repo'), mapping.get('parent'), mapping.get('feature')) == (repo, int(parent), feature),
+                'SYNC_BINDING_MISMATCH: sub-issues without a matching workflow/task-issues.json')
+        tasks = mapping.get('tasks') or {}
+        differ = sorted(task for task, sub in subs.items()
+                        if not isinstance(sub, dict) or (tasks.get(task) or {}).get('number') != sub.get('number'))
+        require(not differ, 'SYNC_BINDING_MISMATCH: sub-issues differ from the task mapping: ' + ', '.join(differ))
+    return entry
+
+
+def same_path(root, label, canonical):
+    try:
+        return canonical_path(root, label) == canonical
+    except WorkflowError:
+        return False
+
+
+def committed_sync_fields(root, label, feature, old_hash, entry):
+    """Entry fields changed since the bytes `old_hash` names, when HEAD still holds them; else None."""
+    shown = subprocess.run(['git', 'show', 'HEAD:' + label], cwd=root, capture_output=True)
+    if shown.returncode or hashlib.sha256(shown.stdout).hexdigest() != old_hash:
+        return None
+    old = sync_entry(shown.stdout, feature)
+    old = old if isinstance(old, dict) else {}
+    return sorted(key for key in set(old) | set(entry) if old.get(key) != entry.get(key))
 
 
 def task_issue_mode(policy):
     return policy['issue_sync']['taskstoissues']
 
 
-def side_effects(policy, feature, stage):
-    """The concrete side-effect globs for a stage; phase-lazy issue sync lets Execute extend the mapping."""
+def side_effects(policy, feature, stage, root=None):
+    """The concrete side-effect globs for a stage; phase-lazy issue sync lets Execute extend the mapping. With
+    `root`, the Project Sync state is the configured file."""
     paths = [path.replace('<feature>', feature) for path in SIDE_EFFECTS.get(stage, [])]
+    if root is not None:
+        paths = [sync_state_label(root) if path == DEFAULT_SYNC_STATE else path for path in paths]
     if stage == 'execute' and task_issue_mode(policy) == 'phase-lazy':
         paths.append(feature + '/workflow/task-issues.json')
     return paths
@@ -1517,10 +1607,20 @@ def native_run_status(root, feature, state, roots):
     for key in ('profile', 'skipped', 'pause'):
         if state.get(key):
             result[key] = state[key]
+    if sync_retry(state, feature):
+        result['project_sync'] = sync_retry(state, feature)
     warnings = guard_approval_warnings(root)
     if warnings:
         result['warnings'] = warnings
     return result
+
+
+def sync_retry(state, feature):
+    """A pending or failed `project-sync` with the command that retries it, else None."""
+    record = state.get('project_sync') or {}
+    if record.get('state') not in ('pending', 'failed'):
+        return None
+    return {**record, 'retry': WORKFLOW_SCRIPT + ' project-sync --feature ' + feature + ' --phase ' + record['phase']}
 
 
 def context_gate(policy, usage):
@@ -1565,9 +1665,13 @@ def text_fingerprints(root, paths):
     return {path: value for path, value in hashes.items() if value is not None}
 
 
-def fingerprint_files(root, paths, normalize=False):
+def fingerprint_files(root, paths, normalize=False, feature=None, like=None):
+    """Byte hashes of `paths`. With `feature`, the configured Project Sync state hashes as that feature's binding
+    projection (`sync_projection`), except where `like` (the fingerprints compared against) holds a legacy raw hash,
+    which stays byte-exact."""
     result = {}
     paths = sorted(set(paths))
+    state = sync_state_label(root) if feature and not normalize else None
     # Legacy labels with Windows separators keep their identity in the result but are read through the
     # canonical path. Labels naming one file each keep their own entry (and the same hash); conflicting role
     # data for such labels is refused when a receipt is ingested (`canonical_receipt`).
@@ -1578,7 +1682,10 @@ def fingerprint_files(root, paths, normalize=False):
     # clean CI checkout of the same commit fingerprint identically.
     for relative in paths:
         content = contents[canonical[relative]]
-        if content is not None:
+        if content is not None and canonical[relative] == state \
+                and str((like or {}).get(relative, SYNC_BINDING_PREFIX)).startswith(SYNC_BINDING_PREFIX):
+            result[relative] = sync_projection(content, feature)
+        elif content is not None:
             # Checkbox bookkeeping must not invalidate task publication or planning.
             if canonical[relative].rsplit('/', 1)[-1] == 'tasks.md':
                 content = re.sub(rb'(?m)^(\s*- )\[[ xX]\]', rb'\1[ ]', content)
@@ -1814,7 +1921,7 @@ def consulted_drift(root, feature, receipts, tier=None):
                  if path in receipt.get('fingerprints', {})}
         if not saved:
             continue
-        current = fingerprint_files(root, saved)
+        current = fingerprint_files(root, saved, feature=feature, like=saved)
         for path in sorted(p for p in saved if current[p] != saved[p]):
             drift.append({'stage': stage, 'path': path, 'because': receipt['input_roles'][path].get('because')})
     return drift
@@ -2018,7 +2125,7 @@ def receipt_status(root, feature, stage, receipt, policy=None, tier=None):
     if not saved or not required <= {portable_label(path) for path in saved}:
         return {'current': False, 'reason': 'explicit-drift', 'paths': sorted(required - set(saved))}
     dependencies = dependency_fingerprints(receipt, required)
-    now_hashes = fingerprint_files(root, dependencies)
+    now_hashes = fingerprint_files(root, dependencies, feature=feature, like=dependencies)
     if now_hashes != dependencies:
         return {'current': False, 'reason': 'explicit-drift',
                 'paths': sorted(path for path in dependencies if now_hashes.get(path) != dependencies[path])}
@@ -2116,7 +2223,7 @@ def upstream_drift(root, feature, stage, receipt, tier=None):
     A required input the receipt never fingerprinted counts as changed."""
     required = required_inputs(root, feature, stage, tier)
     saved = dependency_fingerprints(receipt, required)
-    current = fingerprint_files(root, saved)
+    current = fingerprint_files(root, saved, feature=feature, like=saved)
     drifted = [path for path in saved if current[path] != saved[path]]
     recorded = receipt.get('text_fingerprints') or {}
     text_now = text_fingerprints(root, [path for path in drifted if current[path] is not None and path in recorded])
@@ -2129,7 +2236,7 @@ def receipt_drift(root, feature, stage, receipt, tier=None):
     """Explain staleness without printing source content or weakening the gate."""
     required = required_inputs(root, feature, stage, tier)
     saved = {portable_label(p): v for p, v in dependency_fingerprints(receipt, required).items()}
-    current = fingerprint_files(root, set(saved) | set(required))
+    current = fingerprint_files(root, set(saved) | set(required), feature=feature, like=saved)
     changed = {p for p in set(saved) | set(current) if saved.get(p) != current.get(p)}
     changed.update(set(required) - {portable_label(p) for p in receipt.get('fingerprints', {})})
     if stage in SOURCE_STAGES:
@@ -2623,8 +2730,13 @@ class Run:
             for stage in plan['invalidated']:
                 state['receipts'].pop(stage)
                 lifecycle.queue(state, stage, 'invalidated', reason='migrate: ' + reason.strip())
+            try:
+                record = self._amend_sync_binding(state, reason, 'migrate')
+                sync = {'amended': sorted((record or {}).get('receipts', {})), 'refused': None}
+            except WorkflowError as exc:  # the raw hashes stay byte-exact until sync-amend
+                sync = {'amended': [], 'refused': str(exc)}
             self.save(state)
-            return {'migrated': True, 'migration': copy.deepcopy(entry), 'next': self.next(state)}
+            return {'migrated': True, 'migration': copy.deepcopy(entry), 'sync_binding': sync, 'next': self.next(state)}
 
     def migration_plan(self, state, invalidate_from=None):
         """What a migration of this checkpoint would record, computed without writing.
@@ -2753,7 +2865,8 @@ class Run:
                 old = state['receipts'].get(stage) or {}
                 if stage in found['restamp']:
                     stored = copy.deepcopy(old)
-                    current = fingerprint_files(self.root, stored['fingerprints'])
+                    current = fingerprint_files(self.root, stored['fingerprints'], feature=self.relative,
+                                                like=stored['fingerprints'])
                     drifted = sorted(path for path in stored['fingerprints'] if current[path] != stored['fingerprints'][path])
                     stored['fingerprints'].update(current)
                     stored['revalidated_upstream'] = {**record, 'via': 'whitespace-only', 'paths': drifted}
@@ -2834,6 +2947,83 @@ class Run:
                     'current': receipt_status(self.root, self.relative, stage, receipt, self.policy,
                                               self.tier_of(state))['current'],
                     'stale': staled, 'next': self.next(state)}
+
+    def _amend_sync_binding(self, state, reason, via, actor=None):
+        """Replace each legacy raw hash of the Project Sync state with the binding projection, once the entry is
+        verified (`verify_sync_binding`); the old and new values go to an `administrative-amendment` lineage record.
+        No other hash moves. Returns the record, or None when no receipt holds a raw hash."""
+        label = sync_state_label(self.root)
+        raw = {}
+        for stage, receipt in state['receipts'].items():
+            for path, value in receipt['fingerprints'].items():
+                if same_path(self.root, path, label) and not value.startswith(SYNC_BINDING_PREFIX):
+                    raw[stage, path] = value
+        if not raw:
+            return None
+        entry = verify_sync_binding(self.root, self.relative, state)
+        new = sync_binding(self.root, self.relative)
+        record = {'kind': 'administrative-amendment', 'via': via, 'path': label, 'reason': reason.strip(),
+                  'actor': actor or default_actor(self.root), 'at': now(), 'receipts': {}}
+        for (stage, path), old in raw.items():
+            fields = committed_sync_fields(self.root, label, self.relative, old, entry)
+            changed = [field for field in fields or [] if not SYNC_ADMINISTRATIVE.fullmatch(field)]
+            require(not changed, 'SYNC_BINDING_MISMATCH: ' + stage + ' was recorded with other ' + ', '.join(changed))
+            # fields None: the recorded bytes are not in HEAD, so only the verified binding is known.
+            record['receipts'][stage] = {'before': old, 'after': new, 'fields': fields}
+        for stage, path in raw:  # only once every receipt passed
+            state['receipts'][stage]['fingerprints'][path] = new
+        state.setdefault('lineage', []).append(record)
+        return record
+
+    def sync_amend(self, reason, actor=None):
+        """Convert receipts whose Project Sync state dependency is a raw byte hash (recorded before 1.16.0)."""
+        require(isinstance(reason, str) and reason.strip(), 'SYNC_AMEND_REASON_REQUIRED')
+        from delegate_dispatch import require_not_worker_context
+        require_not_worker_context(self.relative)
+        with locked(self.lock):
+            state = self.load()
+            require(not state['active'], 'ACTIVE_CLAIM_MUST_BE_RESOLVED_BEFORE_SYNC_AMEND')
+            record = self._amend_sync_binding(state, reason, 'sync-amend', actor)
+            require(record, 'SYNC_AMEND_NOT_NEEDED: no receipt holds a raw hash of ' + sync_state_label(self.root))
+            ensure_local_excludes(self.root)
+            write(self.path.parent / 'backups' / (uuid.uuid4().hex + '.json'), read(self.path))
+            self.save(state)
+            return {'amended': sorted(record['receipts']), 'amendment': copy.deepcopy(record), 'next': self.next(state)}
+
+    def sync_project(self, phase):
+        """Run the Project script for `phase`, recording `project_sync` pending before the call and done or failed
+        after it. A phase already attempted whose state entry already shows that phase's status is done without
+        another call, so a retry after a lost result never repeats the remote write."""
+        require(phase in PROJECT_SYNC_STEPS, 'PROJECT_SYNC_PHASE_INVALID: ' + str(phase))
+        with locked(self.lock):
+            state = self.load()
+            applied = (state.get('project_sync') or {}).get('phase') == phase and self.sync_applied(phase)
+            state['project_sync'] = {'phase': phase, 'state': 'done' if applied else 'pending', 'at': now(),
+                                     'summary': 'already applied: status ' + applied if applied else None}
+            self.save(state)
+        if applied:
+            return {'ok': True, 'applied': False, 'project_sync': state['project_sync']}
+        done = subprocess.run([sys.executable, str(self.root / PROJECT_SYNC_SCRIPT), '--phase', phase,
+                               '--feature', self.feature.name, '--summary'],
+                              cwd=self.root, capture_output=True, text=True, encoding='utf-8', errors='replace')
+        lines = (done.stdout.strip() or done.stderr.strip() or 'error exit=' + str(done.returncode)).splitlines()
+        ok = done.returncode == 0 and lines[-1].startswith('ok ')
+        with locked(self.lock):
+            state = self.load()
+            state['project_sync'] = {'phase': phase, 'state': 'done' if ok else 'failed', 'at': now(),
+                                     'summary': lines[-1][:500]}
+            self.save(state)
+        return {'ok': ok, 'applied': True, 'project_sync': state['project_sync']}
+
+    def sync_applied(self, phase):
+        """The status the bound entry shows when it is `phase`'s configured status, else None."""
+        config = read(self.root / '.specify/extensions/project/config.json', {})
+        try:
+            status = read(self.root / sync_state_label(self.root), {}).get(self.feature.name, {}).get('status')
+        except (ValueError, AttributeError):
+            return None
+        target = (config.get('phaseToStatus') or {}).get(phase)
+        return status if target and status == target else None
 
     def revalidate(self, stage, check_run=None, attempt=None, diff_reviewed=None, base_ref=None, reason=None,
                    actor=None, github=None):
@@ -3143,6 +3333,8 @@ class Run:
             result['profile'] = state['profile']
         if state.get('skipped'):
             result['skipped'] = state['skipped']
+        if sync_retry(state, self.relative):
+            result['project_sync'] = sync_retry(state, self.relative)
         return result
 
     def next_stage(self, state, finalize=False):
@@ -3253,7 +3445,8 @@ class Run:
                     'task_type': work_type,
                     'candidates': selected_route(self.policy['delegation'], work_type, active_host(self.root)),
                 }
-            state['active']['baseline'] = fingerprint_files(self.root, [p for r in state['receipts'].values() for p in r['fingerprints']])
+            state['active']['baseline'] = fingerprint_files(self.root, [p for r in state['receipts'].values() for p in r['fingerprints']],
+                                                            feature=self.relative)
             state['status'] = 'in-progress'
             write(self.root / '.specify/feature.json', {'feature_directory': self.relative})
             text, protocol, reporting = reference_text(self.root, stage), None, None
@@ -3274,8 +3467,8 @@ class Run:
             self.save(state)
             claimed = {**state['active'], 'command': state['commands'][stage], 'feature': self.relative, 'issue': state['issue'],
                        'reference': stage_reference(stage), 'reference_text': text,
-                       'side_effects': side_effects(self.policy, self.relative, stage),
-                       'project_sync': project_sync(self.policy, stage)}
+                       'side_effects': side_effects(self.policy, self.relative, stage, self.root),
+                       'project_sync': project_sync(self.policy, stage, self.relative)}
             claimed['receipt_template'] = self.receipt_template(state, stage)
             if reporting:
                 claimed['reporting'], claimed['execute_protocol'] = reporting, protocol
@@ -3441,7 +3634,7 @@ class Run:
         stored['dependency_digest'] = state['dependency_digest']
         decision_input = [self.relative + '/workflow/decisions.json'] if (self.feature / 'workflow/decisions.json').is_file() else []
         stored['fingerprints'] = fingerprint_files(self.root, receipt['inputs'] + receipt['evidence'] + required_inputs(
-            self.root, self.relative, stage, tier) + decision_input)
+            self.root, self.relative, stage, tier) + decision_input, feature=self.relative)
         require(all(v is not None for v in stored['fingerprints'].values()), 'INPUT_MISSING')
         # Whitespace-normalised Markdown hashes: revalidate-upstream's drift decision only.
         text = text_fingerprints(self.root, stored['fingerprints'])
@@ -3506,8 +3699,8 @@ class Run:
             annotate_tasks(self.root, self.relative, self.policy['delegation'], lean=lean)
         # Known semantic transformations advance upstream artifact snapshots with an
         # explicit lineage record. They do not pretend the old artifact remained current.
-        permitted = side_effects(self.policy, self.relative, stage)
-        after = fingerprint_files(self.root, active['baseline'])
+        permitted = side_effects(self.policy, self.relative, stage, self.root)
+        after = fingerprint_files(self.root, active['baseline'], feature=self.relative, like=active['baseline'])
         changed = [p for p, before in active['baseline'].items() if after[p] != before]
         # Only an earlier receipt's dependency can be undermined by this stage.
         # A path every earlier receipt only consulted keeps its recorded hash
@@ -3720,7 +3913,7 @@ def main():
                                       'logged in the relocation record')
     relocate_parser.add_argument('--actor', help='Defaults to the Git user name')
     for name in ('start', 'next', 'status', 'claim', 'complete', 'pause', 'recover', 'bind', 'migrate', 'refresh', 'amend',
-                 'revalidate', 'revalidate-upstream'):
+                 'revalidate', 'revalidate-upstream', 'project-sync', 'sync-amend'):
         cmd = sub.add_parser(name)
         cmd.add_argument('--feature', required=True)
         if name == 'start': cmd.add_argument('--issue', required=True)
@@ -3743,7 +3936,9 @@ def main():
                              help='{stages: {<stage>: {summary, evidence[], inputs[]}}}; required unless --plan')
             cmd.add_argument('--plan', action='store_true', help='Print the changed inputs per stage without writing')
             cmd.add_argument('--actor', help='Defaults to the Git user name')
-        if name in ('pause', 'recover', 'refresh', 'amend'): cmd.add_argument('--reason', required=True)
+        if name in ('pause', 'recover', 'refresh', 'amend', 'sync-amend'): cmd.add_argument('--reason', required=True)
+        if name == 'sync-amend': cmd.add_argument('--actor', help='Defaults to the Git user name')
+        if name == 'project-sync': cmd.add_argument('--phase', required=True, choices=PROJECT_SYNC_STEPS)
         if name == 'migrate': cmd.add_argument('--reason', help='Required unless --preview')
         if name in ('recover', 'bind'): cmd.add_argument('--token', required=True)
         if name == 'migrate':
@@ -3883,6 +4078,8 @@ def run_command(args):
             elif args.action == 'amend':
                 result = run.amend(args.stage, args.evidence, args.reason, args.assessment, args.actor)
             elif args.action == 'refresh': result = run.refresh(args.from_stage, args.reason)
+            elif args.action == 'project-sync': result = run.sync_project(args.phase)
+            elif args.action == 'sync-amend': result = run.sync_amend(args.reason, args.actor)
             elif args.action == 'revalidate':
                 result = run.revalidate(args.stage, args.check_run, args.attempt, args.diff_reviewed, args.base_ref,
                                         args.reason, args.actor)

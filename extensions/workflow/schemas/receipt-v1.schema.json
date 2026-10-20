@@ -13,7 +13,7 @@
     "evidence_snapshots": {"description": "Evidence paths containing sanduq.evidence.snapshot.v1 capture descriptors. Admission and freshness validate retained Git references and exact file proofs through evidence_snapshot.resolve.", "type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
     "command": {"type": "string", "minLength": 1},
     "dependency_digest": {"$ref": "#/$defs/hash"},
-    "fingerprints": {"type": "object", "minProperties": 1, "additionalProperties": {"$ref": "#/$defs/hash"}},
+    "fingerprints": {"description": "SHA-256 per path; a dependency on the configured Project Sync state is sync-binding:v1:<sha256> of the bound feature's entry without status and timestamp fields (1.16.0+), a raw hash before.", "type": "object", "minProperties": 1, "additionalProperties": {"$ref": "#/$defs/fingerprint"}},
     "source_fingerprints": {"description": "Legacy inline source inventory (before 1.13.0); still read.", "type": "object", "additionalProperties": {"type": ["string", "null"]}},
     "source_inventory": {
       "description": "Written by the runtime only: the source inventory side file, relative to the feature directory (workflow/inventory/<stage>-<claim_id>[-<suffix>].json), and the SHA-256 of its bytes.",
@@ -102,6 +102,7 @@
   ],
   "$defs": {
     "hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "fingerprint": {"type": "string", "pattern": "^(sync-binding:v1:)?[0-9a-f]{64}$"},
     "paths": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
     "input_role": {
       "type": "object", "required": ["role"], "additionalProperties": false,
