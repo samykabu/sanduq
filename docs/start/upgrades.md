@@ -11,6 +11,9 @@ specify extension update <id>
 
 Then rerun the extension's init or doctor command if its changelog asks for it.
 
+`update` skips `scope` and `memory` without an error when the community catalog wins their IDs.
+[Register Sanduq's catalog ahead of it](install-speckit.md#if-you-keep-spec-kits-default-catalogs).
+
 ## Workflow and its dependencies
 
 Resolve active [claims](../reference/glossary.md#claim) first. Then preview and apply the
@@ -156,6 +159,11 @@ added. What changes:
   longer reports as a changed input. States recorded before the upgrade compare as before.
 - **Lean execution** is unchanged; the [operating guide](../workflow/operating-guide.md#adopting-lean-execution)
   now says how to adopt it.
+
+## Round 4 migration
+
+Pending: this section lists what each round-4 release changes for a consumer. It is written at
+release.
 
 ## Moved documentation
 

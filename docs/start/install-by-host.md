@@ -40,7 +40,7 @@ A Codex install of these bundles has not been exercised yet. Each bundle carries
 
 ```bash
 specify init --here --integration codex
-specify extension catalog add --name sanduq --priority 10 --install-allowed https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
+specify extension catalog add --name sanduq --priority 1 --install-allowed https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
 ```
 
 Then add extensions. To add all nine extensions, use the [dependency-ordered block](#all-nine-extensions).
@@ -72,7 +72,7 @@ npx skills add samykabu/sanduq-skills --skill illustrate -a claude-code
 
 ```bash
 specify init --here --integration claude
-specify extension catalog add --name sanduq --priority 10 --install-allowed https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
+specify extension catalog add --name sanduq --priority 1 --install-allowed https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
 ```
 
 Then add extensions. To add all nine extensions, use the [dependency-ordered block](#all-nine-extensions).
@@ -108,9 +108,12 @@ specify extension add pr
 specify extension add project
 specify extension add progress
 specify extension add workflow
-specify extension add scope    # requires workflow; another catalog uses the same ID
-specify extension add memory
+specify extension add scope    # requires workflow; the community catalog uses the same ID
+specify extension add memory   # the community catalog uses the same ID
 ```
+
+The community catalog publishes unrelated `scope` and `memory` extensions. If you keep Spec Kit's
+default catalogs, [register Sanduq's catalog ahead of them](install-speckit.md#if-you-keep-spec-kits-default-catalogs).
 
 If you use Workflow, you do not need this block. Add `workflow` and run its init; its installer adds
 Scope, Project, PR, Illustrate and your selected processes. That is the safest way to get Sanduq's

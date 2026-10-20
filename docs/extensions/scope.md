@@ -9,7 +9,7 @@ exports the dependency plan as a diagram.
 | Lifecycle phase | Before and after `specify`, before `plan`, after `implement` |
 | Hooks | Five mandatory hooks ([hooks](../reference/hooks.md)) |
 | Commands | `run`, `guard`, `bind`, `reconcile`, `plan`, `after-specify`, `plan-guard` ([reference](../reference/commands.md#scope)) |
-| Requires | Workflow 1.8 or later (below 2.0); Illustrate 2.2.1 or later (below 3.0) |
+| Requires | Workflow 1.13.0 or later (below 2.0); Illustrate 2.2.1 or later (below 3.0) |
 | Standalone | No |
 | License | MIT; the `scope-gate` and `scope-brainstorm` presets are MIT too |
 
@@ -25,8 +25,9 @@ specify extension add workflow
 $speckit-workflow-init Use our existing GitHub Project and an advisory managed-only evidence gate.
 ```
 
-Another catalog publishes an unrelated extension with the ID `scope`. Workflow's installer resolves
-Sanduq's package from its pinned source.
+The community catalog publishes an unrelated extension with the ID `scope` ("Spec Scope").
+Workflow's installer resolves Sanduq's package from its pinned source. If you run
+`specify extension add scope` yourself, [register Sanduq's catalog ahead of the community catalog](../start/install-speckit.md#if-you-keep-spec-kits-default-catalogs).
 
 ## Example
 

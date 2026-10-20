@@ -1,7 +1,7 @@
 # Project
 
 **Purpose:** mirror each Spec Kit feature on a GitHub Project (v2). Project creates a parent issue,
-moves its Status column through the lifecycle, and creates one sub-issue per task.
+moves its Status column through the lifecycle and, in standalone use, creates one sub-issue per task.
 
 | | |
 | --- | --- |

@@ -33,11 +33,39 @@ Run `git diff` afterwards and keep your constitution, CI files and project metad
 ## 3. Register the Sanduq catalog
 
 ```bash
-specify extension catalog add --name sanduq --priority 10 --install-allowed https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
+specify extension catalog add --name sanduq --priority 1 --install-allowed https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
 ```
 
-The catalog lists published versions. Priority 10 puts it ahead of other catalogs, because one other
-catalog also publishes an extension called `scope`.
+The catalog lists published versions. `catalog add` writes `.specify/extension-catalogs.yml`. While
+that file exists, Spec Kit reads only the catalogs it lists, so after this command Sanduq is your
+only catalog.
+
+### If you keep Spec Kit's default catalogs
+
+If that file also lists Spec Kit's `default` and `community` catalogs, the catalog with the
+**lowest** priority number wins when two catalogs publish the same ID. The community catalog
+(priority 2) publishes unrelated extensions called `scope` ("Spec Scope") and `memory` ("Spec Kit
+Memory") for discovery only. With Sanduq at a higher number, `specify extension add scope` or
+`add memory` refuses to install, `search` and `info` show the other product, and
+`specify extension update` skips the extension without an error.
+
+Priority 1 keeps Sanduq ahead of the community catalog, so install and update both find Sanduq's
+package. If you registered Sanduq with a higher number (older guides used 10), register it again:
+
+```bash
+specify extension catalog remove sanduq
+specify extension catalog add --name sanduq --priority 1 --install-allowed https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
+```
+
+`specify extension info memory` shows which product you get: Sanduq's is "Sanduq Memory".
+
+For a one-off install, use the extension's `download_url` from the [catalog](../../catalog.json),
+for example `specify extension add memory --from https://github.com/samykabu/sanduq/releases/download/memory-v<version>/memory.zip`.
+Spec Kit asks you to confirm. `update` still reads the catalogs, so it keeps skipping that extension.
+
+The Workflow installer is not affected. It installs Scope from Sanduq's release and refuses a
+package with the same ID from another repository. `SPECKIT_CATALOG_URL` replaces every catalog,
+Sanduq's too.
 
 ## 4. Add extensions
 

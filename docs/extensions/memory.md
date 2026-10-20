@@ -24,6 +24,10 @@ python .specify/extensions/memory/scripts/install.py --target-branch main
 $speckit-memory-init Configure main as the merge branch and register our real test commands and covered paths.
 ```
 
+The community catalog publishes an unrelated `memory` extension ("Spec Kit Memory"). If you keep
+Spec Kit's default catalogs, [register Sanduq's catalog ahead of it](../start/install-speckit.md#if-you-keep-spec-kits-default-catalogs);
+`specify extension info memory` should show "Sanduq Memory".
+
 Use your real merge branch and checks that verify your code. Init does not enable automatic
 archiving. `$speckit-memory-enable` shows the policy for your review first.
 

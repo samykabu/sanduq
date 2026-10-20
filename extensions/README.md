@@ -37,4 +37,6 @@ versions independently.
 
 Package READMEs linked above retain detailed runtime contracts. Commands register through the
 consumer's Spec Kit integration; read the [host naming table](../docs/reference/commands.md#command-names).
-Scope's ID is ambiguous across catalogs; use Workflow's versioned Sanduq dependency installer.
+The community catalog also publishes `scope` and `memory`; Workflow's versioned dependency installer
+gets Sanduq's Scope, and [catalog priority](../docs/start/install-speckit.md#if-you-keep-spec-kits-default-catalogs)
+decides the rest.

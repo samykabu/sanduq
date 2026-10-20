@@ -78,9 +78,12 @@ codex plugin add illustration-tools@sanduq
 
 ```bash
 specify init --here --integration codex    # or --integration claude
-specify extension catalog add --name sanduq --priority 10 --install-allowed https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
+specify extension catalog add --name sanduq --priority 1 --install-allowed https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
 specify extension add illustrate
 ```
+
+The community catalog publishes unrelated `scope` and `memory` extensions. If you keep Spec Kit's
+default catalogs, [register Sanduq's catalog ahead of them](docs/start/install-speckit.md#if-you-keep-spec-kits-default-catalogs).
 
 **The managed Workflow:**
 
@@ -188,7 +191,7 @@ The claim's `project_sync.command` is now `workflow.py project-sync`. See
 | --- | --- | --- |
 | Portable skills ([sanduq-skills](https://github.com/samykabu/sanduq-skills)) | MIT | Yes |
 | Scope, `scope-gate` and `scope-brainstorm` presets | MIT | Yes |
-| Workflow, Project, Assure, User Manual, PR, Illustrate, Memory, `workflow` preset | [PolyForm Noncommercial 1.0.0](LICENSE) | Needs a separate written license from [Samy K. Abushanab](https://github.com/samykabu) |
+| Workflow, Project, Assure, User Manual, PR, Illustrate, Memory, Progress, `workflow` preset | [PolyForm Noncommercial 1.0.0](LICENSE) | Needs a separate written license from [Samy K. Abushanab](https://github.com/samykabu) |
 
 PolyForm Noncommercial is source available, not an OSI-approved open-source license. Bundled upstream
 material keeps its own license; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the

@@ -6,7 +6,8 @@ Find the symptom, then run the check. For managed features, `$speckit-workflow-d
 | Symptom | Check | Fix |
 | --- | --- | --- |
 | A command is missing | The integration you initialized (`codex` or `claude`) and the host's command directory | Reinstall the extension, then start a new host session. Workflow's `workflow.py host` operation repairs or switches Codex and Claude Code registrations. |
-| The wrong Scope package is installed | The package origin and Workflow's dependency lock | Install Workflow and let its installer add Sanduq's Scope. Another catalog uses the same ID. |
+| The wrong Scope package is installed | The package origin and Workflow's dependency lock | Install Workflow and let its installer add Sanduq's Scope. The community catalog uses the same ID. |
+| `add memory` or `add scope` refuses, `info` shows another product, or `update` skips the extension | `specify extension catalog list` | The community catalog wins the ID. [Register Sanduq's catalog with priority 1](install-speckit.md#if-you-keep-spec-kits-default-catalogs). |
 | A QA or manual stage never runs | `.specify/workflow.yml` | Installing a package does not [enable](../reference/glossary.md#enabled) it. Select the process with `$speckit-workflow-init`. |
 | GitHub board or auth fails | `gh auth status`, the Project scopes and the board mappings | Run `gh auth refresh -h github.com -s project,read:project`, then `workflow.py doctor --project`. |
 | An old extension version installs | The catalog and the Spec Kit extension cache | Confirm the cache's absolute path, clear only that project's cache, then reinstall. |

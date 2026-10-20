@@ -43,10 +43,11 @@ retain the prior required, all-PR evidence behavior until deliberately changed.
    ```
 
 2. Add Sanduq's catalog, then its workflow package. Check the selected source
-   because another catalog may publish the same extension ID:
+   because the community catalog publishes unrelated `scope` and `memory` extensions
+   ([which catalog wins](../start/install-speckit.md#if-you-keep-spec-kits-default-catalogs)):
 
    ```powershell
-   specify extension catalog add --name sanduq --priority 10 --install-allowed https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
+   specify extension catalog add --name sanduq --priority 1 --install-allowed https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
    specify extension add workflow
    ```
 
