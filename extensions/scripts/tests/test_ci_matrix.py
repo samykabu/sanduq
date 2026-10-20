@@ -1,14 +1,19 @@
 """Tests for .github/scripts/ci_matrix.py: changed paths to regression suites."""
+import datetime
+import importlib.util
+import json
 import re
+import shutil
 import sys
+import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / ".github" / "scripts"))
 import ci_matrix  # noqa: E402
 
-# Everything except `project`, whose module the workflow suite already runs.
-ALL = set(ci_matrix.SUITES) - {"project"}
+ALL = set(ci_matrix.SUITES)
 WORKFLOW_TESTS = ci_matrix.ROOT / "extensions/workflow/tests"
 
 
@@ -36,7 +41,7 @@ class CiMatrixTests(unittest.TestCase):
         self.assertFalse(result["memory_install"])
 
     def test_shared_paths_run_everything(self):
-        for path in ("extensions/scripts/vendor.py", ".github/workflows/ci.yml", "catalog.json",
+        for path in ("extensions/scripts/package.py", ".github/workflows/ci.yml", "catalog.json",
                      "presets/x/preset.yml", "vendor.lock.json"):
             self.assertEqual(ALL, suites([path]), path)
 
@@ -85,21 +90,16 @@ class Round3Selection(unittest.TestCase):
 
     def test_mixed_lint_only_and_code_keeps_the_code_selection(self):
         self.assertEqual({"memory"}, suites(["README.md", "extensions/memory/scripts/x.py"]))
-        self.assertEqual(ALL, suites(["CHANGELOG.md", "extensions/scripts/vendor.py"]))
+        self.assertEqual(ALL, suites(["CHANGELOG.md", "extensions/scripts/package.py"]))
 
     def test_project_change_runs_the_project_suite_and_the_smoke_jobs(self):
         path = "extensions/project/scripts/project_sync.py"
         result = self.result([path])
-        self.assertEqual({("project", "ubuntu-latest"), ("project", "windows-latest")}, pairs([path]))
+        self.assertLessEqual({("project", "ubuntu-latest"), ("project", "windows-latest")}, pairs([path]))
         self.assertTrue(result["install_smoke"])
-        entry = result["matrix"]["include"][0]
-        self.assertEqual(("extensions/workflow/tests", "test_project_sync_summary"), (entry["tests"], entry["modules"]))
-        self.assertTrue((ci_matrix.ROOT / entry["tests"] / (entry["modules"] + ".py")).is_file())
-
-    def test_project_suite_is_dropped_when_workflow_runs(self):
-        self.assertEqual({"workflow", "scope"},
-                         suites(["extensions/project/scripts/x.py", "extensions/workflow/scripts/workflow.py"]))
-        self.assertNotIn("project", suites(None, "schedule"))
+        entry = [i for i in result["matrix"]["include"] if i["suite"] == "project"][0]
+        target = ci_matrix.ROOT / entry["tests"] / ((entry["modules"] or "") + ".py")
+        self.assertTrue(target.is_file() if entry["modules"] else any((ci_matrix.ROOT / entry["tests"]).glob("test*.py")))
 
     def test_install_smoke_follows_install_relevant_paths(self):
         for path in ("extensions/workflow/scripts/install.py", "extensions/scope/extension.yml",
@@ -118,14 +118,14 @@ class Round3Selection(unittest.TestCase):
         self.assertTrue(self.result(["docs/a.md"], "workflow_dispatch")["install_smoke"])
         self.assertTrue(self.result(None, "push")["install_smoke"])
 
-    def test_illustrate_vendored_checks_only_on_vendor_bumps_and_nightly(self):
+    def test_illustrate_vendored_checks_only_on_vendor_bumps_on_demand_and_weekly(self):
         command = "extensions/illustrate/commands/speckit.illustrate.export.md"
         self.assertEqual({"illustrate"}, suites([command]))
         self.assertFalse(self.result([command])["illustrate_vendored"])
         self.assertFalse(self.result(["extensions/illustrate/hooks/self_check_hook.py"])["illustrate_vendored"])
         for files, event in ((["vendor.lock.json"], "pull_request"),
                              (["extensions/illustrate/skill/scripts/verify-geometry.py"], "push"),
-                             (["docs/a.md"], "schedule"), (["docs/a.md"], "workflow_dispatch"), (None, "push")):
+                             (["docs/a.md"], "workflow_dispatch"), (None, "push")):
             result = self.result(files, event)
             self.assertTrue(result["illustrate_vendored"], (files, event))
             self.assertIn("illustrate", {i["suite"] for i in result["matrix"]["include"]}, (files, event))
@@ -144,9 +144,9 @@ class Round3Selection(unittest.TestCase):
         self.assertEqual([{"os": "ubuntu-latest", "suite": "workflow", "tests": "extensions/workflow/tests",
                            "modules": ""}], linux)
 
-    def test_shards_balance_module_bytes(self):
+    def test_shards_balance_module_bytes_without_a_table(self):
         sizes = {p.stem: p.stat().st_size for p in WORKFLOW_TESTS.glob("test*.py")}
-        loads = [sum(sizes[m] for m in shard) for shard in ci_matrix.workflow_shards()]
+        loads = [sum(sizes[m] for m in shard) for shard in ci_matrix.shards("workflow", 4, weights={})]
         # Greedy largest-first: shards differ by at most the largest module.
         self.assertLessEqual(max(loads) - min(loads), max(sizes.values()))
 
@@ -190,9 +190,11 @@ class CiWorkflowFile(unittest.TestCase):
 
     def test_vendored_illustrate_checks_follow_their_flag(self):
         regression = self.job("regression")
-        for step in ("Illustrate builders and verifiers", "Illustrate rendered-layout lint"):
-            head = regression[regression.index(step):].split("run:")[0]
+        for step in ("Illustrate builders and verifiers", "Illustrate rendered-layout lint",
+                     "Cache the Playwright browser", "Install Playwright for Illustrate render checks"):
+            head = regression[regression.index(step):].split("run:")[0].split("with:")[0]
             self.assertIn("needs.changes.outputs.illustrate_vendored == 'true'", head, step)
+            self.assertIn("runner.os == 'Linux'", head, step)
 
     def test_fresh_runners_still_install_chromium_os_dependencies(self):
         regression = self.job("regression")
@@ -202,7 +204,7 @@ class CiWorkflowFile(unittest.TestCase):
     def test_every_setup_python_caches_pip(self):
         for workflow in ("ci.yml", "release-extensions.yml"):
             text = (ci_matrix.ROOT / ".github/workflows" / workflow).read_text(encoding="utf-8")
-            steps = re.findall(r"uses: actions/setup-python@\S+\n((?:\s{8,}\S.*\n)+)", text)
+            steps = re.findall(r"uses: actions/setup-python@\S+.*\n((?:\s{8,}\S.*\n)+)", text)
             self.assertTrue(steps, workflow)
             for body in steps:
                 self.assertIn("cache: pip", body, workflow)
@@ -253,6 +255,179 @@ class ReviewFindings(unittest.TestCase):
             os.chdir(here)
         self.assertIn("extensions/memory/a.py", files)
         self.assertIn("memory", ci_matrix.suites_for(files))
+
+
+class Round4Selection(unittest.TestCase):
+    """IP13-IP15, X15, X16, PM19, AU23."""
+
+    def include(self, files, event="pull_request", today=None):
+        return ci_matrix.build(files, event, today)["matrix"]["include"]
+
+    def test_illustrate_hook_runs_workflow_hook_tests_and_the_install_smoke(self):
+        path = "extensions/illustrate/hooks/self_check_hook.py"
+        for event in ("pull_request", "push"):
+            result = ci_matrix.build([path], event)
+            workflow = [i for i in result["matrix"]["include"] if i["suite"] == "workflow"]
+            self.assertEqual({"ubuntu-latest", "windows-latest"}, {i["os"] for i in workflow}, event)
+            self.assertTrue(all(i["modules"] == "test_install_hooks" and "shard" not in i for i in workflow), event)
+            self.assertEqual({"illustrate", "workflow"}, {i["suite"] for i in result["matrix"]["include"]})
+            self.assertTrue(result["install_smoke"], event)
+        self.assertTrue((WORKFLOW_TESTS / "test_install_hooks.py").is_file())
+
+    def test_a_whole_suite_wins_over_its_module_list(self):
+        files = ["extensions/illustrate/hooks/self_check_hook.py", "extensions/workflow/scripts/workflow.py"]
+        workflow = [i for i in self.include(files) if i["suite"] == "workflow"]
+        self.assertEqual(4, len([i for i in workflow if i["os"] == "windows-latest"]))
+        self.assertEqual([""], [i["modules"] for i in workflow if i["os"] == "ubuntu-latest"])
+
+    def test_vendored_checks_run_on_one_scheduled_day_a_week(self):
+        monday = datetime.date(2026, 10, 19)
+        days = [monday + datetime.timedelta(n) for n in range(7)]
+        weekly = [d for d in days if ci_matrix.build(None, "schedule", d)["illustrate_vendored"]]
+        self.assertEqual([ci_matrix.VENDORED_WEEKDAY], [d.weekday() for d in weekly])
+        # The suite itself still runs every night.
+        self.assertIn("illustrate", {i["suite"] for i in self.include(None, "schedule", monday)})
+        self.assertTrue(ci_matrix.build(["docs/a.md"], "workflow_dispatch", monday)["illustrate_vendored"])
+
+    def test_tooling_paths_are_lint_only(self):
+        for path in (".github/workflows/release-extensions.yml", ".github/workflows/vendor-update.yml",
+                     ".github/workflows/prune-artifacts.yml", ".github/actionlint.yaml",
+                     "extensions/scripts/tests/test_vendor.py", "extensions/scripts/test_check_docs.py",
+                     "extensions/scripts/validate_skills.py", "extensions/scripts/vendor.py"):
+            result = ci_matrix.build([path], "pull_request")
+            self.assertFalse(result["has_regression"], path)
+            self.assertFalse(result["install_smoke"], path)
+        self.assertEqual(ALL, suites([".github/workflows/ci.yml"]))
+
+    def test_tooling_scripts_run_the_one_module_that_reads_them(self):
+        for path, suite, module in (("extensions/scripts/release.py", "workflow", "test_release"),
+                                    ("extensions/scripts/check_docs.py", "assure", "test_descriptions"),
+                                    ("extensions/scripts/benchmark_instructions.py", "scope", "test_instructions")):
+            include = self.include([path])
+            self.assertEqual({suite}, {i["suite"] for i in include}, path)
+            self.assertEqual({module}, {i["modules"] for i in include}, path)
+            self.assertEqual(2, len(include), path)
+            self.assertTrue((ci_matrix.ROOT / include[0]["tests"] / (module + ".py")).is_file(), path)
+
+    def test_injected_files_run_every_suite_that_ships_them(self):
+        self.assertEqual({"workflow", "project", "scope"}, suites(["extensions/scripts/shared/sanduq_remote.py"]))
+        self.assertLessEqual({"workflow", "scope", "assure", "user-manual"},
+                             suites(["extensions/workflow/scripts/sanduq_ci.py"]))
+        self.assertLessEqual({"assure", "user-manual"}, suites(["extensions/workflow/scripts/sanduq_hash.py"]))
+        self.assertTrue(ci_matrix.build(["extensions/scripts/shared/deps.py"], "push")["install_smoke"])
+        # A shared file the table does not know runs everything.
+        self.assertEqual(ALL, suites(["extensions/scripts/shared/new_helper.py"]))
+
+    def test_injected_table_covers_every_built_archive(self):
+        spec = importlib.util.spec_from_file_location("package_for_ci", ci_matrix.ROOT / "extensions/scripts/package.py")
+        package = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(package)
+        sources = {p.name: p for p in (ci_matrix.ROOT / "extensions/scripts/shared").glob("*.py")}
+        sources.update({Path(p).name: ci_matrix.ROOT / p for p in ci_matrix.INJECTED})
+        out = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, out, ignore_errors=True)
+        for extension in sorted(p.parent.name for p in (ci_matrix.ROOT / "extensions").glob("*/extension.yml")):
+            archive = out / (extension + ".zip")
+            package.package(extension, archive)
+            with zipfile.ZipFile(archive) as zf:
+                for name in zf.namelist():
+                    folder, _, base = name.rpartition("/")
+                    source = sources.get(base)
+                    if folder != extension + "/scripts" or source is None or zf.read(name) != source.read_bytes():
+                        continue
+                    if source.parent == ci_matrix.ROOT / "extensions" / extension / "scripts":
+                        continue  # the extension's own file
+                    path = source.relative_to(ci_matrix.ROOT).as_posix()
+                    self.assertIn(extension, ci_matrix.INJECTED.get(path, []), f"{extension} ships {path}")
+
+    def test_project_runs_with_workflow_and_from_either_test_folder(self):
+        self.assertEqual({"project", "workflow"}, suites(["extensions/project/scripts/x.py"]))
+        self.assertIn("project", suites(None, "schedule"))
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        self.addCleanup(setattr, ci_matrix, "ROOT", ci_matrix.ROOT)
+        ci_matrix.ROOT = root
+        (root / "extensions/workflow/tests").mkdir(parents=True)
+        (root / "extensions/workflow/tests/test_project_sync_summary.py").write_text("")
+        self.assertEqual(ci_matrix.PROJECT_LEGACY, ci_matrix.suite_tests("project"))
+        (root / "extensions/project/tests").mkdir(parents=True)
+        (root / "extensions/project/tests/test_project_sync.py").write_text("")
+        self.assertEqual(("extensions/project/tests", ""), ci_matrix.suite_tests("project"))
+        (root / "extensions/workflow/tests/test_project_sync_summary.py").unlink()
+        self.assertEqual(("extensions/project/tests", ""), ci_matrix.suite_tests("project"))
+
+    def test_every_unit_is_in_exactly_one_windows_shard(self):
+        for suite, count in ci_matrix.WINDOWS_SHARDS.items():
+            include = [i for i in self.include([f"extensions/{suite}/scripts/x.py"]) if i["suite"] == suite]
+            windows = [i for i in include if i["os"] == "windows-latest"]
+            self.assertEqual([f"{n}/{count}" for n in range(1, count + 1)], [i["shard"] for i in windows], suite)
+            listed = [u for i in windows for u in i["modules"].split()]
+            self.assertEqual(len(listed), len(set(listed)), suite)
+            self.assertEqual(sorted(ci_matrix.shard_units(suite)), sorted(listed), suite)
+            self.assertEqual([""], [i["modules"] for i in include if i["os"] == "ubuntu-latest"], suite)
+
+    def test_memory_shards_by_class_and_covers_every_module(self):
+        units = ci_matrix.shard_units("memory")
+        self.assertTrue(all(u.count(".") == 1 for u in units))
+        modules = {p.stem for p in (ci_matrix.ROOT / "extensions/memory/tests").glob("test*.py")}
+        self.assertEqual(modules, {u.split(".")[0] for u in units})
+
+    def test_test_classes_skips_mixins_and_follows_local_bases(self):
+        folder = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        path = folder / "test_x.py"
+        path.write_text("import unittest\nfrom unittest import TestCase\n"
+                        "class Mixin:\n    def test_a(self): pass\n"
+                        "class A(Mixin, unittest.TestCase): pass\n"
+                        "class B(TestCase): pass\n"
+                        "class C(B): pass\n"
+                        "class Helper(object): pass\n", encoding="utf-8")
+        self.assertEqual(["A", "B", "C"], ci_matrix.test_classes(path))
+
+    def test_a_unit_missing_from_the_table_still_gets_a_shard(self):
+        units = ci_matrix.shard_units("workflow")
+        weights = {u: 10.0 for u in sorted(units)[1:]}
+        listed = [u for shard in ci_matrix.shards("workflow", 4, weights) for u in shard]
+        self.assertEqual(sorted(units), sorted(listed))
+        # An empty table falls back to file size.
+        listed = [u for shard in ci_matrix.shards("memory", 2, {}) for u in shard]
+        self.assertEqual(sorted(ci_matrix.shard_units("memory")), sorted(listed))
+
+    def test_shards_balance_measured_seconds(self):
+        table = json.loads(ci_matrix.WEIGHTS.read_text(encoding="utf-8"))
+        self.assertTrue(table.get("source"))
+        for suite in ci_matrix.WINDOWS_SHARDS:
+            weights, units = table[suite], ci_matrix.shard_units(suite)
+            self.assertTrue(all(isinstance(v, (int, float)) and v >= 0 for v in weights.values()), suite)
+            known = [u for u in units if u in weights]
+            self.assertGreater(len(known), len(units) // 2, f"{suite}: most units should be measured")
+            rate = sum(weights[u] for u in known) / sum(units[u] for u in known)
+            cost = {u: weights.get(u, units[u] * rate) for u in units}
+            loads = [sum(cost[u] for u in s) for s in ci_matrix.shards(suite)]
+            # Greedy heaviest-first: shards differ by at most the heaviest unit.
+            self.assertLessEqual(max(loads) - min(loads), max(cost.values()) + 1e-6, suite)
+
+
+class Round4WorkflowFiles(unittest.TestCase):
+    """X16 actionlint in lint; X24 every action pinned by commit with its version."""
+
+    def test_every_action_is_pinned_by_commit_with_its_version(self):
+        for path in sorted((ci_matrix.ROOT / ".github/workflows").glob("*.yml")):
+            for ref, rest in re.findall(r"uses: (\S+)(.*)", path.read_text(encoding="utf-8")):
+                self.assertRegex(ref, r"^[\w.-]+/[\w.-]+@[0-9a-f]{40}$", f"{path.name}: {ref}")
+                self.assertRegex(rest, r"^ # v\d+\.\d+\.\d+$", f"{path.name}: {ref}")
+
+    def test_lint_runs_actionlint_with_a_checked_download(self):
+        text = (ci_matrix.ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        lint = re.search(r"^  lint:\n(?:(?:    .*)?\n)+", text, re.M).group(0)
+        self.assertIn("sha256sum -c", lint)
+        self.assertLess(lint.index("ShellCheck bash scripts"), lint.index("actionlint"))
+        self.assertTrue((ci_matrix.ROOT / ".github/actionlint.yaml").is_file())
+
+    def test_suite_step_leaves_the_project_folder_to_the_matrix(self):
+        text = (ci_matrix.ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        self.assertNotIn("discover -s extensions/project/tests", text)
+
 
 if __name__ == "__main__":
     unittest.main()
