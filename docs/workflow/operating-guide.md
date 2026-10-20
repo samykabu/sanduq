@@ -140,7 +140,8 @@ scope:
   runs `task_issues.py --phase "<Phase heading>"` at each phase start; Ready still requires every
   task mapped.
 - `project_sync.points`: the stages that sync the GitHub Project; `claim` prints
-  `project_sync: true|false`. Absent means specify, plan, analyze, taskstoissues, execute and pr.
+  `project_sync: false` or `{phase, command}`, the command being `workflow.py project-sync`.
+  Absent means specify, plan, analyze, taskstoissues, execute and pr.
 - `scope.board_cache_seconds`: `gate`, `approve`, `publish` and `bind` reuse an `inspect`
   snapshot passed with `--snapshot` while it matches the live issue and is younger than this
   (`snapshot_reused` in their output).
