@@ -1,10 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "workflow": "1.16.0",
-    "assure": "2.5.1",
-    "user-manual": "1.7.1"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Issue #99 (finalization loops): Project Sync binding projection in receipts, workflow.py project-sync and sync-amend, legacy raw hashes converted only after verification, document freshness keeps declared outputs out of its inputs, finalization order and lean adoption documented. Two Opus streams reviewed by the orchestrating session and by Codex gpt-6.1-sol (findings fixed) on 2026-10-20; full workflow suite (only the 18 known local failures), Assure, User Manual and scripts suites, two-host smoke install. Publish after main CI."
 }

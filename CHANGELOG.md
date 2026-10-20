@@ -4,7 +4,7 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
-## 2026-10-20 — Workflow 1.16.0, Assure 2.5.1, User Manual 1.7.1 (pending release)
+## 2026-10-20 — Workflow 1.16.0, Assure 2.5.1, User Manual 1.7.1
 
 - Issue #99: a board status write no longer stales receipts or refuses a completion (receipts bind the feature's Project Sync entry without its status); `workflow.py project-sync` records each sync and `sync-amend` converts receipts recorded before 1.16.0 after verifying the binding. Document freshness keeps declared outputs out of its inputs, and reports go to the extension state folder. The dispatcher references state one finalization order; the operating guide covers adopting lean execution.
 

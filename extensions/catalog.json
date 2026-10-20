@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-10-19T23:54:46.484562+00:00",
+  "updated_at": "2026-10-20T11:23:35.586829+00:00",
   "catalog_url": "https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json",
   "extensions": {
     "project": {
@@ -191,14 +191,14 @@
     "assure": {
       "name": "Assure",
       "id": "assure",
-      "version": "2.5.0",
+      "version": "2.5.1",
       "description": "Make QA part of the Spec Kit lifecycle: initialize project policy, require feature test-readiness analysis before implementation, and generate a current QA test manual before pull-request creation.",
       "author": "Samy K. Abushanab",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/assure",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/assure/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/assure/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/assure-v2.5.0/assure.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/assure-v2.5.1/assure.zip",
       "license": "PolyForm-Noncommercial-1.0.0",
       "category": "process",
       "effect": "read-write",
@@ -240,20 +240,20 @@
       ],
       "verified": false,
       "created_at": "2026-07-18T18:35:58Z",
-      "updated_at": "2026-10-19T23:54:45.828013+00:00",
-      "sha256": "ce33f4bac64f206fe9c93dd5e1f239282f47970316b34b61a1d91a52405230c3"
+      "updated_at": "2026-10-20T11:23:35.563719+00:00",
+      "sha256": "7b63a1b76481ae104a185ddcdb58eca742db23fc2ac4b251797cd2c7edaf6e5c"
     },
     "user-manual": {
       "name": "User Manual",
       "id": "user-manual",
-      "version": "1.7.0",
+      "version": "1.7.1",
       "description": "Create and incrementally maintain bilingual-ready, audience-aware application manuals in Markdown, themeable MkDocs HTML (Material, ReadTheDocs, or any installed theme), and PDF, including modules, interfaces, tutorials, screenshots, APIs, releases, migrations, infrastructure, architecture, and complete data dictionaries.",
       "author": "Samy K. Abushanab",
       "repository": "https://github.com/samykabu/sanduq",
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/user-manual",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/user-manual/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/user-manual/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/user-manual-v1.7.0/user-manual.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/user-manual-v1.7.1/user-manual.zip",
       "license": "PolyForm-Noncommercial-1.0.0",
       "category": "documentation",
       "effect": "read-write",
@@ -305,13 +305,13 @@
       ],
       "verified": false,
       "created_at": "2026-07-18T18:35:58Z",
-      "updated_at": "2026-10-19T23:54:45.852206+00:00",
-      "sha256": "5681c9ffe65b698be7f3996b55960df1c42648e64eae216d3b094da58592ac04"
+      "updated_at": "2026-10-20T11:23:35.586752+00:00",
+      "sha256": "d06ef5e68edc708b90d1afbf68d5eb411ef03c0ddf8229c3c0d2fe567316168d"
     },
     "workflow": {
       "name": "Sanduq Workflow",
       "id": "workflow",
-      "version": "1.15.0",
+      "version": "1.16.0",
       "description": "GitHub issue decisions and resumable Scope-to-PR orchestration with optional model-aware delegation, QA, User Manual, and workflow evidence CI.",
       "author": "Samy K. Abushanab",
       "license": "PolyForm-Noncommercial-1.0.0",
@@ -319,7 +319,7 @@
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/workflow",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v1.15.0/workflow.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v1.16.0/workflow.zip",
       "requires": {
         "speckit_version": ">=1.0.0,<2.0.0",
         "tools": [
@@ -353,8 +353,8 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "8545563a8cdc0a96b0df1ff48b9556055d250e7cd4b0db4c67671cdefdc62b37",
-      "updated_at": "2026-10-19T23:54:45.778847+00:00"
+      "sha256": "4fd7ec75d03a505b087d79bfae00e1ef2b57b18b643512e512a8696b9ab51d21",
+      "updated_at": "2026-10-20T11:23:35.545180+00:00"
     },
     "scope": {
       "name": "Speckit Scope",
