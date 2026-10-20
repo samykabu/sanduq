@@ -9,6 +9,9 @@
 *.py text eol=lf
 *.md text eol=lf
 *.ps1 text eol=lf
+# Packaged as working-tree bytes: LF everywhere so local builds equal CI builds (X20).
+*.txt text eol=lf
+LICENSE text eol=lf
 # Byte-pinned test fixtures: autocrlf must never rewrite them (their SHA-256 is asserted).
 extensions/workflow/tests/fixtures/source-key.fixtures.json -text
 extensions/workflow/tests/fixtures/ci-runs/** -text

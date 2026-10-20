@@ -32,10 +32,13 @@ EXCLUDE_PATHS = (
     'workflow/assets/delegate-task/assets',
 )
 BLOB = 'https://github.com/samykabu/sanduq/blob/main/extensions/'
+SHARED = {'sanduq_remote.py': ('workflow', 'project', 'scope'), 'sanduq_pr_lint.py': ('pr', 'workflow')}
 
 
 def excluded(name):
-    return any(name == path or name.startswith(path + '/') for path in EXCLUDE_PATHS)
+    # Each extension's own CHANGELOG.md stays in the repository too (X20); its README links go to GitHub.
+    return re.fullmatch(r'[^/]+/CHANGELOG\.md', name) is not None or \
+        any(name == path or name.startswith(path + '/') for path in EXCLUDE_PATHS)
 
 
 def package(extension, output=None, root=ROOT):
@@ -56,7 +59,7 @@ def package(extension, output=None, root=ROOT):
     readme = extension + '/README.md'
     if readme in files:
         text = files[readme].decode('utf-8')
-        for path in EXCLUDE_PATHS:
+        for path in EXCLUDE_PATHS + (extension + '/CHANGELOG.md',):
             if path.startswith(extension + '/'):
                 text = re.sub(r'\]\(' + re.escape(path[len(extension) + 1:]) + r'(?=[/)#])', '](' + BLOB + path, text)
         files[readme] = re.sub(r'(\]\([^)\s]*/)SKILL\.ext\.md(?=[)#])', r'\1SKILL.md', text).encode('utf-8')
@@ -82,6 +85,12 @@ def package(extension, output=None, root=ROOT):
             helpers.append('evidence_snapshot.py')
         for helper in helpers:
             files[extension + '/scripts/' + helper] = (root / 'extensions/scripts/shared' / helper).read_bytes()
+    # One source each, shipped next to its consumers' scripts: the GitHub remote reading (D4) and the PR
+    # closing-reference lint (PM21). Fixture roots without the shared folder skip them.
+    for helper, consumers in SHARED.items():
+        shared_file = root / 'extensions/scripts/shared' / helper
+        if extension in consumers and shared_file.exists():
+            files[extension + '/scripts/' + helper] = shared_file.read_bytes()
     inventory = {name: hashlib.sha256(value).hexdigest() for name, value in sorted(files.items())}
     files[extension + '/package-inventory.json'] = (json.dumps(inventory, indent=2) + '\n').encode()
     output = output or root / 'dist' / (extension + '.zip')

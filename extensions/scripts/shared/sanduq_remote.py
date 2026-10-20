@@ -67,7 +67,9 @@ def normalize_remote_url(url):
 
 def github_slug(url):
     """`owner/repo` when `url` names a GitHub repository, else None. Case is preserved:
-    compare with `same_github_repository`, never `==`."""
+    compare with `same_github_repository`, never `==`. None-safe, so `github_slug(origin_url(root))` works."""
+    if not url:
+        return None
     match = _GITHUB.fullmatch(normalize_remote_url(url))
     return match[1] if match else None
 
