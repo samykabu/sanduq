@@ -3,7 +3,8 @@
 .SYNOPSIS
   One-time setup for the 'project' extension: discover a GitHub Project (v2), map the Spec
   Kit lifecycle phases to that board's Status columns (hybrid: exact -> fuzzy -> prompt ->
-  optional auto-create), and write .specify/extensions/project/config.json.
+  optional auto-create), and write .specify/extensions/project/config.json. A rerun keeps the
+  existing parentIssue, subIssues and stateFile settings.
 
 .PARAMETER Owner        Project owner login (user or org). Default: the authenticated user.
 .PARAMETER Number       Project number. If 0/omitted, lists the owner's projects to choose from.
@@ -75,6 +76,13 @@ $defaultCfgPath = Join-Path $PSScriptRoot '../../config.default.json' | Resolve-
 if (-not $defaultCfgPath) { $defaultCfgPath = Join-Path $extDir 'config.default.json' }
 if (-not (Test-Path $defaultCfgPath)) { Die "config.default.json not found (looked near the script and in $extDir)" }
 $def = Get-Content $defaultCfgPath -Raw | ConvertFrom-Json
+# A rerun keeps the existing sub-issue, parent and state settings; defaults apply on the first run only.
+$existingCfgPath = Join-Path $extDir 'config.json'
+$existing = $null
+if (Test-Path $existingCfgPath) {
+    try { $existing = Get-Content $existingCfgPath -Raw | ConvertFrom-Json } catch { Die "$existingCfgPath is not valid JSON - fix or delete it, then rerun" }
+}
+function Keep { param($Key) if ($existing -and $existing.PSObject.Properties.Name -contains $Key) { $existing.$Key } else { $def.$Key } }
 $managedWorkflow = Test-Path (Join-Path $repoRoot '.specify/workflow.yml')
 if ($managedWorkflow) {
     $managedJson = & python (Join-Path $repoRoot '.specify/extensions/workflow/scripts/workflow.py') project-defaults
@@ -93,9 +101,10 @@ if ($auth -notmatch '(^|[^:\w-])project([^:\w-]|$)') { Die "gh token lacks 'proj
 if (-not $Owner) { $Owner = (gh api user --jq .login 2>$null); if (-not $Owner) { Die 'could not resolve owner - pass -Owner' } }
 $Owner = $Owner.Trim()
 if (-not $OwnerType) {
-    # user projects list succeeds for a user login; fall back to org
-    $probe = & gh project list --owner $Owner --limit 1 --format json 2>&1
-    $OwnerType = if ($LASTEXITCODE -eq 0) { 'user' } else { 'org' }
+    # 'gh project list' accepts org logins too, so only the account type tells the two apart
+    $kind = & gh api "users/$Owner" --jq .type 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $kind) { Die "cannot tell whether $Owner is a user or an organization - pass -OwnerType user|org" }
+    $OwnerType = if ("$kind".Trim() -eq 'Organization') { 'org' } else { 'user' }
 }
 Info "owner: $Owner ($OwnerType)"
 
@@ -202,10 +211,7 @@ if ($toCreate.Count -gt 0) {
 if ($managedWorkflow) { $HooksMode = 'required' }
 if (-not $HooksMode) {
     if ($NonInteractive) {
-        $existingCfgPath = Join-Path $extDir 'config.json'
-        if (Test-Path $existingCfgPath) {
-            try { $HooksMode = (Get-Content $existingCfgPath -Raw | ConvertFrom-Json).hookMode } catch { $HooksMode = $null }
-        }
+        if ($existing) { $HooksMode = $existing.hookMode }
         if ($HooksMode -notin @('optional', 'required')) { $HooksMode = 'optional' }
         Info "hook mode not supplied in non-interactive mode; using $HooksMode (rerun with -HooksMode optional|required to choose)"
     }
@@ -240,9 +246,9 @@ $config = [ordered]@{
     statusOptions = $statusOptions
     phaseToStatus = $phaseToStatus
     statusOrder   = $statusOrder
-    parentIssue   = $def.parentIssue
-    subIssues     = $def.subIssues
-    stateFile     = $def.stateFile
+    parentIssue   = Keep 'parentIssue'
+    subIssues     = Keep 'subIssues'
+    stateFile     = Keep 'stateFile'
 }
 $outPath = Join-Path $extDir 'config.json'
 if ($DryRun) {

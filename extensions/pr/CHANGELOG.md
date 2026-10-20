@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+Round 4.
+
+- `pr_publish.py` never edits a merged or closed PR: when the branch has no open PR, gh returns the newest closed one, and the script now exits 3 with "PR #n is merged" instead of rewriting its body. A new PR's branch is pushed when its upstream is behind, not only when it has none. The new PR's URL comes from `gh pr create` (one `gh pr view` call fewer).
+- `pr_changelog.py` finds the base through the same default-branch rule as `pr_publish.py` (origin/HEAD, else GitHub). It no longer writes "(no commits on `main..HEAD`)" on a `master` repository; when no base resolves, the commit line is left out.
+- The closing-reference lint is the shared `sanduq_pr_lint` module bundled in the archive (the rule Workflow's `pr-lint` runs). An installed Workflow's `execution_tools.py` is no longer loaded.
+- `speckit.pr.generate` reads the Assure gate through `assure_state.py status --kind document --gate --summary` instead of searching the config text, so a commented-out key no longer turns the gate on.
+- New read-only `scripts/pr_feedback.py gather`: one paged GraphQL query plus the general comments, filtered as step 1 asked. `speckit.pr.review-feedback` step 1 uses it: 3 to 4 `gh` calls instead of 7, every thread read (the old query stopped at 100), 5,201 bytes instead of 5,518.
+- `speckit.pr.generate` step 0 is one sentence: run `deps.py ensure illustrate` and follow its output (it prints the approval step itself).
+- `speckit.pr.generate` description: "Use when asked to 'write the PR description'". Under Workflow, `speckit.workflow.finalize` keeps "open the PR".
+
+### Migration
+
+- A rerun of `speckit.pr.generate` after the PR merged now reports exit 3 and publishes nothing. Open a new branch for further changes.
+
 ## [4.4.0] - 2026-10-20
 
 Optimization round 3 (fixes to 4.3.0).

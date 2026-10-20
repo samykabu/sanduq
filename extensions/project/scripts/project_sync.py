@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Mirror a Spec Kit feature onto a GitHub Project (v2).
 
-Keeps a parent feature issue's Status column in step with the lifecycle, creates one native
-sub-issue per task and closes sub-issues as their tasks are checked off. Idempotent and
-no-regress (the card never moves back unless --force). Stdlib only; needs `gh` authenticated
+Keeps a parent feature issue's Status column in step with the lifecycle. Standalone (no Sanduq
+Workflow), it also creates one native sub-issue per task and closes sub-issues as their tasks are
+checked off; under Workflow, Workflow owns task issues. Idempotent and no-regress (the card never
+moves back unless --force). A malformed state file stops the run; existing task sub-issues are
+found on GitHub before any is created, so a rerun after an interrupted run never duplicates. Stdlib only; needs `gh` authenticated
 with the `project` scope. GraphQL (`gh project`, `gh issue`, `gh pr`) is preferred; when its
 budget is exhausted the same operations use the REST API, which has a separate budget.
 A missing precondition (gh, auth, scope, GitHub remote, config.json) is logged and exits 0 so
@@ -16,20 +18,24 @@ Usage: project_sync.py --phase <open|analysis|engineer-review|ready|in-progress|
 `skipped reason=<why>` or `error exit=<rc> reason=<message>`; the run log moves to stderr.
 """
 import argparse
-import importlib.util
 import json
 import os
 import re
 import subprocess
 import sys
-import urllib.parse
 from pathlib import Path
 from urllib.parse import quote
+
+try:
+    import sanduq_remote
+except ModuleNotFoundError:
+    # Source checkout only; release archives bundle the shared helper next to this script.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts/shared'))
+    import sanduq_remote
 
 PHASES = ('open', 'analysis', 'engineer-review', 'ready', 'in-progress', 'in-review', 'done', 'auto')
 CONFIG = Path('.specify/extensions/project/config.json')
 TASK_LINE = re.compile(r'^\s*-\s*\[([ xX])\]\s*\**(T\d+)\**\s*(.*)$')
-WORKFLOW = Path('.specify/extensions/workflow/scripts/workflow.py')
 TIMEOUT = 120
 SUB_ISSUE_MUTATION = 'mutation($p:ID!,$c:ID!){addSubIssue(input:{issueId:$p,subIssueId:$c}){subIssue{number}}}'
 
@@ -62,61 +68,9 @@ def git(*args):
     return done.stdout.strip() if done.returncode == 0 else ''
 
 
-def _strip_dotgit(path):
-    return path[:-4] if path[-4:].lower() == '.git' else path
-
-
-def _normalize_path_remote(path):
-    path = path.replace('\\', '/')
-    while len(path) > 1 and path.endswith('/'):
-        path = path[:-1]
-    path = _strip_dotgit(path)
-    drive = re.match(r'[A-Za-z]:(?=/|$)', path)
-    return drive.group().lower() + path[drive.end():] if drive else path
-
-
-def normalize_remote_url(url):
-    """Copy of Workflow's `normalize_remote_url` (used instead when Workflow is installed): scheme,
-    credentials, host case, default ports and `.git` fold away; the repository path keeps its case."""
-    url = url.strip()
-    parts = urllib.parse.urlsplit(url)
-    if parts.scheme == 'file':
-        return _normalize_path_remote(parts.path or url)
-    if parts.scheme and parts.netloc:
-        try:
-            host = parts.hostname
-            if host is None:
-                raise ValueError('no host')
-            host = host.rstrip('.').lower()
-            port = parts.port
-            if port and port != {'ssh': 22, 'https': 443, 'http': 80}.get(parts.scheme):
-                host += ':' + str(port)
-            return host + '/' + _strip_dotgit(parts.path.strip('/'))
-        except ValueError:
-            pass
-    if '://' not in url:
-        scp = re.fullmatch(r'(?:[^@/\s]*@)?([^@/:\s]+):(.+)', url)
-        if scp:
-            host, path = scp.groups()
-            if not (len(host) == 1 and host.isalpha()):
-                return host.rstrip('.').lower() + '/' + _strip_dotgit(path.rstrip('/'))
-    return _normalize_path_remote(url)
-
-
 def github_repo(remote):
-    """`owner/repo` of a GitHub remote in any form, through Workflow's normaliser when installed."""
-    normalize = normalize_remote_url
-    if WORKFLOW.is_file():
-        try:
-            spec = importlib.util.spec_from_file_location('sanduq_workflow', WORKFLOW)
-            module = importlib.util.module_from_spec(spec)
-            sys.path.insert(0, str(WORKFLOW.parent.resolve()))
-            spec.loader.exec_module(module)
-            normalize = module.normalize_remote_url
-        except Exception:  # an unreadable Workflow install must not stop the sync: the copy is identical
-            pass
-    match = re.fullmatch(r'github\.com(?::\d+)?/([^/]+/[^/]+)', normalize(remote)) if remote else None
-    return match.group(1) if match else None
+    """`owner/repo` of a GitHub remote in any form (the shared rule Workflow and Scope use), else None."""
+    return sanduq_remote.github_slug(remote) if remote else None
 
 
 def token_scopes(auth):
@@ -140,6 +94,7 @@ class Sync:
         self.args = args
         self.created = self.closed = 0
         self.transport = 'graphql'
+        self.labels_made = set()
 
     def log(self, message, level='info'):
         prefix = '[project][warn]' if level == 'warn' else '[project]'
@@ -202,8 +157,9 @@ class Sync:
 
     def create_issue(self, title, body, labels, color, allow_fail=False):
         """Creates the labels and the issue; returns the issue number (None when allowed to fail)."""
-        for label in labels:
+        for label in set(labels) - self.labels_made:
             gh_raw(['label', 'create', label, '--repo', self.repo, '--color', color, '--force'])
+            self.labels_made.add(label)
         label_args = [arg for label in labels for arg in ('--label', label)]
         url = self.call(['issue', 'create', '--repo', self.repo, '--title', title, '--body', body, *label_args],
                         lambda: self.rest(f'repos/{self.repo}/issues', 'POST',
@@ -232,8 +188,7 @@ class Sync:
                 raise RuntimeError('Managed parent binding mismatch')
             if fs['issue'] and fs['issue'] != int(bound):
                 raise RuntimeError('Project state conflicts with Scope parent binding')
-            fs['issue'] = int(bound)
-            fs['issueNodeId'] = self.issue_node(fs['issue']) or fs['issueNodeId']
+            fs['issue'] = int(bound)  # issueNodeId stays as Scope wrote it: only sub-issues read it, off here
             return
         if fs['issue'] and fs['issue'] > 0:
             return
@@ -345,12 +300,12 @@ class Sync:
         if not tasks:
             self.log('no tasks found in tasks.md', 'warn')
             return
-        to_create = [task for task in tasks if task['id'] not in fs['subIssues']]
+        labels = sub.get('labels', ['spec-task'])
+        template = sub.get('titleTemplate', '{slug} {taskId}: {desc}')
+        to_create = self.recover_sub_issues([task for task in tasks if task['id'] not in fs['subIssues']], labels, template)
         if sub.get('warnAboveCount', 0) > 0 and len(to_create) > sub['warnAboveCount']:
             self.log(f'{len(to_create)} sub-issues to create for {self.slug} (adds that many issues to {self.repo})', 'warn')
         cap = int(sub.get('maxCount', 0) or 0)
-        labels = sub.get('labels', ['spec-task'])
-        template = sub.get('titleTemplate', '{slug} {taskId}: {desc}')
         for task in to_create:
             if cap > 0 and self.created >= cap:
                 self.log(f'reached maxCount={cap}; {len(to_create) - self.created} tasks left WITHOUT sub-issues', 'warn')
@@ -366,17 +321,45 @@ class Sync:
                 self.log(f"failed to create sub-issue for {task['id']}", 'warn')
                 continue
             node = self.issue_node(number, allow_fail=True)
-            linked = self.call(['api', 'graphql', '-H', 'GraphQL-Features: sub_issues', '-f', 'query=' + SUB_ISSUE_MUTATION,
-                                '-f', 'p=' + fs['issueNodeId'], '-f', 'c=' + node],
-                               lambda: self.rest(f'repos/{self.repo}/issues/{fs["issue"]}/sub_issues', 'POST',
-                                                 {'sub_issue_id': self.rest(f'repos/{self.repo}/issues/{number}')['id']}),
-                               allow_fail=True)
-            if linked is None:
+            if self.link_sub_issue(number, node) is None:
                 self.log(f"sub-issue link failed for {task['id']}", 'warn')
             fs['subIssues'][task['id']] = {'number': number, 'nodeId': node, 'closed': False}
             self.created += 1
+            self.save_state()  # an interruption after this point cannot lose the new issue's identity
         if self.created:
             self.log(f'created {self.created} sub-issue(s)')
+
+    def link_sub_issue(self, number, node):
+        return self.call(['api', 'graphql', '-H', 'GraphQL-Features: sub_issues', '-f', 'query=' + SUB_ISSUE_MUTATION,
+                          '-f', 'p=' + self.fs['issueNodeId'], '-f', 'c=' + node],
+                         lambda: self.rest(f'repos/{self.repo}/issues/{self.fs["issue"]}/sub_issues', 'POST',
+                                           {'sub_issue_id': self.rest(f'repos/{self.repo}/issues/{number}')['id']}),
+                         allow_fail=True, mutating=True)
+
+    def recover_sub_issues(self, tasks, labels, template):
+        """Adopts task issues that already exist on GitHub (a run interrupted before it saved, or lost state)
+        and returns the tasks still to create. A title matches the template with any description."""
+        if not tasks:
+            return tasks
+        rows = self.call(['issue', 'list', '--repo', self.repo, '--state', 'all', '--label', ','.join(labels),
+                          '--json', 'number,title,id', '--limit', '1000'],
+                         lambda: [{'number': row['number'], 'title': row['title'], 'id': row['node_id']}
+                                  for row in self.rest(f'repos/{self.repo}/issues?state=all&labels='
+                                                       f'{quote(",".join(labels))}&per_page=100', paginate=True) or []
+                                  if not row.get('pull_request')])
+        left = []
+        for task in tasks:
+            head, _, tail = template.replace('{slug}', self.slug).replace('{taskId}', task['id']).partition('{desc}')
+            found = next((row for row in as_json(rows, []) if row['title'].startswith(head) and row['title'].endswith(tail)
+                          and len(row['title']) >= len(head) + len(tail)), None)
+            if not found:
+                left.append(task)
+                continue
+            self.log(f"found existing sub-issue #{found['number']} for {task['id']}; not creating another")
+            if self.link_sub_issue(found['number'], found['id']) is None and not self.args.dry_run:
+                self.log(f"sub-issue link for {task['id']} not confirmed (it may already be linked)", 'warn')
+            self.fs['subIssues'][task['id']] = {'number': found['number'], 'nodeId': found['id'], 'closed': False}
+        return left
 
     def sync_progress(self):
         fs = self.fs
@@ -442,7 +425,7 @@ class Sync:
             raise Skip('gh not authenticated')
         if 'project' not in token_scopes(auth):
             raise Skip("gh token lacks 'project' scope - run: gh auth refresh -h github.com -s project,read:project")
-        remote = git('config', '--get', 'remote.origin.url')
+        remote = sanduq_remote.origin_url(Path.cwd(), timeout=TIMEOUT) or ''
         self.repo = github_repo(remote)
         if not self.repo:
             raise Skip(f'remote is not GitHub ({remote})')
@@ -473,10 +456,12 @@ class Sync:
         self.state_path = Path(cfg.get('stateFile', '.specify/project-sync-state.json'))
         try:
             self.state = read_json(self.state_path) if self.state_path.is_file() else {}
-        except ValueError:
-            self.state = {}
-        if not isinstance(self.state, dict):
-            self.state = {}
+        except ValueError as exc:
+            raise RuntimeError(f'{self.state_path} is not valid JSON ({exc}); restore it from git or fix it by hand, '
+                               'then rerun (it holds the issue numbers; resetting it would duplicate issues)') from None
+        if not isinstance(self.state, dict) or not isinstance(self.state.get(self.slug, {}), dict):
+            raise RuntimeError(f'{self.state_path} is not a mapping of feature slugs to objects; restore it from git or '
+                               'fix it by hand, then rerun (resetting it would duplicate issues)')
         self.fs = fs = self.state.setdefault(self.slug, {})
         for key, default in (('issue', 0), ('issueNodeId', ''), ('itemId', ''), ('status', ''), ('subIssues', {})):
             if not isinstance(fs.get(key), type(default)):

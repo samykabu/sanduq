@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import os
 from pathlib import Path
@@ -10,7 +11,7 @@ import unittest
 from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
-sys.path.insert(0, str(SCRIPTS))
+sys.path[:0] = [str(SCRIPTS), str(SCRIPTS.parent / "tests")]
 import archive as archive_module
 from archive import Archive, EXTENSION, POLICY
 import memory_delta as md
@@ -18,6 +19,7 @@ import memory_store as ms
 from git_state import ArchiveError, digest, write_json
 from memory import MEMORY, REGISTRY, render
 from test_memory_store import legacy_entries
+from repo_template import TemplateRepo
 
 FEATURE = "specs/010-vat"
 SPEC = FEATURE + "/spec.md"
@@ -28,11 +30,9 @@ CURRENCY = f"{ms.ENTRIES}/PM-invoice-currency.md"
 ROUNDING = f"{ms.ENTRIES}/PM-invoice-rounding.md"
 
 
-class ArchiveV2Tests(unittest.TestCase):
-    def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="memory-v2-test-")
-        self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+class ArchiveV2Tests(TemplateRepo, unittest.TestCase):
+    def build(self):
+        """Once per class (PM20): a migrated repository with one prepared feature; each test gets a copy."""
         self.git("init", "-b", "develop")
         for key, value in {"user.name": "Archive Test", "user.email": "archive@example.invalid", "core.autocrlf": "false",
                            "core.hooksPath": ".git/hooks", "commit.gpgsign": "false"}.items():
@@ -52,6 +52,11 @@ class ArchiveV2Tests(unittest.TestCase):
         self.git("commit", "-m", "VAT feature")
         self.base_root = ms.memory_root(self.root)
         self.prepared = self.archive.prepare([FEATURE], [], [], skip_verification=REASON)
+
+    def restored(self):
+        self.archive = Archive(self.root)
+        self.base_root = self.built["base_root"]
+        self.prepared = copy.deepcopy(self.built["prepared"])
         self.run_dir = self.archive.run_path(self.prepared["run_id"])
 
     def git(self, *args):

@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import pr_changelog  # noqa: E402
+import pr_publish  # noqa: E402
 
 TASKS = ('# Tasks\n\n## Phase 1: Setup\n\n- [x] T001 Create parser (FR-001)\n- [ ] T002 Wire CLI\n\n'
          '## Phase 2: Polish\n\n- [X] T003 Add docs\n')
@@ -42,9 +43,9 @@ class ChangelogTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def run_script(self, *extra):
+    def run_script(self, *extra, runner=fake_run):
         out = io.StringIO()
-        with patch.object(pr_changelog, 'run', fake_run), redirect_stdout(out):
+        with patch.object(pr_changelog, 'run', runner), patch.object(pr_publish, 'run', runner), redirect_stdout(out):
             code = pr_changelog.main(['--root', str(self.root), '--feature', 'specs/001-x', *extra])
         return code, out.getvalue().strip()
 
@@ -86,6 +87,31 @@ class ChangelogTests(unittest.TestCase):
         self.assertIn('### Open items\n\n- none', text)
         self.assertNotIn('Issue:', text)
         self.assertIn(pr_changelog.END, text)
+
+    def master_repo(self, gh_default):
+        """No origin/HEAD, only a local `master`; gh answers `gh_default` (None: gh fails)."""
+        def runner(args, cwd):
+            key = ' '.join(args[:3])
+            if key == 'gh repo view':
+                return subprocess.CompletedProcess(args, 0 if gh_default else 1, gh_default or '', 'no auth')
+            if key == 'git log --format=%s':
+                ok = args[3] == 'master..HEAD'
+                return subprocess.CompletedProcess(args, 0 if ok else 128, 'feat: parser' if ok else '', 'bad revision')
+            return fake_run(args, cwd) if key != 'git symbolic-ref --short' else subprocess.CompletedProcess(args, 1, '', '')
+        return runner
+
+    def test_a_master_repository_lists_its_commits_through_the_default_branch_rule(self):
+        code, printed = self.run_script(runner=self.master_repo('master'))
+        text = (self.root / printed).read_text(encoding='utf-8')
+        self.assertIn('### Added\n\n- feat: parser', text)
+        self.assertNotIn('no commits', text)
+
+    def test_an_unresolvable_base_leaves_the_commit_line_out(self):
+        code, printed = self.run_script(runner=self.master_repo(None))
+        text = (self.root / printed).read_text(encoding='utf-8')
+        self.assertEqual(code, 0)
+        self.assertNotIn('no commits', text)
+        self.assertIn('### Added\n\n### Changed', text)
 
     def test_missing_feature_exits_2(self):
         self.assertEqual(self.run_script('--feature', 'specs/none')[0], 2)

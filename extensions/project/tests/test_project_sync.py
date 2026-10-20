@@ -1,11 +1,14 @@
-"""PJ4: project_sync.py (one stdlib script, replacing the bash and PowerShell twins).
+"""PJ4: project_sync.py (one stdlib script, replacing the bash and PowerShell twins), and the init twins.
 
 The --summary/--json contract the twins had is kept: under --summary stdout is exactly one line,
 `ok issue=<n> status=<status> created=<n> closed=<n>`, `skipped reason=<why>` (a skip is never `ok`)
 or `error exit=<rc> reason=<message>`; the run log goes to stderr. Behaviour tests run the script
 in-process inside a real temporary git repository with `gh` replaced by FakeGh, so nothing reaches
 GitHub: create, advance, no-regress, --force, sub-issue create and close, in-review on an open PR,
-dry run, and the GraphQL-to-REST fallback.
+dry run, and the GraphQL-to-REST fallback. Round 4: malformed state refuses (P1), existing task issues
+are adopted, never duplicated (P1), managed mode skips the node lookup and labels are made once (PM16),
+remotes go through the shared `sanduq_remote` (D4), and init detects org owners and keeps the
+sub-issue, parent and state settings on a rerun (PM12).
 """
 import contextlib
 import io
@@ -40,8 +43,9 @@ CONFIG = {
 class FakeGh:
     """`gh` for one run: GraphQL-backed subcommands, or the REST paths once the budget is 0."""
 
-    def __init__(self, budget='5000', open_pr=False, scopes="'project', 'repo'"):
+    def __init__(self, budget='5000', open_pr=False, scopes="'project', 'repo'", listed=(), fail_create_after=None):
         self.budget, self.open_pr, self.calls, self.next_issue, self.scopes = budget, open_pr, [], 42, scopes
+        self.listed, self.fail_create_after = list(listed), fail_create_after  # task issues already on GitHub
 
     def __call__(self, args, stdin=None):
         self.calls.append(list(args))
@@ -53,7 +57,11 @@ class FakeGh:
         if self.budget == '0' and args[0] != 'api':  # GraphQL-backed gh subcommands fail once exhausted
             return 1, 'GraphQL: API rate limit exceeded for user ID 1.'
         if head == ['issue', 'create']:
+            if self.fail_create_after is not None and len(self.used('issue', 'create')) > self.fail_create_after:
+                raise RuntimeError('timeout: gh issue create gave no answer in 120 s')  # an interrupted run
             return 0, 'https://github.com/acme/app/issues/' + str(self.new_issue())
+        if head == ['issue', 'list'] and '--search' not in args:
+            return 0, json.dumps(self.listed)
         answers = {('issue', 'list'): '[]', ('label', 'create'): '', ('issue', 'close'): '',
                    ('project', 'item-add'): '{"id":"ITEM_1"}', ('project', 'item-edit'): '',
                    ('pr', 'list'): '[{"number":7}]' if self.open_pr else '[]'}
@@ -222,16 +230,17 @@ class ProjectSyncTests(unittest.TestCase):
                'https://x-access-token:T@GitHub.com/Acme/App/': 'Acme/App', 'git@GITHUB.COM:Acme/App.GIT': 'Acme/App',
                'https://github.com@evil.com/acme/app': None, 'https://gitlab.com/acme/app': None, '/srv/git/app.git': None}
 
-    def test_remote_parsing_matches_workflow_and_keeps_dots_and_ports(self):
-        sys.path.insert(0, str(ROOT / 'workflow/scripts'))
-        import workflow
-        for remote, repo in self.REMOTES.items():
-            self.assertEqual(project_sync.normalize_remote_url(remote), workflow.normalize_remote_url(remote), remote)
+    def test_remotes_go_through_the_shared_rule_and_never_load_workflow_py(self):
+        import sanduq_remote
+        self.assertIs(project_sync.sanduq_remote, sanduq_remote)
+        for remote, repo in {**self.REMOTES, 'https://evil.example/github.com/acme/app': None, '': None}.items():
             self.assertEqual(project_sync.github_repo(remote), repo, remote)
-        installed = self.root / project_sync.WORKFLOW  # an installed Workflow's parser is the one used
+        installed = self.root / '.specify/extensions/workflow/scripts/workflow.py'  # D4: its load cost 0.3 s per sync
         installed.parent.mkdir(parents=True)
-        installed.write_text('def normalize_remote_url(url):\n    return "github.com/via/workflow"\n', encoding='utf-8')
-        self.assertEqual(project_sync.github_repo('https://github.com/acme/app'), 'via/workflow')
+        installed.write_text('raise SystemExit("workflow.py loaded")\n', encoding='utf-8')
+        self.configure()
+        code, out, err, _ = self.sync('--phase', 'open', '--summary')
+        self.assertEqual((code, out), (0, ['ok issue=42 status=Backlog created=0 closed=0']), err)
 
     def test_a_dotted_repository_syncs(self):
         self.configure()
@@ -247,6 +256,77 @@ class ProjectSyncTests(unittest.TestCase):
         (self.root / 'specs/001-refunds/scope-source.json').write_text('{"repo": "Acme/App", "issue": 42}', encoding='utf-8')
         code, out, err, _ = self.sync('--phase', 'open', '--summary')
         self.assertEqual((code, out), (0, ['ok issue=42 status=Backlog created=0 closed=0']), err)
+
+    # -- state integrity and task identities (P1) ---------------------------
+
+    def test_a_malformed_state_file_stops_the_run_and_is_kept(self):
+        self.configure()
+        path = self.root / '.specify/project-sync-state.json'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        for text in ('{"001-refunds": {"issue": 42,', '[]', '{"001-refunds": "broken"}'):
+            path.write_text(text, encoding='utf-8')
+            code, out, _, gh = self.sync('--phase', 'open', '--summary')
+            self.assertEqual(code, 1, text)
+            self.assertRegex(out[0], r'^error exit=1 reason=.*project-sync-state\.json .*restore it from git', text)
+            self.assertEqual(path.read_text(encoding='utf-8'), text)
+            self.assertFalse(gh.used('issue', 'create') or gh.used('project'))
+
+    def test_existing_task_issues_are_adopted_not_created_again(self):
+        self.configure(subIssues={**CONFIG['subIssues'], 'enabled': True})
+        self.tasks('- [ ] T001 Add refund model\n- [ ] T002 Wire the API\n')
+        self.state({'001-refunds': {'issue': 42, 'issueNodeId': 'NODE_42', 'itemId': 'ITEM_1', 'status': '', 'subIssues': {}}})
+        listed = [{'number': 50, 'title': '001-refunds T001: Add the refund model (renamed)', 'id': 'NODE_50'},
+                  {'number': 51, 'title': '002-other T002: Wire the API', 'id': 'NODE_51'}]
+        _, out, err, gh = self.sync('--phase', 'ready', '--summary', gh=FakeGh(listed=listed))
+        self.assertEqual(out, ['ok issue=42 status=Ready created=1 closed=0'], err)
+        self.assertEqual(len(gh.used('issue', 'create')), 1)
+        subs = self.state()['001-refunds']['subIssues']
+        self.assertEqual((subs['T001']['number'], subs['T002']['number']), (50, 42))
+        self.assertEqual(len(gh.used('api', 'graphql', '-H')), 2)  # the adopted issue is linked too
+
+    def test_a_run_interrupted_after_one_create_resumes_without_duplicates(self):
+        self.configure(subIssues={**CONFIG['subIssues'], 'enabled': True})
+        self.tasks('- [ ] T001 Add refund model\n- [ ] T002 Wire the API\n')
+        code, out, _, _ = self.sync('--phase', 'ready', '--summary', gh=FakeGh(fail_create_after=2))  # the parent, T001, then T002 fails
+        self.assertEqual(code, 1)
+        self.assertEqual(sorted(self.state()['001-refunds']['subIssues']), ['T001'])  # saved before the failure
+        _, out, _, gh = self.sync('--phase', 'ready', '--summary')
+        self.assertEqual(out, ['ok issue=42 status=Ready created=1 closed=0'])
+        self.assertEqual([c[c.index('--title') + 1] for c in gh.used('issue', 'create')], ['001-refunds T002: Wire the API'])
+
+    def test_a_failed_task_issue_lookup_creates_nothing(self):
+        self.configure(subIssues={**CONFIG['subIssues'], 'enabled': True})
+        self.tasks('- [ ] T001 Add refund model\n')
+        self.state({'001-refunds': {'issue': 42, 'issueNodeId': 'NODE_42', 'itemId': 'ITEM_1', 'status': '', 'subIssues': {}}})
+        gh = FakeGh()
+        real = gh.__call__
+        gh_fail = lambda args, stdin=None: (1, 'HTTP 502') if args[:2] == ['issue', 'list'] else real(args, stdin)
+        gh_fail.used = gh.used
+        code, out, _, _ = self.sync('--phase', 'ready', '--summary', gh=gh_fail)
+        self.assertEqual(code, 1, out)
+        self.assertFalse(gh.used('issue', 'create'))
+
+    # -- fewer gh calls (PM16) ---------------------------------------------
+
+    def test_managed_syncs_skip_the_issue_node_lookup(self):
+        self.configure()
+        (self.root / '.specify/workflow.yml').write_text('schema: 1\n', encoding='utf-8')
+        (self.root / 'specs/001-refunds').mkdir(parents=True)
+        (self.root / 'specs/001-refunds/scope-source.json').write_text('{"repo": "acme/app", "issue": 42}', encoding='utf-8')
+        self.state({'001-refunds': {'issue': 42, 'issueNodeId': 'NODE_SCOPE', 'itemId': '', 'status': '', 'subIssues': {}}})
+        for phase in ('open', 'analysis', 'in-progress'):
+            _, out, err, gh = self.sync('--phase', phase, '--summary')
+            self.assertTrue(out[0].startswith('ok issue=42'), err)
+            self.assertFalse(gh.used('issue', 'view'), phase)
+        self.assertEqual(self.state()['001-refunds']['issueNodeId'], 'NODE_SCOPE')  # the binding fingerprint is stable
+
+    def test_each_label_is_created_once_per_run(self):
+        self.configure(subIssues={**CONFIG['subIssues'], 'enabled': True, 'labels': ['spec-task', 'refunds']})
+        self.tasks(''.join('- [ ] T%03d Task %d\n' % (n, n) for n in range(1, 11)))
+        _, out, _, gh = self.sync('--phase', 'ready', '--summary')
+        self.assertEqual(out, ['ok issue=42 status=Ready created=10 closed=0'])
+        made = sorted(call[2] for call in gh.used('label', 'create'))
+        self.assertEqual(made, ['refunds', 'spec-feature', 'spec-task'])
 
     def test_a_read_project_only_token_is_a_skip(self):
         self.configure()
@@ -278,23 +358,41 @@ class ProjectSyncTests(unittest.TestCase):
 
 FAKE_GH = """import json, sys
 args = sys.argv[1:]
+COLUMNS = ['Backlog', 'Analysis', 'Engineer-Review', 'Ready', 'In progress', 'In review', 'Done']
 if args[:2] == ['auth', 'status']: print("Logged in to github.com\\n  - Token scopes: " + SCOPES)
 elif args[:2] == ['api', 'user']: print('acme')
+elif args[:2] == ['api', 'users/acme']: print(KIND)
 elif args[:2] == ['project', 'list']: print(json.dumps({'projects': [{'number': 1, 'title': 'Alpha'}, {'number': 3, 'title': 'Beta'}]}))
+elif args[:2] == ['project', 'view']: print(json.dumps({'id': 'PVT_1', 'url': 'https://github.com/orgs/acme/projects/1'}))
+elif args[:2] == ['project', 'field-list']:
+    print(json.dumps({'fields': [{'id': 'F1', 'name': 'Status', 'options': [{'id': 'O%d' % i, 'name': n} for i, n in enumerate(COLUMNS)]}]}))
 else: raise SystemExit('unexpected gh ' + ' '.join(args))
+"""
+HOOKS = """hooks:
+  after_tasks:
+  - extension: project
+    command: speckit.project.sync
+    enabled: true
+    optional: true
 """
 
 
 class ProjectInitTests(unittest.TestCase):
     """PM4/PM5: both init scripts need the whole 'project' scope and name the choice they cannot make."""
 
-    def init(self, shell, scopes):
+    def init(self, shell, scopes, *extra, kind='User', existing=None):
+        """(exit code, output) of one init run; `extra` is (bash flags, pwsh flags), `existing` a config.json."""
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name).resolve()
         subprocess.run(['git', 'init', '-q'], cwd=root, check=True)
+        (root / '.specify/extensions/project').mkdir(parents=True)
+        (root / '.specify/extensions.yml').write_text(HOOKS, encoding='utf-8')
+        if existing is not None:
+            (root / '.specify/extensions/project/config.json').write_text(json.dumps(existing), encoding='utf-8')
         fake = root / 'fake_gh.py'
-        fake.write_text('SCOPES = ' + repr(scopes) + '\n' + FAKE_GH, encoding='utf-8')
+        fake.write_text('SCOPES = ' + repr(scopes) + '\nKIND = ' + repr(kind) + '\n' + FAKE_GH, encoding='utf-8')
+        flags = list(extra[0] if shell == 'bash' else extra[1]) if extra else []
         scripts = ROOT / 'project/scripts'
         if shell == 'bash':
             (root / 'bin').mkdir()
@@ -303,11 +401,12 @@ class ProjectInitTests(unittest.TestCase):
             (root / 'bin/gh').chmod(0o755)
             env = dict(os.environ, PATH=str(root / 'bin') + os.pathsep + os.environ.get('PATH', ''))
             args = [shutil.which('bash'), '-c', 'export PATH="$(cygpath -u "$1" 2>/dev/null || echo "$1"):$PATH"; shift; exec bash "$@"',
-                    '_', str(root / 'bin'), (scripts / 'bash/project-init.sh').as_posix(), '--non-interactive', '--dry-run']
+                    '_', str(root / 'bin'), (scripts / 'bash/project-init.sh').as_posix(), '--non-interactive', '--dry-run', *flags]
         else:
             wrapper = root / 'run.ps1'
             wrapper.write_text("function global:gh { & '" + sys.executable + "' '" + str(fake) + "' @args }\n& '" +
-                               str(scripts / 'powershell/project-init.ps1') + "' -NonInteractive -DryRun; exit $LASTEXITCODE\n", encoding='utf-8')
+                               str(scripts / 'powershell/project-init.ps1') + "' -NonInteractive -DryRun " + ' '.join(flags) +
+                               "; exit $LASTEXITCODE\n", encoding='utf-8')
             env, args = dict(os.environ), ['pwsh', '-NoProfile', '-File', str(wrapper)]
         done = subprocess.run(args, cwd=root, env=env, input='', capture_output=True, text=True, encoding='utf-8', timeout=120)
         return done.returncode, done.stdout + done.stderr
@@ -333,6 +432,47 @@ class ProjectInitTests(unittest.TestCase):
             self.assertNotEqual(code, 0, (shell, output))
             self.assertIn('#1 Alpha, #3 Beta', output, shell)
             self.assertIn('rerun with ' + ('--number' if shell == 'bash' else '-Number'), output, shell)
+
+    PICK = (['--number', '1', '--json'], ['-Number', '1', '-Json'])
+
+    def config(self, output):
+        return json.loads([line for line in output.splitlines() if line.startswith('{"owner"')][-1])
+
+    def test_an_organization_owner_is_recorded_as_org(self):
+        for shell in self.shells():
+            for kind, expected in (('Organization', 'org'), ('User', 'user')):
+                code, output = self.init(shell, "'project', 'repo'", *self.PICK, kind=kind)
+                self.assertEqual(code, 0, (shell, output))
+                self.assertEqual(self.config(output)['ownerType'], expected, (shell, kind))
+
+    def test_a_rerun_keeps_the_sub_issue_parent_and_state_settings(self):
+        custom = {'owner': 'acme', 'hookMode': 'required',
+                  'subIssues': {'enabled': False, 'labels': ['my-task'], 'maxCount': 5, 'titleTemplate': '{taskId} {desc}'},
+                  'parentIssue': {'labels': ['epic'], 'titleTemplate': '{title}'}, 'stateFile': '.specify/board.json'}
+        defaults = json.loads((ROOT / 'project/config.default.json').read_text(encoding='utf-8'))
+        for shell in self.shells():
+            code, output = self.init(shell, "'project', 'repo'", *self.PICK, existing=custom)
+            self.assertEqual(code, 0, (shell, output))
+            written = self.config(output)
+            for key in ('subIssues', 'parentIssue', 'stateFile', 'hookMode'):
+                self.assertEqual(written[key], custom[key], (shell, key))
+            code, output = self.init(shell, "'project', 'repo'", *self.PICK)
+            self.assertEqual(self.config(output)['subIssues'], defaults['subIssues'], shell)
+
+
+class DescriptionTests(unittest.TestCase):
+    """D1: each command's frontmatter description equals its manifest entry, and sync says sub-issues are standalone."""
+
+    def test_frontmatter_and_manifest_agree(self):
+        import re
+        manifest = (ROOT / 'project/extension.yml').read_text(encoding='utf-8')
+        for name in ('init', 'sync'):
+            text = (ROOT / 'project/commands/speckit.project.{}.md'.format(name)).read_text(encoding='utf-8')
+            front = re.search(r'^description: (".*")$', text, re.M).group(1)
+            self.assertIn('description: ' + front, manifest, name)
+            if name == 'sync':
+                self.assertIn('standalone', front)
+        self.assertNotIn('all sub-issues closed', (ROOT / 'project/README.md').read_text(encoding='utf-8'))
 
 
 if __name__ == '__main__':

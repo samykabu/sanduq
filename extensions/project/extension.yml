@@ -4,7 +4,7 @@ extension:
   id: project
   name: "GitHub Project Lifecycle Sync"
   version: "2.4.0"
-  description: "Mirror each Spec Kit feature onto a GitHub Project (v2): create a parent feature issue, advance its Status column through the Spec Kit lifecycle (open -> analysis -> engineer-review -> ready -> in-progress -> in-review -> done), create one native sub-issue per task, and close sub-issues as their tasks are checked off. Board-agnostic initialization lets each repo choose required/automatic or optional/manual sync hooks. Idempotent and no-regress."
+  description: "Mirror each Spec Kit feature onto a GitHub Project (v2): create a parent feature issue, advance its Status column through the Spec Kit lifecycle (open -> analysis -> engineer-review -> ready -> in-progress -> in-review -> done), and, in standalone use, create one native sub-issue per task and close it as its task is checked off (under Sanduq Workflow, Workflow owns task issues). Board-agnostic initialization lets each repo choose required/automatic or optional/manual sync hooks. Idempotent and no-regress."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
   license: PolyForm-Noncommercial-1.0.0
@@ -26,7 +26,7 @@ provides:
       description: "Sets up GitHub Project sync once per repository, mapping lifecycle phases to Status columns. Use when asked to 'connect the project board'."
     - name: speckit.project.sync
       file: commands/speckit.project.sync.md
-      description: "Moves the feature issue to a lifecycle phase on the GitHub Project and creates or closes task sub-issues. Use when asked to 'sync the board'."
+      description: "Moves the feature issue to a lifecycle phase on the GitHub Project; standalone, it also creates and closes task sub-issues. Use when asked to 'sync the board'."
 
 # Lifecycle wiring. Hooks install as optional, then `speckit.project.init` applies the project's
 # selected optional/manual or required/automatic policy in `.specify/extensions.yml`. Each prompt
@@ -52,7 +52,7 @@ hooks:
     command: speckit.project.sync
     optional: true
     prompt: "Create one sub-issue per task and set the card to the 'ready' column? Run: /speckit-project-sync ready"
-    description: "Create native task sub-issues and move the parent feature issue to the ready column after task generation"
+    description: "Move the parent feature issue to the ready column after task generation; standalone, also create native task sub-issues"
   before_implement:
     command: speckit.project.sync
     optional: true
@@ -62,7 +62,7 @@ hooks:
     command: speckit.project.sync
     optional: true
     prompt: "Close completed task sub-issues and set 'in-review' if a PR is open? Run: /speckit-project-sync in-progress"
-    description: "Close sub-issues for tasks checked off in tasks.md; advance to in-review when an open PR exists for the branch"
+    description: "Standalone, close sub-issues for tasks checked off in tasks.md; advance to in-review when an open PR exists for the branch"
 
 tags:
   - "project"

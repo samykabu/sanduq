@@ -34,7 +34,7 @@ provides:
   commands:
     - name: speckit.pr.generate
       file: commands/speckit.pr.generate.md
-      description: "Generates the feature CHANGELOG and details doc, then opens or updates the pull request; never merges. Use when asked to 'open the PR'."
+      description: "Generates the feature CHANGELOG and details doc, then creates or updates the pull request body; never merges. Use when asked to 'write the PR description'."
     - name: speckit.pr.review-feedback
       file: commands/speckit.pr.review-feedback.md
       description: "Fixes or answers unresolved PR review comments after approval, then pushes and resolves threads. Use when asked to 'address review comments'."
@@ -44,7 +44,7 @@ hooks:
     command: speckit.pr.generate
     optional: true
     prompt: "Generate the feature CHANGELOG + feature-details doc, diagram assets if needed, and update the PR description?"
-    description: "Generates the feature CHANGELOG and details doc, then opens or updates the pull request; never merges. Use when asked to 'open the PR'."
+    description: "Generates the feature CHANGELOG and details doc, then creates or updates the pull request body; never merges. Use when asked to 'write the PR description'."
 
 tags:
   - "pr"

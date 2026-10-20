@@ -16,6 +16,9 @@ COMMANDS = ("init", "prepare", "run", "session", "enable", "impact", "status")
 HOOK_ONLY = ("prepare", "session")
 # (event, command, description, first). extension.yml lists one command per event, so impact's
 # before_specify binding lives only here. Order matters: templates iterate YAML order, not priority.
+# An existing entry with `enabled: false` (Sanduq Workflow's reconcile disables session and prepare) is kept
+# byte for byte, so its reconcile journal still matches. When a release changes one of these entries, the
+# sequence is: Workflow `reconcile --restore`, then `speckit.memory.init`, then `reconcile --apply`.
 HOOKS = (("before_specify", "impact", "Consult current product memory", True),
          ("before_specify", "session", "Process merged pending archives", True),
          ("before_analyze", "impact", "Consult current product memory", True),
@@ -26,7 +29,7 @@ GUARD_MARK = "memory/hooks/guard.py"
 # Command bodies name commands the Copilot way; skill hosts register them with hyphens.
 SKILL_NAMES = "Here `speckit.memory.<command>` is the skill `speckit-memory-<command>`.\n\n"
 SESSION = """\n<!-- SANDUQ MEMORY SESSION START -->
-At session start run `python .specify/extensions/memory/scripts/archive.py pending`; when it reports pending work or an interrupted run, follow `.specify/extensions/memory/commands/session.md`.
+At session start run `python .specify/extensions/memory/scripts/archive.py pending`; when it reports pending work or an interrupted run, follow `.specify/extensions/memory/commands/session.md`. In a Sanduq Workflow project (`.specify/workflow.yml` exists), Workflow's claim runs this check and returns the Memory commands to run; do not run it separately.
 Before a new specification, branch or broad staging or commit workflow, `archive.py pending --gate` must pass.
 For specification or impact analysis, follow `.specify/extensions/memory/commands/impact.md`.
 Do not load project memory into ordinary implementation tasks.
@@ -109,7 +112,10 @@ def add_hook(text: str, event: str, command: str, description: str, *, first: bo
     end = start + next_event.start() if next_event else len(text)
     section = text[start:end]
     own = re.compile(r"^  - extension: memory\n(?:(?!^  - |^  [a-z_]+:).*(?:\n|$))*", re.M)
-    section = own.sub(lambda match: "" if "command: speckit.memory." + command + "\n" in match.group() else match.group(), section)
+    mine = [m.group() for m in own.finditer(section) if "command: speckit.memory." + command + "\n" in m.group()]
+    if mine and all(re.search(r"^    enabled: false[ \t]*$", block, re.M) for block in mine):
+        return text  # disabled on purpose (Workflow's reconcile or the owner): keep it exactly as it is
+    section = own.sub(lambda match: "" if match.group() in mine else match.group(), section)
     section = block + section if first else section + block
     return text[:start] + section + text[end:]
 

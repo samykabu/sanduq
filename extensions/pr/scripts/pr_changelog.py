@@ -4,9 +4,10 @@
     python .specify/extensions/pr/scripts/pr_changelog.py --feature specs/<slug> [--base <ref>] [--output <path>]
 
 Facts: spec path and branch, the bound issue and repository (`scope-source.json`), the PR (`gh pr
-view`), commit subjects from `git log <base>..HEAD`, the checked and unchecked tasks of `tasks.md`
-by phase, `progress.yml` top-level entries, the stage receipts in `workflow/checkpoint.json` and the
-files under `evidence/`. The facts live between `<!-- speckit-changelog:facts:start -->` and
+view`), commit subjects from `git log <base>..HEAD` (base: --base, else origin's default branch from
+origin/HEAD or GitHub; when no base resolves the commit line is left out), the checked and unchecked
+tasks of `tasks.md` by phase, `progress.yml` top-level entries, the stage receipts in
+`workflow/checkpoint.json` and the files under `evidence/`. The facts live between `<!-- speckit-changelog:facts:start -->` and
 `<!-- speckit-changelog:facts:end -->`; a rerun regenerates only that block and keeps everything
 else, so edit wording and add sections outside the markers. Missing inputs leave their line out.
 Prints the output path. Exit 2 when the feature directory is missing. Standard library only.
@@ -18,6 +19,8 @@ import subprocess
 import sys
 from datetime import date
 from pathlib import Path
+
+import pr_publish
 
 START, END = '<!-- speckit-changelog:facts:start -->', '<!-- speckit-changelog:facts:end -->'
 TASK = re.compile(r'^\s*[-*] \[(?P<done>[ xX])\] (?P<text>.+)$')
@@ -41,6 +44,23 @@ def run(args, cwd):
 def output(args, cwd):
     result = run(args, cwd)
     return result.stdout.strip() if result and result.returncode == 0 else ''
+
+
+def commit_subjects(root, base):
+    """(base ref, subjects) through PR publishing's default-branch rule; (None, '') when no log resolves."""
+    if not base:
+        try:
+            name = pr_publish.default_branch(root)
+        except pr_publish.Failure:
+            name = ''
+        refs = ['origin/' + name, name] if name else []
+    else:
+        refs = [base]
+    for ref in refs:
+        result = run(['git', 'log', '--format=%s', ref + '..HEAD'], root)
+        if result and result.returncode == 0:
+            return ref, result.stdout.strip()
+    return None, ''
 
 
 def tasks_by_phase(text):
@@ -67,10 +87,10 @@ def facts(root, feature, base):
     lines += ['- Branch: `' + branch + '`'] if branch else []
     lines += ['- Issue: ' + source['repo'] + '#' + str(source['issue'])] if source.get('issue') else []
     lines += ['- PR: ' + pr] if pr else []
-    base = base or output(['git', 'symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], root) or 'main'
-    commits = output(['git', 'log', '--format=%s', base + '..HEAD'], root)
-    lines += ['', '## [' + date.today().isoformat() + ']', '', '### Added', '']
-    lines += ['- ' + s for s in commits.splitlines()] or ['- (no commits on `' + base + '..HEAD`)']
+    base, commits = commit_subjects(root, base)
+    lines += ['', '## [' + date.today().isoformat() + ']', '', '### Added']
+    if base:  # no resolvable base: the line is left out, never reported as "no commits"
+        lines += [''] + (['- ' + s for s in commits.splitlines()] or ['- (no commits on `' + base + '..HEAD`)'])
     lines += ['', '### Changed', '']
     phases = tasks_by_phase((feature / 'tasks.md').read_text(encoding='utf-8-sig')) if (feature / 'tasks.md').is_file() else {}
     for phase, items in phases.items():
@@ -102,7 +122,7 @@ def render(existing, block, feature_name):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--feature', required=True, help='specs/<slug>')
-    parser.add_argument('--base', help='git base ref (default: origin/HEAD, else main)')
+    parser.add_argument('--base', help="git base ref (default: origin's default branch, from origin/HEAD or GitHub)")
     parser.add_argument('--output', help='default: docs/<slug>/CHANGELOG.md')
     parser.add_argument('--root', default='.', help=argparse.SUPPRESS)
     args = parser.parse_args(argv)

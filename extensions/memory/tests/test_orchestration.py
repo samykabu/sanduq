@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 import subprocess
 import sys
-import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -17,6 +17,7 @@ import orchestration as orch
 from git_state import ArchiveError, digest, write_json
 from memory import MEMORY, REGISTRY, render
 from test_memory_store import legacy_entries
+from repo_template import TemplateRepo
 
 VAT, FX = "specs/010-vat", "specs/011-fx"
 VSPEC, VTASKS, FSPEC, FTASKS = VAT + "/spec.md", VAT + "/tasks.md", FX + "/spec.md", FX + "/tasks.md"
@@ -42,11 +43,9 @@ def prov(eid, *uids):
     return {"entry": eid, "units": group(*uids)}
 
 
-class OrchestrationTests(unittest.TestCase):
-    def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="memory-orch-test-")
-        self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+class OrchestrationTests(TemplateRepo, unittest.TestCase):
+    def build(self):
+        """Once per class (PM20): a migrated repository with two prepared features; each test gets a copy."""
         self.git("init", "-b", "develop")
         for key, value in {"user.name": "Archive Test", "user.email": "archive@example.invalid", "core.autocrlf": "false",
                            "core.hooksPath": ".git/hooks", "commit.gpgsign": "false"}.items():
@@ -66,6 +65,12 @@ class OrchestrationTests(unittest.TestCase):
         self.write(FSPEC, "# FX\n\nRates refresh hourly.\n")
         self.write(FTASKS, "# Tasks\n\n- [x] T001 Add FX\n")
         self.prepare()
+
+    def restored(self):
+        self.archive = Archive(self.root)
+        self.prepared = copy.deepcopy(self.built["prepared"])
+        self.run_id = self.prepared["run_id"]
+        self.run_dir = self.archive.run_path(self.run_id)
 
     def prepare(self):
         self.git("add", "-A")

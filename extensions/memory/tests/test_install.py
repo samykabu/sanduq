@@ -73,6 +73,26 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(1, text.count("command: speckit.memory.session"))
         self.assertEqual(1, (self.root / "AGENTS.md").read_text().count("SANDUQ MEMORY SESSION START"))
 
+    def test_reinstall_keeps_a_disabled_hook_byte_for_byte(self):
+        """D3: Workflow's reconcile disables session and prepare; a Memory re-init must not re-enable them (its
+        journal compares the whole entry), while the enabled hooks are still rewritten."""
+        install(self.root)
+        config = self.root / ".specify/extensions.yml"
+        text = config.read_text()
+        for command in ("session", "prepare"):
+            text = text.replace("command: speckit.memory." + command + "\n    enabled: true",
+                                "command: speckit.memory." + command + "\n    enabled: false\n    note: reconciled")
+        config.write_text(text)
+        disabled = [block for block in re.findall(r"^  - extension: memory\n(?:    .*\n)*", text, re.M) if "enabled: false" in block]
+        self.assertEqual(2, len(disabled))
+        install(self.root)
+        after = config.read_text()
+        for block in disabled:
+            self.assertEqual(1, after.count(block), block)
+        self.assertEqual(2, after.count("command: speckit.memory.impact\n    enabled: true"))
+        self.assertEqual(1, after.count("command: speckit.memory.session"))
+        self.assertEqual(1, after.count("command: speckit.memory.prepare"))
+
     def test_coexisting_archive_tooling_refuses_without_changes(self):
         self.write(".specify/extensions/legacy-archive/scripts/archive.py", "# Local archive helper\n")
         self.write(".specify/extensions/legacy-archive/archive-policy.json", "{}\n")
@@ -201,8 +221,17 @@ class InstallTests(unittest.TestCase):
                           (self.root / "CLAUDE.md").read_text(encoding="utf-8"), re.S).group(1)
         self.assertEqual(4, len(block.strip().splitlines()))
         for fact in ("archive.py pending`", "commands/session.md", "pending --gate", "commands/impact.md",
-                     "Do not load project memory into ordinary implementation tasks"):
+                     "Do not load project memory into ordinary implementation tasks", "Workflow's claim runs this check"):
             self.assertIn(fact, block)
+
+    def test_session_and_prepare_follow_the_workflow_handoff(self):
+        """D3: the handoff dispatches session with --run/--spec and prepare only to choose checks."""
+        session = (SOURCE / "commands/session.md").read_text(encoding="utf-8")
+        prepare = (SOURCE / "commands/prepare.md").read_text(encoding="utf-8")
+        self.assertIn("with `--run <id>`, recover only that\ntransaction", session)
+        self.assertIn("With `--spec <dir>`, inspect and verify only that\nfeature", session)
+        self.assertIn("workflow.py memory-handoff --transition execute\n--feature specs/<full-feature-name> --check", prepare)
+        self.assertIn("Never run `queue` directly there", prepare)
 
     def test_guard_hooks_register_on_both_hosts_only_when_enabled(self):
         install(self.root)

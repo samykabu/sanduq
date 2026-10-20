@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+Round 4 (D3, Memory side: Sanduq Workflow owns the session and prepare hooks).
+
+- The approval hash reads each Memory hook entry with its event heading, so moving an entry to another event voids the approval (the old reader hashed the block alone). Command, condition, priority and every other field stay bound. The `enabled:` line is left out only for `speckit.memory.session` and `speckit.memory.prepare`, so Workflow's reconcile can disable them without stopping automatic archiving.
+- A Memory hook entry in a layout the approval cannot read (another key first, indented lists, no `command:`) now refuses with a message instead of being left out of the hash.
+- `install.py` keeps an existing `enabled: false` hook entry byte for byte, so a Memory re-init no longer re-enables a hook Workflow disabled (Workflow's next install then failed `HOOK_CHANGED_SINCE_RECONCILE`).
+- `archive.py pending` also returns `policy_hash` and `policy: {target_branch, default_checks}` when automatic mode is on, so Workflow's handoff skips the separate `policy` call (one helper process, about 0.6 s, per transition).
+- A queue entry from before the current approval stays as it is and is reported blocked with the fix (archive it manually or re-queue it), never re-stamped.
+- `session.md` honours the handoff's `--run <id>` and `--spec <dir>`. `prepare.md` has a managed branch: choose the checks, run the read-only preflight, then return them through `workflow.py memory-handoff --transition execute`.
+- The SESSION block says that in a Workflow project the claim runs the session check.
+- README: install the catalog with `--priority 1` (the lowest number wins in Spec Kit).
+
+### Migration
+
+- Re-approve once after the update: run `speckit.memory.enable` (every Memory release changes the hash). Entries queued before the renewal are reported blocked: archive each manually with `speckit.memory.run --spec <dir>`, or re-queue it from its implementation branch.
+- Finish or recover an active archive (`archive.py status`) before updating; a prepared run refuses a changed implementation hash.
+- With Sanduq Workflow: install this release before the Workflow release that disables the two hooks.
+
 ## [2.4.0] - 2026-10-20
 
 Optimization round 3.

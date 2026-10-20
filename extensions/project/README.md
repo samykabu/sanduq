@@ -9,8 +9,9 @@ Mirrors every Spec Kit feature onto a **GitHub Project (v2)**:
 
 - one **parent feature issue** per feature, whose **Status** column advances through the
   Spec Kit lifecycle;
-- one native **sub-issue per task** (fills the board's *Sub-issues progress* bar), closed as
-  its task is checked off in `tasks.md`.
+- in standalone use, one native **sub-issue per task** (fills the board's *Sub-issues progress*
+  bar), closed as its task is checked off in `tasks.md`. Under Sanduq Workflow, Workflow owns
+  task issues and Project creates none.
 
 Idempotent and **no-regress** — re-running a step, or running `auto`, only moves the board
 forward or reconciles it. **Board-agnostic**: run `project init` once per repo to map the
@@ -23,10 +24,10 @@ lifecycle onto whatever Status columns your board has.
 | `/speckit.specify` (after)   | `open`            |
 | `/speckit.plan` (after)      | `analysis`        |
 | `/speckit.analyze` (after)   | `engineer-review` |
-| `/speckit.tasks` (first run) | `ready` (+ sub-issues) |
+| `/speckit.tasks` (first run) | `ready` (+ sub-issues, standalone) |
 | `/speckit.implement` (start) | `in-progress`     |
 | open PR on the branch        | `in-review` (auto) |
-| all sub-issues closed        | `done`            |
+| `done`, passed explicitly    | `done` (closes checked tasks' sub-issues); never automatic |
 
 ## Install & setup
 

@@ -1,6 +1,6 @@
 """PR1: pr_publish.py splices the marked section, writes the exact body and lint receipt, refuses
-on findings and publishes through gh. gh and git are replaced by a fake runner; the lint runs
-Workflow's rule when its script is installed and the same rule in-process otherwise."""
+on findings and publishes through gh. gh and git are replaced by a fake runner; the lint is the
+shared `sanduq_pr_lint` rule, never an installed Workflow's script."""
 import hashlib
 import io
 import json
@@ -24,21 +24,21 @@ SECTION_OLD = pr_publish.START + '\n## Old\n\nold text\n' + pr_publish.END
 
 class FakeRunner:
     def __init__(self, pr=None, branch='feat/x', default='origin/main', upstream=True, view_error=None,
-                 uncommitted=(), unpushed=()):
+                 uncommitted=(), unpushed=(), ahead=0):
         self.pr, self.branch, self.default, self.upstream, self.calls = pr, branch, default, upstream, []
-        self.view_error, self.uncommitted, self.unpushed = view_error, uncommitted, unpushed
+        self.view_error, self.uncommitted, self.unpushed, self.ahead = view_error, uncommitted, unpushed, ahead
 
     def __call__(self, args, cwd):
         self.calls.append(args)
         key = ' '.join(args[:3])
-        if key == 'gh pr view' and 'number,url,body' in args and self.view_error:
+        if key == 'gh pr view' and 'number,url,body,state' in args and self.view_error:
             return self.fail(self.view_error)
-        if key == 'gh pr view' and 'number,url,body' in args:
-            return self.done(json.dumps(self.pr)) if self.pr else self.fail('no pull requests found')
-        if key == 'gh pr view':
-            return self.done('https://github.com/acme/app/pull/12')
-        if key in ('gh pr edit', 'gh pr create'):
+        if key == 'gh pr view' and 'number,url,body,state' in args:
+            return self.done(json.dumps({'state': 'OPEN', **self.pr})) if self.pr else self.fail('no pull requests found')
+        if key == 'gh pr edit':
             return self.done('')
+        if key == 'gh pr create':
+            return self.done('Creating pull request for feat/x into main\n\nhttps://github.com/acme/app/pull/12\n')
         if key == 'git symbolic-ref --short':
             if args[3] == 'HEAD':
                 return self.done(self.branch)
@@ -53,7 +53,9 @@ class FakeRunner:
             return self.fail('HTTP 404: Not Found') if any(quote(p) in args[2] for p in self.unpushed) else self.done('')
         if key == 'git rev-parse --abbrev-ref':
             return self.done('origin/' + self.branch) if self.upstream else self.fail('no upstream')
-        if key == 'git push --set-upstream':
+        if key == 'git rev-list --count':
+            return self.done(str(self.ahead) + '\n')
+        if key in ('git push --set-upstream', 'git push'):
             return self.done('')
         raise AssertionError('unexpected call ' + ' '.join(args))
 
@@ -129,6 +131,29 @@ class PublishTests(unittest.TestCase):
         self.assertEqual(create[3:9], ['--base', 'main', '--head', 'feat/x', '--title', 'Feature X'])
         self.assertEqual(receipt['pr_url'], 'https://github.com/acme/app/pull/12')
 
+    def test_create_takes_the_url_from_gh_pr_create(self):
+        runner = FakeRunner(pr=None)
+        code, receipt = self.run_script(runner)
+        self.assertEqual((code, receipt['pr_url']), (0, 'https://github.com/acme/app/pull/12'))
+        self.assertEqual(sum(c[:3] == ['gh', 'pr', 'view'] for c in runner.calls), 1)  # the lookup only
+
+    def test_a_merged_or_closed_pr_is_never_edited(self):
+        for state in ('MERGED', 'CLOSED'):
+            runner = FakeRunner(pr={'number': 12, 'url': 'u', 'body': 'old', 'state': state})
+            code, result = self.run_script(runner)
+            self.assertEqual(code, 3, result)
+            self.assertIn('PR #12 is ' + state.lower(), result['error'])
+            self.assertEqual([c[:3] for c in runner.calls], [['gh', 'pr', 'view']])
+
+    def test_create_pushes_an_upstream_that_is_behind(self):
+        runner = FakeRunner(pr=None, ahead=2)
+        self.assertEqual(self.run_script(runner)[0], 0)
+        order = [c[:3] for c in runner.calls]
+        self.assertLess(order.index(['git', 'push']), order.index(['gh', 'pr', 'create']))
+        runner = FakeRunner(pr=None, ahead=0)
+        self.assertEqual(self.run_script(runner)[0], 0)
+        self.assertFalse([c for c in runner.calls if c[:2] == ['git', 'push']])
+
     def test_create_refuses_on_the_default_branch_with_exit_3(self):
         code, result = self.run_script(FakeRunner(pr=None, branch='main'))
         self.assertEqual(code, 3)
@@ -149,22 +174,21 @@ class PublishTests(unittest.TestCase):
         self.assertEqual((code, receipt['pr_url'], runner.calls), (0, None, []))
         self.assertTrue(self.body_and_lint(receipt)[1]['ok'])
 
-    def test_workflow_lint_is_imported_by_path_when_installed(self):
-        tools = self.root / pr_publish.WORKFLOW_TOOLS
+    def test_an_installed_workflow_lint_script_is_never_loaded(self):
+        tools = self.root / '.specify/extensions/workflow/scripts/execution_tools.py'
         tools.parent.mkdir(parents=True)
-        tools.write_text('def pr_lint(body, repo, issue, prerequisites=()):\n'
-                         '    return {"ok": True, "body_sha256": "stub", "seen": [repo, issue, list(prerequisites)]}\n',
-                         encoding='utf-8')
+        tools.write_text('raise SystemExit("execution_tools.py loaded")\n', encoding='utf-8')
         code, receipt = self.run_script(FakeRunner(pr={'number': 12, 'url': 'u', 'body': ''}), '--no-pr')
-        self.assertEqual((code, receipt['pr_body_sha256']), (0, 'stub'))
-        self.assertEqual(self.body_and_lint(receipt)[1]['seen'], ['acme/app', 10, [9]])
+        self.assertEqual(code, 0, receipt)
+        self.assertEqual(self.body_and_lint(receipt)[1]['bound'], {'repo': 'acme/app', 'issue': 10})
 
-    def test_fallback_lint_equals_workflow_pr_lint(self):
+    def test_the_lint_is_the_shared_rule_workflow_uses(self):
         sys.path.insert(0, str(ROOT / 'extensions/workflow/scripts'))
         import execution_tools
+        import sanduq_pr_lint
+        self.assertIs(pr_publish.pr_lint, sanduq_pr_lint.pr_lint)
         body = 'Closes #10, fixes #9, resolves other/repo#4 `closes #99`\n```\nfixes #98\n```\n'
-        self.assertEqual(pr_publish.lint(self.root, body, 'Acme/App', 10, [9]),
-                         execution_tools.pr_lint(body, 'Acme/App', 10, [9]))
+        self.assertEqual(pr_publish.pr_lint(body, 'Acme/App', 10, [9]), execution_tools.pr_lint(body, 'Acme/App', 10, [9]))
 
     def test_a_failed_pr_lookup_is_an_error_not_a_missing_pr(self):
         runner = FakeRunner(pr=None, upstream=False, view_error='HTTP 401: Bad credentials (https://api.github.com/graphql)')

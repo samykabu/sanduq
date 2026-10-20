@@ -51,6 +51,34 @@ GUARD_PATHS = [f"{directory}/{language}/create-new-feature.{suffix}"
                for language, suffix in (("bash", "sh"), ("powershell", "ps1"))]
 GUARD_PATHS += [f".specify/extensions/git/scripts/{language}/auto-commit.{suffix}"
                 for language, suffix in (("bash", "sh"), ("powershell", "ps1"))]
+# Sanduq Workflow's reconcile disables these two in a managed project and runs their handoff itself (D3), so
+# their `enabled:` line is not bound by the approval. Everything else in every Memory hook entry is.
+WORKFLOW_OWNED_HOOKS = ("speckit.memory.session", "speckit.memory.prepare")
+
+
+def memory_hooks(text: str) -> list[str]:
+    """Each Memory hook entry of `.specify/extensions.yml` as `event` + its block, sorted, for the approval hash.
+    The block keeps command, condition, priority and every other line; `enabled:` is dropped only for the two
+    Workflow-owned hooks. A Memory entry in a layout this reader does not parse refuses instead of being skipped."""
+    text = text.replace("\r\n", "\n")
+    found = []
+    section = re.search(r"^hooks:[ \t]*\n((?:(?:[ \t]+.*|[ \t]*)(?:\n|$))*)", text, re.M)
+    events = re.split(r"^  ([A-Za-z_][\w-]*):[ \t]*\n", section.group(1), flags=re.M) if section else [""]
+    for event, body in zip(events[1::2], events[2::2]):
+        for block in re.findall(r"^  - extension: memory[ \t]*\n(?:(?!  - |  \S).*(?:\n|$))*", body, re.M):
+            command = re.search(r"^    command: (speckit\.memory\.[\w-]+)[ \t]*$", block, re.M)
+            if not command:
+                raise ArchiveError(f"A Memory hook entry under {event} in .specify/extensions.yml has no readable "
+                                   "command; restore it (run speckit.memory.init) and review the policy again.")
+            if command.group(1) in WORKFLOW_OWNED_HOOKS:
+                block = re.sub(r"^    enabled:.*(?:\n|$)", "", block, flags=re.M)
+            found.append(event + ":\n" + block.rstrip("\n"))
+    mentions = len(re.findall(r"\bextension:[ \t]*[\"']?memory[\"']?(?=[\s,}]|$)", text))
+    if mentions != len(found):
+        raise ArchiveError(f".specify/extensions.yml has {mentions} Memory hook entries but only {len(found)} in the "
+                           "layout the approval reads (`hooks:` > event > `- extension: memory` first); restore them "
+                           "(run speckit.memory.init) and review the policy again.")
+    return sorted(found)
 
 
 def now() -> str:
@@ -118,8 +146,7 @@ class Archive:
                 values.extend([path.encode(), block.group().encode() if block else b"missing"])
         config = self.repo.path(".specify/extensions.yml")
         if config.exists():
-            own_hooks = re.findall(r"^  - extension: memory\n(?:(?!^  - |^  [a-z_]+:).*(?:\n|$))*", config.read_text(encoding="utf-8"), re.M)
-            values.extend([b"hooks", "\n".join(own_hooks).encode()])
+            values.extend([b"hooks:v2", "\n".join(memory_hooks(config.read_text(encoding="utf-8"))).encode()])
         return digest(b"\0".join(values))
 
     def approval_paths(self) -> list[str]:
@@ -568,14 +595,23 @@ class Archive:
                     **self.operational_state()}
         queue = load(self.repo.state / "pending.json", {})
         branch = self.repo.git("branch", "--show-current").decode().strip()
-        result = {"enabled": True, "ready": [], "needs_verification": [], "blocked": [], **self.operational_state()}
+        # PM24: the policy facts Workflow's handoff needs, so it skips a second helper process (`policy`).
+        result = {"enabled": True, "ready": [], "needs_verification": [], "blocked": [], **self.operational_state(),
+                  "policy_hash": approval["policy_hash"],
+                  "policy": {"target_branch": self.policy["target_branch"],
+                             "default_checks": self.policy.get("default_checks", [])}}
         if result["guard_blockers"]:
             result["blocked"].append({"reason": "Archive number guards need reinstall/repair", "paths": result["guard_blockers"]})
             return result
         for spec, item in queue.items():
             try:
-                if item["root"] != str(self.repo.root) or item["enabled_at"] != approval["enabled_at"]:
-                    raise ArchiveError("Queue entry predates current enablement or belongs to another worktree.")
+                if item["root"] != str(self.repo.root):
+                    raise ArchiveError("Queue entry belongs to another worktree.")
+                if item["enabled_at"] != approval["enabled_at"]:
+                    # Kept as queued, never re-stamped: the owner approved a different policy then.
+                    raise ArchiveError("Queue entry predates current enablement (queued under the approval of "
+                                       f"{item['enabled_at']}): archive it manually with speckit.memory.run --spec "
+                                       f"{spec}, or re-queue it from its implementation branch.")
                 if branch != self.policy["target_branch"]:
                     raise ArchiveError("Awaiting local merge/check-out of the configured target branch.")
                 current_product = self.product_state()

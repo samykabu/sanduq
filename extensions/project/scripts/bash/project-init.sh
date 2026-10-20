@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # One-time setup for the 'project' extension (bash twin of project-init.ps1): discover a
 # GitHub Project (v2), map lifecycle phases to the board's Status columns (exact -> fuzzy ->
-# prompt -> optional auto-create), and write .specify/extensions/project/config.json.
+# prompt -> optional auto-create), and write .specify/extensions/project/config.json. A rerun keeps
+# the existing parentIssue, subIssues and stateFile settings.
 #
 # Usage: project-init.sh [--owner <login>] [--number <n>] [--owner-type user|org]
 #                        [--hooks-mode optional|required] [--auto-create-columns]
@@ -63,6 +64,10 @@ EXT_DIR=".specify/extensions/project"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEF="$SCRIPT_DIR/../../config.default.json"; [ -f "$DEF" ] || DEF="$EXT_DIR/config.default.json"
 [ -f "$DEF" ] || die "config.default.json not found"
+OUT="$EXT_DIR/config.json"
+# A rerun keeps the existing sub-issue, parent and state settings; defaults apply on the first run only.
+[ -f "$OUT" ] && { jq -e . "$OUT" >/dev/null 2>&1 || die "$OUT is not valid JSON - fix or delete it, then rerun"; }
+keep(){ if [ -f "$OUT" ] && jq -e --arg k "$1" 'has($k)' "$OUT" >/dev/null; then jq --arg k "$1" '.[$k]' "$OUT"; else jq --arg k "$1" '.[$k]' "$DEF"; fi; }
 MANAGED_WORKFLOW=0
 MANAGED_DEFAULTS='{}'
 if [ -f "$ROOT/.specify/workflow.yml" ]; then
@@ -77,7 +82,9 @@ gh auth status 2>&1 | grep -Eq "(^|[^:[:alnum:]_-])project([^:[:alnum:]_-]|$)" |
 [ -z "$OWNER" ] && OWNER="$(gh api user --jq .login)"
 [ -z "$OWNER" ] && die "could not resolve owner - pass --owner"
 if [ -z "$OWNER_TYPE" ]; then
-  if gh project list --owner "$OWNER" --limit 1 --format json >/dev/null 2>&1; then OWNER_TYPE="user"; else OWNER_TYPE="org"; fi
+  # 'gh project list' accepts org logins too, so only the account type tells the two apart
+  KIND="$(gh api "users/$OWNER" --jq .type 2>/dev/null | tr -d '\r')" || die "cannot tell whether $OWNER is a user or an organization - pass --owner-type user|org"
+  if [ "$KIND" = "Organization" ]; then OWNER_TYPE="org"; else OWNER_TYPE="user"; fi
 fi
 info "owner: $OWNER ($OWNER_TYPE)"
 
@@ -96,8 +103,9 @@ if [ "$NUMBER" -le 0 ] 2>/dev/null; then
 fi
 info "project #$NUMBER"
 
-PROJ_ID="$(gh project view "$NUMBER" --owner "$OWNER" --format json | jq -r '.id')"
-PROJ_URL="$(gh project view "$NUMBER" --owner "$OWNER" --format json | jq -r '.url')"
+VIEW="$(gh project view "$NUMBER" --owner "$OWNER" --format json)" || die "cannot view project #$NUMBER"
+PROJ_ID="$(echo "$VIEW" | jq -r '.id')"
+PROJ_URL="$(echo "$VIEW" | jq -r '.url')"
 FIELDS="$(gh project field-list "$NUMBER" --owner "$OWNER" --format json)"
 STATUS_FIELD_ID="$(echo "$FIELDS" | jq -r '.fields[] | select(.name=="Status" and .options) | .id' | head -1)"
 [ -z "$STATUS_FIELD_ID" ] && die "no single-select 'Status' field on project #$NUMBER"
@@ -165,7 +173,7 @@ fi
 
 if [ -z "$HOOKS_MODE" ]; then
   if [ "$NONINT" = 1 ]; then
-    [ -f "$EXT_DIR/config.json" ] && HOOKS_MODE="$(jq -r '.hookMode // empty' "$EXT_DIR/config.json")"
+    [ -f "$OUT" ] && HOOKS_MODE="$(jq -r '.hookMode // empty' "$OUT" | tr -d '\r')"
     [ "$HOOKS_MODE" = "optional" ] || [ "$HOOKS_MODE" = "required" ] || HOOKS_MODE="optional"
     info "hook mode not supplied in non-interactive mode; using $HOOKS_MODE (rerun with --hooks-mode optional|required to choose)"
   else
@@ -196,11 +204,9 @@ CONFIG="$(jq -n \
   --arg owner "$OWNER" --arg ot "$OWNER_TYPE" --arg hook "$HOOKS_MODE" --argjson num "$NUMBER" \
   --arg pid "$PROJ_ID" --arg purl "$PROJ_URL" --arg sfid "$STATUS_FIELD_ID" \
   --argjson sopt "$SOPT" --argjson p2s "$P2S" --argjson order "$ORDER_JSON" \
-  --argjson parent "$(jq '.parentIssue' "$DEF")" --argjson sub "$(jq '.subIssues' "$DEF")" \
-  --arg state "$(jq -r '.stateFile' "$DEF")" \
+  --argjson parent "$(keep parentIssue)" --argjson sub "$(keep subIssues)" --argjson state "$(keep stateFile)" \
   '{owner:$owner,ownerType:$ot,hookMode:$hook,projectNumber:$num,projectId:$pid,projectUrl:$purl,statusFieldId:$sfid,statusOptions:$sopt,phaseToStatus:$p2s,statusOrder:$order,parentIssue:$parent,subIssues:$sub,stateFile:$state}')"
 
-OUT="$EXT_DIR/config.json"
 if [ "$DRYRUN" = 1 ]; then info "DRYRUN would write $OUT:"; echo "$CONFIG";
 else mkdir -p "$EXT_DIR"; echo "$CONFIG" > "$OUT"; info "wrote $OUT"; fi
 info "done. Next: commit config.json, then dry-run: python $EXT_DIR/scripts/project_sync.py --phase open --dry-run"

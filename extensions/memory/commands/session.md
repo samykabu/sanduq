@@ -5,6 +5,11 @@ description: Processes merged pending archives and resumes interrupted runs. Use
 # Pending archive session
 
 Run `python .specify/extensions/memory/scripts/archive.py pending` from the root.
+
+Arguments (Sanduq Workflow's handoff passes them): with `--run <id>`, recover only that
+transaction, then return to the caller. With `--spec <dir>`, inspect and verify only that
+feature (and run it when it becomes ready), then return to the caller. Without them, process
+all pending work as below.
 Do not load project memory (`specs/memory/`) for this check. Disabled mode stops cleanly.
 This instruction runs at the start of a local agent session and before specifying.
 It is not a background service or a remote merge hook.
