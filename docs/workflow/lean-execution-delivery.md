@@ -11,7 +11,7 @@ This implements the approved first package: **P01-P06, P08 and P12**. P07, P09-P
 | P01 | One lifecycle coordinator; mechanical stages stay with it. Nested orchestration and launches without concrete deliverables are rejected. Claims and receipts remain required. | `workflow.py`, `lean_policy.py` |
 | P02 | Coding review waits for all coding/testing tasks. Ready and CI still require every required task, including documentation and review. | `workflow.py`, stage references |
 | P03 | Opt-in aggregate preflight checks declared source/fixture identities, command arguments, encoding/newlines and runtime/browser status. Scope selects valid initial or revalidation command syntax. | `execution_tools.py`, Scope command references |
-| P04 | Bounded worker briefs retain ownership, acceptance, policy/source fingerprints and pointers to detail. Result projections preserve unknown usage honestly. | `worker_brief.py` |
+| P04 | Bounded worker briefs retain ownership, acceptance, policy/source fingerprints and pointers to detail. | `worker_brief.py` |
 | P05 | One planned corrective continuation; repeated failures require a concrete diagnosis. Comparable history informs bounded timeouts and a finalization reserve. | `delegation.py`, `delegate_dispatch.py`, `lean_policy.py` |
 | P06 | Selected checks bind command, sources, fixtures, declared environment, executable identity and evidence. Only unchanged passing checks can be reused. The selected executable path remains the invocation path. | `verification_plan.py` |
 | P08 | Scope regression coverage retains status/checkbox/REST/idempotency behavior. PR lint verifies the bound closing issue and prerequisites; the receipt recomputes body identity and lint. | `execution_tools.py`, `workflow.py`, PR instructions |

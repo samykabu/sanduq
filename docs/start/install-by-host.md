@@ -106,7 +106,7 @@ specify extension add assure
 specify extension add user-manual
 specify extension add pr
 specify extension add project
-specify extension add progress
+specify extension add progress     # needs Spec Kit 1.1.1 or later
 specify extension add workflow
 specify extension add scope    # requires workflow; the community catalog uses the same ID
 specify extension add memory   # the community catalog uses the same ID

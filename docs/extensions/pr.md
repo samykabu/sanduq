@@ -40,7 +40,8 @@ prints the receipt fields Workflow checks.
 
 Before it touches the PR, Generate checks QA and manual freshness for the extensions you installed.
 Review Feedback shows a plan and waits for your approval before it edits, replies, commits, pushes
-or resolves threads. In the managed Workflow, Finalize runs Generate.
+or resolves threads. It posts replies and resolves threads only from the approved plan file, and resolves
+none until the PR head contains the pushed fixes. In the managed Workflow, Finalize runs Generate.
 [Editable source](../diagrams/extension-pr.html).
 
 ## Limits

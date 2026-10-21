@@ -8,7 +8,7 @@ moves its Status column through the lifecycle and, in standalone use, creates on
 | Lifecycle phase | After `specify`, `plan`, `analyze` and `tasks`; before and after `implement` |
 | Hooks | Six optional hooks; Project Init can make them mandatory ([hooks](../reference/hooks.md)) |
 | Commands | `init`, `sync` ([reference](../reference/commands.md#project)) |
-| Requires | Python 3 (Init also needs PowerShell or bash); uses `gh` when available |
+| Requires | Python 3; uses `gh` when available |
 | Standalone | Yes |
 | License | PolyForm Noncommercial 1.0.0 |
 

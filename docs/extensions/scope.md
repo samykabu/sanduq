@@ -4,6 +4,10 @@
 inventories requirements, estimates effort, and publishes only the decomposition you approve. It
 exports the dependency plan as a diagram.
 
+An issue is ready when each prerequisite is In review or Done. The check follows prerequisites of
+prerequisites through In review issues and stops at a Done one, so a Done prerequisite whose own prerequisite
+was reopened does not block.
+
 | | |
 | --- | --- |
 | Lifecycle phase | Before and after `specify`, before `plan`, after `implement` |
@@ -51,6 +55,7 @@ text list when it cannot. A question may also carry a Mermaid diagram. With
 session, and `clarification.max_questions_per_round` caps a round. In a managed project Scope can
 render the spec from the approved analysis (`scope.py render-spec`), and `--snapshot` reuses an
 `inspect` result across gate, approve, publish and bind.
+`scope.py cancel <issue>-<hash>` marks an interrupted publish cancelled and prints what to repair by hand.
 The managed Workflow runs these steps through its dispatcher.
 [Editable source](../diagrams/extension-scope.html).
 

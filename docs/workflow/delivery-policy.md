@@ -159,7 +159,8 @@ the current behaviour; an unknown key or a wrong type stops the workflow with
 
 ```yaml
 progress:
-  hook_wiring: speckit      # speckit (default) runs through Spec Kit's dispatcher; native runs scripts/hook.py directly
+  hook_wiring: speckit      # speckit runs through Spec Kit's dispatcher; native runs scripts/hook.py directly
+                            # unset: new Progress installs get native; existing installs keep their wiring
   post_tool_matcher: ""     # tools the per-tool-call hook matches; "" (default) matches every tool
 illustrate:
   hooks:

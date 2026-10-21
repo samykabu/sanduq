@@ -110,12 +110,12 @@ Installation changes also need the relevant smoke check:
 ```bash
 python extensions/scripts/smoke_install.py --host codex
 python extensions/scripts/smoke_upgrade.py
-python extensions/scripts/smoke_project_init.py --shell pwsh
+python extensions/scripts/smoke_project_init.py
 python extensions/scripts/smoke_memory_install.py
 ```
 
 CI exercises Linux/Windows regression, Codex/Claude and core/SuperSpec installs, transactional
-upgrades, Project initialization in Bash/PowerShell, and Memory registration. Report unavailable
+upgrades, Project initialization on Linux and Windows, and Memory registration. Report unavailable
 infrastructure and skipped checks accurately; package creation alone is not live acceptance.
 
 ## Update a vendored skill
@@ -169,7 +169,11 @@ asset through the catalogs.
 python extensions/scripts/release.py bump <id> <version>   # writes every copy of the version
 python extensions/scripts/release.py prepare --development
 python extensions/scripts/release.py publish
+python extensions/scripts/release.py check-bumps             # lint: shipped files changed without a bump
 ```
+
+`check-bumps` fails when a package's shipped files differ from its catalog entry and no newer version is
+pending. Edits to only `README.md`, the top-level `CHANGELOG.md`, `LICENSE` or `docs/**` need no bump.
 
 Development preparation cannot be promoted. The publish command above is a dry run without
 `--apply`. Keep pending status `implementation-in-progress` until validation is complete; marking

@@ -98,7 +98,7 @@ Opt-in keys, each off or unchanged until set:
 ```yaml
 # .specify/workflow.yml
 progress:
-  hook_wiring: native            # default speckit; the installer writes hooks that run hook.py directly
+  hook_wiring: native            # hooks run hook.py directly; unset: native on new installs, existing keep theirs
   post_tool_matcher: "Bash|Task|Agent|spawn_agent"   # default "" (every tool); fewer activity updates
 illustrate:
   hooks:

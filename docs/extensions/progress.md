@@ -9,7 +9,7 @@ native hook payloads. No agent is spent keeping it current.
 | Lifecycle phase | After `tasks` through `implement`; native hooks keep it fresh |
 | Hooks | Two optional lifecycle hooks and five native host events ([hooks](../reference/hooks.md)) |
 | Commands | `init`, `refresh`, `status`, `theme`, `export` ([reference](../reference/commands.md#progress)) and a CLI with 16 verbs ([full reference](../../extensions/progress/docs/commands.md)) |
-| Requires | Nothing; Python 3.11 or later. Workflow and Illustrate are optional |
+| Requires | Spec Kit 1.1.1 or later; Python 3.11 or later. Workflow and Illustrate are optional |
 | Standalone | Yes |
 | License | PolyForm Noncommercial 1.0.0 (vendored skill code is MIT) |
 
@@ -21,6 +21,10 @@ specify extension add progress
 
 Add the Sanduq catalog first if you have not ([install by host](../start/install-by-host.md)). With Workflow, use
 `install.py --with progress --apply` instead.
+
+Progress needs Spec Kit 1.1.1 or later. On an older Spec Kit the Workflow installer refuses it before changing
+anything, with `OPTIONAL_PACKAGE_SPECKIT_INCOMPATIBLE` naming both versions: upgrade Spec Kit, or install without
+`--with progress`.
 
 ```text
 $speckit-progress-init Create the progress report for specs/412-refund-approval.
@@ -66,7 +70,7 @@ operations guide. Details:
 - Two optional `progress:` keys in `.specify/workflow.yml`, applied by the installer: `hook_wiring: native` writes
   hooks that run `scripts/hook.py` directly instead of through Spec Kit's dispatcher (about half the time per tool
   call), and `post_tool_matcher` limits the per-tool-call hook to the tools it matches, at the cost of a coarser stale
-  banner. Defaults keep today's wiring; the
+  banner. A new Progress install is wired natively; an existing one keeps its wiring until you set the key. The
   [package README](../../extensions/progress/README.md#how-it-plugs-in) has the details.
 
 ## Plans outside Spec Kit
