@@ -93,6 +93,10 @@ def package_files(extension, root=ROOT):
         shared_file = root / 'extensions/scripts/shared' / helper
         if extension in consumers and shared_file.exists():
             files[extension + '/scripts/' + helper] = shared_file.read_bytes()
+    # Workflow's decisions reach Scope's Project transport without loading scope.py (SC8); Scope ships it natively.
+    scope_github = root / 'extensions/scope/scripts/sanduq_scope_github.py'
+    if extension == 'workflow' and scope_github.exists():
+        files['workflow/scripts/sanduq_scope_github.py'] = scope_github.read_bytes()
     return files
 
 

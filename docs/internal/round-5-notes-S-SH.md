@@ -92,6 +92,21 @@ Tests: `python -m unittest discover -s extensions/scripts/tests -p "test_sanduq_
 - `python -m unittest discover -s extensions/scripts/tests -q`: 185 tests OK (77.8 s), Python 3.11 via uv.
 - `python extensions/scripts/test_check_docs.py`: passed. `python extensions/scripts/check_docs.py`: Documentation OK.
 
+## Follow-ups after S-SC and S-PM landed (orchestrator request)
+
+- `package.py`: the workflow archive carries `workflow/scripts/sanduq_scope_github.py` (bytes of
+  `extensions/scope/scripts/sanduq_scope_github.py`); Scope ships it natively. S-CI's `INJECTED` entry
+  `[scope, workflow]` matches; the archive-coverage test passes.
+- `test_sanduq_remote.py`:
+  - `test_workflow_carries_scopes_github_client`: archive bytes and inventory hash equal the source; the client
+    imports from a folder holding only it and `sanduq_gh.py` (both from the workflow archive), PyYAML and packaging
+    blocked, and both modules load from that folder.
+  - `OneDefinition.MOVED['sanduq_gh.py'] = {'rate_limited', 'token_scopes'}`. The scan now treats
+    `name = module.name` as a re-export, not a copy (`sanduq_scope_github.py:21` has
+    `rate_limited = sanduq_gh.rate_limited`); any other assignment or `def` of a moved name still fails.
+- Results: `extensions/scripts/tests` 189 tests OK; `test_check_docs.py` passed; `check_docs.py` fails only on
+  `docs/reference/hooks.md is stale` (SC17, not S-SH); `release.py check-bumps` ok (bootstrap notices only).
+
 ## Interface changes
 
 None after READY.
@@ -110,6 +125,4 @@ None after READY.
 - **Orchestrator** (`CONTRIBUTING.md:169-171`, not S-SH's file): add one line to the release block:
   `python extensions/scripts/release.py check-bumps    # lint: shipped files changed without a bump`.
 - No changelog entry: `extensions/scripts` is not an extension; X23 is maintainer-only (plan's migration table).
-- **Orchestrator** (after S-SC and S-PM land): add `rate_limited` and `token_scopes` to
-  `OneDefinition.MOVED['sanduq_gh.py']` in `extensions/scripts/tests/test_sanduq_remote.py` (S-SH can do it on
-  request); not added now because `scope.py` and `project_sync.py` still define them.
+- ~~Orchestrator: add `rate_limited` and `token_scopes` to `OneDefinition.MOVED`~~: done (follow-ups above).

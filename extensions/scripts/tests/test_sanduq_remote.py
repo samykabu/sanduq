@@ -167,6 +167,27 @@ class PackagedCopies(unittest.TestCase):
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertEqual(result.stdout.strip(), expected)
 
+    def test_workflow_carries_scopes_github_client(self):
+        """Workflow's decisions reach Scope's Project transport from its own scripts folder (SC8)."""
+        source = (package.ROOT / 'extensions/scope/scripts/sanduq_scope_github.py').read_bytes()
+        with zipfile.ZipFile(self.archives['workflow']) as z:
+            self.assertEqual(z.read('workflow/scripts/sanduq_scope_github.py'), source)
+            inventory = json.loads(z.read('workflow/package-inventory.json'))
+            self.assertEqual(inventory['workflow/scripts/sanduq_scope_github.py'], hashlib.sha256(source).hexdigest())
+            with tempfile.TemporaryDirectory() as tmp:
+                scripts = Path(tmp) / 'scripts'  # only the client and its transport, nothing else of Workflow
+                scripts.mkdir()
+                for helper in ('sanduq_scope_github.py', 'sanduq_gh.py'):
+                    (scripts / helper).write_bytes(z.read('workflow/scripts/' + helper))
+                code = blocked_import_prelude(scripts) + textwrap.dedent(f'''
+                    import sanduq_scope_github as m
+                    assert m.__file__.startswith({str(scripts)!r}) and m.sanduq_gh.__file__.startswith({str(scripts)!r})
+                    print(m.rate_limited('RATE_LIMITED'), m.GitHubError.__name__)
+                ''')
+                result = self.run_python(code, tmp)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), 'True GitHubError')
+
     def test_project_normalisation_route_never_loads_workflow_py(self):
         """Project alone, PyYAML blocked, and a Workflow whose workflow.py leaves a mark when it is loaded.
         Only Project's route is pinned: Scope loads workflow.py on purpose for checkpoint identity."""
@@ -191,7 +212,8 @@ class PackagedCopies(unittest.TestCase):
 class OneDefinition(unittest.TestCase):
     """No consumer script keeps its own copy (they import the shared module and re-export its names)."""
     MOVED = {'sanduq_remote.py': {'normalize_remote_url', '_normalize_path_remote', '_strip_dotgit'},
-             'sanduq_pr_lint.py': {'pr_lint', 'CLOSE_REF'}}
+             'sanduq_pr_lint.py': {'pr_lint', 'CLOSE_REF'},
+             'sanduq_gh.py': {'rate_limited', 'token_scopes'}}
 
     def test_moved_names_are_defined_only_in_the_shared_files(self):
         copies = []
@@ -199,8 +221,11 @@ class OneDefinition(unittest.TestCase):
             if 'illustrate' in path.relative_to(package.ROOT).parts[1:2] or 'tests' in path.parts:
                 continue
             for node in ast.walk(ast.parse(path.read_text(encoding='utf-8'))):
+                # `name = module.name` re-exports the shared definition; it is not a copy.
+                alias = isinstance(node, ast.Assign) and isinstance(node.value, ast.Attribute)
                 names = ({node.name} if isinstance(node, ast.FunctionDef) else
-                         {t.id for t in node.targets if isinstance(t, ast.Name)} if isinstance(node, ast.Assign) else set())
+                         {t.id for t in node.targets if isinstance(t, ast.Name) and not (alias and node.value.attr == t.id)}
+                         if isinstance(node, ast.Assign) else set())
                 for helper, moved in self.MOVED.items():
                     copies += [f'{path.relative_to(package.ROOT).as_posix()}: {name} (move to {helper})'
                                for name in names & moved]
