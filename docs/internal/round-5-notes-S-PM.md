@@ -169,3 +169,39 @@ before, so a failed or dry-run creation wrote a column that did not exist).
 
 - `--shell bash` of the smoke on Windows (WSL bash is found first); not a CI case.
 - No live run against GitHub: `project_init.py`, `reply` and `resolve` were tested with fakes only.
+
+## Codex review fixes (after df0baf6; `round-5-codex-review.md` findings 3, 5, 8, 9)
+
+Each regression test was run before its fix and failed (3: `FileNotFoundError`, no `config.json`; 5, 8, 9: one
+failure and seven errors in `PlanTests`, the new `--approved-head` flag unknown), then passes.
+
+- **3 (high), `project_init.py` restore.** A timeout (`RuntimeError` from `gh_raw`) on an item's unarchive or edit
+  aborted the run: no re-archive, the remaining items skipped, the new option ids never written. Every call in the
+  restore loop now goes through a per-item `attempt` that turns a timeout into that item's failure; an item whose
+  unarchive succeeded or timed out is archived again whatever the edit did; the loop continues; `config.json` is
+  written with the new ids; exit 1 names each failed item. Test:
+  `test_a_timed_out_item_edit_rearchives_continues_and_still_writes_the_config` (runs init in process with
+  `gh_raw` wrapped so the edits of I1 and archived I4 time out; I2 is still restored, I4 is unarchived then
+  archived, the config holds the new ids, both failures are named). Not changed: a timeout on the
+  `updateProjectV2Field` call itself still stops init with exit 1 before `config.json` (the new ids are unknown
+  then).
+- **5 (medium), `head` outside approval.** `head` now gets its own approval: once it is set, `plan` also prints
+  `head` and `head_digest` (sha256 of the plan digest, `:` and the head); `resolve` requires `--approved-head` (exit
+  2 without it) and refuses, before any gh call, a head whose digest is not the approved one (exit 1). Command step
+  7.2: set `head`, run `plan` again, show `head` and `head_digest`, ask for explicit approval, then `resolve ...
+  --approved-head <head_digest>`. Sections 2, 4 and 6 unchanged (pinned by `test_pr_command`). Test:
+  `test_resolve_needs_a_second_approval_covering_the_pushed_head` (head edited to the PR's current head after
+  approval is refused with no gh call; no second approval exits 2; the approved head resolves).
+- **8 (medium), GraphQL errors on exit 0.** `resolve` checks the mutation's answer: any `errors`, or a
+  `resolveReviewThread.thread.isResolved` that is not true, is a failure (exit 3 with what was already resolved).
+  The check sits on the `run` seam rather than `sanduq_gh.graphql`, so the fake runner stays the test seam. Test:
+  `test_a_graphql_error_on_a_successful_exit_is_not_a_resolution`.
+- **9 (medium), threads over 100 comments.** `bind` refuses, before any write, a thread to reply in whose comments
+  GitHub cut at 100 (`hasNextPage`), since an earlier reply could be unseen; a thread only resolved is unaffected.
+  Refusal chosen over paging the comments (one rule, no second query shape). Test:
+  `test_a_thread_with_unread_comments_is_refused_before_any_reply`.
+- Docs: `pr_feedback.py` docstring, `speckit.pr.review-feedback.md` step 7.2 (6,486 B), PR and Project
+  `## Unreleased` entries and the PR Migration line.
+
+Tests after the fixes (uv Python 3.11): pr 45 OK; project 35 OK; `smoke_project_init.py` and `--shell pwsh` ok
+(Windows).

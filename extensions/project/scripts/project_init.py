@@ -124,6 +124,13 @@ class Init:
 
     def restore(self, project_id, field_id, saved, options, renamed):
         """Sets each saved item's Status again by name; an archived item is unarchived, set and archived again."""
+        def attempt(call, *args):
+            """(rc, output, timed out): a timeout fails this item only, never the whole restoration."""
+            try:
+                return call(*args) + (False,)
+            except RuntimeError as exc:
+                return 1, str(exc), True
+
         failures = []
         for item, archived, status in saved:
             option = options.get(renamed.get(status, status))
@@ -132,19 +139,17 @@ class Init:
             if not option:
                 failures.append("%s was '%s': no such column after the update" % (label, status))
                 continue
-            if archived:
-                rc, out = graphql('mutation{unarchiveProjectV2Item(input:{%s}){item{id}}}' % pair)
-                if rc:
-                    failures.append("%s was '%s': %s" % (label, status, out))
-                    continue
-            rc, out = gh('project', 'item-edit', '--id', item, '--project-id', project_id, '--field-id', field_id,
-                         '--single-select-option-id', option)
-            ok = rc == 0
-            if archived:
-                again_rc, again = graphql('mutation{archiveProjectV2Item(input:{%s}){item{id}}}' % pair)
+            rc, out, unsure = attempt(graphql, 'mutation{unarchiveProjectV2Item(input:{%s}){item{id}}}' % pair) \
+                if archived else (0, '', False)
+            unarchived = archived and (rc == 0 or unsure)  # a timed-out unarchive may have happened
+            if rc == 0:
+                rc, out, _ = attempt(gh, 'project', 'item-edit', '--id', item, '--project-id', project_id,
+                                     '--field-id', field_id, '--single-select-option-id', option)
+            if unarchived:  # archive again whatever the edit did
+                again_rc, again, _ = attempt(graphql, 'mutation{archiveProjectV2Item(input:{%s}){item{id}}}' % pair)
                 if again_rc:
-                    ok, out = False, out + '; left unarchived: ' + again
-            if not ok:
+                    rc, out = 1, out + '; left unarchived: ' + again
+            if rc:
                 failures.append("%s was '%s': %s" % (label, status, out))
         info('restored Status on %d of %d item(s)' % (len(saved) - len(failures), len(saved)))
         for failure in failures:

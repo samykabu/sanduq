@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Init is one stdlib script, `scripts/project_init.py`, in place of the bash and PowerShell twins. It takes every flag of both, in either spelling, never prompts and needs no `jq`. A choice it cannot make (several projects, an owner whose account type cannot be read) exits 4 with a JSON `needs` line naming the flag and the options; before, init exited 1 with a message. Rerun preservation, owner type, auto-create (one column per name, current ids), the board-status guard and archived-item restore are unchanged. A phase maps to a column init creates only after the update succeeds. `speckit.project.init` is one invocation.
+- Init is one stdlib script, `scripts/project_init.py`, in place of the bash and PowerShell twins. It takes every flag of both, in either spelling, never prompts and needs no `jq`. A choice it cannot make (several projects, an owner whose account type cannot be read) exits 4 with a JSON `needs` line naming the flag and the options; before, init exited 1 with a message. Rerun preservation, owner type, auto-create (one column per name, current ids), the board-status guard and archived-item restore are unchanged. A phase maps to a column init creates only after the update succeeds. A failure or timeout while restoring one item's Status no longer stops the others: an unarchived item is archived again, `config.json` gets the new option ids, and init exits 1 naming each item to fix by hand. `speckit.project.init` is one invocation.
 - Every `gh` call of sync and init goes through the shared `sanduq_gh` transport bundled in the archive: the same 120 s timeout, no retries, and a missing `gh` is still a skip. The GraphQL-to-REST switch also recognises GraphQL's `RATE_LIMITED` error.
 
 ### Migration

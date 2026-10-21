@@ -486,7 +486,7 @@ class ProjectInitTests(unittest.TestCase):
     choice they cannot make, and keep every board and config guard the shell twins had. `gh` is a fake on PATH."""
 
     def init(self, *flags, scopes="'project', 'repo'", kind='User', existing=None, columns=None, managed=None,
-             dry_run=True, items=(), fail_edit=(), shell='python', hooks=HOOKS):
+             dry_run=True, items=(), fail_edit=(), shell='python', hooks=HOOKS, hang=()):
         """(exit code, output) of one init run; `existing` is a config.json, `managed` the `workflow.py
         project-defaults` answer of a Workflow-managed project, `shell` python or a stub (bash, pwsh)."""
         tmp = tempfile.TemporaryDirectory()
@@ -517,6 +517,21 @@ class ProjectInitTests(unittest.TestCase):
             args = [shutil.which('bash'), (scripts / 'bash/project-init.sh').as_posix(), *flags]
         else:
             args = ['pwsh', '-NoProfile', '-File', str(scripts / 'powershell/project-init.ps1'), *flags]
+        if hang:  # in process, so `gh project item-edit` on these items can time out without waiting 120 s
+            import project_init
+            real = project_sync.gh_raw
+
+            def hung(args, stdin=None):
+                if args[:2] == ['project', 'item-edit'] and args[3] in hang:
+                    raise RuntimeError('timeout: gh project item-edit gave no answer in 120 s')
+                return real(args, stdin)
+            out, cwd = io.StringIO(), os.getcwd()
+            self.addCleanup(os.chdir, cwd)
+            os.chdir(root)
+            with patch.dict(os.environ, {'PATH': env['PATH']}), patch.object(project_sync, 'gh_raw', hung), \
+                    contextlib.redirect_stdout(out):
+                code = project_init.main(flags)
+            return code, out.getvalue()
         done = subprocess.run(args, cwd=root, env=env, input='', capture_output=True, text=True, encoding='utf-8', timeout=120)
         return done.returncode, done.stdout + done.stderr
 
@@ -666,6 +681,19 @@ class ProjectInitTests(unittest.TestCase):
                                  managed=self.MANAGED, dry_run=False, items=None)
         self.assertEqual(code, 0, output)
         self.assertTrue((self.root / 'mutation.json').exists())
+
+    def test_a_timed_out_item_edit_rearchives_continues_and_still_writes_the_config(self):
+        """Codex 3: a timeout on one item must not abandon the rest, leave an item unarchived, or keep the old ids."""
+        code, output = self.init(*self.CREATE, columns=['Todo', 'In Progress', 'Done'], managed=self.MANAGED,
+                                 dry_run=False, items=self.ITEMS, hang={'I1', 'I4'})
+        self.assertEqual(code, 1, output)
+        options = json.loads((self.root / '.specify/extensions/project/config.json')
+                             .read_text(encoding='utf-8-sig'))['statusOptions']
+        self.assertEqual(self.edits(), {'I2': options['Todo']})
+        self.assertEqual([e for e in self.events() if e[1] == 'I4'], [['unarchive', 'I4'], ['archive', 'I4']])
+        self.assertIn("I1 was 'In Progress': timeout", output)
+        self.assertIn("I4 (archived) was 'Done': timeout", output)
+        self.assertIn('restored Status on 1 of 3 item(s)', output)
 
     def test_an_item_whose_status_cannot_be_set_again_is_reported_and_fails_the_run(self):
         code, output = self.init(*self.CREATE, columns=['Todo', 'In Progress', 'Done'], managed=self.MANAGED,

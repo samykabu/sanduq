@@ -142,8 +142,8 @@ class FakeBoard:
     """gh for the plan actions: PR acme/app#7 with threads T1 (comments 10, 11) and T6 (60) on two pages, T2
     resolved (20). Records every call; replies and resolves change its state; `fail` names writes that fail."""
 
-    def __init__(self, compare=None, fail=()):
-        self.calls, self.compare, self.fail = [], compare or {}, set(fail)
+    def __init__(self, compare=None, fail=(), forbidden=(), long=()):
+        self.calls, self.compare, self.fail, self.forbidden = [], compare or {}, set(fail), set(forbidden)
         comment = lambda i, who, body: {'databaseId': i, 'author': {'login': who}, 'body': body}
         self.threads = {'T1': {'id': 'T1', 'isResolved': False, 'comments': {'pageInfo': {'hasNextPage': False}, 'nodes': [
                             comment(10, 'rev', 'This leaks the token'), comment(11, 'me', 'fixing')]}},
@@ -151,6 +151,8 @@ class FakeBoard:
                             comment(20, 'rev', 'nit')]}},
                         'T6': {'id': 'T6', 'isResolved': False, 'comments': {'pageInfo': {'hasNextPage': False}, 'nodes': [
                             comment(60, 'bot[bot]', 'Possible None')]}}}
+        for thread in long:  # GitHub returned only the first 100 comments of these threads
+            self.threads[thread]['comments']['pageInfo']['hasNextPage'] = True
 
     def writes(self):
         return [c for c in self.calls if 'mutation' in ' '.join(c) or any(a.startswith('in_reply_to=') for a in c)]
@@ -169,8 +171,10 @@ class FakeBoard:
             thread = args[-1][3:]
             if thread in self.fail:
                 raise pr_feedback.Failure(3, 'gh api graphql failed: HTTP 502')
+            if thread in self.forbidden:  # GraphQL reports errors with a successful exit
+                return json.dumps({'data': {'resolveReviewThread': None}, 'errors': [{'message': 'Forbidden'}]})
             self.threads[thread]['isResolved'] = True
-            return '{}'
+            return json.dumps({'data': {'resolveReviewThread': {'thread': {'id': thread, 'isResolved': True}}}})
         if args[:2] == ['api', 'repos/acme/app/pulls/7/comments']:
             target = int(args[-1].split('=')[1])
             if target in self.fail:
@@ -203,15 +207,20 @@ class PlanTests(unittest.TestCase):
         self.plan = dict(json.loads(json.dumps(self.PLAN)), **changes)
         self.path.write_text(json.dumps(self.plan), encoding='utf-8')
 
-    def run_action(self, action, gh, approved=None):
+    def run_action(self, action, gh, approved=None, approved_head=None):
         out = io.StringIO()
-        argv = [action, '--plan', str(self.path)] + (['--approved', approved] if approved else [])
+        argv = [action, '--plan', str(self.path)] + (['--approved', approved] if approved else []) + \
+            (['--approved-head', approved_head] if approved_head else [])
         with patch.object(pr_feedback, 'run', gh), redirect_stdout(out):
             code = pr_feedback.main(argv)
         return code, json.loads(out.getvalue())
 
     def approved(self):
         return self.run_action('plan', FakeBoard())[1]['digest']
+
+    def head_approved(self):
+        """The second approval: the digest `plan` shows once `head` is set after the push."""
+        return self.run_action('plan', FakeBoard())[1].get('head_digest', 'no head yet')
 
     def test_plan_checks_read_only_and_its_digest_leaves_out_only_the_head(self):
         gh = FakeBoard()
@@ -230,7 +239,7 @@ class PlanTests(unittest.TestCase):
         self.write(resolves=['T1'])
         for action in ('reply', 'resolve'):
             gh = FakeBoard()
-            code, result = self.run_action(action, gh, approved)
+            code, result = self.run_action(action, gh, approved, 'x' if action == 'resolve' else None)
             self.assertEqual(code, 1, result)
             self.assertIn('plan changed since it was approved', result['error'])
             self.assertEqual(gh.calls, [])
@@ -242,7 +251,7 @@ class PlanTests(unittest.TestCase):
             self.write(**changes)
             for action in ('plan', 'reply', 'resolve'):
                 gh = FakeBoard()
-                code, result = self.run_action(action, gh, pr_feedback.digest(self.plan))
+                code, result = self.run_action(action, gh, pr_feedback.digest(self.plan), 'x')
                 self.assertEqual(code, 1, (changes, action, result))
                 self.assertIn('nothing written', result['error'])
                 self.assertFalse(gh.writes())
@@ -278,7 +287,7 @@ class PlanTests(unittest.TestCase):
             self.write(head=head)
             board.calls.clear()
             board.compare = compare
-            code, result = self.run_action('resolve', board, approved)
+            code, result = self.run_action('resolve', board, approved, self.head_approved())
             self.assertEqual(code, 1, (head, compare, result))
             self.assertIn('nothing resolved', result['error'])
             self.assertIn('set "head"' if head is None else 'does not contain the pushed commit', result['error'])
@@ -289,13 +298,13 @@ class PlanTests(unittest.TestCase):
             for thread in ('T1', 'T6'):
                 board.threads[thread]['isResolved'] = False
             self.write(head=head)
-            code, result = self.run_action('resolve', board, approved)
+            code, result = self.run_action('resolve', board, approved, self.head_approved())
             self.assertEqual((code, result['resolved'], result['already']), (0, ['T1', 'T6'], ['T2']), result)
 
     def test_resolve_waits_for_the_threads_approved_reply(self):
         self.write(head=HEAD)
         gh = FakeBoard()
-        code, result = self.run_action('resolve', gh, self.approved())
+        code, result = self.run_action('resolve', gh, self.approved(), self.head_approved())
         self.assertEqual(code, 1, result)
         self.assertIn('T1, T6', result['error'])
         self.assertFalse(gh.writes())
@@ -304,14 +313,57 @@ class PlanTests(unittest.TestCase):
         self.write(head=HEAD)
         gh, approved = FakeBoard(fail={'T6'}), self.approved()
         self.run_action('reply', gh, approved)
-        code, result = self.run_action('resolve', gh, approved)
+        code, result = self.run_action('resolve', gh, approved, self.head_approved())
         self.assertEqual(code, 3, result)
         self.assertIn("resolved so far: ['T1']", result['error'])
         gh.fail.clear()
         gh.calls.clear()
-        code, result = self.run_action('resolve', gh, approved)
+        code, result = self.run_action('resolve', gh, approved, self.head_approved())
         self.assertEqual((code, result['resolved'], result['already']), (0, ['T6'], ['T1', 'T2']))
         self.assertEqual(len(gh.writes()), 1)
+
+    def test_resolve_needs_a_second_approval_covering_the_pushed_head(self):
+        """Codex 5: `head` is set after the first approval, so it gets its own; editing it voids that approval."""
+        approved, board = self.approved(), FakeBoard(compare={PUSHED + '...' + HEAD: 'ahead'})
+        self.run_action('reply', board, approved)
+        self.write(head=PUSHED)
+        shown = self.run_action('plan', FakeBoard())[1]
+        self.assertEqual((shown['digest'], shown['head']), (approved, PUSHED))
+        self.assertNotEqual(shown['head_digest'], approved)
+        self.write(head=HEAD)  # edited to the PR's current head after the user approved PUSHED
+        board.calls.clear()
+        code, result = self.run_action('resolve', board, approved, shown['head_digest'])
+        self.assertEqual(code, 1, result)
+        self.assertIn('head changed since it was approved', result['error'])
+        self.assertEqual(board.calls, [])
+        out = io.StringIO()
+        with redirect_stdout(out):  # no second approval at all
+            self.assertEqual(pr_feedback.main(['resolve', '--plan', str(self.path), '--approved', approved]), 2)
+        self.write(head=PUSHED)
+        code, result = self.run_action('resolve', board, approved, shown['head_digest'])
+        self.assertEqual((code, result['resolved']), (0, ['T1', 'T6']), result)
+
+    def test_a_graphql_error_on_a_successful_exit_is_not_a_resolution(self):
+        """Codex 8: gh exits 0 with `errors`; the thread must not count as resolved."""
+        self.write(head=HEAD)
+        gh, approved = FakeBoard(forbidden={'T6'}), self.approved()
+        self.run_action('reply', gh, approved)
+        code, result = self.run_action('resolve', gh, approved, self.head_approved())
+        self.assertEqual(code, 3, result)
+        self.assertIn('Forbidden', result['error'])
+        self.assertIn("resolved so far: ['T1']", result['error'])
+        self.assertFalse(gh.threads['T6']['isResolved'])
+
+    def test_a_thread_with_unread_comments_is_refused_before_any_reply(self):
+        """Codex 9: past 100 comments an earlier reply may be unseen, so a rerun could post it twice."""
+        gh = FakeBoard(long={'T6'})
+        for action in ('plan', 'reply'):
+            code, result = self.run_action(action, gh, self.approved())
+            self.assertEqual(code, 1, (action, result))
+            self.assertIn('T6 has more than 100 comments', result['error'])
+        self.assertFalse(gh.writes())
+        self.write(replies=self.PLAN['replies'][:1], resolves=['T6'])  # resolving alone reads no comments
+        self.assertEqual(self.run_action('plan', gh)[0], 0)
 
     def test_a_malformed_or_missing_plan_exits_2(self):
         for broken in ({'schema': 'other'}, {'repo': 'acme'}, {'pr': '7'}, {'replies': [{'thread': 'T1', 'comment': 10}]},

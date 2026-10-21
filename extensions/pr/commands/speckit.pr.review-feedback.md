@@ -124,12 +124,13 @@ gh pr comment <num> --body-file report.md
 ```
 
 2. Resolve every thread that was fixed or replied to after the push succeeds: set `"head"` in the
-   plan file to the pushed commit (`git rev-parse HEAD`; `head` is outside the digest), then run the
-   command below. It refuses until the PR head on GitHub contains that commit and each thread's
-   approved reply is posted; already resolved threads are skipped.
+   plan file to the pushed commit (`git rev-parse HEAD`), run `pr_feedback.py plan --plan <file>`
+   again, show the user the `head` and `head_digest` it prints and ask for explicit approval to resolve
+   at that commit. Then run the command below. It refuses until the PR head on GitHub contains that
+   commit and each thread's approved reply is posted; already resolved threads are skipped.
 
 ```sh
-python .specify/extensions/pr/scripts/pr_feedback.py resolve --plan <file> --approved <digest>
+python .specify/extensions/pr/scripts/pr_feedback.py resolve --plan <file> --approved <digest> --approved-head <head_digest>
 ```
 
 3. Report fixed count, replied count, resolved-thread count, commit SHA, summary comment URL, and

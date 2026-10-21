@@ -50,7 +50,7 @@ class ReviewFeedbackTextTests(unittest.TestCase):
         for paragraph in TRUST:
             self.assertIn(paragraph, FEEDBACK)
         for action in ('plan --plan <file>', 'reply --plan <file> --approved <digest>',
-                       'resolve --plan <file> --approved <digest>'):
+                       'resolve --plan <file> --approved <digest> --approved-head <head_digest>'):
             self.assertIn('pr_feedback.py ' + action, FEEDBACK)
         self.assertNotIn('in_reply_to', FEEDBACK)
         self.assertNotIn('resolveReviewThread', FEEDBACK)
