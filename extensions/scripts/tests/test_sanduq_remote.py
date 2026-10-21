@@ -1,5 +1,6 @@
-"""One source for the GitHub remote reading (D4) and the PR lint (PM21): the shared module's cases, its archive
-copies, an installed-layout import without Workflow or PyYAML, and no second definition in a consumer."""
+"""One source for the GitHub remote reading (D4), the PR lint (PM21) and the gh transport (SC8): the shared
+cases, archive copies, an installed-layout import without Workflow or PyYAML, and no second definition in a
+consumer."""
 import ast
 import hashlib
 import json
@@ -127,6 +128,7 @@ class PackagedCopies(unittest.TestCase):
 
     def test_each_consumer_archive_carries_the_source_bytes_in_its_inventory(self):
         self.assertEqual(package.SHARED['sanduq_remote.py'], ('workflow', 'project', 'scope'))
+        self.assertEqual(package.SHARED['sanduq_gh.py'], ('scope', 'workflow', 'project', 'pr'))
         for helper, consumers in package.SHARED.items():
             source = (SHARED / helper).read_bytes()
             for extension in consumers:
@@ -144,13 +146,18 @@ class PackagedCopies(unittest.TestCase):
     def run_python(self, code, cwd):
         return subprocess.run([sys.executable, '-c', code], cwd=cwd, capture_output=True, text=True, timeout=60)
 
+    CALLS = {'sanduq_remote.py': ("print(m.github_slug('git@github.com:Acme/App.git'))", 'Acme/App'),
+             'sanduq_pr_lint.py': ("print(m.pr_lint('Fixes #2', 'Acme/App', 1)['violations'][0]['code'])",
+                                   'UNBOUND_ISSUE_CLOSE'),
+             'sanduq_gh.py': ("print(m.safe_read(['api', 'repos/a/b']), m.safe_read(['project', 'item-list']))",
+                              'True False')}
+
     def test_installed_copies_import_without_workflow_or_pyyaml(self):
         for helper, consumers in package.SHARED.items():
             for extension in consumers:
                 with self.subTest(helper=helper, extension=extension), tempfile.TemporaryDirectory() as tmp:
                     scripts = self.installed(extension, Path(tmp))
-                    call = ("print(m.github_slug('git@github.com:Acme/App.git'))" if helper == 'sanduq_remote.py'
-                            else "print(m.pr_lint('Fixes #2', 'Acme/App', 1)['violations'][0]['code'])")
+                    call, expected = self.CALLS[helper]
                     code = blocked_import_prelude(scripts) + textwrap.dedent(f'''
                         import {helper[:-3]} as m
                         assert m.__file__.startswith({str(scripts)!r}), m.__file__
@@ -158,7 +165,7 @@ class PackagedCopies(unittest.TestCase):
                     ''')
                     result = self.run_python(code, tmp)
                     self.assertEqual(result.returncode, 0, result.stderr)
-                    self.assertIn(result.stdout.strip(), ('Acme/App', 'UNBOUND_ISSUE_CLOSE'))
+                    self.assertEqual(result.stdout.strip(), expected)
 
     def test_project_normalisation_route_never_loads_workflow_py(self):
         """Project alone, PyYAML blocked, and a Workflow whose workflow.py leaves a mark when it is loaded.

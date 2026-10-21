@@ -32,7 +32,8 @@ EXCLUDE_PATHS = (
     'workflow/assets/delegate-task/assets',
 )
 BLOB = 'https://github.com/samykabu/sanduq/blob/main/extensions/'
-SHARED = {'sanduq_remote.py': ('workflow', 'project', 'scope'), 'sanduq_pr_lint.py': ('pr', 'workflow')}
+SHARED = {'sanduq_remote.py': ('workflow', 'project', 'scope'), 'sanduq_pr_lint.py': ('pr', 'workflow'),
+          'sanduq_gh.py': ('scope', 'workflow', 'project', 'pr')}
 
 
 def excluded(name):
@@ -41,7 +42,8 @@ def excluded(name):
         any(name == path or name.startswith(path + '/') for path in EXCLUDE_PATHS)
 
 
-def package(extension, output=None, root=ROOT):
+def package_files(extension, root=ROOT):
+    """{archive member: bytes} of everything the package ships, before `package-inventory.json`."""
     source = root / 'extensions' / extension
     if not source.is_dir() or not (source / 'extension.yml').is_file() or source.parent != root / 'extensions':
         raise ValueError('Unknown extension: ' + extension)
@@ -85,12 +87,17 @@ def package(extension, output=None, root=ROOT):
             helpers.append('evidence_snapshot.py')
         for helper in helpers:
             files[extension + '/scripts/' + helper] = (root / 'extensions/scripts/shared' / helper).read_bytes()
-    # One source each, shipped next to its consumers' scripts: the GitHub remote reading (D4) and the PR
-    # closing-reference lint (PM21). Fixture roots without the shared folder skip them.
+    # One source each, shipped next to its consumers' scripts: the GitHub remote reading (D4), the PR
+    # closing-reference lint (PM21) and the `gh` transport (SC8). Fixture roots without the shared folder skip them.
     for helper, consumers in SHARED.items():
         shared_file = root / 'extensions/scripts/shared' / helper
         if extension in consumers and shared_file.exists():
             files[extension + '/scripts/' + helper] = shared_file.read_bytes()
+    return files
+
+
+def package(extension, output=None, root=ROOT):
+    files = package_files(extension, root)
     inventory = {name: hashlib.sha256(value).hexdigest() for name, value in sorted(files.items())}
     files[extension + '/package-inventory.json'] = (json.dumps(inventory, indent=2) + '\n').encode()
     output = output or root / 'dist' / (extension + '.zip')
