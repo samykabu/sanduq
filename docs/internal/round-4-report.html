@@ -110,7 +110,7 @@ ol.steps li{margin:.45rem 0}
   <div class="eyebrow">Review · nine Sanduq Spec Kit extensions and three presets · 20 October 2026</div>
   <h1>Sanduq Round 4 Review</h1>
   <p class="lede">Round 4 of the review: first whether the names still fit and whether any extension or preset should be merged, then the optimization plan. The names are decided. The plan is ready for your approval.</p>
-  <p class="note">Names decided on 20 October: the recommended set, so every id, display name, command and preset stays. Phase 2 is reviewed and cross-checked by Codex; <a href="#plan">approve the optimization plan</a> to start implementation.</p>
+  <p class="note">Decided, approved, built and released. Names: the recommended set, so every id, display name, command and preset stays. The approved plan shipped as Workflow 1.17.0 and eight companions after four live managed runs. See <a href="#results">Results</a>.</p>
   <div class="meta">
     <span>Worktree <code>feat/round-4</code> at b482e06 (Workflow 1.16.0)</span>
     <span>Streams: N1 naming (<code>round-4-naming.md</code>), N2 structure (<code>round-4-structure.md</code>)</span>
@@ -213,6 +213,50 @@ ol.steps li{margin:.45rem 0}
     </tbody>
   </table></div>
   <p class="small">Sources: round-3-naming.md §5, round-3-final-plan.md §1, round-4-naming.md §8, round-4-structure.md §5. Tests for any rename run against the CI pin 8147943: both ids installed at once, locally edited skills, custom hook flags, both host defaults, a failure after removal, skipped releases and an idempotent re-run.</p>
+</section>
+
+<section id="results">
+  <h2>Results</h2>
+  <p>You approved every Fix-first and Do group; the deferred items stayed deferred. Ten implementation streams built the plan, the upstream bundles were released and vendored, and pull request <a href="https://github.com/samykabu/sanduq/pull/101">#101</a> passed all 34 CI jobs before it merged. The release is Workflow 1.17.0, Scope 1.10.0, Assure 2.6.0, User Manual 1.8.0, PR 4.5.0, Project 2.5.0, Illustrate 2.7.0, Memory 2.5.0 and Progress 1.5.0, with presets scope-gate 1.5.0, scope-brainstorm 1.4.1 and workflow 1.2.1. Upstream: dev-tools 1.3.0, illustration-tools 3.7.0, agent-tools 1.6.1 and 1.6.2.</p>
+  <h3>The live runs</h3>
+  <p>The Memory hook change was gated on a live managed run: a private throwaway repository, Spec Kit at the CI pin, the round’s packages, and headless Claude Code driving a real GitHub issue. It took four runs. Each one stopped on a bug, the bug was fixed with a regression test, and the next run went further. Most of these bugs were already in the released 1.16.0.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Bug</th><th>What broke</th><th>Since</th></tr></thead>
+    <tbody>
+      <tr><td>B1</td><td>A rendered spec could never bind at Specify (Scope refused a bind-only claim); the same path also treated an unchanged approved analysis as revised</td><td>before round 4</td></tr>
+      <tr><td>B2</td><td>Scope’s gate failed on a root issue with no parent (GitHub’s 404)</td><td>before round 4</td></tr>
+      <tr><td>B3</td><td>Project init created the same column three times, wrote stale option ids and left out the statuses doctor needs</td><td>before round 4</td></tr>
+      <tr><td>Board</td><td>Project init cleared every item’s Status when it added columns, archived items included; it now restores them by name</td><td>before round 4</td></tr>
+      <tr><td>B4</td><td>Memory refused issue-numbered feature folders such as <code>specs/2-…</code></td><td>Memory handoff</td></tr>
+      <tr><td>B5</td><td>The PR stage of every lean feature failed: PR lint needed prerequisites Scope never wrote</td><td>Workflow 1.10.0</td></tr>
+      <tr><td>B6</td><td>Memory refused Workflow’s ignored runtime files, so no managed feature was ever queued for archiving</td><td>Workflow 1.11.2</td></tr>
+      <tr><td>B7</td><td>Memory’s approval turned off when Windows checked files out with CRLF</td><td>before round 4</td></tr>
+    </tbody>
+  </table></div>
+  <p>Run 4 passed: a fresh issue went from Scope to the PR stage, Memory’s queue held exactly one entry with its default checks after Execute, and Memory’s own <code>session</code> and <code>prepare</code> commands never ran. The four runs cost about $17 in model time.</p>
+  <h3>Measured</h3>
+  <div class="tiles">
+    <div class="tile"><div class="n">58 KB → 0.9 KB</div><div class="l">Scope <code>inspect</code> output the model reads for one real issue</div><div class="s">snapshot file 59 KB → 26 KB</div></div>
+    <div class="tile"><div class="n">106 → 6</div><div class="l">GitHub calls for the parent-progress hook with 50 unrelated parents</div><div class="s">one issue listing per split publish instead of three</div></div>
+    <div class="tile"><div class="n">292 → 152 ms</div><div class="l">one managed Project sync (no more loading <code>workflow.py</code>)</div><div class="s">2–3 GitHub calls per sync, was 3–4</div></div>
+    <div class="tile"><div class="n">−4% to −12%</div><div class="l">full-tier front half wall time, alternating reruns on a quiet machine</div><div class="s">git subprocesses 316, unchanged; lite tier flat</div></div>
+  </div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Measure</th><th class="num">Before</th><th class="num">After</th></tr></thead>
+    <tbody>
+      <tr><td>Bytes one invocation of each of the 47 commands reads</td><td class="num">348,992</td><td class="num">346,516 (−0.7%)</td></tr>
+      <tr><td>Host-visible description characters (none failing)</td><td class="num">6,430</td><td class="num">6,665</td></tr>
+      <tr><td>Assure instruction bytes</td><td class="num">23,622</td><td class="num">19,573 (−17%)</td></tr>
+      <tr><td>Illustrate command bytes</td><td class="num">51,664</td><td class="num">44,530 (−14%)</td></tr>
+      <tr><td>Sample manual build, three editions</td><td class="num">16.1 s</td><td class="num">10.4 s</td></tr>
+      <tr><td>Delegation health check per delegated claim (cache hit)</td><td class="num">2.1–2.8 s</td><td class="num">0.05–0.07 s</td></tr>
+      <tr><td>Five slowest Workflow test modules</td><td class="num">1,206 s</td><td class="num">631 s</td></tr>
+      <tr><td>Two slowest Memory test classes</td><td class="num">184 s, 103 s</td><td class="num">30 s, 44 s</td></tr>
+    </tbody>
+  </table></div>
+  <p class="small">Instruction text barely moved: the clarity fixes and the new required checks added text that the trims took out. This round’s gains are correctness and runtime. The first full-tier run showed −33%, which was cold-machine warm-up; the alternating reruns are the honest figure. Savings are measured separately and never added together.</p>
+  <h3>Upgrading</h3>
+  <p>Finish any active Memory archive run, update Memory first, upgrade Workflow to 1.17.0, then run Memory’s <code>enable</code> once. Features bound before this release need <code>dependencies</code> added to <code>scope-source.json</code> before their PR stage. The full table is in <code>docs/start/upgrades.md</code>, “Round 4 migration”.</p>
 </section>
 
 <section id="plan">

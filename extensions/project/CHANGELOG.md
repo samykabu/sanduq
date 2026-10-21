@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.1] - 2026-10-21
+
+Fixes from the review of round 4 (PR #101).
+
+- A recovered task issue (same title, found after lost state or an interrupted run) is adopted only when linking it succeeds or GitHub already lists it as this feature's sub-issue. Otherwise the run warns and neither adopts nor recreates it, so a later sync can never close an issue another parent owns.
+- The origin is read through `url.<base>.insteadOf` rewrites.
+
 ## [2.5.0] - 2026-10-21
 
 Optimization round 4. No renames.

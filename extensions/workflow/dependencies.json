@@ -2,9 +2,9 @@
   "schema_version": 1,
   "repository": "https://github.com/samykabu/sanduq",
   "required": {
-    "scope": "1.10.0",
-    "project": "2.5.0",
-    "pr": "4.5.0",
+    "scope": "1.10.1",
+    "project": "2.5.1",
+    "pr": "4.5.1",
     "illustrate": "2.7.0"
   },
   "selected": {
