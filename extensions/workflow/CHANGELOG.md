@@ -9,6 +9,7 @@
 - Path containment for recorded labels checks each existing component with `lstat` and resolves fully at any symlink, junction or name Windows rewrites, instead of resolving every label. `..`, absolute, drive and UNC labels are still refused.
 - `decisions.py`, `task_issues.py` and `ci_evidence.py` call `gh` through the shared `sanduq_gh.py`. Error codes and messages are unchanged; a missing `gh` is now reported with them instead of a traceback. A GET in `decisions.py` and `task_issues.py` is retried once after a 5xx or a timeout; writes and CI evidence downloads never are. `decisions.py` reaches Scope's GitHub client through `sanduq_scope_github.py` and no longer loads `scope.py`.
 - One git runner (`workflow.run_git`) and one file SHA-256 helper (`execution_tools.sha256_file`) inside the package. Digests are unchanged.
+- Internal: `workflow.py` is split into modules (`wf_core.py`, `wf_identity.py`, `wf_fingerprints.py`, `wf_policy.py`, `wf_health.py`, `wf_receipts.py`). Every name is still importable from `workflow`; behaviour is unchanged.
 
 ### Migration
 

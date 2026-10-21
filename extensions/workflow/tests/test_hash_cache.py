@@ -7,10 +7,10 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
-from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import workflow as w  # noqa: E402
+from runtime_patch import patch_runtime  # noqa: E402
 
 OLD = time.time() - 60
 
@@ -42,7 +42,7 @@ class HashCacheTests(unittest.TestCase):
         def record(root, paths, *args, **kwargs):
             calls.extend(paths)
             return real(root, paths, *args, **kwargs)
-        return calls, mock.patch.object(w, 'fingerprint_files', record)
+        return calls, patch_runtime('fingerprint_files', record)
 
     def test_a_hit_reads_nothing_and_equals_the_full_hash(self):
         first = w.cached_fingerprints(self.root, self.labels)

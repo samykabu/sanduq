@@ -6,10 +6,10 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
-from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import workflow as w  # noqa: E402
+from runtime_patch import patch_runtime  # noqa: E402
 
 OLD = time.time() - 60
 
@@ -50,7 +50,7 @@ class ActiveIndexTests(unittest.TestCase):
                 reads.append(Path(path).parent.parent.name)
             return real(path, default)
         expected = scan(self.root, self.own)
-        with mock.patch.object(w, 'read', record):
+        with patch_runtime('read', record):
             found = w.foreign_active_claim(self.root, self.own)
         self.assertEqual(found, expected)
         return found, reads

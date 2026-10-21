@@ -34,6 +34,7 @@ ISSUE = 'acme/app#10'
 USAGE = {'session_id': 'host-without-telemetry'}  # the tests' unreliable usage: never pauses
 TIER_SCORES = {'lite': 2, 'standard': 5, 'full': 13}
 COUNTED = ('doctor', 'fingerprint_files', 'source_fingerprints', 'git')
+RUNTIME_MODULES = ('wf_core', 'wf_identity', 'wf_fingerprints', 'wf_policy', 'wf_health', 'wf_receipts')
 WORKFLOW_SKILL = 'extensions/workflow/skills/workflow/'
 STAGE_EXTRAS = {
     'scope': ['extensions/scope/commands/run.md', 'extensions/scope/skills/scope-analyst/SKILL.ext.md',
@@ -132,8 +133,14 @@ class Bench:
                 self.counts[name] += 1
                 return fn(*args, **kwargs)
             return wrapper
+        # The split runtime's modules (W9; absent before it) each bind what they import: wrap every binding.
+        modules = [w] + [sys.modules[name] for name in RUNTIME_MODULES if name in sys.modules]
         for name in COUNTED:
-            setattr(w, name, counted(name, getattr(w, name)))
+            real = getattr(w, name)
+            wrapper = counted(name, real)
+            for module in modules:
+                if getattr(module, name, None) is real:
+                    setattr(module, name, wrapper)
         real_run = subprocess.run
 
         def run(cmd, *args, **kwargs):

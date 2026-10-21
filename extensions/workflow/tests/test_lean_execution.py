@@ -15,6 +15,7 @@ import delegation
 import delegate_dispatch as dispatch
 import lean_policy as lean
 import workflow as w
+from runtime_patch import patch_runtime
 
 
 class LeanExecutionTests(unittest.TestCase):
@@ -188,8 +189,8 @@ class LeanExecutionTests(unittest.TestCase):
         state, run = self.state_and_run()
         with patch.object(run, 'load', return_value=state), patch.object(run, 'save'), \
              patch.object(run, 'next', return_value={'stage': 'execute'}), \
-             patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}), \
-             patch.object(w, 'package_digest', return_value='pkg'), \
+             patch_runtime('doctor', return_value={'ok': True, 'errors': []}), \
+             patch_runtime('package_digest', return_value='pkg'), \
              patch.object(w, 'context_gate', return_value={'pause': False}), \
              patch.object(delegation, 'doctor') as install:
             claim = run.claim({'session_id': 'session'})
@@ -203,8 +204,8 @@ class LeanExecutionTests(unittest.TestCase):
         state, run = self.state_and_run()
         with patch.object(run, 'load', return_value=state), patch.object(run, 'save') as save, \
              patch.object(run, 'next', return_value={'stage': 'review'}), \
-             patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}), \
-             patch.object(w, 'package_digest', return_value='pkg'), \
+             patch_runtime('doctor', return_value={'ok': True, 'errors': []}), \
+             patch_runtime('package_digest', return_value='pkg'), \
              patch.object(w, 'context_gate', return_value={'pause': False}), \
              patch.object(delegation, 'doctor') as install:
             with self.assertRaisesRegex(w.WorkflowError, 'INCOMPLETE_TASKS'):
@@ -223,8 +224,8 @@ class LeanExecutionTests(unittest.TestCase):
                    'inputs': [self.feature + '/tasks.md'], 'evidence': [self.feature + '/result.md']}
         with patch.object(run, 'load', return_value=state), patch.object(run, 'save'), \
              patch.object(run, 'next', return_value={'stage': 'verify'}), \
-             patch.object(w, 'required_inputs', return_value=[]), \
-             patch.object(w, 'fingerprint_files', side_effect=lambda root, paths, **_: {p: 'hash' for p in paths}), \
+             patch_runtime('required_inputs', return_value=[]), \
+             patch_runtime('fingerprint_files', side_effect=lambda root, paths, **_: {p: 'hash' for p in paths}), \
              patch.object(delegation, 'latest_attempt') as attempt:
             with self.assertRaisesRegex(w.WorkflowError, 'CLAIM_TOKEN_MISMATCH'):
                 run.complete('foreign', receipt)
@@ -259,7 +260,7 @@ class LeanExecutionTests(unittest.TestCase):
         health = {'ok': True, 'driver': self.root / 'driver.mjs', 'harnesses': {'codex': True}}
         with patch.object(w, 'load_policy', return_value=self.policy), \
              patch.dict(os.environ, {}, clear=True), patch.object(delegation, 'doctor', return_value=health), \
-             patch.object(w, 'active_host', return_value='codex'), \
+             patch_runtime('active_host', return_value='codex'), \
              patch.object(dispatch, 'launch', return_value={'run_id': 'analysis', 'state': 'running'}):
             result = dispatch.candidate_start(self.root, self.feature, self.feature + '/stage:analyze',
                        'review', [self.candidate], brief, self.root, 1800,
@@ -274,7 +275,7 @@ class LeanExecutionTests(unittest.TestCase):
         health = {'ok': True, 'driver': self.root / 'driver.mjs', 'harnesses': {'codex': True}}
         with patch.object(w, 'load_policy', return_value=self.policy), \
              patch.dict(os.environ, {}, clear=True), patch.object(delegation, 'doctor', return_value=health), \
-             patch.object(w, 'active_host', return_value='codex'), \
+             patch_runtime('active_host', return_value='codex'), \
              patch.object(dispatch, 'launch', return_value={'run_id': 'r1', 'state': 'running'}) as launch:
             response = dispatch.candidate_start(self.root, self.feature, self.feature + '/T001',
                        'implementation', [self.candidate], brief, self.root, 1800,
@@ -292,7 +293,7 @@ class LeanExecutionTests(unittest.TestCase):
         health = {'ok': True, 'driver': self.root / 'driver.mjs', 'harnesses': {'codex': True}}
         with patch.object(w, 'load_policy', return_value=self.policy), \
              patch.dict(os.environ, {}, clear=True), patch.object(delegation, 'doctor', return_value=health), \
-             patch.object(w, 'active_host', return_value='codex'), \
+             patch_runtime('active_host', return_value='codex'), \
              patch.object(dispatch, 'launch', side_effect=[{'run_id': 'r1', 'state': 'running'},
                                                          {'run_id': 'r2', 'state': 'running'}]) as launch:
             dispatch.candidate_start(self.root, self.feature, self.feature + '/T001',
@@ -322,7 +323,7 @@ class LeanExecutionTests(unittest.TestCase):
         stronger = {**self.candidate, 'requested_model': 'gpt-6-astra', 'tier': 'high'}
         with patch.object(w, 'load_policy', return_value=self.policy), \
              patch.dict(os.environ, {}, clear=True), patch.object(delegation, 'doctor', return_value=health), \
-             patch.object(w, 'active_host', return_value='codex'), \
+             patch_runtime('active_host', return_value='codex'), \
              patch.object(dispatch, 'intent_run_dirs', return_value=[]), \
              patch.object(dispatch, 'launch', side_effect=dispatch.StartFailed('provider refused model')) as launch:
             with self.assertRaisesRegex(delegation.DelegationError, 'ROUTES_UNAVAILABLE'):

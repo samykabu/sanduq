@@ -17,6 +17,7 @@ import ci_gate as c  # noqa: E402
 import lean_policy  # noqa: E402
 import lifecycle  # noqa: E402
 import workflow as w  # noqa: E402
+from runtime_patch import patch_runtime  # noqa: E402
 from test_receipt_contract import Harness, checkpoint_validator  # noqa: E402
 import lifecycle_snapshot  # noqa: E402
 
@@ -465,7 +466,7 @@ class DoctorCacheTests(Base):
         def counting(*args, **kwargs):
             calls.append(kwargs)
             return real(*args, **kwargs)
-        with patch.object(w, 'doctor', counting):
+        with patch_runtime('doctor', counting):
             self.advance_fresh(run, 'specify')
             self.assertEqual(len(calls), 1)
             cache = w.read(self.root / w.DOCTOR_CACHE)
@@ -490,14 +491,14 @@ class DoctorCacheTests(Base):
         self.policy['project_sync'] = {'points': ['pr']}
         self.configure()
         run = w.Run(self.root, self.feature)
-        with patch.object(w, 'doctor', return_value={'ok': False, 'errors': ['BROKEN'], 'project_checked': True}):
+        with patch_runtime('doctor', return_value={'ok': False, 'errors': ['BROKEN'], 'project_checked': True}):
             with self.assertRaisesRegex(w.WorkflowError, 'BROKEN'):
                 run.claim(self.usage())
         self.assertEqual(w.read(self.root / w.DOCTOR_CACHE)['key']['policy_digest'], before)
 
     def test_inventory_and_eol_scan_run_only_in_the_explicit_doctor(self):
         with patch.object(w.skill_inventory, 'inventory', return_value={'hosts': {}}) as inventory, \
-                patch.object(w, 'eol_drift', return_value=[]) as eol:
+                patch_runtime('eol_drift', return_value=[]) as eol:
             run = self.run_object()
             run.claim(self.usage())
             w.doctor(self.root, self.policy, project=True)

@@ -11,6 +11,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import verification_plan as vp
 import workflow as w
+from runtime_patch import patch_runtime
 
 
 class VerificationPlanTests(unittest.TestCase):
@@ -170,8 +171,8 @@ class VerificationPlanTests(unittest.TestCase):
         policy['lean_execution'] = {'enabled': True, 'verification_plan': self.plan_path}
         receipt = {'fingerprints': {'input.md': 'hash'}, 'source_fingerprints': {'src/a.py': 'old'},
                    'verification_snapshot': saved}
-        with patch.object(w, 'required_inputs', return_value=[]), \
-             patch.object(w, 'fingerprint_files', return_value={'input.md': 'hash'}):
+        with patch_runtime('required_inputs', return_value=[]), \
+             patch_runtime('fingerprint_files', return_value={'input.md': 'hash'}):
             self.assertTrue(w.receipt_status(self.root, 'specs/example', 'verify', receipt, policy)['current'])
             (self.root / 'src/a.py').write_text('changed', encoding='utf-8')
             self.assertFalse(w.receipt_status(self.root, 'specs/example', 'verify', receipt, policy)['current'])
@@ -180,9 +181,9 @@ class VerificationPlanTests(unittest.TestCase):
     def test_legacy_receipts_keep_whole_source_identity_gate(self):
         policy = w.default_policy(False, False)
         receipt = {'fingerprints': {'input.md': 'hash'}, 'source_fingerprints': {'src/a.py': 'old'}}
-        with patch.object(w, 'required_inputs', return_value=[]), \
-             patch.object(w, 'fingerprint_files', return_value={'input.md': 'hash'}), \
-             patch.object(w, 'source_fingerprints', return_value={'src/a.py': 'new'}):
+        with patch_runtime('required_inputs', return_value=[]), \
+             patch_runtime('fingerprint_files', return_value={'input.md': 'hash'}), \
+             patch_runtime('source_fingerprints', return_value={'src/a.py': 'new'}):
             status = w.receipt_status(self.root, 'specs/example', 'verify', receipt, policy)
         self.assertFalse(status['current'])
         self.assertEqual(status['rule'], 'identity')
