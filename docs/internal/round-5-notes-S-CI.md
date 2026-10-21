@@ -36,16 +36,26 @@
 - Test: `test_sanduq_gh_runs_every_suite_that_ships_it` (selection and install smoke). The archive-coverage test
   passes with `sanduq_gh.py` injected.
 
-## Pending (no request in the other notes files yet)
+## X23 lint step
 
-- X23 lint step: waiting for S-SH's command.
+- `ci.yml` lint job: new step "Packages changed without a version bump" running
+  `python3 extensions/scripts/release.py check-bumps`, right after "Check documentation links and command
+  coverage". `check_bumps` calls no git, so the shallow checkout is enough; lint already installs pyyaml and
+  packaging. Locally it exits 0 with the bootstrap notices.
+- `ci_matrix.py` unchanged for this: `release.py` still runs workflow `test_release` on both OSes, `package.py`
+  still runs everything.
+- Tests (class `Round5Lint`): the lint job has the step after the documentation step; release.py and package.py
+  keep their selection.
+
+## Pending
+
 - PM5 `project-init` job: still a `shell: [pwsh, bash]` matrix calling `smoke_project_init.py --shell`; waiting
   for S-PM's new smoke command line.
 
 ## Test results
 
-- `python -m unittest discover -s extensions/scripts/tests -p test_ci_matrix.py -q`: 52 tests OK.
-- `python -m unittest discover -s extensions/scripts/tests -q`: 185 tests, 10 errors, all in
-  `test_release_check_bumps` (S-SH's X23 work in progress, not S-CI files).
-- actionlint 1.7.12 (`go run`): no findings. ShellCheck is not installed here, so its pass over `run:` scripts
+- `python -m unittest discover -s extensions/scripts/tests -p test_ci_matrix.py -q`: 54 tests OK (after X23).
+- `python -m unittest discover -s extensions/scripts/tests -q`: first pass 185 tests, 10 errors, all in
+  `test_release_check_bumps` (S-SH's X23 work then in progress); after S-SH landed, 187 tests OK.
+- actionlint 1.7.12 (`go run`): no findings, before and after the X23 step. ShellCheck is not installed here, so its pass over `run:` scripts
   was not run locally.

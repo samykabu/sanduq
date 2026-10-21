@@ -522,5 +522,22 @@ class Round5ShardTimes(unittest.TestCase):
         self.assertTrue(ci_matrix.build(["extensions/scripts/shared/sanduq_gh.py"], "push")["install_smoke"])
 
 
+class Round5Lint(unittest.TestCase):
+    """X23: lint runs the bump guard after the documentation checks; release.py and package.py select as before."""
+
+    def test_lint_runs_check_bumps_after_the_documentation_checks(self):
+        text = (ci_matrix.ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        lint = re.search(r"^  lint:\n(?:(?:    .*)?\n)+", text, re.M).group(0)
+        step = "run: python3 extensions/scripts/release.py check-bumps"
+        self.assertIn(step, lint)
+        self.assertLess(lint.index("Check documentation links and command coverage"), lint.index(step))
+
+    def test_release_and_package_keep_their_selection(self):
+        self.assertEqual([("workflow", "test_release")] * 2,
+                         [(i["suite"], i["modules"]) for i in ci_matrix.build(["extensions/scripts/release.py"],
+                                                                               "pull_request")["matrix"]["include"]])
+        self.assertEqual(ALL, suites(["extensions/scripts/package.py"]))
+
+
 if __name__ == "__main__":
     unittest.main()

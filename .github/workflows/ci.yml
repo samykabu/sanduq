@@ -73,6 +73,10 @@ jobs:
           python3 extensions/scripts/check_docs.py
           python3 extensions/user-manual/scripts/audit_manual.py --root docs/examples/booking-manual
 
+      # X23: shipped files changed without a version bump (or a pending release above the catalog) fail.
+      - name: Packages changed without a version bump
+        run: python3 extensions/scripts/release.py check-bumps
+
       - name: Repository tooling tests (CI matrix, vendoring, packaging)
         run: python3 -m unittest discover -s extensions/scripts/tests -q
 
