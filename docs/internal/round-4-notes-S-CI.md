@@ -90,3 +90,11 @@ They replace `regression (windows-latest, memory)`. Workflow shard names are unc
 - New tests that fail on the old `ci_matrix.py`: the Illustrate hook case (IP13), the injected-file cases (AU23),
   project with workflow (PM19), the weekly vendored rule (IP15), lint-only tooling (X16), class shards (X15),
   the pin and actionlint checks (X24, X16), the Playwright gating (IP14).
+
+## Follow-up after 0026d8c (weights refresh)
+
+`shard_weights.json` now matches the round-4 test tree. Dropped `test_progress_shim` and `test_project_sync_summary`.
+Scaled by local after/before ratios from the S-WF and S-PM notes: `test_ci_gate`, `test_ci_revalidation`,
+`test_front_half_runtime`, `test_gate_explain`, `test_receipt_contract`, memory `test_orchestration` and
+`test_archive_v2`. `test_progress_reporting` = the old shim weight x 10/92.7 s. `test_memory_hook_lifecycle` uses the
+byte fallback. No stale entries. `test_ci_matrix.py`: 46 tests, OK.
