@@ -161,3 +161,147 @@ Fix B1 and, if my reading holds, B2. Then rerun this repository from a fresh iss
   Specify claim, with token `ba28b841…`. The lifecycle log records `paused` for it, while `status` still shows the
   claim as active.
 - No PR was opened.
+
+## Run 2 (worktree HEAD 32ffcc4)
+
+**Verdict: FAIL.** The D3 queue step after Implement did not queue anything, because of B4 below. Everything
+else D3 needs held up:
+
+- Both hooks stay disabled through an upgrade.
+- Every claim ran the session handoff.
+- Neither `speckit.memory.session` nor `speckit.memory.prepare` ran.
+- No `memory_blocked` or `memory_dispatch` came back from a claim.
+
+The lifecycle reached an open, unmerged PR (#5). It stopped at recording the PR stage, on B5. B1, B2, I1 and the
+B3 init fixes worked live.
+
+Evidence is in `<scratch>/run2/`, where `<scratch>` is the run 1 scratch folder: `transcripts/`, `extensions.*.yml`,
+`upgrade-*.json`, `board-*.json`, `initcheck-*.json` and `memory-*.json`.
+
+### Upgrade, as a consumer would do it
+
+1. Before upgrading, I committed feature #1's run-1 state on its branch (commit "WIP: feature #1 state…") and
+   checked out main. There is no abandon or reset command (the subcommands are `pause`, `recover`, `relocate` and
+   the rest), so run 2 used a new issue, #2.
+2. Memory first: `specify extension add --dev run2/packages/memory --force`. Spec Kit's `register_hooks` set both
+   Memory hooks back to `enabled: true` (`extensions.after-memory-update.yml`), which W10 expects. `install.py`
+   re-init changed nothing. `archive.py pending` then reported `enabled: false`, "needs policy/implementation review
+   and renewal", which is the documented renewal.
+3. Workflow: `upgrade.py --version 1.16.0 --packages run2/packages`, preview then `--apply`. Reconcile set both
+   entries back to `enabled: false`.
+4. **Finding U1, not a Sanduq bug:** the round-4 fixes leave every version number unchanged. The installer
+   therefore skips any dependency whose installed version equals the lock (`install.py:805`), so Scope and Project
+   kept their run-1 code after the upgrade. I updated them with `specify extension add --dev <pkg> --force`, then
+   ran `install.py --packages run2/packages --apply` (reconcile again). After that, every installed extension was
+   byte-identical to the run-2 packages, ignoring CRLF.
+5. **Finding U2 (Spec Kit):** `specify extension add --force project` deletes
+   `.specify/extensions/project/config.json`. `doctor --project` then listed every `PROJECT_CONFIG_REQUIRED` error.
+   I restored the file from git. A consumer who has not committed it loses the board binding.
+6. Memory re-approval: `archive.py enable --approve-hash 3ce2533f…9373`. `pending` then reported `enabled: true`
+   with PM24's `policy` and `policy_hash`.
+7. Hooks after the upgrade (`extensions.after-upgrade.yml`): `speckit.memory.prepare` and `speckit.memory.session`
+   are both `enabled: false`, and `impact` is still enabled. `doctor --project` returned `ok: true`. The upgrade
+   commit is `d1ecc9f` on main, pushed.
+
+### Board check: init replaces option ids, and items lose their Status
+
+**Project init needs a guard.**
+
+On board #12 every column already existed. The one item was #1, in Backlog with option `72ea95e7`. Running
+`project-init.ps1 -AutoCreateColumns` created nothing and made no field mutation, and #1 stayed in Backlog with
+the same id. Board #12 therefore did not exercise the risk.
+
+To exercise it I used a scratch board, user Project **#13 "sanduq-r4-initcheck"**, which I left in place. It had
+the default Todo, In Progress and Done columns. I added issue #1 to it, set it to **In Progress** (option
+`47fc9ee4`), and ran the same init from a scratch copy of the clone's `.specify` against board #13:
+
+```text
+[project-init] board Status columns: Done, Todo, In Progress
+[project-init]   created & mapped open             -> Feature Specification
+[project-init]   created & mapped analysis,engineer-review,ready -> Ready
+[project-init]   created & mapped in-review        -> In review
+[project-init]   created & mapped                  -> Backlog
+[project-init]   created & mapped                  -> Need Clarifications
+```
+
+Before the run, #1 had `{"name":"In Progress","optionId":"47fc9ee4"}`. After it, #1's `fieldValueByName` was
+**`null`**, and all eight option ids were new: Todo `bdc9669e`, In Progress `fde8ffdb`, and so on.
+
+What the B3 fix got right: each column was created once, the `statusOptions` in `config.json` match the live ids,
+and Backlog and Need Clarifications were created. The flaw is that `updateProjectV2Field` with
+`singleSelectOptions` replaces every option, which **clears the Status of every item on the board**.
+
+Init should refuse to change columns, or warn and ask for confirmation, when the board has items. Alternatively,
+it could save each item's Status by option name and set it again afterwards.
+
+### Commands and transcripts
+
+| # | Transcript | Prompt | Tool calls | Turns | Time | Cost | Tokens: input / cache write / cache read / output |
+| --- | --- | --- | ---: | ---: | ---: | ---: | --- |
+| 1 | `run2/transcripts/01-scope.jsonl` | `/speckit-workflow-scope #2 Add a --name flag to the greet CLI.` | 22 | 25 | 153 s | $0.81 | 44 / 50,988 / 1,111,138 / 8,891 |
+| 2 | `run2/transcripts/02-continue.jsonl` | `/speckit-workflow-continue #2` plus the owner's approval, then "continue … to the pull request without merging" | 105 (Bash 97, Agent 2, Write 3, Read 2, Edit 1) | 98 | 906 s | $4.25 | 192 / 156,023 / 10,115,252 / 37,628 |
+
+The lifecycle log for #2 records these claims:
+
+- Scope (score 1, lite tier).
+- Specify, in `bind-only` mode. B1 is fixed: the bind passed. One completion was rejected first, then the next was
+  accepted.
+- Clarify, with zero questions.
+- Plan. Tasks was merged into Plan and recorded as `skipped`.
+- Analyze.
+- Tasks-to-Issues, which created #3 and #4.
+- Execute (commit `f27c0ee`, with a worker subagent).
+- Verify, Review (with a reviewer subagent) and Ready.
+- PR. PR #5 is open and not merged. Its completion was rejected, and the run paused there.
+
+### Memory evidence
+
+- **Memory tool calls per command.** Run 2/1 made 0. Run 2/2 made 0 calls to Memory scripts, `speckit.memory.*`
+  commands or skills, or `memory-handoff`. Its only Memory-related calls were three reads, made after the failure:
+  `memory-lifecycle.md`, the handoff state file and `archive.py` source. I1 is fixed: the model no longer runs
+  `pending --gate`.
+- **Session handoff.** All ten claims ran it in-claim (I2), each with `status: pending`. The session state file
+  was last updated at 11:02:18.86, the PR claim. No claim returned `memory_blocked` or `memory_dispatch`. The model
+  still made up `session_id` from the scratch path, which no longer matters because every claim now runs the
+  handoff.
+- **Queue after Implement's `complete`: empty.** `complete` saved the Execute receipt (`execute:accepted`), then
+  returned `ok: false` and exit 1, with this `memory_handoff`:
+
+  ```json
+  {"transition": "execute", "feature": "specs/2-add-a-name-flag-to-greet", "status": "blocked", "ok": false,
+   "actions": [], "reason": "MEMORY_HELPER_FAILED (1): Select a full feature directory directly under specs/.",
+   "state_file": ".specify/workflow/runtime/memory-handoffs/8c6de25f….json"}
+  ```
+
+  `archive.py pending` at the end reports `ready`, `needs_verification` and `blocked` all empty. `prepare` never ran
+  as a hook or a command.
+
+### New bugs
+
+- **B4 (blocks D3 queueing):** Memory rejects every feature directory Workflow names for an issue below 100.
+  `archive.py` `spec()` (`extensions/memory/scripts/archive.py:183`) requires
+  `re.fullmatch(r"\d{3,}[a-z]?(?:-[a-zA-Z0-9]+)+", name)`. Workflow's `prepare --issue 2` names the feature
+  `specs/2-add-a-name-flag-to-greet`, using the unpadded issue number. So `memory_handoff`'s
+  `queue --spec <feature>` fails on every managed feature for issues 1 to 99. The Memory tests use
+  `specs/412-refund-approval`, so they never exercise this. The fix belongs on one side: Memory accepts `\d+`, or
+  Workflow pads the number. A test is needed with an issue number below 100.
+- **B5 (blocks the PR receipt):** `complete` for the PR stage fails with `{"ok": false, "error":
+  "PR_LINT_SCOPE_PREREQUISITES_REQUIRED"}`. `pr_lint_binding` (`extensions/workflow/scripts/workflow.py:1454`)
+  requires `dependencies` in `scope-source.json`. Scope's `bind` writes `dict(checked, repo=...)` from `gate()`
+  (`extensions/scope/scripts/scope.py:1444`), and `gate()` never returns `dependencies`: its base result is
+  `{issue, score, prompt, fingerprint}`, plus the fresh-path fields. The `scope-source.json` for #2 has no
+  `dependencies` key. The model would not add `"dependencies": []` by hand, which is correct. I have not checked
+  whether any earlier release wrote the key.
+- The model handled `memory_handoff: blocked` reasonably. It reported the failure, did not claim anything was
+  queued, and went on to Verify, because the Execute receipt stays passed. It did not retry `memory-handoff
+  --transition execute`, because the failure is not repairable in place. That matches `memory-lifecycle.md`.
+
+### State left in place after run 2
+
+- The repository `samykabu/sanduq-r4-live` is private and has not been deleted.
+- Project #12 shows #2 in In review. #3 and #4 are closed task sub-issues.
+- Project #13 ("sanduq-r4-initcheck", the scratch board) is left in place. #1 is on it with no Status.
+- **PR #5 is open and not merged**, from branch `2-add-a-name-flag-to-greet` (head `9a99ef8`).
+- The clone's #2 branch has uncommitted workflow state: the checkpoint and lifecycle files, plus the paused PR
+  claim.
+- #1's run-1 state is committed locally on its own branch.
