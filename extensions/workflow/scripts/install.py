@@ -21,7 +21,7 @@ import zipfile
 from pathlib import Path
 from urllib.parse import quote
 import yaml
-from packaging.version import Version
+from packaging.version import InvalidVersion, Version
 from packaging.specifiers import SpecifierSet
 from workflow import load_policy, read, write, require, inside, registry, doctor, locked, WorkflowError, RANGES, ensure_local_excludes, package_digest, active_host, github_repository, sanduq_ci, git
 from reconcile import reconcile
@@ -330,7 +330,42 @@ def memory_archive_preflight(root):
 def command(root, args, log):
     result = subprocess.run(args, cwd=root, input='y\n', capture_output=True, text=True, encoding='utf-8')
     log.append({'args': args, 'exit_code': result.returncode, 'stdout': result.stdout, 'stderr': result.stderr})
-    require(result.returncode == 0, 'INSTALL_COMMAND_FAILED: ' + ' '.join(args))
+    require(result.returncode == 0, 'INSTALL_COMMAND_FAILED: ' + ' '.join(args) + ': ' + failure_message(result))
+
+
+def failure_message(result):
+    """A failed command's own message: the last paragraph of stderr, else stdout, unwrapped (Spec Kit's Rich console
+    wraps at 80 columns); for a failed installer run, the `error` of its JSON result."""
+    for text in (result.stderr, result.stdout):
+        paragraphs = [p for p in re.split(r'\n\s*\n', (text or '').strip()) if p.strip()]
+        if paragraphs:
+            last = ' '.join(paragraphs[-1].split())
+            try:
+                last = json.loads(last).get('error') or last
+            except (ValueError, AttributeError):
+                pass
+            return str(last)[-500:]
+    return 'no output, exit code ' + str(result.returncode)
+
+
+def speckit_version(root):
+    """The installed Spec Kit CLI version from `specify --version` ("specify 1.0.11"), or None when unknown."""
+    try:
+        done = subprocess.run(['specify', '--version'], cwd=root, capture_output=True, text=True, encoding='utf-8',
+                              timeout=30)
+        return str(Version(re.search(r'specify\s+(\S+)', done.stdout or '').group(1)))
+    except (OSError, subprocess.TimeoutExpired, AttributeError, InvalidVersion):
+        return None
+
+
+def check_speckit_requirement(root, name, version, spec, asked):
+    """Spec Kit refuses a package whose `requires.speckit_version` excludes it only mid-apply; refuse in preview."""
+    current = speckit_version(root) if spec else None
+    if current is None:
+        return  # nothing to check, or Spec Kit's version is unknown: Spec Kit still checks on add
+    require(SpecifierSet(spec).contains(Version(current), prereleases=True),
+            f'OPTIONAL_PACKAGE_SPECKIT_INCOMPATIBLE: {name} {version} requires spec-kit {spec}; installed {current}. '
+            'Upgrade Spec Kit' + (f' or run without --with {name}.' if asked else '.'))
 
 
 def preservation(root, name):
@@ -828,6 +863,10 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
         else:
             url = f"{lock['repository']}/releases/download/{name}-v{version}/{name}.zip"
             args = ['specify', 'extension', 'add', name, '--from', url, '--force']
+        if name in offered:  # an optional package may need a newer Spec Kit than Workflow's tested one
+            spec = ((candidate_doc.get('requires') or {}).get('speckit_version') if packages
+                    else (lock.get('optional_speckit') or {}).get(name))
+            check_speckit_requirement(root, name, version, spec, name in with_optional)
         operations.append({'extension':name,'version':version,'args':args})
     preset_ops = []
     for name, priority in (('scope-gate','2'),('scope-brainstorm','2'),('workflow','1')):

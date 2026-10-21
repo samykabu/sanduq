@@ -18,6 +18,9 @@
   "optional": {
     "progress": "1.5.0"
   },
+  "optional_speckit": {
+    "progress": ">=1.1.1.dev0,<2.0.0"
+  },
   "upstream_optional": {
     "superspec": {
       "repository": "https://github.com/WangX0111/superspec",

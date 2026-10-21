@@ -606,6 +606,78 @@ class InstallTests(unittest.TestCase):
                     with self.assertRaisesRegex(w.WorkflowError, expected):
                         installer.required_gate_checks(self.root)
 
+    def optional_speckit(self, spec='>=1.1.1.dev0,<2.0.0'):
+        lock = w.read(self.package / 'dependencies.json')
+        lock['optional_speckit'] = {'progress': spec}
+        w.write(self.package / 'dependencies.json', lock)
+        return lock['optional']['progress']
+
+    def test_preview_refuses_an_optional_package_that_needs_a_newer_spec_kit(self):
+        version = self.optional_speckit()
+        expected = (f'OPTIONAL_PACKAGE_SPECKIT_INCOMPATIBLE: progress {version} requires spec-kit >=1.1.1.dev0,<2.0.0; '
+                    'installed 1.0.11. Upgrade Spec Kit or run without --with progress.')
+        calls = []
+        with patch.object(installer, 'speckit_version', return_value='1.0.11'):
+            with self.assertRaises(w.WorkflowError) as preview:
+                installer.install(self.root, package_root=self.package, with_optional=['progress'])
+            self.assertEqual(str(preview.exception), expected)
+            with self.assertRaises(w.WorkflowError) as applied:
+                installer.install(self.root, apply=True, package_root=self.package, with_optional=['progress'],
+                                  runner=lambda *args: calls.append(args))
+            self.assertEqual(str(applied.exception), expected)
+            installer.install(self.root, package_root=self.package)  # without Progress nothing is checked
+        self.assertEqual(calls, [])
+        self.assertFalse((self.root / '.specify/workflow/install-lock.json').exists())
+        for current in ('1.1.4.dev0', None):  # a matching or an unknown Spec Kit goes ahead
+            with self.subTest(current=current), patch.object(installer, 'speckit_version', return_value=current):
+                result = installer.install(self.root, package_root=self.package, with_optional=['progress'])
+                self.assertEqual(result['extensions'][-1]['extension'], 'progress')
+
+    def test_preview_reads_a_staged_optional_package_requirement(self):
+        lock = w.read(self.package / 'dependencies.json')
+        staged = self.package / 'staged'
+        versions = {**lock['required'], **{k: v for group in lock['selected'].values() for k, v in group.items()},
+                    **lock['optional']}
+        for name, version in versions.items():
+            doc = {'extension': {'id': name, 'version': version, 'repository': lock['repository']}}
+            if name == 'progress':
+                doc['requires'] = {'speckit_version': '>=1.1.1.dev0,<2.0.0'}
+            (staged / name).mkdir(parents=True)
+            (staged / name / 'extension.yml').write_text(yaml.safe_dump(doc), encoding='utf-8')
+        with patch.object(installer, 'speckit_version', return_value='1.0.11'):
+            with self.assertRaisesRegex(w.WorkflowError, 'OPTIONAL_PACKAGE_SPECKIT_INCOMPATIBLE: progress'):
+                installer.install(self.root, packages=staged, package_root=self.package, with_optional=['progress'])
+
+    def test_spec_kit_version_comes_from_specify_version(self):
+        for side_effect, expected in ((subprocess.CompletedProcess([], 0, 'specify 1.0.11\n', ''), '1.0.11'),
+                                      (subprocess.CompletedProcess([], 0, 'specify 1.1.4.dev0\n', ''), '1.1.4.dev0'),
+                                      (subprocess.CompletedProcess([], 2, '', 'No such option'), None),
+                                      (FileNotFoundError('specify'), None)):
+            with self.subTest(expected=expected), patch.object(installer.subprocess, 'run', side_effect=[side_effect]):
+                self.assertEqual(installer.speckit_version(self.root), expected)
+
+    def test_a_failed_command_reports_its_own_error(self):
+        # Spec Kit 1.0.11's output for Progress 1.5.0 in the round-5 live run: Rich wraps it at 80 columns.
+        stdout = ('Continue with installation? [y/N]: Downloading from \nhttps://github.com/samykabu/sanduq/releases/'
+                  'download/progress-v1.5.0/progress.z\nip...\n\nCompatibility Error: Extension requires spec-kit '
+                  '>=1.1.1.dev0,<2.0.0, but \n1.0.11 is installed.\nUpgrade spec-kit with: uv tool install specify-cli '
+                  '--force --from \ngit+https://github.com/github/spec-kit.git\n')
+        cases = [(stdout, '', 'Compatibility Error: Extension requires spec-kit >=1.1.1.dev0,<2.0.0, but 1.0.11 is '
+                              'installed. Upgrade spec-kit with: uv tool install specify-cli --force --from '
+                              'git+https://github.com/github/spec-kit.git'),
+                 (json.dumps({'ok': False, 'error': 'INSTALL_ROLLED_BACK: boom'}) + '\n', '', 'INSTALL_ROLLED_BACK: boom'),
+                 ('progress...\n', 'Traceback (most recent call last):\nValueError: bad\n',
+                  'Traceback (most recent call last): ValueError: bad'),
+                 ('', '', 'no output, exit code 1')]
+        for out, err, cause in cases:
+            log = []
+            with self.subTest(cause=cause), \
+                    patch.object(installer.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1, out, err)):
+                with self.assertRaises(w.WorkflowError) as failed:
+                    installer.command(self.root, ['specify', 'extension', 'add', 'progress'], log)
+                self.assertEqual(str(failed.exception), 'INSTALL_COMMAND_FAILED: specify extension add progress: ' + cause)
+                self.assertEqual(log[0]['stdout'], out)
+
     def test_install_refuses_while_a_memory_archive_run_is_active(self):
         active = memory_archive_run(self.root)
         commands = []
