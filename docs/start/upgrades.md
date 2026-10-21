@@ -199,6 +199,32 @@ $speckit-memory-enable Review the renewed archiving policy and approve it.
 | Project owner type | A config from an older Init for an organization board says `ownerType: user` | Rerun `$speckit-project-init`, or set `"ownerType": "org"` |
 | Scope's `scope-gate` preset changed | A managed Specify claim is no longer told to chain Clarify | Unmanaged projects run `specify preset add` again for `scope-gate`; the Workflow installer re-adds it |
 
+## Round 5 migration (Workflow 1.18.0)
+
+The round ships Workflow 1.18.0, Scope 1.11.0, Project 2.6.0, PR 4.6.0, Progress 1.6.0, Illustrate 2.7.1,
+User Manual 1.8.1 and Assure 2.6.1, with presets scope-gate 1.6.0, scope-brainstorm 1.5.0 and workflow 1.3.0.
+No extension ID, command name or policy key changes. Workflow 1.18.0 requires Scope 1.11.0 or later; the upgrade
+updates both together:
+
+```bash
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.18.0 --apply
+python .specify/extensions/workflow/scripts/workflow.py doctor --project
+```
+
+| Change | What you see | What to do |
+| --- | --- | --- |
+| Checkpoint version 2 | Version 1 checkpoints load unchanged. The first write (a claim, `complete`, `migrate`, `relocate`) rewrites one as version 2 without `repo_path`. Workflow 1.17 and earlier cannot read it (`WORKFLOW_START_REQUIRED`), and an older Scope misses its existing-feature claim | Update Workflow and Scope together. Do not downgrade Workflow after the first write |
+| Native Progress wiring for new installs | `install.py --with progress` on a project with no Progress wiring writes hooks that run `hook.py` directly. Existing installs keep their wiring | To keep Spec Kit's dispatcher, set `progress.hook_wiring: speckit` before the install |
+| Optional package needs a newer Spec Kit | The installer refuses Progress on Spec Kit below 1.1.1 with `OPTIONAL_PACKAGE_SPECKIT_INCOMPATIBLE`, before it changes anything | Upgrade Spec Kit, or install without `--with progress` |
+| Progress v2 and classic layout removed | Progress 1.6.0 needs Workflow 1.17.0 or later. `--schema v2` and `--layout classic` exit 2 with `PROGRESS_REMOVED`; Workflow 1.16 and earlier ask for v2 and get it. A stored `layout: classic` shows the Timeline with one notice | Upgrade Workflow first. Read `progress status --json` (`sanduq.progress.v3`); run `progress theme --layout timeline` |
+| Scope readiness stops at Done | A Done prerequisite whose own prerequisite was reopened no longer blocks. Cancelled, or closed without Done, still blocks | Nothing |
+| `scope-gate` and `scope-brainstorm` overlays replace the command | Unmanaged Clarify and Brainstorm no longer compose the upstream command under the overlay. Spec Kit scaffolds `speckit.superspec.brainstorm` even without Superspec; Scope picks Brainstorm only when Superspec is installed and enabled | Unmanaged projects run `specify preset add` again for both presets; the Workflow installer re-adds them |
+| `accept_plan.py` options removed | `--spec` and `--archify` are refused | Use `--html` |
+| Project init in Python | `project-init.sh` and `project-init.ps1` print the `project_init.py` line and pass every flag through, for this release only. `jq` is no longer needed. Several projects for an owner gives exit 4 and a JSON `needs` line (was exit 1) | Call `python .specify/extensions/project/scripts/project_init.py` |
+| PR review feedback from an approved plan | `speckit.pr.review-feedback` writes a plan file and shows its digest; a changed plan shows a new one. After the push it shows the pushed commit and a second digest | Approve the first digest before replies, and the second before threads are resolved |
+| Illustrate verifiers share `svg_scan.py` | Diagrams and verifier output are unchanged | Keep `svg_scan.py` beside a verifier copied out of the skill |
+| User Manual Init vendored | Init copies nothing into `User-Manual/tools/`. A new `manual.yml` has `lifecycle:` after `renderer:`; existing files are not rewritten | Nothing |
+
 ## Moved documentation
 
 Pages moved in this release keep a forwarding stub at the old path for one release cycle:

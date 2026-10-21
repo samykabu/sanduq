@@ -50,7 +50,7 @@ Docs requests from the stream notes and the live run, applied. No migration tabl
 
 ## Not done / pending
 
-- Migration table: not written (after S-W9).
+- Migration table: written after HEAD 04b1b34 (below).
 - `extensions/README.md`: nothing needed (version column changes come with the bumps).
 
 ## IP22 (after S-VEND landed it; docs commit 5bb8366 was before this)
@@ -64,6 +64,16 @@ Docs requests from the stream notes and the live run, applied. No migration tabl
   Progress 1.5.0; later releases refuse them with `PROGRESS_REMOVED` (exit 2)".
 - No other root-doc mention of Progress v2 or the classic layout ("Sanduq Classic" is an Illustrate theme).
 - `test_check_docs.py:49` (orchestrator's regex for the Progress line in install-by-host) kept.
+
+## Round 5 migration table (`docs/start/upgrades.md`)
+
+- New section "Round 5 migration (Workflow 1.18.0)" before "Moved documentation", in the Round 4 shape: version
+  list (orchestrator's planned versions), the upgrade commands, and an 11-row table. Rows from the `## Unreleased`
+  Migration blocks of workflow, scope, project, pr, progress, plus illustrate and user-manual (no Migration block;
+  their consumer-visible bullets), plus the orchestrator's list: Scope 1.11.0 with Workflow 1.18.0 (checkpoint v2, no
+  downgrade), Progress needs Workflow 1.17.0+ and Spec Kit 1.1.1+, native wiring for new installs,
+  `OPTIONAL_PACKAGE_SPECKIT_INCOMPATIBLE`, the second PR digest, `project_init.py`, Done readiness, `replace`
+  overlays. Not listed: W18, W24, W25. Assure has no `## Unreleased` entry, so it has no row.
 
 ## Requests
 
@@ -79,3 +89,4 @@ Docs requests from the stream notes and the live run, applied. No migration tabl
 - `git diff --check` on README.md, CONTRIBUTING.md, docs: clean.
 - After IP22: `check_docs.py` exit 0 (same OK line); `python extensions/scripts/test_check_docs.py` (as CI runs it):
   "check_docs regression checks passed.", exit 0.
+- After the migration table: both again exit 0; `git diff --check -- docs` clean.
