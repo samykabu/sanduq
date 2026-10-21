@@ -1,18 +1,15 @@
-"""Content fingerprints: file hashes with git text attributes, the advisory hash cache, the Project
-sync-state projection and the source inventory."""
+"""Content fingerprints: file hashes with git text attributes, the Project sync-state projection and the source
+inventory."""
 from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
-import stat
-import time
 import uuid
 from pathlib import Path
-from sanduq_hash import byte_sensitive, portable_files, text_attributes
+from sanduq_hash import portable_files, text_attributes
 from wf_core import (DEFAULT_SYNC_STATE, SYNC_BINDING_PREFIX, SYNC_ADMINISTRATIVE, WorkflowError, require, read,
-                     replace_file, write, inside, portable_label, canonical_path, git, OPERATIONAL_DIRS, _memo, RACY_NS)
+                     replace_file, write, inside, portable_label, canonical_path, git, OPERATIONAL_DIRS, _memo)
 import wf_core  # the operation memo lives only there; read it through the module
 
 
@@ -50,60 +47,6 @@ def sync_binding(root, feature):
     """The current binding fingerprint of the configured state file for `feature` (None when the file is missing)."""
     label = sync_state_label(root)
     return fingerprint_files(root, [label], feature=feature)[label]
-
-
-HASH_CACHE = '.specify/workflow/runtime/hash-cache.json'
-
-
-def cached_fingerprints(root, paths):
-    """`fingerprint_files(root, paths)` for an advisory check (W18). A regular file whose size, mtime and git text
-    attribute equal its cache entry, with an mtime over 2 s old, keeps the cached hash; every other file is hashed
-    and stored if it stayed unchanged meanwhile. Byte-sensitive files are never stored: their portable hash can
-    follow the index. The cache keeps only the paths of the last call."""
-    location = root / HASH_CACHE
-    try:
-        cache = read(location, {})
-    except ValueError:
-        cache = {}
-    cache = cache if isinstance(cache, dict) else {}
-    canonical = {label: canonical_path(root, label) for label in sorted(set(paths))}
-    attributes = git_text_attributes(root, sorted(set(canonical.values())))
-
-    def key(name):
-        try:
-            info = os.stat(root / name)
-        except OSError:
-            return None
-        if not stat.S_ISREG(info.st_mode) or time.time_ns() - info.st_mtime_ns <= RACY_NS:
-            return None
-        return [info.st_size, info.st_mtime_ns, attributes.get(name)]
-
-    result, stored, misses = {}, {}, {}
-    for label, name in canonical.items():
-        current, entry = key(name), cache.get(name)
-        if current and isinstance(entry, list) and len(entry) == 4 and entry[:3] == current                 and isinstance(entry[3], str):
-            result[label], stored[name] = entry[3], entry
-        else:
-            misses[label] = current
-    if misses:
-        hashed = fingerprint_files(root, list(misses))
-        result.update(hashed)
-        for label, before in misses.items():
-            name = canonical[label]
-            if before is None or hashed[label] is None:
-                continue
-            try:
-                sensitive = byte_sensitive(name, (root / name).read_bytes(), attributes.get(name))
-            except OSError:
-                continue
-            if not sensitive and key(name) == before:
-                stored[name] = before + [hashed[label]]
-    if stored != cache:
-        try:
-            write(location, stored)
-        except OSError:
-            pass  # advisory: the next call hashes again
-    return result
 
 
 def normalized_text(content):

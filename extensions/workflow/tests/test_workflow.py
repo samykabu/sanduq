@@ -2,10 +2,12 @@ import atexit
 import copy
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -305,6 +307,18 @@ class WorkflowTests(unittest.TestCase):
         with self.assertRaisesRegex(w.WorkflowError, 'DEPENDENCY_CHANGED'): run.claim(self.usage())
         self.assertEqual(run.migrate('Reviewed compatible package update')['next']['stage'], 'specify')
         self.assertEqual(len(list((run.path.parent / 'backups').glob('*.json'))), 1)
+
+    def test_a_same_size_package_edit_with_an_old_mtime_is_still_a_dependency_change(self):
+        # Codex round 5, finding 4: the claim hashes every installed package file; no stat-keyed cache decides it.
+        old = time.time() - 60
+        for path in (self.root / '.specify').rglob('*'):
+            if path.is_file(): os.utime(path, (old, old))
+        run = self.run_object(); c = run.claim(self.usage()); run.complete(c['token'], self.receipt('scope'))
+        preset = self.root / '.specify/presets/workflow/preset.yml'
+        text = preset.read_text(encoding='utf-8')
+        preset.write_text(text.replace('1.0', '1.1'), encoding='utf-8')
+        os.utime(preset, (old, old))
+        with self.assertRaisesRegex(w.WorkflowError, 'DEPENDENCY_CHANGED'): run.claim(self.usage())
 
     def test_migration_rebinds_a_policy_section_an_upgrade_added(self):
         """A release that only adds a policy section must not orphan finished evidence."""

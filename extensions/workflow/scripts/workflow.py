@@ -23,7 +23,7 @@ from types import SimpleNamespace
 
 # Also supports importlib loading directly from the canonical source tree.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from sanduq_hash import byte_sensitive, eol_drift, portable_content, portable_files, text_attributes
+from sanduq_hash import eol_drift, portable_content, portable_files, text_attributes
 import sanduq_ci
 import skill_inventory
 import source_key as sk
@@ -57,15 +57,14 @@ from wf_core import (SCHEMA, CHECKPOINT_SCHEMA, CHECKPOINT_SCHEMAS, RANGES, BASE
                      WORKFLOW_SCRIPT, WORKFLOW_PACKAGE_PREFIX, WorkflowError, require, now, read, digest,
                      POLICY_DIGEST_VERSION, OPERATIONAL_POLICY, delivery_digest, checkpoint_policy_digest, replace_file,
                      write, inside, portable_label, canonical_path, REPARSE_POINT, _no_link_below, GIT_READS, run_git,
-                     git_ok, git, OPERATIONAL_DIRS, operation, _memo, _wrote, RACY_NS, default_actor,
-                     require_not_delegated_context, RUNTIME_DECLARATION, ensure_local_excludes, locked, ACTIVE_INDEX,
-                     foreign_active_claim)
+                     git_ok, git, OPERATIONAL_DIRS, operation, _memo, _wrote, default_actor,
+                     require_not_delegated_context, RUNTIME_DECLARATION, ensure_local_excludes, locked)
 from wf_identity import (github_repository, previous_branch, normalized_remote, origin_url, root_commit_sha,
                          is_shallow_clone, repo_identity, current_identity, root_commit_still_reachable, same_remote,
                          identity_matches, legacy_history_signal, verify_checkpoint_identity, root_history_changed,
                          require_issue_repository_binding, issue_identity, prepare_issue)
-from wf_fingerprints import (sync_state_label, sync_entry, sync_projection, sync_binding, HASH_CACHE,
-                             cached_fingerprints, normalized_text, text_fingerprints, fingerprint_files,
+from wf_fingerprints import (sync_state_label, sync_entry, sync_projection, sync_binding,
+                             normalized_text, text_fingerprints, fingerprint_files,
                              git_text_attributes, prefetch_attributes, source_fingerprints, inventory_label,
                              store_source_inventory, source_fingerprints_of)
 from wf_policy import (default_policy, select_gate, validate_policy, _positive, validate_front_half_policy, tier,
@@ -1029,9 +1028,9 @@ class Run:
             require(not (self.root / '.specify/workflow/runtime/upgrade.lock').exists(), 'WORKFLOW_UPGRADE_IN_PROGRESS')
             state = self.load()
             require(not state['active'], 'STAGE_ALREADY_ACTIVE: recover or finish the recorded claim')
-            other = foreign_active_claim(self.root, self.path)
-            require(other is None, 'OTHER_FEATURE_STAGE_ACTIVE: ' + str(other))
-            require(state['dependency_digest'] == package_digest(self.root, cached=True), 'DEPENDENCY_CHANGED: review upgrade and migrate the checkpoint before execution')
+            for path in (self.root / 'specs').glob('*/workflow/checkpoint.json'):
+                require(path == self.path or not read(path, {}).get('active'), 'OTHER_FEATURE_STAGE_ACTIVE: ' + str(path))
+            require(state['dependency_digest'] == package_digest(self.root), 'DEPENDENCY_CHANGED: review upgrade and migrate the checkpoint before execution')
             # Delegation health is checked below, after every rejection, because
             # the claim may install the skill it would otherwise report missing.
             health = cached_doctor(self.root, self.policy, state['dependency_digest'])

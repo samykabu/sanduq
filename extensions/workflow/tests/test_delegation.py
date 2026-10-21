@@ -113,6 +113,26 @@ class DelegationTests(unittest.TestCase):
         self.rejected_claim_leaves_no_trace(
             run, 'COMMAND_UNAVAILABLE', health={'ok': False, 'errors': ['COMMAND_UNAVAILABLE: x']})
 
+    def test_an_in_place_edit_to_another_checkpoint_keeping_size_and_mtime_is_still_read(self):
+        # Codex round 5, finding 2: claim exclusion reads every foreign checkpoint under the dispatch lock; no
+        # cached "inactive" may skip one (W25 reverted).
+        self.enable()
+        run = w.Run(self.root, self.feature)
+        run.start('acme/app#10')
+        other = self.root / 'specs/002-other/workflow/checkpoint.json'
+        idle, busy = '{"active": null, "pad": ".."}', '{"active": {"stage": "plan"}}'
+        self.assertEqual(len(idle), len(busy))
+        other.parent.mkdir(parents=True)
+        other.write_text(idle, encoding='utf-8')
+        old = time.time() - 60
+        os.utime(other, (old, old))
+        self.rejected_claim_leaves_no_trace(
+            run, 'COMMAND_UNAVAILABLE', health={'ok': False, 'errors': ['COMMAND_UNAVAILABLE: x']})
+        with open(other, 'r+', encoding='utf-8') as handle:  # same file, same size
+            handle.write(busy)
+        os.utime(other, (old, old))
+        self.rejected_claim_leaves_no_trace(run, 'OTHER_FEATURE_STAGE_ACTIVE')
+
     def test_claim_without_next_stage_does_not_install_skill_or_annotate_tasks(self):
         self.enable()
         run = w.Run(self.root, self.feature)

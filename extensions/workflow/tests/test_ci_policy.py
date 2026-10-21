@@ -30,6 +30,25 @@ def self_hosted():
     return selection
 
 
+class LoadCiTests(unittest.TestCase):
+    """Codex round 5, finding 11: `load_ci` takes a project root or a policy file (`init_manual.py --ci-policy`)."""
+
+    def test_a_policy_file_and_a_project_root_both_load_their_selection(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.assertEqual(ci.load_ci(root), ci.default_ci())  # no policy: the default, as before
+            policy = root / '.specify/workflow.yml'
+            policy.parent.mkdir()
+            policy.write_text(yaml.safe_dump({'schema_version': 1, 'ci': self_hosted()}), encoding='utf-8')
+            self.assertEqual(ci.load_ci(root), self_hosted())
+            self.assertEqual(ci.load_ci(policy), self_hosted())
+            self.assertEqual(ci.load_ci(str(policy)), self_hosted())
+            other = root / 'ci-only.yml'
+            other.write_text(yaml.safe_dump({'ci': self_hosted()}), encoding='utf-8')
+            self.assertEqual(ci.load_ci(other), self_hosted())
+
+
 class RenderTests(unittest.TestCase):
     def test_every_shipped_asset_renders_to_valid_yaml_under_both_selections(self):
         for name, path in ASSETS.items():

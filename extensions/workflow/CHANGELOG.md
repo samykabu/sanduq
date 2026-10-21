@@ -4,8 +4,6 @@
 
 - The checkpoint has its own schema version, separate from the policy's. Version 2 drops `repo_path`. Workflow, the CI gate and Scope's claim check read versions 1 and 2; `start`, `relocate` and every other write produce version 2. `schemas/checkpoint-v1.schema.json` accepts both and refuses `repo_path` on version 2.
 - Removed `worker_brief.project_result` and `project_usage` (used only by a test).
-- A claim's `DEPENDENCY_CHANGED` check reads unchanged installed package files from an advisory hash cache (`.specify/workflow/runtime/hash-cache.json`, git-excluded): a file keeps its hash only while its size, mtime and git text attribute are unchanged and its mtime is over 2 s old. Byte-sensitive files are always hashed. `start` and `migrate` hash every file; receipts and the CI gate never read the cache.
-- The claim's check for another feature's active claim keeps a derived index (`.specify/workflow/runtime/active-index.json`) of checkpoints read as inactive. One is skipped only while its size, mtime, ctime and file id are unchanged and its mtime is over 2 s old; new, replaced, recent or malformed checkpoints are read again. The result equals a full scan.
 - Path containment for recorded labels checks each existing component with `lstat` and resolves fully at any symlink, junction or name Windows rewrites, instead of resolving every label. `..`, absolute, drive and UNC labels are still refused.
 - `decisions.py`, `task_issues.py` and `ci_evidence.py` call `gh` through the shared `sanduq_gh.py`. Error codes and messages are unchanged; a missing `gh` is now reported with them instead of a traceback. A GET in `decisions.py` and `task_issues.py` is retried once after a 5xx or a timeout; writes and CI evidence downloads never are. `decisions.py` reaches Scope's GitHub client through `sanduq_scope_github.py` and no longer loads `scope.py`.
 - One git runner (`workflow.run_git`) and one file SHA-256 helper (`execution_tools.sha256_file`) inside the package. Digests are unchanged.
@@ -15,7 +13,6 @@
 
 - Checkpoints from 1.17 and earlier (version 1) load unchanged. The first command that writes one (a claim, `complete`, `migrate`, `relocate`) rewrites it as version 2 without `repo_path`. Nothing to run.
 - Update Scope together with Workflow: an older Scope does not see an existing-feature claim in a version-2 checkpoint.
-- `hash-cache.json` and `active-index.json` are local runtime files under the already git-excluded `.specify/workflow/runtime/`. Deleting them is always safe.
 - Workflow 1.17 and earlier cannot read a version-2 checkpoint (`WORKFLOW_START_REQUIRED`). Do not downgrade Workflow after the first write.
 
 ## [1.17.1] - 2026-10-21

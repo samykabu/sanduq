@@ -16,7 +16,7 @@ from packaging.version import Version
 from wf_core import (RANGES, COMMANDS, LINT_COMMAND, DOCTOR_CACHE, DOCTOR_CACHE_SECONDS, DOCTOR_CACHE_FILES,
                      WORKFLOW_SCRIPT, WorkflowError, require, read, digest, write, inside, canonical_path)
 from wf_identity import github_repository
-from wf_fingerprints import cached_fingerprints, fingerprint_files
+from wf_fingerprints import fingerprint_files
 from wf_policy import stages
 
 
@@ -46,9 +46,8 @@ def command_exists(root, command):
     return False
 
 
-def package_digest(root, cached=False):
-    """Ignore install timestamps but detect versions, enablement and source drift. `cached` (claim only) reads
-    unchanged files from the advisory hash cache; `start` and `migrate` hash every file."""
+def package_digest(root):
+    """Ignore install timestamps but detect versions, enablement and source drift."""
     entries = {key: {k: value.get(k) for k in ('version', 'enabled')} for key, value in registry(root).items()}
     paths = []
     for folder in (root / '.specify/extensions', root / '.specify/presets'):
@@ -59,7 +58,7 @@ def package_digest(root, cached=False):
     paths += [p.relative_to(root).as_posix() for p in (root / '.agents/skills').glob('speckit-*/SKILL.md')]
     paths += [p.relative_to(root).as_posix() for p in (root / '.claude/skills').glob('speckit-*/SKILL.md')]
     paths += ['.specify/integration.json', '.specify/init-options.json']
-    return digest({'registrations': entries, 'sources': (cached_fingerprints if cached else fingerprint_files)(root, paths)})
+    return digest({'registrations': entries, 'sources': fingerprint_files(root, paths)})
 
 
 def resolve_commands(root, policy, tier=None):

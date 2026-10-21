@@ -287,7 +287,6 @@ def _wrote(path):
         if kind == 'source' and parts[0] in OPERATIONAL_DIRS:
             continue
         del _OPERATION[key]
-RACY_NS = 2_000_000_000  # git's "racy" rule: an mtime this recent may hide a same-size edit
 
 
 def default_actor(root):
@@ -369,44 +368,3 @@ def locked(path):
         yield
     finally:
         path.unlink(missing_ok=True)
-
-
-ACTIVE_INDEX = '.specify/workflow/runtime/active-index.json'
-
-
-def foreign_active_claim(root, own):
-    """The first checkpoint other than `own` that records an active claim, or None (W25). The caller holds the
-    dispatch lock, so no other claim can start meanwhile. The index is derived, never a source of truth: it keeps
-    only checkpoints read as inactive, and one is skipped only while its size, mtime, ctime and file id are
-    unchanged and its mtime is over 2 s old. New, replaced, recent or malformed checkpoints are read again."""
-    location = root / ACTIVE_INDEX
-    try:
-        index = read(location, {})
-    except ValueError:
-        index = {}
-    index = index if isinstance(index, dict) else {}
-    kept = {}
-    for path in (root / 'specs').glob('*/workflow/checkpoint.json'):
-        if path == own:
-            continue
-        name = path.relative_to(root).as_posix()
-        try:
-            info = path.stat()
-            key = [info.st_size, info.st_mtime_ns, info.st_ctime_ns, info.st_ino]
-        except OSError:
-            key = None
-        if key and time.time_ns() - key[1] <= RACY_NS:
-            key = None
-        if key and index.get(name) == key:
-            kept[name] = key
-            continue
-        if read(path, {}).get('active'):
-            return path
-        if key:
-            kept[name] = key
-    if kept != index:
-        try:
-            write(location, kept)
-        except OSError:
-            pass  # advisory: the next claim reads every checkpoint again
-    return None

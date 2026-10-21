@@ -74,7 +74,7 @@
 - Measured (this machine, 400 installed package labels, mean depth 5.7, 4 alternating rounds): full resolve 0.30,
   0.22, 0.40, 0.53 s; lstat walk 0.12, 0.16, 0.26, 0.26 s.
 
-## W18 (Amendment 2)
+## W18 (Amendment 2): REVERTED after the Codex review, see below
 
 - `package_digest(root, cached=False)`; only the claim's `DEPENDENCY_CHANGED` check passes `cached=True`. `start`
   and `migrate` (`migration_plan`) hash fully. `complete`, `sync-amend`, `finalize`, `revalidate*`,
@@ -106,7 +106,7 @@
   operation memo (Amendment 2), adding work to `complete`. The saving does not hold, so W24 is not shipped.
 - Scripts (scratchpad, not in the repo): `r5wf/w24bench.py`, `r5wf/pkgbench.py`, `r5wf/w19bench.py`.
 
-## W25 (Amendment 2)
+## W25 (Amendment 2): REVERTED after the Codex review, see below
 
 - `foreign_active_claim(root, own)` replaces the claim's loop and runs under the dispatch lock the claim holds.
   Index `.specify/workflow/runtime/active-index.json` `{checkpoint label: [size, mtime_ns, ctime_ns, file id]}`
@@ -159,3 +159,38 @@
   test_ci_revalidation` (machine under load from other streams) had 1 transient `PermissionError` from Windows on
   a checkpoint `os.replace`; the full suite run above had none.
 - `check_docs.py` reports `docs/reference/hooks.md` stale. Not from S-WF (no hook or `extension.yml` change here).
+
+## Codex review fixes (round-5-codex-review.md findings 2, 4, 11)
+
+- **Finding 2 (W25) — reverted.** Amendment 2 says a cached "inactive" is never trusted, and with that rule the
+  index cannot skip any read, so it saves nothing (round 4's drop reason holds). Codex also showed the key is not
+  enough on Windows: an in-place edit that keeps the size and restores the mtime keeps the file id and the creation
+  time (`st_ctime_ns`). The claim reads every foreign checkpoint under the dispatch lock again (the pre-round loop,
+  verbatim). Removed `ACTIVE_INDEX`, `foreign_active_claim` (`wf_core.py`, re-export in `workflow.py`),
+  `test_active_index.py` and the changelog line. Regression test
+  `test_delegation.test_an_in_place_edit_to_another_checkpoint_keeping_size_and_mtime_is_still_read`: a rejected
+  claim fills the index while the other checkpoint is idle, then that file is edited in place to an active claim of
+  the same size with its mtime restored; the next claim must refuse `OTHER_FEATURE_STAGE_ACTIVE`. Before the revert
+  it failed (the claim went past the check to `DELEGATE_AGENT_CLI_UNAVAILABLE`); after it, OK.
+- **Finding 4 (W18) — reverted, not patched with extra checks.** The orchestrator's suggested fix was a full
+  `package_digest` on every enforcing path. Today only the claim computes it (one full hash per stage). Adding a
+  full hash to `complete`, `sync-amend`, `finalize`, `revalidate*` and migrations costs about 0.45 s each (measured
+  above), while the cache saves about 0.07 s per claim here, so W18 plus those checks is slower than no W18.
+  Same reasoning as W25 and W24. So the claim hashes every installed package file again (`package_digest(root)`, no
+  `cached` parameter), which is exactly the pre-round behaviour; no path reads a cache. Removed
+  `cached_fingerprints`, `HASH_CACHE`, `RACY_NS`, the `byte_sensitive` imports, `test_hash_cache.py` and the
+  changelog lines. Regression test `test_workflow.test_a_same_size_package_edit_with_an_old_mtime_is_still_a_dependency_change`:
+  all package files get an old mtime, a claim warms the cache, then `preset.yml` is edited (same size) and its
+  mtime restored; the next claim must refuse `DEPENDENCY_CHANGED`. Before the revert it failed (no error raised);
+  after it, OK. If you still want an uncached dependency check before evidence acceptance (`complete` copies the
+  claim-time digest without recomputing; this gap predates round 5), it is a few lines in `Run.complete`; say so
+  and I add it with its cost measured.
+- **Finding 11 — fixed.** `sanduq_ci.load_ci(root)` reads `root` directly when it is an existing file, otherwise
+  `<root>/.specify/workflow.yml` as before; the interface is otherwise unchanged. Test
+  `test_ci_policy.LoadCiTests` (project root with and without a policy, the policy file as `Path` and `str`, a
+  ci-only file): failed before, OK after. `sanduq_ci.py` is injected into Assure and User Manual, so their packaged
+  inventories change: Assure needs a version bump under X23 (it was not on the expected-bumps list).
+- Suites after these fixes (on the W9-split tree): Workflow 1,290 tests in 1,550 s, 3 errors (the known
+  machine-only `test_install` dangling link/junction rollback tests), 2 skipped; Assure 41 OK; User Manual 53 OK.
+  The count went from 1,294 to 1,290: minus 9 (`test_active_index`) and 9 (`test_hash_cache`), plus the 3 new
+  regression tests, plus W9's own test changes.
