@@ -50,9 +50,20 @@ Docs requests from the stream notes and the live run, applied. No migration tabl
 
 ## Not done / pending
 
-- IP22: `docs/extensions/progress.md:95-96` (Deprecated bullet) and `docs/start/upgrades.md:190` still say v2 and
-  classic "still work". Update when S-VEND lands IP22 (with the migration table).
+- Migration table: not written (after S-W9).
 - `extensions/README.md`: nothing needed (version column changes come with the bumps).
+
+## IP22 (after S-VEND landed it; docs commit 5bb8366 was before this)
+
+- `docs/extensions/progress.md`: the Deprecated bullet became Removed: `--schema v2` and `--layout classic` exit 2
+  with `PROGRESS_REMOVED`; a stored `layout: classic` shows the Timeline with one notice, cleared by
+  `progress theme --layout timeline`. Requires row: Workflow (1.17.0 or later) optional. With Workflow: with
+  Workflow installed Progress needs 1.17.0 or later; an older one gets `PROGRESS_REMOVED` with the upgrade command,
+  and `progress status` names the upgrade.
+- `docs/start/upgrades.md:190` is in the Round 4 (1.17.0) table, so the row stays history: "Both still work in
+  Progress 1.5.0; later releases refuse them with `PROGRESS_REMOVED` (exit 2)".
+- No other root-doc mention of Progress v2 or the classic layout ("Sanduq Classic" is an Illustrate theme).
+- `test_check_docs.py:49` (orchestrator's regex for the Progress line in install-by-host) kept.
 
 ## Requests
 
@@ -66,3 +77,5 @@ Docs requests from the stream notes and the live run, applied. No migration tabl
 
 - `check_docs.py` (uv, Python 3.11): `Documentation OK: 70 guides, 47 of 47 commands, ...`, exit 0.
 - `git diff --check` on README.md, CONTRIBUTING.md, docs: clean.
+- After IP22: `check_docs.py` exit 0 (same OK line); `python extensions/scripts/test_check_docs.py` (as CI runs it):
+  "check_docs regression checks passed.", exit 0.
