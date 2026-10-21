@@ -30,7 +30,7 @@ GUARD_MARK = "memory/hooks/guard.py"
 SKILL_NAMES = "Here `speckit.memory.<command>` is the skill `speckit-memory-<command>`.\n\n"
 SESSION = """\n<!-- SANDUQ MEMORY SESSION START -->
 At session start run `python .specify/extensions/memory/scripts/archive.py pending`; when it reports pending work or an interrupted run, follow `.specify/extensions/memory/commands/session.md`. In a Sanduq Workflow project (`.specify/workflow.yml` exists), Workflow's claim runs this check and returns the Memory commands to run; do not run it separately.
-Before a new specification, branch or broad staging or commit workflow, `archive.py pending --gate` must pass.
+Before a new specification, branch or broad staging or commit workflow, `archive.py pending --gate` must pass; in a Sanduq Workflow project Workflow's claim covers this gate too, so do not run it separately.
 For specification or impact analysis, follow `.specify/extensions/memory/commands/impact.md`.
 Do not load project memory into ordinary implementation tasks.
 <!-- SANDUQ MEMORY SESSION END -->

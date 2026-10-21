@@ -131,7 +131,9 @@ def fresh_claim(root, repo, issue, feature, token, session, stages=("scope", "sp
         raise ValueError(str(exc)) from exc
     active = state.get('active') or {}
     if (state.get('issue') != f'{repo}#{issue}' or active.get('stage') not in stages
-            or active.get('mode') != 'initial' or active.get('token') != token
+            # A Specify claim on a spec Scope rendered is `bind-only`: still the initial binding.
+            or active.get('mode') not in ('initial', 'bind-only' if active.get('stage') == 'specify' else 'initial')
+            or active.get('token') != token
             or active.get('session_id') != session or ((run.feature / 'scope-source.json').exists() and (active.get('stage') != 'specify' or
                 workflow.read(run.feature / 'scope-source.json', {}).get('repo') != repo or
                 workflow.read(run.feature / 'scope-source.json', {}).get('issue') != issue))

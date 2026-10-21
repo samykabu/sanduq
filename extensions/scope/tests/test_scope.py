@@ -86,6 +86,11 @@ class FakeGitHub:
             elif method == 'DELETE':
                 deps.discard(int(parts[-1]) // 100)
             return [copy.deepcopy(self.issues[d]) for d in sorted(deps)]
+        if suffix == 'parent':
+            for parent, children in self.children.items():
+                if n in children:
+                    return copy.deepcopy(self.issues[parent])
+            raise m.ScopeError('gh: No parent issue found (HTTP 404)')
         if suffix == 'sub_issues':
             children = self.children.setdefault(n, set())
             if method == 'POST':

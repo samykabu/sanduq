@@ -356,10 +356,16 @@ class ProjectSyncTests(unittest.TestCase):
         self.assertEqual(out.getvalue().splitlines(), ['skipped reason=not a git repo'])
 
 
-FAKE_GH = """import json, sys
+FAKE_GH = """import json, re, sys
 args = sys.argv[1:]
-COLUMNS = ['Backlog', 'Analysis', 'Engineer-Review', 'Ready', 'In progress', 'In review', 'Done']
-if args[:2] == ['auth', 'status']: print("Logged in to github.com\\n  - Token scopes: " + SCOPES)
+COLUMNS = COLUMNS or ['Backlog', 'Analysis', 'Engineer-Review', 'Ready', 'In progress', 'In review', 'Done']
+if args[:2] == ['api', 'graphql']:
+    # updateProjectV2Field replaces every option, so every option comes back with a new id.
+    names = [json.loads('"' + n + '"') for n in re.findall(r'name:"((?:[^"\\\\]|\\\\.)*)"', args[-1])]
+    open('mutation.json', 'w').write(json.dumps(names))
+    print(json.dumps({'data': {'updateProjectV2Field': {'projectV2Field': {
+        'options': [{'id': 'N%d' % i, 'name': n} for i, n in enumerate(names)]}}}}))
+elif args[:2] == ['auth', 'status']: print("Logged in to github.com\\n  - Token scopes: " + SCOPES)
 elif args[:2] == ['api', 'user']: print('acme')
 elif args[:2] == ['api', 'users/acme']: print(KIND)
 elif args[:2] == ['project', 'list']: print(json.dumps({'projects': [{'number': 1, 'title': 'Alpha'}, {'number': 3, 'title': 'Beta'}]}))
@@ -380,18 +386,26 @@ HOOKS = """hooks:
 class ProjectInitTests(unittest.TestCase):
     """PM4/PM5: both init scripts need the whole 'project' scope and name the choice they cannot make."""
 
-    def init(self, shell, scopes, *extra, kind='User', existing=None):
-        """(exit code, output) of one init run; `extra` is (bash flags, pwsh flags), `existing` a config.json."""
+    def init(self, shell, scopes, *extra, kind='User', existing=None, columns=None, managed=None, dry_run=True):
+        """(exit code, output) of one init run; `extra` is (bash flags, pwsh flags), `existing` a config.json,
+        `managed` the `workflow.py project-defaults` answer of a Workflow-managed project."""
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name).resolve()
+        self.root = root
         subprocess.run(['git', 'init', '-q'], cwd=root, check=True)
         (root / '.specify/extensions/project').mkdir(parents=True)
         (root / '.specify/extensions.yml').write_text(HOOKS, encoding='utf-8')
         if existing is not None:
             (root / '.specify/extensions/project/config.json').write_text(json.dumps(existing), encoding='utf-8')
+        if managed is not None:
+            (root / '.specify/workflow.yml').write_text('schema_version: 1\n', encoding='utf-8')
+            stub = root / '.specify/extensions/workflow/scripts/workflow.py'
+            stub.parent.mkdir(parents=True)
+            stub.write_text('print(' + repr(json.dumps(managed)) + ')\n', encoding='utf-8')
         fake = root / 'fake_gh.py'
-        fake.write_text('SCOPES = ' + repr(scopes) + '\nKIND = ' + repr(kind) + '\n' + FAKE_GH, encoding='utf-8')
+        fake.write_text('SCOPES = ' + repr(scopes) + '\nKIND = ' + repr(kind) + '\nCOLUMNS = ' + repr(columns) + '\n'
+                        + FAKE_GH, encoding='utf-8')
         flags = list(extra[0] if shell == 'bash' else extra[1]) if extra else []
         scripts = ROOT / 'project/scripts'
         if shell == 'bash':
@@ -401,11 +415,13 @@ class ProjectInitTests(unittest.TestCase):
             (root / 'bin/gh').chmod(0o755)
             env = dict(os.environ, PATH=str(root / 'bin') + os.pathsep + os.environ.get('PATH', ''))
             args = [shutil.which('bash'), '-c', 'export PATH="$(cygpath -u "$1" 2>/dev/null || echo "$1"):$PATH"; shift; exec bash "$@"',
-                    '_', str(root / 'bin'), (scripts / 'bash/project-init.sh').as_posix(), '--non-interactive', '--dry-run', *flags]
+                    '_', str(root / 'bin'), (scripts / 'bash/project-init.sh').as_posix(), '--non-interactive',
+                    *(['--dry-run'] if dry_run else []), *flags]
         else:
             wrapper = root / 'run.ps1'
             wrapper.write_text("function global:gh { & '" + sys.executable + "' '" + str(fake) + "' @args }\n& '" +
-                               str(scripts / 'powershell/project-init.ps1') + "' -NonInteractive -DryRun " + ' '.join(flags) +
+                               str(scripts / 'powershell/project-init.ps1') + "' -NonInteractive " +
+                               ('-DryRun ' if dry_run else '') + ' '.join(flags) +
                                "; exit $LASTEXITCODE\n", encoding='utf-8')
             env, args = dict(os.environ), ['pwsh', '-NoProfile', '-File', str(wrapper)]
         done = subprocess.run(args, cwd=root, env=env, input='', capture_output=True, text=True, encoding='utf-8', timeout=120)
@@ -458,6 +474,23 @@ class ProjectInitTests(unittest.TestCase):
                 self.assertEqual(written[key], custom[key], (shell, key))
             code, output = self.init(shell, "'project', 'repo'", *self.PICK)
             self.assertEqual(self.config(output)['subIssues'], defaults['subIssues'], shell)
+
+    def test_managed_auto_create_makes_each_doctor_column_once_with_current_ids(self):
+        """B3: GitHub's default board under a Workflow policy: one column per name, the case variant renamed,
+        every id from the update's answer, and every name Workflow's doctor requires present."""
+        statuses = ['Backlog', 'Feature Specification', 'Need Clarifications', 'Ready', 'In progress', 'In review', 'Done']
+        phases = {'open': 'Feature Specification', 'analysis': 'Ready', 'engineer-review': 'Ready', 'ready': 'Ready',
+                  'in-progress': 'In progress', 'in-review': 'In review', 'done': 'Done'}
+        flags = (['--number', '1', '--json', '--auto-create-columns'], ['-Number', '1', '-Json', '-AutoCreateColumns'])
+        for shell in self.shells():
+            code, output = self.init(shell, "'project', 'repo'", *flags, columns=['Todo', 'In Progress', 'Done'],
+                                     managed={'phaseToStatus': phases, 'statuses': statuses}, dry_run=False)
+            self.assertEqual(code, 0, (shell, output))
+            sent = json.loads((self.root / 'mutation.json').read_text())
+            self.assertEqual(sorted(sent), sorted(set(statuses) | {'Todo'}), shell)
+            written = json.loads((self.root / '.specify/extensions/project/config.json').read_text(encoding='utf-8-sig'))
+            self.assertEqual(written['statusOptions'], {name: 'N%d' % i for i, name in enumerate(sent)}, shell)
+            self.assertEqual(written['phaseToStatus'], phases, shell)
 
 
 class DescriptionTests(unittest.TestCase):

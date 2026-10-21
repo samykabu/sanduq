@@ -241,6 +241,8 @@ class InstallTests(unittest.TestCase):
         for fact in ("archive.py pending`", "commands/session.md", "pending --gate", "commands/impact.md",
                      "Do not load project memory into ordinary implementation tasks", "Workflow's claim runs this check"):
             self.assertIn(fact, block)
+        # I1: a managed project runs neither the session check nor the gate itself; the claim covers both.
+        self.assertIn("Workflow's claim covers this gate too, so do not run it separately", block.splitlines()[1])
 
     def test_session_and_prepare_follow_the_workflow_handoff(self):
         """D3: the handoff dispatches session with --run/--spec and prepare only to choose checks."""

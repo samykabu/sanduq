@@ -11,7 +11,7 @@ Round 4 (D3, Memory side: Sanduq Workflow owns the session and prepare hooks).
 - `archive.py pending` also returns `policy_hash` and `policy: {target_branch, default_checks}` when automatic mode is on, so Workflow's handoff skips the separate `policy` call (one helper process, about 0.6 s, per transition).
 - A queue entry from before the current approval stays as it is and is reported blocked with the fix (archive it manually or re-queue it), never re-stamped.
 - `session.md` honours the handoff's `--run <id>` and `--spec <dir>`. `prepare.md` has a managed branch: choose the checks, run the read-only preflight, then return them through `workflow.py memory-handoff --transition execute`.
-- The SESSION block says that in a Workflow project the claim runs the session check.
+- The SESSION block says that in a Workflow project the claim runs the session check and covers the `pending --gate` check, so neither is run separately.
 - README: install the catalog with `--priority 1` (the lowest number wins in Spec Kit).
 
 ### Migration

@@ -803,6 +803,48 @@ class BindOnlyAndLazyIssueTests(Base):
         self.assertEqual((claim['stage'], claim['mode']), ('specify', 'bind-only'))
         run.complete(claim['token'], self.receipt('specify'))
 
+    def test_bind_only_claim_binds_through_scope_with_the_printed_flags(self):
+        """B1: the lean Specify claim on a rendered spec prints Scope's bind with the claim flags; that exact
+        command binds a root issue kept whole (no native parent, B2)."""
+        import shlex
+        sys.path.insert(0, str(SCRIPT.parents[2] / 'scope/tests'))
+        import test_scope as scope_fixture
+        sm = scope_fixture.m
+        analysis_file = self.feature + '/scope-analysis.json'
+        self.policy['lean_execution'] = {'enabled': True, 'scope_analysis': analysis_file}
+        self.configure()
+        gh = scope_fixture.FakeGitHub()
+        gh.add(10)
+        with patch('sanduq_remote.origin_url', return_value='https://github.com/acme/app.git'):
+            app = sm.Scope(self.root, gh)
+        snapshot = app.inspect('10')
+        analysis = {'issue': 10, 'fingerprint': snapshot['fingerprint'], 'requirements': ['AC-1'],
+                    'alignment': 'Reuses tested existing behavior', 'evidence': ['src/feature.py:10'], 'images': [],
+                    'tree': scope_fixture.node()}
+        app.approve(snapshot, analysis, 0, 'test owner', 'I approve this exact proposal.')
+        app.publish(snapshot, analysis, True)
+        w.write(self.root / analysis_file, analysis)
+        run = self.run_object()
+        self.advance_fresh(run, 'scope')
+        app.render_spec('10', self.root / analysis_file, self.feature, apply=True)
+        claim = run.claim(self.usage())
+        self.assertEqual((claim['stage'], claim['mode']), ('specify', 'bind-only'))
+        argv = shlex.split(claim['scope_command']['command'])[2:]
+        self.assertEqual(argv[:2], ['bind', '10'])
+        decisions = sm.workflow_policy._decisions_module()
+        decisions.reconcile = lambda *a, **k: {'version': 1, 'feature': self.feature, 'issue': 'acme/app#10',
+                                               'decisions': []}  # no GitHub: the issue has no decisions
+        previous = os.getcwd()
+        os.chdir(self.root)
+        try:
+            with patch.object(sm, 'Scope', return_value=app), patch('sys.stdout', new=__import__('io').StringIO()), \
+                    patch.object(sm.workflow_policy, '_decisions_module', return_value=decisions):
+                code = sm.main(argv)
+        finally:
+            os.chdir(previous)
+        self.assertEqual(code, 0)
+        self.assertEqual(w.read(self.root / self.feature / 'scope-source.json', {})['issue'], 10)
+
     def test_plain_spec_keeps_the_existing_modes(self):
         run = self.run_object()
         self.advance(run, 'scope')

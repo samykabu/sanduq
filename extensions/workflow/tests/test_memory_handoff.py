@@ -414,18 +414,19 @@ class ClaimSessionHandoffTests(unittest.TestCase):
         self.assertEqual(dispatch, claim['memory_handoff'])
         self.assertIsNone(run.load()['active'])
 
-    def test_one_handoff_per_session_after_specify(self):
+    def test_every_claim_runs_the_handoff_whatever_session_id_it_supplies(self):
+        """I2: the usage session_id is the model's word, not the host's, so a repeated one never skips the handoff."""
         run = self.run_object()
         state = run.load()
         state['memory_session'] = {'session_id': 'old', 'status': 'idle', 'at': w.now()}
         idle = {'status': 'idle', 'ok': True, 'reason': 'MEMORY_NO_ELIGIBLE_WORK', 'actions': []}
         with patch.object(mh, 'handoff', return_value=idle) as handoff:
             self.assertIsNone(run.memory_session(state, 'clarify', 'old'))
-            self.assertEqual(0, handoff.call_count)
+            self.assertEqual(1, handoff.call_count)
             self.assertIsNone(run.memory_session(state, 'clarify', 'new'))
             self.assertIsNone(run.memory_session(state, 'clarify', 'new'))
             self.assertIsNone(run.memory_session(state, 'specify', 'new'))
-        self.assertEqual(2, handoff.call_count)
+        self.assertEqual(4, handoff.call_count)
         self.assertFalse(handoff.call_args.kwargs['lock'])
         self.assertEqual('new', state['memory_session']['session_id'])
 

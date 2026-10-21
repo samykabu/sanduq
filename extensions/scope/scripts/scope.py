@@ -40,6 +40,11 @@ RENDERED = '<!-- sanduq-scope:rendered '
 PAGE_TIMEOUT = 120
 
 
+def leaf_prompt(number, score, text):
+    """The Specify prompt publish writes into a leaf's scope receipt."""
+    return f'GitHub issue #{number}\nEffort: {score}\n\n{text}'
+
+
 def analysis_hash(analysis):
     return hashlib.sha256(json.dumps(analysis, sort_keys=True).encode()).hexdigest()
 
@@ -867,17 +872,22 @@ class Scope:
                     'SCOPE_FRESH_APPROVED_LEAF_REQUIRED')
             require(not self.gh.api(f'{self.base}/{issue["number"]}/sub_issues?per_page=100', pages=True),
                     'SCOPE_PARENT: native children exist')
-            parent = self.gh.api(f'{self.base}/{issue["number"]}/parent')
+            parent = self.native_parent(issue['number'])
             parent_number = parent.get('number') if isinstance(parent, dict) else None
-            parent_receipt = metadata(self.issue(parent_number).get('body')) if parent_number else {}
-            require(parent_number and issue['number'] in parent_receipt.get('children', [])
-                    and parent_receipt.get('approval') == receipt['approval'],
-                    'SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH')
-            children = self.gh.api(f'{self.base}/{parent_number}/sub_issues?per_page=100', pages=True)
-            require(any(child.get('number') == issue['number'] for child in children), 'SCOPE_NATIVE_PARENT_MISMATCH')
+            # A root issue kept whole has no parent and no retained parent approval; a child that lost its parent does.
+            require(parent_number or not receipt['approval'].get('child_count'), 'SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH')
+            if parent_number:
+                parent_receipt = metadata(self.issue(parent_number).get('body'))
+                require(issue['number'] in parent_receipt.get('children', [])
+                        and parent_receipt.get('approval') == receipt['approval'],
+                        'SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH')
+                children = self.gh.api(f'{self.base}/{parent_number}/sub_issues?per_page=100', pages=True)
+                require(any(child.get('number') == issue['number'] for child in children), 'SCOPE_NATIVE_PARENT_MISMATCH')
             # A local replacement inherits owner resolutions only when the exact consumed
             # artifact was applied through Decisions and still matches its recorded bytes.
-            revised = analysis['tree']['specify_prompt'] != receipt['prompt']
+            # Publish prefixes the issue and effort, so the approved analysis's own prompt is unchanged too.
+            local = analysis['tree']['specify_prompt']
+            revised = receipt['prompt'] not in (local, leaf_prompt(issue['number'], score, local))
             artifact_sha = None
             if revised:
                 require(analysis_path is not None, 'SCOPE_RESOLVED_ANALYSIS_EVIDENCE_REQUIRED')
@@ -1211,7 +1221,7 @@ class Scope:
                     self.gh.api(f'{self.base}/{issue["number"]}/dependencies/blocked_by', 'POST', {'issue_id': self.issue_id(dep)})
             source_body = retire_prompts(issue.get('body', ''))
             changed = dict(issue, body=source_body)
-            prompt = '' if children else f'GitHub issue #{issue["number"]}\nEffort: {node["score"]}\n\n{node["specify_prompt"]}'
+            prompt = '' if children else leaf_prompt(issue['number'], node['score'], node['specify_prompt'])
             receipt = {'version': 2, 'score': node['score'], 'fingerprint': fingerprint(changed),
                        'dependencies': deps, 'children': children, 'prompt': prompt, 'operation': operation}
             receipt['approval'] = {k: approval.get(k) for k in ('analysis_sha256', 'child_count', 'approved_by', 'approved_at')}
@@ -1443,16 +1453,20 @@ class Scope:
         return sanduq_remote.same_github_repository(
             re.sub(r'^https://api\.github\.com/repos/', '', issue.get('repository_url') or ''), self.repo)
 
+    def native_parent(self, number):
+        """GitHub's native parent of the issue, or None when it has none (HTTP 404)."""
+        try:
+            return self.gh.api(f'{self.base}/{number}/parent')
+        except ScopeError as error:
+            if 'HTTP 404' in str(error) or 'Not Found' in str(error):
+                return None
+            raise
+
     def ancestors(self, number):
         """The issue's native parent chain in this repository, nearest first (SC15)."""
         chain, seen = [], {number}
         while True:
-            try:
-                parent = self.gh.api(f'{self.base}/{number}/parent')
-            except ScopeError as error:
-                if 'HTTP 404' in str(error) or 'Not Found' in str(error):
-                    return chain  # no parent: the root of the chain
-                raise
+            parent = self.native_parent(number)
             if not isinstance(parent, dict) or not parent.get('number') or not self.same_repository(parent):
                 return chain
             require(parent['number'] not in seen, 'Cycle in parent hierarchy.')

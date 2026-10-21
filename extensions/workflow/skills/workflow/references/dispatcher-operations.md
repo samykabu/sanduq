@@ -37,7 +37,8 @@ policy. Install the package's managed preset through Spec Kit's public CLI.
 ## Context and telemetry
 
 Use host context measurements only when actually available. Supply a usage JSON with
-`session_id`; add `method: measured`, `observed_at` (UTC), `fraction` and `next_fraction` only
+`session_id`, written under `.specify/workflow/runtime/` (Windows Python cannot open Git Bash's
+`/tmp`); add `method: measured`, `observed_at` (UTC), `fraction` and `next_fraction` only
 from fresh host telemetry, and `pre_call_bound: true` only when the host enforces that bound.
 Without reliable telemetry omit them: monitoring is unavailable and execution continues. Never
 invent percentages, stop on an estimate, or ask for a new session because usage is unknown.

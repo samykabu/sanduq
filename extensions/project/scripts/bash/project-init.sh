@@ -70,9 +70,11 @@ OUT="$EXT_DIR/config.json"
 keep(){ if [ -f "$OUT" ] && jq -e --arg k "$1" 'has($k)' "$OUT" >/dev/null; then jq --arg k "$1" '.[$k]' "$OUT"; else jq --arg k "$1" '.[$k]' "$DEF"; fi; }
 MANAGED_WORKFLOW=0
 MANAGED_DEFAULTS='{}'
+REQUIRED=""  # managed: the exact column names Workflow's doctor requires, one per line
 if [ -f "$ROOT/.specify/workflow.yml" ]; then
   MANAGED_WORKFLOW=1; HOOKS_MODE=required
   MANAGED_DEFAULTS="$(python "$ROOT/.specify/extensions/workflow/scripts/workflow.py" project-defaults)" || die 'cannot read managed workflow phase defaults; run workflow doctor'
+  REQUIRED="$(printf '%s' "$MANAGED_DEFAULTS" | jq -r '.statuses[]?' | tr -d '\r')"
 fi
 
 gh auth status >/dev/null 2>&1 || die "gh not authenticated - run: gh auth login"
@@ -114,7 +116,6 @@ BOARD="$(echo "$FIELDS" | jq -r '.fields[] | select(.id=="'"$STATUS_FIELD_ID"'")
 info "board Status columns: $(echo "$BOARD" | cut -f1 | paste -sd, -)"
 
 norm(){ echo "$1" | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]'; }
-board_id_for(){ echo "$BOARD" | awk -F'\t' -v n="$1" 'tolower($1)==tolower(n){print $2; exit}'; }
 board_fuzzy(){ local nw; nw="$(norm "$1")"; echo "$BOARD" | cut -f1 | while read -r c; do nc="$(norm "$c")"; if [ "$nc" = "$nw" ] || echo "$nc" | grep -q "$nw" || echo "$nw" | grep -q "$nc"; then echo "$c"; break; fi; done; }
 
 PHASES="open analysis engineer-review ready in-progress in-review done"
@@ -123,49 +124,89 @@ declare -A PHASE2STATUS; declare -A STATUSOPT
 while IFS=$'\t' read -r name option_id; do
   [ -n "$name" ] && STATUSOPT["$name"]="$option_id"
 done <<< "$BOARD"
-CREATE_NAMES=(); CREATE_COLORS=()
+CREATE_NAMES=(); CREATE_COLORS=(); CREATE_FROM=()  # one entry per name; FROM: a board column renamed to it
+
+map_column(){
+  local phase="$1" wanted="$2" color="$3" label match variant idx do_create ans
+  if [ -n "$phase" ]; then label="phase '$phase'"; else label="status '$wanted'"; fi
+  # managed: doctor and Scope compare exact names, so only an exact (case-sensitive) column matches
+  match="$(echo "$BOARD" | awk -F'\t' -v n="$wanted" '$1==n{print $1; exit}')"
+  if [ -z "$match" ] && [ "$MANAGED_WORKFLOW" = 0 ]; then
+    match="$(echo "$BOARD" | awk -F'\t' -v n="$wanted" 'tolower($1)==tolower(n){print $1; exit}')"
+    [ -n "$match" ] || match="$(board_fuzzy "$wanted")"
+  fi
+  if [ -n "$match" ]; then
+    if [ -n "$phase" ]; then PHASE2STATUS[$phase]="$match"; fi
+    printf '[project-init]   %-16s -> %s\n' "${phase:-status}" "$match"
+    return 0
+  fi
+  for idx in "${!CREATE_NAMES[@]}"; do
+    if [ "${CREATE_NAMES[$idx]}" = "$wanted" ]; then
+      if [ -n "$phase" ]; then PHASE2STATUS[$phase]="$wanted"; fi
+      return 0
+    fi
+  done
+  # managed: a column that differs only in case or spacing is renamed rather than duplicated
+  variant=""
+  if [ "$MANAGED_WORKFLOW" = 1 ]; then
+    variant="$(echo "$BOARD" | cut -f1 | while read -r c; do if [ -n "$c" ] && [ "$(norm "$c")" = "$(norm "$wanted")" ]; then echo "$c"; break; fi; done)"
+  fi
+  do_create=$AUTOCREATE
+  if [ "$do_create" = 0 ] && [ "$NONINT" = 0 ]; then
+    if [ -n "$variant" ]; then ans="Rename '$variant' to '$wanted'"; else ans="Create '$wanted'"; fi
+    read -r -p "[project-init]   no column for $label (wanted '$wanted'). $ans? [y/N] " ans
+    if [[ "$ans" =~ ^[yY] ]]; then do_create=1; fi
+  fi
+  if [ "$do_create" = 1 ]; then
+    CREATE_NAMES+=("$wanted"); CREATE_COLORS+=("$color"); CREATE_FROM+=("$variant")
+    if [ -n "$phase" ]; then PHASE2STATUS[$phase]="$wanted"; fi
+  else warn "$label has no column (wanted '$wanted') - that transition is a no-op until mapped; rerun with --auto-create-columns to create it, or add the column on the board and rerun"; fi
+}
+
 i=0
 for phase in $PHASES; do
   wanted="$(jq -r --arg p "$phase" '.phaseToStatus[$p]' "$DEF")"
-  if [ "$MANAGED_WORKFLOW" = 1 ]; then wanted="$(printf '%s' "$MANAGED_DEFAULTS" | jq -r --arg p "$phase" '.phaseToStatus[$p]')"; fi
-  match="$(echo "$BOARD" | awk -F'\t' -v n="$wanted" 'tolower($1)==tolower(n){print $1; exit}')"
-  [ -z "$match" ] && match="$(board_fuzzy "$wanted")"
-  if [ -n "$match" ]; then
-    PHASE2STATUS[$phase]="$match"; STATUSOPT[$match]="$(board_id_for "$match")"
-    printf '[project-init]   %-16s -> %s\n' "$phase" "$match"
-  else
-    do_create=$AUTOCREATE
-    if [ "$do_create" = 0 ] && [ "$NONINT" = 0 ]; then
-      read -r -p "[project-init]   no column for phase '$phase' (wanted '$wanted'). Create '$wanted'? [y/N] " ans
-      [[ "$ans" =~ ^[yY] ]] && do_create=1
-    fi
-    if [ "$do_create" = 1 ]; then CREATE_NAMES+=("$wanted"); CREATE_COLORS+=("${PALETTE[$((i % 7))]}"); PHASE2STATUS[$phase]="$wanted"
-    else warn "phase '$phase' has no column (wanted '$wanted') - that transition is a no-op until mapped; rerun with --auto-create-columns to create it, or add the column on the board and rerun"; fi
-  fi
+  if [ "$MANAGED_WORKFLOW" = 1 ]; then wanted="$(printf '%s' "$MANAGED_DEFAULTS" | jq -r --arg p "$phase" '.phaseToStatus[$p]' | tr -d '\r')"; fi
+  map_column "$phase" "$wanted" "${PALETTE[$((i % 7))]}"
   i=$((i+1))
 done
+while IFS= read -r name; do
+  if [ -n "$name" ]; then map_column "" "$name" GRAY; fi
+done <<< "$REQUIRED"
 
 if [ "${#CREATE_NAMES[@]}" -gt 0 ]; then
-  if [ "$DRYRUN" = 1 ]; then for n in "${CREATE_NAMES[@]}"; do info "DRYRUN create column '$n'"; done
+  if [ "$DRYRUN" = 1 ]; then
+    for idx in "${!CREATE_NAMES[@]}"; do
+      if [ -n "${CREATE_FROM[$idx]}" ]; then info "DRYRUN rename column '${CREATE_FROM[$idx]}' to '${CREATE_NAMES[$idx]}'"
+      else info "DRYRUN create column '${CREATE_NAMES[$idx]}'"; fi
+    done
   else
-    # full option set = existing + new (updateProjectV2Field replaces all options)
+    # full option set = existing (renamed where asked) + new (updateProjectV2Field replaces all options)
     OPTS=""
     while IFS=$'\t' read -r name _; do
+      [ -n "$name" ] || continue
+      label="$name"
+      for idx in "${!CREATE_FROM[@]}"; do if [ "${CREATE_FROM[$idx]}" = "$name" ]; then label="${CREATE_NAMES[$idx]}"; fi; done
       color="$(echo "$FIELDS" | jq -r '.fields[] | select(.id=="'"$STATUS_FIELD_ID"'") | .options[] | select(.name=="'"$name"'") | .color // "GRAY"' | tr '[:lower:]' '[:upper:]')"
       [ -z "$color" ] && color="GRAY"
-      OPTS="$OPTS{name:$(printf '%s' "$name" | jq -Rr @json),color:$color,description:\"\"},"
+      OPTS="$OPTS{name:$(printf '%s' "$label" | jq -Rr @json),color:$color,description:\"\"},"
     done <<< "$BOARD"
     for idx in "${!CREATE_NAMES[@]}"; do
+      [ -z "${CREATE_FROM[$idx]}" ] || continue
       OPTS="$OPTS{name:$(printf '%s' "${CREATE_NAMES[$idx]}" | jq -Rr @json),color:${CREATE_COLORS[$idx]},description:\"\"},"
     done
     OPTS="${OPTS%,}"
     Q="mutation{updateProjectV2Field(input:{fieldId:\"$STATUS_FIELD_ID\",singleSelectOptions:[$OPTS]}){projectV2Field{... on ProjectV2SingleSelectField{options{id name}}}}}"
     RES="$(gh api graphql -f query="$Q" 2>&1)" || { warn "column creation failed: $RES"; RES=""; }
     if [ -n "$RES" ]; then
-      NEW="$(echo "$RES" | jq -r '.data.updateProjectV2Field.projectV2Field.options[] | "\(.name)\t\(.id)"')"
+      NEW="$(echo "$RES" | jq -r '.data.updateProjectV2Field.projectV2Field.options[] | "\(.name)\t\(.id)"' | tr -d '\r')"
+      # The update replaces every option, so every option id is new: rebuild the whole map.
+      unset STATUSOPT; declare -A STATUSOPT
+      while IFS=$'\t' read -r name option_id; do
+        if [ -n "$name" ]; then STATUSOPT["$name"]="$option_id"; fi
+      done <<< "$NEW"
       for name in "${CREATE_NAMES[@]}"; do
-        nid="$(echo "$NEW" | awk -F'\t' -v n="$name" 'tolower($1)==tolower(n){print $2; exit}')"
-        [ -n "$nid" ] && { STATUSOPT[$name]="$nid"; info "created & mapped -> $name"; }
+        if [ -n "${STATUSOPT[$name]:-}" ]; then info "created & mapped -> $name"; fi
       done
     fi
   fi

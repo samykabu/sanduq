@@ -27,8 +27,8 @@ retry this command without redoing Execute.
 
 ## Session entry
 
-In a managed project the session hook is disabled. Each claim at Scope or Specify, and the
-first claim of a new session, runs this handoff and returns it instead of a stage when it blocks
+In a managed project the session hook is disabled and you do not run `archive.py pending --gate`
+yourself. Every claim runs this handoff, which covers that gate, and returns it instead of a stage when it blocks
 or has work to dispatch (`status: memory_blocked` or `memory_dispatch`). Run it yourself only
 outside a claim:
 

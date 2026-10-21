@@ -12,6 +12,8 @@ Round 4.
 - `scope.py reconcile <issue> --apply` updates only that issue's Scope ancestors; the after_implement hook uses it. Plain `reconcile --apply` still sweeps every parent and no longer rereads a parent it did not change.
 - The scope-gate Specify overlay keeps only the rules for both modes. The Backlog rule and the after_specify chain moved to `references/specify-standalone.md`, read only without `.specify/workflow.yml`, so a managed Specify claim is no longer told to chain Clarify.
 - Snapshot reuse, the board cache and `render-spec` moved from the analysis contract to the README.
+- A rendered spec can be bound. The Specify claim on it is `bind-only`, and `bind` with the claim's flags refused it (`SCOPE_WORKFLOW_BINDING_MISMATCH`). The fresh gate also took the approved analysis for a revised one, because publish prefixes the prompt with the issue and effort.
+- The fresh gate accepts a root issue kept whole: GitHub's 404 for its parent means no parent, so no retained parent approval is needed. An issue whose approval names children still needs its parent.
 
 ### Migration
 

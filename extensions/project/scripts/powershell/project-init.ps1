@@ -84,10 +84,13 @@ if (Test-Path $existingCfgPath) {
 }
 function Keep { param($Key) if ($existing -and $existing.PSObject.Properties.Name -contains $Key) { $existing.$Key } else { $def.$Key } }
 $managedWorkflow = Test-Path (Join-Path $repoRoot '.specify/workflow.yml')
+$required = @()   # managed: the exact column names Workflow's doctor requires
 if ($managedWorkflow) {
     $managedJson = & python (Join-Path $repoRoot '.specify/extensions/workflow/scripts/workflow.py') project-defaults
     if ($LASTEXITCODE -ne 0) { Die 'cannot read managed workflow phase defaults; run workflow doctor' }
-    $def.phaseToStatus = ($managedJson | ConvertFrom-Json).phaseToStatus
+    $managed = $managedJson | ConvertFrom-Json
+    $def.phaseToStatus = $managed.phaseToStatus
+    if ($managed.statuses) { $required = @($managed.statuses) }
 }
 
 # ---- gh preconditions ----
@@ -150,57 +153,74 @@ $palette = @('GRAY', 'BLUE', 'PURPLE', 'GREEN', 'YELLOW', 'ORANGE', 'PINK')
 $phaseToStatus = [ordered]@{}
 $statusOptions = [ordered]@{}
 foreach ($name in $boardOptions.Keys) { $statusOptions[$name] = $boardOptions[$name] }
-$toCreate = @()   # @{ phase; name; color }
+$toCreate = [System.Collections.Generic.List[hashtable]]::new()   # @{ name; color; from; phases }, one per name
 
-foreach ($i in 0..($phases.Count - 1)) {
-    $phase = $phases[$i]
-    $wanted = $def.phaseToStatus.$phase
-    $match = $null
-    # exact (case-insensitive)
-    $match = ($boardOptions.Keys | Where-Object { $_ -ieq $wanted } | Select-Object -First 1)
-    if (-not $match) {
-        # fuzzy: normalized equality or contains
-        $nw = Normalize $wanted
-        $match = ($boardOptions.Keys | Where-Object { (Normalize $_) -eq $nw -or (Normalize $_).Contains($nw) -or $nw.Contains((Normalize $_)) } | Select-Object -First 1)
+function Map-Column {
+    param($Phase, $Wanted, $Color)
+    $label = if ($Phase) { "phase '$Phase'" } else { "status '$Wanted'" }
+    # managed: doctor and Scope compare exact names, so only an exact (case-sensitive) column matches
+    $match = ($boardOptions.Keys | Where-Object { $_ -ceq $Wanted } | Select-Object -First 1)
+    if (-not $match -and -not $managedWorkflow) {
+        $match = ($boardOptions.Keys | Where-Object { $_ -ieq $Wanted } | Select-Object -First 1)
+        if (-not $match) {
+            # fuzzy: normalized equality or contains
+            $nw = Normalize $Wanted
+            $match = ($boardOptions.Keys | Where-Object { (Normalize $_) -eq $nw -or (Normalize $_).Contains($nw) -or $nw.Contains((Normalize $_)) } | Select-Object -First 1)
+        }
     }
     if ($match) {
-        $phaseToStatus[$phase] = $match
-        $statusOptions[$match] = $boardOptions[$match]
-        Info ("  {0,-16} -> {1}" -f $phase, $match)
+        if ($Phase) { $phaseToStatus[$Phase] = $match }
+        Info ("  {0,-16} -> {1}" -f $(if ($Phase) { $Phase } else { 'status' }), $match)
+        return
     }
-    else {
-        $create = $AutoCreateColumns
-        if (-not $create -and -not $NonInteractive) {
-            $ans = Read-Host ("  no column matches phase '$phase' (wanted '$wanted'). Create column '$wanted'? [y/N]")
-            $create = ($ans -match '^[yY]')
-        }
-        if ($create) { $toCreate += @{ phase = $phase; name = $wanted; color = $palette[$i % $palette.Count] } }
-        else { Warn "phase '$phase' has no column (wanted '$wanted') - the transition is a no-op until mapped; rerun with -AutoCreateColumns to create it, or add the column on the board and rerun" }
+    $pending = $toCreate | Where-Object { $_.name -ceq $Wanted } | Select-Object -First 1
+    if ($pending) { if ($Phase) { $pending.phases.Add($Phase) }; return }   # one column per name
+    # managed: a column that differs only in case or spacing is renamed rather than duplicated
+    $variant = if ($managedWorkflow) { $boardOptions.Keys | Where-Object { (Normalize $_) -eq (Normalize $Wanted) } | Select-Object -First 1 }
+    $verb = if ($variant) { "Rename column '$variant' to '$Wanted'" } else { "Create column '$Wanted'" }
+    $create = $AutoCreateColumns
+    if (-not $create -and -not $NonInteractive) {
+        $ans = Read-Host ("  no column matches $label (wanted '$Wanted'). $verb? [y/N]")
+        $create = ($ans -match '^[yY]')
     }
+    if ($create) {
+        $entry = @{ name = $Wanted; color = $Color; from = $variant; phases = [System.Collections.Generic.List[string]]::new() }
+        if ($Phase) { $entry.phases.Add($Phase) }
+        $toCreate.Add($entry)
+    }
+    else { Warn "$label has no column (wanted '$Wanted') - the transition is a no-op until mapped; rerun with -AutoCreateColumns to create it, or add the column on the board and rerun" }
 }
+
+foreach ($i in 0..($phases.Count - 1)) { Map-Column $phases[$i] $def.phaseToStatus.($phases[$i]) $palette[$i % $palette.Count] }
+foreach ($name in $required) { Map-Column $null $name 'GRAY' }
 
 # ---- create missing columns via GraphQL (replaces the full option set) ----
 if ($toCreate.Count -gt 0) {
     if ($DryRun) {
-        foreach ($c in $toCreate) { Info "DRYRUN create column '$($c.name)' ($($c.color))" }
+        foreach ($c in $toCreate) { Info $(if ($c.from) { "DRYRUN rename column '$($c.from)' to '$($c.name)'" } else { "DRYRUN create column '$($c.name)' ($($c.color))" }) }
     }
     else {
-        # build full option set = existing (preserve) + new
+        # build full option set = existing (preserve, renamed where asked) + new
         $opts = @()
-        foreach ($o in $statusField.options) { $opts += "{name:$(ConvertTo-Json $o.name),color:$(if($o.color){$o.color.ToUpper()}else{'GRAY'}),description:`"`"}" }
-        foreach ($c in $toCreate) { $opts += "{name:$(ConvertTo-Json $c.name),color:$($c.color),description:`"`"}" }
+        foreach ($o in $statusField.options) {
+            $renamed = $toCreate | Where-Object { $_.from -ceq $o.name } | Select-Object -First 1
+            $name = if ($renamed) { $renamed.name } else { $o.name }
+            $opts += "{name:$(ConvertTo-Json $name),color:$(if($o.color){$o.color.ToUpper()}else{'GRAY'}),description:`"`"}"
+        }
+        foreach ($c in $toCreate) { if (-not $c.from) { $opts += "{name:$(ConvertTo-Json $c.name),color:$($c.color),description:`"`"}" } }
         $optsStr = $opts -join ','
         $q = "mutation{updateProjectV2Field(input:{fieldId:`"$statusFieldId`",singleSelectOptions:[$optsStr]}){projectV2Field{... on ProjectV2SingleSelectField{options{id name}}}}}"
         $res = & gh api graphql -f query="$q" 2>&1
         if ($LASTEXITCODE -ne 0) { Warn "column creation failed: $res"; }
         else {
+            # The update replaces every option, so every option id is new: rebuild the whole map.
             $newOpts = ($res | ConvertFrom-Json).data.updateProjectV2Field.projectV2Field.options
-            foreach ($no in $newOpts) { $boardOptions[$no.name] = $no.id }
+            $statusOptions = [ordered]@{}
+            foreach ($no in $newOpts) { $statusOptions[$no.name] = $no.id }
             foreach ($c in $toCreate) {
-                if ($boardOptions.ContainsKey($c.name)) {
-                    $phaseToStatus[$c.phase] = $c.name
-                    $statusOptions[$c.name] = $boardOptions[$c.name]
-                    Info ("  created & mapped {0,-16} -> {1}" -f $c.phase, $c.name)
+                if ($statusOptions.Contains($c.name)) {
+                    foreach ($p in $c.phases) { $phaseToStatus[$p] = $c.name }
+                    Info ("  created & mapped {0,-16} -> {1}" -f (($c.phases -join ',') + ''), $c.name)
                 }
             }
         }

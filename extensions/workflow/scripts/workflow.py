@@ -1145,9 +1145,8 @@ def project_errors(root, policy):
     if not isinstance(options, dict) or not options or not all(isinstance(v, str) and v for v in options.values()):
         errors.append('PROJECT_STATUS_OPTIONS_REQUIRED'); options = {}
     if not isinstance(phases, dict): phases = {}
-    logical = ('Backlog', 'Feature Specification', 'Need Clarifications', 'Ready', 'In progress', 'In review', 'Done')
     mapping = policy.get('scope', {}).get('statuses', {})
-    for status in logical:
+    for status in SCOPE_STATUSES:
         if mapping.get(status, status) not in options: errors.append('PROJECT_SCOPE_STATUS_MISSING: ' + mapping.get(status, status))
     for phase in ('open', 'analysis', 'engineer-review', 'ready', 'in-progress', 'in-review', 'done'):
         if phases.get(phase) not in options: errors.append('PROJECT_PHASE_UNMAPPED: ' + phase)
@@ -1155,6 +1154,9 @@ def project_errors(root, policy):
         try: inside(root, config['stateFile'])
         except (WorkflowError, TypeError): errors.append('PROJECT_STATE_PATH_INVALID')
     return errors
+
+
+SCOPE_STATUSES = ('Backlog', 'Feature Specification', 'Need Clarifications', 'Ready', 'In progress', 'In review', 'Done')
 
 
 def project_defaults(root, policy):
@@ -1166,7 +1168,9 @@ def project_defaults(root, policy):
     require(isinstance(existing, dict), 'PROJECT_CONFIG_INVALID: expected a JSON object')
     if existing.get('projectId') and isinstance(existing.get('phaseToStatus'), dict):
         phases.update({phase: status for phase, status in existing['phaseToStatus'].items() if phase in phases and isinstance(status, str) and status})
-    return {'phaseToStatus': phases, 'source': 'managed policy with preserved configured phase choices'}
+    # `statuses`: the exact column names doctor requires, so project init can create the missing ones.
+    return {'phaseToStatus': phases, 'statuses': [mapping.get(status, status) for status in SCOPE_STATUSES],
+            'source': 'managed policy with preserved configured phase choices'}
 
 
 # Workflow files Sanduq renders into a consumer project, and the installed asset
@@ -3436,10 +3440,9 @@ class Run:
 
     def memory_session(self, state, stage, session_id):
         """W14: the session handoff Memory's before_specify hook ran, now run by the claim under the dispatch lock it
-        holds, at Scope, Specify and the first claim of a session. A blocked result, or Memory work to dispatch first,
-        is returned instead of a stage; otherwise the run is recorded (saved with the claim) and None goes on."""
-        if stage not in ('scope', 'specify') and (state.get('memory_session') or {}).get('session_id') == session_id:
-            return None
+        holds, at every claim: the usage `session_id` comes from the model, not the host, so it never skips the
+        handoff (one `archive.py pending`, about 0.4 s). A blocked result, or Memory work to dispatch first, is
+        returned instead of a stage; otherwise the run is recorded (saved with the claim) and None goes on."""
         result = memory_handoff.handoff(SimpleNamespace(**globals()), self.root, 'session', lock=False)
         if result['status'] in ('blocked', 'dispatch'):
             return {'stage': None, 'status': 'memory_' + result['status'], 'ok': result['status'] != 'blocked',
