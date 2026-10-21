@@ -110,10 +110,20 @@ def bump(name, version, root=ROOT):
 UNVERSIONED = re.compile(r'[^/]+/(?:README\.md|CHANGELOG\.md|LICENSE|docs/.+)')
 
 
+def _behaviour_bytes(content):
+    """Text hashes with CRLF as LF, so a Windows working copy agrees with CI; binary hashes exactly. Text is
+    what git's autocrlf converts: no NUL in the first 8000 bytes (git's own test), and valid UTF-8."""
+    try:
+        content.decode('utf-8')
+    except UnicodeDecodeError:
+        return content
+    return content if b'\0' in content[:8000] else content.replace(b'\r\n', b'\n')
+
+
 def inventory_sha256(name, root=ROOT):
     """sha256 of the behaviour a package ships: every packaged file, injected helpers and bundled presets
-    included, except UNVERSIONED. CRLF hashes as LF, so a Windows working copy agrees with CI."""
-    lines = sorted(member + '\0' + hashlib.sha256(content.replace(b'\r\n', b'\n')).hexdigest()
+    included, except UNVERSIONED."""
+    lines = sorted(member + '\0' + hashlib.sha256(_behaviour_bytes(content)).hexdigest()
                    for member, content in package_files(name, root).items() if not UNVERSIONED.fullmatch(member))
     return hashlib.sha256('\n'.join(lines).encode('utf-8')).hexdigest()
 

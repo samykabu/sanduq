@@ -107,6 +107,23 @@ Tests: `python -m unittest discover -s extensions/scripts/tests -p "test_sanduq_
 - Results: `extensions/scripts/tests` 189 tests OK; `test_check_docs.py` passed; `check_docs.py` fails only on
   `docs/reference/hooks.md is stale` (SC17, not S-SH); `release.py check-bumps` ok (bootstrap notices only).
 
+## Codex review fixes (round-5-codex-review.md findings 1 and 10)
+
+- **1 (high), `sanduq_gh._flags`:** clustered short options (`-iXPOST`) and unknown option forms were taken for
+  harmless switches, so a POST could be retried after a timeout. `_flags` now returns None for anything it does not
+  recognise (a short-option cluster, an unknown `--flag` or `--flag=value`, `--`, a second positional), and
+  `safe_read` refuses it. Recognised: the valued flags (`_VALUED`), `-X/-f/-F/-H/-q/-t/-p` with an attached
+  value, and the output switches `--paginate --slurp -i --include --silent --verbose` (`_SWITCHES`). Behaviour
+  for every recognised form is unchanged; the public interface is unchanged.
+  Tests (`test_sanduq_gh.py`): six new never-retried cases (`-iXPOST`, `-if`, unknown flag, unknown `--x=y`, `--`,
+  second positional), each after a 5xx and after a timeout: 12 subtest errors before the fix, pass after; plus a
+  positive case that the recognised switches and `--jq=`/`--hostname` stay safe.
+- **10 (medium), `release.inventory_sha256`:** CRLF was normalised in every file, so dropping CRLF bytes from a PNG
+  hashed the same. Now only text is normalised, decided as git's autocrlf does: no NUL in the first 8000 bytes,
+  and valid UTF-8; anything else hashes exactly. Test `test_binary_files_hash_exactly` (a PNG header with CRLF
+  bytes removed fails the guard): failed before the fix, passes after; the CRLF text test still passes.
+- Results: `extensions/scripts/tests` 190 tests OK; `check_docs.py` OK; `release.py check-bumps` ok (notices only).
+
 ## Interface changes
 
 None after READY.

@@ -20,6 +20,8 @@ RETRY_DELAY = 2
 _VALUED = {'-X', '--method', '-f', '--raw-field', '-F', '--field', '-H', '--header', '--input', '-q', '--jq',
            '-t', '--template', '--hostname', '--cache', '-p', '--preview'}
 _FIELDS = {'-f', '--raw-field', '-F', '--field'}
+# `gh api` switches that change only what is printed.
+_SWITCHES = {'--paginate', '--slurp', '-i', '--include', '--silent', '--verbose'}
 
 
 class GhError(Exception):
@@ -49,19 +51,23 @@ def token_scopes(auth_text):
 
 
 def _flags(args):
-    """(endpoint, [(flag, value)]) of a `gh api` argument list; `--flag=value` and `-Xvalue` are split."""
+    """(endpoint, [(flag, value)]) of a `gh api` argument list; `--flag=value` and `-Xvalue` are split.
+    None for any form not recognised here (a short-option cluster such as `-iXPOST`, an unknown flag, `--`,
+    a second positional), so the caller treats the call as unsafe."""
     endpoint, flags, rest = None, [], list(args[1:])
     while rest:
         item = rest.pop(0)
-        if item.startswith('--') and '=' in item:
+        if item.startswith('--') and '=' in item and item.split('=', 1)[0] in _VALUED:
             flags.append(tuple(item.split('=', 1)))
         elif item in _VALUED:
             flags.append((item, rest.pop(0) if rest else ''))
         elif re.fullmatch(r'-[XfFHqtp].+', item):
             flags.append((item[:2], item[2:]))
-        elif item.startswith('-'):
+        elif item in _SWITCHES:
             flags.append((item, None))
-        elif endpoint is None:
+        elif item.startswith('-') or endpoint is not None:
+            return None
+        else:
             endpoint = item
     return endpoint, flags
 
@@ -84,7 +90,10 @@ def safe_read(args, payload=None):
     query that is not a mutation. `gh project` and every other command are never safe."""
     if not args or args[0] != 'api':
         return False
-    endpoint, flags = _flags(args)
+    parsed = _flags(args)
+    if parsed is None:
+        return False
+    endpoint, flags = parsed
     method = [value for flag, value in flags if flag in ('-X', '--method')]
     if any((value or '').upper() != ('POST' if endpoint == 'graphql' else 'GET') for value in method):
         return False

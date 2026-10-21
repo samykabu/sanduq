@@ -174,6 +174,13 @@ class Retry(Base):
             'named mutation': lambda: gh.graphql('  # add\nmutation Add($p:ID!){x}', retry=True, p='1'),
             'mutation field': lambda: gh.run_gh(['api', 'graphql', '-f', 'query=mutation{x}'], retry=True),
             'query from file': lambda: gh.run_gh(['api', 'graphql', '-F', 'query=@q.graphql'], retry=True),
+            # Codex review finding 1: an option form the classifier does not recognise is never retried.
+            'clustered -iXPOST': lambda: gh.run_gh(['api', 'repos/a/b/actions/runs/1/rerun', '-iXPOST'], retry=True),
+            'clustered -if': lambda: gh.run_gh(['api', 'repos/a/b/labels', '-if', 'name=x'], retry=True),
+            'unknown flag': lambda: gh.run_gh(['api', 'repos/a/b', '--future-flag'], retry=True),
+            'unknown --x=y': lambda: gh.run_gh(['api', 'repos/a/b', '--future=POST'], retry=True),
+            'end of options': lambda: gh.run_gh(['api', '--', 'repos/a/b'], retry=True),
+            'second positional': lambda: gh.run_gh(['api', 'repos/a/b', 'extra'], retry=True),
             'gh project': lambda: gh.run_gh(['project', 'item-list', '1', '--format', 'json'], retry=True),
             'gh issue': lambda: gh.run_gh(['issue', 'view', '1'], retry=True),
         }
@@ -194,6 +201,8 @@ class Retry(Base):
         self.assertTrue(gh.safe_read(['api', 'graphql', '-f', 'query=query($l:String!){x}', '-f', 'l=me']))
         self.assertTrue(gh.safe_read(['api', 'repos/a/b/pulls', '-H', 'Accept: x', '--paginate', '--slurp', '-q', '.[]']))
         self.assertTrue(gh.safe_read(['api', '-X', 'GET', 'repos/a/b']))
+        self.assertTrue(gh.safe_read(['api', '-XGET', 'repos/a/b', '-i', '--include', '--silent', '--verbose',
+                                      '--jq=.x', '--hostname', 'github.com']))
         self.assertFalse(gh.safe_read(['api', 'graphql']))
         self.assertFalse(gh.safe_read(['api', 'graphql', '-X', 'GET', '-f', 'query={x}']))
         self.assertFalse(gh.safe_read([]))

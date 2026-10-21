@@ -72,6 +72,16 @@ class CheckBumps(unittest.TestCase):
         self.write('extensions/pr/commands/speckit.pr.run.md', 'Run it.\r\n')
         self.assertEqual(self.failed(), [])
 
+    def test_binary_files_hash_exactly(self):
+        """Codex review finding 10: dropping CRLF bytes from a PNG is a change, not a line-ending difference."""
+        png = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\r\n'
+        icon = self.root / 'extensions/workflow/assets/icon.png'
+        icon.parent.mkdir(parents=True)
+        icon.write_bytes(png)
+        self.catalog({'workflow': '1.0.0'})
+        icon.write_bytes(png.replace(b'\r\n', b'\n'))
+        self.assertEqual(self.failed(), ['workflow'])
+
     def test_injected_helper_change_fails_in_every_consumer(self):
         self.write('extensions/scripts/shared/sanduq_gh.py', 'TIMEOUT = 120\n')
         self.assertEqual(self.failed(), sorted(CONSUMERS))
