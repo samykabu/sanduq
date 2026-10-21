@@ -35,9 +35,12 @@ SKELETON = """\
 
 
 def run(args, cwd):
+    """The CompletedProcess of one call, None when the tool is missing or timed out (tests replace it)."""
     try:
+        if args[0] == 'gh':
+            return pr_publish.gh_process(args[1:], cwd, 60)
         return subprocess.run(args, cwd=str(cwd), capture_output=True, text=True, encoding='utf-8', timeout=60)
-    except (OSError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.TimeoutExpired, pr_publish.sanduq_gh.GhError):
         return None
 
 

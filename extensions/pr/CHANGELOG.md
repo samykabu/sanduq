@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- `pr_feedback.py plan|reply|resolve` carry out an approved review plan. The plan file binds the repository, the PR and the exact replies and threads to resolve; `plan` checks it read-only and prints its digest, which the user approves. `reply` and `resolve` refuse a plan whose digest changed and threads or comments of another PR, and write nothing then. `resolve` waits until the PR head on GitHub contains the pushed commit (`head` in the plan) and each thread's approved reply is posted. Work already done is skipped, so a rerun after a partial failure finishes the rest. `speckit.pr.review-feedback` posts replies and resolves threads through it; its trust rules and approval gate are unchanged.
+- `pr_publish.py`, `pr_changelog.py` and `pr_feedback.py` run `gh` through the shared `sanduq_gh` transport bundled in the archive, with their timeouts (120 s, 60 s for the changelog) and no retries.
+
+### Migration
+
+- `speckit.pr.review-feedback` now writes a plan file outside the working tree and shows its digest at the approval step. Approve that digest; if you change the plan, it shows a new one.
+
 ## [4.5.1] - 2026-10-21
 
 Fixes from the review of round 4 (PR #101).

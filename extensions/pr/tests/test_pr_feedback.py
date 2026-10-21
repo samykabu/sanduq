@@ -1,8 +1,10 @@
 """PM2a: pr_feedback.py gather pages the review threads, filters resolved, outdated, author-only and
-chatter items, and never calls a writing gh command. gh is replaced by a fake."""
+chatter items, and never calls a writing gh command. PM2b: reply and resolve only from an approved plan
+file. gh is replaced by a fake."""
 import io
 import json
 import sys
+import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -108,6 +110,220 @@ class GatherTests(unittest.TestCase):
         with patch.object(pr_feedback, 'run', failing), redirect_stdout(out):
             self.assertEqual(pr_feedback.main(['gather', '7']), 3)
         self.assertIn('not logged in', json.loads(out.getvalue())['error'])
+
+
+class TransportTests(unittest.TestCase):
+    def test_gh_runs_through_the_shared_transport_never_retried(self):
+        """SC8: 120 s as before, no retry (reply and resolve are writes); failures keep exit 3 and their text."""
+        import sanduq_gh
+        seen = []
+
+        def run_gh(args, **kwargs):
+            seen.append(kwargs)
+            if args[0] == 'missing':
+                raise sanduq_gh.GhError('gh CLI not installed', returncode=127)
+            if args[0] == 'api':
+                raise sanduq_gh.GhError('x', returncode=1, stdout='', stderr='HTTP 404: Not Found\n')
+            return '{}'
+        with patch.object(sanduq_gh, 'run_gh', run_gh):
+            self.assertEqual(pr_feedback.run(['repo', 'view']), '{}')
+            for args, text in ((['missing'], 'gh unavailable: gh CLI not installed'),
+                               (['api', 'graphql'], 'gh api graphql failed: HTTP 404: Not Found')):
+                with self.assertRaises(pr_feedback.Failure) as caught:
+                    pr_feedback.run(args)
+                self.assertEqual((caught.exception.code, str(caught.exception)), (3, text))
+        self.assertEqual(seen, [{'timeout': 120}] * 3)
+
+
+HEAD, PUSHED = 'b' * 40, 'c' * 40
+
+
+class FakeBoard:
+    """gh for the plan actions: PR acme/app#7 with threads T1 (comments 10, 11) and T6 (60) on two pages, T2
+    resolved (20). Records every call; replies and resolves change its state; `fail` names writes that fail."""
+
+    def __init__(self, compare=None, fail=()):
+        self.calls, self.compare, self.fail = [], compare or {}, set(fail)
+        comment = lambda i, who, body: {'databaseId': i, 'author': {'login': who}, 'body': body}
+        self.threads = {'T1': {'id': 'T1', 'isResolved': False, 'comments': {'pageInfo': {'hasNextPage': False}, 'nodes': [
+                            comment(10, 'rev', 'This leaks the token'), comment(11, 'me', 'fixing')]}},
+                        'T2': {'id': 'T2', 'isResolved': True, 'comments': {'pageInfo': {'hasNextPage': False}, 'nodes': [
+                            comment(20, 'rev', 'nit')]}},
+                        'T6': {'id': 'T6', 'isResolved': False, 'comments': {'pageInfo': {'hasNextPage': False}, 'nodes': [
+                            comment(60, 'bot[bot]', 'Possible None')]}}}
+
+    def writes(self):
+        return [c for c in self.calls if 'mutation' in ' '.join(c) or any(a.startswith('in_reply_to=') for a in c)]
+
+    def __call__(self, args):
+        self.calls.append(args)
+        query = next((a[6:] for a in args if a.startswith('query=')), '')
+        if args[:2] == ['api', 'graphql'] and 'viewer{login}' in query:
+            assert ['-F', 'num=7'] == args[args.index('num=7') - 1:args.index('num=7') + 1], args
+            second = 'after=P1' in args
+            nodes = [self.threads['T6']] if second else [self.threads['T1'], self.threads['T2']]
+            pr = {'headRefOid': HEAD, 'reviewThreads': {'pageInfo': {'hasNextPage': not second, 'endCursor': 'P1'},
+                                                         'nodes': json.loads(json.dumps(nodes))}}
+            return json.dumps({'data': {'viewer': {'login': 'me'}, 'repository': {'pullRequest': pr}}})
+        if args[:2] == ['api', 'graphql'] and 'resolveReviewThread' in query:
+            thread = args[-1][3:]
+            if thread in self.fail:
+                raise pr_feedback.Failure(3, 'gh api graphql failed: HTTP 502')
+            self.threads[thread]['isResolved'] = True
+            return '{}'
+        if args[:2] == ['api', 'repos/acme/app/pulls/7/comments']:
+            target = int(args[-1].split('=')[1])
+            if target in self.fail:
+                raise pr_feedback.Failure(3, 'gh api repos/acme/app/pulls/7/comments failed: HTTP 502')
+            thread = next(t for t in self.threads.values() if target in {c['databaseId'] for c in t['comments']['nodes']})
+            thread['comments']['nodes'].append({'databaseId': 900 + target, 'author': {'login': 'me'}, 'body': args[3][5:]})
+            return '{}'
+        if args[0] == 'api' and args[1].startswith('repos/acme/app/compare/'):
+            status = self.compare.get(args[1].rsplit('/', 1)[1])
+            if status is None:
+                raise pr_feedback.Failure(3, 'gh api failed: HTTP 404: No commit found')
+            return status + '\n'
+        raise AssertionError('unexpected gh ' + ' '.join(args))
+
+
+class PlanTests(unittest.TestCase):
+    """PM2b: replies and resolves only from an approved plan file, bound to its repository, PR and digest."""
+    PLAN = {'schema': pr_feedback.PLAN_SCHEMA, 'repo': 'acme/app', 'pr': 7, 'head': None,
+            'replies': [{'thread': 'T1', 'comment': 10, 'body': 'The token is masked at line 3.'},
+                        {'thread': 'T6', 'comment': 60, 'body': 'None is checked by the caller.'}],
+            'resolves': ['T1', 'T6', 'T2']}
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.path = Path(tmp.name) / 'plan.json'
+        self.write()
+
+    def write(self, **changes):
+        self.plan = dict(json.loads(json.dumps(self.PLAN)), **changes)
+        self.path.write_text(json.dumps(self.plan), encoding='utf-8')
+
+    def run_action(self, action, gh, approved=None):
+        out = io.StringIO()
+        argv = [action, '--plan', str(self.path)] + (['--approved', approved] if approved else [])
+        with patch.object(pr_feedback, 'run', gh), redirect_stdout(out):
+            code = pr_feedback.main(argv)
+        return code, json.loads(out.getvalue())
+
+    def approved(self):
+        return self.run_action('plan', FakeBoard())[1]['digest']
+
+    def test_plan_checks_read_only_and_its_digest_leaves_out_only_the_head(self):
+        gh = FakeBoard()
+        code, result = self.run_action('plan', gh)
+        self.assertEqual((code, result['replies'], result['resolves']), (0, 2, 3), result)
+        self.assertEqual(result['digest'], pr_feedback.digest(self.plan))
+        self.assertFalse(gh.writes())
+        self.assertEqual(len(gh.calls), 2)  # the two thread pages
+        self.write(head=PUSHED)
+        self.assertEqual(self.approved(), result['digest'])
+        self.write(replies=[dict(self.PLAN['replies'][0], body='Other text')])
+        self.assertNotEqual(self.approved(), result['digest'])
+
+    def test_a_changed_plan_is_refused_before_any_gh_call(self):
+        approved = self.approved()
+        self.write(resolves=['T1'])
+        for action in ('reply', 'resolve'):
+            gh = FakeBoard()
+            code, result = self.run_action(action, gh, approved)
+            self.assertEqual(code, 1, result)
+            self.assertIn('plan changed since it was approved', result['error'])
+            self.assertEqual(gh.calls, [])
+
+    def test_threads_and_comments_of_another_pr_are_refused_before_any_write(self):
+        for changes in ({'replies': [{'thread': 'TX', 'comment': 10, 'body': 'x'}]},
+                        {'replies': [{'thread': 'T1', 'comment': 60, 'body': 'x'}]},
+                        {'resolves': ['T1', 'OTHER_PR_THREAD']}):
+            self.write(**changes)
+            for action in ('plan', 'reply', 'resolve'):
+                gh = FakeBoard()
+                code, result = self.run_action(action, gh, pr_feedback.digest(self.plan))
+                self.assertEqual(code, 1, (changes, action, result))
+                self.assertIn('nothing written', result['error'])
+                self.assertFalse(gh.writes())
+
+    def test_reply_posts_each_approved_reply_once(self):
+        gh, approved = FakeBoard(), self.approved()
+        code, result = self.run_action('reply', gh, approved)
+        self.assertEqual((code, result['replied'], result['already']), (0, [10, 60], []), result)
+        posted = [c for c in gh.writes()]
+        self.assertEqual([c[-1] for c in posted], ['in_reply_to=10', 'in_reply_to=60'])
+        self.assertEqual(posted[0][2:4], ['-f', 'body=The token is masked at line 3.'])
+        gh.calls.clear()
+        code, result = self.run_action('reply', gh, approved)
+        self.assertEqual((code, result['replied'], result['already']), (0, [], [10, 60]))
+        self.assertFalse(gh.writes())
+
+    def test_a_reply_run_that_fails_halfway_finishes_on_rerun(self):
+        gh, approved = FakeBoard(fail={60}), self.approved()
+        code, result = self.run_action('reply', gh, approved)
+        self.assertEqual(code, 3, result)
+        self.assertIn('replied so far: [10]', result['error'])
+        gh.fail.clear()
+        gh.calls.clear()
+        code, result = self.run_action('reply', gh, approved)
+        self.assertEqual((code, result['replied'], result['already']), (0, [60], [10]))
+
+    def test_resolve_waits_for_a_pushed_head(self):
+        approved = self.approved()
+        board = FakeBoard()
+        self.run_action('reply', board, approved)
+        for head, compare in ((None, {}), (PUSHED, {}), (PUSHED, {PUSHED + '...' + HEAD: 'behind'}),
+                              (PUSHED, {PUSHED + '...' + HEAD: 'diverged'})):
+            self.write(head=head)
+            board.calls.clear()
+            board.compare = compare
+            code, result = self.run_action('resolve', board, approved)
+            self.assertEqual(code, 1, (head, compare, result))
+            self.assertIn('nothing resolved', result['error'])
+            self.assertIn('set "head"' if head is None else 'does not contain the pushed commit', result['error'])
+            self.assertIn(compare and list(compare.values())[0] or ('unknown' if head else 'head'), result['error'])
+            self.assertFalse(board.writes())
+        for head, compare in ((HEAD, {}), (PUSHED, {PUSHED + '...' + HEAD: 'ahead'})):
+            board.compare = compare
+            for thread in ('T1', 'T6'):
+                board.threads[thread]['isResolved'] = False
+            self.write(head=head)
+            code, result = self.run_action('resolve', board, approved)
+            self.assertEqual((code, result['resolved'], result['already']), (0, ['T1', 'T6'], ['T2']), result)
+
+    def test_resolve_waits_for_the_threads_approved_reply(self):
+        self.write(head=HEAD)
+        gh = FakeBoard()
+        code, result = self.run_action('resolve', gh, self.approved())
+        self.assertEqual(code, 1, result)
+        self.assertIn('T1, T6', result['error'])
+        self.assertFalse(gh.writes())
+
+    def test_a_resolve_run_that_fails_halfway_finishes_on_rerun(self):
+        self.write(head=HEAD)
+        gh, approved = FakeBoard(fail={'T6'}), self.approved()
+        self.run_action('reply', gh, approved)
+        code, result = self.run_action('resolve', gh, approved)
+        self.assertEqual(code, 3, result)
+        self.assertIn("resolved so far: ['T1']", result['error'])
+        gh.fail.clear()
+        gh.calls.clear()
+        code, result = self.run_action('resolve', gh, approved)
+        self.assertEqual((code, result['resolved'], result['already']), (0, ['T6'], ['T1', 'T2']))
+        self.assertEqual(len(gh.writes()), 1)
+
+    def test_a_malformed_or_missing_plan_exits_2(self):
+        for broken in ({'schema': 'other'}, {'repo': 'acme'}, {'pr': '7'}, {'replies': [{'thread': 'T1', 'comment': 10}]},
+                       {'resolves': ['T1', 'T1']}, {'head': 'main'}, {'replies': [], 'resolves': []}, {'extra': 1}):
+            self.write(**broken)
+            code, result = self.run_action('plan', FakeBoard())
+            self.assertEqual(code, 2, (broken, result))
+        self.path.unlink()
+        self.assertEqual(self.run_action('plan', FakeBoard())[0], 2)
+        out = io.StringIO()
+        with redirect_stdout(out):
+            self.assertEqual(pr_feedback.main(['reply', '--plan', str(self.path)]), 2)  # no --approved
 
 
 if __name__ == '__main__':

@@ -249,5 +249,39 @@ class PublishTests(unittest.TestCase):
         self.assertEqual(self.run_script(FakeRunner())[0], 2)
 
 
+class TransportTests(unittest.TestCase):
+    """SC8: every gh call of pr_publish and pr_changelog (the PR view, the contents check, create, edit, the
+    default branch) runs through sanduq_gh with the script's timeout, never retried; error shapes stay."""
+
+    def test_gh_runs_through_the_shared_transport_with_each_scripts_timeout(self):
+        import pr_changelog
+        import sanduq_gh
+        self.assertIs(pr_publish.sanduq_gh, sanduq_gh)
+        seen = []
+
+        def run_gh(args, **kwargs):
+            seen.append((args, kwargs))
+            errors = {'missing': sanduq_gh.GhError('gh CLI not installed', returncode=127),
+                      'hung': sanduq_gh.GhError('timeout: gh hung gave no answer in 120 s', timeout=True),
+                      'fail': sanduq_gh.GhError('x', returncode=1, stdout='', stderr='no pull requests found')}
+            if args[0] in errors:
+                raise errors[args[0]]
+            return 'ok\n'
+        with patch.object(sanduq_gh, 'run_gh', run_gh):
+            done = pr_publish.run(['gh', 'pr', 'view'], '.')
+            self.assertEqual((done.returncode, done.stdout), (0, 'ok\n'))
+            done = pr_publish.run(['gh', 'fail'], '.')
+            self.assertEqual((done.returncode, done.stderr), (1, 'no pull requests found'))
+            for broken in ('missing', 'hung'):
+                with self.assertRaises(pr_publish.Failure) as caught:
+                    pr_publish.run(['gh', broken], '.')
+                self.assertEqual(caught.exception.code, 3)
+                self.assertIn('gh unavailable', str(caught.exception))
+                self.assertIsNone(pr_changelog.run(['gh', broken], '.'))
+            self.assertEqual(pr_changelog.run(['gh', 'pr', 'view'], '.').stdout, 'ok\n')
+        self.assertEqual([kwargs['timeout'] for _, kwargs in seen], [120, 120, 120, 60, 120, 60, 60])
+        self.assertFalse(any(kwargs.get('retry') for _, kwargs in seen))
+
+
 if __name__ == '__main__':
     unittest.main()

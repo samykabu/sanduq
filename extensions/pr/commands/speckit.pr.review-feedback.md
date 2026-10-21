@@ -73,6 +73,13 @@ For each unresolved substantive comment:
 Track thread ID, comment database ID, author, file/line, quoted comment summary, classification, and
 planned action.
 
+Write the drafted replies and the threads to resolve to a plan file outside the working tree (for
+example `<git dir>/pr-review-plan.json`): `{"schema": "sanduq.pr.review-plan.v1", "repo":
+"<owner/repo>", "pr": <num>, "replies": [{"thread": "<threadId>", "comment": <databaseId>, "body":
+"<reply text>"}], "resolves": ["<threadId>"], "head": null}`. Run
+`python .specify/extensions/pr/scripts/pr_feedback.py plan --plan <file>` (read-only) and show its
+`digest` with the plan below. If the plan changes, run it again and ask again.
+
 ### 4. Present plan - approval gate
 
 Output a single plan:
@@ -91,12 +98,14 @@ After approval:
 
 - For valid items, apply the fix with normal repo editing tools, run affected tests/linters, and
   never claim success without running them.
-- For invalid items, post the drafted threaded reply:
+- For invalid items, post the approved threaded replies (only the plan's; replies already posted are
+  skipped, so a rerun after a failure finishes the rest):
 
 ```sh
-gh api "repos/{owner}/{repo}/pulls/{num}/comments" \
-  -f body="<reply text>" -F in_reply_to=<comment_databaseId>
+python .specify/extensions/pr/scripts/pr_feedback.py reply --plan <file> --approved <digest>
 ```
+
+- Exit 1 means the script refused (a changed plan, a thread not on this PR): report it and stop.
 
 - If a fix fails or reveals new information, stop and report back before continuing.
 
@@ -114,12 +123,13 @@ gh api "repos/{owner}/{repo}/pulls/{num}/comments" \
 gh pr comment <num> --body-file report.md
 ```
 
-2. Resolve every thread that was fixed or replied to after the push succeeds:
+2. Resolve every thread that was fixed or replied to after the push succeeds: set `"head"` in the
+   plan file to the pushed commit (`git rev-parse HEAD`; `head` is outside the digest), then run the
+   command below. It refuses until the PR head on GitHub contains that commit and each thread's
+   approved reply is posted; already resolved threads are skipped.
 
 ```sh
-gh api graphql -f query='mutation($id:ID!){
-  resolveReviewThread(input:{threadId:$id}){ thread { id isResolved } }
-}' -F id=<threadId>
+python .specify/extensions/pr/scripts/pr_feedback.py resolve --plan <file> --approved <digest>
 ```
 
 3. Report fixed count, replied count, resolved-thread count, commit SHA, summary comment URL, and
