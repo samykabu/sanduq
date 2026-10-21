@@ -182,3 +182,17 @@ passes as is.
   `test_speckit_compat` rerun after the last text edit: 13 OK).
 - `check_docs.py`: fails only on `docs/reference/hooks.md is stale` (generated from the preset strategies I
   changed; orchestrator request 2).
+
+## Codex finding 6 (after commit 4e4a3e3): `cancel` through a linked runs directory
+
+- Defect: `cancel` compared `path.resolve().parent` with `runs.resolve() / value`. When
+  `.specify/scope/runs` itself is a symlink or junction pointing outside the project, both sides resolve outside
+  and match, so `cancel --apply` wrote an external journal.
+- Fix (`scope.py` `Scope.cancel`): before any read or write, `runs.resolve()` must be inside the resolved project
+  root; otherwise `SCOPE_CANCEL_UNKNOWN: .specify/scope/runs resolves outside the project; refusing to read or
+  write it.` The check also covers the bare-issue listing branch and a linked `.specify` or `.specify/scope`.
+- Test: `test_round5.py` `test_cancel_refuses_a_runs_directory_linked_outside_the_project`: runs/ as a directory
+  symlink, and on Windows as a junction (`_winapi.CreateJunction`, as in Workflow's tests); both `cancel <id>
+  --apply` and `cancel <issue>` exit 2 with the message and the outside journal stays unmarked. With the check
+  disabled it failed for both the symlink and the junction (`0 != 2`); with it, both pass on this machine.
+- Scope suite: 284 tests OK, 1 skipped (Playwright).

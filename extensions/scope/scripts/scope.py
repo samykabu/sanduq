@@ -975,6 +975,9 @@ class Scope:
         changed, for manual repair (SC21). No GitHub write; the caller holds the mutation lock with --apply."""
         value = str(operation or '').strip()
         runs = self.root / '.specify/scope/runs'
+        # A linked runs folder (or parent) must not lead the journal read or write outside the project.
+        require(runs.resolve().is_relative_to(self.root),
+                'SCOPE_CANCEL_UNKNOWN: .specify/scope/runs resolves outside the project; refusing to read or write it.')
         if re.fullmatch(r'#?[1-9]\d*', value):
             found = sorted(p.name for p in runs.glob(value.lstrip('#') + '-*') if (p / 'journal.json').is_file())
             raise ScopeError(f'SCOPE_CANCEL_AMBIGUOUS: name one operation as <issue>-<hash>: {", ".join(found) or "none for this issue"}.')

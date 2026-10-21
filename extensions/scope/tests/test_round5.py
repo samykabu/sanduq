@@ -78,6 +78,38 @@ class Cancel(unittest.TestCase):
         self.assertIn('SCOPE_CANCEL_UNKNOWN', err)
         self.assertNotIn('rolled_back', m.read_json(outside / 'journal.json'))
 
+    def test_cancel_refuses_a_runs_directory_linked_outside_the_project(self):
+        # Codex finding 6: with runs/ itself linked away, both sides of the folder check resolved outside and matched.
+        import tempfile
+        from pathlib import Path
+        links = [('symlink', lambda target, link: os.symlink(target, link, target_is_directory=True))]
+        if os.name == 'nt':
+            import _winapi
+            links.append(('junction', lambda target, link: _winapi.CreateJunction(str(target), str(link))))
+        tested = 0
+        for kind, make in links:
+            with self.subTest(kind), tempfile.TemporaryDirectory() as elsewhere:
+                outside = Path(elsewhere)
+                journal = outside / '1-0123456789abcdef' / 'journal.json'
+                m.write_json(journal, {'nodes': {}, 'before': {}, 'operation': '0123456789abcdef'})
+                runs = self.root / '.specify/scope/runs'
+                runs.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    make(outside, runs)
+                except OSError:
+                    continue
+                try:
+                    for argv in (('cancel', '1-0123456789abcdef', '--apply'), ('cancel', '1')):
+                        code, err = self.cli(*argv)
+                        self.assertEqual(code, 2, argv)
+                        self.assertIn('resolves outside the project', err)
+                    self.assertNotIn('rolled_back', m.read_json(journal))
+                    tested += 1
+                finally:
+                    os.rmdir(runs) if os.name == 'nt' else os.unlink(runs)
+        if not tested:
+            self.skipTest('neither symbolic links nor junctions are available')
+
     def test_cancel_holds_the_mutation_lock(self):
         _, _, operation = self.interrupted()
         lock = self.root / '.specify/scope/mutation.lock'
