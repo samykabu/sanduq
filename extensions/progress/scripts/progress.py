@@ -18,7 +18,8 @@ from sanduq_progress import selfreport, snapshot, statusline as statuslib  # noq
 from sanduq_progress.collect import plan as plancol, runs as runscol, tasks as taskscol  # noqa: E402
 from sanduq_progress.lock import Lock, LockBusy  # noqa: E402
 from sanduq_progress.paths import (ASSETS, NAME, PLAN_REGISTRY, PLAN_ROOT, RESERVED_ID, TASK_REF, Ctx, ProgressError, find_root, is_default_plan_dir,  # noqa: E402
-                                   default_excludes, git_exclude, list_plans, normalise_plan_dir, plan_info, resolve_feature, resolve_target, slugify)
+                                   default_excludes, git_exclude, list_plans, normalise_plan_dir, plan_info, project_dir, removed,
+                                   resolve_feature, resolve_target, slugify, workflow_outdated, WORKFLOW_UPGRADE)
 from sanduq_progress.util import atomic_write, diag, ensure_local_dir, iso, parse_time, read_json, refuse_link, utcnow, write_json  # noqa: E402
 
 FALLBACK_CSS = (':root{--bg:#f6f7f4;--surface:#fff;--text:#1b2a24;--muted:#4e5d56;--line:#d5dcd7;--brand:#233c32;'
@@ -73,7 +74,7 @@ def build_parser():
     s.add_argument('--verbose', action='store_true')
     s = verb('status')
     s.add_argument('--json', action='store_true')
-    s.add_argument('--schema', choices=('v2', 'v3'), default='v3', help='projection schema for --json (default v3)')
+    s.add_argument('--schema', choices=('v2', 'v3'), default='v3', help='v3; v2 was removed and exits 2')
     s = verb('lane')
     s.add_argument('id')
     s.add_argument('--tasks')
@@ -122,7 +123,7 @@ def build_parser():
     verb('theme', add_help=False)  # every other token goes to the theme module
     s = verb('export')
     s.add_argument('--format', choices=('md', 'json'), default='md')
-    s.add_argument('--schema', choices=('v2', 'v3'), default='v3', help='projection schema to export (default v3)')
+    s.add_argument('--schema', choices=('v2', 'v3'), default='v3', help='v3; v2 was removed and exits 2')
     s.add_argument('--out')
     s = verb('hook')
     s.add_argument('event')
@@ -427,23 +428,38 @@ def cmd_refresh(a, root):
 
 
 def summary_line(report):
-    """The one-line status. It reads the v2 summary keys (the line is a long-standing consumer contract)."""
+    """The one-line status, from the internal base document's summary (the line is a long-standing consumer contract)."""
     s = report['summary']
     return (f"progress: {s['tasks_done']}/{s['tasks_total']} tasks, {s['lanes_active']} lanes active, "
             f"{s['blocked']} blocked, {s['decisions_pending']} decisions pending (rev {report['rev']})")
 
 
 def cmd_status(a, root):
+    if a.schema == 'v2':
+        raise removed('--schema v2', root)
     ctx = target_ctx(a, root)
     require_init(ctx)
     state = refreshlib.read_state(ctx)
-    wanted = model.schema_name(a.schema)
-    v3, v2 = model.build_pair(ctx, now(), int(state.get('rev') or 0), state, want_v3=a.json and wanted == model.SCHEMA_V3)
+    rev = int(state.get('rev') or 0)
     if a.json:
-        print(json.dumps(v3 if wanted == model.SCHEMA_V3 else v2, indent=2, ensure_ascii=False))
+        print(json.dumps(model.build(ctx, now(), rev, state), indent=2, ensure_ascii=False))
     else:
-        print(summary_line(v2) + codex_hint(root))
+        print(summary_line(model.build_v2(ctx, now(), rev, state)) + codex_hint(root) + layout_hint(root) + workflow_hint(root))
     return 0
+
+
+def layout_hint(root):
+    """A notice while theme.json still asks for the removed classic layout (the page shows the timeline)."""
+    doc = read_json(project_dir(root) / 'theme.json', {})
+    if isinstance(doc, dict) and doc.get('layout') == 'classic':
+        return ' theme layout classic was removed; the page shows timeline (progress theme --layout timeline)'
+    return ''
+
+
+def workflow_hint(root):
+    """A notice when the installed Sanduq Workflow is older than this Progress supports."""
+    version = workflow_outdated(root)
+    return f' Sanduq Workflow {version} is installed; Progress needs 1.17.0 or later: {WORKFLOW_UPGRADE}' if version else ''
 
 
 def codex_hint(root):
@@ -695,16 +711,14 @@ def cmd_runs(a, root):
 
 
 def cmd_export(a, root):
+    if a.schema == 'v2':
+        raise removed('--schema v2', root)
     ctx = target_ctx(a, root)
     require_init(ctx)
     report = read_json(ctx.report)
     if not isinstance(report, dict):
         with locked(ctx):
             report = refresh_now(ctx)
-    if model.schema_name(a.schema) != report.get('schema'):
-        # The stored report is v3. The other schema is built fresh from the producers, at the stored revision.
-        state = refreshlib.read_state(ctx)
-        report = model.build(ctx, now(), int(state.get('rev') or 0), state, schema=a.schema)
     text = json.dumps(report, indent=2, ensure_ascii=False) + '\n' if a.format == 'json' else render_md.render(report)
     if a.out:
         atomic_write(Path(a.out), text)

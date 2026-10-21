@@ -32,7 +32,7 @@ specs/<feature>/progress/
   .view/                 git-ignored and disposable (Progress writes `specs/*/progress/.view/` and `.host/` to .git/info/exclude at init;
                          it also carries the same single-`*` .gitignore; a link at either path is refused)
     report.json          projection, schema sanduq.progress.v3
-    data.js              window.__SANDUQ_PROGRESS__ = <report.json>;   (file:// safe). With theme layout "classic" it holds the v2 document instead
+    data.js              window.__SANDUQ_PROGRESS__ = <report.json>;   (file:// safe)
     index.html           static shell, copied from assets/ui at init/upgrade, never templated with data
     blocks.js            static block renderers + data.js poller
     base.css             static layout styles (copied like index.html)
@@ -110,7 +110,7 @@ candidates when any exist).
   is lower-cased, without `*`, `_`, backticks and `~`, whitespace collapsed, 120 characters at most. `plan.json` is
   rewritten under the report lock on a refresh, and only when the map changed; read-only verbs compute the same ids
   without writing.
-- **Projection.** Same as for a feature report (v3 by default, v2 on request), with no Workflow stages. `feature` gains `mode: "plan"` and `source`; `feature.id` is the plan
+- **Projection.** Same as for a feature report (v3), with no Workflow stages. `feature` gains `mode: "plan"` and `source`; `feature.id` is the plan
   name, `feature.title` the plan title (else the name), `stage` is null and `workflow` false. No Workflow files are
   read for a plan.
 
@@ -214,8 +214,8 @@ Unbound or ambiguous observations are dropped and counted in diagnostics.
 
 ## Projection (`sanduq.progress.v3`)
 
-`report.json` holds the v3 projection, and `status --json` prints it by default. The Timeline view reads it. The
-[v2 projection](#projection-sanduqprogressv2-compatibility) is still available for one release.
+`report.json` holds the v3 projection, and `status --json` prints it. The Timeline view reads it. It is built on the
+[base document](#base-document-sanduqprogressv2-internal), which no command prints since 1.7.0.
 
 **The rule behind every field: no inference from proximity.** A time gap, adjacency, matching text, a model name or
 overlapping timestamps never establish identity, a retry, a revalidation, a rejection, an acceptance or membership.
@@ -264,11 +264,11 @@ run has no duration), `sources` and a `label`. A decision is
 `D = {key, source, source_id, question, options, answer:{kind:single|multiple|text, value, index}|null, state, revision, answer_digest,
 evidence:["display text"], evidence_links:[{text, url}], url, decided_by, observed_at, answered_at, applied:{at, evidence:["…"]}|null, stage}`.
 
-`data.js` also carries `ui: {layout}` (`timeline` or `classic`) beside the document, so an open page switches renderer with the next
-data revision after `progress theme --layout`; `report.json` does not have it.
+`data.js` also carries `ui: {layout: "timeline"}` beside the document, so a view that still holds a blocks.js from before 1.7.0
+draws the timeline; `report.json` does not have it.
 
 `rev` rises on every refresh and on the cheap patch a debounced hook event makes; the UI uses it as its refresh counter.
-`collection`, `rev`, `generated_at` and `stale_after_seconds` mean what they mean in v2.
+`collection`, `rev`, `generated_at` and `stale_after_seconds` mean what they mean in the base document.
 
 **Runs.** One entry per delegation `run_id`. If the ledger holds a run twice, the finished record wins and the fields that
 disagreed are listed in `conflict`. A ledger row with an `intent_id` and no `run_id` is a `dispatch` intent (it is dropped
@@ -388,12 +388,12 @@ generations; the fingerprint still describes what was parsed, not the newer file
 `note` ("only N of M bytes read"). The browser cannot find newer files on its own; the existing producer boundaries (hooks,
 Workflow writes) mark the report dirty, and a refresh publishes the new fingerprints.
 
-## Projection (`sanduq.progress.v2`, compatibility)
+## Base document (`sanduq.progress.v2`, internal)
 
-Deprecated: v2 and the `classic` layout will be removed in a later release. New readers use v3.
-
-This is the document `progress status --json --schema v2` prints, and the one older Workflow releases, `progress export --schema v2`
-and the `classic` layout read. Its contract has not changed. The one-line `progress status` summary still reads its keys.
+Progress builds this document first, from one read of the producers, and builds v3 on it. Since 1.7.0 no command prints it:
+`progress status --json --schema v2` and `progress export --schema v2` exit 2 with `PROGRESS_REMOVED`, and the `classic`
+layout that drew it is gone. The one-line `progress status` summary still reads its `summary`, so that line is unchanged. The
+rules below (units, stage, pause, lanes, models, tasks, decisions) are the rules the v3 fields built from it follow.
 
 ```json
 {
@@ -509,15 +509,15 @@ progress init [--feature DIR] [--statusline yes|no] [--theme PRESET]   -> "progr
 progress init --plan PATH [--name NAME] [--dir DIR]                     -> "progress: ready .progress/<name>/.view/index.html bind=…"
 progress bind [--session ID]                                            -> "progress: bound <session>"
 progress refresh [--final]                                              -> silent on success unless --verbose
-progress status [--json [--schema v2|v3]]                               -> one-line summary, or the projection JSON (v3 by default)
+progress status [--json]                                                -> one-line summary, or the v3 projection JSON
 progress lane L1 --tasks T001-T004,T009 [--owner ID] [--label T] [--harness H --model M --effort E] [--close] [--workstream]
 progress block T007 --by L2|T003|SD2|ext:"text"                         -> "progress: B4 open T007 by L2"
 progress unblock B4 | --all-for T007
 progress decide ask "question" --options a,b,c                          -> "progress: D2 pending"
 progress decide made D2 b --by user|agent-recommendation|assumption [--evidence URL]
 progress note "text" [--target T005]
-progress theme --preset sanduq|cobalt|emerald|classic | --from-illustrate | --file theme.json | --layout timeline|classic | --show
-progress export [--format md|json] [--schema v2|v3] [--out PATH]        -> deterministic; v3 by default
+progress theme --preset sanduq|cobalt|emerald|classic | --from-illustrate | --file theme.json | --layout timeline | --show
+progress export [--format md|json] [--out PATH]                         -> deterministic, v3
 progress bind --host claude|codex --model M [--effort E] [--session ID]  -> coordinator self-report, stored in .host/
 progress attempt record (--lane L1 | --overhead LABEL) --run ID --status S [--started T] [--ended T] [--usage-json PATH]
 progress runs [--json] [--runs-dir DIR]... [--now T] [--stall-seconds N]  -> progress.runs.v1
@@ -630,7 +630,7 @@ it, `stop`, or any verb performs the real refresh and clears the flag. Any excep
 ## Theme (`progress.theme.v1`)
 
 ```json
-{"v":1,"preset":"sanduq","title":null,"logo":null,"density":"comfortable|compact","layout":"timeline|classic",
+{"v":1,"preset":"sanduq","title":null,"logo":null,"density":"comfortable|compact","layout":"timeline",
  "blocks":["header","orchestrator","lanes","boards","decisions","blockers","events"],
  "hidden":[],
  "tokens":{"light":{"bg":"#…","surface":"…","text":"…","muted":"…","line":"…","brand":"…","accent":"…",
@@ -639,12 +639,10 @@ it, `stop`, or any verb performs the real refresh and clears the flag. Any excep
  "font":{"sans":"system-ui, sans-serif","mono":"ui-monospace, monospace"}}
 ```
 
-`layout` picks the view. `timeline` (the default) is the v3 Timeline view and `data.js` carries the v3 document. `classic` is the v2
-lanes view, deprecated and to be removed in a later release, and `data.js` then carries the v2 document (`report.json` stays v3). `progress theme --layout classic|timeline`
-changes only this key and keeps every other customization; picking a new preset or `--from-illustrate` keeps the layout. When the
-layout changes, the command also rebuilds each initialised report under its own report lock, so `data.js` carries the matching
-document at once. A report whose lock is busy is named on a second line and keeps its old `data.js` until the next refresh. The
-generated `layout.js` carries it as `"layout":"classic"`. Colors are validated as `#rgb`/`#rrggbb`. Unknown keys are rejected with a one-line error. `--from-illustrate` maps
+`layout` is `timeline`, the v3 Timeline view. The `classic` layout was removed in 1.7.0: `progress theme --layout classic`, or
+`--file` with it, prints one `PROGRESS_REMOVED` line and exits 2; a stored `theme.json` that still says `classic` is read as
+`timeline`, `progress status` ends its line with a notice, and the next new preset drops the key. `blocks` and `hidden` are
+accepted for older files; the timeline page does not use them. Colors are validated as `#rgb`/`#rrggbb`. Unknown keys are rejected with a one-line error. `--from-illustrate` maps
 Illustrate roles explicitly: paper→bg, paper-2→surface, ink→text, muted→muted, rule→line, accent→accent,
 link→brand, accent-tint→active. Status colours keep the preset's values unless set.
 

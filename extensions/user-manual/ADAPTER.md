@@ -29,12 +29,12 @@ stored as `SKILL.ext.md` and restored to `SKILL.md` by `extensions/scripts/packa
 | `user-manual/assets/github/user-manual-preview.yml` → `assets/github/user-manual-preview.yml` | `"User-Manual/tools/**"` (paths filter, line 8) | `".specify/extensions/user-manual/**"` | Extension scripts live in the Spec Kit install, not in the manual |
 | same file | `User-Manual/tools/` (3 occurrences: audit and two build calls) | `.specify/extensions/user-manual/scripts/` | Same |
 | `user-manual/assets/github/user-manual-release.yml` → `assets/github/user-manual-release.yml` | `User-Manual/tools/` (3 occurrences) | `.specify/extensions/user-manual/scripts/` | Same |
+| `user-manual/scripts/init_manual.py` → `scripts/init_manual.py` | `import sanduq_ci` | The same import, with a `sys.path` fallback to `../workflow/scripts` | The source tree keeps `sanduq_ci` in Workflow; a built package has it beside the script. The command passes `--no-tools`: the extension runs its scripts from `.specify/extensions/user-manual/scripts/`, so none are copied into `User-Manual/tools/` |
 
 ## 3. Extension-owned files (not generated; keep the extension's file)
 
 | Extension file | Portable counterpart | Reason |
 | --- | --- | --- |
-| `scripts/init_manual.py` | `user-manual/scripts/init_manual.py` | Imports Workflow's canonical `sanduq_ci` (with a `sys.path` fallback to `../workflow/scripts`), calls `load_ci(root)` instead of taking `--ci-policy`, names its root `extension_root`, and copies no scripts into `User-Manual/tools/` because the extension runs them from `.specify/extensions/user-manual/scripts/`. Structural differences, so it is owned here rather than rewritten |
 | `scripts/manual_state.py` | `user-manual/scripts/manual_state.py` | Extension delegates to the shared `sanduq_freshness` helper (Spec Kit feature dirs, Workflow checkpoint `target_branch` default for `--base-ref`, `.specify/` and `workflow/`/`evidence/` exclusions, `tasks.md` checkbox normalization, `sanduq_hash.portable_files` EOL handling). Portable is a self-contained equivalent with the same CLI (`record`/`status`, `--feature`, `--repo-root`, `--base-ref`, `--output`, `--summary`, `--json`), state schema 2 shape and exit codes |
 | `skills/user-manual/SKILL.md` | `user-manual/SKILL.md` | Front matter `description` names `speckit.user-manual.init/analyze/update/release`; routes to companions by `../api-docs/SKILL.md` etc.; no standalone/workflow section, no example, rule 7 names Illustrate. Portable is standalone, routes to `user-manual-*` skills, documents `scripts/*.py`, `User-Manual/tools/` and has rule 9 (cross-audience links) |
 | `skills/api-docs/SKILL.md` | `user-manual-api-docs/SKILL.md` | `name: api-docs`; Spec Kit wording ("add a task"); no example |
@@ -47,8 +47,8 @@ stored as `SKILL.ext.md` and restored to `SKILL.md` by `extensions/scripts/packa
 
 | Portable file | Reason |
 | --- | --- |
-| `user-manual/scripts/sanduq_ci.py` | Vendored subset of `extensions/workflow/scripts/sanduq_ci.py` without gate policy and with `load_ci(policy_path=None)` reading an explicit YAML file instead of `.specify/workflow.yml`. The extension package vendors Workflow's copy |
-| `user-manual/tests/test_init_manual.py` | Asserts the portable scaffold (tool copies, no `.specify/`) |
+| `user-manual/scripts/sanduq_ci.py` | Vendored subset of `extensions/workflow/scripts/sanduq_ci.py` without gate policy and with `load_ci(policy_path=None)` reading an explicit YAML file, or a project root's `.specify/workflow.yml` when given a directory. The extension package vendors Workflow's copy |
+| `user-manual/tests/test_init_manual.py` | Asserts the portable scaffold (tool copies, no `.specify/`). The extension's own `tests/test_init_manual.py` runs the vendored script with `--no-tools` |
 
 ## 5. Extension-only files (no portable counterpart)
 

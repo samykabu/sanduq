@@ -403,3 +403,37 @@ def check_excluded(root, directory):
     if loose:
         raise ProgressError('PROGRESS_EXCLUDE_FAILED', f'git does not ignore {loose[0]}; pick another --dir '
                             '(local-only files would be committed)', 3)
+
+
+WORKFLOW_MINIMUM = (1, 17, 0)  # the first Sanduq Workflow that reads v3 and `runs --json` instead of `--schema v2`
+WORKFLOW_UPGRADE = 'python .specify/extensions/workflow/scripts/upgrade.py --version 1.17.1 --apply'
+
+
+def workflow_version(root):
+    """The installed Sanduq Workflow version (`.specify/extensions/workflow/extension.yml`), or None."""
+    try:
+        text = (Path(root) / '.specify' / 'extensions' / 'workflow' / 'extension.yml').read_text(encoding='utf-8-sig')
+    except OSError:
+        return None
+    match = re.search(r'^[ \t]+version:[ \t]*["\']?(\d+(?:\.\d+){0,2})\b', text, re.M)
+    return match.group(1) if match else None
+
+
+def workflow_outdated(root):
+    """The installed Sanduq Workflow version when it is older than Progress needs, else None."""
+    version = workflow_version(root)
+    if version and tuple(int(part) for part in (version.split('.') + ['0', '0'])[:3]) < WORKFLOW_MINIMUM:
+        return version
+    return None
+
+
+def removed(what, root):
+    """The one-line error (exit 2) for a request of a removed v2 surface. It names an installed Sanduq Workflow and, when
+    that Workflow is old enough to still ask for it, the upgrade."""
+    message = f'{what} was removed in agent-tools 1.7.0'
+    version = workflow_version(root)
+    if version:
+        message += f'; Sanduq Workflow {version} is installed'
+        if workflow_outdated(root):
+            message += f' and needs 1.17.0 or later: {WORKFLOW_UPGRADE}'
+    return ProgressError('PROGRESS_REMOVED', message, 2)

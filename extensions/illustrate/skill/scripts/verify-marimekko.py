@@ -100,8 +100,10 @@ import math
 import re
 import sys
 import unicodedata
-from html.parser import HTMLParser
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import svg_scan  # noqa: E402  shared SVG scanning helpers, loaded like theme_tokens.py
+from svg_scan import is_hand_variant  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 ASSET_DIR = ROOT / "assets"
@@ -158,7 +160,6 @@ DECLARES_SEGMENT_RE = re.compile(r"\bdata-segment\s*=", re.IGNORECASE)
 # segment by. Illustrate theme contract: accept the upstream default literals
 # (light #eb6c36, dark #f08a59) AND the active theme's light/dark accents,
 # resolved by theme_tokens.py, so the count holds on themed output.
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 import theme_tokens  # noqa: E402
 
 ACCENT_RE = theme_tokens.accent_re()
@@ -185,25 +186,10 @@ SANS_ADVANCE = 0.60
 WIDE_ADVANCE = 1.00
 ASCENT = 0.74
 
-GROUP_TAGS = ("g", "svg")                     # the only ancestors whose transform is inherited
-BODY_TAGS = ("text", "title", "desc", "style")  # elements whose character data is read
 ROLES = ("label", "caption", "key")
 
 
 # === PARSING =================================================================
-
-
-class Element:
-    """One start tag this checker cares about, as the browser tokenized it."""
-
-    __slots__ = ("tag", "attrs", "line", "body", "ancestor")
-
-    def __init__(self, tag, attrs, line, ancestor):
-        self.tag = tag
-        self.attrs = attrs          # first-wins dict, names lower-cased, values unescaped
-        self.line = line
-        self.body = ""              # character data up to the matching end tag
-        self.ancestor = ancestor    # how the nearest transformed <g>/<svg> moves it, or None
 
 
 class Segment:
@@ -260,112 +246,22 @@ class Column:
         return sum(s.amount for s in self.segments)
 
 
-def first_wins(attrs) -> dict:
-    """Attributes as the browser keeps them: on a repeat, the FIRST wins.
+class _Scanner(svg_scan.Scanner):
+    """svg_scan.Scanner plus a count of every element that carries data-segment.
 
-    HTML parsing drops a duplicate attribute rather than overwriting the one
-    already on the token, so a second `width` on a rect is not merely ignored -
-    it is not in the document at all. A dict comprehension does the opposite,
-    and that gap is a fail-open every caller inherits: a rect carrying a
-    dishonest first `width` and an honest second renders the dishonest one
-    while a last-wins reader checks, and passes, bytes the browser threw away.
-    A present-but-valueless attribute is an empty string, not an absent one.
-    """
-    seen = {}
-    for name, value in attrs:
-        seen.setdefault(name, "" if value is None else value)
-    return seen
-
-
-class _Scanner(HTMLParser):
-    """Collect rects, circles, texts, title/desc and style elements with ancestry.
-
-    HTMLParser already lowercases tag and attribute names, tolerates unquoted
-    values and whitespace around `=`, unescapes entities, keeps a quoted `>`
-    inside the value it belongs to, and never invokes handle_starttag for
-    tag-like text inside a comment or inside <script>/<style> raw text - each
-    of those is exactly a case a regex tag matcher mishandles. Ancestry is
-    tracked for <g>/<svg> only, the elements whose transform a child inherits.
+    Counted on every tag, before the scope filters: the count is how scope
+    detection tells a legitimate carrier that is simply not a <rect> (a legend
+    key) from a claim no parsed element carries at all.
     """
 
     def __init__(self, source: str):
-        super().__init__(convert_charrefs=True)
-        self.rects: list = []
-        self.circles: list = []
-        self.texts: list = []
-        self.named: list = []      # <title> and <desc>
-        self.styles: list = []
         self.segment_carriers = 0  # live elements of ANY tag that carry data-segment
-        self.error = None
-        self._groups: list = []    # (tag, how) per open <g>/<svg>
-        self._open: list = []      # (tag, Element) per open body element
-        try:
-            self.feed(source)
-            self.close()
-        except Exception as exc:  # noqa: BLE001 - any parser failure fails closed
-            self.error = "%s: %s" % (type(exc).__name__, exc)
-
-    def _ancestor(self):
-        for _tag, how in reversed(self._groups):
-            if how is not None:
-                return how
-        return None
-
-    def handle_starttag(self, tag, attrs):
-        self._start(tag, first_wins(attrs), closes=False)
-
-    def handle_startendtag(self, tag, attrs):
-        self._start(tag, first_wins(attrs), closes=True)
+        super().__init__(source, ("rect", "circle"), transform_carrier)
 
     def _start(self, tag, attrs, closes):
-        # Counted on every tag, before the scope filters below: the count is
-        # how scope detection tells a legitimate carrier that is simply not a
-        # <rect> (a legend key) from a claim no parsed element carries at all.
         if "data-segment" in attrs:
             self.segment_carriers += 1
-        if tag in GROUP_TAGS:
-            if not closes:
-                how = None
-                if "transform" in attrs:
-                    how = "an ancestor <g>/<svg> transform"
-                elif transform_carrier(attrs) is not None:
-                    how = "an ancestor <g>/<svg> style transform"
-                self._groups.append((tag, how))
-            return
-        if tag not in ("rect", "circle") and tag not in BODY_TAGS:
-            return
-        element = Element(tag, attrs, self.getpos()[0], self._ancestor())
-        if tag == "rect":
-            self.rects.append(element)
-            return
-        if tag == "circle":
-            self.circles.append(element)
-            return
-        if tag == "text":
-            self.texts.append(element)
-        elif tag == "style":
-            self.styles.append(element)
-        else:
-            self.named.append(element)
-        if not closes:
-            self._open.append((tag, element))
-
-    def handle_endtag(self, tag):
-        stack = self._groups if tag in GROUP_TAGS else self._open if tag in BODY_TAGS else None
-        if stack is None:
-            return
-        # Pop back to the matching open tag - an unclosed inner element ends
-        # with its parent, as it does in the browser's tree.
-        for index in range(len(stack) - 1, -1, -1):
-            if stack[index][0] == tag:
-                del stack[index:]
-                return
-
-    def handle_data(self, data):
-        if self._open:
-            # Innermost only: a <title> tooltip inside a <text> is not part of
-            # the rendered label, and the browser does not draw it either.
-            self._open[-1][1].body += data
+        super()._start(tag, attrs, closes)
 
 
 def parse_document(source: str) -> _Scanner:
@@ -524,12 +420,6 @@ def label_extent(attrs: dict, body: str):
 
 def named_text(doc: _Scanner) -> str:
     return " ".join(plain(element.body) for element in doc.named).casefold()
-
-
-def is_hand_variant(path: Path, source: str) -> bool:
-    """A generate-hand-variants.cjs output: a `-hand` stem or rough.js redraw markup."""
-    # ponytail: rough.js redraws drop the data contract, so they are never in scope.
-    return path.stem.endswith("-hand") or 'class="rough-shape"' in source
 
 
 def looks_like_marimekko(path: Path, source: str) -> bool:

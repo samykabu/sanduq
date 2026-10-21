@@ -28,7 +28,7 @@ Flags: `--non-interactive`, `--module <name>`, `--enable-arabic`, `--provider <i
 5. Run:
 
    ```text
-   python .specify/extensions/user-manual/scripts/init_manual.py --repo-root . --modules-file <json>
+   python .specify/extensions/user-manual/scripts/init_manual.py --repo-root . --modules-file <json> --no-tools
    ```
 
    Add `--enable-arabic`, `--provider`, or `--dry-run` when selected. The JSON file must contain the

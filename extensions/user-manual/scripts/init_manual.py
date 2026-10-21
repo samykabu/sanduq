@@ -7,13 +7,13 @@ import argparse
 import json
 import re
 import shutil
-import sys
 from datetime import date
 from pathlib import Path
 
 try:  # vendored beside this script in a built package
     import sanduq_ci
 except ImportError:  # canonical source tree
+    import sys
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "workflow" / "scripts"))
     import sanduq_ci
 
@@ -52,9 +52,6 @@ def manual_yaml(product: str, modules: list[dict[str, object]], arabic: bool, pr
     lines = [
         'schema_version: "1.0"',
         f"product_name: {q(product)}",
-        "lifecycle:",
-        "  # all: update and analyze read the whole manual; evidence: start from manual_impact.py's list.",
-        "  impact_scope: all",
         "languages:",
         "  required: [en]",
         f"  optional: {optional}",
@@ -82,6 +79,9 @@ def manual_yaml(product: str, modules: list[dict[str, object]], arabic: bool, pr
         "  # material (default), readthedocs, mkdocs, or any installed MkDocs theme.",
         "  theme: material",
         "  theme_options: {}",
+        "lifecycle:",
+        "  # all: update and analyze read the whole manual; evidence: start from the pages an impact tool lists.",
+        "  impact_scope: all",
         "modules:",
     ]
     for module in modules:
@@ -143,6 +143,11 @@ def main() -> None:
     parser.add_argument("--product-name")
     parser.add_argument("--enable-arabic", action="store_true")
     parser.add_argument("--provider")
+    parser.add_argument("--ci-policy", type=Path,
+                        help="YAML file whose `ci:` mapping selects where the CI workflows run "
+                             "(default: <repo-root>/.specify/workflow.yml when present)")
+    parser.add_argument("--no-tools", action="store_true",
+                        help="do not copy the build, audit and state scripts to User-Manual/tools/")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -154,7 +159,7 @@ def main() -> None:
     modules = [valid_module(item, args.enable_arabic) for item in raw_modules]
     product = args.product_name or root.name
     manual_root = root / "User-Manual"
-    extension_root = Path(__file__).resolve().parents[1]
+    skill_root = Path(__file__).resolve().parents[1]
 
     if args.dry_run:
         print(json.dumps({"root": str(manual_root), "product": product, "modules": modules}, indent=2))
@@ -187,20 +192,23 @@ def main() -> None:
                 module_page.write_text(page(module_name, str(module["id"]), language, description), encoding="utf-8")
 
     for name in ("mkdocs.yml", "requirements.lock"):
-        copy_if_missing(extension_root / "assets" / "scaffold" / name, manual_root / name)
+        copy_if_missing(skill_root / "assets" / "scaffold" / name, manual_root / name)
     for name in ("rtl-readthedocs.css", "rtl-generic.css", "theme-readthedocs.css"):
-        copy_if_missing(extension_root / "assets" / "scaffold" / "theme" / name, manual_root / "theme" / name)
+        copy_if_missing(skill_root / "assets" / "scaffold" / "theme" / name, manual_root / "theme" / name)
     for name in ("extra.css", "rtl.css", "print.css"):
-        copy_if_missing(extension_root / "assets" / "scaffold" / "theme" / name, manual_root / "theme" / name)
+        copy_if_missing(skill_root / "assets" / "scaffold" / "theme" / name, manual_root / "theme" / name)
         for language in (["en", "ar"] if args.enable_arabic else ["en"]):
             copy_if_missing(
-                extension_root / "assets" / "scaffold" / "theme" / name,
+                skill_root / "assets" / "scaffold" / "theme" / name,
                 manual_root / "docs" / language / "assets" / "stylesheets" / name,
             )
+    if not args.no_tools:
+        for name in ("audit_manual.py", "build_manual.py", "manual_state.py"):
+            copy_if_missing(skill_root / "scripts" / name, manual_root / "tools" / name)
     # CI assets are templates: render the project's recorded runner selection.
-    ci = sanduq_ci.load_ci(root)
+    ci = sanduq_ci.load_ci(args.ci_policy or root)
     for name in ("user-manual-preview.yml", "user-manual-release.yml"):
-        render_if_missing(extension_root / "assets" / "github" / name, root / ".github" / "workflows" / name, ci)
+        render_if_missing(skill_root / "assets" / "github" / name, root / ".github" / "workflows" / name, ci)
     (manual_root / ".state").mkdir(exist_ok=True)
     print(f"initialized {manual_root} with {len(modules)} approved module(s)")
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+Vendors dev-tools 1.4.0.
+
+- `init_manual.py` is vendored from dev-tools instead of kept as a separate copy. `speckit.user-manual.init` passes
+  `--no-tools`, so nothing is copied into `User-Manual/tools/`. The new `--ci-policy <file>` is not used by the command.
+- A new `manual.yml` has its `lifecycle:` block after `renderer:`. Existing files are not rewritten.
+
 ## [1.8.0] - 2026-10-21
 
 Optimization round 4. No renames.

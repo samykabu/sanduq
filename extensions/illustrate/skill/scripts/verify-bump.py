@@ -73,6 +73,8 @@ import math
 import re
 import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from svg_scan import is_hand_variant, line_of  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 ASSET_DIR = ROOT / "assets"
@@ -121,7 +123,6 @@ LABEL_ROW_OFFSET = 3.5    # px, a label baseline below its vertex, per the refer
 MIN_SNAPSHOTS, MAX_SNAPSHOTS = 3, 6
 MIN_SERIES, MAX_SERIES = 4, 8
 FOCAL_WIDTH, PLAIN_WIDTH = 2.4, 1.2
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 import theme_tokens  # noqa: E402  Illustrate: accept the active theme as well as the defaults
 ACCENTS = theme_tokens.accent_hexes()   # upstream light/dark accents + active theme
 
@@ -171,10 +172,6 @@ def number(value):
     return parsed if math.isfinite(parsed) else None
 
 
-def line_of(source: str, offset: int) -> int:
-    return source.count("\n", 0, offset) + 1
-
-
 def plain(body: str) -> str:
     return TAG_RE.sub("", html.unescape(body)).strip()
 
@@ -188,12 +185,6 @@ def named_text(source: str) -> str:
     return " ".join(
         plain(m.group("body")).lower() for m in NAMED_RE.finditer(source)
     )
-
-
-def is_hand_variant(path: Path, source: str) -> bool:
-    """A generate-hand-variants.cjs output: a `-hand` stem or rough.js redraw markup."""
-    # ponytail: rough.js redraws drop the data contract, so they are never in scope.
-    return path.stem.endswith("-hand") or 'class="rough-shape"' in source
 
 
 def looks_like_bump(path: Path, source: str) -> bool:

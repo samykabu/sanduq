@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+Vendors agent-tools 1.7.0.
+
+- Removed: the v2 status document (`progress status --json --schema v2`, `export --schema v2`) and the classic page
+  layout (`progress theme --layout classic`), deprecated in 1.5.0. Either request exits 2 with one line:
+  `progress: error PROGRESS_REMOVED ...`. When a Sanduq Workflow is installed the line names its version and, below
+  1.17.0, the upgrade command.
+- Progress needs Workflow 1.17.0 or later (`dependencies.yml`). `progress status` ends its line with the upgrade
+  command while an older Workflow is installed. The one-line summary and `progress runs --json` are unchanged.
+- A `theme.json` that still says `layout: classic` shows the Timeline page, and `progress status` says so once on its line.
+- The token benchmark under `tests/bench/` is vendored from agent-tools; this package's report is
+  `tests/token-benchmark.md`. Neither is packaged.
+
+### Migration
+
+- Workflow 1.16.0 or earlier: upgrade first, with
+  `python .specify/extensions/workflow/scripts/upgrade.py --version 1.17.1 --apply`. Those versions ask Progress for v2
+  and get the `PROGRESS_REMOVED` error.
+- Read `progress status --json` (`sanduq.progress.v3`) instead of `--schema v2`.
+- A project on `layout: classic`: run `progress theme --layout timeline` to store the Timeline and clear the notice.
+
 ## [1.5.0] - 2026-10-21
 
 Optimization round 4. No renames.

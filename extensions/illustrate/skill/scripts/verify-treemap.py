@@ -43,6 +43,8 @@ import re
 import sys
 import unicodedata
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from svg_scan import is_hand_variant, line_of  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 ASSET_DIR = ROOT / "assets"
@@ -120,10 +122,6 @@ class Box:
             self.x - EPSILON <= x <= self.right + EPSILON
             and self.y - EPSILON <= y <= self.bottom + EPSILON
         )
-
-
-def line_of(source: str, offset: int) -> int:
-    return source.count("\n", 0, offset) + 1
 
 
 def plain(body: str) -> str:
@@ -485,12 +483,6 @@ def targets(args: argparse.Namespace) -> list[Path]:
         # ponytail: generated -hand variants rewrite geometry; checked only when passed explicitly
         return sorted(p for p in ASSET_DIR.glob("example-treemap*.html") if not p.stem.endswith("-hand"))
     return [Path(p) for p in args.paths]
-
-
-def is_hand_variant(path: Path, source: str) -> bool:
-    """A generate-hand-variants.cjs output: a `-hand` stem or rough.js redraw markup."""
-    # ponytail: rough.js redraws drop the data contract, so they are never in scope.
-    return path.stem.endswith("-hand") or 'class="rough-shape"' in source
 
 
 def in_scope(path: Path, source: str) -> bool:

@@ -12,13 +12,11 @@ def _script(document):
     return f'{PREFIX}{body};\n'
 
 
-def write(ctx, report, display=None, layout=None):
-    """report.json holds the projection (v3). data.js feeds the browser: the same document, or `display` (the v2
-    compatibility document) when the theme layout is classic. The layout in force rides along as `ui.layout`, so an open
-    page picks the right renderer with each data revision instead of keeping the one it loaded with."""
+def write(ctx, report):
+    """report.json holds the projection (v3); data.js feeds the browser the same document. `ui.layout` stays `timeline`
+    so a view still holding an older blocks.js, which could also draw the removed classic page, draws the timeline."""
     atomic_write(ctx.report, json.dumps(report, indent=2, ensure_ascii=False) + '\n')
-    shown = display if display is not None else report
-    atomic_write(ctx.data_js, _script(dict(shown, ui={'layout': layout}) if layout else shown))
+    atomic_write(ctx.data_js, _script(dict(report, ui={'layout': 'timeline'})))
 
 
 def patch_collection(ctx, rev, **fields):

@@ -10,8 +10,8 @@
       ],
       "internal": true,
       "exclusive": true,
-      "ref": "illustration-tools-v3.7.0",
-      "sha": "0e7a37372e9d35512324f7f0589f6a194191428d",
+      "ref": "illustration-tools-v3.7.1",
+      "sha": "e3faeaa33f5d8d6b7e9e13eed4ab3d5b5dfc020e",
       "files": {
         "extensions/illustrate/skill/SKILL.md": "8ad69743ba0f5c3d2940f188cd8f75a444246345b32b7f97b10d9837299267c2",
         "extensions/illustrate/skill/agents/openai.yaml": "94f4c310ca3cfea9f74c10f98e9999f7510a4d896e64c3ea91838054e76b3e8d",
@@ -319,7 +319,7 @@
         "extensions/illustrate/skill/assets/template-terminal.html": "02a8125efbff47e98d40606eded828ea16c893989a46c9e9e993d7bc9994c383",
         "extensions/illustrate/skill/assets/template.html": "7b75aa1f0bf5ce8eb908e7a0bd8f0cdebb44149a72ffa3c65128f4d686dcc778",
         "extensions/illustrate/skill/package-lock.json": "8850a81ea8b75c31ccb7e1de9c2605658c75adf5d38820d615d8506ecfcf8e0c",
-        "extensions/illustrate/skill/package.json": "9aaac14a5c9c4c18d405ff14b27bf0cf9bef27c20829daaee8fdbc9f1a37b8ce",
+        "extensions/illustrate/skill/package.json": "739d76f03e759b61e59cc086f6ff180823d80b6d8b4d765976314dc28a33f7d6",
         "extensions/illustrate/skill/references/animation.md": "a75743fc74ccf5d4bee9163d53f4ab245f61ae0ce40a78d0fc909e5e4365aeb0",
         "extensions/illustrate/skill/references/export-registry.md": "bfab9e22092431c64513ff28a5c182f48004bc299994127328986d7680ba9875",
         "extensions/illustrate/skill/references/export.md": "bfa65001665f4d5edc0b358787a55e3e69b309ab7e7d249c1ea413ddf6733302",
@@ -415,6 +415,7 @@
         "extensions/illustrate/skill/scripts/mermaid_extract.py": "82c32f2e91452e1157e9ae2edab361ca34ceadad545ad8065884c8fb93f48051",
         "extensions/illustrate/skill/scripts/self-check-baseline.txt": "2af9d181a405b7d356e2082a647ac6ea0a5986d4f84954c11c753905793a3d9b",
         "extensions/illustrate/skill/scripts/self_check.py": "64c7498381099e903353a5063ee43a18aeb3d402910120c0be97dda8f33f8083",
+        "extensions/illustrate/skill/scripts/svg_scan.py": "e1c56252e24d06f9f02a5a11ef782c6e6463594e3b2201ff9dd59e041b3052dc",
         "extensions/illustrate/skill/scripts/theme_tokens.py": "6c0f83119fefb3fa97cfbe4028b31b73b031f3a9162c7bf812730664f44d4baa",
         "extensions/illustrate/skill/scripts/vendor/icons/devicon/rstudio-plain.svg": "955fec46daa3d9e05766c15f9bb92bf89f552c8de68239ce6a15cfb9cc603574",
         "extensions/illustrate/skill/scripts/vendor/icons/devicon/spss-plain.svg": "be25dae5fd94d69fc4ec46ee58be301861f2395c6476bd1a88cf1d8c70c57e82",
@@ -498,29 +499,29 @@
         "extensions/illustrate/skill/scripts/vendor/icons/tabler/world-cog.svg": "70c4b81748054b3ba4a1d1918588c09564a7a5f7465e9ab90eed4b2a81cc7748",
         "extensions/illustrate/skill/scripts/vendor/icons/tabler/world-www.svg": "6db2eed5a70108ae6491a60954aadc14950b643aa0c32e5975785449791944b7",
         "extensions/illustrate/skill/scripts/vendor/icons/tabler/world.svg": "ab71e6f58782ae4b2aa099ca869627c6051840f95e727d261f0d994c9fac7619",
-        "extensions/illustrate/skill/scripts/verify-architecture-delta.py": "235d59074662df81bda4e7ed4397998f61501839e85617fcb01990c2aa31aadf",
+        "extensions/illustrate/skill/scripts/verify-architecture-delta.py": "e2ea12f6f8bf2e731c8ae3998d5c4cd4d8f87b523bff55e9e14e0259d7b3226c",
         "extensions/illustrate/skill/scripts/verify-arrow-ends.py": "014fa549b7dc7bc77e04285acbc6955307c2732c1a092379905a08b67319295f",
-        "extensions/illustrate/skill/scripts/verify-axonometric-plan.py": "6adce51c61c261188ecf127aa86345110f77ad6770c5f1cef1bb91ad30b69fd0",
-        "extensions/illustrate/skill/scripts/verify-beeswarm.py": "9f05d6f97f0b1899a6dd59e50ba4404b84b5c9f893c894efa4b557ebcabbdd10",
+        "extensions/illustrate/skill/scripts/verify-axonometric-plan.py": "a3aba649ea15dfdd463101b120199f755197f09c50aed1326cb2c9aecc2d85bb",
+        "extensions/illustrate/skill/scripts/verify-beeswarm.py": "52e07fdb9c5dd68e16e76c56aa65e7a82cc0e4234a8466ac20fc276bfa9b90fd",
         "extensions/illustrate/skill/scripts/verify-block-registry.py": "64000fe80a35a15a9091b6de60d396302f2dc24d3dff7350f413b3eb6aecfb1f",
-        "extensions/illustrate/skill/scripts/verify-bubble.py": "d2361d873eca03ff5e3752d0a95077574fdd3ab16971555db38a61a2af8a29aa",
-        "extensions/illustrate/skill/scripts/verify-bump.py": "b06baa1c3b5a4335dc668040c80aecf64740410b6b350f3dfd6a0a63e031862b",
+        "extensions/illustrate/skill/scripts/verify-bubble.py": "f0f94fca788c27c775f926026a2a5c941bcf046deec2dfdbe03cfdc41bf3b012",
+        "extensions/illustrate/skill/scripts/verify-bump.py": "41da12c5ac1d3f65c0abfe426790676bc5c54846e3b7ae877ce9e989fae477d6",
         "extensions/illustrate/skill/scripts/verify-dumbbell.py": "15060b25bb98ae47732bd940242b127133d913c2559d75e9a5f8651f97805bce",
-        "extensions/illustrate/skill/scripts/verify-exploded.py": "4f623f0df1ba89f105d1489b81c1c810ff63ee1122725ca187da4a1d886dc13e",
+        "extensions/illustrate/skill/scripts/verify-exploded.py": "27fedca1d1f75bf710dec458fd2cf7042b458c29ee58bb35c2f38f94980e8e68",
         "extensions/illustrate/skill/scripts/verify-geometry-baseline.txt": "c9a4b0ba328a092f540db086147a470e22addd2176d93987711d2ddcad0655f2",
         "extensions/illustrate/skill/scripts/verify-geometry.py": "503586cf95e1f303c8bc2ea6ce6c7d9055f5009933a385cd2c29ade006967131",
-        "extensions/illustrate/skill/scripts/verify-heatmap.py": "c7abf2b5abe535474007874c2a235236a5782c079c1f003e128caef6badbdf8a",
-        "extensions/illustrate/skill/scripts/verify-marimekko.py": "8b2bf20c07c64f21e471050de52ac25ee48c926f12aa4e3e49bd41bd176b331d",
+        "extensions/illustrate/skill/scripts/verify-heatmap.py": "0fd094a3ba17a7973663be7c8a6185970827ec630b122ab199fcf5ee220556f9",
+        "extensions/illustrate/skill/scripts/verify-marimekko.py": "ec7c25b3fb855a4838ff934934e3794a475bdf2f494ee9a2007ca401a5e5c851",
         "extensions/illustrate/skill/scripts/verify-motion.py": "aacc868b499b32d5e4659f37a8abc83d7fa75f533d7d615acaa7145b9fe3f9ac",
-        "extensions/illustrate/skill/scripts/verify-polar.py": "ce7f925e7f7e4e8fbc16a7bd65809f7a07dc1ac25584fb22178d6d1e529e3309",
-        "extensions/illustrate/skill/scripts/verify-ridgeline.py": "c0c2a75054270d9c4de8528b663e189f6f58f1c9538365cf5685818b24cd8c14",
-        "extensions/illustrate/skill/scripts/verify-sankey.py": "75b0036bf2194ab2f7053aabc421f3506862bc02dacfeaddf92eda7d8fbb7bd6",
+        "extensions/illustrate/skill/scripts/verify-polar.py": "3a3158be053bb7cbe206ed93b829ef884ae802bb7b80e7fc26958074f9a4d932",
+        "extensions/illustrate/skill/scripts/verify-ridgeline.py": "b9003ea57b5cb69aa9c1e24f6c09babad926d27e2fc2244fee0e35f040925b20",
+        "extensions/illustrate/skill/scripts/verify-sankey.py": "39a472f91cfd19ba52379aa63a2fbcf3f5bd41be2c4c0fb6de7eb3b0b585b9ae",
         "extensions/illustrate/skill/scripts/verify-semantic-motion.py": "39abbebeb31d92dfd1f972e69f5a5d6fe50e7e38496b82eef800ae568665300f",
         "extensions/illustrate/skill/scripts/verify-sequence-oauth.py": "e886181398be7c27a6e05e7d0f3bf1fdfd4b9a0f9402a13f66d487d72bb10718",
-        "extensions/illustrate/skill/scripts/verify-slopegraph.py": "7928edaf111857a390a3c51f338b3db07aac3dbf165c2f70785b5d34da70f754",
-        "extensions/illustrate/skill/scripts/verify-streamgraph.py": "f65e346149a4fbd21cc0281193b81f63cb95a6a0baf3b455c922c891179159dd",
-        "extensions/illustrate/skill/scripts/verify-treemap.py": "09258dc4860406a2316ad297c7d69310bf9a75f803954d5f2fc12755bafba874",
-        "extensions/illustrate/skill/scripts/verify-waterfall.py": "aba19be659a0d82ec43c0134fa62fe1e6d59909bacb2c17ebc806a0e8ec79fb4"
+        "extensions/illustrate/skill/scripts/verify-slopegraph.py": "d6c559933c5656edb87b15fa72a668d5e6ec8e68c1fd64d663b2a96bd1ac785d",
+        "extensions/illustrate/skill/scripts/verify-streamgraph.py": "e98f7b65db1a0b49523658616ef706c79bb2375ab03535e4e099eec8daca3f8b",
+        "extensions/illustrate/skill/scripts/verify-treemap.py": "54fe566c7309d9f36bd8f0f5a3f1148faa6f18618bdaae9a1c8b183de3d0b457",
+        "extensions/illustrate/skill/scripts/verify-waterfall.py": "a0907189c5823c8f379c784c705384b4bf41c000612c07ef00ef31b811604be9"
       }
     },
     "delegate-task": {
@@ -532,8 +533,8 @@
       ],
       "internal": true,
       "exclusive": true,
-      "ref": "agent-tools-v1.6.2",
-      "sha": "7e608b01b9cfcd821d8593ab340c223111bc57e1",
+      "ref": "agent-tools-v1.7.0",
+      "sha": "e3faeaa33f5d8d6b7e9e13eed4ab3d5b5dfc020e",
       "files": {
         "extensions/workflow/assets/delegate-task/.gitignore": "247681cefffa8448d973f21147c92b38b63f492a98a50aca3b3c490bc97499e1",
         "extensions/workflow/assets/delegate-task/README.ar.md": "7c2cade9d85acab9c3da95d81c59d6bd44abbed9bdd465f92e6de81ed034ea12",
@@ -572,6 +573,10 @@
         [
           "skills/dev-tools/skills/user-manual/scripts/build_manual.py",
           "extensions/user-manual/scripts/build_manual.py"
+        ],
+        [
+          "skills/dev-tools/skills/user-manual/scripts/init_manual.py",
+          "extensions/user-manual/scripts/init_manual.py"
         ],
         [
           "skills/dev-tools/skills/user-manual/tests/test_build_manual.py",
@@ -626,10 +631,16 @@
             "User-Manual/tools/",
             ".specify/extensions/user-manual/scripts/"
           ]
+        ],
+        "init_manual.py": [
+          [
+            "import sanduq_ci\n",
+            "try:  # vendored beside this script in a built package\n    import sanduq_ci\nexcept ImportError:  # canonical source tree\n    import sys\n    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / \"workflow\" / \"scripts\"))\n    import sanduq_ci\n"
+          ]
         ]
       },
-      "ref": "dev-tools-v1.3.0",
-      "sha": "0e7a37372e9d35512324f7f0589f6a194191428d",
+      "ref": "dev-tools-v1.4.0",
+      "sha": "e3faeaa33f5d8d6b7e9e13eed4ab3d5b5dfc020e",
       "files": {
         "extensions/user-manual/assets/github/user-manual-preview.yml": "88d70609f3f3b43672039aa69f5c58489e9e5d224b8f31db1b765a563bd47b90",
         "extensions/user-manual/assets/github/user-manual-release.yml": "638dc2f42c09a2cf458a0b1672eb72eb06e95a3a04f523195eb5307de2cfad96",
@@ -643,6 +654,7 @@
         "extensions/user-manual/assets/scaffold/theme/theme-readthedocs.css": "a02ecd1df0b52bfc2dc829845d54263176dd8205a751f28093d50eb4721316e2",
         "extensions/user-manual/scripts/audit_manual.py": "8850b645a531ce8f11402865e2140f2608d2a99bf6ee8536500472e644f3a9b5",
         "extensions/user-manual/scripts/build_manual.py": "e4371681f259add556194a6a2aca332b461d7f09f65efb090f6138b9b11e3df1",
+        "extensions/user-manual/scripts/init_manual.py": "3fe43df0ac73defb48458c720c360505b406e17c8d9b1717b1b296449b4aab3a",
         "extensions/user-manual/skills/api-docs/references/openapi.md": "d4ff6e032f9f7d5321008959fc67edd999b1fe60a72236abf80d4dcb944a29ab",
         "extensions/user-manual/skills/preview-publishing/references/provider-contract.md": "1609a1ba809049bfe7959dc727f34151edd3fda1db8c8c9211d0bdddab83ecb3",
         "extensions/user-manual/skills/release-docs/references/migration-guides.md": "4c3d0634a3871937cf8abe78bdc8d059162bdf9b822f536b9618e12d3e5aa01c",
@@ -674,26 +686,30 @@
         [
           "skills/agent-tools/skills/progress-report/references",
           "extensions/progress/skills/progress/references"
+        ],
+        [
+          "skills/agent-tools/skills/progress-report/tests/bench",
+          "extensions/progress/tests/bench"
         ]
       ],
       "internal": true,
       "exclusive": true,
-      "ref": "agent-tools-v1.6.2",
-      "sha": "7e608b01b9cfcd821d8593ab340c223111bc57e1",
+      "ref": "agent-tools-v1.7.0",
+      "sha": "e3faeaa33f5d8d6b7e9e13eed4ab3d5b5dfc020e",
       "files": {
         "extensions/progress/assets/ui/base.css": "6c5e32f0ca4fb687ef681339957b1ed85805cfaf9f1fa551a3367127032585b0",
-        "extensions/progress/assets/ui/blocks.js": "be84e638ca6d3e4a97a9e156739ece588628db5fe3ee95df9b78fdab124fe2cd",
+        "extensions/progress/assets/ui/blocks.js": "8df55ae3077add1217f757bb8e37eb742ed4747caa3192067a4272243bec569a",
         "extensions/progress/assets/ui/index.html": "6a108df64b2c75d252bca2739b86f1f08104779dd7465454c77a80793ad74380",
         "extensions/progress/docs/assets/progress-dark.png": "d8192fd01c8993b333067742741332ba20bc41b2d63ddad050683fa8e8e6faf2",
         "extensions/progress/docs/assets/progress-light.png": "fa10b6bd15cd74be9dbf1924c611925a9ef859b7fd779f5ebf41bca863edfc4b",
         "extensions/progress/docs/assets/progress-narrow.png": "745c12dc118872760d001d2f5427c7a7a04fbe1445dbcfb550ab8c41cbe83814",
-        "extensions/progress/docs/commands.md": "ccde441bcf41d88287b01dc2b118b46e3023034b5bea9a251225f78b47506607",
-        "extensions/progress/docs/contracts.md": "9557940d0f47b7c3b15092873d8659f0f09d625a954349bcf464d2dc7b4caab0",
-        "extensions/progress/docs/hosts.md": "c37e61a555e5601dbc09ee9b621fc0b4acf12de32953adbef0de355070e82239",
+        "extensions/progress/docs/commands.md": "305729bb52529a355b7133239abdc5b1108bf0af760fa8bbf20e6c1fbfbcaa1a",
+        "extensions/progress/docs/contracts.md": "bcb27fd24d4ad5cec1f0ac6865ed6c1f8afbd1fd82753fe1e9e695ac37ca50d9",
+        "extensions/progress/docs/hosts.md": "0893504b28da0646f64eea9513da9a94e411f34feee41f9b13ce7eb67dbe258c",
         "extensions/progress/docs/token-benchmark.md": "c5475ab085cbc533364d756fa2d62509be4e03ebaac80299772c633c76fcd7e0",
         "extensions/progress/scripts/hook.py": "9f37234f08ed93868238185ba42b006449079ce948394c312ded16b380e254bb",
-        "extensions/progress/scripts/progress.py": "853ac992e1a768856fe2645e59ba9ec3a47b7afc1ecb6f6be060ffd3f34f4c81",
-        "extensions/progress/scripts/sanduq_progress/__init__.py": "26946109ac73f182178eaa2c7eef81a51663f220d2759937265ea029d23dbabe",
+        "extensions/progress/scripts/progress.py": "7f82b56b10352f95593b50c24d690ea8c6b9176b9932736acf61b6579e975dd3",
+        "extensions/progress/scripts/sanduq_progress/__init__.py": "72c7701d3758564334805c7cbf41cd2335e541be573492b3d5209107ac67d3ff",
         "extensions/progress/scripts/sanduq_progress/collect/clarifications.py": "a49d9579b8e5f13f546f0c1be9804209884637ecb65536e5ef8418a786cfe138",
         "extensions/progress/scripts/sanduq_progress/collect/hosts.py": "0393a47c60a018a518da492438b8aef84645fda261038ea5c33345b763fad3cb",
         "extensions/progress/scripts/sanduq_progress/collect/lifecycle.py": "f33646619639cd1568f761cbbaaed21ac2334afd05df3086caf0ac43b735d295",
@@ -708,20 +724,27 @@
         "extensions/progress/scripts/sanduq_progress/hosts/claude.py": "789d06edd5d7734f607e87996d22f3df8aba132ce41643ff003eefb8fd8aa7b1",
         "extensions/progress/scripts/sanduq_progress/hosts/codex.py": "8d5d52e72f082224950c405040d0df87db54ad4cf272f7b28b2562471ad1771a",
         "extensions/progress/scripts/sanduq_progress/lock.py": "26e88b8a3c47e6bcbb28fa922c604488f9b7a20ea8f69f45d92f0d3053e441f4",
-        "extensions/progress/scripts/sanduq_progress/model.py": "067ee4cfd083b1ab89e80b4de6528a0d5b65293bb37d9c487d3559dc96914ea0",
-        "extensions/progress/scripts/sanduq_progress/model_v3.py": "a0e9dbb4682675f05f7e44cf0c6d8459bbe9afadab5541eb1d057b887be18779",
-        "extensions/progress/scripts/sanduq_progress/paths.py": "619fc0ba499780b59a9f34ababe40eceb6d0971036be5f35146072c057c4057a",
-        "extensions/progress/scripts/sanduq_progress/refresh.py": "fb6fb3be44b05447a10f1faba7032dd7b3994fbc21cebe1f12d687316a3c4cd7",
-        "extensions/progress/scripts/sanduq_progress/render_data.py": "d240ccb263771d54fcae5e033f8f80278368267f2f039aac4ec97f47ffbd69d9",
-        "extensions/progress/scripts/sanduq_progress/render_md.py": "7ff02c507a2dc4ce07df43babef34163bfb3d4f4747da708da3c82a87c4efb8d",
+        "extensions/progress/scripts/sanduq_progress/model.py": "06c2903c283a9cbf432bcfc21f0f1972289bc4bcc485098276c6c8139e0c0a4f",
+        "extensions/progress/scripts/sanduq_progress/model_v3.py": "731e0538b5b55fdc3b37559bb5492a0a68cae4d0d7d80f1916224b7f0a7cdb28",
+        "extensions/progress/scripts/sanduq_progress/paths.py": "7c7604f7a3054022ea9539fec270ebd31cf025fb918258ddb0db5c4c04e1db15",
+        "extensions/progress/scripts/sanduq_progress/refresh.py": "bb68b50f212661e1ff39293ae0ef38dc35de88e57ee88dd63c47eed02a84c7e6",
+        "extensions/progress/scripts/sanduq_progress/render_data.py": "d3c94503d5928a8ea32222d45fc2a13b0f9bf4746092b37270b70534521a2d43",
+        "extensions/progress/scripts/sanduq_progress/render_md.py": "99390fdd308abd4c04d82093db28c7446dff8888ce3fb8beacb2890f5038711f",
         "extensions/progress/scripts/sanduq_progress/safelog.py": "b1c625cd95f512d742d03784d791912c203d04f49920fbf0a64b1cd43b3ecda3",
         "extensions/progress/scripts/sanduq_progress/selfreport.py": "479d547763b484f1ddffb7c6a8878363b3fef36314a1f22a5e4ed5a24fbea87a",
         "extensions/progress/scripts/sanduq_progress/snapshot.py": "6e08f9c467644f0f04f01c448d60f3627f412355a8e36d68f4d66951e3801875",
         "extensions/progress/scripts/sanduq_progress/statusline.py": "5908def1fce82595d192e5e6073bb45ea585dc8572977c23e0fbffc0d1b77783",
-        "extensions/progress/scripts/sanduq_progress/theme.py": "4d36e9ea80b1ee8a2a83e9cbac539f481e10b36d8979ce419e0e807eea292f9a",
+        "extensions/progress/scripts/sanduq_progress/theme.py": "d6fef9ad2e7acede1eecbd17f925bdb9e4e4b410eee881b8f34fe571b871d5d9",
         "extensions/progress/scripts/sanduq_progress/util.py": "8fe314050fe42bc84c1444e7c101a1bf48defd45e3642135659b04435e2f9853",
-        "extensions/progress/scripts/sanduq_progress/validate.py": "3a10c2b6330db39b3525ed2547cb21b70f506e1cf55ce5097f339b975e892aa6",
-        "extensions/progress/skills/progress/references/verbs.md": "f6eb00bc85007fe860d599cc5ad456d9c790960f067cbbc2c571af40d1fee85d"
+        "extensions/progress/scripts/sanduq_progress/validate.py": "cc47e49f726e8dc8b1a6ba1771c2ad6d49e279dea2e9b805235618bdbc7d0f62",
+        "extensions/progress/skills/progress/references/verbs.md": "81cea2ebb7565945041010d12a50cc424819ac0ceefa094c93c7d9849cd60ce6",
+        "extensions/progress/tests/bench/__init__.py": "32af8bfcac01b2d1b812821b1902cdfe5d1b49ac39dc7b9ff40f0e4e42855e83",
+        "extensions/progress/tests/bench/approaches.py": "000f1481ceee87018003447246f2191e07c253621acf7263aa6dcc381158ebf7",
+        "extensions/progress/tests/bench/counting.py": "890f76320c7cec396b5d7df17c2eb330efb235efd879c5f6c05c89919df49eb4",
+        "extensions/progress/tests/bench/model.py": "410b2b51f4330c16fade282fa2f825a795c50f1cfbb7b3b2199a3cb49fd578aa",
+        "extensions/progress/tests/bench/report.py": "19f7b1a53d62498fa91c2530636c00d7a28153db2cdf42b4a71e7b8c0da6e5a5",
+        "extensions/progress/tests/bench/run.py": "b8356a89d63bcd64d4fd70cb0673735e1e4c508311bafe72d2cf66e45c453ffe",
+        "extensions/progress/tests/bench/traces.py": "04c5b51543bc57b9b8e37270b7f1885c633a221fc9543f279aa6ede4e798249b"
       }
     }
   }
