@@ -12,6 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / ".github" / "scripts"))
 import ci_matrix  # noqa: E402
+import shard_times  # noqa: E402
 
 ALL = set(ci_matrix.SUITES)
 WORKFLOW_TESTS = ci_matrix.ROOT / "extensions/workflow/tests"
@@ -427,6 +428,98 @@ class Round4WorkflowFiles(unittest.TestCase):
     def test_suite_step_leaves_the_project_folder_to_the_matrix(self):
         text = (ci_matrix.ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
         self.assertNotIn("discover -s extensions/project/tests", text)
+
+
+class Round5ShardTimes(unittest.TestCase):
+    """SHARD: per-unit seconds from the sharded step, and the table rebuilt from them; X22 sanduq_gh entry."""
+
+    SCRIPT = ci_matrix.ROOT / ".github/scripts/shard_times.py"
+    FIXTURE = {
+        "test_m1.py": "import unittest\n"
+                      "class A(unittest.TestCase):\n"
+                      "    @classmethod\n    def setUpClass(cls): print('A-up')\n"
+                      "    @classmethod\n    def tearDownClass(cls): print('A-down')\n"
+                      "    def test_a(self): pass\n"
+                      "class B(unittest.TestCase):\n"
+                      "    @classmethod\n    def tearDownClass(cls): print('B-down')\n"
+                      "    def test_b(self): pass\n",
+        "test_m2.py": "import unittest\n"
+                      "class C(unittest.TestCase):\n    def test_fails(self): self.fail('x')\n",
+    }
+
+    def run_both(self, names):
+        import os
+        import subprocess
+        folder = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        for name, text in self.FIXTURE.items():
+            (folder / name).write_text(text, encoding="utf-8")
+        env = dict(os.environ, PYTHONPATH=str(folder))
+        plain, timed = (subprocess.run(command + names, cwd=folder, env=env, capture_output=True, text=True)
+                        for command in ([sys.executable, "-m", "unittest", "-q"],
+                                        [sys.executable, str(self.SCRIPT), "run"]))
+        return plain, timed
+
+    def test_run_keeps_tests_exit_code_and_fixtures_and_times_each_name(self):
+        for names, code in ((["test_m1.A", "test_m1.B", "test_m2"], 1), (["test_m1"], 0), (["test_nope"], 1)):
+            plain, timed = self.run_both(names)
+            self.assertEqual((code, code), (plain.returncode, timed.returncode), names)
+            ran = re.compile(r"^Ran \d+ tests?", re.M)
+            self.assertEqual(ran.findall(plain.stderr), ran.findall(timed.stderr), names)
+            for line in ("A-up", "A-down", "B-down"):
+                self.assertEqual(plain.stdout.count(line), timed.stdout.count(line), (names, line))
+            self.assertEqual(names, [m[1] for m in map(shard_times.LINE.search, timed.stdout.splitlines()) if m])
+
+    def write_logs(self, *texts):
+        folder = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        paths = []
+        for n, text in enumerate(texts):
+            paths.append(folder / f"log{n}.txt")
+            paths[-1].write_text(text, encoding="utf-8")
+        return paths
+
+    def test_read_times_parses_job_log_lines_and_averages_repeats(self):
+        logs = self.write_logs(
+            "2026-10-22T10:00:00.1Z shard-unit-seconds test_lint 12.50\n"
+            "2026-10-22T10:00:00.2Z Ran 40 tests in 30.1s\n"
+            "2026-10-22T10:00:00.3Z shard-unit-seconds test_x notanumber\n",
+            "regression (windows-latest, memory, 1/2)\tRun the suite\t2026-10-22T10:00:01.0Z "
+            "shard-unit-seconds test_archive.ArchiveTests 30.04\n"
+            "regression (windows-latest, workflow, 1/4)\tRun the suite\t2026-10-22T10:00:02.0Z "
+            "shard-unit-seconds test_lint 13.50\r\n")
+        self.assertEqual({"test_lint": 13.0, "test_archive.ArchiveTests": 30.04}, shard_times.read_times(logs))
+
+    def test_rebuild_replaces_measured_suites_and_drops_unknown_units(self):
+        workflow, memory = sorted(ci_matrix.shard_units("workflow"))[0], sorted(ci_matrix.shard_units("memory"))[0]
+        old = {"source": "old", "workflow": {"test_gone": 1.0}, "memory": {"kept.Tests": 2.0}}
+        table = shard_times.rebuild({workflow: 1.26, "test_deleted": 5.0}, old, "runs 1 and 2")
+        self.assertEqual({"source": "runs 1 and 2", "workflow": {workflow: 1.3}, "memory": {"kept.Tests": 2.0}}, table)
+        self.assertEqual({"test_gone": 1.0}, old["workflow"])
+        self.assertEqual({memory: 2.0}, shard_times.rebuild({memory: 2.0}, old, "s")["memory"])
+
+    def test_rebuild_cli_writes_the_table_and_refuses_logs_without_times(self):
+        import contextlib
+        import io
+        unit = sorted(ci_matrix.shard_units("workflow"))[0]
+        out = Path(tempfile.mkdtemp()) / "weights.json"
+        self.addCleanup(shutil.rmtree, out.parent, ignore_errors=True)
+        empty, = self.write_logs("Ran 3 tests in 1.0s\n")
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(2, shard_times.main(["rebuild", "--source", "s", "--out", str(out), str(empty)]))
+        self.assertFalse(out.exists())
+        log, = self.write_logs(f"shard-unit-seconds {unit} 4.0\n")
+        self.assertEqual(0, shard_times.main(["rebuild", "--source", "run 7", "--out", str(out), str(log)]))
+        self.assertEqual({"source": "run 7", "workflow": {unit: 4.0}}, json.loads(out.read_text(encoding="utf-8")))
+
+    def test_sharded_step_prints_unit_times_and_discover_is_unchanged(self):
+        text = (ci_matrix.ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        self.assertIn('PYTHONPATH="$TESTS" python .github/scripts/shard_times.py run "${names[@]}"', text)
+        self.assertIn('python -m unittest discover -s "$TESTS" -q', text)
+
+    def test_sanduq_gh_runs_every_suite_that_ships_it(self):
+        self.assertEqual({"scope", "workflow", "project", "pr"}, suites(["extensions/scripts/shared/sanduq_gh.py"]))
+        self.assertTrue(ci_matrix.build(["extensions/scripts/shared/sanduq_gh.py"], "push")["install_smoke"])
 
 
 if __name__ == "__main__":
