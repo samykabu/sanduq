@@ -59,3 +59,7 @@ After: D:\Projects\Personal\sanduq-round4 @ def53e0 (tier full, recovery revalid
 | instructions.pr | 10641 | 10641 | +0.0% |
 | instructions.pointer_set_once | 10432 | 9381 | -10.1% |
 | instructions.linked_once | 29075 | 31882 | +9.7% |
+
+Note (2026-10-21): the -33% wall time above includes first-run warm-up (BEFORE ran first on a cold machine). Two
+more alternating pairs on the same machine gave AFTER 23,385 / 25,410 ms against BEFORE 24,324 / 28,909 ms, so the
+full-tier wall time is about 4% to 12% lower; git subprocesses are 316 in every run. Lite is unchanged (+0.3%).
