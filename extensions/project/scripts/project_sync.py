@@ -336,6 +336,14 @@ class Sync:
                                            {'sub_issue_id': self.rest(f'repos/{self.repo}/issues/{number}')['id']}),
                          allow_fail=True, mutating=True)
 
+    def parent_number(self, number):
+        """The issue's parent issue number, or None (no parent, or the lookup failed)."""
+        rc, out = gh_raw(['api', f'repos/{self.repo}/issues/{number}/parent', '-H', 'Accept: application/vnd.github+json'])
+        try:
+            return as_json(out, {}).get('number') if rc == 0 else None
+        except (ValueError, AttributeError):
+            return None
+
     def recover_sub_issues(self, tasks, labels, template):
         """Adopts task issues that already exist on GitHub (a run interrupted before it saved, or lost state)
         and returns the tasks still to create. A title matches the template with any description."""
@@ -356,8 +364,12 @@ class Sync:
                 left.append(task)
                 continue
             self.log(f"found existing sub-issue #{found['number']} for {task['id']}; not creating another")
-            if self.link_sub_issue(found['number'], found['id']) is None and not self.args.dry_run:
-                self.log(f"sub-issue link for {task['id']} not confirmed (it may already be linked)", 'warn')
+            if self.link_sub_issue(found['number'], found['id']) is None and not self.args.dry_run \
+                    and self.parent_number(found['number']) != int(self.fs['issue']):
+                # Never adopt an issue this feature does not own: sync_progress would later close it.
+                self.log(f"#{found['number']} matches {task['id']} but is not linked to #{self.fs['issue']}; "
+                         f"not adopted and not recreated, rerun once the link can be made", 'warn')
+                continue
             self.fs['subIssues'][task['id']] = {'number': found['number'], 'nodeId': found['id'], 'closed': False}
         return left
 
@@ -425,7 +437,7 @@ class Sync:
             raise Skip('gh not authenticated')
         if 'project' not in token_scopes(auth):
             raise Skip("gh token lacks 'project' scope - run: gh auth refresh -h github.com -s project,read:project")
-        remote = sanduq_remote.origin_url(Path.cwd(), timeout=TIMEOUT) or ''
+        remote = sanduq_remote.origin_url(Path.cwd(), timeout=TIMEOUT, resolve=True) or ''
         self.repo = github_repo(remote)
         if not self.repo:
             raise Skip(f'remote is not GitHub ({remote})')
