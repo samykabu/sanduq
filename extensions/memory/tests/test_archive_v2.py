@@ -130,6 +130,19 @@ class ArchiveV2Tests(TemplateRepo, unittest.TestCase):
         self.assertFalse(error["success"])
         self.assertIn(note, error["error"])
 
+    def test_spec_accepts_spec_kit_and_workflow_feature_directories_only(self):
+        """B4: Spec Kit's sequential and timestamp names and Workflow's unpadded issue names; nothing else."""
+        accepted = ("specs/001-x", "specs/20260101-120000-x", "specs/2-add-a-name-flag", "specs/12-café_menu",
+                    "specs/412a-x")
+        refused = ("specs/memory", "specs/2", "specs/x-2", "specs/2-x/y", "other/2-x")
+        for name in accepted + refused:
+            (self.root / name).mkdir(parents=True, exist_ok=True)
+        for name in accepted:
+            self.assertEqual(name, self.archive.spec(name))
+        for name in refused:
+            with self.assertRaises(ArchiveError, msg=name):
+                self.archive.spec(name)
+
     def test_prepare_writes_a_v2_journal_and_delta_skeleton(self):
         run = self.journal()
         self.assertEqual((2, self.base_root), (run["memory_format"], run["base_memory_root"]))

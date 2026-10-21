@@ -12,6 +12,7 @@
 .PARAMETER HooksMode    'optional' offers sync as a manual hook; 'required' marks it automatic.
 .PARAMETER AutoCreateColumns  Create any lifecycle column missing from the board without prompting.
 .PARAMETER NonInteractive     Never prompt; map exact+fuzzy only, warn on unmatched (unless -AutoCreateColumns).
+.PARAMETER AllowStatusReset   Change columns even when the board's item statuses cannot be read; they are then cleared.
 .PARAMETER DryRun       Show what would be written/created without mutating anything.
 .PARAMETER Json         Emit a JSON summary as the last line.
 #>
@@ -23,6 +24,7 @@ param(
     [ValidateSet('optional', 'required')][string]$HooksMode,
     [switch]$AutoCreateColumns,
     [switch]$NonInteractive,
+    [switch]$AllowStatusReset,
     [switch]$DryRun,
     [switch]$Json
 )
@@ -209,6 +211,14 @@ if ($toCreate.Count -gt 0) {
         }
         foreach ($c in $toCreate) { if (-not $c.from) { $opts += "{name:$(ConvertTo-Json $c.name),color:$($c.color),description:`"`"}" } }
         $optsStr = $opts -join ','
+        # The update replaces every option id, which clears every item's Status: save each by name first.
+        $saved = @()
+        $itemsJson = & gh project item-list $Number --owner $Owner --format json --limit 100000 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            $saved = @(($itemsJson | ConvertFrom-Json).items | Where-Object { $_.status } | ForEach-Object { @{ id = $_.id; status = $_.status } })
+        }
+        elseif ($AllowStatusReset) { Warn "cannot read the board's items ($itemsJson); -AllowStatusReset: their Status will be cleared" }
+        else { Die "cannot read the board's items, so their Status could not be restored after the column change: $itemsJson - fix access and rerun, or pass -AllowStatusReset to accept that every item loses its Status" }
         $q = "mutation{updateProjectV2Field(input:{fieldId:`"$statusFieldId`",singleSelectOptions:[$optsStr]}){projectV2Field{... on ProjectV2SingleSelectField{options{id name}}}}}"
         $res = & gh api graphql -f query="$q" 2>&1
         if ($LASTEXITCODE -ne 0) { Warn "column creation failed: $res"; }
@@ -217,6 +227,16 @@ if ($toCreate.Count -gt 0) {
             $newOpts = ($res | ConvertFrom-Json).data.updateProjectV2Field.projectV2Field.options
             $statusOptions = [ordered]@{}
             foreach ($no in $newOpts) { $statusOptions[$no.name] = $no.id }
+            $restoreFailed = @()
+            foreach ($item in $saved) {
+                $renamed = $toCreate | Where-Object { $_.from -ceq $item.status } | Select-Object -First 1
+                $name = if ($renamed) { $renamed.name } else { $item.status }
+                $optionId = ($newOpts | Where-Object { $_.name -ceq $name } | Select-Object -First 1).id
+                $out = if ($optionId) { & gh project item-edit --id $item.id --project-id $projectId --field-id $statusFieldId --single-select-option-id $optionId 2>&1 } else { 'no such column after the update' }
+                if (-not $optionId -or $LASTEXITCODE -ne 0) { $restoreFailed += "$($item.id) was '$($item.status)': $out" }
+            }
+            Info "restored Status on $($saved.Count - $restoreFailed.Count) of $($saved.Count) item(s)"
+            foreach ($f in $restoreFailed) { Warn "item Status not restored, set it by hand: $f" }
             foreach ($c in $toCreate) {
                 if ($statusOptions.Contains($c.name)) {
                     foreach ($p in $c.phases) { $phaseToStatus[$p] = $c.name }
@@ -284,3 +304,4 @@ else {
 Info 'done. Next: commit config.json, then run a dry-run sync:'
 Info '  python .specify/extensions/project/scripts/project_sync.py --phase open --dry-run'
 if ($Json) { $config | ConvertTo-Json -Depth 10 -Compress }
+if ($restoreFailed) { exit 1 }

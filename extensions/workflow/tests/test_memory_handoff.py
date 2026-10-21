@@ -123,6 +123,16 @@ class MemoryHandoffTests(unittest.TestCase):
             run.complete('core-token', self.receipt('execute'))
         self.assertEqual(before, (self.memory_state / 'pending.json').read_bytes())
 
+    def test_an_issue_numbered_feature_below_100_queues(self):
+        """B4: Workflow names features `specs/<issue>-<slug>` without padding; Memory queues them."""
+        self.feature = 'specs/2-add-a-name-flag-to-greet'
+        self.install_memory()
+        self.enable()
+        run, result = self.executed()
+        self.assertEqual(('queued', 'MEMORY_QUEUED'),
+                         (result['memory_handoff']['status'], result['memory_handoff']['reason']))
+        self.assertIn(self.feature, w.read(self.memory_state / 'pending.json'))
+
     def test_stale_approval_never_queues(self):
         self.install_memory()
         self.enable()

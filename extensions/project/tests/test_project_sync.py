@@ -365,6 +365,14 @@ if args[:2] == ['api', 'graphql']:
     open('mutation.json', 'w').write(json.dumps(names))
     print(json.dumps({'data': {'updateProjectV2Field': {'projectV2Field': {
         'options': [{'id': 'N%d' % i, 'name': n} for i, n in enumerate(names)]}}}}))
+elif args[:2] == ['project', 'item-list']:
+    if ITEMS is None: raise SystemExit('HTTP 403: Resource not accessible by integration')
+    if __import__('os').path.exists('mutation.json'): raise SystemExit('items read after the column update')
+    print(json.dumps({'items': ITEMS, 'totalCount': len(ITEMS)}))
+elif args[:2] == ['project', 'item-edit']:
+    item = args[args.index('--id') + 1]
+    if item in FAIL_EDIT: raise SystemExit('edit refused')
+    open('edits.json', 'a').write(json.dumps([item, args[args.index('--single-select-option-id') + 1]]) + '\\n')
 elif args[:2] == ['auth', 'status']: print("Logged in to github.com\\n  - Token scopes: " + SCOPES)
 elif args[:2] == ['api', 'user']: print('acme')
 elif args[:2] == ['api', 'users/acme']: print(KIND)
@@ -386,7 +394,8 @@ HOOKS = """hooks:
 class ProjectInitTests(unittest.TestCase):
     """PM4/PM5: both init scripts need the whole 'project' scope and name the choice they cannot make."""
 
-    def init(self, shell, scopes, *extra, kind='User', existing=None, columns=None, managed=None, dry_run=True):
+    def init(self, shell, scopes, *extra, kind='User', existing=None, columns=None, managed=None, dry_run=True,
+             items=(), fail_edit=()):
         """(exit code, output) of one init run; `extra` is (bash flags, pwsh flags), `existing` a config.json,
         `managed` the `workflow.py project-defaults` answer of a Workflow-managed project."""
         tmp = tempfile.TemporaryDirectory()
@@ -404,7 +413,8 @@ class ProjectInitTests(unittest.TestCase):
             stub.parent.mkdir(parents=True)
             stub.write_text('print(' + repr(json.dumps(managed)) + ')\n', encoding='utf-8')
         fake = root / 'fake_gh.py'
-        fake.write_text('SCOPES = ' + repr(scopes) + '\nKIND = ' + repr(kind) + '\nCOLUMNS = ' + repr(columns) + '\n'
+        fake.write_text('SCOPES = ' + repr(scopes) + '\nKIND = ' + repr(kind) + '\nCOLUMNS = ' + repr(columns) + '\nITEMS = '
+                        + repr(None if items is None else list(items)) + '\nFAIL_EDIT = ' + repr(list(fail_edit)) + '\n'
                         + FAKE_GH, encoding='utf-8')
         flags = list(extra[0] if shell == 'bash' else extra[1]) if extra else []
         scripts = ROOT / 'project/scripts'
@@ -491,6 +501,53 @@ class ProjectInitTests(unittest.TestCase):
             written = json.loads((self.root / '.specify/extensions/project/config.json').read_text(encoding='utf-8-sig'))
             self.assertEqual(written['statusOptions'], {name: 'N%d' % i for i, name in enumerate(sent)}, shell)
             self.assertEqual(written['phaseToStatus'], phases, shell)
+
+    STATUSES = ['Backlog', 'Feature Specification', 'Need Clarifications', 'Ready', 'In progress', 'In review', 'Done']
+    MANAGED = {'phaseToStatus': {'open': 'Feature Specification', 'analysis': 'Ready', 'engineer-review': 'Ready',
+                                 'ready': 'Ready', 'in-progress': 'In progress', 'in-review': 'In review',
+                                 'done': 'Done'}, 'statuses': STATUSES}
+    CREATE = (['--number', '1', '--json', '--auto-create-columns'], ['-Number', '1', '-Json', '-AutoCreateColumns'])
+    ITEMS = [{'id': 'I1', 'status': 'In Progress', 'content': {'type': 'Issue'}},
+             {'id': 'I2', 'status': 'Todo', 'content': {'type': 'DraftIssue'}},
+             {'id': 'I3', 'content': {'type': 'PullRequest'}}]
+
+    def edits(self):
+        path = self.root / 'edits.json'
+        return dict(json.loads(line) for line in path.read_text().splitlines()) if path.exists() else {}
+
+    def test_a_column_change_sets_every_item_status_again_by_name(self):
+        """Board guard: the option update clears every item's Status, so init restores each one by name."""
+        for shell in self.shells():
+            code, output = self.init(shell, "'project', 'repo'", *self.CREATE, columns=['Todo', 'In Progress', 'Done'],
+                                     managed=self.MANAGED, dry_run=False, items=self.ITEMS)
+            self.assertEqual(code, 0, (shell, output))
+            options = json.loads((self.root / '.specify/extensions/project/config.json')
+                                 .read_text(encoding='utf-8-sig'))['statusOptions']
+            # The renamed column keeps its items; an item without a Status is left alone.
+            self.assertEqual(self.edits(), {'I1': options['In progress'], 'I2': options['Todo']}, shell)
+            self.assertIn('restored Status on 2 of 2 item(s)', output, shell)
+
+    def test_unreadable_items_refuse_the_column_change_unless_allowed(self):
+        allow = (['--allow-status-reset'], ['-AllowStatusReset'])
+        for shell in self.shells():
+            code, output = self.init(shell, "'project', 'repo'", *self.CREATE, columns=['Todo', 'In Progress', 'Done'],
+                                     managed=self.MANAGED, dry_run=False, items=None)
+            self.assertNotEqual(code, 0, (shell, output))
+            self.assertIn('allow-status-reset' if shell == 'bash' else 'AllowStatusReset', output, shell)
+            self.assertFalse((self.root / 'mutation.json').exists(), shell)
+            flags = tuple(a + b for a, b in zip(self.CREATE, allow))
+            code, output = self.init(shell, "'project', 'repo'", *flags, columns=['Todo', 'In Progress', 'Done'],
+                                     managed=self.MANAGED, dry_run=False, items=None)
+            self.assertEqual(code, 0, (shell, output))
+            self.assertTrue((self.root / 'mutation.json').exists(), shell)
+
+    def test_an_item_whose_status_cannot_be_set_again_is_reported_and_fails_the_run(self):
+        for shell in self.shells():
+            code, output = self.init(shell, "'project', 'repo'", *self.CREATE, columns=['Todo', 'In Progress', 'Done'],
+                                     managed=self.MANAGED, dry_run=False, items=self.ITEMS, fail_edit=['I2'])
+            self.assertEqual(code, 1, (shell, output))
+            self.assertIn("I2 was 'Todo'", output, shell)
+            self.assertIn('I1', self.edits(), shell)
 
 
 class DescriptionTests(unittest.TestCase):

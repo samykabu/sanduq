@@ -14,11 +14,13 @@ Round 4.
 - Snapshot reuse, the board cache and `render-spec` moved from the analysis contract to the README.
 - A rendered spec can be bound. The Specify claim on it is `bind-only`, and `bind` with the claim's flags refused it (`SCOPE_WORKFLOW_BINDING_MISMATCH`). The fresh gate also took the approved analysis for a revised one, because publish prefixes the prompt with the issue and effort.
 - The fresh gate accepts a root issue kept whole: GitHub's 404 for its parent means no parent, so no retained parent approval is needed. An issue whose approval names children still needs its parent.
+- `gate` returns the issue's checked prerequisites as `dependencies`, so `bind` writes them to `scope-source.json`. Workflow's PR lint (lean execution) and `pr_publish` read them there; without them the PR stage failed `PR_LINT_SCOPE_PREREQUISITES_REQUIRED`. No earlier Scope release wrote the key.
 
 ### Migration
 
 - The after_implement reconcile hook reads the bound issue from `scope-source.json` by itself; no setting changes.
 - Unmanaged projects run `specify preset add` again for scope-gate. The Workflow installer re-adds it when its digest changes.
+- A feature bound before this release has no `dependencies` in `scope-source.json`, so a lean PR stage still fails `PR_LINT_SCOPE_PREREQUISITES_REQUIRED`. Add `"dependencies"` with the list from the issue's scope receipt (the `speckit-scope:metadata` block in the issue body; `[]` when it has none), then record the PR stage again.
 
 ## [1.9.0] - 2026-10-20
 

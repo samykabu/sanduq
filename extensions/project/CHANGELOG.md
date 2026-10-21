@@ -12,12 +12,15 @@ Round 4.
 - Docs: sub-issues are standalone only; `done` runs only when passed explicitly (the README promised an automatic move no code made). `config.default.json` drops the unread `subIssues.granularity`.
 - Tests moved to `extensions/project/tests/`.
 - Init with auto-create makes each column once (Ready was created three times), writes the option ids GitHub returns after the update (all ids change), and in a Workflow project also creates the columns doctor requires (Backlog, Need Clarifications). There it matches names exactly and renames a column that differs only in case or spacing, such as GitHub's default `In Progress`, to Workflow's `In progress`.
+- Init no longer clears item statuses when it changes columns. GitHub's option update replaces every option id, which left every item on the board without a Status. Init now reads each item's Status first (`gh project item-list`, all item types), sets it again by name with the new ids afterwards (a renamed column keeps its items), and reports each item it could not set, exiting 1. When the items cannot be read it refuses before changing anything, unless `--allow-status-reset` (`-AllowStatusReset`) is passed.
+- The bash init exited 1 after a successful run without `--json`; it now exits 0.
 
 ### Migration
 
 - A sync that now stops on a malformed state file: restore `.specify/project-sync-state.json` from git or fix it, then rerun.
 - A config written by an older init for an organization board says `ownerType: user`; rerun `speckit.project.init` (or set `"ownerType": "org"`), otherwise the REST fallback uses the wrong path when GraphQL is exhausted.
 - A Workflow project whose `config.json` came from auto-create may hold stale option ids: rerun `speckit.project.init` and check `workflow.py doctor --project`. In a Workflow project init now asks before renaming a near-match column (auto-create renames it).
+- A board whose items lost their Status in an earlier init run: set them again by hand; this release cannot recover the old values.
 
 ## [2.4.0] - 2026-10-20
 

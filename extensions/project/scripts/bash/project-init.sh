@@ -6,10 +6,11 @@
 #
 # Usage: project-init.sh [--owner <login>] [--number <n>] [--owner-type user|org]
 #                        [--hooks-mode optional|required] [--auto-create-columns]
-#                        [--non-interactive] [--dry-run] [--json]
+#                        [--non-interactive] [--allow-status-reset] [--dry-run] [--json]
+# --allow-status-reset: change columns even when the board's item statuses cannot be read; they are then cleared.
 set -euo pipefail
 
-OWNER=""; NUMBER=0; OWNER_TYPE=""; HOOKS_MODE=""; AUTOCREATE=0; NONINT=0; DRYRUN=0; JSON=0
+OWNER=""; NUMBER=0; OWNER_TYPE=""; HOOKS_MODE=""; AUTOCREATE=0; NONINT=0; DRYRUN=0; JSON=0; ALLOW_RESET=0; RESTORE_FAILED=0
 while [ $# -gt 0 ]; do case "$1" in
   --owner) OWNER="$2"; shift 2;;
   --number) NUMBER="$2"; shift 2;;
@@ -17,6 +18,7 @@ while [ $# -gt 0 ]; do case "$1" in
   --hooks-mode) HOOKS_MODE="$2"; shift 2;;
   --auto-create-columns) AUTOCREATE=1; shift;;
   --non-interactive) NONINT=1; shift;;
+  --allow-status-reset) ALLOW_RESET=1; shift;;
   --dry-run) DRYRUN=1; shift;;
   --json) JSON=1; shift;;
   *) echo "[project-init][warn] unknown arg: $1"; shift;;
@@ -196,6 +198,12 @@ if [ "${#CREATE_NAMES[@]}" -gt 0 ]; then
       OPTS="$OPTS{name:$(printf '%s' "${CREATE_NAMES[$idx]}" | jq -Rr @json),color:${CREATE_COLORS[$idx]},description:\"\"},"
     done
     OPTS="${OPTS%,}"
+    # The update replaces every option id, which clears every item's Status: save each by name first.
+    SAVED=""
+    if ITEMS="$(gh project item-list "$NUMBER" --owner "$OWNER" --format json --limit 100000 2>&1)"; then
+      SAVED="$(echo "$ITEMS" | jq -r '.items[] | select(.status != null and .status != "") | "\(.id)\t\(.status)"' | tr -d '\r')"
+    elif [ "$ALLOW_RESET" = 1 ]; then warn "cannot read the board's items ($ITEMS); --allow-status-reset: their Status will be cleared"
+    else die "cannot read the board's items, so their Status could not be restored after the column change: $ITEMS - fix access and rerun, or pass --allow-status-reset to accept that every item loses its Status"; fi
     Q="mutation{updateProjectV2Field(input:{fieldId:\"$STATUS_FIELD_ID\",singleSelectOptions:[$OPTS]}){projectV2Field{... on ProjectV2SingleSelectField{options{id name}}}}}"
     RES="$(gh api graphql -f query="$Q" 2>&1)" || { warn "column creation failed: $RES"; RES=""; }
     if [ -n "$RES" ]; then
@@ -205,6 +213,19 @@ if [ "${#CREATE_NAMES[@]}" -gt 0 ]; then
       while IFS=$'\t' read -r name option_id; do
         if [ -n "$name" ]; then STATUSOPT["$name"]="$option_id"; fi
       done <<< "$NEW"
+      saved_count=0; restored=0
+      while IFS=$'\t' read -r item_id item_status; do
+        [ -n "$item_id" ] || continue
+        saved_count=$((saved_count+1)); target="$item_status"
+        for idx in "${!CREATE_FROM[@]}"; do if [ "${CREATE_FROM[$idx]}" = "$item_status" ]; then target="${CREATE_NAMES[$idx]}"; fi; done
+        option_id="${STATUSOPT[$target]:-}"
+        if [ -z "$option_id" ]; then out="no such column after the update"
+        elif out="$(gh project item-edit --id "$item_id" --project-id "$PROJ_ID" --field-id "$STATUS_FIELD_ID" --single-select-option-id "$option_id" 2>&1)"; then
+          restored=$((restored+1)); continue
+        fi
+        RESTORE_FAILED=1; warn "item Status not restored, set it by hand: $item_id was '$item_status': $out"
+      done <<< "$SAVED"
+      info "restored Status on $restored of $saved_count item(s)"
       for name in "${CREATE_NAMES[@]}"; do
         if [ -n "${STATUSOPT[$name]:-}" ]; then info "created & mapped -> $name"; fi
       done
@@ -251,4 +272,5 @@ CONFIG="$(jq -n \
 if [ "$DRYRUN" = 1 ]; then info "DRYRUN would write $OUT:"; echo "$CONFIG";
 else mkdir -p "$EXT_DIR"; echo "$CONFIG" > "$OUT"; info "wrote $OUT"; fi
 info "done. Next: commit config.json, then dry-run: python $EXT_DIR/scripts/project_sync.py --phase open --dry-run"
-[ "$JSON" = 1 ] && echo "$CONFIG" | jq -c .
+if [ "$JSON" = 1 ]; then echo "$CONFIG" | jq -c .; fi
+[ "$RESTORE_FAILED" = 0 ] || exit 1

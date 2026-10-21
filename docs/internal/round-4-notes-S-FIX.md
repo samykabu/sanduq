@@ -82,3 +82,55 @@ uv Python 3.11, `unittest discover` per suite:
   (`KeyError: '.claude/skills/delegate-task'`). They fail the same way in the main checkout
   (`D:\Projects\Personal\sanduq`), so they depend on this machine and not on these changes. They are not in
   the known list; S-INST should look at them.
+
+# Round 2 (after live run 2, on 32ffcc4)
+
+## B4: Memory refused Workflow's feature directories below issue 100
+
+- Workflow has no feature-name definition of its own (only "inside `specs/`"), so Memory's `Archive.spec()` is
+  the one place. It now accepts `\d+[a-z]?(?:-\w+)+`: Spec Kit's `001-name` and `20260101-120000-name`
+  (pin 8147943 has both; `numbering.py` already knew the timestamp form) and Workflow's unpadded
+  `<issue>-<slug>`, whose slug keeps Unicode word characters and underscores. `specs/memory`, `specs/2`,
+  nested and out-of-`specs` paths are still refused. The numbering high-water rules (`\d{3,}`) are unchanged.
+- Tests: `test_memory_handoff.test_an_issue_numbered_feature_below_100_queues` (real Memory CLI through
+  `complete`'s Execute handoff, `specs/2-add-a-name-flag-to-greet`; failed before) and
+  `test_archive_v2.test_spec_accepts_spec_kit_and_workflow_feature_directories_only`.
+
+## B5: `scope-source.json` had no `dependencies`
+
+- History: `pr_lint_binding` has required `dependencies` since `1272a4c` (2026-10-12, first in workflow 1.10.0),
+  and `pr_publish` defaults its prerequisites from the same key. No Scope release ever put it there: the gate
+  result has been `{issue, score, prompt, fingerprint}` (plus fresh-path fields) since `445bcc6`, and the key
+  lived only in the scope receipt. Workflow's test fixtures wrote it by hand. The consumer side is right, so
+  the fix is in Scope: `gate()` returns `dependencies` (the receipt's list, already checked equal to the live
+  prerequisites), and `bind` writes it.
+- Released Workflow 1.16.0: not every consumer. The check runs only for a lean PR stage: `lean_execution.enabled`
+  true, or (since 1.13.0) profiles on with a lite or standard feature and lean not set false. Every such PR
+  stage fails, in every release since 1.10.0. Full-tier features and projects without lean are unaffected.
+- Test: `test_front_half_runtime.BindOnlyAndLazyIssueTests.test_scope_bind_gives_the_pr_lint_its_prerequisites`
+  (Scope publish with a done prerequisite #9, Workflow claim, the printed bind, then `pr_lint_binding`: lint
+  passes and a body that closes #9 is refused). The B1 test now shares its setup (`bind_rendered_issue`).
+- Migration: features bound earlier need `dependencies` added by hand from the issue's scope receipt.
+
+## Board guard: column changes cleared every item's Status
+
+- Both init scripts, only when columns are created or renamed (no mutation, no item reads otherwise): before
+  `updateProjectV2Field`, read every item with `gh project item-list --limit 100000` (gh paginates; issues, PRs
+  and draft issues all appear, and `item-edit --id` works for each). After the update, set each item's Status
+  again by option name with the new ids; an item in a renamed column gets the new name. Every item that could
+  not be set is named with its old Status and the run exits 1 (after writing `config.json`, whose ids are
+  current). If the items cannot be read, init refuses before changing anything unless
+  `--allow-status-reset` / `-AllowStatusReset` is passed.
+- In passing: bash init's last line `[ "$JSON" = 1 ] && ...` made a run without `--json` exit 1; fixed.
+- Tests (both shells, fake `gh`): `test_a_column_change_sets_every_item_status_again_by_name`,
+  `test_unreadable_items_refuse_the_column_change_unless_allowed`,
+  `test_an_item_whose_status_cannot_be_set_again_is_reported_and_fails_the_run`. The fake refuses an item read
+  after the mutation, so the order is checked too.
+- Not verified live: whether `gh project item-list` lists archived items. If it does not, an archived item's
+  Status is still cleared. Check on board #13 before release.
+
+## Round 2 tests run
+
+uv Python 3.11, `unittest discover` per suite: scope 265 OK (1 skipped); project 28 OK (both shells); memory
+199 OK; pr 29 OK; workflow 1250, 3 errors (the same three `test_install` dangling-junction tests as round 1,
+which also fail on the main checkout), 2 skipped.

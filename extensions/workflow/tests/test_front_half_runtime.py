@@ -806,6 +806,29 @@ class BindOnlyAndLazyIssueTests(Base):
     def test_bind_only_claim_binds_through_scope_with_the_printed_flags(self):
         """B1: the lean Specify claim on a rendered spec prints Scope's bind with the claim flags; that exact
         command binds a root issue kept whole (no native parent, B2)."""
+        self.bind_rendered_issue()
+        self.assertEqual(w.read(self.root / self.feature / 'scope-source.json', {})['issue'], 10)
+
+    def test_scope_bind_gives_the_pr_lint_its_prerequisites(self):
+        """B5: bind records the checked prerequisites in scope-source.json, and the PR stage's lint reads them."""
+        run = self.bind_rendered_issue(prerequisite=9)
+        self.assertEqual(w.read(self.root / self.feature / 'scope-source.json', {})['dependencies'], [9])
+        import execution_tools
+        body = 'Closes #10\n\nBuilds on #9.\n'
+        (self.root / self.feature / 'pr-body.md').write_bytes(body.encode())  # the exact sent bytes
+        w.write(self.root / self.feature / 'pr-lint.json', execution_tools.pr_lint(body, 'acme/app', 10, [9]))
+        receipt = {'pr_body_file': self.feature + '/pr-body.md', 'pr_lint_file': self.feature + '/pr-lint.json',
+                   'evidence': [self.feature + '/pr-body.md', self.feature + '/pr-lint.json'],
+                   'pr_body_sha256': execution_tools.pr_lint(body, 'acme/app', 10, [9])['body_sha256']}
+        binding = w.pr_lint_binding(self.root, self.feature, run.load(), receipt)
+        self.assertEqual(binding['prerequisites'], [9])
+        (self.root / self.feature / 'pr-body.md').write_bytes(b'Closes #10\nFixes #9\n')  # closing a prerequisite is refused
+        with self.assertRaisesRegex(w.WorkflowError, 'PREREQUISITE_CLOSE'):
+            w.pr_lint_binding(self.root, self.feature, run.load(), receipt)
+
+    def bind_rendered_issue(self, prerequisite=None):
+        """Publish #10 with Scope's fake GitHub, complete Scope, render the spec, claim Specify and run the
+        claim's printed Scope bind; returns the run."""
         import shlex
         sys.path.insert(0, str(SCRIPT.parents[2] / 'scope/tests'))
         import test_scope as scope_fixture
@@ -815,6 +838,9 @@ class BindOnlyAndLazyIssueTests(Base):
         self.configure()
         gh = scope_fixture.FakeGitHub()
         gh.add(10)
+        if prerequisite:
+            gh.add(prerequisite, status='Done')['state'] = 'closed'
+            gh.deps[10] = {prerequisite}
         with patch('sanduq_remote.origin_url', return_value='https://github.com/acme/app.git'):
             app = sm.Scope(self.root, gh)
         snapshot = app.inspect('10')
@@ -843,7 +869,7 @@ class BindOnlyAndLazyIssueTests(Base):
         finally:
             os.chdir(previous)
         self.assertEqual(code, 0)
-        self.assertEqual(w.read(self.root / self.feature / 'scope-source.json', {})['issue'], 10)
+        return run
 
     def test_plain_spec_keeps_the_existing_modes(self):
         run = self.run_object()

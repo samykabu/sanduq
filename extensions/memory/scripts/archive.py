@@ -180,7 +180,9 @@ class Archive:
 
     def spec(self, name: str) -> str:
         path = self.repo.path(name)
-        if path.parent != self.repo.root / "specs" or not re.fullmatch(r"\d{3,}[a-z]?(?:-[a-zA-Z0-9]+)+", path.name):
+        # Spec Kit's `001-name` and `20260101-120000-name`, and Workflow's unpadded `<issue>-<slug>` (its slug keeps
+        # Unicode word characters); never `specs/memory` or another folder without a leading number.
+        if path.parent != self.repo.root / "specs" or not re.fullmatch(r"\d+[a-z]?(?:-\w+)+", path.name):
             raise ArchiveError("Select a full feature directory directly under specs/.")
         if not path.is_dir():
             raise ArchiveError(f"Feature directory does not exist: {name}")

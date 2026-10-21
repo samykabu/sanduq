@@ -863,7 +863,10 @@ class Scope:
         require(f'effort:{receipt["score"]}' in labels and 'scope:parent' not in labels, 'SCOPE_REQUIRED: effort label is missing or inconsistent; run /speckit-scope-run first.')
         require(not snapshot['blocked'], rejection(snapshot['blocked']))
         require(receipt.get('prompt'), 'SCOPE_REQUIRED: missing Specify prompt; run /speckit-scope-run first.')
-        result = {'issue': issue['number'], 'score': receipt['score'], 'prompt': receipt['prompt'], 'fingerprint': receipt['fingerprint']}
+        # `dependencies` (checked equal to the live prerequisites above) reaches scope-source.json through bind;
+        # Workflow's PR lint and pr_publish read the prerequisites from there.
+        result = {'issue': issue['number'], 'score': receipt['score'], 'prompt': receipt['prompt'],
+                  'fingerprint': receipt['fingerprint'], 'dependencies': receipt['dependencies']}
         if fresh:
             require(initial.get('state') == 'open', 'SCOPE_FRESH_OPEN_ISSUE_REQUIRED')
             require(version == 2 and analysis is not None, 'SCOPE_FRESH_ANALYSIS_REQUIRED')

@@ -12,6 +12,7 @@ Round 4 (D3, Memory side: Sanduq Workflow owns the session and prepare hooks).
 - A queue entry from before the current approval stays as it is and is reported blocked with the fix (archive it manually or re-queue it), never re-stamped.
 - `session.md` honours the handoff's `--run <id>` and `--spec <dir>`. `prepare.md` has a managed branch: choose the checks, run the read-only preflight, then return them through `workflow.py memory-handoff --transition execute`.
 - The SESSION block says that in a Workflow project the claim runs the session check and covers the `pending --gate` check, so neither is run separately.
+- `queue`, `prepare` and the other feature commands accept Workflow's unpadded issue-numbered feature directories (`specs/2-add-a-flag`), as well as Spec Kit's `001-name` and `20260101-120000-name`. Before, every Workflow feature for issues 1 to 99 failed "Select a full feature directory directly under specs/.", so the Execute handoff queued nothing. Folders without a leading number, such as `specs/memory`, are still refused.
 - README: install the catalog with `--priority 1` (the lowest number wins in Spec Kit).
 
 ### Migration
