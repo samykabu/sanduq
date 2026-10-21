@@ -47,15 +47,27 @@
 - Tests (class `Round5Lint`): the lint job has the step after the documentation step; release.py and package.py
   keep their selection.
 
+## PM5 project-init job
+
+- `ci.yml` job `project-init`, as S-PM's notes asked: matrix `os: [ubuntu-latest, windows-latest]` instead of
+  `shell: [pwsh, bash]`; `runs-on` uses the regression jobs' pattern (Linux leg on `homek8-general`, fork PRs on
+  `ubuntu-latest`); the step is `python extensions/scripts/smoke_project_init.py` (its default `--shell python`);
+  artifact `project-init-${{ matrix.os }}`. Checkout, setup-python (pip, which the Windows fake `gh.exe` needs) and
+  the pip install are unchanged, actions still pinned by SHA.
+- Nothing in `ci_matrix.py` or its tests named the per-shell matrix. `test_ci_policy.py:421` only has a comment
+  naming `project-init.sh`; S-PM already filed that with S-WF (optional), so no request from S-CI.
+- Test (class `Round5ProjectInit`): the job's OS matrix, runner pattern, setup-python, the smoke step without
+  `--shell`, and the artifact name.
+- Not run here: `smoke_project_init.py` itself (S-PM's); it first runs in CI on both OSes.
+
 ## Pending
 
-- PM5 `project-init` job: still a `shell: [pwsh, bash]` matrix calling `smoke_project_init.py --shell`; waiting
-  for S-PM's new smoke command line.
+- None.
 
 ## Test results
 
-- `python -m unittest discover -s extensions/scripts/tests -p test_ci_matrix.py -q`: 54 tests OK (after X23).
+- `python -m unittest discover -s extensions/scripts/tests -p test_ci_matrix.py -q`: 54 tests OK (after X23), 55 OK (after PM5).
 - `python -m unittest discover -s extensions/scripts/tests -q`: first pass 185 tests, 10 errors, all in
   `test_release_check_bumps` (S-SH's X23 work then in progress); after S-SH landed, 187 tests OK.
-- actionlint 1.7.12 (`go run`): no findings, before and after the X23 step. ShellCheck is not installed here, so its pass over `run:` scripts
+- actionlint 1.7.12 (`go run`): no findings after each change (SHARD, X23, PM5). ShellCheck is not installed here, so its pass over `run:` scripts
   was not run locally.

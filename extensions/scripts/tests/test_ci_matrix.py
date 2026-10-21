@@ -539,5 +539,20 @@ class Round5Lint(unittest.TestCase):
         self.assertEqual(ALL, suites(["extensions/scripts/package.py"]))
 
 
+class Round5ProjectInit(unittest.TestCase):
+    """PM5: project-init drives project_init.py through the smoke on both OSes, not once per shell."""
+
+    def test_project_init_runs_the_python_smoke_on_both_oses(self):
+        text = (ci_matrix.ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        job = re.search(r"^  project-init:\n(?:(?:    .*)?\n)+", text, re.M).group(0)
+        self.assertIn("os: [ubuntu-latest, windows-latest]", job)
+        self.assertIn("runs-on: ${{ matrix.os != 'ubuntu-latest' && matrix.os || ", job)
+        self.assertIn("'homek8-general'", job)
+        self.assertIn("uses: actions/setup-python@", job)
+        self.assertIn("- run: python extensions/scripts/smoke_project_init.py\n", job)
+        self.assertNotIn("--shell", job)
+        self.assertIn("name: project-init-${{ matrix.os }}", job)
+
+
 if __name__ == "__main__":
     unittest.main()
