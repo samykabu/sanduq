@@ -86,7 +86,7 @@ Fixed tool framing is identical across approaches and is not counted. Setup cost
 | NEW | 7111 | 2365 |
 | MD-EDIT | 195314 | 2162 |
 | MD-EDIT-LEAN | 80828 | 2162 |
-| LEGACY | 29311 | 6757 |
+| LEGACY | 29301 | 6752 |
 | MD-RENDER | 7093 | 0 |
 
 ## Reading the result

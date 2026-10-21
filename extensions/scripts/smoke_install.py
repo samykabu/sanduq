@@ -49,7 +49,10 @@ def smoke(host, superspec_source=None, second_host=None):
         path = project / agent / 'skills' / name / 'SKILL.md'
         text = path.read_text(encoding='utf-8')
         assert text.count('<!-- sanduq-workflow-managed:v1 -->') == 1, name
-        assert len(text) > 2500, 'Lost upstream command body: ' + name
+        if name == 'speckit-superspec-brainstorm':  # the workflow preset replaces it with a short pointer (SC17)
+            assert 'github-clarification/SKILL.md' in text, 'Lost the Brainstorm pointer: ' + name
+        else:
+            assert len(text) > 2500, 'Lost upstream command body: ' + name
         snapshots[name] = text
     protocol = '.specify/extensions/workflow/skills/workflow/references/stage-execute.md'
     execution_names = ['speckit-implement']

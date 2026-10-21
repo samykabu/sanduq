@@ -78,6 +78,9 @@ class TokenBudget(unittest.TestCase):
         text = "\n".join(lines)
         self.assertIn("Reporting is a deterministic projection. Never spawn, retain, message or poll an agent solely to maintain it.", text)
 
+    # The LEGACY row runs the real CLI, whose output differs by a few tokens on Windows; the report holds
+    # the Linux counts CI checks.
+    @unittest.skipIf(os.name == "nt", "the report holds Linux counts")
     def test_generated_report_is_current(self):
         doc = report.DOC.read_text(encoding="utf-8")
         self.assertEqual(doc, report.render(self.data), "run: python -m tests.bench.report")
