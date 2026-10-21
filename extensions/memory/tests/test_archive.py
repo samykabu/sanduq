@@ -430,6 +430,27 @@ class ArchiveIntegrationTests(unittest.TestCase):
         self.write(EXTENSION + "/scripts/changed.py", "print('changed')\n")
         self.assertFalse(self.archive.pending()["enabled"])
 
+    def test_approval_survives_a_crlf_checkout_of_every_hashed_file(self):
+        """B7: core.autocrlf rewrites the approved text with CRLF on checkout; automatic mode stays on."""
+        self.write(EXTENSION + "/scripts/tool.py", "first = 1\nsecond = 2\n")
+        self.git("add", "-A")
+        self.git("commit", "-m", "Multi-line extension file")
+        self.archive.enable(self.archive.policy_hash())
+        self.git("config", "core.autocrlf", "true")  # the CRLF copies below are what Git's checkout would write
+        extension = [p.relative_to(self.root).as_posix() for p in (self.root / EXTENSION).rglob("*") if p.is_file()]
+        hashed = [POLICY, *extension, *self.archive.approval_paths()]
+        converted = 0
+        for name in hashed:
+            path = self.root / name
+            data = path.read_bytes()
+            if b"\n" in data and b"\0" not in data:
+                path.write_bytes(data.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+                converted += 1
+        self.assertGreaterEqual(converted, 2)
+        self.assertTrue(self.archive.pending()["enabled"])
+        self.write(POLICY, (self.root / POLICY).read_text(encoding="utf-8").replace("develop", "main"))
+        self.assertFalse(self.archive.pending()["enabled"])  # a real edit still voids it
+
     def test_hook_hash_binds_event_command_condition_and_priority_but_not_the_owned_enabled_flags(self):
         """D3: Workflow's reconcile may disable session and prepare without voiding the approval; any other
         hook change voids it, and a Memory entry the reader cannot parse refuses."""

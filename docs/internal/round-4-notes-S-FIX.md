@@ -183,3 +183,40 @@ which also fail on the main checkout), 2 skipped.
 uv Python 3.11, `unittest discover` per suite: project 28 OK (both shells); memory 200 OK; progress 14 OK
 (7 skipped); workflow 1252, 3 errors (the same three `test_install` dangling-junction tests, machine-only), 2
 skipped.
+
+# Round 4 (after live run 4, on 7968e02)
+
+## B7: the approval hash depended on line endings
+
+- `policy_hash()` now passes the policy, every Memory extension file and the skill wrappers through
+  `portable()`: UTF-8 text without NUL has CRLF folded to LF; binary and non-UTF-8 bytes stay exact and a lone
+  CR is kept. This is Workflow's `sanduq_hash.portable_content` rule without the `.sql`/`-text` exceptions
+  (Memory's hashed set holds no SQL). Memory cannot import Workflow's module, so the rule is a 9-line copy.
+  The SESSION blocks (`read_text`) and the hook block (`memory_hooks`) were already folded.
+- Old approvals: 2.4.0 approvals already stop matching in this release because the hook-entry format changed
+  (event heading), and the existing Migration asks for one `enable` after upgrading. That one renewal records
+  the normalised hash, so there is no second re-approval. The Migration line now says so.
+- Test: `test_archive.test_approval_survives_a_crlf_checkout_of_every_hashed_file` (approve, set
+  `core.autocrlf=true`, rewrite every hashed text file with CRLF, `pending` still enabled; a real policy edit
+  still voids). Fails before the fix (checked against the HEAD `archive.py`).
+
+## N1: board listing lag after publish
+
+- `gate()` keeps its cache-drop retry, then, only while the issue is missing from the live board, reads the board
+  again after 2 s and after 4 s (`BOARD_LAG_RETRY`) before refusing with the unchanged `SPECIFY_STATE` message.
+  An issue on the board in the wrong column refuses at once, as before. Worst case adds 6 s and two listings.
+- Test: `test_scope.test_gate_rereads_a_board_that_lags_the_publish` (fake listing that omits #1 once: passes
+  after one 2 s sleep; omits it always: refuses after 2 s and 4 s). Fails before the fix.
+- The live lag was under 20 s, not measured more finely; if 6 s proves too short, raise the tuple.
+
+## I3: product files listed as Plan inputs
+
+- Cause: `inputs` are dependencies unless given a `consulted` role, and Plan's receipt is an earlier receipt
+  when Execute completes, so Execute's own edits to `greet.py` stale it. One sentence in `stage-plan.md` now says
+  source files Execute will change are not Plan inputs (or are `consulted`) and names the error. The claim
+  carries `reference_text`, so the model reads it at the Plan claim. Not verified live.
+
+## Round 4 tests run
+
+memory 201 OK; scope 266 OK (1 skipped); workflow handoff, hook lifecycle, front-half, reporting and skill
+modules 159 OK.

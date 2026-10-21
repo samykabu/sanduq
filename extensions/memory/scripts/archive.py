@@ -56,6 +56,18 @@ GUARD_PATHS += [f".specify/extensions/git/scripts/{language}/auto-commit.{suffix
 WORKFLOW_OWNED_HOOKS = ("speckit.memory.session", "speckit.memory.prepare")
 
 
+def portable(content: bytes) -> bytes:
+    """Approved text with CRLF folded to LF, so a checkout under core.autocrlf keeps the approval (B7). Binary and
+    non-UTF-8 content stays byte exact and a lone CR is kept, as in Workflow's `sanduq_hash.portable_content`."""
+    if b"\0" in content:
+        return content
+    try:
+        content.decode("utf-8")
+    except UnicodeDecodeError:
+        return content
+    return content.replace(b"\r\n", b"\n")
+
+
 def memory_hooks(text: str) -> list[str]:
     """Each Memory hook entry of `.specify/extensions.yml` as `event` + its block, sorted, for the approval hash.
     The block keeps command, condition, priority and every other line; `enabled:` is dropped only for the two
@@ -132,13 +144,13 @@ class Archive:
             self.repo.path(path)
 
     def policy_hash(self) -> str:
-        values = [POLICY.encode(), self.repo.path(POLICY).read_bytes()]
+        values = [POLICY.encode(), portable(self.repo.path(POLICY).read_bytes())]
         root = self.repo.path(EXTENSION)
         for file in sorted(root.rglob("*")):
             if file.is_file() and "__pycache__" not in file.parts and "tests" not in file.relative_to(root).parts:
-                values.extend([file.relative_to(root).as_posix().encode(), file.read_bytes()])
+                values.extend([file.relative_to(root).as_posix().encode(), portable(file.read_bytes())])
         for path in self.approval_paths():
-            values.extend([path.encode(), self.repo.path(path).read_bytes()])
+            values.extend([path.encode(), portable(self.repo.path(path).read_bytes())])
         for path in ("AGENTS.md", "CLAUDE.md", ".github/copilot-instructions.md"):
             target = self.repo.path(path)
             if target.exists():

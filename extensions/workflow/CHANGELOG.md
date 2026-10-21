@@ -23,6 +23,7 @@
 - Install and `host --use` no longer fail after Spec Kit or Memory registered an owned hook again.
 - `project-defaults` also returns `statuses`, the exact column names doctor requires, so Project init can create the missing ones.
 - `dispatcher-operations.md` says to write the usage JSON under `.specify/workflow/runtime/`: Windows Python cannot open Git Bash's `/tmp`.
+- `stage-plan.md` says source files that Execute will change are not Plan inputs (or are `consulted`), so Execute's completion no longer fails once with `UPSTREAM_INPUT_CHANGED_DURING_STAGE` on them.
 - Workflow records the exclude lines it writes for its runtime files in `.git/info/sanduq-runtime.json` (key `workflow`), so Memory can tell them from feature content.
 
 ### Migration

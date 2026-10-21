@@ -36,6 +36,7 @@ READY = {'In review', 'Done'}
 DIMENSIONS = ('breadth', 'integration', 'data_security', 'verification', 'uncertainty')
 EFFORTS = (1, 2, 3, 5, 8, 13, 21)
 BOARD_CACHE = '.specify/scope/board-cache.json'
+BOARD_LAG_RETRY = (2, 4)  # seconds before each live re-read when the gate's issue is missing from the board
 RENDERED = '<!-- sanduq-scope:rendered '
 PAGE_TIMEOUT = 120
 
@@ -839,8 +840,15 @@ class Scope:
             fresh_continued = fresh and initial.get('state') == 'open' and status == 'Feature Specification'
             continued = revalidation and initial.get('state') == 'open' and status in {'Feature Specification', 'Need Clarifications', 'Ready', 'In progress', 'In review'}
             return status == required_status or continued or fresh_continued
-        require(allowed() or (self.drop_cached_board() and allowed()),
-                f'SPECIFY_STATE: Specify requires {required_status}; #{initial["number"]} is {self.status(initial)}.')
+        ok = allowed() or (self.drop_cached_board() and allowed())
+        for delay in BOARD_LAG_RETRY:
+            # N1: right after publish, GitHub's Project listing can lag the item-add for a few seconds.
+            if ok or initial['number'] in self.board():
+                break
+            time.sleep(delay)
+            self.board(fresh=True)
+            ok = allowed()
+        require(ok, f'SPECIFY_STATE: Specify requires {required_status}; #{initial["number"]} is {self.status(initial)}.')
         # The fresh path validates the analysis against the issue's images, so only it needs the full evidence.
         snapshot = self.load_snapshot(value, self.default_snapshot(value, snapshot_path), initial, evidence=bool(fresh))
         issue = snapshot['issue']
