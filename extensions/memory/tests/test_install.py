@@ -93,6 +93,24 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(1, after.count("command: speckit.memory.session"))
         self.assertEqual(1, after.count("command: speckit.memory.prepare"))
 
+    def test_keys_after_hooks_are_kept_in_place(self):
+        """Spec Kit 8147943's yaml.dump can write `settings:` after `hooks:`; init edits only the hooks mapping."""
+        settings = "settings:\n  auto_execute_hooks: true\n"
+        self.write(".specify/extensions.yml", "installed:\n- workflow\n- memory\nhooks:\n"
+                   "  before_specify:\n  - extension: workflow\n    command: speckit.workflow.scope\n    enabled: true\n"
+                   "  after_implement:\n  - extension: memory\n    command: speckit.memory.prepare\n    enabled: true\n"
+                   "    optional: false\n    priority: 10\n    prompt: Execute speckit.memory.prepare?\n"
+                   "    description: Queue archive work without deleting feature files\n    condition: null\n" + settings)
+        install(self.root)
+        install(self.root)
+        text = (self.root / ".specify/extensions.yml").read_text()
+        self.assertTrue(text.endswith("\n" + settings), text)
+        self.assertEqual(1, text.count("settings:"))
+        hooks = text[text.index("hooks:\n"):text.index(settings)]
+        self.assertEqual(len(HOOKS), hooks.count("extension: memory"))
+        self.assertEqual(len(HOOKS), text.count("extension: memory"))
+        self.assertLess(text.index("installed:"), text.index("hooks:"))
+
     def test_coexisting_archive_tooling_refuses_without_changes(self):
         self.write(".specify/extensions/legacy-archive/scripts/archive.py", "# Local archive helper\n")
         self.write(".specify/extensions/legacy-archive/archive-policy.json", "{}\n")

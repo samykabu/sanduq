@@ -103,10 +103,20 @@ def hook(command: str, description: str) -> str:
 
 
 def add_hook(text: str, event: str, command: str, description: str, *, first: bool) -> str:
+    """Edits only the `hooks:` mapping; every other top-level key (e.g. `settings:` after it) stays as it is."""
+    head = re.search(r"^hooks:[ \t]*\n", text, re.M)
+    if not head:
+        return add_event_hook(text, event, command, description, first=first)
+    rest = re.search(r"^\S", text[head.end():], re.M)
+    end = head.end() + rest.start() if rest else len(text)
+    return text[:head.end()] + add_event_hook(text[head.end():end], event, command, description, first=first) + text[end:]
+
+
+def add_event_hook(text: str, event: str, command: str, description: str, *, first: bool) -> str:
     event_match = re.search(r"^  " + event + r":\s*$", text, re.M)
     block = hook(command, description)
     if not event_match:
-        return text.rstrip() + "\n  " + event + ":\n" + block
+        return (text if not text or text.endswith("\n") else text + "\n") + "  " + event + ":\n" + block
     start = event_match.end() + 1
     next_event = re.search(r"^  [a-z_]+:\s*$", text[start:], re.M)
     end = start + next_event.start() if next_event else len(text)

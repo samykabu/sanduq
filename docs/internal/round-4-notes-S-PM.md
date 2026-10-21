@@ -135,3 +135,12 @@ All with the uv python, 2026-10-21, while other streams ran on the same machine 
   re-adds only the manifest's (priority 10), so the install-only `before_specify: impact` entry disappears and
   the hash changes (pre-existing; one renewal). The lifecycle test should expect it.
 - **S-INST**: Memory approval needs one renewal with this release (any release does); upgrade docs should say so.
+
+## Follow-up: keys after `hooks:` (found by S-WF's lifecycle test)
+
+`install.py add_hook` worked on the whole file: a Memory block that was the last hook entry swallowed the next
+top-level line (`settings:`), and a new or last event's block was appended after it. `add_hook` now edits only
+the `hooks:` mapping (up to the next top-level key) and leaves every other key and its order alone. Regression
+test `test_install.test_keys_after_hooks_are_kept_in_place` (Spec Kit 8147943 layout, `settings:` after
+`hooks:`, init twice) fails on the HEAD code and passes now. `test_install` 18 OK;
+`extensions/workflow/tests/test_memory_hook_lifecycle.py` 3 OK. Changelog and Migration lines added.
