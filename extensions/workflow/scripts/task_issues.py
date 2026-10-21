@@ -84,13 +84,19 @@ def remote_repository(root):
     return github_repository(root)
 
 
+GH_TIMEOUT = 120  # seconds per gh call; a hung gh must not hold the dispatch lock forever
+
+
 class GitHub:
     def api(self, path, method='GET', payload=None, pages=False):
         args = ['gh', 'api', path, '-X', method, '-H', 'Accept: application/vnd.github+json']
         if pages: args += ['--paginate', '--slurp']
         if payload is not None: args += ['--input', '-']
-        result = subprocess.run(args, input=json.dumps(payload) if payload is not None else None,
-                                text=True, encoding='utf-8', capture_output=True)
+        try:
+            result = subprocess.run(args, input=json.dumps(payload) if payload is not None else None,
+                                    text=True, encoding='utf-8', capture_output=True, timeout=GH_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            raise WorkflowError(f'GITHUB_API_FAILED: gh api {path} timed out after {GH_TIMEOUT} s') from None
         require(result.returncode == 0, 'GITHUB_API_FAILED: ' + result.stderr.strip())
         output = json.loads(result.stdout) if result.stdout.strip() else None
         return [item for page in output for item in page] if pages else output

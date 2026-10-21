@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import test_archive as fixture
 import test_archive_v2 as fixture_v2
+from repo_template import TemplateRepo
 from archive import ArchiveError, POLICY
 from git_state import digest, write_json
 import bounded_json
@@ -240,8 +241,9 @@ class MemoryToolingTests(unittest.TestCase):
                 self.archive.repo.blob(head, files[0])
 
 
-class MemoryV2ToolingTests(unittest.TestCase):
-    setUp = fixture_v2.ArchiveV2Tests.setUp
+class MemoryV2ToolingTests(TemplateRepo, unittest.TestCase):
+    build = fixture_v2.ArchiveV2Tests.build
+    restored = fixture_v2.ArchiveV2Tests.restored
     git = fixture_v2.ArchiveV2Tests.git
     write = fixture_v2.ArchiveV2Tests.write
     read = fixture_v2.ArchiveV2Tests.read

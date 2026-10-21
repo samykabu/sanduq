@@ -25,7 +25,7 @@ Requires Spec Kit 1.1.1 or later and Python 3.11 or later. Workflow and Illustra
 Plain Spec Kit, from the Sanduq catalog:
 
 ```bash
-specify extension catalog add --name sanduq --priority 10 --install-allowed https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
+specify extension catalog add --name sanduq --priority 1 --install-allowed https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
 specify extension add progress
 ```
 
@@ -80,7 +80,8 @@ The install registers five native hooks (see [How it plugs in](#how-it-plugs-in)
 
    The summary is built from the v2 counts, so its wording did not change in 1.2.0. `progress status --json` prints the
    v3 projection (`sanduq.progress.v3`) that the Timeline page reads. `progress status --json --schema v2` prints the
-   old document, kept for the Workflow bridge and other older readers.
+   old document for older readers, such as Workflow 1.16.0 and earlier. The v2 document is deprecated and will be
+   removed in a later release.
 
 In the rest of this page `progress` stands for `python .specify/extensions/progress/scripts/progress.py`, run from the
 repository root.
@@ -220,7 +221,8 @@ link or junction (`PROGRESS_UNSAFE_TARGET`). The layout and every schema are in 
 | `$speckit-progress-theme` | Choose a preset, import the Illustrate theme or load a file |
 | `$speckit-progress-export` | Write the projection as Markdown or JSON |
 
-`progress status --json` prints the v3 projection and `--schema v2` the old one (see [Quick start](#quick-start)).
+`progress status --json` prints the v3 projection and `--schema v2` the old, deprecated one (see
+[Quick start](#quick-start)).
 `progress bind --host codex --model gpt-6.1-sol --effort high` records the coordinator's own model and effort when the host
 reports nothing; the page labels them self-reported and never lets them replace a value the host observed. The `lane`, `block`, `unblock`, `decide`, `note`, `attempt` and `runs` verbs run through the CLI. Every verb, flag,
 output line, exit code, schema and example is in [the command reference](docs/commands.md). The internal
@@ -231,7 +233,8 @@ output line, exit code, schema and example is in [the command reference](docs/co
 Four presets (`sanduq`, `cobalt`, `emerald`, `classic`) in light and dark, tokens only. `--from-illustrate` maps the
 project's Illustrate theme. Section order, hidden sections, density, title, logo and fonts are set in
 `.specify/progress/theme.json`. `progress theme --layout timeline|classic` picks the page. `timeline` is the default.
-`classic` is the old lanes and boards page, fed the v2 document, and is kept for one release only.
+`classic` is the old lanes and boards page, fed the v2 document. It is deprecated and will be removed in a later
+release, together with `--schema v2`.
 
 ![Progress report, dark theme](https://raw.githubusercontent.com/samykabu/sanduq/main/extensions/progress/docs/assets/progress-dark.png)
 
@@ -297,8 +300,8 @@ config and theme.
 
 Upgrading to 1.2.0 needs no data change. Run `progress init` once per feature to copy the Timeline page into `.view/`.
 `facts.jsonl` is not rewritten, so lanes recorded before 1.2.0 carry no workstream marker and are not grouped as workstreams. Record
-a new lane with `--workstream` for Execute work. To keep the old page for one more release, run
-`progress theme --layout classic`.
+a new lane with `--workstream` for Execute work. `progress theme --layout classic` still shows the old page, but it
+is deprecated.
 
 The full list of changes is in [the changelog](CHANGELOG.md).
 

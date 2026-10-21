@@ -28,13 +28,25 @@ def relative(root, value):
     return path.relative_to(root.resolve()).as_posix()
 
 
-def fingerprints(root, paths):
+# The User Manual's task block (speckit.user-manual.analyze), with the blank lines before it. Its
+# tasks do not change QA coverage, so the analyze kind ignores it.
+MANUAL_TASKS = re.compile(rb'(?ms)(?:^[ \t]*\r?\n)*^[ \t]*<!-- user-manual-tasks:start -->.*?'
+                          rb'<!-- user-manual-tasks:end -->[ \t]*(?:\r?\n|\Z)')
+
+
+def task_bytes(content, kind=None):
+    """tasks.md as hashed: checkbox state is bookkeeping, and analyze also drops the manual block."""
+    content = re.sub(rb'(?m)^(\s*- )\[[ xX]\]', rb'\1[ ]', content)
+    return MANUAL_TASKS.sub(b'', content) if kind == 'analyze' else content
+
+
+def fingerprints(root, paths, kind=None):
     result = {}
     paths = [relative(root, value) for value in sorted(set(paths))]
     # Checkout-independent bytes: see sanduq_hash.portable_files.
     for key, content in portable_files(root, paths).items():
         if content is not None and Path(key).name == 'tasks.md':
-            content = re.sub(rb'(?m)^(\s*- )\[[ xX]\]', rb'\1[ ]', content)
+            content = task_bytes(content, kind)
         result[key] = hashlib.sha256(content).hexdigest() if content is not None else None
     return result
 
@@ -87,14 +99,12 @@ def inputs(root, feature, kind, base=None, outputs=()):
             '.specify/workflow/', '.specify/scope/', '.specify/extensions/',
             'graphify-out/', 'User-Manual/', 'docs/' + Path(feature).name + '/')) or Path(value).name in
             {'.env', 'workflow.yml', 'feature.json', 'project-sync-state.json'})
-    result = fingerprints(root, [p for p in paths if included(p) and p not in outputs])
-    # Task completion bookkeeping is not a requirements change.
+    result = fingerprints(root, [p for p in paths if included(p) and p not in outputs], kind)
+    # The feature's own tasks.md is hashed from its working-tree text (kept for recorded hashes).
     task = feature + '/tasks.md'
     if task in result and (root / task).is_file():
-        import re
         content = (root / task).read_bytes().replace(b'\r\n', b'\n')
-        content = re.sub(rb'(?m)^(\s*- )\[[ xX]\]', rb'\1[ ]', content)
-        result[task] = hashlib.sha256(content).hexdigest()
+        result[task] = hashlib.sha256(task_bytes(content, kind)).hexdigest()
     return {'base_commit': comparison, 'files': result}
 
 
@@ -114,7 +124,7 @@ def record_or_status(root, feature, kind, state_path, action, outputs, base=None
     current = inputs(root, feature, kind, comparison, exclude)
     if action == 'record':
         if not outputs: raise ValueError('At least one actual output file is required.')
-        output_hashes = fingerprints(root, outputs)
+        output_hashes = fingerprints(root, outputs, kind)
         if any(value is None for value in output_hashes.values()): raise ValueError('A declared output is missing.')
         payload = {'schemaVersion': 2, 'feature': feature, 'kind': kind, 'inputs': current, 'outputs': output_hashes,
                    'gitHead': git(root, 'rev-parse', 'HEAD').strip()}
@@ -125,7 +135,9 @@ def record_or_status(root, feature, kind, state_path, action, outputs, base=None
     if not saved: return {'current': False, 'reason': 'missing'}
     if saved.get('schemaVersion') != 2: return {'current': False, 'reason': 'legacy-state-regenerate'}
     saved_outputs = saved.get('outputs') or {}
-    current_outputs = fingerprints(root, saved_outputs)
+    # Same kind rule as record. A state recorded before the manual block was ignored, over a tasks.md
+    # that already held the block, goes stale once; any other earlier state hashes as it did.
+    current_outputs = fingerprints(root, saved_outputs, kind)
     matches = (saved.get('feature') == feature and saved.get('kind') == kind and saved.get('inputs') == current
                and bool(saved_outputs) and current_outputs == saved_outputs)
     if matches: return {'current': True, 'reason': 'current'}
@@ -167,7 +179,8 @@ def cli(description, record, state_path, kind, default_outputs=lambda root: [], 
         return 0
     feature = args.feature if args.feature.is_absolute() else root / args.feature
     kind = args.kind if isinstance(kind, tuple) else kind
-    outputs = args.output or default_outputs(root)
+    # Status compares the outputs saved in the state, so only record walks for the default list.
+    outputs = args.output or (default_outputs(root) if args.action == 'record' else [])
     base_ref = args.base_ref or checkpoint_target_branch(feature)
     try:
         result = record(root, feature, kind, state_path(root, feature, kind), args.action, outputs, base_ref)

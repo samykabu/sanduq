@@ -514,7 +514,7 @@ class Clarification:
         require(analysis.get('snapshot_digest') == snapshot['snapshot_digest'], 'CLARIFICATION_STALE: issue, answers or specification changed; reread and reevaluate.')
         require(analysis.get('engine') in {'clarify', 'brainstorm'}, 'Choose clarify or brainstorm.')
         require(isinstance(analysis.get('coverage'), dict) and analysis['coverage'], 'Supply the complete ambiguity coverage assessment.')
-        require(isinstance(analysis.get('questions'), list), 'Supply all remaining questions as a list (no numeric cap).')
+        require(isinstance(analysis.get('questions'), list), 'Supply all remaining questions as a list (capped only by clarification.max_questions_per_round).')
         answers = analysis.get('answers', [])
         require(isinstance(answers, list), 'answers must be a list.')
         previous = snapshot['history']['questions']
@@ -1009,7 +1009,7 @@ def main(argv=None):
         else:
             print(json.dumps(with_transport(result, app.gh), indent=2, ensure_ascii=True))
         return 0
-    except (ScopeError, OSError, ValueError, KeyError, TypeError) as exc:
+    except (ScopeError, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
     finally:

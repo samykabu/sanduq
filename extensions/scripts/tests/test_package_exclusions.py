@@ -1,5 +1,6 @@
 """The one packaging exclusion list leaves human-only and unrunnable files out and keeps every runtime asset."""
 import re
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -60,6 +61,21 @@ class PackageExclusionTests(unittest.TestCase):
             for pattern in AGENT_GLOBS:
                 for source in root.glob(pattern):
                     self.assertNotIn(needle, source.read_text(encoding='utf-8'), f'{source} names excluded {path}')
+
+    def test_extension_changelogs_stay_in_the_repository_and_readme_links_point_at_github(self):
+        for extension, names in self.names.items():
+            self.assertTrue((package.ROOT / 'extensions' / extension / 'CHANGELOG.md').is_file(), extension)
+            self.assertNotIn(f'{extension}/CHANGELOG.md', names)
+        self.assertIn('](' + package.BLOB + 'workflow/CHANGELOG.md)', self.readmes['workflow'])
+        self.assertIn('](' + package.BLOB + 'progress/CHANGELOG.md)', self.readmes['progress'])
+        self.assertFalse(package.excluded('pr/templates/CHANGELOG.md'))  # only the top-level release history
+
+    def test_license_and_text_files_are_lf_in_every_checkout(self):
+        for path in ('LICENSE', 'extensions/workflow/LICENSE', 'extensions/scope/requirements.txt'):
+            result = subprocess.run(['git', 'check-attr', 'text', 'eol', '--', path], cwd=package.ROOT,
+                                    capture_output=True, text=True, check=True)
+            self.assertIn(path + ': text: set', result.stdout)
+            self.assertIn(path + ': eol: lf', result.stdout)
 
     def test_packaged_readme_links_resolve_inside_the_archive_or_point_at_github(self):
         for extension, text in self.readmes.items():

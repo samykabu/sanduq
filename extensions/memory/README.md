@@ -12,7 +12,7 @@ Spec Kit extension `memory`, part of Sanduq Spec Kit Extensions. It reconciles v
 Requires Python 3.11+, Git and Spec Kit 1.x. Install from the Sanduq catalog:
 
 ```bash
-specify extension catalog add --name sanduq --priority 10 --install-allowed https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
+specify extension catalog add --name sanduq --priority 1 --install-allowed https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
 specify extension add memory
 ```
 
@@ -127,7 +127,7 @@ Select several exact folders or `--all-completed` for freshly verified features.
 
 ### Automatic use
 
-Run `enable` for the owner's one-time review of the concrete policy and hash. Approval binds project policy, implementation, generated commands, session instructions, archive hooks and script guards. Changes invalidate it. No additional human prompt occurs per archive; independent candidate review still applies.
+Run `enable` for the owner's one-time review of the concrete policy and hash. Approval binds project policy, implementation, generated commands, session instructions, archive hooks (each hook's event, command, condition, priority and other fields) and script guards. Changes invalidate it, with one exception: the `enabled:` flag of `speckit.memory.session` and `speckit.memory.prepare`, which Sanduq Workflow's reconcile turns off in a managed project because its claim and handoff run them. A Memory hook entry the approval cannot read refuses until `speckit.memory.init` restores it. Re-initialization keeps an entry that is `enabled: false` exactly as it is. No additional human prompt occurs per archive; independent candidate review still applies.
 
 The implementation hook queues new work on its feature branch. The next local session after merge into the configured target branch verifies actual completion and processes eligible entries. No daemon or remote merge execution is installed. Legacy unqueued features never archive automatically. Re-queue after review fixes. Squash/rebase merges require identical recorded feature inputs and fresh verification; changed/unidentified inputs use explicit manual archival.
 
@@ -234,4 +234,7 @@ verification. Everything else (synthesis, independent review with `verification_
 in `review.json`, fixture and reference repairs, scoped commits, recovery) still applies;
 the agent's full rules are in
 [`references/verification-override.md`](references/verification-override.md).
-Updating this extension invalidates any previous automatic-policy approval.
+Updating this extension invalidates any previous automatic-policy approval: run `enable` once
+after the update. Entries queued before that renewal stay queued and are never re-stamped;
+`pending` reports them as blocked with the fix: archive one manually with `speckit.memory.run
+--spec <dir>`, or re-queue it from its implementation branch.

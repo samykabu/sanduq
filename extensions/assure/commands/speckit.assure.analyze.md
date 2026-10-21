@@ -37,22 +37,17 @@ resolved yet, continue.
 
 ### 0. Load the QA contract
 
-Read `.specify/extensions/assure/skills/assure/SKILL.md` and its `references/analysis.md` (feature
-resolution, task block format, report shape). In lifecycle-integrated mode this command is a gate: do
-not report success while critical acceptance scenarios lack concrete test or evidence tasks.
+Read the rules in `.specify/extensions/assure/skills/assure/SKILL.md` and its
+`references/analysis.md` (task block format, report shape). In lifecycle-integrated mode this
+command is a gate: do not report success while critical acceptance scenarios lack concrete test or
+evidence tasks.
 
 ### 0a. Ensure the Illustrate dependency
 
-```text
-python .specify/extensions/assure/scripts/deps.py ensure illustrate
-```
-
-- Exit `0`: the dependency is ready. Load the Illustrate references only in step 3, immediately before
-  adding a diagram task. Pass a "newer compatible release available" note on to the user.
-- Non-zero exit: report the script's one-line result verbatim, continue the non-diagram analysis, skip
-  the diagram bullet in step 3, and do not silently use another diagram system. If the line names a
-  `specify extension add/update illustrate` recipe and the user approves it, re-run with `--approve`
-  (under a `manual` policy the user runs the printed command themselves, then re-run this command).
+Run `python .specify/extensions/assure/scripts/deps.py ensure illustrate`. On exit `0`, pass on any
+"newer compatible release available" note and load Illustrate only in step 3, before adding a
+diagram task. On a non-zero exit, report its line verbatim, follow it, skip the diagram bullet in
+step 3 and use no other diagram system.
 
 ### 1. Resolve the feature and scan the workspace
 
@@ -67,8 +62,7 @@ file (Document writes it):
 python .specify/extensions/assure/scripts/assure_scan.py --check
 ```
 
-Read the printed inventory (one line per detected project, then the memory block) instead of walking
-the tree. A frontend that the feature artifacts describe but the scan did not detect is
+Read the printed inventory (one line per detected project) instead of walking the tree. A frontend that the feature artifacts describe but the scan did not detect is
 `planned/spec-only`, never detected implementation.
 
 ### 2. Identify impacted projects

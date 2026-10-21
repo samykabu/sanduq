@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.6.0] - 2026-10-21
+
+Optimization round 4. No renames.
+
+Optimization round 4.
+
+- The rendered `documentation-gates.yml` checks out the PR head, not GitHub's merge commit, so a base branch that moved after `record` no longer fails the gate.
+- `assure init` keeps an existing `assure-config.yml` and changes only its three lifecycle values. It rewrites `extensions.yml` only when a hook changes. A config without those keys stops init with a message instead of being replaced.
+- The scanner skips folders git ignores (such as `.venv`) inside a git work tree and reads each folder once. The default exclude list adds `.venv`, `venv`, `__pycache__`, `target`, `vendor`, `Pods` and `.gradle` for scans outside git.
+- `assure_scan.py --check` prints the inventory and the `would write` line; `--show-block` also prints the memory block.
+- The analyze state ignores the User Manual task block in `tasks.md`, as input and as output, so the User Manual `after_tasks` hook no longer forces a full Analyze rerun.
+- `status` no longer collects default outputs it does not use. `deps.py` names the next step in its one line; the commands say one sentence about it.
+- Document's Illustrate step names full script paths (Spec Kit rewrote the bare `scripts/` token). The skill drops its routing section; its paths point at `.specify/extensions/assure/scripts/`.
+- The config template drops `freshness.policy`, `freshness.state_directory` and `output.directory_name`, which nothing read.
+
+### Migration
+
+- An unedited earlier `documentation-gates.yml` is replaced by `assure init` (and the Workflow upgrade). An edited one is kept; init prints the `ref:` line to add.
+- The first scan after the upgrade can drop rows that came from ignored folders. That rewrites `.github/memory/project-memory.md` once and stales recorded document and manual states once.
+- An analyze state recorded over a `tasks.md` that already held the User Manual block goes stale once. Every other earlier state compares as before.
+- An existing `assure-config.yml` keeps the removed keys; they do nothing.
+
 ## [2.5.1] - 2026-10-20
 
 - Document freshness hashes each declared `--output` as an output only, not also as an implicit input, so a regenerated output no longer reports as a changed input; a missing or changed output still stales the state. States recorded by 2.5.0 compare as before until the next `record`. Analyze is unchanged.
@@ -99,7 +121,7 @@ Optimization round 2, measured with `extensions/scripts/benchmark_instructions.p
   `core.autocrlf` checkout wrote with different line endings hashes as its
   committed blob, so QA state recorded on Windows stays current in Linux CI.
 
-## 2.1.0 (unreleased)
+## 2.1.0
 
 - Use YAML parsing for hook initialization and shared source/output freshness with deletion detection.
 - Managed initialization preserves dispatcher-owned hooks and uses the workflow's

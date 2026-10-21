@@ -54,4 +54,26 @@ fails_with(check_docs.CHANGELOG, changelog[:first] + '## 2026-10-19 — Workflow
 fails_with(check_docs.CHANGELOG, changelog[:first] + '## Undated entry\n\n' + changelog[first:], 'has no YYYY-MM-DD date')
 fails_with(check_docs.CHANGELOG, '# Changelog\n\n## 2026-10-20 — Workflow 9.0.0\n\n' + changelog.split('\n', 2)[2],
            'preamble must come before the first entry')
+# Version drift (X18): the Requires row, the README's "describes X.Y.Z", old "(unreleased)" headings.
+page = check_docs.DOCS / 'extensions/assure.md'
+text = read_text(page, encoding='utf-8')
+assert '| Requires | Illustrate 2.x' in text
+fails_with(page, text.replace('| Requires | Illustrate 2.x', '| Requires | Illustrate 2.5', 1),
+           'Requires row says Illustrate 2.5; extension.yml requires illustrate >=2.0.0')
+fails_with(page, text.replace('| Requires | Illustrate 2.x', '| Requires | Nothing', 1),
+           'Requires row does not name illustrate')
+pr_readme = check_docs.ROOT / 'extensions/pr/README.md'
+fails_with(pr_readme, read_text(pr_readme, encoding='utf-8') + '\nThis README describes PR 4.0.0.\n',
+           'describes 4.0.0; extension.yml has')
+pr_changelog = check_docs.ROOT / 'extensions/pr/CHANGELOG.md'
+history = read_text(pr_changelog, encoding='utf-8')
+fails_with(pr_changelog, history + '\n## 0.0.1 (unreleased)\n\n- Old.\n', '"0.0.1 (unreleased)" is marked unreleased below')
+fails_with(pr_changelog, history + '\n## Unreleased\n\n- Old.\n', '"Unreleased" is marked unreleased below')
+# A streams' "## Unreleased" heading above the manifest version's entry is allowed.
+manifests = [check_docs.yaml.safe_load(p.read_text(encoding='utf-8'))
+             for p in sorted(check_docs.ROOT.glob('extensions/*/extension.yml'))]
+on_top = history.replace('\n## ', '\n## Unreleased\n\n- Next.\n\n## ', 1)
+with patch.object(Path, 'read_text', lambda p, *a, **kw: on_top if p == pr_changelog else read_text(p, *a, **kw)):
+    drift = check_docs.version_drift(manifests)
+assert not [e for e in drift if e.startswith(str(pr_changelog.relative_to(check_docs.ROOT)))], drift
 print('check_docs regression checks passed.')

@@ -47,12 +47,18 @@ yourself. Your project's checks supply the test results; Assure records them.
 
 Scripts do the mechanical parts. `assure_scan.py` detects the projects in the repository and keeps
 `.github/memory/project-memory.md` current: Analyze only reads the result, Document writes it.
-Folders listed under `scan.exclude` in `assure-config.yml` are skipped. `audit_qa.py` checks the
+It skips the folders under `scan.exclude` in `assure-config.yml`, whose default list also covers
+`.venv`, `venv`, `__pycache__`, `target`, `vendor`, `Pods` and `.gradle`. Inside a git work tree it
+also skips the folders git ignores. `assure_scan.py --check`
+prints the inventory and the `would write` line without writing; add `--show-block` to also print
+the memory block. Init keeps an existing `assure-config.yml` and changes only its three lifecycle
+values. `audit_qa.py` checks the
 generated manual for image alt text and captions, broken relative links, the development-only
 marker, and secret-shaped values. When Document runs again, the freshness status lists the changed
 inputs and outputs, so only the affected parts are rewritten. The `documentation-gates.yml` CI
-check runs `assure_state.py status --gate`, which skips the check when
-`lifecycle.require_document_before_pr` is false.
+check checks out the PR head, not GitHub's merge commit, and runs `assure_state.py status --gate`,
+which skips the check when `lifecycle.require_document_before_pr` is false. Init replaces an
+unedited earlier `documentation-gates.yml`; for an edited one it prints the `ref:` line to add.
 
 ## Limits
 

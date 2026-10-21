@@ -3,7 +3,8 @@
 .SYNOPSIS
   One-time setup for the 'project' extension: discover a GitHub Project (v2), map the Spec
   Kit lifecycle phases to that board's Status columns (hybrid: exact -> fuzzy -> prompt ->
-  optional auto-create), and write .specify/extensions/project/config.json.
+  optional auto-create), and write .specify/extensions/project/config.json. A rerun keeps the
+  existing parentIssue, subIssues and stateFile settings.
 
 .PARAMETER Owner        Project owner login (user or org). Default: the authenticated user.
 .PARAMETER Number       Project number. If 0/omitted, lists the owner's projects to choose from.
@@ -11,6 +12,7 @@
 .PARAMETER HooksMode    'optional' offers sync as a manual hook; 'required' marks it automatic.
 .PARAMETER AutoCreateColumns  Create any lifecycle column missing from the board without prompting.
 .PARAMETER NonInteractive     Never prompt; map exact+fuzzy only, warn on unmatched (unless -AutoCreateColumns).
+.PARAMETER AllowStatusReset   Change columns even when the board's item statuses cannot be read; they are then cleared.
 .PARAMETER DryRun       Show what would be written/created without mutating anything.
 .PARAMETER Json         Emit a JSON summary as the last line.
 #>
@@ -22,6 +24,7 @@ param(
     [ValidateSet('optional', 'required')][string]$HooksMode,
     [switch]$AutoCreateColumns,
     [switch]$NonInteractive,
+    [switch]$AllowStatusReset,
     [switch]$DryRun,
     [switch]$Json
 )
@@ -75,11 +78,21 @@ $defaultCfgPath = Join-Path $PSScriptRoot '../../config.default.json' | Resolve-
 if (-not $defaultCfgPath) { $defaultCfgPath = Join-Path $extDir 'config.default.json' }
 if (-not (Test-Path $defaultCfgPath)) { Die "config.default.json not found (looked near the script and in $extDir)" }
 $def = Get-Content $defaultCfgPath -Raw | ConvertFrom-Json
+# A rerun keeps the existing sub-issue, parent and state settings; defaults apply on the first run only.
+$existingCfgPath = Join-Path $extDir 'config.json'
+$existing = $null
+if (Test-Path $existingCfgPath) {
+    try { $existing = Get-Content $existingCfgPath -Raw | ConvertFrom-Json } catch { Die "$existingCfgPath is not valid JSON - fix or delete it, then rerun" }
+}
+function Keep { param($Key) if ($existing -and $existing.PSObject.Properties.Name -contains $Key) { $existing.$Key } else { $def.$Key } }
 $managedWorkflow = Test-Path (Join-Path $repoRoot '.specify/workflow.yml')
+$required = @()   # managed: the exact column names Workflow's doctor requires
 if ($managedWorkflow) {
     $managedJson = & python (Join-Path $repoRoot '.specify/extensions/workflow/scripts/workflow.py') project-defaults
     if ($LASTEXITCODE -ne 0) { Die 'cannot read managed workflow phase defaults; run workflow doctor' }
-    $def.phaseToStatus = ($managedJson | ConvertFrom-Json).phaseToStatus
+    $managed = $managedJson | ConvertFrom-Json
+    $def.phaseToStatus = $managed.phaseToStatus
+    if ($managed.statuses) { $required = @($managed.statuses) }
 }
 
 # ---- gh preconditions ----
@@ -93,9 +106,10 @@ if ($auth -notmatch '(^|[^:\w-])project([^:\w-]|$)') { Die "gh token lacks 'proj
 if (-not $Owner) { $Owner = (gh api user --jq .login 2>$null); if (-not $Owner) { Die 'could not resolve owner - pass -Owner' } }
 $Owner = $Owner.Trim()
 if (-not $OwnerType) {
-    # user projects list succeeds for a user login; fall back to org
-    $probe = & gh project list --owner $Owner --limit 1 --format json 2>&1
-    $OwnerType = if ($LASTEXITCODE -eq 0) { 'user' } else { 'org' }
+    # 'gh project list' accepts org logins too, so only the account type tells the two apart
+    $kind = & gh api "users/$Owner" --jq .type 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $kind) { Die "cannot tell whether $Owner is a user or an organization - pass -OwnerType user|org" }
+    $OwnerType = if ("$kind".Trim() -eq 'Organization') { 'org' } else { 'user' }
 }
 Info "owner: $Owner ($OwnerType)"
 
@@ -141,57 +155,112 @@ $palette = @('GRAY', 'BLUE', 'PURPLE', 'GREEN', 'YELLOW', 'ORANGE', 'PINK')
 $phaseToStatus = [ordered]@{}
 $statusOptions = [ordered]@{}
 foreach ($name in $boardOptions.Keys) { $statusOptions[$name] = $boardOptions[$name] }
-$toCreate = @()   # @{ phase; name; color }
+$toCreate = [System.Collections.Generic.List[hashtable]]::new()   # @{ name; color; from; phases }, one per name
 
-foreach ($i in 0..($phases.Count - 1)) {
-    $phase = $phases[$i]
-    $wanted = $def.phaseToStatus.$phase
-    $match = $null
-    # exact (case-insensitive)
-    $match = ($boardOptions.Keys | Where-Object { $_ -ieq $wanted } | Select-Object -First 1)
-    if (-not $match) {
-        # fuzzy: normalized equality or contains
-        $nw = Normalize $wanted
-        $match = ($boardOptions.Keys | Where-Object { (Normalize $_) -eq $nw -or (Normalize $_).Contains($nw) -or $nw.Contains((Normalize $_)) } | Select-Object -First 1)
+function Map-Column {
+    param($Phase, $Wanted, $Color)
+    $label = if ($Phase) { "phase '$Phase'" } else { "status '$Wanted'" }
+    # managed: doctor and Scope compare exact names, so only an exact (case-sensitive) column matches
+    $match = ($boardOptions.Keys | Where-Object { $_ -ceq $Wanted } | Select-Object -First 1)
+    if (-not $match -and -not $managedWorkflow) {
+        $match = ($boardOptions.Keys | Where-Object { $_ -ieq $Wanted } | Select-Object -First 1)
+        if (-not $match) {
+            # fuzzy: normalized equality or contains
+            $nw = Normalize $Wanted
+            $match = ($boardOptions.Keys | Where-Object { (Normalize $_) -eq $nw -or (Normalize $_).Contains($nw) -or $nw.Contains((Normalize $_)) } | Select-Object -First 1)
+        }
     }
     if ($match) {
-        $phaseToStatus[$phase] = $match
-        $statusOptions[$match] = $boardOptions[$match]
-        Info ("  {0,-16} -> {1}" -f $phase, $match)
+        if ($Phase) { $phaseToStatus[$Phase] = $match }
+        Info ("  {0,-16} -> {1}" -f $(if ($Phase) { $Phase } else { 'status' }), $match)
+        return
     }
-    else {
-        $create = $AutoCreateColumns
-        if (-not $create -and -not $NonInteractive) {
-            $ans = Read-Host ("  no column matches phase '$phase' (wanted '$wanted'). Create column '$wanted'? [y/N]")
-            $create = ($ans -match '^[yY]')
-        }
-        if ($create) { $toCreate += @{ phase = $phase; name = $wanted; color = $palette[$i % $palette.Count] } }
-        else { Warn "phase '$phase' has no column (wanted '$wanted') - the transition is a no-op until mapped; rerun with -AutoCreateColumns to create it, or add the column on the board and rerun" }
+    $pending = $toCreate | Where-Object { $_.name -ceq $Wanted } | Select-Object -First 1
+    if ($pending) { if ($Phase) { $pending.phases.Add($Phase) }; return }   # one column per name
+    # managed: a column that differs only in case or spacing is renamed rather than duplicated
+    $variant = if ($managedWorkflow) { $boardOptions.Keys | Where-Object { (Normalize $_) -eq (Normalize $Wanted) } | Select-Object -First 1 }
+    $verb = if ($variant) { "Rename column '$variant' to '$Wanted'" } else { "Create column '$Wanted'" }
+    $create = $AutoCreateColumns
+    if (-not $create -and -not $NonInteractive) {
+        $ans = Read-Host ("  no column matches $label (wanted '$Wanted'). $verb? [y/N]")
+        $create = ($ans -match '^[yY]')
     }
+    if ($create) {
+        $entry = @{ name = $Wanted; color = $Color; from = $variant; phases = [System.Collections.Generic.List[string]]::new() }
+        if ($Phase) { $entry.phases.Add($Phase) }
+        $toCreate.Add($entry)
+    }
+    else { Warn "$label has no column (wanted '$Wanted') - the transition is a no-op until mapped; rerun with -AutoCreateColumns to create it, or add the column on the board and rerun" }
 }
+
+foreach ($i in 0..($phases.Count - 1)) { Map-Column $phases[$i] $def.phaseToStatus.($phases[$i]) $palette[$i % $palette.Count] }
+foreach ($name in $required) { Map-Column $null $name 'GRAY' }
 
 # ---- create missing columns via GraphQL (replaces the full option set) ----
 if ($toCreate.Count -gt 0) {
     if ($DryRun) {
-        foreach ($c in $toCreate) { Info "DRYRUN create column '$($c.name)' ($($c.color))" }
+        foreach ($c in $toCreate) { Info $(if ($c.from) { "DRYRUN rename column '$($c.from)' to '$($c.name)'" } else { "DRYRUN create column '$($c.name)' ($($c.color))" }) }
     }
     else {
-        # build full option set = existing (preserve) + new
+        # build full option set = existing (preserve, renamed where asked) + new
         $opts = @()
-        foreach ($o in $statusField.options) { $opts += "{name:$(ConvertTo-Json $o.name),color:$(if($o.color){$o.color.ToUpper()}else{'GRAY'}),description:`"`"}" }
-        foreach ($c in $toCreate) { $opts += "{name:$(ConvertTo-Json $c.name),color:$($c.color),description:`"`"}" }
+        foreach ($o in $statusField.options) {
+            $renamed = $toCreate | Where-Object { $_.from -ceq $o.name } | Select-Object -First 1
+            $name = if ($renamed) { $renamed.name } else { $o.name }
+            $opts += "{name:$(ConvertTo-Json $name),color:$(if($o.color){$o.color.ToUpper()}else{'GRAY'}),description:`"`"}"
+        }
+        foreach ($c in $toCreate) { if (-not $c.from) { $opts += "{name:$(ConvertTo-Json $c.name),color:$($c.color),description:`"`"}" } }
         $optsStr = $opts -join ','
+        # The update replaces every option id, which clears every item's Status: save each by name first.
+        # GraphQL, not `gh project item-list`, which leaves archived items out.
+        $saved = @(); $cursor = $null; $readError = $null
+        do {
+            $after = if ($cursor) { ",after:`"$cursor`"" } else { '' }
+            $iq = "query{node(id:`"$projectId`"){... on ProjectV2{items(first:100$after,archivedStates:[ARCHIVED,NOT_ARCHIVED]){pageInfo{hasNextPage endCursor} nodes{id isArchived fieldValueByName(name:`"Status`"){... on ProjectV2ItemFieldSingleSelectValue{name}}}}}}}"
+            $page = & gh api graphql -f query="$iq" 2>&1
+            $items = if ($LASTEXITCODE -eq 0) { ($page | ConvertFrom-Json).data.node.items } else { $null }
+            if (-not $items) { $readError = "$page"; break }
+            foreach ($n in $items.nodes) {
+                if ($n.fieldValueByName.name) { $saved += @{ id = $n.id; status = $n.fieldValueByName.name; archived = [bool]$n.isArchived } }
+            }
+            $cursor = if ($items.pageInfo.hasNextPage) { $items.pageInfo.endCursor } else { $null }
+        } while ($cursor)
+        if ($readError -and $AllowStatusReset) { $saved = @(); Warn "cannot read the board's items ($readError); -AllowStatusReset: their Status will be cleared" }
+        elseif ($readError) { Die "cannot read the board's items, so their Status could not be restored after the column change: $readError - fix access and rerun, or pass -AllowStatusReset to accept that every item loses its Status" }
         $q = "mutation{updateProjectV2Field(input:{fieldId:`"$statusFieldId`",singleSelectOptions:[$optsStr]}){projectV2Field{... on ProjectV2SingleSelectField{options{id name}}}}}"
         $res = & gh api graphql -f query="$q" 2>&1
         if ($LASTEXITCODE -ne 0) { Warn "column creation failed: $res"; }
         else {
+            # The update replaces every option, so every option id is new: rebuild the whole map.
             $newOpts = ($res | ConvertFrom-Json).data.updateProjectV2Field.projectV2Field.options
-            foreach ($no in $newOpts) { $boardOptions[$no.name] = $no.id }
+            $statusOptions = [ordered]@{}
+            foreach ($no in $newOpts) { $statusOptions[$no.name] = $no.id }
+            $restoreFailed = @()
+            foreach ($item in $saved) {
+                $renamed = $toCreate | Where-Object { $_.from -ceq $item.status } | Select-Object -First 1
+                $name = if ($renamed) { $renamed.name } else { $item.status }
+                $optionId = ($newOpts | Where-Object { $_.name -ceq $name } | Select-Object -First 1).id
+                if (-not $optionId) { $restoreFailed += "$($item.id) was '$($item.status)': no such column after the update"; continue }
+                # GitHub refuses to update an archived item: unarchive it, set the Status, archive it again.
+                $pair = "projectId:`"$projectId`",itemId:`"$($item.id)`""
+                if ($item.archived) {
+                    $out = & gh api graphql -f query="mutation{unarchiveProjectV2Item(input:{$pair}){item{id}}}" 2>&1
+                    if ($LASTEXITCODE -ne 0) { $restoreFailed += "$($item.id) (archived) was '$($item.status)': $out"; continue }
+                }
+                $out = & gh project item-edit --id $item.id --project-id $projectId --field-id $statusFieldId --single-select-option-id $optionId 2>&1
+                $ok = $LASTEXITCODE -eq 0
+                if ($item.archived) {
+                    $again = & gh api graphql -f query="mutation{archiveProjectV2Item(input:{$pair}){item{id}}}" 2>&1
+                    if ($LASTEXITCODE -ne 0) { $ok = $false; $out = "$out; left unarchived: $again" }
+                }
+                if (-not $ok) { $restoreFailed += "$($item.id)$(if ($item.archived) { ' (archived)' }) was '$($item.status)': $out" }
+            }
+            Info "restored Status on $($saved.Count - $restoreFailed.Count) of $($saved.Count) item(s)"
+            foreach ($f in $restoreFailed) { Warn "item Status not restored, set it by hand: $f" }
             foreach ($c in $toCreate) {
-                if ($boardOptions.ContainsKey($c.name)) {
-                    $phaseToStatus[$c.phase] = $c.name
-                    $statusOptions[$c.name] = $boardOptions[$c.name]
-                    Info ("  created & mapped {0,-16} -> {1}" -f $c.phase, $c.name)
+                if ($statusOptions.Contains($c.name)) {
+                    foreach ($p in $c.phases) { $phaseToStatus[$p] = $c.name }
+                    Info ("  created & mapped {0,-16} -> {1}" -f (($c.phases -join ',') + ''), $c.name)
                 }
             }
         }
@@ -202,10 +271,7 @@ if ($toCreate.Count -gt 0) {
 if ($managedWorkflow) { $HooksMode = 'required' }
 if (-not $HooksMode) {
     if ($NonInteractive) {
-        $existingCfgPath = Join-Path $extDir 'config.json'
-        if (Test-Path $existingCfgPath) {
-            try { $HooksMode = (Get-Content $existingCfgPath -Raw | ConvertFrom-Json).hookMode } catch { $HooksMode = $null }
-        }
+        if ($existing) { $HooksMode = $existing.hookMode }
         if ($HooksMode -notin @('optional', 'required')) { $HooksMode = 'optional' }
         Info "hook mode not supplied in non-interactive mode; using $HooksMode (rerun with -HooksMode optional|required to choose)"
     }
@@ -240,9 +306,9 @@ $config = [ordered]@{
     statusOptions = $statusOptions
     phaseToStatus = $phaseToStatus
     statusOrder   = $statusOrder
-    parentIssue   = $def.parentIssue
-    subIssues     = $def.subIssues
-    stateFile     = $def.stateFile
+    parentIssue   = Keep 'parentIssue'
+    subIssues     = Keep 'subIssues'
+    stateFile     = Keep 'stateFile'
 }
 $outPath = Join-Path $extDir 'config.json'
 if ($DryRun) {
@@ -258,3 +324,4 @@ else {
 Info 'done. Next: commit config.json, then run a dry-run sync:'
 Info '  python .specify/extensions/project/scripts/project_sync.py --phase open --dry-run'
 if ($Json) { $config | ConvertTo-Json -Depth 10 -Compress }
+if ($restoreFailed) { exit 1 }

@@ -11,7 +11,7 @@ Use this optional Illustrate family for workflow maps, approval flows, automatio
 - [Template](#template)
 - [Output](#output)
 - [Documentation integration](#documentation-integration)
-- [Quality assurance](#quality-assurance--preview--fix)
+- [Quality assurance](#quality-assurance)
 - [Example process types](#example-process-types)
 - [Worked example](#worked-example--ai-governance-workflow)
 
@@ -265,87 +265,11 @@ diagram and an exported PNG image:
   generated documentation that the PNG export is pending, and report the follow-up. Do not silently
   embed a broken image.
 
-## Quality Assurance — Preview & Fix
+## Quality assurance
 
-**IMPORTANT: Always preview the diagram before delivering to the user.**
-
-After creating the HTML file, follow this QA process based on your context:
-
-### Context-Aware QA Approaches
-
-| Context | QA Approach |
-|---------|-------------|
-| **Claude in Chrome** | Take screenshot with browser tools, visually inspect, fix issues, re-screenshot to verify |
-| **Claude.ai with artifacts** | Present file to user — they see rendered preview and can report issues for you to fix |
-| **Claude Code CLI** | Inform user to open the HTML file in browser and report any visual issues |
-| **API/Agents SDK** | If Puppeteer/Playwright available, screenshot programmatically; otherwise inform user to verify |
-
-### Step 1: Preview the diagram
-1. Copy the file to `/mnt/user-data/outputs/` (in Claude.ai sandbox)
-2. Use `present_files` to share it with the user
-3. **If browser tools available:** Take a screenshot to visually inspect
-4. **If no browser tools:** Let user know you've followed the design system but they should verify the rendering
-
-### Step 2: Check for common issues
-Inspect the screenshot (or ask user to check) for these problems:
-
-**Layout issues:**
-- [ ] Right-side cutoff (decision diamonds, exit nodes, labels clipped)
-- [ ] Overlapping elements (boxes, labels, context areas)
-- [ ] Elements extending beyond viewBox boundaries
-
-**Connection issues:**
-- [ ] Arrows not connecting to box edges (gaps or overshoots)
-- [ ] Arrow labels overlapping with the arrow line itself
-- [ ] Loop-back arrows not curving smoothly
-
-**Text issues:**
-- [ ] Labels overlapping each other
-- [ ] Text extending outside boxes
-- [ ] Unreadable font sizes
-
-**Spacing issues:**
-- [ ] Uneven gaps between steps
-- [ ] Step number badges misaligned with boxes
-- [ ] Actor labels too close to or overlapping boxes
-
-### Step 3: Fix any issues found
-Common fixes:
-
-| Problem | Solution |
-|---------|----------|
-| Right-side cutoff | Increase viewBox width by 100-200px, increase min-width to match |
-| Element overlap | Adjust x/y positions, reduce element width, or expand viewBox |
-| Arrow not connecting | Check endpoint coordinates match the target box edge (account for rx radius) |
-| Label on arrow line | Move label y-coordinate above (y-10) or below (y+12) the line |
-| Diamond edge connection | Diamond corners are at center ± ~57px on each axis for the standard 80×80 rotated diamond |
-
-### Step 4: Re-preview if changes were made
-If you made fixes:
-- **With browser tools:** Take another screenshot to verify
-- **Without browser tools:** Re-present the file and let user confirm the fix
-
-### Coordinate Reference Guide
-
-For a step box at position `(x, y)` with `width=160, height=80`:
-- **Left edge:** `x`
-- **Right edge:** `x + 160`
-- **Top edge:** `y`
-- **Bottom edge:** `y + 80`
-- **Center:** `(x + 80, y + 40)`
-- **Arrow entry (left):** `(x, y + 40)`
-- **Arrow exit (right):** `(x + 160, y + 40)`
-
-For a decision diamond centered at `(cx, cy)` with an 80×80 square rotated 45 degrees:
-- **Left point:** `(cx - 57, cy)`
-- **Right point:** `(cx + 57, cy)`
-- **Top point:** `(cx, cy - 57)`
-- **Bottom point:** `(cx, cy + 57)`
-
-For a pill/exit node at `(x, y)` with `width=100, height=40`:
-- **Center:** `(x + 50, y + 20)`
-- **Top edge:** `y`
-- **Bottom edge:** `y + 40`
+1. Run the SKILL.md step 7 checks: `python scripts/verify-geometry.py <file>` and `python scripts/self_check.py --profile technical-color <file>`. Fix and rerun until they pass.
+2. When Playwright is installed, run `python scripts/lint-render.py <file>`; it catches content the browser clips.
+3. Without Playwright, ask the user to open the file in a browser and report anything cut off or overlapping.
 
 ## Example Process Types
 

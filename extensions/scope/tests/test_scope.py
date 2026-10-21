@@ -86,6 +86,11 @@ class FakeGitHub:
             elif method == 'DELETE':
                 deps.discard(int(parts[-1]) // 100)
             return [copy.deepcopy(self.issues[d]) for d in sorted(deps)]
+        if suffix == 'parent':
+            for parent, children in self.children.items():
+                if n in children:
+                    return copy.deepcopy(self.issues[parent])
+            raise m.ScopeError('gh: No parent issue found (HTTP 404)')
         if suffix == 'sub_issues':
             children = self.children.setdefault(n, set())
             if method == 'POST':
@@ -120,7 +125,7 @@ class ScopeTests(unittest.TestCase):
                      'owner': 'acme', 'statusFieldId': 'F', 'statusOptions': {x: x for x in ['Backlog', 'Feature Specification', 'Need Clarifications', 'Ready', 'In progress', 'In review', 'Done']}, 'stateFile': '.specify/project-sync-state.json'})
         self.gh = FakeGitHub()
         self.gh.add(1)
-        with patch.object(subprocess, 'check_output', return_value='https://github.com/acme/app.git'):
+        with patch('sanduq_remote.origin_url', return_value='https://github.com/acme/app.git'):
             self.app = m.Scope(self.root, self.gh)
 
     def tearDown(self):
@@ -154,6 +159,37 @@ class ScopeTests(unittest.TestCase):
         self.assertEqual(self.app.gate('1')['issue'],1)
         receipt=m.metadata(self.gh.issues[1]['body'])
         self.assertEqual(receipt['approval']['approved_by'],'project-policy')
+
+    def lagging_board(self, misses):
+        """The Project listing leaves issue #1 out for its first `misses` live reads (GitHub's lag after item-add)."""
+        original, reads = self.gh.command, []
+
+        def command(args, payload=None):
+            data = original(args, payload)
+            if args[:2] == ['project', 'item-list']:
+                reads.append(1)
+                if len(reads) <= misses:
+                    data = dict(data, items=[x for x in data['items'] if x['content']['number'] != 1])
+                    data['totalCount'] = len(data['items'])
+            return data
+        self.gh.command = command
+        self.app.invalidate_board()
+        return reads
+
+    def test_gate_rereads_a_board_that_lags_the_publish(self):
+        """N1: one short bounded retry, then the existing message."""
+        snap, analysis = self.analysis()
+        self.publish_approved(snap, analysis)
+        self.lagging_board(misses=1)
+        with patch.object(m.time, 'sleep') as sleep:
+            self.assertEqual(self.app.gate('1')['issue'], 1)
+        self.assertEqual([2], [c.args[0] for c in sleep.call_args_list])
+        reads = self.lagging_board(misses=10)
+        with patch.object(m.time, 'sleep') as sleep:
+            with self.assertRaisesRegex(m.ScopeError, r'SPECIFY_STATE: .*not on configured Project'):
+                self.app.gate('1')
+        self.assertEqual([2, 4], [c.args[0] for c in sleep.call_args_list])
+        self.assertLessEqual(len(reads), 4)
 
     def test_project_status_aliases_use_real_board_options(self):
         (self.root / '.specify/workflow.yml').write_text('schema_version: 1\nscope:\n  statuses:\n    Backlog: Todo\n    Feature Specification: Discovery\n', encoding='utf-8')

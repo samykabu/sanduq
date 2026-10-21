@@ -1,13 +1,10 @@
 schema_version: "1.0"
+# assure init sets these three. The analyze gate is the before_implement hook init makes mandatory;
+# require_document_before_pr turns on the documentation gate in PR and CI.
 lifecycle:
   mode: manual
   require_analyze_before_implement: false
   require_document_before_pr: false
-freshness:
-  policy: feature-inputs-and-working-tree
-  state_directory: .specify/extensions/assure/state
-output:
-  directory_name: qa
 scan:
   exclude:
     - .git
@@ -22,3 +19,10 @@ scan:
     - .expo
     - coverage
     - .cache
+    - .venv
+    - venv
+    - __pycache__
+    - target
+    - vendor
+    - Pods
+    - .gradle

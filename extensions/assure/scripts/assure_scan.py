@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
 """Scan the repository for projects and refresh `.github/memory/project-memory.md`.
 
-Walks the tree (pruning `scan.exclude` from `.specify/extensions/assure/assure-config.yml`), tests
-the marker files and `package.json` dependency names the Assure commands used to spell out, classifies
+Walks the tree (inside a git work tree only the folders git tracks or would add, so ignored trees
+such as `.venv` are skipped; always pruning `scan.exclude` from
+`.specify/extensions/assure/assure-config.yml`), tests the marker files and `package.json` dependency names the Assure commands used to spell out, classifies
 each project as web, mobile, backend, infrastructure or tooling, prints one line per project and
 rewrites the block between `<!-- assure-scan:start -->` and `<!-- assure-scan:end -->` in the memory
 file. Text outside the markers (for example `planned/spec-only` rows) is kept. `--check` prints the
-inventory and the block without writing. Stdlib only, like `deps.py`.
+inventory and whether the memory file would change, without writing; `--show-block` also prints the
+block. Stdlib only, like `deps.py`.
 """
 from __future__ import annotations
 
 import argparse
+import fnmatch
+import functools
 import json
 import os
 import re
+import subprocess
 import sys
 from datetime import date
 from pathlib import Path
@@ -92,20 +97,34 @@ def _deps(package):
     return names
 
 
-def _present(directory, patterns):
-    return sorted({p.name for pattern in patterns for p in directory.glob(pattern)})
+@functools.lru_cache(maxsize=None)
+def _matcher(patterns):
+    # One regex per pattern tuple; case-insensitive where the file system is, as Path.glob was.
+    names = [fnmatch.translate(p) for p in patterns if '/' not in p] or ['(?!)']
+    return re.compile('|'.join(names), re.IGNORECASE if os.name == 'nt' else 0).match
 
 
-def classify(directory, root):
+def _present(directory, patterns, names=None):
+    """Marker names in `directory`; `names` is its listing, read once per directory by the caller."""
+    if names is None:
+        names = os.listdir(directory)
+    match = _matcher(patterns)
+    found = {n for n in names if match(n)}
+    found.update(p.name for pattern in patterns if '/' in pattern for p in directory.glob(pattern))
+    return sorted(found)
+
+
+def classify(directory, root, names=None):
     """One inventory row for `directory`, or None when it holds no project marker."""
-    package = _package(directory)
+    names = os.listdir(directory) if names is None else names
+    package = _package(directory) if 'package.json' in names else None
     deps = _deps(package) if package else set()
     markers = {}
-    markers['mobile'] = [MOBILE_DEPS[d] for d in sorted(deps & MOBILE_DEPS.keys())] + _present(directory, MOBILE_FILES)
-    markers['web'] = [WEB_DEPS[d] for d in sorted(deps & WEB_DEPS.keys())] + _present(directory, WEB_FILES)
-    markers['backend'] = _present(directory, BACKEND_FILES) + [BACKEND_DEPS[d] for d in sorted(deps & BACKEND_DEPS.keys())]
-    markers['infrastructure'] = _present(directory, INFRA_FILES)
-    markers['tooling'] = _present(directory, TOOLING_FILES)
+    markers['mobile'] = [MOBILE_DEPS[d] for d in sorted(deps & MOBILE_DEPS.keys())] + _present(directory, MOBILE_FILES, names)
+    markers['web'] = [WEB_DEPS[d] for d in sorted(deps & WEB_DEPS.keys())] + _present(directory, WEB_FILES, names)
+    markers['backend'] = _present(directory, BACKEND_FILES, names) + [BACKEND_DEPS[d] for d in sorted(deps & BACKEND_DEPS.keys())]
+    markers['infrastructure'] = _present(directory, INFRA_FILES, names)
+    markers['tooling'] = _present(directory, TOOLING_FILES, names)
     # A mobile app is also a React app; a web app may also carry a Dockerfile. Mobile wins over web,
     # a product marker wins over an infrastructure or tooling one.
     role = next((r for r in ROLE_ORDER if markers[r]), 'tooling' if package else None)
@@ -121,7 +140,7 @@ def classify(directory, root):
     runner = next((RUNNER_DEPS[d] for d in RUNNER_DEPS if d in deps), '')
     if not runner and (directory / '.maestro').is_dir():
         runner = 'maestro'
-    if not runner and _present(directory, ('playwright.config.*',)):
+    if not runner and _present(directory, ('playwright.config.*',), names):
         runner = 'playwright'
     public = next((d for d in ('public', 'static') if (directory / d).is_dir()), '')
     rel = directory.relative_to(root).as_posix() if directory != root else '.'
@@ -132,13 +151,35 @@ def classify(directory, root):
             'qa_root': qa_root, 'docs': 'docs' if (directory / 'docs').is_dir() else ''}
 
 
+def git_folders(root):
+    """Root-relative folders holding a file git tracks or would add (ignored trees are absent), or
+    None outside a git work tree. shortcut: a submodule's own folders are absent; recurse if needed."""
+    try:
+        result = subprocess.run(['git', 'ls-files', '--cached', '--others', '--exclude-standard', '-z'],
+                                cwd=root, capture_output=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode:
+        return None
+    folders = set()
+    for path in result.stdout.decode('utf-8', 'surrogateescape').split('\0'):
+        parts = path.split('/')
+        # A submodule is listed as one path: keep it as a folder too.
+        folders.update('/'.join(parts[:n]) for n in range(1, len(parts) + 1))
+    return folders
+
+
 def scan(root, exclude):
     projects, found = [], set()
+    tracked = git_folders(root)
     for current, dirs, files in os.walk(root):
-        # `.specify` holds Spec Kit's installed extensions, never a project of the repository.
-        dirs[:] = sorted(d for d in dirs if d not in exclude and d != '.specify')
         directory = Path(current)
-        row = classify(directory, root)
+        names = dirs + files
+        base = '' if directory == root else directory.relative_to(root).as_posix() + '/'
+        # `.specify` holds Spec Kit's installed extensions, never a project of the repository.
+        dirs[:] = sorted(d for d in dirs if d not in exclude and d != '.specify'
+                         and (tracked is None or base + d in tracked))
+        row = classify(directory, root, names)
         if row:
             projects.append(row)
         found.update(f for f in files if f in WORKSPACE_MARKERS)
@@ -201,7 +242,8 @@ def merge(existing, block):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--root', type=Path, default=Path.cwd())
-    parser.add_argument('--check', action='store_true', help='Print the inventory and block; write nothing')
+    parser.add_argument('--check', action='store_true', help='Print the inventory; write nothing')
+    parser.add_argument('--show-block', action='store_true', help='With --check, also print the memory block')
     parser.add_argument('--config', type=Path, default=None, help='assure-config.yml (default: the installed one under --root)')
     args = parser.parse_args(argv)
     root = args.root.resolve()
@@ -223,7 +265,8 @@ def main(argv=None):
     print('\n'.join(summary_lines(projects)) or 'no project markers found')
     if args.check:
         print(f"memory: {'unchanged' if merged == existing else 'would write'} {MEMORY.as_posix()}")
-        print(block, end='')
+        if args.show_block:
+            print(block, end='')
     else:
         target.parent.mkdir(parents=True, exist_ok=True)
         if merged != existing:

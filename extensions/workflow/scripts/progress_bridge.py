@@ -71,26 +71,6 @@ def script(root):
     return path if path.is_file() else None
 
 
-def progress_version(root):
-    """The installed Progress version as a tuple of ints, or None when it cannot be read."""
-    path = script(root)
-    if path is None:
-        return None
-    folder = Path(path).resolve().parent
-    # An installed extension has extension.yml beside the scripts folder. A source tree (tests, direct use) has
-    # none, so fall back to the package's own VERSION.
-    sources = ((folder.parent / 'extension.yml', r"(?m)^\s+version:\s*[\"']?(\d+)\.(\d+)\.(\d+)"),
-               (folder / 'sanduq_progress' / '__init__.py', r"(?m)^VERSION\s*=\s*[\"'](\d+)\.(\d+)\.(\d+)"))
-    for source, pattern in sources:
-        try:
-            match = re.search(pattern, source.read_text(encoding='utf-8'))
-        except OSError:
-            continue
-        if match:
-            return tuple(int(part) for part in match.groups())
-    return None
-
-
 def _off(data):
     """True when a config object is itself switched off (`enabled: false` or `disabled: true`)."""
     return data.get('enabled') is False or data.get('disabled') is True
@@ -316,33 +296,14 @@ def run(root, args, timeout=60, stdin=None):
     return done.returncode, done.stdout, done.stderr
 
 
-def _flag_unsupported(result, flag):
-    """True when a usage failure names `flag` as an unrecognised argument."""
-    text = (result[1] or '') + '\n' + (result[2] or '')
-    return flag.lstrip('-') in text and ('PROGRESS_USAGE' in text or 'unrecognized arguments' in text)
-
-
-def status(root, feature=None):
-    """The Progress projection from `status --json`, or None when unavailable (absent, not initialised, broken)."""
-    args = ['status', '--json'] + (['--feature', feature] if feature else [])
-    # Workflow reads the v2 projection. Progress 1.2.0 defaults to v3 and takes `--schema v2`; Progress 1.1.x
-    # rejects the flag with a usage error (exit 2), so retry once without it.
-    version = progress_version(root)
-    if version is not None and version < (1, 2, 0):
-        result = run(root, args)  # known to predate the flag: no probe process
-    else:
-        result = run(root, args + ['--schema', 'v2'])
-        # Retry only when the version is unknown and the failure says the flag itself is unsupported. Exit 2 also
-        # reports an uninitialised feature, which a retry cannot fix.
-        if version is None and result and result[0] == 2 and _flag_unsupported(result, '--schema'):
-            result = run(root, args)
-    if not result or result[0] != 0:
+def status_line(root, feature):
+    """Progress's own one-line text status for `feature` (W21), or None when Progress is absent. A failure comes back
+    as its first output line, never raised: the workflow record must print without it."""
+    result = run(root, ['status', '--feature', feature], timeout=10)
+    if result is None:
         return None
-    try:
-        data = json.loads(result[1])
-    except ValueError:
-        return None
-    return data if isinstance(data, dict) else None
+    lines = (result[1] or result[2] or '').strip().splitlines()
+    return lines[0] if lines else f'progress status exited {result[0]} with no output'
 
 
 def mode(root, feature=None, host=None):

@@ -76,6 +76,29 @@ class FreshBindingTests(unittest.TestCase):
         self.assertEqual(self.gh.writes, before)
         self.assertEqual(self.gh.statuses[1], 'Feature Specification')
 
+    def prepare_root_kept_whole(self):
+        snap, analysis = self.analysis(); self.publish_approved(snap, analysis)
+        self.gh.statuses[1] = 'Feature Specification'; self.app._board = None
+        self.prepare()
+        return analysis  # the approved analysis itself, unchanged
+
+    def test_fresh_gate_on_a_root_kept_whole_needs_no_parent(self):
+        analysis = self.prepare_root_kept_whole()
+        with patch.object(m.workflow_policy, '_decisions_module', return_value=self.decisions()):
+            result = self.app.gate('1', feature='specs/001-new', token='owned', session='session', analysis=analysis)
+        self.assertIsNone(result['parent'])
+        self.assertFalse(result['publication_required'])
+
+    def test_fresh_gate_refuses_a_child_that_lost_its_parent(self):
+        analysis = self.prepare_root_kept_whole()
+        receipt = m.metadata(self.gh.issues[1]['body'])
+        receipt['approval'] = dict(receipt['approval'], child_count=2)
+        self.gh.issues[1]['body'] = m.replace_block(self.gh.issues[1]['body'],
+                                                    '<!-- speckit-scope:metadata ' + json.dumps(receipt) + ' -->')
+        with patch.object(m.workflow_policy, '_decisions_module', return_value=self.decisions()):
+            with self.assertRaisesRegex(m.ScopeError, 'SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH'):
+                self.app.gate('1', feature='specs/001-new', token='owned', session='session', analysis=analysis)
+
     def test_standalone_and_advanced_fresh_statuses_remain_blocked(self):
         analysis = self.prepare_published_child()
         with self.assertRaisesRegex(m.ScopeError, 'SPECIFY_STATE'): self.app.gate('1')

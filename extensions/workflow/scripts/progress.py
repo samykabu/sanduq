@@ -3,8 +3,8 @@
 The current coordinator is the sole writer. Workers send updates to the coordinator.
 Run with --help for the portable CLI; no web server or dependencies are needed.
 
-This is the legacy reporter. When the optional Sanduq Progress extension is installed, the same subcommands are
-forwarded to its CLI (progress_shim.py) and no legacy state is written; see references/reporting.md.
+This is the legacy reporter, for projects without the optional Sanduq Progress extension. With Progress installed
+and enabled every subcommand exits 2, writes nothing and names the Progress command to use; see references/reporting.md.
 """
 import argparse
 from datetime import datetime, timezone
@@ -401,6 +401,27 @@ def record_usage(state, args, fail):
     entries[:] = [e for e in entries if not same(e, entry)] + [entry]
 
 
+PROGRESS = 'python .specify/extensions/progress/scripts/progress.py'
+# What replaces each legacy call once Sanduq Progress maintains the report (round 4, D5).
+REPLACEMENTS = {
+    'init': f'run "{PROGRESS} init"',
+    'task': 'check the task box in tasks.md',
+    'usage': 'nothing: hooks and delegate results record usage',
+    'sync': f'run "{PROGRESS} refresh"',
+    'phase': 'nothing: Progress reads phases from tasks.md',
+    'pr': f"run \"{PROGRESS} note 'PR open: <url>'\"",
+    'event': f"run \"{PROGRESS} note '<text>'\"",
+}
+
+
+def progress_installed(command, summary):
+    """Refuse a legacy call while Progress owns the report: one line, exit 2 (the old compatibility exit), no write."""
+    message = (f'PROGRESS_INSTALLED: Sanduq Progress maintains the report; instead of "progress.py {command}", '
+               f'{REPLACEMENTS[command]}. Do not retry this call.')
+    print('error ' + message, file=sys.stdout if summary else sys.stderr)
+    sys.exit(2)
+
+
 def summary_error(message, code=2):
     """Print one `error <message>` line and exit, matching argparse's own error
     exit code (2) so `--summary` never changes what code a caller sees."""
@@ -464,13 +485,11 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.summary and args.json:
         parser.error('--summary and --json cannot be combined')
-    # Optional Sanduq Progress: when its CLI is installed this script only forwards to it (progress_shim.py).
-    # When it is absent the legacy reporter below runs unchanged.
+    # Optional Sanduq Progress: when it is installed and enabled this script refuses and names the Progress command.
+    # When it is absent or disabled the legacy reporter below runs unchanged.
     import progress_bridge
-    root = progress_bridge.find_root(args.output)
-    if progress_bridge.script(root):
-        import progress_shim
-        sys.exit(progress_shim.forward(args, root))
+    if progress_bridge.script(progress_bridge.find_root(args.output)):
+        progress_installed(args.command, args.summary)
     fail = summary_error if args.summary else parser.error
     try:
         _run(args, fail)

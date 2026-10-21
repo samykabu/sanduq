@@ -11,6 +11,13 @@ from workflow import load_policy, require, write, read, WorkflowError, locked
 OWNED = {'assure', 'user-manual', 'superspec', 'speckit-superpowers-bridge', 'project'}
 
 
+def managed_hook(event, hook):
+    """The one hook-ownership rule, for reconcile and doctor. check_docs.py evaluates the `managed` expression with
+    only OWNED in scope, so keep it one assignment with inline literals."""
+    managed = hook.get('extension') in OWNED or (hook.get('extension') == 'pr' and event == 'after_implement') or (hook.get('command') == 'speckit.scope.after-specify') or (hook.get('extension') == 'memory' and hook.get('command') in ('speckit.memory.session', 'speckit.memory.prepare'))
+    return managed
+
+
 def reconcile(root, apply=False, restore=False):
     with locked(root / '.specify/workflow/runtime/reconcile.lock'):
         return _reconcile(root, apply, restore)
@@ -33,18 +40,21 @@ def _reconcile(root, apply=False, restore=False):
             key = event + ':' + hook.get('command', '')
             require(key not in seen, 'DUPLICATE_HOOK: ' + key)
             seen.add(key)
-            managed = hook.get('extension') in OWNED or (hook.get('extension') == 'pr' and event == 'after_implement') or (hook.get('command') == 'speckit.scope.after-specify') or (hook.get('extension') == 'project' and event == 'after_tasks')
-            if not managed: continue
+            if not managed_hook(event, hook): continue
             before = copy.deepcopy(hook)
+            record = journal['entries'].get(key)
+            # Spec Kit's register_hooks (extension add/update) and Memory's installer write an owned hook back
+            # enabled: a fresh registration, not an edit. A disabled entry that differs was edited after
+            # reconcile and is refused. The entry holds no provenance, so a deliberate re-enable looks the same.
+            fresh = bool(record) and hook != record['managed'] and hook.get('enabled', True) is not False
+            if record and not fresh:
+                require(hook == record['managed'], 'HOOK_CHANGED_SINCE_RECONCILE: ' + key)
             if restore:
-                record = journal['entries'].get(key)
-                if record:
-                    require(hook == record['managed'], 'HOOK_CHANGED_SINCE_RECONCILE: ' + key)
+                if record and not fresh:
                     hook.clear(); hook.update(record['original'])
+                # A fresh registration is the extension's current entry: keep it; the journal goes below.
             else:
-                if key in journal['entries']:
-                    require(hook == journal['entries'][key]['managed'], 'HOOK_CHANGED_SINCE_RECONCILE: ' + key)
-                else:
+                if not record or fresh:
                     journal['entries'][key] = {'original': before}
                 hook['enabled'] = False
                 journal['entries'][key]['managed'] = copy.deepcopy(hook)

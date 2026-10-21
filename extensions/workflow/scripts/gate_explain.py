@@ -62,7 +62,7 @@ def explain(root, feature, base_ref):
         receipt = state.get('receipts', {}).get(stage, {})
         status = receipt_status(root, feature, stage, receipt, policy)
         result['stage'] = stage
-        result['recovery'] = recovery_recipe(feature, stage, status, policy, receipt)
+        result['recovery'] = recovery_recipe(feature, stage, status, policy, receipt, root)
         evidence = set(receipt.get('evidence') or [])
         # A path that is also a declared input, or one of the stage's required
         # core artifacts, is never amend-only eligible even if it is listed as

@@ -9,8 +9,9 @@ Mirrors every Spec Kit feature onto a **GitHub Project (v2)**:
 
 - one **parent feature issue** per feature, whose **Status** column advances through the
   Spec Kit lifecycle;
-- one native **sub-issue per task** (fills the board's *Sub-issues progress* bar), closed as
-  its task is checked off in `tasks.md`.
+- in standalone use, one native **sub-issue per task** (fills the board's *Sub-issues progress*
+  bar), closed as its task is checked off in `tasks.md`. Under Sanduq Workflow, Workflow owns
+  task issues and Project creates none.
 
 Idempotent and **no-regress** — re-running a step, or running `auto`, only moves the board
 forward or reconciles it. **Board-agnostic**: run `project init` once per repo to map the
@@ -23,10 +24,10 @@ lifecycle onto whatever Status columns your board has.
 | `/speckit.specify` (after)   | `open`            |
 | `/speckit.plan` (after)      | `analysis`        |
 | `/speckit.analyze` (after)   | `engineer-review` |
-| `/speckit.tasks` (first run) | `ready` (+ sub-issues) |
+| `/speckit.tasks` (first run) | `ready` (+ sub-issues, standalone) |
 | `/speckit.implement` (start) | `in-progress`     |
 | open PR on the branch        | `in-review` (auto) |
-| all sub-issues closed        | `done`            |
+| `done`, passed explicitly    | `done` (closes checked tasks' sub-issues); never automatic |
 
 ## Install & setup
 
@@ -43,6 +44,12 @@ gh auth refresh -h github.com -s project,read:project   # one-time scope
 (manual/user-approved), discovers the project id, Status field, and columns, then maps each phase
 to a column (**exact → fuzzy → prompt → optional auto-create**). It writes `config.json` and updates
 the `project` hooks in `.specify/extensions.yml`; commit both files.
+
+Creating or renaming a column replaces every Status option on GitHub, which clears every item's Status. Init
+therefore reads each item's Status first, archived items included, and sets it again by name afterwards. GitHub
+refuses to edit an archived item, so init unarchives it, sets the Status and archives it again. Each item it
+could not set is named, and init exits 1. If the items cannot be read, init changes nothing unless you pass
+`--allow-status-reset` (`-AllowStatusReset`), which accepts that every item loses its Status.
 
 For unattended initialization, select the policy explicitly:
 

@@ -18,6 +18,7 @@ import lean_policy  # noqa: E402
 import lifecycle  # noqa: E402
 import workflow as w  # noqa: E402
 from test_receipt_contract import Harness, checkpoint_validator  # noqa: E402
+import lifecycle_snapshot  # noqa: E402
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'scripts/workflow.py'
 
@@ -37,8 +38,17 @@ class Base(Harness):
         receipt['effort_score'] = score
         return receipt
 
+    def run_object(self):
+        # W22/X25: the started run, and below each lifecycle prefix, is built once per class and starting tree.
+        return lifecycle_snapshot.reuse(self, lambda: Harness.run_object(self), lambda: w.Run(self.root, self.feature))
+
     def advance(self, run, last, receipts=None):
-        """Claim and complete every stage up to and including `last`."""
+        """Claim and complete every stage up to and including `last` (a copy when this class already did it)."""
+        key = (last, json.dumps(receipts or {}, sort_keys=True))
+        lifecycle_snapshot.reuse(self, lambda: self.advance_fresh(run, last, receipts), lambda: None, key)
+
+    def advance_fresh(self, run, last, receipts=None):
+        """`advance` that always runs the stages, for a test that observes them (patches, counters)."""
         receipts = receipts or {}
         while True:
             claim = run.claim(self.usage(), finalize=True)
@@ -456,7 +466,7 @@ class DoctorCacheTests(Base):
             calls.append(kwargs)
             return real(*args, **kwargs)
         with patch.object(w, 'doctor', counting):
-            self.advance(run, 'specify')
+            self.advance_fresh(run, 'specify')
             self.assertEqual(len(calls), 1)
             cache = w.read(self.root / w.DOCTOR_CACHE)
             self.assertTrue(cache['result']['ok'])
@@ -792,6 +802,74 @@ class BindOnlyAndLazyIssueTests(Base):
         claim = run.claim(self.usage())
         self.assertEqual((claim['stage'], claim['mode']), ('specify', 'bind-only'))
         run.complete(claim['token'], self.receipt('specify'))
+
+    def test_bind_only_claim_binds_through_scope_with_the_printed_flags(self):
+        """B1: the lean Specify claim on a rendered spec prints Scope's bind with the claim flags; that exact
+        command binds a root issue kept whole (no native parent, B2)."""
+        self.bind_rendered_issue()
+        self.assertEqual(w.read(self.root / self.feature / 'scope-source.json', {})['issue'], 10)
+
+    def test_scope_bind_gives_the_pr_lint_its_prerequisites(self):
+        """B5: bind records the checked prerequisites in scope-source.json, and the PR stage's lint reads them."""
+        run = self.bind_rendered_issue(prerequisite=9)
+        self.assertEqual(w.read(self.root / self.feature / 'scope-source.json', {})['dependencies'], [9])
+        import execution_tools
+        body = 'Closes #10\n\nBuilds on #9.\n'
+        (self.root / self.feature / 'pr-body.md').write_bytes(body.encode())  # the exact sent bytes
+        w.write(self.root / self.feature / 'pr-lint.json', execution_tools.pr_lint(body, 'acme/app', 10, [9]))
+        receipt = {'pr_body_file': self.feature + '/pr-body.md', 'pr_lint_file': self.feature + '/pr-lint.json',
+                   'evidence': [self.feature + '/pr-body.md', self.feature + '/pr-lint.json'],
+                   'pr_body_sha256': execution_tools.pr_lint(body, 'acme/app', 10, [9])['body_sha256']}
+        binding = w.pr_lint_binding(self.root, self.feature, run.load(), receipt)
+        self.assertEqual(binding['prerequisites'], [9])
+        (self.root / self.feature / 'pr-body.md').write_bytes(b'Closes #10\nFixes #9\n')  # closing a prerequisite is refused
+        with self.assertRaisesRegex(w.WorkflowError, 'PREREQUISITE_CLOSE'):
+            w.pr_lint_binding(self.root, self.feature, run.load(), receipt)
+
+    def bind_rendered_issue(self, prerequisite=None):
+        """Publish #10 with Scope's fake GitHub, complete Scope, render the spec, claim Specify and run the
+        claim's printed Scope bind; returns the run."""
+        import shlex
+        sys.path.insert(0, str(SCRIPT.parents[2] / 'scope/tests'))
+        import test_scope as scope_fixture
+        sm = scope_fixture.m
+        analysis_file = self.feature + '/scope-analysis.json'
+        self.policy['lean_execution'] = {'enabled': True, 'scope_analysis': analysis_file}
+        self.configure()
+        gh = scope_fixture.FakeGitHub()
+        gh.add(10)
+        if prerequisite:
+            gh.add(prerequisite, status='Done')['state'] = 'closed'
+            gh.deps[10] = {prerequisite}
+        with patch('sanduq_remote.origin_url', return_value='https://github.com/acme/app.git'):
+            app = sm.Scope(self.root, gh)
+        snapshot = app.inspect('10')
+        analysis = {'issue': 10, 'fingerprint': snapshot['fingerprint'], 'requirements': ['AC-1'],
+                    'alignment': 'Reuses tested existing behavior', 'evidence': ['src/feature.py:10'], 'images': [],
+                    'tree': scope_fixture.node()}
+        app.approve(snapshot, analysis, 0, 'test owner', 'I approve this exact proposal.')
+        app.publish(snapshot, analysis, True)
+        w.write(self.root / analysis_file, analysis)
+        run = self.run_object()
+        self.advance_fresh(run, 'scope')
+        app.render_spec('10', self.root / analysis_file, self.feature, apply=True)
+        claim = run.claim(self.usage())
+        self.assertEqual((claim['stage'], claim['mode']), ('specify', 'bind-only'))
+        argv = shlex.split(claim['scope_command']['command'])[2:]
+        self.assertEqual(argv[:2], ['bind', '10'])
+        decisions = sm.workflow_policy._decisions_module()
+        decisions.reconcile = lambda *a, **k: {'version': 1, 'feature': self.feature, 'issue': 'acme/app#10',
+                                               'decisions': []}  # no GitHub: the issue has no decisions
+        previous = os.getcwd()
+        os.chdir(self.root)
+        try:
+            with patch.object(sm, 'Scope', return_value=app), patch('sys.stdout', new=__import__('io').StringIO()), \
+                    patch.object(sm.workflow_policy, '_decisions_module', return_value=decisions):
+                code = sm.main(argv)
+        finally:
+            os.chdir(previous)
+        self.assertEqual(code, 0)
+        return run
 
     def test_plain_spec_keeps_the_existing_modes(self):
         run = self.run_object()

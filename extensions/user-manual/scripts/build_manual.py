@@ -218,6 +218,7 @@ def resolve_theme(manual: dict, renderer: str) -> tuple[str, dict]:
 
 
 AUDIENCES = ("end-user", "administrator", "technical")
+BUILD_LOG_TAIL = 40
 
 
 def build_edition(args: argparse.Namespace, root: Path, manual: dict) -> tuple[Path, Path | None, Path | None]:
@@ -296,8 +297,12 @@ def build_edition(args: argparse.Namespace, root: Path, manual: dict) -> tuple[P
             if args.renderer == "zensical"
             else [sys.executable, "-m", "mkdocs", "build", "--strict", "--config-file", str(config_path)]
         )
-        result = subprocess.run(command, cwd=temp, check=False)
+        # The renderer's banners and INFO lines would flood the caller's transcript; show them only on failure.
+        result = subprocess.run(command, cwd=temp, check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                text=True, encoding="utf-8", errors="replace")
         if result.returncode:
+            tail = "\n".join((result.stdout or "").strip().splitlines()[-BUILD_LOG_TAIL:])
+            print(f"{edition}: {args.renderer} build failed\n{tail}", file=sys.stderr)
             raise SystemExit(result.returncode)
         site_dir.parent.mkdir(parents=True, exist_ok=True)
         if site_dir.exists():

@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 EXT_DIR = Path(__file__).resolve().parent.parent
@@ -124,6 +125,121 @@ class SelfCheckHook(unittest.TestCase):
         # The patch may arrive as a bare string or an argv list.
         self.assertEqual(run(root, {"tool_name": "apply_patch", "tool_input": "*** Begin Patch\n*** Update File: bad.html\n"})[0], 2)
         self.assertEqual(run(root, {"tool_name": "apply_patch", "tool_input": {"cmd": ["apply_patch", "*** Add File: bad.html\n"]}})[0], 2)
+
+
+try:
+    import yaml as YAML
+except ImportError:
+    YAML = None
+
+# Every form the docs show (block in README and docs, flow in the hook's docstring), plus the usual YAML around it.
+ON_FORMS = (
+    ON,
+    "illustrate: {hooks: {self_check: true}}\n",
+    "illustrate:\n  hooks: {self_check: true}  # flow under block\n",
+    "# .specify/workflow.yml\n---\nprogress:\n  hook_wiring: native\nstages:\n- specify\n- plan\nillustrate:\n"
+    "  hooks:\n    self_check: true             # default false; checks every written diagram HTML\n",
+    "illustrate:\n    hooks:\n        self_check: yes\n",
+    "\"illustrate\":\n  'hooks':\n    \"self_check\": True\n",
+    "illustrate: {\n  hooks: {self_check: on},\n}\n",
+    "illustrate:\n  hooks:\n    self_check: false\nillustrate:\n  hooks:\n    self_check: true\n",  # the last key wins
+    "﻿illustrate:\n  hooks:\n    self_check: true\n",
+    "notes: |\n  keep {braces and\n  illustrate: {hooks: {}}\nlist: [a, {b: c},\n  d]\nillustrate:\n  hooks:\n    self_check: true\n",
+)
+OFF_FORMS = (
+    "illustrate:\n  hooks:\n    self_check: false\n",
+    "illustrate: {hooks: {self_check: false}}\n",
+    "illustrate:\n  hooks:\n    self_check: \"true\"\n",
+    "illustrate:\n  hooks:\n    # self_check: true\n    other: 1\n",
+    "illustrate:\n  hooks:\n  self_check: true\n",  # a sibling of hooks, not inside it
+    "other:\n  hooks:\n    self_check: true\nillustrate: {hooks: {}}\n",
+    "illustrate:\n  hooks:\n    self_check:\n",
+    "illustrate: [self_check, true]\n",
+)
+# Valid YAML that only PyYAML reads reliably: without it the hook must fail closed, with it the key is on.
+PYYAML_ONLY_ON = (
+    "base: &h {self_check: true}\nillustrate: {hooks: *h}\n",
+    "illustrate:\n  hooks:\n    self_check: !!bool true\n",
+    "illustrate:\n  <<: {hooks: {self_check: true}}\n",
+)
+INVALID = ("illustrate: {hooks: {self_check: true}\n", "illustrate:\n  hooks:\n    self_check: true\n   bad: [\n")
+
+
+class PolicyForms(unittest.TestCase):
+    """The setting is read without PyYAML in every documented form, and never passes silently when it may be on."""
+
+    def project(self, policy: str) -> Path:
+        root = temp_root(self)
+        (root / ".specify").mkdir()
+        (root / ".specify" / "workflow.yml").write_text(policy, encoding="utf-8")
+        (root / "bad.html").write_text(BAD, encoding="utf-8")
+        return root
+
+    def modes(self):
+        """(name, sys.modules patch): PyYAML absent always; present when this Python has it."""
+        yield "no PyYAML", {"yaml": None}
+        if YAML is not None:
+            yield "PyYAML", {"yaml": YAML}
+
+    def outcome(self, policy: str, modules: dict, tool_input: str = "bad.html") -> tuple[int, str]:
+        with unittest.mock.patch.dict(sys.modules, modules):
+            return run(self.project(policy), SelfCheckHook.write(tool_input))
+
+    def test_documented_forms_turn_the_gate_on_with_and_without_pyyaml(self):
+        for policy in ON_FORMS:
+            for name, modules in self.modes():
+                with self.subTest(policy=policy, mode=name):
+                    code, message = self.outcome(policy, modules)
+                    self.assertEqual(code, 2)
+                    self.assertIn("self_check.py: ", message)
+
+    def test_off_forms_stay_off_with_and_without_pyyaml(self):
+        for policy in OFF_FORMS:
+            for name, modules in self.modes():
+                with self.subTest(policy=policy, mode=name):
+                    self.assertEqual(self.outcome(policy, modules), (0, ""))
+
+    def test_the_stdlib_reader_agrees_with_pyyaml(self):
+        if YAML is None:
+            self.skipTest("PyYAML is not installed")
+        for policy in ON_FORMS + OFF_FORMS:
+            with self.subTest(policy=policy):
+                data = YAML.safe_load(policy.lstrip("﻿"))
+                self.assertEqual(hook.read_key(policy.lstrip("﻿")), hook.follow(data, hook.KEY_PATH))
+
+    def test_forms_only_pyyaml_reads_fail_closed_without_it(self):
+        for policy in PYYAML_ONLY_ON:
+            with self.subTest(policy=policy):
+                code, message = self.outcome(policy, {"yaml": None})
+                self.assertEqual(code, 2)
+                self.assertIn("cannot read illustrate.hooks.self_check", message)
+                self.assertIn("install PyYAML for", message)
+                self.assertEqual(message.count("\n"), 1, message)
+                if YAML is not None:
+                    self.assertIn("self_check.py: ", self.outcome(policy, {"yaml": YAML})[1])
+
+    def test_invalid_yaml_fails_closed_with_and_without_pyyaml(self):
+        for policy in INVALID:
+            for name, modules in self.modes():
+                with self.subTest(policy=policy, mode=name):
+                    code, message = self.outcome(policy, modules)
+                    self.assertEqual(code, 2)
+                    self.assertIn("cannot read illustrate.hooks.self_check", message)
+
+    def test_a_write_that_is_no_diagram_never_reads_the_policy(self):
+        for name, modules in self.modes():
+            with self.subTest(mode=name):
+                self.assertEqual(self.outcome(INVALID[0], modules, "src/app.py"), (0, ""))
+        # Run alone, a non-diagram edit loads neither PyYAML nor subprocess.
+        probe = ("import importlib.util,io,sys;s=importlib.util.spec_from_file_location('h',sys.argv[1]);"
+                 "h=importlib.util.module_from_spec(s);s.loader.exec_module(h);"
+                 "c=h.main(io.StringIO(sys.argv[3]),{'CLAUDE_PROJECT_DIR':sys.argv[2]});"
+                 "print(c,'yaml' in sys.modules,'subprocess' in sys.modules)")
+        root = self.project(ON)
+        payload = json.dumps(SelfCheckHook.write("src/app.py"))
+        out = subprocess.run([sys.executable, "-c", probe, str(HOOK), str(root), payload],
+                             capture_output=True, text=True, check=True).stdout.split()
+        self.assertEqual(out, ["0", "False", "False"])
 
 
 CLAUDE_UNRELATED = {

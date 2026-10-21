@@ -48,8 +48,12 @@ The [theme gallery](../user-manual-examples.md) shows real builds.
 
 ![User Manual sequence: user-manual.init interviews you and proposes a module map you approve; user-manual.analyze runs before implementation; user-manual.update writes and audits pages after implementation; after a verified application release, user-manual.release builds the outputs for each audience and language.](../diagrams/extension-user-manual.animated.svg)
 
-Analysis runs before implementation. Update writes the affected pages, audits them, and builds a
-preview afterwards. Release uses verified application release evidence.
+Analysis runs before implementation. It writes its tasks between `<!-- user-manual-tasks:start -->`
+and `<!-- user-manual-tasks:end -->` in `tasks.md` and replaces that block on a rerun. Update writes
+the affected pages, audits them, and builds a preview afterwards with `build_manual.py --all`. It adds
+`--archive` only when `manual.yml` names an approved provider, so a local Update writes no
+`User-Manual/site/<version>/*.zip`; CI builds its own preview archive. Release uses verified
+application release evidence. Init never overwrites an existing `docs/<lang>/index.md`.
 [Editable source](../diagrams/extension-user-manual.html).
 
 On a rerun, `manual_state.py status` names the inputs and manual files that changed since the last

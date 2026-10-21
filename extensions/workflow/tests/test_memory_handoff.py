@@ -123,6 +123,54 @@ class MemoryHandoffTests(unittest.TestCase):
             run.complete('core-token', self.receipt('execute'))
         self.assertEqual(before, (self.memory_state / 'pending.json').read_bytes())
 
+    def test_an_issue_numbered_feature_below_100_queues(self):
+        """B4: Workflow names features `specs/<issue>-<slug>` without padding; Memory queues them."""
+        self.feature = 'specs/2-add-a-name-flag-to-greet'
+        self.install_memory()
+        self.enable()
+        run, result = self.executed()
+        self.assertEqual(('queued', 'MEMORY_QUEUED'),
+                         (result['memory_handoff']['status'], result['memory_handoff']['reason']))
+        self.assertIn(self.feature, w.read(self.memory_state / 'pending.json'))
+
+    def runtime_files(self):
+        """The ignored files the runtime writes into a feature folder: Workflow's checkpoint backup and legacy
+        report, and Progress's local view (Progress writes and declares its own exclude lines)."""
+        sys.path.insert(0, str(SOURCE.parent / 'progress/scripts'))
+        from sanduq_progress.paths import git_exclude
+        self.assertTrue(git_exclude(self.root))
+        names = [self.feature + '/workflow/backups/0123.json', self.feature + '/workflow/progress/index.html',
+                 self.feature + '/workflow/progress/state.json', self.feature + '/progress/.view/index.html']
+        for name in names:
+            (self.root / name).parent.mkdir(parents=True, exist_ok=True)
+            (self.root / name).write_text('{}', encoding='utf-8')
+        return names
+
+    def test_workflow_runtime_files_in_the_feature_do_not_block_queueing(self):
+        """B6: files ignored by the exclude lines Workflow declares are disposable runtime, never archive content."""
+        self.install_memory()
+        self.enable()
+        names = self.runtime_files()
+        run, result = self.executed()
+        self.assertEqual(('queued', 'MEMORY_QUEUED'),
+                         (result['memory_handoff']['status'], result['memory_handoff']['reason']))
+        hashes = w.read(self.memory_state / 'pending.json')[self.feature]['spec_hashes']
+        self.assertFalse(set(names) & set(hashes))
+        self.assertIn(self.feature + '/spec.md', hashes)
+
+    def test_other_ignored_files_in_the_feature_still_refuse(self):
+        self.install_memory()
+        self.enable()
+        self.runtime_files()
+        exclude = self.root / '.git/info/exclude'
+        exclude.write_text(exclude.read_text(encoding='utf-8') + '*.local\n', encoding='utf-8')
+        (self.root / self.feature / 'notes.local').write_text('owner notes', encoding='utf-8')
+        run, result = self.executed()
+        self.assertEqual('blocked', result['memory_handoff']['status'])
+        self.assertIn('Ignored artifacts are not recoverable', result['memory_handoff']['reason'])
+        self.assertIn('notes.local', result['memory_handoff']['reason'])
+        self.assertNotIn('workflow/progress', result['memory_handoff']['reason'])
+
     def test_stale_approval_never_queues(self):
         self.install_memory()
         self.enable()
@@ -328,6 +376,17 @@ class MemoryHandoffTests(unittest.TestCase):
         self.assertFalse(body['ok'])
         self.assertIn('MEMORY_HELPER_MALFORMED', body['reason'])
 
+    def test_pending_with_policy_facts_saves_the_policy_helper(self):
+        # PM24: with automatic mode on, Memory's `pending` carries policy_hash and policy; no second helper process.
+        self.install_memory()
+        pending = {'enabled': True, 'ready': [], 'blocked': [], 'active_run': None, 'writer': None,
+                   'guard_blockers': [], 'policy_hash': 'f' * 64,
+                   'policy': {'target_branch': 'develop', 'default_checks': ['product']}}
+        with patch.object(mh, 'helper', return_value=pending) as helper:
+            result = self.call('session')
+        self.assertEqual(['pending'], [c.args[1] for c in helper.call_args_list])
+        self.assertEqual('pending', result['status'])  # the fixture approval does not match this hash
+
     def test_missing_registered_action_is_a_concrete_blocker(self):
         self.install_memory()
         (self.root / '.agents/skills/speckit-memory-session/SKILL.md').unlink()
@@ -337,6 +396,87 @@ class MemoryHandoffTests(unittest.TestCase):
             result = self.call('session')
         self.assertFalse(result['ok'])
         self.assertEqual('MEMORY_COMMAND_UNAVAILABLE: speckit.memory.session', result['reason'])
+
+
+class ClaimSessionHandoffTests(unittest.TestCase):
+    """W14: the claim runs the session handoff the before_specify hook ran, under the dispatch lock it holds."""
+    setUp = fixture.WorkflowTests.setUp
+    configure = fixture.WorkflowTests.configure
+    usage = fixture.WorkflowTests.usage
+    run_object = fixture.WorkflowTests.run_object
+    install_memory = MemoryHandoffTests.install_memory
+
+    DISABLED = {'enabled': False, 'ready': [], 'blocked': [], 'active_run': None,
+                'writer': None, 'guard_blockers': [], 'reason': 'MEMORY_AUTOMATIC_MODE_DISABLED'}
+
+    def test_claim_without_memory_starts_no_helper_and_records_the_session(self):
+        run = self.run_object()
+        with patch.object(mh, 'helper', side_effect=AssertionError('no helper without Memory')):
+            claim = run.claim(self.usage())
+        self.assertEqual('scope', claim['stage'])
+        self.assertNotIn('memory_handoff', claim)
+        self.assertEqual({'session_id': 'new-session', 'status': 'pending'},
+                         {k: v for k, v in run.load()['memory_session'].items() if k != 'at'})
+
+    def test_claim_runs_the_handoff_inside_its_own_dispatch_lock(self):
+        # The lock is not re-entrant: without lock=False the handoff would block on WORKFLOW_BUSY.
+        self.install_memory()
+        run = self.run_object()
+        with patch.object(mh, 'helper', return_value=dict(self.DISABLED)) as helper:
+            claim = run.claim(self.usage())
+        self.assertEqual('scope', claim['stage'])
+        self.assertEqual(['pending'], [c.args[1] for c in helper.call_args_list])
+
+    def test_every_blocked_result_refuses_the_claim_and_is_not_recorded(self):
+        self.install_memory()
+        run = self.run_object()
+        active = {**self.DISABLED, 'active_run': 'a' * 32}
+        for side_effect, reason in (([active, {'active': {}}], 'MEMORY_ACTIVE_RECOVERY_REQUIRED'),
+                                    ([{'enabled': True}], 'MEMORY_HELPER_MALFORMED')):
+            with patch.object(mh, 'helper', side_effect=side_effect):
+                claim = run.claim(self.usage())
+            self.assertIs(claim['ok'], False)
+            self.assertEqual('memory_blocked', claim['status'])
+            self.assertIn(reason, claim['memory_handoff']['reason'])
+            state = run.load()
+            self.assertIsNone(state['active'])
+            self.assertNotIn('memory_session', state)
+
+    def test_an_unavailable_memory_command_refuses_the_claim(self):
+        self.install_memory()
+        (self.root / '.agents/skills/speckit-memory-session/SKILL.md').unlink()
+        run = self.run_object()
+        with patch.object(mh, 'helper', side_effect=[{**self.DISABLED, 'active_run': 'a' * 32}, {}]):
+            claim = run.claim(self.usage())
+        self.assertIn('MEMORY_COMMAND_UNAVAILABLE', claim['memory_handoff']['reason'])
+        self.assertIsNone(run.load()['active'])
+
+    def test_dispatch_returns_the_actions_before_granting_work(self):
+        run = self.run_object()
+        dispatch = {'status': 'dispatch', 'ok': True, 'reason': 'MEMORY_REGISTERED_ACTION_REQUIRED',
+                    'actions': [{'command': 'speckit.memory.run', 'arguments': [], 'reason': 'x'}]}
+        with patch.object(mh, 'handoff', return_value=dispatch):
+            claim = run.claim(self.usage())
+        self.assertEqual('memory_dispatch', claim['status'])
+        self.assertTrue(claim['ok'])
+        self.assertEqual(dispatch, claim['memory_handoff'])
+        self.assertIsNone(run.load()['active'])
+
+    def test_every_claim_runs_the_handoff_whatever_session_id_it_supplies(self):
+        """I2: the usage session_id is the model's word, not the host's, so a repeated one never skips the handoff."""
+        run = self.run_object()
+        state = run.load()
+        state['memory_session'] = {'session_id': 'old', 'status': 'idle', 'at': w.now()}
+        idle = {'status': 'idle', 'ok': True, 'reason': 'MEMORY_NO_ELIGIBLE_WORK', 'actions': []}
+        with patch.object(mh, 'handoff', return_value=idle) as handoff:
+            self.assertIsNone(run.memory_session(state, 'clarify', 'old'))
+            self.assertEqual(1, handoff.call_count)
+            self.assertIsNone(run.memory_session(state, 'clarify', 'new'))
+            self.assertIsNone(run.memory_session(state, 'clarify', 'new'))
+            self.assertIsNone(run.memory_session(state, 'specify', 'new'))
+        self.assertEqual(4, handoff.call_count)
+        self.assertFalse(handoff.call_args.kwargs['lock'])
+        self.assertEqual('new', state['memory_session']['session_id'])
 
 
 if __name__ == '__main__':

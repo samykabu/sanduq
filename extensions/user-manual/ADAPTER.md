@@ -16,7 +16,6 @@ stored as `SKILL.ext.md` and restored to `SKILL.md` by `extensions/scripts/packa
 | `user-manual/scripts/build_manual.py` | `scripts/build_manual.py` |
 | `user-manual/tests/test_build_manual.py` | `tests/test_build_manual.py` |
 | `user-manual/assets/scaffold/**` | `assets/scaffold/**` |
-| `user-manual/assets/user-manual-config.template.yml` | `user-manual-config.template.yml` |
 | `user-manual/references/*.md` | `skills/user-manual/references/*.md` |
 | `user-manual-api-docs/references/*.md` | `skills/api-docs/references/*.md` |
 | `user-manual-preview-publishing/references/*.md` | `skills/preview-publishing/references/*.md` |

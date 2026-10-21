@@ -5,9 +5,8 @@ This part applies when the claim's `reporting` is `legacy`: Progress is absent o
 
 ## Legacy reporter calls (mode legacy only)
 
-The calls below are unchanged from earlier releases. When Progress is installed the same script
-forwards them to the Progress CLI, and a request with no faithful mapping prints a compatibility
-error and exits non-zero.
+The calls below are unchanged from earlier releases. When Progress is installed and enabled each
+of them exits 2 without writing and names the Progress command to use instead.
 
 The current coordinator creates the report before assigning the first task:
 

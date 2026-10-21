@@ -524,3 +524,162 @@ class InstallTests(unittest.TestCase):
         installer.install_aliases(self.root, self.package)
         self.assertIn('<!-- sanduq-workflow-alias:v1 -->', destination.read_text(encoding='utf-8'))
         self.assertNotIn('LEGACY_ALIAS_RECONCILIATION_REQUIRED', str(w.doctor(self.root, self.policy)))
+
+    # Round 4 installer items (X19, X21, W10, D3, AU8).
+    def apply(self, runner=None, **kwargs):
+        with patch.object(installer, 'install_aliases', return_value={}), \
+             patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}), \
+             patch.object(installer, 'required_gate_checks', return_value=[]):
+            return installer.install(self.root, apply=True, package_root=self.package,
+                                     runner=runner or (lambda *args: None), **kwargs)
+
+    def test_four_applies_keep_three_zips_every_result_and_alias_backups(self):
+        backups = [Path(self.apply()['backup'])]
+        saved = backups[0] / 'unrecognized-aliases/.claude/skills/speckit-scope/SKILL.md'
+        saved.parent.mkdir(parents=True); saved.write_text('local edit', encoding='utf-8')
+        receipt = None
+        for _ in range(3):
+            receipt = self.apply(); backups.append(Path(receipt['backup']))
+        self.assertEqual([(b / 'before.zip').exists() for b in backups], [False, True, True, True])
+        self.assertTrue(all((b / 'result.json').is_file() and (b / 'before.json').is_file() for b in backups))
+        self.assertTrue(saved.is_file())
+        self.assertEqual(receipt['backups'], {'zips': 3, 'bytes': sum((b / 'before.zip').stat().st_size
+                                                                       for b in backups[1:])})
+        self.assertEqual(installer.backup_usage(self.root), receipt['backups'])
+
+    def test_failed_apply_prunes_no_backup_and_the_next_success_keeps_the_newest_three(self):
+        old = fake_backups(self.root, 4)
+
+        def runner(root, args, log):
+            raise w.WorkflowError('simulated')
+        with self.assertRaisesRegex(w.WorkflowError, 'INSTALL_ROLLED_BACK'):
+            self.apply(runner)
+        self.assertTrue(all(path.is_file() for path in old))
+        self.assertEqual(installer.backup_usage(self.root)['zips'], 5)
+        receipt = self.apply()
+        self.assertEqual(receipt['backups']['zips'], 3)
+        self.assertTrue((Path(receipt['backup']) / 'before.zip').is_file())
+        self.assertEqual([path.is_file() for path in old], [False, False, False, True])
+
+    def test_install_inside_an_upgrade_leaves_pruning_to_the_upgrade(self):
+        old = fake_backups(self.root, 4)
+        receipt = self.apply(upgrade_owner=os.getpid())
+        self.assertNotIn('backups', receipt)
+        self.assertTrue(all(path.is_file() for path in old))
+
+    def test_gh_api_timeout_maps_to_the_branch_rule_error(self):
+        seen = {}
+
+        def run(args, **kwargs):
+            seen.update(kwargs)
+            raise subprocess.TimeoutExpired(args, kwargs.get('timeout'))
+        with patch.object(installer.subprocess, 'run', side_effect=run), \
+             patch.object(installer, 'github_repository', return_value='acme/app'):
+            with self.assertRaisesRegex(w.WorkflowError,
+                                        'CI_BRANCH_RULE_INSPECTION_FAILED: gh api repos/acme/app timed out'):
+                installer.required_gate_checks(self.root)
+        self.assertEqual(seen['timeout'], 60)
+
+    def test_install_refuses_while_a_memory_archive_run_is_active(self):
+        active = memory_archive_run(self.root)
+        commands = []
+        with self.assertRaisesRegex(w.WorkflowError, 'MEMORY_ARCHIVE_ACTIVE: archive run a{32} .*'
+                                                      'speckit.memory.session --run a{32}'):
+            self.apply(lambda root, args, log: commands.append(args))
+        self.assertEqual(commands, [])
+        self.assertFalse((self.root / '.specify/workflow/backups/installs').exists())
+        active.unlink()  # Memory finished the run: an idle Memory never blocks.
+        self.assertTrue(self.apply()['applied'])
+
+    def owned_hook(self):
+        path = self.root / '.specify/extensions.yml'
+        hook = {'extension': 'project', 'command': 'speckit.project.sync', 'enabled': True, 'optional': False}
+        path.write_text(yaml.safe_dump({'hooks': {'after_tasks': [hook]}}), encoding='utf-8')
+        from reconcile import reconcile
+        reconcile(self.root, apply=True)
+        # `specify extension add/update` (register_hooks) and Memory's init re-create the entry enabled.
+        path.write_text(yaml.safe_dump({'hooks': {'after_tasks': [hook]}}), encoding='utf-8')
+        return path
+
+    def test_install_accepts_an_owned_hook_registered_again_and_disables_it(self):
+        path = self.owned_hook()
+        self.assertTrue(self.apply()['applied'])
+        [entry] = yaml.safe_load(path.read_text(encoding='utf-8'))['hooks']['after_tasks']
+        self.assertIs(entry['enabled'], False)
+        # A disabled entry edited by hand is still refused, not overwritten.
+        entry['prompt'] = 'user edit'
+        path.write_text(yaml.safe_dump({'hooks': {'after_tasks': [entry]}}), encoding='utf-8')
+        with self.assertRaisesRegex(w.WorkflowError, 'INSTALL_ROLLED_BACK: HOOK_CHANGED_SINCE_RECONCILE'):
+            self.apply()
+        self.assertIn('user edit', path.read_text(encoding='utf-8'))
+
+    def assure_reference(self, content):
+        reference = self.root / '.specify/extensions/assure/assets/github/documentation-gates.yml'
+        reference.parent.mkdir(parents=True, exist_ok=True)
+        reference.write_bytes(content)
+        return reference
+
+    def test_unedited_documentation_gate_from_the_assure_this_apply_replaced_is_removed(self):
+        # Standalone Assure rendered this file; installing Workflow updates Assure to a changed template (AU8).
+        old = ASSURE_GATE.read_bytes()
+        reference = self.assure_reference(old)
+        legacy = self.root / '.github/workflows/documentation-gates.yml'
+        legacy.parent.mkdir(parents=True, exist_ok=True)
+        legacy.write_bytes(installer.rendered(reference, w.load_policy(self.root)))
+
+        def runner(root, args, log):
+            if args[1:3] == ['extension', 'add'] and 'assure' in ' '.join(args):
+                reference.write_bytes(old + b'# changed in the new Assure\n')
+        self.apply(runner)
+        self.assertFalse(legacy.exists())
+
+    def test_documentation_gate_rendered_before_the_head_checkout_is_removed(self):
+        # Assure was already updated to the AU8 template; the file is still the earlier render.
+        template = ASSURE_GATE.read_bytes().replace(b'\r\n', b'\n')
+        self.assertIn(installer.ASSURE_HEAD_CHECKOUT, template)
+        self.assure_reference(template)
+        legacy = self.root / '.github/workflows/documentation-gates.yml'
+        legacy.parent.mkdir(parents=True, exist_ok=True)
+        legacy.write_bytes(installer.sanduq_ci.render(template.replace(installer.ASSURE_HEAD_CHECKOUT, b''),
+                                                      w.load_policy(self.root)['ci']))
+        self.apply()
+        self.assertFalse(legacy.exists())
+
+    def test_edited_documentation_gate_is_still_refused(self):
+        reference = self.assure_reference(ASSURE_GATE.read_bytes())
+        legacy = self.root / '.github/workflows/documentation-gates.yml'
+        legacy.parent.mkdir(parents=True, exist_ok=True)
+        edited = installer.rendered(reference, w.load_policy(self.root)) + b'# local edit\n'
+        legacy.write_bytes(edited)
+        with self.assertRaisesRegex(w.WorkflowError, 'LEGACY_CI_HAS_LOCAL_EDITS'):
+            self.apply()
+        self.assertEqual(legacy.read_bytes(), edited)
+
+
+ASSURE_GATE = Path(__file__).resolve().parents[2] / 'assure/assets/github/documentation-gates.yml'
+
+
+def fake_backups(root, count):
+    """``count`` earlier backups spread over the three folders, oldest first, all older than any new apply."""
+    zips = []
+    for index in range(count):
+        folder = root / '.specify/workflow/backups' / installer.BACKUP_KINDS[index % 3] / ('old%d' % index)
+        folder.mkdir(parents=True)
+        for name in ('before.json', 'result.json'):
+            (folder / name).write_text('{}', encoding='utf-8')
+        path = folder / 'before.zip'
+        path.write_bytes(b'zip')
+        stamp = (1_600_000_000 + index) * 10**9
+        os.utime(path, ns=(stamp, stamp))
+        zips.append(path)
+    return zips
+
+
+def memory_archive_run(root, run_id='a' * 32):
+    """An installed Memory with an unfinished archive run, recorded as archive.py records it."""
+    script = root / '.specify/extensions/memory/scripts/archive.py'
+    script.parent.mkdir(parents=True, exist_ok=True)
+    script.write_text('# fixture\n', encoding='utf-8')
+    active = root / '.git/sanduq-memory/active.json'
+    w.write(active, {'run_id': run_id})
+    return active

@@ -612,6 +612,7 @@ def launch(root, driver, candidate, cwd, task, timeout, intent_id=None, orchestr
     except OSError as exc:
         raise StartFailed('DELEGATE_START_FAILED: ' + str(exc)[:500]) from exc
     if result.returncode:
+        delegation.forget_health(root)  # the next claim probes the driver again (W6)
         raise StartFailed('DELEGATE_START_FAILED: ' +
                           (result.stderr.strip() or result.stdout.strip())[:500], result.returncode)
     try:

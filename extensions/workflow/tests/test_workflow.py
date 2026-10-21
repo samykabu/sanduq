@@ -174,12 +174,6 @@ class WorkflowTests(unittest.TestCase):
         self.assertNotIn('manual_analyze', w.stages(self.policy))
         self.assertTrue(w.doctor(self.root, self.policy)['ok'])
 
-    def test_scope_inclusive_boundaries_and_units(self):
-        self.policy['scope'] = {'keep_together': {'target': 20, 'tolerance': 3, 'unit': 'points', 'inclusive': True}}
-        for value in (17, 20, 23): self.assertTrue(w.scope_decision(self.policy, value, 'points')['automatic'])
-        for value in (16, 24): self.assertFalse(w.scope_decision(self.policy, value, 'points')['automatic'])
-        with self.assertRaisesRegex(w.WorkflowError, 'UNIT_MISMATCH'): w.scope_decision(self.policy, 20, 'hours')
-
     def test_context_reserves_space_and_labels_estimation(self):
         gate = w.context_gate(self.policy, self.usage(.46))
         self.assertFalse(gate['pause'])  # Estimates must never force a fresh session

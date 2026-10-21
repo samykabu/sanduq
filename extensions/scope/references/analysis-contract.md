@@ -45,27 +45,5 @@ apply in its scope; shared source images do not make every screen part of every 
 
 ## Approval
 
-Review, approval and publication follow `skills/scope-analyst/references/controls.md`.
-
-## Reusing an inspect snapshot
-
-`inspect <issue> --output <file>` saves the snapshot. `gate`, `approve`, `publish` and
-`bind` accept `--snapshot <file>` and reuse it when the file is younger than
-`scope.board_cache_seconds` (default 300; 0 disables) and its `fingerprint` matches one
-fresh fetch of the issue; the receipt and labels still come from that fresh fetch.
-Otherwise they inspect again (`gate` and `bind` read prerequisites only). Without
-`--snapshot`, `gate` and `bind` use `.specify/scope/issue-<number>-snapshot.json` when it
-exists. The output says which with `snapshot_reused`.
-
-Project board reads are cached in `.specify/scope/board-cache.json`
-(`{fetched_at, repo, items}`) for the same TTL. Every Scope or clarification write to the
-board or an issue removes the cache, and a gate that would refuse because of a cached
-status rereads the live board first.
-
-## Rendering the specification
-
-For an approved single-leaf analysis, `scope.py render-spec <issue> --analysis <file>
---feature specs/<feature>` prints the Spec Kit spec (`text` in the JSON output); `--apply`
-writes `specs/<feature>/spec.md` with a `<!-- sanduq-scope:rendered <sha256> -->` first line.
-It refuses with `SCOPE_RENDER_UNAPPROVED`, `SCOPE_RENDER_LEAF_REQUIRED` or `SCOPE_RENDER_EXISTS`
-(replace an unmarked spec only with `--force`).
+Review, approval and publication follow `skills/scope-analyst/references/controls.md`. Snapshot
+reuse, the board cache and `render-spec` are described in the extension README.

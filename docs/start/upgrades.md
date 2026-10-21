@@ -11,6 +11,9 @@ specify extension update <id>
 
 Then rerun the extension's init or doctor command if its changelog asks for it.
 
+`update` skips `scope` and `memory` without an error when the community catalog wins their IDs.
+[Register Sanduq's catalog ahead of it](install-speckit.md#if-you-keep-spec-kits-default-catalogs).
+
 ## Workflow and its dependencies
 
 Resolve active [claims](../reference/glossary.md#claim) first. Then preview and apply the
@@ -18,7 +21,7 @@ transactional upgrade, substituting the published version:
 
 ```bash
 python .specify/extensions/workflow/scripts/upgrade.py --version <version>
-python .specify/extensions/workflow/scripts/upgrade.py --version <version> --apply
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.17.0 --apply
 python .specify/extensions/workflow/scripts/workflow.py doctor --project
 ```
 
@@ -156,6 +159,45 @@ added. What changes:
   longer reports as a changed input. States recorded before the upgrade compare as before.
 - **Lean execution** is unchanged; the [operating guide](../workflow/operating-guide.md#adopting-lean-execution)
   now says how to adopt it.
+
+## Round 4 migration (Workflow 1.17.0)
+
+The round ships Workflow 1.17.0, Scope 1.10.0, Assure 2.6.0, User Manual 1.8.0, PR 4.5.0, Project 2.5.0,
+Illustrate 2.7.0, Memory 2.5.0 and Progress 1.5.0. Round 4 changes no extension ID, command name or policy key. Finish or recover any active Memory
+archive run first (`archive.py status`). Then update Memory before Workflow, and run Memory's
+`enable` once:
+
+```bash
+specify extension update memory
+python .specify/extensions/workflow/scripts/upgrade.py --version <version> --apply
+python .specify/extensions/workflow/scripts/workflow.py doctor --project
+```
+
+```text
+$speckit-memory-enable Review the renewed archiving policy and approve it.
+```
+
+| Change | What you see | What to do |
+| --- | --- | --- |
+| Catalog priority (docs) | With Spec Kit's default catalogs listed and Sanduq at priority 10, `add scope` or `add memory` refuses and `update` skips them | [Register Sanduq at priority 1](install-speckit.md#if-you-keep-spec-kits-default-catalogs) |
+| Workflow keeps three backup ZIPs | After the next successful apply, older ZIPs under `.specify/workflow/backups/` are deleted. Logs stay; a failed apply deletes nothing | Copy out any older ZIP you want before that apply |
+| Install and upgrade wait for Memory | `MEMORY_ARCHIVE_ACTIVE` names the command that resumes the run | Finish or roll back the archive run, then upgrade |
+| Memory approval hash | Automatic archiving stays off until you approve again | Run `$speckit-memory-enable` once after the update |
+| Old Memory queue entries | `pending` reports entries queued before the new approval as blocked, with the fix | Archive each with `$speckit-memory-run --spec <dir>`, or queue it again from its implementation branch |
+| Workflow owns Memory's `session` and `prepare` hooks | The upgrade's reconcile sets `enabled: false` on both. Adding Memory after Workflow gives `DUPLICATE_STAGE_OWNER` in `doctor` | Run `python .specify/extensions/workflow/scripts/reconcile.py --apply`. Do not re-enable the hooks by hand; reconcile undoes it |
+| The claim runs Memory's session check | A claim can return `memory_blocked` or `memory_dispatch` with `memory_handoff` instead of a stage | Run its actions, then claim again. Stop running `memory-handoff --transition session` before each claim |
+| Workflow's legacy `progress.py` retired | With Progress installed and enabled, a legacy call exits 2 with `error PROGRESS_INSTALLED: ...` and the command to use | Switch prompts and scripts to `.specify/extensions/progress/scripts/progress.py` ([mapping](../workflow/operations.md#reporting-modes-and-the-legacy-call-mapping)) |
+| Progress v2 status and classic layout deprecated | Both still work | Read `progress status --json` (`sanduq.progress.v3`); run `progress theme --layout timeline` |
+| Assure's gate checks out the PR head | `assure init` and the Workflow upgrade replace an unedited `documentation-gates.yml`. An edited one is kept and init prints the `ref:` line | Add the printed `ref:` line to an edited gate |
+| Assure scan skips git-ignored folders | The first scan can drop rows, rewrite `.github/memory/project-memory.md` once and stale recorded document and manual states once | Commit the rewrite and rerun Document and Update when asked |
+| Assure Analyze ignores the User Manual task block | An analyze state recorded over a `tasks.md` that held that block goes stale once | Rerun Analyze once |
+| Assure config keys removed | `freshness.policy`, `freshness.state_directory` and `output.directory_name` stay in an existing config and do nothing | Nothing; delete them if you like |
+| User Manual Update archives | A local Update no longer writes `User-Manual/site/<version>/*.zip` unless `manual.yml` names an approved provider | Nothing; those ZIPs were build output |
+| Illustrate self-check fails closed | With `illustrate.hooks.self_check: true`, a `.specify/workflow.yml` the hook cannot read blocks written diagrams with a message | Install PyYAML for the hook's Python, write the key as plain block lines, or set it to `false` |
+| PR never edits a merged or closed PR | Rerunning `speckit.pr.generate` after the PR merged exits 3 and publishes nothing | Open a new branch for further changes |
+| Project refuses a malformed state file | The sync stops on a malformed `.specify/project-sync-state.json` | Restore it from git or fix it, then rerun |
+| Project owner type | A config from an older Init for an organization board says `ownerType: user` | Rerun `$speckit-project-init`, or set `"ownerType": "org"` |
+| Scope's `scope-gate` preset changed | A managed Specify claim is no longer told to chain Clarify | Unmanaged projects run `specify preset add` again for `scope-gate`; the Workflow installer re-adds it |
 
 ## Moved documentation
 

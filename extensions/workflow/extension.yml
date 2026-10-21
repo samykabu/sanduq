@@ -2,7 +2,7 @@ schema_version: '1.0'
 extension:
   id: workflow
   name: Sanduq Workflow
-  version: "1.16.0"
+  version: "1.17.0"
   description: GitHub issue decisions and resumable Scope-to-PR orchestration with
     optional model-aware delegation, QA, User Manual, and workflow evidence CI.
   author: Samy K. Abushanab
@@ -35,10 +35,10 @@ provides:
     description: 'Resumes an issue-bound feature at its earliest unfinished or stale stage. Use when a session was interrupted or paused, or for "continue the feature".'
   - name: speckit.workflow.finalize
     file: commands/finalize.md
-    description: 'Checks readiness and creates or updates the feature''s single pull request, then verifies the merge. Use when the feature is ready, or for "open the PR".'
+    description: 'Runs the managed Ready and PR stages of an issue-bound feature: readiness checks, its one pull request, then the merge check. Use when every earlier stage has passed in a project with .specify/workflow.yml, or for "open the PR".'
   - name: speckit.workflow.status
     file: commands/status.md
-    description: 'Shows a feature''s stage, claim, receipts, blockers and evidence freshness without changing anything. Use when checking progress, or for "where is this feature".'
+    description: 'Prints the workflow record of one issue-bound feature: stage, active claim, receipts, blockers and evidence freshness; read-only. Use when asked which stage a feature is in or what blocks it, or for "where is this feature". For the live progress report use speckit.progress.status.'
   - name: speckit.workflow.doctor
     file: commands/doctor.md
     description: 'Checks the workflow''s dependencies, policy, host commands, hooks and board setup. Use when a claim fails on setup or after an upgrade, or for "diagnose the workflow".'

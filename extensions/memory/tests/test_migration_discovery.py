@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import test_archive as legacy
 import test_archive_v2 as delta
+from repo_template import TemplateRepo
 from archive import ArchiveError, POLICY
 from git_state import write_json
 
@@ -128,14 +129,15 @@ class LegacyMigrationDiscoveryTests(MigrationDiscoveryChecks, unittest.TestCase)
     save_candidate = legacy.ArchiveIntegrationTests.save_candidate
 
 
-class DeltaMigrationDiscoveryTests(MigrationDiscoveryChecks, unittest.TestCase):
+class DeltaMigrationDiscoveryTests(TemplateRepo, MigrationDiscoveryChecks, unittest.TestCase):
     git = delta.ArchiveV2Tests.git
     write = delta.ArchiveV2Tests.write
     read = delta.ArchiveV2Tests.read
     journal = delta.ArchiveV2Tests.journal
+    build = delta.ArchiveV2Tests.build
 
-    def setUp(self):
-        delta.ArchiveV2Tests.setUp(self)
+    def restored(self):
+        delta.ArchiveV2Tests.restored(self)
         self.archive.abandon(self.prepared['run_id'])
         self.source = delta.SPEC
         self.destination = 'tests/Fixtures/spec-memory/' + self.source.removeprefix('specs/')

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import os
 from pathlib import Path
@@ -10,7 +11,7 @@ import unittest
 from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
-sys.path.insert(0, str(SCRIPTS))
+sys.path[:0] = [str(SCRIPTS), str(SCRIPTS.parent / "tests")]
 import archive as archive_module
 from archive import Archive, EXTENSION, POLICY
 import memory_delta as md
@@ -18,6 +19,7 @@ import memory_store as ms
 from git_state import ArchiveError, digest, write_json
 from memory import MEMORY, REGISTRY, render
 from test_memory_store import legacy_entries
+from repo_template import TemplateRepo
 
 FEATURE = "specs/010-vat"
 SPEC = FEATURE + "/spec.md"
@@ -28,11 +30,9 @@ CURRENCY = f"{ms.ENTRIES}/PM-invoice-currency.md"
 ROUNDING = f"{ms.ENTRIES}/PM-invoice-rounding.md"
 
 
-class ArchiveV2Tests(unittest.TestCase):
-    def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="memory-v2-test-")
-        self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+class ArchiveV2Tests(TemplateRepo, unittest.TestCase):
+    def build(self):
+        """Once per class (PM20): a migrated repository with one prepared feature; each test gets a copy."""
         self.git("init", "-b", "develop")
         for key, value in {"user.name": "Archive Test", "user.email": "archive@example.invalid", "core.autocrlf": "false",
                            "core.hooksPath": ".git/hooks", "commit.gpgsign": "false"}.items():
@@ -52,6 +52,11 @@ class ArchiveV2Tests(unittest.TestCase):
         self.git("commit", "-m", "VAT feature")
         self.base_root = ms.memory_root(self.root)
         self.prepared = self.archive.prepare([FEATURE], [], [], skip_verification=REASON)
+
+    def restored(self):
+        self.archive = Archive(self.root)
+        self.base_root = self.built["base_root"]
+        self.prepared = copy.deepcopy(self.built["prepared"])
         self.run_dir = self.archive.run_path(self.prepared["run_id"])
 
     def git(self, *args):
@@ -124,6 +129,19 @@ class ArchiveV2Tests(unittest.TestCase):
         error = json.loads(failed.stdout.decode("utf-8"))
         self.assertFalse(error["success"])
         self.assertIn(note, error["error"])
+
+    def test_spec_accepts_spec_kit_and_workflow_feature_directories_only(self):
+        """B4: Spec Kit's sequential and timestamp names and Workflow's unpadded issue names; nothing else."""
+        accepted = ("specs/001-x", "specs/20260101-120000-x", "specs/2-add-a-name-flag", "specs/12-café_menu",
+                    "specs/412a-x")
+        refused = ("specs/memory", "specs/2", "specs/x-2", "specs/2-x/y", "other/2-x")
+        for name in accepted + refused:
+            (self.root / name).mkdir(parents=True, exist_ok=True)
+        for name in accepted:
+            self.assertEqual(name, self.archive.spec(name))
+        for name in refused:
+            with self.assertRaises(ArchiveError, msg=name):
+                self.archive.spec(name)
 
     def test_prepare_writes_a_v2_journal_and_delta_skeleton(self):
         run = self.journal()

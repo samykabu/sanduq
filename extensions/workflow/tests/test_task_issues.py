@@ -372,3 +372,25 @@ class TaskIssuesSummaryTests(unittest.TestCase):
                                         '--parent', '10', '--dependencies', str(deps), '--json'])
         self.assertEqual((default_code, default_out), (json_code, json_out))
         self.assertIn('"action": "create"', default_out)
+
+
+class GitHubTimeoutTests(unittest.TestCase):
+    def test_a_hung_gh_call_is_reported_with_the_api_error_code(self):
+        # X21: no timeout let a hung gh hold the dispatch lock forever.
+        with mock.patch.object(t.subprocess, 'run', side_effect=subprocess.TimeoutExpired('gh', t.GH_TIMEOUT)) as run:
+            with self.assertRaisesRegex(t.WorkflowError, 'GITHUB_API_FAILED: gh api repos/acme/app/issues timed out'):
+                t.GitHub().api('repos/acme/app/issues')
+        self.assertEqual(run.call_args.kwargs['timeout'], t.GH_TIMEOUT)
+
+
+class GitHubTimeoutTests(unittest.TestCase):
+    def test_a_hung_gh_call_is_reported_with_the_api_error_code(self):
+        # X21: no timeout let a hung gh hold the dispatch lock forever.
+        with mock.patch.object(t.subprocess, 'run', side_effect=subprocess.TimeoutExpired('gh', t.GH_TIMEOUT)) as run:
+            with self.assertRaisesRegex(t.WorkflowError, 'GITHUB_API_FAILED: gh api repos/acme/app/issues timed out'):
+                t.GitHub().api('repos/acme/app/issues')
+        self.assertEqual(run.call_args.kwargs['timeout'], t.GH_TIMEOUT)
+
+
+if __name__ == '__main__':
+    unittest.main()

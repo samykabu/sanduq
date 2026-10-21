@@ -496,6 +496,27 @@ class SwitchTests(HostTests):
         self.assertEqual(w.active_host(self.root), 'codex')
         self.assert_complete()
 
+    def test_switch_keeps_the_newest_three_zips(self):
+        old = test_install.fake_backups(self.root, 4)
+        result = hosts.switch(self.root, 'claude', runner=self.specify, package_root=self.package)
+        self.assertEqual(result['backups']['zips'], 3)
+        self.assertEqual([path.is_file() for path in old], [False, False, True, True])
+
+    def test_failed_switch_prunes_no_backup(self):
+        old = test_install.fake_backups(self.root, 4)
+        with patch.object(hosts, 'register_hosts', side_effect=w.WorkflowError('simulated')):
+            with self.assertRaisesRegex(w.WorkflowError, 'HOST_SWITCH_ROLLED_BACK'):
+                hosts.switch(self.root, 'claude', runner=self.specify, package_root=self.package)
+        self.assertTrue(all(path.is_file() for path in old))
+
+    def test_switch_accepts_an_owned_hook_registered_again_and_disables_it(self):
+        # R1 W10: Spec Kit re-registered an owned hook enabled after an earlier reconcile.
+        path = test_install.InstallTests.owned_hook(self)
+        result = hosts.switch(self.root, 'claude', runner=self.specify, package_root=self.package)
+        self.assertTrue(result['applied'])
+        [entry] = yaml.safe_load(path.read_text(encoding='utf-8'))['hooks']['after_tasks']
+        self.assertIs(entry['enabled'], False)
+
     def test_doctor_warns_when_another_host_lost_skills(self):
         shutil.rmtree(self.root / '.claude/skills/speckit-pr-generate')
         health = w.doctor(self.root, self.policy)

@@ -14,7 +14,7 @@ Spec Kit feature is implemented.
 |---|---|---|
 | `speckit.user-manual.init` | `/speckit-user-manual-init` | Interview, discover modules, approve the map, and scaffold the manual |
 | `speckit.user-manual.analyze` | `/speckit-user-manual-analyze` | Add feature-specific documentation and asset tasks |
-| `speckit.user-manual.update` | `/speckit-user-manual-update` | Update affected modules, then `build_manual.py --all --archive` for the private preview |
+| `speckit.user-manual.update` | `/speckit-user-manual-update` | Update affected modules, then `build_manual.py --all` (`--archive` only when an approved provider publishes the preview) |
 | `speckit.user-manual.release` | `/speckit-user-manual-release` | `build_manual.py --all --version <v> --archive --pdf` for versioned HTML archives and PDFs |
 
 The committed source of truth lives under `User-Manual/`. English is required. Arabic is optional

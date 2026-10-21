@@ -123,7 +123,7 @@ def check(root, feature, policy, base=None, rules=None, verify_ci_evidence=True,
                     note += '; drift reaching lanes: ' + json.dumps(status['lanes'])
                 raise WorkflowError('STALE_RECEIPT: ' + stage + '; changed paths: ' +
                                     json.dumps(receipt_drift(root, feature, stage, receipt)) + note +
-                                    '; recovery: ' + ' | '.join(recovery_recipe(feature, stage, status, policy, receipt)))
+                                    '; recovery: ' + ' | '.join(recovery_recipe(feature, stage, status, policy, receipt, root)))
             if status.get('via') in ('ci-evidence', 'lane-free-drift'):
                 accepted.append({'stage': stage, 'via': status['via'], 'drift': status.get('paths', []),
                                  **({'run_id': status.get('run_id')} if status['via'] == 'ci-evidence' else {})})

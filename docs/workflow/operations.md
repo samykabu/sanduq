@@ -103,29 +103,21 @@ Hooks count as off when the host's own switch is off: Claude Code's `disableAllH
 coordinator makes its few calls as part of its own turn. Opening the report once for a person is fine. Reopening it,
 re-verifying it or waiting to see it refresh is not. Waiting for a worker to finish is different and stays.
 
-When Progress is installed, `scripts/progress.py` forwards each legacy subcommand to the Progress CLI and writes no legacy
-state, so existing instructions keep working. Each call prints what it always did: the report path, or one `--summary` line
-such as `ok done=0 total=6 pending=4 running=1 blocked=1`.
+When Progress is installed and enabled, Workflow's `scripts/progress.py` no longer forwards legacy calls. A legacy
+call writes nothing, exits 2 and prints one line, `error PROGRESS_INSTALLED: ...`, that names what to do instead. Do
+not retry it. Without Progress, or with Progress disabled, the legacy reporter runs as before.
 
-| Legacy call | Progress verbs it runs |
+| Legacy call | Use instead |
 | --- | --- |
-| `init --tasks T --output O [--open]` | `init`; `--open` then opens `index.html`. `--title` is refused |
-| `task --id T --status running [--agent A] [--note N]` | Finds or makes the lane owned by `A` (`lane new --tasks T --owner A`) and moves `T` into it, then `unblock --all-for T`, `note` when a note is given, and `attempt record --lane L --run legacy-T-A --status running` |
-| `task --id T --status done` | The same lane step, `unblock --all-for T`, then `attempt record ... --status done --ended <now>` |
-| `task --id T --status blocked --note N` | `block T --by L2` when the note is a lane, task, W or C id such as `L2`, otherwise `block T --by ext:"N"`; plus `attempt record ... --status blocked` |
-| `task --id T --status pending` | `unblock --all-for T`, then `note "T pending" --target T` |
-| `event --message M` | `note M` |
-| `phase --name N --status S [--commit C]` | `note "Phase N: S (C)"` |
-| `pr --url U --status open\|merged` | `note "PR S: U"` |
-| `sync` | `refresh` |
-| `usage --id T` or `--overhead LABEL` | `attempt record ... --usage-json` with the counters Workflow's own usage reader produced, and a `note` when usage is unavailable |
-| any call with `--json` | Refused with a compatibility error and exit 2. Use `progress.py status --json` |
-| `--summary` | Kept |
+| `init` | `python .specify/extensions/progress/scripts/progress.py init` |
+| `task` | Check the task box in `tasks.md` |
+| `usage` | Nothing: hooks and delegate results record usage |
+| `sync` | `python .specify/extensions/progress/scripts/progress.py refresh` |
+| `phase` | Nothing: Progress reads phases from `tasks.md` |
+| `pr` | `python .specify/extensions/progress/scripts/progress.py note 'PR open: <url>'` |
+| `event` | `python .specify/extensions/progress/scripts/progress.py note '<text>'` |
 
-An unknown task id prints `error Unknown task ID: T099` and exits 2. A request with no faithful mapping fails with a
-compatibility error and never succeeds silently. Do not retry it; use the Progress verb in the table. Legacy attempts carry
-origin `legacy` and never override the delegation ledger. Every Progress verb is in the
-[command reference](../../extensions/progress/docs/commands.md).
+Every Progress verb is in the [command reference](../../extensions/progress/docs/commands.md).
 
 ## The lifetime of one feature
 
@@ -169,7 +161,7 @@ edited to claim that a new package executed old work.
 | `specs/<feature>/workflow/delegations.json` | Tracked delegation attempts, route decisions and usage |
 | `specs/<feature>/workflow/lifecycle.jsonl` | Append-only claim, completion, recovery, invalidation and revalidation events ([details](state-files.md#lifecycle-events-stage-plan-and-next-action-1120)) |
 | `specs/<feature>/workflow/clarifications.json` | Clarification questions, answers and their application, written by Scope 1.7.0 |
-| `.specify/workflow/backups/installs/` | Backup ZIP and operation log for every install and upgrade |
+| `.specify/workflow/backups/installs/` | Backup ZIP and operation log for an install or upgrade. After a successful apply, only the three newest ZIPs across `installs/`, `upgrades/` and `hosts/` are kept; the logs stay |
 | `docs/workflow/implementation-plan.html` | The Illustrate dependency plan, regenerated after every decomposition |
 
 Reusable source lives in this repository. Policy, issue bindings, feature progress, manual content,

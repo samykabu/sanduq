@@ -25,4 +25,10 @@ This command is also the final `after_implement` hook. Do not assume
 6. Explain that the full checkpoint, synthesis and archive will run in the next
    local agent session after merge into the configured target branch, completion and verification.
 
+Under Sanduq Workflow (`.specify/workflow.yml` exists), Workflow's handoff queues the work and
+calls this command only to choose checks. Do steps 2 to 4, then, instead of step 5, run
+`python .specify/extensions/workflow/scripts/workflow.py memory-handoff --transition execute
+--feature specs/<full-feature-name> --check <approved-name>` (repeat `--check`) and report its
+`status` and `reason`. Never run `queue` directly there: the handoff records its intent first.
+
 Keep using the feature folder for QA, documentation, review and PR generation.

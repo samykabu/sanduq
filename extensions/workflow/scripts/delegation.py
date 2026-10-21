@@ -1163,6 +1163,56 @@ def doctor(root, host, install=False, scope='project', upgrade_owner=None):
             'cli_errors': cli_errors, 'diagnostic': result.stdout.strip()}
 
 
+HEALTH_CACHE = '.specify/workflow/runtime/delegation-health.json'
+HEALTH_TTL = 3600  # seconds; longer than one model stage, so consecutive claims reuse one probe
+
+
+def health_key(root, host, scope, driver):
+    """What a green probe is valid for: host, scope, overrides, the driver copy's bytes and the node/codex/claude
+    executables (path, size, mtime). A CLI that loses its login inside the TTL is found at dispatch start."""
+    files = {}
+    for name in SKILL_FILES:
+        path = Path(driver).parent / name if driver else None
+        files[name] = hashlib.sha256(path.read_bytes()).hexdigest() if path and path.is_file() else None
+    tools = {}
+    for name in ('node', 'codex', 'claude'):
+        found = shutil.which(name)
+        try:
+            info = os.stat(found) if found else None
+        except OSError:
+            info = None
+        tools[name] = [found, info.st_size, info.st_mtime_ns] if info else [found]
+    return {'host': host, 'scope': scope, 'driver': driver, 'files': files, 'tools': tools,
+            'override': os.environ.get('SANDUQ_DELEGATE_DRIVER'), 'plugin': os.environ.get('CLAUDE_PLUGIN_ROOT')}
+
+
+def forget_health(root):
+    (Path(root) / HEALTH_CACHE).unlink(missing_ok=True)
+
+
+def cached_health(root, host, scope):
+    """`doctor(install=True)` for a claim (W6): a green result with an available CLI is kept for HEALTH_TTL and
+    reused while its key holds. A miss, a red result or a driver start failure probes again; `doctor` always does."""
+    path = Path(root) / HEALTH_CACHE
+    try:
+        cached = json.loads(path.read_text(encoding='utf-8'))
+        driver = cached['result'].get('driver')
+        if (0 <= time.time() - cached['at'] < HEALTH_TTL
+                and cached['key'] == health_key(root, host, scope, driver)):
+            return {**cached['result'], 'cached': True, 'notices': []}
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    result = doctor(root, host, install=True, scope=scope)
+    if result.get('ok') and any((result.get('harnesses') or {}).values()):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        stored = {key: value for key, value in result.items() if key != 'notices'}
+        path.write_text(json.dumps({'at': time.time(), 'key': health_key(root, host, scope, result.get('driver')),
+                                    'result': stored}), encoding='utf-8')
+    else:
+        forget_health(root)
+    return result
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=Path.cwd())

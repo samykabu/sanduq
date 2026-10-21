@@ -4,6 +4,10 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## 2026-10-21 — Workflow 1.17.0, Scope 1.10.0, Assure 2.6.0, User Manual 1.8.0, PR 4.5.0, Project 2.5.0, Illustrate 2.7.0, Memory 2.5.0, Progress 1.5.0 (pending release)
+
+- Optimization round 4, reviewed with Codex and gated on four live managed runs in a throwaway repository. No renames. In managed projects Workflow owns Memory's session and prepare hooks: every claim runs the Memory session check, and Execute's `complete` queues the feature for archiving. The live runs found and fixed bugs that predate this round: a rendered spec could not bind at Specify, the PR stage of every lean feature failed for missing prerequisites (since Workflow 1.10.0), and Memory never queued a managed feature (runtime files and issue-numbered folders); Project init cleared item statuses when it changed columns. Also: one shared GitHub remote parser for Workflow, Project and Scope (Scope now accepts valid remotes and refuses look-alikes); Assure's CI gate checks the PR head; init scripts keep consumer config and pages; Scope's inspect output 58 KB to under 1 KB; fewer GitHub calls in Scope, Project and PR; the Progress forwarder retired; the Illustrate hook fails closed without PyYAML and imports run the required checks; three install backups kept; catalog priority 1 documented. See the Round 4 migration table in `docs/start/upgrades.md`.
+
 ## 2026-10-20 — Workflow 1.16.0, Assure 2.5.1, User Manual 1.7.1
 
 - Issue #99: a board status write no longer stales receipts or refuses a completion (receipts bind the feature's Project Sync entry without its status); `workflow.py project-sync` records each sync and `sync-amend` converts receipts recorded before 1.16.0 after verifying the binding. Document freshness keeps declared outputs out of its inputs, and reports go to the extension state folder. The dispatcher references state one finalization order; the operating guide covers adopting lean execution.

@@ -34,7 +34,8 @@ Supported flags:
 
    Forward `--dry-run` when supplied.
 4. Verify that `.specify/extensions/assure/assure-config.yml` and `.specify/extensions.yml` reflect the
-   selected mode. Tell the user to commit both files so every checkout uses the same policy.
+   selected mode. Tell the user to commit both files so every checkout uses the same policy. Pass on
+   any line the script prints about local edits in `documentation-gates.yml`.
 
 Never claim that direct `gh pr create` or the GitHub web UI can execute agent commands. The
 installed PR extension enforces the document preflight; CI can detect bypasses.

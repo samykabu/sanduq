@@ -7,6 +7,16 @@ from pathlib import Path
 EXTENSION = Path(__file__).resolve().parents[1]
 COMMANDS = EXTENSION / 'commands'
 
+# Spec Kit 8147943 `rewrite_project_relative_paths` (src/specify_cli/agents.py:219-243), applied to every
+# rendered command: a bare scripts/, memory/ or templates/ token becomes this extension's folder.
+SPEC_KIT_REWRITE = re.compile(r"""(?:(?<![.\w])(?P<parent>(?:\.\./){2,})|(?P<boundary>^|[\s`"'(\[{<=])"""
+                              r"""(?P<rel>\.specify/|(?:\.?/))?)(?P<target>scripts|memory|templates)/""")
+
+
+def rewritten(source):
+    """Tokens Spec Kit would rewrite (an already `.specify/` path is left alone)."""
+    return [m.group(0) for m in SPEC_KIT_REWRITE.finditer(source) if m.group('rel') != '.specify/']
+
 
 def text(name):
     return (COMMANDS / f'speckit.assure.{name}.md').read_text(encoding='utf-8')
@@ -40,6 +50,32 @@ class CommandTextTest(unittest.TestCase):
             with self.subTest(path.name):
                 self.assertIsNone(legacy.search(path.read_text(encoding='utf-8')))
         self.assertNotIn('SKILL.md', text('init'))
+
+    def test_spec_kit_rendering_rewrites_no_path(self):
+        # AU13a: "Its `scripts/` are under ..." rendered as Assure's own scripts folder.
+        for path in COMMANDS.glob('*.md'):
+            with self.subTest(path.name):
+                self.assertEqual(rewritten(path.read_text(encoding='utf-8')), [])
+        self.assertEqual(rewritten('Its `scripts/` are under'), ['`scripts/'])
+
+    def test_dependency_handling_is_one_sentence(self):
+        # AU17: deps.py prints the next step itself; the commands carry no per-policy prose.
+        for name in ('analyze', 'document'):
+            with self.subTest(name):
+                self.assertNotIn('--approve', text(name))
+                self.assertIn('report its line verbatim, follow it', text(name))
+
+    def test_skill_carries_rules_with_installed_paths(self):
+        # AU18: no routing section; script paths resolve from the repository root.
+        skill = (EXTENSION / 'skills/assure/SKILL.ext.md').read_text(encoding='utf-8')
+        self.assertNotIn('## Route the request', skill)
+        for source in (skill, (EXTENSION / 'skills/assure/references/documentation.md').read_text(encoding='utf-8')):
+            self.assertIsNone(re.search(r'(?<![/\w])scripts/', source))
+
+    def test_analyze_reads_the_inventory_rows_only(self):
+        analyze = text('analyze')
+        self.assertIn('assure_scan.py --check\n', analyze)
+        self.assertNotIn('--show-block', analyze)
 
 
 if __name__ == '__main__':

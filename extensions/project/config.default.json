@@ -1,5 +1,5 @@
 {
-  "$comment": "DEFAULT config for the 'project' Spec Kit extension. Ships with NO board-specific ids. Run the speckit-project-init skill (scripts/*/project-init.*) in the consuming repo to discover the board, choose optional or required lifecycle hooks, map phases to your Status columns, and write the real .specify/extensions/project/config.json. 'phaseToStatus' holds the DEFAULT column names init tries to match on your board (exact -> fuzzy -> prompt -> optional auto-create).",
+  "$comment": "DEFAULT config for the 'project' Spec Kit extension. Ships with NO board-specific ids. Run speckit.project.init (scripts/*/project-init.*, non-interactive) in the consuming repo to discover the board, set optional or required lifecycle hooks, map phases to your Status columns, and write the real .specify/extensions/project/config.json; a rerun keeps parentIssue, subIssues and stateFile. 'phaseToStatus' holds the DEFAULT column names init tries to match on your board (exact -> fuzzy -> optional auto-create).",
   "owner": "",
   "ownerType": "user",
   "hookMode": "optional",
@@ -32,7 +32,6 @@
   },
   "subIssues": {
     "enabled": true,
-    "granularity": "task",
     "titleTemplate": "{slug} {taskId}: {desc}",
     "labels": ["spec-task"],
     "warnAboveCount": 40,

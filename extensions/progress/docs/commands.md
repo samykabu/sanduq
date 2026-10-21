@@ -241,8 +241,8 @@ progress: 0/6 tasks, 1 lanes active, 0 blocked, 0 decisions pending (rev 15)
 ```
 
 `--json` prints the whole projection. The default is schema `sanduq.progress.v3` ([fields](#status---json-sanduqprogressv3)).
-`--schema v2` prints the compatibility document ([fields](#status---json---schema-v2-sanduqprogressv2)) that the Workflow shim and other
-older readers use. The one-line summary above is built from the v2 numbers. Errors: `PROGRESS_NOT_INITIALIZED` (2), and
+`--schema v2` prints the compatibility document ([fields](#status---json---schema-v2-sanduqprogressv2)) that older Workflow releases and other
+older readers use. `--schema v2` is deprecated and will be removed in a later release; read v3. The one-line summary above is built from the v2 numbers. Errors: `PROGRESS_NOT_INITIALIZED` (2), and
 `PROGRESS_USAGE` (2) for any other `--schema` value.
 
 ### lane
@@ -603,7 +603,7 @@ a project before any `progress init`. It takes no other option. `--help` prints
 | Form | Effect | Output |
 | --- | --- | --- |
 | `--preset NAME` | Replaces the project `theme.json` with `{"v":1,"preset":"NAME"}` (the layout you picked is kept) | `progress: theme cobalt` |
-| `--layout NAME` | Sets only `layout` in `theme.json` and keeps every other customization. `timeline` (default) is the v3 Timeline view; `classic` is the v2 lanes view, which is fed the v2 document. A layout change also rebuilds every initialised report under its own lock, so `data.js` matches at once. A report whose lock is busy gets a warning line and is republished by the next refresh | `progress: theme layout classic` |
+| `--layout NAME` | Sets only `layout` in `theme.json` and keeps every other customization. `timeline` (default) is the v3 Timeline view; `classic` is the v2 lanes view, which is fed the v2 document; it is deprecated and will be removed in a later release. A layout change also rebuilds every initialised report under its own lock, so `data.js` matches at once. A report whose lock is busy gets a warning line and is republished by the next refresh | `progress: theme layout classic` |
 | `--from-illustrate` | Reads `active.theme` from `.github/illustration-theme.yml` and writes the matching colours as tokens | `progress: theme emerald` |
 | `--file PATH` | Validates your file and stores it as `theme.json` | `progress: theme classic` (the file's preset) |
 | `--show` | Prints the resolved theme, with every default filled in, as JSON | the JSON document |

@@ -19,7 +19,8 @@ The host is detected from the environment and an unknown host selects `refresh`;
 user has not approved print `reporting: refresh (codex hooks not approved)` (`--json` has a `reason` field): Codex skips
 untrusted projects and unapproved hooks. Ask the user to trust the project and approve the Progress hooks as the
 [Workflow README](../../../README.md#progress-reporting) describes. In the commands below `progress` stands for
-`python .specify/extensions/progress/scripts/progress.py`; every verb prints one line.
+`python .specify/extensions/progress/scripts/progress.py`; every verb prints at most one line (`refresh` prints
+nothing unless given `--verbose`).
 
 | Mode | When | Coordinator does |
 | --- | --- | --- |
@@ -27,7 +28,7 @@ untrusted projects and unapproved hooks. Ask the user to trust the project and a
 | `refresh` | Progress is installed and enabled, but the active host does not collect automatically (or the host is unknown) | The `projection` calls, plus `progress refresh` after each collected attempt and phase commit. |
 | `legacy` | Progress is absent or disabled | The legacy calls in [`execute/reporting-legacy.md`](execute/reporting-legacy.md#legacy-reporter-calls-mode-legacy-only): init, task, usage, sync, phase and pr, exactly as before. |
 
-On a Codex worktree whose hooks are not approved (`codex hooks not approved`), the coordinator also runs `progress bind --host codex --model <m> --effort <e>` once per session. It is a labelled self-report, never host-observed telemetry, and needs Progress 1.2.0 or later. From 1.2.0 a workstream lane fact carries `semantics: "workstream"` (`progress lane new ... --workstream`); the `progress.py` forwarder adds it to the lanes it creates.
+On a Codex worktree whose hooks are not approved (`codex hooks not approved`), the coordinator also runs `progress bind --host codex --model <m> --effort <e>` once per session. It is a labelled self-report, never host-observed telemetry, and needs Progress 1.2.0 or later. From 1.2.0 a workstream lane fact carries `semantics: "workstream"` (`progress lane <id> ... --workstream`).
 
 In `projection` and `refresh` mode task state comes from `tasks.md`, retries and attempts from the delegation ledger, and
 model, effort, context and run usage from host hooks and delegate results. Do not call task, usage, sync, phase or pr
@@ -35,6 +36,6 @@ reporters for them. Check task boxes in `tasks.md` as usual. The report opens at
 Budget overruns and PR state are notes: `progress note "Budget overrun T###: <class> <figure>/<budget>: <reason>" --target
 T###`, `progress note "PR open: <pr-url>"`, `"CI failure: <check>; fix assigned to <worker-id>"` and `"PR merged: <pr-url>"`.
 
-If a legacy `progress.py` call is made while Progress is installed it is forwarded to the Progress CLI. An unsupported
-request prints a compatibility error and exits non-zero; do not retry it, use the verb named above instead.
+A legacy `workflow/scripts/progress.py` call made while Progress is installed and enabled writes nothing, exits 2 and
+names the Progress command to use instead; do not retry it.
 Do not pass secrets, absolute paths or transcript text to any reporting call. Lean mode follows the same table.

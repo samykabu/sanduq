@@ -78,9 +78,12 @@ codex plugin add illustration-tools@sanduq
 
 ```bash
 specify init --here --integration codex    # or --integration claude
-specify extension catalog add --name sanduq --priority 10 --install-allowed https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
+specify extension catalog add --name sanduq --priority 1 --install-allowed https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
 specify extension add illustrate
 ```
+
+The community catalog publishes unrelated `scope` and `memory` extensions. If you keep Spec Kit's
+default catalogs, [register Sanduq's catalog ahead of them](docs/start/install-speckit.md#if-you-keep-spec-kits-default-catalogs).
 
 **The managed Workflow:**
 
@@ -182,13 +185,29 @@ python .specify/extensions/workflow/scripts/workflow.py migrate --feature specs/
 The claim's `project_sync.command` is now `workflow.py project-sync`. See
 [upgrades](docs/start/upgrades.md#upgrade-to-workflow-1160) for what changes.
 
+## Upgrade to Workflow 1.17.0 (round 4)
+
+Workflow 1.17.0 ships with Scope 1.10.0, Assure 2.6.0, User Manual 1.8.0, PR 4.5.0, Project 2.5.0,
+Illustrate 2.7.0, Memory 2.5.0 and Progress 1.5.0. It fixes three bugs that stopped managed features in
+1.16.0: a rendered spec could not bind at Specify, the PR stage of a lean feature failed for missing
+prerequisites, and Memory never queued a managed feature for archiving. In managed projects Workflow now
+runs Memory's session check in every claim. Finish any active Memory archive run, update Memory first,
+upgrade, then run Memory's `enable` once:
+
+```bash
+specify extension update memory
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.17.0 --apply
+```
+
+See the [round 4 migration table](docs/start/upgrades.md#round-4-migration-workflow-1170) for every change.
+
 ## Can I use this?
 
 | Package | License | Commercial use |
 | --- | --- | --- |
 | Portable skills ([sanduq-skills](https://github.com/samykabu/sanduq-skills)) | MIT | Yes |
 | Scope, `scope-gate` and `scope-brainstorm` presets | MIT | Yes |
-| Workflow, Project, Assure, User Manual, PR, Illustrate, Memory, `workflow` preset | [PolyForm Noncommercial 1.0.0](LICENSE) | Needs a separate written license from [Samy K. Abushanab](https://github.com/samykabu) |
+| Workflow, Project, Assure, User Manual, PR, Illustrate, Memory, Progress, `workflow` preset | [PolyForm Noncommercial 1.0.0](LICENSE) | Needs a separate written license from [Samy K. Abushanab](https://github.com/samykabu) |
 
 PolyForm Noncommercial is source available, not an OSI-approved open-source license. Bundled upstream
 material keeps its own license; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the

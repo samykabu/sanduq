@@ -2,7 +2,10 @@
 """PostToolUse check for Claude Code and Codex: a written HTML diagram must pass the skill's own checks.
 
 Hook mode (no arguments, the host's hook JSON on stdin). Opt-in: `.specify/workflow.yml` must set
-`illustrate: {hooks: {self_check: true}}`; otherwise, and whenever that file is missing, this exits 0 at once.
+`illustrate: {hooks: {self_check: true}}` (flow or block form); otherwise, and whenever that file is missing, this
+exits 0. The key is read with PyYAML when the hook's Python has it, else with a small reader for plain mappings. When a
+diagram was written and the key cannot be read (invalid YAML, or anchors, aliases or tags without PyYAML), the hook
+exits 2 and says how to fix it: a gate that may be on never passes silently.
 For a Claude Write, Edit or MultiEdit, or a Codex `apply_patch` (every added, updated or moved file in the patch),
 each written `.html` path whose content contains `<svg` gets `self_check.py`, `verify-geometry.py` and
 `illustration_theme.py validate` from the installed skill (`skill/scripts/` beside this hook, that is
@@ -23,7 +26,6 @@ is gone, so `specify extension remove illustrate` without `uninstall` leaves an 
 import json
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
 
@@ -48,22 +50,162 @@ LAUNCHER = ("import os,runpy,sys;p=os.path.join(os.environ.get('CLAUDE_PROJECT_D
 TOML_BLOCK = re.compile(r'\[\[hooks\.\w+\]\]\n(?:(?!\[\[hooks\.\w+\]\]).)*?speckit_marker = true\n*', re.DOTALL)
 
 
+KEY_PATH = ('illustrate', 'hooks', 'self_check')
+YAML_TRUE = {'true', 'True', 'TRUE', 'yes', 'Yes', 'YES', 'on', 'On', 'ON'}  # what PyYAML (YAML 1.1) loads as True
+BLOCK_KEY = re.compile(r'''^(?:"([^"\\]*)"|'([^']*)'|([^\s"'#{}\[\],&*!|>%@`?-][^:]*?|-[^\s:][^:]*?))\s*:(?:\s+(.*))?$''')
+FLOW_TOKEN = re.compile(r'''\s*(?:([{}\[\],:])|"([^"\\]*)"|'([^']*)'|([^\s{}\[\],:][^{}\[\],:]*))''')
+FLOW_START = re.compile(r'^(?:-\s+)*(?:[^\s:][^:]*:\s+)?[\[{]')  # a value that opens a flow collection
+BLOCK_SCALAR = re.compile(r'(?:^|:\s+|^-\s+)[|>][-+0-9]*$')
+NEEDS_PYYAML ='anchors, aliases, tags, merge keys and block scalars need PyYAML'
+
+
+class Unreadable(Exception):
+    pass
+
+
 def enabled(root):
-    policy = root / '.specify' / 'workflow.yml'
+    """`illustrate.hooks.self_check` is true. Raises Unreadable when the file cannot be read the way PyYAML would."""
     try:
-        text = policy.read_text(encoding='utf-8-sig')
+        text = (root / '.specify' / 'workflow.yml').read_text(encoding='utf-8-sig')
     except OSError:
         return False
-    if 'self_check' not in text:  # skip the PyYAML import (most of the cost) when the key cannot be set
+    if 'self_check' not in text:  # skip the parse when the key cannot be set
         return False
     try:
         import yaml
-        data = yaml.safe_load(text) or {}
-    except Exception:
+    except ImportError:
+        return read_key(text)
+    try:
+        data = yaml.safe_load(text)
+    except Exception as exc:
+        raise Unreadable('invalid YAML: ' + ' '.join(str(exc).split())[:160]) from None
+    return follow(data, KEY_PATH)
+
+
+def follow(data, path):
+    for key in path:
+        data = data.get(key) if isinstance(data, dict) else None
+    return data is True
+
+
+def read_key(text):
+    """The key without PyYAML: block and flow mappings of plain or quoted scalars, and comments. Lines it cannot
+    read raise Unreadable rather than guess."""
+    lines, depth, scalar = [], 0, None
+    for number, raw in enumerate(text.splitlines(), 1):
+        line = re.sub(r'(^|\s)#.*$', '', raw).rstrip()
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip(' '))
+        body = line[indent:]
+        if scalar is not None and indent > scalar:
+            continue  # block scalar content, never a key
+        scalar = None
+        if depth > 0:  # inside a multi-line flow collection: join it to the line that opened it
+            lines[-1] = (*lines[-1][:2], lines[-1][2] + ' ' + body)
+        elif body in ('---', '...') or body.startswith('%'):
+            if lines:
+                raise Unreadable(f'line {number}: more than one YAML document')
+            continue
+        else:
+            lines.append((number, indent, body))
+        if depth > 0 or FLOW_START.match(body):
+            bare = re.sub(r'"[^"]*"|\'[^\']*\'', '', body)
+            depth += bare.count('{') + bare.count('[') - bare.count('}') - bare.count(']')
+        elif BLOCK_SCALAR.search(body):
+            scalar = indent
+    return block_lookup(lines, KEY_PATH)
+
+
+def block_lookup(lines, path):
+    """Follow path through one block mapping, given as its (line number, indent, text) lines."""
+    if not lines:
         return False
-    illustrate = data.get('illustrate') if isinstance(data, dict) else None
-    hooks = illustrate.get('hooks') if isinstance(illustrate, dict) else None
-    return isinstance(hooks, dict) and hooks.get('self_check') is True
+    base, found = lines[0][1], None
+    for index, (number, indent, body) in enumerate(lines):
+        if indent > base:
+            continue
+        if indent < base or body.startswith('\t'):
+            raise Unreadable(f'line {number}: unexpected indentation')
+        if body == '-' or body.startswith('- '):
+            if index == 0:
+                return False  # a list, not a mapping
+            continue  # an unindented list item of the key above
+        match = BLOCK_KEY.match(body)
+        if not match:
+            raise Unreadable(f'line {number}: not a plain `key: value` line')
+        if next(group for group in match.groups()[:3] if group is not None) != path[0]:
+            if body.startswith('<<'):
+                raise Unreadable(f'line {number}: {NEEDS_PYYAML}')
+            continue
+        end = next((i for i in range(index + 1, len(lines)) if lines[i][1] <= base), len(lines))
+        found = (number, (match.group(4) or '').strip(), lines[index + 1:end])  # a duplicate key: the last one wins
+    if found is None:
+        return False
+    number, rest, children = found
+    if rest[:1] in ('{', '['):
+        return flow_lookup(rest, path[1:], number)
+    if rest[:1] in ('&', '*', '!', '|', '>') or (len(path) == 1 and children):
+        raise Unreadable(f'line {number}: {NEEDS_PYYAML}')
+    if len(path) == 1:
+        return rest in YAML_TRUE  # a quoted "true" is a string, as in PyYAML
+    return False if rest else block_lookup(children, path[1:])
+
+
+def flow_lookup(text, path, number):
+    """Follow path through one flow collection (`{hooks: {self_check: true}}`) of plain or quoted scalars."""
+    unreadable = Unreadable(f'line {number}: a flow mapping this reader cannot parse; {NEEDS_PYYAML}')
+    tokens, position = [], 0
+    while text[position:].strip():
+        match = FLOW_TOKEN.match(text, position)
+        if not match:
+            raise unreadable
+        punct, double, single, plain = match.groups()
+        if punct:
+            tokens.append(('p', punct))
+        elif plain is not None:
+            if plain.strip()[:1] in ('&', '*', '!', '|', '>'):
+                raise unreadable
+            tokens.append(('s', plain.strip()))
+        else:
+            tokens.append(('q', double if double is not None else single))
+        position = match.end()
+    tokens.append(('end', None))
+    at = [0]
+
+    def take():
+        at[0] += 1
+        return tokens[at[0] - 1]
+
+    def node():
+        kind, item = take()
+        if kind == 's':
+            return True if item in YAML_TRUE else item
+        if kind == 'q':
+            return item
+        if (kind, item) not in (('p', '{'), ('p', '[')):
+            raise unreadable
+        close = '}' if item == '{' else ']'
+        result = {} if item == '{' else []
+        while tokens[at[0]] != ('p', close):
+            if close == '}':
+                key = take()
+                if key[0] not in ('s', 'q') or take() != ('p', ':'):
+                    raise unreadable
+                result[key[1]] = None if tokens[at[0]] in (('p', ','), ('p', close)) else node()
+            else:
+                result.append(node())
+            if tokens[at[0]] == ('p', ','):
+                take()
+            elif tokens[at[0]] != ('p', close):
+                raise unreadable
+        take()
+        return result
+
+    data = node()
+    if tokens[at[0]] != ('end', None):
+        raise unreadable
+    return follow(data, path)
 
 
 def strings(value):
@@ -122,6 +264,7 @@ def checks(root, path):
 
 def first_failure(root, path):
     """`<script>: <first finding>` for the first failing check, or None."""
+    import subprocess  # only a written diagram pays for it
     for name, argv in checks(root, path):
         run = subprocess.run(argv, capture_output=True, text=True, cwd=str(root))
         if run.returncode == 0:
@@ -140,14 +283,32 @@ def main(stdin=sys.stdin, environ=os.environ):
     if not isinstance(payload, dict):
         return 0
     root = Path(environ.get('CLAUDE_PROJECT_DIR') or payload.get('cwd') or '.').resolve()
-    if not enabled(root) or not SCRIPTS.is_dir():
+    diagrams = written_diagrams(payload, root)  # the payload first: most writes are not diagrams
+    if not diagrams or not SCRIPTS.is_dir():
         return 0
-    for path in written_diagrams(payload, root):
+    try:
+        if not enabled(root):
+            return 0
+    except Exception as exc:  # Unreadable, or a reader bug: either way the gate may be on
+        sys.stderr.write(unreadable_message(exc) + '\n')
+        return 2
+    for path in diagrams:
         failure = first_failure(root, path)
         if failure:
             sys.stderr.write('Illustrate self-check: ' + failure + ' (' + str(path) + ')\n')
             return 2
     return 0
+
+
+def unreadable_message(exc):
+    try:
+        import yaml  # noqa: F401
+        fix = 'fix the YAML'
+    except ImportError:
+        fix = (f'install PyYAML for {sys.executable or "the Python that runs this hook"}, or write the key as plain '
+               'block lines (illustrate: / hooks: / self_check: true)')
+    return (f'Illustrate self-check: cannot read illustrate.hooks.self_check in .specify/workflow.yml ({exc}); {fix}. '
+            'To turn the check off, set it to false and rerun the Workflow installer, or run this hook with uninstall.')
 
 
 # ---- management CLI ----------------------------------------------------------------------------------------

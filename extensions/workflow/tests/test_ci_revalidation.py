@@ -23,6 +23,7 @@ import workflow as w  # noqa: E402
 import fake_github  # noqa: E402
 import fixture_008  # noqa: E402
 from test_receipt_contract import Harness, checkpoint_validator  # noqa: E402
+import lifecycle_snapshot  # noqa: E402
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'scripts/workflow.py'
 HOOK = '.specify/hooks/affected.py'
@@ -73,13 +74,18 @@ class DriftHarness(Harness):
         if self.check:
             gate['verification_check'] = {'name': fake_github.CHECK, 'workflow': fake_github.WORKFLOW}
         self.configure()
-        self.write(HOOK, HOOK_SOURCE)
-        for path, text in SOURCE.items():
-            self.write(path, text)
-        self.commit_all('Product source')
-        self.run = self.run_object()
-        self.complete_through(self.run, 'ready')
-        self.commit_all('Record the workflow through Ready')
+
+        def build():
+            self.write(HOOK, HOOK_SOURCE)
+            for path, text in SOURCE.items():
+                self.write(path, text)
+            self.commit_all('Product source')
+            run = self.run_object()
+            self.complete_through(run, 'ready')
+            self.commit_all('Record the workflow through Ready')
+        # W22/X25: once per class (hook and check are class attributes); later tests get a copy of the tree.
+        lifecycle_snapshot.reuse(self, build, lambda: None)
+        self.run = w.Run(self.root, self.feature)
         self.recorded = copy.deepcopy(self.run.load()['receipts'])
         self.next_run = 500
 

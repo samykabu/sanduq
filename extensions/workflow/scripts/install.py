@@ -23,7 +23,7 @@ from urllib.parse import quote
 import yaml
 from packaging.version import Version
 from packaging.specifiers import SpecifierSet
-from workflow import load_policy, read, write, require, inside, registry, doctor, locked, WorkflowError, RANGES, ensure_local_excludes, package_digest, active_host, github_repository, sanduq_ci
+from workflow import load_policy, read, write, require, inside, registry, doctor, locked, WorkflowError, RANGES, ensure_local_excludes, package_digest, active_host, github_repository, sanduq_ci, git
 from reconcile import reconcile
 from delegate_dispatch import maintenance_preflight
 from delegation import is_junction, is_link
@@ -213,6 +213,36 @@ def snapshot(root, directory):
     return files
 
 
+BACKUP_KINDS = ('installs', 'upgrades', 'hosts')
+KEEP_BACKUP_ZIPS = 3
+
+
+def backup_zips(root):
+    """Every install, upgrade and host-switch ``before.zip``, newest first."""
+    base = root / '.specify/workflow/backups'
+    found = [p for kind in BACKUP_KINDS for p in (base / kind).glob('*/before.zip') if p.is_file()]
+    return sorted(found, key=lambda p: p.stat().st_mtime_ns, reverse=True)
+
+
+def backup_usage(root):
+    """Count and bytes of the kept backup zips, for doctor and the apply result."""
+    zips = backup_zips(root)
+    return {'zips': len(zips), 'bytes': sum(p.stat().st_size for p in zips)}
+
+
+def prune_backups(root, keep=KEEP_BACKUP_ZIPS):
+    """After a successful apply, delete all but the newest ``keep`` zips.
+
+    before.json, result.json and alias backups stay. Never raises: the apply already succeeded.
+    """
+    try:
+        for path in backup_zips(root)[keep:]:
+            path.unlink(missing_ok=True)
+        return backup_usage(root)
+    except OSError as exc:
+        return {'error': 'BACKUP_PRUNE_FAILED: ' + str(exc)}
+
+
 def restore(root, files, expected):
     current = managed_files(root)
     require(current == expected, 'ROLLBACK_CONFLICT: managed files changed; backup retained for review')
@@ -277,6 +307,21 @@ def delegation_preflight(root):
         raise WorkflowError(str(exc)) from exc
 
 
+def memory_archive_preflight(root):
+    """Refuse while a Memory archive run is active: the apply changes Memory's hooks, which its approval binds.
+
+    Memory records the active run in <git common dir>/sanduq-memory/active.json (archive.py active_id).
+    """
+    if not (root / '.specify/extensions/memory/scripts/archive.py').is_file():
+        return
+    common = Path(git(root, 'rev-parse', '--git-common-dir'))
+    active = read((common if common.is_absolute() else root / common).resolve() / 'sanduq-memory/active.json', {})
+    run_id = active.get('run_id') if isinstance(active, dict) else active
+    require(not run_id, f'MEMORY_ARCHIVE_ACTIVE: archive run {run_id} is not finished; resume or roll it back with '
+                        f'"/speckit.memory.session --run {run_id}" (or see "python .specify/extensions/memory/scripts/'
+                        'archive.py status"), then run this again')
+
+
 def command(root, args, log):
     result = subprocess.run(args, cwd=root, input='y\n', capture_output=True, text=True, encoding='utf-8')
     log.append({'args': args, 'exit_code': result.returncode, 'stdout': result.stdout, 'stderr': result.stderr})
@@ -304,8 +349,11 @@ def required_gate_checks(root):
     repo = github_repository(root)
 
     def api(endpoint, missing_ok=False):
-        result = subprocess.run(['gh', 'api', endpoint, '-H', 'Accept: application/vnd.github+json'],
-                                cwd=root, capture_output=True, text=True, encoding='utf-8')
+        try:
+            result = subprocess.run(['gh', 'api', endpoint, '-H', 'Accept: application/vnd.github+json'],
+                                    cwd=root, capture_output=True, text=True, encoding='utf-8', timeout=60)
+        except subprocess.TimeoutExpired as exc:
+            raise WorkflowError('CI_BRANCH_RULE_INSPECTION_FAILED: gh api ' + endpoint + ' timed out after 60 s') from exc
         if result.returncode:
             if missing_ok and ('HTTP 404' in result.stderr or 'Not Found' in result.stderr):
                 return None
@@ -331,6 +379,11 @@ def required_gate_checks(root):
         names.extend(check.get('context') for check in protection.get('checks', []))
     return sorted({name for name in names if isinstance(name, str)
                    and ('workflow-evidence' in name or 'Sanduq workflow gates' in name)})
+
+
+# The lines Assure's AU8 added to documentation-gates.yml; keep equal to assure_init.HEAD_CHECKOUT.
+ASSURE_HEAD_CHECKOUT = (b"          # The recorded states describe the PR head, not GitHub's merge commit.\n"
+                        b"          ref: ${{ github.event.pull_request.head.sha }}\n")
 
 
 def ci_matches_managed(content, asset, receipt):
@@ -816,6 +869,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
             require(not read(path, {}).get('active'), 'ACTIVE_STAGE_MUST_BE_RESOLVED: ' + str(path))
         # A rollback restores every delegation ledger, so no attempt may be live.
         delegation_preflight(root)
+        memory_archive_preflight(root)
         # Judge every alias against the sources as they are now, before any
         # Spec Kit command changes them; a local edit stops here untouched.
         review = review_aliases(root, package_root, runner, enabled=aliases_on)
@@ -889,7 +943,17 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
             legacy = root / '.github/workflows/documentation-gates.yml'
             reference = root / '.specify/extensions/assure/assets/github/documentation-gates.yml'
             if legacy.exists():
-                require(reference.exists() and legacy.read_bytes().replace(b'\r\n',b'\n') == rendered(reference, policy).replace(b'\r\n',b'\n'), 'LEGACY_CI_HAS_LOCAL_EDITS: reconcile selected processes explicitly')
+                # Unedited: a render of the Assure template now, of the one before this transaction updated
+                # Assure, or of either without the head checkout AU8 added (assure_init.HEAD_CHECKOUT).
+                earlier = before.get(reference.relative_to(root).as_posix())
+                templates = [t.replace(b'\r\n', b'\n') for t in (reference.read_bytes() if reference.exists() else None, earlier)
+                             if isinstance(t, bytes)]
+                templates += [t.replace(ASSURE_HEAD_CHECKOUT, b'') for t in templates]
+                try:
+                    renders = [sanduq_ci.render(t, policy.get('ci') or sanduq_ci.default_ci()) for t in templates]
+                except sanduq_ci.CIPolicyError as exc:
+                    raise WorkflowError('CI_RENDER_FAILED: ' + reference.name + ': ' + str(exc)) from exc
+                require(legacy.read_bytes().replace(b'\r\n',b'\n') in renders, 'LEGACY_CI_HAS_LOCAL_EDITS: reconcile selected processes explicitly')
                 legacy.unlink()  # exact backed-up legacy gate; policy-aware gate replaces it
             # The receipt and lock that record the preserved file are written
             # only after this check, so hand the choice to the doctor directly.
@@ -922,6 +986,8 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                        'ci_sha256':hashlib.sha256(asset.replace(b'\r\n', b'\n')).hexdigest()}
             write(root / '.specify/workflow/install-receipt.json', receipt)
             write(backup / 'result.json', {'ok':True,'commands':log})
+            if upgrade_owner is None:  # an upgrade prunes once its own outer transaction succeeds
+                receipt['backups'] = prune_backups(root)
             return receipt
         except Exception as exc:
             failed = managed_files(root)

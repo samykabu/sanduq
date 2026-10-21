@@ -8,6 +8,9 @@ evidence. For a `mode: revalidate` claim, update only what changed; keep establi
 and task history and never copy a fresh template over reviewed content. A new material choice
 goes to the bound issue through `decisions.py` and pauses for an authorized GitHub answer;
 apply it and record its evidence before a passed receipt.
+Source files that Execute will change are not Plan `inputs`: leave them out, or give them
+`{"role": "consulted", "because": "..."}`; as dependencies they fail Execute's completion with
+`UPSTREAM_INPUT_CHANGED_DURING_STAGE`.
 
 ## Merged plan and tasks
 

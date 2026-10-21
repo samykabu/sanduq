@@ -220,14 +220,16 @@ def promote(root=ROOT, verifier=verify_asset):
     expected={r['tag']:r['sha256'] for r in plan['releases']}
     require({r['tag']:r['sha256'] for r in receipt['assets'] if r.get('verified')}==expected,'Not every asset is verified')
     for release in plan['releases']: verifier(release,root)
-    if not plan['releases']: return {'promoted':[]}
+    if not plan['releases']: return {'promoted':[],'written':[]}
     write(root/'catalog.json',plan['catalog']);write(root/'extensions/catalog.json',plan['catalog'])
     pending=read(root/'extensions/pending-releases.json')
     for release in plan['releases']: pending['versions'].pop(release['id'])
     pending['status']='released' if not pending['versions'] else 'pending'
     write(root/'extensions/pending-releases.json',pending)
     cleared=clear_pending_headings({r['id']:r['version'] for r in plan['releases']},root)
-    return {'promoted':[r['tag'] for r in plan['releases']],'changelog_headings_released':cleared}
+    # The release job stages exactly these paths (release-extensions.yml; test_release_promote.py checks it).
+    written=['catalog.json','extensions/catalog.json','extensions/pending-releases.json']+(['CHANGELOG.md'] if cleared else [])
+    return {'promoted':[r['tag'] for r in plan['releases']],'changelog_headings_released':cleared,'written':written}
 
 
 if __name__=='__main__':

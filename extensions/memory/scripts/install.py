@@ -16,6 +16,9 @@ COMMANDS = ("init", "prepare", "run", "session", "enable", "impact", "status")
 HOOK_ONLY = ("prepare", "session")
 # (event, command, description, first). extension.yml lists one command per event, so impact's
 # before_specify binding lives only here. Order matters: templates iterate YAML order, not priority.
+# An existing entry with `enabled: false` (Sanduq Workflow's reconcile disables session and prepare) is kept
+# byte for byte, so its reconcile journal still matches. When a release changes one of these entries, the
+# sequence is: Workflow `reconcile --restore`, then `speckit.memory.init`, then `reconcile --apply`.
 HOOKS = (("before_specify", "impact", "Consult current product memory", True),
          ("before_specify", "session", "Process merged pending archives", True),
          ("before_analyze", "impact", "Consult current product memory", True),
@@ -26,8 +29,8 @@ GUARD_MARK = "memory/hooks/guard.py"
 # Command bodies name commands the Copilot way; skill hosts register them with hyphens.
 SKILL_NAMES = "Here `speckit.memory.<command>` is the skill `speckit-memory-<command>`.\n\n"
 SESSION = """\n<!-- SANDUQ MEMORY SESSION START -->
-At session start run `python .specify/extensions/memory/scripts/archive.py pending`; when it reports pending work or an interrupted run, follow `.specify/extensions/memory/commands/session.md`.
-Before a new specification, branch or broad staging or commit workflow, `archive.py pending --gate` must pass.
+At session start run `python .specify/extensions/memory/scripts/archive.py pending`; when it reports pending work or an interrupted run, follow `.specify/extensions/memory/commands/session.md`. In a Sanduq Workflow project (`.specify/workflow.yml` exists), Workflow's claim runs this check and returns the Memory commands to run; do not run it separately.
+Before a new specification, branch or broad staging or commit workflow, `archive.py pending --gate` must pass; in a Sanduq Workflow project Workflow's claim covers this gate too, so do not run it separately.
 For specification or impact analysis, follow `.specify/extensions/memory/commands/impact.md`.
 Do not load project memory into ordinary implementation tasks.
 <!-- SANDUQ MEMORY SESSION END -->
@@ -100,16 +103,29 @@ def hook(command: str, description: str) -> str:
 
 
 def add_hook(text: str, event: str, command: str, description: str, *, first: bool) -> str:
+    """Edits only the `hooks:` mapping; every other top-level key (e.g. `settings:` after it) stays as it is."""
+    head = re.search(r"^hooks:[ \t]*\n", text, re.M)
+    if not head:
+        return add_event_hook(text, event, command, description, first=first)
+    rest = re.search(r"^\S", text[head.end():], re.M)
+    end = head.end() + rest.start() if rest else len(text)
+    return text[:head.end()] + add_event_hook(text[head.end():end], event, command, description, first=first) + text[end:]
+
+
+def add_event_hook(text: str, event: str, command: str, description: str, *, first: bool) -> str:
     event_match = re.search(r"^  " + event + r":\s*$", text, re.M)
     block = hook(command, description)
     if not event_match:
-        return text.rstrip() + "\n  " + event + ":\n" + block
+        return (text if not text or text.endswith("\n") else text + "\n") + "  " + event + ":\n" + block
     start = event_match.end() + 1
     next_event = re.search(r"^  [a-z_]+:\s*$", text[start:], re.M)
     end = start + next_event.start() if next_event else len(text)
     section = text[start:end]
     own = re.compile(r"^  - extension: memory\n(?:(?!^  - |^  [a-z_]+:).*(?:\n|$))*", re.M)
-    section = own.sub(lambda match: "" if "command: speckit.memory." + command + "\n" in match.group() else match.group(), section)
+    mine = [m.group() for m in own.finditer(section) if "command: speckit.memory." + command + "\n" in m.group()]
+    if mine and all(re.search(r"^    enabled: false[ \t]*$", block, re.M) for block in mine):
+        return text  # disabled on purpose (Workflow's reconcile or the owner): keep it exactly as it is
+    section = own.sub(lambda match: "" if match.group() in mine else match.group(), section)
     section = block + section if first else section + block
     return text[:start] + section + text[end:]
 

@@ -1,4 +1,7 @@
-"""Reporting modes and the legacy progress.py shim over the optional Progress extension (CLI only)."""
+"""Reporting modes, Progress wiring, the legacy reporter, and the Progress CLI contract reporting.md names.
+
+Moved from test_progress_shim.py when the forwarder was retired (round 4, D5).
+"""
 import contextlib
 import importlib.util
 import io
@@ -51,7 +54,7 @@ class Project(unittest.TestCase):
         os.chdir(self.root)
         self.addCleanup(os.chdir, self.cwd)
 
-    def shim(self, *argv):
+    def run_legacy(self, *argv):
         """Run the legacy script in-process; return (exit code, stdout, stderr)."""
         out, err, code = io.StringIO(), io.StringIO(), 0
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
@@ -62,7 +65,7 @@ class Project(unittest.TestCase):
         return code, out.getvalue().strip(), err.getvalue().strip()
 
     def legacy(self, command, *args):
-        return self.shim(command, '--output', str(self.output), *args)
+        return self.run_legacy(command, '--output', str(self.output), *args)
 
     def progress(self, *args):
         done = subprocess.run([sys.executable, str(PROGRESS_SCRIPT), '--root', str(self.root), *args], capture_output=True,
@@ -74,14 +77,9 @@ class Project(unittest.TestCase):
         rows = [json.loads(line) for line in path.read_text(encoding='utf-8').splitlines() if line.strip()] if path.is_file() else []
         return [r for r in rows if kind in (None, r['kind'])]
 
-    def status(self):
-        code, text = self.progress('status', '--json', '--schema', 'v2', '--feature', FEATURE)
-        self.assertEqual(code, 0, text)
-        return json.loads(text)
-
     def init(self):
-        code, out, err = self.legacy('init', '--tasks', str(self.feature_dir / 'tasks.md'), '--summary')
-        self.assertEqual(code, 0, out + err)
+        code, out = self.progress('init', '--feature', FEATURE)
+        self.assertEqual(code, 0, out)
         return out
 
 
@@ -451,423 +449,121 @@ class AbsentProgress(Project):
         self.assertEqual(next(t for t in state['tasks'] if t['id'] == 'T002')['agent'], 'w1')
 
 
-class ShimMappings(Project):
-    def test_init_forwards_and_keeps_the_summary_line(self):
-        self.assertEqual(self.init(), 'ok done=2 total=5 pending=3 running=0 blocked=0')
-        self.assertTrue((self.feature_dir / 'progress' / '.view' / 'index.html').is_file())
-        self.assertFalse((self.output / 'state.json').exists())  # no legacy state is written
-        code, out, _ = self.legacy('init', '--tasks', str(self.feature_dir / 'tasks.md'))
-        self.assertEqual(code, 0)
-        self.assertTrue(out.replace('\\', '/').endswith('specs/001-demo/progress/.view/index.html'), out)
-
-    def test_task_lifecycle_maps_to_lane_and_attempt_facts(self):
-        self.init()
-        code, out, err = self.legacy('task', '--id', 'T002', '--status', 'running', '--agent', 'worker-1',
-                                     '--note', 'Own parser.py', '--summary')
-        self.assertEqual((code, out), (0, 'ok done=2 total=5 pending=2 running=1 blocked=0'), err)
-        lane = self.facts('lane')[-1]
-        self.assertEqual((lane['owner'], lane['tasks']), ('worker-1', ['T002']))
-        attempt = self.facts('attempt')[-1]
-        self.assertEqual((attempt['run'], attempt['status'], attempt['origin'], attempt['lane']),
-                         ('legacy-T002-worker-1', 'running', 'legacy', lane['id']))
-        self.assertTrue(attempt['started_at'] and attempt['ended_at'] is None)
-        self.assertEqual(self.facts('note')[-1]['text'], 'T002 running: Own parser.py')
-        # same agent takes a second task: still one lane
-        self.legacy('task', '--id', 'T003', '--status', 'running', '--agent', 'worker-1', '--summary')
-        self.assertEqual(self.facts('lane')[-1]['tasks'], ['T002', 'T003'])
-        code, out, _ = self.legacy('task', '--id', 'T002', '--status', 'done', '--agent', 'worker-1', '--summary')
-        self.assertEqual(code, 0, out)
-        done = [a for a in self.facts('attempt') if a['run'] == 'legacy-T002-worker-1'][-1]
-        self.assertEqual((done['status'], bool(done['ended_at']), done['started_at']), ('done', True, attempt['started_at']))
-        report = self.status()
-        mine = next(l for l in report['lanes'] if l['owner'] == 'worker-1')
-        self.assertEqual(mine['attempts'][0]['origin'], 'legacy')
-
-    def test_a_new_worker_for_the_same_task_updates_the_lane_instead_of_adding_one(self):
-        self.init()
-        for agent in ('scope-worker', 'specify-worker', 'clarify-worker'):
-            code, out, err = self.legacy('task', '--id', 'T002', '--status', 'running', '--agent', agent, '--summary')
-            self.assertEqual(code, 0, out + err)
-        self.assertEqual(len({l['id'] for l in self.facts('lane')}), 1)
-        self.assertEqual(self.facts('lane')[-1]['owner'], 'clarify-worker')
-        self.assertEqual(self.facts('lane')[-1]['tasks'], ['T002'])
-        lanes = [l for l in self.status()['lanes'] if l.get('origin') == 'facts']
-        self.assertEqual(len(lanes), 1)
-
-    def test_reassigning_one_task_of_a_shared_lane_splits_it_out(self):
-        self.init()
-        for task in ('T002', 'T003'):
-            code, out, err = self.legacy('task', '--id', task, '--status', 'running', '--agent', 'worker-a', '--summary')
-            self.assertEqual(code, 0, out + err)
-        code, out, err = self.legacy('task', '--id', 'T003', '--status', 'running', '--agent', 'worker-b', '--summary')
-        self.assertEqual(code, 0, out + err)
-        lanes = {l['owner']: l for l in self.status()['lanes'] if l.get('origin') == 'facts'}
-        self.assertEqual(lanes['worker-a']['tasks']['active'], ['T002'])
-        self.assertEqual(lanes['worker-b']['tasks']['active'], ['T003'])
-
-    def test_reassigning_an_open_task_leaves_the_done_task_with_its_worker(self):
-        self.init()
-        for task in ('T002', 'T003'):
-            code, out, err = self.legacy('task', '--id', task, '--status', 'running', '--agent', 'worker-a', '--summary')
-            self.assertEqual(code, 0, out + err)
-        code, out, err = self.legacy('task', '--id', 'T002', '--status', 'done', '--agent', 'worker-a', '--summary')
-        self.assertEqual(code, 0, out + err)
-        tasks = self.feature_dir / 'tasks.md'
-        tasks.write_text(tasks.read_text(encoding='utf-8').replace('- [ ] T002', '- [x] T002'), encoding='utf-8', newline='')
-        code, out, err = self.legacy('task', '--id', 'T003', '--status', 'running', '--agent', 'worker-b', '--summary')
-        self.assertEqual(code, 0, out + err)
-        lanes = {l['owner']: l for l in self.status()['lanes'] if l.get('origin') == 'facts'}
-        self.assertIn('T002', lanes['worker-a']['tasks']['done'])
-        self.assertEqual(lanes['worker-b']['tasks']['active'], ['T003'])
-        self.assertNotIn('T002', lanes['worker-b']['tasks']['done'])
-
-    def test_running_without_agent_never_forwards_an_invalid_lane(self):
-        self.init()
-        before = self.facts()
-        code, out, err = self.legacy('task', '--id', 'T002', '--status', 'running', '--summary')
-        if code == 0:  # mapped onto something Progress accepts
-            attempts = self.facts('attempt')
-            self.assertTrue(attempts, 'running must still record an attempt')
-            self.assertRegex(attempts[-1]['lane'] or 'L0', r'^L\d+$')
-        else:  # explicit compatibility error, before any mutation
-            self.assertIn('compatibility:', out + err)
-            self.assertEqual(self.facts(), before)
-
-    def test_agentless_running_tasks_share_one_coordinator_lane(self):
-        self.init()
-        for task in ('T002', 'T003'):
-            code, out, _ = self.legacy('task', '--id', task, '--status', 'running', '--summary')
-            self.assertEqual(code, 0, out)
-        lanes = {l['id'] for l in self.facts('lane')}
-        self.assertEqual(len(lanes), 1, lanes)
-        self.assertEqual(self.facts('lane')[-1]['tasks'], ['T002', 'T003'])
-
-    def test_blocked_uses_note_as_external_blocker_unless_a_reference_is_given(self):
-        self.init()
-        self.legacy('task', '--id', 'T002', '--status', 'blocked', '--agent', 'w1', '--note', 'waiting for API key')
-        block = self.facts('block')[-1]
-        self.assertEqual((block['target'], block['by'], block['state']), ('T002', {'type': 'external', 'ref': 'waiting for API key'}, 'open'))
-        self.legacy('task', '--id', 'T003', '--status', 'blocked', '--agent', 'w2', '--note', 'T002')
-        self.assertEqual(self.facts('block')[-1]['by'], {'type': 'task', 'ref': 'T002'})
-        self.legacy('task', '--id', 'T004', '--status', 'blocked')
-        self.assertEqual(self.facts('block')[-1]['by']['ref'], 'blocked (legacy)')
-        code, out, _ = self.legacy('task', '--id', 'T002', '--status', 'pending', '--summary')
-        self.assertEqual(code, 0, out)
-        self.assertEqual([b['state'] for b in self.facts('block') if b['target'] == 'T002'][-1], 'resolved')
-        # a task with no open blocker accepts pending without error
-        self.assertEqual(self.legacy('task', '--id', 'T001', '--status', 'pending', '--summary')[0], 0)
-
-    def test_event_phase_and_pr_become_notes(self):
-        self.init()
-        self.legacy('event', '--message', 'Phase 1 tests passed')
-        self.legacy('phase', '--name', 'Phase 1', '--status', 'complete', '--commit', 'abc123')
-        self.legacy('pr', '--url', 'https://github.com/a/b/pull/1', '--status', 'merged')
-        self.assertEqual([n['text'] for n in self.facts('note')],
-                         ['Phase 1 tests passed', 'Phase Phase 1: complete (abc123)', 'PR merged: https://github.com/a/b/pull/1'])
-
-    def test_sync_refreshes_the_projection(self):
-        self.init()
-        before = self.status()['rev']
-        code, out, err = self.legacy('sync', '--summary')
-        self.assertEqual((code, out), (0, 'ok done=2 total=5 pending=3 running=0 blocked=0'), err)
-        self.assertGreater(self.status()['rev'], before)
-
-    def test_usage_reported_counts_keep_provenance(self):
-        self.init()
-        self.legacy('task', '--id', 'T002', '--status', 'running', '--agent', 'w1')
-        code, out, err = self.legacy('usage', '--id', 'T002', '--agent', 'w1', '--fresh-input', '100', '--cached-input', '40',
-                                     '--output-tokens', '7', '--harness', 'codex', '--model', 'gpt-x', '--summary')
-        self.assertEqual(code, 0, out + err)
-        attempt = [a for a in self.facts('attempt') if a['run'] == 'legacy-T002-w1'][-1]
-        self.assertEqual(attempt['status'], 'running')  # usage never changes the attempt's status or window
-        self.assertTrue(attempt['started_at'])
-        usage = attempt['usage']
-        self.assertEqual((usage['fidelity'], usage['fresh_input'], usage['cache_read'], usage['output'], usage['harness'], usage['model']),
-                         ('reported', 100, 40, 7, 'codex', 'gpt-x'))
-        shown = next(l for l in self.status()['lanes'] if l['owner'] == 'w1')['attempts'][0]
-        self.assertEqual((shown['fidelity'], shown['tokens']['fresh_input'], shown['origin']), ('reported', 100, 'legacy'))
-
-    def test_usage_delegate_log_window_and_explicit_path(self):
-        self.init()
-        self.legacy('task', '--id', 'T002', '--status', 'running', '--agent', 'run-9')
-        result = self.root / '.delegate' / 'runs' / 'run-9' / 'result.json'
-        result.parent.mkdir(parents=True)
-        result.write_text(json.dumps({'run_id': 'run-9', 'harness': 'codex', 'model': 'gpt-6', 'tokens': {
-            'fidelity': 'exact', 'input_fresh': 11, 'cache_read': 5, 'cache_write': 0, 'output_total': 3, 'reasoning': 2}}), encoding='utf-8')
-        code, out, err = self.legacy('usage', '--id', 'T002', '--agent', 'run-9', '--collect', 'delegate',
-                                     '--log', str(result), '--since', '2026-10-15T10:00:00Z', '--until', '2026-10-15T11:00:00Z', '--summary')
-        self.assertEqual(code, 0, out + err)
-        usage = [a for a in self.facts('attempt') if a['run'] == 'legacy-T002-run-9'][-1]['usage']
-        self.assertEqual((usage['fidelity'], usage['fresh_input'], usage['reasoning'], usage['harness'], usage['log']),
-                         ('exact', 11, 2, 'codex', '.delegate/runs/run-9/result.json'))
-        self.assertEqual((usage['since'], usage['until']), ('2026-10-15T10:00:00Z', '2026-10-15T11:00:00Z'))
-
-    def test_usage_unavailable_is_a_gap_not_a_zero(self):
-        self.init()
-        self.legacy('task', '--id', 'T002', '--status', 'done', '--agent', 'ghost')
-        os.environ['SANDUQ_CLAUDE_PROJECTS'] = str(self.root / 'nowhere')
-        code, out, err = self.legacy('usage', '--id', 'T002', '--agent', 'ghost', '--collect', 'claude', '--summary')
-        self.assertEqual(code, 0, out + err)
-        usage = [a for a in self.facts('attempt') if a['run'] == 'legacy-T002-ghost'][-1]['usage']
-        self.assertEqual(usage['fidelity'], 'unavailable')
-        self.assertIsNone(usage['fresh_input'])
-        self.assertTrue(usage['reason'])
-        self.assertIn('Token usage unavailable for ghost', self.facts('note')[-1]['text'])
-        self.assertIsNone(next(l for l in self.status()['lanes'] if l['owner'] == 'ghost')['attempts'][0]['tokens'])
-
-    def test_overhead_usage_has_no_lane(self):
-        self.init()
-        code, out, err = self.legacy('usage', '--overhead', 'orchestrator', '--agent', 'o1', '--fresh-input', '5', '--summary')
-        self.assertEqual(code, 0, out + err)
-        row = self.facts('attempt')[-1]
-        self.assertEqual((row['lane'], row['label']), (None, 'orchestrator'))
-        self.assertEqual(self.status()['overhead'][0]['label'], 'orchestrator')
-
-    def test_reused_agent_needs_a_started_task_to_split_its_log(self):
-        self.init()
-        self.legacy('task', '--id', 'T002', '--status', 'running', '--agent', 'w1')
-        code, out, _ = self.legacy('usage', '--id', 'T003', '--agent', 'w1', '--collect', 'claude', '--summary')
-        self.assertEqual(code, 2)
-        self.assertIn('also worked on other tasks', out)
-        self.assertTrue(out.startswith('error '))
-
-    def test_unknown_task_and_missing_progress_state_fail_like_legacy(self):
-        self.init()
-        code, out, _ = self.legacy('task', '--id', 'T999', '--status', 'done', '--summary')
-        self.assertEqual((code, out), (2, 'error Unknown task ID: T999'))
+LEGACY_CALLS = {
+    'init': ['--tasks', 'TASKS'], 'task': ['--id', 'T002', '--status', 'running'], 'event': ['--message', 'hello'],
+    'phase': ['--name', 'Setup', '--status', 'done'], 'pr': ['--url', 'https://github.com/acme/app/pull/1', '--status', 'open'],
+    'usage': ['--id', 'T002', '--agent', 'w1', '--fresh-input', '10'], 'sync': []}
+REPLACEMENT = {'init': 'progress.py init', 'task': 'tasks.md', 'event': 'note', 'phase': 'tasks.md',
+               'pr': "note 'PR open: <url>'", 'usage': 'hooks and delegate results', 'sync': 'progress.py refresh'}
 
 
-class ProcessCounts(Project):
-    """Each forwarded legacy call spawns as few Progress processes as it needs."""
+class LegacyCallsWithProgress(Project):
+    """D5: with Progress installed and enabled a legacy call writes nothing, exits 2 and names the replacement."""
 
-    def counted(self, *argv):
-        calls, real = [], bridge.run
-        bridge.run = lambda root, args, *a, **k: calls.append(args[0]) or real(root, args, *a, **k)
-        try:
-            code, out, err = self.legacy(*argv)
-        finally:
-            bridge.run = real
-        self.assertEqual(code, 0, out + err)
-        return calls
+    def args(self, command):
+        return [str(self.feature_dir / 'tasks.md') if a == 'TASKS' else a for a in LEGACY_CALLS[command]]
 
-    # command -> (processes without --summary, with --summary)
-    EXPECTED = {
-        'event': (['status', 'note'], ['status', 'note', 'status']),
-        'phase': (['status', 'note'], ['status', 'note', 'status']),
-        'pr': (['status', 'note'], ['status', 'note', 'status']),
-        'sync': (['status', 'refresh'], ['status', 'refresh', 'status']),
-    }
-    ARGS = {'event': ('--message', 'm'), 'phase': ('--name', 'P1', '--status', 'complete'),
-            'pr': ('--url', 'https://github.com/a/b/pull/1', '--status', 'open'), 'sync': ()}
+    def assert_nothing_written(self):
+        self.assertFalse(self.output.exists())
+        self.assertFalse((self.feature_dir / 'progress').exists())
 
-    def test_notes_and_sync_skip_redundant_status_calls(self):
-        self.init()
-        for command, (plain, summary) in self.EXPECTED.items():
+    def test_each_legacy_call_exits_2_with_one_line_naming_its_replacement(self):
+        for command in LEGACY_CALLS:
             with self.subTest(command=command):
-                self.assertEqual(self.counted(command, *self.ARGS[command]), plain)
-                self.assertEqual(self.counted(command, *self.ARGS[command], '--summary'), summary)
+                code, out, err = self.legacy(command, *self.args(command), '--summary')
+                self.assertEqual(code, 2)
+                self.assertEqual(len(out.splitlines()), 1, out)
+                self.assertTrue(out.startswith('error PROGRESS_INSTALLED: '), out)
+                self.assertIn(REPLACEMENT[command], out)
+                self.assertEqual(err, '')
+                self.assert_nothing_written()
 
-    def test_first_call_for_a_feature_initialises_once(self):
-        self.assertEqual(self.counted('event', '--message', 'm'), ['status', 'init', 'status', 'note'])
+    def test_without_summary_the_line_goes_to_stderr(self):
+        for flags in ([], ['--json']):
+            code, out, err = self.legacy('sync', *flags)
+            self.assertEqual((code, out), (2, ''))
+            self.assertIn('PROGRESS_INSTALLED', err)
+            self.assert_nothing_written()
 
-    def test_task_running_needs_one_status_before_and_none_after_without_summary(self):
-        self.init()
-        calls = self.counted('task', '--id', 'T002', '--status', 'running', '--agent', 'w1')
-        self.assertEqual(calls.count('status'), 1, calls)
-        self.assertEqual(self.counted('task', '--id', 'T002', '--status', 'running', '--agent', 'w1', '--summary').count('status'), 2)
-
-    def test_usage_without_a_split_needs_no_extra_status(self):
-        self.init()
-        self.legacy('task', '--id', 'T002', '--status', 'running', '--agent', 'w1')
-        calls = self.counted('usage', '--id', 'T002', '--agent', 'w1', '--fresh-input', '1')
-        self.assertEqual(calls.count('status'), 1, calls)
-
-    def test_init_prints_the_index_without_asking_status(self):
-        calls = self.counted('init', '--tasks', str(self.feature_dir / 'tasks.md'))
-        self.assertEqual(calls, ['init'])
+    def test_the_forwarder_is_gone(self):
+        self.assertFalse((SCRIPTS / 'progress_shim.py').exists())
+        self.assertFalse(hasattr(bridge, 'status'))  # the v2 projection reader had no other caller
 
 
-class CompatibilityErrors(Project):
-    def test_unsupported_requests_exit_non_zero_with_an_explicit_error_and_write_nothing(self):
-        self.init()
-        before = self.facts()
-        code, out, err = self.legacy('init', '--tasks', str(self.feature_dir / 'tasks.md'), '--title', 'Named')
-        self.assertEqual(code, 2)
-        self.assertIn('compatibility:', err)
-        self.assertIn('--title', err)
-        code, out, err = self.legacy('sync', '--json')
-        self.assertEqual(code, 2)
-        self.assertIn('compatibility:', err)
-        code, out, _ = self.legacy('init', '--tasks', str(self.feature_dir / 'tasks.md'), '--title', 'Named', '--summary')
-        self.assertEqual(code, 2)
-        self.assertTrue(out.startswith('error compatibility:'), out)
-        self.assertEqual(self.facts(), before)
+class ProgressCliContract(Project):
+    """IP23: the verbs reporting.md tells the coordinator to call, against the real Progress CLI."""
 
-    def test_progress_failure_is_never_swallowed(self):
-        self.init()
-        code, out, err = self.legacy('event', '--message', 'password = hunter2hunter2', '--summary')
-        self.assertNotEqual(code, 0)
-        self.assertIn('PROGRESS_FORBIDDEN_CONTENT', out)
+    def call(self, *args):
+        code, out = self.progress(*args, '--feature', FEATURE)
+        self.assertEqual(code, 0, (args, out))
+        self.assertLessEqual(len(out.splitlines()), 1, (args, out))
+        return out
 
+    def test_the_seven_verbs_take_the_documented_arguments_and_print_at_most_one_line(self):
+        self.assertTrue(self.call('init').startswith('progress: ready '))
+        self.assertIn('L1 open', self.call('lane', 'L1', '--tasks', 'T001-T002', '--owner', 'w1', '--harness', 'codex',
+                                           '--model', 'm', '--effort', 'high', '--workstream'))
+        blocked = self.call('block', 'T002', '--by', 'L1')
+        block_id = blocked.split()[1]
+        self.assertRegex(block_id, r'^B\d+$')
+        self.assertIn('resolved', self.call('unblock', block_id))
+        self.assertIn('noted', self.call('note', 'PR open: https://github.com/acme/app/pull/1'))
+        self.assertIn('noted', self.call('note', 'Budget overrun T001: tests 3/2: flaky', '--target', 'T001'))
+        self.assertEqual(self.call('refresh'), '')  # quiet unless --verbose
+        self.assertEqual(self.call('refresh', '--final'), '')
+        self.assertTrue(self.call('refresh', '--verbose').startswith('progress: refreshed rev '))
+        self.assertIn('self-report', self.call('bind', '--host', 'codex', '--model', 'm', '--effort', 'high'))
+        # W21: the text status line `workflow status` carries, one line and no projection schema.
+        line = self.call('status')
+        self.assertRegex(line, r'^progress: \d+/\d+ tasks, ')
+        self.assertEqual(bridge.status_line(self.root, FEATURE), line)
 
-class WorkstreamMarker(Project):
-    """New lane facts carry `--workstream` only from Progress 1.2.0; older Progress gets no flag."""
-
-    def fake_progress(self, version):
-        folder = self.root / 'fake-progress'
-        (folder / 'scripts').mkdir(parents=True, exist_ok=True)
-        (folder / 'scripts' / 'progress.py').write_text('# fake', encoding='utf-8')
-        (folder / 'extension.yml').write_text('extension:\n  id: progress\n  version: "%s"\n' % version, encoding='utf-8')
-        os.environ['SANDUQ_PROGRESS_SCRIPT'] = str(folder / 'scripts' / 'progress.py')
-
-    def new_lane_argv(self):
-        import progress_shim
-        calls = []
-        forward = progress_shim.Forward(self.root, FEATURE)
-        forward.call = lambda *argv, **kwargs: calls.append(argv) or 'progress: L1 open 1 tasks'
-        forward.new_lane('--tasks', 'T001', '--owner', 'worker', '--label', 'worker')
-        return calls[0]
-
-    def test_progress_1_2_0_gets_the_marker(self):
-        self.fake_progress('1.2.0')
-        argv = self.new_lane_argv()
-        self.assertEqual(argv[:2], ('lane', 'new'))
-        self.assertEqual(argv[-1], '--workstream')
-        self.fake_progress('1.10.1')
-        self.assertEqual(self.new_lane_argv()[-1], '--workstream')
-
-    def test_older_progress_gets_no_flag_and_an_unreadable_version_is_probed(self):
-        for version in ('1.1.3', '1.0.0'):
-            self.fake_progress(version)
-            self.assertNotIn('--workstream', self.new_lane_argv())
-        self.assertEqual(bridge.progress_version(self.root), (1, 0, 0))
-        (self.root / 'fake-progress' / 'extension.yml').unlink()
-        self.assertIsNone(bridge.progress_version(self.root))  # no extension.yml and no package VERSION
-
-    def fake_source_tree(self, version):
-        """A script folder with no extension.yml beside it, only the package's VERSION."""
-        folder = self.root / 'source-tree'
-        (folder / 'sanduq_progress').mkdir(parents=True, exist_ok=True)
-        (folder / 'progress.py').write_text('# fake', encoding='utf-8')
-        (folder / 'sanduq_progress' / '__init__.py').write_text("VERSION = '%s'\n" % version, encoding='utf-8')
-        os.environ['SANDUQ_PROGRESS_SCRIPT'] = str(folder / 'progress.py')
-
-    def test_a_source_tree_without_extension_yml_is_versioned_from_the_package(self):
-        self.fake_source_tree('1.2.0')
-        self.assertEqual(bridge.progress_version(self.root), (1, 2, 0))
-        self.assertEqual(self.new_lane_argv()[-1], '--workstream')
-        self.fake_source_tree('1.1.0')
-        self.assertNotIn('--workstream', self.new_lane_argv())
-
-    def test_extension_yml_wins_over_the_package_version(self):
-        self.fake_source_tree('1.0.0')
-        (self.root / 'extension.yml').write_text('extension:\n  id: progress\n  version: "1.5.0"\n', encoding='utf-8')
-        self.assertEqual(bridge.progress_version(self.root), (1, 5, 0))
-
-    PROBE = r"""import json, sys
-open(LOG, "a").write(json.dumps(sys.argv[1:]) + "\n")
-if "--workstream" in sys.argv and not ACCEPTS:
-    print("PROGRESS_USAGE: unrecognized arguments: --workstream", file=sys.stderr)
-    sys.exit(2)
-print("progress: L1 open 1 tasks")
-"""
-
-    def unversioned(self, accepts):
-        import progress_shim
-        progress_shim.WORKSTREAM_PROBE.clear()
-        script = self.root / 'unversioned.py'
-        script.write_text(self.PROBE.replace('LOG', repr(str(self.root / 'probe.log'))).replace('ACCEPTS', repr(accepts)),
-                          encoding='utf-8')
-        os.environ['SANDUQ_PROGRESS_SCRIPT'] = str(script)
-        log = self.root / 'probe.log'
-        if log.exists():
-            log.unlink()
-        return progress_shim, log
-
-    def lines(self, log):
-        return [json.loads(line) for line in log.read_text(encoding='utf-8').splitlines()]
-
-    def test_an_unversioned_progress_is_probed_once_per_process(self):
-        shim, log = self.unversioned(True)
-        forward = shim.Forward(self.root, FEATURE)
-        forward.new_lane('--tasks', 'T001')
-        forward.new_lane('--tasks', 'T002')
-        calls = self.lines(log)
-        self.assertEqual(len(calls), 2)
-        self.assertTrue(all(c[-1] == '--workstream' for c in calls))
-
-    def test_an_unversioned_progress_that_rejects_the_flag_is_retried_without_it_then_remembered(self):
-        shim, log = self.unversioned(False)
-        forward = shim.Forward(self.root, FEATURE)
-        forward.new_lane('--tasks', 'T001')
-        forward.new_lane('--tasks', 'T002')
-        calls = self.lines(log)
-        self.assertEqual([c[-1] for c in calls], ['--workstream', 'T001', 'T002'])  # one probe, then no flag at all
-        self.assertNotIn('--workstream', calls[1] + calls[2])
+    def test_every_verb_reporting_md_names_is_tested(self):
+        text = (SCRIPTS.parent / 'skills/workflow/references/reporting.md').read_text(encoding='utf-8')
+        import re
+        named = set(re.findall(r'`progress (\w+)', text))
+        self.assertEqual(named, {'init', 'lane', 'block', 'unblock', 'note', 'refresh', 'bind'})
 
 
-class StatusSchemaFlag(Project):
-    """`bridge.status` asks for v2 and falls back once for a Progress that does not know `--schema`."""
+class StatusLine(Project):
+    """W21: the workflow record carries Progress's line, never a v2 projection."""
+    installed = False
 
-    FAKE = r"""import json, sys
-open(LOG, "a").write(json.dumps(sys.argv[1:]) + "\n")
-if "--schema" in sys.argv and not ACCEPTS:
-    print("PROGRESS_USAGE: unrecognized arguments: --schema", file=sys.stderr)
-    sys.exit(2)
-print(json.dumps({"schema": "v2" if "--schema" in sys.argv else "legacy"}))
-"""
+    def test_absent_progress_gives_no_line(self):
+        self.assertIsNone(bridge.status_line(self.root, FEATURE))
 
-    def fake(self, accepts_schema):
-        script = self.root / 'fake_progress.py'
-        text = self.FAKE.replace('LOG', repr(str(self.root / 'calls.log'))).replace('ACCEPTS', repr(accepts_schema))
-        script.write_text(text, encoding='utf-8')
-        os.environ['SANDUQ_PROGRESS_SCRIPT'] = str(script)
+    def test_a_failing_progress_returns_its_line_instead_of_raising(self):
+        fake = self.root / 'fake_progress.py'
+        fake.write_text("import sys\nprint('progress: error PROGRESS_NOT_INITIALISED run progress init')\nsys.exit(3)\n",
+                        encoding='utf-8')
+        os.environ['SANDUQ_PROGRESS_SCRIPT'] = str(fake)
+        self.assertEqual(bridge.status_line(self.root, FEATURE), 'progress: error PROGRESS_NOT_INITIALISED run progress init')
 
-    def calls(self):
-        return [json.loads(line) for line in (self.root / 'calls.log').read_text(encoding='utf-8').splitlines()]
 
-    def test_a_progress_that_accepts_the_flag_is_asked_once_for_v2(self):
-        self.fake(True)
-        self.assertEqual(bridge.status(self.root, FEATURE), {'schema': 'v2'})
-        calls = self.calls()
-        self.assertEqual(len(calls), 1)
-        self.assertEqual(calls[0][-2:], ['--schema', 'v2'])
+class DoubledProgressWiring(unittest.TestCase):
+    """IP20: doctor and status warn when native Progress wiring sits next to a re-rendered dispatcher entry."""
 
-    def test_a_progress_that_names_another_usage_error_is_not_retried(self):
-        # Exit 2 also reports an uninitialised feature; retrying without --schema cannot fix that.
-        script = self.root / 'fake_progress.py'
-        script.write_text("import json, sys\nopen(%r, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n"
-                          "print('PROGRESS_NOT_INITIALISED: run progress init', file=sys.stderr)\nsys.exit(2)\n"
-                          % str(self.root / 'calls.log'), encoding='utf-8')
-        os.environ['SANDUQ_PROGRESS_SCRIPT'] = str(script)
-        self.assertIsNone(bridge.status(self.root, FEATURE))
-        self.assertEqual(len(self.calls()), 1)
+    def setUp(self):
+        import test_workflow as fixture
+        self.w = fixture.w
+        fixture.WorkflowTests.setUp(self)
 
-    def test_the_exact_call_sequence_for_an_uninitialised_unversioned_feature(self):
-        script = self.root / 'fake_progress.py'
-        script.write_text(
-            "import json, os, sys\nlog = %r\nopen(log, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n"
-            "verb = [a for a in sys.argv[3:] if not a.startswith('-')][0]\n"
-            "marker = log + '.init'\n"
-            "if verb == 'init':\n    open(marker, 'w').write('x')\n    print('progress: initialised')\n    sys.exit(0)\n"
-            "if verb == 'status' and not os.path.exists(marker):\n"
-            "    print('PROGRESS_NOT_INITIALISED: run progress init', file=sys.stderr)\n    sys.exit(2)\n"
-            "print(json.dumps({'schema': 'v2'}))\n" % str(self.root / 'calls.log'), encoding='utf-8')
-        os.environ['SANDUQ_PROGRESS_SCRIPT'] = str(script)
-        import progress_shim
-        forward = progress_shim.Forward(self.root, FEATURE)
-        forward.ensure_init()
-        verbs = [[a for a in c[2:] if not a.startswith('-')][0] for c in self.calls()]
-        self.assertEqual(verbs, ['status', 'init', 'status'])  # no extra status between the failure and init
-        self.assertEqual([c for c in self.calls() if 'status' in c][0][-2:], ['--schema', 'v2'])
+    configure = __import__('test_workflow').WorkflowTests.configure
 
-    def test_an_older_progress_is_retried_once_without_the_flag(self):
-        self.fake(False)
-        self.assertEqual(bridge.status(self.root, FEATURE), {'schema': 'legacy'})
-        calls = self.calls()
-        self.assertEqual(len(calls), 2)
-        self.assertIn('--schema', calls[0])
-        self.assertNotIn('--schema', calls[1])
+    def test_native_wiring_with_a_dispatcher_entry_is_reported_with_the_fix(self):
+        w = self.w
+        settings = self.root / '.claude/settings.json'
+        settings.parent.mkdir(parents=True, exist_ok=True)
+        settings.write_text(json.dumps(SPECKIT_CLAUDE), encoding='utf-8')
+        self.assertEqual(w.progress_wiring_warnings(self.root), [])  # default (speckit) wiring: the entry is expected
+        w.write(self.root / '.specify/workflow/install-lock.json', {'progress': {'hook_wiring': 'native'}})
+        warnings = w.progress_wiring_warnings(self.root)
+        self.assertEqual(len(warnings), 1)
+        self.assertTrue(warnings[0].startswith('PROGRESS_HOOKS_DOUBLE_WIRED: .claude/settings.json '))
+        self.assertIn('install.py --apply', warnings[0])
+        self.assertIn(warnings[0], w.doctor(self.root, self.policy)['warnings'])
+        settings.write_text(json.dumps({'hooks': {}}), encoding='utf-8')
+        self.assertEqual(w.progress_wiring_warnings(self.root), [])
 
 
 if __name__ == '__main__':

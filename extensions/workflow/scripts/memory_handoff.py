@@ -1,6 +1,7 @@
 """Workflow's local Memory adapter. Never verifies, synthesizes or archives a feature."""
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 from pathlib import Path
@@ -34,11 +35,12 @@ def action(command, arguments, reason):
     return {'command': command, 'arguments': arguments, 'reason': reason}
 
 
-def handoff(w, root, transition, feature=None, checks=None, report=None):
+def handoff(w, root, transition, feature=None, checks=None, report=None, lock=True):
     """Persist a recoverable result separately from accepted product stage receipts.
 
     One host dispatcher invokes returned registered commands. Subprocess argv are
     argument arrays, and the installed Memory CLI remains the eligibility authority.
+    `lock=False` only for a caller that already holds dispatch.lock (claim): it is not re-entrant.
     """
     root = root.resolve()
     key = w.digest([transition, feature])
@@ -59,12 +61,13 @@ def handoff(w, root, transition, feature=None, checks=None, report=None):
         return action('speckit.memory.session', arguments or [], reason)
 
     try:
-        with w.locked(root / '.specify/workflow/runtime/dispatch.lock'):
+        with w.locked(root / '.specify/workflow/runtime/dispatch.lock') if lock else contextlib.nullcontext():
             entry = w.registry(root).get('memory')
             if not entry or entry.get('enabled') is not True:
                 return finish('pending', 'MEMORY_DEPENDENCY_MISSING_OR_DISABLED')
             if not (root / '.specify/extensions/memory/scripts/archive.py').is_file():
                 return finish('blocked', 'MEMORY_HELPER_MISSING', ok=False)
+            w.ensure_local_excludes(root)  # Memory reads Workflow's runtime declaration beside info/exclude
             pending = helper(root, 'pending')
             if (not isinstance(pending.get('enabled'), bool)
                     or not isinstance(pending.get('ready'), list)
@@ -85,7 +88,9 @@ def handoff(w, root, transition, feature=None, checks=None, report=None):
                               [session('Inspect pending writer/guard blockers; never remove a live lock.')], False)
             if not pending['enabled']:
                 return finish('pending', pending.get('reason') or 'MEMORY_AUTOMATIC_MODE_DISABLED')
-            policy_data = helper(root, 'policy')
+            # PM24: a Memory whose `pending` carries the policy facts saves the second helper process.
+            policy_data = (pending if isinstance(pending.get('policy'), dict) and pending.get('policy_hash')
+                           else helper(root, 'policy'))
             policy = policy_data.get('policy')
             if not isinstance(policy, dict) or not isinstance(policy.get('target_branch'), str):
                 raise HandoffError('MEMORY_HELPER_MALFORMED: policy contract')

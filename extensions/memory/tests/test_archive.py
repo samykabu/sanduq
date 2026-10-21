@@ -22,6 +22,38 @@ CONTRACT = FEATURE + "/contracts/rule.json"
 FIXTURE = "tests/Fixtures/spec-memory/007-invoice/contracts/rule.json"
 
 
+HOOKS_YML = """installed:
+- memory
+hooks:
+  before_specify:
+  - extension: memory
+    command: speckit.memory.session
+    enabled: true
+    optional: false
+    priority: 5
+    description: Process merged pending archives
+    condition: null
+  - extension: memory
+    command: speckit.memory.impact
+    enabled: true
+    optional: false
+    priority: 5
+    description: Consult current product memory
+    condition: null
+  after_implement:
+  - extension: workflow
+    command: speckit.workflow.finalize
+    enabled: true
+  - extension: memory
+    command: speckit.memory.prepare
+    enabled: true
+    optional: false
+    priority: 5
+    description: Queue implemented work for archival after merge
+    condition: null
+"""
+
+
 class ArchiveIntegrationTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="memory-test-")
@@ -397,6 +429,86 @@ class ArchiveIntegrationTests(unittest.TestCase):
         self.archive.enable(self.archive.policy_hash())
         self.write(EXTENSION + "/scripts/changed.py", "print('changed')\n")
         self.assertFalse(self.archive.pending()["enabled"])
+
+    def test_approval_survives_a_crlf_checkout_of_every_hashed_file(self):
+        """B7: core.autocrlf rewrites the approved text with CRLF on checkout; automatic mode stays on."""
+        self.write(EXTENSION + "/scripts/tool.py", "first = 1\nsecond = 2\n")
+        self.git("add", "-A")
+        self.git("commit", "-m", "Multi-line extension file")
+        self.archive.enable(self.archive.policy_hash())
+        self.git("config", "core.autocrlf", "true")  # the CRLF copies below are what Git's checkout would write
+        extension = [p.relative_to(self.root).as_posix() for p in (self.root / EXTENSION).rglob("*") if p.is_file()]
+        hashed = [POLICY, *extension, *self.archive.approval_paths()]
+        converted = 0
+        for name in hashed:
+            path = self.root / name
+            data = path.read_bytes()
+            if b"\n" in data and b"\0" not in data:
+                path.write_bytes(data.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+                converted += 1
+        self.assertGreaterEqual(converted, 2)
+        self.assertTrue(self.archive.pending()["enabled"])
+        self.write(POLICY, (self.root / POLICY).read_text(encoding="utf-8").replace("develop", "main"))
+        self.assertFalse(self.archive.pending()["enabled"])  # a real edit still voids it
+
+    def test_hook_hash_binds_event_command_condition_and_priority_but_not_the_owned_enabled_flags(self):
+        """D3: Workflow's reconcile may disable session and prepare without voiding the approval; any other
+        hook change voids it, and a Memory entry the reader cannot parse refuses."""
+        self.write(".specify/extensions.yml", HOOKS_YML)
+        base = self.archive.policy_hash()
+
+        def hashed(text):
+            self.write(".specify/extensions.yml", text)
+            return self.archive.policy_hash()
+        flip = lambda command: HOOKS_YML.replace("command: " + command + "\n    enabled: true",
+                                                 "command: " + command + "\n    enabled: false")
+        self.assertEqual(base, hashed(flip("speckit.memory.session").replace("\n", "\r\n")))
+        self.assertEqual(base, hashed(flip("speckit.memory.prepare")))
+        self.assertNotEqual(base, hashed(flip("speckit.memory.impact")))
+        self.assertNotEqual(base, hashed(HOOKS_YML.replace("priority: 5\n    description: Queue", "priority: 1\n    description: Queue")))
+        self.assertNotEqual(base, hashed(HOOKS_YML.replace("condition: null\n  after_implement", "condition: x\n  after_implement")))
+        self.assertNotEqual(base, hashed(HOOKS_YML.replace("command: speckit.memory.impact", "command: speckit.memory.run")))
+        moved = HOOKS_YML.replace("  before_specify:\n", "  before_plan:\n")  # the same blocks under another event
+        self.assertNotEqual(base, hashed(moved))
+        self.assertNotEqual(base, hashed(HOOKS_YML.replace("prepare\n    enabled: true\n    optional: false",
+                                                           "prepare\n    enabled: true\n    optional: true")))
+        for unreadable in (HOOKS_YML + "  after_tasks:\n  - command: speckit.memory.prepare\n    extension: memory\n",
+                           HOOKS_YML + "  after_tasks:\n    - extension: memory\n      command: speckit.memory.prepare\n",
+                           HOOKS_YML.replace("command: speckit.memory.impact", "commands: speckit.memory.impact")):
+            self.write(".specify/extensions.yml", unreadable)
+            with self.assertRaisesRegex(ArchiveError, "restore"):
+                self.archive.policy_hash()
+
+    def test_pending_carries_the_policy_facts_the_workflow_handoff_needs(self):
+        self.assertNotIn("policy_hash", self.archive.pending())  # disabled: the handoff stops before it needs them
+        self.archive.enable(self.archive.policy_hash())
+        pending = self.archive.pending()
+        self.assertEqual(self.archive.policy_hash(), pending["policy_hash"])
+        self.assertEqual({"target_branch": "develop", "default_checks": ["consumer"]}, pending["policy"])
+
+    def test_upgrade_needs_one_renewal_and_never_restamps_old_queue_entries(self):
+        self.archive.enable(self.archive.policy_hash())
+        self.git("checkout", "-b", "007-invoice")
+        self.write(FEATURE + "/review.md", "Implementation reviewed\n")
+        self.git("add", "-A")
+        self.git("commit", "-m", "Finish feature")
+        self.archive.queue(FEATURE, ["consumer"])
+        state = self.archive.repo.state / "pending.json"
+        queued = json.loads(state.read_text())[FEATURE]
+        self.write(EXTENSION + "/scripts/changed.py", "print('a new Memory release')\n")
+        self.git("add", "-A")
+        self.git("commit", "-m", "Upgrade Memory")
+        pending = self.archive.pending()
+        self.assertFalse(pending["enabled"])
+        self.assertIn("renewal", pending["reason"])
+        self.archive.enable(self.archive.policy_hash())
+        self.git("checkout", "develop")
+        self.git("merge", "--no-ff", "007-invoice", "-m", "Merge feature")
+        blocked = [item["reason"] for item in self.archive.pending()["blocked"] if item.get("spec") == FEATURE]
+        self.assertEqual(1, len(blocked))
+        self.assertIn("predates current enablement", blocked[0])
+        self.assertIn("speckit.memory.run --spec " + FEATURE, blocked[0])
+        self.assertEqual(queued, json.loads(state.read_text())[FEATURE])  # kept, never re-stamped
 
     def test_squash_merge_uses_content_identity_then_fresh_verification(self):
         self.archive.enable(self.archive.policy_hash())

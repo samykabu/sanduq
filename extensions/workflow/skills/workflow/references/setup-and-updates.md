@@ -27,6 +27,9 @@ unless already selected explicitly:
 - Optional, only when the user wants them: `profiles` (tiers by effort score),
   `clarification.max_questions_per_round`, `clarification.in_session_first_round`,
   `artifacts.budgets`, `project_sync.points` and `scope.board_cache_seconds`.
+- Never offer these as choices; they are validated but change nothing today: `updates.policy`,
+  `execution.checkpoints` (`every-phase` acts as `required-only`), `context.mode:
+  measured-with-estimated-fallback` (acts as `measured-only`) and `clarification.transport`.
 
 Discover existing effort units and preferences and keep their meaning. No later feature asks
 these questions again; show changed policy when `--replace` is needed. Then run

@@ -22,9 +22,13 @@ claims, evidence, invalidation and handoffs; it does not implement semantic agen
 work or launch a fresh host session by itself. Missing native invocation support
 is a blocker, not an instruction to pretend a stage ran.
 
-When Memory is installed, accepted Execute completion queues its exact feature
-through the same native handoff for Core and SuperSpec. Session entry and verified
-post-merge follow-up use that handoff too. It preserves existing queue entries and
+When Memory is installed, reconcile disables Memory's `session` and `prepare`
+hooks and the dispatcher runs both steps. The claim runs the session handoff at
+Scope, Specify and the first claim of each session; a Memory blocker or Memory work
+to dispatch first comes back as `memory_blocked` or `memory_dispatch` with a
+`memory_handoff` instead of a stage. Accepted Execute completion queues its exact
+feature through the same native handoff for Core and SuperSpec, with the Memory
+policy's `default_checks`. Verified post-merge follow-up uses that handoff too. It preserves existing queue entries and
 returns registered Memory actions for work that needs synthesis or independent
 review. Disabled approval remains pending; a Memory failure keeps its actual
 blocked reason without changing an accepted product receipt. See the

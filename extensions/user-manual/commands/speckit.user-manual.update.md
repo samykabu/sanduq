@@ -43,20 +43,20 @@ Flags: `--feature <path>`, `--full`, `--module <id>`, `--skip-runtime`, `--no-bu
    do not transliterate technical prose or leave machine-like literal translations.
 6. Use the API, screenshot, release, and Illustrate skills only for applicable surfaces. For a
    diagram, run `python .specify/extensions/user-manual/scripts/deps.py ensure illustrate` first; on
-   a non-zero exit report its line and generate no diagram (when it prints a `specify extension`
-   recipe and the user approves, re-run with `--approve`; under a `manual` policy the user runs the
-   printed command, then re-runs this command). When it exits zero, pass on any "newer compatible
-   release available" note and draw with the procedure in `.specify/extensions/illustrate/skill/SKILL.md`:
-   the §0 theme gate first, then §10 (choose the type from `references/type-index.md`, read its
-   `type-*.md`, apply and validate the theme, and run the step 7 checks); its `scripts/` are under
-   `.specify/extensions/illustrate/skill/scripts/`, run from the repository root. Capture screenshots with deterministic synthetic fixtures; never use
-   production data.
+   a non-zero exit report its line, follow it and generate no diagram. When it exits zero, pass on
+   any "newer compatible release available" note and draw with the procedure in
+   `.specify/extensions/illustrate/skill/SKILL.md`: the §0 theme gate first, then §10 (choose the
+   type from `references/type-index.md`, read its `type-*.md`, apply and validate the theme, and run
+   the step 7 checks). Run Illustrate's scripts from the repository root as
+   `python .specify/extensions/illustrate/skill/scripts/<script>`. Capture screenshots with
+   deterministic synthetic fixtures; never use production data.
 7. Update `User-Manual/.state/coverage.json`, including source evidence, affected modules, pages,
    audiences, languages, assets, and known gaps (`manual_impact.py` records its list under `impact`).
 8. Unless `--no-build`, run `python .specify/extensions/user-manual/scripts/audit_manual.py` and
-   `python .specify/extensions/user-manual/scripts/build_manual.py --all --archive` once; it builds
-   every configured audience and language. Deploy an ephemeral preview only when `manual.yml`
-   names an approved provider; in that case load `skills/preview-publishing/SKILL.md`, validate its
+   `python .specify/extensions/user-manual/scripts/build_manual.py --all` once; it builds every
+   configured audience and language. Deploy an ephemeral preview only when `manual.yml` names an
+   approved provider; in that case add `--archive` to that build (the provider publishes the
+   archives; CI builds its own), load `skills/preview-publishing/SKILL.md`, validate its
    checked-in provider descriptor, and preserve the private artifact even when hosted deployment
    succeeds or is skipped.
 9. Record freshness:

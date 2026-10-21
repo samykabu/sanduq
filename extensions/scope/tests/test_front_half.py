@@ -27,7 +27,7 @@ class BoardCacheTests(unittest.TestCase):
         return calls
 
     def another_process(self):
-        with patch.object(subprocess, 'check_output', return_value='https://github.com/acme/app.git'):
+        with patch('sanduq_remote.origin_url', return_value='https://github.com/acme/app.git'):
             return m.Scope(self.root, self.gh)
 
     def test_a_second_process_reads_the_cache_and_a_reload_is_live(self):

@@ -1,5 +1,42 @@
 # Changelog
 
+## [1.17.0] - 2026-10-21
+
+Optimization round 4. No renames.
+
+- `reconcile` accepts an owned hook that Spec Kit (`extension add`/`update`) or Memory's installer registered again with `enabled: true`: apply disables it again and journals the new entry; restore keeps it. A disabled entry edited after reconcile is still refused with `HOOK_CHANGED_SINCE_RECONCILE`. Re-enabling an owned hook by hand is reversed by the next reconcile.
+- One hook-ownership rule (`reconcile.managed_hook`) for reconcile and doctor. Doctor's `DUPLICATE_STAGE_OWNER` names the reconcile command.
+- `sync-amend` and `migrate` find a legacy receipt's recorded bytes in a CRLF commit of the Project Sync state file (the history hash is CRLF-folded like the receipt's).
+- The `gh` calls in `task_issues.py` (120 s) and `ci_evidence.py` (300 s) time out with their existing errors (`GITHUB_API_FAILED`, the evidence error).
+- The GitHub remote reading and the PR closing-reference lint come from the shared `sanduq_remote.py` and `sanduq_pr_lint.py`; `workflow.py` and `execution_tools.py` re-export the old names.
+- New descriptions for `speckit.workflow.finalize` and `speckit.workflow.status`.
+- In a managed project `reconcile` also disables Memory's `speckit.memory.session` (before Specify) and `speckit.memory.prepare` (after Implement); `speckit.memory.impact` stays. The runtime does both steps: every claim runs the Memory session handoff, under the dispatch lock it already holds (one `archive.py pending`, about 0.4 s; the model-supplied `session_id` is not trusted to skip it). Any `blocked` result, or Memory work to dispatch first, comes back instead of a stage (`status: memory_blocked` or `memory_dispatch`, with `memory_handoff`); the run is recorded in the checkpoint (`memory_session`) only after it succeeded. Execute's handoff queues with the Memory policy's `default_checks`; the prepare hook's early `archive.py preflight` no longer runs at Implement (verify and archive still run it). The handoff reads `policy` and `policy_hash` from Memory's `pending` when it carries them (one helper process fewer).
+- `scripts/progress_shim.py` is removed. With Progress installed and enabled, a legacy `scripts/progress.py` call writes nothing, exits 2 and prints one `error PROGRESS_INSTALLED: ...` line naming the Progress command to use. Without Progress, or with it disabled, the legacy reporter runs as before. `progress_bridge.status` (the v2 projection reader) is removed with it.
+- `status` carries Progress's one text status line as `progress_status` (no v2 projection); the dispatcher no longer runs `progress.py status` itself.
+- A claim reuses a green delegation health probe for up to an hour (`.specify/workflow/runtime/delegation-health.json`), while the host, scope, driver copy and the `node`, `codex` and `claude` executables are unchanged. A red result is never kept; a driver start failure drops it; `doctor` always probes. Measured here: 2.1 to 2.8 s for a probe, 0.05 to 0.07 s for a hit.
+- The recovery for a pre-1.16.0 raw hash of the Project Sync state names `sync-amend` first. Its rules moved from `dispatcher-operations.md` to `recovery.md` (read on drift).
+- `doctor` and `status` warn `PROGRESS_HOOKS_DOUBLE_WIRED` when `progress.hook_wiring: native` and a host file also holds Spec Kit's `speckit.progress.hook` entry, and name `install.py --apply`.
+- `setup-and-updates.md` names the policy values that change nothing today. Dead code removed: `clear_caches`, `scope_decision`.
+- The Brainstorm overlay states the one question limit (`clarification.max_questions_per_round`) instead of "no question count limit".
+- Install, upgrade and `host --use` keep only the three newest backup zips across `installs/`, `upgrades/` and `hosts/` after a successful apply. `before.json`, `result.json` and alias backups stay. A failed apply deletes nothing. The apply result reports `backups: {zips, bytes}`; an explicit `doctor` reports them too.
+- The branch-rule check in the installer times out after 60 s with `CI_BRANCH_RULE_INSPECTION_FAILED`.
+- Install and upgrade refuse while a Memory archive run is active (`MEMORY_ARCHIVE_ACTIVE`) and name the command that resumes it.
+- Install no longer refuses an unedited `documentation-gates.yml` rendered from an earlier Assure template (`LEGACY_CI_HAS_LOCAL_EDITS`); it is removed as before.
+- Install and `host --use` no longer fail after Spec Kit or Memory registered an owned hook again.
+- `project-defaults` also returns `statuses`, the exact column names doctor requires, so Project init can create the missing ones.
+- `dispatcher-operations.md` says to write the usage JSON under `.specify/workflow/runtime/`: Windows Python cannot open Git Bash's `/tmp`.
+- `stage-plan.md` says source files that Execute will change are not Plan inputs (or are `consulted`), so Execute's completion no longer fails once with `UPSTREAM_INPUT_CHANGED_DURING_STAGE` on them.
+- Workflow records the exclude lines it writes for its runtime files in `.git/info/sanduq-runtime.json` (key `workflow`), so Memory can tell them from feature content.
+
+### Migration
+
+- Older backup zips are deleted on the next successful apply after this release (not on the upgrade into it). Copy any you still want out of `.specify/workflow/backups/` first.
+- Finish or roll back an active Memory archive run before upgrading.
+- Upgrade Memory first, then Workflow. Memory's approval hash changed format: run `speckit.memory.enable` once after the upgrade. Queue entries from before keep their `enabled_at` and `pending` reports them blocked with the fix; they are never re-stamped.
+- The upgrade's `reconcile --apply` sets `enabled: false` on Memory's `session` and `prepare` hooks. A project that adds Memory after Workflow now also needs `reconcile --apply`; doctor names it (`DUPLICATE_STAGE_OWNER: ...; run "python .specify/extensions/workflow/scripts/reconcile.py --apply"`). Re-enabling an owned hook by hand is undone by the next reconcile.
+- A claim can now stop on a Memory blocker (an interrupted archive run, a busy writer, a missing Memory command) and return `memory_handoff` instead of a stage. Run its actions, then claim again. Do not run `memory-handoff --transition session` before each claim any more.
+- Prompts or scripts that call `.specify/extensions/workflow/scripts/progress.py init|task|usage|sync|phase|pr|event` while Progress is installed now get exit 2 and the Progress command to use. Switch them to `.specify/extensions/progress/scripts/progress.py` (see `references/reporting.md`).
+
 ## [1.16.0] - 2026-10-20
 
 Fixes for issue #99 (finalization loops). New subcommands `project-sync` and `sync-amend`; the claim's `project_sync.command` changes.

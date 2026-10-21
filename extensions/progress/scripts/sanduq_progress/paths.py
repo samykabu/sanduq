@@ -357,6 +357,14 @@ def git_exclude(root, patterns=None):
         if missing:
             with open(target, 'a', encoding='utf-8') as stream:
                 stream.write(('\n' if existing and existing[-1] != '' else '') + '\n'.join(missing) + '\n')
+        # Memory treats a file ignored by one of these lines as disposable runtime, not feature content.
+        declaration = target.parent / 'sanduq-runtime.json'
+        declared = read_json(declaration, {})
+        declared = declared if isinstance(declared, dict) else {}
+        owned = declared.get('progress') if isinstance(declared.get('progress'), list) else []
+        if not set(patterns) <= set(owned):
+            from .util import write_json
+            write_json(declaration, {**declared, 'progress': list(dict.fromkeys([*owned, *patterns]))})
         return True
     except (OSError, subprocess.SubprocessError):
         return False

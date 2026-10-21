@@ -1,5 +1,5 @@
 ---
-description: "Generates the feature CHANGELOG and details doc, then opens or updates the pull request; never merges. Use when asked to 'open the PR'."
+description: "Generates the feature CHANGELOG and details doc, then creates or updates the pull request body; never merges. Use when asked to 'write the PR description'."
 ---
 
 # Generate a Detailed PR
@@ -39,14 +39,9 @@ resolve feature -> documentation preflights -> gather ground truth -> generate d
 
 ### 0. Ensure the Illustrate dependency
 
-```text
-python .specify/extensions/pr/scripts/deps.py ensure illustrate
-```
-
-Exit 0: continue (pass on a "newer compatible release available" note if printed). Nonzero: report
-the printed line verbatim, continue the non-diagram work and skip diagram generation; if the line
-names a `specify extension add/update illustrate` recipe and the user approves, re-run with
-`--approve` and then this command.
+Run `python .specify/extensions/pr/scripts/deps.py ensure illustrate`. On exit 0, pass on any
+"newer compatible release available" note. On a non-zero exit, report its line verbatim, follow it,
+continue the non-diagram work and skip diagram generation.
 
 ### 1. Resolve the active feature
 
@@ -64,13 +59,14 @@ creating/updating the PR. When `.specify/workflow.yml` exists, its `processes.qa
 
 #### QA
 
-If `.specify/extensions/assure/assure-config.yml` exists and contains
-`require_document_before_pr: true`:
+If `.specify/extensions/assure/` exists, ask its script whether the gate is on (never read the
+config file yourself):
 
-1. Run `python .specify/extensions/assure/scripts/assure_state.py status --kind document --feature <feature-dir>`.
-2. If `current` is false, execute `speckit.assure.document --feature <feature-dir>` with the current
+1. Run `python .specify/extensions/assure/scripts/assure_state.py status --kind document --gate --summary --feature <feature-dir>`.
+   `skipped gate=off`: skip QA. `ok ...`: the QA document is current; continue.
+2. On `error ...`, execute `speckit.assure.document --feature <feature-dir>` with the current
    integration and wait for it to finish.
-3. Run the status command again. Stop before PR handling if it is still missing/stale or required QA
+3. Run the status command again. Stop before PR handling if it is still `error` or required QA
    evidence remains incomplete. Do not allow an old file to satisfy the gate.
 
 #### User Manual
@@ -167,16 +163,15 @@ The script detects the branch's PR, replaces the text between `<!-- speckit-pr:s
 `<!-- speckit-pr:end -->` (or appends the marked section; unpaired or repeated markers are refused),
 pins each relative image path to a verified commit URL, writes the exact UTF-8/LF body to
 `<feature-dir>/evidence/pr-body.md`, lints its closing references against the bound issue and its
-prerequisites from `scope-source.json` with Workflow's `execution_tools.py pr-lint` rule into
+prerequisites from `scope-source.json` with the closing-reference rule Workflow's `pr-lint` also
+uses (bundled with PR, so Workflow is never required or installed merely for linting) into
 `pr-body.lint.json` beside it, and only then runs `gh pr edit`, or pushes the branch and runs
-`gh pr create`; it never publishes after a nonzero exit. When Workflow is absent, the script applies
-the same closing-reference check on its own, so standalone PR use is unchanged and Workflow is never
-required or installed merely for linting. It prints the PR receipt fragment (`pr_url`,
+`gh pr create`; it never publishes after a nonzero exit. It prints the PR receipt fragment (`pr_url`,
 `pr_body_file`, `pr_lint_file`, `pr_body_sha256`, `evidence`): copy it into the receipt as printed.
 Exit codes: 0 published; 1 the body closes a foreign, prerequisite or unbound issue: fix the
 document and rerun; 2 bad input (malformed markers, an image not committed); 3 `gh` or `git` failed,
-including a PR lookup that fails (it is never read as "no PR") and an image not on the remote: report
-that the PR step was skipped and why. With `--no-pr` it stops after the lint.
+including a PR lookup that fails (it is never read as "no PR"), a branch whose PR is merged or closed
+(that PR is never edited) and an image not on the remote: report that the PR step was skipped and why. With `--no-pr` it stops after the lint.
 
 ### 7. Report
 

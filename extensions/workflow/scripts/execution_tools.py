@@ -37,8 +37,16 @@ except ModuleNotFoundError:
 
 import check_inputs
 
+try:
+    import sanduq_pr_lint
+except ModuleNotFoundError:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'shared'))
+    import sanduq_pr_lint
+# One source with PR (round 4, PM21); re-exported for the CLI, workflow.py and the tests.
+from sanduq_pr_lint import CLOSE_REF, FENCE, pr_lint  # noqa: F401
+
 PREFLIGHT_SCHEMA = 'sanduq.execution.preflight.v1'
-PR_LINT_SCHEMA = 'sanduq.execution.pr-lint.v1'
+PR_LINT_SCHEMA = sanduq_pr_lint.PR_LINT_SCHEMA
 PROGRESS_SCHEMA = 'sanduq.execution.progress.v1'
 SCOPE_COMMAND_SCHEMA = 'sanduq.execution.scope-command.v1'
 SCOPE_SCRIPT = 'python .specify/extensions/scope/scripts/scope.py'
@@ -295,36 +303,6 @@ def scope_command(mode, command, issue, feature=None, token=None, session=None, 
 
 
 # ----------------------------------------------------------------------------- pr lint
-
-CLOSE_REF = re.compile(
-    r'\b(?P<kw>close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b:?\s+'
-    r'(?:https?://github\.com/(?P<urepo>[\w.-]+/[\w.-]+)/issues/(?P<unum>\d+)|(?P<repo>[\w.-]+/[\w.-]+)?#(?P<num>\d+))',
-    re.I)
-FENCE = re.compile(r'```.*?```|~~~.*?~~~|`[^`\n]*`', re.S)
-
-
-def pr_lint(body, repo, issue, prerequisites=()):
-    repo_key = repo.lower()
-    prereqs = {int(p) for p in prerequisites}
-    text = FENCE.sub('', body)
-    closes, violations = [], []
-    for match in CLOSE_REF.finditer(text):
-        ref_repo = (match.group('urepo') or match.group('repo') or repo).lower()
-        number = int(match.group('unum') or match.group('num'))
-        closes.append({'keyword': match.group('kw').lower(), 'repo': ref_repo, 'issue': number})
-        if ref_repo != repo_key:
-            code = 'FOREIGN_REPO_CLOSE'
-        elif number in prereqs:
-            code = 'PREREQUISITE_CLOSE'
-        elif number != int(issue):
-            code = 'UNBOUND_ISSUE_CLOSE'
-        else:
-            continue
-        violations.append({'code': code, 'repo': ref_repo, 'issue': number})
-    return {'schema': PR_LINT_SCHEMA, 'ok': not violations,
-            'body_sha256': hashlib.sha256(body.encode('utf-8')).hexdigest(), 'bound': {'repo': repo_key, 'issue': int(issue)},
-            'closes': closes, 'violations': violations}
-
 
 # ------------------------------------------------------------------------------ progress
 

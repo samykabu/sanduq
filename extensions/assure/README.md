@@ -56,9 +56,11 @@ writes. The commands no longer take a `--phase` flag.
 | Script | Used by | What it does |
 |---|---|---|
 | `scripts/deps.py ensure illustrate` | analyze, document | Checks that `illustrate >=2.0.0,<3.0.0` is installed, follows the project's `update_policy`, prints one line and fails closed. The Illustrate references load only when a diagram is added or generated. |
-| `scripts/assure_scan.py` | analyze (`--check`), document | Walks the repository, skipping `scan.exclude` from `assure-config.yml`, classifies projects as web, mobile, backend, infrastructure or tooling, prints one line per project, and rewrites the block between `<!-- assure-scan:start -->` and `<!-- assure-scan:end -->` in `.github/memory/project-memory.md` with a `Last scanned` date. `--check` prints without writing; text outside the markers is kept. |
+| `scripts/assure_scan.py` | analyze (`--check`), document | Walks the repository (inside git, only folders git tracks or would add), skipping `scan.exclude` from `assure-config.yml`, classifies projects as web, mobile, backend, infrastructure or tooling, prints one line per project, and rewrites the block between `<!-- assure-scan:start -->` and `<!-- assure-scan:end -->` in `.github/memory/project-memory.md` with a `Last scanned` date. `--check` prints the inventory without writing (`--show-block` adds the block); text outside the markers is kept. |
 | `scripts/audit_qa.py <manual.html>...` | document | Fails on an `<img>` without `alt` or `<figcaption>`, a relative `src` or `href` that does not resolve, a missing "Development-only draft" marker, or a secret-shaped value. |
 | `scripts/assure_state.py record\|status` | analyze, document, PR, CI | Records and checks feature-scoped freshness. `status` lists `changed_inputs` and `changed_outputs` when the state is stale. `status --gate` prints `skipped gate=off` and exits 0 unless `lifecycle.require_document_before_pr` is true. |
 
 `scan.exclude` defaults to `.git`, `node_modules`, `bin`, `obj`, `dist`, `build`, `.next`, `.nuxt`,
-`.turbo`, `.expo`, `coverage` and `.cache`; `assure_init.py` writes that list, and you can edit it.
+`.turbo`, `.expo`, `coverage`, `.cache`, `.venv`, `venv`, `__pycache__`, `target`, `vendor`, `Pods` and
+`.gradle`; `assure_init.py` writes that list into a new config, and you can edit it. A rerun of init keeps
+your edits and changes only the three `lifecycle` values.

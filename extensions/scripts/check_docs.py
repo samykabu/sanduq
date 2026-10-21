@@ -205,6 +205,60 @@ def release_facts(manifests, texts):
     return errors
 
 
+def lower_bound(spec):
+    match = re.search(r'>=\s*(\d+(?:\.\d+)*)', str(spec or ''))
+    return match and match.group(1)
+
+
+def same_version(a, b):
+    a, b = version_key(a), version_key(b)
+    width = max(len(a), len(b))
+    return a + (0,) * (width - len(a)) == b + (0,) * (width - len(b))
+
+
+def version_drift(manifests):
+    """The Requires row, the README's "describes X.Y.Z" and old "(unreleased)" headings agree with each manifest."""
+    errors = []
+    for manifest in manifests:
+        meta, requires = manifest['extension'], manifest.get('requires') or {}
+        ext, version = meta['id'], str(meta['version'])
+        # {spoken name: (manifest lower bound, required)}; "Illustrate 2.x" reads as 2.0.0.
+        bounds = {d['id'].replace('-', ' '): (lower_bound(d.get('version')), d.get('required', True))
+                  for d in requires.get('extensions') or []}
+        bounds['spec kit'] = (lower_bound(requires.get('speckit_version')), False)
+        bounds.update({t['name']: (lower_bound(t.get('version')), False) for t in requires.get('tools') or []})
+        page = DOCS / 'extensions' / (ext + '.md')
+        row = re.search(r'^\| Requires \|(.*)\|\s*$', page.read_text(encoding='utf-8'), re.M) if page.is_file() else None
+        if row:
+            where = f'{page.relative_to(ROOT)}: Requires row'
+            for name, (bound, required) in bounds.items():
+                named = re.search(r'\b' + re.escape(name) + r'\b(?: (\d+(?:\.\d+)*)(?:\.x)?\b)?', row.group(1), re.I)
+                if required and not named:
+                    errors.append(f'{where} does not name {name}, which extension.yml requires')
+                elif named and named.group(1) and bound and not same_version(named.group(1), bound):
+                    errors.append(f'{where} says {named.group(0)}; extension.yml requires {name} >={bound}')
+        readme = ROOT / 'extensions' / ext / 'README.md'
+        if readme.is_file():
+            for n, line in enumerate(readme.read_text(encoding='utf-8').splitlines(), 1):
+                for described in re.findall(r'\bdescribes [A-Z][\w -]*? (\d+\.\d+\.\d+)\b', line):
+                    if described != version:
+                        errors.append(f'{readme.relative_to(ROOT)}:{n}: describes {described}; extension.yml has '
+                                      f'{version} (fix or delete the sentence)')
+        changelog = ROOT / 'extensions' / ext / 'CHANGELOG.md'
+        if changelog.is_file():
+            released = False  # an "## Unreleased" heading may only sit above the manifest version's entry
+            for n, line in enumerate(changelog.read_text(encoding='utf-8').splitlines(), 1):
+                if not line.startswith('## '):
+                    continue
+                heading = re.search(r'\d+\.\d+\.\d+', line)
+                if heading and version_key(heading.group()) <= version_key(version):
+                    released = True
+                if 'unreleased' in line.lower() and released:
+                    errors.append(f'{changelog.relative_to(ROOT)}:{n}: "{line[3:]}" is marked unreleased below '
+                                  f'{version}, the manifest version')
+    return errors
+
+
 def check():
     errors = []
     texts = {p: p.read_text(encoding='utf-8') for p in GUIDES}
@@ -274,6 +328,7 @@ def check():
     portable = [p for p in skill_paths if any(f.startswith(p.parent.relative_to(ROOT).as_posix() + '/') for f in vendored)]
     portable_ok = sum(p.relative_to(ROOT).as_posix() in all_text for p in portable)
     errors += release_facts(manifests, texts)
+    errors += version_drift(manifests)
     hooks = HOOKS_PAGE.read_text(encoding='utf-8')
     if hooks_text(hooks) != hooks:
         errors.append(f'{HOOKS_PAGE.relative_to(ROOT)} is stale: run check_docs.py --write')

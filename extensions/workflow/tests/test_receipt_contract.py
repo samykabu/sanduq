@@ -15,6 +15,7 @@ import ci_gate as c  # noqa: E402
 import workflow as w  # noqa: E402
 import fixture_008  # noqa: E402
 import test_workflow as fixture  # noqa: E402
+import lifecycle_snapshot  # noqa: E402
 
 SCRIPTS = Path(__file__).resolve().parents[1] / 'scripts'
 
@@ -78,14 +79,21 @@ class LegacyCheckpointTests(Harness):
         super().setUp()
         self.policy = copy.deepcopy(fixture_008.load()['policy'])
         self.configure(superspec=True)
-        subprocess.run(['git', 'switch', '-qc', fixture_008.BRANCH], cwd=self.root, check=True)
-        self.original = fixture_008.materialise(self.root)
+
+        def build():
+            subprocess.run(['git', 'switch', '-qc', fixture_008.BRANCH], cwd=self.root, check=True)
+            original = fixture_008.materialise(self.root)
+            if self.target_branch is not None:
+                # A checkpoint started by 1.6.0 records the branch it forked from.
+                original['target_branch'] = self.target_branch
+                w.write(self.root / fixture_008.FEATURE / 'workflow/checkpoint.json', original)
+            self.commit_all('Materialise the anonymised 1.3.0 checkpoint')
+            return original
+        # W22/X25: once per class; later tests get a copy of the tree and of the materialised checkpoint.
+        self.original = copy.deepcopy(lifecycle_snapshot.reuse(
+            self, build, lambda: json.loads((self.root / fixture_008.FEATURE / 'workflow/checkpoint.json')
+                                            .read_text(encoding='utf-8'))))
         self.feature = fixture_008.FEATURE
-        if self.target_branch is not None:
-            # A checkpoint started by 1.6.0 records the branch it forked from.
-            self.original['target_branch'] = self.target_branch
-            w.write(self.root / self.feature / 'workflow/checkpoint.json', self.original)
-        self.commit_all('Materialise the anonymised 1.3.0 checkpoint')
         self.run = w.Run(self.root, self.feature)
 
     def gate(self):
@@ -487,10 +495,14 @@ class AmendmentTests(Harness):
     def ready(self):
         self.policy = w.default_policy(False, False)
         self.configure()
-        run = self.run_object()
-        self.complete_through(run, 'ready')
-        self.commit_all()
-        return run
+
+        def build():
+            run = self.run_object()
+            self.complete_through(run, 'ready')
+            self.commit_all()
+            return run
+        # W22/X25: once per class and starting tree; later tests get a copy.
+        return lifecycle_snapshot.reuse(self, build, lambda: w.Run(self.root, self.feature))
 
     def gate(self):
         policy = w.load_policy(self.root)

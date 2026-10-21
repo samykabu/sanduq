@@ -23,7 +23,8 @@ $ARGUMENTS
    - anything else → say which formats are supported and stop.
 3. Resolve the project theme with
    `.specify/extensions/illustrate/skill/scripts/illustration_theme.py --project-root . resolve`;
-   initialize it per `skill/references/theme-initialization.md` if it is missing.
+   initialize it per `.specify/extensions/illustrate/skill/references/theme-initialization.md` if it
+   is missing.
 4. Run the bundled extractor once (`drawio_extract.py`, `mermaid_extract.py`, or
    `excalidraw_extract.py` under `.specify/extensions/illustrate/skill/scripts/`). Never read the raw
    source instead, never render it, and report a non-zero exit verbatim and stop.
@@ -35,6 +36,9 @@ $ARGUMENTS
    `--output` arguments.
 7. Redraw with the resolved project colours and fonts — never source coordinates, colours, or
    fonts — then run `illustration_theme.py --project-root . apply <output.html>` and
-   `illustration_theme.py validate`.
+   `illustration_theme.py validate`. Then run the SKILL.md step 7 checks on the output from the same
+   `scripts/` folder: `verify-geometry.py <output.html>`, `self_check.py --strict <output.html>`
+   (technical-color: `--profile technical-color` instead of `--strict`), and the type's
+   `verify-<type>.py` when one exists. Fix every finding and rerun them until they pass.
 8. Report the output paths, the four dials used, and the fidelity ledger (what was merged,
    collapsed, or dropped).
