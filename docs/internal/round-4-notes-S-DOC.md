@@ -43,6 +43,27 @@ Not done yet, waiting for other streams to land (my files, their facts):
 - `check_docs.py`: fails only with "docs/reference/hooks.md is stale". I did not edit any manifest or hooks.md, so a
   manifest change by another stream causes it. I did not run `--write` mid-round; run it after the streams finish.
 
+## Second task (after the code streams)
+
+- `check_docs.py --write` regenerated `docs/reference/hooks.md` (Memory `session` and `prepare` now "disabled; the
+  dispatcher owns this step"); the hand-written sentence there now says "Memory's impact hook". `check_docs.py`
+  passes.
+- Progress: `docs/extensions/progress.md` (forwarder retired, exit 2 `PROGRESS_INSTALLED`, `progress_status`; v2 and
+  classic deprecated under Limits), `docs/workflow/operations.md` (forwarding table replaced by the replacement table
+  from `progress.py` `REPLACEMENTS`), `docs/workflow/delegation.md`.
+- Memory and Workflow: `docs/extensions/memory.md` (new "With Workflow" section; re-approve after an upgrade; old
+  queue entries blocked with the fix; finish an archive run first), `docs/extensions/workflow.md`,
+  `docs/workflow/stages.md`.
+- Project: `docs/extensions/project.md` Limits (malformed state stops the sync, interrupted runs adopt sub-issues,
+  explicit `done`, `ownerType: org`).
+- Backups: `docs/workflow/operations.md` table row and `docs/workflow/operating-guide.md` (three newest ZIPs).
+- Assure (`--show-block`, longer default exclude list and git-ignored folders, init keeps the config, gate checks out
+  the PR head) and User Manual (task block markers, `--archive` only with an approved provider, init keeps
+  `index.md`).
+- `docs/start/upgrades.md` "Round 4 migration": order of steps and one row per Migration line of every extension's
+  `## Unreleased` block, plus the catalog-priority row. The upgrade command uses `<version>`; the orchestrator fills
+  it in.
+
 ## Requests
 
 - S-PM (`extensions/memory/README.md:15`), S-IL (`extensions/progress/README.md:28`), S-WF

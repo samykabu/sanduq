@@ -75,6 +75,17 @@ in `/hooks`). While an archive run is active, the hook refuses `git push`, `stas
 `clean` and any write under `specs/memory/`, and names the run's `candidate.json` and the recovery
 reference. It is off by default.
 
+## With Workflow
+
+In a managed project, Workflow owns Memory's `session` (before Specify) and `prepare` (after Implement)
+hooks. Its reconcile disables them, and `impact` stays. The Workflow claim runs the Memory session check
+at Scope, Specify and the first claim of each session. When Memory is blocked (an interrupted archive
+run, a busy writer, a missing Memory command) or has work to dispatch first, the claim returns
+`memory_blocked` or `memory_dispatch` with a `memory_handoff` instead of a stage. Run its actions, then
+claim again. Memory's approval leaves out the `enabled:` flag of those two hooks only, so disabling
+them keeps automatic archiving approved. If you add Memory after Workflow, run `reconcile.py --apply`;
+`doctor` names it.
+
 ## How it runs
 
 ![Memory sequence: memory.init configures policy; memory.impact runs as a required hook before Analyze; memory.prepare queues finished work after implementation; after the merge, the next session or memory.run checks eligibility and evidence, migrates knowledge with an independent review, and commits a recoverable checkpoint before the final archive.](../diagrams/extension-memory.animated.svg)
@@ -87,7 +98,11 @@ reviews it, and commits before it removes the feature folder.
 ## Limits
 
 - Automatic mode runs in a local session. There is no daemon and no remote merge trigger.
-- Changing the policy or the scripts withdraws the approval. Review and enable again.
+- Changing the policy or the scripts withdraws the approval, and every Memory update changes the
+  scripts. Run `$speckit-memory-enable` again after an upgrade. Entries queued before the new approval
+  are reported blocked with the fix: archive each with `$speckit-memory-run --spec <dir>`, or queue it
+  again from its implementation branch.
+- Finish or recover an active archive run (`archive.py status`) before you update Memory or Workflow.
 - Checked tasks and a merge do not prove a feature is complete. Memory runs your checks.
 - Never delete a journal or reset Git to get past a blocked archive. Use the printed recovery steps.
 

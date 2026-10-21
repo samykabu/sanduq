@@ -233,7 +233,10 @@ lock selects exact versions and source URLs.
 Installed process choices do not silently change on update. Newer compatible dependencies are retained and reported rather than silently downgraded to an older lock baseline; active runs still need reviewed migration.
 
 The installer preserves configuration/state and stores a backup ZIP and operation
-log under `.specify/workflow/backups/installs/`. A failed attempt restores exact managed
+log under `.specify/workflow/backups/installs/`. After a successful apply it keeps only the three
+newest backup ZIPs across `installs/`, `upgrades/` and `hosts/`; `before.json`, `result.json` and
+alias backups stay, and a failed apply deletes nothing. The apply result and `doctor` report the
+count and bytes. Copy out any older ZIP you want to keep. A failed attempt restores exact managed
 file bytes. Unknown customized CI workflows or a locally edited Scope alias block
 replacement and leave a backup for explicit reconciliation. After success, current
 runs detect package drift and require a reviewed migration:

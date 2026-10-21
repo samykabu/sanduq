@@ -699,6 +699,5 @@ Every `progress.py` subcommand accepts `--summary` (one line, e.g.
 on a validation failure) and `--json` (the full `state.json` content) as
 alternatives to the default output (only the report path); `--summary` and
 `--json` together is rejected, and exit codes are unchanged either way. This describes the legacy reporter.
-When the Progress extension is installed, the same script forwards each subcommand to the Progress CLI (`sync`
-becomes `refresh`, `usage` becomes a legacy attempt with its log path, window and counters), keeps the `--summary`
-line, and fails with a compatibility error for `--json` and `init --title`.
+When the Progress extension is installed and enabled, the same script writes nothing, exits 2 and names the
+Progress command to use instead ([mapping](operations.md#reporting-modes-and-the-legacy-call-mapping)).

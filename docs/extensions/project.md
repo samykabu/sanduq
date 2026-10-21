@@ -50,6 +50,12 @@ opening the sync command file.
 
 - If `gh`, its scopes, a GitHub remote or `config.json` is missing, sync logs a skip and exits 0.
   A skip is not a completed sync.
+- A malformed `.specify/project-sync-state.json` stops the sync with a message. Restore it from git
+  or fix it, then rerun. Sync no longer resets it, which made the next run create duplicate issues.
+- An interrupted run adopts the task sub-issues it already created, so a rerun does not duplicate them.
+- `done` runs only when you pass it; Project does not move a feature to done by itself.
+- An organization board needs `ownerType: org`. Init detects it; rerun Init if an older Init
+  recorded `user`.
 - Project only touches the configured board and issues in the `origin` repository.
 
 Package details: [Project README](../../extensions/project/README.md).

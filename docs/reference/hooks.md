@@ -14,7 +14,7 @@ edit them by hand.
   Required Project sync makes every Project hook run automatically.
 - **Workflow takes over.** `speckit.workflow.reconcile` disables the hooks Workflow owns and runs
   those commands as dispatcher stages instead. It keeps a journal so the change can be reversed.
-  Scope's guard, bind, plan-guard and reconcile hooks, Memory's hooks and unrelated hooks stay as they are.
+  Scope's guard, bind, plan-guard and reconcile hooks, Memory's impact hook and unrelated hooks stay as they are.
 
 ## Hooks at a glance
 
@@ -113,7 +113,7 @@ their manifest mode.
 | Phase | When | Extension | Command | Under Workflow |
 | --- | --- | --- | --- | --- |
 | specify | before | scope | `speckit.scope.guard` | kept |
-| specify | before | memory | `speckit.memory.session` | kept |
+| specify | before | memory | `speckit.memory.session` | disabled; the dispatcher owns this step |
 | specify | after | scope | `speckit.scope.bind` | kept |
 | specify | after | project | `speckit.project.sync` | disabled; the dispatcher owns this step |
 | specify | after | scope | `speckit.scope.after-specify` | disabled; the dispatcher owns this step |
@@ -128,7 +128,7 @@ their manifest mode.
 | implement | before | assure | `speckit.assure.analyze` | disabled; runs as stage `qa_analyze` |
 | implement | before | project | `speckit.project.sync` | disabled; the dispatcher owns this step |
 | implement | after | assure | `speckit.assure.document` | disabled; runs as stage `qa_document` |
-| implement | after | memory | `speckit.memory.prepare` | kept |
+| implement | after | memory | `speckit.memory.prepare` | disabled; the dispatcher owns this step |
 | implement | after | pr | `speckit.pr.generate` | disabled; runs as stage `pr` |
 | implement | after | progress | `speckit.progress.refresh` | kept |
 | implement | after | project | `speckit.project.sync` | disabled; the dispatcher owns this step |

@@ -58,9 +58,10 @@ report runs as before. `progress_bridge.py mode` prints the mode in use (`projec
 [modes and the old-call mapping](../workflow/operations.md#reporting-modes-and-the-legacy-call-mapping) are in the
 operations guide. Details:
 
-- Workflow's `progress.py` forwards its old subcommands to the Progress CLI, so existing prompts keep working.
-  `--json` and `init --title` have no faithful mapping and fail with a compatibility error.
-- Legacy usage is stored as an attempt labelled `legacy`. It never overrides the delegation ledger.
+- Workflow's legacy `progress.py` no longer forwards to Progress. With Progress installed and enabled, a legacy call
+  writes nothing, exits 2 with `error PROGRESS_INSTALLED: ...` and names the Progress command to use. Switch old
+  prompts and scripts to `.specify/extensions/progress/scripts/progress.py`.
+- Workflow's `status` carries Progress's one text status line as `progress_status`.
 - Workflow's lean run status reads `progress runs --json` (schema `progress.runs.v1`).
 - Two optional `progress:` keys in `.specify/workflow.yml`, applied by the installer: `hook_wiring: native` writes
   hooks that run `scripts/hook.py` directly instead of through Spec Kit's dispatcher (about half the time per tool
@@ -87,6 +88,9 @@ skill's upstream `SKILL.md` is not vendored. The README screenshots stay in the 
 - Codex fields and the stop event of a background child are unverified against a running host.
 - A session must be bound to a feature before its hooks are recorded. If the report does not update, start with
   [troubleshooting](../../extensions/progress/README.md#report-is-not-updating).
+- Deprecated: the v2 status document (`progress status --json --schema v2`) and the classic layout
+  (`progress theme --layout classic`). Both still work and will be removed in a later release. Read
+  `progress status --json` (`sanduq.progress.v3`) and use `progress theme --layout timeline`.
 
 ## More
 
