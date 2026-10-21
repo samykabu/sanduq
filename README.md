@@ -185,6 +185,22 @@ python .specify/extensions/workflow/scripts/workflow.py migrate --feature specs/
 The claim's `project_sync.command` is now `workflow.py project-sync`. See
 [upgrades](docs/start/upgrades.md#upgrade-to-workflow-1160) for what changes.
 
+## Upgrade to Workflow 1.17.0 (round 4)
+
+Workflow 1.17.0 ships with Scope 1.10.0, Assure 2.6.0, User Manual 1.8.0, PR 4.5.0, Project 2.5.0,
+Illustrate 2.7.0, Memory 2.5.0 and Progress 1.5.0. It fixes three bugs that stopped managed features in
+1.16.0: a rendered spec could not bind at Specify, the PR stage of a lean feature failed for missing
+prerequisites, and Memory never queued a managed feature for archiving. In managed projects Workflow now
+runs Memory's session check in every claim. Finish any active Memory archive run, update Memory first,
+upgrade, then run Memory's `enable` once:
+
+```bash
+specify extension update memory
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.17.0 --apply
+```
+
+See the [round 4 migration table](docs/start/upgrades.md#round-4-migration-workflow-1170) for every change.
+
 ## Can I use this?
 
 | Package | License | Commercial use |

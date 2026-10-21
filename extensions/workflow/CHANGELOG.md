@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## [1.17.0] - 2026-10-21
+
+Optimization round 4. No renames.
 
 - `reconcile` accepts an owned hook that Spec Kit (`extension add`/`update`) or Memory's installer registered again with `enabled: true`: apply disables it again and journals the new entry; restore keeps it. A disabled entry edited after reconcile is still refused with `HOOK_CHANGED_SINCE_RECONCILE`. Re-enabling an owned hook by hand is reversed by the next reconcile.
 - One hook-ownership rule (`reconcile.managed_hook`) for reconcile and doctor. Doctor's `DUPLICATE_STAGE_OWNER` names the reconcile command.

@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## [1.8.0] - 2026-10-21
+
+Optimization round 4. No renames.
 
 Optimization round 4.
 

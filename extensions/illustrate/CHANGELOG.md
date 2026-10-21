@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## [2.7.0] - 2026-10-21
+
+Optimization round 4. No renames.
 
 - Fixed: the opt-in post-write check no longer passes silently when the hook's Python has no PyYAML. It reads
   `illustrate.hooks.self_check` in block or flow form without PyYAML. When it cannot read the setting (invalid YAML,

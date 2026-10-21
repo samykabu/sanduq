@@ -1,6 +1,16 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Issue #99 (finalization loops): Project Sync binding projection in receipts, workflow.py project-sync and sync-amend, legacy raw hashes converted only after verification, document freshness keeps declared outputs out of its inputs, finalization order and lean adoption documented. Two Opus streams reviewed by the orchestrating session and by Codex gpt-6.1-sol (findings fixed) on 2026-10-20; full workflow suite (only the 18 known local failures), Assure, User Manual and scripts suites, two-host smoke install. Publish after main CI."
+  "versions": {
+    "scope": "1.10.0",
+    "assure": "2.6.0",
+    "user-manual": "1.8.0",
+    "pr": "4.5.0",
+    "project": "2.5.0",
+    "illustrate": "2.7.0",
+    "memory": "2.5.0",
+    "progress": "1.5.0",
+    "workflow": "1.17.0"
+  },
+  "status": "ready",
+  "note": "Optimization round 4: naming kept (user decision), Workflow owns Memory session/prepare hooks in managed projects, shared remote parser, fixes from six reviews and a Codex cross-check, and eight bugs found by four live managed runs (B1-B7, board status reset). Ten Opus streams plus S-FIX, reviewed by the orchestrating session; every suite passes locally except three machine-only link-rollback tests; live run 4 PASS on the D3 gate. Upstream dev-tools 1.3.0, illustration-tools 3.7.0, agent-tools 1.6.2 vendored. Publish after main CI."
 }

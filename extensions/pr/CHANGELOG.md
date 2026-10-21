@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## [4.5.0] - 2026-10-21
+
+Optimization round 4. No renames.
 
 Round 4.
 

@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## [2.5.0] - 2026-10-21
+
+Optimization round 4. No renames.
 
 Round 4 (D3, Memory side: Sanduq Workflow owns the session and prepare hooks).
 

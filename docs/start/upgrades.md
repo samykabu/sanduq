@@ -21,7 +21,7 @@ transactional upgrade, substituting the published version:
 
 ```bash
 python .specify/extensions/workflow/scripts/upgrade.py --version <version>
-python .specify/extensions/workflow/scripts/upgrade.py --version <version> --apply
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.17.0 --apply
 python .specify/extensions/workflow/scripts/workflow.py doctor --project
 ```
 
@@ -160,9 +160,10 @@ added. What changes:
 - **Lean execution** is unchanged; the [operating guide](../workflow/operating-guide.md#adopting-lean-execution)
   now says how to adopt it.
 
-## Round 4 migration
+## Round 4 migration (Workflow 1.17.0)
 
-Round 4 changes no extension ID, command name or policy key. Finish or recover any active Memory
+The round ships Workflow 1.17.0, Scope 1.10.0, Assure 2.6.0, User Manual 1.8.0, PR 4.5.0, Project 2.5.0,
+Illustrate 2.7.0, Memory 2.5.0 and Progress 1.5.0. Round 4 changes no extension ID, command name or policy key. Finish or recover any active Memory
 archive run first (`archive.py status`). Then update Memory before Workflow, and run Memory's
 `enable` once:
 

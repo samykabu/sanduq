@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## [1.5.0] - 2026-10-21
+
+Optimization round 4. No renames.
 
 - Deprecated: the v2 status document (`progress status --json --schema v2`) and the classic layout
   (`progress theme --layout classic`). Both still work in this release and will be removed in a later one. Workflow
