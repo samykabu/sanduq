@@ -265,7 +265,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=Path.cwd())
     parser.add_argument('--feature', required=True)
-    parser.add_argument('--parent', type=int, required=True)
+    parser.add_argument('--parent', type=int, required=True, help='parent issue number, e.g. 14 (not owner/repo#14)')
     parser.add_argument('--dependencies', type=Path, help='JSON task-ID dependency mapping, explicitly {} if independent')
     parser.add_argument('--phase', help='Create and link only the tasks under this "## <heading>" of tasks.md (phase-lazy issue sync)')
     parser.add_argument('--sync-states', action='store_true', help='Update already-linked issue states from completed tasks; never create issues')
