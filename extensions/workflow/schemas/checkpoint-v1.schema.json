@@ -102,6 +102,12 @@
       "type": "array", "items": {"type": "object"}
     },
     "head": {"type": "string"},
+    "memory_session": {
+      "description": "The last Memory session handoff a claim ran (round 4, W14), recorded only when it neither blocked nor returned work to dispatch. A claim in another session, or at Scope or Specify, runs it again.",
+      "type": "object", "required": ["session_id", "status", "at"],
+      "properties": {"session_id": {"type": "string"}, "status": {"type": "string"},
+                     "at": {"type": "string", "format": "date-time"}}
+    },
     "execute_protocol": {
       "description": "The Execute protocol last printed in full by a claim: its files and the digest of their content. An Execute claim with the same digest names the files instead of printing them (1.15.0+).",
       "type": "object",

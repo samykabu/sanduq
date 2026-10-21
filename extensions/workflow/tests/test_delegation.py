@@ -3677,5 +3677,57 @@ class DelegationTests(unittest.TestCase):
         self.assertIsNone(dispatch.find_run(ledger, 'codex-1')['replaces_run_id'])
 
 
+class HealthCacheTests(unittest.TestCase):
+    """W6: a claim reuses a green delegation probe; a miss, a red result or a changed key probes again."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name).resolve()
+        self.driver = self.root / '.agents/skills/delegate-task/delegate.mjs'
+        self.driver.parent.mkdir(parents=True)
+        for name in delegation.SKILL_FILES:
+            (self.driver.parent / name).parent.mkdir(parents=True, exist_ok=True)
+            (self.driver.parent / name).write_text(name, encoding='utf-8')
+        self.green = {'ok': True, 'driver': str(self.driver), 'harnesses': {'codex': True, 'claude': False},
+                      'notices': ['once']}
+
+    def health(self, result=None):
+        with patch.object(delegation, 'doctor', return_value=result or self.green) as probe:
+            return delegation.cached_health(self.root, 'codex', 'project'), probe.call_count
+
+    def test_a_second_claim_makes_no_probe(self):
+        first, calls = self.health()
+        self.assertEqual((calls, first['notices']), (1, ['once']))
+        second, calls = self.health()
+        self.assertEqual(calls, 0)
+        self.assertTrue(second['cached'])
+        self.assertEqual(second['notices'], [])  # notices are reported once, by the probe that raised them
+
+    def test_a_changed_driver_copy_or_tool_probes_again(self):
+        self.health()
+        (self.driver.parent / 'SKILL.md').write_text('changed', encoding='utf-8')
+        self.assertEqual(self.health()[1], 1)
+        with patch.object(delegation.shutil, 'which', side_effect=lambda name: '/elsewhere/' + name):
+            self.assertEqual(self.health()[1], 1)
+
+    def test_a_red_result_or_no_cli_is_not_cached(self):
+        for result in ({'ok': False, 'error': 'NODE_MISSING'},
+                       {**self.green, 'harnesses': {'codex': False, 'claude': False}}):
+            self.health(result)
+            self.assertFalse((self.root / delegation.HEALTH_CACHE).exists())
+            self.assertEqual(self.health(result)[1], 1)
+
+    def test_expiry_and_a_start_failure_probe_again(self):
+        self.health()
+        path = self.root / delegation.HEALTH_CACHE
+        stored = json.loads(path.read_text(encoding='utf-8'))
+        stored['at'] -= delegation.HEALTH_TTL + 1
+        path.write_text(json.dumps(stored), encoding='utf-8')
+        self.assertEqual(self.health()[1], 1)
+        delegation.forget_health(self.root)
+        self.assertEqual(self.health()[1], 1)
+
+
 if __name__ == '__main__':
     unittest.main()

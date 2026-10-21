@@ -18,6 +18,7 @@ import lean_policy  # noqa: E402
 import lifecycle  # noqa: E402
 import workflow as w  # noqa: E402
 from test_receipt_contract import Harness, checkpoint_validator  # noqa: E402
+import lifecycle_snapshot  # noqa: E402
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'scripts/workflow.py'
 
@@ -37,8 +38,17 @@ class Base(Harness):
         receipt['effort_score'] = score
         return receipt
 
+    def run_object(self):
+        # W22/X25: the started run, and below each lifecycle prefix, is built once per class and starting tree.
+        return lifecycle_snapshot.reuse(self, lambda: Harness.run_object(self), lambda: w.Run(self.root, self.feature))
+
     def advance(self, run, last, receipts=None):
-        """Claim and complete every stage up to and including `last`."""
+        """Claim and complete every stage up to and including `last` (a copy when this class already did it)."""
+        key = (last, json.dumps(receipts or {}, sort_keys=True))
+        lifecycle_snapshot.reuse(self, lambda: self.advance_fresh(run, last, receipts), lambda: None, key)
+
+    def advance_fresh(self, run, last, receipts=None):
+        """`advance` that always runs the stages, for a test that observes them (patches, counters)."""
         receipts = receipts or {}
         while True:
             claim = run.claim(self.usage(), finalize=True)
@@ -456,7 +466,7 @@ class DoctorCacheTests(Base):
             calls.append(kwargs)
             return real(*args, **kwargs)
         with patch.object(w, 'doctor', counting):
-            self.advance(run, 'specify')
+            self.advance_fresh(run, 'specify')
             self.assertEqual(len(calls), 1)
             cache = w.read(self.root / w.DOCTOR_CACHE)
             self.assertTrue(cache['result']['ok'])

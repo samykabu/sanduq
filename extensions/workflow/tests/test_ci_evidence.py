@@ -1,8 +1,10 @@
 """CI verification runs read as evidence (workflow 1.6.0, B4): the A9a plan contract, no network."""
 import copy
+import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -137,6 +139,15 @@ class RecordedRunTests(unittest.TestCase):
         # The same run under another prefix is not found.
         evidence = ce.collect(copy.deepcopy(client), 'acme/app', 900, prefix='other-plan')
         self.assertIsNone(evidence['plan'])
+
+
+class GhTimeoutTests(unittest.TestCase):
+    def test_a_hung_gh_call_is_an_evidence_error(self):
+        # X21: no timeout let a hung gh stall the gate.
+        with mock.patch.object(ce.subprocess, 'run', side_effect=subprocess.TimeoutExpired('gh', ce.GH_TIMEOUT)) as run:
+            with self.assertRaisesRegex(ce.EvidenceError, 'GitHub API repos/a/b/actions/runs/1: timed out'):
+                ce.GhClient().api('repos/a/b/actions/runs/1')
+        self.assertEqual(run.call_args.kwargs['timeout'], ce.GH_TIMEOUT)
 
 
 if __name__ == '__main__':

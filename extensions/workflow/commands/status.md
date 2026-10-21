@@ -1,5 +1,5 @@
 ---
-description: 'Shows a feature''s stage, claim, receipts, blockers and evidence freshness without changing anything. Use when checking progress, or for "where is this feature".'
+description: 'Prints the workflow record of one issue-bound feature: stage, active claim, receipts, blockers and evidence freshness; read-only. Use when asked which stage a feature is in or what blocks it, or for "where is this feature". For the live progress report use speckit.progress.status.'
 ---
 
 # Sanduq Workflow: status

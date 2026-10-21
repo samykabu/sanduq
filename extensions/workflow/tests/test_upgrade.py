@@ -11,6 +11,7 @@ import delegate_dispatch as dispatch
 import delegation
 import workflow as w
 import test_workflow as fixture
+import test_install as fixture_install
 
 
 class UpgradeCITests(unittest.TestCase):
@@ -155,3 +156,30 @@ class UpgradeCITests(unittest.TestCase):
         self.assertEqual(sorted(refused), ['abandon', 'collect', 'reassign', 'recover', 'start'])
         self.assertTrue(all(error.startswith('WORKFLOW_UPGRADE_IN_PROGRESS') for error in refused.values()))
         self.assertEqual(ledger.read_bytes(), original)
+
+    def test_successful_upgrade_keeps_the_newest_three_zips(self):
+        old = fixture_install.fake_backups(self.root, 4)
+        result = upgrade.upgrade(self.root, '1.1.1', apply=True, runner=lambda *args: None)
+        self.assertEqual(result['backups']['zips'], 3)
+        self.assertTrue((Path(result['backup']) / 'before.zip').is_file())
+        self.assertEqual([path.is_file() for path in old], [False, False, True, True])
+        self.assertTrue(all((path.parent / 'result.json').is_file() for path in old))
+
+    def test_failed_upgrade_prunes_no_backup(self):
+        old = fixture_install.fake_backups(self.root, 4)
+
+        def runner(root, args, log):
+            if args[0] == sys.executable:
+                raise w.WorkflowError('INSTALL_ROLLED_BACK: simulated')
+        with self.assertRaisesRegex(w.WorkflowError, 'WORKFLOW_UPGRADE_ROLLED_BACK'):
+            upgrade.upgrade(self.root, '1.1.1', apply=True, runner=runner)
+        self.assertTrue(all(path.is_file() for path in old))
+
+    def test_upgrade_refuses_while_a_memory_archive_run_is_active(self):
+        fixture_install.memory_archive_run(self.root)
+        commands = []
+        with self.assertRaisesRegex(w.WorkflowError, 'MEMORY_ARCHIVE_ACTIVE: archive run a{32} is not finished'):
+            upgrade.upgrade(self.root, '1.1.1', apply=True, runner=lambda root, args, log: commands.append(args))
+        self.assertEqual(commands, [])
+        self.assertFalse((self.root / '.specify/workflow/backups/upgrades').exists())
+        self.assertFalse((self.root / '.specify/workflow/runtime/upgrade.lock').exists())

@@ -121,5 +121,17 @@ class RuleInventoryTests(unittest.TestCase):
         self.assertEqual(hits, [])
 
 
+class CommandDescriptionTests(unittest.TestCase):
+    def test_frontmatter_description_equals_the_manifest(self):
+        # D1: the catalog reads extension.yml, the host reads the frontmatter; they must say the same.
+        import yaml
+        root = ROOT / 'extensions/workflow'
+        manifest = yaml.safe_load((root / 'extension.yml').read_text(encoding='utf-8'))
+        for command in manifest['provides']['commands']:
+            text = (root / command['file']).read_text(encoding='utf-8')
+            front = yaml.safe_load(text.split('---', 2)[1])
+            self.assertEqual(front['description'], command['description'], command['name'])
+
+
 if __name__ == '__main__':
     unittest.main()

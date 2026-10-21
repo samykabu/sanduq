@@ -130,7 +130,7 @@ def stale_after(root, feature, policy, touched_paths):
             continue
         status = receipt_status(root, feature, stage, receipt, policy)
         if not status['current']:
-            report.append({'stage': stage, 'recovery': recovery_recipe(feature, stage, status, policy, receipt)})
+            report.append({'stage': stage, 'recovery': recovery_recipe(feature, stage, status, policy, receipt, root)})
     return report
 
 

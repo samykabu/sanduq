@@ -11,7 +11,7 @@ from pathlib import Path
 import yaml
 from packaging.version import Version
 from workflow import WorkflowError, ensure_local_excludes, load_policy, locked, read, registry, require, write
-from install import command, delegation_preflight, managed_files, restore, snapshot
+from install import command, delegation_preflight, managed_files, memory_archive_preflight, prune_backups, restore, snapshot
 
 REPOSITORY = 'https://github.com/samykabu/sanduq'
 
@@ -45,6 +45,7 @@ def upgrade(root, version, apply=False, packages=None, runner=command, preserve_
             # waits out earlier ones and refuses while any attempt is live, so a
             # rollback can never overwrite a running attempt's record.
             delegation_preflight(root)
+            memory_archive_preflight(root)
             backup = root / '.specify/workflow/backups/upgrades' / uuid.uuid4().hex
             before = snapshot(root, backup)
             delegation_before = load_policy(root)['delegation']
@@ -99,6 +100,7 @@ def upgrade(root, version, apply=False, packages=None, runner=command, preserve_
                     result[key] = installed[key]
             result.update(applied=True, backup=str(backup), commands=log)
             write(backup / 'result.json', {'ok': True, **result})
+            result['backups'] = prune_backups(root)
             return result
         except Exception as error:
             write(backup / 'result.json', {'ok': False, 'error': str(error), 'commands': log})

@@ -14,7 +14,6 @@ import subprocess
 import sys
 import time
 import unicodedata
-import urllib.parse
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -23,7 +22,7 @@ from types import SimpleNamespace
 
 # Also supports importlib loading directly from the canonical source tree.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from sanduq_hash import eol_drift, portable_files, text_attributes
+from sanduq_hash import eol_drift, portable_content, portable_files, text_attributes
 import sanduq_ci
 import skill_inventory
 import source_key as sk
@@ -33,6 +32,13 @@ import evidence_snapshot
 import execution_tools
 import lifecycle
 import memory_handoff
+try:
+    import sanduq_remote
+except ModuleNotFoundError:  # the source tree; package.py copies it into scripts/
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'shared'))
+    import sanduq_remote
+# Moved to the shared module (round 4, D4); re-exported for Scope's workflow_policy, memory_handoff and the tests.
+from sanduq_remote import _normalize_path_remote, _strip_dotgit, normalize_remote_url, same_github_repository
 
 import yaml
 from packaging.specifiers import SpecifierSet
@@ -270,12 +276,6 @@ def operation():
         _OPERATION = None
 
 
-def clear_caches():
-    """Drop the current operation's memo (no-op outside one)."""
-    if _OPERATION is not None:
-        _OPERATION.clear()
-
-
 def _memo(kind, root, compute):
     if _OPERATION is None:
         return compute()
@@ -325,22 +325,9 @@ def github_repository(root):
     """
     remote = origin_url(root)
     require(remote is not None, 'GIT_ERROR: no remote.origin.url')
-    normalized = normalize_remote_url(remote)
-    match = re.fullmatch(r'github\.com(?::\d+)?/([^/]+/[^/]+)', normalized)
-    require(match, 'GITHUB_REMOTE_REQUIRED')
-    return match[1]
-
-
-def same_github_repository(a, b):
-    """Case-insensitive equality for two `owner/repo` strings, either of
-    which may be `None` (no GitHub remote resolved at all). GitHub
-    repository names are not case sensitive, but a checkpoint's `issue`
-    field and this repository's own remote may disagree only in case
-    (round 2, finding N1) -- comparing them with `==` would treat that as
-    a different repository and refuse, or (in `relocate`) treat it as a
-    rename that needs an explicit new issue.
-    """
-    return a is not None and b is not None and a.lower() == b.lower()
+    slug = sanduq_remote.github_slug(remote)
+    require(slug, 'GITHUB_REMOTE_REQUIRED')
+    return slug
 
 
 def previous_branch(root):
@@ -357,90 +344,6 @@ def previous_branch(root):
     return value if result.returncode == 0 and value and value != '@' else None
 
 
-def _strip_dotgit(path):
-    """Drop one trailing `.git` (case-insensitively -- real hosts vary), once."""
-    return path[:-4] if path[-4:].lower() == '.git' else path
-
-
-def _normalize_path_remote(path):
-    """A local-filesystem remote (a bare path, `file://`, a Windows drive path):
-    fold separator style only, never case -- these are real filesystem paths,
-    and folding case could merge two distinct case-sensitive paths into one
-    identity (round 1, finding 3). The one exception is a leading Windows
-    drive letter (`C:`/`c:`), which is folded to lower case: unlike the rest
-    of the path, a drive letter genuinely is case-insensitive on Windows,
-    so `C:/repos/App` and `c:/repos/App` name the same location (round 2,
-    LOW, optional).
-    """
-    path = path.replace('\\', '/')
-    while len(path) > 1 and path.endswith('/'):
-        path = path[:-1]
-    path = _strip_dotgit(path)
-    drive = re.match(r'[A-Za-z]:(?=/|$)', path)
-    if drive:
-        path = drive.group().lower() + path[drive.end():]
-    return path
-
-
-def normalize_remote_url(url):
-    """Fold scheme, credential, case and port-vs-path differences that name
-    the same remote (round 1, finding 3 -- see the earlier revision's
-    docstring for the original rationale, which still holds for the host
-    and case handling below).
-
-    ``https://user:pass@Github.com/Acme/App.git``, ``git@github.com:Acme/App.git``
-    and ``ssh://git@github.com/Acme/App/`` all normalise to ``github.com/Acme/App``:
-    the scheme and any embedded credentials carry no identity, the host is
-    case-insensitive by DNS convention (so it is lowered, and a trailing
-    root ``.`` is folded), and a trailing ``.git``/``/`` is cosmetic. The
-    repository *path* keeps its case.
-
-    A real URL is parsed with `urllib.parse` rather than an ad-hoc regex:
-    its `.hostname`/`.port` correctly separate a userinfo trick
-    (``https://github.com@evil.com/...`` is ``evil.com``, not
-    ``github.com``) and correctly reject a malformed one
-    (``https://evil.com:github.com/...`` has a non-numeric "port" and is
-    refused down to the opaque, unfolded fallback below -- never
-    misread as a path). An explicit, resolvable port is kept as
-    ``host:port``, distinct from a URL with no port at all: an SSH URL's
-    ``:22`` is a port, never the start of the path, which a shared regex
-    for both the URL and the legacy SCP-shorthand forms could not tell
-    apart from a path that happens to start with a numeric segment (the
-    ``ssh://host:22/team/app`` vs ``https://host/22/team/app`` collision
-    this replaces). Anything with no scheme and no resolvable host --
-    SCP shorthand (``[user@]host:path``, but never a single-letter
-    "host" immediately followed by ``/`` or ``\\``, which is a Windows
-    drive letter, not a hostname) or a bare local path -- falls through to
-    ``_normalize_path_remote``, which never folds case.
-    """
-    url = url.strip()
-    parts = urllib.parse.urlsplit(url)
-    if parts.scheme == 'file':
-        return _normalize_path_remote(parts.path or url)
-    if parts.scheme and parts.netloc:
-        try:
-            host = parts.hostname
-            if host is None:
-                raise ValueError('no host')
-            host = host.rstrip('.').lower()
-            port = parts.port
-            # A port equal to its scheme's well-known default carries no
-            # identity (round 2, LOW, optional): ssh://host:22/... and
-            # ssh://host/... (or https://host:443/...) name the same thing.
-            if port and port != {'ssh': 22, 'https': 443, 'http': 80}.get(parts.scheme):
-                host += ':' + str(port)
-            return host + '/' + _strip_dotgit(parts.path.strip('/'))
-        except ValueError:
-            pass  # malformed (e.g. a non-numeric port): fall through, unfolded
-    if '://' not in url:
-        scp = re.fullmatch(r'(?:[^@/\s]*@)?([^@/:\s]+):(.+)', url)
-        if scp:
-            host, path = scp.groups()
-            if not (len(host) == 1 and host.isalpha()):  # else a Windows drive letter, not SCP
-                return host.rstrip('.').lower() + '/' + _strip_dotgit(path.rstrip('/'))
-    return _normalize_path_remote(url)
-
-
 def normalized_remote(root):
     """The normalised `origin` URL, or None when no remote is configured.
 
@@ -454,11 +357,7 @@ def normalized_remote(root):
 
 def origin_url(root):
     """The raw `remote.origin.url`, or None when it is not configured (memoised per operation)."""
-    def read_url():
-        result = subprocess.run(['git', 'config', '--get', 'remote.origin.url'], cwd=root,
-                                capture_output=True, text=True, encoding='utf-8')
-        return result.stdout.strip() if result.returncode == 0 else None
-    return _memo('origin', root, read_url)
+    return _memo('origin', root, lambda: sanduq_remote.origin_url(root))
 
 
 def root_commit_sha(root):
@@ -1099,9 +998,12 @@ def recorded_sync_fields(root, label, feature, old_hash, entry):
         revs = subprocess.run(['git', 'rev-list', '-n', '50', 'HEAD', '--', label], cwd=root, capture_output=True,
                               text=True).stdout.split()
         old = None
+        attribute = text_attributes(root, [label]).get(label)
         for rev in ['HEAD'] + revs:
             shown = subprocess.run(['git', 'show', rev + ':' + label], cwd=root, capture_output=True)
-            if not shown.returncode and hashlib.sha256(shown.stdout).hexdigest() == old_hash:
+            # The receipt hashed portable bytes (CRLF folded), so a CRLF blob must be folded the same way.
+            if not shown.returncode and hashlib.sha256(
+                    portable_content(label, shown.stdout, attribute)).hexdigest() == old_hash:
                 old = shown.stdout
                 break
         require(old is not None, 'SYNC_BINDING_MISMATCH: no version of ' + label + ' matches the recorded hash; '
@@ -1135,17 +1037,6 @@ def load_policy(root):
     path = root / '.specify/workflow.yml'
     require(path.is_file(), 'WORKFLOW_INIT_REQUIRED')
     return validate_policy(yaml.safe_load(path.read_text(encoding='utf-8-sig')), root)
-
-
-def scope_decision(policy, estimate, unit):
-    band = policy.get('scope', {}).get('keep_together')
-    if not band:
-        return {'decision': 'needs-assessment', 'reason': 'No project keep-together preference'}
-    require(unit == band['unit'], 'SCOPE_UNIT_MISMATCH')
-    require(type(estimate) in (int, float) and estimate >= 0, 'SCOPE_ESTIMATE_INVALID')
-    keep = band['target'] - band['tolerance'] <= estimate <= band['target'] + band['tolerance']
-    return {'decision': 'keep-together' if keep else 'needs-assessment', 'automatic': keep,
-            'estimate': estimate, 'unit': unit, 'policy_digest': digest(band)}
 
 
 def stages(policy, tier=None):
@@ -1383,6 +1274,20 @@ def host_warnings(root):
     return [problem + '; run "' + repair + '" to re-register every installed host' for problem in problems]
 
 
+def progress_wiring_warnings(root):
+    """IP20: native Progress wiring next to a Spec Kit dispatcher entry runs every hook event twice. Any later
+    `specify extension` command re-renders the dispatcher entries."""
+    if (read(root / '.specify/workflow/install-lock.json', {}).get('progress') or {}).get('hook_wiring') != 'native':
+        return []
+    import progress_bridge
+    doubled = [name for files in progress_bridge.HOST_FILES.values() for name in files
+               if (root / name).is_file()
+               and 'speckit.progress.hook' in (root / name).read_text(encoding='utf-8-sig', errors='replace')]
+    return ['PROGRESS_HOOKS_DOUBLE_WIRED: ' + ', '.join(doubled) + " also hold Spec Kit's speckit.progress.hook "
+            'entries next to the native Progress wiring, so each hook event runs twice; run "python '
+            '.specify/extensions/workflow/scripts/install.py --apply"'] if doubled else []
+
+
 def guard_approval_warnings(root):
     """On Codex the guard hook runs only in a trusted project after `/hooks` approval; warn where it would not run.
     A warning, not an error: the worker prohibitions stay in the Execute text either way."""
@@ -1464,11 +1369,13 @@ def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True
     else:
         hooks = yaml.safe_load(hooks_path.read_text(encoding='utf-8-sig')) or {}
         require(isinstance(hooks, dict) and isinstance(hooks.get('hooks'), dict), 'HOOK_CONFIG_INVALID')
+        from reconcile import managed_hook  # lazy: reconcile imports this module
         for event, items in hooks.get('hooks', {}).items():
             require(isinstance(items, list) and all(isinstance(item, dict) for item in items), 'HOOK_LIST_INVALID: ' + event)
             for hook in items:
-                owned = hook.get('extension') in ('assure', 'user-manual', 'superspec', 'speckit-superpowers-bridge', 'project') or hook.get('command') == 'speckit.scope.after-specify' or (hook.get('extension') == 'pr' and event == 'after_implement')
-                if owned and hook.get('enabled', True): errors.append('DUPLICATE_STAGE_OWNER: ' + event + ':' + hook.get('command', ''))
+                if managed_hook(event, hook) and hook.get('enabled', True):
+                    errors.append('DUPLICATE_STAGE_OWNER: ' + event + ':' + hook.get('command', '') +
+                                  '; run "python .specify/extensions/workflow/scripts/reconcile.py --apply"')
     preset_registry = read(root / '.specify/presets/.registry', {}).get('presets', {})
     for preset in ('workflow', 'scope-gate', 'scope-brainstorm'):
         if not (root / '.specify/presets' / preset / 'preset.yml').is_file():
@@ -1477,7 +1384,7 @@ def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True
             errors.append('PRESET_NOT_ENABLED: ' + preset)
     errors += ci_errors(root, policy, preserved_ci)
     if project: errors += project_errors(root, policy)
-    warnings = host_warnings(root) + guard_approval_warnings(root)
+    warnings = host_warnings(root) + guard_approval_warnings(root) + progress_wiring_warnings(root)
     # E9: AGENTS.md is the standing file; CLAUDE.md should import it, not repeat it.
     claude_md = root / 'CLAUDE.md'
     if (root / 'AGENTS.md').is_file() and claude_md.is_file() and \
@@ -1514,6 +1421,9 @@ def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True
               'context': 'Only fresh reliable measurements can trigger context pauses; unavailable or estimated usage is nonblocking outside explicit strict mode'}
     if project and explicit:
         result['skill_inventory'] = skill_inventory_result
+    if explicit:
+        from install import backup_usage  # lazy: only an explicit doctor reports the kept backups (X19)
+        result['backups'] = {**backup_usage(root), 'kept': 'the three newest before.zip'}
     if preflight:
         result['preflight'] = preflight
     return result
@@ -1620,7 +1530,11 @@ def native_run_status(root, feature, state, roots):
             result[key] = state[key]
     if sync_retry(state, feature):
         result['project_sync'] = sync_retry(state, feature)
-    warnings = guard_approval_warnings(root)
+    import progress_bridge
+    line = progress_bridge.status_line(root, feature)  # W21: Progress's own text line, no v2 projection
+    if line is not None:
+        result['progress_status'] = line
+    warnings = guard_approval_warnings(root) + progress_wiring_warnings(root)
     if warnings:
         result['warnings'] = warnings
     return result
@@ -2182,11 +2096,12 @@ def receipt_current(root, feature, stage, receipt, policy=None):
     return receipt_status(root, feature, stage, receipt, policy)['current']
 
 
-def recovery_recipe(feature, stage, status, policy, receipt):
+def recovery_recipe(feature, stage, status, policy, receipt, root=None):
     """The exact commands that make a stale receipt current again (G6).
 
-    Offers `amend` for changed evidence, `revalidate` when a checked route
-    exists for source drift, and otherwise the claim/complete re-record.
+    Offers `sync-amend` first when (with `root`) the drift is a pre-1.16.0 raw hash of the Project Sync state,
+    `amend` for changed evidence, `revalidate` when a checked route exists for source drift, and otherwise the
+    claim/complete re-record.
     """
     at = ' --feature ' + feature
     rerecord = (f'{WORKFLOW_SCRIPT} claim{at} --usage <usage.json> (it claims {stage}; if a claim is active, '
@@ -2202,6 +2117,12 @@ def recovery_recipe(feature, stage, status, policy, receipt):
         return ['Re-record (a changed amendment undermined this receipt): ' + rerecord]
     if reason == 'explicit-drift':
         evidence = set(receipt.get('evidence') or [])
+        state_file = sync_state_label(root) if root is not None else None
+        raw = str((receipt.get('fingerprints') or {}).get(state_file, SYNC_BINDING_PREFIX))
+        if state_file in status.get('paths', []) and not raw.startswith(SYNC_BINDING_PREFIX):
+            # W20: the runtime names the step, so the per-session reading no longer has to.
+            return [f'{WORKFLOW_SCRIPT} sync-amend{at} --reason "<why>" (a receipt recorded before 1.16.0 holds a '
+                    f'raw hash of {state_file}; with no active claim)', 'or re-record: ' + rerecord]
         steps = [f'{WORKFLOW_SCRIPT} amend{at} --stage {stage} --evidence {path} --reason "<why>" '
                  f'--assessment unchanged|changed' for path in status.get('paths', []) if path in evidence]
         if any(path not in evidence for path in status.get('paths', [])):
@@ -3080,7 +3001,7 @@ class Run:
                 prior_status = receipt_status(self.root, self.relative, earlier, prior, self.policy, tier)
                 require(prior_status['current'], 'EARLIER_STAGE_NOT_CURRENT: ' + earlier + ' (make it current before ' +
                         stage + '). Recovery: ' + ' | '.join(
-                            recovery_recipe(self.relative, earlier, prior_status, self.policy, prior)))
+                            recovery_recipe(self.relative, earlier, prior_status, self.policy, prior, self.root)))
             mark = receipt.get('stale')
             require(not mark or (stage == 'verify' and mark.get('reason') == 'ci-lane-gap'),
                     'RECEIPT_MARKED_STALE: ' + json.dumps(mark) + '; a changed amendment needs a re-record')
@@ -3088,7 +3009,7 @@ class Run:
             if status.get('reason') == 'explicit-drift':
                 raise WorkflowError('EXPLICIT_FINGERPRINTS_CHANGED: ' + json.dumps(status['paths']) +
                                     '; revalidation never re-hashes inputs or evidence. Recovery: ' +
-                                    ' | '.join(recovery_recipe(self.relative, stage, status, self.policy, receipt)))
+                                    ' | '.join(recovery_recipe(self.relative, stage, status, self.policy, receipt, self.root)))
             require(not status['current'] or mark, 'REVALIDATION_NOT_NEEDED: ' + stage + ' is current')
             dirty = sk.dirty_source_paths(self.root)
             require(not dirty, 'SOURCE_TREE_DIRTY: commit or stash source changes first: ' + ', '.join(dirty[:10]))
@@ -3373,7 +3294,7 @@ class Run:
                 if status['current']:
                     continue
                 return {'stage': stage, 'reason': 'inputs-or-evidence-changed',
-                        'recovery': recovery_recipe(self.relative, stage, status, self.policy, receipt)}
+                        'recovery': recovery_recipe(self.relative, stage, status, self.policy, receipt, self.root)}
             if stage == 'pr' and not finalize:
                 return {'stage': None, 'status': 'ready_to_finalize', 'command': 'speckit.workflow.finalize'}
             return {'stage': stage, 'command': state['commands'][stage], 'reason': 'pending'}
@@ -3398,6 +3319,9 @@ class Run:
             if not nxt.get('stage'):
                 return nxt
             stage = nxt['stage']
+            memory = self.memory_session(state, stage, usage['session_id'])
+            if memory is not None:
+                return memory
             if BASE_STAGES.index(stage) >= BASE_STAGES.index('execute'):
                 preflight = lean_preflight(self.root, self.policy)
                 require(not preflight or preflight['ok'], 'LEAN_PREFLIGHT_FAILED: ' + json.dumps(preflight))
@@ -3420,9 +3344,9 @@ class Run:
             if self.policy['delegation']['enabled'] and not coordinator_owned:
                 # Side effects only once a stage will be claimed: a rejected claim
                 # leaves tasks.md and every skill location untouched.
-                from delegation import annotate_tasks, doctor as delegation_doctor, health_error
-                delegation_health = delegation_doctor(self.root, active_host(self.root), install=True,
-                                                      scope=self.policy['delegation']['install_scope'])
+                from delegation import annotate_tasks, cached_health, health_error
+                delegation_health = cached_health(self.root, active_host(self.root),
+                                                  self.policy['delegation']['install_scope'])
                 require(delegation_health['ok'], health_error(delegation_health))
                 require(any(delegation_health['harnesses'].values()),
                         'DELEGATE_AGENT_CLI_UNAVAILABLE: no supported Codex or Claude CLI')
@@ -3509,6 +3433,20 @@ class Run:
                 # Reported to the caller only; the checkpoint keeps the claim itself.
                 claimed['notices'] = notices
             return claimed
+
+    def memory_session(self, state, stage, session_id):
+        """W14: the session handoff Memory's before_specify hook ran, now run by the claim under the dispatch lock it
+        holds, at Scope, Specify and the first claim of a session. A blocked result, or Memory work to dispatch first,
+        is returned instead of a stage; otherwise the run is recorded (saved with the claim) and None goes on."""
+        if stage not in ('scope', 'specify') and (state.get('memory_session') or {}).get('session_id') == session_id:
+            return None
+        result = memory_handoff.handoff(SimpleNamespace(**globals()), self.root, 'session', lock=False)
+        if result['status'] in ('blocked', 'dispatch'):
+            return {'stage': None, 'status': 'memory_' + result['status'], 'ok': result['status'] != 'blocked',
+                    'memory_handoff': result,
+                    'next': 'run memory_handoff.actions in order, then claim again'}
+        state['memory_session'] = {'session_id': session_id, 'status': result['status'], 'at': now()}
+        return None
 
     def rendered_spec(self):
         """The analysis hash of a spec.md Scope rendered (`<!-- sanduq-scope:rendered <sha256> -->`), else None."""

@@ -15,8 +15,8 @@ error, not `recover`'s or `migrate`'s.
 ## status
 
 Run `status --feature ...` and summarize receipts, active claim, blockers, drift, the profile
-and skipped stages. When Progress is installed, append its one line
-(`python .specify/extensions/progress/scripts/progress.py status`). Those facts are the status;
+and skipped stages. When Progress is installed, `progress_status` carries the progress report's one
+line (`progress.py status`); show it as is, without running it again. Those facts are the status;
 a model-written narrative on top is optional explanation, never required, and no agent is
 started to produce it ([reporting.md](reporting.md)).
 
@@ -56,12 +56,9 @@ directly. Policy requires board sync, so only `done` is success; a graceful skip
 phase whose state entry already shows that phase's status records `done` without another
 remote write.
 
-Receipts fingerprint the configured state file (`stateFile`) as the bound feature's entry
-without `status` and timestamps (`sync-binding:v1:<sha256>`). A status-only sync therefore never
-stales a receipt or refuses a completion, before or after `complete`. A changed issue, node ID,
-item ID or sub-issue mapping, or a missing entry, still does; other features' entries do not
-count. This holds for a state file under `.specify/` (the default). A state file elsewhere is
-also source for Verify, Review and Ready, so a status write there is source drift. Managed Project 2.1+ uses the bound parent and never writes task issues. Native
+A board status write never stales a receipt; how receipts bind the state file, and the
+pre-1.16.0 `sync-amend` case, are in [recovery.md](recovery.md#project-sync-state).
+Managed Project 2.1+ uses the bound parent and never writes task issues. Native
 task-issue state syncs once per phase ([execution-report.md](execution-report.md)). Never infer
 human-review completion from generated evidence.
 
@@ -81,15 +78,6 @@ fix or a board status write does not repeat the acceptance chain.
 
 Recover within that order before dispatching another semantic agent:
 
-- A receipt recorded before 1.16.0 holds a raw hash of the state file and stays byte-exact, so a
-  status write stales it. `migrate` converts it; so does `workflow.py sync-amend --feature <f>
-  --reason <text>`, with no active claim. Both first check the entry's issue against
-  `scope-source.json` and its sub-issues against `workflow/task-issues.json`, then find the
-  recorded bytes (working tree, HEAD, or the last 50 commits that touched the file). They refuse
-  when the binding differs, when the recorded bytes are not found, or when a field other than
-  `status` or a timestamp changed since; re-record the stage then. The old and new value and the
-  changed fields go to an `administrative-amendment` lineage entry. No other hash moves. A
-  Clarify change to the state file keeps such a receipt's hash raw.
 - Changed evidence: `amend`. Upstream documents edited after their stage: `revalidate-upstream`.
   Source drift: `revalidate` ([recovery.md](recovery.md)).
 - Re-record a stage only when none of those applies.
@@ -123,7 +111,7 @@ feature scope does not disable implementation task sub-issues.
 
 ## Local Memory entry
 
-Before creating a feature or claiming a stage, run `workflow.py memory-handoff --transition
-session` and honor its exit and returned actions through this dispatcher
+The claim runs Memory's session handoff itself. A claim that returns `memory_handoff` instead of
+a stage (`memory_blocked`, `memory_dispatch`): run its actions in order, then claim again
 ([memory-lifecycle.md](memory-lifecycle.md)). After native Execute completion, honor the
 returned `memory_handoff` before advancing.

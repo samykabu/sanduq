@@ -27,7 +27,8 @@ SuperSpec availability decides which engine runs, never a second round.
 ## Coverage
 
 Read the target spec and the constitution first. Cover at least these five categories, then
-every other material ambiguity, with no question count limit:
+every other material ambiguity. The only count limit is `clarification.max_questions_per_round` when
+it is set: give each question a `priority` (1 is the most important) and defer the rest to the next round:
 
 - Boundary conditions: minimum and maximum values, empty states, edge-of-range input.
 - Error scenarios: a service down, malformed input, partial failures.

@@ -14,6 +14,7 @@ import delegate_dispatch as dispatch
 import workflow as w
 import waivers
 import test_workflow as fixture
+import lifecycle_snapshot
 
 class CIGateTests(unittest.TestCase):
     setUp=fixture.WorkflowTests.setUp
@@ -23,14 +24,17 @@ class CIGateTests(unittest.TestCase):
 
     def ready(self):
         self.policy=w.default_policy(False,False);self.configure()
-        run=w.Run(self.root,self.feature);run.start('acme/app#10')
-        w.write(run.feature/'scope-source.json',{'repo':'acme/app','issue':10})
-        (run.feature/'tasks.md').write_text('- [x] T001 Done behavior',encoding='utf-8')
-        w.write(run.feature/'workflow/task-issues.json',{'repo':'acme/app','parent':10,'feature':self.feature,'tasks':{'T001':{'number':11,'linked':True}}})
-        for stage in w.stages(self.policy):
-            if stage=='pr':break
-            claim=run.claim(self.usage());run.complete(claim['token'],self.receipt(stage))
-        return run
+        def build():
+            run=w.Run(self.root,self.feature);run.start('acme/app#10')
+            w.write(run.feature/'scope-source.json',{'repo':'acme/app','issue':10})
+            (run.feature/'tasks.md').write_text('- [x] T001 Done behavior',encoding='utf-8')
+            w.write(run.feature/'workflow/task-issues.json',{'repo':'acme/app','parent':10,'feature':self.feature,'tasks':{'T001':{'number':11,'linked':True}}})
+            for stage in w.stages(self.policy):
+                if stage=='pr':break
+                claim=run.claim(self.usage());run.complete(claim['token'],self.receipt(stage))
+            return run
+        # W22/X25: the lifecycle runs once per class and starting tree; later tests get a copy.
+        return lifecycle_snapshot.reuse(self, build, lambda: w.Run(self.root, self.feature))
 
     def invoke(self, base):
         output = io.StringIO()

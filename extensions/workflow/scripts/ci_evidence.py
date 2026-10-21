@@ -29,6 +29,7 @@ def plan_key_version(plan):
     version = plan.get('keyVersion') if isinstance(plan, dict) else None
     return version if version in ACCEPTED_KEY_VERSIONS else KEY_VERSION
 DEFAULT_ARTIFACT_PREFIX = 'bootstrap-plan'
+GH_TIMEOUT = 300  # seconds per gh call, artifact downloads included
 SHA = re.compile(r'^[0-9a-f]{40}$')
 KEY = re.compile(r'^[0-9a-f]{64}$')
 
@@ -45,8 +46,12 @@ class GhClient:
     """GitHub REST access through the `gh` CLI (its own authentication, REST budget)."""
 
     def _run(self, endpoint):
-        result = subprocess.run(['gh', 'api', endpoint, '-H', 'Accept: application/vnd.github+json',
-                                 '-H', 'X-GitHub-Api-Version: 2022-11-28'], capture_output=True)
+        try:
+            result = subprocess.run(['gh', 'api', endpoint, '-H', 'Accept: application/vnd.github+json',
+                                     '-H', 'X-GitHub-Api-Version: 2022-11-28'], capture_output=True,
+                                    timeout=GH_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            raise EvidenceError(f'GitHub API {endpoint}: timed out after {GH_TIMEOUT} s') from None
         if result.returncode != 0:
             raise EvidenceError('GitHub API ' + endpoint + ': ' +
                                 result.stderr.decode('utf-8', 'replace').strip()[:500])

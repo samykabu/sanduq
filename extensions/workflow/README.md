@@ -33,7 +33,7 @@ You need Spec Kit, Python 3.10 or later, Git and the GitHub CLI. See
 Add the Sanduq catalog, then add Workflow from your repository root:
 
 ```bash
-specify extension catalog add --name sanduq --priority 10 --install-allowed https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
+specify extension catalog add --name sanduq --priority 1 --install-allowed https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json
 specify extension add workflow
 ```
 
@@ -184,29 +184,23 @@ re-verifying it or waiting to see it refresh is not. Waiting for a worker to fin
 
 ### Old calls while Progress is installed
 
-When Progress is installed, `scripts/progress.py` forwards every subcommand to the Progress CLI and writes no legacy
-state, so older instructions keep working. Each call prints what it always did: the report path, or one `--summary`
-line such as `ok done=0 total=6 pending=4 running=1 blocked=1`.
+When Progress is installed and enabled, `scripts/progress.py` writes nothing and exits 2 with one line that names the
+Progress command to use (on stdout with `--summary`, else on stderr), for example
+`error PROGRESS_INSTALLED: Sanduq Progress maintains the report; instead of "progress.py sync", run "python
+.specify/extensions/progress/scripts/progress.py refresh". Do not retry this call.` Without Progress, or with it
+disabled, the legacy reporter runs as before.
 
-| Legacy call | Progress verbs it runs |
+| Legacy call | Use instead |
 | --- | --- |
-| `init --tasks T --output O [--open]` | `init`; `--open` then opens `index.html`. `--title` is refused |
-| `task --id T --status running [--agent A] [--note N]` | A lane owned by `A` is found or made (`lane new --tasks T --owner A`), `T` is moved into it, then `unblock --all-for T`, `note` when a note is given and `attempt record --lane L --run legacy-T-A --status running` |
-| `task --id T --status done` | The same lane step, `unblock --all-for T`, `attempt record ... --status done --ended <now>` |
-| `task --id T --status blocked --note N` | `block T --by L2` when the note is a lane, task, W or C id such as `L2`, else `block T --by ext:"N"`; plus `attempt record ... --status blocked` |
-| `task --id T --status pending` | `unblock --all-for T`, then `note "T pending" --target T` |
-| `event --message M` | `note M` |
-| `phase --name N --status S [--commit C]` | `note "Phase N: S (C)"` |
-| `pr --url U --status open\|merged` | `note "PR S: U"` |
-| `sync` | `refresh` |
-| `usage --id T` or `--overhead LABEL` | `attempt record ... --usage-json` with the counters Workflow's own usage reader produced, and a `note` when usage is unavailable |
-| any call with `--json` | Refused with a compatibility error and exit 2. Use `progress.py status --json` |
-| `--summary` | Kept |
+| `init` | `progress init` |
+| `task` | check the task box in `tasks.md` |
+| `usage` | nothing: hooks and delegate results record usage |
+| `sync` | `progress refresh` |
+| `phase` | nothing: Progress reads phases from `tasks.md` |
+| `pr` | `progress note "PR open: <url>"` |
+| `event` | `progress note "<text>"` |
 
-An unknown task id prints `error Unknown task ID: T099` and exits 2. A legacy request with no faithful mapping fails
-with a compatibility error; it never succeeds silently. Do not retry it. Use the Progress verb named above.
-
-Legacy attempts carry origin `legacy` and never override the delegation ledger. Lean run status
+`workflow.status` carries Progress's one status line as `progress_status`. Lean run status
 (`workflow.py status --runs`) reads Progress's `runs --json` when available. The rules are in
 `skills/workflow/references/reporting.md`. The full Progress reference is
 [here](https://github.com/samykabu/sanduq/blob/main/extensions/progress/docs/commands.md).

@@ -475,8 +475,8 @@ def status(root, package_root=None):
 
 def switch(root, target, preview=False, runner=None, package_root=None, replace_unrecognized_aliases=False):
     """Make ``target`` the default host without losing any host's managed skills."""
-    from install import (command, delegation_preflight, install_aliases, alias_edit_errors, restore, review_aliases,
-                         snapshot)
+    from install import (command, delegation_preflight, install_aliases, alias_edit_errors, prune_backups, restore,
+                         review_aliases, snapshot)
     from reconcile import reconcile
     runner = runner or command
     package_root = package_root or PACKAGE
@@ -584,6 +584,7 @@ def switch(root, target, preview=False, runner=None, package_root=None, replace_
                                             'changed': digest_after != digest_before},
                       'checkpoints_to_migrate': migrations(root, digest_after, False, reason, digest_before)}
             write(backup / 'result.json', {'ok': True, 'commands': log})
+            result['backups'] = prune_backups(root)
             return result
         except Exception as exc:
             from install import managed_files

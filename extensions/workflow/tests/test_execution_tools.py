@@ -251,8 +251,10 @@ class PrLintTests(unittest.TestCase):
 
     def test_pr_generate_procedure_lints_before_any_github_write(self):
         text = (Path(__file__).resolve().parents[2] / 'pr/commands/speckit.pr.generate.md').read_text(encoding='utf-8')
-        self.assertLess(text.index('execution_tools.py pr-lint'), text.index('gh pr edit'))
-        self.assertLess(text.index('execution_tools.py pr-lint'), text.index('gh pr create'))
+        # PM21: PR bundles the shared sanduq_pr_lint rule, so the text no longer names execution_tools.py.
+        lint = text.index('lints its closing references')
+        self.assertLess(lint, text.index('gh pr edit'))
+        self.assertLess(lint, text.index('gh pr create'))
         self.assertIn('after a nonzero exit', ' '.join(text.split()))
 
     def test_cli_exit_codes(self):

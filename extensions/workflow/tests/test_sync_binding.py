@@ -277,6 +277,34 @@ class LegacyReceiptTests(Base):
         self.assertEqual(result['amendment']['receipts']['specify']['fields'], ['status'])
         self.assertEqual(result['amendment']['receipts']['specify']['before'], raw)
 
+    def test_w20_the_recipe_for_a_raw_hash_drift_names_sync_amend(self):
+        run = self.run_object()
+        self.legacy(run)
+        self.write_sync(status='Ready')
+        receipt = run.load()['receipts']['specify']
+        status = w.receipt_status(self.root, self.feature, 'specify', receipt, self.policy)
+        recipe = w.recovery_recipe(self.feature, 'specify', status, self.policy, receipt, self.root)
+        self.assertIn('sync-amend --feature ' + self.feature, recipe[0])
+        self.assertIn('re-record', recipe[-1])
+        # Without the root (older callers) the recipe is unchanged.
+        self.assertNotIn('sync-amend', ' '.join(w.recovery_recipe(self.feature, 'specify', status, self.policy, receipt)))
+
+    def test_w11_crlf_history_matches_the_portable_recorded_hash(self):
+        # Project writes its state file with write_text, which is CRLF on Windows; with autocrlf off the
+        # blob keeps CRLF. The receipt hashed the portable (LF) bytes, so history must be folded too.
+        subprocess.run(['git', 'config', 'core.autocrlf', 'false'], cwd=self.root, check=True)
+        run = self.run_object()
+        path = self.root / self.state_file
+        raw = self.legacy(run)
+        path.write_bytes(path.read_bytes().replace(b'\r\n', b'\n').replace(b'\n', b'\r\n'))
+        self.assertEqual(w.fingerprint_files(self.root, [self.state_file])[self.state_file], raw)
+        self.commit_all('recorded bytes, CRLF')
+        self.write_sync(status='Ready')
+        self.commit_all('status only')
+        self.write_sync(status='In progress')
+        result = run.sync_amend('status only')
+        self.assertEqual(result['amendment']['receipts']['specify']['fields'], ['status'])
+
     def test_review_fix_1_history_refuses_a_binding_change(self):
         run = self.run_object()
         raw = self.legacy(run)

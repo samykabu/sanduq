@@ -9,9 +9,9 @@ return to this dispatcher before choosing another feature.
 ## Execute
 
 Native `workflow.py complete` saves the accepted Execute receipt, then runs the Memory handoff
-for Core Implement and SuperSpec Execute. Follow `memory_handoff.actions` in order. An upstream
-hook may already have queued the feature; the adapter keeps that entry byte for byte. Do not
-invoke the prepare hook again. Missing or disabled Memory stays honestly pending. Missing check
+for Core Implement and SuperSpec Execute. Follow `memory_handoff.actions` in order. In a managed
+project the prepare hook is disabled; this handoff queues, with the policy's `default_checks`. An
+existing queue entry is kept byte for byte. Missing or disabled Memory stays honestly pending. Missing check
 selection returns `speckit.memory.prepare`: inspect the implementation, choose existing
 configured checks, and retry:
 
@@ -27,7 +27,10 @@ retry this command without redoing Execute.
 
 ## Session entry
 
-Before creating a feature or claiming a stage, run:
+In a managed project the session hook is disabled. Each claim at Scope or Specify, and the
+first claim of a new session, runs this handoff and returns it instead of a stage when it blocks
+or has work to dispatch (`status: memory_blocked` or `memory_dispatch`). Run it yourself only
+outside a claim:
 
 ```text
 python .specify/extensions/workflow/scripts/workflow.py memory-handoff --transition session
