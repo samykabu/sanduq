@@ -305,3 +305,132 @@ The lifecycle log for #2 records these claims:
 - The clone's #2 branch has uncommitted workflow state: the checkpoint and lifecycle files, plus the paused PR
   claim.
 - #1's run-1 state is committed locally on its own branch.
+
+## Run 3 (worktree HEAD e112a09)
+
+**Verdict: FAIL.** The Memory queue after Execute's `complete` is still empty. A new cross-extension bug (B6)
+blocks it.
+
+Everything else passes. #6 ran Scope through the PR stage. The PR stage's `complete` was accepted (B5 fixed), and
+PR #9 is open and not merged. B4 is fixed: Memory accepted `specs/6-…` and failed later, on B6. Neither
+`speckit.memory.prepare` nor `speckit.memory.session` ran. No claim returned `memory_blocked` or
+`memory_dispatch`. The board guard restores every item it can read.
+
+Evidence is in `<scratch>/run3/`: `p14-*.json`, `upgrade-apply.json`, `install-reapply.json`, `memory-*.json` and
+`transcripts/`.
+
+### Board guard, live (scratch Project #14 "sanduq-r4-initcheck-2", left in place)
+
+The board started with its default Todo, In Progress and Done columns, so init had to add columns. Items before
+init:
+
+- #1 in Todo.
+- #2 in In Progress.
+- #3 in Done. GitHub's default auto-add workflow put this closed sub-issue of #2 on the board.
+- #4 in Done, then **archived**.
+
+`gh project item-list --format json --limit 100000` returned 3 items. **It leaves out archived items.**
+
+`project-init.ps1 -AutoCreateColumns` printed `restored Status on 3 of 3 item(s)` and created Feature
+Specification, Ready, In review, Backlog and Need Clarifications. Afterwards all eight option ids were new:
+
+| Item | Before | After |
+| --- | --- | --- |
+| #1 | Todo | Todo |
+| #2 | In Progress | In Progress |
+| #3 | Done | Done |
+| #4 (archived) | Done | **null**. `node(id)` reports `isArchived: true` with `fieldValueByName: null`, and the item no longer appears in `items(first: 50)` |
+
+**G1: an archived item loses its Status.** The guard reads only what `item-list` returns. It needs a GraphQL read
+of the items that includes archived ones, or a warning that names how many archived items it cannot keep.
+
+### Upgrade (consumer path, versions still unchanged)
+
+Neither `install.py` nor `upgrade.py` has a flag to force a reinstall: their options are `--packages`, `--apply`,
+`--preserve-ci`, `--with` and the alias flags. I first committed #2's workflow state on its branch and checked out
+main. Then:
+
+1. I copied `.specify/extensions/project/config.json` to `run3/project-config.backup.json`.
+2. `specify extension add --dev <pkg> --force` for memory, project and scope.
+3. I restored `config.json`; it is byte-identical afterwards.
+4. Memory `install.py`.
+5. `upgrade.py --version 1.16.0 --packages run3/packages --apply`.
+6. `install.py --packages run3/packages --apply`.
+
+After this, every installed extension was byte-identical to the run-3 packages, ignoring CRLF.
+
+The hooks end as before: `speckit.memory.prepare` and `speckit.memory.session` are `enabled: false`, and `impact`
+is enabled. `doctor --project` returned `ok: true`. Memory asked for renewal, and I re-approved it
+(`9dca9c6f…b4d1`). The upgrade commit is `22a0284` on main, pushed.
+
+### Feature #6 (`--shout`)
+
+The prompt said #3, but the new issue got number **#6**, because #3 and #4 are task sub-issues and #5 is PR #5.
+
+The lifecycle log for #6 records these claims:
+
+- Scope, score 1 on the lite tier.
+- Specify (bind-only). B5: the bind wrote `dependencies: []` to `scope-source.json`. One completion was rejected
+  first.
+- Clarify, with zero questions.
+- Plan. Tasks was skipped because it is merged into Plan.
+- Analyze.
+- Tasks-to-Issues, which created #7 and #8.
+- Execute. Its completion was rejected first with `UPSTREAM_INPUT_CHANGED_DURING_STAGE: greet.py, test_greet.py`:
+  the model had listed the product files as Plan inputs. It recovered through `revalidate-upstream` and was then
+  accepted.
+- Verify, Review (with a reviewer subagent) and Ready.
+- **PR, accepted**: PR #9, head `7b5cec0`, open and not a draft.
+
+Partway through the PR stage, GitHub's GraphQL limit ran out ("API rate limit already exceeded"; the 5,000 per
+hour is shared with my other sessions). The model retried `pr_publish.py` once a minute in a background loop, and
+it published at 12:12:51. This is environmental, but it is the first live run to reach that limit.
+
+| # | Transcript | Tool calls | Turns | Time | Cost | Tokens: input / cache write / cache read / output |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| 1 | `run3/transcripts/01-scope.jsonl` | 21 | 24 | 146 s | $0.77 | 42 / 50,150 / 1,065,068 / 7,934 |
+| 2 | `run3/transcripts/02-continue.jsonl` | 112 (Bash 104, Agent 2) | 105 (3 segments: the session resumed twice after its background tasks) | 1,006 s | $4.47 | 214 / 151,552 / 11,161,663 / 38,743 |
+
+### Memory evidence
+
+- **Memory tool calls per command.** Command 1 made 0. Command 2 made 0 calls to Memory scripts or
+  `memory-handoff`, and invoked no `speckit.memory.*` skill. After the block it made 2 diagnostic reads
+  (`git check-ignore` with a grep, and `sed` on `archive.py`) and appended 1 note to `handoff.md`.
+- **The session handoff ran in every claim.** The session state file was last updated at 12:04:10, the PR claim.
+- **Queue after Execute's `complete`: empty.** The Execute receipt was saved, then `complete` returned `ok: false`
+  with:
+
+  ```text
+  "status": "blocked", "reason": "MEMORY_HELPER_FAILED (1): Ignored artifacts are not recoverable from the checkpoint: ['specs/6-add-a-shout-flag-to-greet/workflow/backups/39e3d7c2e0eb4a24b3d10a30e4afed33.json', 'specs/6-add-a-shout-flag-to-greet/workflow/progress/index.html', 'specs/6-add-a-shout-flag-to-greet/workflow/progress/sanduq-icon.png', 'specs/6-add-a-shout-flag-to-greet/workflow/progress/sanduq-logo-dark.png', 'specs/6-add-a-shout-flag-to-greet/workflow/progress/sanduq-logo.png', 'specs/6-add-a-shout-flag-to-greet/workflow/progress/state.json']"
+  ```
+
+  `archive.py pending` reports `ready`, `needs_verification` and `blocked` all empty. The model reported the block,
+  did not claim the work was queued, and went on to Verify.
+
+### New bug
+
+- **B6 (blocks D3 queueing for every managed feature):** Workflow and Memory disagree on whether a feature folder
+  may hold ignored files. Workflow writes `/specs/*/workflow/backups/` and `/specs/*/workflow/progress/` to
+  `.git/info/exclude` (`extensions/workflow/scripts/workflow.py:2370-2377`). It then writes the progress report
+  and checkpoint backups into those folders during the run. Memory's `queue` collects every file under the spec
+  directory and refuses when any is git-ignored
+  (`extensions/memory/scripts/archive.py:538-540`, `Ignored artifacts are not recoverable from the checkpoint`).
+  Run 2 never got this far, because B4 stopped it first.
+  The fix belongs on one side: Memory skips Workflow's known runtime subfolders (they are not archive content),
+  or Workflow writes them outside `specs/<feature>/`. A test should queue a feature that holds Workflow's
+  progress and backups folders.
+
+### Not done
+
+- I did not try the migration route on #2 (adding `dependencies` by hand to its `scope-source.json` and recording
+  its PR stage again). #6 already showed B5 fixed through the PR stage's `complete`. #2's branch also carries the
+  run-2 extension code, so it would first need main merged in, which marks its receipts stale, and B6 would still
+  block its Memory step.
+
+### State left in place after run 3
+
+- The repository is private and has not been deleted.
+- Projects #12, #13 and #14 are left in place. #14 is the board-guard test; #4 is archived on it with no Status.
+- PR #5 (#2) and **PR #9 (#6)** are open and not merged.
+- The clone is on `6-add-a-shout-flag-to-greet`, with uncommitted workflow state: the checkpoint and lifecycle
+  files and the sync state.
