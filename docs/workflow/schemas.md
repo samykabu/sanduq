@@ -80,10 +80,14 @@ Title: "Sanduq feature checkpoint v1". Required keys: `schema_version`, `run_id`
 `feature`, `issue`, `policy_digest`, `dependency_digest`, `policy`, `commands`, `receipts`,
 `generation`, `active` and `status`.
 
+`schema_version` is the checkpoint's own version, separate from the policy's. Version 2 drops `repo_path`.
+Workflow reads versions 1 and 2 and writes version 2, so the first write after an upgrade migrates a version-1
+checkpoint. Scope reads both.
+
 | Field | Meaning |
 | --- | --- |
 | `repo_identity` | Portable repository identity (1.8.0+): `remote`, `root_commit` and `shallow`. See [Checkpoint identity](state-files.md#checkpoint-identity-and-relocating-a-repository-180). |
-| `repo_path` | Legacy absolute root. Written for older readers, never read by 1.8.0+. |
+| `repo_path` | Version 1 only: the legacy absolute root. Never compared by 1.8.0+; `relocate` records a pre-1.8.0 value as `old_identity.legacy_repo_path`. |
 | `branch`, `target_branch` | The bound feature branch and its target. |
 | `issue` | The bound GitHub issue. |
 | `policy_digest`, `dependency_digest` | Fingerprints compared on load. A changed dependency digest makes `claim` refuse with `DEPENDENCY_CHANGED` until you run `migrate`. |

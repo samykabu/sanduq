@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from workflow import (canonical_path, load_policy, stages, read, require, inside, git, digest, checkpoint_policy_digest, receipt_status,
                       receipt_drift, recovery_recipe, ready_checks, github_repository, verification_check, WorkflowError,
-                      WORKFLOW_SCRIPT, source_fingerprints_of, state_tier)
+                      WORKFLOW_SCRIPT, source_fingerprints_of, state_tier, CHECKPOINT_SCHEMAS)
 import sanduq_ci
 
 
@@ -92,7 +92,8 @@ def check(root, feature, policy, base=None, rules=None, verify_ci_evidence=True,
     directory = inside(root, feature)
     require(directory.is_relative_to(root / 'specs'), 'FEATURE_PATH_INVALID')
     state = read(directory / 'workflow/checkpoint.json', {})
-    require(state.get('feature') == feature and state.get('schema_version') == 1, 'CHECKPOINT_MISSING_OR_WRONG_FEATURE')
+    require(state.get('feature') == feature and state.get('schema_version') in CHECKPOINT_SCHEMAS,
+            'CHECKPOINT_MISSING_OR_WRONG_FEATURE')
     require(not state.get('active'), 'ACTIVE_STAGE_REMAINS')
     if rules['receipts']:
         require(state.get('policy_digest') == checkpoint_policy_digest(state, policy),

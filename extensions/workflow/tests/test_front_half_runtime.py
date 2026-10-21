@@ -645,6 +645,19 @@ class OperationCacheTests(Base):
                        check=True)
         self.assertEqual(w.normalized_remote(self.root), 'github.com/acme/third')
 
+    def test_the_one_git_runner_keeps_the_memo_for_reads_and_drops_it_after_a_write(self):
+        """W26: unchecked git calls go through `run_git`, which applies the same memo rule as `git`."""
+        calls, counting = self.git_calls()
+        with counting, w.operation():
+            w.normalized_remote(self.root)
+            self.assertTrue(w.git_ok(self.root, 'rev-parse', '--git-dir'))
+            self.assertFalse(w.git_ok(self.root, 'check-ref-format', '--branch', 'a..b'))
+            w.normalized_remote(self.root)
+            self.assertEqual(self.count(calls, 'config', '--get', 'remote.origin.url'), 1)
+            self.assertEqual(w.run_git(self.root, 'remote', 'set-url', 'origin',
+                                       'https://github.com/acme/other.git').returncode, 0)
+            self.assertEqual(w.normalized_remote(self.root), 'github.com/acme/other')
+
     def test_load_with_a_recorded_root_commit_skips_the_history_walk(self):
         run = self.run_object()
         calls, counting = self.git_calls()
@@ -857,13 +870,13 @@ class BindOnlyAndLazyIssueTests(Base):
         self.assertEqual((claim['stage'], claim['mode']), ('specify', 'bind-only'))
         argv = shlex.split(claim['scope_command']['command'])[2:]
         self.assertEqual(argv[:2], ['bind', '10'])
-        decisions = sm.workflow_policy._decisions_module()
-        decisions.reconcile = lambda *a, **k: {'version': 1, 'feature': self.feature, 'issue': 'acme/app#10',
-                                               'decisions': []}  # no GitHub: the issue has no decisions
+        decisions = sm.workflow_policy._decisions_module()  # cached per process: patched, never overwritten
+        no_decisions = {'version': 1, 'feature': self.feature, 'issue': 'acme/app#10', 'decisions': []}
         previous = os.getcwd()
         os.chdir(self.root)
         try:
             with patch.object(sm, 'Scope', return_value=app), patch('sys.stdout', new=__import__('io').StringIO()), \
+                    patch.object(decisions, 'reconcile', return_value=no_decisions), \
                     patch.object(sm.workflow_policy, '_decisions_module', return_value=decisions):
                 code = sm.main(argv)
         finally:

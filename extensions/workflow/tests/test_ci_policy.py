@@ -418,7 +418,7 @@ class PolicyIntegrationTests(unittest.TestCase):
         self.assertEqual(w.load_policy(self.root)['ci']['runners']['linux'], ['ubuntu-latest'])
 
     def test_the_runtime_works_from_a_copied_scripts_directory(self):
-        # project-init.sh runs workflow.py out of
+        # Project init (project_init.py) runs workflow.py out of
         # .specify/extensions/workflow/scripts/, a plain copy of this directory
         # with no package layout around it. A shared module reachable only from
         # the source tree makes that invocation die on import, which no
@@ -431,7 +431,7 @@ class PolicyIntegrationTests(unittest.TestCase):
         shutil.copytree(EXTENSIONS / 'workflow/scripts', scripts,
                         ignore=shutil.ignore_patterns('__pycache__'))
         # Installed scripts include package.py's canonical shared-module injection.
-        for helper in ('check_inputs.py', 'evidence_snapshot.py', 'bounded_json.py', 'sanduq_remote.py',
+        for helper in ('check_inputs.py', 'evidence_snapshot.py', 'bounded_json.py', 'sanduq_remote.py', 'sanduq_gh.py',
                        'sanduq_pr_lint.py'):
             shutil.copyfile(EXTENSIONS / 'scripts/shared' / helper, scripts / helper)
         subprocess.run(['git', 'init', '-q'], cwd=copy, check=True, capture_output=True)

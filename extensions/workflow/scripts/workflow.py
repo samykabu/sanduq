@@ -10,6 +10,7 @@ import os
 import random
 import re
 import shlex
+import stat
 import subprocess
 import sys
 import time
@@ -22,7 +23,7 @@ from types import SimpleNamespace
 
 # Also supports importlib loading directly from the canonical source tree.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from sanduq_hash import eol_drift, portable_content, portable_files, text_attributes
+from sanduq_hash import byte_sensitive, eol_drift, portable_content, portable_files, text_attributes
 import sanduq_ci
 import skill_inventory
 import source_key as sk
@@ -44,7 +45,10 @@ import yaml
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 
-SCHEMA = 1
+SCHEMA = 1  # the policy schema
+# The checkpoint has its own version (W27): 2 drops `repo_path`. Readers accept 1 and 2; every write is 2.
+CHECKPOINT_SCHEMA = 2
+CHECKPOINT_SCHEMAS = (1, 2)
 RANGES = {'scope': '>=1.4,<2', 'assure': '>=2.2,<3', 'user-manual': '>=1.2,<2',
           'pr': '>=4.1,<5', 'superspec': '>=1.0.2,<2', 'project': '>=2.1,<3', 'progress': '>=1.0,<2'}
 BASE_STAGES = ['scope', 'specify', 'clarify', 'plan', 'tasks', 'qa_analyze',
@@ -241,16 +245,54 @@ def canonical_path(root, label):
     parts = [part for part in text.split('/') if part not in ('', '.')]
     require(parts and '..' not in parts, 'PATH_OUTSIDE_PROJECT: ' + label)
     canonical = '/'.join(parts)
-    inside(root, canonical)
+    if not _no_link_below(root, parts):
+        inside(root, canonical)
     return canonical
 
 
-def git(root, *args):
-    result = subprocess.run(['git', *args], cwd=root, capture_output=True, text=True, encoding='utf-8')
-    if args and args[0] not in ('rev-parse', 'branch', 'ls-files', 'config', 'rev-list', 'merge-base'):
+REPARSE_POINT = 0x400  # FILE_ATTRIBUTE_REPARSE_POINT: a Windows symlink, junction or mount point
+
+
+def _no_link_below(root, parts):
+    """True when no existing component of `root/parts` below `root` is a link or reparse point, so the path cannot
+    leave the root (W19): one `lstat` per component instead of a full resolve. False means a full resolve decides.
+    Checked on every call and never memoised, so an ancestor replaced by a link mid-operation is still caught."""
+    path = os.fspath(root)
+    for part in parts:
+        if ':' in part or part.endswith(('.', ' ')):
+            return False  # Windows reads these as a stream or trims them
+        path = os.path.join(path, part)
+        try:
+            info = os.lstat(path)
+        except FileNotFoundError:
+            return True  # nothing below a missing component exists
+        except OSError:
+            return False
+        if stat.S_ISLNK(info.st_mode) or getattr(info, 'st_file_attributes', 0) & REPARSE_POINT:
+            return False
+    return True
+
+
+GIT_READS = ('rev-parse', 'branch', 'ls-files', 'config', 'rev-list', 'merge-base', 'check-ref-format', 'show-ref',
+             'show')
+
+
+def run_git(root, *args, **options):
+    """This package's one git runner (W26): unchecked, the caller reads the result."""
+    result = subprocess.run(['git', *args], cwd=root, capture_output=True, **options)
+    if args and args[0] not in GIT_READS and args[:2] != ('worktree', 'list'):
         _wrote(None)  # anything else may move HEAD, the index or the configuration
     elif args[:1] == ('config',) and '--get' not in args and len(args) > 2:
         _wrote(None)
+    return result
+
+
+def git_ok(root, *args):
+    return run_git(root, *args).returncode == 0
+
+
+def git(root, *args):
+    result = run_git(root, *args, text=True, encoding='utf-8')
     require(result.returncode == 0, 'GIT_ERROR: ' + result.stderr.strip())
     return result.stdout.strip()
 
@@ -338,8 +380,7 @@ def previous_branch(root):
     Best-effort: None on a shallow or single-branch checkout, a detached HEAD
     with no prior checkout in this reflog, or any other Git failure.
     """
-    result = subprocess.run(['git', 'rev-parse', '--abbrev-ref', '@{-1}'], cwd=root,
-                            capture_output=True, text=True, encoding='utf-8')
+    result = run_git(root, 'rev-parse', '--abbrev-ref', '@{-1}', text=True, encoding='utf-8')
     value = result.stdout.strip()
     return value if result.returncode == 0 and value and value != '@' else None
 
@@ -372,8 +413,7 @@ def root_commit_sha(root):
     that remote instead, so the truncated history never matters there.
     """
     def walk():
-        result = subprocess.run(['git', 'rev-list', '--max-parents=0', '--reverse', 'HEAD'], cwd=root,
-                                capture_output=True, text=True, encoding='utf-8')
+        result = run_git(root, 'rev-list', '--max-parents=0', '--reverse', 'HEAD', text=True, encoding='utf-8')
         if result.returncode != 0:
             return None
         shas = [line for line in result.stdout.split() if line]
@@ -388,8 +428,7 @@ def is_shallow_clone(root):
     """True/False, or None when Git cannot say (an old Git, or any other
     failure -- treated as "don't know", never as a mismatch)."""
     def ask():
-        result = subprocess.run(['git', 'rev-parse', '--is-shallow-repository'], cwd=root,
-                                capture_output=True, text=True, encoding='utf-8')
+        result = run_git(root, 'rev-parse', '--is-shallow-repository', text=True, encoding='utf-8')
         return {'true': True, 'false': False}.get(result.stdout.strip()) if result.returncode == 0 else None
     return _memo('shallow', root, ask)
 
@@ -436,9 +475,7 @@ def root_commit_still_reachable(root, commit_sha):
     # (read as an option). `^{commit}` additionally refuses a non-commit object.
     if not isinstance(commit_sha, str) or not re.fullmatch(r'[0-9a-f]{40,64}', commit_sha):
         return False
-    result = subprocess.run(['git', 'merge-base', '--is-ancestor', commit_sha + '^{commit}', 'HEAD'], cwd=root,
-                            capture_output=True, text=True, encoding='utf-8')
-    return result.returncode == 0
+    return git_ok(root, 'merge-base', '--is-ancestor', commit_sha + '^{commit}', 'HEAD')
 
 
 def same_remote(a, b):
@@ -629,8 +666,7 @@ def issue_identity(root, issue, gh=None):
     title = unicodedata.normalize('NFKC', item.get('title', '')).casefold()
     slug = re.sub(r'[^\w]+', '-', title, flags=re.UNICODE).strip('-_')[:56].strip('-_') or 'issue'
     name = str(issue) + '-' + slug
-    require(subprocess.run(['git', 'check-ref-format', '--branch', name], cwd=root,
-                           capture_output=True).returncode == 0, 'ISSUE_TITLE_UNSAFE_FOR_BRANCH')
+    require(git_ok(root, 'check-ref-format', '--branch', name), 'ISSUE_TITLE_UNSAFE_FOR_BRANCH')
     return {'issue': repo + '#' + str(issue), 'title': item['title'],
             'feature': 'specs/' + name, 'branch': name}
 
@@ -660,8 +696,7 @@ def prepare_issue(root, issue, gh=None):
     current = git(root, 'branch', '--show-current')
     require(current, 'DETACHED_HEAD_UNSUPPORTED')
     if current != identity['branch']:
-        exists = subprocess.run(['git', 'show-ref', '--verify', '--quiet',
-                                 'refs/heads/' + identity['branch']], cwd=root).returncode == 0
+        exists = git_ok(root, 'show-ref', '--verify', '--quiet', 'refs/heads/' + identity['branch'])
         require(not exists, 'ISSUE_BRANCH_EXISTS: inspect its owner before switching')
         git(root, 'switch', '-c', identity['branch'])
     return {**identity, 'branch_owner': 'sanduq'}
@@ -995,12 +1030,11 @@ def recorded_sync_fields(root, label, feature, old_hash, entry):
     if fingerprint_files(root, [label])[label] == old_hash:
         old = (Path(root) / label).read_bytes()
     else:
-        revs = subprocess.run(['git', 'rev-list', '-n', '50', 'HEAD', '--', label], cwd=root, capture_output=True,
-                              text=True).stdout.split()
+        revs = run_git(root, 'rev-list', '-n', '50', 'HEAD', '--', label, text=True).stdout.split()
         old = None
         attribute = text_attributes(root, [label]).get(label)
         for rev in ['HEAD'] + revs:
-            shown = subprocess.run(['git', 'show', rev + ':' + label], cwd=root, capture_output=True)
+            shown = run_git(root, 'show', rev + ':' + label)
             # The receipt hashed portable bytes (CRLF folded), so a CRLF blob must be folded the same way.
             if not shown.returncode and hashlib.sha256(
                     portable_content(label, shown.stdout, attribute)).hexdigest() == old_hash:
@@ -1100,8 +1134,9 @@ def command_exists(root, command):
     return False
 
 
-def package_digest(root):
-    """Ignore install timestamps but detect versions, enablement and source drift."""
+def package_digest(root, cached=False):
+    """Ignore install timestamps but detect versions, enablement and source drift. `cached` (claim only) reads
+    unchanged files from the advisory hash cache; `start` and `migrate` hash every file."""
     entries = {key: {k: value.get(k) for k in ('version', 'enabled')} for key, value in registry(root).items()}
     paths = []
     for folder in (root / '.specify/extensions', root / '.specify/presets'):
@@ -1112,7 +1147,62 @@ def package_digest(root):
     paths += [p.relative_to(root).as_posix() for p in (root / '.agents/skills').glob('speckit-*/SKILL.md')]
     paths += [p.relative_to(root).as_posix() for p in (root / '.claude/skills').glob('speckit-*/SKILL.md')]
     paths += ['.specify/integration.json', '.specify/init-options.json']
-    return digest({'registrations': entries, 'sources': fingerprint_files(root, paths)})
+    return digest({'registrations': entries, 'sources': (cached_fingerprints if cached else fingerprint_files)(root, paths)})
+
+
+HASH_CACHE = '.specify/workflow/runtime/hash-cache.json'
+RACY_NS = 2_000_000_000  # git's "racy" rule: an mtime this recent may hide a same-size edit
+
+
+def cached_fingerprints(root, paths):
+    """`fingerprint_files(root, paths)` for an advisory check (W18). A regular file whose size, mtime and git text
+    attribute equal its cache entry, with an mtime over 2 s old, keeps the cached hash; every other file is hashed
+    and stored if it stayed unchanged meanwhile. Byte-sensitive files are never stored: their portable hash can
+    follow the index. The cache keeps only the paths of the last call."""
+    location = root / HASH_CACHE
+    try:
+        cache = read(location, {})
+    except ValueError:
+        cache = {}
+    cache = cache if isinstance(cache, dict) else {}
+    canonical = {label: canonical_path(root, label) for label in sorted(set(paths))}
+    attributes = git_text_attributes(root, sorted(set(canonical.values())))
+
+    def key(name):
+        try:
+            info = os.stat(root / name)
+        except OSError:
+            return None
+        if not stat.S_ISREG(info.st_mode) or time.time_ns() - info.st_mtime_ns <= RACY_NS:
+            return None
+        return [info.st_size, info.st_mtime_ns, attributes.get(name)]
+
+    result, stored, misses = {}, {}, {}
+    for label, name in canonical.items():
+        current, entry = key(name), cache.get(name)
+        if current and isinstance(entry, list) and len(entry) == 4 and entry[:3] == current                 and isinstance(entry[3], str):
+            result[label], stored[name] = entry[3], entry
+        else:
+            misses[label] = current
+    if misses:
+        hashed = fingerprint_files(root, list(misses))
+        result.update(hashed)
+        for label, before in misses.items():
+            name = canonical[label]
+            if before is None or hashed[label] is None:
+                continue
+            try:
+                sensitive = byte_sensitive(name, (root / name).read_bytes(), attributes.get(name))
+            except OSError:
+                continue
+            if not sensitive and key(name) == before:
+                stored[name] = before + [hashed[label]]
+    if stored != cache:
+        try:
+            write(location, stored)
+        except OSError:
+            pass  # advisory: the next call hashes again
+    return result
 
 
 def resolve_commands(root, policy, tier=None):
@@ -2005,9 +2095,7 @@ def ci_evidence_current(root, receipt):
         return False
     evidence = receipt['ci_evidence']
     if evidence['head'] != receipt['head']:
-        ancestor = subprocess.run(['git', 'merge-base', '--is-ancestor', evidence['head'], receipt['head']],
-                                  cwd=root, capture_output=True)
-        if ancestor.returncode != 0:
+        if not git_ok(root, 'merge-base', '--is-ancestor', evidence['head'], receipt['head']):
             return False
     head, _ = current_source_key(root)
     if head is None:
@@ -2410,6 +2498,47 @@ def locked(path):
         path.unlink(missing_ok=True)
 
 
+ACTIVE_INDEX = '.specify/workflow/runtime/active-index.json'
+
+
+def foreign_active_claim(root, own):
+    """The first checkpoint other than `own` that records an active claim, or None (W25). The caller holds the
+    dispatch lock, so no other claim can start meanwhile. The index is derived, never a source of truth: it keeps
+    only checkpoints read as inactive, and one is skipped only while its size, mtime, ctime and file id are
+    unchanged and its mtime is over 2 s old. New, replaced, recent or malformed checkpoints are read again."""
+    location = root / ACTIVE_INDEX
+    try:
+        index = read(location, {})
+    except ValueError:
+        index = {}
+    index = index if isinstance(index, dict) else {}
+    kept = {}
+    for path in (root / 'specs').glob('*/workflow/checkpoint.json'):
+        if path == own:
+            continue
+        name = path.relative_to(root).as_posix()
+        try:
+            info = path.stat()
+            key = [info.st_size, info.st_mtime_ns, info.st_ctime_ns, info.st_ino]
+        except OSError:
+            key = None
+        if key and time.time_ns() - key[1] <= RACY_NS:
+            key = None
+        if key and index.get(name) == key:
+            kept[name] = key
+            continue
+        if read(path, {}).get('active'):
+            return path
+        if key:
+            kept[name] = key
+    if kept != index:
+        try:
+            write(location, kept)
+        except OSError:
+            pass  # advisory: the next claim reads every checkpoint again
+    return None
+
+
 class Run:
     def __init__(self, root, feature):
         self.root = root.resolve()
@@ -2422,7 +2551,7 @@ class Run:
 
     def load(self, allow_branch_change=False):
         state = read(self.path)
-        require(state and state.get('schema_version') == SCHEMA, 'WORKFLOW_START_REQUIRED')
+        require(state and state.get('schema_version') in CHECKPOINT_SCHEMAS, 'WORKFLOW_START_REQUIRED')
         require(state['feature'] == self.relative, 'CHECKPOINT_IDENTITY_MISMATCH')
         adopted = verify_checkpoint_identity(self.root, state, self.relative)
         if adopted is not None:
@@ -2431,7 +2560,6 @@ class Run:
             # which persists whatever `state` it was handed -- so a
             # read-only `load` (e.g. `next`) never writes anything itself.
             state['repo_identity'] = adopted
-            state['repo_path'] = str(self.root)  # never compared; kept only for an older reader (see CHANGELOG)
         require(allow_branch_change or state['branch'] == git(self.root, 'branch', '--show-current'), 'CHECKPOINT_BRANCH_MISMATCH')
         return state
 
@@ -2569,7 +2697,7 @@ class Run:
                 'RELOCATE_ISSUE_OPTIONS_CONFLICT: pass --issue or --keep-issue-number, not both')
         if preview:
             state = read(self.path)
-            require(state and state.get('schema_version') == SCHEMA, 'WORKFLOW_START_REQUIRED')
+            require(state and state.get('schema_version') in CHECKPOINT_SCHEMAS, 'WORKFLOW_START_REQUIRED')
             require(state['feature'] == self.relative, 'RELOCATE_FEATURE_MISMATCH')
             plan = self._relocate_plan(state, allow_branch_rebind, allow_repository_rename, new_issue, keep_issue_number,
                                        allow_history_change)
@@ -2584,7 +2712,7 @@ class Run:
         scope_rebind = None
         with locked(self.lock):
             state = read(self.path)
-            require(state and state.get('schema_version') == SCHEMA, 'WORKFLOW_START_REQUIRED')
+            require(state and state.get('schema_version') in CHECKPOINT_SCHEMAS, 'WORKFLOW_START_REQUIRED')
             require(state['feature'] == self.relative, 'RELOCATE_FEATURE_MISMATCH')
             require(not state['active'], 'ACTIVE_CLAIM_MUST_BE_RESOLVED_BEFORE_RELOCATE')
             plan = self._relocate_plan(state, allow_branch_rebind, allow_repository_rename, new_issue, keep_issue_number,
@@ -2615,7 +2743,6 @@ class Run:
                     scope_rebind = (source_path, source_path.read_bytes(),
                                     {**source, 'repo': new_owner_repo, 'issue': int(new_number)})
                 state['issue'] = plan['new_issue']
-            state['repo_path'] = str(self.root)  # never compared; kept only for an older reader (see CHANGELOG)
             state['repo_identity'] = plan['new_identity']
             state.setdefault('relocations', []).append(entry)
             if scope_rebind:
@@ -3134,9 +3261,7 @@ class Run:
         errors = ci_evidence.validate(evidence, repository, int(run_id), check['name'], check['workflow'],
                                       attempt and int(attempt), local, check['artifact_prefix'])
         if not errors and plan['headSha'] != head:
-            ancestor = subprocess.run(['git', 'merge-base', '--is-ancestor', plan['headSha'], head], cwd=self.root,
-                                      capture_output=True)
-            if ancestor.returncode != 0:
+            if not git_ok(self.root, 'merge-base', '--is-ancestor', plan['headSha'], head):
                 errors.append(f'Run head {plan["headSha"]} is not a commit of this branch (an ancestor of {head}).')
         if not errors and plan['sourceKey'] != sk.source_key(self.root, head, ci_evidence.plan_key_version(plan)):
             errors.append(f'Run {run_id} verified source key {plan["sourceKey"]}, not the current {key}: the source '
@@ -3168,8 +3293,7 @@ class Run:
         path = inside(self.root, evidence)
         require(path.is_file(), 'EVIDENCE_MISSING: ' + evidence)
         require(base != head, 'DIFF_REVIEW_EMPTY: the review head is HEAD; nothing was committed to review')
-        require(subprocess.run(['git', 'merge-base', '--is-ancestor', base, head], cwd=self.root,
-                               capture_output=True).returncode == 0,
+        require(git_ok(self.root, 'merge-base', '--is-ancestor', base, head),
                 'DIFF_REVIEW_BASE_NOT_ANCESTOR: ' + base + ' is not an ancestor of HEAD; re-record Review')
         text = path.read_text(encoding='utf-8-sig', errors='replace')
         marks = r'[\s*_`]*'
@@ -3210,11 +3334,8 @@ class Run:
                 require(state['issue'] == issue, 'ISSUE_BINDING_CONFLICT')
                 return state
             commands = resolve_commands(self.root, self.policy)
-            state = {'schema_version': SCHEMA, 'run_id': uuid.uuid4().hex, 'repo_identity': repo_identity(self.root),
-                     # `repo_path` is never read or compared by this version; it is written only so an
-                     # older reader (pre-1.8.0) does not KeyError on a checkpoint this version writes.
-                     # Slated for removal once no supported release still needs it (see CHANGELOG).
-                     'repo_path': str(self.root),
+            state = {'schema_version': CHECKPOINT_SCHEMA, 'run_id': uuid.uuid4().hex,
+                     'repo_identity': repo_identity(self.root),
                      'branch': git(self.root, 'branch', '--show-current'), 'feature': self.relative,
                      'issue': issue, 'policy_digest_version': POLICY_DIGEST_VERSION,
                      'policy_digest': delivery_digest(self.policy),
@@ -3247,6 +3368,9 @@ class Run:
 
     def save(self, state):
         self.__dict__.pop('_saved_next', None)
+        # Every write is a version-2 checkpoint; a loaded version 1 is migrated here (W27).
+        state['schema_version'] = CHECKPOINT_SCHEMA
+        state.pop('repo_path', None)
         state['generation'] += 1
         state['updated_at'] = now()
         state['head'] = git(self.root, 'rev-parse', 'HEAD')
@@ -3323,9 +3447,9 @@ class Run:
             require(not (self.root / '.specify/workflow/runtime/upgrade.lock').exists(), 'WORKFLOW_UPGRADE_IN_PROGRESS')
             state = self.load()
             require(not state['active'], 'STAGE_ALREADY_ACTIVE: recover or finish the recorded claim')
-            for path in (self.root / 'specs').glob('*/workflow/checkpoint.json'):
-                require(path == self.path or not read(path, {}).get('active'), 'OTHER_FEATURE_STAGE_ACTIVE: ' + str(path))
-            require(state['dependency_digest'] == package_digest(self.root), 'DEPENDENCY_CHANGED: review upgrade and migrate the checkpoint before execution')
+            other = foreign_active_claim(self.root, self.path)
+            require(other is None, 'OTHER_FEATURE_STAGE_ACTIVE: ' + str(other))
+            require(state['dependency_digest'] == package_digest(self.root, cached=True), 'DEPENDENCY_CHANGED: review upgrade and migrate the checkpoint before execution')
             # Delegation health is checked below, after every rejection, because
             # the claim may install the skill it would otherwise report missing.
             health = cached_doctor(self.root, self.policy, state['dependency_digest'])

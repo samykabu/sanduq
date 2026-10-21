@@ -103,7 +103,7 @@ class CorrectiveTests(unittest.TestCase):
             if args[2].endswith('projectsV2/7'):
                 return subprocess.CompletedProcess(args, 0, json.dumps({'number': 7, 'owner': {'login': 'acme', 'type': 'Organization'}}), '')
             return subprocess.CompletedProcess(args, 0, json.dumps([fields]), '')
-        with patch.object(module.subprocess, 'run', run):
+        with patch.object(module.sanduq_gh.subprocess, 'run', run):  # Scope's client runs gh through sanduq_gh
             result = client.command(['project', 'field-list', '7', '--owner', 'acme'])
         self.assertEqual(result['fields'][0]['id'], 'F')
         self.assertEqual(client.project_transport, 'rest')
