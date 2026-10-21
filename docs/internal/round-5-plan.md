@@ -123,3 +123,75 @@ workflow. Upstream: dev-tools, illustration-tools, agent-tools.
    suites must pass; GitHub mutations are never retried.
 3. IP22 with an old Workflow: the v2 refusal must be actionable, never a silent empty view.
 4. W9 last: no behaviour change; the full suite and the benchmark counters equal before and after.
+
+## Amendments after the Codex plan review (`round-5-codex-plan-review.md`)
+
+Binding on every stream; where they disagree with the tables above, these win. Scope is unchanged.
+
+1. **`sanduq_gh.py` contract.** The module owns transport only: `run_gh`, `api`, `graphql`, `rate_limited`,
+   `token_scopes`, `GhError`. Retries are opt-in: `run_gh(..., retry=False)` by default; a caller passes `retry=True`
+   only for a read it knows is safe (REST GET without `-f/-F/--input`, a GraphQL query that is not a mutation).
+   Never retried: any `gh project` command, any GraphQL mutation, any REST call with a method other than GET or with
+   fields. A timeout after a possible write is reported, never retried. GraphQL errors on exit 0 are still detected.
+   Scope's `GitHub` client class (with `masked_owner_failure`, `verify_project`, the GraphQL-to-REST switch) and
+   `ProjectRest` stay in Scope's ownership; they move into a second injected file `sanduq_scope_github.py` only if
+   S-SC can do so with `ScopeError`/`require` replaced by a module-local error that Scope maps back; otherwise they
+   stay in `scope.py` and `decisions.py` keeps loading Scope's transport. S-SC decides and records it. Every caller
+   keeps its error codes, fake runners and seams (`test_decisions_corrective.py:96`, `test_task_issues.py:386`,
+   `test_ci_evidence.py:146`, `test_round4.py:182`, `test_execution_tools.py:151`, installer branch-rule tests).
+   Caller inventory per stream: PR `pr_publish.py` (including `:101`, `:159`), `pr_feedback.py:45`,
+   `pr_changelog.py:84`; Project `project_sync.py` `gh_raw` paths (`:109`, `:161`, `:341`, `:433`); `ci_evidence`
+   keeps binary downloads with its 300 s timeout.
+2. **Caches are advisory where safety is enforced (W18, W24, W25).** A cache may only skip work on a path that does
+   not decide evidence, containment or claim exclusion. Full hashing (bypassing both the hash cache and the operation
+   memo) is required in `complete`, `sync-amend`, `finalize`, `revalidate`, `revalidate-upstream`, migrations,
+   `receipt_status` when called for acceptance, and `ci_gate`. Portable hashing (git attributes and index state) is
+   unchanged. W25's index must discover new checkpoints, drop deleted ones, re-read replaced or malformed ones, and
+   never trust a cached "inactive"; the claim re-reads every candidate that the index reports active or stale, under
+   the dispatch lock. Tests for each case.
+3. **W19.** Keep rejecting `..`, absolute, drive and UNC labels. A memoised parent is valid only while its `lstat`
+   identity (device, inode or file id, mtime) is unchanged; any change, or any link in the chain, falls back to the
+   full resolve. Test an ancestor replaced by a symlink or junction between two calls in one operation.
+4. **W26.** Merge only primitives with equal contracts; stored digest formats stay byte-identical; `sanduq_hash.py`
+   (injected into Assure and User Manual) keeps its interface.
+5. **W27 checkpoint migration.** Separate the checkpoint schema version from the policy `SCHEMA` constant. Readers
+   accept checkpoint versions 1 and 2 (Workflow loader, migration path, relocation-history reader, `ci_gate.py:95`,
+   Scope's `workflow_policy.py:97`); the three writers write version 2 without `repo_path`; `docs/workflow/schemas.md`
+   and the identity fixtures updated. S-WF owns `extensions/scope/scripts/workflow_policy.py` lines for this only and
+   coordinates with S-SC through the notes file (S-SC edits other parts of that file; S-WF's change lands first).
+6. **IP21.** Besides the live gate, installed-layout tests for: first install (native), existing implicit and
+   explicit choices kept, upgrade, host switching, rollback.
+7. **IP22 compatibility.** Spec Kit does not enforce `requires.extensions`, so the gate is at runtime: Progress 1.6
+   answers a `--schema v2` or `--layout classic` request with exit 2 and one line naming the installed Workflow
+   version and the upgrade command; Progress `status`/doctor flags an installed Workflow below 1.17. The text summary
+   and the runs JSON Workflow 1.17 uses (`progress_bridge.py:302`, `:330`) stay byte-compatible. This is a loud break
+   for Workflow 1.16 and earlier, after one deprecation release, as designed.
+8. **X23.** Hash the final packaged inventory (injected helpers and bundled presets included). Exempt only
+   `README.md`, top-level `CHANGELOG.md`, `LICENSE` and `docs/**`; commands, skills, references and templates
+   (including nested `templates/CHANGELOG.md`) stay covered. Bootstrap: an entry without `inventory_sha256` is
+   skipped with a notice until the next release writes it. A pending-release exemption counts only when it names a
+   version greater than the catalog's.
+9. **PM5.** A compatibility table of every Bash flag and its PowerShell counterpart, kept by the Python script (both
+   spellings accepted by the stubs). Command file is `commands/speckit.project.init.md`. Replace the PowerShell
+   function-intercept fixtures with a fake `gh` on `PATH`; keep every status-preservation and failure test
+   (`test_project_sync.py:511` onward).
+10. **PM2b.** The plan file has a schema binding repository, PR number, head commit expected after push, and the exact
+    approved replies and resolves by thread and comment id, with a digest the command shows the user for approval.
+    The script refuses a changed plan, another PR's threads, a head without the pushed commit, and repeats work
+    idempotently. Tests for each.
+11. **SC16.** Stop only where Scope's logical `status()` is Done (aliases applied; cancelled or wrongly closed still
+    block). `test_scope.py:218` changes deliberately, with the Migration line. Tests: In review traversal, direct-only
+    timelines, overrides, shared prerequisites, cycles, call counts.
+12. **SC17.** Acceptance includes rendered unmanaged and managed Clarify and Brainstorm procedures, not only a
+    taxonomy count.
+13. **SC21.** `cancel` takes the journal's `<issue>-<hash>` id, refuses ambiguous or outside paths, holds the
+    publication mutation lock, and prints created nodes, dependency before-images and catalog/map backups too.
+14. **AU22.** Upstream keeps `--repo-root` (the command contract); `--project-root` is not added unless it already
+    exists. The vendor mapping is added by S-VEND before `vendor.py update` runs; `vendor.py update` output in
+    marketplaces and `delegate-task` is owned by S-VEND for this round.
+15. **SHARD.** S-CI first adds per-module timing output to the sharded unittest step (one line per module), then the
+    weights come from the first run with it. If that run is not available before release, SHARD ships as the logging
+    change only.
+16. **Ownership additions.** S-SH: `.github/scripts/ci_matrix.py` entry for `sanduq_gh.py` (coordinate with S-CI, who
+    owns the file: S-SH requests it); W9 may touch `benchmark_front_half.py` (S-W9 owns it then; S-SH is done by then).
+    I3 records Execute's first `complete` outcome before any recovery.
