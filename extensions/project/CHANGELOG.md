@@ -14,6 +14,7 @@ Round 4.
 - Init with auto-create makes each column once (Ready was created three times), writes the option ids GitHub returns after the update (all ids change), and in a Workflow project also creates the columns doctor requires (Backlog, Need Clarifications). There it matches names exactly and renames a column that differs only in case or spacing, such as GitHub's default `In Progress`, to Workflow's `In progress`.
 - Init no longer clears item statuses when it changes columns. GitHub's option update replaces every option id, which left every item on the board without a Status. Init now reads each item's Status first (`gh project item-list`, all item types), sets it again by name with the new ids afterwards (a renamed column keeps its items), and reports each item it could not set, exiting 1. When the items cannot be read it refuses before changing anything, unless `--allow-status-reset` (`-AllowStatusReset`) is passed.
 - The bash init exited 1 after a successful run without `--json`; it now exits 0.
+- Init reads the board's items through GraphQL with archived items included (`gh project item-list` leaves them out) and restores an archived item's Status by unarchiving it, setting the Status and archiving it again (GitHub refuses to edit an archived item).
 
 ### Migration
 

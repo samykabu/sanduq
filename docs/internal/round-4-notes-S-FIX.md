@@ -134,3 +134,52 @@ uv Python 3.11, `unittest discover` per suite:
 uv Python 3.11, `unittest discover` per suite: scope 265 OK (1 skipped); project 28 OK (both shells); memory
 199 OK; pr 29 OK; workflow 1250, 3 errors (the same three `test_install` dangling-junction tests as round 1,
 which also fail on the main checkout), 2 skipped.
+
+# Round 3 (after live run 3, on e112a09)
+
+## B6: Memory refused Workflow's and Progress's runtime files in a feature folder
+
+- What Memory protects: archiving deletes `specs/<feature>/` after merge, and the checkpoint commit is the only
+  way back. An ignored file is not in that commit, so deleting it is permanent; `spec_files` refuses instead.
+- Since when: the Execute queue handoff shipped in workflow 1.11.2, and Workflow's excludes
+  `/specs/*/workflow/backups/` (1.0.0) and `/specs/*/workflow/progress/` (1.2.0) predate it. The legacy reporter
+  writes `specs/<f>/workflow/progress/` and Progress writes `specs/<f>/progress/.view/` and `.host/` (also
+  ignored, through its own exclude lines) during every reported Execute; `refresh`, `migrate` and
+  `revalidate-upstream` write checkpoint backups. So in practice the handoff has never queued a managed
+  feature whose Execute reported progress; run 2 never got that far because of B4.
+- Fix (kept in `specs/<feature>/`; moving the folders would change the legacy reporter, Progress's report
+  location, `delegation.py` and every consumer's links for no extra safety): each owner records the exact
+  exclude lines it writes in `<git-dir>/info/sanduq-runtime.json` (`{"workflow": [...], "progress": [...]}`),
+  beside `info/exclude`. Workflow writes it in `ensure_local_excludes` (install, upgrade, init, the recovery
+  commands) and at every Memory handoff; Progress in `git_exclude`. Memory's `Repository.local_runtime()` asks
+  git (`check-ignore -v`) which rule decides each ignored path and accepts it only when that rule is a line of
+  `info/exclude` and is declared. Those files are dropped from the queued, prepared and archived feature hashes
+  (so a report rewrite never stales a queue entry) and deleted with the folder at publication. Any other
+  ignored file still refuses, including one matched by a declared pattern that a `.gitignore` line decides.
+- Tests: `test_memory_handoff.test_workflow_runtime_files_in_the_feature_do_not_block_queueing` (real Memory CLI
+  through `complete`: backups, legacy report and Progress `.view` files; fails before the fix, checked against
+  the HEAD `archive.py`), `test_other_ignored_files_in_the_feature_still_refuse`,
+  `test_git_state.LocalRuntimeTests.test_only_declared_exclude_lines_make_a_file_runtime`.
+- Not tested: the publication-time delete of runtime leftovers runs only in a full archive on the target
+  branch; no existing archive test has runtime files, and I did not add one.
+- Known limit: Workflow and Progress rewrite the same JSON file without a lock; a lost key is rebuilt on that
+  owner's next run, and until then Memory refuses (fails closed).
+
+## G1: archived items
+
+- Introspection on GitHub: `ProjectV2.items` takes `archivedStates: [ARCHIVED, NOT_ARCHIVED]`. On board #14 it
+  returned all 4 items, #4 with `isArchived: true`. `gh project item-edit` on an archived item fails with "The
+  item is archived and cannot be updated"; `unarchiveProjectV2Item`, then the edit, then `archiveProjectV2Item`
+  works. I ran that once on board #14's item #4: it is archived again, with Status Done (its value before run
+  3's init), so that board is repaired.
+- Both scripts now read items through that GraphQL query (paginated by `endCursor`, 100 per page) instead of
+  `gh project item-list`, and restore an archived item by unarchive, edit, archive. A failure at any step names
+  the item (and "left unarchived" when re-archiving failed) and the run exits 1.
+- The fake `gh` now answers the items query two per page, refuses to edit an archived item until it is
+  unarchived, and logs the order. Project README documents the behaviour.
+
+## Round 3 tests run
+
+uv Python 3.11, `unittest discover` per suite: project 28 OK (both shells); memory 200 OK; progress 14 OK
+(7 skipped); workflow 1252, 3 errors (the same three `test_install` dangling-junction tests, machine-only), 2
+skipped.

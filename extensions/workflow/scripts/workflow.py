@@ -2365,6 +2365,10 @@ def require_not_delegated_context(command):
             'context; run it directly, outside any delegated process tree')
 
 
+# Beside info/exclude: {owner: [the exclude lines that owner writes for its local runtime files]}.
+RUNTIME_DECLARATION = 'sanduq-runtime.json'
+
+
 def ensure_local_excludes(root):
     """Keep runtime/backup files local, including preserved consumer credentials."""
     value = git(root, 'rev-parse', '--git-path', 'info/exclude')
@@ -2379,6 +2383,16 @@ def ensure_local_excludes(root):
     if missing:
         _wrote(None)  # the exclude file may live in a common git dir outside the root
         path.write_text(current.rstrip('\n') + '\n# Sanduq local backups and runtime\n' + '\n'.join(missing) + '\n', encoding='utf-8')
+    # Memory treats a file ignored by exactly one of these lines as disposable runtime, not feature content.
+    declaration = path.parent / RUNTIME_DECLARATION
+    try:
+        declared = read(declaration, {})
+    except ValueError:
+        declared = {}  # rewritten below; the owners' lists are rebuilt on their next run
+    declared = declared if isinstance(declared, dict) else {}
+    if declared.get('workflow') != list(patterns):
+        _wrote(None)
+        write(declaration, {**declared, 'workflow': list(patterns)})
 
 
 @contextmanager

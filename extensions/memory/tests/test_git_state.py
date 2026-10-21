@@ -126,5 +126,29 @@ class TrackedIgnoredScopeTests(unittest.TestCase):
         self.assertEqual("", self.git("ls-files", "artifacts/issue842/untracked.bin"))
 
 
+class LocalRuntimeTests(unittest.TestCase):
+    """B6: only files ignored by an exclude line an owner declared as its runtime are disposable."""
+    setUp = TrackedIgnoredScopeTests.setUp
+    git = TrackedIgnoredScopeTests.git
+    write = TrackedIgnoredScopeTests.write
+
+    def test_only_declared_exclude_lines_make_a_file_runtime(self):
+        report, backup, notes, logged = ("specs/2-x/workflow/progress/index.html", "specs/2-x/workflow/backups/a.json",
+                                         "specs/2-x/notes.local", "specs/2-x/run.log")
+        self.write(".git/info/exclude", "/specs/*/workflow/progress/\n/specs/*/workflow/backups/\n*.local\n")
+        self.write(".gitignore", "artifacts/\n*.log\n")
+        for name in (report, backup, notes, logged):
+            self.write(name, "x")
+        ignored = self.repo.ignored([report, backup, notes, logged])
+        self.assertEqual(4, len(ignored))
+        self.assertEqual(set(), self.repo.local_runtime(ignored))  # no declaration: nothing is disposable
+        self.write(".git/info/sanduq-runtime.json",
+                   '{"workflow": ["/specs/*/workflow/progress/", "/specs/*/workflow/backups/", "*.log"]}')
+        # `*.log` is declared, but the deciding rule is the tracked .gitignore's, so run.log stays protected.
+        self.assertEqual({report, backup}, self.repo.local_runtime(ignored))
+        self.write(".git/info/sanduq-runtime.json", "not json")
+        self.assertEqual(set(), self.repo.local_runtime(ignored))
+
+
 if __name__ == "__main__":
     unittest.main()

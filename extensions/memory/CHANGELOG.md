@@ -14,9 +14,11 @@ Round 4 (D3, Memory side: Sanduq Workflow owns the session and prepare hooks).
 - The SESSION block says that in a Workflow project the claim runs the session check and covers the `pending --gate` check, so neither is run separately.
 - `queue`, `prepare` and the other feature commands accept Workflow's unpadded issue-numbered feature directories (`specs/2-add-a-flag`), as well as Spec Kit's `001-name` and `20260101-120000-name`. Before, every Workflow feature for issues 1 to 99 failed "Select a full feature directory directly under specs/.", so the Execute handoff queued nothing. Folders without a leading number, such as `specs/memory`, are still refused.
 - README: install the catalog with `--priority 1` (the lowest number wins in Spec Kit).
+- `queue` and the archive no longer refuse a feature that holds Workflow's or Progress's runtime files (checkpoint backups, the progress report, Progress's `.view` and `.host`). A file counts as runtime only when the exclude rule that ignores it is a line of `.git/info/exclude` that its owner declared in `.git/info/sanduq-runtime.json`. Runtime files are left out of the queued and archived feature hashes and deleted with the folder. Any other ignored file in a feature folder still refuses. Before, every managed feature whose Execute wrote a progress report failed `Ignored artifacts are not recoverable from the checkpoint`, so the Execute handoff queued nothing.
 
 ### Migration
 
+- Workflow writes its declaration at every Memory handoff, so a managed project needs no step. Progress writes its own at `progress init` or the next report; until then a feature holding Progress's `.view` or `.host` files still refuses.
 - Re-approve once after the update: run `speckit.memory.enable` (every Memory release changes the hash). Entries queued before the renewal are reported blocked: archive each manually with `speckit.memory.run --spec <dir>`, or re-queue it from its implementation branch.
 - Finish or recover an active archive (`archive.py status`) before updating; a prepared run refuses a changed implementation hash.
 - With Sanduq Workflow: install this release before the Workflow release that disables the two hooks.

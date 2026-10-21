@@ -212,13 +212,21 @@ if ($toCreate.Count -gt 0) {
         foreach ($c in $toCreate) { if (-not $c.from) { $opts += "{name:$(ConvertTo-Json $c.name),color:$($c.color),description:`"`"}" } }
         $optsStr = $opts -join ','
         # The update replaces every option id, which clears every item's Status: save each by name first.
-        $saved = @()
-        $itemsJson = & gh project item-list $Number --owner $Owner --format json --limit 100000 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            $saved = @(($itemsJson | ConvertFrom-Json).items | Where-Object { $_.status } | ForEach-Object { @{ id = $_.id; status = $_.status } })
-        }
-        elseif ($AllowStatusReset) { Warn "cannot read the board's items ($itemsJson); -AllowStatusReset: their Status will be cleared" }
-        else { Die "cannot read the board's items, so their Status could not be restored after the column change: $itemsJson - fix access and rerun, or pass -AllowStatusReset to accept that every item loses its Status" }
+        # GraphQL, not `gh project item-list`, which leaves archived items out.
+        $saved = @(); $cursor = $null; $readError = $null
+        do {
+            $after = if ($cursor) { ",after:`"$cursor`"" } else { '' }
+            $iq = "query{node(id:`"$projectId`"){... on ProjectV2{items(first:100$after,archivedStates:[ARCHIVED,NOT_ARCHIVED]){pageInfo{hasNextPage endCursor} nodes{id isArchived fieldValueByName(name:`"Status`"){... on ProjectV2ItemFieldSingleSelectValue{name}}}}}}}"
+            $page = & gh api graphql -f query="$iq" 2>&1
+            $items = if ($LASTEXITCODE -eq 0) { ($page | ConvertFrom-Json).data.node.items } else { $null }
+            if (-not $items) { $readError = "$page"; break }
+            foreach ($n in $items.nodes) {
+                if ($n.fieldValueByName.name) { $saved += @{ id = $n.id; status = $n.fieldValueByName.name; archived = [bool]$n.isArchived } }
+            }
+            $cursor = if ($items.pageInfo.hasNextPage) { $items.pageInfo.endCursor } else { $null }
+        } while ($cursor)
+        if ($readError -and $AllowStatusReset) { $saved = @(); Warn "cannot read the board's items ($readError); -AllowStatusReset: their Status will be cleared" }
+        elseif ($readError) { Die "cannot read the board's items, so their Status could not be restored after the column change: $readError - fix access and rerun, or pass -AllowStatusReset to accept that every item loses its Status" }
         $q = "mutation{updateProjectV2Field(input:{fieldId:`"$statusFieldId`",singleSelectOptions:[$optsStr]}){projectV2Field{... on ProjectV2SingleSelectField{options{id name}}}}}"
         $res = & gh api graphql -f query="$q" 2>&1
         if ($LASTEXITCODE -ne 0) { Warn "column creation failed: $res"; }
@@ -232,8 +240,20 @@ if ($toCreate.Count -gt 0) {
                 $renamed = $toCreate | Where-Object { $_.from -ceq $item.status } | Select-Object -First 1
                 $name = if ($renamed) { $renamed.name } else { $item.status }
                 $optionId = ($newOpts | Where-Object { $_.name -ceq $name } | Select-Object -First 1).id
-                $out = if ($optionId) { & gh project item-edit --id $item.id --project-id $projectId --field-id $statusFieldId --single-select-option-id $optionId 2>&1 } else { 'no such column after the update' }
-                if (-not $optionId -or $LASTEXITCODE -ne 0) { $restoreFailed += "$($item.id) was '$($item.status)': $out" }
+                if (-not $optionId) { $restoreFailed += "$($item.id) was '$($item.status)': no such column after the update"; continue }
+                # GitHub refuses to update an archived item: unarchive it, set the Status, archive it again.
+                $pair = "projectId:`"$projectId`",itemId:`"$($item.id)`""
+                if ($item.archived) {
+                    $out = & gh api graphql -f query="mutation{unarchiveProjectV2Item(input:{$pair}){item{id}}}" 2>&1
+                    if ($LASTEXITCODE -ne 0) { $restoreFailed += "$($item.id) (archived) was '$($item.status)': $out"; continue }
+                }
+                $out = & gh project item-edit --id $item.id --project-id $projectId --field-id $statusFieldId --single-select-option-id $optionId 2>&1
+                $ok = $LASTEXITCODE -eq 0
+                if ($item.archived) {
+                    $again = & gh api graphql -f query="mutation{archiveProjectV2Item(input:{$pair}){item{id}}}" 2>&1
+                    if ($LASTEXITCODE -ne 0) { $ok = $false; $out = "$out; left unarchived: $again" }
+                }
+                if (-not $ok) { $restoreFailed += "$($item.id)$(if ($item.archived) { ' (archived)' }) was '$($item.status)': $out" }
             }
             Info "restored Status on $($saved.Count - $restoreFailed.Count) of $($saved.Count) item(s)"
             foreach ($f in $restoreFailed) { Warn "item Status not restored, set it by hand: $f" }

@@ -133,6 +133,44 @@ class MemoryHandoffTests(unittest.TestCase):
                          (result['memory_handoff']['status'], result['memory_handoff']['reason']))
         self.assertIn(self.feature, w.read(self.memory_state / 'pending.json'))
 
+    def runtime_files(self):
+        """The ignored files the runtime writes into a feature folder: Workflow's checkpoint backup and legacy
+        report, and Progress's local view (Progress writes and declares its own exclude lines)."""
+        sys.path.insert(0, str(SOURCE.parent / 'progress/scripts'))
+        from sanduq_progress.paths import git_exclude
+        self.assertTrue(git_exclude(self.root))
+        names = [self.feature + '/workflow/backups/0123.json', self.feature + '/workflow/progress/index.html',
+                 self.feature + '/workflow/progress/state.json', self.feature + '/progress/.view/index.html']
+        for name in names:
+            (self.root / name).parent.mkdir(parents=True, exist_ok=True)
+            (self.root / name).write_text('{}', encoding='utf-8')
+        return names
+
+    def test_workflow_runtime_files_in_the_feature_do_not_block_queueing(self):
+        """B6: files ignored by the exclude lines Workflow declares are disposable runtime, never archive content."""
+        self.install_memory()
+        self.enable()
+        names = self.runtime_files()
+        run, result = self.executed()
+        self.assertEqual(('queued', 'MEMORY_QUEUED'),
+                         (result['memory_handoff']['status'], result['memory_handoff']['reason']))
+        hashes = w.read(self.memory_state / 'pending.json')[self.feature]['spec_hashes']
+        self.assertFalse(set(names) & set(hashes))
+        self.assertIn(self.feature + '/spec.md', hashes)
+
+    def test_other_ignored_files_in_the_feature_still_refuse(self):
+        self.install_memory()
+        self.enable()
+        self.runtime_files()
+        exclude = self.root / '.git/info/exclude'
+        exclude.write_text(exclude.read_text(encoding='utf-8') + '*.local\n', encoding='utf-8')
+        (self.root / self.feature / 'notes.local').write_text('owner notes', encoding='utf-8')
+        run, result = self.executed()
+        self.assertEqual('blocked', result['memory_handoff']['status'])
+        self.assertIn('Ignored artifacts are not recoverable', result['memory_handoff']['reason'])
+        self.assertIn('notes.local', result['memory_handoff']['reason'])
+        self.assertNotIn('workflow/progress', result['memory_handoff']['reason'])
+
     def test_stale_approval_never_queues(self):
         self.install_memory()
         self.enable()

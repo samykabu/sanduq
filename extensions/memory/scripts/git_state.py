@@ -199,6 +199,31 @@ class Repository:
         return self.names('check-ignore', '--no-index', '--stdin', '-z', ok=(0, 1),
                           stdin=b'\0'.join(p.encode('utf-8') for p in paths))
 
+    def local_runtime(self, paths: list[str]) -> set[str]:
+        """The ignored `paths` that an owner's local runtime rule ignores: the deciding rule is a line of
+        info/exclude that Workflow or Progress declared in `info/sanduq-runtime.json` as the exclude it writes
+        for its own runtime files. They are disposable, never feature content; any other ignored path is not."""
+        if not paths:
+            return set()
+        exclude = Path(self.git("rev-parse", "--git-path", "info/exclude").decode().strip())
+        exclude = (exclude if exclude.is_absolute() else self.root / exclude).resolve()
+        try:
+            declared = json.loads((exclude.parent / "sanduq-runtime.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return set()
+        owned = {pattern for lines in (declared.values() if isinstance(declared, dict) else ())
+                 if isinstance(lines, list) for pattern in lines if isinstance(pattern, str)}
+        # -v -z prints source, line number, pattern and path for each ignored path: git decides the match.
+        fields = self.git("check-ignore", "--no-index", "--stdin", "-z", "-v", ok=(0, 1),
+                          stdin=b"\0".join(p.encode("utf-8") for p in paths)).split(b"\0")
+        result = set()
+        for source, _line, pattern, path in zip(*[iter(fields)] * 4):
+            source_path = Path(source.decode("utf-8"))
+            if ((source_path if source_path.is_absolute() else self.root / source_path).resolve() == exclude
+                    and pattern.decode("utf-8") in owned):
+                result.add(path.decode("utf-8"))
+        return result
+
     def exists_at(self, commit: str, paths: list[str]) -> dict[str, bool]:
         """Which paths are files at commit: one batched `cat-file --batch-check` over stdin, cached per (commit, path)."""
         self.immutable_commit(commit)

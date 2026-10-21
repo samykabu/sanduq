@@ -67,6 +67,7 @@ def handoff(w, root, transition, feature=None, checks=None, report=None, lock=Tr
                 return finish('pending', 'MEMORY_DEPENDENCY_MISSING_OR_DISABLED')
             if not (root / '.specify/extensions/memory/scripts/archive.py').is_file():
                 return finish('blocked', 'MEMORY_HELPER_MISSING', ok=False)
+            w.ensure_local_excludes(root)  # Memory reads Workflow's runtime declaration beside info/exclude
             pending = helper(root, 'pending')
             if (not isinstance(pending.get('enabled'), bool)
                     or not isinstance(pending.get('ready'), list)

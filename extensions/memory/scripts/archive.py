@@ -535,7 +535,13 @@ class Archive:
                     files[relative] = self.repo.file_hash(relative)
                 elif not path.is_dir():
                     raise ArchiveError(f"Nonregular archive artifact: {relative}")
+            # An ignored file is not in the checkpoint, so deleting the folder would lose it for good. Workflow's
+            # and Progress's declared runtime files (reports, local backups) are disposable and never archived.
             ignored = self.repo.ignored([p for p in files if self.repo.within(p, [spec])])
+            runtime = self.repo.local_runtime(ignored)
+            for path in runtime:
+                files.pop(path)
+            ignored = [p for p in ignored if p not in runtime]
             if ignored:
                 raise ArchiveError(f"Ignored artifacts are not recoverable from the checkpoint: {ignored}")
         if not files and not allow_empty:
@@ -1126,6 +1132,9 @@ class Archive:
             for spec in run["specs"]:
                 directory = self.repo.path(spec)
                 if directory.exists():
+                    leftovers = [p.relative_to(self.repo.root).as_posix() for p in directory.rglob("*") if p.is_file()]
+                    for path in self.repo.local_runtime(self.repo.ignored(leftovers)):
+                        self.repo.path(path).unlink()  # disposable runtime only; anything else stops rmdir
                     for subdir in sorted((p for p in directory.rglob("*") if p.is_dir()), key=lambda p: len(p.parts), reverse=True):
                         subdir.rmdir()
                     directory.rmdir()

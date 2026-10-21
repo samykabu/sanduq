@@ -5,6 +5,7 @@
 - Deprecated: the v2 status document (`progress status --json --schema v2`) and the classic layout
   (`progress theme --layout classic`). Both still work in this release and will be removed in a later one. Workflow
   1.16.0 and earlier still ask for v2, so the removal waits until those versions are out of use.
+- Progress records the exclude lines it writes for its local files in `.git/info/sanduq-runtime.json` (key `progress`), so Memory can tell them from feature content.
 
 ### Migration
 

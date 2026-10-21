@@ -199,11 +199,20 @@ if [ "${#CREATE_NAMES[@]}" -gt 0 ]; then
     done
     OPTS="${OPTS%,}"
     # The update replaces every option id, which clears every item's Status: save each by name first.
-    SAVED=""
-    if ITEMS="$(gh project item-list "$NUMBER" --owner "$OWNER" --format json --limit 100000 2>&1)"; then
-      SAVED="$(echo "$ITEMS" | jq -r '.items[] | select(.status != null and .status != "") | "\(.id)\t\(.status)"' | tr -d '\r')"
-    elif [ "$ALLOW_RESET" = 1 ]; then warn "cannot read the board's items ($ITEMS); --allow-status-reset: their Status will be cleared"
-    else die "cannot read the board's items, so their Status could not be restored after the column change: $ITEMS - fix access and rerun, or pass --allow-status-reset to accept that every item loses its Status"; fi
+    # GraphQL, not `gh project item-list`, which leaves archived items out.
+    SAVED=""; CURSOR=""; READ_ERROR=""
+    while :; do
+      AFTER=""; [ -z "$CURSOR" ] || AFTER=",after:\"$CURSOR\""
+      IQ="query{node(id:\"$PROJ_ID\"){... on ProjectV2{items(first:100$AFTER,archivedStates:[ARCHIVED,NOT_ARCHIVED]){pageInfo{hasNextPage endCursor} nodes{id isArchived fieldValueByName(name:\"Status\"){... on ProjectV2ItemFieldSingleSelectValue{name}}}}}}}"
+      if ! PAGE="$(gh api graphql -f query="$IQ" 2>&1)" || ! printf '%s' "$PAGE" | jq -e '.data.node.items' >/dev/null 2>&1; then
+        READ_ERROR="${PAGE:-no answer}"; break
+      fi
+      SAVED="$SAVED$(printf '%s' "$PAGE" | jq -r '.data.node.items.nodes[] | select((.fieldValueByName.name // "") != "") | "\(.id)\t\(.isArchived)\t\(.fieldValueByName.name)"' | tr -d '\r')"$'\n'
+      CURSOR="$(printf '%s' "$PAGE" | jq -r 'if .data.node.items.pageInfo.hasNextPage then .data.node.items.pageInfo.endCursor else "" end' | tr -d '\r')"
+      [ -n "$CURSOR" ] || break
+    done
+    if [ -n "$READ_ERROR" ] && [ "$ALLOW_RESET" = 1 ]; then SAVED=""; warn "cannot read the board's items ($READ_ERROR); --allow-status-reset: their Status will be cleared"
+    elif [ -n "$READ_ERROR" ]; then die "cannot read the board's items, so their Status could not be restored after the column change: $READ_ERROR - fix access and rerun, or pass --allow-status-reset to accept that every item loses its Status"; fi
     Q="mutation{updateProjectV2Field(input:{fieldId:\"$STATUS_FIELD_ID\",singleSelectOptions:[$OPTS]}){projectV2Field{... on ProjectV2SingleSelectField{options{id name}}}}}"
     RES="$(gh api graphql -f query="$Q" 2>&1)" || { warn "column creation failed: $RES"; RES=""; }
     if [ -n "$RES" ]; then
@@ -214,16 +223,25 @@ if [ "${#CREATE_NAMES[@]}" -gt 0 ]; then
         if [ -n "$name" ]; then STATUSOPT["$name"]="$option_id"; fi
       done <<< "$NEW"
       saved_count=0; restored=0
-      while IFS=$'\t' read -r item_id item_status; do
+      while IFS=$'\t' read -r item_id item_archived item_status; do
         [ -n "$item_id" ] || continue
-        saved_count=$((saved_count+1)); target="$item_status"
+        saved_count=$((saved_count+1)); target="$item_status"; label="$item_id"
         for idx in "${!CREATE_FROM[@]}"; do if [ "${CREATE_FROM[$idx]}" = "$item_status" ]; then target="${CREATE_NAMES[$idx]}"; fi; done
         option_id="${STATUSOPT[$target]:-}"
+        # GitHub refuses to update an archived item: unarchive it, set the Status, archive it again.
+        pair="projectId:\"$PROJ_ID\",itemId:\"$item_id\""
+        if [ "$item_archived" = true ]; then label="$item_id (archived)"; fi
         if [ -z "$option_id" ]; then out="no such column after the update"
+        elif [ "$item_archived" = true ] && ! out="$(gh api graphql -f query="mutation{unarchiveProjectV2Item(input:{$pair}){item{id}}}" 2>&1)"; then :
         elif out="$(gh project item-edit --id "$item_id" --project-id "$PROJ_ID" --field-id "$STATUS_FIELD_ID" --single-select-option-id "$option_id" 2>&1)"; then
-          restored=$((restored+1)); continue
+          if [ "$item_archived" != true ] || again="$(gh api graphql -f query="mutation{archiveProjectV2Item(input:{$pair}){item{id}}}" 2>&1)"; then
+            restored=$((restored+1)); continue
+          fi
+          out="left unarchived: $again"
+        elif [ "$item_archived" = true ]; then
+          gh api graphql -f query="mutation{archiveProjectV2Item(input:{$pair}){item{id}}}" >/dev/null 2>&1 || out="$out; left unarchived"
         fi
-        RESTORE_FAILED=1; warn "item Status not restored, set it by hand: $item_id was '$item_status': $out"
+        RESTORE_FAILED=1; warn "item Status not restored, set it by hand: $label was '$item_status': $out"
       done <<< "$SAVED"
       info "restored Status on $restored of $saved_count item(s)"
       for name in "${CREATE_NAMES[@]}"; do

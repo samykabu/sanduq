@@ -359,20 +359,37 @@ class ProjectSyncTests(unittest.TestCase):
 FAKE_GH = """import json, re, sys
 args = sys.argv[1:]
 COLUMNS = COLUMNS or ['Backlog', 'Analysis', 'Engineer-Review', 'Ready', 'In progress', 'In review', 'Done']
-if args[:2] == ['api', 'graphql']:
+import os
+def log(*entry): open('edits.json', 'a').write(json.dumps(entry) + '\\n')
+def unarchived(): return json.load(open('unarchived.json')) if os.path.exists('unarchived.json') else []
+if args[:2] == ['api', 'graphql'] and 'updateProjectV2Field' in args[-1]:
     # updateProjectV2Field replaces every option, so every option comes back with a new id.
     names = [json.loads('"' + n + '"') for n in re.findall(r'name:"((?:[^"\\\\]|\\\\.)*)"', args[-1])]
     open('mutation.json', 'w').write(json.dumps(names))
     print(json.dumps({'data': {'updateProjectV2Field': {'projectV2Field': {
         'options': [{'id': 'N%d' % i, 'name': n} for i, n in enumerate(names)]}}}}))
-elif args[:2] == ['project', 'item-list']:
+elif args[:2] == ['api', 'graphql'] and 'archivedStates:[ARCHIVED,NOT_ARCHIVED]' in args[-1]:
+    # Every item, archived ones too, two per page (`gh project item-list` would leave archived ones out).
     if ITEMS is None: raise SystemExit('HTTP 403: Resource not accessible by integration')
-    if __import__('os').path.exists('mutation.json'): raise SystemExit('items read after the column update')
-    print(json.dumps({'items': ITEMS, 'totalCount': len(ITEMS)}))
+    if os.path.exists('mutation.json'): raise SystemExit('items read after the column update')
+    start = int((re.search(r'after:"(\\d+)"', args[-1]) or [0, 0])[1])
+    page = [{'id': i['id'], 'isArchived': i.get('archived', False),
+             'fieldValueByName': {'name': i['status']} if i.get('status') else None} for i in ITEMS[start:start + 2]]
+    more = start + 2 < len(ITEMS)
+    print(json.dumps({'data': {'node': {'items': {'pageInfo': {'hasNextPage': more, 'endCursor': str(start + 2) if more else None},
+                                                  'nodes': page}}}}))
+elif args[:2] == ['api', 'graphql'] and 'archiveProjectV2Item' in args[-1]:
+    item = re.search(r'itemId:"([^"]+)"', args[-1])[1]
+    undo = 'unarchiveProjectV2Item' in args[-1]
+    json.dump(unarchived() + [item] if undo else [i for i in unarchived() if i != item], open('unarchived.json', 'w'))
+    log('unarchive' if undo else 'archive', item)
+    print('{}')
 elif args[:2] == ['project', 'item-edit']:
     item = args[args.index('--id') + 1]
     if item in FAIL_EDIT: raise SystemExit('edit refused')
-    open('edits.json', 'a').write(json.dumps([item, args[args.index('--single-select-option-id') + 1]]) + '\\n')
+    if any(i['id'] == item and i.get('archived') for i in ITEMS) and item not in unarchived():
+        raise SystemExit('GraphQL: The item is archived and cannot be updated (updateProjectV2ItemFieldValue)')
+    log('edit', item, args[args.index('--single-select-option-id') + 1])
 elif args[:2] == ['auth', 'status']: print("Logged in to github.com\\n  - Token scopes: " + SCOPES)
 elif args[:2] == ['api', 'user']: print('acme')
 elif args[:2] == ['api', 'users/acme']: print(KIND)
@@ -507,13 +524,15 @@ class ProjectInitTests(unittest.TestCase):
                                  'ready': 'Ready', 'in-progress': 'In progress', 'in-review': 'In review',
                                  'done': 'Done'}, 'statuses': STATUSES}
     CREATE = (['--number', '1', '--json', '--auto-create-columns'], ['-Number', '1', '-Json', '-AutoCreateColumns'])
-    ITEMS = [{'id': 'I1', 'status': 'In Progress', 'content': {'type': 'Issue'}},
-             {'id': 'I2', 'status': 'Todo', 'content': {'type': 'DraftIssue'}},
-             {'id': 'I3', 'content': {'type': 'PullRequest'}}]
+    ITEMS = [{'id': 'I1', 'status': 'In Progress'}, {'id': 'I2', 'status': 'Todo'}, {'id': 'I3'},
+             {'id': 'I4', 'status': 'Done', 'archived': True}]
+
+    def events(self):
+        path = self.root / 'edits.json'
+        return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
 
     def edits(self):
-        path = self.root / 'edits.json'
-        return dict(json.loads(line) for line in path.read_text().splitlines()) if path.exists() else {}
+        return {event[1]: event[2] for event in self.events() if event[0] == 'edit'}
 
     def test_a_column_change_sets_every_item_status_again_by_name(self):
         """Board guard: the option update clears every item's Status, so init restores each one by name."""
@@ -523,9 +542,13 @@ class ProjectInitTests(unittest.TestCase):
             self.assertEqual(code, 0, (shell, output))
             options = json.loads((self.root / '.specify/extensions/project/config.json')
                                  .read_text(encoding='utf-8-sig'))['statusOptions']
-            # The renamed column keeps its items; an item without a Status is left alone.
-            self.assertEqual(self.edits(), {'I1': options['In progress'], 'I2': options['Todo']}, shell)
-            self.assertIn('restored Status on 2 of 2 item(s)', output, shell)
+            # The renamed column keeps its items; an item without a Status is left alone; the items span two pages.
+            self.assertEqual(self.edits(), {'I1': options['In progress'], 'I2': options['Todo'], 'I4': options['Done']},
+                             shell)
+            # G1: an archived item cannot be edited, so it is unarchived, set and archived again.
+            self.assertEqual([e for e in self.events() if e[1] == 'I4'],
+                             [['unarchive', 'I4'], ['edit', 'I4', options['Done']], ['archive', 'I4']], shell)
+            self.assertIn('restored Status on 3 of 3 item(s)', output, shell)
 
     def test_unreadable_items_refuse_the_column_change_unless_allowed(self):
         allow = (['--allow-status-reset'], ['-AllowStatusReset'])
