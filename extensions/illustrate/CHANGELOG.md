@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [2.7.1] - 2026-10-21
 
 Vendors illustration-tools 3.7.1.
 

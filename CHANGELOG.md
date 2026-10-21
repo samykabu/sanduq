@@ -4,6 +4,10 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## 2026-10-21 — Workflow 1.18.0, Scope 1.11.0, Project 2.6.0, PR 4.6.0, Progress 1.6.0, Illustrate 2.7.1, User Manual 1.8.1, Assure 2.6.1 (pending release)
+
+- Optimization round 5: round 4's deferred items, reviewed with Codex and gated on one live managed run. One shared `gh` transport (`sanduq_gh.py`) for Scope, Workflow, Project and PR, which retries only reads it can prove safe. Workflow checkpoints are version 2 without `repo_path` (Workflow 1.18.0 needs Scope 1.11.0; update both together), `workflow.py` is split into modules, and new Progress installs wire hooks natively; the installer refuses an optional package the installed Spec Kit cannot take and shows a failing command's own error. Scope readiness stops at a Done prerequisite, `scope.py cancel` marks an operation rolled back, and the Clarify and Brainstorm overlays are compact `replace` pointers. Project init is one Python script (`jq` no longer needed); PR review-feedback replies and resolves from an approved plan file. Progress 1.6.0 removes v2 output and the classic layout (agent-tools 1.7.0); User Manual vendors `init_manual.py` (dev-tools 1.4.0); Illustrate's verifiers share one SVG scanner (illustration-tools 3.7.1). Maintainers: `release.py check-bumps` fails when shipped files change without a version bump. Three cache options (W18, W24, W25) were measured or reverted and did not ship. Presets scope-gate 1.6.0, scope-brainstorm 1.5.0, workflow 1.3.0. See the Round 5 migration table in `docs/start/upgrades.md`.
+
 ## 2026-10-21 — Workflow 1.17.1, Scope 1.10.1, Project 2.5.1, PR 4.5.1
 
 - Review fixes for round 4: Project adopts a recovered task issue only when it is linked to this feature, Scope and Project read the origin through `insteadOf` rewrites again, and review-feedback gathering says when GitHub cut a connection at 100 items.

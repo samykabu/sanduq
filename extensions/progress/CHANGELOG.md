@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [1.6.0] - 2026-10-21
 
 Vendors agent-tools 1.7.0.
 

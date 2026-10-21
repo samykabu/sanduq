@@ -20,7 +20,7 @@ SCHEMA = 1  # the policy schema
 # The checkpoint has its own version (W27): 2 drops `repo_path`. Readers accept 1 and 2; every write is 2.
 CHECKPOINT_SCHEMA = 2
 CHECKPOINT_SCHEMAS = (1, 2)
-RANGES = {'scope': '>=1.4,<2', 'assure': '>=2.2,<3', 'user-manual': '>=1.2,<2',
+RANGES = {'scope': '>=1.11,<2', 'assure': '>=2.2,<3', 'user-manual': '>=1.2,<2',
           'pr': '>=4.1,<5', 'superspec': '>=1.0.2,<2', 'project': '>=2.1,<3', 'progress': '>=1.0,<2'}
 BASE_STAGES = ['scope', 'specify', 'clarify', 'plan', 'tasks', 'qa_analyze',
                'manual_analyze', 'analyze', 'taskstoissues', 'execute', 'verify',

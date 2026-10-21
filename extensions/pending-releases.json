@@ -1,6 +1,15 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Round 4 review fixes (PR #101 Codex connector findings): Project sub-issue adoption requires a confirmed link, Scope/Project resolve insteadOf, pr_feedback reports truncated connections. Regression tests for each; Project, PR, Scope and scripts suites pass locally. Publish after main CI."
+  "versions": {
+    "workflow": "1.18.0",
+    "scope": "1.11.0",
+    "project": "2.6.0",
+    "pr": "4.6.0",
+    "progress": "1.6.0",
+    "illustrate": "2.7.1",
+    "user-manual": "1.8.1",
+    "assure": "2.6.1"
+  },
+  "status": "ready",
+  "note": "Round 5 (round 4 deferred items): shared gh transport, checkpoint v2, workflow.py split, native Progress default, Scope readiness/cancel/overlays, Python Project init, PR plan-file replies, Progress v2 removal, vendored init_manual and svg_scan. Codex plan and diff reviews applied; live managed run passed (I3, IP21 gate). Publish after main CI."
 }

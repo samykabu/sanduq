@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [1.18.0] - 2026-10-21
 
 - The checkpoint has its own schema version, separate from the policy's. Version 2 drops `repo_path`. Workflow, the CI gate and Scope's claim check read versions 1 and 2; `start`, `relocate` and every other write produce version 2. `schemas/checkpoint-v1.schema.json` accepts both and refuses `repo_path` on version 2.
 - Removed `worker_brief.project_result` and `project_usage` (used only by a test).

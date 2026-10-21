@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [1.11.0] - 2026-10-21
 
 - The prerequisite check stops at a Done prerequisite (status aliases applied) and still walks through In review ones. A full inspect reads pull-request timelines for the direct prerequisites only. A chain of N Done prerequisites now costs 3 API calls instead of 2 + 2N.
 - `scope.py cancel <issue>-<hash>` cancels an interrupted publish: with `--apply` it marks the journal `rolled_back` under the mutation lock, so `publish` refuses to resume it. It makes no GitHub write and prints the created issues, issue before-images, dependency before-images and catalog and issue-map backups for manual repair. A bare issue number lists that issue's operations instead. A publish journals each new issue before linking it, so an interrupted link still lists the issue.
