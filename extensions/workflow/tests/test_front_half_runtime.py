@@ -17,6 +17,7 @@ import ci_gate as c  # noqa: E402
 import lean_policy  # noqa: E402
 import lifecycle  # noqa: E402
 import workflow as w  # noqa: E402
+from runtime_patch import patch_runtime  # noqa: E402
 from test_receipt_contract import Harness, checkpoint_validator  # noqa: E402
 import lifecycle_snapshot  # noqa: E402
 
@@ -465,7 +466,7 @@ class DoctorCacheTests(Base):
         def counting(*args, **kwargs):
             calls.append(kwargs)
             return real(*args, **kwargs)
-        with patch.object(w, 'doctor', counting):
+        with patch_runtime('doctor', counting):
             self.advance_fresh(run, 'specify')
             self.assertEqual(len(calls), 1)
             cache = w.read(self.root / w.DOCTOR_CACHE)
@@ -490,14 +491,14 @@ class DoctorCacheTests(Base):
         self.policy['project_sync'] = {'points': ['pr']}
         self.configure()
         run = w.Run(self.root, self.feature)
-        with patch.object(w, 'doctor', return_value={'ok': False, 'errors': ['BROKEN'], 'project_checked': True}):
+        with patch_runtime('doctor', return_value={'ok': False, 'errors': ['BROKEN'], 'project_checked': True}):
             with self.assertRaisesRegex(w.WorkflowError, 'BROKEN'):
                 run.claim(self.usage())
         self.assertEqual(w.read(self.root / w.DOCTOR_CACHE)['key']['policy_digest'], before)
 
     def test_inventory_and_eol_scan_run_only_in_the_explicit_doctor(self):
         with patch.object(w.skill_inventory, 'inventory', return_value={'hosts': {}}) as inventory, \
-                patch.object(w, 'eol_drift', return_value=[]) as eol:
+                patch_runtime('eol_drift', return_value=[]) as eol:
             run = self.run_object()
             run.claim(self.usage())
             w.doctor(self.root, self.policy, project=True)
@@ -644,6 +645,19 @@ class OperationCacheTests(Base):
         subprocess.run(['git', 'remote', 'set-url', 'origin', 'https://github.com/acme/third.git'], cwd=self.root,
                        check=True)
         self.assertEqual(w.normalized_remote(self.root), 'github.com/acme/third')
+
+    def test_the_one_git_runner_keeps_the_memo_for_reads_and_drops_it_after_a_write(self):
+        """W26: unchecked git calls go through `run_git`, which applies the same memo rule as `git`."""
+        calls, counting = self.git_calls()
+        with counting, w.operation():
+            w.normalized_remote(self.root)
+            self.assertTrue(w.git_ok(self.root, 'rev-parse', '--git-dir'))
+            self.assertFalse(w.git_ok(self.root, 'check-ref-format', '--branch', 'a..b'))
+            w.normalized_remote(self.root)
+            self.assertEqual(self.count(calls, 'config', '--get', 'remote.origin.url'), 1)
+            self.assertEqual(w.run_git(self.root, 'remote', 'set-url', 'origin',
+                                       'https://github.com/acme/other.git').returncode, 0)
+            self.assertEqual(w.normalized_remote(self.root), 'github.com/acme/other')
 
     def test_load_with_a_recorded_root_commit_skips_the_history_walk(self):
         run = self.run_object()
@@ -857,13 +871,13 @@ class BindOnlyAndLazyIssueTests(Base):
         self.assertEqual((claim['stage'], claim['mode']), ('specify', 'bind-only'))
         argv = shlex.split(claim['scope_command']['command'])[2:]
         self.assertEqual(argv[:2], ['bind', '10'])
-        decisions = sm.workflow_policy._decisions_module()
-        decisions.reconcile = lambda *a, **k: {'version': 1, 'feature': self.feature, 'issue': 'acme/app#10',
-                                               'decisions': []}  # no GitHub: the issue has no decisions
+        decisions = sm.workflow_policy._decisions_module()  # cached per process: patched, never overwritten
+        no_decisions = {'version': 1, 'feature': self.feature, 'issue': 'acme/app#10', 'decisions': []}
         previous = os.getcwd()
         os.chdir(self.root)
         try:
             with patch.object(sm, 'Scope', return_value=app), patch('sys.stdout', new=__import__('io').StringIO()), \
+                    patch.object(decisions, 'reconcile', return_value=no_decisions), \
                     patch.object(sm.workflow_policy, '_decisions_module', return_value=decisions):
                 code = sm.main(argv)
         finally:

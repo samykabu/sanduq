@@ -30,6 +30,25 @@ def self_hosted():
     return selection
 
 
+class LoadCiTests(unittest.TestCase):
+    """Codex round 5, finding 11: `load_ci` takes a project root or a policy file (`init_manual.py --ci-policy`)."""
+
+    def test_a_policy_file_and_a_project_root_both_load_their_selection(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.assertEqual(ci.load_ci(root), ci.default_ci())  # no policy: the default, as before
+            policy = root / '.specify/workflow.yml'
+            policy.parent.mkdir()
+            policy.write_text(yaml.safe_dump({'schema_version': 1, 'ci': self_hosted()}), encoding='utf-8')
+            self.assertEqual(ci.load_ci(root), self_hosted())
+            self.assertEqual(ci.load_ci(policy), self_hosted())
+            self.assertEqual(ci.load_ci(str(policy)), self_hosted())
+            other = root / 'ci-only.yml'
+            other.write_text(yaml.safe_dump({'ci': self_hosted()}), encoding='utf-8')
+            self.assertEqual(ci.load_ci(other), self_hosted())
+
+
 class RenderTests(unittest.TestCase):
     def test_every_shipped_asset_renders_to_valid_yaml_under_both_selections(self):
         for name, path in ASSETS.items():
@@ -418,7 +437,7 @@ class PolicyIntegrationTests(unittest.TestCase):
         self.assertEqual(w.load_policy(self.root)['ci']['runners']['linux'], ['ubuntu-latest'])
 
     def test_the_runtime_works_from_a_copied_scripts_directory(self):
-        # project-init.sh runs workflow.py out of
+        # Project init (project_init.py) runs workflow.py out of
         # .specify/extensions/workflow/scripts/, a plain copy of this directory
         # with no package layout around it. A shared module reachable only from
         # the source tree makes that invocation die on import, which no
@@ -431,7 +450,7 @@ class PolicyIntegrationTests(unittest.TestCase):
         shutil.copytree(EXTENSIONS / 'workflow/scripts', scripts,
                         ignore=shutil.ignore_patterns('__pycache__'))
         # Installed scripts include package.py's canonical shared-module injection.
-        for helper in ('check_inputs.py', 'evidence_snapshot.py', 'bounded_json.py', 'sanduq_remote.py',
+        for helper in ('check_inputs.py', 'evidence_snapshot.py', 'bounded_json.py', 'sanduq_remote.py', 'sanduq_gh.py',
                        'sanduq_pr_lint.py'):
             shutil.copyfile(EXTENSIONS / 'scripts/shared' / helper, scripts / helper)
         subprocess.run(['git', 'init', '-q'], cwd=copy, check=True, capture_output=True)

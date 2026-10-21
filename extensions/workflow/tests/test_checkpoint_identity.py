@@ -16,8 +16,7 @@ new checkpoints alike, refusing when there is no GitHub remote to check
 change unless explicitly allowed (finding 2); `normalize_remote_url` parses
 a real URL with `urllib.parse` rather than an ad-hoc regex (finding 3); the
 root commit is also required to match when neither clone is shallow, even
-when the remote does (finding 4); `repo_path` is still written for an older
-reader (finding 5); and the delegated-context env read is shared with
+when the remote does (finding 4); and the delegated-context env read is shared with
 `delegate_dispatch` (finding 7).
 """
 import copy
@@ -330,13 +329,12 @@ class LegacyUpgradeTests(Harness):
         self.assertEqual(run.path.read_bytes(), raw_before)
 
         # The next real write persists the upgrade and touches no receipt.
-        # `repo_path` is refreshed, not dropped: 1.8.0+ never reads it, but
-        # an older reader must not KeyError on a checkpoint this version writes
-        # (round 1, finding 5).
+        # It is a version-2 checkpoint, which no longer carries `repo_path` (W27).
         result = run.migrate('promote to 1.8.0 identity')
         self.assertEqual(result['migration']['invalidated'], [])
         saved = run.load()
-        self.assertEqual(saved['repo_path'], str(root))
+        self.assertEqual(saved['schema_version'], 2)
+        self.assertNotIn('repo_path', saved)
         self.assertEqual(saved['repo_identity'], state['repo_identity'])
         self.assertEqual(saved['receipts'], original['receipts'])
 
@@ -453,7 +451,7 @@ class SecurityTests(Harness):
         identity_a = w.repo_identity(repo_a)
         self.assertIsNone(identity_a['remote'])
         self.assertIsNotNone(identity_a['root_commit'])
-        state = {'schema_version': w.SCHEMA, 'run_id': 'r' * 8, 'repo_identity': identity_a,
+        state = {'schema_version': w.CHECKPOINT_SCHEMA, 'run_id': 'r' * 8, 'repo_identity': identity_a,
                  'branch': 'whatever', 'feature': 'specs/001-example', 'issue': 'acme/app#10',
                  'policy_digest': 'a' * 64, 'dependency_digest': 'b' * 64,
                  'policy': w.default_policy(True, True), 'commands': {}, 'receipts': {},
@@ -515,17 +513,87 @@ class SecurityTests(Harness):
                 w.Run(repo_c, 'specs/001-example').load()
 
 
-class CompatibilityTests(Harness):
-    """Round 1, finding 5: `repo_path` is still written for an older reader."""
+class CheckpointVersionTests(Harness):
+    """W27: checkpoint version 2 drops `repo_path`; version 1 (Workflow 1.17 and earlier) still loads."""
 
-    def test_repo_path_is_still_written_by_start(self):
+    def started(self):
         root = self.make_repo(remote='https://github.com/acme/app.git')
-        state = w.Run(root, 'specs/001-example').start('acme/app#10')
-        self.assertIn('repo_path', state)
-        self.assertEqual(state['repo_path'], str(root))
-        # The exact condition a pre-1.8.0 Run.load() checked still holds,
-        # so a checkpoint this version writes does not KeyError there.
-        self.assertTrue(state['repo_path'] == str(root) and state['feature'] == 'specs/001-example')
+        run = w.Run(root, 'specs/001-example')
+        run.start('acme/app#10')
+        return root, run
+
+    def as_1_17(self, root, run):
+        """Rewrite the checkpoint into the shape Workflow 1.17 wrote: version 1 with `repo_path`."""
+        state = json.loads(run.path.read_text(encoding='utf-8'))
+        state.update(schema_version=1, repo_path=str(root))
+        run.path.write_text(json.dumps(state, indent=2) + '\n', encoding='utf-8')
+        return state
+
+    def test_start_writes_version_2_without_repo_path(self):
+        _, run = self.started()
+        saved = json.loads(run.path.read_text(encoding='utf-8'))
+        self.assertEqual(saved['schema_version'], 2)
+        self.assertNotIn('repo_path', saved)
+        self.assertEqual(w.SCHEMA, 1)  # the policy schema is separate and unchanged
+
+    def test_a_1_17_checkpoint_loads_and_its_next_write_is_version_2(self):
+        root, run = self.started()
+        self.root, self.policy = root, w.default_policy(True, True)
+        fixture.WorkflowTests.configure(self, superspec=True)  # so `migrate`'s doctor check passes
+        old = self.as_1_17(root, run)
+        raw = run.path.read_bytes()
+        state = run.load()
+        self.assertEqual(run.path.read_bytes(), raw)  # loading writes nothing
+        self.assertEqual(state['run_id'], old['run_id'])
+        result = run.migrate('upgrade to checkpoint version 2')
+        self.assertEqual(result['migration']['invalidated'], [])
+        saved = json.loads(run.path.read_text(encoding='utf-8'))
+        self.assertEqual(saved['schema_version'], 2)
+        self.assertNotIn('repo_path', saved)
+        self.assertEqual(saved['repo_identity'], old['repo_identity'])
+        self.assertEqual(saved['receipts'], old['receipts'])
+
+    def test_an_unknown_checkpoint_version_is_refused(self):
+        root, run = self.started()
+        state = json.loads(run.path.read_text(encoding='utf-8'))
+        run.path.write_text(json.dumps({**state, 'schema_version': 3}), encoding='utf-8')
+        with self.assertRaisesRegex(w.WorkflowError, 'WORKFLOW_START_REQUIRED'):
+            run.load()
+
+    def test_ci_gate_reads_versions_1_and_2(self):
+        import ci_gate
+        root, run = self.started()
+        policy = w.load_policy(root)
+        for version in (2, 1, 3):
+            if version == 1:
+                self.as_1_17(root, run)
+            elif version == 3:
+                state = json.loads(run.path.read_text(encoding='utf-8'))
+                run.path.write_text(json.dumps({**state, 'schema_version': 3}), encoding='utf-8')
+            try:
+                ci_gate.check(root, 'specs/001-example', policy)
+                message = ''
+            except w.WorkflowError as exc:
+                message = str(exc)
+            self.assertEqual('CHECKPOINT_MISSING_OR_WRONG_FEATURE' in message, version == 3, (version, message))
+
+    def test_scope_bound_claim_reads_versions_1_and_2(self):
+        import importlib.util
+        path = Path(__file__).resolve().parents[2] / 'scope/scripts/workflow_policy.py'
+        spec = importlib.util.spec_from_file_location('scope_workflow_policy_w27', path)
+        policy = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(policy)
+        root, run = self.started()
+        (root / 'specs/001-example/spec.md').write_text('# Existing behavior', encoding='utf-8')
+        w.write(root / 'specs/001-example/scope-source.json', {'repo': 'acme/app', 'issue': 10})
+        w.write(root / '.specify/feature.json', {'feature_directory': 'specs/001-example'})
+        state = json.loads(run.path.read_text(encoding='utf-8'))
+        state['active'] = {'stage': 'scope', 'token': 'owned', 'mode': 'revalidate'}
+        for version in (2, 1, 3):
+            shaped = dict(state, schema_version=version, **({'repo_path': str(root)} if version == 1 else {}))
+            run.path.write_text(json.dumps(shaped), encoding='utf-8')
+            claim = policy.bound_claim(root, 'acme/app', 10, ('scope',))
+            self.assertEqual(claim is not None, version != 3, version)
 
 
 class MergedUnrelatedHistoryTests(Harness):
@@ -667,7 +735,7 @@ class RelocateTests(Harness):
 
         after = run.load()  # now accepted under the new identity
         self.assertEqual(after['repo_identity']['remote'], 'github.com/acme-renamed/app')
-        self.assertEqual(after['repo_path'], str(self.root))  # refreshed, still written (finding 5)
+        self.assertNotIn('repo_path', after)  # a version-2 write drops it (W27)
         self.assertEqual(after['issue'], 'acme-renamed/app#10')
         self.assertEqual(after['relocations'][-1], relocation)
         after_hash = hashlib.sha256(json.dumps(after['receipts'], sort_keys=True).encode()).hexdigest()

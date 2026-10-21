@@ -233,7 +233,8 @@ These skills ship inside extensions; they are not additional `npx skills` instal
 
 Canonical [Workflow](../../presets/workflow/preset.yml), [Scope Gate](../../presets/scope-gate/preset.yml),
 and [Scope Brainstorm](../../presets/scope-brainstorm/preset.yml) presets prepend policy to provider
-commands; the Workflow preset replaces Clarify and SuperSpec Brainstorm outright. Installing an overlay does not install SuperSpec or Bridge. The
+commands; Clarify and SuperSpec Brainstorm are replaced outright by pointers to Scope's GitHub clarification
+skill. Installing an overlay does not install SuperSpec or Bridge. The
 [worked lifecycle](../workflow/lifecycle.md#core-superspec-and-bridge-overlays) covers every overlay and its
 consistent prompt. [Contributing](../../CONTRIBUTING.md#find-the-owning-source) explains where to contribute.
 

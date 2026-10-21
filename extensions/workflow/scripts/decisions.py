@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import importlib.util
 import re
-import subprocess
 import sys
 from pathlib import Path
 
+try:
+    import sanduq_gh
+except ModuleNotFoundError:  # the source tree; package.py copies it into scripts/
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'shared'))
+    import sanduq_gh
+from execution_tools import sha256_file
 from workflow import WorkflowError, Run, digest, inside, load_policy, locked, read, require, write
 
 MARKER = re.compile(r'\A<!-- sanduq-decision:question (\{[^\n]*\}) -->\n')
@@ -24,8 +28,14 @@ MODES = ('single', 'multiple')
 
 
 def scope_transport():
-    path = Path(__file__).resolve().parents[2] / 'scope/scripts/scope.py'
-    spec = importlib.util.spec_from_file_location('sanduq_scope_decision_transport', path)
+    """Scope's GitHub client module (`sanduq_scope_github`, with its GraphQL-to-REST Project switch), without
+    loading `scope.py`: the copy packaged next to this file, else the one in Scope's scripts."""
+    try:
+        import sanduq_scope_github
+        return sanduq_scope_github
+    except ModuleNotFoundError:
+        path = Path(__file__).resolve().parents[2] / 'scope/scripts/sanduq_scope_github.py'
+    spec = importlib.util.spec_from_file_location('sanduq_scope_github', path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -41,18 +51,11 @@ class GitHub:
         return self._project.project_transport if self._project else None
 
     def api(self, endpoint, method='GET', payload=None, pages=False):
-        args = ['gh', 'api', endpoint, '-H', 'Accept: application/vnd.github+json']
-        if pages:
-            args += ['--paginate', '--slurp']
-        if method != 'GET':
-            args += ['--method', method]
-        if payload is not None:
-            args += ['--input', '-']
-        result = subprocess.run(args, input=json.dumps(payload) if payload is not None else None,
-                                capture_output=True, text=True, encoding='utf-8', timeout=30)
-        require(result.returncode == 0, 'GITHUB_DECISION_API_FAILED: ' + result.stderr.strip()[:500])
-        data = json.loads(result.stdout) if result.stdout.strip() else None
-        return [item for page in data for item in page] if pages else data
+        try:
+            return sanduq_gh.api(endpoint, method=method, payload=payload, pages=pages, timeout=30,
+                                 retry=method == 'GET')
+        except sanduq_gh.GhError as exc:
+            raise WorkflowError('GITHUB_DECISION_API_FAILED: ' + (exc.stderr.strip() or str(exc))[:500]) from None
 
     def command(self, args):
         if self._project is None:
@@ -426,7 +429,7 @@ def _apply_answer(root, feature, qid, evidence, gh=None):
     files = [str(inside(root, value).relative_to(root).as_posix()) for value in evidence]
     require(files and all((root / value).is_file() for value in files), 'DECISION_APPLICATION_EVIDENCE_REQUIRED')
     item['status'] = 'applied'
-    item['application'] = {'evidence': {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in files},
+    item['application'] = {'evidence': {name: sha256_file(root / name) for name in files},
                            'answer_digest': item['answer_digest']}
     write(Path(root) / feature / 'workflow/decisions.json', ledger)
     return item
@@ -454,7 +457,7 @@ def verify_ledger(root, feature, ledger):
         require(application.get('answer_digest') == item['answer_digest'], 'DECISION_APPLICATION_STALE')
         for name, expected in application.get('evidence', {}).items():
             path = inside(root, name)
-            require(path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() == expected,
+            require(path.is_file() and sha256_file(path) == expected,
                     'DECISION_APPLICATION_STALE: ' + name)
 
 

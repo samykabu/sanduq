@@ -28,6 +28,8 @@ import importlib.util
 import math
 import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from svg_scan import is_hand_variant  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "assets"
@@ -229,12 +231,6 @@ def verify(path: Path) -> list[str]:
     except ValueError:
         display = str(path)
     return verify_source(path.read_text(encoding="utf-8"), display)
-
-
-def is_hand_variant(path: Path, source: str) -> bool:
-    """A generate-hand-variants.cjs output: a `-hand` stem or rough.js redraw markup."""
-    # ponytail: rough.js redraws drop the data contract, so they are never in scope.
-    return path.stem.endswith("-hand") or 'class="rough-shape"' in source
 
 
 def in_scope(path: Path, source: str) -> bool:

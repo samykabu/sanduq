@@ -21,6 +21,8 @@ from pathlib import Path
 
 import yaml
 
+from execution_tools import sha256_file
+
 # ``qa`` split in two (B12): ``qa_author`` is standard-tier authored QA work
 # (writing tests, analysing coverage); ``qa_collect`` is the light-eligible
 # route for running an existing, fixed check and reporting its result. Nothing
@@ -1173,7 +1175,7 @@ def health_key(root, host, scope, driver):
     files = {}
     for name in SKILL_FILES:
         path = Path(driver).parent / name if driver else None
-        files[name] = hashlib.sha256(path.read_bytes()).hexdigest() if path and path.is_file() else None
+        files[name] = sha256_file(path) if path and path.is_file() else None
     tools = {}
     for name in ('node', 'codex', 'claude'):
         found = shutil.which(name)

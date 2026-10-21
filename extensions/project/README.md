@@ -42,8 +42,9 @@ gh auth refresh -h github.com -s project,read:project   # one-time scope
 
 `project init` asks whether lifecycle sync hooks are **required** (automatic) or **optional**
 (manual/user-approved), discovers the project id, Status field, and columns, then maps each phase
-to a column (**exact → fuzzy → prompt → optional auto-create**). It writes `config.json` and updates
-the `project` hooks in `.specify/extensions.yml`; commit both files.
+to a column (**exact → fuzzy → optional auto-create**). It writes `config.json` and updates
+the `project` hooks in `.specify/extensions.yml`; commit both files. The script never prompts: a
+choice it cannot make (several projects, an unreadable owner type) exits 4 with JSON `needs`.
 
 Creating or renaming a column replaces every Status option on GitHub, which clears every item's Status. Init
 therefore reads each item's Status first, archived items included, and sets it again by name afterwards. GitHub
@@ -53,13 +54,12 @@ could not set is named, and init exits 1. If the items cannot be read, init chan
 
 For unattended initialization, select the policy explicitly:
 
-```powershell
-pwsh scripts/powershell/project-init.ps1 -HooksMode required -NonInteractive
+```bash
+python scripts/project_init.py --hooks-mode required
 ```
 
-```bash
-scripts/bash/project-init.sh --hooks-mode required --non-interactive
-```
+`scripts/bash/project-init.sh` and `scripts/powershell/project-init.ps1` still work for one release: they
+print the `project_init.py` line and pass every flag through, in either spelling.
 
 ## Usage
 
@@ -83,7 +83,8 @@ API, and `--json` reports the `transport`.
 
 - `config.default.json` — DEFAULT phase→column names + sub-issue policy (no ids).
 - `config.json` — written by `project init` (board ids + mapping); **committed per repo**.
-- `scripts/{powershell,bash}/project-init.*` — one-time board discovery + mapping.
+- `scripts/project_init.py` — one-time board discovery + mapping (stdlib; `jq` is no longer needed).
+- `scripts/{powershell,bash}/project-init.*` — deprecated stubs that run `project_init.py`.
 - `scripts/project_sync.py` — the lifecycle engine.
 - `commands/*.md` — command sources (rendered into each assistant target on install).
 - State (runtime, committed): `.specify/project-sync-state.json`.

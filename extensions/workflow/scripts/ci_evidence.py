@@ -16,10 +16,17 @@ from __future__ import annotations
 import io
 import json
 import re
-import subprocess
+import sys
 import zipfile
+from pathlib import Path
 
 from source_key import ACCEPTED_KEY_VERSIONS, KEY_VERSION
+
+try:
+    import sanduq_gh
+except ModuleNotFoundError:  # the source tree; package.py copies it into scripts/
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'shared'))
+    import sanduq_gh
 
 PLAN_FILE = 'verification-plan.json'
 
@@ -46,16 +53,14 @@ class GhClient:
     """GitHub REST access through the `gh` CLI (its own authentication, REST budget)."""
 
     def _run(self, endpoint):
+        # Not retried: an artifact download may take the whole 300 s.
         try:
-            result = subprocess.run(['gh', 'api', endpoint, '-H', 'Accept: application/vnd.github+json',
-                                     '-H', 'X-GitHub-Api-Version: 2022-11-28'], capture_output=True,
-                                    timeout=GH_TIMEOUT)
-        except subprocess.TimeoutExpired:
-            raise EvidenceError(f'GitHub API {endpoint}: timed out after {GH_TIMEOUT} s') from None
-        if result.returncode != 0:
-            raise EvidenceError('GitHub API ' + endpoint + ': ' +
-                                result.stderr.decode('utf-8', 'replace').strip()[:500])
-        return result.stdout
+            return sanduq_gh.run_gh(['api', endpoint, '-H', 'Accept: application/vnd.github+json',
+                                     '-H', 'X-GitHub-Api-Version: 2022-11-28'], binary=True, timeout=GH_TIMEOUT)
+        except sanduq_gh.GhError as exc:
+            if exc.timeout:
+                raise EvidenceError(f'GitHub API {endpoint}: timed out after {GH_TIMEOUT} s') from None
+            raise EvidenceError('GitHub API ' + endpoint + ': ' + (exc.stderr.strip() or str(exc))[:500]) from None
 
     def api(self, endpoint):
         return json.loads(self._run(endpoint).decode('utf-8'))

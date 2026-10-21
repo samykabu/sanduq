@@ -5,11 +5,16 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import subprocess
 import sys
 from pathlib import Path
 
 import yaml
+
+try:
+    import sanduq_gh
+except ModuleNotFoundError:  # the source tree; package.py copies it into scripts/
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'shared'))
+    import sanduq_gh
 
 from workflow import WorkflowError, require, inside, git, read, write, locked, digest, github_repository
 
@@ -89,17 +94,14 @@ GH_TIMEOUT = 120  # seconds per gh call; a hung gh must not hold the dispatch lo
 
 class GitHub:
     def api(self, path, method='GET', payload=None, pages=False):
-        args = ['gh', 'api', path, '-X', method, '-H', 'Accept: application/vnd.github+json']
-        if pages: args += ['--paginate', '--slurp']
-        if payload is not None: args += ['--input', '-']
         try:
-            result = subprocess.run(args, input=json.dumps(payload) if payload is not None else None,
-                                    text=True, encoding='utf-8', capture_output=True, timeout=GH_TIMEOUT)
-        except subprocess.TimeoutExpired:
-            raise WorkflowError(f'GITHUB_API_FAILED: gh api {path} timed out after {GH_TIMEOUT} s') from None
-        require(result.returncode == 0, 'GITHUB_API_FAILED: ' + result.stderr.strip())
-        output = json.loads(result.stdout) if result.stdout.strip() else None
-        return [item for page in output for item in page] if pages else output
+            # A GET is a read and may be retried once (sanduq_gh's rule); a write never is.
+            return sanduq_gh.api(path, method=method, payload=payload, pages=pages, timeout=GH_TIMEOUT,
+                                 retry=method == 'GET')
+        except sanduq_gh.GhError as exc:
+            if exc.timeout:
+                raise WorkflowError(f'GITHUB_API_FAILED: gh api {path} timed out after {GH_TIMEOUT} s') from None
+            raise WorkflowError('GITHUB_API_FAILED: ' + (exc.stderr.strip() or str(exc))) from None
 
 
 def matching_issues(issues, repo, parent, feature):
@@ -263,7 +265,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=Path.cwd())
     parser.add_argument('--feature', required=True)
-    parser.add_argument('--parent', type=int, required=True)
+    parser.add_argument('--parent', type=int, required=True, help='parent issue number, e.g. 14 (not owner/repo#14)')
     parser.add_argument('--dependencies', type=Path, help='JSON task-ID dependency mapping, explicitly {} if independent')
     parser.add_argument('--phase', help='Create and link only the tasks under this "## <heading>" of tasks.md (phase-lazy issue sync)')
     parser.add_argument('--sync-states', action='store_true', help='Update already-linked issue states from completed tasks; never create issues')

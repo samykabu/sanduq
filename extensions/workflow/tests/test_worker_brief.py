@@ -266,22 +266,6 @@ class WorkerBriefLeanTests(unittest.TestCase):
         self.assertTrue(oversized)
         self.assertIn('line 119', text)
 
-    def test_projection_keeps_counters_apart_and_unavailable_zeros_unknown(self):
-        placeholder = {f: 0 for f in wb.USAGE_FIELDS}
-        for tokens in ({**placeholder, 'fidelity': 'unavailable'}, None, {'total': 5}):
-            self.assertIsNone(wb.project_result({'run_id': 'r', 'tokens': tokens})['usage'])
-        exact = {'input_total': 354918, 'input_fresh': 12, 'cache_read': 307644, 'cache_write': 47262,
-                 'output_total': 2925, 'reasoning': 879, 'total': 357843, 'fidelity': 'exact'}
-        known = wb.project_result({'run_id': 'r', 'summary': 's' * 900, 'source_fingerprint': 'f', 'tokens': exact})
-        self.assertEqual(known['usage']['input_fresh'], 12)
-        self.assertEqual(known['usage']['cache_read'], 307644)
-        self.assertEqual(known['usage']['output_total'], 2925)
-        self.assertEqual(len(known['summary']), 300)
-        self.assertEqual(known['source_fingerprint'], 'f')
-        partial = wb.project_result({'run_id': 'r', 'tokens': {'fidelity': 'exact', 'total': 3, 'cache_read': -1}})
-        self.assertEqual((partial['usage']['total'], partial['usage']['cache_read'], partial['usage']['input_fresh']),
-                         (3, None, None))
-
 
 class TaskCardTests(unittest.TestCase):
     """E8: with the role agents installed, the worker gets a task card under 1.5 KB."""

@@ -176,8 +176,8 @@ worktree is ignored. Context size and elapsed time cannot be self-reported and s
 
 ## Projection details worth knowing
 
-This list describes the v2 compatibility document (`progress status --json --schema v2`). The v3 rules are in
-[contracts](contracts.md#projection-sanduqprogressv3).
+This list describes the internal base document v3 is built on ([contracts](contracts.md#base-document-sanduqprogressv2-internal));
+no command prints it. The v3 rules are in [contracts](contracts.md#projection-sanduqprogressv3).
 
 
 - `events` are chronological (oldest first), bounded by kind: the last 50 stage, failure, decision, block and workflow

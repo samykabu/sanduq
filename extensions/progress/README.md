@@ -19,8 +19,9 @@ so deleting it loses nothing.
 
 ## Install
 
-Requires Spec Kit 1.1.1 or later and Python 3.11 or later. Workflow and Illustrate are optional
-([dependencies](dependencies.yml)).
+Requires Spec Kit 1.1.1 or later (`requires.speckit_version`) and Python 3.11 or later. Workflow 1.17.0 or later and
+Illustrate are optional ([dependencies](dependencies.yml)). On an older Spec Kit the Workflow installer refuses
+`--with progress` with `OPTIONAL_PACKAGE_SPECKIT_INCOMPATIBLE`: upgrade Spec Kit, or install without `--with progress`.
 
 Plain Spec Kit, from the Sanduq catalog:
 
@@ -78,10 +79,10 @@ The install registers five native hooks (see [How it plugs in](#how-it-plugs-in)
    progress: 0/6 tasks, 1 lanes active, 0 blocked, 0 decisions pending (rev 15)
    ```
 
-   The summary is built from the v2 counts, so its wording did not change in 1.2.0. `progress status --json` prints the
-   v3 projection (`sanduq.progress.v3`) that the Timeline page reads. `progress status --json --schema v2` prints the
-   old document for older readers, such as Workflow 1.16.0 and earlier. The v2 document is deprecated and will be
-   removed in a later release.
+   The summary wording has not changed since 1.2.0. `progress status --json` prints the v3 projection
+   (`sanduq.progress.v3`) that the Timeline page reads. `--schema v2` was removed: it prints a `PROGRESS_REMOVED`
+   line and exits 2. Workflow 1.16.0 and earlier asked for v2, so Progress needs Workflow 1.17.0 or later; `status`
+   names the upgrade command while an older Workflow is installed.
 
 In the rest of this page `progress` stands for `python .specify/extensions/progress/scripts/progress.py`, run from the
 repository root.
@@ -118,14 +119,16 @@ standard library and returns before importing Progress when Progress was never i
 session is not bound.
 
 With Workflow, two optional keys in `.specify/workflow.yml` change how these hooks are written. Both are applied by
-`install.py --with progress --apply`, and an absent key keeps the behaviour above:
+`install.py --with progress --apply`:
 
 ```yaml
 progress:
-  hook_wiring: native                    # default speckit
+  hook_wiring: native                    # unset: native for a new install, else the recorded wiring
   post_tool_matcher: "Bash|Task|Agent|spawn_agent"   # default "" (every tool)
 ```
 
+- Unset `hook_wiring`: a new Progress install (no Progress wiring yet) is wired natively; an existing install keeps
+  the wiring `.specify/workflow/install-lock.json` records (Spec Kit's when none is recorded).
 - `hook_wiring: native` removes the Spec Kit entries from `.claude/settings.json` and `.codex/config.toml` and runs
   `progress hooks install --host <host>` for each installed host instead, so each event is one Python process running
   `scripts/hook.py <event>` (`.claude/settings.json`, `.codex/hooks.json`) rather than the dispatcher plus a second
@@ -221,8 +224,7 @@ link or junction (`PROGRESS_UNSAFE_TARGET`). The layout and every schema are in 
 | `$speckit-progress-theme` | Choose a preset, import the Illustrate theme or load a file |
 | `$speckit-progress-export` | Write the projection as Markdown or JSON |
 
-`progress status --json` prints the v3 projection and `--schema v2` the old, deprecated one (see
-[Quick start](#quick-start)).
+`progress status --json` prints the v3 projection; `--schema v2` was removed (see [Quick start](#quick-start)).
 `progress bind --host codex --model gpt-6.1-sol --effort high` records the coordinator's own model and effort when the host
 reports nothing; the page labels them self-reported and never lets them replace a value the host observed. The `lane`, `block`, `unblock`, `decide`, `note`, `attempt` and `runs` verbs run through the CLI. Every verb, flag,
 output line, exit code, schema and example is in [the command reference](docs/commands.md). The internal
@@ -231,10 +233,10 @@ output line, exit code, schema and example is in [the command reference](docs/co
 ## Theming
 
 Four presets (`sanduq`, `cobalt`, `emerald`, `classic`) in light and dark, tokens only. `--from-illustrate` maps the
-project's Illustrate theme. Section order, hidden sections, density, title, logo and fonts are set in
-`.specify/progress/theme.json`. `progress theme --layout timeline|classic` picks the page. `timeline` is the default.
-`classic` is the old lanes and boards page, fed the v2 document. It is deprecated and will be removed in a later
-release, together with `--schema v2`.
+project's Illustrate theme. Density, title, logo and fonts are set in
+`.specify/progress/theme.json`. The page is the Timeline. The classic lanes and boards layout was removed:
+`--layout classic` prints a `PROGRESS_REMOVED` line and exits 2, and a stored `layout: classic` shows the Timeline
+with one notice in `progress status`.
 
 ![Progress report, dark theme](https://raw.githubusercontent.com/samykabu/sanduq/main/extensions/progress/docs/assets/progress-dark.png)
 
@@ -300,8 +302,7 @@ config and theme.
 
 Upgrading to 1.2.0 needs no data change. Run `progress init` once per feature to copy the Timeline page into `.view/`.
 `facts.jsonl` is not rewritten, so lanes recorded before 1.2.0 carry no workstream marker and are not grouped as workstreams. Record
-a new lane with `--workstream` for Execute work. `progress theme --layout classic` still shows the old page, but it
-is deprecated.
+a new lane with `--workstream` for Execute work.
 
 The full list of changes is in [the changelog](CHANGELOG.md).
 

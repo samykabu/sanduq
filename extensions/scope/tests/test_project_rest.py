@@ -9,11 +9,13 @@ from contextlib import redirect_stderr
 from pathlib import Path
 from unittest.mock import patch
 
-SCRIPT = Path(__file__).resolve().parents[1] / 'scripts/scope.py'
-spec = importlib.util.spec_from_file_location('scope', SCRIPT)
-m = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(m)
-sys.modules['scope'] = m
+SCRIPTS = Path(__file__).resolve().parents[1] / 'scripts'
+spec = importlib.util.spec_from_file_location('scope', SCRIPTS / 'scope.py')
+scope = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(scope)
+sys.modules['scope'] = scope
+# The client under test is the module Scope and Workflow's decisions load (SC8).
+import sanduq_scope_github as m  # noqa: E402
 
 CFG = {'owner': 'acme', 'ownerType': 'org', 'projectNumber': 7, 'projectId': 'PVT_1'}
 BASE = 'orgs/acme/projectsV2/7'
@@ -110,7 +112,7 @@ class ProjectRestFallbackTests(unittest.TestCase):
     def client(self, fake):
         gh = m.GitHub()
         gh.project_cfg = CFG
-        self.patcher = patch.object(m.subprocess, 'run', fake)
+        self.patcher = patch.object(m.sanduq_gh.subprocess, 'run', fake)
         self.patcher.start()
         self.addCleanup(self.patcher.stop)
         return gh
@@ -132,7 +134,7 @@ class ProjectRestFallbackTests(unittest.TestCase):
     def test_misleading_error_with_budget_left_is_not_masked(self):
         fake = FakeGh(project_ok=False, remaining=4200, project_lookup='missing')
         gh = self.client(fake)
-        with self.assertRaisesRegex(m.ScopeError, 'unknown owner type'):
+        with self.assertRaisesRegex(m.GitHubError, 'unknown owner type'):
             gh.command(['project', 'item-list', '7', '--owner', 'acme', '--format', 'json'])
         self.assertEqual(fake.rest_calls(), [['api', BASE, '-H', 'Accept: application/vnd.github+json']])
         self.assertIsNone(gh.project_transport)
@@ -196,7 +198,7 @@ class ProjectRestFallbackTests(unittest.TestCase):
             with self.subTest(lookup=lookup):
                 fake = FakeGh(project_ok=False, remaining=4200, project_lookup=lookup)
                 gh = self.client(fake)
-                with self.assertRaisesRegex(m.ScopeError, 'unknown owner type'):
+                with self.assertRaisesRegex(m.GitHubError, 'unknown owner type'):
                     gh.command(self.ITEM_LIST)
                 self.assertIsNone(gh.project_transport)
                 self.assertFalse([c for c in fake.rest_calls() if c[1] != BASE])
@@ -206,7 +208,7 @@ class ProjectRestFallbackTests(unittest.TestCase):
         fake = FakeGh(project_ok=False, remaining=4200, project_lookup='missing')
         gh = self.client(fake)
         gh.project_cfg = {**CFG, 'ownerType': 'user'}
-        with self.assertRaisesRegex(m.ScopeError, 'unknown owner type'):
+        with self.assertRaisesRegex(m.GitHubError, 'unknown owner type'):
             gh.command(self.ITEM_LIST)
         self.assertEqual(fake.rest_calls()[0][1], 'users/acme/projectsV2/7')
 
@@ -214,7 +216,7 @@ class ProjectRestFallbackTests(unittest.TestCase):
         fake = FakeGh(project_ok=False, remaining=4200, project_error='accepts at most 1 arg(s)',
                       owner_blocked=True)
         gh = self.client(fake)
-        with self.assertRaisesRegex(m.ScopeError, 'accepts at most'):
+        with self.assertRaisesRegex(m.GitHubError, 'accepts at most'):
             gh.command(self.ITEM_LIST)
         self.assertEqual(fake.rest_calls(), [])
         self.assertFalse([c for c in fake.calls if any('repositoryOwner' in a for a in c)])
@@ -259,7 +261,7 @@ class ProjectRestFallbackTests(unittest.TestCase):
             for error, extra in (('unknown owner type', {}), ('GraphQL: API rate limit exceeded', {}), ('blocked (type RATE_LIMIT)', {})):
                 with self.subTest(request=name, error=error):
                     fake, gh = self.mismatch_fake(project_error=error, **extra)
-                    with self.assertRaises(m.ScopeError):
+                    with self.assertRaises(m.GitHubError):
                         self.run_quiet(gh.command, request)
                     self.assertEqual(fake.writes, [])
                     self.assertEqual([c for c in fake.rest_calls() if c[1] != BASE], [])
@@ -270,7 +272,7 @@ class ProjectRestFallbackTests(unittest.TestCase):
         for lookup in ('node', 'user', 'other'):
             with self.subTest(lookup=lookup):
                 fake, gh = self.mismatch_fake(project_error='GraphQL: API rate limit exceeded', project_lookup=lookup)
-                with self.assertRaisesRegex(m.ScopeError, 'not the configured Project'):
+                with self.assertRaisesRegex(m.GitHubError, 'not the configured Project'):
                     self.run_quiet(gh.command, ['project', 'item-edit', '--id', 'PVTI_a', '--project-id', 'PVT_1',
                                                 '--field-id', 'PVTF_blocked', '--text', 'x'])
                 self.assertEqual(fake.writes, [])
@@ -291,7 +293,7 @@ class ProjectRestFallbackTests(unittest.TestCase):
                         'GraphQL: Could not resolve to a ProjectV2'):
             with self.subTest(message=message):
                 fake, gh = self.mismatch_fake(project_error=message)
-                with self.assertRaises(m.ScopeError):
+                with self.assertRaises(m.GitHubError):
                     gh.command(self.ITEM_LIST)
                 self.assertEqual(fake.rest_calls(), [])
                 self.assertIsNone(gh.project_transport)
@@ -300,7 +302,7 @@ class ProjectRestFallbackTests(unittest.TestCase):
     def test_unrelated_failure_with_positive_budget_is_raised(self):
         fake = FakeGh(project_ok=False, remaining=67, project_error='GraphQL: Could not resolve to a ProjectV2')
         gh = self.client(fake)
-        with self.assertRaisesRegex(m.ScopeError, 'Could not resolve'):
+        with self.assertRaisesRegex(m.GitHubError, 'Could not resolve'):
             gh.command(['project', 'item-list', '7', '--owner', 'acme', '--format', 'json'])
         self.assertEqual(fake.rest_calls(), [])
         self.assertIsNone(gh.project_transport)
@@ -337,8 +339,8 @@ class ProjectRestFallbackTests(unittest.TestCase):
     def test_non_project_failures_are_not_rerouted(self):
         fake = FakeGh(remaining=0)
         gh = self.client(fake)
-        with patch.object(m.subprocess, 'run', lambda *a, **k: done(returncode=1, stderr='boom')):
-            with self.assertRaisesRegex(m.ScopeError, 'boom'):
+        with patch.object(m.sanduq_gh.subprocess, 'run', lambda *a, **k: done(returncode=1, stderr='boom')):
+            with self.assertRaisesRegex(m.GitHubError, 'boom'):
                 gh.command(['issue', 'view', '1'])
 
     def test_item_list_mapping_matches_gh_shape(self):
@@ -450,7 +452,7 @@ class ProjectRestFallbackTests(unittest.TestCase):
     def test_item_add_duplicate_error_without_matching_item_is_raised(self):
         fake = FakeGh(project_ok=False, remaining=0, post_error=self.DUPLICATE)
         gh = self.client(fake)
-        with self.assertRaisesRegex(m.ScopeError, 'already exists'):
+        with self.assertRaisesRegex(m.GitHubError, 'already exists'):
             self.run_quiet(gh.command, self.ADD)
         self.assertEqual([w[0] for w in fake.writes], ['POST'])
         self.assertEqual(len(self.listings(fake)), 2)
@@ -460,7 +462,7 @@ class ProjectRestFallbackTests(unittest.TestCase):
             with self.subTest(error=error):
                 fake = FakeGh(project_ok=False, remaining=0, post_error=error, race_items=[self.EXISTING])
                 gh = self.client(fake)
-                with self.assertRaisesRegex(m.ScopeError, error[:8]):
+                with self.assertRaisesRegex(m.GitHubError, error[:8]):
                     self.run_quiet(gh.command, self.ADD)
                 self.assertEqual([w[0] for w in fake.writes], ['POST'])
                 self.assertEqual(len(self.listings(fake)), 1)
@@ -482,18 +484,18 @@ class ProjectRestFallbackTests(unittest.TestCase):
     def test_unsupported_actions_raise(self):
         fake = FakeGh(project_ok=False, remaining=0)
         gh = self.client(fake)
-        with self.assertRaisesRegex(m.ScopeError, 'does not support `gh project field-create`'):
+        with self.assertRaisesRegex(m.GitHubError, 'does not support `gh project field-create`'):
             self.run_quiet(gh.command, ['project', 'field-create', '7', '--owner', 'acme', '--name', 'X'])
-        with self.assertRaisesRegex(m.ScopeError, 'unsupported argument --number'):
+        with self.assertRaisesRegex(m.GitHubError, 'unsupported argument --number'):
             self.run_quiet(gh.command, ['project', 'item-edit', '--id', 'PVTI_a', '--project-id', 'PVT_1',
                                         '--field-id', 'PVTF_blocked', '--number', '3'])
 
     def test_transport_is_reported_on_stdout_results_only(self):
         gh = m.GitHub()
-        self.assertEqual(m.with_transport({'a': 1}, gh), {'a': 1})
+        self.assertEqual(scope.with_transport({'a': 1}, gh), {'a': 1})
         gh.transports.update({'rest', 'graphql'})
-        self.assertEqual(m.with_transport({'a': 1}, gh), {'a': 1, 'transport': 'graphql+rest'})
-        self.assertEqual(m.with_transport([1], gh), [1])
+        self.assertEqual(scope.with_transport({'a': 1}, gh), {'a': 1, 'transport': 'graphql+rest'})
+        self.assertEqual(scope.with_transport([1], gh), [1])
 
 
 if __name__ == '__main__':

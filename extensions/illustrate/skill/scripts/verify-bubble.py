@@ -105,8 +105,10 @@ import argparse
 import math
 import re
 import sys
-from html.parser import HTMLParser
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import svg_scan  # noqa: E402  shared SVG scanning helpers, loaded like theme_tokens.py
+from svg_scan import is_hand_variant, median  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 ASSET_DIR = ROOT / "assets"
@@ -140,13 +142,6 @@ CSS_MOVES_MARK_RE = re.compile(
     r"\s*:",
     re.IGNORECASE,
 )
-# The COMPLETE numeric token an author may print: sign, comma-grouped
-# thousands, decimals, leading-dot decimals, exponents. Matching only the
-# first fragment is how "512,000" once agreed with metadata that said 512.
-NUMBER_RE = re.compile(
-    r"[-+]?(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)(?:[eE][-+]?\d+)?"
-)
-DIGIT_RE = re.compile(r"\d")
 # A CSS comment is whitespace to the browser, so `/**/transform:` is a live
 # declaration. CSS_MOVES_MARK_RE allows only whitespace between a declaration
 # boundary and the property name, which let a comment sitting there hide the
@@ -163,7 +158,6 @@ HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 # The accent stroke on either skin, hex or rgba. The focal count keys on the
 # STROKE because the fill is a translucent tint the paper shows through; the
 # stroke is the mark's edge and the thing a reader identifies the accent by.
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 import theme_tokens  # noqa: E402  Illustrate: accept the active theme as well as the defaults
 ACCENT_RE = theme_tokens.accent_re()   # upstream light/dark accents + active theme, hex or rgba
 
@@ -180,26 +174,10 @@ TICK_TOLERANCE = 6.0       # px, tick position vs the scale the bubbles set
 LABEL_TOLERANCE = 0.5      # px, slack before a label counts as another bubble's
 OVERLAP_SLACK = 0.5        # px, separation below which two bubbles overlap
 
-GROUP_TAGS = ("g", "svg")                     # the only ancestors whose transform is inherited
-BODY_TAGS = ("text", "title", "desc", "style")  # elements whose character data is read
 MARK_TAGS = ("circle",)                       # the element this contract binds
 
 
 # === PARSING =================================================================
-
-
-class Element:
-    """One start tag this checker cares about, as the browser tokenized it."""
-
-    __slots__ = ("tag", "attrs", "offset", "line", "body", "ancestor")
-
-    def __init__(self, tag, attrs, offset, line, ancestor):
-        self.tag = tag
-        self.attrs = attrs          # first-wins dict, names lower-cased, values unescaped
-        self.offset = offset        # offset of `<` in the source, for ordering
-        self.line = line
-        self.body = ""              # character data up to the matching end tag
-        self.ancestor = ancestor    # how the nearest transformed <g>/<svg> moves it, or None
 
 
 class Bubble:
@@ -213,133 +191,8 @@ class Bubble:
         self.line = line
 
 
-def first_wins(attrs) -> dict:
-    """Attributes as the browser keeps them: on a repeat, the FIRST wins.
-
-    HTML parsing drops a duplicate attribute rather than overwriting the one
-    already on the token, so a second `r` on a circle is not merely ignored -
-    it is not in the document at all. A dict comprehension does the opposite,
-    and that gap is a fail-open every caller inherits: a circle carrying a
-    dishonest first `r` and an honest second renders the dishonest radius
-    while a last-wins reader checks, and passes, bytes the browser threw away.
-    A present-but-valueless attribute is an empty string, not an absent one.
-    """
-    seen = {}
-    for name, value in attrs:
-        seen.setdefault(name, "" if value is None else value)
-    return seen
-
-
-class _Scanner(HTMLParser):
-    """Collect circles, texts, title/desc and style elements with ancestry.
-
-    HTMLParser already lowercases tag and attribute names, tolerates unquoted
-    values and whitespace around `=`, unescapes entities, keeps a quoted `>`
-    inside the value it belongs to, and never invokes handle_starttag for
-    tag-like text inside a comment or inside <script>/<style> raw text - each
-    of those is exactly a case a regex tag matcher mishandles. Ancestry is
-    tracked for <g>/<svg> only, the elements whose transform a child inherits.
-    """
-
-    def __init__(self, source: str):
-        super().__init__(convert_charrefs=True)
-        self.circles: list = []
-        self.texts: list = []
-        self.named: list = []      # <title> and <desc>
-        self.styles: list = []
-        self.error = None
-        self._groups: list = []    # (tag, how) per open <g>/<svg>
-        self._open: list = []      # (tag, Element) per open body element
-        self._line_starts = [0]
-        for index, char in enumerate(source):
-            if char == "\n":
-                self._line_starts.append(index + 1)
-        try:
-            self.feed(source)
-            self.close()
-        except Exception as exc:  # noqa: BLE001 - any parser failure fails closed
-            self.error = "%s: %s" % (type(exc).__name__, exc)
-
-    def _offset(self) -> int:
-        line, column = self.getpos()
-        return self._line_starts[line - 1] + column
-
-    def _ancestor(self):
-        for _tag, how in reversed(self._groups):
-            if how is not None:
-                return how
-        return None
-
-    def handle_starttag(self, tag, attrs):
-        self._start(tag, first_wins(attrs), closes=False)
-
-    def handle_startendtag(self, tag, attrs):
-        self._start(tag, first_wins(attrs), closes=True)
-
-    def _start(self, tag, attrs, closes):
-        if tag in GROUP_TAGS:
-            if not closes:
-                how = None
-                if "transform" in attrs:
-                    how = "an ancestor <g>/<svg> transform"
-                elif transform_carrier(attrs) is not None:
-                    how = "an ancestor <g>/<svg> style transform"
-                self._groups.append((tag, how))
-            return
-        if tag not in MARK_TAGS and tag not in BODY_TAGS:
-            return
-        element = Element(tag, attrs, self._offset(), self.getpos()[0], self._ancestor())
-        if tag == "circle":
-            self.circles.append(element)
-            return
-        if tag == "text":
-            self.texts.append(element)
-        elif tag == "style":
-            self.styles.append(element)
-        else:
-            self.named.append(element)
-        if not closes:
-            self._open.append((tag, element))
-
-    def handle_endtag(self, tag):
-        stack = self._groups if tag in GROUP_TAGS else self._open if tag in BODY_TAGS else None
-        if stack is None:
-            return
-        # Pop back to the matching open tag - an unclosed inner element ends
-        # with its parent, as it does in the browser's tree.
-        for index in range(len(stack) - 1, -1, -1):
-            if stack[index][0] == tag:
-                del stack[index:]
-                return
-
-    def handle_data(self, data):
-        if self._open:
-            # Innermost only: a <title> tooltip inside a <text> is not part of
-            # the rendered label, and the browser does not draw it either.
-            self._open[-1][1].body += data
-
-
-def parse_document(source: str) -> _Scanner:
-    return _Scanner(source)
-
-
-def attrs_of(raw: str) -> dict:
-    """First-wins attributes of one tag's raw attribute text, via the parser."""
-
-    class _One(HTMLParser):
-        def __init__(self):
-            super().__init__(convert_charrefs=True)
-            self.attrs = {}
-
-        def handle_starttag(self, tag, attrs):
-            self.attrs = first_wins(attrs)
-
-        handle_startendtag = handle_starttag
-
-    scanner = _One()
-    scanner.feed("<x " + raw + ">")
-    scanner.close()
-    return scanner.attrs
+def parse_document(source: str) -> svg_scan.Scanner:
+    return svg_scan.Scanner(source, MARK_TAGS, transform_carrier)
 
 
 def transform_carrier(attrs: dict):
@@ -415,30 +268,7 @@ def number(value):
 
 
 def printed_number(body: str):
-    """(value, reason) for a label's visible text.
-
-    Returns a value only when the text carries exactly one complete numeric
-    token. Trailing units are fine ("500ms"); a second number, or digits the
-    token did not consume, is ambiguous and reported rather than guessed at.
-    """
-    match = NUMBER_RE.search(body)
-    if match is None:
-        return None, "prints no number"
-    outside = body[:match.start()] + body[match.end():]
-    if DIGIT_RE.search(outside):
-        return None, "prints more than one numeric token"
-    value = number(match.group())
-    if value is None:
-        return None, "prints a number this checker cannot read"
-    return value, None
-
-
-def median(values: list) -> float:
-    ordered = sorted(values)
-    middle = len(ordered) // 2
-    if len(ordered) % 2:
-        return ordered[middle]
-    return (ordered[middle - 1] + ordered[middle]) / 2.0
+    return svg_scan.printed_number(body, number)
 
 
 def fit(points: list) -> tuple:
@@ -485,15 +315,9 @@ def outliers(points: list, tolerance: float) -> list:
     return found
 
 
-def named_text(doc: _Scanner) -> str:
+def named_text(doc: svg_scan.Scanner) -> str:
     """The accessible name and description, where a figure says what it is."""
     return " ".join(plain(element.body) for element in doc.named).casefold()
-
-
-def is_hand_variant(path: Path, source: str) -> bool:
-    """A generate-hand-variants.cjs output: a `-hand` stem or rough.js redraw markup."""
-    # ponytail: rough.js redraws drop the data contract, so they are never in scope.
-    return path.stem.endswith("-hand") or 'class="rough-shape"' in source
 
 
 def looks_like_bubble(path: Path, source: str) -> bool:
@@ -517,7 +341,7 @@ def looks_like_bubble(path: Path, source: str) -> bool:
     return "bubble chart" in described or "bubble plot" in described
 
 
-def parse_bubbles(doc: _Scanner, findings: list, name: str) -> list:
+def parse_bubbles(doc: svg_scan.Scanner, findings: list, name: str) -> list:
     """Bubble circles, with anything unparseable reported rather than dropped."""
     bubbles = []
     for element in doc.circles:
@@ -580,7 +404,7 @@ def parse_bubbles(doc: _Scanner, findings: list, name: str) -> list:
 # === CHECKS ==================================================================
 
 
-def check_transforms(doc: _Scanner, findings: list, name: str) -> None:
+def check_transforms(doc: svg_scan.Scanner, findings: list, name: str) -> None:
     """No transform may move verified geometry or a bound label.
 
     All three carriers are held to that rule - the `transform` attribute, an
@@ -735,7 +559,7 @@ def check_paint_order(bubbles: list, findings: list, name: str) -> None:
                 )
 
 
-def check_labels(bubbles: list, doc: _Scanner, findings: list, name: str) -> None:
+def check_labels(bubbles: list, doc: svg_scan.Scanner, findings: list, name: str) -> None:
     """Bound labels must name a real bubble, match it, and sit on it."""
     centres = {b.name: (b.cx, b.cy) for b in bubbles}
     seen = set()
@@ -797,7 +621,7 @@ def check_labels(bubbles: list, doc: _Scanner, findings: list, name: str) -> Non
                 )
 
 
-def check_ticks(x_fit, y_fit, doc: _Scanner, findings: list, name: str) -> None:
+def check_ticks(x_fit, y_fit, doc: svg_scan.Scanner, findings: list, name: str) -> None:
     """Bound axis ticks must print their value and sit on the bubbles' scale."""
     ticks = {"x": [], "y": []}
     for element in doc.texts:

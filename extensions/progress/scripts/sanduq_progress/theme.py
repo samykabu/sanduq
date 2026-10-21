@@ -10,16 +10,17 @@ import tempfile
 from pathlib import Path
 
 try:
-    from .paths import PLAN_ROOT, project_dir, registry_dirs
+    from .paths import PLAN_ROOT, project_dir, registry_dirs, removed
 except ImportError:  # run as a script
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    from sanduq_progress.paths import PLAN_ROOT, project_dir, registry_dirs
+    from sanduq_progress.paths import PLAN_ROOT, project_dir, registry_dirs, removed
 
 BLOCKS = ("header", "decisions", "blockers", "orchestrator", "lanes", "boards", "events")  # attention first
 TOKEN_KEYS = ("bg", "surface", "text", "muted", "line", "brand", "accent",
               "active", "waiting", "blocked", "done", "failed")
 TOP_KEYS = {"v", "preset", "title", "logo", "density", "blocks", "hidden", "tokens", "font", "layout"}
-LAYOUTS = ("timeline", "classic")  # timeline: the v3 Timeline view (default); classic: the v2 lanes view, fed the v2 document
+LAYOUTS = ("timeline",)  # the v3 Timeline view
+REMOVED_LAYOUTS = ("classic",)  # still read from an existing theme.json, where it means timeline; never written
 DEFAULT_LAYOUT = "timeline"
 DENSITIES = ("comfortable", "compact")
 FONT_KEYS = ("sans", "mono")
@@ -124,8 +125,8 @@ def validate(doc):
             _fail(f"{k} must be a short string or null")
     if doc.get("density", "comfortable") not in DENSITIES:
         _fail("density must be comfortable or compact")
-    if doc.get("layout", DEFAULT_LAYOUT) not in LAYOUTS:
-        _fail("layout must be timeline or classic")
+    if doc.get("layout", DEFAULT_LAYOUT) not in LAYOUTS + REMOVED_LAYOUTS:
+        _fail("layout must be timeline")
     for k in ("blocks", "hidden"):
         val = doc.get(k, [])
         if not isinstance(val, list) or any(b not in BLOCKS for b in val) or len(set(val)) != len(val):
@@ -163,7 +164,7 @@ def resolve_doc(doc=None):
     font.update(doc.get("font", {}))
     return {"v": 1, "preset": preset, "title": doc.get("title"), "logo": doc.get("logo"),
             "density": doc.get("density", "comfortable"), "blocks": order, "hidden": hidden,
-            "tokens": tokens, "font": font, "layout": doc.get("layout", DEFAULT_LAYOUT)}
+            "tokens": tokens, "font": font, "layout": DEFAULT_LAYOUT}
 
 
 def theme_path(project_root):
@@ -301,47 +302,7 @@ def _refresh_views(project_root, resolved):
             write_assets(view, resolved)
 
 
-def _republish(project_root):
-    """Rebuild report.json and data.js for every initialised report, each under its own report lock. The layout decides
-    which document data.js carries (v3 for timeline, v2 for classic), so changing it must publish the matching one now;
-    the next hook or refresh would otherwise leave the browser showing the wrong schema. Returns the reports it could not
-    republish as (feature, reason) pairs; the theme itself is already saved."""
-    import importlib
-    from datetime import datetime, timezone
-    package = __package__ or "sanduq_progress"  # run as a script, there is no package: the top of this file puts it on sys.path
-    Lock, LockBusy = (getattr(importlib.import_module(package + ".lock"), n) for n in ("Lock", "LockBusy"))
-    Ctx = importlib.import_module(package + ".paths").Ctx
-    refresh = importlib.import_module(package + ".refresh").refresh
-    util = importlib.import_module(package + ".util")
-    ProgressError, utcnow = util.ProgressError, util.utcnow
-    root = Path(project_root)
-    stamp = os.environ.get("SANDUQ_PROGRESS_NOW")  # the same test clock the progress command honours
-    moment = datetime.fromisoformat(stamp.replace("Z", "+00:00")).astimezone(timezone.utc) if stamp else utcnow()
-    failed = []
-    for view in _views(root):
-        directory = view.parent
-        is_feature = directory.name == "progress" and directory.parent.parent.name == "specs"
-        feature = (directory.parent if is_feature else directory).relative_to(root).as_posix()
-        try:
-            ctx = Ctx(root, feature)
-            if not ctx.report.is_file():
-                continue  # never initialised: nothing to republish
-            lock = Lock(ctx.lock, retries=3, delay=0.2)
-            try:
-                lock.acquire()
-            except LockBusy:
-                failed.append((feature, "another progress command is running"))
-                continue
-            try:
-                refresh(ctx, moment)
-            finally:
-                lock.release()
-        except (OSError, ValueError, ProgressError) as exc:
-            failed.append((feature, type(exc).__name__))
-    return failed
-
-
-USAGE = "theme --preset NAME | --from-illustrate | --file PATH | --layout timeline|classic | --show | --help"
+USAGE = "theme --preset NAME | --from-illustrate | --file PATH | --layout timeline | --show | --help"
 
 
 def cli(argv, project_root=None):
@@ -355,8 +316,11 @@ def cli(argv, project_root=None):
             print(json.dumps(resolve(root), indent=2))
             return 0
         if len(args) == 2 and args[0] == "--layout":
+            if args[1] in REMOVED_LAYOUTS:
+                print(removed("the classic layout", root).line())
+                return 2
             if args[1] not in LAYOUTS:
-                _fail("layout must be timeline or classic")
+                _fail("layout must be timeline")
             doc = _stored(root)  # only the layout changes; every other customization is kept
             doc["layout"] = args[1]
             doc.setdefault("v", 1)
@@ -374,6 +338,9 @@ def cli(argv, project_root=None):
             except (OSError, ValueError) as exc:
                 _fail("cannot read file: " + str(exc)[:80])
             validate(doc)
+            if doc.get("layout") in REMOVED_LAYOUTS:
+                print(removed("the classic layout", root).line())
+                return 2
             doc.setdefault("v", 1)
             label = doc.get("preset", DEFAULT_PRESET)
         else:
@@ -381,15 +348,11 @@ def cli(argv, project_root=None):
             return 2
         if "layout" not in doc:
             keep = _stored(root).get("layout")  # a new look keeps the layout the user picked
-            if keep:
+            if keep in LAYOUTS:
                 doc["layout"] = keep
-        before = resolve(root).get("layout")
         _store(root, doc)
         _refresh_views(root, resolve_doc(doc))
         print(f"progress: theme {label}")
-        if resolve_doc(doc).get("layout") != before:
-            for feature, why in _republish(root):
-                print(f"progress: warning data.js for {feature} not republished ({why}); run progress refresh")
         return 0
     except ThemeError as exc:
         print(f"progress: error PROGRESS_THEME_INVALID {exc}")

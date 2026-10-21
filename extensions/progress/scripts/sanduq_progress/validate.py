@@ -2,18 +2,15 @@
 
     problems = validate(document)    # [] when the document is well formed
 
-`validate` picks the check from the document's `schema` (`sanduq.progress.v3` or `sanduq.progress.v2`). It checks shape,
+`validate` checks a `sanduq.progress.v3` document (any other `schema` is a problem). It checks shape,
 enums, id uniqueness, text bounds and the cross-references the Timeline view relies on; it never repairs a document."""
-from . import SCHEMA_V2, SCHEMA_V3
+from . import SCHEMA_V3
 from .util import parse_time
 
-V2_KEYS = ('schema', 'rev', 'generated_at', 'stale_after_seconds', 'collection', 'feature', 'orchestrator', 'lanes',
-           'unassigned_tasks', 'tasks', 'decisions', 'blockers', 'events', 'summary')
 V3_KEYS = ('schema', 'rev', 'generated_at', 'stale_after_seconds', 'collection', 'feature', 'orchestrator', 'attention', 'stages',
            'workstreams', 'tasks', 'runs', 'dispatch', 'decisions', 'timeline', 'history', 'sources', 'summary')
 V3_SUMMARY = ('tasks_total', 'tasks_done', 'stages_selected', 'stages_accepted', 'runs_total', 'runs_failed', 'decisions_pending',
               'blockers_open')
-V2_SUMMARY = ('tasks_total', 'tasks_done', 'lanes_active', 'blocked', 'decisions_pending')
 STAGE_STATUS = ('pending', 'running', 'accepted', 'excluded')
 VALIDITY = ('current', 'stale', 'unknown')
 OUTCOMES = ('accepted', 'rejected-completion', 'recovered', 'paused', 'invalidated', 'running', 'unknown')
@@ -49,22 +46,7 @@ def validate(doc):
     schema = doc.get('schema')
     if schema == SCHEMA_V3:
         return validate_v3(doc)
-    if schema == SCHEMA_V2:
-        return validate_v2(doc)
     return [f'unknown schema {schema!r}']
-
-
-def validate_v2(doc):
-    problems = [f'missing {k}' for k in V2_KEYS if k not in doc]
-    if problems:
-        return problems
-    problems += [f'summary missing {k}' for k in V2_SUMMARY if k not in doc['summary']]
-    _unique(problems, 'lanes', [lane.get('id') for lane in doc['lanes']])
-    for lane in doc['lanes']:
-        for k in ('observed', 'status', 'elapsed', 'active', 'attempts', 'tasks'):
-            if k not in lane:
-                problems.append(f"lane {lane.get('id')}: missing {k}")
-    return problems
 
 
 def validate_v3(doc):

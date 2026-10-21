@@ -11,7 +11,7 @@ Error lines start with `progress: error CODE`. `docs/contracts.md` (the full con
 | `init [--feature DIR] [--statusline yes\|no] [--theme PRESET]` | `specs/<feature>/progress/`, project config, pending bind | Spec Kit mode. Same output line. |
 | `bind [--session ID]` (prints `progress: pending bind=<nonce>` without `--session`) | project `bindings.json` | Needed again only when `init` was not run in this session. `--session` binds directly where hooks are absent. `bind --host H --model M [--effort E]` records a coordinator self-report in `.host/` instead (shown as self-reported; the host's own observation wins). |
 | `refresh` | `.view/`, `plan.json` ids | Silent on success. `--verbose` prints one line. |
-| `status [--json [--schema v2\|v3]]` | nothing | One line, or the projection (v3 by default; v2 is the compatibility document). |
+| `status [--json]` | nothing | One line, or the v3 projection. `--schema v2` was removed and exits 2. |
 | `lane L1 --tasks P001-P004,T009 [--owner ID] [--label T] [--harness H --model M --effort E] [--close]` | `facts.jsonl` | Task ids are the plan's (`T001`, `US3`) or the auto ids (`P001`). Harness, model and effort are the values you requested, never observed ones. |
 | `block P007 --by L2\|P003\|SD2\|ext:"text"` | `facts.jsonl` | Prints the blocker id, for example `B4`. |
 | `unblock B4` or `unblock --all-for P007` | `facts.jsonl` | |

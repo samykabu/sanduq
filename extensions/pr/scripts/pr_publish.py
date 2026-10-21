@@ -33,10 +33,12 @@ from pathlib import Path
 from urllib.parse import quote, unquote
 
 try:
+    import sanduq_gh
     from sanduq_pr_lint import FENCE, PR_LINT_SCHEMA, pr_lint
 except ModuleNotFoundError:
-    # Source checkout only; release archives bundle the shared helper next to this script.
+    # Source checkout only; release archives bundle the shared helpers next to this script.
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts/shared'))
+    import sanduq_gh
     from sanduq_pr_lint import FENCE, PR_LINT_SCHEMA, pr_lint
 
 START, END = '<!-- speckit-pr:start -->', '<!-- speckit-pr:end -->'
@@ -52,11 +54,24 @@ class Failure(Exception):
         self.code = code
 
 
-def run(args, cwd):
-    """Every external call goes through here (tests replace it)."""
+def gh_process(args, cwd, timeout):
+    """`gh <args>` through the shared transport (never retried) as a CompletedProcess; raises `GhError` only
+    when gh is missing or timed out (pr_changelog uses it too)."""
     try:
+        return subprocess.CompletedProcess(['gh', *args], 0, sanduq_gh.run_gh(args, cwd=str(cwd), timeout=timeout), '')
+    except sanduq_gh.GhError as exc:
+        if exc.timeout or exc.returncode == sanduq_gh.GH_MISSING:
+            raise
+        return subprocess.CompletedProcess(['gh', *args], exc.returncode, exc.stdout, exc.stderr)
+
+
+def run(args, cwd):
+    """Every external call goes through here (tests replace it); gh through the shared transport."""
+    try:
+        if args[0] == 'gh':
+            return gh_process(args[1:], cwd, 120)
         return subprocess.run(args, cwd=str(cwd), capture_output=True, text=True, encoding='utf-8', timeout=120)
-    except (OSError, subprocess.TimeoutExpired) as exc:
+    except (OSError, subprocess.TimeoutExpired, sanduq_gh.GhError) as exc:
         raise Failure(3, args[0] + ' unavailable: ' + str(exc)) from exc
 
 

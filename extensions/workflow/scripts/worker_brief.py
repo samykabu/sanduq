@@ -178,7 +178,6 @@ def t7_template():
 
 ACCEPTANCE = re.compile(r'\bAcceptance:\s*(.+)$', re.I)
 PROTOCOL_FILES = ('execution-assign.md', 'execution-report.md')
-PROJECTION_SCHEMA = 'sanduq.worker-result.projection.v1'
 
 
 def digest(text):
@@ -198,32 +197,6 @@ def source_fingerprint(context, requirements, owned):
 def acceptance_criteria(description):
     match = ACCEPTANCE.search(description)
     return [part.strip() for part in re.split(r';\s*', match.group(1)) if part.strip()] if match else []
-
-
-USAGE_FIELDS = ('input_total', 'input_fresh', 'cache_read', 'cache_write', 'output_total', 'reasoning', 'total')
-
-
-def project_usage(result):
-    """Measured usage counters, or None. Only fidelity "exact" is a measurement: the driver fills
-    every counter with 0 when a harness reports nothing ("unavailable"), and those are unknown."""
-    tokens = result.get('tokens')
-    if not isinstance(tokens, dict) or tokens.get('fidelity') != 'exact':
-        return None
-    return {field: (tokens[field] if isinstance(tokens.get(field), int) and not isinstance(tokens.get(field), bool)
-                    and tokens[field] >= 0 else None) for field in USAGE_FIELDS}
-
-
-def project_result(result):
-    """Compact projection of one normalized delegate-task result: identity, fingerprints, owned
-    paths, status and the usage counters (fresh/cache/output kept apart; never a single merged
-    figure). The full result stays at `details` for retrieval."""
-    return {'schema': PROJECTION_SCHEMA, 'run_id': result.get('run_id'), 'harness': result.get('harness'),
-            'status': result.get('status'), 'summary': (result.get('summary') or '')[:300],
-            'policy_fingerprint': result.get('policy_fingerprint'),
-            'source_fingerprint': result.get('source_fingerprint'),
-            'owned_paths': result.get('owned_paths'), 'acceptance': result.get('acceptance'),
-            'files_claimed': result.get('files_claimed'), 'usage': project_usage(result),
-            'details': (result.get('artifacts') or {}).get('dir') or result.get('source')}
 
 
 def render_brief(feature, task_id, context, requirements, contract, owned, budget_row, forbidden, spawn_rules,

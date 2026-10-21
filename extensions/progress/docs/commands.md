@@ -230,7 +230,7 @@ Errors: `PROGRESS_NOT_INITIALIZED` (2), `PROGRESS_LOCK_BUSY` (4).
 ### status
 
 ```text
-progress status [--json [--schema v2|v3]]
+progress status [--json]
 ```
 
 Reads the current state and prints it. It rebuilds the projection in memory and writes no file. Without a flag:
@@ -240,10 +240,11 @@ $ progress status
 progress: 0/6 tasks, 1 lanes active, 0 blocked, 0 decisions pending (rev 15)
 ```
 
-`--json` prints the whole projection. The default is schema `sanduq.progress.v3` ([fields](#status---json-sanduqprogressv3)).
-`--schema v2` prints the compatibility document ([fields](#status---json---schema-v2-sanduqprogressv2)) that older Workflow releases and other
-older readers use. `--schema v2` is deprecated and will be removed in a later release; read v3. The one-line summary above is built from the v2 numbers. Errors: `PROGRESS_NOT_INITIALIZED` (2), and
-`PROGRESS_USAGE` (2) for any other `--schema` value.
+`--json` prints the whole projection, schema `sanduq.progress.v3` ([fields](#status---json-sanduqprogressv3)). `--schema v3` is
+accepted. `--schema v2` was removed in 1.7.0 and prints `progress: error PROGRESS_REMOVED --schema v2 was removed in agent-tools 1.7.0` (exit 2). When a Sanduq Workflow is installed the line also names its version, and for one older than 1.17.0 the upgrade command (`python .specify/extensions/workflow/scripts/upgrade.py --version 1.17.1 --apply`). The one-line summary keeps its
+format: lanes active and blocked are counted as before. It gains one notice at the end while `theme.json` names the removed
+`classic` layout, and another while the installed Sanduq Workflow is older than 1.17.0. Errors: `PROGRESS_NOT_INITIALIZED` (2),
+and `PROGRESS_USAGE` (2) for any other `--schema` value.
 
 ### lane
 
@@ -590,22 +591,22 @@ progress: statusline removed
 progress theme --preset NAME
 progress theme --from-illustrate
 progress theme --file PATH
-progress theme --layout timeline|classic
+progress theme --layout timeline
 progress theme --show
 progress theme --help
 ```
 
 The theme file is project-level (`.specify/progress/theme.json`, or `.progress/.project/theme.json` without Spec Kit), so the verb needs no initialised feature and works in
 a project before any `progress init`. It takes no other option. `--help` prints
-`theme --preset NAME | --from-illustrate | --file PATH | --layout timeline|classic | --show | --help`. Any other form prints
-`progress: error PROGRESS_USAGE theme --preset NAME | --from-illustrate | --file PATH | --layout timeline|classic | --show | --help`.
+`theme --preset NAME | --from-illustrate | --file PATH | --layout timeline | --show | --help`. Any other form prints
+`progress: error PROGRESS_USAGE theme --preset NAME | --from-illustrate | --file PATH | --layout timeline | --show | --help`.
 
 | Form | Effect | Output |
 | --- | --- | --- |
-| `--preset NAME` | Replaces the project `theme.json` with `{"v":1,"preset":"NAME"}` (the layout you picked is kept) | `progress: theme cobalt` |
-| `--layout NAME` | Sets only `layout` in `theme.json` and keeps every other customization. `timeline` (default) is the v3 Timeline view; `classic` is the v2 lanes view, which is fed the v2 document; it is deprecated and will be removed in a later release. A layout change also rebuilds every initialised report under its own lock, so `data.js` matches at once. A report whose lock is busy gets a warning line and is republished by the next refresh | `progress: theme layout classic` |
+| `--preset NAME` | Replaces the project `theme.json` with `{"v":1,"preset":"NAME"}` (a `timeline` layout is kept) | `progress: theme cobalt` |
+| `--layout timeline` | Sets only `layout` in `theme.json` and keeps every other customization. `--layout classic` was removed in 1.7.0: it prints `progress: error PROGRESS_REMOVED the classic layout was removed in agent-tools 1.7.0` (with the Sanduq Workflow details `status` gives) and exits 2 | `progress: theme layout timeline` |
 | `--from-illustrate` | Reads `active.theme` from `.github/illustration-theme.yml` and writes the matching colours as tokens | `progress: theme emerald` |
-| `--file PATH` | Validates your file and stores it as `theme.json` | `progress: theme classic` (the file's preset) |
+| `--file PATH` | Validates your file and stores it as `theme.json`. A file with `"layout": "classic"` is refused like `--layout classic` | `progress: theme classic` (the file's preset) |
 | `--show` | Prints the resolved theme, with every default filled in, as JSON | the JSON document |
 
 A successful change rewrites `theme.css` and `layout.js` in the `.view/` of every feature that has one (none is created). Open pages pick it up on the next
@@ -631,13 +632,12 @@ poll. Failures print `progress: error PROGRESS_THEME_INVALID reason` and exit 2,
 | `title` | string up to 200 characters, or null | Replaces the feature title in the header and the browser tab |
 | `logo` | string, or null | An image path or URL shown beside the title. `javascript:` and `vbscript:` values are ignored |
 | `density` | `comfortable` (default) or `compact` | Spacing |
-| `blocks` | list of block names | Display order. Blocks you leave out follow in the default order |
-| `hidden` | list of block names | Blocks not drawn |
-| `layout` | `timeline` (default) or `classic` | Which view reads `data.js`. Written to `layout.js` as `layout` |
+| `blocks`, `hidden` | lists of block names | Accepted for older theme files; the timeline page does not use them |
+| `layout` | `timeline` | The page layout. A file written before 1.7.0 may still say `classic`: it is read as `timeline` and `progress status` says so |
 | `tokens` | `{"light": {...}, "dark": {...}}` | Colour overrides, below |
 | `font` | `{"sans": "...", "mono": "..."}` | A font stack, up to 200 characters, none of `; { } < > \` or a newline |
 
-Block names are `header`, `decisions`, `blockers`, `orchestrator`, `lanes`, `boards` and `events`, which is also the default order (what needs attention comes first). Lists hold unique known names.
+Block names are `header`, `decisions`, `blockers`, `orchestrator`, `lanes`, `boards` and `events`. Lists hold unique known names.
 
 Tokens are `#rgb` or `#rrggbb` colours:
 
@@ -658,26 +658,21 @@ Example, the project `theme.json`:
   "preset": "classic",
   "title": "Demo report",
   "density": "compact",
-  "blocks": ["header", "lanes", "boards"],
-  "hidden": ["events"],
   "tokens": {"light": {"accent": "#00aa77"}},
   "font": {"sans": "Inter, sans-serif"}
 }
 ```
 
-This draws the header, lanes and boards first, then the blocks not listed (decisions, blockers, orchestrator) in their
-default order, and hides events.
-
 ## Export formats
 
 ```text
-progress export [--format md|json] [--schema v2|v3] [--out PATH]
+progress export [--format md|json] [--out PATH]
 ```
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
 | `--format` | `md` | `md` for a Markdown document, `json` for the projection |
-| `--schema` | `v3` | `v2` builds the compatibility document fresh from the producers, so use it for the old Markdown or JSON shape |
+| `--schema` | `v3` | `v3` only. `v2` was removed in 1.7.0 and exits 2, as for `status` |
 | `--out` | stdout | A file to write. Prints `progress: exported PATH` |
 
 Export reads the last written projection (`report.json`). It builds one only when none exists, so run `progress refresh`
@@ -686,11 +681,7 @@ and no revision number. Exporting costs no model tokens.
 
 The v3 Markdown export has these sections, in order: the title; a feature, task, stage and run summary line; the next action when there
 is one; **Orchestrator** (with where each field came from); **Needs attention**; **Stages**; **Workstreams**; **Tasks** (a checklist grouped by phase, each task with its dependencies, workstream and
-state: done, active, blocked or waiting); **Decisions** (with the sources that could not be read); **Runs**; and **Timeline**. The v2 export (`--schema v2`) has these sections, in order: the title; a one-line feature and task summary; **Orchestrator** (host,
-model, effort, context, elapsed, each marked `(partial)` or `(estimated)` when not exact, and `unknown` when missing);
-**Lanes** (a table of lane, label, status, requested and observed model, and task ids by state, plus any unassigned
-tasks); **Tasks** (a checklist grouped by phase, with dependencies and lanes); **Decisions**; **Blockers**; and **Recent
-events**.
+state: done, active, blocked or waiting); **Decisions** (with the sources that could not be read); **Runs**; and **Timeline**.
 
 ```text
 $ progress export
@@ -698,57 +689,39 @@ $ progress export
 
 Feature `001-demo`, branch `001-demo`.
 
-Tasks 0/6 done, 1 active lanes, 0 open blockers, 0 pending decisions.
+Tasks 2/5 done, 0/0 stages accepted, 0 runs (0 failed), 0 open blockers, 0 pending decisions.
 
 ## Orchestrator
 
 - Host: unknown
-- Model: unknown
-- Effort: unknown
+- Model: unknown (none)
+- Effort: unknown (none)
 - Context: unknown
-- Elapsed: 3 (estimated)
+- Host elapsed: unknown
+- Note: no host telemetry recorded
 
-## Lanes
+## Workstreams
 
-| Lane | Label | Status | Requested | Observed model | Done | Active | Waiting | Blocked |
-|---|---|---|---|---|---|---|---|---|
-| L1 | Core | active | codex/gpt-6.1-sol/high | unknown |  | T001 | T002 T003 |  |
+- Core (facts-marked): done T001; active -; waiting T002 T003; blocked -
+- Shared (shared): done T005; active -; waiting T004; blocked -
 ```
+
+The rest of the document (**Tasks**, **Decisions**, **Runs**, **Timeline**) follows in the order above.
 
 The JSON export is the full projection, indented, followed by a newline.
 
 ## JSON schemas
 
-### status --json --schema v2: `sanduq.progress.v2`
-
-`progress status --json --schema v2` and `progress export --format json --schema v2` print this document. `.view/report.json` holds v3.
-
-| Field | Content |
-| --- | --- |
-| `schema`, `rev`, `generated_at`, `stale_after_seconds` | `sanduq.progress.v2`; the refresh counter; the UTC time; 600 by default |
-| `collection` | `automatic` (a host has reported), `hosts`, `dirty`, `last_event_at`, `diagnostics` (lines in the feature's log) |
-| `feature` | `id`, `title`, `dir`, `branch`, `issue` (`number`, `url`, or null), `stage` (`value`, `source` (`workflow-checkpoint` or `workflow-receipts`), optional `status`, or null), `started_at`, `workflow`. A plan report adds `mode: "plan"` and `source` (the repo-relative or `external:<name>` plan reference); a feature report has neither field |
-| `orchestrator` | `host`, `session_id`, `since`, and the measurements `model`, `effort`, `context`, `elapsed`, `active` |
-| `lanes[]` | `id`, `label`, `owner`, `origin` (`facts`, `workflow-delegation`, `host-child`, `coordinator`), `requested` (`harness`, `model`, `effort`), `observed` (`model`, `effort`), `status`, `elapsed`, `active`, `last_observed_at`, `attempts[]`, `tasks` (`active`, `waiting`, `blocked[]`, `done`) |
-| `unassigned_tasks` | The same four task lists, for tasks no lane owns |
-| `tasks` | By id: `title`, `phase`, `done`, `parallel`, `depends_on`, `lane` |
-| `decisions` | `pending[]` and `made[]`: `id`, `question`, `options`, `selected`, `decided_by`, `at`, `url`, `source` |
-| `blockers[]` | `id`, `target`, `by` (`type`, `ref`), `since`, `source` (`facts`, `workflow-pause`, `delegation`) |
-| `events[]` | Bounded (up to 50 stage, failure, decision, block and workflow lines, up to 15 notes (`NOTE_LIMIT`) and up to 30 others), oldest first: `at`, `kind` (`stage`, `failure`, `decision`, `block`, `workflow`, `delegation`, `subagent`, `lane`, `note`, `attempt`), `text` |
-| `summary` | `tasks_total`, `tasks_done`, `lanes_active`, `blocked`, `decisions_pending` |
-| `overhead[]` | Only when present: attempts that belong to no lane |
-
-A **measurement** is `{"value", "source", "observed_at", "fidelity"}` with `fidelity` one of `exact`, `partial`,
-`estimated` or `unknown`. An unknown value is `null`, with source `none`. Every duration in the projection is a whole
-number of seconds. An **attempt** in `lanes[].attempts` has `run_id`, `status`, `started_at`, `ended_at`, `tokens`,
-`fidelity` and, for legacy records, `origin: "legacy"`.
-
 ### status --json: `sanduq.progress.v3`
 
-`progress status --json` and `.view/report.json` hold this document; `--schema v2` is the one above. The field-by-field contract,
+`progress status --json` and `.view/report.json` hold this document. The field-by-field contract,
 including the rules for runs, stages, workstreams, decisions and the producer files, is in [contracts](contracts.md#projection-sanduqprogressv3).
 Top level: `schema`, `rev`, `generated_at`, `stale_after_seconds`, `collection`, `feature`, `orchestrator`, `attention`, `stages`,
 `workstreams`, `tasks`, `runs`, `dispatch`, `decisions`, `timeline`, `history`, `sources`, `summary`.
+
+A **measurement** is `{"value", "source", "observed_at", "fidelity"}` with `fidelity` one of `exact`, `partial`,
+`estimated` or `unknown`. An unknown value is `null`, with source `none`. Every duration in the projection is a whole
+number of seconds.
 
 ### runs --json: `progress.runs.v1`
 

@@ -9,7 +9,6 @@ from __future__ import annotations
 import argparse
 import copy
 import getpass
-import hashlib
 import json
 import os
 import re
@@ -24,6 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import delegation
+import execution_tools
 import workflow
 import lean_policy
 import lifecycle
@@ -100,7 +100,7 @@ def written_marker(root, feature):
 
 def ledger_bytes_digest(path):
     try:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
+        return file_sha256(path)
     except OSError:
         return None
 
@@ -983,8 +983,7 @@ def bookkeeping_paths(root, feature, attempt, payload):
     """
     repo = payload.get('repo_root')
     if not repo:
-        found = subprocess.run(['git', 'rev-parse', '--show-toplevel'], cwd=root / attempt['cwd'],
-                               capture_output=True, text=True, encoding='utf-8')
+        found = workflow.run_git(root / attempt['cwd'], 'rev-parse', '--show-toplevel', text=True, encoding='utf-8')
         repo = found.stdout.strip() if found.returncode == 0 else None
     if not repo:
         return set()
@@ -1327,12 +1326,7 @@ def _path_escapes_relative(text):
     return PurePosixPath(text).is_absolute()
 
 
-def file_sha256(path):
-    digest = hashlib.sha256()
-    with open(path, 'rb') as handle:
-        for chunk in iter(lambda: handle.read(65536), b''):
-            digest.update(chunk)
-    return digest.hexdigest()
+file_sha256 = execution_tools.sha256_file
 
 
 def owned_roots(cwd, owned_paths):
@@ -1556,8 +1550,7 @@ def light_tier_evidence(text, root, attempt):
 
 def registered_worktrees(root):
     """Every worktree ``git`` itself knows about for the repository at ``root``."""
-    result = subprocess.run(['git', 'worktree', 'list', '--porcelain'], cwd=root,
-                            capture_output=True, text=True, encoding='utf-8')
+    result = workflow.run_git(root, 'worktree', 'list', '--porcelain', text=True, encoding='utf-8')
     if result.returncode != 0:
         return set()
     found = set()

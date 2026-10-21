@@ -6,15 +6,6 @@ from . import render_data
 from .util import iso, read_json, utcnow, write_json
 
 
-def layout(ctx):
-    """The theme's layout (`timeline` by default). A theme that cannot be read leaves the default."""
-    try:
-        from . import theme
-        return theme.resolve(ctx.root).get('layout') or 'timeline'
-    except Exception:
-        return 'timeline'
-
-
 def read_state(ctx):
     data = read_json(ctx.state, {})
     return data if isinstance(data, dict) else {}
@@ -32,9 +23,8 @@ def refresh(ctx, now=None):
     if ctx.is_plan:
         from .collect import plan
         collected = plan.persist(ctx)  # the plan is read once; the projection reuses it
-    classic = layout(ctx) == 'classic'
-    report, v2 = model.build_pair(ctx, now, state['rev'], state, plan=collected)
-    render_data.write(ctx, report, display=v2 if classic else None, layout='classic' if classic else 'timeline')
+    report = model.build(ctx, now, state['rev'], state, plan=collected)
+    render_data.write(ctx, report)
     state['last_refresh_ts'] = time.time()
     state['last_refresh_at'] = iso(now)
     write_json(ctx.state, state)

@@ -27,10 +27,12 @@ from pathlib import Path
 from urllib.parse import quote
 
 try:
+    import sanduq_gh
     import sanduq_remote
 except ModuleNotFoundError:
-    # Source checkout only; release archives bundle the shared helper next to this script.
+    # Source checkout only; release archives bundle the shared helpers next to this script.
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts/shared'))
+    import sanduq_gh
     import sanduq_remote
 
 PHASES = ('open', 'analysis', 'engineer-review', 'ready', 'in-progress', 'in-review', 'done', 'auto')
@@ -45,16 +47,16 @@ class Skip(Exception):
 
 
 def gh_raw(args, stdin=None):
-    """(returncode, output) of `gh <args>`; stderr joins the output only on failure. 127: no gh."""
+    """(returncode, output) of `gh <args>` through the shared transport, never retried; stderr joins the output
+    only on failure. 127: no gh. A timeout raises."""
     try:
-        done = subprocess.run(['gh', *args], input=stdin, capture_output=True, text=True, encoding='utf-8',
-                              timeout=TIMEOUT)
-    except FileNotFoundError:
-        return 127, 'gh CLI not installed'
-    except subprocess.TimeoutExpired:
-        raise RuntimeError('timeout: gh ' + ' '.join(args[:2]) + ' gave no answer in ' + str(TIMEOUT) + ' s') from None
-    out = done.stdout.strip()
-    return done.returncode, out if done.returncode == 0 else (out + '\n' + done.stderr.strip()).strip()
+        return 0, sanduq_gh.run_gh(args, payload=stdin, timeout=TIMEOUT).strip()
+    except sanduq_gh.GhError as error:
+        if error.timeout:
+            raise RuntimeError(str(error)) from None
+        if error.returncode == sanduq_gh.GH_MISSING:
+            return 127, 'gh CLI not installed'
+        return error.returncode, (error.stdout.strip() + '\n' + error.stderr.strip()).strip()
 
 
 def git(*args):
@@ -71,11 +73,6 @@ def git(*args):
 def github_repo(remote):
     """`owner/repo` of a GitHub remote in any form (the shared rule Workflow and Scope use), else None."""
     return sanduq_remote.github_slug(remote) if remote else None
-
-
-def token_scopes(auth):
-    """The scopes on gh's `Token scopes:` lines, as a set ('project' is not 'read:project')."""
-    return {scope for line in auth.splitlines() if 'Token scopes:' in line for scope in re.findall(r"'([^']+)'", line)}
 
 
 def as_json(value, default):
@@ -107,7 +104,7 @@ class Sync:
         if self.transport == 'rest':
             return True
         rc, out = gh_raw(['api', 'graphql', '-f', 'query={rateLimit{remaining}}', '--jq', '.data.rateLimit.remaining'])
-        exhausted = (out.isdigit() and int(out) <= 0) if rc == 0 else 'rate limit' in out.lower()
+        exhausted = (out.isdigit() and int(out) <= 0) if rc == 0 else sanduq_gh.rate_limited(out)
         if not exhausted:
             return False
         self.transport = 'rest'
@@ -435,7 +432,7 @@ class Sync:
             raise Skip(auth)
         if rc != 0:
             raise Skip('gh not authenticated')
-        if 'project' not in token_scopes(auth):
+        if 'project' not in sanduq_gh.token_scopes(auth):
             raise Skip("gh token lacks 'project' scope - run: gh auth refresh -h github.com -s project,read:project")
         remote = sanduq_remote.origin_url(Path.cwd(), timeout=TIMEOUT, resolve=True) or ''
         self.repo = github_repo(remote)

@@ -20,10 +20,11 @@ from .model import FEATURE, REPORT_PATH
 HERE = Path(__file__).resolve().parent
 EXT = HERE.parent.parent
 REPO = EXT.parent.parent
-NEW_CLI = "python .specify/extensions/progress/scripts/progress.py"
+# A repository that vendors this bench in another layout (Sanduq) names its CLI line and skill file here.
+NEW_CLI = os.environ.get("PROGRESS_BENCH_CLI", "python .claude/skills/progress-report/scripts/progress.py")
 LEGACY_CLI = "python .specify/extensions/workflow/scripts/progress.py"
 LEGACY_OUT = "specs/%s/workflow/progress" % FEATURE
-SKILL_PATH = EXT / "skills" / "progress" / "SKILL.ext.md"
+SKILL_PATH = EXT / os.environ.get("PROGRESS_BENCH_SKILL", "SKILL.md")
 LEGACY_PROTOCOL = REPO / "extensions" / "workflow" / "skills" / "workflow" / "references" / "execution-report.md"
 LEGACY_SCRIPT = REPO / "extensions" / "workflow" / "scripts" / "progress.py"
 EDIT_OK = "The file %s has been updated successfully." % REPORT_PATH
@@ -59,7 +60,7 @@ def skill_text():
 
 
 def skill_load():
-    return [("skill-call", call(skill="progress")), ("skill", skill_text())]
+    return [("skill-call", call(skill=SKILL_PATH.parent.name)), ("skill", skill_text())]
 
 
 def _git(args, cwd):

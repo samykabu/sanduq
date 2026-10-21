@@ -155,6 +155,30 @@ class Calls(unittest.TestCase):
         self.assertNotIn(('project', 'item-add'), gh.calls)  # already on the board
 
 
+    def chain(self, status, length=5):
+        """Issue 1 depends on 2, 2 on 3, and so on: `length` prerequisites, all in `status`."""
+        gh = self.use_counter()
+        for n in range(2, length + 2):
+            gh.add(n, status=status)
+            gh.deps[n - 1] = {n}
+        self.new_process()
+        return gh
+
+    def test_prerequisite_walk_stops_at_done(self):
+        gh = self.chain('Done')
+        self.assertTrue(self.app.inspect('1', evidence=False)['ready'])
+        # The issue, its links, the one Done prerequisite, the board; 2 + 2N = 12 API calls before SC16.
+        self.assertEqual(gh.total(), 4)
+        gh = self.chain('In review')
+        self.assertTrue(self.app.inspect('1', evidence=False)['ready'])
+        self.assertEqual(gh.total(), 2 + 2 * 5 + 1)  # In review is walked through
+
+    def test_full_inspect_reads_timelines_for_direct_prerequisites_only(self):
+        gh = self.chain('In review')
+        self.app.inspect('1')
+        self.assertEqual(gh.calls[('GET', 'N/timeline')], 1)  # 5 before SC16
+
+
 class ClarificationCalls(unittest.TestCase):
     setUp, tearDown, analysis = tc.ClarificationTests.setUp, tc.ClarificationTests.tearDown, tc.ClarificationTests.analysis
 

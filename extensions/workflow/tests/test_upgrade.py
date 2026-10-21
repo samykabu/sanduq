@@ -1,12 +1,16 @@
 """Check CI preservation across the outer workflow upgrade transaction."""
 import hashlib
+import json
+import re
 import sys
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import upgrade
+import install as upgrade_install
 import delegate_dispatch as dispatch
 import delegation
 import workflow as w
@@ -63,6 +67,22 @@ class UpgradeCITests(unittest.TestCase):
         with self.assertRaisesRegex(w.WorkflowError, 'WORKFLOW_UPGRADE_ROLLED_BACK'):
             upgrade.upgrade(self.root, '1.1.1', apply=True, preserve_ci=True, runner=runner)
         self.assertFalse(receipt.exists())
+
+    def test_a_failed_installer_run_names_its_cause_at_the_top(self):
+        real = upgrade_install.subprocess.run
+        cause = 'Compatibility Error: Extension requires spec-kit >=1.1.1.dev0,<2.0.0, but 1.0.11 is installed.'
+
+        def run(args, *rest, **kwargs):
+            if args[0] == 'specify':
+                return upgrade_install.subprocess.CompletedProcess(args, 0, '', '')
+            if args[0] == sys.executable:
+                error = 'INSTALL_ROLLED_BACK: INSTALL_COMMAND_FAILED: specify extension add progress: ' + cause
+                return upgrade_install.subprocess.CompletedProcess(args, 1, json.dumps({'ok': False, 'error': error}), '')
+            return real(args, *rest, **kwargs)
+        with patch.object(upgrade_install.subprocess, 'run', side_effect=run):
+            with self.assertRaisesRegex(w.WorkflowError, 'WORKFLOW_UPGRADE_ROLLED_BACK: INSTALL_COMMAND_FAILED: .*'
+                                        'install.py .*--with progress: INSTALL_ROLLED_BACK: .*' + re.escape(cause)):
+                upgrade.upgrade(self.root, '1.1.1', apply=True, with_optional=['progress'])
 
     def test_default_does_not_request_preservation(self):
         commands = []

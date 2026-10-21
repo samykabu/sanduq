@@ -2,12 +2,17 @@
 
 Skipped when tiktoken is not installed. Counts are o200k_base serialized-content tokens, exact for that encoding.
 """
+import os
 import sys
 import unittest
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+# The bench is vendored from agent-tools; these name this extension's CLI line, skill file and report.
+os.environ.setdefault("PROGRESS_BENCH_CLI", "python .specify/extensions/progress/scripts/progress.py")
+os.environ.setdefault("PROGRESS_BENCH_SKILL", "skills/progress/SKILL.ext.md")
+os.environ.setdefault("PROGRESS_BENCH_DOC", "tests/token-benchmark.md")
 
 try:
     import tiktoken  # noqa: F401
@@ -16,7 +21,7 @@ except ImportError:  # pragma: no cover
     HAVE_TIKTOKEN = False
 
 if HAVE_TIKTOKEN:
-    from bench import approaches, run, traces
+    from bench import approaches, report, run, traces
 
 ENC = "o200k_base"
 REQUIRES_CLI = unittest.skipUnless(HAVE_TIKTOKEN and approaches.new_available() if HAVE_TIKTOKEN else False,
@@ -72,6 +77,13 @@ class TokenBudget(unittest.TestCase):
         self.assertLessEqual(len(lines), 60)
         text = "\n".join(lines)
         self.assertIn("Reporting is a deterministic projection. Never spawn, retain, message or poll an agent solely to maintain it.", text)
+
+    # The LEGACY row runs the real CLI, whose output differs by a few tokens on Windows; the report holds
+    # the Linux counts CI checks.
+    @unittest.skipIf(os.name == "nt", "the report holds Linux counts")
+    def test_generated_report_is_current(self):
+        doc = report.DOC.read_text(encoding="utf-8")
+        self.assertEqual(doc, report.render(self.data), "run: python -m tests.bench.report")
 
 
 if __name__ == "__main__":

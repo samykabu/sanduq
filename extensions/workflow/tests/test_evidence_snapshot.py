@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import execution_tools as execution
 import evidence_snapshot as evidence
 import workflow as workflow
+from runtime_patch import patch_runtime
 
 
 class EvidenceSnapshotTests(unittest.TestCase):
@@ -148,7 +149,7 @@ class EvidenceSnapshotTests(unittest.TestCase):
         for label in expected:
             (self.root / label).unlink()
         self.assertEqual(evidence.resolve(self.root, 'before.json'), expected)
-        with patch.object(workflow, 'required_inputs', return_value=['before.json']):
+        with patch_runtime('required_inputs', return_value=['before.json']):
             self.assertTrue(workflow.receipt_status(self.root, 'specs/example', 'specify', receipt)['current'])
         self.assertEqual({p: (self.root / p).read_bytes() for p in originals}, originals)
 
@@ -218,7 +219,7 @@ class EvidenceSnapshotTests(unittest.TestCase):
         evidence.validate(clone, 'before.json')
         self.assertEqual(evidence.resolve(clone, 'before.json'), {'clean.md': b'exact\n'})
         workflow.validate_evidence_snapshots(clone, receipt)
-        with patch.object(workflow, 'required_inputs', return_value=['before.json']):
+        with patch_runtime('required_inputs', return_value=['before.json']):
             self.assertTrue(workflow.receipt_status(clone, 'specs/example', 'specify', receipt)['current'])
         # A fetched commit that is not an ancestor of HEAD is still refused.
         side = self.orphan_head()
@@ -315,7 +316,7 @@ class EvidenceSnapshotTests(unittest.TestCase):
                     patch.object(evidence, '_blob_content', wraps=evidence._blob_content) as blobs:
                 self.assertIsNone(evidence.validate(self.root, 'before.json'))
                 workflow.validate_evidence_snapshots(self.root, receipt)
-                with patch.object(workflow, 'required_inputs', return_value=['before.json']):
+                with patch_runtime('required_inputs', return_value=['before.json']):
                     self.assertTrue(workflow.receipt_status(self.root, 'specs/example', 'specify', receipt)['current'])
                 self.assertTrue(files.call_args_list)
                 self.assertTrue(blobs.call_args_list)

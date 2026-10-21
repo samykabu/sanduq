@@ -27,6 +27,8 @@ except ModuleNotFoundError:
     # Source checkout only; release archives bundle the canonical helper.
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'shared'))
     import sanduq_remote
+# Scope's errors and its GitHub client's are one class, so every `except ScopeError` covers both.
+from sanduq_scope_github import GitHub, GitHubError as ScopeError, PAGE_TIMEOUT, ProjectRest, rate_limited  # noqa: F401
 
 BEGIN, END = '<!-- speckit-scope:start -->', '<!-- speckit-scope:end -->'
 META = re.compile(r'<!-- speckit-scope:metadata (.*?) -->', re.S)
@@ -38,7 +40,6 @@ EFFORTS = (1, 2, 3, 5, 8, 13, 21)
 BOARD_CACHE = '.specify/scope/board-cache.json'
 BOARD_LAG_RETRY = (2, 4)  # seconds before each live re-read when the gate's issue is missing from the board
 RENDERED = '<!-- sanduq-scope:rendered '
-PAGE_TIMEOUT = 120
 
 
 def leaf_prompt(number, score, text):
@@ -103,10 +104,6 @@ def analysis_difference(baseline_nodes, current_nodes):
             'child_count_before': max(len(baseline_nodes) - 1, 0),
             'child_count_after': max(len(current_nodes) - 1, 0),
             'summary': summary}
-
-
-class ScopeError(Exception):
-    pass
 
 
 def require(condition, message):
@@ -251,305 +248,6 @@ def dependency_text(body):
         if inline:
             parts.append(inline[1])
     return '\n'.join(parts)
-
-
-def rate_limited(text):
-    """True when a GitHub message names a rate limit: "rate limit", "rate limited", "RATE_LIMIT", "rate-limit"."""
-    return 'rate limit' in re.sub(r'[\s_\-]+', ' ', (text or '').lower())
-
-
-class GitHub:
-    """`gh` CLI client. `gh project` is GraphQL-only; while GraphQL is rate-limited, Project
-    operations are served from the REST Projects API (a separate budget) and GraphQL is
-    tried again once the reported reset time has passed."""
-
-    def __init__(self):
-        # Project board settings (owner, ownerType, projectNumber) for the REST fallback; set by Scope.
-        self.project_cfg = None
-        self.transports = set()
-        self._rest_until = 0.0
-        self._rest = None
-        self._project_verified = False
-
-    @property
-    def project_transport(self):
-        """Transport that served this process's Project operations, or None if there were none."""
-        if not self.transports:
-            return None
-        return '+'.join(sorted(self.transports, key=('graphql', 'rest').index))
-
-    def command(self, args, payload=None, timeout=30):
-        is_project = bool(args) and args[0] == 'project' and self.project_cfg is not None
-        if is_project and time.time() < self._rest_until:
-            return self._project_rest(args)
-        p = subprocess.run(['gh', *args], input=json.dumps(payload) if payload is not None else None,
-                           capture_output=True, text=True, encoding='utf-8', timeout=timeout)
-        if p.returncode:
-            if is_project and self.graphql_exhausted(p.stderr, args):
-                return self._project_rest(args)
-            raise ScopeError(f'GitHub request failed ({" ".join(args[:3])}): {p.stderr.strip()[:700]}')
-        if is_project:
-            if self._rest_until:
-                self._rest_until = 0.0
-                print('[scope] GraphQL budget recovered; Project operations use GraphQL again.', file=sys.stderr)
-            self.transports.add('graphql')
-        return json.loads(p.stdout) if p.stdout.strip() else None
-
-    def _project_rest(self, args):
-        if self._rest is None:
-            self._rest = ProjectRest(self, self.project_cfg)
-        self._rest.validate(args)
-        self.verify_project()
-        self.transports.add('rest')
-        return self._rest.run(args)
-
-    def graphql_exhausted(self, stderr='', args=None):
-        """True when GraphQL is rate-limited. The failed request's own message naming a rate limit is
-        enough, even while the cheap budget probe still reports points left (a costly query can be
-        refused first). `gh project` can also report exhaustion as an unrelated error (for example
-        "unknown owner type"), so the real budget is checked for every other failure; that masked owner error
-        is accepted only when `masked_owner_failure` verifies it."""
-        explicit = rate_limited(stderr)
-        p = subprocess.run(['gh', 'api', 'graphql', '-f', 'query={rateLimit{remaining resetAt}}'],
-                           capture_output=True, text=True, encoding='utf-8', timeout=30)
-        reset = None
-        if p.returncode:
-            exhausted = explicit or rate_limited((p.stderr or '') + (p.stdout or ''))
-        else:
-            try:
-                limit = json.loads(p.stdout)['data']['rateLimit']
-                exhausted = explicit or limit['remaining'] <= 0
-                reset = datetime.fromisoformat(limit['resetAt'].replace('Z', '+00:00')).timestamp()
-            except (ValueError, KeyError, TypeError, AttributeError):
-                exhausted = explicit
-        if not exhausted and self.masked_owner_failure(stderr, args):
-            exhausted = True
-        if exhausted:
-            # Unknown reset: re-check GraphQL after a minute rather than before every operation.
-            self._rest_until = max(reset or 0, time.time() + 60)
-            when = datetime.fromtimestamp(reset, timezone.utc).strftime('%H:%M UTC') if reset else 'unknown'
-            print(f'[scope] GraphQL rate-limited (resets {when}); using the REST Projects API for Project operations.',
-                  file=sys.stderr)
-        return exhausted
-
-    def masked_owner_failure(self, stderr, args=None):
-        """True when `gh project` reported "unknown owner type" for a block that is not the configured owner's
-        fault: the request itself targets the configured Project, and a direct owner query is rate-limited or
-        the REST Projects API resolves the same configured owner, type, number and node ID. A mismatched
-        request, a failed or mismatched REST lookup keeps the original error."""
-        cfg = self.project_cfg or {}
-        if 'unknown owner type' not in (stderr or '').lower() or not cfg.get('owner') or not cfg.get('projectNumber'):
-            return False
-        try:
-            ProjectRest(self, cfg).validate(args or [])
-        except ScopeError:
-            return False
-        direct = subprocess.run(['gh', 'api', 'graphql', '-f', 'query=query($login:String!){repositoryOwner(login:$login){login}}',
-                                 '-f', f'login={cfg["owner"]}'], capture_output=True, text=True, encoding='utf-8', timeout=30)
-        if direct.returncode and rate_limited((direct.stderr or '') + (direct.stdout or '')):
-            return True
-        try:
-            self.verify_project()
-        except ScopeError:
-            return False
-        return True
-
-    def verify_project(self):
-        """Require the live REST Project to be the configured one (owner, owner type, number, node ID)."""
-        if self._project_verified:
-            return
-        cfg = self.project_cfg
-        base = ProjectRest(self, cfg).base
-        project = self.api(base) or {}
-        owner = project.get('owner') or {}
-        kind = 'Organization' if cfg.get('ownerType', 'user') == 'org' else 'User'
-        require(str(project.get('number')) == str(cfg['projectNumber'])
-                and str(owner.get('login', '')).casefold() == str(cfg['owner']).casefold()
-                and owner.get('type', kind) == kind
-                and (not cfg.get('projectId') or project.get('node_id') == cfg['projectId']),
-                f'REST fallback: {base} is not the configured Project (owner, owner type, number or node ID differ).')
-        self._project_verified = True
-
-    def api(self, endpoint, method='GET', payload=None, pages=False):
-        args = ['api', endpoint, '-H', 'Accept: application/vnd.github+json']
-        if pages:
-            args += ['--paginate', '--slurp']
-        if method != 'GET':
-            args += ['--method', method]
-        if payload is not None:
-            args += ['--input', '-']
-        # A paginated read of a large repository takes one call per 100 items; 120 s as Project's sync allows.
-        data = self.command(args, payload, PAGE_TIMEOUT if pages else 30)
-        return [item for page in data for item in page] if pages else data
-
-    def graphql(self, query, **variables):
-        data = self.command(['api', 'graphql', '--input', '-'], {'query': query, 'variables': variables})
-        require(not data.get('errors'), f'GraphQL failed: {data.get("errors")}')
-        return data['data']
-
-
-class ProjectRest:
-    """REST equivalents of the `gh project` subcommands Scope uses, returning `gh`'s JSON shapes.
-
-    `gh project` addresses fields and items by node ID; REST addresses them by database ID.
-    Both appear in the REST listings, which are fetched once per instance and cached.
-    """
-    FIELD_TYPES = {'single_select': 'ProjectV2SingleSelectField', 'iteration': 'ProjectV2IterationField'}
-    CONTENT_FIELDS = {'title', 'type', 'repository', 'assignees', 'labels', 'linked pull requests', 'milestone',
-                      'reviewers', 'parent issue', 'sub-issues progress'}
-
-    def __init__(self, gh, cfg):
-        self.gh, self.cfg = gh, cfg
-        owner_path = 'orgs' if cfg.get('ownerType', 'user') == 'org' else 'users'
-        self.base = f'{owner_path}/{cfg["owner"]}/projectsV2/{cfg["projectNumber"]}'
-        self._fields = None
-        self._item_ids = None
-
-    # Options each `gh project` subcommand may carry when served over REST; anything else is refused.
-    ALLOWED = {'field-list': {'--owner', '--format', '--limit'}, 'item-list': {'--owner', '--format', '--limit'},
-               'item-add': {'--owner', '--format', '--url'},
-               'field-create': {'--owner', '--format', '--name', '--data-type', '--single-select-options'},
-               'item-edit': {'--id', '--project-id', '--field-id', '--single-select-option-id', '--text'}}
-
-    def validate(self, args):
-        """Refuse a request that names another owner, Project number or Project ID, or carries unsupported
-        arguments, before any REST operation (a throttle must not retarget the request)."""
-        action = args[1] if len(args) > 1 else ''
-        allowed = self.ALLOWED.get(action)
-        require(allowed is not None, f'REST fallback does not support `gh project {action}`; retry after the GraphQL rate limit resets.')
-        rest = list(args[2:])
-        positional = []
-        while rest and not rest[0].startswith('--'):
-            positional.append(rest.pop(0))
-        require(len(rest) % 2 == 0 and all(rest[i].startswith('--') for i in range(0, len(rest), 2)),
-                f'REST fallback: malformed `gh project {action}` arguments.')
-        options = {}
-        for i in range(0, len(rest), 2):
-            require(rest[i] in allowed and rest[i] not in options,
-                    f'REST fallback: unsupported argument {rest[i]} for `gh project {action}`.')
-            options[rest[i]] = rest[i + 1]
-        if action == 'item-edit':
-            require(not positional and self.cfg.get('projectId') and options.get('--project-id') == self.cfg['projectId'],
-                    'REST fallback: request Project ID differs from the configured Project.')
-            require(('--single-select-option-id' in options) != ('--text' in options) and '--id' in options and '--field-id' in options,
-                    'REST fallback: item-edit needs --id, --field-id and exactly one value.')
-            return
-        require(positional == [str(self.cfg['projectNumber'])], 'REST fallback: request Project number differs from the configured Project.')
-        require(str(options.get('--owner', '')).casefold() == str(self.cfg['owner']).casefold(),
-                'REST fallback: request owner differs from the configured Project owner.')
-        require(options.get('--format', 'json') == 'json', 'REST fallback supports --format json only.')
-        if action == 'field-create':
-            require(options.get('--data-type') == 'SINGLE_SELECT' and '--name' in options and '--single-select-options' in options,
-                    'REST fallback does not support `gh project field-create` without SINGLE_SELECT, --name and options.')
-
-    def run(self, args):
-        options = {args[i]: args[i + 1] for i in range(2, len(args) - 1) if args[i].startswith('--')}
-        action = args[1] if len(args) > 1 else ''
-        if action == 'field-list':
-            self._fields = None  # field creation and verification must see current remote state
-            fields = [self.field_row(f) for f in self.fields()]
-            return {'fields': fields, 'totalCount': len(fields)}
-        if action == 'field-create':
-            require(options.get('--data-type') == 'SINGLE_SELECT', 'REST fallback does not support `gh project field-create` without SINGLE_SELECT.')
-            field = self.gh.api(f'{self.base}/fields', 'POST', {
-                'name': options['--name'], 'data_type': 'single_select',
-                'single_select_options': [{'name': name, 'color': 'GRAY', 'description': ''}
-                                          for name in options['--single-select-options'].split(',')]})
-            self._fields = None
-            return self.field_row(field)
-        if action == 'item-list':
-            items = [self.item_row(raw) for raw in self.raw_items()]
-            return {'items': items, 'totalCount': len(items)}
-        if action == 'item-add':
-            match = re.search(r'github\.com/([^/]+/[^/]+)/issues/(\d+)', options.get('--url', ''))
-            require(match, f'REST fallback: item-add needs an issue URL, got {options.get("--url")!r}.')
-            issue = self.gh.api(f'repos/{match[1]}/issues/{match[2]}')
-            existing = self.existing_issue_item(match[1], issue)
-            if existing:
-                return {'id': existing}
-            try:
-                item = self.gh.api(f'{self.base}/items', 'POST', {'type': 'Issue', 'id': issue['id']})
-            except ScopeError as error:
-                # `gh project item-add` is idempotent; REST answers 422 when the issue is already on the board.
-                # Accept it only if one fresh reread finds that exact issue; any other failure is raised.
-                existing = self.existing_issue_item(match[1], issue) if 'already exists' in str(error).lower() else None
-                if not existing:
-                    raise
-                return {'id': existing}
-            if self._item_ids is not None:
-                self._item_ids[item['node_id']] = item['id']
-            return {'id': item['node_id']}
-        if action == 'item-edit':
-            field = next((f for f in self.fields() if f['node_id'] == options.get('--field-id')), None)
-            require(field, f'REST fallback: unknown Project field {options.get("--field-id")}.')
-            if '--single-select-option-id' in options:
-                value = options['--single-select-option-id']
-            elif '--text' in options:
-                value = options['--text'] or None  # an empty text value clears the field
-            else:
-                raise ScopeError('REST fallback supports single-select and text field edits only.')
-            item_id = self.item_database_id(options.get('--id'))
-            self.gh.api(f'{self.base}/items/{item_id}', 'PATCH', {'fields': [{'id': field['id'], 'value': value}]})
-            return None
-        raise ScopeError(f'REST fallback does not support `gh project {action}`; retry after the GraphQL rate limit resets.')
-
-    def fields(self):
-        if self._fields is None:
-            self._fields = self.gh.api(f'{self.base}/fields?per_page=100', pages=True)
-        return self._fields
-
-    def raw_items(self):
-        ids = ','.join(str(f['id']) for f in self.fields())
-        rows = self.gh.api(f'{self.base}/items?per_page=100&fields={ids}', pages=True)
-        self._item_ids = {raw['node_id']: raw['id'] for raw in rows}
-        return rows
-
-    def existing_issue_item(self, repo, issue):
-        """Node ID of the configured board's item for exactly this issue (repository and number), from a fresh
-        paginated listing; None when the issue is not on the board."""
-        for raw in self.raw_items():
-            content = raw.get('content') or {}
-            repository = re.sub(r'^https://api\.github\.com/repos/', '', content.get('repository_url') or '')
-            if (raw.get('content_type') == 'Issue' and content.get('number') == issue['number']
-                    and repository.casefold() == repo.casefold()
-                    and content.get('id', issue['id']) == issue['id']):
-                return raw['node_id']
-        return None
-
-    def item_database_id(self, node_id):
-        if self._item_ids is None or node_id not in self._item_ids:
-            self.raw_items()
-        require(node_id in self._item_ids, f'REST fallback: Project item {node_id} not found.')
-        return self._item_ids[node_id]
-
-    @classmethod
-    def field_row(cls, field):
-        row = {'id': field['node_id'], 'name': field['name'],
-               'type': cls.FIELD_TYPES.get(field.get('data_type'), 'ProjectV2Field')}
-        if field.get('options') is not None:
-            row['options'] = [{'id': o['id'], 'name': cls.text(o.get('name'))} for o in field['options']]
-        return row
-
-    @staticmethod
-    def text(value):
-        return value.get('raw') if isinstance(value, dict) else value
-
-    @classmethod
-    def item_row(cls, raw):
-        content = raw.get('content') or {}
-        kind = raw.get('content_type') if raw.get('content_type') in ('Issue', 'PullRequest') else 'DraftIssue'
-        repo = re.sub(r'^https://api\.github\.com/repos/', '', content.get('repository_url') or '')
-        row = {'id': raw['node_id'], 'title': content.get('title'),
-               'content': {'type': kind, 'number': content.get('number'), 'title': content.get('title'),
-                           'repository': repo, 'url': content.get('html_url'), 'body': content.get('body')}}
-        for field in raw.get('fields') or []:
-            key, value = field['name'].lower(), field.get('value')
-            if key in cls.CONTENT_FIELDS or value is None:
-                continue
-            if isinstance(value, dict):
-                value = cls.text(value.get('name', value.get('title', value)))
-            row[key] = value
-        return row
 
 
 class Scope:
@@ -764,7 +462,8 @@ class Scope:
         return found
 
     def prerequisite_report(self, issue, found=None):
-        """Transitive prerequisites; `found` receives each visited issue's direct dependencies."""
+        """Transitive prerequisites, not walked below a logically Done one (SC16); `found` receives each walked
+        issue's direct dependencies."""
         seen, stack, all_deps = set(), set(), {}
         found = {} if found is None else found
 
@@ -776,9 +475,10 @@ class Scope:
             stack.add(n)
             found[n] = self.dependencies(current)
             for dep in found[n]:
-                obj = self.issue(dep)
+                obj = all_deps.get(dep) or self.issue(dep)
                 all_deps[dep] = obj
-                visit(obj)
+                if self.status(obj) != 'Done':
+                    visit(obj)
             stack.remove(n)
             seen.add(n)
         visit(issue)
@@ -797,7 +497,7 @@ class Scope:
                 x.get('reason') and x.get('approved_by') and x.get('approval_text')}
 
     def inspect(self, value, evidence=True):
-        """Prerequisites, then (with `evidence`) comments, images and prerequisite timelines."""
+        """Prerequisites, then (with `evidence`) comments, images and the direct prerequisites' timelines."""
         issue = self.resolve(value)
         direct = {}
         deps = self.prerequisite_report(issue, direct)
@@ -816,7 +516,7 @@ class Scope:
         result['comments'] = [slim_comment(x) for x in comments]
         result['images'] = images(issue.get('body', '') + '\n' + '\n'.join(x.get('body', '') for x in comments))
         result['implementation_evidence'] = []
-        for dep in deps:
+        for dep in (d for d in deps if d['number'] in direct[issue['number']]):
             timeline = self.gh.api(f'{self.base}/{dep["number"]}/timeline?per_page=100', pages=True)
             prs = []
             for event in timeline:
@@ -1199,6 +899,9 @@ class Scope:
                     body += '\n\n## Source\n\n' + root_issue['html_url']
                     issue = self.gh.api(self.base, 'POST', {'title': node['title'], 'body': body})
                     self.remember(issue)
+                    # Journal a new issue before linking it, so `cancel` lists it even if the link fails.
+                    journal['nodes'][node['key']] = issue['number']
+                    write_json(journal_path, journal)
                 if parent['number'] not in native_children:
                     native_children[parent['number']] = {x['number'] for x in self.gh.api(f'{self.base}/{parent["number"]}/sub_issues?per_page=100', pages=True)}
                 if issue['number'] not in native_children[parent['number']]:
@@ -1266,6 +969,39 @@ class Scope:
                                   'revision_of': approval.get('revision_of'),
                                   'difference': approval.get('difference')}
         return result
+
+    def cancel(self, operation, apply=False):
+        """Mark one publish journal `rolled_back`, so `publish` refuses to resume it, and return what the operation
+        changed, for manual repair (SC21). No GitHub write; the caller holds the mutation lock with --apply."""
+        value = str(operation or '').strip()
+        runs = self.root / '.specify/scope/runs'
+        # A linked runs folder (or parent) must not lead the journal read or write outside the project.
+        require(runs.resolve().is_relative_to(self.root),
+                'SCOPE_CANCEL_UNKNOWN: .specify/scope/runs resolves outside the project; refusing to read or write it.')
+        if re.fullmatch(r'#?[1-9]\d*', value):
+            found = sorted(p.name for p in runs.glob(value.lstrip('#') + '-*') if (p / 'journal.json').is_file())
+            raise ScopeError(f'SCOPE_CANCEL_AMBIGUOUS: name one operation as <issue>-<hash>: {", ".join(found) or "none for this issue"}.')
+        require(re.fullmatch(r'[1-9]\d*-[0-9a-f]{16}', value),
+                'SCOPE_CANCEL_OPERATION: name the operation as <issue>-<hash>, its folder under .specify/scope/runs.')
+        folder = runs / value
+        path = folder / 'journal.json'
+        journal = read_json(path) if path.is_file() and path.resolve().parent == runs.resolve() / value else None
+        require(isinstance(journal, dict) and journal.get('operation') == value.split('-', 1)[1],
+                f'SCOPE_CANCEL_UNKNOWN: no publish journal {value} under .specify/scope/runs.')
+        if apply and not journal.get('rolled_back'):
+            journal.update(rolled_back=True, rolled_back_at=datetime.now(timezone.utc).isoformat())
+            write_json(path, journal)
+        root = int(value.split('-', 1)[0])
+        relative = folder.relative_to(self.root).as_posix()
+        return {'operation': value, 'journal': f'{relative}/journal.json', 'dry_run': not apply,
+                'rolled_back': bool(journal.get('rolled_back')), 'published': bool(journal.get('published')),
+                'created': {key: n for key, n in journal.get('nodes', {}).items() if n != root},
+                'before': journal.get('before', {}), 'dependencies_before': journal.get('dependencies_before', {}),
+                'backups': [f'{relative}/{name}' for name in ('snapshot.json', 'analysis.json', 'catalog-before.json',
+                                                              'issue-map-before.json') if (folder / name).is_file()],
+                'repair': 'Scope changed nothing on GitHub. By hand: restore issue bodies from `before` and native '
+                          'dependencies from `dependencies_before`, close the `created` issues you do not keep, and '
+                          'restore the catalog and issue map from the backups.'}
 
     def rewire(self, parent, leaves, journal, journal_path, candidates):
         """Move each candidate's dependency on `parent` to `leaves`; `candidates` come from `rewire_candidates`."""
@@ -1586,8 +1322,8 @@ def rejection(blocked):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['inspect', 'gate', 'approve', 'publish', 'bind', 'reconcile', 'export-plan', 'render-spec'])
-    parser.add_argument('issue', nargs='?')
+    parser.add_argument('command', choices=['inspect', 'gate', 'approve', 'publish', 'bind', 'reconcile', 'export-plan', 'render-spec', 'cancel'])
+    parser.add_argument('issue', nargs='?', help='issue number or exact title; cancel: the <issue>-<hash> operation')
     parser.add_argument('--root', default='.')
     parser.add_argument('--analysis', type=Path)
     parser.add_argument('--output', type=Path)
@@ -1653,6 +1389,8 @@ def main(argv=None):
             result = app.reconcile(args.apply, args.issue)
         elif args.command == 'render-spec':
             result = app.render_spec(args.issue, args.analysis, args.feature, args.apply, args.force)
+        elif args.command == 'cancel':
+            result = app.cancel(args.issue, args.apply)
         else:
             require(args.apply, 'export-plan requires --apply because it updates local plan data.')
             result = app.export_plan()

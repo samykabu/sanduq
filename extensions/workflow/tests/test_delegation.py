@@ -20,6 +20,7 @@ import delegate_dispatch as dispatch
 import delegation
 import task_issues
 import workflow as w
+from runtime_patch import patch_runtime
 import test_workflow as fixture
 
 
@@ -70,7 +71,7 @@ class DelegationTests(unittest.TestCase):
         run = w.Run(self.root, self.feature)
         run.start('acme/app#10')
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
-             patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}):
+             patch_runtime('doctor', return_value={'ok': True, 'errors': []}):
             claim = run.claim({'session_id': 'test-session'})
         self.assertEqual(claim['delegation']['task_type'], 'discovery')
         # Discovery defaults to standard, never light (B12); Scope and Plan
@@ -84,7 +85,7 @@ class DelegationTests(unittest.TestCase):
         with patch.object(delegation, 'doctor') as delegation_doctor, \
              patch.object(delegation, 'install_skill') as install, \
              patch.object(delegation, 'annotate_tasks') as annotate, \
-             patch.object(w, 'doctor', return_value=patches.get('health', {'ok': True, 'errors': []})), \
+             patch_runtime('doctor', return_value=patches.get('health', {'ok': True, 'errors': []})), \
              patch.object(w.Run, 'next', side_effect=patches.get('next', w.Run.next), autospec=True):
             if expected:
                 with self.assertRaisesRegex(w.WorkflowError, expected):
@@ -112,6 +113,26 @@ class DelegationTests(unittest.TestCase):
         self.rejected_claim_leaves_no_trace(
             run, 'COMMAND_UNAVAILABLE', health={'ok': False, 'errors': ['COMMAND_UNAVAILABLE: x']})
 
+    def test_an_in_place_edit_to_another_checkpoint_keeping_size_and_mtime_is_still_read(self):
+        # Codex round 5, finding 2: claim exclusion reads every foreign checkpoint under the dispatch lock; no
+        # cached "inactive" may skip one (W25 reverted).
+        self.enable()
+        run = w.Run(self.root, self.feature)
+        run.start('acme/app#10')
+        other = self.root / 'specs/002-other/workflow/checkpoint.json'
+        idle, busy = '{"active": null, "pad": ".."}', '{"active": {"stage": "plan"}}'
+        self.assertEqual(len(idle), len(busy))
+        other.parent.mkdir(parents=True)
+        other.write_text(idle, encoding='utf-8')
+        old = time.time() - 60
+        os.utime(other, (old, old))
+        self.rejected_claim_leaves_no_trace(
+            run, 'COMMAND_UNAVAILABLE', health={'ok': False, 'errors': ['COMMAND_UNAVAILABLE: x']})
+        with open(other, 'r+', encoding='utf-8') as handle:  # same file, same size
+            handle.write(busy)
+        os.utime(other, (old, old))
+        self.rejected_claim_leaves_no_trace(run, 'OTHER_FEATURE_STAGE_ACTIVE')
+
     def test_claim_without_next_stage_does_not_install_skill_or_annotate_tasks(self):
         self.enable()
         run = w.Run(self.root, self.feature)
@@ -129,13 +150,13 @@ class DelegationTests(unittest.TestCase):
         run.start('acme/app#10')
         with patch.object(delegation, 'doctor',
                           return_value={'ok': False, 'error': 'DELEGATE_SKILL_INSTALL_FAILED'}), \
-             patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}):
+             patch_runtime('doctor', return_value={'ok': True, 'errors': []}):
             with self.assertRaisesRegex(w.WorkflowError, 'DELEGATE_SKILL_INSTALL_FAILED'):
                 run.claim({'session_id': 'test-session'})
         self.assertIsNone(w.read(run.path)['active'])
         self.assertNotIn('sanduq-delegation', path.read_text(encoding='utf-8'))
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()) as delegation_doctor, \
-             patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}) as health:
+             patch_runtime('doctor', return_value={'ok': True, 'errors': []}) as health:
             claim = run.claim({'session_id': 'test-session'})
         self.assertEqual(delegation_doctor.call_args.kwargs['install'], True)
         self.assertIs(health.call_args.kwargs['check_delegation'], False)
@@ -573,7 +594,7 @@ class DelegationTests(unittest.TestCase):
         self.enable()
         run = w.Run(self.root, self.feature)
         run.start('acme/app#10')
-        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()),              patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}):
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()),              patch_runtime('doctor', return_value={'ok': True, 'errors': []}):
             claim = run.claim({'session_id': 'test-session'})
         launch = patch.object(dispatch, 'launch', return_value={'run_id': 'codex-scope', 'state': 'running'})
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), launch as mocked:
@@ -636,7 +657,7 @@ class DelegationTests(unittest.TestCase):
         run = w.Run(self.root, self.feature)
         run.start('acme/app#10')
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
-             patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}):
+             patch_runtime('doctor', return_value={'ok': True, 'errors': []}):
             claim = run.claim({'session_id': 'test-session'})
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
              patch.object(dispatch, 'launch', return_value={'run_id': 'codex-scope', 'state': 'running'}):
@@ -657,7 +678,7 @@ class DelegationTests(unittest.TestCase):
         run = w.Run(self.root, self.feature)
         run.start('acme/app#10')
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
-             patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}):
+             patch_runtime('doctor', return_value={'ok': True, 'errors': []}):
             claim = run.claim({'session_id': 'test-session'})
         receipt = fixture.WorkflowTests.receipt(self, 'scope')
         with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_STAGE_NOT_VERIFIED'):
@@ -668,7 +689,7 @@ class DelegationTests(unittest.TestCase):
         run = w.Run(self.root, self.feature)
         run.start('acme/app#10')
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
-             patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}):
+             patch_runtime('doctor', return_value={'ok': True, 'errors': []}):
             claim = run.claim({'session_id': 'test-session'})
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
              patch.object(dispatch, 'launch', return_value={'run_id': 'codex-scope', 'state': 'running'}):
@@ -687,7 +708,7 @@ class DelegationTests(unittest.TestCase):
         run = w.Run(self.root, self.feature)
         run.start('acme/app#10')
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
-             patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}):
+             patch_runtime('doctor', return_value={'ok': True, 'errors': []}):
             claim = run.claim({'session_id': 'test-session'})
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
              patch.object(dispatch, 'launch', return_value={'run_id': 'codex-scope', 'state': 'running'}):
@@ -717,7 +738,7 @@ class DelegationTests(unittest.TestCase):
         run = w.Run(self.root, self.feature)
         run.start('acme/app#10')
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
-             patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}):
+             patch_runtime('doctor', return_value={'ok': True, 'errors': []}):
             claim = run.claim({'session_id': 'test-session'})
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
              patch.object(dispatch, 'launch', return_value={'run_id': 'codex-scope', 'state': 'running'}):
@@ -748,7 +769,7 @@ class DelegationTests(unittest.TestCase):
         self.enable()
         run = w.Run(self.root, self.feature)
         run.start('acme/app#10')
-        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()),              patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}):
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()),              patch_runtime('doctor', return_value={'ok': True, 'errors': []}):
             claim = run.claim({'session_id': 'test-session'})
         log = self.root / self.feature / 'workflow/lifecycle.jsonl'
         # Before the delegation check: no attempt exists, so the rejection names no candidate.
@@ -765,7 +786,7 @@ class DelegationTests(unittest.TestCase):
                          return_value=subprocess.CompletedProcess([], 0, json.dumps(payload), '')):
             dispatch.collect(self.root, self.feature, 'codex-scope')
         # After it: a later check refuses the receipt, and the validated attempt is on the record.
-        with patch.object(w, 'fingerprint_files', side_effect=w.WorkflowError('INPUT_MISSING')):
+        with patch_runtime('fingerprint_files', side_effect=w.WorkflowError('INPUT_MISSING')):
             with self.assertRaisesRegex(w.WorkflowError, 'INPUT_MISSING'):
                 run.complete(claim['token'], fixture.WorkflowTests.receipt(self, 'scope'))
         # A rejection at the very first check, on a fresh instance, is back to null.
@@ -789,7 +810,7 @@ class DelegationTests(unittest.TestCase):
         run = w.Run(self.root, self.feature)
         run.start('acme/app#10')
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
-             patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}):
+             patch_runtime('doctor', return_value={'ok': True, 'errors': []}):
             claim = run.claim({'session_id': 'test-session'})
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
              patch.object(dispatch, 'launch', return_value={'run_id': 'codex-scope', 'state': 'running'}):
@@ -1404,7 +1425,7 @@ class DelegationTests(unittest.TestCase):
         run = w.Run(self.root, self.feature)
         run.start('acme/app#10')
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
-             patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}):
+             patch_runtime('doctor', return_value={'ok': True, 'errors': []}):
             claim = run.claim({'session_id': 'test-session'})
         self.assertIn(dispatch.NO_DISPATCHER_COMMANDS,
                       dispatch.stage_brief(self.root, self.feature, 'scope', claim['token']))
@@ -3620,7 +3641,7 @@ class DelegationTests(unittest.TestCase):
         run = w.Run(self.root, self.feature)
         run.start('acme/app#10')
         with patch.object(delegation, 'doctor', return_value=health), \
-             patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}):
+             patch_runtime('doctor', return_value={'ok': True, 'errors': []}):
             claim = run.claim({'session_id': 'test-session'})
         self.assertEqual(claim['notices'], [notice])
         self.assertNotIn('notices', w.read(run.path)['active'])
@@ -3648,7 +3669,7 @@ class DelegationTests(unittest.TestCase):
         self.enable()
         run = w.Run(self.root, self.feature)
         run.start('acme/app#10')
-        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()),              patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}):
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()),              patch_runtime('doctor', return_value={'ok': True, 'errors': []}):
             claim = run.claim({'session_id': 'test-session'})
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()),              patch.object(dispatch, 'launch', return_value={'run_id': 'codex-scope', 'state': 'running'}):
             started = dispatch.start(self.root, self.feature, 'stage:scope', token=claim['token'])

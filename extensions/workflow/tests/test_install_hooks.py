@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import install as installer
@@ -230,6 +231,140 @@ class ProgressCost(unittest.TestCase):
         record = self.wire(hook_wiring='native')
         self.assertNotIn('hint', record)
         self.assertEqual([record['hosts'][h]['cost_class'] for h in ('claude', 'codex')], ['native', 'native'])
+
+
+class ProgressDefault(Apply):
+    """IP21: a project with no Progress wiring yet gets native wiring; existing projects keep theirs."""
+
+    def setUp(self):
+        super().setUp()
+        self.lock = self.root / '.specify/workflow/install-lock.json'
+        # A stub specify_cli on PYTHONPATH makes the dispatcher interpreter the slow class (the IP9 hint).
+        stub = self.root / 'stub/specify_cli'
+        stub.mkdir(parents=True)
+        (stub / '__init__.py').write_text('', encoding='utf-8'); (stub / 'events.py').write_text('', encoding='utf-8')
+        environ = patch.dict(os.environ, {'PYTHONPATH': str(stub.parent)}); environ.start(); self.addCleanup(environ.stop)
+
+    def hosts(self, *installed):
+        w.write(self.root / '.specify/integration.json', {'integration': installed[-1], 'installed_integrations': list(installed)})
+
+    def render(self, *hosts):
+        """What Spec Kit renders for Progress on an extension or integration command."""
+        for host in hosts:
+            if host == 'claude':
+                self.claude.parent.mkdir(exist_ok=True)
+                data = json.loads(self.claude.read_text(encoding='utf-8')) if self.claude.exists() else {}
+                data.setdefault('hooks', {}).setdefault('PostToolUse', []).append({'matcher': '*', 'hooks': [
+                    {'type': 'command', 'command': dispatcher('speckit.progress.hook', sys.executable), '__speckit_event__': True}]})
+                self.claude.write_text(json.dumps(data, indent=2), encoding='utf-8')
+            else:
+                self.codex_toml.parent.mkdir(exist_ok=True)
+                with self.codex_toml.open('a', encoding='utf-8') as handle:
+                    handle.write(toml_block('speckit.progress.hook', sys.executable))
+
+    def add_progress(self, version='1.5.0'):
+        registry = w.registry(self.root); registry['progress'] = {'version': version, 'enabled': True}
+        w.write(self.root / '.specify/extensions/.registry', {'extensions': registry})
+        folder = self.root / '.specify/extensions/progress'
+        shutil.copytree(PROGRESS_SCRIPTS, folder / 'scripts', ignore=shutil.ignore_patterns('__pycache__'), dirs_exist_ok=True)
+        (folder / 'extension.yml').write_text(json.dumps({'extension': {
+            'id': 'progress', 'version': version, 'repository': 'https://github.com/samykabu/sanduq'}}), encoding='utf-8')
+        self.render(*installer.installed_hosts(self.root))
+
+    def runner(self, root, args, log):
+        if args[:4] == ['specify', 'extension', 'add', 'progress']:
+            self.add_progress()
+
+    def apply(self, *optional):
+        return installer.install(self.root, apply=True, package_root=self.package, runner=self.runner, with_optional=optional)
+
+    def wiring(self):
+        return w.read(self.lock)['progress']['hook_wiring']
+
+    def text(self):
+        return b''.join(self.host_text().values()).decode('utf-8')
+
+    def assert_native(self, *hosts):
+        self.assertEqual(self.wiring(), 'native')
+        self.assertNotIn('speckit.progress.hook', self.text())
+        record = w.read(self.lock)['progress']
+        self.assertEqual({h: e['cost_class'] for h, e in record['hosts'].items()}, {h: 'native' for h in hosts})
+        self.assertNotIn('hint', record)
+        for host in hosts:
+            path = self.claude if host == 'claude' else self.codex_hooks
+            self.assertIn(installer.NATIVE_TAG, path.read_text(encoding='utf-8'))
+        self.assertEqual(w.progress_wiring_warnings(self.root), [])  # IP20 stays quiet on the new default
+
+    def assert_speckit(self):
+        self.assertEqual(self.wiring(), 'speckit')
+        self.assertIn('speckit.progress.hook', self.text())
+        self.assertNotIn(installer.NATIVE_TAG, self.text())
+
+    def test_first_install_wires_progress_natively_and_keeps_it(self):
+        result = self.apply('progress')
+        self.assertEqual(result['progress']['hook_wiring'], 'native')
+        self.assert_native('claude', 'codex')
+        # The next apply needs no --with and keeps the recorded wiring.
+        self.apply()
+        self.assert_native('claude', 'codex')
+        # A later Spec Kit command renders its entries again: IP20 warns, and the next apply clears it.
+        self.render('claude')
+        self.assertIn('PROGRESS_HOOKS_DOUBLE_WIRED', w.progress_wiring_warnings(self.root)[0])
+        self.apply()
+        self.assert_native('claude', 'codex')
+
+    def test_progress_installed_before_keeps_spec_kit_wiring_and_the_hint(self):
+        self.add_progress()
+        result = self.apply('progress')
+        self.assert_speckit()
+        self.assertEqual(result['progress']['hint'], installer.SLOW_DISPATCHER_HINT)
+
+    def test_explicit_choice_wins_on_a_new_and_on_an_existing_project(self):
+        self.policy['progress'] = {'hook_wiring': 'speckit'}
+        self.configure()
+        self.apply('progress')
+        self.assert_speckit()
+        self.policy['progress'] = {'hook_wiring': 'native'}
+        (self.root / '.specify/workflow.yml').write_text(yaml.safe_dump(self.policy), encoding='utf-8')
+        self.apply()
+        self.assert_native('claude', 'codex')
+
+    def test_a_host_added_later_is_wired_natively_too(self):
+        self.hosts('claude')
+        self.apply('progress')
+        self.assert_native('claude')
+        self.assertFalse(self.codex_hooks.exists())
+        self.hosts('claude', 'codex')
+        self.render('codex')  # `specify integration use codex` renders Spec Kit's entries there
+        self.apply()
+        self.assert_native('claude', 'codex')
+
+    def test_a_failed_first_install_rolls_back_the_native_wiring(self):
+        before = self.host_text()
+        with patch.object(installer, 'skill_errors', return_value=['LATE_FAILURE']):
+            with self.assertRaisesRegex(w.WorkflowError, 'INSTALL_ROLLED_BACK: LATE_FAILURE'):
+                self.apply('progress')
+        self.assertEqual(self.host_text(), before)
+        self.assertFalse(self.lock.exists())
+
+    def test_an_upgrade_keeps_the_spec_kit_wiring_an_earlier_install_recorded(self):
+        self.add_progress('1.4.0')
+        w.write(self.lock, {'progress': {'hook_wiring': 'speckit', 'post_tool_matcher': ''}})
+        registry = w.registry(self.root); registry['workflow'] = {'version': '1.1.0', 'enabled': True}
+        w.write(self.root / '.specify/extensions/.registry', {'extensions': registry})
+
+        def runner(root, args, log):
+            if args[:4] == ['specify', 'extension', 'add', 'workflow']:
+                manifest = root / '.specify/extensions/workflow/extension.yml'
+                manifest.parent.mkdir(parents=True, exist_ok=True)
+                manifest.write_text(json.dumps({'extension': {'id': 'workflow', 'version': '1.1.1',
+                                                              'repository': upgrade.REPOSITORY}}), encoding='utf-8')
+            elif args[0] == sys.executable:  # the new package's installer
+                installer.install(root, apply=True, package_root=self.package, runner=self.runner,
+                                  upgrade_owner=os.getpid())
+        upgrade.upgrade(self.root, '1.1.1', apply=True, runner=runner)
+        self.assertEqual(w.registry(self.root)['progress']['version'], '1.5.0')
+        self.assert_speckit()
 
 
 class UpgradeHooks(unittest.TestCase):

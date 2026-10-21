@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.6.1] - 2026-10-21
+
+- The injected `sanduq_ci.load_ci` also reads a policy file passed directly, so the vendored User Manual init honours `--ci-policy FILE`.
+
 ## [2.6.0] - 2026-10-21
 
 Optimization round 4. No renames.

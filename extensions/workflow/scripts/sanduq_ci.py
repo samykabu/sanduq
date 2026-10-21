@@ -310,13 +310,14 @@ def render(template, ci):
 
 
 def load_ci(root):
-    """This project's recorded CI selection, or the shipped default.
+    """This project's recorded CI selection, or the shipped default. `root` is a project root or an existing
+    policy file (`init_manual.py --ci-policy FILE`).
 
     Assure and User Manual can be installed without the workflow extension, so a
     missing or CI-less policy is normal and yields the default rather than an error.
     """
     from pathlib import Path
-    path = Path(root) / '.specify/workflow.yml'
+    path = Path(root) if Path(root).is_file() else Path(root) / '.specify/workflow.yml'
     if not path.is_file():
         return default_ci()
     try:

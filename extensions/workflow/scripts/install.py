@@ -21,7 +21,7 @@ import zipfile
 from pathlib import Path
 from urllib.parse import quote
 import yaml
-from packaging.version import Version
+from packaging.version import InvalidVersion, Version
 from packaging.specifiers import SpecifierSet
 from workflow import load_policy, read, write, require, inside, registry, doctor, locked, WorkflowError, RANGES, ensure_local_excludes, package_digest, active_host, github_repository, sanduq_ci, git
 from reconcile import reconcile
@@ -29,6 +29,11 @@ from delegate_dispatch import maintenance_preflight
 from delegation import is_junction, is_link
 from hosts import (ALIASES, HOST_SKILLS, CODEX_HOOK_APPROVAL, ROLE_FILES, ROLES, alias_wanted, aliases_enabled,
                    installed_hosts, register_hosts, skill_errors, skill_report)
+try:
+    import sanduq_gh
+except ModuleNotFoundError:  # the source tree; package.py copies it into scripts/
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'shared'))
+    import sanduq_gh
 
 PACKAGE = Path(__file__).resolve().parents[1]
 DIRECTORIES = ('.specify/extensions', '.specify/presets')
@@ -325,7 +330,42 @@ def memory_archive_preflight(root):
 def command(root, args, log):
     result = subprocess.run(args, cwd=root, input='y\n', capture_output=True, text=True, encoding='utf-8')
     log.append({'args': args, 'exit_code': result.returncode, 'stdout': result.stdout, 'stderr': result.stderr})
-    require(result.returncode == 0, 'INSTALL_COMMAND_FAILED: ' + ' '.join(args))
+    require(result.returncode == 0, 'INSTALL_COMMAND_FAILED: ' + ' '.join(args) + ': ' + failure_message(result))
+
+
+def failure_message(result):
+    """A failed command's own message: the last paragraph of stderr, else stdout, unwrapped (Spec Kit's Rich console
+    wraps at 80 columns); for a failed installer run, the `error` of its JSON result."""
+    for text in (result.stderr, result.stdout):
+        paragraphs = [p for p in re.split(r'\n\s*\n', (text or '').strip()) if p.strip()]
+        if paragraphs:
+            last = ' '.join(paragraphs[-1].split())
+            try:
+                last = json.loads(last).get('error') or last
+            except (ValueError, AttributeError):
+                pass
+            return str(last)[-500:]
+    return 'no output, exit code ' + str(result.returncode)
+
+
+def speckit_version(root):
+    """The installed Spec Kit CLI version from `specify --version` ("specify 1.0.11"), or None when unknown."""
+    try:
+        done = subprocess.run(['specify', '--version'], cwd=root, capture_output=True, text=True, encoding='utf-8',
+                              timeout=30)
+        return str(Version(re.search(r'specify\s+(\S+)', done.stdout or '').group(1)))
+    except (OSError, subprocess.TimeoutExpired, AttributeError, InvalidVersion):
+        return None
+
+
+def check_speckit_requirement(root, name, version, spec, asked):
+    """Spec Kit refuses a package whose `requires.speckit_version` excludes it only mid-apply; refuse in preview."""
+    current = speckit_version(root) if spec else None
+    if current is None:
+        return  # nothing to check, or Spec Kit's version is unknown: Spec Kit still checks on add
+    require(SpecifierSet(spec).contains(Version(current), prereleases=True),
+            f'OPTIONAL_PACKAGE_SPECKIT_INCOMPATIBLE: {name} {version} requires spec-kit {spec}; installed {current}. '
+            'Upgrade Spec Kit' + (f' or run without --with {name}.' if asked else '.'))
 
 
 def preservation(root, name):
@@ -350,18 +390,17 @@ def required_gate_checks(root):
 
     def api(endpoint, missing_ok=False):
         try:
-            result = subprocess.run(['gh', 'api', endpoint, '-H', 'Accept: application/vnd.github+json'],
-                                    cwd=root, capture_output=True, text=True, encoding='utf-8', timeout=60)
-        except subprocess.TimeoutExpired as exc:
-            raise WorkflowError('CI_BRANCH_RULE_INSPECTION_FAILED: gh api ' + endpoint + ' timed out after 60 s') from exc
-        if result.returncode:
-            if missing_ok and ('HTTP 404' in result.stderr or 'Not Found' in result.stderr):
+            data = sanduq_gh.api(endpoint, cwd=root, timeout=60)
+        except sanduq_gh.GhError as exc:
+            if exc.timeout:
+                raise WorkflowError('CI_BRANCH_RULE_INSPECTION_FAILED: gh api ' + endpoint + ' timed out after 60 s') from exc
+            if missing_ok and ('HTTP 404' in exc.stderr or 'Not Found' in exc.stderr):
                 return None
-            raise WorkflowError('CI_BRANCH_RULE_INSPECTION_FAILED: ' + result.stderr.strip()[:400])
-        try:
-            return json.loads(result.stdout)
+            raise WorkflowError('CI_BRANCH_RULE_INSPECTION_FAILED: ' + exc.stderr.strip()[:400]) from exc
         except ValueError as exc:
             raise WorkflowError('CI_BRANCH_RULE_RESPONSE_INVALID') from exc
+        require(data is not None, 'CI_BRANCH_RULE_RESPONSE_INVALID')  # an empty body
+        return data
 
     branch = api('repos/' + repo)['default_branch']
     endpoint = 'repos/' + repo + '/rules/branches/' + quote(branch, safe='')
@@ -590,10 +629,11 @@ NATIVE_TAG = '--managed-by=progress-report'  # the tag `progress hooks install` 
 TOML_BLOCK = re.compile(r'\[\[hooks\.(\w+)\]\]\n(?:(?!\[\[hooks\.\w+\]\]).)*?speckit_marker = true\n*', re.DOTALL)
 
 
-def progress_policy(policy):
-    """The `progress:` keys with today's behaviour as the default: Spec Kit wiring, every tool on PostToolUse."""
+def progress_policy(policy, wiring='speckit'):
+    """The `progress:` keys; without `hook_wiring`, ``wiring`` (install() passes the project's current one), every
+    tool on PostToolUse."""
     section = policy.get('progress') if isinstance(policy.get('progress'), dict) else {}
-    return {'hook_wiring': section.get('hook_wiring') or 'speckit', 'post_tool_matcher': section.get('post_tool_matcher') or ''}
+    return {'hook_wiring': section.get('hook_wiring') or wiring, 'post_tool_matcher': section.get('post_tool_matcher') or ''}
 
 
 def _is_speckit_progress(handler):
@@ -783,7 +823,11 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
     for process, enabled in policy['processes'].items():
         if enabled: selected.update(lock['selected'][process])
     existing = registry(root); operations = []; retained = []
-    was_native = (read(root / '.specify/workflow/install-lock.json', {}).get('progress') or {}).get('hook_wiring') == 'native'
+    last_wiring = (read(root / '.specify/workflow/install-lock.json', {}).get('progress') or {}).get('hook_wiring')
+    was_native = last_wiring == 'native'
+    # IP21: without an explicit key, Progress keeps the wiring it has (Spec Kit's, if installed before the lock
+    # recorded one); a project with no Progress wiring yet gets native wiring.
+    progress = progress_policy(policy, last_wiring or ('speckit' if 'progress' in existing else 'native'))
     # Optional extensions (Progress) are installed only when asked for with --with, or kept in step when already installed.
     # They are never required, and the workflow works without them.
     offered = lock.get('optional') or {}
@@ -801,7 +845,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
         if name in existing:
             require(meta.get('repository', '').rstrip('/') == lock['repository'], 'EXISTING_EXTENSION_SOURCE_CONFLICT: ' + name)
             # Leaving native Progress wiring needs Spec Kit to render the progress events again, so re-add it.
-            rewire = name == 'progress' and was_native and progress_policy(policy)['hook_wiring'] == 'speckit'
+            rewire = name == 'progress' and was_native and progress['hook_wiring'] == 'speckit'
             if existing[name].get('version') == version and existing[name].get('enabled') is True and not rewire: continue
             if Version(existing[name]['version']) > Version(version):
                 require(Version(existing[name]['version']) in SpecifierSet(RANGES.get(name, '>=2.1.2,<3')), 'NEWER_DEPENDENCY_INCOMPATIBLE: ' + name)
@@ -819,6 +863,10 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
         else:
             url = f"{lock['repository']}/releases/download/{name}-v{version}/{name}.zip"
             args = ['specify', 'extension', 'add', name, '--from', url, '--force']
+        if name in offered:  # an optional package may need a newer Spec Kit than Workflow's tested one
+            spec = ((candidate_doc.get('requires') or {}).get('speckit_version') if packages
+                    else (lock.get('optional_speckit') or {}).get(name))
+            check_speckit_requirement(root, name, version, spec, name in with_optional)
         operations.append({'extension':name,'version':version,'args':args})
     preset_ops = []
     for name, priority in (('scope-gate','2'),('scope-brainstorm','2'),('workflow','1')):
@@ -846,7 +894,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
               'preserve_ci_requested': preserve_ci, 'preserved_ci': None,
               'replace_unrecognized_aliases_requested': replace_unrecognized_aliases,
               'with_aliases': aliases_on,
-              'progress': progress_policy(policy) if 'progress' in chosen else None}
+              'progress': progress if 'progress' in chosen else None}
     if 'codex' in hosts:
         result['codex_hook_approval'] = CODEX_HOOK_APPROVAL
     if not apply:
@@ -902,7 +950,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
             # Reconcile also re-applies the host files: hidden hook-only skills, guard hook, roles.
             result['host_files'] = reconcile(root, apply=True).get('host_files')
             if 'progress' in chosen:
-                result['progress'] = wire_progress(root, policy, hosts)
+                result['progress'] = wire_progress(root, {'progress': progress}, hosts)
             result['illustrate'] = wire_illustrate(root, policy, hosts)
             if any(entry.get('needs_approval') for entry in result['illustrate']['hosts'].values()):
                 result['illustrate_hook_approval'] = ILLUSTRATE_HOOK_APPROVAL

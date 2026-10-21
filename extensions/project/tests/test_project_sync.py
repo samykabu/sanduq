@@ -1,4 +1,5 @@
-"""PJ4: project_sync.py (one stdlib script, replacing the bash and PowerShell twins), and the init twins.
+"""PJ4: project_sync.py (one stdlib script, replacing the bash and PowerShell twins), and PM5's project_init.py
+(likewise, with the init twins left as one-release stubs).
 
 The --summary/--json contract the twins had is kept: under --summary stdout is exactly one line,
 `ok issue=<n> status=<status> created=<n> closed=<n>`, `skipped reason=<why>` (a skip is never `ok`)
@@ -11,6 +12,7 @@ remotes go through the shared `sanduq_remote` (D4), and init detects org owners 
 sub-issue, parent and state settings on a rerun (PM12).
 """
 import contextlib
+import importlib.util
 import io
 import json
 import os
@@ -19,6 +21,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -355,6 +358,36 @@ class ProjectSyncTests(unittest.TestCase):
         self.assertRegex(out[0], r"^skipped reason=gh token lacks 'project' scope")
         self.assertEqual(gh.calls, [['auth', 'status']])
 
+    def test_gh_calls_go_through_the_shared_transport_never_retried(self):
+        """SC8: the runner, timeout, scopes and rate-limit test are sanduq_gh's; (rc, output) and 127 stay."""
+        import sanduq_gh
+        self.assertIs(project_sync.sanduq_gh, sanduq_gh)
+        self.assertFalse(hasattr(project_sync, 'token_scopes'))
+        seen = []
+
+        def run_gh(args, **kwargs):
+            seen.append(kwargs)
+            answers = {'ok': ' out \n', 'missing': sanduq_gh.GhError('gh CLI not installed', returncode=127),
+                       'fail': sanduq_gh.GhError('x', returncode=1, stdout='partial\n', stderr='HTTP 502\n')}
+            if isinstance(answers[args[0]], Exception):
+                raise answers[args[0]]
+            return answers[args[0]]
+        with patch.object(sanduq_gh, 'run_gh', run_gh):
+            self.assertEqual(project_sync.gh_raw(['ok'], stdin='{}'), (0, 'out'))
+            self.assertEqual(project_sync.gh_raw(['missing']), (127, 'gh CLI not installed'))
+            self.assertEqual(project_sync.gh_raw(['fail']), (1, 'partial\nHTTP 502'))
+        self.assertEqual(seen[0], {'payload': '{}', 'timeout': project_sync.TIMEOUT})
+        self.assertFalse(any(kwargs.get('retry') for kwargs in seen))
+        # The shared rate-limit rule: GraphQL's RATE_LIMITED type counts too.
+        self.configure()
+        gh = FakeGh()
+        real = gh.__call__
+        limited = lambda args, stdin=None: (1, 'GraphQL: RATE_LIMITED') if args[:2] == ['api', 'graphql'] or \
+            args[0] != 'api' and args[:2] != ['auth', 'status'] else real(args, stdin)
+        limited.used = gh.used
+        code, out, err, _ = self.sync('--phase', 'open', '--json', gh=limited)
+        self.assertEqual((code, json.loads(out[-1])['transport']), (0, 'rest'), err)
+
     def test_a_hung_gh_is_an_error_line_and_a_missing_git_a_skip(self):
         self.configure()
         real = subprocess.run
@@ -412,7 +445,9 @@ elif args[:2] == ['project', 'item-edit']:
     log('edit', item, args[args.index('--single-select-option-id') + 1])
 elif args[:2] == ['auth', 'status']: print("Logged in to github.com\\n  - Token scopes: " + SCOPES)
 elif args[:2] == ['api', 'user']: print('acme')
-elif args[:2] == ['api', 'users/acme']: print(KIND)
+elif args[:2] == ['api', 'users/acme']:
+    if KIND is None: raise SystemExit('HTTP 404: Not Found')
+    print(KIND)
 elif args[:2] == ['project', 'list']: print(json.dumps({'projects': [{'number': 1, 'title': 'Alpha'}, {'number': 3, 'title': 'Beta'}]}))
 elif args[:2] == ['project', 'view']: print(json.dumps({'id': 'PVT_1', 'url': 'https://github.com/orgs/acme/projects/1'}))
 elif args[:2] == ['project', 'field-list']:
@@ -428,20 +463,39 @@ HOOKS = """hooks:
 """
 
 
-class ProjectInitTests(unittest.TestCase):
-    """PM4/PM5: both init scripts need the whole 'project' scope and name the choice they cannot make."""
+def fake_gh(bindir, source):
+    """Puts a `gh` that runs `source` with this interpreter first on PATH. On Windows, where a subprocess finds
+    only .exe files, it is pip's console-script launcher with the script appended as a zip."""
+    bindir.mkdir(exist_ok=True)
+    if os.name != 'nt':
+        (bindir / 'gh').write_text('#!' + sys.executable + '\n' + source, encoding='utf-8', newline='\n')
+        (bindir / 'gh').chmod(0o755)
+        return
+    pip = importlib.util.find_spec('pip')
+    launcher = pip and Path(pip.origin).parent / '_vendor/distlib/t64.exe'
+    if not launcher or not launcher.is_file():
+        raise unittest.SkipTest("no pip launcher to build a fake gh.exe from")
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, 'w') as bundle:
+        bundle.writestr('__main__.py', source)
+    (bindir / 'gh.exe').write_bytes(launcher.read_bytes() + b'#!"' + sys.executable.encode() + b'"\r\n' + archive.getvalue())
 
-    def init(self, shell, scopes, *extra, kind='User', existing=None, columns=None, managed=None, dry_run=True,
-             items=(), fail_edit=()):
-        """(exit code, output) of one init run; `extra` is (bash flags, pwsh flags), `existing` a config.json,
-        `managed` the `workflow.py project-defaults` answer of a Workflow-managed project."""
+
+class ProjectInitTests(unittest.TestCase):
+    """PM4/PM5: project_init.py (and the one-release shell stubs) need the whole 'project' scope, name the
+    choice they cannot make, and keep every board and config guard the shell twins had. `gh` is a fake on PATH."""
+
+    def init(self, *flags, scopes="'project', 'repo'", kind='User', existing=None, columns=None, managed=None,
+             dry_run=True, items=(), fail_edit=(), shell='python', hooks=HOOKS, hang=()):
+        """(exit code, output) of one init run; `existing` is a config.json, `managed` the `workflow.py
+        project-defaults` answer of a Workflow-managed project, `shell` python or a stub (bash, pwsh)."""
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name).resolve()
         self.root = root
         subprocess.run(['git', 'init', '-q'], cwd=root, check=True)
         (root / '.specify/extensions/project').mkdir(parents=True)
-        (root / '.specify/extensions.yml').write_text(HOOKS, encoding='utf-8')
+        (root / '.specify/extensions.yml').write_bytes(hooks.encode('utf-8'))
         if existing is not None:
             (root / '.specify/extensions/project/config.json').write_text(json.dumps(existing), encoding='utf-8')
         if managed is not None:
@@ -449,78 +503,117 @@ class ProjectInitTests(unittest.TestCase):
             stub = root / '.specify/extensions/workflow/scripts/workflow.py'
             stub.parent.mkdir(parents=True)
             stub.write_text('print(' + repr(json.dumps(managed)) + ')\n', encoding='utf-8')
-        fake = root / 'fake_gh.py'
-        fake.write_text('SCOPES = ' + repr(scopes) + '\nKIND = ' + repr(kind) + '\nCOLUMNS = ' + repr(columns) + '\nITEMS = '
-                        + repr(None if items is None else list(items)) + '\nFAIL_EDIT = ' + repr(list(fail_edit)) + '\n'
-                        + FAKE_GH, encoding='utf-8')
-        flags = list(extra[0] if shell == 'bash' else extra[1]) if extra else []
+        fake_gh(root / 'bin', 'SCOPES = ' + repr(scopes) + '\nKIND = ' + repr(kind) + '\nCOLUMNS = ' + repr(columns)
+                + '\nITEMS = ' + repr(None if items is None else list(items)) + '\nFAIL_EDIT = ' + repr(list(fail_edit))
+                + '\n' + FAKE_GH)
+        # The stubs run `python` from PATH: this interpreter's folder comes right after the fake gh.
+        env = dict(os.environ, PATH=os.pathsep.join([str(root / 'bin'), str(Path(sys.executable).parent),
+                                                     os.environ.get('PATH', '')]))
         scripts = ROOT / 'project/scripts'
-        if shell == 'bash':
-            (root / 'bin').mkdir()
-            (root / 'bin/gh').write_text('#!/usr/bin/env bash\nexec "' + Path(sys.executable).as_posix() + '" "' +
-                                         fake.as_posix() + '" "$@"\n', encoding='utf-8', newline='\n')
-            (root / 'bin/gh').chmod(0o755)
-            env = dict(os.environ, PATH=str(root / 'bin') + os.pathsep + os.environ.get('PATH', ''))
-            args = [shutil.which('bash'), '-c', 'export PATH="$(cygpath -u "$1" 2>/dev/null || echo "$1"):$PATH"; shift; exec bash "$@"',
-                    '_', str(root / 'bin'), (scripts / 'bash/project-init.sh').as_posix(), '--non-interactive',
-                    *(['--dry-run'] if dry_run else []), *flags]
+        flags = [*flags, *(['--dry-run'] if dry_run else [])]
+        if shell == 'python':
+            args = [sys.executable, str(scripts / 'project_init.py'), *flags]
+        elif shell == 'bash':
+            args = [shutil.which('bash'), (scripts / 'bash/project-init.sh').as_posix(), *flags]
         else:
-            wrapper = root / 'run.ps1'
-            wrapper.write_text("function global:gh { & '" + sys.executable + "' '" + str(fake) + "' @args }\n& '" +
-                               str(scripts / 'powershell/project-init.ps1') + "' -NonInteractive " +
-                               ('-DryRun ' if dry_run else '') + ' '.join(flags) +
-                               "; exit $LASTEXITCODE\n", encoding='utf-8')
-            env, args = dict(os.environ), ['pwsh', '-NoProfile', '-File', str(wrapper)]
+            args = ['pwsh', '-NoProfile', '-File', str(scripts / 'powershell/project-init.ps1'), *flags]
+        if hang:  # in process, so `gh project item-edit` on these items can time out without waiting 120 s
+            import project_init
+            real = project_sync.gh_raw
+
+            def hung(args, stdin=None):
+                if args[:2] == ['project', 'item-edit'] and args[3] in hang:
+                    raise RuntimeError('timeout: gh project item-edit gave no answer in 120 s')
+                return real(args, stdin)
+            out, cwd = io.StringIO(), os.getcwd()
+            self.addCleanup(os.chdir, cwd)
+            os.chdir(root)
+            with patch.dict(os.environ, {'PATH': env['PATH']}), patch.object(project_sync, 'gh_raw', hung), \
+                    contextlib.redirect_stdout(out):
+                code = project_init.main(flags)
+            return code, out.getvalue()
         done = subprocess.run(args, cwd=root, env=env, input='', capture_output=True, text=True, encoding='utf-8', timeout=120)
         return done.returncode, done.stdout + done.stderr
 
-    def shells(self):
-        # Windows' System32 bash.exe is the WSL launcher, not a POSIX shell the init script can run in.
+    def stubs(self):
+        # Windows' System32 bash.exe is the WSL launcher, not a POSIX shell the stub can run in.
         posix_bash = shutil.which('bash') and 'system32' not in shutil.which('bash').lower()
-        found = [shell for shell in ('bash', 'pwsh') if (posix_bash if shell == 'bash' else shutil.which(shell))
-                 and (shell != 'bash' or shutil.which('jq'))]
-        if not found:
-            self.skipTest('neither bash with jq nor pwsh is installed')
-        return found
+        return [shell for shell in ('bash', 'pwsh') if (posix_bash if shell == 'bash' else shutil.which(shell))]
 
     def test_read_project_alone_is_refused_with_the_refresh_command(self):
-        for shell in self.shells():
-            code, output = self.init(shell, "'read:project', 'repo'")
-            self.assertNotEqual(code, 0, (shell, output))
-            self.assertIn("lacks 'project' scope - run: gh auth refresh", output, shell)
+        code, output = self.init(scopes="'read:project', 'repo'")
+        self.assertEqual(code, 1, output)
+        self.assertIn("lacks 'project' scope - run: gh auth refresh", output)
 
-    def test_several_projects_are_listed_with_the_flag_to_pass(self):
-        for shell in self.shells():
-            code, output = self.init(shell, "'project', 'repo'")
-            self.assertNotEqual(code, 0, (shell, output))
-            self.assertIn('#1 Alpha, #3 Beta', output, shell)
-            self.assertIn('rerun with ' + ('--number' if shell == 'bash' else '-Number'), output, shell)
+    def test_several_projects_are_a_missing_choice_with_the_flag_to_pass(self):
+        code, output = self.init()
+        self.assertEqual(code, 4, output)
+        self.assertIn('#1 Alpha, #3 Beta', output)
+        self.assertIn('rerun with --number', output)
+        needs = json.loads(output.strip().splitlines()[-1])
+        self.assertEqual(needs, {'ok': False, 'needs': [{'flag': '--number', 'why': 'several projects for acme',
+                                                         'options': [{'number': 1, 'title': 'Alpha'},
+                                                                     {'number': 3, 'title': 'Beta'}]}]})
+        self.assertFalse((self.root / '.specify/extensions/project/config.json').exists())
 
-    PICK = (['--number', '1', '--json'], ['-Number', '1', '-Json'])
+    def test_an_unreadable_owner_type_is_a_missing_choice(self):
+        code, output = self.init('--number', '1', kind=None)
+        self.assertEqual(code, 4, output)
+        self.assertEqual(json.loads(output.strip().splitlines()[-1])['needs'][0]['flag'], '--owner-type')
+        code, output = self.init('--number', '1', '--owner-type', 'org', '--json', kind=None)
+        self.assertEqual((code, self.config(output)['ownerType']), (0, 'org'), output)
+
+    PICK = ('--number', '1', '--json')
 
     def config(self, output):
         return json.loads([line for line in output.splitlines() if line.startswith('{"owner"')][-1])
 
     def test_an_organization_owner_is_recorded_as_org(self):
-        for shell in self.shells():
-            for kind, expected in (('Organization', 'org'), ('User', 'user')):
-                code, output = self.init(shell, "'project', 'repo'", *self.PICK, kind=kind)
-                self.assertEqual(code, 0, (shell, output))
-                self.assertEqual(self.config(output)['ownerType'], expected, (shell, kind))
+        for kind, expected in (('Organization', 'org'), ('User', 'user')):
+            code, output = self.init(*self.PICK, kind=kind)
+            self.assertEqual(code, 0, output)
+            self.assertEqual(self.config(output)['ownerType'], expected, kind)
 
     def test_a_rerun_keeps_the_sub_issue_parent_and_state_settings(self):
         custom = {'owner': 'acme', 'hookMode': 'required',
                   'subIssues': {'enabled': False, 'labels': ['my-task'], 'maxCount': 5, 'titleTemplate': '{taskId} {desc}'},
                   'parentIssue': {'labels': ['epic'], 'titleTemplate': '{title}'}, 'stateFile': '.specify/board.json'}
         defaults = json.loads((ROOT / 'project/config.default.json').read_text(encoding='utf-8'))
-        for shell in self.shells():
-            code, output = self.init(shell, "'project', 'repo'", *self.PICK, existing=custom)
-            self.assertEqual(code, 0, (shell, output))
-            written = self.config(output)
-            for key in ('subIssues', 'parentIssue', 'stateFile', 'hookMode'):
-                self.assertEqual(written[key], custom[key], (shell, key))
-            code, output = self.init(shell, "'project', 'repo'", *self.PICK)
-            self.assertEqual(self.config(output)['subIssues'], defaults['subIssues'], shell)
+        code, output = self.init(*self.PICK, existing=custom)
+        self.assertEqual(code, 0, output)
+        written = self.config(output)
+        for key in ('subIssues', 'parentIssue', 'stateFile', 'hookMode'):
+            self.assertEqual(written[key], custom[key], key)
+        code, output = self.init(*self.PICK)
+        self.assertEqual(self.config(output)['subIssues'], defaults['subIssues'])
+        self.assertEqual(self.config(output)['hookMode'], 'optional')
+
+    def test_the_hook_mode_is_set_on_every_project_hook_keeping_line_endings(self):
+        hooks = HOOKS.replace('\n', '\r\n') + '  after_plan:\r\n  - extension: other\r\n    optional: true\r\n'
+        code, output = self.init(*self.PICK, '--hooks-mode', 'required', dry_run=False, hooks=hooks)
+        self.assertEqual(code, 0, output)
+        self.assertEqual((self.root / '.specify/extensions.yml').read_bytes().decode('utf-8'),
+                         hooks.replace('optional: true\r\n  after_plan', 'optional: false\r\n  after_plan', 1))
+        code, output = self.init(*self.PICK, '--hooks-mode', 'required', dry_run=False, hooks='hooks: {}\n')
+        self.assertEqual(code, 1, output)
+        self.assertIn('no project sync hooks', output)
+
+    def test_both_spellings_reach_the_script_directly_and_through_the_stubs(self):
+        """PM5: the shell scripts are one-release stubs; each passes either spelling through and says so."""
+        bash = ('--number', '1', '--owner-type', 'org', '--hooks-mode', 'required', '--non-interactive', '--json')
+        pwsh = ('-Number', '1', '-OwnerType', 'org', '-HooksMode', 'required', '-NonInteractive', '-json')
+        code, output = self.init(*bash)
+        self.assertEqual(code, 0, output)
+        expected = self.config(output)
+        self.assertEqual((expected['ownerType'], expected['hookMode']), ('org', 'required'))
+        for shell in ['python', *self.stubs()]:
+            for flags in (bash, pwsh):
+                code, output = self.init(*flags, shell=shell)
+                self.assertEqual((code, self.config(output)), (0, expected), (shell, flags, output))
+                if shell != 'python':
+                    self.assertIn('deprecated; run: python .specify/extensions/project/scripts/project_init.py', output)
+            code, output = self.init(shell=shell)
+            self.assertEqual(code, 4, (shell, output))  # the stubs pass the exit code through
 
     def test_managed_auto_create_makes_each_doctor_column_once_with_current_ids(self):
         """B3: GitHub's default board under a Workflow policy: one column per name, the case variant renamed,
@@ -528,22 +621,22 @@ class ProjectInitTests(unittest.TestCase):
         statuses = ['Backlog', 'Feature Specification', 'Need Clarifications', 'Ready', 'In progress', 'In review', 'Done']
         phases = {'open': 'Feature Specification', 'analysis': 'Ready', 'engineer-review': 'Ready', 'ready': 'Ready',
                   'in-progress': 'In progress', 'in-review': 'In review', 'done': 'Done'}
-        flags = (['--number', '1', '--json', '--auto-create-columns'], ['-Number', '1', '-Json', '-AutoCreateColumns'])
-        for shell in self.shells():
-            code, output = self.init(shell, "'project', 'repo'", *flags, columns=['Todo', 'In Progress', 'Done'],
-                                     managed={'phaseToStatus': phases, 'statuses': statuses}, dry_run=False)
-            self.assertEqual(code, 0, (shell, output))
-            sent = json.loads((self.root / 'mutation.json').read_text())
-            self.assertEqual(sorted(sent), sorted(set(statuses) | {'Todo'}), shell)
-            written = json.loads((self.root / '.specify/extensions/project/config.json').read_text(encoding='utf-8-sig'))
-            self.assertEqual(written['statusOptions'], {name: 'N%d' % i for i, name in enumerate(sent)}, shell)
-            self.assertEqual(written['phaseToStatus'], phases, shell)
+        code, output = self.init(*self.CREATE, columns=['Todo', 'In Progress', 'Done'],
+                                 managed={'phaseToStatus': phases, 'statuses': statuses}, dry_run=False)
+        self.assertEqual(code, 0, output)
+        sent = json.loads((self.root / 'mutation.json').read_text())
+        self.assertEqual(sorted(sent), sorted(set(statuses) | {'Todo'}))
+        written = json.loads((self.root / '.specify/extensions/project/config.json').read_text(encoding='utf-8-sig'))
+        self.assertEqual(written['statusOptions'], {name: 'N%d' % i for i, name in enumerate(sent)})
+        self.assertEqual(written['phaseToStatus'], phases)
+        self.assertEqual(written['hookMode'], 'required')
+        self.assertEqual((self.root / '.specify/extensions.yml').read_text(encoding='utf-8'), HOOKS)
 
     STATUSES = ['Backlog', 'Feature Specification', 'Need Clarifications', 'Ready', 'In progress', 'In review', 'Done']
     MANAGED = {'phaseToStatus': {'open': 'Feature Specification', 'analysis': 'Ready', 'engineer-review': 'Ready',
                                  'ready': 'Ready', 'in-progress': 'In progress', 'in-review': 'In review',
                                  'done': 'Done'}, 'statuses': STATUSES}
-    CREATE = (['--number', '1', '--json', '--auto-create-columns'], ['-Number', '1', '-Json', '-AutoCreateColumns'])
+    CREATE = ('--number', '1', '--json', '--auto-create-columns')
     ITEMS = [{'id': 'I1', 'status': 'In Progress'}, {'id': 'I2', 'status': 'Todo'}, {'id': 'I3'},
              {'id': 'I4', 'status': 'Done', 'archived': True}]
 
@@ -556,41 +649,60 @@ class ProjectInitTests(unittest.TestCase):
 
     def test_a_column_change_sets_every_item_status_again_by_name(self):
         """Board guard: the option update clears every item's Status, so init restores each one by name."""
-        for shell in self.shells():
-            code, output = self.init(shell, "'project', 'repo'", *self.CREATE, columns=['Todo', 'In Progress', 'Done'],
-                                     managed=self.MANAGED, dry_run=False, items=self.ITEMS)
-            self.assertEqual(code, 0, (shell, output))
-            options = json.loads((self.root / '.specify/extensions/project/config.json')
-                                 .read_text(encoding='utf-8-sig'))['statusOptions']
-            # The renamed column keeps its items; an item without a Status is left alone; the items span two pages.
-            self.assertEqual(self.edits(), {'I1': options['In progress'], 'I2': options['Todo'], 'I4': options['Done']},
-                             shell)
-            # G1: an archived item cannot be edited, so it is unarchived, set and archived again.
-            self.assertEqual([e for e in self.events() if e[1] == 'I4'],
-                             [['unarchive', 'I4'], ['edit', 'I4', options['Done']], ['archive', 'I4']], shell)
-            self.assertIn('restored Status on 3 of 3 item(s)', output, shell)
+        code, output = self.init(*self.CREATE, columns=['Todo', 'In Progress', 'Done'], managed=self.MANAGED,
+                                 dry_run=False, items=self.ITEMS)
+        self.assertEqual(code, 0, output)
+        options = json.loads((self.root / '.specify/extensions/project/config.json')
+                             .read_text(encoding='utf-8-sig'))['statusOptions']
+        # The renamed column keeps its items; an item without a Status is left alone; the items span two pages.
+        self.assertEqual(self.edits(), {'I1': options['In progress'], 'I2': options['Todo'], 'I4': options['Done']})
+        # G1: an archived item cannot be edited, so it is unarchived, set and archived again.
+        self.assertEqual([e for e in self.events() if e[1] == 'I4'],
+                         [['unarchive', 'I4'], ['edit', 'I4', options['Done']], ['archive', 'I4']])
+        self.assertIn('restored Status on 3 of 3 item(s)', output)
+
+    def test_a_dry_run_changes_no_column(self):
+        code, output = self.init(*self.CREATE, columns=['Todo', 'In Progress', 'Done'], managed=self.MANAGED,
+                                 items=self.ITEMS)
+        self.assertEqual(code, 0, output)
+        self.assertIn("DRYRUN rename column 'In Progress' to 'In progress'", output)
+        self.assertIn("DRYRUN create column 'Backlog'", output)
+        self.assertFalse((self.root / 'mutation.json').exists() or self.events())
+        self.assertFalse((self.root / '.specify/extensions/project/config.json').exists())
 
     def test_unreadable_items_refuse_the_column_change_unless_allowed(self):
-        allow = (['--allow-status-reset'], ['-AllowStatusReset'])
-        for shell in self.shells():
-            code, output = self.init(shell, "'project', 'repo'", *self.CREATE, columns=['Todo', 'In Progress', 'Done'],
-                                     managed=self.MANAGED, dry_run=False, items=None)
-            self.assertNotEqual(code, 0, (shell, output))
-            self.assertIn('allow-status-reset' if shell == 'bash' else 'AllowStatusReset', output, shell)
-            self.assertFalse((self.root / 'mutation.json').exists(), shell)
-            flags = tuple(a + b for a, b in zip(self.CREATE, allow))
-            code, output = self.init(shell, "'project', 'repo'", *flags, columns=['Todo', 'In Progress', 'Done'],
-                                     managed=self.MANAGED, dry_run=False, items=None)
-            self.assertEqual(code, 0, (shell, output))
-            self.assertTrue((self.root / 'mutation.json').exists(), shell)
+        code, output = self.init(*self.CREATE, columns=['Todo', 'In Progress', 'Done'], managed=self.MANAGED,
+                                 dry_run=False, items=None)
+        self.assertEqual(code, 1, output)
+        self.assertIn('--allow-status-reset', output)
+        self.assertFalse((self.root / 'mutation.json').exists())
+        self.assertFalse((self.root / '.specify/extensions/project/config.json').exists())
+        code, output = self.init(*self.CREATE, '--allow-status-reset', columns=['Todo', 'In Progress', 'Done'],
+                                 managed=self.MANAGED, dry_run=False, items=None)
+        self.assertEqual(code, 0, output)
+        self.assertTrue((self.root / 'mutation.json').exists())
+
+    def test_a_timed_out_item_edit_rearchives_continues_and_still_writes_the_config(self):
+        """Codex 3: a timeout on one item must not abandon the rest, leave an item unarchived, or keep the old ids."""
+        code, output = self.init(*self.CREATE, columns=['Todo', 'In Progress', 'Done'], managed=self.MANAGED,
+                                 dry_run=False, items=self.ITEMS, hang={'I1', 'I4'})
+        self.assertEqual(code, 1, output)
+        options = json.loads((self.root / '.specify/extensions/project/config.json')
+                             .read_text(encoding='utf-8-sig'))['statusOptions']
+        self.assertEqual(self.edits(), {'I2': options['Todo']})
+        self.assertEqual([e for e in self.events() if e[1] == 'I4'], [['unarchive', 'I4'], ['archive', 'I4']])
+        self.assertIn("I1 was 'In Progress': timeout", output)
+        self.assertIn("I4 (archived) was 'Done': timeout", output)
+        self.assertIn('restored Status on 1 of 3 item(s)', output)
 
     def test_an_item_whose_status_cannot_be_set_again_is_reported_and_fails_the_run(self):
-        for shell in self.shells():
-            code, output = self.init(shell, "'project', 'repo'", *self.CREATE, columns=['Todo', 'In Progress', 'Done'],
-                                     managed=self.MANAGED, dry_run=False, items=self.ITEMS, fail_edit=['I2'])
-            self.assertEqual(code, 1, (shell, output))
-            self.assertIn("I2 was 'Todo'", output, shell)
-            self.assertIn('I1', self.edits(), shell)
+        code, output = self.init(*self.CREATE, columns=['Todo', 'In Progress', 'Done'], managed=self.MANAGED,
+                                 dry_run=False, items=self.ITEMS, fail_edit=['I2'])
+        self.assertEqual(code, 1, output)
+        self.assertIn("I2 was 'Todo'", output)
+        self.assertIn('I1', self.edits())
+        written = json.loads((self.root / '.specify/extensions/project/config.json').read_text(encoding='utf-8-sig'))
+        self.assertTrue(all(value.startswith('N') for value in written['statusOptions'].values()), written)  # current ids
 
 
 class DescriptionTests(unittest.TestCase):

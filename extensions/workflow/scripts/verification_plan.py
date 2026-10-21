@@ -19,6 +19,8 @@ import sys
 import uuid
 from pathlib import Path, PurePosixPath
 
+from execution_tools import sha256_file
+
 try:
     import check_inputs
 except ModuleNotFoundError:
@@ -53,7 +55,7 @@ def file_path(root, label):
 def file_hash(root, label):
     path = file_path(root, label)
     require(path.is_file(), 'VERIFICATION_FILE_MISSING: ' + label)
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return sha256_file(path)
 
 
 def read_plan(root, label):

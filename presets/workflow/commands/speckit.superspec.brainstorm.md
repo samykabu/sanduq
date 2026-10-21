@@ -21,28 +21,7 @@ In every case execute `.specify/extensions/scope/skills/github-clarification/SKI
 `engine: brainstorm`, using the explicit issue number or the bound feature. That shared contract
 supersedes SuperSpec's and Superpowers' one-at-a-time questioning, question quotas, chat
 approvals and completion signals; an optional underlying brainstorming skill must not bring them
-back. Brainstorm shares Clarify's GitHub history, question IDs, answers and round count.
+back.
+Brainstorm shares Clarify's GitHub history, question IDs, answers and round count.
 SuperSpec availability decides which engine runs, never a second round.
 
-## Coverage
-
-Read the target spec and the constitution first. Cover at least these five categories, then
-every other material ambiguity. The only count limit is `clarification.max_questions_per_round` when
-it is set: give each question a `priority` (1 is the most important) and defer the rest to the next round:
-
-- Boundary conditions: minimum and maximum values, empty states, edge-of-range input.
-- Error scenarios: a service down, malformed input, partial failures.
-- Scale and performance: load, concurrency, rate limits.
-- Security and privacy: injection, authorization, data exposure.
-- User experience: confusion points, accessibility, unintended usage.
-
-Each question is a separate GitHub comment that mentions the issue creator, in plain English,
-with supporting details or a diagram and a highlighted, justified recommendation.
-
-## Applying answers
-
-Express each accepted answer as `spec_edits`: new requirements go to Functional Requirements,
-resolved questions update the Open Questions table, and new edge cases go to Edge Cases. Fold any
-brainstorming-skill design output back into the existing `spec.md` (never `docs/superpowers/`).
-When the spec has a Brainstorm Log, append a dated summary of what this round found; later
-rounds skip categories the log already covers unless the spec changed there.

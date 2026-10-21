@@ -9,7 +9,7 @@ native hook payloads. No agent is spent keeping it current.
 | Lifecycle phase | After `tasks` through `implement`; native hooks keep it fresh |
 | Hooks | Two optional lifecycle hooks and five native host events ([hooks](../reference/hooks.md)) |
 | Commands | `init`, `refresh`, `status`, `theme`, `export` ([reference](../reference/commands.md#progress)) and a CLI with 16 verbs ([full reference](../../extensions/progress/docs/commands.md)) |
-| Requires | Nothing; Python 3.11 or later. Workflow and Illustrate are optional |
+| Requires | Spec Kit 1.1.1 or later; Python 3.11 or later. Workflow (1.17.0 or later) and Illustrate are optional |
 | Standalone | Yes |
 | License | PolyForm Noncommercial 1.0.0 (vendored skill code is MIT) |
 
@@ -21,6 +21,10 @@ specify extension add progress
 
 Add the Sanduq catalog first if you have not ([install by host](../start/install-by-host.md)). With Workflow, use
 `install.py --with progress --apply` instead.
+
+Progress needs Spec Kit 1.1.1 or later. On an older Spec Kit the Workflow installer refuses it before changing
+anything, with `OPTIONAL_PACKAGE_SPECKIT_INCOMPATIBLE` naming both versions: upgrade Spec Kit, or install without
+`--with progress`.
 
 ```text
 $speckit-progress-init Create the progress report for specs/412-refund-approval.
@@ -53,7 +57,9 @@ model, effort and context come from host hooks and are shown as unknown when a h
 ## With Workflow
 
 Progress is optional for [Workflow](workflow.md). Install it with `install.py --with progress`. Workflow then reports
-through Progress and no longer asks an agent to keep a report current. If you leave Progress out, Workflow's own
+through Progress and no longer asks an agent to keep a report current. With Workflow installed, Progress needs 1.17.0 or later: an
+older Workflow asks for the removed v2 document and gets `PROGRESS_REMOVED` with the upgrade command, and
+`progress status` names the upgrade while it is installed. If you leave Progress out, Workflow's own
 report runs as before. `progress_bridge.py mode` prints the mode in use (`projection`, `refresh` or `legacy`); the
 [modes and the old-call mapping](../workflow/operations.md#reporting-modes-and-the-legacy-call-mapping) are in the
 operations guide. Details:
@@ -66,7 +72,7 @@ operations guide. Details:
 - Two optional `progress:` keys in `.specify/workflow.yml`, applied by the installer: `hook_wiring: native` writes
   hooks that run `scripts/hook.py` directly instead of through Spec Kit's dispatcher (about half the time per tool
   call), and `post_tool_matcher` limits the per-tool-call hook to the tools it matches, at the cost of a coarser stale
-  banner. Defaults keep today's wiring; the
+  banner. A new Progress install is wired natively; an existing one keeps its wiring until you set the key. The
   [package README](../../extensions/progress/README.md#how-it-plugs-in) has the details.
 
 ## Plans outside Spec Kit
@@ -88,9 +94,10 @@ skill's upstream `SKILL.md` is not vendored. The README screenshots stay in the 
 - Codex fields and the stop event of a background child are unverified against a running host.
 - A session must be bound to a feature before its hooks are recorded. If the report does not update, start with
   [troubleshooting](../../extensions/progress/README.md#report-is-not-updating).
-- Deprecated: the v2 status document (`progress status --json --schema v2`) and the classic layout
-  (`progress theme --layout classic`). Both still work and will be removed in a later release. Read
-  `progress status --json` (`sanduq.progress.v3`) and use `progress theme --layout timeline`.
+- Removed: the v2 status document (`progress status --json --schema v2`) and the classic layout
+  (`progress theme --layout classic`). Either request exits 2 with `PROGRESS_REMOVED`. Read
+  `progress status --json` (`sanduq.progress.v3`). A stored `layout: classic` shows the Timeline with one notice;
+  `progress theme --layout timeline` clears it.
 
 ## More
 

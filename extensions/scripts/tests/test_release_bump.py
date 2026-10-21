@@ -71,6 +71,18 @@ class ReleaseBumpTests(unittest.TestCase):
         self.assertEqual((pending['versions'], pending['status']), ({'pr': '4.4.0'}, 'implementation-in-progress'))
         self.assertNotIn(b'\r\n', (self.root / 'extensions/workflow/dependencies.json').read_bytes())
 
+    def test_bump_keeps_crlf_and_each_quote_style(self):
+        """A Windows checkout (core.autocrlf) has CRLF manifests; only the version value may change."""
+        for quote in ('"', "'", ''):
+            for newline in ('\r\n', '\n'):
+                with self.subTest(quote=quote, newline=newline):
+                    old, new = (f'{quote}{v}{quote}\n  repository' for v in ('4.3.0', '4.4.1'))
+                    text = MANIFEST.replace('"4.3.0"\n  repository', old)
+                    (self.root / 'extensions/pr/extension.yml').write_bytes(text.replace('\n', newline).encode())
+                    (self.root / 'extensions/README.md').write_bytes(INDEX.encode())
+                    release.bump('pr', '4.4.1', self.root)
+                    self.assertEqual(self.read('extensions/pr/extension.yml'), text.replace(old, new).replace('\n', newline))
+
     def test_second_bump_is_a_no_op_and_a_lower_version_is_refused(self):
         release.bump('pr', '4.4.0', self.root)
         after = {p: p.read_bytes() for p in self.root.rglob('*') if p.is_file()}

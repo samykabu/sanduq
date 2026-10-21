@@ -5,8 +5,6 @@
   var POLL_MS = 3000;
   var LOAD_TIMEOUT_MS = 10000;
   var LAYOUT = window.__SANDUQ_PROGRESS_LAYOUT__ || {};
-  var ALL = ['header', 'decisions', 'blockers', 'orchestrator', 'lanes', 'boards', 'events'];  /* attention first */
-  var TITLES = { orchestrator: 'Orchestrator', lanes: 'Lanes', boards: 'Boards', decisions: 'Decisions', blockers: 'Blockers', events: 'Events' };
   var cur = -1, inflight = false, data = null, loadError = '', renderError = '';
   var app = document.getElementById('app'), banners = document.getElementById('banners');
   if (LAYOUT.density) document.documentElement.setAttribute('data-density', String(LAYOUT.density));
@@ -61,10 +59,16 @@
     return w;
   }
   function plain(v) { return v == null || v === '' ? unk() : el('span', 'wrap', v); }
+  function mvTag(m) {
+    var f = ['exact', 'partial', 'estimated'].indexOf(m.fidelity) < 0 ? 'unknown' : m.fidelity;
+    var t = el('span', 'fid', f === 'estimated' ? 'est' : f);
+    t.title = 'source: ' + (m.source || 'none');
+    return t;
+  }
+  function item(k, v) { return el('div', null, [el('dt', null, k), el('dd', null, v)]); }
   /* Ids in the data are untrusted text: a run, stage or lane may be called "constructor" or "__proto__". Every lookup
-     keyed by such an id goes through a prototype-free object or an own-property read, never a plain {} lookup. */
+     keyed by such an id goes through a prototype-free object, never a plain {} lookup. */
   function dict() { return Object.create(null); }
-  function own(o, k) { return o && typeof o === 'object' && Object.prototype.hasOwnProperty.call(o, k) ? o[k] : undefined; }
   /* a short stable token for an id, safe inside a DOM id (djb2 over the id text) */
   function token(s) {
     var h = 5381, t = String(s);
@@ -97,280 +101,10 @@
     if (!on && i >= 0) list.splice(i, 1);
   }
 
-  /* ---------- blocks ---------- */
-  function section(name, count, body, st) {
-    var open = st.c.indexOf(name) < 0;
-    var id = 'b-' + name;
-    var btn = attr(el('button', null, [TITLES[name], count != null ? el('span', 'n', count) : null]), { type: 'button', 'aria-expanded': String(open), 'aria-controls': id, 'data-k': 'c-' + name });
-    btn.addEventListener('click', function () {
-      var s = readState();
-      toggle(s.c, name, open);
-      writeState(s);
-      render();
-    });
-    var b = el('div', 'body', body);
-    b.id = id;
-    if (!open) b.hidden = true;
-    return el('section', 'blk', [el('h2', null, btn), b]);
-  }
-
-  function bHeader(d) {
-    var f = d.feature || {}, sm = d.summary || {};
-    var total = sm.tasks_total || 0, done = sm.tasks_done || 0, pct = total ? Math.round(done * 100 / total) : 0;
-    var top = el('div', 'top');
-    var logo = LAYOUT.logo;
-    if (typeof logo === 'string' && !/^\s*(javascript|vbscript):/i.test(logo)) top.appendChild(attr(el('img'), { src: logo, alt: '' }));
-    var head = el('div', null, [el('h1', 'wrap', LAYOUT.title || f.title || f.id || 'Progress')]);
-    var meta = el('div', 'meta');
-    if (f.id) meta.appendChild(el('span', 'mono wrap', f.id));
-    if (f.issue) meta.appendChild(link('Issue #' + f.issue.number, f.issue.url));
-    meta.appendChild(el('span', 'wrap', ['Branch ', f.branch ? el('code', null, f.branch) : unk()]));
-    if (f.mode === 'plan') meta.appendChild(el('span', 'wrap', ['Plan ', f.source ? el('code', null, f.source) : unk()]));
-    else meta.appendChild(el('span', null, ['Stage ', f.stage && f.stage.value ? pill(f.stage.value) : unk(),
-      f.stage && f.stage.status && f.stage.status !== 'in-progress' ? el('span', 'sub', ' \u00b7 ' + f.stage.status) : null]));
-    head.appendChild(meta);
-    top.appendChild(head);
-    var bar = attr(el('div', 'bar', el('i')), { role: 'progressbar', 'aria-label': 'Tasks done', 'aria-valuemin': '0', 'aria-valuemax': String(total), 'aria-valuenow': String(done) });
-    bar.firstChild.style.width = pct + '%';
-    var counts = el('dl', 'counts');
-    [['Tasks done', done + ' / ' + total + ' (' + pct + '%)'], ['Lanes active', sm.lanes_active || 0], ['Blocked', sm.blocked || 0], ['Decisions pending', sm.decisions_pending || 0]].forEach(function (c) {
-      counts.appendChild(el('div', null, [el('dt', null, c[0]), el('dd', null, c[1])]));
-    });
-    return el('header', 'hdr', [top, bar, counts]);
-  }
-
-  function bOrch(d, st) {
-    var o = d.orchestrator || {}, ctx = o.context || {}, cv = ctx.value;
-    var gauge = unk();
-    if (cv && typeof cv.used_percent === 'number') {
-      var p = Math.max(0, Math.min(100, cv.used_percent));
-      var g = attr(el('div', 'gauge' + (p >= 80 ? ' hot' : ''), el('i')), { role: 'meter', 'aria-label': 'Context used', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(p) });
-      g.firstChild.style.width = p + '%';
-      var tok = typeof cv.used_tokens === 'number' && cv.window ? ' (' + cv.used_tokens.toLocaleString() + ' / ' + cv.window.toLocaleString() + ')' : '';
-      gauge = el('div', null, [el('span', 'mv', p.toFixed(1) + '%' + tok), mvTag(ctx), g]);
-    }
-    var kv = el('dl', 'kv', [
-      item('Host', plain(o.host)), item('Model', mv(o.model)), item('Effort', mv(o.effort)),
-      item('Context used', gauge),
-      item('Elapsed (wall time)', mv(o.elapsed, dur)), item('Active (observed work)', mv(o.active, dur)),
-      item('Session', plain(o.session_id)), item('Since', when(o.since))
-    ]);
-    var c = d.collection || {}, missing = o.model && o.model.value == null && c.automatic === false && (!o.host || o.host === 'codex' || o.host === 'unknown');
-    return section('orchestrator', null, [kv,
-      missing ? el('p', 'note warn', 'No host hook data for this report yet' + (o.host === 'codex' ? ' \u2014 are the Codex worktree hooks active?' : '.')) : null,
-      el('p', 'note', 'Elapsed is wall time since start. Active counts only observed work intervals and stays unknown without them.')], st);
-  }
-  function mvTag(m) {
-    var f = ['exact', 'partial', 'estimated'].indexOf(m.fidelity) < 0 ? 'unknown' : m.fidelity;
-    var t = el('span', 'fid', f === 'estimated' ? 'est' : f);
-    t.title = 'source: ' + (m.source || 'none');
-    return t;
-  }
-  function item(k, v) { return el('div', null, [el('dt', null, k), el('dd', null, v)]); }
-
-  function visibleLanes(d, st) {
-    return (d.lanes || []).filter(function (l) { return !st.f || l.id === st.f; });
-  }
-
-  function hasWork(l) {
-    var t = l.tasks || {};
-    return (l.attempts || []).length > 0 || ['active', 'waiting', 'blocked', 'done'].some(function (k) { return (t[k] || []).length; });
-  }
-  function laneRow(l, st) {
-    var req = l.requested || {}, obs = l.observed || {};
-    var open = st.o.indexOf(l.id) >= 0, at = l.attempts || [];
-    var det = el('details');
-    det.open = open;
-    det.appendChild(attr(el('summary', null, at.length + (at.length === 1 ? ' attempt' : ' attempts')), { 'data-k': 'attempts-' + l.id }));
-    if (at.length) det.appendChild(el('ul', null, at.map(function (a) {
-      return el('li', 'wrap', [a.run_id || '?', ' ', pill(a.status), ' ', dur((Date.parse(a.ended_at) - Date.parse(a.started_at)) / 1000) || (a.ended_at ? '' : 'running'),
-        a.tokens ? ' ' + tokText(a.tokens) : '', a.fidelity ? el('span', 'fid', a.fidelity) : null]);
-    })));
-    det.addEventListener('toggle', function () {
-      var s = readState();
-      if (det.open === (s.o.indexOf(l.id) >= 0)) return;
-      toggle(s.o, l.id, det.open);
-      writeState(s);
-    });
-    var rowHead = el('td', null, [el('strong', 'wrap', l.id), el('span', 'sub', l.label || ''), el('span', 'sub', l.origin || '')]);
-    rowHead.setAttribute('data-label', 'Lane');
-    var cells = [
-      [rowHead],
-      ['Owner', plain(l.owner)],
-      ['Model', [el('span', 'sub', 'requested ' + ([req.harness, req.model].filter(Boolean).join(' ') || 'unknown')), el('span', null, ['observed ', mv(obs.model)])]],
-      ['Effort', [el('span', 'sub', 'requested ' + (req.effort || 'unknown')), el('span', null, ['observed ', mv(obs.effort)])]],
-      ['Status', pill(l.status)],
-      ['Elapsed', mv(l.elapsed, dur)],
-      ['Active', mv(l.active, dur)],
-      ['Last observed', when(l.last_observed_at)],
-      ['Attempts', det]
-    ];
-    var tr = el('tr');
-    cells.forEach(function (c) {
-      if (c.length === 1) { tr.appendChild(c[0]); return; }
-      tr.appendChild(attr(el('td', null, c[1]), { 'data-label': c[0] }));
-    });
-    return tr;
-  }
-  function laneTable(list, st) {
-    var tbl = el('table', 'stack');
-    var cols = ['Lane', 'Owner', 'Model', 'Effort', 'Status', 'Elapsed', 'Active', 'Last observed', 'Attempts'];
-    tbl.appendChild(el('thead', null, el('tr', null, cols.map(function (c) { return attr(el('th', null, c), { scope: 'col' }); }))));
-    tbl.appendChild(el('tbody', null, list.map(function (l) { return laneRow(l, st); })));
-    return tbl;
-  }
-
-  function bLanes(d, st) {
-    var lanes = d.lanes || [];
-    var shown = visibleLanes(d, st);
-    var busy = shown.filter(hasWork), quiet = shown.filter(function (l) { return !hasWork(l); });
-    var filter = el('div', 'filter');
-    filter.setAttribute('role', 'group');
-    filter.setAttribute('aria-label', 'Filter by lane');
-    [{ id: '' }].concat(lanes.filter(function (l) { return hasWork(l) || l.id === st.f; })).forEach(function (l) {
-      var b = attr(el('button', null, l.id || 'All lanes'), { type: 'button', 'aria-pressed': String(st.f === l.id), 'data-k': 'f-' + l.id });
-      b.addEventListener('click', function () {
-        var s = readState();
-        s.f = s.f === l.id ? '' : l.id;
-        writeState(s);
-        render();
-      });
-      filter.appendChild(b);
-    });
-    var body = [filter];
-    if (!lanes.length) body.push(el('p', 'empty', 'No lanes yet.'));
-    if (busy.length) body.push(laneTable(busy, st));
-    if (quiet.length) {
-      /* lanes with no tasks and no attempts have no board or run to read: one collapsed line, not table rows */
-      var det = el('details', 'quiet', [attr(el('summary', null, quiet.length + (quiet.length === 1 ? ' lane' : ' lanes') + ' with no tasks or attempts'), { 'data-k': 'quiet-lanes' }), laneTable(quiet, st)]);
-      det.open = st.o.indexOf('quiet-lanes') >= 0;
-      det.addEventListener('toggle', function () {
-        var s = readState();
-        if (det.open === (s.o.indexOf('quiet-lanes') >= 0)) return;
-        toggle(s.o, 'quiet-lanes', det.open);
-        writeState(s);
-      });
-      body.push(det);
-    }
-    return section('lanes', lanes.length, body, st);
-  }
-  function tokText(t) {
-    var parts = [];
-    for (var k in t) if (typeof t[k] === 'number') parts.push(k + ' ' + t[k].toLocaleString());
-    return parts.join(', ');
-  }
-
-  function chip(d, id, status, by) {
-    var t = own(d.tasks, id) || {};
-    var c = el('div', 'chip', [el('span', 'id', id), t.title || '']);
-    c.style.setProperty('--s', 'var(--' + status + ')');
-    if (by && by.length) c.appendChild(el('div', 'by', by.map(function (b) {
-      return el('span', 'wrap', 'blocked by ' + (b.type === 'external' ? 'external: ' : '') + b.ref);
-    })));
-    return c;
-  }
-  function board(d, name, tasks, key, st) {
-    var t = tasks || {};
-    var spec = [['active', 'Active', t.active || []], ['waiting', 'Waiting', t.waiting || []], ['blocked', 'Blocked', t.blocked || []], ['done', 'Done', t.done || []]];
-    var cols = el('div', 'cols', spec.map(function (s) {
-      var items = s[2].map(function (x) {
-        var tid = s[0] === 'blocked' ? x.task : x;
-        return el('li', null, chip(d, tid, s[0], s[0] === 'blocked' ? x.by : null));
-      });
-      return el('div', 'col', [el('h4', null, [s[1], el('span', null, s[2].length)]), el('ul', null, items.length ? items : el('li', 'none', 'None'))]);
-    }));
-    /* a board with only finished work starts closed; a click flips it, and the flip is kept in the hash */
-    var doneOnly = !(spec[0][2].length || spec[1][2].length || spec[2][2].length);
-    var flipped = st.o.indexOf(key) >= 0;
-    var det = el('details', 'board', [attr(el('summary', null, [el('h3', 'wrap', name), el('span', 'sub', doneOnly ? spec[3][2].length + ' done' : '')]), { 'data-k': 'board-' + key }), cols]);
-    det.open = doneOnly === flipped;
-    det.addEventListener('toggle', function () {
-      var s = readState(), nowFlipped = det.open === doneOnly;
-      if (nowFlipped === (s.o.indexOf(key) >= 0)) return;
-      toggle(s.o, key, nowFlipped);
-      writeState(s);
-    });
-    return det;
-  }
-  function taskTotal(t) {
-    t = t || {};
-    return ['active', 'waiting', 'blocked', 'done'].reduce(function (n, k) { return n + (t[k] || []).length; }, 0);
-  }
-  function bBoards(d, st) {
-    /* a lane with no tasks has nothing to put on a board */
-    var parts = visibleLanes(d, st).filter(function (l) { return taskTotal(l.tasks) > 0; }).map(function (l) {
-      return board(d, l.id + (l.label ? ' ' + l.label : ''), l.tasks, 'bd:' + l.id, st);
-    });
-    var un = d.unassigned_tasks;
-    if (!st.f && taskTotal(un) > 0) parts.push(board(d, 'Unassigned', un, 'bd:unassigned', st));
-    return section('boards', null, parts.length ? parts : el('p', 'empty', 'No boards.'), st);
-  }
-
-  function selectedList(x) { return Array.isArray(x.selected) ? x.selected : x.selected == null ? [] : [x.selected]; }
-  function decItem(x, made) {
-    var li = el('li', null, [el('h3', 'wrap', [x.id, ' ', x.question || '']), pill(made ? 'done' : 'waiting')]);
-    li.lastChild.textContent = made ? 'made' : 'pending';
-    var opts = el('div', 'opts', (x.options || []).map(function (o) { return el('span', 'wrap' + (made && selectedList(x).indexOf(o) >= 0 ? ' sel' : ''), o); }));
-    li.appendChild(opts);
-    if (made) {
-      li.appendChild(el('p', 'note', ['Selected ', el('strong', 'wrap', selectedList(x).length ? selectedList(x).join(', ') : 'unknown'), ' by ', x.decided_by || 'unknown', x.at ? ' ' + (ago(x.at) || '') : '', ' ', x.url ? link('evidence', x.url) : el('span', 'unk', 'no evidence link')]));
-    }
-    return li;
-  }
-  function bDecisions(d, st) {
-    var dc = d.decisions || {}, p = dc.pending || [], m = dc.made || [];
-    var body = [el('p', 'sect', 'Pending'), p.length ? el('ul', 'dec', p.map(function (x) { return decItem(x, false); })) : el('p', 'empty', 'None pending.'),
-      el('p', 'sect', 'Made'), m.length ? el('ul', 'dec', m.map(function (x) { return decItem(x, true); })) : el('p', 'empty', 'No decisions recorded in Workflow decisions.')];
-    return section('decisions', p.length + ' pending', body, st);
-  }
-
-  function bBlockers(d, st) {
-    var bl = d.blockers || [];
-    var body = el('p', 'empty', 'No open blockers.');
-    if (bl.length) {
-      var tbl = el('table', 'stack', [el('thead', null, el('tr', null, ['Id', 'Target', 'Blocked by', 'Since', 'Source'].map(function (c) { return attr(el('th', null, c), { scope: 'col' }); }))),
-        el('tbody', null, bl.map(function (b) {
-          var by = b.by || {};
-          var cells = [['Id', b.id], ['Target', b.target], ['Blocked by', (by.type || '?') + ': ' + (by.ref == null ? '' : by.ref)], ['Since', when(b.since)], ['Source', b.source || 'unknown']];
-          return el('tr', null, cells.map(function (c) { return attr(el('td', null, c[1]), { 'data-label': c[0] }); }));
-        }))]);
-      body = tbl;
-    }
-    return section('blockers', bl.length, body, st);
-  }
-
-  function bEvents(d, st) {
-    var all = d.events || [], kinds = [];
-    all.forEach(function (e) { if (e.kind && kinds.indexOf(e.kind) < 0) kinds.push(e.kind); });
-    var filter = el('div', 'filter');
-    filter.setAttribute('role', 'group');
-    filter.setAttribute('aria-label', 'Filter events by kind');
-    [''].concat(kinds).forEach(function (k) {
-      var b = attr(el('button', null, k || 'All events'), { type: 'button', 'aria-pressed': String(st.k === k), 'data-k': 'k-' + k });
-      b.addEventListener('click', function () {
-        var s = readState();
-        s.k = s.k === k ? '' : k;
-        writeState(s);
-        render();
-      });
-      filter.appendChild(b);
-    });
-    var ev = all.filter(function (e) { return !st.k || e.kind === st.k; }).slice(-100);
-    var list = ev.length ? el('ol', 'ev', ev.map(function (e) {
-      return el('li', null, [el('span', 't', e.at ? new Date(e.at).toLocaleTimeString() : ''), el('span', 'k', e.kind || ''), el('span', null, e.text || '')]);
-    })) : el('p', 'empty', 'No events yet.');
-    return section('events', ev.length, [kinds.length ? filter : null, list], st);
-  }
-
-  var RENDER = { header: bHeader, orchestrator: bOrch, lanes: bLanes, boards: bBoards, decisions: bDecisions, blockers: bBlockers, events: bEvents };
-
   /* ---------- v3 Timeline layout (schema sanduq.progress.v3) ---------- */
   var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   var PAGE = 10, TL_LIMIT = 12;
   function isV3(d) { return !!d && d.schema === 'sanduq.progress.v3'; }
-  /* the layout rides with each data revision (`ui.layout`), so a page left open follows `progress theme --layout` */
-  function layoutOf(d) { return d && d.ui && typeof d.ui.layout === 'string' ? d.ui.layout : LAYOUT.layout; }
-  function timelineLayout(d) { return isV3(d) && layoutOf(d) !== 'classic'; }
   function utc(iso) {
     var t = Date.parse(iso);
     if (isNaN(t)) return null;
@@ -925,17 +659,7 @@
     var caret = key === 'q' && active.selectionStart != null ? [active.selectionStart, active.selectionEnd] : null;
     var oldScroll = app.querySelector('.gscroll'), sx = oldScroll ? oldScroll.scrollLeft : 0, sy = window.pageYOffset;
     try {
-      var frag = document.createDocumentFragment();
-      if (timelineLayout(data)) {
-        frag = renderV3(data, st);
-      } else {
-        var order = Array.isArray(LAYOUT.blocks) ? LAYOUT.blocks : ALL;
-        var hidden = Array.isArray(LAYOUT.hidden) ? LAYOUT.hidden : [];
-        if (isV3(data)) frag.appendChild(el('p', 'note warn', 'The classic layout needs a v2 report. Showing what this v3 report has in common with it.'));
-        order.forEach(function (n) {
-          if (RENDER[n] && hidden.indexOf(n) < 0) frag.appendChild(RENDER[n](data, st));
-        });
-      }
+      var frag = renderV3(data, st);
       app.textContent = '';
       app.appendChild(frag);
       var ns = app.querySelector('.gscroll');
@@ -976,11 +700,9 @@
   /* ---------- poller ---------- */
   function accept(d) {
     if (!d || typeof d !== 'object') return false;
-    if (/^sanduq\.progress\.v3$/.test(d.schema || '')) {
-      if (typeof d.rev !== 'number') d.rev = Date.parse(d.generated_at) || 0;  /* a v3 report without a counter orders by snapshot time */
-      return true;
-    }
-    return /^sanduq\.progress\.v2$/.test(d.schema || '') && typeof d.rev === 'number';
+    if (!isV3(d)) return false;
+    if (typeof d.rev !== 'number') d.rev = Date.parse(d.generated_at) || 0;  /* a v3 report without a counter orders by snapshot time */
+    return true;
   }
   function poll() {
     if (inflight) return;

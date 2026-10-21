@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.18.0] - 2026-10-21
+
+- The checkpoint has its own schema version, separate from the policy's. Version 2 drops `repo_path`. Workflow, the CI gate and Scope's claim check read versions 1 and 2; `start`, `relocate` and every other write produce version 2. `schemas/checkpoint-v1.schema.json` accepts both and refuses `repo_path` on version 2.
+- Removed `worker_brief.project_result` and `project_usage` (used only by a test).
+- Path containment for recorded labels checks each existing component with `lstat` and resolves fully at any symlink, junction or name Windows rewrites, instead of resolving every label. `..`, absolute, drive and UNC labels are still refused.
+- `decisions.py`, `task_issues.py` and `ci_evidence.py` call `gh` through the shared `sanduq_gh.py`. Error codes and messages are unchanged; a missing `gh` is now reported with them instead of a traceback. A GET in `decisions.py` and `task_issues.py` is retried once after a 5xx or a timeout; writes and CI evidence downloads never are. `decisions.py` reaches Scope's GitHub client through `sanduq_scope_github.py` and no longer loads `scope.py`.
+- One git runner (`workflow.run_git`) and one file SHA-256 helper (`execution_tools.sha256_file`) inside the package. Digests are unchanged.
+- Internal: `workflow.py` is split into modules (`wf_core.py`, `wf_identity.py`, `wf_fingerprints.py`, `wf_policy.py`, `wf_health.py`, `wf_receipts.py`). Every name is still importable from `workflow`; behaviour is unchanged.
+
+### Migration
+
+- Checkpoints from 1.17 and earlier (version 1) load unchanged. The first command that writes one (a claim, `complete`, `migrate`, `relocate`) rewrites it as version 2 without `repo_path`. Nothing to run.
+- Update Scope together with Workflow: an older Scope does not see an existing-feature claim in a version-2 checkpoint.
+- Workflow 1.17 and earlier cannot read a version-2 checkpoint (`WORKFLOW_START_REQUIRED`). Do not downgrade Workflow after the first write.
+
 ## [1.17.1] - 2026-10-21
 
 Fixes from the review of round 4 (PR #101).

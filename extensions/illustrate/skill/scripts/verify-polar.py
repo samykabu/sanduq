@@ -11,6 +11,8 @@ import re
 import sys
 from typing import Sequence
 from urllib.parse import urlsplit
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from svg_scan import is_hand_variant  # noqa: E402
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -782,12 +784,6 @@ def check_variants(paths: Sequence[Path]) -> list[str]:
     """Check each variant and ensure all variants carry one shared dataset."""
 
     return [finding for _path, finding in _check_variants_with_paths(paths)]
-
-
-def is_hand_variant(path: Path, source: str) -> bool:
-    """A generate-hand-variants.cjs output: a `-hand` stem or rough.js redraw markup."""
-    # ponytail: rough.js redraws drop the data contract, so they are never in scope.
-    return path.stem.endswith("-hand") or 'class="rough-shape"' in source
 
 
 def in_scope(path: Path, source: str) -> bool:

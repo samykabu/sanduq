@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Bump source versions, prepare immutable pending releases, publish/verify assets, then promote catalogs.
 
+`check-bumps` (lint) fails when a package's shipped files changed without a version bump (X23).
 Only `bump <id> <version>` changes source versions: it writes every copy (extension.yml, the
 extensions/README.md row, Workflow's dependencies.json pins, pending-releases.json) and leaves
 status `ready` to a maintainer. Public catalogs change only in promote, following successful
@@ -18,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import yaml
 from packaging.version import Version
-from package import package, ROOT
+from package import package, package_files, ROOT
 
 REPO = 'samykabu/sanduq'
 URL = 'https://github.com/' + REPO
@@ -64,7 +65,8 @@ def bump(name, version, root=ROOT):
     old = str(yaml.safe_load(text)['extension']['version'])
     require(Version(version) >= Version(old), f'{name}: {version} is lower than the source version {old}')
     # Replace only the value on the extension block's version line, so comments and key order survive.
-    block = re.search(r'^extension:\n(?:[ \t]+.*\n|\n)*', text, re.M)
+    # `\r?` keeps a CRLF working copy (core.autocrlf) working; every byte but the version stays as it was.
+    block = re.search(r'^extension:\r?\n(?:[ \t]+.*\n|\r?\n)*', text, re.M)
     require(block, f'{manifest_path}: no extension block')
     line = re.compile(r'^([ \t]+version:[ \t]*)(["\']?)' + re.escape(old) + r'\2', re.M)
     new_block, count = line.subn(lambda m: m.group(1) + m.group(2) + version + m.group(2), block.group(0), count=1)
@@ -101,6 +103,50 @@ def bump(name, version, root=ROOT):
             path.write_bytes(content.encode('utf-8'))
             written.append(path.relative_to(root).as_posix())
     return {'id': name, 'from': old, 'to': version, 'written': written}
+
+
+# Human documentation at a package's top level; nested README.md or CHANGELOG.md (templates, presets, skills) is
+# agent input and stays covered (X23).
+UNVERSIONED = re.compile(r'[^/]+/(?:README\.md|CHANGELOG\.md|LICENSE|docs/.+)')
+
+
+def _behaviour_bytes(content):
+    """Text hashes with CRLF as LF, so a Windows working copy agrees with CI; binary hashes exactly. Text is
+    what git's autocrlf converts: no NUL in the first 8000 bytes (git's own test), and valid UTF-8."""
+    try:
+        content.decode('utf-8')
+    except UnicodeDecodeError:
+        return content
+    return content if b'\0' in content[:8000] else content.replace(b'\r\n', b'\n')
+
+
+def inventory_sha256(name, root=ROOT):
+    """sha256 of the behaviour a package ships: every packaged file, injected helpers and bundled presets
+    included, except UNVERSIONED."""
+    lines = sorted(member + '\0' + hashlib.sha256(_behaviour_bytes(content)).hexdigest()
+                   for member, content in package_files(name, root).items() if not UNVERSIONED.fullmatch(member))
+    return hashlib.sha256('\n'.join(lines).encode('utf-8')).hexdigest()
+
+
+def check_bumps(root=ROOT):
+    """X23: a package whose shipped behaviour differs from its catalog entry needs a version above the catalog's,
+    in its manifest or in pending-releases.json. An entry without `inventory_sha256` is skipped with a notice."""
+    catalog = read(root / 'catalog.json')['extensions']
+    pending = read(root / 'extensions/pending-releases.json').get('versions') or {}
+    failures, notices = [], []
+    for manifest in sorted((root / 'extensions').glob('*/extension.yml')):
+        name, entry = manifest.parent.name, catalog.get(manifest.parent.name)
+        if entry is None:
+            continue  # never released: nothing to compare with
+        version = str(yaml.safe_load(manifest.read_text(encoding='utf-8'))['extension']['version'])
+        if any(v and Version(v) > Version(entry['version']) for v in (version, pending.get(name))):
+            continue
+        if not entry.get('inventory_sha256'):
+            notices.append(f'{name} {entry["version"]}: no inventory_sha256 in catalog.json; its next release records it')
+        elif inventory_sha256(name, root) != entry['inventory_sha256']:
+            failures.append(f'{name}: shipped files changed since {entry["version"]} was released; '
+                            f'run `release.py bump {name} <X.Y.Z>`')
+    return {'ok': not failures, 'failures': failures, 'notices': notices}
 
 
 def clear_pending_headings(released, root=ROOT):
@@ -156,7 +202,7 @@ def prepare(root=ROOT, development=False):
                       'requires':doc.get('requires',{}),'provides':{'commands':len(doc.get('provides',{}).get('commands',[])), 'hooks':len(doc.get('hooks',{}))},
                       'tags':doc.get('tags',[]),'category':meta.get('category','process'),
                       'effect':meta.get('effect','read-write'),'verified':False,
-                      'sha256':built['sha256'],'updated_at':datetime.now(timezone.utc).isoformat()})
+                      'sha256':built['sha256'],'inventory_sha256':inventory_sha256(name,root),'updated_at':datetime.now(timezone.utc).isoformat()})
         catalog['extensions'][name] = entry
         releases.append({'id':name,'version':version,'tag':name+'-v'+version,'asset':name+'.zip',
                          'archive':(Path('dist')/(name+'.zip')).as_posix(),'sha256':built['sha256']})
@@ -234,14 +280,15 @@ def promote(root=ROOT, verifier=verify_asset):
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action',choices=('bump','prepare','publish','promote'))
+    parser.add_argument('action',choices=('bump','prepare','publish','promote','check-bumps'))
     parser.add_argument('target',nargs='*',metavar='ID VERSION',help='bump only: extension id and new X.Y.Z version')
     parser.add_argument('--apply',action='store_true')
     parser.add_argument('--development',action='store_true',help='Prepare a preview which cannot be published')
     args=parser.parse_args()
     try:
         require(len(args.target)==(2 if args.action=='bump' else 0),'bump takes an extension id and a version; other actions take none')
-        result=bump(*args.target) if args.action=='bump' else prepare(development=args.development) if args.action=='prepare' else publish(apply=args.apply) if args.action=='publish' else promote()
+        result=bump(*args.target) if args.action=='bump' else prepare(development=args.development) if args.action=='prepare' else publish(apply=args.apply) if args.action=='publish' else check_bumps() if args.action=='check-bumps' else promote()
         print(json.dumps({k:v for k,v in result.items() if k!='catalog'},indent=2))
+        if result.get('ok') is False: raise SystemExit(1)
     except (ValueError,OSError,KeyError) as exc:
         print(json.dumps({'ok':False,'error':str(exc)}));raise SystemExit(1)

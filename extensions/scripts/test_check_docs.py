@@ -46,7 +46,7 @@ readme = check_docs.ROOT / 'README.md'
 fails_with(readme, read_text(readme, encoding='utf-8').replace('Spec_Kit-9_extensions', 'Spec_Kit-8_extensions'),
            'says 8 extensions')
 install = read_text(check_docs.INSTALL_PAGE, encoding='utf-8')
-fails_with(check_docs.INSTALL_PAGE, install.replace('specify extension add progress\n', '', 1), "missing ['progress']")
+fails_with(check_docs.INSTALL_PAGE, re.sub(r'specify extension add progress[^\n]*\n', '', install, count=1), "missing ['progress']")
 changelog = read_text(check_docs.CHANGELOG, encoding='utf-8')
 first = changelog.index('\n## ') + 1
 fails_with(check_docs.CHANGELOG, changelog[:first] + '## 2026-10-19 — Workflow 1.14.0 (pending release)\n\n' + changelog[first:],

@@ -72,16 +72,16 @@ def event_key(event):
 
 
 def workflow_rules():
-    """Read stage selection from workflow.py and hook ownership from reconcile.py without importing them."""
+    """Read stage selection from the runtime and hook ownership from reconcile.py without importing them."""
     scripts = ROOT / 'extensions/workflow/scripts'
-    tree = ast.parse((scripts / 'workflow.py').read_text(encoding='utf-8'))
     names = {}
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name) and \
-                node.targets[0].id in ('BASE_STAGES', 'COMMANDS'):
-            names[node.targets[0].id] = ast.literal_eval(node.value)
-        if isinstance(node, ast.FunctionDef) and node.name == 'stages':
-            exec(compile(ast.Module([node], []), 'workflow.py', 'exec'), names)
+    for module in ('wf_core.py', 'wf_policy.py'):  # workflow.py re-exports them from these modules (W9)
+        for node in ast.parse((scripts / module).read_text(encoding='utf-8')).body:
+            if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name) and \
+                    node.targets[0].id in ('BASE_STAGES', 'COMMANDS'):
+                names[node.targets[0].id] = ast.literal_eval(node.value)
+            if isinstance(node, ast.FunctionDef) and node.name == 'stages':
+                exec(compile(ast.Module([node], []), module, 'exec'), names)
     tree = ast.parse((scripts / 'reconcile.py').read_text(encoding='utf-8'))
     owned = next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign)
                  and getattr(n.targets[0], 'id', '') == 'OWNED')

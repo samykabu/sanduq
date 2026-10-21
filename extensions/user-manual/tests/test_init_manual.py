@@ -22,7 +22,8 @@ class InitManualTest(unittest.TestCase):
 
     def init(self, *extra):
         result = subprocess.run([sys.executable, str(SCRIPT), '--repo-root', str(self.root), '--modules-file',
-                                 str(self.modules), '--product-name', 'Shop', *extra], capture_output=True, text=True)
+                                 str(self.modules), '--product-name', 'Shop', '--no-tools', *extra],
+                                capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_existing_home_page_survives(self):
@@ -44,6 +45,8 @@ class InitManualTest(unittest.TestCase):
         self.assertIn('id: "billing"', (self.manual / 'manual.yml').read_text(encoding='utf-8'))
         self.assertTrue((self.manual / 'theme/rtl.css').is_file())
         self.assertTrue((self.root / '.github/workflows/user-manual-preview.yml').is_file())
+        # The command passes --no-tools: the extension runs its scripts from .specify/extensions/user-manual/.
+        self.assertFalse((self.manual / 'tools').exists())
 
 
 if __name__ == '__main__':

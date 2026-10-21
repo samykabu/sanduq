@@ -4,8 +4,8 @@ General rule: no inference from proximity. Time gaps, adjacency, matching text, 
 establish identity, retries, revalidation, rejection, acceptance or membership. A fact that no explicit record supports is
 null (or "unknown"), and the field says so.
 
-The v2 document (`model.build(..., schema='v2')`) is built first from the same reads; this module adds the structured views
-on top of it and takes the pieces v2 already settled (orchestrator telemetry, blockers, legacy lane aliases) from it.
+The internal base document (`model.build_v2`) is built first from the same reads; this module adds the structured views
+on top of it and takes the pieces the base already settled (orchestrator telemetry, blockers, legacy lane aliases) from it.
 """
 import hashlib
 import os

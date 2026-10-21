@@ -21,6 +21,8 @@ import sys
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from svg_scan import is_hand_variant  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 ASSET_DIR = ROOT / "assets"
@@ -493,12 +495,6 @@ def check_source(path: Path, source: str) -> list[str]:
     for target, change in sorted(actual - expected):
         fail(root, f"unexpected ledger coverage: {change} {target}")
     return findings
-
-
-def is_hand_variant(path: Path, source: str) -> bool:
-    """A generate-hand-variants.cjs output: a `-hand` stem or rough.js redraw markup."""
-    # ponytail: rough.js redraws drop the data contract, so they are never in scope.
-    return path.stem.endswith("-hand") or 'class="rough-shape"' in source
 
 
 def looks_like_delta(path: Path, source: str) -> bool:

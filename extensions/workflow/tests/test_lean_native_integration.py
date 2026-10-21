@@ -10,6 +10,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import execution_tools as tools
 import workflow as w
+from runtime_patch import patch_runtime
 import delegate_dispatch as dispatch
 import delegation
 import test_lean_execution as fixture
@@ -24,8 +25,8 @@ class NativeIntegrationTests(unittest.TestCase):
         state, run = self.state_and_run()
         with patch.object(run, 'load', return_value=state), patch.object(run, 'save'), \
              patch.object(run, 'next', return_value={'stage': stage}), \
-             patch.object(w, 'doctor', return_value={'ok': True, 'errors': []}), \
-             patch.object(w, 'package_digest', return_value='pkg'), \
+             patch_runtime('doctor', return_value={'ok': True, 'errors': []}), \
+             patch_runtime('package_digest', return_value='pkg'), \
              patch.object(w, 'context_gate', return_value={'pause': False}):
             return run.claim({'session_id': 'native-session'})
 
@@ -68,11 +69,11 @@ class NativeIntegrationTests(unittest.TestCase):
 
     def test_doctor_exposes_aggregate_preflight_diagnostics(self):
         self.policy['lean_execution']['preflight_manifest'] = self.feature + '/missing.json'
-        with patch.object(w, 'compatible', return_value=True), \
-             patch.object(w, 'resolve_commands', return_value=w.COMMANDS), \
-             patch.object(w, 'command_exists', return_value=True), \
-             patch.object(w, 'ci_errors', return_value=[]), patch.object(w, 'host_warnings', return_value=[]), \
-             patch.object(w, 'eol_drift', return_value=[]):
+        with patch_runtime('compatible', return_value=True), \
+             patch_runtime('resolve_commands', return_value=w.COMMANDS), \
+             patch_runtime('command_exists', return_value=True), \
+             patch_runtime('ci_errors', return_value=[]), patch_runtime('host_warnings', return_value=[]), \
+             patch_runtime('eol_drift', return_value=[]):
             report = w.doctor(self.root, self.policy)
         self.assertFalse(report['preflight']['ok'])
         self.assertTrue(any('LEAN_PREFLIGHT_FAILED' in e for e in report['errors']))
@@ -94,20 +95,20 @@ class NativeIntegrationTests(unittest.TestCase):
         for body in ('Closes #9', 'Fixes #99', 'Closes foreign/repo#10'):
             receipt = self.pr_receipt(body)
             w.write(self.root / receipt['pr_lint_file'], {'ok': True})
-            with patch.object(w, 'github_repository', return_value='acme/app'), \
+            with patch_runtime('github_repository', return_value='acme/app'), \
                  self.assertRaisesRegex(w.WorkflowError, 'CLOSING_REFERENCE_REJECTED'):
                 w.pr_lint_binding(self.root, self.feature, state, receipt)
 
     def test_native_pr_rejects_changed_body_sent_sha_and_repository(self):
         state, _ = self.state_and_run()
         receipt = self.pr_receipt()
-        with patch.object(w, 'github_repository', return_value='acme/app'):
+        with patch_runtime('github_repository', return_value='acme/app'):
             with self.assertRaisesRegex(w.WorkflowError, 'SENT_BODY_SHA'):
                 w.pr_lint_binding(self.root, self.feature, state, {**receipt, 'pr_body_sha256': '0' * 64})
             (self.root / receipt['pr_body_file']).write_text('Closes #10\nExtra paragraph', encoding='utf-8')
             with self.assertRaisesRegex(w.WorkflowError, 'RECEIPT_MISMATCH'):
                 w.pr_lint_binding(self.root, self.feature, state, receipt)
-        with patch.object(w, 'github_repository', return_value='foreign/repo'), \
+        with patch_runtime('github_repository', return_value='foreign/repo'), \
              self.assertRaisesRegex(w.WorkflowError, 'REPOSITORY_MISMATCH'):
             w.pr_lint_binding(self.root, self.feature, state, receipt)
 
@@ -115,7 +116,7 @@ class NativeIntegrationTests(unittest.TestCase):
         state, _ = self.state_and_run()
         receipt = self.pr_receipt()
         (self.root / receipt['pr_body_file']).unlink()
-        with patch.object(w, 'github_repository', return_value='acme/app'),              self.assertRaisesRegex(w.WorkflowError, 'PR_LINT_BODY_UNREADABLE'):
+        with patch_runtime('github_repository', return_value='acme/app'),              self.assertRaisesRegex(w.WorkflowError, 'PR_LINT_BODY_UNREADABLE'):
             w.pr_lint_binding(self.root, self.feature, state, receipt)
 
     def test_native_pr_completion_fingerprints_body_lint_and_scope(self):
@@ -124,9 +125,9 @@ class NativeIntegrationTests(unittest.TestCase):
         receipt = self.pr_receipt()
         with patch.object(run, 'load', return_value=state), patch.object(run, 'save'), \
              patch.object(run, 'next', return_value={'stage': None}), \
-             patch.object(w, 'github_repository', return_value='acme/app'), \
-             patch.object(w, 'required_inputs', return_value=[]), \
-             patch.object(w, 'fingerprint_files', side_effect=lambda root, paths, **_: {p: 'hash' for p in paths}):
+             patch_runtime('github_repository', return_value='acme/app'), \
+             patch_runtime('required_inputs', return_value=[]), \
+             patch_runtime('fingerprint_files', side_effect=lambda root, paths, **_: {p: 'hash' for p in paths}):
             run.complete('owned', receipt)
         stored = state['receipts']['pr']
         self.assertEqual(stored['pr_lint_binding']['prerequisites'], [9])
@@ -194,7 +195,7 @@ class NativeIntegrationTests(unittest.TestCase):
                                                 'active': {'token': token, 'session_id': 's-' + token}})
 
     def claim_env(self, feature, branch='feature-b', inherited=None):
-        with patch.object(w, 'git', return_value=branch), patch.object(dispatch, 'lean_enabled', return_value=True), patch.dict(os.environ, inherited or {}):
+        with patch_runtime('git', return_value=branch), patch.object(dispatch, 'lean_enabled', return_value=True), patch.dict(os.environ, inherited or {}):
             return dispatch.driver_env(self.root, run_context='intent', feature=feature)
 
     def test_worker_native_environment_preserves_current_claim_identity(self):
@@ -214,7 +215,7 @@ class NativeIntegrationTests(unittest.TestCase):
             return type('R', (), {'returncode': 0, 'stdout': json.dumps({'run_id': 'r', 'state': 'running'}),
                                   'stderr': ''})()
         candidate = {'harness': 'codex', 'requested_model': None}
-        with patch.object(w, 'git', return_value='feature-b'), patch.object(dispatch, 'lean_enabled', return_value=True), \
+        with patch_runtime('git', return_value='feature-b'), patch.object(dispatch, 'lean_enabled', return_value=True), \
              patch.object(dispatch.shutil, 'which', return_value='node'), \
              patch.object(dispatch.subprocess, 'run', side_effect=run), \
              patch.dict(os.environ, {'SANDUQ_WORKFLOW_CLAIM_TOKEN': 'token-a'}):

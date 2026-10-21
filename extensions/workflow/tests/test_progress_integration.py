@@ -32,6 +32,12 @@ class OptionalProgressInstall(unittest.TestCase):
         self.assertNotIn('progress', lock['required'])
         self.assertTrue(all('progress' not in group for group in lock['selected'].values()))
 
+    def test_dependencies_name_the_spec_kit_range_progress_requires(self):
+        # A release install has no package on disk at preview time, so the preview check reads this copy (D1).
+        lock = w.read(Path(__file__).resolve().parents[1] / 'dependencies.json')
+        manifest = yaml.safe_load(PROGRESS_MANIFEST.read_text(encoding='utf-8'))
+        self.assertEqual(lock['optional_speckit'], {'progress': manifest['requires']['speckit_version']})
+
     def test_a_default_install_does_not_add_progress(self):
         result = installer.install(self.root, package_root=self.package)
         self.assertNotIn('progress', self.names(result))

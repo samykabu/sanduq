@@ -46,9 +46,8 @@ existing checkpoint, though `workflow.py`'s lower-level identity primitives
 still support one for other purposes.
 
 A checkpoint from before 1.8.0 recorded only `repo_path` (never read or
-compared by 1.8.0+, but still written by `start`, the legacy-upgrade path
-and `relocate` so a pre-1.8.0 reader does not `KeyError`; it will be removed
-once no supported release still needs it) and is accepted once both checks
+compared by 1.8.0+; version 2 checkpoints no longer carry it, and version 1
+checkpoints that do still load) and is accepted once both checks
 above pass *and* it records a full-hex commit id (its `head`, or a receipt's
 `head`) that is reachable from this repository's HEAD — the one verifiable
 history signal such a checkpoint carries, since origin is only local Git

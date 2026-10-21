@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.7.1] - 2026-10-21
+
+Vendors illustration-tools 3.7.1.
+
+- The data verifiers share `skill/scripts/svg_scan.py` (the SVG scanner and its helpers). Diagrams and verifier output
+  are unchanged. A verifier copied out of the skill needs `svg_scan.py` beside it.
+
 ## [2.7.0] - 2026-10-21
 
 Optimization round 4. No renames.

@@ -375,21 +375,30 @@ class TaskIssuesSummaryTests(unittest.TestCase):
 
 
 class GitHubTimeoutTests(unittest.TestCase):
+    """The transport is the shared `sanduq_gh` (SC8): its runner is the seam."""
+
+    def hung(self):
+        return mock.patch.object(t.sanduq_gh.subprocess, 'run', side_effect=subprocess.TimeoutExpired('gh', t.GH_TIMEOUT))
+
     def test_a_hung_gh_call_is_reported_with_the_api_error_code(self):
         # X21: no timeout let a hung gh hold the dispatch lock forever.
-        with mock.patch.object(t.subprocess, 'run', side_effect=subprocess.TimeoutExpired('gh', t.GH_TIMEOUT)) as run:
+        with self.hung() as run, mock.patch.object(t.sanduq_gh.time, 'sleep') as sleep:
             with self.assertRaisesRegex(t.WorkflowError, 'GITHUB_API_FAILED: gh api repos/acme/app/issues timed out'):
                 t.GitHub().api('repos/acme/app/issues')
         self.assertEqual(run.call_args.kwargs['timeout'], t.GH_TIMEOUT)
+        self.assertEqual((run.call_count, sleep.call_count), (2, 1))  # a GET is a read: tried once more
 
-
-class GitHubTimeoutTests(unittest.TestCase):
-    def test_a_hung_gh_call_is_reported_with_the_api_error_code(self):
-        # X21: no timeout let a hung gh hold the dispatch lock forever.
-        with mock.patch.object(t.subprocess, 'run', side_effect=subprocess.TimeoutExpired('gh', t.GH_TIMEOUT)) as run:
+    def test_a_hung_write_is_never_repeated(self):
+        with self.hung() as run, mock.patch.object(t.sanduq_gh.time, 'sleep') as sleep:
             with self.assertRaisesRegex(t.WorkflowError, 'GITHUB_API_FAILED: gh api repos/acme/app/issues timed out'):
-                t.GitHub().api('repos/acme/app/issues')
-        self.assertEqual(run.call_args.kwargs['timeout'], t.GH_TIMEOUT)
+                t.GitHub().api('repos/acme/app/issues', method='POST', payload={'title': 'x'})
+        self.assertEqual((run.call_count, sleep.call_count), (1, 0))
+
+    def test_a_failed_call_keeps_the_api_error_code_and_message(self):
+        failed = subprocess.CompletedProcess(['gh'], 1, '', 'HTTP 404: Not Found\n')
+        with mock.patch.object(t.sanduq_gh.subprocess, 'run', return_value=failed):
+            with self.assertRaisesRegex(t.WorkflowError, r'^GITHUB_API_FAILED: HTTP 404: Not Found$'):
+                t.GitHub().api('repos/acme/app/issues/9')
 
 
 if __name__ == '__main__':

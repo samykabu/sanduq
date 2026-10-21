@@ -117,6 +117,9 @@ import math
 import re
 import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import svg_scan  # noqa: E402  shared SVG scanning helpers, loaded like theme_tokens.py
+from svg_scan import is_hand_variant, line_of, median  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 ASSET_DIR = ROOT / "assets"
@@ -158,13 +161,6 @@ CSS_MOVES_MARK_RE = re.compile(
     re.IGNORECASE,
 )
 TAG_RE = re.compile(r"<[^>]+>")
-# The COMPLETE numeric token an author may print: sign, comma-grouped
-# thousands, decimals, leading-dot decimals, exponents. Matching only the
-# first fragment is how "512,000" once agreed with metadata that said 512.
-NUMBER_RE = re.compile(
-    r"[-+]?(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)(?:[eE][-+]?\d+)?"
-)
-DIGIT_RE = re.compile(r"\d")
 
 # Both quote styles: matching only double quotes drops a single-quoted dot
 # from the verified set without a word, which is exactly how a lie ships.
@@ -182,7 +178,6 @@ DECLARES_VALUE_RE = re.compile(r"\bdata-value\s*=", re.IGNORECASE)
 # STROKE: it is the mark's edge and the thing a reader identifies the accent
 # by, and an accent FILL on a muted-stroked dot already fails the one-ink
 # rule instead.
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 import theme_tokens  # noqa: E402  Illustrate: accept the active theme as well as the defaults
 ACCENT_RE = theme_tokens.accent_re()   # upstream light/dark accents + active theme, hex or rgba
 
@@ -213,10 +208,6 @@ class Dot:
         self.fill = fill
         self.accent = accent
         self.offset = offset
-
-
-def line_of(source: str, offset: int) -> int:
-    return source.count("\n", 0, offset) + 1
 
 
 def blank_comments(source: str) -> str:
@@ -259,30 +250,7 @@ def number(value):
 
 
 def printed_number(body: str):
-    """(value, reason) for a label's visible text.
-
-    Returns a value only when the text carries exactly one complete numeric
-    token. Trailing units are fine ("500ms"); a second number, or digits the
-    token did not consume, is ambiguous and reported rather than guessed at.
-    """
-    match = NUMBER_RE.search(body)
-    if match is None:
-        return None, "prints no number"
-    outside = body[:match.start()] + body[match.end():]
-    if DIGIT_RE.search(outside):
-        return None, "prints more than one numeric token"
-    value = number(match.group())
-    if value is None:
-        return None, "prints a number this checker cannot read"
-    return value, None
-
-
-def median(values: list) -> float:
-    ordered = sorted(values)
-    middle = len(ordered) // 2
-    if len(ordered) % 2:
-        return ordered[middle]
-    return (ordered[middle - 1] + ordered[middle]) / 2.0
+    return svg_scan.printed_number(body, number)
 
 
 def fit(points: list) -> tuple:
@@ -308,12 +276,6 @@ def fit(points: list) -> tuple:
 def named_text(source: str) -> str:
     """The accessible name and description, where a figure says what it is."""
     return " ".join(plain(m.group("body")) for m in NAMED_RE.finditer(source)).casefold()
-
-
-def is_hand_variant(path: Path, source: str) -> bool:
-    """A generate-hand-variants.cjs output: a `-hand` stem or rough.js redraw markup."""
-    # ponytail: rough.js redraws drop the data contract, so they are never in scope.
-    return path.stem.endswith("-hand") or 'class="rough-shape"' in source
 
 
 def looks_like_beeswarm(path: Path, source: str) -> bool:

@@ -62,9 +62,9 @@ Generated from `presets/*/preset.yml`. An overlay runs Sanduq policy before the 
 
 | Preset | Command | Strategy |
 | --- | --- | --- |
-| scope-brainstorm | `speckit.superspec.brainstorm` | prepend |
+| scope-brainstorm | `speckit.superspec.brainstorm` | replace |
 | scope-gate | `speckit.specify` | prepend |
-| scope-gate | `speckit.clarify` | prepend |
+| scope-gate | `speckit.clarify` | replace |
 | workflow | `speckit.scope.run` | prepend |
 | workflow | `speckit.specify` | prepend |
 | workflow | `speckit.clarify` | replace |

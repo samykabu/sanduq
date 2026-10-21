@@ -144,10 +144,22 @@ class RecordedRunTests(unittest.TestCase):
 class GhTimeoutTests(unittest.TestCase):
     def test_a_hung_gh_call_is_an_evidence_error(self):
         # X21: no timeout let a hung gh stall the gate.
-        with mock.patch.object(ce.subprocess, 'run', side_effect=subprocess.TimeoutExpired('gh', ce.GH_TIMEOUT)) as run:
+        with mock.patch.object(ce.sanduq_gh.subprocess, 'run',
+                               side_effect=subprocess.TimeoutExpired('gh', ce.GH_TIMEOUT)) as run:
             with self.assertRaisesRegex(ce.EvidenceError, 'GitHub API repos/a/b/actions/runs/1: timed out'):
                 ce.GhClient().api('repos/a/b/actions/runs/1')
         self.assertEqual(run.call_args.kwargs['timeout'], ce.GH_TIMEOUT)
+        self.assertEqual(run.call_count, 1)  # never retried: a download may take the whole timeout
+
+    def test_a_failed_call_and_a_download_keep_their_shapes(self):
+        failed = subprocess.CompletedProcess(['gh'], 1, b'', b'HTTP 404: Not Found\n')
+        with mock.patch.object(ce.sanduq_gh.subprocess, 'run', return_value=failed):
+            with self.assertRaisesRegex(ce.EvidenceError, r'^GitHub API repos/a/b: HTTP 404: Not Found$'):
+                ce.GhClient().api('repos/a/b')
+        archive = subprocess.CompletedProcess(['gh'], 0, b'PK\x03\x04 bytes', b'')
+        with mock.patch.object(ce.sanduq_gh.subprocess, 'run', return_value=archive) as run:
+            self.assertEqual(ce.GhClient().download('repos/a/b/actions/artifacts/1/zip'), b'PK\x03\x04 bytes')
+        self.assertNotIn('text', run.call_args.kwargs)
 
 
 if __name__ == '__main__':

@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.11.0] - 2026-10-21
+
+- The prerequisite check stops at a Done prerequisite (status aliases applied) and still walks through In review ones. A full inspect reads pull-request timelines for the direct prerequisites only. A chain of N Done prerequisites now costs 3 API calls instead of 2 + 2N.
+- `scope.py cancel <issue>-<hash>` cancels an interrupted publish: with `--apply` it marks the journal `rolled_back` under the mutation lock, so `publish` refuses to resume it. It makes no GitHub write and prints the created issues, issue before-images, dependency before-images and catalog and issue-map backups for manual repair. A bare issue number lists that issue's operations instead. A publish journals each new issue before linking it, so an interrupted link still lists the issue.
+- The github-clarification skill holds the Clarify and Brainstorm coverage categories and the rules for placing answers in the spec (`references/analysis-json.md`), once. The Clarify and Brainstorm overlays in the scope-gate, scope-brainstorm and workflow presets are short pointers to it; both scope presets now `replace` instead of `prepend`, so an unmanaged Clarify round no longer loads the 19.5 KB upstream command.
+- Scope's GitHub client (`GitHub`, `ProjectRest`, the GraphQL-to-REST switch) moved to `scripts/sanduq_scope_github.py` on the shared `sanduq_gh` runner. `from scope import GitHub` still works, and messages are unchanged. A failed REST GET is retried once after a 5xx or a timeout; writes and `gh project` commands never are. A `gh` timeout or a missing `gh` is a Scope error with a message.
+- The workflow policy is parsed once per file text in a process (with the C YAML loader when present), and Workflow's `workflow.py` and `decisions.py` are loaded once per process.
+
+### Migration
+
+- Readiness rule change: a Done prerequisite whose own prerequisite was reopened no longer blocks the issue. A cancelled prerequisite, or one closed without Done, still blocks.
+- `accept_plan.py` no longer accepts `--spec` or `--archify` (deprecated since 1.7.0); use `--html`.
+- Unmanaged Clarify and Brainstorm no longer compose the upstream command under the overlay. Run `specify preset add` for scope-gate and scope-brainstorm again after the update. Spec Kit now scaffolds `speckit.superspec.brainstorm` even without Superspec; Scope still picks Brainstorm only when Superspec is installed and enabled.
+
 ## [1.10.1] - 2026-10-21
 
 Fixes from the review of round 4 (PR #101).

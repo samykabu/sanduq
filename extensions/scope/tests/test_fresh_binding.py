@@ -1,5 +1,6 @@
 import copy
 import json
+import types
 import unittest
 from unittest.mock import patch
 import test_scope as f
@@ -27,7 +28,8 @@ class FreshBindingTests(unittest.TestCase):
         return feature, state
 
     def decisions(self, pending=False):
-        module = m.workflow_policy._decisions_module()
+        # A copy: the loaded module is cached per process and must stay real for the other tests.
+        module = types.SimpleNamespace(**vars(m.workflow_policy._decisions_module()))
         module.reconcile = lambda *args, **kwargs: {'version': 1, 'feature': 'specs/001-new', 'issue': 'acme/app#1',
             'decisions': [{'id': 'SD1', 'status': 'pending', 'answers': []}] if pending else []}
         return module
