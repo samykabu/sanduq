@@ -4,7 +4,7 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
-## 2026-10-21 — Workflow 1.17.1, Scope 1.10.1, Project 2.5.1, PR 4.5.1 (pending release)
+## 2026-10-21 — Workflow 1.17.1, Scope 1.10.1, Project 2.5.1, PR 4.5.1
 
 - Review fixes for round 4: Project adopts a recovered task issue only when it is linked to this feature, Scope and Project read the origin through `insteadOf` rewrites again, and review-feedback gathering says when GitHub cut a connection at 100 items.
 
