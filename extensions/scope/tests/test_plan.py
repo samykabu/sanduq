@@ -310,17 +310,19 @@ class AcceptanceTests(unittest.TestCase):
         self.assertFalse(self.pending.exists())
         self.assertEqual(self.receipt()['perceptual_review']['reviewer'], 'reviewer')
 
-    def test_deprecated_flags_still_work_for_one_minor_version(self):
-        output = self.run_main('--archify', 'old/cli.mjs', '--spec', str(self.candidate), '--mapping', str(self.mapping), '--illustrate', str(self.skill))
-        self.assertIn('--archify is deprecated and ignored', output)
-        self.assertIn('--spec is deprecated', output)
-        self.assertFalse(self.pending.exists())
+    def test_removed_flags_are_refused(self):
+        # Round 5 removed --spec and --archify on purpose (deprecated since 1.7.0); argparse refuses them.
+        for flag, value in (('--archify', 'old/cli.mjs'), ('--spec', str(self.candidate))):
+            with self.assertRaises(SystemExit) as raised:
+                self.run_main(flag, value, '--html', str(self.candidate), '--mapping', str(self.mapping))
+            self.assertEqual(raised.exception.code, 2, flag)
+        self.assertTrue(self.pending.exists())
 
     def test_previous_renderer_candidate_requires_regeneration(self):
         legacy = self.artifacts / 'implementation-plan.legacy.json'
         legacy.write_text('{}', encoding='utf-8')
         with self.assertRaisesRegex(SystemExit, 'must be regenerated'):
-            self.run_main('--spec', str(legacy), '--mapping', str(self.mapping))
+            self.run_main('--html', str(legacy), '--mapping', str(self.mapping))
         self.assertTrue(self.pending.exists())
 
     def test_pending_plan_from_previous_renderer_is_migrated_not_dropped(self):

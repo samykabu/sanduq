@@ -216,10 +216,60 @@ class ScopeTests(unittest.TestCase):
         self.assertIn('GitHub Issue Number | Title | Current status', m.rejection(result['blocked']))
 
     def test_transitive_blocker(self):
-        self.gh.add(2, status='Done')
+        # SC16 (round 5) changed this rule on purpose: the walk stops at a Done prerequisite, so a Done issue
+        # whose own prerequisite was reopened no longer blocks. Through In review it still descends.
+        self.gh.add(2, status='In review')
         self.gh.add(3)
         self.gh.deps.update({1: {2}, 2: {3}})
         self.assertEqual(self.app.inspect('1')['blocked'][0]['number'], 3)
+        self.gh.statuses[2] = 'Done'
+        self.app._board = None
+        result = self.app.inspect('1')
+        self.assertTrue(result['ready'])
+        self.assertEqual([d['number'] for d in result['prerequisites']], [2])
+
+    def test_walk_stops_only_at_logical_done(self):
+        (self.root / '.specify').mkdir(exist_ok=True)
+        (self.root / '.specify/workflow.yml').write_text('schema_version: 1\nscope:\n  statuses:\n    Done: Shipped\n', encoding='utf-8')
+        self.gh.add(2, status='Shipped')  # the alias of Done
+        self.gh.add(3)
+        self.gh.deps.update({1: {2}, 2: {3}})
+        self.assertTrue(self.app.inspect('1')['ready'])
+        # Cancelled, or closed without Done, is not Done: the walk descends and the issue blocks.
+        self.gh.issues[2]['state_reason'] = 'not_planned'
+        self.app._board = None
+        self.assertEqual([d['number'] for d in self.app.inspect('1')['blocked']], [2, 3])
+        self.gh.issues[2].update(state='closed', state_reason=None)
+        self.gh.statuses[2] = 'In review'
+        self.app._board = None
+        self.assertEqual([d['number'] for d in self.app.inspect('1')['blocked']], [2, 3])
+
+    def test_timelines_only_for_direct_prerequisites(self):
+        self.gh.add(2, status='In review')
+        self.gh.add(3, status='Done')
+        self.gh.deps.update({1: {2}, 2: {3}})
+        result = self.app.inspect('1')
+        self.assertEqual([d['number'] for d in result['prerequisites']], [2, 3])
+        self.assertEqual([e['number'] for e in result['implementation_evidence']], [2])
+
+    def test_override_reaches_a_blocker_behind_in_review(self):
+        self.gh.add(2, status='In review')
+        self.gh.add(3, status='In progress')
+        self.gh.deps.update({1: {2}, 2: {3}})
+        m.write_json(self.root / '.specify/scope/prerequisite-overrides.json', {'overrides': [
+            {'issue': 1, 'prerequisite': 3, 'reason': 'Shipped behind a flag', 'approved_by': 'test owner',
+             'approval_text': 'Override for this issue only.'}]})
+        result = self.app.inspect('1')
+        self.assertTrue(result['ready'])
+        self.assertEqual([d['number'] for d in result['overridden']], [3])
+
+    def test_shared_prerequisite_is_reported_once(self):
+        for n, status in ((2, 'In review'), (3, 'In review'), (4, 'Backlog'), (5, 'Done')):
+            self.gh.add(n, status=status)
+        self.gh.deps.update({1: {2, 3, 5}, 2: {4}, 3: {4, 5}})
+        result = self.app.inspect('1')
+        self.assertEqual([d['number'] for d in result['prerequisites']], [2, 3, 4, 5])
+        self.assertEqual([d['number'] for d in result['blocked']], [4])
 
     def test_unknown_and_cancelled_do_not_pass(self):
         self.gh.add(2, status='Done')['state_reason'] = 'not_planned'
@@ -262,8 +312,14 @@ class ScopeTests(unittest.TestCase):
         self.assertFalse(self.app.inspect('1')['ready'])
 
     def test_dependency_cycle_fails(self):
-        self.gh.add(2, status='Done')
+        # SC16: a Done prerequisite is not walked, so the cycle is found through In review.
+        self.gh.add(2, status='In review')
         self.gh.deps.update({1: {2}, 2: {1}})
+        with self.assertRaisesRegex(m.ScopeError, 'cycle'):
+            self.app.inspect('1')
+        self.gh.add(3, status='In review')
+        self.gh.deps.update({1: {3}, 2: {3}, 3: {2}})
+        self.app._board = None
         with self.assertRaisesRegex(m.ScopeError, 'cycle'):
             self.app.inspect('1')
 

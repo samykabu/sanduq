@@ -223,8 +223,6 @@ def deliver(candidate, output, artifact_directory):
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--html', type=Path, help='Illustrate dependency-graph candidate HTML')
-    p.add_argument('--spec', type=Path, help='Deprecated alias of --html (removed in 1.7.0)')
-    p.add_argument('--archify', help='Deprecated and ignored (removed in 1.7.0)')
     p.add_argument('--mapping', type=Path)
     p.add_argument('--illustrate', type=Path, help='Installed Illustrate skill directory (default .specify/extensions/illustrate/skill)')
     p.add_argument('--review', type=Path, help='Perceptual review of the delivered HTML, with screenshot hashes')
@@ -245,11 +243,7 @@ def main(argv=None):
     if args.migrate_only:
         print(message or 'Pending plan is current; nothing to migrate.')
         return
-    if args.archify:
-        print('--archify is deprecated and ignored; the plan is checked with Illustrate.', file=sys.stderr)
-    if args.spec and not args.html:
-        print('--spec is deprecated; use --html.', file=sys.stderr)
-    candidate = (args.html or args.spec)
+    candidate = args.html
     if not candidate or not args.mapping:
         raise SystemExit('--html <candidate.html> and --mapping <mapping.json> are required.')
     candidate = candidate.resolve()

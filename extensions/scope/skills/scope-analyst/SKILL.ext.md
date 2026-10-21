@@ -24,7 +24,8 @@ With `.specify/workflow.yml`, also follow [managed.md](references/managed.md); o
    as shell code.
 3. A nonzero exit stops analysis and publication: show the runtime's **GitHub Issue Number |
    Title | Current status** table (`SCOPE_PREREQUISITES_NOT_READY`). Never bypass this because
-   code seems present.
+   code seems present. Readiness: every prerequisite is In review or Done; the check walks
+   through In review prerequisites but not below a Done one.
 
 ## Evidence and sizing
 

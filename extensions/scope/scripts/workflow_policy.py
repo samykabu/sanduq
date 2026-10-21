@@ -1,15 +1,29 @@
 """Optional managed-project policy; unmanaged Scope retains its previous contract."""
 from pathlib import Path
+import copy
 import hashlib
 import json
 
 
+_PARSED = {}  # resolved path -> (file text, parsed policy)
+_MODULES = {}  # Workflow script file name -> module, loaded once per process
+
+
 def load(root):
     path = Path(root) / '.specify/workflow.yml'
-    if not path.exists():
+    try:
+        text = path.read_text(encoding='utf-8-sig')
+    except FileNotFoundError:
         return None
-    import yaml
-    data = yaml.safe_load(path.read_text(encoding='utf-8-sig'))
+    # Keyed by the text, not the mtime: reading is cheap, parsing is not, and a same-size rewrite inside one
+    # mtime tick must not return the old policy.
+    key = str(path.resolve())
+    cached = _PARSED.get(key)
+    if cached is None or cached[0] != text:
+        import yaml
+        cached = _PARSED[key] = (text, yaml.load(text, Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader)))
+    # A copy, so no caller can change the cached policy.
+    data = copy.deepcopy(cached[1])
     if not isinstance(data, dict) or data.get('schema_version') != 1:
         raise ValueError('Unsupported workflow policy; run workflow doctor before Scope.')
     return data
@@ -64,18 +78,21 @@ def _workflow_module():
     declares `workflow` as a dependency, and both ship side by side under
     `.specify/extensions/` (and `extensions/` in the source tree), so the
     checkpoint-identity gate is shared with workflow itself rather than
-    copied. None when it cannot be loaded, which refuses the claim."""
-    import importlib.util
-    path = Path(__file__).resolve().parents[2] / 'workflow/scripts/workflow.py'
-    if not path.is_file():
-        return None
-    spec = importlib.util.spec_from_file_location('sanduq_workflow_for_scope', path)
-    module = importlib.util.module_from_spec(spec)
-    try:
-        spec.loader.exec_module(module)
-    except Exception:
-        return None
-    return module
+    copied. None when it cannot be loaded, which refuses the claim. Loaded
+    once per process."""
+    if 'workflow.py' not in _MODULES:
+        import importlib.util
+        path = Path(__file__).resolve().parents[2] / 'workflow/scripts/workflow.py'
+        module = None
+        if path.is_file():
+            spec = importlib.util.spec_from_file_location('sanduq_workflow_for_scope', path)
+            module = importlib.util.module_from_spec(spec)
+            try:
+                spec.loader.exec_module(module)
+            except Exception:
+                module = None
+        _MODULES['workflow.py'] = module
+    return _MODULES['workflow.py']
 
 
 def bound_claim(root, repo, issue, stages):
@@ -94,7 +111,7 @@ def bound_claim(root, repo, issue, stages):
     active = state.get('active') or {}
     if not isinstance(active, dict): return None
     if (source.get('repo'), source.get('issue')) != (repo, issue): return None
-    if state.get('schema_version') != 1 or state.get('issue') != f'{repo}#{issue}': return None
+    if state.get('schema_version') not in (1, 2) or state.get('issue') != f'{repo}#{issue}': return None  # checkpoint v1 or v2 (W27)
     # `repo_path`, when present, is a pre-1.8.0 checkpoint's absolute path
     # (machine- and clone-specific -- the same checkpoint-identity design bug
     # workflow.py's `Run.load()` fixes) and is never compared: the `issue`
@@ -163,11 +180,15 @@ def fresh_claim(root, repo, issue, feature, token, session, stages=("scope", "sp
 
 
 def _decisions_module():
-    import importlib.util
-    import sys
-    path = Path(__file__).resolve().parents[2] / 'workflow/scripts/decisions.py'
-    sys.path.insert(0, str(path.parent))
-    spec = importlib.util.spec_from_file_location('sanduq_scope_fresh_decisions', path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    """Workflow's `decisions.py`, loaded by path once per process; its own imports need its folder on the path."""
+    if 'decisions.py' not in _MODULES:
+        import importlib.util
+        import sys
+        path = Path(__file__).resolve().parents[2] / 'workflow/scripts/decisions.py'
+        if str(path.parent) not in sys.path:
+            sys.path.insert(0, str(path.parent))
+        spec = importlib.util.spec_from_file_location('sanduq_scope_fresh_decisions', path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _MODULES['decisions.py'] = module
+    return _MODULES['decisions.py']

@@ -26,3 +26,39 @@ Each spec edit: exact nonempty `before` and `after` strings, no file paths. Upda
 acceptance and edge cases, remove contradictions, keep unrelated text, and cite the human answer
 comment IDs. The runtime appends the round's review log (question, answer, evidence links) to the
 spec; do not write a separate Q/A list.
+
+## Coverage
+
+Read the spec and any `.specify/memory/constitution.md`. Mark each category Clear, Partial or
+Missing in `coverage`; leave questions that belong to planning for Plan.
+
+Clarify:
+
+- Functional scope and behavior: user goals, success criteria, out-of-scope declarations, roles.
+- Domain and data: entities, identity and uniqueness, lifecycle and state transitions, volume.
+- Interaction and UX: critical journeys, error, empty and loading states, accessibility, locales.
+- Non-functional: performance, scalability, reliability and recovery, observability, security
+  and privacy, compliance.
+- Integrations: external services and their failure modes, import and export formats, versioning.
+- Edge cases: negative scenarios, rate limiting, conflict resolution such as concurrent edits.
+- Constraints and tradeoffs: technical constraints, rejected alternatives.
+- Terminology: canonical terms, avoided synonyms.
+- Completion signals: testable acceptance criteria, measurable definition of done.
+- Placeholders: TODOs, unresolved decisions, vague adjectives with no measure.
+
+Brainstorm: any focus topic in the command input first, then at least boundary conditions
+(minimum and maximum values, empty states, edge-of-range input), error scenarios (a service down,
+malformed input, partial failures), scale and performance (load, concurrency, rate limits),
+security and privacy (injection, authorization, data exposure) and user experience (confusion
+points, accessibility, unintended usage), then every other material ambiguity. Skip categories
+the spec's Brainstorm Log covers unless the spec changed there.
+
+## Applying answers
+
+Clarify: functional ambiguity goes to Functional Requirements, actors to the user stories, data
+shape to the data model, non-functional constraints to measurable success criteria, edge cases to
+Edge Cases, and terminology across the whole spec.
+
+Brainstorm: new requirements go to Functional Requirements, resolved questions to the Open
+Questions table, edge cases to Edge Cases. Fold brainstorming-skill design output into the
+existing `spec.md` (never `docs/superpowers/`). Append a dated summary to any Brainstorm Log.

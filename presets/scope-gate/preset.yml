@@ -20,7 +20,7 @@ provides:
       name: speckit.clarify
       file: commands/clarify-github.md
       replaces: speckit.clarify
-      strategy: prepend
+      strategy: replace
 tags:
   - scope
   - github

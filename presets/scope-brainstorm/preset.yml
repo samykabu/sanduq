@@ -15,7 +15,7 @@ provides:
       name: speckit.superspec.brainstorm
       file: commands/brainstorm-github.md
       replaces: speckit.superspec.brainstorm
-      strategy: prepend
+      strategy: replace
 tags:
   - github
   - clarification

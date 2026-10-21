@@ -68,6 +68,14 @@ Managed default artifacts are `.specify/scope/github/` and
 legacy paths. All paths must stay inside the project. Read `references/analysis-contract.md`
 for the effort rubric and approval details.
 
+## Readiness
+
+An issue is ready when each of its prerequisites is In review or Done (status aliases from
+`scope.statuses` apply). The check follows prerequisites of prerequisites through In review
+issues and stops at a Done one, so a Done prerequisite whose own prerequisite was reopened
+does not block. A cancelled issue, or one closed without Done, is not Done. A full inspect
+reads pull-request timelines for the direct prerequisites only.
+
 ## Snapshots, board cache and spec rendering
 
 `scope.py inspect <issue> --output <file>` saves the snapshot and prints only a summary (issue,

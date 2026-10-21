@@ -26,7 +26,10 @@
    workflow: issue edits, labels, prompts, child links, dependencies, Project fields and plan
    export all wait for it. On a transient failure keep the same analysis and operation journal;
    never recreate issues blindly. If requirements changed, stop and reconcile the journal first.
-   A cancelled operation fails with `SCOPE_ROLLED_BACK`.
+   To cancel an interrupted operation instead, run `scope.py cancel <issue>-<hash>` (the folder
+   under `.specify/scope/runs/`), then again with `--apply`. It marks the journal `rolled_back`,
+   changes nothing on GitHub, and prints the created issues, before-images and backups to repair
+   by hand. A cancelled operation fails with `SCOPE_ROLLED_BACK`.
 5. Publication keeps original bodies and images, records approved scores and prompts, and makes
    split parents aggregate-only. A larger approved score is legitimate; an unexpected count
    change or stale or missing approval is an error. Version 2 receipts keep approval provenance;

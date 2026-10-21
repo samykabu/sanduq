@@ -50,5 +50,60 @@ class InstructionTests(unittest.TestCase):
             self.assertEqual(bench.failing(bench.describe(description)), [], name)
 
 
+def render(command, presets):
+    """A command as Spec Kit composes it, top preset first: `prepend` layers stack, a `replace` layer ends the
+    stack, and 'UPSTREAM' stands in for the core or extension command under them."""
+    import yaml
+    parts = []
+    for preset in presets:
+        manifest = yaml.safe_load((ROOT / 'presets' / preset / 'preset.yml').read_text(encoding='utf-8'))
+        entry = next((t for t in manifest['provides']['templates'] if t['name'] == command), None)
+        if entry:
+            parts.append((ROOT / 'presets' / preset / entry['file']).read_text(encoding='utf-8').split('---', 2)[2])
+            if entry['strategy'] == 'replace':
+                return '\n'.join(parts)
+    return '\n'.join(parts + ['UPSTREAM'])
+
+
+class RenderedProcedureTests(unittest.TestCase):
+    """SC17: unmanaged and managed Clarify and Brainstorm render without upstream text, and the coverage
+    categories exist once in the files a Clarify or Brainstorm stage reads."""
+    SKILL = SCOPE / 'skills/github-clarification'
+    CASES = {('speckit.clarify', 'clarify'): ('scope-gate',),
+             ('speckit.superspec.brainstorm', 'brainstorm'): ('scope-brainstorm',)}
+
+    def setUp(self):
+        try:
+            import yaml  # noqa: F401
+        except ImportError as error:
+            self.skipTest(str(error))
+
+    def stage_files(self, rendered, managed):
+        texts = [rendered, (self.SKILL / 'SKILL.ext.md').read_text(encoding='utf-8')]
+        texts += [p.read_text(encoding='utf-8') for p in sorted((self.SKILL / 'references').glob('*.md'))]
+        if managed:
+            texts.append((REFERENCES / 'stage-clarify.md').read_text(encoding='utf-8'))
+        return ' '.join('\n'.join(texts).lower().split())
+
+    def test_rendered_procedures(self):
+        for (command, engine), scope_presets in self.CASES.items():
+            for managed in (False, True):
+                presets = ('workflow',) + scope_presets if managed else scope_presets
+                text = render(command, presets)
+                with self.subTest(command=command, managed=managed):
+                    self.assertNotIn('UPSTREAM', text)
+                    self.assertIn('.specify/extensions/scope/skills/github-clarification/SKILL.md', text)
+                    self.assertIn(f'`engine: {engine}`', text)
+                    self.assertIn('STOP', text)
+                    self.assertNotIn('Managed workflow precedence', text)
+                    self.assertLess(len(text.encode('utf-8')), 1700)
+                    if managed:
+                        self.assertIn('#managed-overlay-contract', text)
+                        self.assertIn('stage-clarify.md', text)
+                    files = self.stage_files(text, managed)
+                    for phrase in ('identity and uniqueness', 'edge-of-range input', 'open questions table'):
+                        self.assertEqual(files.count(phrase), 1, phrase)
+
+
 if __name__ == '__main__':
     unittest.main()
