@@ -434,3 +434,115 @@ it published at 12:12:51. This is environmental, but it is the first live run to
 - PR #5 (#2) and **PR #9 (#6)** are open and not merged.
 - The clone is on `6-add-a-shout-flag-to-greet`, with uncommitted workflow state: the checkpoint and lifecycle
   files and the sync state.
+
+## Run 4 (worktree HEAD 7968e02)
+
+**Verdict: PASS WITH ISSUES.** The D3 gate check passed on a fresh feature:
+
+- The PR stage's `complete` was accepted.
+- After Execute's `complete`, the Memory queue held exactly one entry for #10, with `checks: ["tests"]`, which
+  equals `default_checks`.
+- No claim returned `memory_blocked` or `memory_dispatch`.
+- Neither `speckit.memory.prepare` nor `speckit.memory.session` ran.
+
+The issue: B7 below makes Memory's approval depend on line endings. On Windows with `core.autocrlf=true`, a branch
+switch turns automatic mode off. It affects D3's promise that "Memory approval stays valid", so it should be fixed
+before release.
+
+Evidence is in `<scratch>/run4/`: `transcripts/`, `sanduq-runtime.json`, `memory-*.json`, `retry-6*.json` and
+`extensions.after-upgrade.yml`. GitHub's GraphQL budget was 4,996 of 5,000 at the start and 4,862 at the end.
+
+### Upgrade
+
+This used the same route as run 3:
+
+1. #6's state was committed on its branch, and main checked out.
+2. `config.json` was backed up.
+3. `specify extension add --dev --force` for memory, project and scope.
+4. `config.json` was restored; it is byte-identical.
+5. Memory `install.py`, `upgrade.py --apply`, then `install.py --packages --apply`.
+
+Every installed extension was byte-identical to the run-4 packages, ignoring CRLF. The hooks: `speckit.memory.prepare`
+and `speckit.memory.session` are `enabled: false`, and `impact` is enabled. `doctor --project` returned `ok: true`.
+Memory was re-approved (`b1c42f50…01c6`). The upgrade commit is `85c2fcf` on main, pushed.
+
+**`.git/info/sanduq-runtime.json` appeared** once Workflow's installer ran. It holds `{"workflow": [...]}` with the
+six exclude lines, including `/specs/*/workflow/backups/` and `/specs/*/workflow/progress/`. Progress is not
+installed in this project, so the file has no `progress` key.
+
+### Feature #10 (`--upper`)
+
+| # | Transcript | Tool calls | Turns | Time | Cost | Tokens: input / cache write / cache read / output |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| 1 | `run4/transcripts/01-scope.jsonl` | 28 | 31 | 187 s | $0.91 | 58 / 53,912 / 1,564,057 / 8,373 |
+| 2 | `run4/transcripts/02-continue.jsonl` | 105 (Bash 98, Agent 2) | 98 | 1,033 s | $4.17 | 196 / 149,507 / 10,167,866 / 36,130 |
+
+The lifecycle log for #10 records these claims:
+
+- Scope.
+- Specify (bind-only, then accepted).
+- Clarify.
+- Plan. Tasks was skipped because it is merged into Plan.
+- Analyze.
+- Tasks-to-Issues, which created #11 and #12.
+- Execute. Its completion was rejected once with `UPSTREAM_INPUT_CHANGED_DURING_STAGE: greet.py, test_greet.py`,
+  as in run 3: the model lists the product files as Plan inputs. It recovered with `revalidate-upstream` and was
+  then accepted.
+- Verify, Review and Ready.
+- **PR, accepted**: PR #13, head `2a7c446`, open, not a draft, not merged.
+
+Memory evidence:
+
+- **Memory tool calls:** 0 in each command. No Memory script, `memory-handoff` call or `speckit.memory.*` skill.
+- **Execute's `complete`** returned `{"ok": true, "stage": "execute", "next": {"stage": "verify", ...}}`. The
+  handoff state file records `transition: execute`, `status: queued`, `reason: MEMORY_QUEUED` at 13:09:55.
+- **Queue** (`.git/sanduq-memory/pending.json`): one entry, `specs/10-add-an-upper-flag-to-greet`, with
+  `checks: ["tests"]`, branch `10-add-an-upper-flag-to-greet` and head `b8ff884`. `archive.py pending` lists it
+  with "Awaiting local merge/check-out of the configured target branch.", the normal state before merge.
+- **Session handoff:** it ran in every claim. The last update was at 13:12:14, the PR claim.
+
+### Feature #6 retry
+
+I checked out `6-add-a-shout-flag-to-greet` and merged main into it (local merge commit `c24634f`, not pushed), so
+the branch carries the fixed Memory. Then I ran the documented retry,
+`workflow.py memory-handoff --transition execute --feature specs/6-add-a-shout-flag-to-greet`:
+
+1. The first try returned `status: pending`, `ok: true`, "Automatic mode is disabled or needs policy/implementation
+   review and renewal.". The reason is B7.
+2. I re-approved with the branch's hash (`07092a97…2433`) and retried. It returned `status: queued`, `ok: true`,
+   `MEMORY_QUEUED`.
+3. The queue then held both features, `{'specs/10-…': ['tests'], 'specs/6-…': ['tests']}`. The re-approval also
+   blocked #10's entry: "Queue entry predates current enablement (queued under the approval of
+   2026-10-21T12:53:48…): archive it manually with speckit.memory.run --spec specs/10-add-an-upper-flag-to-greet,
+   or re-queue it from its implementation branch."
+
+### Issues
+
+- **B7: Memory's approval hash depends on line endings, so a branch switch on Windows turns automatic mode off.**
+  `archive.py` `policy_hash()` (`extensions/memory/scripts/archive.py:134-150`) hashes the raw bytes of the policy,
+  every Memory extension file, the Memory skill wrappers, the SESSION blocks and the hook block. With
+  `core.autocrlf=true`, Git's default on Windows, the installer writes those files with LF, which pass approval.
+  A later checkout or merge writes them back with CRLF. On `6-…` after the merge, `archive.py` had 1,545 CRLF
+  lines, `memory-policy.json` 53 and `extensions.yml` 161. `policy` then returned `07092a97…` against the approved
+  `b1c42f50…`.
+  - Effect: every branch switch on Windows makes `pending` report "needs … renewal". Re-approving orphans the
+    queue entries made under the earlier approval, as #10's above shows.
+  - Cause: only the hook blocks are CRLF-folded. W11 fixed the same class of bug for Workflow receipts with
+    `portable_content`.
+  - Fix: hash text files with line endings normalised, or by Git blob. Test: approve, rewrite the files with CRLF,
+    and `policy_hash` must be unchanged.
+- **N1, transient:** right after publishing, Scope's gate refused once with `SPECIFY_STATE: Specify requires
+  Backlog; #10 is Unknown (not on configured Project).`. GraphQL showed #10 on Project #12 in Backlog. The model
+  polled `gh project item-list` and the item appeared on the first poll, after the model's 20 s wait. This is
+  likely GitHub's listing lag after `item-add`. Scope could re-read the item by node id before refusing.
+- **I3, repeated in runs 3 and 4:** the model lists product files as Plan inputs, so Execute's completion is
+  rejected once with `UPSTREAM_INPUT_CHANGED_DURING_STAGE`. This costs a `revalidate-upstream` and a resume.
+  Clearer text in `stage-plan.md` about Plan inputs would avoid it.
+
+### State left in place after run 4
+
+- The repository is private and has not been deleted.
+- Projects #12, #13 and #14 are left in place.
+- PRs #5, #9 and **#13** are open and not merged.
+- The clone is on `6-add-a-shout-flag-to-greet`, at the local merge commit with main.
+- Memory's approval is now the branch-6 hash, and the queue holds #10 (blocked: predates enablement) and #6.
