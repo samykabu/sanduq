@@ -75,6 +75,24 @@ class GatherTests(unittest.TestCase):
         self.assertEqual(sum(c[:2] == ['api', 'graphql'] for c in gh.calls), 2)  # two pages, one query
         self.assertEqual(len(gh.calls), 3)
 
+    def test_connections_cut_at_100_are_reported_not_silently_dropped(self):
+        self.assertNotIn('truncated', self.gather('acme/app#7')[1])
+        original = FakeGh.__call__
+
+        def cut(gh, args):
+            out = original(gh, args)
+            if args[:2] == ['api', 'graphql']:
+                data = json.loads(out)
+                pr = data['data']['repository']['pullRequest']
+                pr['reviews']['pageInfo'] = {'hasPreviousPage': True}
+                pr['reviewThreads']['nodes'][0]['comments']['pageInfo'] = {'hasNextPage': True}
+                out = json.dumps(data)
+            return out
+        with patch.object(FakeGh, '__call__', cut):
+            code, result, _ = self.gather('acme/app#7')
+        self.assertEqual(code, 0)
+        self.assertEqual(result['truncated'], {'reviews': True, 'threads': ['T1', 'T4']})
+
     def test_identifiers(self):
         self.assertEqual(self.gather('https://github.com/acme/app/pull/7')[0], 0)
         code, _, gh = self.gather('7')

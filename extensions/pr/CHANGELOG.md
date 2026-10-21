@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.5.1] - 2026-10-21
+
+Fixes from the review of round 4 (PR #101).
+
+- `pr_feedback.py gather` reports `truncated` (and warns on stderr) when GitHub returned only the newest 100 reviews or the first 100 comments of a thread, and `review-feedback` tells the agent to read the rest on the PR; before, that feedback was dropped silently.
+
 ## [4.5.0] - 2026-10-21
 
 Optimization round 4. No renames.

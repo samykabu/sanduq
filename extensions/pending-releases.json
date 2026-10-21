@@ -1,6 +1,11 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Optimization round 4: naming kept (user decision), Workflow owns Memory session/prepare hooks in managed projects, shared remote parser, fixes from six reviews and a Codex cross-check, and eight bugs found by four live managed runs (B1-B7, board status reset). Ten Opus streams plus S-FIX, reviewed by the orchestrating session; every suite passes locally except three machine-only link-rollback tests; live run 4 PASS on the D3 gate. Upstream dev-tools 1.3.0, illustration-tools 3.7.0, agent-tools 1.6.2 vendored. Publish after main CI."
+  "versions": {
+    "workflow": "1.17.1",
+    "scope": "1.10.1",
+    "project": "2.5.1",
+    "pr": "4.5.1"
+  },
+  "status": "ready",
+  "note": "Round 4 review fixes (PR #101 Codex connector findings): Project sub-issue adoption requires a confirmed link, Scope/Project resolve insteadOf, pr_feedback reports truncated connections. Regression tests for each; Project, PR, Scope and scripts suites pass locally. Publish after main CI."
 }

@@ -101,6 +101,15 @@ class RemoteCases(unittest.TestCase):
             self.assertEqual(r.origin_url(tmp), 'git@github.com:Acme/App.git')
             self.assertEqual(r.github_slug(r.origin_url(tmp)), 'Acme/App')
 
+    def test_resolve_applies_insteadof_rewrites(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            subprocess.run(['git', 'init', '-q'], cwd=tmp, check=True)
+            self.assertIsNone(r.origin_url(tmp, resolve=True))
+            subprocess.run(['git', 'remote', 'add', 'origin', 'gh:Acme/App.git'], cwd=tmp, check=True)
+            subprocess.run(['git', 'config', 'url.git@github.com:.insteadOf', 'gh:'], cwd=tmp, check=True)
+            self.assertEqual(r.origin_url(tmp), 'gh:Acme/App.git')  # identity keeps the raw value
+            self.assertEqual(r.github_slug(r.origin_url(tmp, resolve=True)), 'Acme/App')
+
 
 class PackagedCopies(unittest.TestCase):
     @classmethod

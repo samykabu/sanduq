@@ -79,8 +79,11 @@ def same_github_repository(a, b):
     return a is not None and b is not None and a.lower() == b.lower()
 
 
-def origin_url(root, timeout=10):
-    """The raw `remote.origin.url`, or None when it is not configured."""
-    result = subprocess.run(['git', 'config', '--get', 'remote.origin.url'], cwd=root,
+def origin_url(root, timeout=10, resolve=False):
+    """The `origin` URL, or None when it is not configured. Raw `remote.origin.url` by default, which
+    Workflow's portable identity is built from; `resolve=True` applies `url.<base>.insteadOf` rewrites
+    (`git remote get-url`), which is what a GitHub slug must be read from."""
+    command = ['remote', 'get-url', 'origin'] if resolve else ['config', '--get', 'remote.origin.url']
+    result = subprocess.run(['git', *command], cwd=root,
                             capture_output=True, text=True, encoding='utf-8', timeout=timeout)
     return result.stdout.strip() if result.returncode == 0 and result.stdout.strip() else None

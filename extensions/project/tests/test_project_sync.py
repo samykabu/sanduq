@@ -43,9 +43,11 @@ CONFIG = {
 class FakeGh:
     """`gh` for one run: GraphQL-backed subcommands, or the REST paths once the budget is 0."""
 
-    def __init__(self, budget='5000', open_pr=False, scopes="'project', 'repo'", listed=(), fail_create_after=None):
+    def __init__(self, budget='5000', open_pr=False, scopes="'project', 'repo'", listed=(), fail_create_after=None,
+                 fail_link=False, parents=None):
         self.budget, self.open_pr, self.calls, self.next_issue, self.scopes = budget, open_pr, [], 42, scopes
         self.listed, self.fail_create_after = list(listed), fail_create_after  # task issues already on GitHub
+        self.fail_link, self.parents = fail_link, dict(parents or {})  # addSubIssue refused; {issue: parent}
 
     def __call__(self, args, stdin=None):
         self.calls.append(list(args))
@@ -53,7 +55,12 @@ class FakeGh:
         if head == ['auth', 'status']:
             return 0, "Logged in to github.com as fixture\nToken scopes: " + self.scopes
         if head == ['api', 'graphql']:
+            if self.fail_link and 'GraphQL-Features: sub_issues' in args:
+                return 1, 'GraphQL: Issue may not contain duplicate sub-issues'
             return (0, self.budget) if any('rateLimit' in arg for arg in args) else (0, '{}')
+        if head[0] == 'api' and head[1].endswith('/parent'):
+            number = int(head[1].split('/')[-2])
+            return (0, json.dumps({'number': self.parents[number]})) if number in self.parents else (1, 'Not Found (HTTP 404)')
         if self.budget == '0' and args[0] != 'api':  # GraphQL-backed gh subcommands fail once exhausted
             return 1, 'GraphQL: API rate limit exceeded for user ID 1.'
         if head == ['issue', 'create']:
@@ -283,6 +290,19 @@ class ProjectSyncTests(unittest.TestCase):
         subs = self.state()['001-refunds']['subIssues']
         self.assertEqual((subs['T001']['number'], subs['T002']['number']), (50, 42))
         self.assertEqual(len(gh.used('api', 'graphql', '-H')), 2)  # the adopted issue is linked too
+
+    def test_a_matching_issue_whose_link_fails_is_adopted_only_when_it_is_already_this_features_child(self):
+        self.configure(subIssues={**CONFIG['subIssues'], 'enabled': True})
+        self.tasks('- [ ] T001 Add refund model\n')
+        listed = [{'number': 50, 'title': '001-refunds T001: Add refund model', 'id': 'NODE_50'}]
+        for parents, adopted in (({50: 7}, False), ({}, False), ({50: 42}, True)):
+            self.state({'001-refunds': {'issue': 42, 'issueNodeId': 'NODE_42', 'itemId': 'ITEM_1', 'status': '', 'subIssues': {}}})
+            _, _, err, gh = self.sync('--phase', 'ready', '--summary', gh=FakeGh(listed=listed, fail_link=True, parents=parents))
+            subs = self.state()['001-refunds']['subIssues']
+            self.assertEqual('T001' in subs, adopted, parents)
+            self.assertFalse(gh.used('issue', 'create'), parents)  # never recreated either
+            if not adopted:
+                self.assertIn('not linked to #42', err)
 
     def test_a_run_interrupted_after_one_create_resumes_without_duplicates(self):
         self.configure(subIssues={**CONFIG['subIssues'], 'enabled': True})

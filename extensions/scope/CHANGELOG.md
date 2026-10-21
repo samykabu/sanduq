@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.10.1] - 2026-10-21
+
+Fixes from the review of round 4 (PR #101).
+
+- Scope reads the origin with `git remote get-url origin` again (through `sanduq_remote.origin_url(resolve=True)`), so an origin written with a `url.<base>.insteadOf` alias such as `gh:Acme/App.git` resolves to GitHub. 1.10.0 read the raw config value and refused it.
+
 ## [1.10.0] - 2026-10-21
 
 Optimization round 4. No renames.

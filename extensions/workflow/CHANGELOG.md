@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.17.1] - 2026-10-21
+
+Fixes from the review of round 4 (PR #101).
+
+- The packaged `sanduq_remote.py` gains `origin_url(..., resolve=True)` for Scope and Project. Workflow itself still reads the raw `remote.origin.url`, so its repository identity is unchanged.
+
 ## [1.17.0] - 2026-10-21
 
 Optimization round 4. No renames.

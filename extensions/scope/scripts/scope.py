@@ -559,7 +559,7 @@ class Scope:
         self.cfg = read_json(self.root / '.specify/extensions/project/config.json')
         require(self.cfg and self.cfg.get('projectId'), 'Run /speckit-project-init first.')
         self.gh.project_cfg = self.cfg
-        url = sanduq_remote.origin_url(self.root)
+        url = sanduq_remote.origin_url(self.root, resolve=True)
         require(url, 'A GitHub origin remote is required: no remote.origin.url is set (git remote add origin <url>).')
         self.repo = sanduq_remote.github_slug(url)
         require(self.repo, 'A GitHub origin remote is required: remote.origin.url does not name a github.com repository.')
