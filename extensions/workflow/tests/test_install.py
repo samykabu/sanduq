@@ -580,6 +580,32 @@ class InstallTests(unittest.TestCase):
                 installer.required_gate_checks(self.root)
         self.assertEqual(seen['timeout'], 60)
 
+    def test_branch_rule_errors_keep_their_codes_on_the_shared_gh_transport(self):
+        def respond(protection=None, repo=None):
+            def run(args, **kwargs):
+                endpoint = args[2]
+                if endpoint == 'repos/acme/app':
+                    return repo or subprocess.CompletedProcess(args, 0, json.dumps({'default_branch': 'main'}), '')
+                if '/rules/branches/' in endpoint:
+                    return subprocess.CompletedProcess(args, 0, '[]', '')
+                return protection
+            return run
+        missing = subprocess.CompletedProcess([], 1, '', 'gh: Not Found (HTTP 404)')
+        cases = [(respond(missing), []),
+                 (respond(repo=subprocess.CompletedProcess([], 1, '', 'HTTP 403: forbidden')),
+                  'CI_BRANCH_RULE_INSPECTION_FAILED: HTTP 403: forbidden'),
+                 (respond(repo=subprocess.CompletedProcess([], 0, 'not json', '')), 'CI_BRANCH_RULE_RESPONSE_INVALID'),
+                 (respond(repo=subprocess.CompletedProcess([], 0, '', '')), 'CI_BRANCH_RULE_RESPONSE_INVALID'),
+                 (FileNotFoundError('gh'), 'CI_BRANCH_RULE_INSPECTION_FAILED: gh CLI not installed')]
+        for side_effect, expected in cases:
+            with self.subTest(expected=expected), patch.object(installer.subprocess, 'run', side_effect=side_effect), \
+                    patch.object(installer, 'github_repository', return_value='acme/app'):
+                if isinstance(expected, list):
+                    self.assertEqual(installer.required_gate_checks(self.root), expected)
+                else:
+                    with self.assertRaisesRegex(w.WorkflowError, expected):
+                        installer.required_gate_checks(self.root)
+
     def test_install_refuses_while_a_memory_archive_run_is_active(self):
         active = memory_archive_run(self.root)
         commands = []
