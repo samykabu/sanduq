@@ -284,9 +284,15 @@ def _run_legacy(args, cwd):
     return proc.stdout.strip() or proc.stderr.strip()
 
 
+def read_call(rel):
+    """Read-call arguments for a repository-relative path, with / on every OS so the counts match."""
+    return call(file_path=rel.as_posix())
+
+
 def legacy_setup_and_events(trace):
     """Run the real legacy progress.py in a sandbox so every output line is the script's own."""
     protocol = LEGACY_PROTOCOL.read_text(encoding="utf-8")
+    protocol_call = ("protocol-call", read_call(LEGACY_PROTOCOL.relative_to(REPO)))
     state = model.new_state()
     with tempfile.TemporaryDirectory(prefix="legacy-bench-") as tmp:
         feature = Path(tmp) / "specs" / FEATURE
@@ -294,13 +300,13 @@ def legacy_setup_and_events(trace):
         (feature / "tasks.md").write_text(_tasks_md(), encoding="utf-8")
         init = ["init", "--output", LEGACY_OUT, "--tasks", "specs/%s/tasks.md" % FEATURE, "--summary"]
         init_out = _run_legacy(init, tmp)
-        setup = [("protocol-call", call(file_path=str(LEGACY_PROTOCOL.relative_to(REPO)))), ("protocol", protocol),
+        setup = [protocol_call, ("protocol", protocol),
                  ("call", bash(LEGACY_CLI + " " + " ".join(_shell(a) for a in init))), ("result", init_out)]
         events = []
         for ev in trace:
             msgs = []
             if ev["kind"] in ("resume", "compaction"):
-                msgs += [("protocol-call", call(file_path=str(LEGACY_PROTOCOL.relative_to(REPO)))), ("protocol", protocol)]
+                msgs += [protocol_call, ("protocol", protocol)]
             if ev["kind"] == "assign_lane":
                 model.apply(state, ev)  # lane owners are needed by later task commands
             for args in _legacy_commands(ev, state):
