@@ -548,10 +548,11 @@ class Archive:
                     files[relative] = self.repo.file_hash(relative)
                 elif not path.is_dir():
                     raise ArchiveError(f"Nonregular archive artifact: {relative}")
-            # Scoped checkpoints preserve tracked files even under ignored parents, including edits and deletions.
-            # Only untracked ignored files need refusal or the declared disposable-runtime exception.
-            ignored = self.repo.ignored([p for p in files if p not in tracked and self.repo.within(p, [spec])])
-            runtime = self.repo.local_runtime(ignored)
+            # Checkpoints start from HEAD; ignored index-only additions cannot be recovered from that tree.
+            ignored = self.repo.ignored([p for p in files if self.repo.within(p, [spec])])
+            committed = self.repo.exists_at(self.repo.head(), ignored)
+            ignored = [p for p in ignored if not committed[p]]
+            runtime = self.repo.local_runtime([p for p in ignored if p not in tracked])
             for path in runtime:
                 files.pop(path)
             ignored = [p for p in ignored if p not in runtime]

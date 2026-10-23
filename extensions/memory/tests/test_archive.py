@@ -405,6 +405,35 @@ class ArchiveIntegrationTests(unittest.TestCase):
         (self.root / unsafe).unlink()
         self.assertTrue(self.archive.preflight([FEATURE], ["consumer"])["ok"])
 
+    def test_ignored_index_only_additions_refused_before_checkpoint(self):
+        self.archive.verify(FEATURE, ["consumer"])
+        evidence = FEATURE + "/evidence/تقرير [1].json"
+        runtime = FEATURE + "/workflow/backups/staged.json"
+        self.write(".gitignore", FEATURE + "/evidence/\n")
+        self.write(".git/info/exclude", "/specs/*/workflow/backups/\n")
+        self.write(".git/info/sanduq-runtime.json", json.dumps({"workflow": ["/specs/*/workflow/backups/"]}))
+        for path in (evidence, runtime):
+            self.write(path, b"staged ignored bytes\x00\xff\n")
+        self.git("add", "-f", "--", evidence, runtime)
+        head = self.archive.repo.head()
+        index = (self.root / ".git/index").read_bytes()
+        state = {p: p.read_bytes() for p in self.archive.repo.state.rglob("*") if p.is_file()}
+        self.assertTrue({evidence, runtime}.issubset(self.archive.repo.tracked()))
+        self.assertEqual({evidence: False, runtime: False}, self.archive.repo.exists_at(head, [evidence, runtime]))
+        for operation in (lambda: self.archive.preflight([FEATURE], ["consumer"]),
+                          lambda: self.archive.prepare([FEATURE], [], ["consumer"])):
+            with self.subTest(operation=operation):
+                with self.assertRaisesRegex(ArchiveError, "Ignored artifacts") as caught:
+                    operation()
+                for path in (evidence, runtime):
+                    self.assertIn(path, str(caught.exception))
+                    self.assertEqual(b"staged ignored bytes\x00\xff\n", (self.root / path).read_bytes())
+                self.assertEqual(head, self.archive.repo.head())
+                self.assertEqual(index, (self.root / ".git/index").read_bytes())
+                self.assertIsNone(self.archive.active_id())
+                self.assertFalse((self.archive.repo.state / "runs").exists())
+                self.assertEqual(state, {p: p.read_bytes() for p in self.archive.repo.state.rglob("*") if p.is_file()})
+
     def test_checkpoint_preserves_modified_tracked_ignored_evidence_and_deletion(self):
         evidence = FEATURE + "/evidence/تقرير [1].json"
         removed = FEATURE + "/evidence/removed.json"
