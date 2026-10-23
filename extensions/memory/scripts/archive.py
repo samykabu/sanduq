@@ -538,6 +538,7 @@ class Archive:
 
     def spec_files(self, specs: list[str], *, allow_empty=False) -> dict:
         files = {}
+        tracked = set(self.repo.tracked())
         for spec in specs:
             directory = self.repo.path(spec)
             for path in sorted(directory.rglob("*")):
@@ -547,10 +548,11 @@ class Archive:
                     files[relative] = self.repo.file_hash(relative)
                 elif not path.is_dir():
                     raise ArchiveError(f"Nonregular archive artifact: {relative}")
-            # An ignored file is not in the checkpoint, so deleting the folder would lose it for good. Workflow's
-            # and Progress's declared runtime files (reports, local backups) are disposable and never archived.
+            # Checkpoints start from HEAD; ignored index-only additions cannot be recovered from that tree.
             ignored = self.repo.ignored([p for p in files if self.repo.within(p, [spec])])
-            runtime = self.repo.local_runtime(ignored)
+            committed = self.repo.exists_at(self.repo.head(), ignored)
+            ignored = [p for p in ignored if not committed[p]]
+            runtime = self.repo.local_runtime([p for p in ignored if p not in tracked])
             for path in runtime:
                 files.pop(path)
             ignored = [p for p in ignored if p not in runtime]

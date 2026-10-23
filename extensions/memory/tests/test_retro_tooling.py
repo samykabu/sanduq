@@ -56,14 +56,15 @@ class MemoryToolingTests(unittest.TestCase):
             self.archive.verify(fixture.FEATURE, ['consumer'])
         self.assertFalse((self.root / 'sentinel').exists())
 
-    def test_missing_declared_input_and_ignored_tracked_source_stop_early(self):
+    def test_missing_declared_input_and_ignored_untracked_source_stop_early(self):
         self.sentinel()
         self.declaration()
         (self.root / 'config.json').unlink()
         with self.assertRaisesRegex(ArchiveError, 'input missing'):
             self.archive.verify(fixture.FEATURE, ['consumer'])
         self.archive.policy['checks']['consumer'].pop('inputs')
-        self.write('.gitignore', fixture.FEATURE + '/spec.md\n')
+        self.write('.gitignore', fixture.FEATURE + '/untracked.json\n')
+        self.write(fixture.FEATURE + '/untracked.json', 'unrecoverable evidence')
         with self.assertRaisesRegex(ArchiveError, 'Ignored artifacts'):
             self.archive.verify(fixture.FEATURE, ['consumer'])
         self.assertFalse((self.root / 'sentinel').exists())
