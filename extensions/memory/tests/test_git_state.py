@@ -65,6 +65,15 @@ class TrackedIgnoredScopeTests(unittest.TestCase):
         with self.assertRaisesRegex(ArchiveError, "ignored"):
             self.repo.git_paths("add", "-A", "-n", paths=[TRACKED])
 
+    def test_ignored_keeps_pattern_semantics_for_mixed_nul_delimited_paths(self):
+        untracked = "artifacts/odd dir/تقرير [1].json"
+        self.write(untracked, "untracked ignored bytes\n")
+        self.assertEqual([SPACED, untracked, TRACKED], self.repo.ignored([SPACED, "other.txt", untracked, TRACKED]))
+        self.assertEqual([], self.repo.ignored([]))
+        for unsafe in ("../outside", "other.txt\0artifacts/unsafe"):
+            with self.assertRaises(ArchiveError):
+                self.repo.ignored([TRACKED, unsafe])
+
     def test_expected_tree_stages_edits_deletions_and_new_files_under_ignored_parent(self):
         self.write(TRACKED, "two\n")
         (self.root / LOG).unlink()

@@ -11,7 +11,7 @@ PR, illustration, Memory, and Progress reporting processes. Use [install by host
 | --- | --- | ---: |
 | [assure](assure/README.md) | 2.6.1 | 3 |
 | [illustrate](illustrate/README.md) | 2.7.1 | 4 |
-| [memory](memory/README.md) | 2.5.0 | 7 |
+| [memory](memory/README.md) | 2.5.1 | 7 |
 | [pr](pr/README.md) | 4.6.0 | 2 |
 | [progress](progress/README.md) | 1.6.0 | 5 |
 | [project](project/README.md) | 2.6.0 | 2 |

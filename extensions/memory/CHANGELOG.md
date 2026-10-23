@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.5.1] - 2026-10-23
+
+- Preflight accepts tracked feature evidence that matches an ignore rule. The scoped checkpoint preserves its current edits and deletions. Untracked ignored evidence still blocks archival unless its owner's declared runtime rule makes it disposable.
+
 ## [2.5.0] - 2026-10-21
 
 Optimization round 4. No renames.

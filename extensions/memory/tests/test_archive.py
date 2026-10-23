@@ -386,6 +386,64 @@ class ArchiveIntegrationTests(unittest.TestCase):
         with self.assertRaisesRegex(ArchiveError, "Ignored artifacts"):
             self.archive.spec_files([FEATURE])
 
+    def test_preflight_accepts_tracked_ignored_evidence_but_refuses_untracked_sibling(self):
+        evidence = FEATURE + "/evidence/odd dir/تقرير [1].json"
+        unsafe = FEATURE + "/evidence/odd dir/untracked تقرير.json"
+        self.write(".gitignore", FEATURE + "/evidence/\n")
+        self.write(evidence, b'{"committed":true}\n')
+        self.git("add", ".gitignore")
+        self.git("add", "-f", "--", evidence)
+        self.git("commit", "-m", "Retain ignored evidence")
+        self.assertEqual(b'{"committed":true}\n', self.archive.repo.blob(self.archive.repo.head(), evidence))
+        self.assertTrue(self.archive.preflight([FEATURE], ["consumer"])["ok"])
+        self.assertIn(evidence, self.archive.spec_files([FEATURE]))
+        self.write(unsafe, "must not be lost")
+        with self.assertRaisesRegex(ArchiveError, "Ignored artifacts") as caught:
+            self.archive.preflight([FEATURE], ["consumer"])
+        self.assertIn(unsafe, str(caught.exception))
+        self.assertNotIn(evidence, str(caught.exception))
+        (self.root / unsafe).unlink()
+        self.assertTrue(self.archive.preflight([FEATURE], ["consumer"])["ok"])
+
+    def test_checkpoint_preserves_modified_tracked_ignored_evidence_and_deletion(self):
+        evidence = FEATURE + "/evidence/تقرير [1].json"
+        removed = FEATURE + "/evidence/removed.json"
+        self.write(".gitignore", FEATURE + "/evidence/\n")
+        for path in (evidence, removed):
+            self.write(path, "old bytes\n")
+        self.git("add", ".gitignore")
+        self.git("add", "-f", "--", evidence, removed)
+        self.git("commit", "-m", "Retain ignored evidence")
+        updated = b'new checkpoint bytes\x00\xff\n'
+        self.write(evidence, updated)
+        (self.root / removed).unlink()
+        self.write("unrelated.txt", "unrelated working bytes\n")
+        prepared = self.prepare()
+        run = self.archive.journal(prepared["run_id"])
+        self.assertEqual(updated, self.archive.repo.blob(prepared["checkpoint"], evidence))
+        self.assertEqual(digest(updated), run["original_files"][evidence])
+        self.assertFalse(self.archive.repo.exists_at(prepared["checkpoint"], [removed])[removed])
+        self.assertNotIn(removed, run["original_files"])
+        self.assertEqual(b"initial\n", self.archive.repo.blob(prepared["checkpoint"], "unrelated.txt"))
+        self.assertEqual(b"unrelated working bytes\n", (self.root / "unrelated.txt").read_bytes())
+
+    def test_preflight_keeps_runtime_exception_only_for_untracked_declared_runtime(self):
+        tracked = FEATURE + "/workflow/backups/retained.json"
+        runtime = FEATURE + "/workflow/backups/local.json"
+        self.write(tracked, "retained bytes\n")
+        self.git("add", "--", tracked)
+        self.git("commit", "-m", "Retain workflow evidence")
+        self.write(".git/info/exclude", "/specs/*/workflow/backups/\n")
+        self.write(".git/info/sanduq-runtime.json", json.dumps({"workflow": ["/specs/*/workflow/backups/"]}))
+        self.write(runtime, "disposable runtime bytes\n")
+        self.assertTrue(self.archive.preflight([FEATURE], ["consumer"])["ok"])
+        files = self.archive.spec_files([FEATURE])
+        self.assertIn(tracked, files)
+        self.assertNotIn(runtime, files)
+        prepared = self.prepare()
+        self.assertEqual(b"retained bytes\n", self.archive.repo.blob(prepared["checkpoint"], tracked))
+        self.assertFalse(self.archive.repo.exists_at(prepared["checkpoint"], [runtime])[runtime])
+
     def test_interruption_after_delete_resumes(self):
         prepared = self.prepare()
         self.candidate(prepared)

@@ -538,6 +538,7 @@ class Archive:
 
     def spec_files(self, specs: list[str], *, allow_empty=False) -> dict:
         files = {}
+        tracked = set(self.repo.tracked())
         for spec in specs:
             directory = self.repo.path(spec)
             for path in sorted(directory.rglob("*")):
@@ -547,9 +548,9 @@ class Archive:
                     files[relative] = self.repo.file_hash(relative)
                 elif not path.is_dir():
                     raise ArchiveError(f"Nonregular archive artifact: {relative}")
-            # An ignored file is not in the checkpoint, so deleting the folder would lose it for good. Workflow's
-            # and Progress's declared runtime files (reports, local backups) are disposable and never archived.
-            ignored = self.repo.ignored([p for p in files if self.repo.within(p, [spec])])
+            # Scoped checkpoints preserve tracked files even under ignored parents, including edits and deletions.
+            # Only untracked ignored files need refusal or the declared disposable-runtime exception.
+            ignored = self.repo.ignored([p for p in files if p not in tracked and self.repo.within(p, [spec])])
             runtime = self.repo.local_runtime(ignored)
             for path in runtime:
                 files.pop(path)
