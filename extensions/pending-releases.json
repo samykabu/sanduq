@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "Round 5 (round 4 deferred items): shared gh transport, checkpoint v2, workflow.py split, native Progress default, Scope readiness/cancel/overlays, Python Project init, PR plan-file replies, Progress v2 removal, vendored init_manual and svg_scan. Codex plan and diff reviews applied; live managed run passed (I3, IP21 gate). Publish after main CI."
+  "versions": {
+    "memory": "2.5.1"
+  },
+  "status": "implementation-in-progress",
+  "note": "Memory 2.5.1 preserves tracked evidence matched by ignore rules. Source review and 205 Memory tests passed; consumer validation remains pending. Not marked ready for release."
 }
