@@ -144,42 +144,42 @@ class FrozenAuthorityTests(unittest.TestCase):
                 recovery.historical_scope_authority(Path.cwd(), 'immutable-anchor',
                     {'evidence': [label], 'fingerprints': {label: '0' * 64}}, original)
 
-    def parent_fixture(self, **nodes_change):
+    def test_legacy_gate_keeps_missing_membership_without_reading_parent_publication(self):
         approval = {'approved_by': 'owner', 'approved_at': '2026-10-24', 'analysis_sha256': 'a' * 64, 'child_count': 2}
         original = {'repo': 'acme/app', 'issue': 1, 'score': 3, 'prompt': 'Refund scope',
                     'fingerprint': 'b' * 64, 'dependencies': [], 'approval': approval, 'parent': 18}
-        gate_label, parent_label = 'f/evidence/gate.json', 'f/scope/approved-parent-context/publication-result.json'
-        gate = json.dumps({'issue': 1, 'score': 3, 'prompt': 'Refund scope', 'fingerprint': 'b' * 64}).encode()
-        parent = json.dumps({'issue': 18, 'nodes': {'root': 18, 'a': 1, 'b': 2, **nodes_change}}).encode()
-        receipt = {'evidence': [gate_label], 'fingerprints': {gate_label: recovery.sha(gate)}}
-        files = {gate_label: gate, parent_label: parent}
-        return original, receipt, {parent_label: {recovery.sha(parent)}}, files
+        label = 'f/evidence/gate.json'
+        gate = {key: original[key] for key in ('issue', 'score', 'prompt', 'fingerprint')}
+        data = json.dumps(gate).encode()
+        receipt = {'evidence': [label], 'fingerprints': {label: recovery.sha(data)}}
+        before = copy.deepcopy((original, receipt))
+        with patch.object(recovery, 'proof_blob', return_value=(data, 'anchor')) as read_proof, \
+                patch.object(recovery, 'historical_attributes', return_value={label: None}):
+            restored = recovery.historical_scope_authority(Path.cwd(), 'anchor', receipt, original)
+            self.assertEqual(restored, original)
+            self.assertNotIn('parent_children', restored)
+            self.assertEqual(read_proof.call_args.args[2], label)
+            self.assertEqual(read_proof.call_count, 1)
+            with self.assertRaisesRegex(w.WorkflowError, 'APPROVAL_REQUIRED'):
+                recovery.historical_scope_authority(Path.cwd(), 'anchor', receipt,
+                    {k: v for k, v in original.items() if k != 'approval'})
+        self.assertEqual((original, receipt), before)
 
-    def recover(self, original, receipt, bound, files):
-        with patch.object(recovery, 'proof_blob', side_effect=lambda r, a, name, h, attr: (files[name], a)),                 patch.object(recovery, 'historical_attributes', return_value={n: None for n in files}):
-            return recovery.historical_scope_authority(Path.cwd(), 'anchor', receipt, original, 'f', bound)
-
-    def test_parent_children_come_from_the_accepted_native_parent_proof(self):
-        original, receipt, bound, files = self.parent_fixture()
-        restored = self.recover(original, receipt, bound, files)
-        self.assertEqual((restored['parent_children'], restored['approval']), ([1, 2], original['approval']))
-
-    def test_unbound_changed_or_mismatched_parent_proof_is_rejected(self):
-        original, receipt, bound, files = self.parent_fixture()
-        for case, args in {
-                'unbound': (original, receipt, {}, files),
-                'two hashes': (original, receipt, {k: v | {'0' * 64} for k, v in bound.items()}, files),
-                'wrong parent': (dict(original, parent=19), receipt, bound, files),
-                'no membership': (dict(original, issue=7), receipt, bound, files),
-                'child count': (dict(original, approval=dict(original['approval'], child_count=3)), receipt, bound, files)}.items():
-            with self.subTest(case), self.assertRaisesRegex(w.WorkflowError, 'APPROVAL_HISTORY_REQUIRED|PROOF_INVALID'):
-                self.recover(*args)
-        original, receipt, bound, files = self.parent_fixture(extra=20)
-        with self.assertRaisesRegex(w.WorkflowError, 'APPROVAL_HISTORY_REQUIRED'):
-            self.recover(original, receipt, bound, files)
-        original.pop('approval')
-        with self.assertRaisesRegex(w.WorkflowError, 'APPROVAL_HISTORY_REQUIRED'):
-            self.recover(original, receipt, bound, files)
+    def test_recorded_gate_conflicts_are_checked_even_with_complete_source_authority(self):
+        approval = {'approved_by': 'owner', 'approved_at': '2026-10-24', 'analysis_sha256': 'a' * 64, 'child_count': 2}
+        source = {'repo': 'acme/app', 'issue': 1, 'score': 3, 'prompt': 'Refund scope',
+                  'fingerprint': 'b' * 64, 'dependencies': [], 'approval': approval,
+                  'parent': 18, 'parent_children': [1, 2]}
+        label = 'f/evidence/gate.json'
+        for field, value in {'issue': 7, 'score': 5, 'prompt': 'Changed', 'fingerprint': 'c' * 64,
+                             'dependencies': [2], 'approval': dict(approval, approved_by='stranger'),
+                             'parent': 19, 'parent_children': [1, 3]}.items():
+            data = json.dumps(dict(source, **{field: value})).encode()
+            receipt = {'evidence': [label], 'fingerprints': {label: recovery.sha(data)}}
+            with self.subTest(field=field), patch.object(recovery, 'proof_blob', return_value=(data, 'anchor')), \
+                    patch.object(recovery, 'historical_attributes', return_value={label: None}), \
+                    self.assertRaisesRegex(w.WorkflowError, 'SCOPE_PROOF_'):
+                recovery.historical_scope_authority(Path.cwd(), 'anchor', receipt, source)
 
 
 if __name__ == '__main__': unittest.main()

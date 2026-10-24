@@ -620,9 +620,13 @@ class Scope:
         workflow_policy.accepted_receipt(self.root, self.repo, original['issue'], feature, accepted)
         live = self.validate_binding(original)
         require(original.get('parent') == live['parent'], 'SCOPE_RECOVERY_AUTHORITY_CHANGED: parent')
-        if live['parent']:
+        if live['parent'] and 'parent_children' in original:
             require(original.get('parent_children') == live['parent_children'],
                     'SCOPE_RECOVERY_CHILD_HISTORY_MISSING_OR_CHANGED')
+        elif live['parent']:
+            count = original['approval'].get('child_count')
+            require(type(count) is int and count > 0 and len(live['parent_children']) == count,
+                    'SCOPE_RECOVERY_APPROVED_CHILD_COUNT_CHANGED')
         return live
 
     def validate_binding(self, original):

@@ -140,49 +140,24 @@ def provider(run, receipt, original):
         raise WorkflowError(str(exc)) from exc
 
 
-def native_parent_children(root, anchor, feature, original, bound):
-    """Children of the retained parent approval, from the native parent proof under its recorded fingerprint."""
-    label = feature + '/scope/approved-parent-context/publication-result.json'
-    require(len(bound.get(label, ())) == 1, 'SCOPE_RECOVERY_APPROVAL_HISTORY_REQUIRED: unbound ' + label)
-    attr = historical_attributes(root, anchor, [label])[label]
-    data, _ = proof_blob(root, anchor, label, next(iter(bound[label])), attr)
-    try:
-        nodes = json.loads(data)['nodes']
-        parent, issue = original['parent'], original['issue']
-        children = sorted(n for n in nodes.values() if n != parent)
-        require(json.loads(data)['issue'] == parent and parent in nodes.values() and issue in children
-                and len(children) == original['approval'].get('child_count'), 'x')
-    except (ValueError, KeyError, TypeError, AttributeError, WorkflowError) as exc:
-        raise WorkflowError('SCOPE_RECOVERY_APPROVAL_HISTORY_REQUIRED: ' + label) from exc
-    return children
-
-
-def historical_scope_authority(root, anchor, receipt, original, feature=None, bound=None):
-    """Recover omitted fields only from this acceptance's immutable native gate evidence."""
-    if not original.get('approval') or (original.get('parent') and 'parent_children' not in original):
-        # Older bindings omitted provenance. Only an already accepted, immutable gate proof can supply it.
-        proofs = []
-        for label in receipt.get('evidence', []):
-            attr = historical_attributes(root, anchor, [label])[label]
-            data, _ = proof_blob(root, anchor, canonical_path(root, label), receipt['fingerprints'][label], attr)
-            require(sha(portable_content(label, data, attr)) == receipt['fingerprints'][label],
-                    'SCOPE_RECOVERY_HISTORY_UNPROVEN: ' + label)
-            try:
-                proof = json.loads(data)
-            except ValueError:
-                continue
-            if isinstance(proof, dict) and all(k in proof for k in ('issue', 'score', 'prompt', 'fingerprint', 'dependencies')):
-                proofs.append(scope_proof_authority(proof, original))
-        if (not proofs and original.get('approval') and original.get('parent')
-                and 'parent_children' not in original and bound is not None):
-            # The gate proof predates the binding's family fields; the accepted parent proof supplies them.
-            proofs.append(scope_proof_authority(
-                {**{k: original[k] for k in ('issue', 'score', 'fingerprint', 'dependencies')},
-                 'prompt': original.get('published_prompt', original['prompt']),
-                 'parent_children': native_parent_children(root, anchor, feature, original, bound)}, original))
-        require(proofs and all(p == proofs[0] for p in proofs), 'SCOPE_RECOVERY_APPROVAL_HISTORY_REQUIRED')
-        original = proofs[0]
-    return original
+def historical_scope_authority(root, anchor, receipt, original):
+    """Validate recorded native gate proofs without inventing omitted historical membership."""
+    proofs = []
+    for label in receipt.get('evidence', []):
+        attr = historical_attributes(root, anchor, [label])[label]
+        data, _ = proof_blob(root, anchor, canonical_path(root, label), receipt['fingerprints'][label], attr)
+        require(sha(portable_content(label, data, attr)) == receipt['fingerprints'][label],
+                'SCOPE_RECOVERY_HISTORY_UNPROVEN: ' + label)
+        try:
+            proof = json.loads(data)
+        except ValueError:
+            continue
+        if isinstance(proof, dict) and all(k in proof for k in ('issue', 'score', 'prompt', 'fingerprint')):
+            # Legacy gate output omitted dependencies; the receipt-bound source already retains them.
+            proofs.append(scope_proof_authority({'dependencies': original.get('dependencies'), **proof}, original))
+    require(not proofs or all(p == proofs[0] for p in proofs), 'SCOPE_RECOVERY_APPROVAL_HISTORY_REQUIRED')
+    require(proofs or original.get('approval'), 'SCOPE_RECOVERY_APPROVAL_HISTORY_REQUIRED')
+    return proofs[0] if proofs else original
 
 
 def writer_guards(run, state):
@@ -236,12 +211,7 @@ def _plan(run):
     source_attr = historical_attributes(run.root, anchor, [source_label])[source_label]
     require(sha(portable_content(source_label, original_bytes, source_attr)) in bound,
             'SCOPE_RECOVERY_AUTHORITY_HISTORY_UNBOUND')
-    bound_hashes = {}
-    for item in list(previous['receipts'].values()) + [r for r in state['receipts'].values()
-                                                       if r.get('outcome') == 'passed' and not r.get('stale')]:
-        for name, value in item.get('fingerprints', {}).items():
-            bound_hashes.setdefault(name, set()).add(value)
-    original = historical_scope_authority(run.root, anchor, historical_receipt, original, run.relative, bound_hashes)
+    original = historical_scope_authority(run.root, anchor, historical_receipt, original)
     live = provider(run, receipt, original)
     score = receipt.get('effort_score', state.get('effort_score', original.get('score')))
     require(score == original.get('score'), 'SCOPE_RECOVERY_EFFORT_CHANGED')

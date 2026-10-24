@@ -106,6 +106,63 @@ class FreshBindingTests(unittest.TestCase):
         with self.assertRaisesRegex(m.ScopeError, 'SCOPE_PLAN_PENDING'):
             self.app.gate(str(child['number']))
 
+    def test_legacy_recovery_preserves_leaf_authority_and_approved_child_count(self):
+        self.prepare_published_child()
+        leaf = m.metadata(self.gh.issues[1]['body'])
+        leaf['approval'] = dict(leaf['approval'], child_count=2)
+        parent = dict(leaf, children=[1, 19])
+        self.gh.add(19); self.gh.add(20)
+        self.gh.children[18] = {1, 19}
+        for number, value in ((1, leaf), (18, parent)):
+            self.gh.issues[number]['body'] = m.replace_block(self.gh.issues[number]['body'],
+                '<!-- speckit-scope:metadata ' + json.dumps(value) + ' -->')
+        original = {key: copy.deepcopy(leaf[key]) for key in ('score', 'prompt', 'fingerprint', 'dependencies', 'approval')}
+        original.update(issue=1, repo='acme/app', parent=18)
+        before = {p.relative_to(self.root).as_posix(): p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
+        writes = list(self.gh.writes)
+        bodies = {number: self.gh.issues[number]['body'] for number in (1, 18)}
+        with patch.object(m.workflow_policy, 'accepted_receipt', return_value={}):
+            live = self.app.revalidate_accepted('specs/001-new', {}, original)
+            self.assertEqual(live['parent_children'], [1, 19])
+            self.assertNotIn('parent_children', original)
+            for conflict in ('membership', 'parent-approval', 'owner-approval', 'count', 'missing-count', 'noninteger-count', 'dependency', 'parent', 'score', 'prompt', 'fingerprint'):
+                self.gh.children[18] = {1, 19}; self.gh.deps[1] = set()
+                for number, body in bodies.items(): self.gh.issues[number]['body'] = body
+                authority = copy.deepcopy(original)
+                if conflict == 'membership': self.gh.children[18].remove(1)
+                elif conflict in ('parent-approval', 'owner-approval'):
+                    for number in ((18,) if conflict == 'parent-approval' else (1, 18)):
+                        value = m.metadata(self.gh.issues[number]['body'])
+                        value['approval'] = dict(value['approval'], approved_by='other')
+                        self.gh.issues[number]['body'] = m.replace_block(self.gh.issues[number]['body'],
+                            '<!-- speckit-scope:metadata ' + json.dumps(value) + ' -->')
+                elif conflict == 'count':
+                    self.gh.children[18].add(20)
+                    self.gh.issues[18]['body'] = m.replace_block(bodies[18],
+                        '<!-- speckit-scope:metadata ' + json.dumps(dict(parent, children=[1, 19, 20])) + ' -->')
+                elif conflict in ('missing-count', 'noninteger-count'):
+                    if conflict == 'missing-count': authority['approval'].pop('child_count')
+                    else: authority['approval']['child_count'] = 2.0
+                    for number in (1, 18):
+                        value = m.metadata(bodies[number]); value['approval'] = authority['approval']
+                        self.gh.issues[number]['body'] = m.replace_block(bodies[number],
+                            '<!-- speckit-scope:metadata ' + json.dumps(value) + ' -->')
+                elif conflict == 'dependency':
+                    self.gh.add(2, status='Done')['state'] = 'closed'; self.gh.deps[1].add(2)
+                else: authority[conflict] = {'parent': 17, 'score': 5, 'prompt': 'Changed', 'fingerprint': 'c' * 64}[conflict]
+                with self.subTest(conflict=conflict), self.assertRaises(m.ScopeError):
+                    self.app.revalidate_accepted('specs/001-new', {}, authority)
+            self.gh.deps[1] = set(); self.gh.issues[1]['body'] = bodies[1]
+            self.gh.children[18] = {1, 20}
+            self.gh.issues[18]['body'] = m.replace_block(bodies[18],
+                '<!-- speckit-scope:metadata ' + json.dumps(dict(parent, children=[1, 20])) + ' -->')
+            # The legacy contract retained membership/count, not the unrecorded sibling IDs.
+            self.app.revalidate_accepted('specs/001-new', {}, original)
+            with self.assertRaisesRegex(m.ScopeError, 'parent_children'):
+                self.app.revalidate_accepted('specs/001-new', {}, dict(original, parent_children=[1, 19]))
+        self.assertEqual(writes, self.gh.writes)
+        self.assertEqual(before, {p.relative_to(self.root).as_posix(): p.read_bytes() for p in self.root.rglob('*') if p.is_file()})
+
     def prepare_root_kept_whole(self):
         snap, analysis = self.analysis(); self.publish_approved(snap, analysis)
         self.gh.statuses[1] = 'Feature Specification'; self.app._board = None
