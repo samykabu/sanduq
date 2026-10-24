@@ -569,7 +569,7 @@ class Scope:
             nodes = self.validate_analysis(snapshot, analysis)
             require(len(nodes) == 1 and analysis['tree']['score'] == score,
                     'SCOPE_FRESH_APPROVED_LEAF_REQUIRED')
-            parent_number = self.retained_parent(issue, receipt)
+            family = self.retained_family(issue, receipt)
             # A local replacement inherits owner resolutions only when the exact consumed
             # artifact was applied through Decisions and still matches its recorded bytes.
             # Publish prefixes the issue and effort, so the approved analysis's own prompt is unchanged too.
@@ -590,10 +590,10 @@ class Scope:
                           analysis_role='applied-resolution' if revised else 'consulted',
                           applied_analysis_sha256=artifact_sha,
                           analysis_sha256=hashlib.sha256(json.dumps(analysis, sort_keys=True).encode()).hexdigest(),
-                          approval=receipt['approval'], parent=parent_number, publication_required=False)
+                          approval=receipt['approval'], **family, publication_required=False)
         return result
 
-    def retained_parent(self, issue, receipt):
+    def retained_family(self, issue, receipt):
         """Validate native leaf membership and the exact retained parent approval."""
         require(not self.gh.api(f'{self.base}/{issue["number"]}/sub_issues?per_page=100', pages=True),
                 'SCOPE_PARENT: native children exist')
@@ -601,19 +601,33 @@ class Scope:
         parent_number = parent.get('number') if isinstance(parent, dict) else None
         # A root issue kept whole has no parent and no retained parent approval; a child that lost its parent does.
         require(parent_number or not receipt['approval'].get('child_count'), 'SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH')
+        parent_children = []
         if parent_number:
-            parent_receipt = metadata(self.issue(parent_number).get('body'))
+            parent_issue = self.issue(parent_number)
+            require(self.same_repository(parent_issue), 'SCOPE_NATIVE_PARENT_MISMATCH')
+            parent_receipt = metadata(parent_issue.get('body'))
             require(issue['number'] in parent_receipt.get('children', [])
                     and parent_receipt.get('approval') == receipt['approval'],
                     'SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH')
             children = self.gh.api(f'{self.base}/{parent_number}/sub_issues?per_page=100', pages=True)
-            require(any(child.get('number') == issue['number'] for child in children), 'SCOPE_NATIVE_PARENT_MISMATCH')
-        return parent_number
+            parent_children = sorted(child['number'] for child in children)
+            require(issue['number'] in parent_children and
+                    sorted(parent_receipt.get('children', [])) == parent_children, 'SCOPE_NATIVE_PARENT_MISMATCH')
+        return {'parent': parent_number, 'parent_children': parent_children}
 
     def revalidate_accepted(self, feature, accepted, original):
         """Recheck an accepted receipt, never an ordinary claim or approval carry-forward."""
         workflow_policy.accepted_receipt(self.root, self.repo, original['issue'], feature, accepted)
-        # Every recovery invocation owns a new live board and prerequisite snapshot.
+        live = self.validate_binding(original)
+        require(original.get('parent') == live['parent'], 'SCOPE_RECOVERY_AUTHORITY_CHANGED: parent')
+        if live['parent']:
+            require(original.get('parent_children') == live['parent_children'],
+                    'SCOPE_RECOVERY_CHILD_HISTORY_MISSING_OR_CHANGED')
+        return live
+
+    def validate_binding(self, original):
+        """Fresh approved authority, without claim admission, cache writes or publication."""
+        # Each invocation owns a new live board and prerequisite snapshot.
         self._board = {x['content']['number']: x for x in self.read_board_items()}
         self._board_cached = False
         initial = self.issue(original['issue'])
@@ -626,21 +640,13 @@ class Scope:
         receipt = self.approved_leaf(snapshot)
         require(receipt.get('version') == 2 and original.get('approval'),
                 'SCOPE_RECOVERY_APPROVAL_HISTORY_REQUIRED')
-        parent = self.retained_parent(issue, receipt)
-        parent_children = []
-        if parent:
-            parent_issue = self.issue(parent)
-            require(self.same_repository(parent_issue), 'SCOPE_RECOVERY_ISSUE_MISMATCH')
-            parent_children = sorted(x['number'] for x in self.gh.api(
-                f'{self.base}/{parent}/sub_issues?per_page=100', pages=True))
-            require(original.get('parent_children') == parent_children
-                    and sorted(metadata(parent_issue.get('body')).get('children', [])) == parent_children,
-                    'SCOPE_RECOVERY_CHILD_HISTORY_MISSING_OR_CHANGED')
+        family = self.retained_family(issue, receipt)
         for key in ('score', 'prompt', 'fingerprint', 'dependencies', 'approval'):
             expected = original.get('published_prompt', original.get('prompt')) if key == 'prompt' else original.get(key)
             require(receipt.get(key) == expected, 'SCOPE_RECOVERY_AUTHORITY_CHANGED: ' + key)
-        require(original.get('parent') == parent, 'SCOPE_RECOVERY_AUTHORITY_CHANGED: parent')
-        return {'metadata': receipt, 'parent': parent, 'parent_children': parent_children, 'snapshot': snapshot,
+        for key in ('parent', 'parent_children'):
+            require(key not in original or original[key] == family[key], 'SCOPE_RECOVERY_AUTHORITY_CHANGED: ' + key)
+        return {'metadata': receipt, **family, 'snapshot': snapshot,
                 'identity': {k: initial.get(k) for k in ('id', 'node_id', 'number', 'repository_url', 'html_url', 'user')},
                 'status': self.status(issue),
                 'local_paths': [p.relative_to(self.root).as_posix() for p in (
@@ -1229,6 +1235,8 @@ class Scope:
         checked = self.gate(value, 'Feature Specification' if resuming else 'Backlog',
                             feature=feature, token=token, session=session, analysis=analysis, analysis_path=analysis_path,
                             snapshot_path=snapshot_path, initial=initial)
+        require(isinstance(checked.get('dependencies'), list) and all(type(n) is int and n > 0
+                for n in checked['dependencies']), 'SCOPE_BINDING_PREREQUISITES_REQUIRED')
         issue = initial
         state_path = self.root / self.cfg['stateFile']
         state = read_json(state_path, {})

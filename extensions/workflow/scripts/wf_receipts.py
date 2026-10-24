@@ -496,6 +496,28 @@ def ci_evidence_current(root, receipt):
     return evidence['source_key'] in keys and receipt.get('source_key') in keys
 
 
+def scope_proof_authority(proof, source):
+    """Join an accepted native gate proof to its binding, refusing conflicting frozen authority."""
+    require(isinstance(proof, dict) and all(k in proof for k in
+            ('issue', 'score', 'prompt', 'fingerprint', 'dependencies')), 'SCOPE_PROOF_INVALID')
+    require(type(proof['issue']) is int and proof['issue'] == source.get('issue')
+            and isinstance(proof['dependencies'], list)
+            and all(type(n) is int and n > 0 for n in proof['dependencies']), 'SCOPE_PROOF_INVALID')
+    require(not proof.get('repo') or proof['repo'] == source.get('repo'), 'SCOPE_PROOF_BINDING_MISMATCH')
+    for key in ('score', 'fingerprint', 'dependencies', 'approval', 'parent', 'parent_children'):
+        require(key not in source or key not in proof or source[key] == proof[key],
+                'SCOPE_PROOF_AUTHORITY_CHANGED: ' + key)
+    expected = source.get('published_prompt', source.get('prompt'))
+    require(expected is None or expected == proof.get('published_prompt', proof['prompt']),
+            'SCOPE_PROOF_AUTHORITY_CHANGED: prompt')
+    authority = {**proof, **source}
+    approval = authority.get('approval')
+    require(isinstance(approval, dict) and approval.get('approved_by') and approval.get('approved_at')
+            and isinstance(approval.get('analysis_sha256'), str)
+            and re.fullmatch(r'[a-f0-9]{64}', approval.get('analysis_sha256', '')), 'SCOPE_PROOF_APPROVAL_REQUIRED')
+    return authority
+
+
 def validate_evidence_snapshots(root, receipt):
     snapshots = receipt.get('evidence_snapshots', [])
     require(isinstance(snapshots, list) and all(isinstance(p, str) for p in snapshots)

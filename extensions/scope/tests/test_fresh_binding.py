@@ -78,6 +78,34 @@ class FreshBindingTests(unittest.TestCase):
         self.assertEqual(self.gh.writes, before)
         self.assertEqual(self.gh.statuses[1], 'Feature Specification')
 
+    def test_parented_gate_and_bind_preserve_frozen_recovery_authority(self):
+        analysis = self.prepare_published_child()
+        with patch.object(m.workflow_policy, '_decisions_module', return_value=self.decisions()):
+            proof = self.app.gate('1', feature='specs/001-new', token='owned', session='session', analysis=analysis)
+        self.assertEqual(proof['parent_children'], [1])
+        self.assertEqual(proof['dependencies'], [])
+        original = dict(proof, repo='acme/app')
+        before = {p.relative_to(self.root).as_posix(): p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
+        with patch.object(m.workflow_policy, 'accepted_receipt', return_value={}):
+            live = self.app.revalidate_accepted('specs/001-new', {'stage': 'scope', 'outcome': 'passed'}, original)
+            self.assertEqual(live['parent_children'], [1])
+            self.gh.add(19); self.gh.children[18].add(19)
+            with self.assertRaisesRegex(m.ScopeError, 'SCOPE_NATIVE_PARENT_MISMATCH'):
+                self.app.revalidate_accepted('specs/001-new', {'stage': 'scope', 'outcome': 'passed'}, original)
+        self.assertEqual(before, {p.relative_to(self.root).as_posix(): p.read_bytes() for p in self.root.rglob('*') if p.is_file()})
+
+    def test_published_native_parent_history_is_exported_without_bypassing_pending_plan(self):
+        snapshot, analysis = self.analysis(split=True)
+        self.publish_approved(snapshot, analysis)
+        children = sorted(self.gh.children[1])
+        child = self.gh.issues[children[0]]
+        approval = m.metadata(child['body'])['approval']
+        self.assertEqual(approval, m.metadata(self.gh.issues[1]['body'])['approval'])
+        family = self.app.retained_family(child, m.metadata(child['body']))
+        self.assertEqual(family, {'parent': 1, 'parent_children': children})
+        with self.assertRaisesRegex(m.ScopeError, 'SCOPE_PLAN_PENDING'):
+            self.app.gate(str(child['number']))
+
     def prepare_root_kept_whole(self):
         snap, analysis = self.analysis(); self.publish_approved(snap, analysis)
         self.gh.statuses[1] = 'Feature Specification'; self.app._board = None
@@ -132,6 +160,8 @@ class FreshBindingTests(unittest.TestCase):
             result = self.app.bind('1', True, feature='specs/001-new', token='owned', session='session', analysis=analysis)
         self.assertEqual(result['feature'], '001-new')
         self.assertEqual(m.read_json(feature / 'scope-source.json')['issue'], 1)
+        self.assertEqual(m.read_json(feature / 'scope-source.json')['parent_children'], [1])
+        self.assertEqual(m.read_json(feature / 'scope-source.json')['dependencies'], [])
 
     def test_scope_claim_cannot_bind_or_create_any_artifact(self):
         analysis = self.prepare_published_child()

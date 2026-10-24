@@ -3,6 +3,7 @@
 ## [1.18.1] - 2026-10-24 (pending release)
 
 - Added explicit, assessed accepted-Scope recovery through `revalidate-upstream --through scope --plan` and `--receipt ... --apply`. Historical raw evidence, attributes, approval, decisions and writer guards fail closed; other receipts remain unchanged.
+- Missing historical parent membership is recovered only from an accepted immutable gate proof with matching approval. PR completion can read omitted legacy prerequisites from accepted Scope proof and fresh provider validation without rewriting the binding.
 - Recovery records its exact plan and previous receipt through the checkpoint/lifecycle outbox. Scope 1.11.1 supplies the compatible read-only provider validation. Implementation and package validation remain in progress.
 
 ## [1.18.0] - 2026-10-21

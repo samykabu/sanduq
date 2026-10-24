@@ -3,6 +3,7 @@
 ## [1.11.1] - 2026-10-24 (pending release)
 
 - Shared approved-leaf and retained-parent validation with Workflow accepted-Scope recovery. Recovery fetches current provider state without cache, publication or claim writes; ordinary claim admission remains unchanged.
+- Fresh managed bindings retain the approved parent's exact native child list and prerequisites; a pending dependency plan still blocks admission.
 - Requires Workflow 1.18.1 for the read-only decision ledger helper. Implementation and package validation remain in progress.
 
 ## [1.11.0] - 2026-10-21

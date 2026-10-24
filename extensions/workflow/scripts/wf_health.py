@@ -390,6 +390,53 @@ def lean_preflight(root, policy):
                 'checks': [], 'failed': ['manifest'], 'error': str(exc)}
 
 
+def legacy_scope_prerequisites(root, feature, state, source):
+    """Read missing legacy prerequisites from accepted proof and fresh provider, without changing the binding."""
+    from types import SimpleNamespace
+    from wf_receipts import scope_proof_authority, validate_evidence_snapshots
+    from wf_scope_revalidation import raw, provider
+    label = feature + '/scope-source.json'
+    source_bytes = raw(root, label)
+    try:
+        require(json.loads(source_bytes) == source, 'PR_LINT_SCOPE_BINDING_CHANGED: ' + label)
+    except ValueError as exc:
+        raise WorkflowError('PR_LINT_SCOPE_BINDING_CHANGED: ' + label) from exc
+    accepted = state.get('receipts', {}).get('scope') or {}
+    require(state.get('feature') == feature and accepted.get('stage') == 'scope'
+            and accepted.get('outcome') == 'passed' and not accepted.get('stale'),
+            'PR_LINT_SCOPE_PROOF_REQUIRED: accepted Scope receipt for ' + label)
+    source_hash = fingerprint_files(root, [label])[label]
+    require(any(item.get('outcome') == 'passed' and not item.get('stale')
+                and item.get('fingerprints', {}).get(label) == source_hash
+                for item in state['receipts'].values()), 'PR_LINT_SCOPE_BINDING_UNTRUSTED: ' + label)
+    validate_evidence_snapshots(root, accepted)
+    proofs, proof_bytes = [], {}
+    searched = accepted.get('evidence') or []
+    for path in searched:
+        try:
+            data = raw(root, path)
+            proof_bytes[path] = data
+            expected = accepted.get('fingerprints', {}).get(path)
+            require(expected and fingerprint_files(root, [path])[path] == expected,
+                    'PR_LINT_SCOPE_PROOF_CHANGED: ' + path)
+            try:
+                proof = json.loads(data)
+            except ValueError:
+                continue
+            if isinstance(proof, dict) and all(k in proof for k in ('issue', 'score', 'prompt', 'fingerprint', 'dependencies')):
+                proofs.append((path, scope_proof_authority(proof, source)))
+        except (WorkflowError, OSError, ValueError) as exc:
+            raise WorkflowError('PR_LINT_SCOPE_PROOF_INVALID: ' + path + ': ' + str(exc)) from exc
+    require(proofs, 'PR_LINT_SCOPE_PROOF_REQUIRED: ' + label + '; accepted evidence paths: ' + json.dumps(searched))
+    authority = proofs[0][1]
+    require(all(item == authority for _, item in proofs), 'PR_LINT_SCOPE_PROOF_CONFLICT: ' + json.dumps(searched))
+    provider(SimpleNamespace(root=Path(root), relative=feature), None, authority)
+    require(raw(root, label) == source_bytes, 'PR_LINT_SCOPE_BINDING_CHANGED: ' + label)
+    for path, data in proof_bytes.items():
+        require(raw(root, path) == data, 'PR_LINT_SCOPE_PROOF_CHANGED: ' + path)
+    return authority['dependencies'], [path for path, _ in proofs]
+
+
 def pr_lint_binding(root, feature, state, receipt):
     """Recompute exact-body lint from native Scope binding, never a submitted success flag."""
     source_label = feature + '/scope-source.json'
@@ -397,8 +444,13 @@ def pr_lint_binding(root, feature, state, receipt):
     repo, issue = state['issue'].split('#')
     require(same_github_repository(github_repository(root), repo), 'PR_LINT_REPOSITORY_MISMATCH')
     require((source.get('repo'), source.get('issue')) == (repo, int(issue)), 'PR_LINT_SCOPE_BINDING_MISMATCH')
-    require('dependencies' in source and isinstance(source['dependencies'], list) and
-            all(type(n) is int and n > 0 for n in source['dependencies']), 'PR_LINT_SCOPE_PREREQUISITES_REQUIRED')
+    proof_paths = []
+    if 'dependencies' in source:
+        dependencies = source['dependencies']
+        require(isinstance(dependencies, list) and all(type(n) is int and n > 0 for n in dependencies),
+                'PR_LINT_SCOPE_PREREQUISITES_REQUIRED')
+    else:
+        dependencies, proof_paths = legacy_scope_prerequisites(root, feature, state, source)
     body_label = canonical_path(root, receipt.get('pr_body_file', ''))
     lint_label = canonical_path(root, receipt.get('pr_lint_file', ''))
     require(body_label != lint_label and body_label in receipt['evidence'] and lint_label in receipt['evidence'],
@@ -407,11 +459,12 @@ def pr_lint_binding(root, feature, state, receipt):
         body = inside(root, body_label).read_bytes().decode('utf-8')
     except (OSError, UnicodeDecodeError) as exc:
         raise WorkflowError('PR_LINT_BODY_UNREADABLE: ' + str(body_label) + ': ' + str(exc)) from exc
-    computed = execution_tools.pr_lint(body, repo, int(issue), source['dependencies'])
+    computed = execution_tools.pr_lint(body, repo, int(issue), dependencies)
     require(computed['ok'], 'PR_CLOSING_REFERENCE_REJECTED: ' + json.dumps(computed['violations']))
     recorded = read(inside(root, lint_label), {})
     require(recorded == computed, 'PR_LINT_RECEIPT_MISMATCH: regenerate lint for the exact sent body')
     require(receipt.get('pr_body_sha256') == computed['body_sha256'], 'PR_SENT_BODY_SHA_MISMATCH')
     return {'body': body_label, 'lint': lint_label, 'scope': source_label,
+            **({'prerequisite_evidence': proof_paths} if proof_paths else {}),
             'body_sha256': computed['body_sha256'], 'bound': computed['bound'],
-            'prerequisites': sorted(set(source['dependencies']))}
+            'prerequisites': sorted(set(dependencies))}

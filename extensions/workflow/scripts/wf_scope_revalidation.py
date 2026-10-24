@@ -14,7 +14,7 @@ import wf_core as core
 from wf_core import (WorkflowError, require, read, digest, canonical_path, _no_link_below,
                      git, run_git, locked, now, checkpoint_policy_digest)
 from wf_fingerprints import fingerprint_files, source_fingerprints_of, source_fingerprints
-from wf_receipts import required_inputs, validate_evidence_snapshots
+from wf_receipts import required_inputs, validate_evidence_snapshots, scope_proof_authority
 from sanduq_hash import portable_content, text_attributes
 import evidence_snapshot
 import lifecycle
@@ -114,11 +114,34 @@ def provider(run, receipt, original):
     spec = importlib.util.spec_from_file_location('sanduq_scope_recovery_provider', source)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    require(hasattr(module.Scope, 'revalidate_accepted'), 'SCOPE_RECOVERY_PROVIDER_INCOMPATIBLE: Scope 1.11.1 required')
+    required = 'validate_binding' if receipt is None else 'revalidate_accepted'
+    require(hasattr(module.Scope, required), 'SCOPE_RECOVERY_PROVIDER_INCOMPATIBLE: Scope 1.11.1 required')
     try:
-        return module.Scope(run.root).revalidate_accepted(run.relative, receipt, original)
+        app = module.Scope(run.root)
+        return app.validate_binding(original) if receipt is None else app.revalidate_accepted(run.relative, receipt, original)
     except module.ScopeError as exc:
         raise WorkflowError(str(exc)) from exc
+
+
+def historical_scope_authority(root, anchor, receipt, original):
+    """Recover omitted fields only from this acceptance's immutable native gate evidence."""
+    if not original.get('approval') or (original.get('parent') and 'parent_children' not in original):
+        # Older bindings omitted provenance. Only an already accepted, immutable gate proof can supply it.
+        proofs = []
+        for label in receipt.get('evidence', []):
+            data = blob(root, anchor, canonical_path(root, label))
+            attr = historical_attributes(root, anchor, [label])[label]
+            require(sha(portable_content(label, data, attr)) == receipt['fingerprints'][label],
+                    'SCOPE_RECOVERY_HISTORY_UNPROVEN: ' + label)
+            try:
+                proof = json.loads(data)
+            except ValueError:
+                continue
+            if isinstance(proof, dict) and all(k in proof for k in ('issue', 'score', 'prompt', 'fingerprint', 'dependencies')):
+                proofs.append(scope_proof_authority(proof, original))
+        require(proofs and all(p == proofs[0] for p in proofs), 'SCOPE_RECOVERY_APPROVAL_HISTORY_REQUIRED')
+        original = proofs[0]
+    return original
 
 
 def writer_guards(run, state):
@@ -172,24 +195,7 @@ def _plan(run):
     source_attr = historical_attributes(run.root, anchor, [source_label])[source_label]
     require(sha(portable_content(source_label, original_bytes, source_attr)) in bound,
             'SCOPE_RECOVERY_AUTHORITY_HISTORY_UNBOUND')
-    if not original.get('approval'):
-        # Older bindings omitted provenance. Only an already accepted, immutable gate proof can supply it.
-        proofs = []
-        for label in historical_receipt.get('evidence', []):
-            data = blob(run.root, anchor, canonical_path(run.root, label))
-            attr = historical_attributes(run.root, anchor, [label])[label]
-            require(sha(portable_content(label, data, attr)) == historical_receipt['fingerprints'][label],
-                    'SCOPE_RECOVERY_HISTORY_UNPROVEN: ' + label)
-            try:
-                proof = json.loads(data)
-            except ValueError:
-                continue
-            if isinstance(proof, dict) and proof.get('approval') and all(
-                    proof.get(k) == original.get(k) for k in ('issue', 'score', 'prompt', 'fingerprint', 'dependencies')):
-                proofs.append(proof)
-        require(proofs and all(p == proofs[0] for p in proofs), 'SCOPE_RECOVERY_APPROVAL_HISTORY_REQUIRED')
-        original = {**original, 'approval': proofs[0]['approval'], 'parent': proofs[0].get('parent'),
-                    'parent_children': proofs[0].get('parent_children')}
+    original = historical_scope_authority(run.root, anchor, historical_receipt, original)
     live = provider(run, receipt, original)
     score = receipt.get('effort_score', state.get('effort_score', original.get('score')))
     require(score == original.get('score'), 'SCOPE_RECOVERY_EFFORT_CHANGED')

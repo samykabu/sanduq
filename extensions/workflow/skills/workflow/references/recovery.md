@@ -52,6 +52,9 @@ transition needs the original accepted checkpoint in reachable Git history and e
 bytes from Git or an already accepted, validated evidence snapshot. The original approval
 must be in the accepted binding or an accepted gate proof. Missing history blocks recovery.
 Equal parsed JSON or a matching normalized hash alone cannot establish unchanged bytes.
+For a parented leaf, the historical binding or accepted gate proof must also retain the exact
+`parent_children` list. A missing list can come only from that immutable proof, never today's
+provider response. Its approval must agree with any approval already in the binding.
 
 Write an assessment using `schemas/scope-revalidation-v1.schema.json`. For example, after
 reviewing the empty decision ledger and both Scope proofs for the refund feature:
