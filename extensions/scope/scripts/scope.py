@@ -593,10 +593,24 @@ class Scope:
                           approval=receipt['approval'], **family, publication_required=False)
         return result
 
-    def retained_family(self, issue, receipt):
+    def retained_family(self, issue, receipt, accepted=None):
         """Validate native leaf membership and the exact retained parent approval."""
-        require(not self.gh.api(f'{self.base}/{issue["number"]}/sub_issues?per_page=100', pages=True),
-                'SCOPE_PARENT: native children exist')
+        children = self.gh.api(f'{self.base}/{issue["number"]}/sub_issues?per_page=100', pages=True)
+        if children:
+            require(accepted is not None, 'SCOPE_PARENT: native children exist')
+            require(all(self.same_repository(child) for child in children), 'SCOPE_PARENT: unproven native task child')
+            native_ids = {(child['number'], child['id']) for child in children}
+            children = [self.issue(child['number']) for child in children]
+            for child in children:
+                parent = self.native_parent(child['number'])
+                require((child['number'], child['id']) in native_ids
+                        and self.same_repository(child) and not metadata(child.get('body'))
+                        and isinstance(parent, dict) and parent.get('number') == issue['number']
+                        and self.same_repository(parent), 'SCOPE_PARENT: unproven native task child')
+            try:
+                workflow_policy.accepted_task_children(self.root, self.repo, issue['number'], *accepted, children)
+            except ValueError as exc:
+                raise ScopeError(str(exc)) from exc
         parent = self.native_parent(issue['number'])
         parent_number = parent.get('number') if isinstance(parent, dict) else None
         # A root issue kept whole has no parent and no retained parent approval; a child that lost its parent does.
@@ -617,8 +631,8 @@ class Scope:
 
     def revalidate_accepted(self, feature, accepted, original):
         """Recheck an accepted receipt, never an ordinary claim or approval carry-forward."""
-        workflow_policy.accepted_receipt(self.root, self.repo, original['issue'], feature, accepted)
-        live = self.validate_binding(original)
+        state = workflow_policy.accepted_receipt(self.root, self.repo, original['issue'], feature, accepted)
+        live = self.validate_binding(original, accepted=(feature, state))
         require(original.get('parent') == live['parent'], 'SCOPE_RECOVERY_AUTHORITY_CHANGED: parent')
         if live['parent'] and 'parent_children' in original:
             require(original.get('parent_children') == live['parent_children'],
@@ -629,7 +643,7 @@ class Scope:
                     'SCOPE_RECOVERY_APPROVED_CHILD_COUNT_CHANGED')
         return live
 
-    def validate_binding(self, original):
+    def validate_binding(self, original, accepted=None):
         """Fresh approved authority, without claim admission, cache writes or publication."""
         # Each invocation owns a new live board and prerequisite snapshot.
         self._board = {x['content']['number']: x for x in self.read_board_items()}
@@ -644,7 +658,7 @@ class Scope:
         receipt = self.approved_leaf(snapshot)
         require(receipt.get('version') == 2 and original.get('approval'),
                 'SCOPE_RECOVERY_APPROVAL_HISTORY_REQUIRED')
-        family = self.retained_family(issue, receipt)
+        family = self.retained_family(issue, receipt, accepted=accepted)
         for key in ('score', 'prompt', 'fingerprint', 'dependencies', 'approval'):
             expected = original.get('published_prompt', original.get('prompt')) if key == 'prompt' else original.get(key)
             require(receipt.get(key) == expected, 'SCOPE_RECOVERY_AUTHORITY_CHANGED: ' + key)

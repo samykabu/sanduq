@@ -176,6 +176,68 @@ class FreshBindingTests(unittest.TestCase):
         self.assertIsNone(result['parent'])
         self.assertFalse(result['publication_required'])
 
+    def test_accepted_native_tasks_require_bound_mapping_and_exact_markers(self):
+        self.prepare_root_kept_whole()
+        workflow = m.workflow_policy._workflow_module()
+        import task_issues
+        feature = 'specs/001-new'; directory = self.root / feature
+        original = dict(m.metadata(self.gh.issues[1]['body']), repo='acme/app', issue=1, parent=None)
+        m.write_json(directory / 'scope-source.json', original)
+        (directory / 'tasks.md').write_text('- [x] T001 Refund approval\n- [x] T002 Refund audit\n')
+        task_issues.sync(self.root, feature, 1, {}, apply=True, github=self.gh)
+        labels = [feature + '/workflow/task-issues.json', feature + '/tasks.md']
+        mapping_path = self.root / labels[0]; mapping_bytes = mapping_path.read_bytes()
+        mapping = m.read_json(mapping_path)
+        child = mapping['tasks']['T001']['number']; body = self.gh.issues[child]['body']
+        marker = json.loads(task_issues.MARKER.search(body)[1])
+        for number in self.gh.children[1]: self.gh.issues[number]['state'] = 'closed'
+        proof = {'stage': 'taskstoissues', 'outcome': 'passed', 'parent_issue': 'acme/app#1',
+                 'native_links_verified': True, 'fingerprints': workflow.fingerprint_files(self.root, labels, feature=feature)}
+        state = {'receipts': {'taskstoissues': proof}}
+        before = {p.relative_to(self.root).as_posix(): p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
+        writes = list(self.gh.writes)
+        with patch.object(m.workflow_policy, 'accepted_receipt', return_value=state):
+            self.assertIsNone(self.app.revalidate_accepted(feature, {'stage': 'scope', 'outcome': 'passed'}, original)['parent'])
+            self.assertEqual(before, {p.relative_to(self.root).as_posix(): p.read_bytes() for p in self.root.rglob('*') if p.is_file()})
+            # Initial gate callers use this strict path without accepted receipt authority.
+            with self.assertRaisesRegex(m.ScopeError, 'SCOPE_PARENT'):
+                self.app.retained_family(self.gh.issues[1], m.metadata(self.gh.issues[1]['body']))
+            for field, value in [('repo', 'foreign/repo'), ('parent', 7), ('parent', True), ('feature', 'specs/other'), ('task', 'T099')]:
+                changed = dict(marker, **{field: value})
+                self.gh.issues[child]['body'] = '<!-- sanduq-task ' + json.dumps(changed) + ' -->'
+                with self.subTest(marker=field), self.assertRaisesRegex(m.ScopeError, 'TASK_CHILDREN_INVALID'):
+                    self.app.revalidate_accepted(feature, {}, original)
+            for bad_body in ('No marker', body + body, '<!-- sanduq-task {bad} -->',
+                             body + '<!-- speckit-scope:metadata {"children": [7]} -->'):
+                self.gh.issues[child]['body'] = bad_body
+                with self.subTest(body=bad_body), self.assertRaises(m.ScopeError):
+                    self.app.revalidate_accepted(feature, {}, original)
+            self.gh.issues[child]['body'] = body
+            self.gh.issues[child]['repository_url'] = 'https://api.github.com/repos/foreign/repo'
+            with self.assertRaisesRegex(m.ScopeError, 'unproven native task child'):
+                self.app.revalidate_accepted(feature, {}, original)
+            self.gh.issues[child]['repository_url'] = 'https://api.github.com/repos/acme/app'
+            parent_reader = self.app.native_parent
+            with patch.object(self.app, 'native_parent', side_effect=lambda n: {'number': 7} if n == child else parent_reader(n)):
+                with self.assertRaisesRegex(m.ScopeError, 'unproven native task child'):
+                    self.app.revalidate_accepted(feature, {}, original)
+            for change in ('unbound', 'changed', 'stale', 'repo', 'parent', 'feature', 'number', 'id', 'linked', 'task'):
+                altered = copy.deepcopy(mapping); checked = copy.deepcopy(proof)
+                if change == 'unbound': checked['fingerprints'].pop(labels[0])
+                elif change == 'stale': checked['stale'] = {'reason': 'changed'}
+                elif change in ('repo', 'parent', 'feature'): altered[change] = {'repo': 'other/repo', 'parent': 7, 'feature': 'specs/other'}[change]
+                elif change == 'task': altered['tasks']['T099'] = altered['tasks'].pop('T001')
+                else: altered['tasks']['T001'][{'changed': 'number'}.get(change, change)] = False if change == 'linked' else 999
+                m.write_json(mapping_path, altered)
+                if change not in ('unbound', 'changed', 'stale'):
+                    checked['fingerprints'] = workflow.fingerprint_files(self.root, labels, feature=feature)
+                state['receipts']['taskstoissues'] = checked
+                with self.subTest(mapping=change), self.assertRaisesRegex(m.ScopeError, 'TASK_CHILDREN_INVALID'):
+                    self.app.revalidate_accepted(feature, {}, original)
+            mapping_path.write_bytes(mapping_bytes); state['receipts']['taskstoissues'] = proof
+        self.assertEqual(writes, self.gh.writes)
+        self.assertEqual(before, {p.relative_to(self.root).as_posix(): p.read_bytes() for p in self.root.rglob('*') if p.is_file()})
+
     def test_fresh_gate_refuses_a_child_that_lost_its_parent(self):
         analysis = self.prepare_root_kept_whole()
         receipt = m.metadata(self.gh.issues[1]['body'])
