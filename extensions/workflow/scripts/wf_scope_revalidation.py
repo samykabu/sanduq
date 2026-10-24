@@ -59,6 +59,23 @@ def blob(root, revision, label):
     return result.stdout
 
 
+def proof_blob(root, anchor, name, expected, attr):
+    """Original proof bytes. Stage output is committed after its receipt's head, so look later in
+    reachable history, accepting only bytes that reproduce the recorded fingerprint under the
+    original attributes (or exact storage). Never a current file or a guessed hash."""
+    found = run_git(root, 'show', anchor + ':' + name)
+    if found.returncode == 0:
+        return found.stdout, anchor
+    matches = {}
+    for rev in git(root, 'rev-list', 'HEAD', '--', name).splitlines():
+        shown = run_git(root, 'show', rev + ':' + name)
+        if (shown.returncode == 0 and run_git(root, 'merge-base', '--is-ancestor', anchor, rev).returncode == 0
+                and expected in (sha(portable_content(name, shown.stdout, attr)), sha(shown.stdout))):
+            matches.setdefault(shown.stdout, rev)
+    require(len(matches) == 1, 'SCOPE_RECOVERY_HISTORY_MISSING: ' + anchor + ':' + name)
+    return next(iter(matches.items()))
+
+
 def historical_attributes(root, revision, paths):
     # Local/global attribute overrides have no immutable historical provenance.
     info = Path(git(root, 'rev-parse', '--git-path', 'info/attributes'))
@@ -123,14 +140,31 @@ def provider(run, receipt, original):
         raise WorkflowError(str(exc)) from exc
 
 
-def historical_scope_authority(root, anchor, receipt, original):
+def native_parent_children(root, anchor, feature, original, bound):
+    """Children of the retained parent approval, from the native parent proof under its recorded fingerprint."""
+    label = feature + '/scope/approved-parent-context/publication-result.json'
+    require(len(bound.get(label, ())) == 1, 'SCOPE_RECOVERY_APPROVAL_HISTORY_REQUIRED: unbound ' + label)
+    attr = historical_attributes(root, anchor, [label])[label]
+    data, _ = proof_blob(root, anchor, label, next(iter(bound[label])), attr)
+    try:
+        nodes = json.loads(data)['nodes']
+        parent, issue = original['parent'], original['issue']
+        children = sorted(n for n in nodes.values() if n != parent)
+        require(json.loads(data)['issue'] == parent and parent in nodes.values() and issue in children
+                and len(children) == original['approval'].get('child_count'), 'x')
+    except (ValueError, KeyError, TypeError, AttributeError, WorkflowError) as exc:
+        raise WorkflowError('SCOPE_RECOVERY_APPROVAL_HISTORY_REQUIRED: ' + label) from exc
+    return children
+
+
+def historical_scope_authority(root, anchor, receipt, original, feature=None, bound=None):
     """Recover omitted fields only from this acceptance's immutable native gate evidence."""
     if not original.get('approval') or (original.get('parent') and 'parent_children' not in original):
         # Older bindings omitted provenance. Only an already accepted, immutable gate proof can supply it.
         proofs = []
         for label in receipt.get('evidence', []):
-            data = blob(root, anchor, canonical_path(root, label))
             attr = historical_attributes(root, anchor, [label])[label]
+            data, _ = proof_blob(root, anchor, canonical_path(root, label), receipt['fingerprints'][label], attr)
             require(sha(portable_content(label, data, attr)) == receipt['fingerprints'][label],
                     'SCOPE_RECOVERY_HISTORY_UNPROVEN: ' + label)
             try:
@@ -139,6 +173,13 @@ def historical_scope_authority(root, anchor, receipt, original):
                 continue
             if isinstance(proof, dict) and all(k in proof for k in ('issue', 'score', 'prompt', 'fingerprint', 'dependencies')):
                 proofs.append(scope_proof_authority(proof, original))
+        if (not proofs and original.get('approval') and original.get('parent')
+                and 'parent_children' not in original and bound is not None):
+            # The gate proof predates the binding's family fields; the accepted parent proof supplies them.
+            proofs.append(scope_proof_authority(
+                {**{k: original[k] for k in ('issue', 'score', 'fingerprint', 'dependencies')},
+                 'prompt': original.get('published_prompt', original['prompt']),
+                 'parent_children': native_parent_children(root, anchor, feature, original, bound)}, original))
         require(proofs and all(p == proofs[0] for p in proofs), 'SCOPE_RECOVERY_APPROVAL_HISTORY_REQUIRED')
         original = proofs[0]
     return original
@@ -195,7 +236,12 @@ def _plan(run):
     source_attr = historical_attributes(run.root, anchor, [source_label])[source_label]
     require(sha(portable_content(source_label, original_bytes, source_attr)) in bound,
             'SCOPE_RECOVERY_AUTHORITY_HISTORY_UNBOUND')
-    original = historical_scope_authority(run.root, anchor, historical_receipt, original)
+    bound_hashes = {}
+    for item in list(previous['receipts'].values()) + [r for r in state['receipts'].values()
+                                                       if r.get('outcome') == 'passed' and not r.get('stale')]:
+        for name, value in item.get('fingerprints', {}).items():
+            bound_hashes.setdefault(name, set()).add(value)
+    original = historical_scope_authority(run.root, anchor, historical_receipt, original, run.relative, bound_hashes)
     live = provider(run, receipt, original)
     score = receipt.get('effort_score', state.get('effort_score', original.get('score')))
     require(score == original.get('score'), 'SCOPE_RECOVERY_EFFORT_CHANGED')
@@ -239,9 +285,10 @@ def _plan(run):
     paths, blockers = [], []
     for label in sorted(labels):
         name = canonical_path(run.root, label)
-        before = snapshots.get(name)
+        before, proof_commit = snapshots.get(name), anchor
         if before is None:
-            before = blob(run.root, anchor, name)
+            before, proof_commit = proof_blob(run.root, anchor, name, historical_receipt['fingerprints'][label],
+                                              old_attrs.get(name))
         # Historical context and raw bytes must independently reproduce the accepted hash.
         old_hash = sha(portable_content(name, before, old_attrs.get(name)))
         interpretation = 'historical-attributes'
@@ -264,7 +311,8 @@ def _plan(run):
                           'before_fingerprint': old_hash, 'after_fingerprint': current[label],
                           'before_attribute': old_attrs.get(name), 'after_attribute': current_attrs.get(name),
                           'before_interpretation': interpretation,
-                          'history': {'commit': anchor, 'path': name, 'snapshot': name in snapshots}})
+                          'history': {'commit': anchor, 'path': name, 'snapshot': name in snapshots,
+                                  **({'proof_commit': proof_commit} if proof_commit != anchor else {})}})
             continue
         if before == after and (old_attrs.get(name) != current_attrs.get(name) or interpretation == 'exact-retained-storage'):
             classification = 'unchanged-bytes-context-transition'
@@ -278,7 +326,8 @@ def _plan(run):
                       'before_fingerprint': old_hash, 'after_fingerprint': current[label],
                       'before_attribute': old_attrs.get(name), 'after_attribute': current_attrs.get(name),
                       'before_interpretation': interpretation,
-                      'history': {'commit': anchor, 'path': name, 'snapshot': name in snapshots}})
+                      'history': {'commit': anchor, 'path': name, 'snapshot': name in snapshots,
+                                  **({'proof_commit': proof_commit} if proof_commit != anchor else {})}})
 
     config = ['.specify/workflow.yml', '.specify/extensions/.registry', '.specify/extensions/project/config.json',
               '.specify/scope/plan-pending.json', '.specify/scope/prerequisite-overrides.json',

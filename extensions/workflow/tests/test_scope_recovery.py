@@ -105,6 +105,42 @@ class ScopeRecoveryTests(Harness):
                 'stages': {'scope': {'summary': 'Refund approval remains unchanged.', 'evidence': [evidence],
                                      'assessments': findings}}}
 
+    def commit_proofs_late(self, edit=None):
+        """Native shape: the accepted receipt is committed before its stage output is."""
+        self.git('reset', '--soft', 'HEAD~2')
+        self.git('rm', '--cached', '-f', '-q', '.gitattributes', *self.proof_paths)
+        self.git('commit', '-q', '-m', 'Accepted Scope receipt, proofs not yet committed')
+        self.anchor = self.git('rev-parse', 'HEAD')
+        if edit:
+            edit()
+        self.git('add', '--', *self.proof_paths)
+        self.git('commit', '-q', '-m', 'Stage output committed later')
+        self.late = self.git('rev-parse', 'HEAD')
+        self.write('.gitattributes', 'specs/** -text\n')
+        self.commit_all('Preserve feature bytes')
+
+    def test_proofs_committed_after_the_receipt_head_resolve_by_recorded_fingerprint(self):
+        self.commit_proofs_late()
+        before = self.persistent()
+        plan = recovery.plan(self.run)
+        self.assertEqual(plan['history_anchor'], self.anchor)
+        self.assertEqual(before, self.persistent())
+        gate = self.proof_paths[0]
+        (self.root / gate).write_bytes(b'{\r\n  "retained": true,\r\n  "edited": 1\r\n}\r\n')
+        item = next(p for p in recovery.plan(self.run)['paths'] if p['path'] == gate)
+        self.assertEqual((item['classification'], item['history']['proof_commit']), ('blocked', self.late))
+
+    def test_late_proof_with_unrecorded_bytes_or_no_history_is_rejected(self):
+        def alter():
+            (self.root / self.proof_paths[0]).write_bytes(b'{"forged": true}\r\n')
+        self.commit_proofs_late(alter)
+        with self.assertRaisesRegex(w.WorkflowError, 'HISTORY_MISSING'):
+            recovery.plan(self.run)
+        self.git('rm', '-q', '--', self.proof_paths[1])
+        self.git('commit', '-q', '-m', 'Drop proof')
+        with self.assertRaisesRegex(w.WorkflowError, 'HISTORY_MISSING|EVIDENCE_MISSING'):
+            recovery.plan(self.run)
+
     def test_legacy_crlf_plan_is_stable_and_completely_readonly(self):
         before = self.persistent()
         first = self.run.revalidate_upstream('scope', plan=True)

@@ -77,7 +77,8 @@ from wf_policy import (default_policy, select_gate, validate_policy, _positive, 
 from wf_health import (registry, compatible, active_host, command_exists, package_digest, resolve_commands,
                        project_errors, SCOPE_STATUSES, project_defaults, MANAGED_CI, preserved_ci_path, ci_errors,
                        delegation_errors, host_warnings, progress_wiring_warnings, guard_approval_warnings,
-                       doctor_cache_key, store_doctor_cache, cached_doctor, doctor, lean_preflight, pr_lint_binding)
+                       doctor_cache_key, store_doctor_cache, cached_doctor, doctor, lean_preflight, pr_lint_binding,
+                       legacy_scope_prerequisites)
 from wf_receipts import (verify_sync_binding, same_path, recorded_sync_fields, handoff_text, native_run_status,
                          sync_retry, context_gate, measured_context_gate, required_inputs, first_phase_tasks,
                          consulted_inputs, without_required, canonical_receipt, dependency_fingerprints, role_exempt,
@@ -86,7 +87,7 @@ from wf_receipts import (verify_sync_binding, same_path, recorded_sync_fields, h
                          _positive_int, _string_list, diff_review_command, diff_review_shell, diff_review_sha256,
                          ci_evidence_complete, ci_evidence_current, validate_evidence_snapshots, receipt_status,
                          receipt_current, recovery_recipe, upstream_drift, receipt_drift, ready_checks,
-                         coding_review_checks)
+                         coding_review_checks, scope_proof_authority)
 
 
 # Where `claim` tells the dispatcher to read this stage's own instructions, project-relative
