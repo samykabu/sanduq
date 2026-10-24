@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.18.1] - 2026-10-24 (pending release)
+
+- Added explicit, assessed accepted-Scope recovery through `revalidate-upstream --through scope --plan` and `--receipt ... --apply`. Historical raw evidence, attributes, approval, decisions and writer guards fail closed; other receipts remain unchanged.
+- Recovery records its exact plan and previous receipt through the checkpoint/lifecycle outbox. Scope 1.11.1 supplies the compatible read-only provider validation. Implementation and package validation remain in progress.
+
 ## [1.18.0] - 2026-10-21
 
 - The checkpoint has its own schema version, separate from the policy's. Version 2 drops `repo_path`. Workflow, the CI gate and Scope's claim check read versions 1 and 2; `start`, `relocate` and every other write produce version 2. `schemas/checkpoint-v1.schema.json` accepts both and refuses `repo_path` on version 2.

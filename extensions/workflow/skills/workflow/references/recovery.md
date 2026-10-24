@@ -34,6 +34,74 @@ a note alone.
 With `ci.gate.affected_command` set, drift the hook maps to no lane (Markdown, committed
 artifacts) keeps Verify, Review and Ready current; a failing hook fails closed.
 
+## Accepted Scope after an attribute change
+
+For the booking application's refund issue, preview without taking locks or writing files:
+
+```bash
+python .specify/extensions/workflow/scripts/workflow.py revalidate-upstream --feature specs/412-refund-approval --through scope --plan
+```
+
+Keep the output outside the consumer when checking a live project. The plan binds the exact
+checkpoint, Git history, index, attributes, policy, provider, decisions and proof bytes. It
+separates identical bytes with a changed fingerprint interpretation from real context edits.
+It also reports later receipt drift. It never runs product checks or refreshes those receipts.
+
+Read every proposed path and compare its historical and current evidence. An unchanged-byte
+transition needs the original accepted checkpoint in reachable Git history and exact old
+bytes from Git or an already accepted, validated evidence snapshot. The original approval
+must be in the accepted binding or an accepted gate proof. Missing history blocks recovery.
+Equal parsed JSON or a matching normalized hash alone cannot establish unchanged bytes.
+
+Write an assessment using `schemas/scope-revalidation-v1.schema.json`. For example, after
+reviewing the empty decision ledger and both Scope proofs for the refund feature:
+
+```json
+{
+  "schema": "sanduq.scope-revalidation.v1",
+  "plan_id": "<exact plan_id from this preview>",
+  "actor": "<person who assessed the evidence>",
+  "reason": "The byte guard changed interpretation; refund approval remains unchanged.",
+  "schema_transition": {"from": 1, "to": 2, "drops_repo_path": true},
+  "stages": {
+    "scope": {
+      "summary": "The approved refund requirements and decisions remain unchanged.",
+      "evidence": ["specs/412-refund-approval/evidence/scope/recovery.json"],
+      "assessments": [
+        {
+          "path": "specs/412-refund-approval/workflow/decisions.json",
+          "classification": "unchanged-bytes-context-transition",
+          "conclusion": "scope-unchanged",
+          "rationale": "The historical and current raw ledger bytes are identical; no decisions were added."
+        }
+      ]
+    }
+  }
+}
+```
+
+Use the preview's actual `schema_transition`, and add one finding for **every** proposed path,
+including both proofs in this example. Do not submit hashes. In the new `recovery.json` evidence,
+record exactly `schema`, `plan_id`, `scope_unchanged: true` and `findings`; `findings` contains
+the same assessed entries. The evidence must describe your actual comparison. For a real
+project-memory or deviation edit, use `context-edit` and explain how its exact before/after
+evidence preserves the approved Scope. All other substantive edits block this route.
+
+```bash
+python .specify/extensions/workflow/scripts/workflow.py revalidate-upstream --feature specs/412-refund-approval --through scope --receipt assessment.json --apply
+```
+
+Apply rereads provider and local state under writer, delegation and decision locks. A changed
+plan or evidence is refused. It retains the complete previous Scope receipt and assessment
+in `scope_revalidations`; every other receipt and original proof stays unchanged. A version-1
+checkpoint becomes version 2 only through the explicitly assessed canonical save. Resolve
+package or policy migrations separately. A lifecycle append failure reports committed recovery
+with a pending outbox; it does not undo the checkpoint.
+
+Later Verify, Review, Ready, QA, manual and PR gates still require their own current evidence.
+Changed approval, prompt, requirements, effort, prerequisites, parent/child membership or live
+decisions cannot be waived. Ordinary amendment eligibility and claim ownership are unchanged.
+
 ## Project Sync state
 
 Receipts fingerprint the configured state file (`stateFile`) as the bound feature's entry

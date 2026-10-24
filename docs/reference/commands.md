@@ -183,6 +183,8 @@ can run them to diagnose or recover:
 python .specify/extensions/workflow/scripts/lint.py --feature specs/412-refund-approval --json
 python .specify/extensions/workflow/scripts/lint.py --feature specs/412-refund-approval --record --token <active-token>
 # Re-record stages after an upstream document changed (no active claim)
+python .specify/extensions/workflow/scripts/workflow.py revalidate-upstream --feature specs/412-refund-approval --through scope --plan
+python .specify/extensions/workflow/scripts/workflow.py revalidate-upstream --feature specs/412-refund-approval --through scope --receipt <assessment.json> --apply
 python .specify/extensions/workflow/scripts/workflow.py revalidate-upstream --feature specs/412-refund-approval --through plan --plan
 python .specify/extensions/workflow/scripts/workflow.py revalidate-upstream --feature specs/412-refund-approval --through plan --receipt <stages.json>
 # Render the spec from the approved Scope analysis (single leaf, approved analysis only)

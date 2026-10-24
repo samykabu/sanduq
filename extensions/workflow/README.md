@@ -95,6 +95,11 @@ also skips the QA and User Manual stages and makes research, data model, quickst
 optional. Scores above 8 run the full chain. Skipped stages appear in `status`. Three more options
 shorten the front half: Scope 1.8.0 can render spec.md from the approved analysis so Specify only
 binds, the first clarification round can be answered in the session by the issue creator, and
+`revalidate-upstream --through scope --plan` previews evidence-backed recovery of an accepted
+Scope after a fingerprint-context change. The Scope route requires an exact assessed receipt and
+explicit `--apply`; missing historical bytes or approval block it. It preserves every later receipt
+and leaves their freshness checks independent. See [recovery](skills/workflow/references/recovery.md#accepted-scope-after-an-attribute-change).
+
 `revalidate-upstream` re-records every stale upstream receipt in one operation after a mid-run
 change. See the [changelog](CHANGELOG.md) for the policy keys.
 

@@ -312,15 +312,20 @@ class Scope:
             items = None if fresh or self._board_cached is not None else self.cached_board()
             self._board_cached = items is not None
             if items is None:
-                data = self.gh.command(['project', 'item-list', str(self.cfg['projectNumber']), '--owner', self.cfg['owner'], '--limit', '10000', '--format', 'json'])
-                require(data['totalCount'] <= len(data['items']), 'Project exceeds collection limit; refusing a partial board snapshot.')
-                items = [x for x in data['items'] if sanduq_remote.same_github_repository(x.get('content', {}).get('repository'), self.repo)
-                         and x['content'].get('type') == 'Issue']
+                items = self.read_board_items()
                 if self.board_ttl() > 0:
                     write_json(self.root / BOARD_CACHE, {'fetched_at': datetime.now(timezone.utc).isoformat(),
                                                          'repo': self.repo, 'items': items})
             self._board = {x['content']['number']: x for x in items}
         return self._board
+
+    def read_board_items(self):
+        """Fresh complete provider GET, with no persistent cache boundary."""
+        data = self.gh.command(['project', 'item-list', str(self.cfg['projectNumber']), '--owner', self.cfg['owner'], '--limit', '10000', '--format', 'json'])
+        require(data['totalCount'] <= len(data['items']), 'Project exceeds collection limit; refusing a partial board snapshot.')
+        items = [x for x in data['items'] if sanduq_remote.same_github_repository(x.get('content', {}).get('repository'), self.repo)
+                 and x['content'].get('type') == 'Issue']
+        return items
 
     def invalidate_board(self, memory=True):
         """Remove the shared cache (and, by default, this process's board) after a write to the board or an issue."""
@@ -552,25 +557,8 @@ class Scope:
         # The fresh path validates the analysis against the issue's images, so only it needs the full evidence.
         snapshot = self.load_snapshot(value, self.default_snapshot(value, snapshot_path), initial, evidence=bool(fresh))
         issue = snapshot['issue']
-        receipt = metadata(issue.get('body'))
-        require(not receipt.get('children'), 'SCOPE_PARENT: do not specify this aggregate issue; select a scoped leaf sub-issue.')
+        receipt = self.approved_leaf(snapshot)
         version, score = receipt.get('version'), receipt.get('score')
-        require((version == 1 and score in (1, 2, 3, 5)) or (version == 2 and score in EFFORTS),
-                'SCOPE_REQUIRED: missing approved scope score; run /speckit-scope-run first.')
-        if version == 2:
-            approved = receipt.get('approval', {})
-            require(approved.get('approved_by') and approved.get('approved_at') and
-                    re.fullmatch(r'[a-f0-9]{64}', approved.get('analysis_sha256', '')),
-                    'SCOPE_REQUIRED: missing user approval provenance.')
-        require(receipt.get('fingerprint') == fingerprint(issue), 'SCOPE_STALE: requirements changed; run /speckit-scope-run again.')
-        require(receipt.get('dependencies') == snapshot['dependencies'], 'SCOPE_STALE: prerequisites changed; run /speckit-scope-run again.')
-        pending = read_json(self.root / '.specify/scope/plan-pending.json', {})
-        require(pending.get('operation') != receipt.get('operation'),
-                'SCOPE_PLAN_PENDING: finish /speckit-scope-plan before specifying a newly decomposed issue.')
-        labels = {x['name'] for x in issue.get('labels', [])}
-        require(f'effort:{receipt["score"]}' in labels and 'scope:parent' not in labels, 'SCOPE_REQUIRED: effort label is missing or inconsistent; run /speckit-scope-run first.')
-        require(not snapshot['blocked'], rejection(snapshot['blocked']))
-        require(receipt.get('prompt'), 'SCOPE_REQUIRED: missing Specify prompt; run /speckit-scope-run first.')
         # `dependencies` (checked equal to the live prerequisites above) reaches scope-source.json through bind;
         # Workflow's PR lint and pr_publish read the prerequisites from there.
         result = {'issue': issue['number'], 'score': receipt['score'], 'prompt': receipt['prompt'],
@@ -581,19 +569,7 @@ class Scope:
             nodes = self.validate_analysis(snapshot, analysis)
             require(len(nodes) == 1 and analysis['tree']['score'] == score,
                     'SCOPE_FRESH_APPROVED_LEAF_REQUIRED')
-            require(not self.gh.api(f'{self.base}/{issue["number"]}/sub_issues?per_page=100', pages=True),
-                    'SCOPE_PARENT: native children exist')
-            parent = self.native_parent(issue['number'])
-            parent_number = parent.get('number') if isinstance(parent, dict) else None
-            # A root issue kept whole has no parent and no retained parent approval; a child that lost its parent does.
-            require(parent_number or not receipt['approval'].get('child_count'), 'SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH')
-            if parent_number:
-                parent_receipt = metadata(self.issue(parent_number).get('body'))
-                require(issue['number'] in parent_receipt.get('children', [])
-                        and parent_receipt.get('approval') == receipt['approval'],
-                        'SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH')
-                children = self.gh.api(f'{self.base}/{parent_number}/sub_issues?per_page=100', pages=True)
-                require(any(child.get('number') == issue['number'] for child in children), 'SCOPE_NATIVE_PARENT_MISMATCH')
+            parent_number = self.retained_parent(issue, receipt)
             # A local replacement inherits owner resolutions only when the exact consumed
             # artifact was applied through Decisions and still matches its recorded bytes.
             # Publish prefixes the issue and effort, so the approved analysis's own prompt is unchanged too.
@@ -616,6 +592,83 @@ class Scope:
                           analysis_sha256=hashlib.sha256(json.dumps(analysis, sort_keys=True).encode()).hexdigest(),
                           approval=receipt['approval'], parent=parent_number, publication_required=False)
         return result
+
+    def retained_parent(self, issue, receipt):
+        """Validate native leaf membership and the exact retained parent approval."""
+        require(not self.gh.api(f'{self.base}/{issue["number"]}/sub_issues?per_page=100', pages=True),
+                'SCOPE_PARENT: native children exist')
+        parent = self.native_parent(issue['number'])
+        parent_number = parent.get('number') if isinstance(parent, dict) else None
+        # A root issue kept whole has no parent and no retained parent approval; a child that lost its parent does.
+        require(parent_number or not receipt['approval'].get('child_count'), 'SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH')
+        if parent_number:
+            parent_receipt = metadata(self.issue(parent_number).get('body'))
+            require(issue['number'] in parent_receipt.get('children', [])
+                    and parent_receipt.get('approval') == receipt['approval'],
+                    'SCOPE_RETAINED_PARENT_APPROVAL_MISMATCH')
+            children = self.gh.api(f'{self.base}/{parent_number}/sub_issues?per_page=100', pages=True)
+            require(any(child.get('number') == issue['number'] for child in children), 'SCOPE_NATIVE_PARENT_MISMATCH')
+        return parent_number
+
+    def revalidate_accepted(self, feature, accepted, original):
+        """Recheck an accepted receipt, never an ordinary claim or approval carry-forward."""
+        workflow_policy.accepted_receipt(self.root, self.repo, original['issue'], feature, accepted)
+        # Every recovery invocation owns a new live board and prerequisite snapshot.
+        self._board = {x['content']['number']: x for x in self.read_board_items()}
+        self._board_cached = False
+        initial = self.issue(original['issue'])
+        require(initial.get('number') == original['issue'] and self.same_repository(initial), 'SCOPE_RECOVERY_ISSUE_MISMATCH')
+        snapshot = self.inspect(initial, evidence=False)
+        issue = snapshot['issue']
+        require(issue.get('state') == 'open' and self.status(issue) in {
+            'Backlog', 'Feature Specification', 'Need Clarifications', 'Ready', 'In progress', 'In review'},
+            'SCOPE_RECOVERY_INELIGIBLE')
+        receipt = self.approved_leaf(snapshot)
+        require(receipt.get('version') == 2 and original.get('approval'),
+                'SCOPE_RECOVERY_APPROVAL_HISTORY_REQUIRED')
+        parent = self.retained_parent(issue, receipt)
+        parent_children = []
+        if parent:
+            parent_issue = self.issue(parent)
+            require(self.same_repository(parent_issue), 'SCOPE_RECOVERY_ISSUE_MISMATCH')
+            parent_children = sorted(x['number'] for x in self.gh.api(
+                f'{self.base}/{parent}/sub_issues?per_page=100', pages=True))
+            require(original.get('parent_children') == parent_children
+                    and sorted(metadata(parent_issue.get('body')).get('children', [])) == parent_children,
+                    'SCOPE_RECOVERY_CHILD_HISTORY_MISSING_OR_CHANGED')
+        for key in ('score', 'prompt', 'fingerprint', 'dependencies', 'approval'):
+            expected = original.get('published_prompt', original.get('prompt')) if key == 'prompt' else original.get(key)
+            require(receipt.get(key) == expected, 'SCOPE_RECOVERY_AUTHORITY_CHANGED: ' + key)
+        require(original.get('parent') == parent, 'SCOPE_RECOVERY_AUTHORITY_CHANGED: parent')
+        return {'metadata': receipt, 'parent': parent, 'parent_children': parent_children, 'snapshot': snapshot,
+                'identity': {k: initial.get(k) for k in ('id', 'node_id', 'number', 'repository_url', 'html_url', 'user')},
+                'status': self.status(issue),
+                'local_paths': [p.relative_to(self.root).as_posix() for p in (
+                    self.catalog_path, self.map_path, self.root / '.specify/extensions/project/config.json')]}
+
+    def approved_leaf(self, snapshot):
+        """The shared admission checks; callers own status, binding and snapshot freshness."""
+        issue = snapshot['issue']
+        receipt = metadata(issue.get('body'))
+        require(not receipt.get('children'), 'SCOPE_PARENT: do not specify this aggregate issue; select a scoped leaf sub-issue.')
+        version, score = receipt.get('version'), receipt.get('score')
+        require((version == 1 and score in (1, 2, 3, 5)) or (version == 2 and score in EFFORTS),
+                'SCOPE_REQUIRED: missing approved scope score; run /speckit-scope-run first.')
+        if version == 2:
+            approved = receipt.get('approval', {})
+            require(approved.get('approved_by') and approved.get('approved_at') and
+                    re.fullmatch(r'[a-f0-9]{64}', approved.get('analysis_sha256', '')),
+                    'SCOPE_REQUIRED: missing user approval provenance.')
+        require(receipt.get('fingerprint') == fingerprint(issue), 'SCOPE_STALE: requirements changed; run /speckit-scope-run again.')
+        require(receipt.get('dependencies') == snapshot['dependencies'], 'SCOPE_STALE: prerequisites changed; run /speckit-scope-run again.')
+        pending = read_json(self.root / '.specify/scope/plan-pending.json', {})
+        require(pending.get('operation') != receipt.get('operation'),
+                'SCOPE_PLAN_PENDING: finish /speckit-scope-plan before specifying a newly decomposed issue.')
+        labels = {x['name'] for x in issue.get('labels', [])}
+        require(f'effort:{receipt["score"]}' in labels and 'scope:parent' not in labels, 'SCOPE_REQUIRED: effort label is missing or inconsistent; run /speckit-scope-run first.')
+        require(not snapshot['blocked'], rejection(snapshot['blocked']))
+        require(receipt.get('prompt'), 'SCOPE_REQUIRED: missing Specify prompt; run /speckit-scope-run first.')
+        return receipt
 
     def validate_analysis(self, snapshot, analysis):
         require(not snapshot['blocked'], rejection(snapshot['blocked']))

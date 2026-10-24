@@ -266,7 +266,7 @@ def bound_state(run, previous=None, claim_token=None, session_id=None):
     return state
 
 
-def reconcile(root, feature, gh=None, *, publish_field=False, claim_token=None, session_id=None):
+def _fresh_ledger(root, feature, gh=None, *, claim_token=None, session_id=None):
     run = Run(root, feature)
     previous = read(run.feature / 'workflow/decisions.json', {})
     state = bound_state(run, previous, claim_token, session_id)
@@ -314,6 +314,25 @@ def reconcile(root, feature, gh=None, *, publish_field=False, claim_token=None, 
     ledger = {'version': 1, 'feature': feature, 'issue': state['issue'], 'decisions': current}
     if previous.get('lifecycle'):
         ledger['lifecycle'] = previous['lifecycle']
+    return run, gh, issue, previous, ledger
+
+
+def fresh_ledger(root, feature, gh=None):
+    """Fresh questions, answers and application state, without writing or publishing."""
+    return _fresh_ledger(root, feature, gh)[-1]
+
+
+def reconcile(root, feature, gh=None, *, publish_field=False, claim_token=None, session_id=None):
+    lock = Path(root) / '.specify/workflow/runtime' / ('decision-' + digest(feature) + '.lock')
+    with locked(lock):
+        return _reconcile(root, feature, gh, publish_field=publish_field,
+                          claim_token=claim_token, session_id=session_id)
+
+
+def _reconcile(root, feature, gh=None, *, publish_field=False, claim_token=None, session_id=None):
+    run, gh, issue, previous, ledger = _fresh_ledger(
+        root, feature, gh, claim_token=claim_token, session_id=session_id)
+    path = run.feature / 'workflow/decisions.json'
     if ledger != previous:
         write(path, ledger)
     if publish_field:
@@ -342,7 +361,7 @@ def _ask(root, feature, question, options, gh=None, mode='single', recommended=N
         recommended = ord(recommended.upper()) - 65
     require(recommended is None or (mode == 'single' and 0 <= recommended < len(options)),
             'DECISION_RECOMMENDATION_INVALID')
-    ledger = reconcile(root, feature, gh)
+    ledger = _reconcile(root, feature, gh)
     # Requests made without the new settings keep the digest they always had.
     request = {'question': question.strip(), 'options': options}
     if mode != 'single':
@@ -382,7 +401,7 @@ def upgrade_questions(root, feature, gh=None):
 
 
 def _upgrade_questions(root, feature, gh=None):
-    reconcile(root, feature, gh)  # validate trusted immutable evidence before any PATCH
+    _reconcile(root, feature, gh)  # validate trusted immutable evidence before any PATCH
     run = Run(root, feature)
     state = bound_state(run, read(run.feature / 'workflow/decisions.json', {}))
     repo, number = state['issue'].split('#')
@@ -411,7 +430,7 @@ def _upgrade_questions(root, feature, gh=None):
                 'DECISION_UPGRADE_NOT_CONFIRMED: ' + record['id'])
         upgraded.append(record['id'])
     # The ledger keeps IDs, options and every real reply; only the question's digest moves.
-    reconcile(root, feature, gh)
+    _reconcile(root, feature, gh)
     return {'upgraded': upgraded, 'unchanged': unchanged}
 
 
@@ -423,7 +442,7 @@ def apply_answer(root, feature, qid, evidence, gh=None):
 
 def _apply_answer(root, feature, qid, evidence, gh=None):
     root = Path(root).resolve()  # inside() resolves; an unresolved 8.3 root never matches
-    ledger = reconcile(root, feature, gh)
+    ledger = _reconcile(root, feature, gh)
     item = next((item for item in ledger['decisions'] if item['id'] == qid), None)
     require(item and item['status'] in ('answered', 'applied'), 'DECISION_NOT_ANSWERED: ' + qid)
     files = [str(inside(root, value).relative_to(root).as_posix()) for value in evidence]

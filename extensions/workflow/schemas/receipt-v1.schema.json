@@ -24,6 +24,7 @@
     "effort_score": {"description": "Scope only: the effort score that selects the tier; required when profiles are enabled.", "enum": [1, 2, 3, 5, 8, 13, 21]},
     "lint": {"description": "Analyze recorded by lint.py --record (command workflow:lint).", "type": "object", "required": ["ok", "findings"], "properties": {"ok": {"const": true}, "findings": {"type": "integer", "minimum": 0}}},
     "lazy": {"description": "Tasks-to-Issues under issue_sync.taskstoissues phase-lazy: only the first phase is mapped.", "const": true},
+    "scope_revalidations": {"description": "Runtime-owned assessed Scope recovery. Preserves the complete previous receipt, exact plan, assessment and evidence hashes; no downstream receipt is refreshed.", "type": "array", "items": {"$ref": "scope-revalidation-v1.schema.json#/$defs/record"}},
     "revalidated_upstream": {"description": "Written by the runtime only: the revalidate-upstream episode that re-recorded or re-stamped this receipt.", "type": "object", "required": ["episode_id", "at", "via"], "properties": {"episode_id": {"type": "string"}, "at": {"type": "string", "format": "date-time"}, "actor": {"type": "string"}, "via": {"enum": ["receipt", "whitespace-only"]}, "paths": {"type": "array", "items": {"type": "string"}}}},
     "completed_at": {"type": "string", "format": "date-time"},
     "unresolved": {"const": 0},

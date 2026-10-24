@@ -43,7 +43,7 @@ AMENDMENT_DEPENDENTS = ('verify', 'review', 'ready')
 # Receipt fields only the runtime writes; a submitted receipt may not carry them.
 RUNTIME_RECEIPT_FIELDS = ('amendments', 'stale', 'head', 'source_key', 'ci_evidence', 'diff_reviewed',
                           'revalidations', 'delegation_ledger_trust', 'verification_snapshot', 'pr_lint_binding',
-                          'source_inventory', 'text_fingerprints', 'revalidated_upstream')
+                          'source_inventory', 'text_fingerprints', 'revalidated_upstream', 'scope_revalidations')
 # Stages whose receipts also inventory source (`source_inventory`) and record `head` and `source_key`.
 SOURCE_STAGES = ('verify', 'review', 'ready')
 # Effort scores a Scope receipt may carry (`effort_score`), and the tier bands they map to.
@@ -156,8 +156,11 @@ def replace_file(source, target, attempts=10):
 def write(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_name(path.name + '.' + uuid.uuid4().hex + '.tmp')
-    temp.write_text(json.dumps(value, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
-    replace_file(temp, path)
+    try:
+        temp.write_text(json.dumps(value, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+        replace_file(temp, path)
+    finally:
+        temp.unlink(missing_ok=True)
 
 
 def inside(root, relative):

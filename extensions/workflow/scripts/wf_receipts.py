@@ -599,6 +599,10 @@ def recovery_recipe(feature, stage, status, policy, receipt, root=None):
                     f'--check-run <run id>', 'or re-record: ' + rerecord]
         return ['Re-record (a changed amendment undermined this receipt): ' + rerecord]
     if reason == 'explicit-drift':
+        if stage == 'scope':
+            return [f'{WORKFLOW_SCRIPT} revalidate-upstream{at} --through scope --plan '
+                    '(requires immutable historical bytes and original approval; apply only with the exact assessed plan)',
+                    'If recovery is blocked, retain the evidence and resolve the reported blocker before claiming again.']
         evidence = set(receipt.get('evidence') or [])
         state_file = sync_state_label(root) if root is not None else None
         raw = str((receipt.get('fingerprints') or {}).get(state_file, SYNC_BINDING_PREFIX))

@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.11.1] - 2026-10-24 (pending release)
+
+- Shared approved-leaf and retained-parent validation with Workflow accepted-Scope recovery. Recovery fetches current provider state without cache, publication or claim writes; ordinary claim admission remains unchanged.
+- Requires Workflow 1.18.1 for the read-only decision ledger helper. Implementation and package validation remain in progress.
+
 ## [1.11.0] - 2026-10-21
 
 - The prerequisite check stops at a Done prerequisite (status aliases applied) and still walks through In review ones. A full inspect reads pull-request timelines for the direct prerequisites only. A chain of N Done prerequisites now costs 3 API calls instead of 2 + 2N.

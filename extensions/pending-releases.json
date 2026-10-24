@@ -1,7 +1,9 @@
 {
   "schema_version": 1,
   "versions": {
-    "memory": "2.5.1"
+    "memory": "2.5.1",
+    "workflow": "1.18.1",
+    "scope": "1.11.1"
   },
   "status": "implementation-in-progress",
   "note": "Memory 2.5.1 preserves tracked evidence matched by ignore rules. Source review and 205 Memory tests passed; consumer validation remains pending. Not marked ready for release."

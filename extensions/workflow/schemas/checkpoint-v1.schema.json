@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://sanduq.local/schemas/checkpoint-v1.schema.json",
   "title": "Sanduq feature checkpoint v1",
-  "description": "Checkpoint versions 1 and 2. Version 2 drops repo_path; readers accept both and every write is version 2.",
+  "description": "Checkpoint versions 1 and 2. Version 2 drops repo_path; readers accept both and every write is version 2. Scope recovery explicitly assesses this transition and retains its plan and previous receipt in receipts.scope.scope_revalidations.",
   "type": "object",
   "required": ["schema_version", "run_id", "branch", "feature", "issue", "policy_digest", "dependency_digest", "policy", "commands", "receipts", "generation", "active", "status"],
   "properties": {

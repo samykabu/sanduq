@@ -292,3 +292,11 @@ changed.
   `administrative-amendment` record (old and new value, changed fields) to the checkpoint's
   `lineage`. Otherwise it refuses and the stage is re-recorded. `workflow.py project-sync` records the last sync as `project_sync: {phase,
   state: pending|done|failed, at, summary}`; `next` and `status` report a pending or failed one.
+
+### Scope recovery audit
+
+`receipts.scope.scope_revalidations` retains each exact recovery plan, assessed findings,
+evidence hashes and complete previous receipt. Original proof files and every other receipt
+remain unchanged. The plan explicitly assesses a checkpoint v1-to-v2 save when needed. The
+checkpoint and lifecycle outbox commit atomically; an append failure leaves a committed
+checkpoint with pending delivery. Resolve that delivery separately from later gate freshness.

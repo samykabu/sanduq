@@ -192,3 +192,19 @@ def _decisions_module():
         spec.loader.exec_module(module)
         _MODULES['decisions.py'] = module
     return _MODULES['decisions.py']
+
+
+def accepted_receipt(root, repo, issue, feature, accepted):
+    """Explicit accepted-Scope binding, separate from every claim admission rule."""
+    workflow = _workflow_module()
+    if workflow is None:
+        raise ValueError('SCOPE_WORKFLOW_UNAVAILABLE')
+    run = workflow.Run(Path(root).resolve(), feature)
+    state = run.load()
+    source = workflow.read(run.feature / 'scope-source.json', {})
+    if (state.get('active') or state.get('issue') != f'{repo}#{issue}'
+            or (source.get('repo'), source.get('issue')) != (repo, issue)
+            or not accepted or accepted.get('stage') != 'scope' or accepted.get('outcome') != 'passed'
+            or state.get('receipts', {}).get('scope') != accepted):
+        raise ValueError('SCOPE_ACCEPTED_RECEIPT_BINDING_MISMATCH')
+    return state
