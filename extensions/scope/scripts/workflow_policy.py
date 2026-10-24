@@ -192,3 +192,59 @@ def _decisions_module():
         spec.loader.exec_module(module)
         _MODULES['decisions.py'] = module
     return _MODULES['decisions.py']
+
+
+def accepted_receipt(root, repo, issue, feature, accepted):
+    """Explicit accepted-Scope binding, separate from every claim admission rule."""
+    workflow = _workflow_module()
+    if workflow is None:
+        raise ValueError('SCOPE_WORKFLOW_UNAVAILABLE')
+    run = workflow.Run(Path(root).resolve(), feature)
+    state = run.load()
+    source = workflow.read(run.feature / 'scope-source.json', {})
+    if (state.get('active') or state.get('issue') != f'{repo}#{issue}'
+            or (source.get('repo'), source.get('issue')) != (repo, issue)
+            or not accepted or accepted.get('stage') != 'scope' or accepted.get('outcome') != 'passed'
+            or state.get('receipts', {}).get('scope') != accepted):
+        raise ValueError('SCOPE_ACCEPTED_RECEIPT_BINDING_MISMATCH')
+    return state
+
+
+def accepted_task_children(root, repo, issue, feature, state, children):
+    """Exact native task identities under the accepted Tasks-to-Issues input binding."""
+    workflow = _workflow_module()
+    if workflow is None:
+        raise ValueError('SCOPE_WORKFLOW_UNAVAILABLE')
+    import task_issues
+    labels = [feature + '/workflow/task-issues.json', feature + '/tasks.md']
+    try:
+        proof = state.get('receipts', {}).get('taskstoissues') or {}
+        workflow.require(proof.get('stage') == 'taskstoissues' and proof.get('outcome') == 'passed'
+                         and not proof.get('stale') and proof.get('parent_issue') == f'{repo}#{issue}'
+                         and proof.get('native_links_verified') is True, 'accepted Tasks-to-Issues receipt required')
+        workflow.require(all(workflow._no_link_below(root, label.split('/')) for label in labels), 'unsafe task input path')
+        before = {label: (Path(root) / label).read_bytes() for label in labels}
+        saved = proof.get('fingerprints', {})
+        current = workflow.fingerprint_files(root, labels, feature=feature, like=saved)
+        workflow.require(all(saved.get(label) and current[label] == saved[label] for label in labels),
+                         'accepted task mapping/input changed or unbound')
+        mapping = json.loads(before[labels[0]].decode('utf-8-sig'))
+        tasks = task_issues.parse_tasks(before[labels[1]].decode('utf-8-sig'))
+        workflow.require(mapping.get('schema_version') == 1 and type(mapping.get('parent')) is int and
+                         (mapping.get('repo'), mapping.get('parent'), mapping.get('feature')) == (repo, issue, feature),
+                         'task mapping identity mismatch')
+        known = task_issues.matching_issues(children, repo, issue, feature)
+        workflow.require(len(known) == len(children), 'unknown or conflicting native task marker')
+        for task, child in known.items():
+            entry = mapping.get('tasks', {}).get(task) or {}
+            markers = task_issues.MARKER.findall(child.get('body') or '')
+            workflow.require(len(markers) == 1 and type(json.loads(markers[0]).get('parent')) is int,
+                             'ambiguous or invalid native task marker')
+            workflow.require(task in tasks and entry.get('linked') is True
+                             and type(entry.get('number')) is int and entry['number'] == child['number']
+                             and type(entry.get('id')) is int and entry['id'] == child['id'],
+                             'native task marker/mapping mismatch: ' + str(task))
+        workflow.require(all((Path(root) / label).read_bytes() == data for label, data in before.items()),
+                         'task mapping/input changed during validation')
+    except (workflow.WorkflowError, ValueError, KeyError, TypeError, AttributeError, OSError) as exc:
+        raise ValueError('SCOPE_ACCEPTED_TASK_CHILDREN_INVALID: ' + labels[0] + ': ' + str(exc)) from exc

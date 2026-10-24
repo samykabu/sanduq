@@ -1,0 +1,406 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sanduq.local/schemas/scope-revalidation-v1.schema.json",
+  "title": "Assessed accepted-Scope recovery",
+  "type": "object",
+  "required": [
+    "schema",
+    "plan_id",
+    "reason",
+    "actor",
+    "schema_transition",
+    "stages"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "sanduq.scope-revalidation.v1"
+    },
+    "plan_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schema_transition": {
+      "type": "object",
+      "required": [
+        "from",
+        "to",
+        "drops_repo_path"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "enum": [
+            1,
+            2
+          ]
+        },
+        "to": {
+          "const": 2
+        },
+        "drops_repo_path": {
+          "type": "boolean"
+        }
+      }
+    },
+    "stages": {
+      "type": "object",
+      "required": [
+        "scope"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "scope": {
+          "type": "object",
+          "required": [
+            "summary",
+            "evidence",
+            "assessments"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "summary": {
+              "type": "string",
+              "minLength": 1
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "assessments": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/finding"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "required": [
+        "path",
+        "classification",
+        "conclusion",
+        "rationale"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "classification": {
+          "enum": [
+            "unchanged-bytes-context-transition",
+            "context-edit"
+          ]
+        },
+        "conclusion": {
+          "const": "scope-unchanged"
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "plan": {
+      "type": "object",
+      "required": [
+        "schema",
+        "feature",
+        "through",
+        "identity",
+        "head",
+        "history_anchor",
+        "checkpoint_sha256",
+        "receipts_sha256",
+        "index_sha256",
+        "git_configuration_sha256",
+        "policy",
+        "commands",
+        "runtime",
+        "provider",
+        "decisions",
+        "inventory",
+        "paths",
+        "schema_transition",
+        "retained_receipts",
+        "remaining_drift",
+        "blockers",
+        "can_apply",
+        "noop",
+        "plan_id",
+        "current_attributes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "const": "sanduq.scope-revalidation-plan.v1"
+        },
+        "feature": {
+          "type": "string",
+          "minLength": 1
+        },
+        "through": {
+          "const": "scope"
+        },
+        "identity": {
+          "type": "object"
+        },
+        "head": {},
+        "history_anchor": {},
+        "checkpoint_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "receipts_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "index_sha256": {},
+        "git_configuration_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "policy": {
+          "type": "object"
+        },
+        "commands": {
+          "type": "object"
+        },
+        "runtime": {
+          "type": "object"
+        },
+        "provider": {
+          "type": "object"
+        },
+        "decisions": {
+          "type": "object"
+        },
+        "inventory": {
+          "type": "object"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "path",
+              "classification",
+              "before_raw_sha256",
+              "after_raw_sha256",
+              "before_fingerprint",
+              "after_fingerprint",
+              "before_attribute",
+              "after_attribute",
+              "history",
+              "before_interpretation"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "classification": {
+                "enum": [
+                  "unchanged-bytes-context-transition",
+                  "context-edit",
+                  "blocked"
+                ]
+              },
+              "before_raw_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "after_raw_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "before_fingerprint": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "after_fingerprint": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "before_attribute": {
+                "type": "string",
+                "minLength": 1
+              },
+              "after_attribute": {
+                "type": "string",
+                "minLength": 1
+              },
+              "history": {
+                "type": "object",
+                "required": [
+                  "commit",
+                  "path",
+                  "snapshot"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "commit": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "snapshot": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "before_interpretation": {
+                "enum": [
+                  "historical-attributes",
+                  "exact-retained-storage"
+                ]
+              }
+            }
+          }
+        },
+        "schema_transition": {
+          "type": "object",
+          "required": [
+            "from",
+            "to",
+            "drops_repo_path"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "enum": [
+                1,
+                2
+              ]
+            },
+            "to": {
+              "const": 2
+            },
+            "drops_repo_path": {
+              "type": "boolean"
+            }
+          }
+        },
+        "retained_receipts": {
+          "type": "object"
+        },
+        "remaining_drift": {
+          "type": "object"
+        },
+        "blockers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "can_apply": {
+          "type": "boolean"
+        },
+        "noop": {
+          "type": "boolean"
+        },
+        "plan_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "current_attributes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "record": {
+      "type": "object",
+      "required": [
+        "kind",
+        "plan",
+        "assessment",
+        "assessment_evidence",
+        "previous_receipt",
+        "at"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "scope-revalidation"
+        },
+        "plan": {
+          "$ref": "#/$defs/plan"
+        },
+        "assessment": {
+          "$ref": "#"
+        },
+        "assessment_evidence": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "previous_receipt": {
+          "type": "object"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "schema",
+        "plan_id",
+        "scope_unchanged",
+        "findings"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "const": "sanduq.scope-revalidation.v1"
+        },
+        "plan_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "scope_unchanged": {
+          "const": true
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/finding"
+          }
+        }
+      }
+    }
+  }
+}

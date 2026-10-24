@@ -16,6 +16,10 @@ import sys
 import time
 import unicodedata
 import uuid
+# Scope preview must not create bytecode in an externally selected consumer or package.
+if 'revalidate-upstream' in sys.argv and 'scope' in sys.argv:
+    sys.dont_write_bytecode = True
+
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -73,7 +77,8 @@ from wf_policy import (default_policy, select_gate, validate_policy, _positive, 
 from wf_health import (registry, compatible, active_host, command_exists, package_digest, resolve_commands,
                        project_errors, SCOPE_STATUSES, project_defaults, MANAGED_CI, preserved_ci_path, ci_errors,
                        delegation_errors, host_warnings, progress_wiring_warnings, guard_approval_warnings,
-                       doctor_cache_key, store_doctor_cache, cached_doctor, doctor, lean_preflight, pr_lint_binding)
+                       doctor_cache_key, store_doctor_cache, cached_doctor, doctor, lean_preflight, pr_lint_binding,
+                       legacy_scope_prerequisites)
 from wf_receipts import (verify_sync_binding, same_path, recorded_sync_fields, handoff_text, native_run_status,
                          sync_retry, context_gate, measured_context_gate, required_inputs, first_phase_tasks,
                          consulted_inputs, without_required, canonical_receipt, dependency_fingerprints, role_exempt,
@@ -82,7 +87,7 @@ from wf_receipts import (verify_sync_binding, same_path, recorded_sync_fields, h
                          _positive_int, _string_list, diff_review_command, diff_review_shell, diff_review_sha256,
                          ci_evidence_complete, ci_evidence_current, validate_evidence_snapshots, receipt_status,
                          receipt_current, recovery_recipe, upstream_drift, receipt_drift, ready_checks,
-                         coding_review_checks)
+                         coding_review_checks, scope_proof_authority)
 
 
 # Where `claim` tells the dispatcher to read this stage's own instructions, project-relative
@@ -466,6 +471,9 @@ class Run:
     def upstream_plan(self, state, through):
         """Per stale or removed receipt from Specify through `through`: the changed input paths, which stages
         only changed by whitespace in Markdown (re-stamped without a model pass), and which need a receipt."""
+        if through == 'scope':
+            import wf_scope_revalidation
+            return wf_scope_revalidation.plan(self)
         tier = self.tier_of(state)
         first, last = BASE_STAGES.index('specify'), BASE_STAGES.index(through)
         changed, restamp, needs = {}, [], []
@@ -485,13 +493,20 @@ class Run:
             (restamp if status.get('reason') == 'explicit-drift' and not paths else needs).append(stage)
         return {'changed': changed, 'restamp': restamp, 'needs_receipt': needs}
 
-    def revalidate_upstream(self, through, receipts=None, plan=False, actor=None):
+    def revalidate_upstream(self, through, receipts=None, plan=False, actor=None, apply=False):
         """Re-record stale upstream receipts (Specify through `through`) in one locked operation.
 
         `plan` only reports `changed: {stage: [paths]}`. Otherwise `receipts` is `{stages: {<stage>:
         {summary, evidence[], inputs[]}}}` with an entry for every stage that needs one; each is checked the
         way `complete` checks a receipt (binding, decisions ledger, required inputs). A stage whose only drift
         is whitespace in Markdown inputs is re-stamped with the new byte hashes and no entry."""
+        if through == 'scope':
+            import wf_scope_revalidation as recovery
+            require(actor is None, 'SCOPE_RECOVERY_ACTOR_IN_ASSESSMENT: record actor in the assessed receipt')
+            require(plan != apply, 'SCOPE_RECOVERY_EXPLICIT_MODE_REQUIRED: select --plan or --apply')
+            require(not plan or receipts is None, 'SCOPE_RECOVERY_PLAN_TAKES_NO_RECEIPT')
+            return recovery.plan(self) if plan else recovery.apply(self, receipts)
+        require(not apply, 'REVALIDATE_UPSTREAM_APPLY_SCOPE_ONLY: other stages keep their existing invocation')
         require(through in BASE_STAGES and BASE_STAGES.index('specify') <= BASE_STAGES.index(through)
                 < BASE_STAGES.index('execute'), 'REVALIDATE_UPSTREAM_STAGE_INVALID: --through names a stage from '
                 'specify to taskstoissues')
@@ -947,7 +962,7 @@ class Run:
             except OSError:
                 pass  # an orphaned inventory is harmless; the checkpoint no longer names it
 
-    def save(self, state):
+    def save(self, state, *, evaluate_next=True):
         self.__dict__.pop('_saved_next', None)
         # Every write is a version-2 checkpoint; a loaded version 1 is migrated here (W27).
         state['schema_version'] = CHECKPOINT_SCHEMA
@@ -956,7 +971,8 @@ class Run:
         state['updated_at'] = now()
         state['head'] = git(self.root, 'rev-parse', 'HEAD')
         state['stage_plan'] = {'v': 1, 'generation': state['generation'], 'stages': stages(self.policy, state_tier(state))}
-        state['next_action'] = self.evaluate_next_action(state)
+        # Recovery retains stale later receipts without running their project hooks or checks.
+        state['next_action'] = self.evaluate_next_action(state) if evaluate_next else None
         write(self.path, state)
         # The queued lifecycle events were written with the state; append them now, under the caller's
         # lock. A crash here leaves them queued and the next save replays them (deduplicated by event_id).
@@ -1616,12 +1632,13 @@ def main():
             cmd.add_argument('--token', required=True)
             cmd.add_argument('--receipt', type=Path, required=True)
         if name == 'revalidate-upstream':
-            cmd.add_argument('--through', required=True, choices=BASE_STAGES[BASE_STAGES.index('specify'):
+            cmd.add_argument('--through', required=True, choices=BASE_STAGES[BASE_STAGES.index('scope'):
                                                                              BASE_STAGES.index('execute')],
-                             help='Last upstream stage to re-record (specify to taskstoissues)')
+                             help='Scope recovery, or last upstream stage to re-record (specify to taskstoissues)')
             cmd.add_argument('--receipt', type=Path,
                              help='{stages: {<stage>: {summary, evidence[], inputs[]}}}; required unless --plan')
             cmd.add_argument('--plan', action='store_true', help='Print the changed inputs per stage without writing')
+            cmd.add_argument('--apply', action='store_true', help='Explicit assessed Scope recovery only')
             cmd.add_argument('--actor', help='Defaults to the Git user name')
         if name in ('pause', 'recover', 'refresh', 'amend', 'sync-amend'): cmd.add_argument('--reason', required=True)
         if name == 'sync-amend': cmd.add_argument('--actor', help='Defaults to the Git user name')
@@ -1753,7 +1770,7 @@ def run_command(args):
             elif args.action == 'revalidate-upstream':
                 require(args.plan or args.receipt, 'REVALIDATE_UPSTREAM_RECEIPT_REQUIRED: pass --receipt, or --plan')
                 result = run.revalidate_upstream(args.through, read(args.receipt) if args.receipt else None,
-                                                 args.plan, args.actor)
+                                                 args.plan, args.actor, args.apply)
             elif args.action == 'bind': result = run.bind(args.token)
             elif args.action == 'relocate':
                 result = run.relocate(args.reason, args.preview, args.allow_branch_rebind,

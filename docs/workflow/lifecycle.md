@@ -167,3 +167,11 @@ Keep project decisions in `.specify/workflow.yml` and feature history under
 migrate an active checkpoint when package identity changes. A migration preserves historical
 receipts; it does not certify old work against a new execution contract. See the
 [upgrade procedure](operating-guide.md#updates-and-releases) for commands and rollback behavior.
+
+### Recover an accepted Scope
+
+`revalidate-upstream --through scope --plan` checks the accepted Scope without locks or writes.
+Review the exact historical/current bytes and current approval, then submit the plan-bound
+assessment with `--receipt <file> --apply`. Missing historical proof blocks recovery. Apply
+preserves other receipts and their remaining staleness; it does not claim Scope or run product
+checks. See the [recovery example](https://github.com/samykabu/sanduq/blob/main/extensions/workflow/skills/workflow/references/recovery.md#accepted-scope-after-an-attribute-change).

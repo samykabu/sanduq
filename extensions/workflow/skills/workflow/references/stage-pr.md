@@ -27,6 +27,14 @@ PR prose), refuses on findings (exit 1), and prints `pr_url`, `pr_body_file`, `p
 lint; the guard hook refuses `gh pr create|edit --body-file` without a matching sibling
 `.lint.json`. Keep the actual publication evidence and body bytes.
 
+For an approved legacy binding that omitted `dependencies`, completion reads them from its
+unchanged, accepted native Scope gate proof and rechecks the original approval with the current
+Scope provider. It writes neither the binding nor earlier receipts. Missing, changed or
+untrusted proof blocks completion and names the evidence path; live prerequisites alone cannot
+replace it. An explicit `dependencies` field stays authoritative and must be valid. For example,
+a refund PR bound to #1093 may say `Closes #1093` and reference #1089 and #1092 without closing
+those prerequisites.
+
 For source-only PRs, write the affected features to `.specify/workflow/pr-features.json` as
 `{"features": ["specs/001-example"]}` and include it in the PR. CI uses it in addition to the
 changed feature directories, never instead. Refresh readiness evidence after source edits.

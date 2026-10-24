@@ -27,3 +27,12 @@ them (Clarify: `spec.md`, the configured Project Sync state file, `checklists/*.
 lineage records each change. Changing any other upstream input during the claim refuses the
 completion. The state file counts as changed only when the bound feature's binding changes, never
 for a status write ([dispatcher-operations.md](dispatcher-operations.md#project-sync-and-task-issue-sync)).
+
+## Assessed Scope recovery
+
+`revalidate-upstream --through scope` requires a read-only plan and an explicit assessment
+using `schemas/scope-revalidation-v1.schema.json`, then `--receipt <file> --apply`. The runtime
+verifies original raw proof, attributes, approval and live decisions; submitted hashes never
+authorize a replacement. The runtime-owned `scope_revalidations` retains the previous receipt,
+exact plan, actor, reason and bound assessment evidence. Non-Scope receipts remain unchanged.
+See [the refund recovery example](recovery.md#accepted-scope-after-an-attribute-change).

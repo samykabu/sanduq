@@ -150,3 +150,11 @@ The rules behind these fields are in [Receipt contract](state-files.md#receipt-c
 Decision lifecycle parks mapped Backlog or Feature Specification while questions wait,
 then returns an owned park to mapped Feature Specification under `reread-answers`.
 Advanced statuses remain protected. `lifecycle_status` defaults to true for new and legacy policies.
+
+### Accepted Scope recovery
+
+[scope-revalidation-v1.schema.json](https://github.com/samykabu/sanduq/blob/main/extensions/workflow/schemas/scope-revalidation-v1.schema.json)
+defines the strict submitted assessment, bound evidence and runtime plan/audit record. Unknown
+fields, omitted or extra assessment paths and submitted runtime hashes are rejected. The plan
+binds raw history, attributes, all accepted receipt inventories and fresh provider/decision
+state. Recovery requires the same approved Scope; an assessment cannot waive changed authority.

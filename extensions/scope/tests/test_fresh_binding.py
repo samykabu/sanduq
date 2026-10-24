@@ -78,6 +78,91 @@ class FreshBindingTests(unittest.TestCase):
         self.assertEqual(self.gh.writes, before)
         self.assertEqual(self.gh.statuses[1], 'Feature Specification')
 
+    def test_parented_gate_and_bind_preserve_frozen_recovery_authority(self):
+        analysis = self.prepare_published_child()
+        with patch.object(m.workflow_policy, '_decisions_module', return_value=self.decisions()):
+            proof = self.app.gate('1', feature='specs/001-new', token='owned', session='session', analysis=analysis)
+        self.assertEqual(proof['parent_children'], [1])
+        self.assertEqual(proof['dependencies'], [])
+        original = dict(proof, repo='acme/app')
+        before = {p.relative_to(self.root).as_posix(): p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
+        with patch.object(m.workflow_policy, 'accepted_receipt', return_value={}):
+            live = self.app.revalidate_accepted('specs/001-new', {'stage': 'scope', 'outcome': 'passed'}, original)
+            self.assertEqual(live['parent_children'], [1])
+            self.gh.add(19); self.gh.children[18].add(19)
+            with self.assertRaisesRegex(m.ScopeError, 'SCOPE_NATIVE_PARENT_MISMATCH'):
+                self.app.revalidate_accepted('specs/001-new', {'stage': 'scope', 'outcome': 'passed'}, original)
+        self.assertEqual(before, {p.relative_to(self.root).as_posix(): p.read_bytes() for p in self.root.rglob('*') if p.is_file()})
+
+    def test_published_native_parent_history_is_exported_without_bypassing_pending_plan(self):
+        snapshot, analysis = self.analysis(split=True)
+        self.publish_approved(snapshot, analysis)
+        children = sorted(self.gh.children[1])
+        child = self.gh.issues[children[0]]
+        approval = m.metadata(child['body'])['approval']
+        self.assertEqual(approval, m.metadata(self.gh.issues[1]['body'])['approval'])
+        family = self.app.retained_family(child, m.metadata(child['body']))
+        self.assertEqual(family, {'parent': 1, 'parent_children': children})
+        with self.assertRaisesRegex(m.ScopeError, 'SCOPE_PLAN_PENDING'):
+            self.app.gate(str(child['number']))
+
+    def test_legacy_recovery_preserves_leaf_authority_and_approved_child_count(self):
+        self.prepare_published_child()
+        leaf = m.metadata(self.gh.issues[1]['body'])
+        leaf['approval'] = dict(leaf['approval'], child_count=2)
+        parent = dict(leaf, children=[1, 19])
+        self.gh.add(19); self.gh.add(20)
+        self.gh.children[18] = {1, 19}
+        for number, value in ((1, leaf), (18, parent)):
+            self.gh.issues[number]['body'] = m.replace_block(self.gh.issues[number]['body'],
+                '<!-- speckit-scope:metadata ' + json.dumps(value) + ' -->')
+        original = {key: copy.deepcopy(leaf[key]) for key in ('score', 'prompt', 'fingerprint', 'dependencies', 'approval')}
+        original.update(issue=1, repo='acme/app', parent=18)
+        before = {p.relative_to(self.root).as_posix(): p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
+        writes = list(self.gh.writes)
+        bodies = {number: self.gh.issues[number]['body'] for number in (1, 18)}
+        with patch.object(m.workflow_policy, 'accepted_receipt', return_value={}):
+            live = self.app.revalidate_accepted('specs/001-new', {}, original)
+            self.assertEqual(live['parent_children'], [1, 19])
+            self.assertNotIn('parent_children', original)
+            for conflict in ('membership', 'parent-approval', 'owner-approval', 'count', 'missing-count', 'noninteger-count', 'dependency', 'parent', 'score', 'prompt', 'fingerprint'):
+                self.gh.children[18] = {1, 19}; self.gh.deps[1] = set()
+                for number, body in bodies.items(): self.gh.issues[number]['body'] = body
+                authority = copy.deepcopy(original)
+                if conflict == 'membership': self.gh.children[18].remove(1)
+                elif conflict in ('parent-approval', 'owner-approval'):
+                    for number in ((18,) if conflict == 'parent-approval' else (1, 18)):
+                        value = m.metadata(self.gh.issues[number]['body'])
+                        value['approval'] = dict(value['approval'], approved_by='other')
+                        self.gh.issues[number]['body'] = m.replace_block(self.gh.issues[number]['body'],
+                            '<!-- speckit-scope:metadata ' + json.dumps(value) + ' -->')
+                elif conflict == 'count':
+                    self.gh.children[18].add(20)
+                    self.gh.issues[18]['body'] = m.replace_block(bodies[18],
+                        '<!-- speckit-scope:metadata ' + json.dumps(dict(parent, children=[1, 19, 20])) + ' -->')
+                elif conflict in ('missing-count', 'noninteger-count'):
+                    if conflict == 'missing-count': authority['approval'].pop('child_count')
+                    else: authority['approval']['child_count'] = 2.0
+                    for number in (1, 18):
+                        value = m.metadata(bodies[number]); value['approval'] = authority['approval']
+                        self.gh.issues[number]['body'] = m.replace_block(bodies[number],
+                            '<!-- speckit-scope:metadata ' + json.dumps(value) + ' -->')
+                elif conflict == 'dependency':
+                    self.gh.add(2, status='Done')['state'] = 'closed'; self.gh.deps[1].add(2)
+                else: authority[conflict] = {'parent': 17, 'score': 5, 'prompt': 'Changed', 'fingerprint': 'c' * 64}[conflict]
+                with self.subTest(conflict=conflict), self.assertRaises(m.ScopeError):
+                    self.app.revalidate_accepted('specs/001-new', {}, authority)
+            self.gh.deps[1] = set(); self.gh.issues[1]['body'] = bodies[1]
+            self.gh.children[18] = {1, 20}
+            self.gh.issues[18]['body'] = m.replace_block(bodies[18],
+                '<!-- speckit-scope:metadata ' + json.dumps(dict(parent, children=[1, 20])) + ' -->')
+            # The legacy contract retained membership/count, not the unrecorded sibling IDs.
+            self.app.revalidate_accepted('specs/001-new', {}, original)
+            with self.assertRaisesRegex(m.ScopeError, 'parent_children'):
+                self.app.revalidate_accepted('specs/001-new', {}, dict(original, parent_children=[1, 19]))
+        self.assertEqual(writes, self.gh.writes)
+        self.assertEqual(before, {p.relative_to(self.root).as_posix(): p.read_bytes() for p in self.root.rglob('*') if p.is_file()})
+
     def prepare_root_kept_whole(self):
         snap, analysis = self.analysis(); self.publish_approved(snap, analysis)
         self.gh.statuses[1] = 'Feature Specification'; self.app._board = None
@@ -90,6 +175,68 @@ class FreshBindingTests(unittest.TestCase):
             result = self.app.gate('1', feature='specs/001-new', token='owned', session='session', analysis=analysis)
         self.assertIsNone(result['parent'])
         self.assertFalse(result['publication_required'])
+
+    def test_accepted_native_tasks_require_bound_mapping_and_exact_markers(self):
+        self.prepare_root_kept_whole()
+        workflow = m.workflow_policy._workflow_module()
+        import task_issues
+        feature = 'specs/001-new'; directory = self.root / feature
+        original = dict(m.metadata(self.gh.issues[1]['body']), repo='acme/app', issue=1, parent=None)
+        m.write_json(directory / 'scope-source.json', original)
+        (directory / 'tasks.md').write_text('- [x] T001 Refund approval\n- [x] T002 Refund audit\n')
+        task_issues.sync(self.root, feature, 1, {}, apply=True, github=self.gh)
+        labels = [feature + '/workflow/task-issues.json', feature + '/tasks.md']
+        mapping_path = self.root / labels[0]; mapping_bytes = mapping_path.read_bytes()
+        mapping = m.read_json(mapping_path)
+        child = mapping['tasks']['T001']['number']; body = self.gh.issues[child]['body']
+        marker = json.loads(task_issues.MARKER.search(body)[1])
+        for number in self.gh.children[1]: self.gh.issues[number]['state'] = 'closed'
+        proof = {'stage': 'taskstoissues', 'outcome': 'passed', 'parent_issue': 'acme/app#1',
+                 'native_links_verified': True, 'fingerprints': workflow.fingerprint_files(self.root, labels, feature=feature)}
+        state = {'receipts': {'taskstoissues': proof}}
+        before = {p.relative_to(self.root).as_posix(): p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
+        writes = list(self.gh.writes)
+        with patch.object(m.workflow_policy, 'accepted_receipt', return_value=state):
+            self.assertIsNone(self.app.revalidate_accepted(feature, {'stage': 'scope', 'outcome': 'passed'}, original)['parent'])
+            self.assertEqual(before, {p.relative_to(self.root).as_posix(): p.read_bytes() for p in self.root.rglob('*') if p.is_file()})
+            # Initial gate callers use this strict path without accepted receipt authority.
+            with self.assertRaisesRegex(m.ScopeError, 'SCOPE_PARENT'):
+                self.app.retained_family(self.gh.issues[1], m.metadata(self.gh.issues[1]['body']))
+            for field, value in [('repo', 'foreign/repo'), ('parent', 7), ('parent', True), ('feature', 'specs/other'), ('task', 'T099')]:
+                changed = dict(marker, **{field: value})
+                self.gh.issues[child]['body'] = '<!-- sanduq-task ' + json.dumps(changed) + ' -->'
+                with self.subTest(marker=field), self.assertRaisesRegex(m.ScopeError, 'TASK_CHILDREN_INVALID'):
+                    self.app.revalidate_accepted(feature, {}, original)
+            for bad_body in ('No marker', body + body, '<!-- sanduq-task {bad} -->',
+                             body + '<!-- speckit-scope:metadata {"children": [7]} -->'):
+                self.gh.issues[child]['body'] = bad_body
+                with self.subTest(body=bad_body), self.assertRaises(m.ScopeError):
+                    self.app.revalidate_accepted(feature, {}, original)
+            self.gh.issues[child]['body'] = body
+            self.gh.issues[child]['repository_url'] = 'https://api.github.com/repos/foreign/repo'
+            with self.assertRaisesRegex(m.ScopeError, 'unproven native task child'):
+                self.app.revalidate_accepted(feature, {}, original)
+            self.gh.issues[child]['repository_url'] = 'https://api.github.com/repos/acme/app'
+            parent_reader = self.app.native_parent
+            with patch.object(self.app, 'native_parent', side_effect=lambda n: {'number': 7} if n == child else parent_reader(n)):
+                with self.assertRaisesRegex(m.ScopeError, 'unproven native task child'):
+                    self.app.revalidate_accepted(feature, {}, original)
+            for change in ('unbound', 'changed', 'stale', 'repo', 'parent', 'feature', 'number', 'id', 'linked', 'task'):
+                altered = copy.deepcopy(mapping); checked = copy.deepcopy(proof)
+                if change == 'unbound': checked['fingerprints'].pop(labels[0])
+                elif change == 'stale': checked['stale'] = {'reason': 'changed'}
+                elif change in ('repo', 'parent', 'feature'): altered[change] = {'repo': 'other/repo', 'parent': 7, 'feature': 'specs/other'}[change]
+                elif change == 'task': altered['tasks']['T099'] = altered['tasks'].pop('T001')
+                else: altered['tasks']['T001'][{'changed': 'number'}.get(change, change)] = False if change == 'linked' else 999
+                m.write_json(mapping_path, altered)
+                if change not in ('unbound', 'changed', 'stale'):
+                    checked['fingerprints'] = workflow.fingerprint_files(self.root, labels, feature=feature)
+                state['receipts']['taskstoissues'] = checked
+                with self.subTest(mapping=change), self.assertRaisesRegex(m.ScopeError, 'TASK_CHILDREN_INVALID'):
+                    self.app.revalidate_accepted(feature, {}, original)
+            mapping_path.write_bytes(mapping_bytes); state['receipts']['taskstoissues'] = proof
+        self.assertEqual(writes, self.gh.writes)
+        self.assertEqual(before, {p.relative_to(self.root).as_posix(): p.read_bytes() for p in self.root.rglob('*') if p.is_file()})
 
     def test_fresh_gate_refuses_a_child_that_lost_its_parent(self):
         analysis = self.prepare_root_kept_whole()
@@ -132,6 +279,8 @@ class FreshBindingTests(unittest.TestCase):
             result = self.app.bind('1', True, feature='specs/001-new', token='owned', session='session', analysis=analysis)
         self.assertEqual(result['feature'], '001-new')
         self.assertEqual(m.read_json(feature / 'scope-source.json')['issue'], 1)
+        self.assertEqual(m.read_json(feature / 'scope-source.json')['parent_children'], [1])
+        self.assertEqual(m.read_json(feature / 'scope-source.json')['dependencies'], [])
 
     def test_scope_claim_cannot_bind_or_create_any_artifact(self):
         analysis = self.prepare_published_child()

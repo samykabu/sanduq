@@ -32,6 +32,12 @@ branch/repository/issue, pending decision, stale scope, changed approved score o
 relationship fails closed. Other fresh statuses keep the Backlog gate; standalone invocation
 and revalidation keep their guards.
 
+Keep the initial gate output in the Scope receipt's evidence, using `--output
+specs/<feature>/evidence/scope/gate.json`. Fresh managed gate and bind retain the original
+approval, parent, exact native sibling list (`parent_children`) and prerequisites (`dependencies`).
+Finish the published dependency plan's actual acceptance before this gate; a pending plan
+still blocks admission.
+
 ## Binding restrictions
 
 Fresh native `bind` requires the owned initial Specify claim before any local or remote write,
