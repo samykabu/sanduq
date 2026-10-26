@@ -73,7 +73,8 @@ from wf_policy import (default_policy, select_gate, validate_policy, _positive, 
 from wf_health import (registry, compatible, active_host, command_exists, package_digest, resolve_commands,
                        project_errors, SCOPE_STATUSES, project_defaults, MANAGED_CI, preserved_ci_path, ci_errors,
                        delegation_errors, host_warnings, progress_wiring_warnings, guard_approval_warnings,
-                       doctor_cache_key, store_doctor_cache, cached_doctor, doctor, lean_preflight, pr_lint_binding)
+                       doctor_cache_key, store_doctor_cache, cached_doctor, doctor, lean_preflight, pr_lint_binding,
+                       upgrade_command, dependency_errors)
 from wf_receipts import (verify_sync_binding, same_path, recorded_sync_fields, handoff_text, native_run_status,
                          sync_retry, context_gate, measured_context_gate, required_inputs, first_phase_tasks,
                          consulted_inputs, without_required, canonical_receipt, dependency_fingerprints, role_exempt,
@@ -1030,7 +1031,11 @@ class Run:
             require(not state['active'], 'STAGE_ALREADY_ACTIVE: recover or finish the recorded claim')
             for path in (self.root / 'specs').glob('*/workflow/checkpoint.json'):
                 require(path == self.path or not read(path, {}).get('active'), 'OTHER_FEATURE_STAGE_ACTIVE: ' + str(path))
-            require(state['dependency_digest'] == package_digest(self.root), 'DEPENDENCY_CHANGED: review upgrade and migrate the checkpoint before execution')
+            require(state['dependency_digest'] == package_digest(self.root),
+                    'DEPENDENCY_CHANGED: the installed packages changed since this checkpoint was written; review the '
+                    'upgrade notes, then run "python .specify/extensions/workflow/scripts/workflow.py migrate --feature ' +
+                    self.relative + ' --reason <text>" before execution (an incomplete upgrade is fixed by "' +
+                    upgrade_command(self.root)[0] + '")')
             # Delegation health is checked below, after every rejection, because
             # the claim may install the skill it would otherwise report missing.
             health = cached_doctor(self.root, self.policy, state['dependency_digest'])
@@ -1103,14 +1108,26 @@ class Run:
             if coordinator_owned:
                 state['active']['execution_owner'] = 'coordinator'
             if self.policy['delegation']['enabled'] and not coordinator_owned:
-                from delegation import selected_route, stage_work_type
+                from delegation import DelegationError, selected_route, stage_work_type
                 work_type = stage_work_type(state['commands'], stage,
                                             self.policy['delegation'].get('fixed_collection_commands'))
-                state['active']['delegation'] = {
-                    'identity': self.relative + '/stage:' + stage,
-                    'task_type': work_type,
-                    'candidates': selected_route(self.policy['delegation'], work_type, active_host(self.root)),
-                }
+                try:
+                    candidates = selected_route(self.policy['delegation'], work_type, active_host(self.root))
+                except DelegationError as exc:
+                    if not str(exc).startswith('DELEGATION_REVIEW_ROUTE_UNSAFE'):
+                        raise
+                    # SEC-01 interim: a review-kind stage runs natively in the selected host instead of
+                    # through the external driver; no route is recorded, so completion needs no
+                    # dispatcher attempt, and the refusal stays visible on the claim.
+                    state['active']['delegation_refused'] = {'task_type': work_type,
+                                                             'rule': 'refused:DELEGATION_REVIEW_ROUTE_UNSAFE',
+                                                             'reason': str(exc)}
+                else:
+                    state['active']['delegation'] = {
+                        'identity': self.relative + '/stage:' + stage,
+                        'task_type': work_type,
+                        'candidates': candidates,
+                    }
             state['active']['baseline'] = fingerprint_files(self.root, [p for r in state['receipts'].values() for p in r['fingerprints']],
                                                             feature=self.relative)
             state['status'] = 'in-progress'

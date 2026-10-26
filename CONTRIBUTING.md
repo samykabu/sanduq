@@ -5,14 +5,27 @@ usable example. Generated agent registrations and installed consumer copies are 
 
 ## Table of contents
 
+- [Priority rule](#priority-rule)
 - [Set up the checkout](#set-up-the-checkout)
 - [Find the owning source](#find-the-owning-source)
 - [Test a local package](#test-a-local-package)
 - [Validate a change](#validate-a-change)
 - [Update documentation and assets](#update-documentation-and-assets)
 - [Prepare a release](#prepare-a-release)
+- [Release trains](#release-trains)
 - [CI and runner policy](#ci-and-runner-policy)
 - [Maintainer records](#maintainer-records)
+
+## Priority rule
+
+The [product brief](docs/start/product-brief.md) names the users and the outcomes. Work is ordered by it:
+
+1. Consumer-reported data loss and broken workflows come first. Fix them before any optimization work.
+2. No optimization rounds during the stabilization phases (PH-01 and PH-02 of the current plan). Fixes,
+   documentation and security work continue.
+3. A cleanup pull request shows that behavior does not change: the same tests pass before and after,
+   and the description says which checks prove it.
+4. Record the agent cost of each release train. See [release trains](#release-trains).
 
 ## Set up the checkout
 
@@ -38,7 +51,7 @@ need authenticated GitHub access. Use a disposable consumer for installer work.
 
 | Change | Source |
 | --- | --- |
-| Portable skills (Illustrate, User Manual, Delegate Task) | [samykabu/sanduq-skills](https://github.com/samykabu/sanduq-skills); never edit their vendored copies here |
+| Portable skills (Illustrate, User Manual, Delegate Task, Progress Report) | [samykabu/sanduq-skills](https://github.com/samykabu/sanduq-skills); never edit their vendored copies here |
 | Vendored skill copies and their pins | `vendor.lock.json`, synced by `extensions/scripts/vendor.py` |
 | Claude Code marketplace entries | `.claude-plugin/marketplace.json` (pinned `git-subdir` sources); bundle versions live in sanduq-skills |
 | Extension-adapted skill entrypoints | `SKILL.ext.md`; `package.py` restores `SKILL.md` in the archive |
@@ -120,11 +133,13 @@ infrastructure and skipped checks accurately; package creation alone is not live
 
 ## Update a vendored skill
 
-Change and release the skill in sanduq-skills first (tag `<bundle>-vX.Y.Z`). Every day, the
-`vendor-update` workflow here vendors any newer release, pins its marketplace entry, and opens a
-pull request; run it from the Actions tab to skip the wait. It opens the pull request with the
+Change and release the skill in sanduq-skills first (tag `<bundle>-vX.Y.Z`). As a step of each
+release train, run the `vendor-update` workflow from the Actions tab: it vendors any newer release,
+pins its marketplace entry, and opens a pull request. It opens the pull request with the
 `VENDOR_PR_TOKEN` secret (a fine-grained token for this repository with contents and pull-request
-write access) so CI starts on its own; renew that token before it expires. To do the same locally:
+write access) so CI starts on its own; renew that token before it expires. The same token opens the
+release catalog pull request (`release/catalog-<run id>`) and enables auto-merge on it, because the
+`main` ruleset requires a pull request and the lint check. To do the same locally:
 
 ```bash
 python extensions/scripts/vendor.py update --source ../sanduq-skills
@@ -184,11 +199,17 @@ the current `main` commit. It builds deterministic archives, publishes immutable
 assets, downloads and verifies their SHA-256 bytes, and only then promotes both catalogs. A retry
 must verify the same bytes. Never overwrite an existing release asset to repair a version.
 
+## Release trains
+
+Packages ship together in one release train per completed phase, with vendor syncs batched into
+the train. The checklist (cumulative upgrade smoke, one retained live run per host, evidence assets,
+agent cost and code paths touched) is in [release process](docs/start/release-process.md).
+
 ## CI and runner policy
 
-Sanduq's own [CI](.github/workflows/ci.yml) uses `ubuntu-latest` and `windows-latest`; release runs
-on Ubuntu. The repository records an exception because the organization-scoped home-office
-runners belong to another account. Verify current availability before changing `runs-on`.
+Sanduq's own [CI](.github/workflows/ci.yml) runs on the home-office runner `homek8-general`. The
+jobs that run on GitHub-hosted runners, and why, are listed in the red runner exception at the top
+of the [README](README.md). Update that exception in the same pull request that changes a `runs-on`.
 
 A consumer records its own runners and capabilities in `.specify/workflow.yml`; Sanduq renders
 managed workflows from that policy. See [runner configuration](docs/workflow/operations.md#where-your-ci-actually-runs).

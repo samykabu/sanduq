@@ -10,7 +10,7 @@ before implementation, and writes a QA walkthrough for testers after it.
 | Commands | `init`, `analyze`, `document` ([reference](../reference/commands.md#assure)) |
 | Requires | Illustrate 2.x, enforced by `deps.py ensure` |
 | Standalone | Yes |
-| License | PolyForm Noncommercial 1.0.0 |
+| License | MIT |
 
 ## Setup
 

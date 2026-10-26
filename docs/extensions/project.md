@@ -10,7 +10,7 @@ moves its Status column through the lifecycle and, in standalone use, creates on
 | Commands | `init`, `sync` ([reference](../reference/commands.md#project)) |
 | Requires | Python 3; uses `gh` when available |
 | Standalone | Yes |
-| License | PolyForm Noncommercial 1.0.0 |
+| License | MIT |
 
 ## Setup
 

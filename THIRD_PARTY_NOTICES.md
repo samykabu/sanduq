@@ -6,7 +6,9 @@ copy that includes that material.
 
 ## Illustrate skill
 
-Portions of the Illustrate skill are derived from work by Cathryn Lavery:
+The Illustrate extension vendors the `illustrate` skill from the `illustration-tools` plugin of
+[sanduq-skills](https://github.com/samykabu/sanduq-skills) (MIT, Copyright (c) 2026 Samy K. Abushanab), pinned in
+[`vendor.lock.json`](vendor.lock.json). Portions of that skill are derived from work by Cathryn Lavery:
 
 > MIT License
 >
@@ -27,11 +29,12 @@ Portions of the Illustrate skill are derived from work by Cathryn Lavery:
 > DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT
 > OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-## Progress and Delegate Task skills
+## Progress, Delegate Task and User Manual skills
 
-The Progress extension vendors the `progress-report` skill, and Workflow vendors `delegate-task`, from
-[sanduq-skills](https://github.com/samykabu/sanduq-skills), pinned in [`vendor.lock.json`](vendor.lock.json). Both are
-MIT licensed there:
+The Progress extension vendors the `progress-report` skill, Workflow vendors `delegate-task`, and User Manual
+vendors the `user-manual` skills' scripts, scaffold and references (the `dev-tools` plugin), from
+[sanduq-skills](https://github.com/samykabu/sanduq-skills), pinned in [`vendor.lock.json`](vendor.lock.json). All
+three are MIT licensed there:
 
 > MIT License
 >

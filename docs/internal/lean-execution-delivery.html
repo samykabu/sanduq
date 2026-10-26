@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lean execution delivery</title><style>body{max-width:1180px;margin:32px auto;padding:24px;font:16px/1.65 system-ui;color:#173340}h1,h2{color:#096764}table{border-collapse:collapse;width:100%;font-size:14px}th,td{border:1px solid #d4dfe3;padding:9px;text-align:left;vertical-align:top}code{overflow-wrap:anywhere;background:#edf2f4}pre{padding:16px;overflow:auto}a{color:#096764}</style></head><body><h1>Lean execution: first delivery package</h1>
-<p><strong>Implemented and locally accepted on 12 October 2026.</strong> The independent final review found three material defects; one repair batch closed them and the focused recheck passed. The corrected packages passed 123 targeted tests and an isolated Bunyan upgrade. Main Bunyan is unchanged. Publication and main-workspace adoption remain separate delivery steps.</p>
+<p><strong>Implemented and locally accepted on 12 October 2026.</strong> The independent final review found three material defects; one repair batch closed them and the focused recheck passed. The corrected packages passed 123 targeted tests and an isolated consumer upgrade. The consumer's main checkout is unchanged. Publication and main-workspace adoption remain separate delivery steps.</p>
 <p>This implements the approved first package: <strong>P01-P06, P08 and P12</strong>. P07, P09-P11, P13 and optional P14 remain deferred. The changes preserve model allowlists, local functional acceptance, lightweight self-hosted PR checks, Project buckets and disabled deployment. They do not restore mandatory TDD.</p>
 <h2>What changed</h2>
 <table>
@@ -61,7 +61,7 @@
 <li>[x] Run targeted tests, documentation checks, vendor identity checks and package builds.</li>
 <li>[x] Complete the independent review after coding and testing.</li>
 <li>[x] Repair the three material findings and rerun affected checks.</li>
-<li>[x] Rebuild and upgrade the isolated Bunyan consumer; verify protected files.</li>
+<li>[x] Rebuild and upgrade the isolated consumer; verify protected files.</li>
 <li>[x] Complete the focused reviewer continuation and retain evidence.</li>
 </ul>
 <h2>Verification and review</h2>
@@ -96,7 +96,7 @@
 </tr>
 </tbody>
 </table>
-<p>The supported upgrade installed these packages in <code>D:/Projects/abushanab-net/Bunyan/.claude/worktrees/lean-workflow-pilot</code>, branch <code>chore/workflow-lean-pilot</code>, using <code>--preserve-ci</code>. Workflow doctor passes with lean mode enabled. The installed progress CLI reconciles all 121 historical normalized runs. Five protected policy/CI file hashes match their baseline; all seven snapshot hashes in the original main checkout remain unchanged.</p>
+<p>The supported upgrade installed these packages in <code><consumer-checkout>/.claude/worktrees/lean-workflow-pilot</code>, branch <code>chore/workflow-lean-pilot</code>, using <code>--preserve-ci</code>. Workflow doctor passes with lean mode enabled. The installed progress CLI reconciles all 121 historical normalized runs. Five protected policy/CI file hashes match their baseline; all seven snapshot hashes in the original main checkout remain unchanged.</p>
 <p>The pilot explicitly enables lean execution with a 300-second minimum timeout, 7200-second maximum and 120-second finalization reserve. <code>.specify/lean-preflight.json</code> paths resolve relative to the manifest directory. Feature verification plans must still declare actual inputs and commands before evidence reuse. This pilot does not manufacture future product acceptance.</p>
 <p>The pilot includes copied pre-existing installed toolchain state from the main workspace, so its whole Git diff must not be staged as this change. Illustrate, Memory and portable-driver differences against its base are not all attributable to this package. The source worktree is the bounded, reviewable implementation.</p>
 <h2>Delegation and cost evidence</h2>
@@ -166,13 +166,13 @@
 <p>Claude reported Sonnet5.5 for all three of its invocations. Codex did not report actual serving-model identity; requested models are shown above without treating them as confirmed actual models. The timed-out continuation has no terminal usage record. Its zero placeholders are excluded. Exact reported usage and available cost estimates are retained separately by harness in the <a href="lean-execution-evidence.json">evidence file</a>; cross-harness token totals are not added together.</p>
 <p>This batch still incurred author integration continuations and one timeout. The changes provide controls and measurable evidence for the next feature; they do not demonstrate a percentage reduction in implementation time or tokens yet. Timeout/finalization guidance uses the existing watchdog. A new mid-run signal in the portable driver is not implemented.</p>
 <h2>Handoff</h2>
-<p>Source: <code>D:/Projects/Personal/sanduq-lean-execution</code>, branch <code>fix/workflow-lean-execution</code>, based on <code>35959c5</code>. It includes the retained PR77 prerequisites, verified open and unmerged through GitHub REST during this task. Do not drop that dependency when preparing publication. Workflow/Scope/PR release entries remain <code>pending-review</code>; the public catalog was not changed.</p>
+<p>Source: <code><sanduq-worktree></code>, branch <code>fix/workflow-lean-execution</code>, based on <code>35959c5</code>. It includes the retained PR77 prerequisites, verified open and unmerged through GitHub REST during this task. Do not drop that dependency when preparing publication. Workflow/Scope/PR release entries remain <code>pending-review</code>; the public catalog was not changed.</p>
 <p>There are no remaining implementation blockers within the approved package. No PR, remote release, merge or deployment was created by this work. Main-workspace adoption should use the supported package upgrade after its existing changes are reconciled, preserving CI and the approved Memory/Project/constitution files. Do not copy the pilot's entire dirty tree.</p>
 <p>To verify the retained pilot:</p>
-<pre><code class="language-powershell">Set-Location D:/Projects/abushanab-net/Bunyan/.claude/worktrees/lean-workflow-pilot
+<pre><code class="language-powershell">Set-Location <consumer-checkout>/.claude/worktrees/lean-workflow-pilot
 python .specify/extensions/workflow/scripts/workflow.py doctor --project
 </code></pre>
-<p>The next product feature must enter through Sanduq Workflow with its actual issue and declared verification plan. Deferred proposal IDs remain in the original Bunyan retrospective decision report; they are not silently included in this delivery.</p>
+<p>The next product feature must enter through Sanduq Workflow with its actual issue and declared verification plan. Deferred proposal IDs remain in the original consumer retrospective decision report; they are not silently included in this delivery.</p>
 <p><a href="lean-execution-evidence.json">Machine-readable evidence</a> contains the selected test outputs, protected-file checks, package and source hashes, review outcomes and seven-run ledger. Raw prompts and harness logs remain ignored in <code>.delegate/</code>.</p>
 <h2>Changes after this evidence</h2>
 <p>The hashes and pilot results above describe the packages built before the 2026-10-15 merge review. That review rebased the work onto Workflow 1.9.5 and changed it: claim credentials reach workers only when lean mode is on, artifact-analysis routing and claim environment output are lean-gated, Scope became 1.6.2 requiring Workflow 1.10.0, and PR 4.2.3 runs the lint step only when <code>execution_tools.py</code> exists. The release packages will differ from the recorded hashes. Their own release checks replace this evidence.</p>

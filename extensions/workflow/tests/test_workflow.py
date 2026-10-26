@@ -176,6 +176,28 @@ class WorkflowTests(unittest.TestCase):
         self.assertNotIn('manual_analyze', w.stages(self.policy))
         self.assertTrue(w.doctor(self.root, self.policy)['ok'])
 
+    def test_doctor_project_names_versions_and_upgrade_command_for_an_older_dependency(self):
+        # MARWA-14: Workflow updated alone through Spec Kit leaves an older Scope behind.
+        lock = json.loads((Path(w.__file__).resolve().parents[1] / 'dependencies.json').read_text(encoding='utf-8'))
+        w.write(self.root / '.specify/extensions/workflow/dependencies.json', lock)
+        registered = w.registry(self.root)
+        registered['workflow'] = {'version': '1.18.0', 'enabled': True}
+        registered['scope'] = {'version': '1.10.0', 'enabled': True}
+        w.write(self.root / '.specify/extensions/.registry', {'extensions': registered})
+        command = 'python .specify/extensions/workflow/scripts/upgrade.py --version 1.18.0 --apply'
+        errors = [e for e in w.doctor(self.root, self.policy, project=True)['errors'] if e.startswith('DEPENDENCY_UNAVAILABLE: scope')]
+        self.assertEqual(len(errors), 1)
+        for text in ('scope 1.10.0 is installed', 'Workflow 1.18.0 requires scope ' + lock['required']['scope'], command):
+            self.assertIn(text, errors[0])
+        # Inside RANGES but older than the lock: only `doctor --project` reports it.
+        lock['required']['scope'] = '1.12.0'
+        w.write(self.root / '.specify/extensions/workflow/dependencies.json', lock)
+        registered['scope'] = {'version': '1.11.0', 'enabled': True}
+        w.write(self.root / '.specify/extensions/.registry', {'extensions': registered})
+        self.assertIn('DEPENDENCY_UNAVAILABLE: scope 1.11.0 is installed; Workflow 1.18.0 requires scope 1.12.0 '
+                      '(>=1.11,<2); run "' + command + '"', w.doctor(self.root, self.policy, project=True)['errors'])
+        self.assertFalse(any(e.startswith('DEPENDENCY_UNAVAILABLE: scope') for e in w.doctor(self.root, self.policy)['errors']))
+
     def test_context_reserves_space_and_labels_estimation(self):
         gate = w.context_gate(self.policy, self.usage(.46))
         self.assertFalse(gate['pause'])  # Estimates must never force a fresh session

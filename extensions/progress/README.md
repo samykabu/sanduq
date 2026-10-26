@@ -413,5 +413,6 @@ Hooks and the status line never fail: they drop the event, log it and exit 0.
 
 ## License
 
-The extension is PolyForm Noncommercial 1.0.0. The vendored `progress-report` code (`scripts/`, `assets/ui/`, `docs/`,
+The extension is MIT (versions released before the October 2026 release train were PolyForm Noncommercial 1.0.0).
+The vendored `progress-report` code (`scripts/`, `assets/ui/`, `docs/`,
 `skills/progress/references/`) is MIT in sanduq-skills; the notice is in `THIRD_PARTY_NOTICES.md`. See [licenses](https://github.com/samykabu/sanduq/blob/main/docs/reference/licenses.md).

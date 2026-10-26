@@ -23,6 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
+          persist-credentials: false
           fetch-depth: 0
       - id: matrix
         run: |
@@ -40,12 +41,14 @@ jobs:
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || 'homek8-general' }}
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
 
       - name: Install validation dependencies
         run: python3 -m pip install --user pyyaml packaging
 
       - name: Claude Code validates the marketplace
-        run: npx -y @anthropic-ai/claude-code plugin validate .
+        run: npx -y @anthropic-ai/claude-code@2.1.310 plugin validate .
 
       - name: Skills follow the Agent Skills frontmatter rules
         run: python3 extensions/scripts/validate_skills.py extensions presets
@@ -168,6 +171,23 @@ jobs:
           print("extension/catalog/plugin manifest validation ok")
           PY
 
+      # SEC-09 pins: npx: <pkg>@<version>; Install-Module: -RequiredVersion; OS packages belong in the
+      # runner image. Allowed until they move into the homek8-general image (runner-image work): shellcheck
+      # from apt-get below, and the Chromium OS libraries that `playwright install --with-deps` installs.
+      # The [x]/[e]/[t] brackets keep these patterns from matching their own lines.
+      - name: Workflow tool installs are pinned
+        run: |
+          {
+            grep -nE 'np[x] +(-y +)?(@[a-z0-9._-]+/)?[a-z0-9_.][a-z0-9._-]*( |$)' .github/workflows/*.yml
+            grep -nE 'Install-Modul[e] ' .github/workflows/*.yml | grep -v -- '-RequiredVersion '
+            grep -nE 'apt-ge[t] +install' .github/workflows/*.yml | grep -vF 'sudo apt-get install -y shellcheck'
+          } > "$RUNNER_TEMP/unpinned.txt" || true
+          if [ -s "$RUNNER_TEMP/unpinned.txt" ]; then
+            cat "$RUNNER_TEMP/unpinned.txt"
+            echo "::error::Unpinned tool install in .github/workflows (see the lines above): npx: <pkg>@<version>; Install-Module: -RequiredVersion; OS packages: the runner image."
+            exit 1
+          fi
+
       - name: ShellCheck bash scripts
         run: |
           sudo apt-get update -y && sudo apt-get install -y shellcheck
@@ -189,7 +209,7 @@ jobs:
         shell: pwsh
         run: |
           Set-PSRepository PSGallery -InstallationPolicy Trusted
-          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Force -Scope CurrentUser
           $issues = Get-ChildItem -Recurse -Filter *.ps1 | ForEach-Object {
             Invoke-ScriptAnalyzer -Path $_.FullName -Severity Error,Warning
           }
@@ -209,7 +229,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.changes.outputs.matrix) }}
-    runs-on: ${{ matrix.os != 'ubuntu-latest' && matrix.os || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || 'homek8-general' }}
+    runs-on: ${{ matrix.os == 'windows-latest' && 'windows-latest' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || 'homek8-general' }}
     # Tests create and delete many temporary repositories; a detached `git gc --auto` or background
     # maintenance writing into one while it is removed fails cleanup (Errno 39) on Linux.
     env:
@@ -220,6 +240,8 @@ jobs:
       GIT_CONFIG_VALUE_1: 'false'
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.13'
@@ -305,9 +327,11 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os != 'ubuntu-latest' && matrix.os || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || 'homek8-general' }}
+    runs-on: ${{ matrix.os == 'windows-latest' && 'windows-latest' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || 'homek8-general' }}
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.13'
@@ -316,12 +340,13 @@ jobs:
           cache-dependency-path: |
             extensions/workflow/requirements.txt
             .github/workflows/ci.yml
-      - run: python -m pip install 'specify-cli @ git+https://github.com/github/spec-kit.git@8147943512404afb9d99c6252cb9bf84369fd0b0'
+      - run: python -m pip install 'specify-cli @ git+https://github.com/github/spec-kit.git@0282d03eb6fc3091b3deaa3a855d4030dc40cd6c'
       - run: python extensions/scripts/smoke_memory_install.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: memory-installation-${{ matrix.os }}
+          retention-days: 7
           path: dist/memory-install-tests/
           if-no-files-found: ignore
 
@@ -338,6 +363,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.13'
@@ -347,13 +374,14 @@ jobs:
             extensions/workflow/requirements.txt
             .github/workflows/ci.yml
       - name: Install the tested Spec Kit build
-        run: python -m pip install 'specify-cli @ git+https://github.com/github/spec-kit.git@8147943512404afb9d99c6252cb9bf84369fd0b0' -r extensions/workflow/requirements.txt
+        run: python -m pip install 'specify-cli @ git+https://github.com/github/spec-kit.git@0282d03eb6fc3091b3deaa3a855d4030dc40cd6c' -r extensions/workflow/requirements.txt
       - name: Verify isolated native workflow prototype contract
         run: python -m unittest discover -s prototypes/sanduq-delivery -p test_native_probe.py
       - name: Fetch the tested optional SuperSpec source
         if: matrix.provider == 'superspec'
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
+          persist-credentials: false
           repository: WangX0111/superspec
           ref: c20ac6c1ba069cc9a72dacb8044b7b193d3dde81
           path: dist/upstream-superspec
@@ -382,6 +410,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: installation-${{ matrix.host }}-${{ matrix.provider }}
+          retention-days: 7
           path: |
             dist/install-tests/*/result.json
             dist/install-tests/*/*.log
@@ -395,6 +424,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.13'
@@ -403,7 +434,7 @@ jobs:
           cache-dependency-path: |
             extensions/workflow/requirements.txt
             .github/workflows/ci.yml
-      - run: python -m pip install 'specify-cli @ git+https://github.com/github/spec-kit.git@8147943512404afb9d99c6252cb9bf84369fd0b0' -r extensions/workflow/requirements.txt
+      - run: python -m pip install 'specify-cli @ git+https://github.com/github/spec-kit.git@0282d03eb6fc3091b3deaa3a855d4030dc40cd6c' -r extensions/workflow/requirements.txt
       - name: Verify actual version upgrade and failure rollback
         env:
           GH_TOKEN: ${{ github.token }}
@@ -415,6 +446,7 @@ jobs:
         if: always()
         with:
           name: upgrade-rollback
+          retention-days: 7
           path: |
             dist/install-tests/*/upgrade-result.json
             dist/install-tests/*/*.log
@@ -427,9 +459,11 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os != 'ubuntu-latest' && matrix.os || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || 'homek8-general' }}
+    runs-on: ${{ matrix.os == 'windows-latest' && 'windows-latest' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || 'homek8-general' }}
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
       # On Windows the smoke builds its fake gh.exe from pip's launcher, which this interpreter has.
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -442,6 +476,7 @@ jobs:
         if: always()
         with:
           name: project-init-${{ matrix.os }}
+          retention-days: 7
           path: |
             dist/project-init-tests/*/result.json
             dist/project-init-tests/*/execution.log
@@ -453,6 +488,8 @@ jobs:
     runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || 'homek8-general' }}
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
       - name: project-sync degrades gracefully without config/gh
         run: |
           # No config.json + no gh scope -> must exit 0 with a logged skip, never throw.

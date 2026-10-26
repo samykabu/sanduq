@@ -36,8 +36,9 @@ defaults:
   check_interval_hours: 24
 """
 
-# The real, plain-text `specify extension info <id>` output (specify_cli 1.0.11, the commit
-# pinned in .github/workflows/ci.yml: 8147943512404afb9d99c6252cb9bf84369fd0b0). Captured by
+# The real, plain-text `specify extension info <id>` output, captured on specify_cli 1.0.11
+# (commit 8147943512404afb9d99c6252cb9bf84369fd0b0); the format is unchanged on the 1.1.3 pin
+# now used in .github/workflows/ci.yml, which the installation job exercises live. Captured by
 # driving `specify_cli.extensions.command_info` through Typer's CliRunner with a mocked catalog
 # entry: there is no --json option, and Rich renders plain text (no ANSI/markup) when stdout is
 # not a tty, exactly as it is here under subprocess.PIPE.

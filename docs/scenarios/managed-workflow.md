@@ -11,8 +11,44 @@ runs next, takes a [claim](../reference/glossary.md#claim) on it, and checks the
 ## Prerequisites
 
 - A Spec Kit project with the Sanduq catalog registered. See [set up Spec Kit](../start/install-speckit.md).
-- Python 3.10 or later, Git, and `gh` signed in with Project scopes. See [prerequisites](../start/prerequisites.md).
-- A GitHub Project (v2) for the repository.
+- Python 3.11 or later (Workflow runs on 3.10; Memory and Progress need 3.11), Git, and `gh` signed
+  in with Project scopes. See [prerequisites](../start/prerequisites.md).
+- A GitHub Project (v2) board linked to the repository. See [board](#board).
+
+## Board
+
+Every managed claim checks the board first. Without a configured board, the claim fails with a list of
+`PROJECT_CONFIG_REQUIRED`, `PROJECT_SCOPE_STATUS_MISSING` and `PROJECT_PHASE_UNMAPPED` codes, and
+nothing runs. The board's Status field needs these seven options, spelled exactly like this:
+
+`Backlog`, `Feature Specification`, `Need Clarifications`, `Ready`, `In progress`, `In review`, `Done`
+
+A new GitHub board has `In Progress` with a capital P. Rename it, or let `$speckit-project-init`
+create the missing columns (`--auto-create-columns` in the script). Changing columns gives every
+option a new id; Project init saves and restores each item's Status while it does this.
+
+## First-run checklist
+
+Follow these in order. Each step links to its detail.
+
+1. Install Spec Kit, Python 3.11 or later, Git and `gh` ([prerequisites](../start/prerequisites.md)).
+2. Sign in to GitHub and add the Project scopes:
+   `gh auth login`, then `gh auth refresh -h github.com -s project,read:project`.
+3. In your repository, run `specify init --here --integration codex` (or `--integration claude`) and
+   register the Sanduq catalog at priority 1 ([set up Spec Kit](../start/install-speckit.md)).
+4. Create a GitHub Project (v2), link it to the repository, and give its Status field the seven
+   options under [board](#board).
+5. Run `specify extension add workflow`.
+6. Run `$speckit-workflow-init` with your choices (see [install](#install)). Init runs Workflow's
+   installer.
+7. Run `$speckit-project-init` and select required sync. It maps the seven statuses to the
+   lifecycle phases.
+8. Run `python .specify/extensions/workflow/scripts/workflow.py doctor --project` until it reports
+   `ok: true`.
+9. On Codex, approve the guard hook once in `/hooks`. Start a new agent session so the host loads the
+   new commands.
+10. Run `$speckit-workflow-scope <issue>` on a real issue. The first claim has succeeded when Scope
+    starts its analysis of the issue instead of stopping on doctor errors.
 
 ## Install
 

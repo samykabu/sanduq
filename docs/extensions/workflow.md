@@ -11,7 +11,7 @@ can resume in a new session.
 | Commands | 13, including `init`, `scope`, `clarify`, `continue`, `finalize`, `status`, `doctor` ([reference](../reference/commands.md#workflow)) |
 | Requires | Python 3.10 or later, Git, `gh`; installs Scope, Project, PR, Illustrate and selected Assure and User Manual |
 | Standalone | Yes; it is the managed level |
-| License | PolyForm Noncommercial 1.0.0 |
+| License | MIT |
 
 ## Setup
 

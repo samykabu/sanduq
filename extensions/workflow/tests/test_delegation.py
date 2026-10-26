@@ -215,14 +215,15 @@ class DelegationTests(unittest.TestCase):
         # documentation, review, coordination. Discovery and qa_author are
         # standard (never light); qa_collect is the only light default;
         # coordination defaults to high (finding 7; standing rule 5 / C2).
+        # review is refused while external runs bypass permissions (SEC-01 interim).
         expected = {
             'codex': ['gpt-6-sol', 'gpt-6-sol', 'gpt-6-sol', 'gpt-6-terra',
-                      'gpt-6-sol', 'gpt-6-sol', 'gpt-6-astra'],
-            'claude': ['sonnet', 'sonnet', 'sonnet', 'haiku', 'opus', 'opus', 'opus'],
+                      'gpt-6-sol', 'gpt-6-astra'],
+            'claude': ['sonnet', 'sonnet', 'sonnet', 'haiku', 'opus', 'opus'],
         }
         for host, models in expected.items():
             actual = [delegation.selected_route(self.policy['delegation'], work_type, host)[0]
-                      ['requested_model'] for work_type in delegation.TYPES]
+                      ['requested_model'] for work_type in delegation.TYPES if work_type != 'review']
             self.assertEqual(actual, models)
 
     def test_annotation_preserves_task_lines_and_earlier_task_fingerprints(self):
@@ -3244,6 +3245,61 @@ class DelegationTests(unittest.TestCase):
         self.assertTrue(any('qa_author' in warning for warning in result['warnings']))
         self.assertTrue(any('coordination' in warning for warning in result['warnings']))
 
+    def test_review_kind_stage_claims_natively_while_external_runs_bypass_permissions(self):
+        # SEC-01 interim at the stage level: a review-profile stage (Analyze routes to the review tier) is
+        # claimed without a delegation route, runs in the selected host, and the refusal stays on the claim.
+        self.tasks()
+        self.enable()
+        run = w.Run(self.root, self.feature)
+        run.start('acme/app#10')
+        forced = lambda self_, state, finalize=False: {'stage': 'analyze', 'command': state['commands']['analyze'],
+                                                       'reason': 'pending'}
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch_runtime('doctor', return_value={'ok': True, 'errors': []}), \
+             patch.object(w.Run, 'next', side_effect=forced, autospec=True):
+            claim = run.claim({'session_id': 'test-session'})
+        self.assertEqual(claim['stage'], 'analyze')
+        state = run.load()
+        self.assertNotIn('delegation', state['active'])
+        self.assertEqual(state['active']['delegation_refused']['rule'], 'refused:DELEGATION_REVIEW_ROUTE_UNSAFE')
+        self.assertIn('permission-bypass', state['active']['delegation_refused']['reason'])
+        # (a non-review stage still records its route: test_claim_refreshes_pending_metadata_and_exposes_stage_route)
+
+    def test_review_kind_routes_are_refused_while_external_runs_bypass_permissions(self):
+        # SEC-01 interim: refused at selection, so claim, start, annotate and doctor all see it.
+        config = self.policy['delegation']
+        with self.assertRaisesRegex(delegation.DelegationError,
+                                    r'^DELEGATION_REVIEW_ROUTE_UNSAFE: .*permission-bypass.*full environment.*'
+                                    r'natively.*PH-02'):
+            delegation.selected_route(config, 'review', 'codex')
+        for work_type in delegation.TYPES:
+            if work_type != 'review':
+                self.assertTrue(delegation.selected_route(config, work_type, 'codex'))
+        profiled = copy.deepcopy(config)
+        profiled['routes']['documentation']['fallbacks'] = [{'harness': 'selected', 'tier': 'review'}]
+        profiled['overrides'][self.feature + '/T001'] = {'preferred': {'harness': 'codex', 'tier': 'review'},
+                                                         'fallbacks': []}
+        with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_REVIEW_ROUTE_UNSAFE'):
+            delegation.selected_route(profiled, 'documentation', 'claude')
+        with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_REVIEW_ROUTE_UNSAFE'):
+            delegation.selected_route(profiled, 'implementation', 'claude', self.feature + '/T001')
+        self.assertEqual(delegation.unsafe_review_routes(profiled), ['documentation', 'review', self.feature + '/T001'])
+        # doctor warns (other routes keep delegating) only while delegation is enabled
+        self.assertFalse(any('DELEGATION_REVIEW_ROUTE_UNSAFE' in x
+                             for x in w.doctor(self.root, self.policy, check_delegation=False)['warnings']))
+        self.policy['delegation']['enabled'] = True
+        warnings = w.doctor(self.root, self.policy, check_delegation=False)['warnings']
+        self.assertTrue(any(x.startswith('DELEGATION_REVIEW_ROUTE_UNSAFE') and x.endswith('(refused: review)')
+                            for x in warnings), warnings)
+        # annotate keeps working and marks a review task as refused; start refuses it
+        self.configure()
+        path = self.tasks('- [ ] T001 Implement parser\n- [ ] T002 [Review] Check parser\n')
+        delegation.annotate_tasks(self.root, self.feature, self.policy['delegation'], 'codex')
+        self.assertIn('"rule": "refused:DELEGATION_REVIEW_ROUTE_UNSAFE"', path.read_text(encoding='utf-8'))
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_REVIEW_ROUTE_UNSAFE'):
+            dispatch.start(self.root, self.feature, 'T002')
+
     def test_legacy_ledger_with_qa_task_type_stays_readable(self):
         self.tasks()
         self.enable()
@@ -3259,7 +3315,7 @@ class DelegationTests(unittest.TestCase):
         ledger = dispatch.load_ledger(self.root, self.feature)
         self.assertEqual(ledger['attempts'][0]['task_type'], 'qa')
 
-    def test_review_and_implementation_routes_launch_writable(self):
+    def test_implementation_routes_launch_writable_and_review_routes_are_refused(self):
         self.tasks('- [ ] T001 Implement parser\n- [ ] T002 [Review] Check parser\n')
         self.enable()
         launched = []
@@ -3269,15 +3325,11 @@ class DelegationTests(unittest.TestCase):
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
              patch.object(dispatch, 'launch', side_effect=launch):
             dispatch.start(self.root, self.feature, 'T001')
-            dispatch.start(self.root, self.feature, 'T002')
-            route = delegation.selected_route(self.policy['delegation'], 'review', 'codex')
-            dispatch.candidate_start(self.root, self.feature, self.feature + '/stage:review', 'review',
-                                     route, dispatch.brief_file(self.root, 'Review stage'),
-                                     self.root, 1800)
-        self.assertEqual(len(launched), 3)
-        self.assertEqual([c['read_only'] for c in launched], [False, False, False])
+            with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_REVIEW_ROUTE_UNSAFE'):
+                dispatch.start(self.root, self.feature, 'T002')
+        self.assertEqual([c['read_only'] for c in launched], [False])
         attempts = dispatch.load_ledger(self.root, self.feature)['attempts']
-        self.assertEqual([a['task_type'] for a in attempts], ['implementation', 'review', 'review'])
+        self.assertEqual([a['task_type'] for a in attempts], ['implementation'])
         self.assertFalse(any(a['read_only'] for a in attempts))
 
     def test_annotation_adds_newline_before_marker_on_final_task_line(self):

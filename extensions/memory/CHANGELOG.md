@@ -3,6 +3,8 @@
 ## [2.5.1] - 2026-10-23
 
 - Preflight accepts tracked feature evidence that matches an ignore rule. The scoped checkpoint preserves its current edits and deletions. Untracked ignored evidence still blocks archival unless its owner's declared runtime rule makes it disposable.
+- License: this package is MIT; versions before this one were PolyForm Noncommercial 1.0.0. The archive now ships its LICENSE.
+
 
 ## [2.5.0] - 2026-10-21
 

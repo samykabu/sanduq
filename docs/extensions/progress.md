@@ -11,7 +11,7 @@ native hook payloads. No agent is spent keeping it current.
 | Commands | `init`, `refresh`, `status`, `theme`, `export` ([reference](../reference/commands.md#progress)) and a CLI with 16 verbs ([full reference](../../extensions/progress/docs/commands.md)) |
 | Requires | Spec Kit 1.1.1 or later; Python 3.11 or later. Workflow (1.17.0 or later) and Illustrate are optional |
 | Standalone | Yes |
-| License | PolyForm Noncommercial 1.0.0 (vendored skill code is MIT) |
+| License | MIT |
 
 ## Setup
 

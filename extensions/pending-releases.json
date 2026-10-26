@@ -1,8 +1,15 @@
 {
   "schema_version": 1,
   "versions": {
-    "memory": "2.5.1"
+    "memory": "2.5.1",
+    "workflow": "1.19.0",
+    "assure": "2.6.2",
+    "illustrate": "2.7.2",
+    "pr": "4.6.1",
+    "progress": "1.6.1",
+    "project": "2.6.1",
+    "user-manual": "1.8.2"
   },
   "status": "implementation-in-progress",
-  "note": "Memory 2.5.1 preserves tracked evidence matched by ignore rules. Source review and 205 Memory tests passed; consumer validation remains pending. Not marked ready for release."
+  "note": "PH-01 release train of the October 2026 review: every package is relicensed to MIT and ships LICENSE and notices; Workflow 1.19.0 moves the tested Spec Kit to 1.1.3, improves doctor dependency errors and refuses external review routes (SEC-01 interim). Memory 2.5.1 (preserves tracked evidence matched by ignore rules) rides along; its consumer validation is still pending. Not marked ready: the owner marks ready after the PH-01 pull request merges and the release checklist (docs/start/release-process.md) is done."
 }

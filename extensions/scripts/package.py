@@ -32,6 +32,11 @@ EXCLUDE_PATHS = (
     'workflow/assets/delegate-task/assets',
 )
 BLOB = 'https://github.com/samykabu/sanduq/blob/main/extensions/'
+# SEC-13: sections of the root THIRD_PARTY_NOTICES.md each vendoring package ships as its own notices file.
+NOTICES = {'illustrate': ('Illustrate skill', 'Bundled icon sources'),
+           'progress': ('Progress, Delegate Task and User Manual skills',),
+           'workflow': ('Progress, Delegate Task and User Manual skills',),
+           'user-manual': ('Progress, Delegate Task and User Manual skills',)}
 SHARED = {'sanduq_remote.py': ('workflow', 'project', 'scope'), 'sanduq_pr_lint.py': ('pr', 'workflow'),
           'sanduq_gh.py': ('scope', 'workflow', 'project', 'pr')}
 
@@ -40,6 +45,15 @@ def excluded(name):
     # Each extension's own CHANGELOG.md stays in the repository too (X20); its README links go to GitHub.
     return re.fullmatch(r'[^/]+/CHANGELOG\.md', name) is not None or \
         any(name == path or name.startswith(path + '/') for path in EXCLUDE_PATHS)
+
+
+def notices(extension, root=ROOT):
+    """The package's THIRD_PARTY_NOTICES.md built from its sections of the root file, repository links made absolute."""
+    blocks = (root / 'THIRD_PARTY_NOTICES.md').read_text(encoding='utf-8').split('\n## ')[1:]
+    sections = {block.split('\n', 1)[0]: '## ' + block.rstrip() + '\n' for block in blocks}
+    text = ('# Third-party notices\n\nThe `LICENSE` file in this package (MIT) covers Sanduq\'s original contributions. '
+            'The material below remains under its upstream license.\n\n' + '\n'.join(sections[name] for name in NOTICES[extension]))
+    return re.sub(r'\]\((?!https?:|#)([^)]+)\)', r'](https://github.com/samykabu/sanduq/blob/main/\1)', text).encode('utf-8')
 
 
 def package_files(extension, root=ROOT):
@@ -65,6 +79,11 @@ def package_files(extension, root=ROOT):
             if path.startswith(extension + '/'):
                 text = re.sub(r'\]\(' + re.escape(path[len(extension) + 1:]) + r'(?=[/)#])', '](' + BLOB + path, text)
         files[readme] = re.sub(r'(\]\([^)\s]*/)SKILL\.ext\.md(?=[)#])', r'\1SKILL.md', text).encode('utf-8')
+    # Every package carries its licence (SEC-13): the extension's own, else the repository's.
+    if extension + '/LICENSE' not in files and (root / 'LICENSE').is_file():
+        files[extension + '/LICENSE'] = (root / 'LICENSE').read_bytes()
+    if extension in NOTICES and (root / 'THIRD_PARTY_NOTICES.md').is_file():
+        files[extension + '/THIRD_PARTY_NOTICES.md'] = notices(extension, root)
     for preset in PRESETS.get(extension, ()):
         include(root / 'presets' / preset, Path('presets') / preset)
     shared = root / 'extensions/scripts/shared/sanduq_freshness.py'

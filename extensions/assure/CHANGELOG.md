@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.6.2] - 2026-10-26
+
+- License: this package is MIT; versions before this one were PolyForm Noncommercial 1.0.0. The archive now ships its LICENSE.
+
 ## [2.6.1] - 2026-10-21
 
 - The injected `sanduq_ci.load_ci` also reads a policy file passed directly, so the vendored User Manual init honours `--ci-policy FILE`.

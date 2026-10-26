@@ -26,6 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
+          persist-credentials: false
           ref: main
           fetch-depth: 0
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
@@ -75,21 +76,35 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python extensions/scripts/release.py promote
-      - name: Commit released catalog metadata
+      # main only accepts pull requests that pass lint, so promotion goes through one that merges itself.
+      # VENDOR_PR_TOKEN opens it: a pull request opened with GITHUB_TOKEN would not start CI. The checkout
+      # keeps no credentials; the token reaches git only through the push URL.
+      - name: Open the released catalog pull request
         if: steps.gate.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.VENDOR_PR_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: release/catalog-${{ github.run_id }}
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           # promote also clears the root CHANGELOG's "(pending release)" headings for what it released.
           git add catalog.json extensions/catalog.json extensions/pending-releases.json CHANGELOG.md
-          if ! git diff --cached --quiet; then
-            git commit -m 'chore(extensions): publish verified release catalog [skip ci]'
-            git push origin HEAD:main
+          if git diff --cached --quiet; then exit 0; fi
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::VENDOR_PR_TOKEN is missing or empty: the assets are published, but the catalog pull request cannot be opened. Add the secret and re-run this workflow."
+            exit 1
           fi
+          git switch -c "$BRANCH"
+          git commit -m 'chore(extensions): publish verified release catalog'
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$BRANCH"
+          gh pr create --base main --head "$BRANCH" --title 'chore(extensions): publish verified release catalog' --body "Catalog promotion from release run $GITHUB_RUN_ID. The release assets are already published and verified; this merges by itself once the required checks pass."
+          gh pr merge "$BRANCH" --auto --squash
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always() && steps.gate.outputs.ready == 'true'
         with:
           name: extension-release-evidence
+          retention-days: 7
           path: |
             dist/release-plan.json
             dist/release-verification.json

@@ -16,6 +16,7 @@ to use. Then install, and use the reference when you need an exact command or ho
 
 | Task | Page |
 | --- | --- |
+| See who Sanduq is for and how success is measured | [Product brief](start/product-brief.md) |
 | Check the tools and versions you need | [Prerequisites](start/prerequisites.md) |
 | Create or prepare a Spec Kit project | [Set up Spec Kit](start/install-speckit.md) |
 | Install on Codex, Claude Code or Claude Desktop, and set recipes | [Install by host](start/install-by-host.md) |
@@ -61,7 +62,7 @@ One page per extension: purpose, lifecycle phase, hooks, dependencies, setup, an
 | --- | --- |
 | [Commands](reference/commands.md) | All 42 commands with an example each, and host syntax |
 | [Hooks](reference/hooks.md) | Every hook: manifest defaults and the managed Workflow view (generated) |
-| [Compatibility](reference/compatibility.md) | Hosts, tested versions and Spec Kit ranges |
+| [Compatibility](reference/compatibility.md) | Hosts, platforms, live-run evidence, tested versions and Spec Kit ranges |
 | [Licenses](reference/licenses.md) | License per package |
 | [Glossary](reference/glossary.md) | Terms used in these pages |
 
@@ -94,5 +95,6 @@ Replace angle-bracket placeholders before execution. Screenshots and payloads us
 | --- | --- |
 | Find the owning source, test packages and submit a change | [Contributing](../CONTRIBUTING.md) |
 | Write or edit these pages | [Style guide](style-guide.md) |
+| Ship a release train | [Release process](start/release-process.md) |
 | Find logos and editable illustrations | [Asset index](assets/README.md) |
 | Look up an exact package contract | [Extension source index](../extensions/README.md) |

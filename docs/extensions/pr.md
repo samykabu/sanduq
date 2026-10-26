@@ -10,7 +10,7 @@ update the branch's pull request. It also processes review feedback through an a
 | Commands | `generate`, `review-feedback` ([reference](../reference/commands.md#pr)) |
 | Requires | Illustrate 2.x, enforced by `deps.py ensure`; uses Assure and User Manual when installed |
 | Standalone | Yes |
-| License | PolyForm Noncommercial 1.0.0 |
+| License | MIT |
 
 ## Setup
 

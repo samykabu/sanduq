@@ -32,6 +32,46 @@ def compatible(root, name):
         return False
 
 
+def upgrade_command(root):
+    """The dependency-aware fix: upgrade.py at the installed Workflow version installs the versions its lock names."""
+    version = registry(root).get('workflow', {}).get('version')
+    if not version:
+        manifest = root / '.specify/extensions/workflow/extension.yml'
+        doc = yaml.safe_load(manifest.read_text(encoding='utf-8-sig')) if manifest.is_file() else {}
+        version = ((doc or {}).get('extension') or {}).get('version')
+    return ('python .specify/extensions/workflow/scripts/upgrade.py --version ' + str(version or '<workflow version>') +
+            ' --apply'), version
+
+
+def dependency_errors(root, needed, project=False):
+    """DEPENDENCY_UNAVAILABLE for a needed extension that is missing, disabled or outside RANGES and, with
+    `project`, for a needed or installed optional one older than the installed Workflow's dependencies.json."""
+    lock = read(root / '.specify/extensions/workflow/dependencies.json', {}) if project else {}
+    lock = lock if isinstance(lock, dict) else {}
+    pins = dict(lock.get('optional') or {})
+    for group in (lock.get('selected') or {}).values():
+        pins.update(group or {})
+    pins.update(lock.get('required') or {})
+    installed = registry(root)
+    names = list(needed) + [n for n in (lock.get('optional') or {}) if n not in needed and n in installed]
+    command, workflow_version = upgrade_command(root)
+    errors = []
+    for name in names:
+        entry = installed.get(name, {})
+        have = entry.get('version') if entry.get('enabled') is True else None
+        pin = pins.get(name)
+        try:
+            older = bool(pin) and have is not None and Version(have) < Version(pin)
+        except ValueError:
+            older = True
+        if (name in needed and not compatible(root, name)) or older:
+            required = (pin + ' (' + RANGES[name] + ')') if pin and name in RANGES else (pin or RANGES[name])
+            errors.append('DEPENDENCY_UNAVAILABLE: ' + name + ' ' + (have + ' is installed' if have else 'is not installed or not enabled') +
+                          '; Workflow ' + str(workflow_version or '') + (' ' if workflow_version else '') + 'requires ' + name + ' ' + required +
+                          '; run "' + command + '"')
+    return errors
+
+
 def active_host(root):
     integration = read(root / '.specify/integration.json', {})
     options = read(root / '.specify/init-options.json', {})
@@ -289,7 +329,7 @@ def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True
     """Installation health. `explicit` (the `doctor` command) also runs the skill inventory (with `project`)
     and the byte-sensitive line-ending scan, which no claim or other command pays for."""
     needed = ['scope', 'project', 'pr'] + (['assure'] if policy['processes']['qa'] else []) + (['user-manual'] if policy['processes']['user_manual'] else [])
-    errors = ['DEPENDENCY_UNAVAILABLE: ' + name + ' ' + RANGES[name] for name in needed if not compatible(root, name)]
+    errors = dependency_errors(root, needed, project)
     if active_host(root) not in ('codex','claude'):
         errors.append('HOST_UNSUPPORTED: this release supports Codex and Claude skills mode')
     if (check_delegation and policy.get('delegation', {}).get('enabled') and
@@ -353,8 +393,11 @@ def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True
             skill_inventory_result = None
             warnings.append('SKILL_INVENTORY_UNAVAILABLE: ' + str(exc))
     if isinstance(policy.get('delegation'), dict):
-        from delegation import light_tier_route_warnings
+        from delegation import light_tier_route_warnings, unsafe_review_routes, REVIEW_ROUTE_UNSAFE
         warnings += light_tier_route_warnings(policy['delegation'])
+        refused = unsafe_review_routes(policy['delegation']) if policy['delegation'].get('enabled') else []
+        if refused:  # a warning: only these routes are refused, every other route still delegates
+            warnings.append(REVIEW_ROUTE_UNSAFE + ' (refused: ' + ', '.join(refused) + ')')
     drift = eol_drift(root) if explicit else None
     if drift:
         warnings.append(
