@@ -14,7 +14,9 @@ from pathlib import Path
 
 import yaml
 
-SPEC = importlib.util.spec_from_file_location('sanduq_workflow', Path(__file__).resolve().parents[1] / 'scripts/workflow.py')
+WORKFLOW_SOURCE = (Path(os.environ['SANDUQ_WORKFLOW_TEST_PACKAGE']) if os.environ.get('SANDUQ_WORKFLOW_TEST_PACKAGE')
+                   else Path(__file__).resolve().parents[1])
+SPEC = importlib.util.spec_from_file_location('sanduq_workflow', WORKFLOW_SOURCE / 'scripts/workflow.py')
 w = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(w)
 

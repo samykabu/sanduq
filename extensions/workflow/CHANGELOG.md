@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.19.1] - 2026-10-26
+
+- `status` and exact-token `recover` work from another branch, including after the original branch was deleted. Recovery keeps the recorded branch, receipts and an audit of the original claim, actor, reason and terminal writer evidence. It refuses starting, running, unknown or untrusted delegated ownership.
+- A dependent claim reconciles a leftover owner only after trusted terminal delegation and live GitHub REST checks prove the bound feature PR merged into its target and closed its issue. Native and legacy claims without terminal writer evidence report the public recovery action. Closure alone cannot release ownership.
+- Verified post-merge follow-up reconciles ownership before checking whether Memory is enabled. External delivery can supply the exact PR binding without a PR stage receipt; it never creates acceptance receipts or archives the feature. Worker reservations recheck claim ownership under the delegation lock.
+
 ## [1.19.0] - 2026-10-26
 
 - `tested_spec_kit` in `dependencies.json` is Spec Kit 1.1.3, commit `0282d03eb6fc3091b3deaa3a855d4030dc40cd6c` (was 1.0.11, `8147943`).

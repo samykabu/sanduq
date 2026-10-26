@@ -2,7 +2,7 @@
   "schema_version": 1,
   "versions": {
     "memory": "2.5.1",
-    "workflow": "1.19.0",
+    "workflow": "1.19.1",
     "assure": "2.6.2",
     "illustrate": "2.7.2",
     "pr": "4.6.1",

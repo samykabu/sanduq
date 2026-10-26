@@ -179,6 +179,10 @@ These run from the consumer root inside the managed lifecycle; the dispatcher ca
 can run them to diagnose or recover:
 
 ```bash
+# Inspect an interrupted owner, even after its branch was deleted
+python .specify/extensions/workflow/scripts/workflow.py status --feature specs/412-refund-approval
+# After inspecting writes and confirming the owner stopped, release its exact claim
+python .specify/extensions/workflow/scripts/workflow.py recover --feature specs/412-refund-approval --token <recorded-token> --reason "Owner stopped; inspected local and remote writes"
 # Analyze on the lite and standard tiers: deterministic lint, recorded only when clean
 python .specify/extensions/workflow/scripts/lint.py --feature specs/412-refund-approval --json
 python .specify/extensions/workflow/scripts/lint.py --feature specs/412-refund-approval --record --token <active-token>
