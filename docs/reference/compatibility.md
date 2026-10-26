@@ -9,6 +9,8 @@ that installs or upgrades the packages and runs their test suites. A **live run*
 managed run of a real issue by an agent host, from scope to an open pull request. A clean install is
 not a live run.
 
+Workflow 1.19.2 hotfix: focused reconciler, rollback and packaged CLI checks passed with Spec Kit 1.1.3, plus an existing Windows consumer upgrade and project doctor. No new full managed live run was recorded for either host for this patch; the older live runs below retain their stated versions.
+
 ## Hosts
 
 | Product | Codex | Claude Code | Claude Desktop | Live run (date, versions, host) |

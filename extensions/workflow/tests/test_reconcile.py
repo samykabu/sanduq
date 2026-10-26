@@ -1,4 +1,7 @@
 import copy
+import json
+import os
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -11,6 +14,106 @@ import workflow as w
 class ReconcileTests(unittest.TestCase):
     setUp = fixture.WorkflowTests.setUp
     configure = fixture.WorkflowTests.configure
+
+    def metadata_drift(self, originally_enabled=True):
+        hook = {'extension': 'project', 'command': 'speckit.project.sync', 'enabled': originally_enabled,
+                'optional': False, 'condition': 'feature_exists', 'priority': 10,
+                'prompt': 'Old prompt', 'description': 'Old description'}
+        unrelated = {'extension': 'custom', 'command': 'custom.check', 'enabled': True}
+        self._hooks({'hooks': {'after_tasks': [hook], 'after_implement': [unrelated]}})
+        reconcile(self.root, apply=True)
+        current = self._hooks()
+        current['hooks']['after_tasks'][0].update(prompt='Current prompt', description='Current description')
+        self._hooks(current)
+        self.manifest_path = self.root / '.specify/extensions/project/extension.yml'
+        manifest_hook = {k: v for k, v in current['hooks']['after_tasks'][0].items() if k not in ('extension', 'enabled')}
+        self.manifest_path.write_text(yaml.safe_dump({'extension': {'id': 'project', 'version': '2.6.1'},
+                                                    'hooks': {'after_tasks': manifest_hook}}), encoding='utf-8')
+        return hook, unrelated
+
+    def test_disabled_manifest_metadata_preview_apply_audit_idempotence_and_restore(self):
+        for originally_enabled in (True, False):
+            with self.subTest(originally_enabled=originally_enabled):
+                original, unrelated = self.metadata_drift(originally_enabled)
+                backup = self.root / '.specify/workflow/integration-backup.json'
+                config = self.root / '.specify/extensions.yml'
+                before = config.read_bytes(), backup.read_bytes()
+                preview = reconcile(self.root)
+                self.assertEqual(before, (config.read_bytes(), backup.read_bytes()))
+                self.assertIn('metadata_refresh', preview['changes'][0])
+                report = reconcile(self.root, apply=True)
+                record = w.read(backup)['entries']['after_tasks:speckit.project.sync']
+                audit, = record['metadata_refreshes']
+                self.assertEqual('Old prompt', audit['before']['prompt'])
+                self.assertEqual('Current prompt', audit['after']['prompt'])
+                self.assertIs(record['original']['enabled'], originally_enabled)
+                self.assertFalse(record['managed']['enabled'])
+                self.assertEqual(unrelated, self._hooks()['hooks']['after_implement'][0])
+                journal_bytes = backup.read_bytes()
+                self.assertEqual([], reconcile(self.root, apply=True)['changes'])
+                self.assertEqual(journal_bytes, backup.read_bytes())
+                self.assertEqual(record, w.read(backup)['entries']['after_tasks:speckit.project.sync'])
+                reconcile(self.root, apply=True, restore=True)
+                restored = self._hooks()['hooks']['after_tasks'][0]
+                self.assertEqual({**original, 'prompt': 'Current prompt', 'description': 'Current description'}, restored)
+                self.assertFalse(backup.exists())
+
+    def test_disabled_metadata_refresh_rejects_operational_edits_and_untrusted_manifests(self):
+        self.metadata_drift()
+        good = self._hooks()
+        manifest = self.manifest_path.read_bytes()
+        backup = self.root / '.specify/workflow/integration-backup.json'
+        for key, value in [('optional', True), ('condition', 'other'), ('priority', 99),
+                           ('extension', 'assure'), ('extension', 'custom'),
+                           ('command', 'speckit.project.other'), ('unknown', 'value'), ('prompt', 'User text')]:
+            with self.subTest(field=key):
+                changed = copy.deepcopy(good)
+                changed['hooks']['after_tasks'][0][key] = value
+                self._hooks(changed)
+                before = (self.root / '.specify/extensions.yml').read_bytes(), backup.read_bytes()
+                for restore in (False, True):
+                    with self.assertRaisesRegex(w.WorkflowError, 'HOOK_CHANGED_SINCE_RECONCILE'):
+                        reconcile(self.root, apply=True, restore=restore)
+                    self.assertEqual(before, ((self.root / '.specify/extensions.yml').read_bytes(), backup.read_bytes()))
+        self._hooks(good)
+        journal = w.read(backup)
+        journal['entries']['after_tasks:speckit.project.sync']['original']['priority'] = 99
+        w.write(backup, journal)
+        with self.assertRaisesRegex(w.WorkflowError, 'HOOK_CHANGED_SINCE_RECONCILE'):
+            reconcile(self.root, apply=True)
+        journal['entries']['after_tasks:speckit.project.sync']['original']['priority'] = 10
+        w.write(backup, journal)
+        metadata = yaml.safe_load(manifest)
+        for content in (None, b'extension: {id: other}\n', b'not: a manifest\n',
+                        yaml.safe_dump({**metadata, 'hooks': {'after_tasks': [metadata['hooks']['after_tasks']] * 2}}).encode()):
+            with self.subTest(manifest=content):
+                if content is None:
+                    self.manifest_path.unlink(missing_ok=True)
+                else:
+                    self.manifest_path.write_bytes(content)
+                with self.assertRaisesRegex(w.WorkflowError, 'HOOK_CHANGED_SINCE_RECONCILE'):
+                    reconcile(self.root, apply=True)
+
+    def test_packaged_public_cli_repairs_metadata_for_original_restore(self):
+        self.metadata_drift(originally_enabled=False)
+        package = Path(os.environ.get('SANDUQ_WORKFLOW_TEST_PACKAGE', Path(__file__).resolve().parents[1]))
+        argv = [sys.executable, str(package / 'scripts/reconcile.py'), '--root', str(self.root)]
+        config = self.root / '.specify/extensions.yml'
+        backup = self.root / '.specify/workflow/integration-backup.json'
+        before = config.read_bytes(), backup.read_bytes()
+        preview = subprocess.run(argv, capture_output=True, text=True, encoding='utf-8')
+        self.assertEqual(0, preview.returncode, preview.stdout + preview.stderr)
+        self.assertFalse(json.loads(preview.stdout)['applied'])
+        self.assertEqual(before, (config.read_bytes(), backup.read_bytes()))
+        applied = subprocess.run([*argv, '--apply'], capture_output=True, text=True, encoding='utf-8')
+        self.assertEqual(0, applied.returncode, applied.stdout + applied.stderr)
+        self.assertTrue(json.loads(applied.stdout)['applied'])
+        # An older upgrader's unchanged restore guard now sees exactly its managed record.
+        record = w.read(backup)['entries']['after_tasks:speckit.project.sync']
+        self.assertEqual(self._hooks()['hooks']['after_tasks'][0], record['managed'])
+        restored = subprocess.run([*argv, '--apply', '--restore'], capture_output=True, text=True, encoding='utf-8')
+        self.assertEqual(0, restored.returncode, restored.stdout + restored.stderr)
+        self.assertFalse(self._hooks()['hooks']['after_tasks'][0]['enabled'])
     def test_reconcile_roundtrip_preserves_unrelated_entries(self):
         path = self.root / '.specify/extensions.yml'
         original = {'hooks': {'after_tasks': [{'extension':'project','command':'speckit.project.sync','optional':False}], 'before_specify':[{'extension':'scope','command':'speckit.scope.guard','optional':False}], 'after_implement':[{'extension':'custom','command':'custom.check','optional':True}]}, 'other':{'keep':True}}

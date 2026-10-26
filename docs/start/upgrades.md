@@ -24,6 +24,21 @@ python .specify/extensions/workflow/scripts/workflow.py doctor --project
 The first command previews. The second backs up the managed files, upgrades, and restores the old
 state if anything fails. Add `--preserve-ci` to keep a project-owned evidence workflow.
 
+If an older upgrade stopped at `HOOK_CHANGED_SINCE_RECONCILE` after an extension refreshed a
+disabled hook's prompt or description, use the standard upgrade to published Workflow 1.19.2:
+
+```bash
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.19.2 --preserve-ci
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.19.2 --preserve-ci --apply
+```
+
+The upgrader installs the new Workflow first, then runs its installer and reconciler inside
+the rollback transaction. No separate repair step is required. Reconciliation accepts only
+text matching the installed extension manifest, preserves original enablement, and audits both
+metadata versions. Operational changes or unverified text still block; inspect them instead
+of editing the journal or enabling hooks. Omit `--preserve-ci` when you do not need to retain
+a project-owned evidence workflow.
+
 After an upgrade, a feature that was in progress needs a reviewed migration before it continues:
 
 ```bash

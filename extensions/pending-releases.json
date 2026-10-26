@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "October 2026 train (PH-01): every package relicensed to MIT with LICENSE and notices in the archives; Workflow 1.19.0 moves the tested Spec Kit to 1.1.3, names fixes in dependency errors and refuses external review routes (SEC-01 interim); Memory 2.5.1 preserves tracked evidence matched by ignore rules. Marked ready by the owner on 2026-10-27 after pull request #118 merged with 34 of 34 CI checks green and all suites green locally; the consumer (already on 1.18.0) reproduced its open issues on current source, verdicts on #109, #112, #113, #114."
+  "versions": {
+    "workflow": "1.19.2"
+  },
+  "status": "ready",
+  "note": "Owner-requested standalone broken-workflow hotfix. Workflow 1.19.2: manifest-proven disabled-hook metadata reconciliation and durable installer repair audit. Focused reconciler, rollback and packaged CLI checks passed; independent native review found no remaining blockers. Actual Windows consumer upgrade 1.18.0 to the reviewed 1.19.2 package and doctor --project passed with 36 protected files unchanged. Agent USD/token cost and total wall time were not reported. Release remains gated by successful CI on the exact main commit."
 }

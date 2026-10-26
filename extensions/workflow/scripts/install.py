@@ -927,9 +927,12 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
         ensure_local_excludes(root)
         backup = root / '.specify/workflow/backups/installs' / uuid.uuid4().hex
         before = snapshot(root, backup); log = []
+        result['hook_metadata_refreshes'] = []
         try:
             if (root / '.specify/workflow/integration-backup.json').exists():
-                reconcile(root, apply=True, restore=True)
+                restored_hooks = reconcile(root, apply=True, restore=True)
+                result['hook_metadata_refreshes'] = [change for change in restored_hooks['changes']
+                                                    if change.get('metadata_refresh')]
             for operation in operations:
                 preserved = preservation(root, operation['extension'])
                 runner(root, operation['args'], log)
@@ -1033,13 +1036,15 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
             receipt = {**result,'applied':True,'backup':str(backup),'commands':log,
                        'ci_sha256':hashlib.sha256(asset.replace(b'\r\n', b'\n')).hexdigest()}
             write(root / '.specify/workflow/install-receipt.json', receipt)
-            write(backup / 'result.json', {'ok':True,'commands':log})
+            write(backup / 'result.json', {'ok':True,'commands':log,
+                                         'hook_metadata_refreshes':result['hook_metadata_refreshes']})
             if upgrade_owner is None:  # an upgrade prunes once its own outer transaction succeeds
                 receipt['backups'] = prune_backups(root)
             return receipt
         except Exception as exc:
             failed = managed_files(root)
-            write(backup / 'result.json', {'ok':False,'error':str(exc),'commands':log})
+            write(backup / 'result.json', {'ok':False,'error':str(exc),'commands':log,
+                                         'hook_metadata_refreshes':result['hook_metadata_refreshes']})
             restore(root, before, failed)
             raise WorkflowError('INSTALL_ROLLED_BACK: ' + str(exc) + '; backup: ' + str(backup)) from exc
 
