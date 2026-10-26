@@ -711,6 +711,44 @@ class InstallTests(unittest.TestCase):
             self.apply()
         self.assertIn('user edit', path.read_text(encoding='utf-8'))
 
+    def test_install_restores_manifest_metadata_drift_and_rolls_back_exactly_on_later_failure(self):
+        from reconcile import reconcile
+        path = self.owned_hook()
+        reconcile(self.root, apply=True)
+        document = yaml.safe_load(path.read_text(encoding='utf-8'))
+        document['hooks']['after_tasks'][0]['description'] = 'Current installed description'
+        path.write_text(yaml.safe_dump(document), encoding='utf-8')
+        manifest_path = self.root / '.specify/extensions/project/extension.yml'
+        manifest = yaml.safe_load(manifest_path.read_text(encoding='utf-8'))
+        manifest['hooks'] = {'after_tasks': {'command': 'speckit.project.sync',
+                                           'description': 'Current installed description'}}
+        manifest_path.write_text(yaml.safe_dump(manifest), encoding='utf-8')
+        journal = self.root / '.specify/workflow/integration-backup.json'
+        before = path.read_bytes(), journal.read_bytes()
+        def fail_after_restore(*args):
+            restored = yaml.safe_load(path.read_text(encoding='utf-8'))['hooks']['after_tasks'][0]
+            self.assertTrue(restored['enabled'])
+            self.assertEqual('Current installed description', restored['description'])
+            raise w.WorkflowError('DEPENDENCY_COMMAND_FAILED')
+        with self.assertRaisesRegex(w.WorkflowError, 'INSTALL_ROLLED_BACK: DEPENDENCY_COMMAND_FAILED'):
+            self.apply(fail_after_restore)
+        self.assertEqual(before, (path.read_bytes(), journal.read_bytes()))
+        results = [w.read(p) for p in (self.root / '.specify/workflow/backups/installs').glob('*/result.json')]
+        failed, = [item for item in results if item.get('error') == 'DEPENDENCY_COMMAND_FAILED']
+        audit, = failed['hook_metadata_refreshes']
+        self.assertNotIn('description', audit['before'])
+        self.assertEqual('Current installed description', audit['after']['description'])
+        self.assertFalse(audit['before']['enabled'])
+        self.assertFalse(audit['after']['enabled'])
+        result = self.apply()
+        self.assertTrue(result['applied'])
+        self.assertEqual([audit], result['hook_metadata_refreshes'])
+        self.assertEqual([audit], w.read(self.root / '.specify/workflow/install-receipt.json')['hook_metadata_refreshes'])
+        self.assertEqual([audit], w.read(Path(result['backup']) / 'result.json')['hook_metadata_refreshes'])
+        hook, = yaml.safe_load(path.read_text(encoding='utf-8'))['hooks']['after_tasks']
+        self.assertFalse(hook['enabled'])
+        self.assertEqual('Current installed description', hook['description'])
+
     def assure_reference(self, content):
         reference = self.root / '.specify/extensions/assure/assets/github/documentation-gates.yml'
         reference.parent.mkdir(parents=True, exist_ok=True)

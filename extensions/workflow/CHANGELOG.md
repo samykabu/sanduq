@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.19.2] - 2026-10-27
+
+- Reconcile accepts disabled hook prompt/description refreshes only when they match the installed extension manifest. It preserves operational fields and the originally recorded enabled state, and records the old and new metadata in the integration backup and command report. Other disabled hook edits remain blocked.
+- Use the standard upgrade to 1.19.2 for this metadata-only blocker. The new installer reconciles hooks inside the rollback transaction and retains metadata decisions in its result, receipt and backup audit, including a later failure. No separate repair, journal edits or temporary hook enablement are needed.
+
 ## [1.19.1] - 2026-10-26
 
 - `status` and exact-token `recover` work from another branch, including after the original branch was deleted. Recovery keeps the recorded branch, receipts and an audit of the original claim, actor, reason and terminal writer evidence. It refuses starting, running, unknown or untrusted delegated ownership.
