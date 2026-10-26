@@ -207,6 +207,25 @@ $speckit-memory-enable Review the renewed archiving policy and approve it.
 | Project owner type | A config from an older Init for an organization board says `ownerType: user` | Rerun `$speckit-project-init`, or set `"ownerType": "org"` |
 | Scope's `scope-gate` preset changed | A managed Specify claim is no longer told to chain Clarify | Unmanaged projects run `specify preset add` again for `scope-gate`; the Workflow installer re-adds it |
 
+## October 2026 train (Workflow 1.19.0)
+
+The train ships Workflow 1.19.0, Assure 2.6.2, Illustrate 2.7.2, PR 4.6.1, Progress 1.6.1, Project 2.6.1,
+User Manual 1.8.2 and Memory 2.5.1, with the `workflow` preset 1.3.1. No extension ID, command name or policy
+key changes. The upgrade updates every companion together:
+
+```bash
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.19.0 --apply
+python .specify/extensions/workflow/scripts/workflow.py doctor --project
+```
+
+| Change | What you see | What to do |
+| --- | --- | --- |
+| Every package is MIT | Each archive carries a `LICENSE` and, where it vendors upstream material, a `THIRD_PARTY_NOTICES.md`. Versions before this train stay PolyForm Noncommercial 1.0.0 ([licenses](../reference/licenses.md)) | Nothing |
+| Tested Spec Kit is 1.1.3 | `dependencies.json` names Spec Kit 1.1.3 (commit `0282d03e`); 1.0.11 is no longer tested and cannot install Progress | Install the [prerequisites](prerequisites.md) version |
+| Dependency errors name the fix | `doctor --project` fails on a companion older than Workflow's lock with `DEPENDENCY_UNAVAILABLE: <id> <installed> is installed; Workflow 1.19.0 requires <id> <required>; run "...upgrade.py --version 1.19.0 --apply"`. `DEPENDENCY_CHANGED` names `workflow.py migrate` and the same `upgrade.py` line | Run the command the message prints; then `migrate` each feature in progress with a reason |
+| Review work is not delegated externally (security interim) | With delegation on, a `review` route, or any route on the `review` model profile, is refused with `DELEGATION_REVIEW_ROUTE_UNSAFE` at `doctor`, `claim` and `start`; `doctor` lists the refused routes as a warning; a review-kind stage (Analyze, Review) is claimed without a route and runs in the selected host; `tasks.md` marks a refused task `refused:DELEGATION_REVIEW_ROUTE_UNSAFE` | Run reviews natively. External review routes return with the clean-environment launch planned next |
+| Maintainers: catalog promotion by pull request | `main` requires a pull request and the `lint` check; the release workflow opens `release/catalog-<run id>` and auto-merges it. The `vendor-update` workflow has no schedule | Run `vendor-update` by hand as part of each train ([release process](release-process.md)) |
+
 ## Round 5 migration (Workflow 1.18.0)
 
 The round ships Workflow 1.18.0, Scope 1.11.0, Project 2.6.0, PR 4.6.0, Progress 1.6.0, Illustrate 2.7.1,
