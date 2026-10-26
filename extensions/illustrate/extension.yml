@@ -3,12 +3,12 @@ schema_version: "1.0"
 extension:
   id: illustrate
   name: "Illustrate"
-  version: "2.7.1"
+  version: "2.7.2"
   description: "Generate, import, and export forty-four technical, product, architecture, process, and quantitative illustration types with tracked project-level light/dark color and font themes."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
   category: "documentation"
-  license: PolyForm-Noncommercial-1.0.0
+  license: MIT
 
 requires:
   speckit_version: ">=0.2.0"

@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.8.2] - 2026-10-26
+
+- License: this package is MIT; versions before this one were PolyForm Noncommercial 1.0.0. The archive now ships its LICENSE and a THIRD_PARTY_NOTICES.md for the vendored dev-tools material.
+
 ## [1.8.1] - 2026-10-21
 
 Vendors dev-tools 1.4.0.

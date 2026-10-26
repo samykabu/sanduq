@@ -89,7 +89,7 @@
         "workflow"
       ],
       "code": 0,
-      "output": "{\n  \"archive\": \"D:\\\\Projects\\\\Personal\\\\sanduq-lean-execution\\\\dist\\\\workflow.zip\",\n  \"sha256\": \"a42d3ac4ba7adc3cdacc636f74979a59938150dd55857c1b0d48572e795baf59\",\n  \"files\": 130\n}\n"
+      "output": "{\n  \"archive\": \"<sanduq-worktree>\\\\dist\\\\workflow.zip\",\n  \"sha256\": \"a42d3ac4ba7adc3cdacc636f74979a59938150dd55857c1b0d48572e795baf59\",\n  \"files\": 130\n}\n"
     },
     {
       "command": [
@@ -98,7 +98,7 @@
         "scope"
       ],
       "code": 0,
-      "output": "{\n  \"archive\": \"D:\\\\Projects\\\\Personal\\\\sanduq-lean-execution\\\\dist\\\\scope.zip\",\n  \"sha256\": \"b97e4fd4eafc050644fe34737e2f056fbd9d346e68b1f216b430e2f1f6fd1e71\",\n  \"files\": 33\n}\n"
+      "output": "{\n  \"archive\": \"<sanduq-worktree>\\\\dist\\\\scope.zip\",\n  \"sha256\": \"b97e4fd4eafc050644fe34737e2f056fbd9d346e68b1f216b430e2f1f6fd1e71\",\n  \"files\": 33\n}\n"
     },
     {
       "command": [
@@ -107,7 +107,7 @@
         "pr"
       ],
       "code": 0,
-      "output": "{\n  \"archive\": \"D:\\\\Projects\\\\Personal\\\\sanduq-lean-execution\\\\dist\\\\pr.zip\",\n  \"sha256\": \"7b1b237aac6e75522952f8bfbbb8ed316c726770a087de15306e36c010bc2d8f\",\n  \"files\": 9\n}\n"
+      "output": "{\n  \"archive\": \"<sanduq-worktree>\\\\dist\\\\pr.zip\",\n  \"sha256\": \"7b1b237aac6e75522952f8bfbbb8ed316c726770a087de15306e36c010bc2d8f\",\n  \"files\": 9\n}\n"
     }
   ],
   "consumer": {

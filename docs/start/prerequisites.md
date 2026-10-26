@@ -8,11 +8,12 @@ Install only the tools your [adoption level](../reference/glossary.md#adoption-l
 
 | Tool | Needed by | Tested |
 | --- | --- | --- |
-| Spec Kit (`specify` CLI) | Every extension | 1.0.11, commit `8147943` |
-| Python | Every extension; Illustrate export; User Manual builds; Workflow's guard hook (`python3`, or `python` on Windows, on `PATH`) | 3.13 in CI |
+| Spec Kit (`specify` CLI) | Every extension | 1.1.3, commit `0282d03` |
+| Python | Every extension; Illustrate export; User Manual builds; Workflow's guard hook (`python3`, or `python` on Windows, on `PATH`). Memory and Progress need 3.11 or later | 3.13 in CI |
 | Node.js and npm | `npx skills`; Delegate Task (18 or later); Illustrate's hand-drawn generator | `skills` 1.7.2 in CI; Node unverified |
 | Git | Workflow, Memory, Scope (required); others (optional) | Unverified |
 | GitHub CLI (`gh`) with Project scopes | Workflow, Scope (required); Project, PR (optional) | Unverified |
+| GitHub Project (v2) board with seven statuses | Managed Workflow ([board setup](../scenarios/managed-workflow.md#board)) | Live runs on Claude Code |
 | Playwright and Chromium | Illustrate PNG export; User Manual screenshots | Playwright 1.63.0 |
 | MkDocs, Material for MkDocs and the PDF libraries | User Manual HTML and PDF builds | Material 9.7.6, `mkdocs-to-pdf` 0.10.1 |
 | `age` | User Manual previews in a public repository | Unverified |
@@ -22,11 +23,12 @@ Install only the tools your [adoption level](../reference/glossary.md#adoption-l
 
 ## Spec Kit
 
-Install the tested revision. The command uses `uv`; the
+Install the tested revision. Progress needs Spec Kit 1.1.1 or later; Workflow's installer refuses
+Progress on an older Spec Kit. The command uses `uv`; the
 [Spec Kit installation guide](https://github.com/github/spec-kit#installation) explains how to get it.
 
 ```bash
-uv tool install specify-cli --from git+https://github.com/github/spec-kit.git@8147943512404afb9d99c6252cb9bf84369fd0b0
+uv tool install specify-cli --from git+https://github.com/github/spec-kit.git@0282d03eb6fc3091b3deaa3a855d4030dc40cd6c
 specify --version
 ```
 
@@ -42,6 +44,7 @@ Each package declares its own Spec Kit range. This is information, not a problem
 | Assure, Illustrate, PR, Project, User Manual | `>=0.2.0` |
 | Scope | `>=1.0.0` |
 | Memory, Workflow, `workflow` preset | `>=1.0.0,<2.0.0` |
+| Progress | `>=1.1.1.dev0,<2.0.0` |
 | `scope-gate`, `scope-brainstorm` presets | `>=1.0.0` |
 
 ## Python
@@ -49,9 +52,12 @@ Each package declares its own Spec Kit range. This is information, not a problem
 | Package | Python |
 | --- | --- |
 | Workflow, Scope | 3.10 or later |
-| Memory | 3.11 or later |
-| Assure, PR, User Manual | Required, no minimum declared |
-| Illustrate, Project | Not declared (Illustrate's export scripts use Python) |
+| Memory, Progress | 3.11 or later |
+| Assure, PR, Project, User Manual | Required, no minimum declared |
+| Illustrate | Not declared (its export scripts use Python) |
+
+Use Python 3.11 or later for the managed path. Workflow itself runs on 3.10, but Memory and Progress,
+which a managed project usually adds, need 3.11. CI tests 3.13.
 
 <details>
 <summary>Install Python</summary>
@@ -170,6 +176,6 @@ If you install Scope by itself, nothing installs Workflow for you. Install Workf
 
 ## Limits
 
-- Host cells and most tool versions are unverified until the host test phase records evidence.
+- Most tool versions are unverified. Host and platform results are in [compatibility](../reference/compatibility.md).
 - PDF builds on Windows are unverified.
 - Sanduq does not test every Spec Kit version a manifest range allows.

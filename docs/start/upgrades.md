@@ -3,25 +3,21 @@
 Read the published version in the [catalog](../../catalog.json) before you upgrade. Release notes
 are in the root [CHANGELOG](../../CHANGELOG.md) and in each package's `CHANGELOG.md`.
 
-## One extension
-
-```bash
-specify extension update <id>
-```
-
-Then rerun the extension's init or doctor command if its changelog asks for it.
-
-`update` skips `scope` and `memory` without an error when the community catalog wins their IDs.
-[Register Sanduq's catalog ahead of it](install-speckit.md#if-you-keep-spec-kits-default-catalogs).
-
 ## Workflow and its dependencies
+
+If Workflow is installed, upgrade it only through its `upgrade.py`. Workflow pins the versions of
+Scope, Project, PR and Illustrate, and of Assure, User Manual and Progress when selected, in
+`dependencies.json`. Some releases need them
+updated together (Workflow 1.18.0 needs Scope 1.11.0). `specify extension update workflow` on its own
+is not supported: it updates Workflow without its companions, and the mismatch can misbehave
+without an error. `workflow.py doctor --project` reports a mismatch.
 
 Resolve active [claims](../reference/glossary.md#claim) first. Then preview and apply the
 transactional upgrade, substituting the published version:
 
 ```bash
 python .specify/extensions/workflow/scripts/upgrade.py --version <version>
-python .specify/extensions/workflow/scripts/upgrade.py --version 1.17.0 --apply
+python .specify/extensions/workflow/scripts/upgrade.py --version <version> --apply
 python .specify/extensions/workflow/scripts/workflow.py doctor --project
 ```
 
@@ -36,6 +32,18 @@ python .specify/extensions/workflow/scripts/workflow.py migrate --feature specs/
 
 The [operating guide](../workflow/operating-guide.md#updates-and-releases) explains what migration
 keeps and what it invalidates.
+
+## One extension
+
+```bash
+specify extension update <id>
+```
+
+Use this for an extension that Workflow does not pin, such as Memory, or in a project without
+Workflow. Then rerun the extension's init or doctor command if its changelog asks for it.
+
+`update` skips `scope` and `memory` without an error when the community catalog wins their IDs.
+[Register Sanduq's catalog ahead of it](install-speckit.md#if-you-keep-spec-kits-default-catalogs).
 
 ## Adopt Workflow 1.13.0 profiles
 
@@ -227,7 +235,7 @@ python .specify/extensions/workflow/scripts/workflow.py doctor --project
 
 ## Moved documentation
 
-Pages moved in this release keep a forwarding stub at the old path for one release cycle:
+Pages moved in October 2026. The forwarding stubs at the old paths have been removed:
 
 | Old page | New page |
 | --- | --- |

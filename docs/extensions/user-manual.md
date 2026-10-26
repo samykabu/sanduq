@@ -11,7 +11,7 @@ Reference editions in HTML and PDF.
 | Commands | `init`, `analyze`, `update`, `release` ([reference](../reference/commands.md#user-manual)) |
 | Requires | Illustrate 2.x, enforced by `deps.py ensure` |
 | Standalone | Yes |
-| License | PolyForm Noncommercial 1.0.0 |
+| License | MIT |
 
 The manual skills are [vendored](../../vendor.lock.json) from
 [sanduq-skills](https://github.com/samykabu/sanduq-skills).

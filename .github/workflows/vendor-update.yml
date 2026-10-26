@@ -1,13 +1,13 @@
 name: vendor-update
 
-# Daily (and on demand): if samykabu/sanduq-skills has a newer bundle release than vendor.lock.json,
-# vendor it into the extensions, pin the marketplace entry to that release, and open a pull request.
+# On demand, as a step of each release train (docs/start/release-process.md): if samykabu/sanduq-skills
+# has a newer bundle release than vendor.lock.json, vendor it into the extensions, pin the marketplace
+# entry to that release, and open a pull request. The daily schedule was removed in the October 2026
+# train so vendor syncs are batched with the train instead of fanning out releases.
 # sanduq-skills is public, so reading it needs no token. VENDOR_PR_TOKEN (fine-grained, this repository
 # only: contents and pull requests) pushes the branch and opens the PR so CI runs on it; without it the
 # built-in token is used and CI has to be started by hand.
 on:
-  schedule:
-    - cron: '17 5 * * *'
   workflow_dispatch:
 
 permissions:
@@ -24,6 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
+          persist-credentials: false
           token: ${{ secrets.VENDOR_PR_TOKEN || github.token }}
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -52,7 +53,9 @@ jobs:
           TAGS: ${{ steps.update.outputs.tags }}
         run: |
           branch="vendor/$(echo "$TAGS" | tr ' ' '+')"
-          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+          # The checkout keeps no credentials; the token reaches git only through this URL.
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads "$remote" "$branch" >/dev/null; then
             echo "A pull request branch for $TAGS already exists."; exit 0
           fi
           git config user.name "github-actions[bot]"
@@ -60,5 +63,5 @@ jobs:
           git switch -c "$branch"
           git add -A
           git commit -m "chore(vendor): $TAGS from sanduq-skills"
-          git push origin "$branch"
+          git push "$remote" "$branch"
           gh pr create --title "Vendor $TAGS from sanduq-skills" --body "Vendors $TAGS from samykabu/sanduq-skills and pins the marketplace entries to those releases. Extensions that ship the vendored files need a patch release recorded in extensions/pending-releases.json before merging. If CI did not start, VENDOR_PR_TOKEN is missing or expired: re-run CI from the Actions tab."

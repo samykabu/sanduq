@@ -576,6 +576,26 @@ def task_type(description, lean=False):
     return 'implementation'
 
 
+# SEC-01 interim: every external run launches the agent CLI in permission-bypass mode with the whole parent
+# environment, so review-kind work (the review work type, or a route on the review profile) is refused until
+# the clean-environment launch planned in PH-02 exists.
+REVIEW_ROUTE_UNSAFE = ('DELEGATION_REVIEW_ROUTE_UNSAFE: an external delegated run launches the agent CLI in '
+                       'permission-bypass mode with the full environment, so review work is not delegated; run '
+                       'the review natively in the selected host, or wait for the clean-environment launch '
+                       'planned in PH-02')
+
+
+def review_route_unsafe(work_type, route):
+    """True for review-kind work: the review work type or any candidate on the review model profile."""
+    return work_type == 'review' or any(c.get('tier') == 'review' for c in (route['preferred'], *route['fallbacks']))
+
+
+def unsafe_review_routes(config):
+    """The policy routes and overrides the SEC-01 interim refuses, for `doctor`."""
+    return sorted([name for name, route in config['routes'].items() if review_route_unsafe(name, route)] +
+                  [key for key, route in config['overrides'].items() if review_route_unsafe(None, route)])
+
+
 def selected_route(config, work_type, selected_host, identity=None):
     validate_delegation(config)
     require(work_type in TYPES, 'DELEGATION_TASK_TYPE_INVALID')
@@ -588,6 +608,7 @@ def selected_route(config, work_type, selected_host, identity=None):
     elif route != {'preferred': {'harness': 'selected', 'tier': DEFAULT_TIERS[work_type]},
                    'fallbacks': [{'harness': 'selected', 'model': None}]}:
         rule = 'yaml:' + work_type
+    require(not review_route_unsafe(work_type, route), REVIEW_ROUTE_UNSAFE)
     candidates = []
     for index, item in enumerate((route['preferred'], *route['fallbacks'])):
         harness = selected_host if item['harness'] == 'selected' else item['harness']
@@ -788,7 +809,13 @@ def annotate_tasks(root, feature, config, selected_host=None, lean=False):
                 output.append(old_marker + marker_ending)
             continue
         work_type = task_type(match[1], lean)
-        route = selected_route(config, work_type, selected_host, feature + '/' + task_id)[0]
+        try:
+            route = selected_route(config, work_type, selected_host, feature + '/' + task_id)[0]
+        except DelegationError as exc:
+            if not str(exc).startswith('DELEGATION_REVIEW_ROUTE_UNSAFE'):
+                raise
+            # A refused review task still gets a marker, naming no harness: it runs in the selected host.
+            route = {'harness': None, 'requested_model': None, 'rule': 'refused:DELEGATION_REVIEW_ROUTE_UNSAFE'}
         metadata = {'task_id': task_id, 'task_type': work_type,
                     'preferred_harness': route['harness'],
                     'preferred_model': route['requested_model'], 'rule': route['rule']}

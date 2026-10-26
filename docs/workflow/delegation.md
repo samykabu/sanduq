@@ -10,6 +10,19 @@ skill, records every attempt, and leaves the dispatcher in charge of claims and
 receipts. A successful delegated run is candidate evidence for the orchestrator
 to inspect, never a passed stage or a completed task.
 
+## Security interim
+
+Every external delegated run launches the agent CLI in permission-bypass mode
+with the full parent environment, so the worker can use any credential in it
+(`GH_TOKEN`, provider API keys). Until the clean-environment launch planned for
+PH-02 exists, Workflow refuses review work through the external driver: a route
+whose work type is `review` (the Analyze and Review stages, `[Review]` tasks) or
+that names the `review` model profile fails with
+`DELEGATION_REVIEW_ROUTE_UNSAFE` at claim and start, `doctor` lists the refused
+routes as a warning, and tasks.md marks such a task
+`refused:DELEGATION_REVIEW_ROUTE_UNSAFE`. Run reviews natively in the selected
+host. Every other route is unchanged.
+
 ## Turning it on, off or rerouting later
 
 Select it during init with `--delegate on`, or opt in later without

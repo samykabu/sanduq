@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.19.0] - 2026-10-26
+
+- `tested_spec_kit` in `dependencies.json` is Spec Kit 1.1.3, commit `0282d03eb6fc3091b3deaa3a855d4030dc40cd6c` (was 1.0.11, `8147943`).
+- `doctor --project` reports a needed extension, or an installed optional one, that is older than the installed Workflow's `dependencies.json` as `DEPENDENCY_UNAVAILABLE`. Every `DEPENDENCY_UNAVAILABLE` message now names the installed and required versions and the fix: `python .specify/extensions/workflow/scripts/upgrade.py --version <workflow version> --apply`.
+- Security interim (SEC-01): external delegated runs launch the agent CLI in permission-bypass mode with the full environment, so a `review` route, or any route on the `review` model profile, is refused with `DELEGATION_REVIEW_ROUTE_UNSAFE` at claim and start until the clean-environment launch (PH-02). `doctor` lists the refused routes as a warning; tasks.md marks a refused task `refused:DELEGATION_REVIEW_ROUTE_UNSAFE`. Run reviews natively. Other routes are unchanged.
+- Claim: when delegation is on, a review-kind stage (Analyze, Review) is claimed without a delegation route and runs natively in the selected host; the claim records `delegation_refused` and completion needs no dispatcher attempt. Other stages are unchanged.
+- `DEPENDENCY_CHANGED` names the `workflow.py migrate` command and the `upgrade.py` fix.
+- License: this package is MIT; versions before this one were PolyForm Noncommercial 1.0.0. The archive now ships its LICENSE and a THIRD_PARTY_NOTICES.md for the vendored delegate-task and progress-report material.
+
+
 ## [1.18.0] - 2026-10-21
 
 - The checkpoint has its own schema version, separate from the policy's. Version 2 drops `repo_path`. Workflow, the CI gate and Scope's claim check read versions 1 and 2; `start`, `relocate` and every other write produce version 2. `schemas/checkpoint-v1.schema.json` accepts both and refuses `repo_path` on version 2.

@@ -3,12 +3,12 @@ schema_version: "1.0"
 extension:
   id: user-manual
   name: "User Manual"
-  version: "1.8.1"
+  version: "1.8.2"
   description: "Create and incrementally maintain bilingual-ready, audience-aware application manuals in Markdown, themeable MkDocs HTML (Material, ReadTheDocs, or any installed theme), and PDF, including modules, interfaces, tutorials, screenshots, APIs, releases, migrations, infrastructure, architecture, and complete data dictionaries."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
   category: "documentation"
-  license: PolyForm-Noncommercial-1.0.0
+  license: MIT
 
 requires:
   speckit_version: ">=0.2.0"

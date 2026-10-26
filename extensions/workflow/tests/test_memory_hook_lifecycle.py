@@ -3,7 +3,7 @@
 Scripted, no model and no network: Memory installed before and after Workflow, Memory re-init, a
 `specify extension update memory` re-registration, `reconcile --restore`, automatic mode off and an
 interrupted archive. Registration uses the real Spec Kit `HookExecutor.register_hooks` when
-`specify_cli` is importable (CI pin 8147943), else `register_hooks` below, which keeps the two
+`specify_cli` is importable (CI pin 0282d03), else `register_hooks` below, which keeps the two
 behaviours that matter here: this extension's entries are re-created `enabled: true`, and its
 entries on events the manifest no longer declares are purged.
 """

@@ -2,12 +2,12 @@ schema_version: '1.0'
 extension:
   id: workflow
   name: Sanduq Workflow
-  version: "1.18.0"
+  version: "1.19.0"
   description: GitHub issue decisions and resumable Scope-to-PR orchestration with
     optional model-aware delegation, QA, User Manual, and workflow evidence CI.
   author: Samy K. Abushanab
   repository: https://github.com/samykabu/sanduq
-  license: PolyForm-Noncommercial-1.0.0
+  license: MIT
   category: process
 requires:
   speckit_version: '>=1.0.0,<2.0.0'

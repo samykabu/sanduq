@@ -97,7 +97,7 @@ A Claude Code plugin that installs one or more portable skills. Sanduq's marketp
 
 ## Portable skill
 
-Agent instructions and scripts for one task that work without Spec Kit. Sanduq's seven portable
+Agent instructions and scripts for one task that work without Spec Kit. Sanduq's eight portable
 skills live in [sanduq-skills](https://github.com/samykabu/sanduq-skills).
 
 ## Preset

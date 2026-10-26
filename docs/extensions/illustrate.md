@@ -11,7 +11,7 @@ color and font theme. It supports 44 diagram types and exports SVG and PNG on re
 | Requires | Nothing |
 | Required by | Assure, PR, User Manual (Illustrate 2.x) |
 | Standalone | Yes |
-| License | PolyForm Noncommercial 1.0.0 |
+| License | MIT |
 
 The extension carries its own version-matched copy of the Illustrate skill under
 `.specify/extensions/illustrate/skill/`. It does not need a separately installed skill. The copy is

@@ -4,7 +4,7 @@
 without Spec Kit. This is the lightest [adoption level](../reference/glossary.md#adoption-level).
 
 A [portable skill](../reference/glossary.md#portable-skill) gives your agent instructions and
-scripts for one task. Sanduq's seven portable skills live in
+scripts for one task. Sanduq's eight portable skills live in
 [sanduq-skills](https://github.com/samykabu/sanduq-skills) under the MIT license. Install only the
 skills you use.
 
@@ -92,7 +92,7 @@ Skills have no dependencies on each other. Each skill checks its own tools when 
   [compatibility](../reference/compatibility.md).
 - Skills do not add lifecycle hooks. For hooks, use the extensions.
 
-## The seven skills
+## The eight skills
 
 ### Contents
 
@@ -103,6 +103,7 @@ Skills have no dependencies on each other. Each skill checks its own tools when 
 - [UI screenshots](#user-manual-ui-screenshots)
 - [Preview publishing](#user-manual-preview-publishing)
 - [Delegate Task](#delegate-task)
+- [Progress Report](#progress-report)
 
 All examples use the [booking application and refund feature](../README.md#example-conventions).
 Each section names the source contract so you can check its prerequisites and detailed behavior.
@@ -280,3 +281,18 @@ and token totals from different harnesses are not an efficiency ranking.
 Use `status` while running, `collect` for the result, `start --resume <run-id>` for a follow-up,
 and `prune --keep 20 --yes` to remove older terminal run artifacts. `contract` prints flags and
 guarantees. Do not redispatch an `adrift` run until its surviving process is settled.
+
+## Progress Report
+
+Use `progress-report` to keep a live HTML report of a Markdown plan checklist or a Spec Kit feature:
+tasks done, lanes, blockers, open decisions, and the model and context the host hooks observe. It
+needs Python 3.11 or later and spends no agent tokens on upkeep. In a Spec Kit project, the
+[Progress extension](../extensions/progress.md) wraps the same skill.
+[Source](https://github.com/samykabu/sanduq-skills/blob/main/docs/skills/progress-report.md).
+
+```text
+$progress-report Track docs/plan.md. Create the report and install the hooks for this host.
+```
+
+Expected result: a static page at `.progress/<name>/.view/index.html` that opens from `file://` and
+refreshes every 3 seconds.

@@ -546,8 +546,11 @@ class Round5ProjectInit(unittest.TestCase):
         text = (ci_matrix.ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
         job = re.search(r"^  project-init:\n(?:(?:    .*)?\n)+", text, re.M).group(0)
         self.assertIn("os: [ubuntu-latest, windows-latest]", job)
-        self.assertIn("runs-on: ${{ matrix.os != 'ubuntu-latest' && matrix.os || ", job)
+        # PH-01 (SEC-02): a runner label never comes from matrix data; only the literal windows-latest leg
+        # may resolve to a GitHub-hosted runner, everything else falls through to the fork/home logic.
+        self.assertIn("runs-on: ${{ matrix.os == 'windows-latest' && 'windows-latest' || ", job)
         self.assertIn("'homek8-general'", job)
+        self.assertNotIn("&& matrix.os ||", text)
         self.assertIn("uses: actions/setup-python@", job)
         self.assertIn("- run: python extensions/scripts/smoke_project_init.py\n", job)
         self.assertNotIn("--shell", job)

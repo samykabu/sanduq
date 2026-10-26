@@ -6,7 +6,7 @@ extension:
   description: Reconcile verified feature specifications into current project memory,
     migrate required fixtures, and archive through scoped recoverable Git commits.
   author: Samy K. Abushanab
-  license: PolyForm-Noncommercial-1.0.0
+  license: MIT
   repository: https://github.com/samykabu/sanduq
   homepage: https://github.com/samykabu/sanduq/tree/main/extensions/memory
   category: process

@@ -11,7 +11,7 @@ recoverable Git commits.
 | Commands | `init`, `prepare`, `run`, `session`, `enable`, `impact`, `status` ([reference](../reference/commands.md#memory)) |
 | Requires | Nothing; Python 3.11 or later, Git, Spec Kit 1.x |
 | Standalone | Yes |
-| License | PolyForm Noncommercial 1.0.0 |
+| License | MIT |
 
 ## Setup
 
