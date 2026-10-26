@@ -4,7 +4,7 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
-## 2026-10-26 — Workflow 1.19.0, Assure 2.6.2, Illustrate 2.7.2, PR 4.6.1, Progress 1.6.1, Project 2.6.1, User Manual 1.8.2, Memory 2.5.1 (pending release)
+## 2026-10-26 — Workflow 1.19.0, Assure 2.6.2, Illustrate 2.7.2, PR 4.6.1, Progress 1.6.1, Project 2.6.1, User Manual 1.8.2, Memory 2.5.1
 
 - First milestone of the October 2026 review (PH-01 "Consumer current, matrix honest"; the review package records the findings and decisions). Every package is now MIT; versions released before this train stay PolyForm Noncommercial 1.0.0 (see `docs/reference/licenses.md`). Every archive ships its LICENSE and, where it vendors upstream material, a THIRD_PARTY_NOTICES.md. The `workflow` preset is 1.3.1.
 - Workflow 1.19.0: the tested Spec Kit is 1.1.3 (commit `0282d03e`); `doctor --project` reports a companion older than the installed lock with both versions and the `upgrade.py` fix; `DEPENDENCY_CHANGED` names the `migrate` and `upgrade.py` commands; security interim for SEC-01: review-kind work is not sent through the external driver (`DELEGATION_REVIEW_ROUTE_UNSAFE`), review stages run natively until the clean-environment launch lands.
