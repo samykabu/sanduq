@@ -1,8 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "workflow": "1.19.2"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Owner-requested standalone broken-workflow hotfix. Workflow 1.19.2: manifest-proven disabled-hook metadata reconciliation and durable installer repair audit. Focused reconciler, rollback and packaged CLI checks passed; independent native review found no remaining blockers. Actual Windows consumer upgrade 1.18.0 to the reviewed 1.19.2 package and doctor --project passed with 36 protected files unchanged. Agent USD/token cost and total wall time were not reported. Release remains gated by successful CI on the exact main commit."
 }

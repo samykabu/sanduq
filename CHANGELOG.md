@@ -4,7 +4,7 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
-## 2026-10-27 — Workflow 1.19.2 (pending release)
+## 2026-10-27 — Workflow 1.19.2
 
 - Repair upgrades blocked by disabled hook text refreshed from the installed manifest. Reconcile preserves original enablement and operational fields, audits metadata changes, and keeps rollback intact.
 - Scope: Workflow reconciler and installer. Focused package checks and an existing Windows consumer upgrade passed; agent cost and total wall time were not reported.
