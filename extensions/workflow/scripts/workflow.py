@@ -33,6 +33,7 @@ import evidence_snapshot
 import execution_tools
 import lifecycle
 import memory_handoff
+import wf_ownership
 try:
     import sanduq_remote
 except ModuleNotFoundError:  # the source tree; package.py copies it into scripts/
@@ -948,14 +949,15 @@ class Run:
             except OSError:
                 pass  # an orphaned inventory is harmless; the checkpoint no longer names it
 
-    def save(self, state):
+    def save(self, state, preserve_head=False):
         self.__dict__.pop('_saved_next', None)
         # Every write is a version-2 checkpoint; a loaded version 1 is migrated here (W27).
         state['schema_version'] = CHECKPOINT_SCHEMA
         state.pop('repo_path', None)
         state['generation'] += 1
         state['updated_at'] = now()
-        state['head'] = git(self.root, 'rev-parse', 'HEAD')
+        if not preserve_head:
+            state['head'] = git(self.root, 'rev-parse', 'HEAD')
         state['stage_plan'] = {'v': 1, 'generation': state['generation'], 'stages': stages(self.policy, state_tier(state))}
         state['next_action'] = self.evaluate_next_action(state)
         write(self.path, state)
@@ -1030,7 +1032,14 @@ class Run:
             state = self.load()
             require(not state['active'], 'STAGE_ALREADY_ACTIVE: recover or finish the recorded claim')
             for path in (self.root / 'specs').glob('*/workflow/checkpoint.json'):
-                require(path == self.path or not read(path, {}).get('active'), 'OTHER_FEATURE_STAGE_ACTIVE: ' + str(path))
+                if path != self.path and read(path, {}).get('active'):
+                    other = Run(self.root, path.parent.parent.relative_to(self.root).as_posix())
+                    try:
+                        other.release_ownership(automatic=True, dispatch_locked=True)
+                    except (WorkflowError, ValueError, KeyError, OSError) as exc:
+                        raise WorkflowError('OTHER_FEATURE_OWNERSHIP_RECOVERY_REQUIRED: ' + other.relative +
+                                            '; ' + str(exc) + '; inspect with workflow.py status --feature ' +
+                                            other.relative) from None
             require(state['dependency_digest'] == package_digest(self.root),
                     'DEPENDENCY_CHANGED: the installed packages changed since this checkpoint was written; review the '
                     'upgrade notes, then run "python .specify/extensions/workflow/scripts/workflow.py migrate --feature ' +
@@ -1173,6 +1182,50 @@ class Run:
                 # Reported to the caller only; the checkpoint keeps the claim itself.
                 claimed['notices'] = notices
             return claimed
+
+    def release_ownership(self, token=None, reason=None, actor=None, automatic=False, report=None,
+                          dispatch_locked=False):
+        """Release bookkeeping only; ordinary execution stays bound to the original branch."""
+        from contextlib import nullcontext
+        from delegate_dispatch import ledger_lock
+        require_not_delegated_context('recover')
+        require(automatic or isinstance(reason, str) and reason.strip(), 'RECOVER_REASON_REQUIRED')
+        with operation(), (nullcontext() if dispatch_locked else
+                           locked(self.root / '.specify/workflow/runtime/dispatch.lock')), locked(self.lock), \
+                ledger_lock(self.root, self.relative):
+            require(not (self.root / '.specify/workflow/runtime/upgrade.lock').exists(), 'WORKFLOW_UPGRADE_IN_PROGRESS')
+            state = self.load(allow_branch_change=True)
+            active = copy.deepcopy(state.get('active'))
+            if not active:
+                if not automatic:
+                    require(any(r.get('claim', {}).get('token') == token for r in state.get('recoveries', [])),
+                            'CLAIM_TOKEN_MISMATCH')
+                prompt_path = self.path.parent / 'resume-prompt.md'
+                return {'feature': self.relative, 'released': False, 'status': state.get('status'),
+                        'checkpoint': str(self.path),
+                        'prompt': prompt_path.read_text(encoding='utf-8-sig') if prompt_path.is_file() else None}
+            require(automatic or active['token'] == token, 'CLAIM_TOKEN_MISMATCH')
+            evidence = wf_ownership.writer_evidence(SimpleNamespace(**globals()), self, state, automatic)
+            if automatic:
+                evidence['delivery'] = wf_ownership.merged_delivery(SimpleNamespace(**globals()), self, state, report)
+            # The ledger lock fences dispatcher reservations. Compare again after external reads.
+            latest = self.load(allow_branch_change=True)
+            require(latest.get('active') == active and latest.get('generation') == state.get('generation'),
+                    'OWNERSHIP_CHANGED: retry with the current claim; nothing was released')
+            claim_id = active.get('claim_id') or lifecycle.claim_id_for(active['token'])
+            at = now()
+            reason = reason or 'Verified merged delivery; terminal delegated ownership released'
+            state.setdefault('recoveries', []).append({'claim': {**active, 'claim_id': claim_id},
+                'reason': reason, 'actor': actor or default_actor(self.root), 'at': at,
+                'branch': state['branch'], 'terminal_evidence': evidence,
+                'source': 'postmerge' if automatic else 'recover'})
+            lifecycle.queue(state, active['stage'], 'recovered', claim_id=claim_id, at=at,
+                            episode_id=lifecycle.episode_for_claim(claim_id), reason=reason,
+                            delegation_run_ids=lifecycle.delegation_runs_for(self.feature, active['token'], claim_id))
+            state['active'] = None
+            paused = self.checkpoint(state, reason, preserve_head=True)
+            return {**paused, 'feature': self.relative, 'released': True, 'claim_id': claim_id,
+                    'terminal_evidence': evidence}
 
     def memory_session(self, state, stage, session_id):
         """W14: the session handoff Memory's before_specify hook ran, now run by the claim under the dispatch lock it
@@ -1489,14 +1542,14 @@ class Run:
                 result['ok'] = False
         return result
 
-    def checkpoint(self, state, reason, context=None):
+    def checkpoint(self, state, reason, context=None, preserve_head=False):
         state['status'] = 'paused'
         state['pause'] = {'reason': reason, 'context': context, 'at': now()}
         held = state.get('active')
         claim_id = (held.get('claim_id') or lifecycle.claim_id_for(held['token'])) if held else None
         lifecycle.queue(state, held['stage'] if held else None, 'paused', claim_id=claim_id,
                         episode_id=lifecycle.episode_for_claim(claim_id), reason=reason)
-        self.save(state)
+        self.save(state, preserve_head=preserve_head)
         pending = self.next(state)
         task_path = self.feature / 'tasks.md'
         pending_tasks = re.findall(r'(?m)^\s*- \[ \]\s+(T\d{3,})\b', task_path.read_text(encoding='utf-8-sig')) if task_path.is_file() else []
@@ -1758,7 +1811,7 @@ def run_command(args):
             run = Run(root, args.feature)
             if args.action == 'start': result = run.start(args.issue)
             elif args.action == 'next': result = run.next(run.load(), args.finalize)
-            elif args.action == 'status': result = native_run_status(root, run.relative, run.load(), args.runs)
+            elif args.action == 'status': result = native_run_status(root, run.relative, run.load(allow_branch_change=True), args.runs)
             elif args.action == 'claim':
                 result = run.claim(read(args.usage), args.finalize, args.verbose)
                 if not args.verbose:
@@ -1772,6 +1825,7 @@ def run_command(args):
                 result = run.revalidate_upstream(args.through, read(args.receipt) if args.receipt else None,
                                                  args.plan, args.actor)
             elif args.action == 'bind': result = run.bind(args.token)
+            elif args.action == 'recover': result = run.release_ownership(args.token, args.reason)
             elif args.action == 'relocate':
                 result = run.relocate(args.reason, args.preview, args.allow_branch_rebind,
                                       args.allow_repository_rename, args.issue, args.keep_issue_number, args.actor,
@@ -1792,16 +1846,6 @@ def run_command(args):
             else:
                 with locked(run.lock):
                     state = run.load()
-                    if args.action == 'recover':
-                        require(state['active'] and state['active']['token'] == args.token, 'CLAIM_TOKEN_MISMATCH')
-                        lost = state['active'].get('claim_id') or lifecycle.claim_id_for(args.token)
-                        recovered_at = now()
-                        state.setdefault('recoveries', []).append(
-                            {'claim': {**state['active'], 'claim_id': lost}, 'reason': args.reason, 'at': recovered_at})
-                        lifecycle.queue(state, state['active']['stage'], 'recovered', claim_id=lost, at=recovered_at,
-                                        episode_id=lifecycle.episode_for_claim(lost), reason=args.reason,
-                                        delegation_run_ids=lifecycle.delegation_runs_for(run.feature, args.token, lost))
-                        state['active'] = None
                     result = run.checkpoint(state, args.reason)
         print(json.dumps(result, indent=2))
         return 1 if result.get('ok') is False else 0

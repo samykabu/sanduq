@@ -627,6 +627,7 @@ def launch(root, driver, candidate, cwd, task, timeout, intent_id=None, orchestr
 def candidate_start(root, feature, identity, work_type, candidates, task_path, cwd,
                     timeout, parent_run_id=None, retry_count=0, decision=None, owned_paths=None,
                     claim_token=None, pinned=False, deliverable=None, correction_plan=None, diagnosis=None):
+    ownership_at_start = workflow.read(root / feature / 'workflow/checkpoint.json', {})
     policy = workflow.load_policy(root)
     config = policy['delegation']
     guidance = None
@@ -686,6 +687,18 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
     owned_paths = list(owned_paths) if owned_paths else ['.']
     dismissed = set()
     with edit_ledger(root, feature) as ledger:
+        # Recovery holds this same ledger lock until the claim release is durable.
+        checkpoint = workflow.read(root / feature / 'workflow/checkpoint.json', {})
+        active = checkpoint.get('active') or {}
+        if claim_token is not None:
+            delegation.require(active.get('token') == claim_token and
+                               identity == feature + '/stage:' + str(active.get('stage')),
+                               'DELEGATION_STAGE_CLAIM_MISMATCH')
+        elif re.fullmatch(r'T\d{3,}', identity.removeprefix(feature + '/')):
+            if ownership_at_start or checkpoint:
+                delegation.require(active.get('stage') == 'execute' and active.get('token') and
+                                   active == (ownership_at_start.get('active') or {}),
+                                   'DELEGATION_EXECUTE_CLAIM_REQUIRED')
         # The reservation and the route decision that justifies it are one
         # write, so a concurrent start or collect cannot launch the work twice.
         reserve(ledger, identity, parent_run_id)

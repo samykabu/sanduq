@@ -62,6 +62,11 @@ def handoff(w, root, transition, feature=None, checks=None, report=None, lock=Tr
 
     try:
         with w.locked(root / '.specify/workflow/runtime/dispatch.lock') if lock else contextlib.nullcontext():
+            if transition == 'postmerge':
+                if not isinstance(report, dict):
+                    return finish('blocked', 'MEMORY_POSTMERGE_REPORT_REQUIRED', ok=False)
+                result['ownership'] = w.Run(root, feature).release_ownership(
+                    automatic=True, report=report, dispatch_locked=True)
             entry = w.registry(root).get('memory')
             if not entry or entry.get('enabled') is not True:
                 return finish('pending', 'MEMORY_DEPENDENCY_MISSING_OR_DISABLED')

@@ -71,6 +71,8 @@ workflow folder with URLs, timestamps, failures and follow-ups. Keep original st
 deploy authorization from Finalize, or claim completion while required checks fail.
 
 After verified delivery, run the post-merge Memory handoff in
-[memory-lifecycle.md](memory-lifecycle.md) and dispatch its next action. A report-only
+[memory-lifecycle.md](memory-lifecycle.md), including when Memory is disabled: it first reconciles
+leftover ownership using terminal writer and live merged-PR evidence. Inspect any recovery-required
+result before starting a dependent feature, then dispatch its returned Memory action. A report-only
 follow-up PR stops after reporting: never archive another feature or refresh dependency reports
 again. A returned Memory action is pending work, not proof of an archive.

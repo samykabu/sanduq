@@ -11,6 +11,19 @@ Policy lives in `.specify/workflow.yml`. Feature state lives under
 explicit Specify claim can bind a new branch after verifying scope-source.json.
 Use `recover` with the recorded token after inspecting possible remote writes;
 use `migrate` after reviewing a dependency upgrade. Both preserve an audit trail.
+`status` and exact-token `recover` also work from another branch when the original branch
+was deleted. They keep the recorded branch and repository identity. Recovery refuses live,
+unknown or untrusted delegated work. Inspect and collect that work first. A retry with the
+same recovered token makes no further change.
+
+Starting a dependent feature can release terminal delegated ownership left after verified
+delivery. Workflow reads the bound issue and PR through GitHub REST and requires the same
+repository, original feature branch, target and an explicit closing reference to the issue.
+Closure alone is insufficient. Native or legacy ownership without trusted terminal writer
+evidence returns `OTHER_FEATURE_OWNERSHIP_RECOVERY_REQUIRED`; inspect it and use the recorded
+token with `recover`. Releases preserve receipts and record the original claim, actor, reason,
+time, branch and terminal evidence in `recoveries[]` and a `recovered` lifecycle event.
+
 A migration backs up the checkpoint, preserves still-current historical evidence and invalidates changed command selections. Use `--invalidate-from <stage>` when an upgrade changes a stage contract.
 `migrate --preview` writes nothing and returns the exact `invalidated` and
 `preserved_as_historical` lists the migration would record, with any blockers;

@@ -108,7 +108,7 @@ class DelegationTests(unittest.TestCase):
         run.start('acme/app#10')
         other = self.root / 'specs/002-other/workflow/checkpoint.json'
         w.write(other, {'active': {'stage': 'plan', 'token': 'other'}})
-        self.rejected_claim_leaves_no_trace(run, 'OTHER_FEATURE_STAGE_ACTIVE')
+        self.rejected_claim_leaves_no_trace(run, 'OTHER_FEATURE_OWNERSHIP_RECOVERY_REQUIRED')
         other.unlink()
         self.rejected_claim_leaves_no_trace(
             run, 'COMMAND_UNAVAILABLE', health={'ok': False, 'errors': ['COMMAND_UNAVAILABLE: x']})
@@ -131,7 +131,7 @@ class DelegationTests(unittest.TestCase):
         with open(other, 'r+', encoding='utf-8') as handle:  # same file, same size
             handle.write(busy)
         os.utime(other, (old, old))
-        self.rejected_claim_leaves_no_trace(run, 'OTHER_FEATURE_STAGE_ACTIVE')
+        self.rejected_claim_leaves_no_trace(run, 'OTHER_FEATURE_OWNERSHIP_RECOVERY_REQUIRED')
 
     def test_claim_without_next_stage_does_not_install_skill_or_annotate_tasks(self):
         self.enable()
