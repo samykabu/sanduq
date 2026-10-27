@@ -114,6 +114,8 @@ specify extension add memory   # the community catalog uses the same ID
 
 The community catalog publishes unrelated `scope` and `memory` extensions. If you keep Spec Kit's
 default catalogs, [register Sanduq's catalog ahead of them](install-speckit.md#if-you-keep-spec-kits-default-catalogs).
+Workflow's `doctor` fails with `DEPENDENCY_SOURCE_MISMATCH` when an installed `scope` or `memory` names
+another repository or author, or when its files differ from the package inventory its release ships.
 
 If you use Workflow, you do not need this block. Add `workflow` and run its init; its installer adds
 Scope, Project, PR, Illustrate and your selected processes. That is the safest way to get Sanduq's

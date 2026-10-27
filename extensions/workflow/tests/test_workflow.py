@@ -1,5 +1,6 @@
 import atexit
 import copy
+import hashlib
 import importlib.util
 import json
 import os
@@ -73,7 +74,7 @@ class WorkflowTests(unittest.TestCase):
         for n, v in versions.items():
             p = self.root / '.specify/extensions' / n / 'extension.yml'
             p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(yaml.safe_dump({'extension':{'id':n,'version':v,'repository':'https://github.com/samykabu/sanduq'}}), encoding='utf-8')
+            p.write_text(yaml.safe_dump({'extension':{'id':n,'version':v,'repository':'https://github.com/samykabu/sanduq','author':'Samy K. Abushanab'}}), encoding='utf-8')
         commands = list(w.COMMANDS.values())
         if superspec: commands += ['speckit.superspec.' + suffix for suffix in ('brainstorm', 'tasks', 'execute', 'review')]
         for command in commands:
@@ -230,6 +231,34 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn('DEPENDENCY_UNAVAILABLE: scope 1.11.0 is installed; Workflow 1.18.0 requires scope 1.12.0 '
                       '(>=1.11,<2); run "' + command + '"', w.doctor(self.root, self.policy, project=True)['errors'])
         self.assertFalse(any(e.startswith('DEPENDENCY_UNAVAILABLE: scope') for e in w.doctor(self.root, self.policy)['errors']))
+
+    def test_doctor_fails_when_an_installed_scope_or_memory_is_not_sanduqs(self):
+        """SEC-14: the community catalogs publish other packages under the ids scope and memory."""
+        self.assertTrue(w.doctor(self.root, self.policy, explicit=True)['ok'])
+        memory = self.root / '.specify/extensions/memory'
+        memory.mkdir(parents=True)
+        (memory / 'extension.yml').write_text(yaml.safe_dump({'extension': {
+            'id': 'memory', 'version': '1.0.0', 'repository': 'https://github.com/someone/memory', 'author': 'Someone'}}),
+            encoding='utf-8')
+        registered = w.registry(self.root)
+        registered['memory'] = {'version': '1.0.0', 'enabled': True, 'source': {'kind': 'catalog', 'catalog': 'community'}}
+        w.write(self.root / '.specify/extensions/.registry', {'extensions': registered})
+        self.assertIn('DEPENDENCY_SOURCE_MISMATCH: memory must come from samykabu/sanduq',
+                      w.doctor(self.root, self.policy)['errors'])
+        # Sanduq's repository and author, but no release inventory from a catalog: still refused.
+        (memory / 'extension.yml').write_text(yaml.safe_dump({'extension': {
+            'id': 'memory', 'version': '1.0.0', 'repository': 'https://github.com/samykabu/sanduq',
+            'author': 'Samy K. Abushanab'}}), encoding='utf-8')
+        self.assertTrue(w.doctor(self.root, self.policy)['ok'])
+        self.assertTrue(any(e.startswith('DEPENDENCY_SOURCE_MISMATCH: memory was installed from a catalog without')
+                            for e in w.doctor(self.root, self.policy, explicit=True)['errors']))
+        # With the inventory, a file that differs from it is named.
+        (memory / 'run.py').write_bytes(b'print(1)\n')
+        w.write(memory / 'package-inventory.json', {'memory/run.py': '0' * 64})
+        self.assertIn('DEPENDENCY_SOURCE_MISMATCH: memory differs from its package inventory: memory/run.py',
+                      w.doctor(self.root, self.policy, explicit=True)['errors'])
+        w.write(memory / 'package-inventory.json', {'memory/run.py': hashlib.sha256(b'print(1)\n').hexdigest()})
+        self.assertFalse(any('memory' in e for e in w.doctor(self.root, self.policy, explicit=True)['errors']))
 
     def test_context_reserves_space_and_labels_estimation(self):
         gate = w.context_gate(self.policy, self.usage(.46))

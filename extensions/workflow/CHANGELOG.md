@@ -4,6 +4,7 @@
 
 - A `T###` task worker no longer receives the workflow claim token or session id, even when the Execute orchestrator that launched it holds them; only stage launches do (SEC-06).
 - `delegate_dispatch.py accept`, `adopt`, `reassign` and `trust-reset` need `--nonce <value>`, kept in `~/.sanduq/runtime/dispatcher-<project key>.nonce` outside every worker's checkout and returned by `start` as `dispatcher_nonce`; without it they fail with `DELEGATION_NONCE_REQUIRED`. They, and `start`, refuse a process that descends from a live delegated run of the feature (the run's driver supervisor pid) with `DELEGATION_LINEAGE_SELF`, whatever its environment says; the Execute orchestrator's own run is exempt except for `trust-reset`. Both are advisory against a same-user worker; docs/workflow/delegation.md "Security" states the residual risk.
+- `doctor` fails with `DEPENDENCY_SOURCE_MISMATCH` when an installed `scope` or `memory` is not Sanduq's: its manifest names another repository or author, or (explicit `doctor` only) it came from a catalog without the `package-inventory.json` every Sanduq release ships, or its files differ from that inventory (SEC-14).
 
 ## [1.21.0] - 2026-10-27
 
