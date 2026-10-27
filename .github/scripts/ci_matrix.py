@@ -28,9 +28,13 @@ OSES = ["ubuntu-latest", "windows-latest"]
 WINDOWS_SLOW_SUITES = {"workflow", "memory"}
 WINDOWS_WORKFLOW_EVENTS = {"pull_request", "schedule", "workflow_dispatch"}
 ALWAYS_ALL = {"schedule", "workflow_dispatch"}
-# Windows runs of these suites are split into parallel jobs; Linux stays one job. Workflow shards by
-# module, memory by test class (test_archive is one class and about two thirds of the suite).
+# Windows runs of these suites are split into parallel jobs. Workflow shards by module, memory by test
+# class (test_archive is one class and about two thirds of the suite).
 WINDOWS_SHARDS = {"workflow": 4, "memory": 2}
+# Linux shards the whole workflow suite (about 5 to 15 minutes there) with the same weights. Every other
+# Linux run (memory takes about 1.5 minutes there, the rest under one) shares one batch job, because the
+# self-hosted scale set runs few jobs at once and each job's setup costs about a minute.
+LINUX_SHARDS = {"workflow": 4}
 # Measured seconds per module (workflow) or module.Class (memory); see its "source" key.
 WEIGHTS = ROOT / ".github/scripts/shard_weights.json"
 # The vendored Illustrate checks also run on scheduled runs on this weekday (Monday = 0).
@@ -222,9 +226,11 @@ def vendored(files, event, today=None):
 
 
 def build(files, event, today=None):
+    """Matrix entries: os, suite (the job name), suites (for step conditions) and runs, one
+    "<suite> <tests folder> [modules...]" line per suite the job runs in order; shards add shard."""
     everything = files is None or event in ALWAYS_ALL
     selection = {suite: None for suite in SUITES} if everything else selection_for(files)
-    include = []
+    include, batch = [], []
     for suite in SUITES:
         if suite not in selection:
             continue
@@ -236,13 +242,21 @@ def build(files, event, today=None):
             windows = os_name == "windows-latest"
             if windows and not partial and suite in WINDOWS_SLOW_SUITES and event not in WINDOWS_WORKFLOW_EVENTS:
                 continue
-            if windows and not partial and suite in WINDOWS_SHARDS:
-                count = WINDOWS_SHARDS[suite]
-                for n, shard in enumerate(shards(suite), 1):
-                    include.append({"os": os_name, "suite": suite, "tests": tests,
-                                    "shard": f"{n}/{count}", "modules": " ".join(shard)})
+            counts = WINDOWS_SHARDS if windows else LINUX_SHARDS
+            if not partial and suite in counts:
+                for n, shard in enumerate(shards(suite, counts[suite]), 1):
+                    include.append({"os": os_name, "suite": suite, "suites": [suite], "shard": f"{n}/{counts[suite]}",
+                                    "runs": " ".join([suite, tests] + shard)})
                 continue
-            include.append({"os": os_name, "suite": suite, "tests": tests, "modules": modules})
+            run = " ".join(filter(None, [suite, tests, modules]))
+            if windows:
+                include.append({"os": os_name, "suite": suite, "suites": [suite], "runs": run})
+            else:
+                batch.append((suite, run))
+    if batch:
+        # First, so the longest Linux job asks for a runner first.
+        include.insert(0, {"os": "ubuntu-latest", "suite": " + ".join(s for s, _ in batch),
+                           "suites": [s for s, _ in batch], "runs": "\n".join(r for _, r in batch)})
     return {
         "matrix": {"include": include},
         "has_regression": bool(include),
