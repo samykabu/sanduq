@@ -16,7 +16,7 @@ except ModuleNotFoundError:  # the source tree; package.py copies it into script
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'shared'))
     import sanduq_gh
 from execution_tools import sha256_file
-from workflow import WorkflowError, Run, digest, inside, load_policy, locked, read, require, write
+from workflow import WorkflowError, Run, digest, inside, load_policy, locked, project_sync_mode, read, require, write
 
 MARKER = re.compile(r'\A<!-- sanduq-decision:question (\{[^\n]*\}) -->\n')
 # AHMED-15: `SD1: B.`, `SD1 - B`, `SD1 = B` and `SD1: B - keep drafts` all count; the letters must still stand
@@ -43,7 +43,8 @@ LOCAL_MENTION = re.compile(r'(?<![A-Za-z0-9])(SD[1-9]\d*|C[1-9]\d*Q[1-9]\d*)(?![
 def local_sections(text):
     """`{ID: {title, options, ticked, answers, unparsed}}` of a clarifications.md: one `## <ID>: <question>` section per
     question with its checkbox options; an answer line (`<ID>: B`, `<ID>: A, C`, free text for a question without
-    options) anywhere in the file; every other line naming a known ID is reported unparsed."""
+    options) anywhere in the file; every other line naming a known ID, or a letter the question does not offer, is
+    reported unparsed."""
     sections, current = {}, None
     for line in text.splitlines():
         heading = LOCAL_HEADING.match(line)
@@ -62,8 +63,13 @@ def local_sections(text):
         if reply and reply[1].upper() in sections:
             section = sections[reply[1].upper()]
             letters = re.fullmatch(LETTERS, reply[2], re.I)
-            if letters:
-                section['answers'].append((sorted(set(re.findall(r'[A-Z]', letters[1].upper()))), line.strip()))
+            chosen = sorted(set(re.findall(r'[A-Z]', letters[1].upper()))) if letters else []
+            invalid = [letter for letter in chosen if letter not in section['options']]
+            if letters and section['options'] and invalid:
+                section['unparsed'].append(line.strip() + ' (' + ', '.join(invalid) + (' is' if len(invalid) == 1 else ' are')
+                                           + ' not an option of ' + reply[1].upper() + ')')
+            elif letters:
+                section['answers'].append((chosen, line.strip()))
             elif not section['options']:
                 section['answers'].append(([], line.strip()))
             else:
@@ -424,7 +430,8 @@ def reconcile(root, feature, gh=None, *, publish_field=False, claim_token=None, 
         ledger['lifecycle'] = previous['lifecycle']
     if ledger != previous:
         write(path, ledger)
-    if publish_field:
+    # Board writes outside the statuses minimal mode keeps (REQ-22): the Decision field and the parking move.
+    if publish_field and project_sync_mode(run.policy) == 'full':
         sync_project_field(root, issue, ledger, gh, run.policy)
         lifecycle = sync_lifecycle(root, issue, ledger, gh, run.policy, ledger_path=path)
         if lifecycle != ledger.get('lifecycle', {}):

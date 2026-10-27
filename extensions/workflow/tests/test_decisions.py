@@ -203,6 +203,14 @@ class DecisionTests(unittest.TestCase):
             'C1Q1': (['B'], [], []), 'C1Q2': ([], [([], 'C1Q2: thirty days')], []),
             'SD1': ([], [(['A'], 'SD1 = A')], ['SD1 might also be C'])})
 
+    def test_a_local_letter_the_question_does_not_offer_is_unparsed_with_the_reason(self):
+        text = ('## C1Q1: Keep drafts?\n\n- [ ] **A.** Yes\n- [ ] **B.** No\n\nC1Q1: Z\n\n'
+                '## C1Q2: How long?\n\nC1Q2: Z\n')
+        sections = d.local_sections(text)
+        self.assertEqual((sections['C1Q1']['answers'], sections['C1Q1']['unparsed']),
+                         ([], ['C1Q1: Z (Z is not an option of C1Q1)']))
+        self.assertEqual(sections['C1Q2']['answers'], [(['Z'], 'C1Q2: Z')])  # no options: free text still answers
+
     def test_project_field_sync_does_not_touch_lifecycle_status(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

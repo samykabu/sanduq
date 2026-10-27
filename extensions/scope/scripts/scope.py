@@ -247,8 +247,10 @@ class Scope:
     def __init__(self, root, gh=None):
         self.root = Path(root).resolve()
         self.gh = gh or GitHub()
-        self.cfg = read_json(self.root / '.specify/extensions/project/config.json')
-        require(self.cfg and self.cfg.get('projectId'), 'Run /speckit-project-init first.')
+        # Workflow's `project_sync.mode: off` runs without a board (REQ-22): no Project config, reads or writes.
+        self.board_mode = workflow_policy.board_mode(self.root)
+        self.cfg = read_json(self.root / '.specify/extensions/project/config.json', {})
+        require(self.board_mode == 'off' or (self.cfg and self.cfg.get('projectId')), 'Run /speckit-project-init first.')
         self.gh.project_cfg = self.cfg
         url = sanduq_remote.origin_url(self.root, resolve=True)
         require(url, 'A GitHub origin remote is required: no remote.origin.url is set (git remote add origin <url>).')
@@ -300,6 +302,8 @@ class Scope:
         return cache['items'] if fresh else None
 
     def board(self, fresh=False):
+        if self.board_mode == 'off':
+            return {}
         if self._board is None or fresh:
             # Only the first read in a process may come from the shared cache; any reload is live.
             items = None if fresh or self._board_cached is not None else self.cached_board()
@@ -378,6 +382,11 @@ class Scope:
         return matches[0]
 
     def status(self, issue):
+        if self.board_mode == 'off':
+            # No board: the issue state is the status, so a prerequisite is ready once it is closed as completed.
+            if issue.get('state_reason') == 'not_planned':
+                return 'Closed (not planned)'
+            return 'Done' if issue.get('state') == 'closed' else 'Open (no board)'
         status = self.board().get(issue['number'], {}).get('status', 'Unknown (not on configured Project)')
         aliases = workflow_policy.statuses(self.root)
         status = next((logical for logical, actual in aliases.items() if actual == status), status)
@@ -527,16 +536,20 @@ class Scope:
         initial = initial or self.resolve(value)
         revalidation = workflow_policy.bound_claim(self.root, self.repo, initial['number'], {'scope', 'specify'})
         fresh = workflow_policy.fresh_claim(self.root, self.repo, initial['number'], feature, token, session) if any((feature, token, session)) else None
+        tracked = workflow_policy.board_writes(self.root, required_status)
 
         def allowed():
             status = self.status(initial)
             fresh_continued = fresh and initial.get('state') == 'open' and status == 'Feature Specification'
             continued = revalidation and initial.get('state') == 'open' and status in {'Feature Specification', 'Need Clarifications', 'Ready', 'In progress', 'In review'}
+            if not tracked:
+                # The board mode never writes this column: an open issue the board has not moved on qualifies.
+                return initial.get('state') == 'open' and (continued or status not in {'Ready', 'In progress', 'In review', 'Done'})
             return status == required_status or continued or fresh_continued
         ok = allowed() or (self.drop_cached_board() and allowed())
         for delay in BOARD_LAG_RETRY:
             # N1: right after publish, GitHub's Project listing can lag the item-add for a few seconds.
-            if ok or initial['number'] in self.board():
+            if ok or self.board_mode == 'off' or initial['number'] in self.board():
                 break
             time.sleep(delay)
             self.board(fresh=True)
@@ -832,14 +845,22 @@ class Scope:
                 row.pop(key, None)  # item-list omits an empty field
 
     def project_fields(self):
+        if self.board_mode == 'off':
+            return []
         if self._fields is None:
             self._fields = self.gh.command(['project', 'field-list', str(self.cfg['projectNumber']), '--owner', self.cfg['owner'], '--format', 'json', '--limit', '100'])['fields']
         return self._fields
 
     def set_status(self, issue, status):
+        if not self.tracks(status):
+            return
         status = self.actual_status(status)
         require(status in self.cfg['statusOptions'], f'Missing Project status: {status}')
         self.edit_item(issue, self.cfg['statusFieldId'], 'status', status, self.cfg['statusOptions'][status])
+
+    def tracks(self, status):
+        """Whether the board mode writes the logical `status` (every one in full mode, none in off)."""
+        return workflow_policy.board_writes(self.root, status)
 
     def actual_status(self, status):
         return workflow_policy.statuses(self.root).get(status, status)
@@ -930,9 +951,10 @@ class Scope:
             self._ids[issue['number']] = issue['id']
             journal['nodes'][node['key']] = issue['number']
             write_json(journal_path, journal)
-            self.board_item(issue)
-            if not self.board().get(issue['number'], {}).get('status'):
-                self.set_status(issue, 'Backlog')
+            if self.board_mode != 'off':
+                self.board_item(issue)
+                if not self.board().get(issue['number'], {}).get('status'):
+                    self.set_status(issue, 'Backlog')
             if node.get('children'):
                 current = self.gh.api(f'{self.base}/{issue["number"]}/sub_issues?per_page=100', pages=True)
                 native_children[issue['number']] = {x['number'] for x in current}
@@ -1197,6 +1219,11 @@ class Scope:
                             feature=feature, token=token, session=session, analysis=analysis, analysis_path=analysis_path,
                             snapshot_path=snapshot_path, initial=initial)
         issue = initial
+        if self.board_mode == 'off':
+            # No board and no Project Sync state: scope-source.json is the whole binding.
+            if apply:
+                write_json(path / 'scope-source.json', dict(checked, repo=self.repo))
+            return {'feature': path.name, 'issue': checked['issue'], 'dry_run': not apply}
         state_path = self.root / self.cfg['stateFile']
         state = read_json(state_path, {})
         slug = path.name

@@ -139,6 +139,35 @@ class BoardModeTests(Base):
         self.assertEqual(claim['stage'], 'verify')
         self.assertEqual(set(run.load()['receipts']), before)
 
+    def test_the_task_issue_skip_follows_a_mode_switch_without_invalidating(self):
+        run = self.run_object()
+        self.advance(run, 'analyze')
+        before = run.load()['receipts']
+        self.board('off')  # after Analyze, before Tasks-to-Issues: Execute must not need the task-issue journal
+        run = w.Run(self.root, self.feature)
+        claim = run.claim(self.usage())
+        self.assertEqual(claim['stage'], 'execute')
+        # The fixture receipt writes a journal for any later stage, so check what Execute's completion requires.
+        self.assertNotIn(self.feature + '/workflow/task-issues.json', w.required_inputs(self.root, self.feature, 'execute'))
+        run.complete(claim['token'], self.receipt('execute'))
+        state = run.load()
+        self.assertEqual(state['skipped'], {'taskstoissues': 'issue_sync.taskstoissues: off'})
+        self.assertEqual({k: state['receipts'][k] for k in before}, before)
+        self.board('full')  # back on after a later stage passed: the skip stays, nothing reruns
+        run = w.Run(self.root, self.feature)
+        self.assertEqual(run.next(run.load())['stage'], 'verify')
+        self.assertIn('taskstoissues', run.load()['skipped'])
+
+
+    def test_switching_task_issues_back_on_before_a_later_receipt_requires_the_stage_again(self):
+        self.board('off')
+        run = self.run_object()
+        self.advance(run, 'analyze')
+        self.board('full')
+        run = w.Run(self.root, self.feature)
+        self.assertEqual(run.next(run.load())['stage'], 'taskstoissues')
+        self.assertNotIn('taskstoissues', run.load().get('skipped') or {})
+
     def test_the_task_issue_adapter_refuses_in_mode_off(self):
         self.board('off')
         script = SCRIPT.parent / 'task_issues.py'

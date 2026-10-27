@@ -409,15 +409,16 @@ def load_policy(root):
     return validate_policy(parse_policy(path.read_text(encoding='utf-8-sig')), root)
 
 
-def stages(policy, tier=None):
+def stages(policy, tier=None, skipped=None):
     """The selected stage order; a lite or standard tier merges Tasks into Plan, lite also drops QA/manual stages,
-    and `issue_sync.taskstoissues: off` drops Tasks-to-Issues."""
+    and `issue_sync.taskstoissues: off` drops Tasks-to-Issues. `skipped`: the feature's recorded skips, which keep
+    a Tasks-to-Issues skip that outlived a switch back on (`Run.reconcile_skipped`)."""
     selected = [s for s in BASE_STAGES if not (s.startswith('qa_') and not policy['processes']['qa'])
                 and not (s.startswith('manual_') and not policy['processes']['user_manual'])
                 and not (s == 'taskstoissues' and (policy.get('issue_sync') or {}).get('taskstoissues') == 'off')]
     if tier in ('lite', 'standard'):
         selected = [s for s in selected if s != 'tasks' and not (tier == 'lite' and s in LITE_SKIPPED)]
-    return selected
+    return [s for s in selected if s not in (skipped or {})]
 
 
 # Sub-keys that tune how future work runs (a cache TTL, a question cap, the board mode) and never change what

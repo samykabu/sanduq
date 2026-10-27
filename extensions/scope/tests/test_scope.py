@@ -764,5 +764,47 @@ class ScopeTests(unittest.TestCase):
             self.publish_approved(self.app.inspect('1'), analysis)
 
 
+
+class BoardModeTests(unittest.TestCase):
+    """REQ-22: Workflow's `project_sync.mode` reaches Scope; off needs no Project config, minimal writes only its statuses."""
+    setUp, tearDown, analysis, publish_approved = ScopeTests.setUp, ScopeTests.tearDown, ScopeTests.analysis, ScopeTests.publish_approved
+
+    def board(self, mode):
+        import yaml
+        policy = m.workflow_policy._workflow_module().default_policy(False, False)
+        policy['project_sync'] = {'mode': mode}
+        (self.root / '.specify/workflow.yml').write_text(yaml.safe_dump(policy), encoding='utf-8')
+        with patch('sanduq_remote.origin_url', return_value='https://github.com/acme/app.git'):
+            self.app = m.Scope(self.root, self.gh)
+
+    def test_off_runs_scope_and_specify_without_a_board_and_minimal_skips_backlog(self):
+        (self.root / '.specify/extensions/project/config.json').unlink()
+        self.board('off')
+        self.gh.command = lambda args, payload=None: self.fail('board call in mode off: ' + ' '.join(args[:2]))
+        self.gh.add(2, 'Prerequisite')
+        self.gh.issues[1]['body'] = '### Blocked by\n- #2'
+        self.assertEqual(self.app.inspect('1')['blocked'], [{'number': 2, 'title': 'Prerequisite', 'status': 'Open (no board)'}])
+        self.gh.issues[2].update(state='closed', state_reason='completed')  # closed as completed is ready
+        snap, analysis = self.analysis()
+        self.publish_approved(snap, analysis)
+        self.assertEqual(self.app.gate('1')['score'], 3)  # the passed Scope receipt
+        feature = self.root / 'specs/001-new'
+        feature.mkdir(parents=True)
+        (feature / 'spec.md').write_text('# Spec\n', encoding='utf-8')
+        m.write_json(self.root / '.specify/feature.json', {'feature_directory': 'specs/001-new'})
+        self.assertFalse(self.app.bind('1', True)['dry_run'])
+        self.assertEqual(m.read_json(feature / 'scope-source.json')['issue'], 1)
+        self.assertFalse((self.root / '.specify/project-sync-state.json').exists())
+
+        self.tearDown()
+        self.setUp()
+        self.board('minimal')
+        self.gh.statuses[1] = None  # on the board without a status
+        snap, analysis = self.analysis()
+        self.publish_approved(snap, analysis)
+        self.assertFalse([w for w in self.gh.writes if w[0] == 'item-edit'], 'minimal mode wrote Backlog')
+        self.assertEqual(self.app.gate('1')['score'], 3)
+
+
 if __name__ == '__main__':
     unittest.main()

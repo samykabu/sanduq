@@ -190,7 +190,21 @@ class Run:
             # read-only `load` (e.g. `next`) never writes anything itself.
             state['repo_identity'] = adopted
         require(allow_branch_change or state['branch'] == git(self.root, 'branch', '--show-current'), 'CHECKPOINT_BRANCH_MISMATCH')
+        self.reconcile_skipped(state)
         return state
+
+    def reconcile_skipped(self, state):
+        """`issue_sync.taskstoissues` is operational (AHMED-30), so the recorded Tasks-to-Issues skip follows the
+        current policy and the required inputs follow the stage selection. Switched back on, the skip stays once a
+        later stage has a receipt: running Tasks-to-Issues then would invalidate those receipts."""
+        skipped = dict(state.get('skipped') or {})
+        if task_issue_mode(self.policy) == 'off':
+            if 'taskstoissues' not in state['receipts']:
+                skipped.setdefault('taskstoissues', 'issue_sync.taskstoissues: off')
+        elif 'taskstoissues' in skipped and not any(
+                BASE_STAGES.index(stage) > BASE_STAGES.index('taskstoissues') for stage in state['receipts']):
+            del skipped['taskstoissues']
+        self.record_skipped(state, skipped)
 
     def _relocate_plan(self, state, allow_branch_rebind, allow_repository_rename, new_issue, keep_issue_number,
                        allow_history_change=False):
@@ -456,7 +470,7 @@ class Run:
         old_policy_digest = state['policy_digest']
         policy_digest = delivery_digest(self.policy)
         commands = resolve_commands(self.root, self.policy, state_tier(state))
-        selected = stages(self.policy, state_tier(state))
+        selected = stages(self.policy, state_tier(state), state.get('skipped'))
         changed = [stage for stage in selected if state['commands'].get(stage) != commands[stage]]
         if policy_digest != old_policy_digest:
             reached = policy_cutoff(state.get('policy'), self.policy)
@@ -518,7 +532,7 @@ class Run:
         tier = self.tier_of(state)
         first, last = BASE_STAGES.index('specify'), BASE_STAGES.index(through)
         changed, restamp, needs = {}, [], []
-        for stage in stages(self.policy, state_tier(state)):
+        for stage in stages(self.policy, state_tier(state), state.get('skipped')):
             if not first <= BASE_STAGES.index(stage) <= last:
                 continue
             receipt = state['receipts'].get(stage)
@@ -772,7 +786,7 @@ class Run:
             if stage == 'review':
                 coding_review_checks(self.root, self.relative, self.policy, state)
             tier = self.tier_of(state)
-            selected = stages(self.policy, state_tier(state))
+            selected = stages(self.policy, state_tier(state), state.get('skipped'))
             require(stage in selected, 'STAGE_NOT_SELECTED: ' + stage)
             receipt = state['receipts'].get(stage)
             require(receipt, 'RECEIPT_MISSING: ' + stage)
@@ -1027,7 +1041,7 @@ class Run:
         state['updated_at'] = now()
         if not preserve_head:
             state['head'] = git(self.root, 'rev-parse', 'HEAD')
-        state['stage_plan'] = {'v': 1, 'generation': state['generation'], 'stages': stages(self.policy, state_tier(state))}
+        state['stage_plan'] = {'v': 1, 'generation': state['generation'], 'stages': stages(self.policy, state_tier(state), state.get('skipped'))}
         state['next_action'] = self.evaluate_next_action(state)
         write(self.path, state)
         # The queued lifecycle events were written with the state; append them now, under the caller's
@@ -1062,7 +1076,7 @@ class Run:
         result = self.next_stage(state, finalize)
         if finalize and result.get('stage') and BASE_STAGES.index(result['stage']) < BASE_STAGES.index('ready'):
             # AHMED-07: finalize is Ready plus PR, never "run everything that remains".
-            remaining = [stage for stage in stages(self.policy, state_tier(state))
+            remaining = [stage for stage in stages(self.policy, state_tier(state), state.get('skipped'))
                          if BASE_STAGES.index(result['stage']) <= BASE_STAGES.index(stage) < BASE_STAGES.index('ready')]
             result = {'stage': None, 'status': 'not_ready_to_finalize', 'remaining': remaining,
                       'reason': result.get('reason'), 'command': 'speckit.workflow.continue'}
@@ -1086,7 +1100,7 @@ class Run:
         cutoff = policy_cutoff(state.get('policy'), self.policy) if policy_changed else len(BASE_STAGES)
         prefetch_attributes(self.root, [path for receipt in state['receipts'].values()
                                         for path in receipt.get('fingerprints') or {}])
-        for stage in stages(self.policy, state_tier(state)):
+        for stage in stages(self.policy, state_tier(state), state.get('skipped')):
             receipt = state['receipts'].get(stage)
             if receipt and BASE_STAGES.index(stage) >= cutoff:
                 return {'stage':stage,'command':state['commands'][stage],'reason':'policy-changed'}

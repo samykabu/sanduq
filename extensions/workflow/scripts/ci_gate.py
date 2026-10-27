@@ -104,7 +104,7 @@ def check(root, feature, policy, base=None, rules=None, verify_ci_evidence=True,
     require(f"{source.get('repo')}#{source.get('issue')}" == state.get('issue'), 'FEATURE_BINDING_MISMATCH')
     amendments, revalidations, accepted, warnings = [], [], [], []
     if rules['receipts']:
-        for stage in stages(policy, state_tier(state)):
+        for stage in stages(policy, state_tier(state), state.get('skipped')):
             if stage == 'pr': continue  # PR publication follows readiness; never requires a recursive PR commit.
             receipt = state.get('receipts', {}).get(stage, {})
             require(receipt.get('outcome') == 'passed' and receipt.get('evidence'), 'RECEIPT_MISSING: ' + stage)
