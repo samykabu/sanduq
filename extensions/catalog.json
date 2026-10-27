@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-10-26T23:39:55.698894+00:00",
+  "updated_at": "2026-10-27T02:49:06.172034+00:00",
   "catalog_url": "https://raw.githubusercontent.com/samykabu/sanduq/main/catalog.json",
   "extensions": {
     "project": {
@@ -316,7 +316,7 @@
     "workflow": {
       "name": "Sanduq Workflow",
       "id": "workflow",
-      "version": "1.19.2",
+      "version": "1.20.0",
       "description": "GitHub issue decisions and resumable Scope-to-PR orchestration with optional model-aware delegation, QA, User Manual, and workflow evidence CI.",
       "author": "Samy K. Abushanab",
       "license": "MIT",
@@ -324,7 +324,7 @@
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/workflow",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/workflow/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v1.19.2/workflow.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/workflow-v1.20.0/workflow.zip",
       "requires": {
         "speckit_version": ">=1.0.0,<2.0.0",
         "tools": [
@@ -358,14 +358,14 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "65f48dd46944e36e068a03169bb6e2f65218b0d5feae5cf202993cd6a509e67a",
-      "updated_at": "2026-10-26T23:39:55.698803+00:00",
-      "inventory_sha256": "3e3ae1888ad133ba9a9b46d8a52062fd8890e0e388a2dc74a6f5ebec1927155a"
+      "sha256": "feefc208eefb0aa5eccc4751eb20a1c16beff9f7be9bf7f0f5c9d226616fcf7e",
+      "updated_at": "2026-10-27T02:49:06.131594+00:00",
+      "inventory_sha256": "f68a73ac035c05fbf963f30f981d26af1de9389990d6d1d537da018b20f08c89"
     },
     "scope": {
       "name": "Speckit Scope",
       "id": "scope",
-      "version": "1.11.0",
+      "version": "1.11.1",
       "description": "Analyze GitHub issue scope, enforce prerequisites, review user-selected decomposition before publishing, and maintain parent progress.",
       "author": "Samy K. Abushanab",
       "license": "MIT",
@@ -373,7 +373,7 @@
       "homepage": "https://github.com/samykabu/sanduq/tree/main/extensions/scope",
       "documentation": "https://github.com/samykabu/sanduq/blob/main/extensions/scope/README.md",
       "changelog": "https://github.com/samykabu/sanduq/blob/main/extensions/scope/CHANGELOG.md",
-      "download_url": "https://github.com/samykabu/sanduq/releases/download/scope-v1.11.0/scope.zip",
+      "download_url": "https://github.com/samykabu/sanduq/releases/download/scope-v1.11.1/scope.zip",
       "requires": {
         "speckit_version": ">=1.0.0",
         "extensions": [
@@ -413,9 +413,9 @@
       "category": "process",
       "effect": "read-write",
       "verified": false,
-      "sha256": "fe27b0e0d9e52fcd3a21157fe701e8c63c28e79835752358c88ed3de1bf58e42",
-      "updated_at": "2026-10-21T21:37:35.037924+00:00",
-      "inventory_sha256": "c30c3004c9362d0c40bc4c44445274010589e71dd61035eef2cfd7e715e71fe5"
+      "sha256": "63701da1a7313a4756f64d7d6e8a7d68506bb70ef96aaa70bc8376a3cf50abdb",
+      "updated_at": "2026-10-27T02:49:06.171964+00:00",
+      "inventory_sha256": "e77e8a3d0edf7a5daa46f730bb43dc7f7b320a69bb22f76397f815960c648e35"
     },
     "memory": {
       "name": "Sanduq Memory",
