@@ -257,7 +257,7 @@ class LeanExecutionTests(unittest.TestCase):
         self.policy['delegation']['enabled'] = True
         brief = self.root / 'brief.txt'
         brief.write_text('Analyze spec and plan consistency', encoding='utf-8')
-        health = {'ok': True, 'driver': self.root / 'driver.mjs', 'harnesses': {'codex': True}}
+        health = {'ok': True, 'driver': str(self.root / 'driver.mjs'), 'harnesses': {'codex': True}}
         with patch.object(w, 'load_policy', return_value=self.policy), \
              patch.dict(os.environ, {}, clear=True), patch.object(delegation, 'doctor', return_value=health), \
              patch_runtime('active_host', return_value='codex'), \
@@ -272,7 +272,7 @@ class LeanExecutionTests(unittest.TestCase):
         self.policy['delegation']['enabled'] = True
         brief = self.root / 'brief.txt'
         brief.write_text('Implement parser', encoding='utf-8')
-        health = {'ok': True, 'driver': self.root / 'driver.mjs', 'harnesses': {'codex': True}}
+        health = {'ok': True, 'driver': str(self.root / 'driver.mjs'), 'harnesses': {'codex': True}}
         with patch.object(w, 'load_policy', return_value=self.policy), \
              patch.dict(os.environ, {}, clear=True), patch.object(delegation, 'doctor', return_value=health), \
              patch_runtime('active_host', return_value='codex'), \
@@ -290,7 +290,7 @@ class LeanExecutionTests(unittest.TestCase):
         self.policy['delegation']['enabled'] = True
         brief = self.root / 'brief.txt'
         brief.write_text('Implement parser', encoding='utf-8')
-        health = {'ok': True, 'driver': self.root / 'driver.mjs', 'harnesses': {'codex': True}}
+        health = {'ok': True, 'driver': str(self.root / 'driver.mjs'), 'harnesses': {'codex': True}}
         with patch.object(w, 'load_policy', return_value=self.policy), \
              patch.dict(os.environ, {}, clear=True), patch.object(delegation, 'doctor', return_value=health), \
              patch_runtime('active_host', return_value='codex'), \
@@ -319,7 +319,7 @@ class LeanExecutionTests(unittest.TestCase):
         self.policy['delegation']['enabled'] = True
         brief = self.root / 'brief.txt'
         brief.write_text('Implement parser', encoding='utf-8')
-        health = {'ok': True, 'driver': self.root / 'driver.mjs', 'harnesses': {'codex': True}}
+        health = {'ok': True, 'driver': str(self.root / 'driver.mjs'), 'harnesses': {'codex': True}}
         stronger = {**self.candidate, 'requested_model': 'gpt-6-astra', 'tier': 'high'}
         with patch.object(w, 'load_policy', return_value=self.policy), \
              patch.dict(os.environ, {}, clear=True), patch.object(delegation, 'doctor', return_value=health), \
@@ -330,6 +330,47 @@ class LeanExecutionTests(unittest.TestCase):
                 dispatch.candidate_start(self.root, self.feature, self.feature + '/T001',
                        'implementation', [self.candidate, stronger], brief, self.root, 1800,
                        deliverable='Implement parser.py with passing parser unit tests')
+        self.assertEqual(launch.call_count, 1)
+
+    def test_fourth_lean_attempt_is_refused_and_blocked_attempts_do_not_count(self):
+        identity = self.feature + '/T001'
+        diagnosis = {'cause': 'Unicode input breaks the tokenizer', 'evidence': 'diag.json',
+                     'change': 'Normalise input before tokenizing it'}
+        def admit(attempts, policy=None):
+            return lean.admit(policy or self.policy, attempts, identity, 'implementation',
+                              'Implement parser.py with passing parser unit tests',
+                              'Fix Unicode parsing and rerun parser tests', diagnosis)
+        failed = [{'identity': identity, 'status': 'failed'}] * 3
+        ignored = [{'identity': identity, 'status': status} for status in ('blocked', 'intent-abandoned')]
+        self.assertEqual(admit(failed[:2] + ignored)['attempt_number'], 3)
+        with self.assertRaisesRegex(lean.LeanPolicyError, 'LEAN_ATTEMPT_LIMIT_REACHED.*max_attempts: 3.*adopt'):
+            admit(failed + ignored)
+        raised = {**self.policy, 'lean_execution': {'enabled': True, 'max_attempts': 4}}
+        self.assertEqual(admit(failed, raised)['attempt_number'], 4)
+        for bad in (0, '3', True):
+            with self.subTest(bad=bad), self.assertRaises(lean.LeanPolicyError):
+                lean.validate({'enabled': True, 'max_attempts': bad})
+
+    def test_lean_reassign_of_a_provider_rejection_is_refused(self):
+        self.tasks('- [ ] T001 Implement parser and run tests\n')
+        self.policy['delegation']['enabled'] = True
+        brief = self.root / 'brief.txt'
+        brief.write_text('Implement parser', encoding='utf-8')
+        health = {'ok': True, 'driver': str(self.root / 'driver.mjs'), 'harnesses': {'codex': True}}
+        with patch.object(w, 'load_policy', return_value=self.policy), \
+             patch.dict(os.environ, {}, clear=True), patch.object(delegation, 'doctor', return_value=health), \
+             patch_runtime('active_host', return_value='codex'), \
+             patch.object(dispatch, 'launch', return_value={'run_id': 'r1', 'state': 'running'}) as launch:
+            dispatch.candidate_start(self.root, self.feature, self.feature + '/T001',
+                                     'implementation', [self.candidate], brief, self.root, 1800,
+                                     deliverable='Implement parser.py with passing parser unit tests')
+            with dispatch.edit_ledger(self.root, self.feature) as ledger:
+                ledger['attempts'][0].update(status='failed', model_rejected=True,
+                                             failure_category='provider-rejection')
+            with self.assertRaisesRegex(delegation.DelegationError,
+                                        'LEAN_PROVIDER_REJECTED: run r1 .*rejected model gpt-6-sol.*start '
+                                        '--feature specs/001-example --id T001 --harness'):
+                dispatch.reassign(self.root, self.feature, 'r1', 'Fix Unicode parsing and rerun parser tests')
         self.assertEqual(launch.call_count, 1)
 
 

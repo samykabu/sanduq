@@ -9,7 +9,7 @@ on:
 
 permissions:
   contents: write
-  actions: read
+  actions: write # the CI gate dispatches ci.yml when the release commit has no Windows run
 
 concurrency:
   group: release-extensions
@@ -17,10 +17,13 @@ concurrency:
 
 jobs:
   release:
+    # A completed push run starts the release; so does a scheduled or dispatched (Windows) run, so the full
+    # CI run the gate below dispatches releases when it passes.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push' &&
+       contains(fromJSON('["push", "workflow_dispatch", "schedule"]'), github.event.workflow_run.event) &&
+       github.event.workflow_run.head_branch == 'main' &&
        github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: homek8-general
     steps:
@@ -48,31 +51,74 @@ jobs:
             echo 'ready=false' >> "$GITHUB_OUTPUT"
             echo "Pending status \`$status\`: nothing is marked ready, so no release runs. This is not a failure." >> "$GITHUB_STEP_SUMMARY"
           fi
+      # Push runs skip the slow Windows suites (ci_matrix.py WINDOWS_SLOW_SUITES), so the commit must also have
+      # a successful scheduled or dispatched ci run whose Windows workflow and memory jobs passed. Anything
+      # still missing or running is a notice, not a failure: the run that completes triggers this again.
+      # Dry run from a checkout: HEAD_SHA=<sha> DRY_RUN=1 GH_REPO=samykabu/sanduq python <this script>
       - name: Require successful CI for the current main commit
+        id: ci
         if: steps.gate.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          TRIGGER_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           python - <<'PY'
-          import json, subprocess
-          head=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
-          runs=json.loads(subprocess.check_output(['gh','run','list','--workflow','ci.yml','--commit',head,'--branch','main','--event','push','--json','conclusion,status,headSha'],text=True))
-          if not any(r['headSha']==head and r['status']=='completed' and r['conclusion']=='success' for r in runs):
-              raise SystemExit('Current main has no successful completed push CI; nothing released.')
+          import json, os, subprocess, sys
+          repo, dry = os.environ['GH_REPO'], os.environ.get('DRY_RUN') == '1'
+          head = os.environ.get('HEAD_SHA') or subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          trigger = os.environ.get('TRIGGER_SHA', '')
+          WINDOWS = ('regression (windows-latest, workflow', 'regression (windows-latest, memory')
+
+          def api(path):
+              return json.loads(subprocess.check_output(['gh', 'api', path], text=True))
+
+          def finish(release, why, level='notice'):
+              print(f'::{level}::{why}')
+              for name, text in (('GITHUB_OUTPUT', f'release={str(release).lower()}'), ('GITHUB_STEP_SUMMARY', why)):
+                  if os.environ.get(name):
+                      with open(os.environ[name], 'a', encoding='utf-8') as fh:
+                          fh.write(text + '\n')
+              sys.exit(1 if level == 'error' else 0)
+
+          if trigger and trigger != head:
+              finish(False, f'Triggered by ci for {trigger[:8]}, but main is at {head[:8]}; the ci run for {head[:8]} triggers the release.')
+          runs = api(f'repos/{repo}/actions/workflows/ci.yml/runs?head_sha={head}&per_page=100')['workflow_runs']
+          push = [r for r in runs if r['event'] == 'push' and r['head_branch'] == 'main']
+          if not any(r['status'] == 'completed' and r['conclusion'] == 'success' for r in push):
+              if any(r['status'] != 'completed' for r in push) or not push:
+                  finish(False, f'No completed push ci run for {head[:8]} yet; its completion triggers the release. Nothing released.')
+              finish(False, f'The push ci run for {head[:8]} failed; nothing released.', 'error')
+
+          def windows_passed(run):
+              jobs = api(f'repos/{repo}/actions/runs/{run["id"]}/jobs?per_page=100')['jobs']
+              return all(any(j['name'].startswith(p) and j['conclusion'] == 'success' for j in jobs) for p in WINDOWS)
+
+          full = [r for r in runs if r['event'] in ('schedule', 'workflow_dispatch')]
+          done = [r for r in full if r['status'] == 'completed' and r['conclusion'] == 'success']
+          good = next((r for r in done if windows_passed(r)), None)
+          if good:
+              finish(True, f'ci run {good["id"]} ({good["event"]}) passed the Windows legs on {head[:8]}: releasing.')
+          if any(r['status'] != 'completed' for r in full):
+              finish(False, f'A full ci run for {head[:8]} is still running; its completion triggers the release. Nothing released.')
+          if dry:
+              finish(False, f'DRY RUN: no ci run with Windows legs on {head[:8]}; would dispatch ci.yml on main. Nothing released.')
+          subprocess.run(['gh', 'api', '-X', 'POST', f'repos/{repo}/actions/workflows/ci.yml/dispatches', '-f', 'ref=main'], check=True)
+          finish(False, f'No successful ci run with Windows legs (schedule or workflow_dispatch) on {head[:8]}: dispatched ci.yml on main; '
+                        'its completion triggers the release. Nothing released.')
           PY
-      - if: steps.gate.outputs.ready == 'true'
+      - if: steps.ci.outputs.release == 'true'
         run: python -m pip install -r extensions/workflow/requirements.txt
       - name: Prepare reviewed versions and deterministic assets
-        if: steps.gate.outputs.ready == 'true'
+        if: steps.ci.outputs.release == 'true'
         run: python extensions/scripts/release.py prepare
       - name: Publish immutable assets and verify downloaded bytes
-        if: steps.gate.outputs.ready == 'true'
+        if: steps.ci.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python extensions/scripts/release.py publish --apply
       - name: Promote catalogs only after verifying every asset
-        if: steps.gate.outputs.ready == 'true'
+        if: steps.ci.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python extensions/scripts/release.py promote
@@ -80,7 +126,7 @@ jobs:
       # VENDOR_PR_TOKEN opens it: a pull request opened with GITHUB_TOKEN would not start CI. The checkout
       # keeps no credentials; the token reaches git only through the push URL.
       - name: Open the released catalog pull request
-        if: steps.gate.outputs.ready == 'true'
+        if: steps.ci.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ secrets.VENDOR_PR_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -101,7 +147,7 @@ jobs:
           gh pr create --base main --head "$BRANCH" --title 'chore(extensions): publish verified release catalog' --body "Catalog promotion from release run $GITHUB_RUN_ID. The release assets are already published and verified; this merges by itself once the required checks pass."
           gh pr merge "$BRANCH" --auto --squash
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always() && steps.gate.outputs.ready == 'true'
+        if: always() && steps.ci.outputs.release == 'true'
         with:
           name: extension-release-evidence
           retention-days: 7

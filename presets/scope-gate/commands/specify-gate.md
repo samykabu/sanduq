@@ -29,3 +29,5 @@ reference owns binding and hand-off; gate and bind flags are in
 `.specify/workflow.yml`, also follow `.specify/extensions/scope/references/specify-standalone.md`.
 
 The instructions below are composed from the installed upstream Spec Kit command.
+Where the upstream text below conflicts with the claim's `reference_text`, the `reference_text` wins;
+upstream hook prompts are skipped inside a claim.

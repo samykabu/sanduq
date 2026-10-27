@@ -222,6 +222,28 @@ $speckit-memory-enable Review the renewed archiving policy and approve it.
 | Project owner type | A config from an older Init for an organization board says `ownerType: user` | Rerun `$speckit-project-init`, or set `"ownerType": "org"` |
 | Scope's `scope-gate` preset changed | A managed Specify claim is no longer told to chain Clarify | Unmanaged projects run `specify preset add` again for `scope-gate`; the Workflow installer re-adds it |
 
+## PH-02 train (Workflow 1.20.0)
+
+The train ships Workflow 1.20.0 and Scope 1.11.1, with presets `workflow` 1.3.2 and `scope-gate` 1.6.1.
+No extension ID or command name changes; one new route key (`allow_default_model`) and one new
+`lean_execution` key (`max_attempts`). The upgrade updates both together:
+
+```bash
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.20.0 --apply
+python .specify/extensions/workflow/scripts/workflow.py doctor --project
+```
+
+| Change | What you see | What to do |
+| --- | --- | --- |
+| Receipt placeholders | `complete` refuses `RECEIPT_PLACEHOLDER: <field>` when a gating field still holds the claim template's `<...>` value | Set every gating field from the work done; nothing passes by default |
+| Effort score check | The first Plan claim refuses `EFFORT_SCORE_MISMATCH` or `EFFORT_SCORE_UNVERIFIED` | Make the Scope receipt's `effort_score` match the score Scope verified (or the issue's `effort:<n>` label) |
+| Unknown policy keys | `POLICY_KEY_UNKNOWN: <path>; did you mean <closest>?` on `.specify/workflow.yml` | Fix the key; a key from a newer release names the `upgrade.py` command |
+| Live claims cannot be taken over | `recover` refuses `CLAIM_OWNER_ALIVE`; `status` shows `owner:` and `last_activity:` | Wait, or pass `--force-live-owner "<how you know it stopped>"` |
+| Fallback needs confirmation | With delegation on, a rejected model stops `collect` with `FALLBACK_CONFIRMATION_REQUIRED` | Confirm in the conversation; the top-level session runs `collect --confirm-fallback <requested>=<substitute>`. List substitutes in the route's `fallbacks`, or set `allow_default_model: true` for the CLI default |
+| Clean delegated environment | Workers see only the allowlisted variables; `GH_TOKEN` only on GitHub-adapter routes | A worker that needs another variable gets it through a `SANDUQ_*` name or the route's harness credentials |
+| Lean attempt cap | `LEAN_ATTEMPT_LIMIT_REACHED` after `max_attempts` (default 3); `LEAN_PROVIDER_REJECTED` on `reassign` after a model rejection | Ask the owner, or start with another eligible harness/model pair |
+| Locks recover from a dead owner | `WORKFLOW_BUSY` names pid, host, age and liveness; a lock whose pid exited on this host is reclaimed | Delete a lock from another host or an older version yourself once its process is gone |
+
 ## October 2026 train (Workflow 1.19.0)
 
 The train ships Workflow 1.19.0, Assure 2.6.2, Illustrate 2.7.2, PR 4.6.1, Progress 1.6.1, Project 2.6.1,

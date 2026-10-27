@@ -143,7 +143,9 @@ class WorkflowTests(unittest.TestCase):
             if w.BASE_STAGES.index(stage) >= w.BASE_STAGES.index(first) and not path.exists():
                 path.write_text('- [x] T001 Done behavior' if name == 'tasks.md' else '# Fixture ' + name, encoding='utf-8')
         if w.BASE_STAGES.index(stage) >= w.BASE_STAGES.index('specify') and not (directory / 'scope-source.json').exists():
-            w.write(directory / 'scope-source.json', {'repo': 'acme/app', 'issue': 10})
+            # Scope's bind caches the score its gate verified; fix_profile checks the receipt against it (OMAR-05).
+            score = ((w.read(directory / 'workflow/checkpoint.json', {}).get('receipts') or {}).get('scope') or {}).get('effort_score')
+            w.write(directory / 'scope-source.json', {'repo': 'acme/app', 'issue': 10, **({'score': score} if score else {})})
         if w.BASE_STAGES.index(stage) >= w.BASE_STAGES.index('taskstoissues') and not (directory / 'workflow/task-issues.json').exists():
             w.write(directory / 'workflow/task-issues.json', {'repo': 'acme/app', 'parent': 10, 'feature': self.feature,
                                                            'tasks': {'T001': {'number': 11, 'linked': True}}})

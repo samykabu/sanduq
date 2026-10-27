@@ -18,11 +18,13 @@ whose measurement shows no edits: empty `dirty_paths_changed`, unchanged HEAD
 and index, and `coverage_complete: true`. Unknown or incomplete measurement means
 no automatic retry, so
 review the worktree yourself. Do not reassign a running run when YAML changes.
-For a terminal result that is still too complex or incomplete, the orchestrator
-can run `delegate_dispatch.py reassign --feature specs/<feature> --run-id <id>
+For a terminal result that is still too complex or incomplete, the top-level
+dispatcher session can run `delegate_dispatch.py reassign --feature specs/<feature> --run-id <id>
 --reason "<specific gap>"`; this starts at most one stronger attempt within the
 same limit and records the reason. Review partial edits before choosing that
-path.
+path. `accept`, `adopt`, `reassign` and `trust-reset` run only in the top-level
+dispatcher session, never in a host subagent: an orchestration agent reports
+"needs accept/adopt for T###" at a batch boundary instead.
 
 When a start fails with `DELEGATION_ROUTES_UNAVAILABLE`, no candidate could start or each
 was proved never launched; the attempt is `blocked`: fix the CLI or route (`workflow.py doctor
@@ -65,13 +67,16 @@ sha256/size evidence. `accept --owned` may only narrow the paths recorded at
 Ledger trust is tri-state, not pass/fail: no local `.written` marker (a fresh
 checkout or CI runner) is a warning only, not a block — status is still
 enforced. A genuine tamper (a marker that disagrees) is sticky and survives a
-later legitimate write; resolve it with `delegate_dispatch.py trust-reset
---feature <f> --reason "<text>"` only after reviewing exactly what changed —
-this catches accidental and local tampering only, never a forged commit, so CI
-integrity still rests on review. After upgrading to this release, re-delegate
-any stage claimed under an older checkpoint once, since its recorded attempt
-has no `claim_token` and can never satisfy `complete`. `trust-reset` is an
-orchestration-agent command, never a worker's.
+later legitimate write. `trust-reset` needs the user's explicit approval in this
+conversation: pause, show the user exactly what changed in the ledger (quote the
+diff), and only after they approve run `delegate_dispatch.py trust-reset
+--feature <f> --reason "approved by <user>: <why>"` from the top-level
+dispatcher session. This catches accidental and local tampering only, never a
+forged commit, so CI integrity still rests on review. After upgrading to this
+release, re-delegate any stage claimed under an older checkpoint once, since its
+recorded attempt has no `claim_token` and can never satisfy `complete`.
+`trust-reset` is never run by a worker, a host subagent or the orchestration
+agent.
 
 A checked task with no delegation attempt reaches Ready only through
 `delegate_dispatch.py adopt --feature <feature> --id <task> --command

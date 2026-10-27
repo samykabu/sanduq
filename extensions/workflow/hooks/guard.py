@@ -6,6 +6,8 @@
 - `delegate_dispatch.py trust-reset|accept|reassign|adopt` are refused only in a worker context:
   env SANDUQ_DELEGATED_RUN set, env SANDUQ_ROLE=worker, or a payload carrying `agent_id` or
   `agent_type` (both hosts add these in subagent sessions). The top-level session runs them.
+- `delegate_dispatch.py ... --confirm-fallback` is the user's confirmation of a substitute model; it is
+  refused in that worker context and in a delegated orchestrator (env SANDUQ_DELEGATED_ROLE set).
 - `gh pr create|edit --body-file <f>` is refused in a managed project (`.specify/workflow.yml`
   present) when the sibling lint `<f minus suffix>.lint.json` (what `pr_publish.py` writes) is
   missing or its `body_sha256` is not the file's hash; an inline `--body`/`-b` is refused there too
@@ -117,7 +119,7 @@ def git_args(tokens):
 
 
 def findings(command, root='.'):
-    """(kind, reason) for each guarded command in ``command``; kind is 'git', 'ledger' or 'pr'."""
+    """(kind, reason) for each guarded command in ``command``; kind is 'git', 'ledger', 'fallback' or 'pr'."""
     found = []
     for segment in SEPARATORS.split(command):
         tokens = words(segment.strip())
@@ -134,6 +136,10 @@ def findings(command, root='.'):
                 if verbs:
                     found.append(('ledger', 'delegate_dispatch.py ' + sorted(verbs)[0] +
                                   " is the coordinator's command; a delegated worker or subagent may not run it"))
+                if any(t == '--confirm-fallback' or t.startswith('--confirm-fallback=') for t in tokens[index + 1:]):
+                    found.append(('fallback', "delegate_dispatch.py --confirm-fallback is the user's confirmation; a "
+                                              'delegated worker, orchestrator or subagent may not give it. Show the '
+                                              'user the FALLBACK_CONFIRMATION_REQUIRED message instead'))
     return found
 
 
@@ -153,6 +159,9 @@ def main(stdin=sys.stdin, environ=os.environ):
     for kind, text in findings(command_text(payload), root):
         if kind == 'git' and environ.get('SANDUQ_ROLE') != 'coordinator':
             sys.stderr.write('Sanduq guard: ' + text + ' (SANDUQ_ROLE=coordinator allows it).\n')
+            return 2
+        if kind == 'fallback' and (worker_context(payload, environ) or environ.get('SANDUQ_DELEGATED_ROLE')):
+            sys.stderr.write('Sanduq guard: ' + text + '.\n')
             return 2
         if kind == 'ledger' and worker_context(payload, environ):
             sys.stderr.write('Sanduq guard: ' + text + '.\n')

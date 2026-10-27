@@ -69,6 +69,23 @@ class GuardTests(unittest.TestCase):
                     self.assertIn('delegated worker or subagent may not run it', reason)
                     self.assertEqual(reason.count('\n'), 1, reason)
 
+    def test_fallback_confirmation_is_refused_in_a_worker_subagent_or_orchestrator(self):
+        """SEC-24: --confirm-fallback is the user's word; only the top-level session may pass it."""
+        for shape in (claude, codex):
+            for command in ('python .specify/extensions/workflow/scripts/delegate_dispatch.py collect --feature '
+                            'specs/1-x --run-id codex-1 --confirm-fallback gpt-6-sol=default',
+                            'python delegate_dispatch.py collect --run-id r --confirm-fallback=a=b'):
+                self.assertEqual(self.run_guard(shape(command))[0], 0, command)  # the top-level session
+                for payload, env in (({**shape(command), 'agent_id': 'a1'}, {}),
+                                     ({**shape(command), 'agent_type': 'general-purpose'}, {}),
+                                     (shape(command), {'SANDUQ_DELEGATED_RUN': 'run-1'}),
+                                     (shape(command), {'SANDUQ_DELEGATED_ROLE': 'orchestrator'}),
+                                     (shape(command), {'SANDUQ_ROLE': 'worker'})):
+                    code, reason = self.run_guard(payload, env)
+                    self.assertEqual(code, 2, (command, env, sorted(payload)))
+                    self.assertIn("--confirm-fallback is the user's confirmation", reason)
+                    self.assertEqual(reason.count('\n'), 1, reason)
+
     def test_allows_ordinary_and_read_only_commands(self):
         for command in ('git add src/a.py', 'git add ./src', 'git status', 'git stash list', 'git stash show',
                         'echo "git add -A"', 'python delegate_dispatch.py start --task T001',

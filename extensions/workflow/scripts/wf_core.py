@@ -5,15 +5,20 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import random
 import re
 import stat
 import subprocess
 import time
-import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+
+try:
+    import sanduq_fs
+except ModuleNotFoundError:  # the source tree; package.py copies it into scripts/
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'shared'))
+    import sanduq_fs
 
 
 SCHEMA = 1  # the policy schema
@@ -141,23 +146,14 @@ def checkpoint_policy_digest(state, policy):
 
 
 def replace_file(source, target, attempts=10):
-    """`os.replace` with a short bounded retry: on Windows another process (an indexer, a scanner, a
-    concurrent reader) can hold the target for a moment and the rename fails with PermissionError."""
+    """`os.replace` with the shared bounded Windows retry (`sanduq_fs.replace_file`)."""
     _wrote(target)
-    for attempt in range(attempts):
-        try:
-            return os.replace(source, target)
-        except PermissionError:
-            if attempt == attempts - 1:
-                raise
-            time.sleep(0.02 + 0.03 * random.random())
+    return sanduq_fs.replace_file(source, target, attempts)
 
 
 def write(path, value):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_name(path.name + '.' + uuid.uuid4().hex + '.tmp')
-    temp.write_text(json.dumps(value, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
-    replace_file(temp, path)
+    _wrote(path)
+    sanduq_fs.write_json(path, value)
 
 
 def inside(root, relative):
@@ -357,14 +353,8 @@ def ensure_local_excludes(root):
 
 @contextmanager
 def locked(path):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-    except FileExistsError:
-        raise WorkflowError('WORKFLOW_BUSY: inspect owner before removing ' + str(path))
-    try:
-        os.write(fd, json.dumps({'pid': os.getpid(), 'created': now()}).encode())
-        os.close(fd)
+    """Workflow's runtime lock: one try (timeout 0), `WORKFLOW_BUSY` naming the live owner, and a lock whose
+    recorded pid has exited on this host is reclaimed (SAMY-01)."""
+    with sanduq_fs.file_lock(path, 0, 'WORKFLOW_BUSY', WorkflowError, 'WORKFLOW_LOCK_RELEASE_BUSY'):
         yield
-    finally:
-        path.unlink(missing_ok=True)
+

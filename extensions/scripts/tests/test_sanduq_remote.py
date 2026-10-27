@@ -150,7 +150,8 @@ class PackagedCopies(unittest.TestCase):
              'sanduq_pr_lint.py': ("print(m.pr_lint('Fixes #2', 'Acme/App', 1)['violations'][0]['code'])",
                                    'UNBOUND_ISSUE_CLOSE'),
              'sanduq_gh.py': ("print(m.safe_read(['api', 'repos/a/b']), m.safe_read(['project', 'item-list']))",
-                              'True False')}
+                              'True False'),
+             'sanduq_fs.py': ("print(m.process_alive(-1), m.LOCK_UNREADABLE_STALE_SECONDS)", 'False 60')}
 
     def test_installed_copies_import_without_workflow_or_pyyaml(self):
         for helper, consumers in package.SHARED.items():

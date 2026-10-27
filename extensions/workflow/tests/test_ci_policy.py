@@ -451,7 +451,7 @@ class PolicyIntegrationTests(unittest.TestCase):
                         ignore=shutil.ignore_patterns('__pycache__'))
         # Installed scripts include package.py's canonical shared-module injection.
         for helper in ('check_inputs.py', 'evidence_snapshot.py', 'bounded_json.py', 'sanduq_remote.py', 'sanduq_gh.py',
-                       'sanduq_pr_lint.py'):
+                       'sanduq_pr_lint.py', 'sanduq_fs.py'):
             shutil.copyfile(EXTENSIONS / 'scripts/shared' / helper, scripts / helper)
         subprocess.run(['git', 'init', '-q'], cwd=copy, check=True, capture_output=True)
         (copy / '.specify/workflow.yml').write_text(

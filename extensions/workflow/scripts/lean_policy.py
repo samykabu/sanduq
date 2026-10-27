@@ -12,7 +12,7 @@ class LeanPolicyError(ValueError):
 
 
 DEFAULTS = {'enabled': False, 'timeout_min_seconds': 300, 'timeout_max_seconds': 7200,
-            'finalization_seconds': 120}
+            'finalization_seconds': 120, 'max_attempts': 3}
 KEYS = set(DEFAULTS) | {'verification_plan', 'preflight_manifest', 'scope_analysis'}
 COORDINATOR_STAGES = {'taskstoissues', 'execute', 'ready', 'pr'}
 FAILURE_CATEGORIES = ('provider-rejection', 'harness-failure', 'timeout',
@@ -28,7 +28,7 @@ def validate(config):
     require(isinstance(config, dict) and set(config) <= KEYS and
             type(config.get('enabled')) is bool, 'LEAN_POLICY_INVALID')
     value = {**DEFAULTS, **config}
-    for key in ('timeout_min_seconds', 'timeout_max_seconds', 'finalization_seconds'):
+    for key in ('timeout_min_seconds', 'timeout_max_seconds', 'finalization_seconds', 'max_attempts'):
         require(type(value[key]) is int and value[key] > 0, 'LEAN_POLICY_INVALID: ' + key)
     require(value['finalization_seconds'] < value['timeout_min_seconds'] <=
             value['timeout_max_seconds'] <= 28800, 'LEAN_TIMEOUT_BOUNDS_INVALID')
@@ -88,6 +88,14 @@ def admit(policy, attempts, identity, work_type, deliverable, correction_plan=No
     require(concrete_text(deliverable), 'LEAN_CONCRETE_DELIVERABLE_REQUIRED')
     previous = [a for a in attempts if a.get('identity') == identity and
                 a.get('status') not in ('blocked', 'intent-abandoned')]
+    limit = settings(policy)['max_attempts']
+    require(len(previous) < limit,
+            'LEAN_ATTEMPT_LIMIT_REACHED: ' + str(identity) + ' already has ' + str(len(previous)) + ' attempts '
+            '(lean_execution.max_attempts: ' + str(limit) + '). Stop and ask the owner: raise '
+            'lean_execution.max_attempts in .specify/workflow.yml, or do the work natively and record it with '
+            '"python .specify/extensions/workflow/scripts/delegate_dispatch.py adopt --feature ' +
+            str(identity).rsplit('/', 1)[0] + ' --id ' + str(identity).rsplit('/', 1)[-1] +
+            ' --command \"<acceptance command>\" --expect counts"')
     if previous:
         require(concrete_text(correction_plan), 'LEAN_CORRECTION_PLAN_REQUIRED')
         if len(previous) > 1:

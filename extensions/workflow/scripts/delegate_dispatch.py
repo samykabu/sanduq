@@ -574,27 +574,66 @@ class StartFailed(delegation.DelegationError):
 SUPERVISOR_START_FAILED = 5
 
 
+# SEC-01: the agent CLI runs with --clean-env and only these names (the driver adds its own runtime
+# basics), its provider's credentials, every SANDUQ_* name and, for a route that needs the GitHub
+# adapter, the GitHub token. Names only are recorded, never values.
+BASE_KEEP_ENV = ('PATH', 'HOME', 'USERPROFILE', 'SystemRoot', 'SYSTEMROOT', 'TEMP', 'TMP', 'APPDATA',
+                 'LOCALAPPDATA', 'ComSpec',
+                 # a host behind a proxy or a private CA still reaches the provider
+                 'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'no_proxy',
+                 'SSL_CERT_FILE', 'REQUESTS_CA_BUNDLE', 'NODE_EXTRA_CA_CERTS')
+PROVIDER_KEEP_ENV = {'claude': ('ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL',
+                                'CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_CONFIG_DIR'),
+                     'codex': ('OPENAI_API_KEY', 'OPENAI_BASE_URL', 'CODEX_HOME')}
+GITHUB_KEEP_ENV = ('GH_TOKEN', 'GITHUB_TOKEN')
+DELEGATED_NAMES = ('SANDUQ_DELEGATED_RUN', 'SANDUQ_DELEGATED_ROLE', 'SANDUQ_DELEGATED_FEATURE')
+# SEC-16: the driver acknowledges a start within 15 s and collect only reads files.
+DRIVER_START_TIMEOUT = 60
+DRIVER_COLLECT_TIMEOUT = 120
+
+
+def github_access(identity, work_type):
+    """Only the Execute orchestrator and the decision-raising stages (discovery and coordination
+    work) use the GitHub adapter; tasks, reviews, QA and documentation stages never get a token."""
+    return '/stage:' in identity and work_type in ('discovery', 'coordination')
+
+
+def read_only_route(work_type, candidate):
+    """Review and analysis work (the review type or the review model profile) runs read-only."""
+    return work_type == 'review' or candidate.get('tier') == 'review'
+
+
+def keep_env_names(harness, env, github=False):
+    """The allowlist passed as --keep-env, in a stable order without duplicates."""
+    return list(dict.fromkeys((*BASE_KEEP_ENV, *PROVIDER_KEEP_ENV.get(harness, ()),
+                               *(GITHUB_KEEP_ENV if github else ()), *DELEGATED_NAMES,
+                               # SANDUQ_ROLE stays behind: a worker must not inherit the coordinator's guard bypass
+                               *sorted(name for name in env
+                                       if name.upper().startswith('SANDUQ_') and name.upper() != 'SANDUQ_ROLE'))))
+
+
 def launch(root, driver, candidate, cwd, task, timeout, intent_id=None, orchestrator_feature=None, feature=None):
-    """Start one worker through the driver.
+    """Start one worker through the driver with a clean environment.
 
     ``orchestrator_feature``, given only for the ``stage:execute`` launch
     itself (round 10, finding 1), selects the orchestrator environment
-    shape from ``driver_env`` in place of the ordinary worker one; every
-    other launch -- any task, any other stage -- is unaffected. ``--keep-
-    env`` is passed for all three ``SANDUQ_DELEGATED_*`` names regardless
-    (round 10, finding 2), so a future ``--clean-env`` launch does not
-    silently drop whichever of them this call actually set; it has no
-    effect at all without ``--clean-env``, which nothing here passes.
+    shape from ``driver_env`` in place of the ordinary worker one. The
+    driver always gets ``--clean-env`` with the ``keep_env_names``
+    allowlist; ``candidate['github_access']`` adds the GitHub token and
+    ``candidate['read_only']`` adds ``--sandbox``. The kept names are
+    returned in the payload as ``keep_env`` for the ledger.
     """
     node = shutil.which('node')
     if node is None:
         raise StartFailed('NODE_MISSING')
+    env = driver_env(root, run_context=intent_id,
+                     role='orchestrator' if orchestrator_feature else None,
+                     feature=orchestrator_feature or feature)
+    keep = keep_env_names(candidate['harness'], env, candidate.get('github_access'))
     args = [node, driver, 'start', '--harness', candidate['harness'], '--cwd', str(cwd),
-            '--timeout', str(timeout), '--task', task,
-            '--keep-env', 'SANDUQ_DELEGATED_RUN', '--keep-env', 'SANDUQ_DELEGATED_ROLE',
-            '--keep-env', 'SANDUQ_DELEGATED_FEATURE']
-    if lean_enabled(root, feature or orchestrator_feature):
-        args += ['--keep-env', 'SANDUQ_WORKFLOW_CLAIM_TOKEN', '--keep-env', 'SANDUQ_WORKFLOW_SESSION_ID']
+            '--timeout', str(timeout), '--task', task, '--clean-env']
+    for name in keep:
+        args += ['--keep-env', name]
     if candidate['requested_model']:
         args += ['--model', candidate['requested_model']]
     if candidate.get('read_only'):
@@ -603,12 +642,16 @@ def launch(root, driver, candidate, cwd, task, timeout, intent_id=None, orchestr
         args.append('--allow-commit')
     if intent_id:
         args += ['--constraint', 'Sanduq delegation intent: ' + intent_id]
-    env = driver_env(root, run_context=intent_id,
-                     role='orchestrator' if orchestrator_feature else None,
-                     feature=orchestrator_feature or feature)
     try:
-        result = subprocess.run(args, cwd=root, env=env,
-                                capture_output=True, text=True, encoding='utf-8')
+        result = subprocess.run(args, cwd=root, env=env, capture_output=True, text=True, encoding='utf-8',
+                                timeout=DRIVER_START_TIMEOUT)
+    except subprocess.TimeoutExpired as exc:
+        # subprocess.run has already killed the driver; its detached supervisor, if any, is left
+        # for recover/abandon, because killing it would turn an uncertain start into a lost run.
+        delegation.forget_health(root)
+        raise StartFailed('DELEGATE_START_FAILED: the driver did not answer within ' + str(DRIVER_START_TIMEOUT) +
+                          ' seconds (check "node <driver> doctor"); a run it may have left is recovered with '
+                          '"delegate_dispatch.py recover"') from exc
     except OSError as exc:
         raise StartFailed('DELEGATE_START_FAILED: ' + str(exc)[:500]) from exc
     if result.returncode:
@@ -621,12 +664,13 @@ def launch(root, driver, candidate, cwd, task, timeout, intent_id=None, orchestr
         raise delegation.DelegationError('DELEGATE_START_RESPONSE_INVALID') from exc
     delegation.require(payload.get('run_id') and payload.get('state') in ('starting', 'running'),
                        'DELEGATE_START_RESPONSE_INVALID')
-    return payload
+    return {**payload, 'keep_env': keep}
 
 
 def candidate_start(root, feature, identity, work_type, candidates, task_path, cwd,
                     timeout, parent_run_id=None, retry_count=0, decision=None, owned_paths=None,
-                    claim_token=None, pinned=False, deliverable=None, correction_plan=None, diagnosis=None):
+                    claim_token=None, pinned=False, deliverable=None, correction_plan=None, diagnosis=None,
+                    fallback=None):
     ownership_at_start = workflow.read(root / feature / 'workflow/checkpoint.json', {})
     policy = workflow.load_policy(root)
     config = policy['delegation']
@@ -663,8 +707,8 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
                                                work_type, candidates)
         delegation.require(lean_policy.settings(policy)['finalization_seconds'] < timeout <=
                            lean_policy.settings(policy)['timeout_max_seconds'], 'LEAN_TIMEOUT_INVALID')
-    status = delegation.doctor(root, workflow.active_host(root), install=True,
-                               scope=config['install_scope'])
+    # SAMY-16: one probe per TTL; a start failure below forgets it so the next start probes again.
+    status = delegation.cached_health(root, workflow.active_host(root), config['install_scope'])
     delegation.require(status['ok'], delegation.health_error(status))
     # An explicit pin never falls back: an unavailable harness is refused
     # before any ledger intent exists, not skipped to another candidate.
@@ -728,15 +772,17 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
                                                               'AGENT_CLI_UNAVAILABLE')})
             continue
         selected = copy.deepcopy(candidate)
-        # Route type chooses a model, never filesystem permission: a delegated
-        # review writes its evidence and may run checks or schedule fixes.
-        selected['read_only'] = False
+        # SEC-01: review and analysis routes start read-only; only routes that use the GitHub
+        # adapter receive a GitHub token; only the Execute orchestrator may commit.
+        selected['read_only'] = read_only_route(work_type, candidate)
+        selected['github_access'] = github_access(identity, work_type)
         selected['allow_commit'] = identity.endswith('/stage:execute')
         try:
             started = launch(root, status['driver'], selected, cwd, task, timeout, intent_id,
                              orchestrator_feature=feature if identity.endswith('/stage:execute') else None,
                              feature=feature)
         except delegation.DelegationError as error:
+            delegation.forget_health(root)  # a cached green probe is not trusted after a failed start
             # The driver writes meta.json before it spawns a worker. An exited
             # driver with no run for this intent proves nothing started, and so
             # does exit 5 with a finalised never-launched run whose supervisor
@@ -783,12 +829,16 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
                    'route_candidates': candidates, 'retry_count': retry_count,
                    'read_only': selected['read_only'], 'status': 'running',
                    'allow_commit': selected['allow_commit'],
+                   'clean_env': True, 'kept_env_names': started.get('keep_env'),
+                   'github_access': selected['github_access'],
+                   'permission': 'sandbox' if selected['read_only'] else 'bypass',
                    'started_at': stamp(), 'task_file': relative(root, task_path),
                    'cwd': relative(root, cwd), 'timeout': timeout, 'owned_paths': owned_paths,
                    'claim_token': claim_token, 'pinned': bool(pinned),
                    'intent_id': intent_id, 'claim_id': lifecycle.claim_id_for(claim_token),
                    'replaces_run_id': parent_run_id,
                    'evidence_location': '.delegate/runs/' + started['run_id'] + '/result.json',
+                   **(fallback or {}),
                    **({'lean_admission': admission, 'timeout_guidance': guidance} if admission else {})}
         with edit_ledger(root, feature, ('intent_id', intent_id)) as ledger:
             find_intent(ledger, intent_id).update(attempt)
@@ -800,7 +850,7 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
                                                             'failed before a run existed'})
         response = {'enabled': True, 'run_id': started['run_id'], 'state': started['state'],
                     'route': selected, 'evidence_location': attempt['evidence_location'],
-                    'intent_id': intent_id}
+                    'intent_id': intent_id, **(fallback or {})}
         if guidance:
             response['timeout_guidance'] = guidance
         if status.get('notices'):
@@ -950,7 +1000,12 @@ STDERR_TAIL_LINES = 40
 
 
 def model_rejected(result, requested_model=None):
-    """True when the CLI refused the requested model, not when work merely mentions one.
+    """True when the CLI refused the requested model, not when work merely mentions one."""
+    return rejection_reason(result, requested_model) is not None
+
+
+def rejection_reason(result, requested_model=None):
+    """The status reason or stderr-tail line that shows the CLI refused the requested model, else None.
 
     Worker output such as "Model matching query does not exist" from a test run
     must not count. When a model was requested, a wording match must name that
@@ -965,17 +1020,17 @@ def model_rejected(result, requested_model=None):
     name = str(requested_model or '').casefold()
     for index, text in enumerate(texts):
         if MODEL_ERROR_CODE.search(text):
-            return True
+            return text.strip()[:500]
         if not MODEL_ERROR.search(text):
             continue
         if name:
             if name in text.casefold():
-                return True
+                return text.strip()[:500]
         elif index == 0:
             # No model was requested: only the driver's own status reason can
             # say the CLI default was refused.
-            return True
-    return False
+            return text.strip()[:500]
+    return None
 
 
 def measured_no_edits(payload):
@@ -1027,12 +1082,9 @@ def retry_plan(policy, attempt, payload, rejected, host, tier=None):
     if lean_policy.enabled(policy, tier) or payload['status'] != 'failed' or attempt.get('pinned'):
         return None
     if rejected:
-        # A rejected model did no work; keep the configured fallback order
-        # rather than trading it for a stronger-tier retry.
-        remaining = attempt['route_candidates'][attempt['candidate_index'] + 1:]
-        if not remaining or measured_change(payload):
-            return None
-        return remaining, 'requested model rejected by CLI', 'fallback', attempt['retry_count']
+        # DEC-12 B: a rejected model is never replaced automatically, and never by a stronger
+        # tier; collect stops with FALLBACK_CONFIRMATION_REQUIRED (fallback_substitute).
+        return None
     if (not measured_no_edits(payload) or
             attempt['retry_count'] >= policy['delegation']['stronger_retry']):
         return None
@@ -1041,6 +1093,89 @@ def retry_plan(policy, attempt, payload, rejected, host, tier=None):
         return None
     return ([stronger], 'failed work eligible for one stronger reassignment', 'reassignment',
             attempt['retry_count'] + 1)
+
+
+DISPATCH_SCRIPT = 'python .specify/extensions/workflow/scripts/delegate_dispatch.py'
+WORKFLOW_NATIVE_STAGE = ('{script} recover --feature {feature} --token {token} --reason "model rejected; '
+                         'running natively", set delegation.enabled: false in .specify/workflow.yml, then '
+                         '{script} claim --feature {feature}')
+
+
+def model_label(model):
+    """A model as spelled in --confirm-fallback: its id, or ``default`` for the CLI default."""
+    return model or 'default'
+
+
+def substitute_text(candidate):
+    if candidate['requested_model']:
+        return candidate['harness'] + '/' + candidate['requested_model']
+    if candidate['harness'] == 'codex':
+        return 'codex CLI default, model unknown: Codex does not report it'
+    return candidate['harness'] + ' CLI default (the model is known only if the harness reports it)'
+
+
+def route_config(config, attempt):
+    """The policy route an attempt's candidates came from (an override or its work type's route)."""
+    rule = str(attempt.get('rule') or '')
+    if rule.startswith('override:'):
+        return config.get('overrides', {}).get(rule.removeprefix('override:')) or {}
+    return config.get('routes', {}).get(attempt.get('task_type')) or {}
+
+
+def substitute_listed(config, attempt, substitute):
+    """DEC-12 B: an explicit fallback model is pre-listed by its route; the CLI default is listed only
+    when the route sets ``allow_default_model: true``."""
+    return bool(substitute['requested_model']) or route_config(config, attempt).get('allow_default_model') is True
+
+
+def fallback_substitute(policy, attempt, payload, rejected, tier=None):
+    """The next configured candidate a rejected model could be replaced by, once confirmed; else None."""
+    if (not rejected or lean_policy.enabled(policy, tier) or payload['status'] != 'failed' or
+            attempt.get('pinned') or measured_change(payload)):
+        return None
+    remaining = attempt['route_candidates'][attempt['candidate_index'] + 1:]
+    return remaining[0] if remaining else None
+
+
+def fallback_message(feature, attempt, pending):
+    """FALLBACK_CONFIRMATION_REQUIRED with the three exact ways on (AHMED-05)."""
+    identity = attempt['identity'].removeprefix(feature + '/')
+    confirm = (DISPATCH_SCRIPT + ' collect --feature ' + feature + ' --run-id ' + attempt['run_id'] +
+               ' --confirm-fallback ' + pending['pair'])
+    if not pending['listed']:
+        confirm = ('first set allow_default_model: true on the ' + str(attempt.get('rule')) + ' route in '
+                   '.specify/workflow.yml (the substitute must be pre-listed), then ' + confirm)
+    token = ' --claim-token ' + attempt['claim_token'] if attempt.get('claim_token') else ''
+    others = [c for c in attempt['route_candidates'] if c['requested_model'] and
+              (c['harness'], c['requested_model']) != (attempt['requested_harness'], attempt['requested_model'])]
+    pick = (DISPATCH_SCRIPT + ' start --feature ' + feature + ' --id ' + identity + ' --harness ' +
+            others[0]['harness'] + ' --model ' + others[0]['requested_model'] + token if others else
+            'set delegation.models.' + attempt['requested_harness'] + ' in .specify/workflow.yml to a model this '
+            'account can use, then ' + DISPATCH_SCRIPT + ' start --feature ' + feature + ' --id ' + identity + token)
+    native = (WORKFLOW_NATIVE_STAGE.format(script=workflow.WORKFLOW_SCRIPT, feature=feature,
+                                           token=attempt['claim_token'])
+              if attempt.get('claim_token') else
+              'do ' + identity + ' in this session, then ' + DISPATCH_SCRIPT + ' adopt --feature ' + feature +
+              ' --id ' + identity + ' --command "<acceptance command>" --expect counts')
+    return ('FALLBACK_CONFIRMATION_REQUIRED: ' + identity + ' of ' + feature + ': ' + attempt['requested_harness'] +
+            ' rejected model ' + model_label(attempt['requested_model']) + ' (' + pending['reason'] + '). '
+            'The configured substitute is ' + substitute_text(pending['substitute']) + '. No replacement run was '
+            'started. Ask the user, then run one of: (1) confirm the substitute for one run: ' + confirm +
+            '; (2) pick an allowed model: ' + pick + '; (3) run natively: ' + native)
+
+
+def fallback_fields(attempt):
+    """requested/substitute/actual model, confirmed_by and fallback_used for collect, status and receipts."""
+    record = attempt.get('fallback') or {}
+    pending = attempt.get('fallback_pending') or {}
+    return {'requested_model': record.get('requested_model', attempt.get('requested_model')),
+            'substitute_model': record.get('substitute_model',
+                                           (pending.get('substitute') or {}).get('requested_model')),
+            'actual_model': attempt.get('actual_model') or 'unreported',
+            'confirmed_by': record.get('confirmed_by'),
+            'fallback_used': bool(record),
+            **({'fallback_summary': 'fallback confirmed; model ' + (attempt.get('actual_model') or 'unverified')}
+               if record else {})}
 
 
 def replacement_link(ledger, attempt):
@@ -1714,8 +1849,7 @@ def run_capped(args, cwd, timeout):
 def _recorded_response(attempt):
     """The collect-shaped response for an attempt already fully processed."""
     response = {'run_id': attempt['run_id'], 'status': attempt['status'],
-                'requested_model': attempt.get('requested_model'),
-                'actual_model': attempt.get('actual_model'),
+                **fallback_fields(attempt),
                 'actual_model_evidence': attempt.get('actual_model_evidence'),
                 'harness': attempt.get('actual_harness'), 'evidence_location': attempt.get('evidence_location'),
                 'token_usage': attempt.get('token_usage'), 'result_summary': attempt.get('result_summary'),
@@ -1730,12 +1864,74 @@ def _recorded_response(attempt):
                 'timeout_guidance', 'lean_admission'):
         if key in attempt:
             response[key] = attempt[key]
+    pending = attempt.get('fallback_pending')
+    if pending and not pending.get('confirmed_by'):
+        response.update(ok=False, decision='FALLBACK_CONFIRMATION_REQUIRED', error=pending['message'])
     return response
 
 
-def collect(root, feature, run_id, auto_retry=True):
+def confirm_fallback(root, feature, run_id, pair):
+    """DEC-12 B: start the pre-listed substitute of a rejected model for one run, on the user's word only."""
+    delegation.require(not delegation.delegated_run_id() and not delegation.delegated_role() and
+                       os.environ.get('SANDUQ_ROLE') != 'worker',
+                       "FALLBACK_CONFIRMATION_FORBIDDEN: --confirm-fallback is the user's confirmation; a "
+                       'delegated worker, orchestrator or subagent may not give it. Show the user the '
+                       'FALLBACK_CONFIRMATION_REQUIRED message; the top-level session runs the command once the '
+                       'user approves it in the conversation')
+    delegation.require_no_maintenance(root)
+    policy = workflow.load_policy(root)
+    show = DISPATCH_SCRIPT + ' collect --feature ' + feature + ' --run-id ' + run_id
+    with edit_ledger(root, feature) as ledger:
+        attempt = find_run(ledger, run_id)
+        delegation.require(attempt is not None, 'DELEGATION_RUN_UNKNOWN: ' + run_id)
+        pending = attempt.get('fallback_pending')
+        delegation.require(bool(pending) and not pending.get('confirmed_by') and
+                           replacement_link(ledger, attempt) is None,
+                           'FALLBACK_CONFIRMATION_NOT_PENDING: run ' + run_id + ' has no unconfirmed fallback; run "' +
+                           show + '" to see its state')
+        delegation.require(pair == pending['pair'],
+                           'FALLBACK_CONFIRMATION_MISMATCH: run ' + run_id + ' waits for --confirm-fallback ' +
+                           pending['pair'] + ', not ' + str(pair) + '; run "' + show + '" for the message')
+        delegation.require(substitute_listed(policy['delegation'], attempt, pending['substitute']),
+                           'FALLBACK_SUBSTITUTE_NOT_LISTED: ' + substitute_text(pending['substitute']) +
+                           ' is not pre-listed for the ' + str(attempt.get('rule')) + ' route; set '
+                           'allow_default_model: true on that route in .specify/workflow.yml, or pick an allowed '
+                           'model as "' + show + '" shows')
+        attempt = copy.deepcopy(attempt)
+    task_path = root / attempt['task_file']
+    delegation.require(task_path.is_file(), 'DELEGATION_BRIEF_MISSING_FOR_RETRY')
+    substitute = pending['substitute']
+    actor = 'user:' + getpass.getuser()
+    record = {'requested_harness': pending['requested_harness'], 'requested_model': pending['requested_model'],
+              'substitute_harness': substitute['harness'], 'substitute_model': substitute['requested_model'],
+              'confirmed_by': actor, 'confirmed_at': stamp(), 'after_run_id': run_id,
+              'reason': pending['reason']}
+    replacement = candidate_start(root, feature, attempt['identity'], attempt['task_type'], [substitute],
+                                  task_path, root / attempt['cwd'], attempt['timeout'], parent_run_id=run_id,
+                                  retry_count=attempt['retry_count'], owned_paths=attempt.get('owned_paths'),
+                                  claim_token=attempt.get('claim_token'),
+                                  decision={'at': stamp(), 'identity': attempt['identity'],
+                                            'requested': attempt_to_candidate(attempt),
+                                            'actual_route': substitute, 'decision': 'fallback-confirmed',
+                                            'reason': pending['reason'], 'confirmed_by': actor,
+                                            'after_run_id': run_id},
+                                  fallback={'fallback': record, 'fallback_used': True,
+                                            'substitute_model': substitute['requested_model'],
+                                            'confirmed_by': actor})
+    with edit_ledger(root, feature) as ledger:
+        attempt = find_run(ledger, run_id)
+        attempt['replacement_run_id'] = replacement['run_id']
+        attempt['fallback_pending'].update(confirmed_by=actor, confirmed_at=record['confirmed_at'],
+                                           replacement_run_id=replacement['run_id'])
+        attempt = copy.deepcopy(attempt)
+    return {**_recorded_response(attempt), 'replacement': replacement, 'decision': 'fallback confirmed'}
+
+
+def collect(root, feature, run_id, auto_retry=True, confirm=None):
     root = root.resolve()
     feature = feature_identity(root, feature)
+    if confirm is not None:
+        return confirm_fallback(root, feature, run_id, confirm)
     delegation.require_no_maintenance(root)
     policy = workflow.load_policy(root)
     with edit_ledger(root, feature) as ledger:
@@ -1758,9 +1954,15 @@ def collect(root, feature, run_id, auto_retry=True):
     driver = pinned_driver(root, attempt)
     node = shutil.which('node')
     delegation.require(node is not None, 'NODE_MISSING')
-    result = subprocess.run([node, driver, 'collect', run_id, '--json'],
-                            cwd=root, env=driver_env(root), capture_output=True,
-                            text=True, encoding='utf-8')
+    try:
+        result = subprocess.run([node, driver, 'collect', run_id, '--json'],
+                                cwd=root, env=driver_env(root), capture_output=True,
+                                text=True, encoding='utf-8', timeout=DRIVER_COLLECT_TIMEOUT)
+    except subprocess.TimeoutExpired as exc:
+        raise delegation.DelegationError(
+            'DELEGATE_COLLECT_TIMEOUT: the driver did not answer collect for ' + run_id + ' within ' +
+            str(DRIVER_COLLECT_TIMEOUT) + ' seconds; nothing was recorded. Run "' + DISPATCH_SCRIPT +
+            ' collect --feature ' + feature + ' --run-id ' + run_id + '" again') from exc
     if result.returncode == 3:
         return {'run_id': run_id, 'status': 'running'}
     delegation.require(result.returncode == 0, 'DELEGATE_COLLECT_FAILED: ' +
@@ -1774,7 +1976,8 @@ def collect(root, feature, run_id, auto_retry=True):
                        'DELEGATE_RESULT_INVALID')
     delegation.require(payload.get('harness') == attempt['requested_harness'],
                        'DELEGATE_HARNESS_MISMATCH')
-    rejected = model_rejected(payload, attempt['requested_model'])
+    rejection = rejection_reason(payload, attempt['requested_model'])
+    rejected = rejection is not None
     raw_changed = payload.get('dirty_paths_changed')
     internal = []
     if isinstance(raw_changed, list) and any(str(path).endswith('/workflow/delegations.json')
@@ -1826,6 +2029,22 @@ def collect(root, feature, run_id, auto_retry=True):
                 {**payload, 'status': attempt['status']}, rejected)
             attempt.setdefault('failure_domain', 'unknown')
         linked = replacement_link(ledger, attempt)
+        substitute = None if linked else fallback_substitute(policy, attempt, measured, rejected,
+                                                             lean_policy.feature_tier(root, feature))
+        if substitute:
+            pending = {'at': stamp(), 'requested_harness': attempt['requested_harness'],
+                       'requested_model': attempt['requested_model'], 'substitute': substitute,
+                       'pair': model_label(attempt['requested_model']) + '=' +
+                               model_label(substitute['requested_model']),
+                       'listed': substitute_listed(policy['delegation'], attempt, substitute),
+                       'reason': rejection}
+            pending['message'] = fallback_message(feature, attempt, pending)
+            attempt['fallback_pending'] = pending
+            ledger['route_decisions'].append({'at': stamp(), 'identity': attempt['identity'],
+                                              'requested': attempt_to_candidate(attempt),
+                                              'decision': 'fallback-confirmation-required',
+                                              'substitute': substitute, 'reason': rejection,
+                                              'after_run_id': run_id})
         attempt = copy.deepcopy(attempt)
     response = _recorded_response(attempt)
     if linked:
@@ -1911,6 +2130,15 @@ def reassign(root, feature, run_id, reason, task_file=None, diagnosis=None):
                        'acceptance check, or "start" the task normally to create a real dispatched '
                        'attempt reassign can act on')
     lean = lean_policy.enabled(policy, lean_policy.feature_tier(root, feature))
+    # SAMY-17: lean reassign keeps the prior candidate, so it would only run the rejected model again.
+    delegation.require(not lean or not (prior.get('model_rejected') or
+                                        prior.get('failure_category') == 'provider-rejection'),
+                       'LEAN_PROVIDER_REJECTED: run ' + run_id + ' failed because ' + str(prior.get('requested_harness')) +
+                       ' rejected model ' + model_label(prior.get('requested_model')) + '; reassign would run the '
+                       'same model again. Start with another eligible candidate: ' + DISPATCH_SCRIPT + ' start '
+                       '--feature ' + feature + ' --id ' + prior['identity'].removeprefix(feature + '/') +
+                       ' --harness <codex|claude> --model <id> --deliverable "<artifact and acceptance result>" '
+                       '--correction-plan "<what changes>", or fix delegation.models in .specify/workflow.yml')
     delegation.require(lean or not prior.get('pinned'),
                        'DELEGATION_PINNED_ROUTE_NO_ESCALATION: the run was started with an explicit '
                        '--harness/--model pair; start again with another eligible pair instead')
@@ -2325,6 +2553,9 @@ def main(argv=None):
     collect_cmd.add_argument('--feature', required=True)
     collect_cmd.add_argument('--run-id', required=True)
     collect_cmd.add_argument('--no-auto-retry', action='store_true')
+    collect_cmd.add_argument('--confirm-fallback', metavar='REQUESTED=SUBSTITUTE',
+                             help="The user's confirmation of the substitute a FALLBACK_CONFIRMATION_REQUIRED stop "
+                                  'names, for one run; refused in a delegated or subagent context')
     classify_cmd = sub.add_parser('classify')
     classify_cmd.add_argument('--feature', required=True)
     classify_cmd.add_argument('--run-id', required=True)
@@ -2373,7 +2604,11 @@ def main(argv=None):
                            workflow.read(workflow.inside(args.root.resolve(), str(args.diagnosis)))
                            if args.diagnosis else None)
         elif args.action == 'collect':
-            result = collect(args.root, args.feature, args.run_id, not args.no_auto_retry)
+            result = collect(args.root, args.feature, args.run_id, not args.no_auto_retry, args.confirm_fallback)
+            try:  # AHMED-01: a coordinator collecting results is still at work; keep its claim alive
+                workflow.Run(args.root, args.feature).heartbeat()
+            except workflow.WorkflowError:
+                pass  # no claim to refresh, or the feature lock is busy; the collect result stands
         elif args.action == 'classify':
             result = classify_failure(args.root, args.feature, args.run_id,
                                       workflow.read(workflow.inside(args.root.resolve(), str(args.attribution))))
@@ -2394,7 +2629,7 @@ def main(argv=None):
                               workflow.read(workflow.inside(args.root.resolve(), str(args.diagnosis)))
                               if args.diagnosis else None)
         print(json.dumps(result, indent=2))
-        return 0
+        return 1 if isinstance(result, dict) and result.get('ok') is False else 0
     except (delegation.DelegationError, workflow.WorkflowError, OSError, ValueError) as error:
         print(json.dumps({'ok': False, 'error': str(error)}))
         return 1

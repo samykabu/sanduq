@@ -191,7 +191,11 @@ class Bench:
             if first in merged: inputs.append(FEATURE + '/' + name)
         if index >= w.BASE_STAGES.index('specify') and not (directory / 'scope-source.json').exists():
             # `dependencies` (none) lets a lean PR receipt bind its lint; harmless where lean is off.
-            w.write(directory / 'scope-source.json', {'repo': 'acme/app', 'issue': 10, 'dependencies': []})
+            # `score` is what Scope's gate verified (Workflow reads it instead of the issue's effort label).
+            source = {'repo': 'acme/app', 'issue': 10, 'dependencies': []}
+            if self.supports_profiles:
+                source['score'] = TIER_SCORES[self.tier]
+            w.write(directory / 'scope-source.json', source)
         if index >= w.BASE_STAGES.index('taskstoissues') and not (directory / 'workflow/task-issues.json').exists():
             w.write(directory / 'workflow/task-issues.json', {'repo': 'acme/app', 'parent': 10, 'feature': FEATURE,
                                                              'tasks': {'T001': {'number': 11, 'linked': True}}})

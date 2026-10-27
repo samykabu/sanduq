@@ -108,7 +108,8 @@ class ClaimAndAcceptTests(LifecycleBase):
     def test_pause_and_recover_record_the_claim_before_it_is_cleared(self):
         run = self.start()
         claim = run.claim(self.usage())
-        code, result = self.cli('recover', '--feature', self.feature, '--token', claim['token'], '--reason', 'lost session')
+        code, result = self.cli('recover', '--feature', self.feature, '--token', claim['token'], '--reason', 'lost session',
+                                '--force-live-owner', 'test: owner gone')
         self.assertEqual(code, 0, result)
         events = self.events()
         self.assertEqual([e['event'] for e in events], ['claim', 'recovered', 'paused'])
@@ -179,7 +180,8 @@ class IdentityLinkTests(LifecycleBase):
         self.assertEqual(receipt['claim_id'], accepted['claim_id'])
         self.assertEqual(receipt['completed_at'], accepted['at'])
         second = run.claim(self.usage())
-        code, result = self.cli('recover', '--feature', self.feature, '--token', second['token'], '--reason', 'lost session')
+        code, result = self.cli('recover', '--feature', self.feature, '--token', second['token'], '--reason', 'lost session',
+                                '--force-live-owner', 'test: owner gone')
         self.assertEqual(code, 0, result)
         recovery, = run.load()['recoveries']
         recovered, = [e for e in self.events() if e['event'] == 'recovered']

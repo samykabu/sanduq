@@ -308,7 +308,11 @@ certify stale evidence.
 
 For an interrupted active claim, inspect its recorded token and possible local/remote effects
 before `recover --feature specs/412-refund-approval --token <recorded-token> --reason <actual-reason>`.
-Do not recover a live owner or run another executor concurrently. Use Workflow Continue afterward.
+`status` shows the claim's `owner` (`alive`, `dead` or `unknown`) and `last_activity`; `recover` refuses
+with `CLAIM_OWNER_ALIVE` while the claiming process is alive on this host or the claim's heartbeat is
+under 15 minutes old. Only when you have confirmed the owner is gone, add `--force-live-owner <reason>`;
+the reason is recorded on the recovery. Do not run another executor concurrently. Use Workflow Continue
+afterward.
 
 ## Optional model-aware delegation
 

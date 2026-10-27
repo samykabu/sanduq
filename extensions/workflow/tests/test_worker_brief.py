@@ -103,7 +103,11 @@ class WorkerBriefTests(unittest.TestCase):
         self.assertIn('EXEC-06: The capacity warning must use the correct flag.', brief)
         self.assertIn('## Forbidden commands (S6)', brief)
         self.assertIn('## Result template (T7)', brief)
-        self.assertIn('## Spawn and wait rules (F1, F2)', brief)
+        self.assertIn('## Return and wait rules (F2)', brief)
+        # OMAR-02: a worker never gets the orchestrator's spawn imperative.
+        self.assertIn(wb.WORKER_RETURN_RULE, brief)
+        self.assertNotIn('Spawn a batch', brief)
+        self.assertNotRegex(brief, r'(?im)^\s*spawn\b')
         self.assertIn('## Report only on state change (F3)', brief)
         self.assertIn('## Read summaries before raw output (T8)', brief)
 
@@ -207,7 +211,7 @@ class WorkerBriefTests(unittest.TestCase):
         self.assertEqual(context['work_type'], 'qa_collect')
         self.assertFalse(oversized)
         self.assertLessEqual(len(brief.encode('utf-8')), wb.MAX_BYTES)
-        for rule in ('git stash', 'git add -A', 'git add .', 'Spawn and wait rules (F1, F2)',
+        for rule in ('git stash', 'git add -A', 'git add .', 'Return and wait rules (F2)',
                      'Report only on state change (F3)', 'Read summaries before raw output (T8)',
                      'Result template (T7)', 'Turn budget (T0)'):
             self.assertIn(rule, brief)

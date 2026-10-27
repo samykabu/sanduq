@@ -10,6 +10,7 @@ import os
 import random
 import re
 import shlex
+import socket
 import stat
 import subprocess
 import sys
@@ -70,7 +71,8 @@ from wf_fingerprints import (sync_state_label, sync_entry, sync_projection, sync
                              store_source_inventory, source_fingerprints_of)
 from wf_policy import (default_policy, select_gate, validate_policy, _positive, validate_front_half_policy, tier,
                        state_tier, feature_tier, skipped_stages, project_sync, task_issue_mode, side_effects,
-                       matches_side_effect, load_policy, stages, OPERATIONAL_SUBKEYS, policy_cutoff)
+                       matches_side_effect, load_policy, stages, OPERATIONAL_SUBKEYS, policy_cutoff, POLICY_KEYS,
+                       unknown_policy_key)
 from wf_health import (registry, compatible, active_host, command_exists, package_digest, resolve_commands,
                        project_errors, SCOPE_STATUSES, project_defaults, MANAGED_CI, preserved_ci_path, ci_errors,
                        delegation_errors, host_warnings, progress_wiring_warnings, guard_approval_warnings,
@@ -84,7 +86,7 @@ from wf_receipts import (verify_sync_binding, same_path, recorded_sync_fields, h
                          _positive_int, _string_list, diff_review_command, diff_review_shell, diff_review_sha256,
                          ci_evidence_complete, ci_evidence_current, validate_evidence_snapshots, receipt_status,
                          receipt_current, recovery_recipe, upstream_drift, receipt_drift, ready_checks,
-                         coding_review_checks)
+                         coding_review_checks, CLAIM_HEARTBEAT_SECONDS, claim_owner)
 
 
 # Where `claim` tells the dispatcher to read this stage's own instructions, project-relative
@@ -120,6 +122,31 @@ def execute_protocol(policy, tier, reporting):
         parts.append('execute/delegated-workers.md')
     parts.append('execute/reporting-legacy.md' if reporting == 'legacy' else 'reporting.md')
     return parts
+
+
+# OMAR-01: receipt fields whose value decides a pass. receipt_template prints them as `<...>` placeholders, and a
+# placeholder left in place is refused, so an unedited template never records a passed stage.
+RECEIPT_GATING_FIELDS = ('outcome', 'effort_score', 'unresolved', 'answers_applied', 'lint', 'native_links_verified',
+                         'blocking_findings', 'images_verified', 'pr_url')
+PLACEHOLDER = re.compile(r'<[^<>]+>')
+
+
+def reject_placeholders(receipt):
+    """RECEIPT_PLACEHOLDER naming the first gating field that still holds a `<...>` template value."""
+    for field in RECEIPT_GATING_FIELDS:
+        value = receipt.get(field)
+        for name, item in (value.items() if isinstance(value, dict) else [(None, value)]):
+            if isinstance(item, str) and PLACEHOLDER.search(item):
+                path = field + ('.' + name if name else '')
+                raise WorkflowError('RECEIPT_PLACEHOLDER: ' + path + ' still holds the receipt_template placeholder '
+                                    + repr(item) + '; set it to what this stage actually produced (every gating field '
+                                    'is set by the agent), then run workflow.py complete again with the edited receipt')
+
+
+def other_feature_command(relative, active):
+    """SAMY-12: the exact recover command for another feature's active claim."""
+    return (WORKFLOW_SCRIPT + ' recover --feature ' + relative + ' --token ' + str(active.get('token')) +
+            ' --reason "<why that claim is abandoned>"')
 
 
 class Run:
@@ -352,6 +379,7 @@ class Run:
             require(branch, 'DETACHED_HEAD_UNSUPPORTED')
             state.setdefault('branch_history', []).append({'from': state['branch'], 'to': branch, 'at': now()})
             state['branch'] = branch
+            state['active']['heartbeat_at'] = now()
             self.save(state)
             return {'bound': True, 'branch': branch, 'feature': self.relative}
 
@@ -1026,20 +1054,27 @@ class Run:
             return {'stage': stage, 'command': state['commands'][stage], 'reason': 'pending'}
         return {'stage': None, 'status': 'pr_open'}
 
-    def claim(self, usage, finalize=False, verbose=False):
+    def claim(self, usage, finalize=False, verbose=False, owner_pid=None):
+        """`owner_pid` is the process that holds the claim; the CLI passes none, since it exits at once and the
+        heartbeat then governs `recover` (AHMED-01)."""
         with operation(), locked(self.root / '.specify/workflow/runtime/dispatch.lock'), locked(self.lock):
             require(not (self.root / '.specify/workflow/runtime/upgrade.lock').exists(), 'WORKFLOW_UPGRADE_IN_PROGRESS')
             state = self.load()
             require(not state['active'], 'STAGE_ALREADY_ACTIVE: recover or finish the recorded claim')
             for path in (self.root / 'specs').glob('*/workflow/checkpoint.json'):
-                if path != self.path and read(path, {}).get('active'):
+                held = read(path, {}).get('active')
+                if path != self.path and held:
                     other = Run(self.root, path.parent.parent.relative_to(self.root).as_posix())
                     try:
                         other.release_ownership(automatic=True, dispatch_locked=True)
                     except (WorkflowError, ValueError, KeyError, OSError) as exc:
-                        raise WorkflowError('OTHER_FEATURE_OWNERSHIP_RECOVERY_REQUIRED: ' + other.relative +
-                                            '; ' + str(exc) + '; inspect with workflow.py status --feature ' +
-                                            other.relative) from None
+                        raise WorkflowError(
+                            'OTHER_FEATURE_OWNERSHIP_RECOVERY_REQUIRED: ' + other.relative + ' has an active ' +
+                            str(held.get('stage')) + ' claim (claimed_at ' + str(held.get('claimed_at')) +
+                            ', session ' + str(held.get('session_id')) + '); ' + str(exc) + '; inspect it with "' +
+                            WORKFLOW_SCRIPT + ' status --feature ' + other.relative + '", then finish it there or, '
+                            'once its owner has stopped, run "' + other_feature_command(other.relative, held) +
+                            '"') from None
             require(state['dependency_digest'] == package_digest(self.root),
                     'DEPENDENCY_CHANGED: the installed packages changed since this checkpoint was written; review the '
                     'upgrade notes, then run "python .specify/extensions/workflow/scripts/workflow.py migrate --feature ' +
@@ -1102,8 +1137,10 @@ class Run:
                                 reason='removed when ' + stage + ' was claimed (completed '
                                        + str(state['receipts'][downstream].get('completed_at')) + ')')
                 state['receipts'].pop(downstream, None)
-            state['active'] = {'stage': stage, 'token': token, 'claim_id': claim_id, 'claimed_at': now(),
-                               'session_id': usage['session_id'], 'context': gate}
+            claimed_at = now()
+            state['active'] = {'stage': stage, 'token': token, 'claim_id': claim_id, 'claimed_at': claimed_at,
+                               'session_id': usage['session_id'], 'context': gate, 'pid': owner_pid,
+                               'host': socket.gethostname(), 'heartbeat_at': claimed_at}
             lifecycle.queue(state, stage, 'resume' if resuming else 'claim', claim_id=claim_id,
                             episode_id=lifecycle.episode_for_claim(claim_id),
                             reason='resumed after a pause' if resuming else None)
@@ -1184,7 +1221,7 @@ class Run:
             return claimed
 
     def release_ownership(self, token=None, reason=None, actor=None, automatic=False, report=None,
-                          dispatch_locked=False):
+                          dispatch_locked=False, force_live_owner=None):
         """Release bookkeeping only; ordinary execution stays bound to the original branch."""
         from contextlib import nullcontext
         from delegate_dispatch import ledger_lock
@@ -1205,6 +1242,21 @@ class Run:
                         'checkpoint': str(self.path),
                         'prompt': prompt_path.read_text(encoding='utf-8-sig') if prompt_path.is_file() else None}
             require(automatic or active['token'] == token, 'CLAIM_TOKEN_MISMATCH')
+            # AHMED-01: a live pid, or a recent heartbeat the pid does not disprove, means the owner may still work.
+            liveness = None if automatic else claim_owner(active)
+            if liveness and (liveness['owner'] == 'alive' or liveness['owner'] != 'dead' and liveness['heartbeat_recent']):
+                require(isinstance(force_live_owner, str) and force_live_owner.strip(),
+                        'CLAIM_OWNER_ALIVE: the ' + active['stage'] + ' claim on ' + self.relative + ' may still be '
+                        'owned (owner ' + liveness['owner'] + ', pid ' + str(liveness['pid']) + ' on ' +
+                        str(liveness['host']) + ', last activity ' + str(liveness['last_activity_minutes']) +
+                        ' min ago, session ' + str(active.get('session_id')) + ', claimed_at ' +
+                        str(active.get('claimed_at')) + '); inspect it with "' + WORKFLOW_SCRIPT + ' status --feature ' +
+                        self.relative + '" and let that session finish or pause. Only once you have confirmed it '
+                        'stopped, rerun recover with --force-live-owner "<how you know the owner stopped>"; '
+                        'otherwise wait until its last activity is ' + str(CLAIM_HEARTBEAT_SECONDS // 60) +
+                        ' minutes old')
+            else:
+                force_live_owner = None
             evidence = wf_ownership.writer_evidence(SimpleNamespace(**globals()), self, state, automatic)
             if automatic:
                 evidence['delivery'] = wf_ownership.merged_delivery(SimpleNamespace(**globals()), self, state, report)
@@ -1219,6 +1271,8 @@ class Run:
                 'reason': reason, 'actor': actor or default_actor(self.root), 'at': at,
                 'branch': state['branch'], 'terminal_evidence': evidence,
                 'source': 'postmerge' if automatic else 'recover'})
+            if force_live_owner:
+                state['recoveries'][-1]['forced_live_owner'] = {'reason': force_live_owner, **liveness}
             lifecycle.queue(state, active['stage'], 'recovered', claim_id=claim_id, at=at,
                             episode_id=lifecycle.episode_for_claim(claim_id), reason=reason,
                             delegation_run_ids=lifecycle.delegation_runs_for(self.feature, active['token'], claim_id))
@@ -1226,6 +1280,18 @@ class Run:
             paused = self.checkpoint(state, reason, preserve_head=True)
             return {**paused, 'feature': self.relative, 'released': True, 'claim_id': claim_id,
                     'terminal_evidence': evidence}
+
+    def heartbeat(self, token=None):
+        """Refresh the active claim's heartbeat (AHMED-01) for an owner still at work, such as `delegate_dispatch
+        collect`. Returns False when there is no active claim, or it holds another token."""
+        with locked(self.lock):
+            state = self.load(allow_branch_change=True)
+            active = state.get('active')
+            if not active or token is not None and active.get('token') != token:
+                return False
+            active['heartbeat_at'] = now()
+            write(self.path, state)
+            return True
 
     def memory_session(self, state, stage, session_id):
         """W14: the session handoff Memory's before_specify hook ran, now run by the claim under the dispatch lock it
@@ -1249,9 +1315,33 @@ class Run:
             match = RENDER_MARKER.fullmatch(handle.readline().strip())
         return match[1] if match else None
 
-    def fix_profile(self, state):
-        """Freeze the tier at the first Plan claim from the Scope receipt's effort score, and record what it skips."""
+    def verified_effort_score(self, state, gh=None):
+        """OMAR-05: the effort score Scope's gate verified against the issue's Scope receipt and `effort:<n>` label,
+        as `(score, source)`. Scope's bind caches the gate result in scope-source.json; without it, one GitHub read
+        of the issue's labels."""
+        cached = read(self.feature / 'scope-source.json', {}).get('score')
+        if cached is not None:
+            return cached, 'scope-source.json (verified by Scope at bind)'
+        repo, number = state['issue'].split('#')
+        if gh is None:
+            from decisions import GitHub
+            gh = GitHub()
+        labels = [label.get('name') or '' for label in gh.api('repos/' + repo + '/issues/' + number).get('labels', [])]
+        scores = [int(label[len('effort:'):]) for label in labels if re.fullmatch(r'effort:\d+', label)]
+        require(len(scores) == 1, 'EFFORT_SCORE_UNVERIFIED: ' + state['issue'] + ' carries ' + str(len(scores)) +
+                ' effort:<n> labels and scope-source.json records no Scope-verified score; rerun Scope for the issue '
+                '(/speckit-scope-run ' + number + ') so its receipt and label agree, then claim again')
+        return scores[0], 'effort:' + str(scores[0]) + ' label on ' + state['issue']
+
+    def fix_profile(self, state, gh=None):
+        """Freeze the tier at the first Plan claim from the Scope receipt's effort score, and record what it skips.
+        The score must equal the one Scope verified (OMAR-05)."""
         score = (state['receipts'].get('scope') or {}).get('effort_score')
+        verified, source = self.verified_effort_score(state, gh)
+        require(score == verified, 'EFFORT_SCORE_MISMATCH: the Scope receipt records effort_score ' + str(score) +
+                ' but ' + source + ' says ' + str(verified) + '; the tier comes from the verified score, so rerun '
+                'Scope: "' + WORKFLOW_SCRIPT + ' refresh --feature ' + self.relative + ' --from-stage scope --reason '
+                '\"effort score mismatch\"", then complete Scope with effort_score ' + str(verified))
         fixed = tier(self.policy, score)
         state['profile'] = {'tier': fixed, 'score': score, 'fixed_at': now()}
         state['skipped'] = skipped_stages(self.policy, fixed)
@@ -1298,6 +1388,7 @@ class Run:
 
     def _check_receipt(self, stage, receipt, tier):
         """The shape every recorded receipt meets (complete and revalidate-upstream). Returns the canonical copy."""
+        reject_placeholders(receipt)
         require(receipt.get('stage') == stage and receipt.get('outcome') == 'passed', 'STAGE_NOT_PASSED')
         require(receipt.get('summary') and receipt.get('evidence'), 'EVIDENCE_REQUIRED')
         require(isinstance(receipt.get('inputs'), list) and receipt['inputs'], 'INPUT_MANIFEST_REQUIRED')
@@ -1313,25 +1404,25 @@ class Run:
     def receipt_template(self, state, stage):
         """The receipt skeleton `claim` prints: the fields `_check_receipt` and `_check_stage_rules` require for this
         stage and tier. Inputs the runtime adds itself (`_stamp`: required artifacts, the decision ledger) are left
-        out; `<...>` values are placeholders to replace."""
-        template = {'stage': stage, 'outcome': 'passed', 'summary': '', 'inputs': [], 'evidence': []}
+        out; `<...>` values are placeholders to replace, and every gating field is one (OMAR-01)."""
+        template = {'stage': stage, 'outcome': '<passed|failed|blocked>', 'summary': '', 'inputs': [], 'evidence': []}
         if stage == 'scope' and (self.policy.get('profiles') or {}).get('enabled'):
             template['effort_score'] = '<one of ' + ', '.join(map(str, EFFORT_SCORES)) + '>'
         if stage == 'clarify':
-            template.update(unresolved=0, answers_applied=True)
+            template.update(unresolved='<count>', answers_applied='<true|false>')
         if stage == 'plan' and state_tier(state) in ('lite', 'standard'):
             template['inputs'] = [self.relative + '/tasks.md']
         if stage == 'analyze' and state['commands'].get(stage) == LINT_COMMAND:
             template['lint'] = {'ok': True, 'findings': '<count lint.py reported>'}
         if stage == 'taskstoissues':
-            template.update(parent_issue=state['issue'], native_links_verified=True)
+            template.update(parent_issue=state['issue'], native_links_verified='<true after verification>')
             if task_issue_mode(self.policy) == 'phase-lazy':
                 template['lazy'] = True
         if stage in SOURCE_STAGES:
-            template['blocking_findings'] = 0
+            template['blocking_findings'] = '<count>'
         if stage == 'pr':
             template.update(pr_url='https://github.com/' + state['issue'].split('#')[0] + '/pull/<number>',
-                            images_verified=True)
+                            images_verified='<true|false>')
         return template
 
     def _check_stage_rules(self, state, stage, receipt, token=None, session_id=None):
@@ -1546,6 +1637,8 @@ class Run:
         state['status'] = 'paused'
         state['pause'] = {'reason': reason, 'context': context, 'at': now()}
         held = state.get('active')
+        if held:
+            held['heartbeat_at'] = state['pause']['at']
         claim_id = (held.get('claim_id') or lifecycle.claim_id_for(held['token'])) if held else None
         lifecycle.queue(state, held['stage'] if held else None, 'paused', claim_id=claim_id,
                         episode_id=lifecycle.episode_for_claim(claim_id), reason=reason)
@@ -1698,6 +1791,9 @@ def main():
         if name == 'project-sync': cmd.add_argument('--phase', required=True, choices=PROJECT_SYNC_STEPS)
         if name == 'migrate': cmd.add_argument('--reason', help='Required unless --preview')
         if name in ('recover', 'bind'): cmd.add_argument('--token', required=True)
+        if name == 'recover':
+            cmd.add_argument('--force-live-owner', metavar='REASON',
+                             help='Recover a claim whose owner looks alive (CLAIM_OWNER_ALIVE); say how you know it stopped')
         if name == 'migrate':
             cmd.add_argument('--invalidate-from', choices=BASE_STAGES)
             cmd.add_argument('--preview', action='store_true',
@@ -1825,7 +1921,8 @@ def run_command(args):
                 result = run.revalidate_upstream(args.through, read(args.receipt) if args.receipt else None,
                                                  args.plan, args.actor)
             elif args.action == 'bind': result = run.bind(args.token)
-            elif args.action == 'recover': result = run.release_ownership(args.token, args.reason)
+            elif args.action == 'recover':
+                result = run.release_ownership(args.token, args.reason, force_live_owner=args.force_live_owner)
             elif args.action == 'relocate':
                 result = run.relocate(args.reason, args.preview, args.allow_branch_rebind,
                                       args.allow_repository_rename, args.issue, args.keep_issue_number, args.actor,

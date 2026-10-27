@@ -4,6 +4,10 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## 2026-10-27 — Workflow 1.20.0, Scope 1.11.1 (pending release)
+
+- PH-02 of the October 2026 review: the high-severity fixes. Runtime locks and claims survive a killed owner (`WORKFLOW_BUSY` names the owner, `recover` refuses a live one with `CLAIM_OWNER_ALIVE`), subprocesses under the locks are bounded, delegated runs launch in a clean environment with an explicit allowlist and a read-only sandbox for review routes, a rejected model is never substituted without the user's confirmation (`FALLBACK_CONFIRMATION_REQUIRED`), lean execution caps attempts, receipts no longer pre-fill passing values, the Plan claim checks the Scope effort score, unknown policy keys are refused, and worker briefs cannot spawn. CI: the matrix declares cross-suite dependents and the release gate also needs the Windows suites. Presets workflow 1.3.2 and scope-gate 1.6.1. See the PH-02 migration table in `docs/start/upgrades.md`.
+
 ## 2026-10-27 — Workflow 1.19.2
 
 - Repair upgrades blocked by disabled hook text refreshed from the installed manifest. Reconcile preserves original enablement and operational fields, audits metadata changes, and keeps rollback intact.
