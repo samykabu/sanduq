@@ -259,6 +259,12 @@ class WorkflowTests(unittest.TestCase):
                       w.doctor(self.root, self.policy, explicit=True)['errors'])
         w.write(memory / 'package-inventory.json', {'memory/run.py': hashlib.sha256(b'print(1)\n').hexdigest()})
         self.assertFalse(any('memory' in e for e in w.doctor(self.root, self.policy, explicit=True)['errors']))
+        # A core.autocrlf checkout holds the untouched file as CRLF: still Sanduq's. A real edit is not.
+        (memory / 'run.py').write_bytes(b'print(1)\r\n')
+        self.assertFalse(any('memory' in e for e in w.doctor(self.root, self.policy, explicit=True)['errors']))
+        (memory / 'run.py').write_bytes(b'print(2)\r\n')
+        self.assertIn('DEPENDENCY_SOURCE_MISMATCH: memory differs from its package inventory: memory/run.py',
+                      w.doctor(self.root, self.policy, explicit=True)['errors'])
 
     def test_context_reserves_space_and_labels_estimation(self):
         gate = w.context_gate(self.policy, self.usage(.46))

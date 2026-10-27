@@ -1,6 +1,7 @@
 """Installation health: registry, hosts, commands, the dependency digest and `doctor` with its cache."""
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import sanduq_ci
@@ -10,7 +11,7 @@ import execution_tools
 import yaml
 from datetime import datetime, timezone
 from pathlib import Path
-from sanduq_hash import eol_drift
+from sanduq_hash import eol_drift, portable_content
 from sanduq_remote import same_github_repository
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
@@ -91,9 +92,15 @@ def companion_inventory_errors(root, name):
         source = registry(root).get(name, {}).get('source')
         return (['DEPENDENCY_SOURCE_MISMATCH: ' + name + ' was installed from a catalog without the package '
                  'inventory every Sanduq release ships'] if isinstance(source, dict) else [])
+
+    def same(path, sha):
+        # A core.autocrlf checkout of a consumer repository holds text as CRLF; compare it with CRLF as LF.
+        content = path.read_bytes()
+        return sha in (hashlib.sha256(content).hexdigest(), hashlib.sha256(portable_content(path.name, content)).hexdigest())
+
     changed = sorted(member for member, sha in inventory.items()
                      if not (folder / member.removeprefix(name + '/')).is_file()
-                     or execution_tools.sha256_file(folder / member.removeprefix(name + '/')) != sha)
+                     or not same(folder / member.removeprefix(name + '/'), sha))
     return (['DEPENDENCY_SOURCE_MISMATCH: ' + name + ' differs from its package inventory: ' + ', '.join(changed[:5])]
             if changed else [])
 
