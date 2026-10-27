@@ -642,7 +642,8 @@ class OperationCacheTests(Base):
         calls, real = [], subprocess.run
 
         def run(cmd, *args, **kwargs):
-            if isinstance(cmd, (list, tuple)) and cmd and cmd[0] == 'git':
+            # run_git calls git by its absolute PATH entry (SEC-15), so match the basename
+            if isinstance(cmd, (list, tuple)) and cmd and os.path.basename(str(cmd[0])).lower().split('.')[0] == 'git':
                 calls.append(list(cmd[1:]))
             return real(cmd, *args, **kwargs)
         return calls, patch.object(subprocess, 'run', run)
