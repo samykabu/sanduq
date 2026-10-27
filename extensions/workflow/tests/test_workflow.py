@@ -86,6 +86,11 @@ class WorkflowTests(unittest.TestCase):
         return {'session_id': 'new-session', 'observed_at': w.now(), 'method': method,
                 'fraction': fraction, 'next_fraction': .05}
 
+    def claim_any(self, run):
+        """Claim whatever is next, the PR included: finalize is Ready plus PR, never a stage before (AHMED-07)."""
+        claim = run.claim(self.usage())
+        return run.claim(self.usage(), finalize=True) if claim.get('status') == 'ready_to_finalize' else claim
+
     def run_object(self):
         run = w.Run(self.root, self.feature)
         run.start('acme/app#10')
@@ -94,12 +99,35 @@ class WorkflowTests(unittest.TestCase):
     def test_issue_identity_uses_issue_number_and_title(self):
         class GitHub:
             def api(self, endpoint):
-                self_endpoint = 'repos/acme/app/issues/42'
-                assert endpoint == self_endpoint
-                return {'number': 42, 'title': 'Fix checkout timeout!'}
+                assert endpoint in ('repos/acme/app', 'repos/acme/app/issues/42'), endpoint
+                return {'number': 42, 'title': 'Fix checkout timeout!', 'fork': False}
         identity = w.issue_identity(self.root, '42', GitHub())
         self.assertEqual(identity['feature'], 'specs/42-fix-checkout-timeout')
         self.assertEqual(identity['branch'], '42-fix-checkout-timeout')
+
+    def test_a_fork_origin_is_refused_before_binding_and_names_the_parent(self):
+        # AHMED-13: #42 on the fork is not the upstream #42; nothing is bound.
+        class GitHub:
+            def api(self, endpoint):
+                assert endpoint == 'repos/acme/app', endpoint
+                return {'fork': True, 'parent': {'full_name': 'upstream/app'}}
+        with self.assertRaisesRegex(w.WorkflowError, r'^ORIGIN_IS_FORK: .*acme/app is a fork of upstream/app.*git remote -v'):
+            w.prepare_issue(self.root, '42', GitHub())
+        self.assertFalse((self.root / 'specs/42-fix-checkout-timeout').exists())
+
+    def test_finalize_before_ready_claims_nothing_and_lists_the_remaining_stages(self):
+        # AHMED-07: at Tasks, finalize is not "run everything"; the stages before Ready are reported.
+        run = self.run_object()
+        for stage in ('scope', 'specify', 'clarify', 'plan', 'tasks'):
+            claim = run.claim(self.usage()); run.complete(claim['token'], self.receipt(stage))
+        result = run.claim(self.usage(), finalize=True)
+        self.assertEqual((result['stage'], result['status'], result['command']),
+                         (None, 'not_ready_to_finalize', 'speckit.workflow.continue'))
+        self.assertEqual(result['remaining'], [s for s in w.stages(self.policy) if s not in
+                                               ('scope', 'specify', 'clarify', 'plan', 'tasks', 'ready', 'pr')])
+        self.assertEqual(run.next(run.load(), finalize=True)['status'], 'not_ready_to_finalize')
+        self.assertIsNone(run.load()['active'])
+        self.assertEqual(run.claim(self.usage())['stage'], result['remaining'][0])
 
     def test_prepare_issue_creates_branch_when_no_git_hook(self):
         class GitHub:

@@ -34,6 +34,7 @@ describe their shape.
 | `providers.clarification`, `providers.tasks` | `prefer-superspec`, `core` or `superspec`. |
 | `issue_sync` | `taskstoissues` is `required` (every task mapped at Tasks-to-Issues) or `phase-lazy` (each phase mapped when it starts; Ready still needs every task mapped); `parent_link` is fixed to `native-subissue`. |
 | `profiles` | Optional. `enabled`, `lite.max_score` (default 3), `standard.max_score` (default 8). Absent means every feature runs the full stage list. |
+| `clarification.transport` | `github-comments` (default) or `local`. Copied to each feature's checkpoint (`clarification_transport`) at Scope start, so a later change applies to features started after it and invalidates nothing. With `local`, Clarify questions and decisions are asked in the conversation and recorded in `specs/<feature>/clarifications.md`; nothing is posted to GitHub. |
 | `clarification.max_questions_per_round`, `clarification.in_session_first_round` | Optional question cap per round (absent: no cap) and in-session first round (default false). |
 | `artifacts` | Optional. `budgets` (`spec_kb`, `plan_kb`, `research_kb`, `tasks_detail_lines`) checked by `workflow:lint`, and `enforce` (`lite-standard`, `all` or `warn`). |
 | `project_sync.points` | Optional list of stages at which Project Sync runs: `specify`, `plan`, `analyze`, `taskstoissues`, `execute`, `pr`. Absent means all six. |

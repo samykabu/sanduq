@@ -10,9 +10,11 @@ is tried once more after 2 s when it failed with an HTTP 5xx or timed out. Anyth
 `gh project` command, is never retried, so a timeout after a possible write is reported, not repeated.
 """
 import json
+import os
 import re
 import subprocess
 import time
+from pathlib import Path
 
 GH_MISSING = 127
 RETRY_DELAY = 2
@@ -22,6 +24,10 @@ _VALUED = {'-X', '--method', '-f', '--raw-field', '-F', '--field', '-H', '--head
 _FIELDS = {'-f', '--raw-field', '-F', '--field'}
 # `gh api` switches that change only what is printed.
 _SWITCHES = {'--paginate', '--slurp', '-i', '--include', '--silent', '--verbose'}
+# SEC-05: every issue comment a Sanduq process posts is logged here (one JSON object per line), so the decision
+# reader can refuse it as an answer. Relative to the project the call runs in (`cwd`, else the process directory).
+POSTED_COMMENTS = '.specify/workflow/runtime/posted-comments.jsonl'
+_ISSUE_COMMENTS = re.compile(r'repos/[^/]+/[^/]+/issues/\d+/comments$')
 
 
 class GhError(Exception):
@@ -142,6 +148,36 @@ def run_gh(args, *, payload=None, timeout=60, binary=False, cwd=None, retry=Fals
     return _run_once(args, payload, timeout, binary, cwd)
 
 
+def _record_posted_comment(cwd, endpoint, data):
+    """Append the id of a comment this process just created; a missing `.specify` (no project) or an unwritable
+    runtime folder never fails the post that already happened."""
+    root = Path(cwd or os.getcwd())
+    if not (root / '.specify').is_dir():
+        return
+    try:
+        path = root / POSTED_COMMENTS
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, 'a', encoding='utf-8') as handle:
+            handle.write(json.dumps({'id': data['id'], 'endpoint': endpoint,
+                                     'at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}) + '\n')
+    except OSError:
+        pass
+
+
+def posted_comment_ids(root):
+    """The ids of every issue comment a Sanduq process posted in this project (see POSTED_COMMENTS)."""
+    path = Path(root) / POSTED_COMMENTS
+    if not path.is_file():
+        return set()
+    ids = set()
+    for line in path.read_text(encoding='utf-8').splitlines():
+        try:
+            ids.add(json.loads(line).get('id'))
+        except ValueError:
+            continue
+    return ids - {None}
+
+
 def api(endpoint, *, method='GET', payload=None, pages=False, timeout=60, cwd=None, retry=False):
     """Parsed JSON of a REST call (None for an empty body); `pages` follows every page and flattens list pages."""
     args = ['api', endpoint, '-H', 'Accept: application/vnd.github+json']
@@ -153,6 +189,8 @@ def api(endpoint, *, method='GET', payload=None, pages=False, timeout=60, cwd=No
         args += ['--input', '-']
     out = run_gh(args, payload=payload, timeout=timeout, cwd=cwd, retry=retry)
     data = json.loads(out) if out.strip() else None
+    if method == 'POST' and isinstance(data, dict) and data.get('id') and _ISSUE_COMMENTS.search(endpoint):
+        _record_posted_comment(cwd, endpoint, data)
     if pages and data is not None:
         return [item for page in data for item in (page if isinstance(page, list) else [page])]
     return data

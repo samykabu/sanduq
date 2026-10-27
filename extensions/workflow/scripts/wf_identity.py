@@ -24,7 +24,9 @@ def github_repository(root):
     never `==`.
     """
     remote = origin_url(root)
-    require(remote is not None, 'GIT_ERROR: no remote.origin.url')
+    require(remote is not None, 'GIT_ERROR: no remote.origin.url in ' + str(root) + '; Sanduq binds issues of the '
+            '"origin" remote. Check "git remote -v", then add it with "git remote add origin '
+            'https://github.com/<owner>/<repo>.git"')
     slug = sanduq_remote.github_slug(remote)
     require(slug, 'GITHUB_REMOTE_REQUIRED')
     return slug
@@ -318,9 +320,16 @@ def issue_identity(root, issue, gh=None):
     if gh is None:
         from decisions import GitHub
         gh = GitHub()
+    # AHMED-13: a fork's issues live upstream, so binding #n on the fork would bind the wrong issue.
+    origin = gh.api(f'repos/{repo}') or {}
+    require(not origin.get('fork'), 'ORIGIN_IS_FORK: the "origin" remote ' + repo + ' is a fork of '
+            + str((origin.get('parent') or {}).get('full_name') or 'another repository') + ', whose issues are not '
+            'on the fork. Sanduq binds issues of "origin" only: clone the parent repository and run Scope there '
+            '(check "git remote -v")')
     item = gh.api(f'repos/{repo}/issues/{issue}')
     require(item.get('number') == int(issue) and 'pull_request' not in item,
-            'GITHUB_ISSUE_REQUIRED')
+            'GITHUB_ISSUE_REQUIRED: #' + str(issue) + ' is not an issue of ' + repo + ' (the "origin" remote, '
+            '"git remote get-url origin"); it is missing or a pull request')
     title = unicodedata.normalize('NFKC', item.get('title', '')).casefold()
     slug = re.sub(r'[^\w]+', '-', title, flags=re.UNICODE).strip('-_')[:56].strip('-_') or 'issue'
     name = str(issue) + '-' + slug

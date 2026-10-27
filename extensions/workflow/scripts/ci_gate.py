@@ -138,6 +138,10 @@ def check(root, feature, policy, base=None, rules=None, verify_ci_evidence=True,
                             ('path', 'assessment', 'reason', 'actor', 'at', 'old_hash', 'new_hash')}}
                            for item in receipt.get('amendments', [])]
             if stage == 'clarify': require(receipt.get('unresolved') == 0 and receipt.get('answers_applied') is True, 'CLARIFICATION_UNRESOLVED')
+            if stage == 'clarify' and receipt.get('self_attested'):
+                warnings.append('CLARIFICATION_SELF_ATTESTED: the Clarify answers were recorded by the agent in '
+                                + str(receipt['self_attested'].get('file')) + ' (local transport); no GitHub record '
+                                'vouches for them')
             if stage in ('verify','review','ready'): require(receipt.get('blocking_findings') == 0, 'BLOCKING_FINDINGS_REMAIN')
     ready_checks(root, feature, policy, state, base, {'tasks': rules['tasks'], 'task_links': rules['task_links']},
                 warnings=warnings)
@@ -148,12 +152,15 @@ def check(root, feature, policy, base=None, rules=None, verify_ci_evidence=True,
         require(decisions.get('issue') == state['issue'], 'DECISION_ISSUE_MISMATCH')
         verify_ledger(root, feature, decisions)
     if rules['live_answers']:
-        from decisions import GitHub, answers
-        repo, number = state['issue'].split('#')
-        gh = GitHub()
-        issue = gh.api(f'repos/{repo}/issues/{number}')
-        comments = gh.api(f'repos/{repo}/issues/{number}/comments?per_page=100', pages=True)
-        live = answers(comments, issue, policy)
+        from decisions import LOCAL_FILE, GitHub, answers, local_answers, local_transport, sanduq_gh
+        if local_transport(state):
+            live = local_answers(directory / LOCAL_FILE, decisions, feature + '/' + LOCAL_FILE)
+        else:
+            repo, number = state['issue'].split('#')
+            gh = GitHub()
+            issue = gh.api(f'repos/{repo}/issues/{number}')
+            comments = gh.api(f'repos/{repo}/issues/{number}/comments?per_page=100', pages=True)
+            live = answers(comments, issue, policy, sanduq_gh.posted_comment_ids(root))
         require({item['id']: (item['answer_digest'], item.get('option'),
                               item.get('question_comment_id'), item.get('options'))
                  for item in decisions['decisions']} ==

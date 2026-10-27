@@ -533,6 +533,21 @@ class ClarificationTests(unittest.TestCase):
         self.move('Ready')
         self.assertEqual(self.app.plan_gate('1')['status'], 'Ready')
 
+    def test_local_transport_refuses_github_rounds_and_gates_plan_on_the_clarify_receipt(self):
+        # REQ-21: the feature's checkpoint froze transport local at Scope start; nothing is posted or moved.
+        checkpoint = self.feature / 'workflow/checkpoint.json'
+        sm.write_json(checkpoint, {'issue': 'acme/app#1', 'clarification_transport': 'local', 'receipts': {}})
+        for call in (lambda: self.app.inspect('1'), lambda: self.app.publish('1', {'version': 1}, True)):
+            with self.assertRaisesRegex(sm.ScopeError, r'^CLARIFICATION_TRANSPORT_LOCAL: #1 .*specs/001-example/clarifications.md'):
+                call()
+        with self.assertRaisesRegex(sm.ScopeError, r'^CLARIFICATION_REQUIRED: .*specs/001-example/clarifications.md'):
+            self.app.plan_gate('1')
+        sm.write_json(checkpoint, {'issue': 'acme/app#1', 'clarification_transport': 'local',
+                                   'receipts': {'clarify': {'outcome': 'passed'}}})
+        self.assertEqual(self.app.plan_gate('1'), {'issue': 1, 'status': m.FEATURE, 'transport': 'local'})
+        self.assertEqual(self.gh.writes, [])
+        self.assertEqual(self.app.dispatch('1')['engine'], 'clarify')  # the dispatcher still names the engine
+
     # ---- workflow/clarifications.json (Scope 1.7.0) -------------------------------------------------------------
 
     def records_path(self):

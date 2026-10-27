@@ -89,7 +89,7 @@ class Base(Harness):
 
     def advance(self, run, last, receipts=None):
         while True:
-            claim = run.claim(self.usage(), finalize=True)
+            claim = self.claim_any(run)
             stage = claim['stage']
             run.complete(claim['token'], (receipts or {}).get(stage) or self.receipt(stage))
             if stage == last:

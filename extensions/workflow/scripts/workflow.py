@@ -952,6 +952,9 @@ class Run:
                      'policy_digest': delivery_digest(self.policy),
                      'ci_policy_digest': digest(self.policy['ci']), 'commands': commands,
                      'policy': copy.deepcopy(self.policy), 'target_branch': previous_branch(self.root),
+                     # REQ-21: frozen per feature here, outside the policy cutoff; a later policy edit changes
+                     # only features started after it.
+                     'clarification_transport': self.policy['clarification'].get('transport', 'github-comments'),
                      'receipts': {}, 'generation': 0, 'active': None, 'status': 'in-progress'}
             state['dependency_digest'] = package_digest(self.root)
             self.save(state)
@@ -1019,6 +1022,12 @@ class Run:
 
     def next(self, state, finalize=False):
         result = self.next_stage(state, finalize)
+        if finalize and result.get('stage') and BASE_STAGES.index(result['stage']) < BASE_STAGES.index('ready'):
+            # AHMED-07: finalize is Ready plus PR, never "run everything that remains".
+            remaining = [stage for stage in stages(self.policy, state_tier(state))
+                         if BASE_STAGES.index(result['stage']) <= BASE_STAGES.index(stage) < BASE_STAGES.index('ready')]
+            result = {'stage': None, 'status': 'not_ready_to_finalize', 'remaining': remaining,
+                      'reason': result.get('reason'), 'command': 'speckit.workflow.continue'}
         drift = consulted_drift(self.root, self.relative, state['receipts'], self.tier_of(state))
         if drift:
             # Advisory only: a consulted input never stales its receipt.
@@ -1197,7 +1206,8 @@ class Run:
             claimed = {**state['active'], 'command': state['commands'][stage], 'feature': self.relative, 'issue': state['issue'],
                        'reference': stage_reference(stage), 'reference_text': text,
                        'side_effects': side_effects(self.policy, self.relative, stage, self.root),
-                       'project_sync': project_sync(self.policy, stage, self.relative)}
+                       'project_sync': project_sync(self.policy, stage, self.relative),
+                       'clarification_transport': state.get('clarification_transport', 'github-comments')}
             claimed['receipt_template'] = self.receipt_template(state, stage)
             if reporting:
                 claimed['reporting'], claimed['execute_protocol'] = reporting, protocol
@@ -1410,6 +1420,8 @@ class Run:
             template['effort_score'] = '<one of ' + ', '.join(map(str, EFFORT_SCORES)) + '>'
         if stage == 'clarify':
             template.update(unresolved='<count>', answers_applied='<true|false>')
+            if state.get('clarification_transport') == 'local':
+                template['inputs'] = [self.relative + '/clarifications.md']
         if stage == 'plan' and state_tier(state) in ('lite', 'standard'):
             template['inputs'] = [self.relative + '/tasks.md']
         if stage == 'analyze' and state['commands'].get(stage) == LINT_COMMAND:
@@ -1434,6 +1446,19 @@ class Run:
                         'records effort_score, one of ' + ', '.join(map(str, EFFORT_SCORES)))
         if stage == 'clarify':
             require(receipt.get('unresolved') == 0 and receipt.get('answers_applied') is True, 'CLARIFICATION_UNRESOLVED')
+            if state.get('clarification_transport') == 'local':
+                # REQ-21: the file is the only record of the questions and the user's replies.
+                from decisions import LOCAL_FILE, local_sections
+                label = self.relative + '/' + LOCAL_FILE
+                require(label in receipt['inputs'] and (self.root / label).is_file(),
+                        'CLARIFICATION_FILE_INPUT_REQUIRED: with the local transport the Clarify receipt lists '
+                        + label + ' (the questions asked in the conversation and the user\'s replies) as an input')
+                sections = local_sections((self.root / label).read_text(encoding='utf-8-sig'))
+                open_ids = [qid for qid, section in sections.items()
+                            if qid.startswith('C') and not (section['ticked'] or section['answers'])]
+                require(not open_ids, 'CLARIFICATION_UNRESOLVED: ' + ', '.join(open_ids) + ' in ' + label
+                        + ' has no recorded reply (a line `<ID>: <letter>` or a ticked box); unparsed lines: '
+                        + json.dumps({qid: sections[qid]['unparsed'] for qid in open_ids}))
         if BASE_STAGES.index(stage) >= BASE_STAGES.index('specify'):
             source = read(self.feature / 'scope-source.json', {})
             require(f"{source.get('repo')}#{source.get('issue')}" == state['issue'], 'FEATURE_BINDING_MISMATCH')
@@ -1472,6 +1497,9 @@ class Run:
                          and receipt.get('command') == COMMANDS['analyze'])
         stored['command'] = COMMANDS['analyze'] if model_analyze else state['commands'][stage]
         stored['dependency_digest'] = state['dependency_digest']
+        if stage == 'clarify' and state.get('clarification_transport') == 'local':
+            # The agent transcribed the replies itself; no GitHub record vouches for them.
+            stored['self_attested'] = {'answers': 'local', 'file': self.relative + '/clarifications.md'}
         decision_input = [self.relative + '/workflow/decisions.json'] if (self.feature / 'workflow/decisions.json').is_file() else []
         stored['fingerprints'] = fingerprint_files(self.root, receipt['inputs'] + receipt['evidence'] + required_inputs(
             self.root, self.relative, stage, tier) + decision_input, feature=self.relative)

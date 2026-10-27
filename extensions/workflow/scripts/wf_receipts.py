@@ -182,6 +182,7 @@ def native_run_status(root, feature, state, roots):
     for key in ('profile', 'skipped', 'pause'):
         if state.get(key):
             result[key] = state[key]
+    result['questions'] = waiting_questions(root, feature, state)
     if sync_retry(state, feature):
         result['project_sync'] = sync_retry(state, feature)
     import progress_bridge
@@ -192,6 +193,22 @@ def native_run_status(root, feature, state, roots):
     if warnings:
         result['warnings'] = warnings
     return result
+
+
+def waiting_questions(root, feature, state):
+    """Where this feature's questions are answered and which ones still wait (REQ-21): the decision ledger's
+    pending or conflicting ids, plus, with the local transport, the unanswered questions in clarifications.md."""
+    from decisions import LOCAL_FILE, local_sections
+    local = state.get('clarification_transport') == 'local'
+    ledger = read(Path(root) / feature / 'workflow/decisions.json', {})
+    pending = [item['id'] for item in ledger.get('decisions', []) if item.get('status') in ('pending', 'conflict')]
+    file = Path(root) / feature / LOCAL_FILE
+    if local and file.is_file():
+        pending += [qid for qid, section in local_sections(file.read_text(encoding='utf-8-sig')).items()
+                    if qid.startswith('C') and not (section['ticked'] or section['answers'])]
+    return {'transport': 'local' if local else 'github-comments',
+            'answered_in': feature + '/' + LOCAL_FILE if local else 'comments on ' + state['issue'],
+            'waiting': pending}
 
 
 def sync_retry(state, feature):

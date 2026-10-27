@@ -44,6 +44,29 @@ class DecisionTests(unittest.TestCase):
                          self.issue, self.policy)
         self.assertEqual(rows[0]['status'], 'pending')
 
+    def test_tolerant_answer_forms_count(self):
+        # AHMED-15: punctuation, `-` or `=` separators and a ` - feedback` tail never hide a plain letter.
+        for body in ('SD1: B.', 'SD1 - B', 'SD1 = b', 'SD1: B!', 'sd1: B - keep the drafts'):
+            rows = d.answers([self.question, self.reply(2, 'reviewer', body)], self.issue, self.policy)
+            self.assertEqual((rows[0]['status'], rows[0]['option'], rows[0]['unparsed']), ('answered', 'B', []), body)
+
+    def test_an_unparsed_answer_is_reported_with_its_comment_and_never_inferred(self):
+        prose = {**self.reply(2, 'reviewer', 'I pick B for SD1'), 'html_url': 'https://x/2'}
+        rows = d.answers([self.question, prose, self.reply(3, 'reviewer', 'SD1: A, B'),
+                          self.reply(4, 'outsider', 'SD1: B')], self.issue, self.policy)
+        self.assertEqual((rows[0]['status'], rows[0]['answers']), ('pending', []))
+        self.assertEqual([(u['comment_id'], u['url'], u['author'], u['reason']) for u in rows[0]['unparsed']],
+                         [(2, 'https://x/2', 'reviewer', 'not understood; reply `SD1: A` on its own line or tick the box'),
+                          (3, None, 'reviewer', 'several letters for a single-choice question')])
+
+    def test_agent_posted_and_pre_question_comments_are_never_answers(self):
+        # SEC-05: a comment a Sanduq process posted, or one older than the question, is reported, not counted.
+        rows = d.answers([self.reply(0, 'reviewer', 'SD1: A'), self.question, self.reply(2, 'reviewer', 'SD1: A')],
+                         self.issue, self.policy, agent_ids={2})
+        self.assertEqual((rows[0]['status'], rows[0]['answers']), ('pending', []))
+        self.assertEqual([(u['comment_id'], u['reason']) for u in rows[0]['unparsed']],
+                         [(0, 'posted before the question'), (2, 'posted by a Sanduq process, not a reviewer')])
+
     def test_question_edit_fails_closed(self):
         altered = dict(self.question, body=self.question['body'] + '\nnew text')
         with self.assertRaisesRegex(d.WorkflowError, 'DECISION_QUESTION_EDITED'):
@@ -102,6 +125,83 @@ class DecisionTests(unittest.TestCase):
             second = d.ask(root, 'specs/001', 'Which path?', ['First', 'Second'], gh)
             self.assertEqual((first['id'], second['id'], gh.posts), ('SD1', 'SD1', 1))
             self.assertTrue(second['reused'])
+
+    def test_a_comment_posted_through_sanduq_gh_in_this_project_is_not_a_decision(self):
+        class FakeRun:
+            policy = {'decisions': {'authorized_users': ['reviewer']}}
+
+            def __init__(self, root, feature):
+                self.feature = Path(root) / feature
+
+            def load(self, allow_branch_change=False):
+                return {'issue': 'acme/app#12'}
+
+        class FakeGitHub:
+            def api(self, endpoint, method='GET', payload=None, pages=False):
+                if endpoint.endswith('/comments?per_page=100'):
+                    return [test.question, test.reply(2, 'reviewer', 'SD1: A', 'OWNER')]
+                return {'number': 12, 'user': {'login': 'creator'}}
+
+        test = self
+        with tempfile.TemporaryDirectory() as folder, patch.object(d, 'Run', FakeRun):
+            root = Path(folder)
+            (root / 'specs/001').mkdir(parents=True)
+            (root / 'specs/001/scope-source.json').write_text('{"repo":"acme/app","issue":12}', encoding='utf-8')
+            self.assertEqual(d.reconcile(root, 'specs/001', FakeGitHub())['decisions'][0]['status'], 'answered')
+            log = root / d.sanduq_gh.POSTED_COMMENTS
+            log.parent.mkdir(parents=True)
+            log.write_text('{"id": 2, "endpoint": "repos/acme/app/issues/12/comments"}\n', encoding='utf-8')
+            item = d.reconcile(root, 'specs/001', FakeGitHub())['decisions'][0]
+            self.assertEqual((item['status'], item['answers'], item['unparsed'][0]['reason']),
+                             ('pending', [], 'posted by a Sanduq process, not a reviewer'))
+
+    def test_local_transport_writes_the_question_to_the_file_and_reads_the_reply_from_it(self):
+        # REQ-21: no GitHub call at all; the ledger records the quoted line with source local.
+        class FakeRun:
+            policy = {'decisions': {'authorized_users': []}}
+
+            def __init__(self, root, feature):
+                self.feature = Path(root) / feature
+
+            def load(self, allow_branch_change=False):
+                return {'issue': 'acme/app#12', 'clarification_transport': 'local'}
+
+        class NoGitHub:
+            def api(self, *args, **kwargs):
+                raise AssertionError('GitHub was called in local mode: ' + str(args))
+
+        with tempfile.TemporaryDirectory() as folder, patch.object(d, 'Run', FakeRun):
+            root = Path(folder)
+            (root / 'specs/001').mkdir(parents=True)
+            (root / 'specs/001/scope-source.json').write_text('{"repo":"acme/app","issue":12}', encoding='utf-8')
+            asked = d.ask(root, 'specs/001', 'Which path?', ['First', 'Second'], NoGitHub(), recommended='B')
+            self.assertEqual(asked, {'id': 'SD1', 'url': 'specs/001/clarifications.md#sd1', 'status': 'pending',
+                                     'transport': 'local'})
+            path = root / 'specs/001/clarifications.md'
+            text = path.read_text(encoding='utf-8')
+            self.assertIn('\n## SD1: Which path?\n\n- [ ] **A.** First\n- [ ] **B.** Second **(Recommended)**\n', text)
+            self.assertEqual(d.reconcile(root, 'specs/001', NoGitHub(), publish_field=True)['decisions'][0]['status'], 'pending')
+            path.write_text(text + '\nSD1: B. - as discussed\nthe user also mentioned SD1 later\n', encoding='utf-8')
+            ledger = d.reconcile(root, 'specs/001', NoGitHub())
+            item = ledger['decisions'][0]
+            self.assertEqual((ledger['transport'], item['status'], item['option'], item['question_comment_id']),
+                             ('local', 'answered', 'B', None))
+            self.assertEqual([(a['source'], a['quote'], a['author']) for a in item['answers']],
+                             [('local', 'SD1: B. - as discussed', None)])
+            self.assertEqual([u['quote'] for u in item['unparsed']], ['the user also mentioned SD1 later'])
+            path.write_text(text.replace('- [ ] **A.**', '- [x] **A.**') + '\nSD1: B\n', encoding='utf-8')
+            self.assertEqual(d.reconcile(root, 'specs/001', NoGitHub())['decisions'][0]['status'], 'conflict')
+            with self.assertRaisesRegex(d.WorkflowError, 'DECISION_TRANSPORT_LOCAL'):
+                d.upgrade_questions(root, 'specs/001', NoGitHub())
+
+    def test_local_sections_parse_both_id_kinds_and_text_answers(self):
+        text = ('# Clarifications\n\n## C1Q1: Keep drafts?\n\n- [ ] **A.** Yes\n- [x] **B.** No\n\n'
+                '## C1Q2: How long?\n\nC1Q2: thirty days\n\n## SD1: Which path?\n\n- [ ] **A.** First\n'
+                '- [ ] **B.** Second\n\nSD1 = A\nSD1 might also be C\n')
+        sections = d.local_sections(text)
+        self.assertEqual({k: (v['ticked'], v['answers'], v['unparsed']) for k, v in sections.items()}, {
+            'C1Q1': (['B'], [], []), 'C1Q2': ([], [([], 'C1Q2: thirty days')], []),
+            'SD1': ([], [(['A'], 'SD1 = A')], ['SD1 might also be C'])})
 
     def test_project_field_sync_does_not_touch_lifecycle_status(self):
         with tempfile.TemporaryDirectory() as folder:

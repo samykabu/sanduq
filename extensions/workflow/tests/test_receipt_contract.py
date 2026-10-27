@@ -34,6 +34,7 @@ class Harness(unittest.TestCase):
     setUp = fixture.WorkflowTests.setUp
     configure = fixture.WorkflowTests.configure
     usage = fixture.WorkflowTests.usage
+    claim_any = fixture.WorkflowTests.claim_any
     receipt = fixture.WorkflowTests.receipt
 
     def run_object(self):
@@ -584,7 +585,7 @@ class AmendmentTests(Harness):
     def test_amend_waits_for_an_active_claim(self):
         run = self.ready()
         path = self.edit_execute_evidence()
-        run.claim(self.usage(), finalize=True)
+        run.claim(self.usage())  # the stale Execute stage; finalize would refuse with not_ready_to_finalize
         with self.assertRaisesRegex(w.WorkflowError, 'ACTIVE_CLAIM_MUST_BE_RESOLVED_BEFORE_AMEND'):
             run.amend('execute', path, 'why', 'unchanged')
 

@@ -256,6 +256,8 @@ def validate_front_half_policy(policy):
             bands[name] = band['max_score']
         require(bands['lite'] < bands['standard'], 'PROFILES_POLICY_INVALID: lite.max_score must be below standard.max_score')
     clarification = policy.get('clarification', {})
+    require(clarification.get('transport', 'github-comments') in ('github-comments', 'local'),
+            'CLARIFICATION_POLICY_INVALID: transport is github-comments or local')
     if 'max_questions_per_round' in clarification:
         require(_positive(clarification['max_questions_per_round']), 'CLARIFICATION_POLICY_INVALID: max_questions_per_round')
     if 'in_session_first_round' in clarification:
@@ -356,9 +358,10 @@ def stages(policy, tier=None):
 
 
 # Sub-keys that tune how future work runs (a cache TTL, a question cap) and never change what
-# finished evidence means; a change to them alone reaches no stage.
+# finished evidence means; a change to them alone reaches no stage. `transport` is frozen per feature on
+# its checkpoint at Scope start (REQ-21), so a later edit only affects features started after it.
 OPERATIONAL_SUBKEYS = {'scope': ('board_cache_seconds',),
-                       'clarification': ('max_questions_per_round', 'in_session_first_round')}
+                       'clarification': ('max_questions_per_round', 'in_session_first_round', 'transport')}
 
 
 def policy_cutoff(previous, current):

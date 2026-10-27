@@ -17,6 +17,9 @@ from the claim's `reference_text`.
 
 In every case execute `.specify/extensions/scope/skills/github-clarification/SKILL.md` with
 `engine: clarify`, using the explicit issue number or the active feature's `scope-source.json`.
-Questions go to GitHub, one comment each, not to this chat (the managed in-session first round
-is the one exception). There is no five-question cap and no answer-length limit.
+With `clarification_transport: github-comments` on the claim, questions go to GitHub, one
+comment each, not to this chat (the managed in-session first round is the one exception). With
+`local`, ask in this conversation and record the user's replies in
+`specs/<feature>/clarifications.md` as the skill's `references/local.md` says; nothing is posted
+to GitHub. There is no five-question cap and no answer-length limit.
 
