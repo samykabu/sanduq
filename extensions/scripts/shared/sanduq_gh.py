@@ -27,7 +27,7 @@ def tool_path(name):
     (SEC-15); this search reads PATH only."""
     if os.name != 'nt':
         return shutil.which(name) or name
-    extensions = [e.lower() for e in os.environ.get('PATHEXT', '.EXE;.CMD;.BAT').split(os.pathsep) if e]
+    extensions = [e.lower() for e in os.environ.get('PATHEXT', '.EXE;.CMD;.BAT').split(';') if e]  # PATHEXT is ';'-separated everywhere
     for folder in os.environ.get('PATH', '').split(os.pathsep):
         for extension in extensions:
             candidate = os.path.join(folder, name + extension)
