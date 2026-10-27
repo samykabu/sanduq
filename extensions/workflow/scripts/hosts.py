@@ -39,7 +39,8 @@ INTEGRATION_FILES = ('.specify/integration.json', '.specify/init-options.json')
 ALIASES = {'speckit-scope': 'legacy-alias-hashes.json',
            'speckit-superpowers-bridge': 'legacy-bridge-alias-hashes.json'}
 INSTALL_LOCK = '.specify/workflow/install-lock.json'
-# Scope commands only its hooks call; on Claude they leave the slash menu but stay callable.
+# Scope commands only its hooks call. Scope no longer lists them as skills (OMAR-09); an older Scope's
+# rendered copies are still hidden from the Claude slash menu here.
 HOOK_ONLY_SKILLS = tuple('speckit-scope-' + name for name in ('guard', 'bind', 'after-specify', 'plan-guard', 'reconcile'))
 # Where each host reads project hooks, and the text that marks Sanduq's guard entry in them.
 HOOK_FILES = {'claude': '.claude/settings.json', 'codex': '.codex/hooks.json'}
@@ -309,7 +310,8 @@ def render_role(role, host, model=None):
     """One role definition as the host's custom-agent file."""
     source = '.specify/extensions/workflow/assets/roles/' + role['name'].removeprefix('sanduq-') + '.yml'
     note = ROLE_MARKER + ' generated from ' + source + ' by the workflow installer; local edits are replaced'
-    instructions = role['instructions'].strip() + '\n'
+    from delegate_dispatch import NO_DISPATCHER_COMMANDS  # the one source of the forbidden dispatcher commands
+    instructions = role['instructions'].strip().replace('{no_dispatcher_commands}', NO_DISPATCHER_COMMANDS.strip()) + '\n'
     if host == 'claude':
         head = ['---', 'name: ' + role['name'], 'description: ' + json.dumps(role['description'], ensure_ascii=False),
                 'tools: ' + ', '.join(role['tools'])] + (['model: ' + model] if model else []) + ['---']

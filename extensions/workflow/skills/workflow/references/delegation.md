@@ -8,7 +8,8 @@ command and decisions stay in [delegation-and-decisions.md](delegation-and-decis
 When `delegation.enabled` is true, use the claim's `delegation` route: `delegate_dispatch.py
 start --feature specs/<feature> --id stage:<stage> --claim-token <token>`, then
 `delegate_dispatch.py collect --feature specs/<feature> --run-id <id>` until terminal,
-following any `replacement` run ID. A successful delegate result is candidate evidence, not a
+following any `replacement` run ID. A `successful` delegate result means the driver saw no
+failure or abandonment signal; it does not verify the objective. It is candidate evidence, not a
 passed stage: inspect outputs and checks before the receipt. Failed, abandoned or unresolved
 work keeps the claim active. An unreported actual model stays unverified. Disabled mode ignores
 routing tags and uses the user's selected model.
@@ -61,14 +62,17 @@ the ledger and status carry `requested_model`, `substitute_model`, `actual_model
 telemetry, else `unreported`), `confirmed_by` and `fallback_used`; with no reported model the
 summary reads "fallback confirmed; model unverified".
 
-## Opt-in lean execution
+## Lean execution (default for lite and standard)
 
-`lean_execution.enabled: true` (the default for the lite and standard tiers unless the policy
-sets it false) makes one lifecycle coordinator keep claims, scheduling, integration, receipts
-and publication; never create or dispatch another coordinator. Execute, Tasks-to-Issues, Ready
-and PR claims return `execution_owner: coordinator` without a model route, as does an exact
+Lean execution is on for a lite or standard feature unless the policy sets
+`lean_execution.enabled: false`, and on for every tier when it sets `true`. Claim and status print
+`lean_execution: on (tier default)`, `on (policy)`, `off (policy)` or `off (default)`; trust that
+line and the claim's `execution_owner` over any prose default. When it is on, one lifecycle
+coordinator keeps claims, scheduling, integration, receipts and publication; never create or
+dispatch another coordinator. Execute, Tasks-to-Issues, Ready and PR claims return
+`execution_owner: coordinator` without a model route, as does an exact
 `delegation.fixed_collection_commands.verify` match. Semantic stages keep their routes and
-successful attempt checks. Without lean policy the legacy protocol applies.
+successful attempt checks. When it is off the legacy protocol applies.
 
 ```yaml
 lean_execution:

@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased]
+
+- Usage from a delegate result records `model` only when the driver observed it (`actual_model` with `model_observed`), with the request in `requested_model`, and keeps the driver's `fidelity` (`exact` or `partial`) instead of marking every reading exact; the legacy report tooltip prints `requested <m>, model unreported` and `(partial)`.
+- The worker and reviewer results have an eleven-line template: a `Model:` line carries the model the harness reports, else `unreported`; the coordinator copies it beside the requested model into the handoff and the Execute receipt's `summary`, never filling the reported value from the request.
+- The forbidden dispatcher-command sentence in the worker and reviewer role files is rendered at install from `delegate_dispatch.NO_DISPATCHER_COMMANDS`, the same text the brief carries; execution-assign.md says a task worker runs no `delegate_dispatch.py` command and that the guard enforces the four trust verbs.
+- Lean execution is described as the default for lite and standard (the heading no longer says "opt-in"); `claim` and `status` print `lean_execution: on (tier default)`, `on (policy)`, `off (policy)` or `off (default)`.
+- Every Execute claim prints `execute_protocol.summary` (owner, forbidden commands, staging rule, result template), also when the full protocol is unchanged and left out.
+- delegation.md states that a delegate's `successful` means no failure or abandonment signal was seen, not a verified objective.
+- `speckit-scope` alias: `disable-model-invocation: true` and a description naming `speckit-workflow-scope`, so one entry answers "scope issue 42"; the earlier alias content is an accepted legacy hash.
+- A workflow project's copy of the delegate-task skill (`delegate_dispatch.py` installs it) gets `disable-model-invocation: true` and a description naming the dispatcher, so "have another agent do X" never runs the driver outside the ledger; a global copy keeps the portable text.
+- `status`, `doctor` and `reconcile` read `references/utilities.md` (their three sections, moved out of dispatcher-operations.md) instead of the whole skill and its session set.
+
 ## [1.20.0] - 2026-10-27
 
 - Runtime locks (`dispatch.lock`, feature, upgrade, install and decision locks) recover from a killed owner: a lock whose recorded pid has exited on this host is reclaimed by the next command, with no manual cleanup. A live owner still refuses with `WORKFLOW_BUSY`, which now names the owner's pid, host, age and liveness (`alive: yes` or `unknown`) and how to check it. A lock from another host, or one written by an earlier Workflow version (no host recorded), is never taken automatically; delete it once you have checked that its process is gone. A crashed upgrade's `upgrade.lock` still blocks claims on purpose: rerun the upgrade, which reclaims the lock.

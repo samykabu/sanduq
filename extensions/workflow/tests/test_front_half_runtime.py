@@ -372,6 +372,8 @@ class ClaimOutputTests(Base):
         self.assertEqual(claim['reporting']['mode'], 'legacy')  # Progress is not installed in the fixture
         protocol = claim['execute_protocol']
         self.assertEqual((protocol['files'], protocol['printed']), (legacy, True))
+        self.assertIn('a dedicated orchestration agent schedules and integrates', protocol['summary'])
+        self.assertIn('delegate_dispatch.py', protocol['summary'])
         self.assertEqual(claim['reference_text'], w.reference_text(self.root, 'execute', legacy))
         self.assertIn('## Legacy reporter calls (mode legacy only)', claim['reference_text'])
         self.assertEqual(run.load()['execute_protocol']['digest'], protocol['digest'])
@@ -380,7 +382,8 @@ class ClaimOutputTests(Base):
         claim = reclaim()  # unchanged: named, not printed
         self.assertEqual(claim['execute_protocol']['digest'], protocol['digest'])
         self.assertIs(claim['execute_protocol']['printed'], False)
-        self.assertIn('context was reset', claim['execute_protocol']['note'])
+        self.assertIn('follow the summary', claim['execute_protocol']['note'])
+        self.assertEqual(claim['execute_protocol']['summary'], protocol['summary'])  # OMAR-18: printed on every claim
         self.assertEqual(claim['reference_text'], w.reference_text(self.root, 'execute'))
 
         self.assertIs(reclaim(verbose=True)['execute_protocol']['printed'], True)  # --verbose always prints
@@ -780,6 +783,7 @@ class InventoryAndHandoffTests(Base):
         self.assertEqual(code, 0, result)
         self.assertEqual(result['completed'], ['scope'])
         self.assertEqual(result['next_action']['stage'], 'specify')
+        self.assertRegex(result['lean_execution'], r'^(on|off) \((tier default|policy|default)\)$')
 
 
 class RevalidateUpstreamTests(Base):

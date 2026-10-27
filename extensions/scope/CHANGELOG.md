@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+- The five hook commands (`speckit.scope.guard`, `bind`, `after-specify`, `plan-guard`, `reconcile`) are no longer listed under `provides.commands`, so no host registers them as skills; on Codex they competed with `speckit.specify` and `speckit.plan` for prompts such as "plan issue 42" and counted against the skills budget. Their files are now `commands/speckit.scope.<name>.md`, where the event dispatcher finds them by name, and the hooks are unchanged. Refresh parent progress by hand with `scope.py reconcile --apply`. Reinstall to drop the old skills.
+- `scope-analyst` names its callers (`speckit-scope-run` and the workflow Scope stage) instead of answering "scope an issue" itself, so one entry matches "scope issue 42" in a managed project.
+- Lite tier: a first-pass score of 3 or less skips the prerequisite, PR, code and test inspection (step 6) only when every prerequisite is Done; an In review prerequisite is always inspected.
+
 ## [1.11.1] - 2026-10-27
 
 - The bundled `scope-gate` preset (1.6.1) states that inside a claim the claim's `reference_text` wins over the composed upstream text and that upstream hook prompts are skipped. No script change; Workflow 1.20.0 requires this version.

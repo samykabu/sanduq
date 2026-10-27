@@ -60,12 +60,13 @@ agent requests, not shell commands. Claude Desktop does not run extensions.
 | Command | When and example |
 | --- | --- |
 | `$speckit-scope-run` | Analyze: `412 Inspect existing refund behavior and propose the remaining feature boundary.` |
-| `$speckit-scope-guard` | Before Specify: `Validate issue 412's current approved scope and prerequisite status.` |
-| `$speckit-scope-bind` | After Specify: `Bind the refund spec to the explicit issue validated in this Specify invocation.` |
-| `$speckit-scope-reconcile` | After child changes: `Refresh the refund parent from its native children's actual state.` |
 | `$speckit-scope-plan` | After decomposition: `Regenerate and validate the refund dependency plan as an Illustrate diagram.` |
-| `$speckit-scope-after-specify` | Continue clarification: `Dispatch installed Brainstorm, or core Clarify, for the newly bound refund feature.` |
-| `$speckit-scope-plan-guard` | Before Plan: `Verify that unresolved GitHub questions do not block the refund plan.` |
+
+Scope's hook commands run from Spec Kit events and are not host skills (so they never compete with
+`speckit.specify` or `speckit.plan` for a prompt): `$speckit-scope-guard` before Specify,
+`$speckit-scope-bind` and `$speckit-scope-after-specify` after Specify, `$speckit-scope-plan-guard`
+before Plan, `$speckit-scope-reconcile` after Implement. To refresh parent progress by hand run
+`python .specify/extensions/scope/scripts/scope.py reconcile --apply`.
 
 ## Project
 

@@ -67,7 +67,7 @@ runtime script, listed alongside `init`/`continue`/`status`/`doctor`/
   the task's class, the F1/F2 spawn-and-wait rules, the F3
   report-on-state-change rule, the T8 read-summary-first rule, the S6
   forbidden-commands rule (reusing `delegate_dispatch.py`'s own
-  `NO_DISPATCHER_COMMANDS`/`QA_COLLECT_ADDENDUM`), and the T7 ten-line
+  `NO_DISPATCHER_COMMANDS`/`QA_COLLECT_ADDENDUM`), and the T7 eleven-line
   result template. The work type, when `--class` is omitted, is classified
   the same way delegation routing already does (`delegation.task_type`), so
   the brief and the delegated route agree; `--class` never accepts

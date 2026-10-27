@@ -100,7 +100,7 @@
   "reason": "the resume contract goes through status"
  },
  {
-  "file": "extensions/workflow/skills/workflow/references/dispatcher-operations.md",
+  "file": "extensions/workflow/skills/workflow/references/utilities.md",
   "rule": "a skipped check is not a pass",
   "reason": "doctor never hides skipped checks"
  },
@@ -131,7 +131,7 @@
  },
  {
   "file": "extensions/workflow/skills/workflow/references/delegation.md",
-  "rule": "A successful delegate result is candidate evidence, not a passed stage",
+  "rule": "it does not verify the objective. It is candidate evidence, not a passed stage",
   "reason": "delegated output is reviewed before a receipt"
  },
  {

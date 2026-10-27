@@ -18,17 +18,19 @@ credentials and transcripts out of notes.
 
 Read the task dependency graph and the real files before building each batch.
 Record each assignment's stable task IDs, prerequisites, owned paths, shared
-resources, acceptance checks and worker ID in the handoff, and in the report as
+resources, acceptance checks, worker ID and requested model in the handoff (the reported
+model joins it from the result's `Model:` line), and in the report as
 `reporting.md` says (one lane per workstream in projection mode, updated, not duplicated, when it moves to a new worker). Give workers
 only their scope and the context needed to implement it. Workers must not stage,
 commit, push, merge, change shared report files or invoke another executor.
-`git stash` and `git add -A`/`git add .` are forbidden for a task worker, as
-are `delegate_dispatch.py accept`, `delegate_dispatch.py reassign`,
-`delegate_dispatch.py trust-reset` and `delegate_dispatch.py adopt`: a stash
-can hide another agent's uncommitted change, a wildcard add can stage paths
-outside the worker's owned scope, and `accept`/`reassign`/`trust-reset`/`adopt`
-are ledger-trust decisions. They run only in the top-level dispatcher session:
-the guard refuses them in every host subagent, the orchestration agent included.
+`git stash` and `git add -A`/`git add .` are forbidden for a task worker: a stash
+can hide another agent's uncommitted change and a wildcard add can stage paths
+outside the worker's owned scope. A task worker runs no `delegate_dispatch.py`
+command at all; the exact sentence, generated from `NO_DISPATCHER_COMMANDS`, is in
+its brief and in the role files. The guard enforces the four trust verbs
+(`accept`, `reassign`, `trust-reset`, `adopt`): they are ledger-trust decisions
+that run only in the top-level dispatcher session, and the guard refuses them in
+every host subagent, the orchestration agent included.
 The orchestration agent reports "needs accept/adopt for T###" (or reassign) at a
 batch boundary and the dispatcher runs the command. `trust-reset` also needs the
 user's explicit approval in the conversation, quoted in its `--reason`. The one

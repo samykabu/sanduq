@@ -39,8 +39,8 @@ WORKFLOW_SKILL = 'extensions/workflow/skills/workflow/'
 STAGE_EXTRAS = {
     'scope': ['extensions/scope/commands/run.md', 'extensions/scope/skills/scope-analyst/SKILL.ext.md',
               'extensions/scope/references/analysis-contract.md'],
-    'specify': ['presets/scope-gate/commands/specify-gate.md', 'extensions/scope/commands/guard.md',
-                'extensions/scope/commands/bind.md'],
+    'specify': ['presets/scope-gate/commands/specify-gate.md', 'extensions/scope/commands/speckit.scope.guard.md',
+                'extensions/scope/commands/speckit.scope.bind.md'],
     'clarify': ['extensions/scope/skills/github-clarification/SKILL.ext.md'],
     'execute': [WORKFLOW_SKILL + 'references/execution-assign.md', WORKFLOW_SKILL + 'references/execution-report.md',
                 WORKFLOW_SKILL + 'references/reporting.md'],

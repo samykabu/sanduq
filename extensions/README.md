@@ -15,7 +15,7 @@ PR, illustration, Memory, and Progress reporting processes. Use [install by host
 | [pr](pr/README.md) | 4.6.1 | 2 |
 | [progress](progress/README.md) | 1.6.1 | 5 |
 | [project](project/README.md) | 2.6.1 | 2 |
-| [scope](scope/README.md) | 1.11.1 | 7 |
+| [scope](scope/README.md) | 1.11.1 | 2 |
 | [user-manual](user-manual/README.md) | 1.8.2 | 4 |
 | [workflow](workflow/README.md) | 1.20.0 | 13 |
 

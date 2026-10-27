@@ -308,6 +308,10 @@ class DelegationTests(unittest.TestCase):
         self.assertTrue(result['installed'])
         driver = project_skill / 'delegate.mjs'
         self.assertTrue(driver.is_file())
+        skill = (project_skill / 'SKILL.md').read_text(encoding='utf-8')  # OMAR-07: managed copy, not model-invocable
+        self.assertIn('\ndescription: ' + delegation.MANAGED_SKILL_DESCRIPTION + '\n', skill)
+        self.assertIn('\ndisable-model-invocation: true\n---\n', skill)
+        self.assertNotIn('have another agent do X', skill)
         self.assertFalse(delegation.install_skill(self.root, 'codex', 'project')['installed'])
         driver.unlink()
         self.assertEqual(delegation.inspect_skill(self.root, 'codex')['error'], 'DELEGATE_SKILL_BROKEN')
@@ -330,6 +334,8 @@ class DelegationTests(unittest.TestCase):
         installed = delegation.install_skill(self.root, 'claude', 'global')
         self.assertTrue(installed['installed'])
         self.assertTrue((global_root / '.claude/skills/delegate-task/delegate.mjs').is_file())
+        self.assertIn('have another agent do X',  # the global copy keeps the portable description
+                      (global_root / '.claude/skills/delegate-task/SKILL.md').read_text(encoding='utf-8'))
         self.assertEqual(delegation.inspect_skill(self.root, 'claude')['scope'], 'global')
         self.assertFalse((self.root / '.claude/skills/delegate-task').exists())
 
