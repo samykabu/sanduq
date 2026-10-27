@@ -1,6 +1,15 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "PH-03 train of the October 2026 review: Workflow 1.21.0, Scope 1.12.0, Memory 2.6.0, PR 4.7.0, Project 2.7.0, Progress 1.7.0; presets workflow 1.3.3, scope-gate 1.6.2, scope-brainstorm 1.5.1; agent-tools 1.8.0 vendored. Workflow 1.20.1 folded in. Every suite passed on the merged tree locally (workflow 1394, scope 290, memory 207, scripts 209) and 25 of 25 CI checks passed on PR #129 (merged as 9d5d5f9). Release remains gated by successful CI on the exact main commit."
+  "versions": {
+    "illustrate": "2.7.3",
+    "pr": "4.7.1",
+    "memory": "2.6.1",
+    "scope": "1.13.0",
+    "assure": "2.7.0",
+    "workflow": "1.22.0",
+    "project": "2.7.1",
+    "user-manual": "1.8.3"
+  },
+  "status": "implementation-in-progress",
+  "note": "PH-04 train of the October 2026 review (trust boundaries): Workflow 1.22.0, Scope 1.13.0, Assure 2.7.0, Memory 2.6.1, Illustrate 2.7.3, PR 4.7.1, Project 2.7.1 and User Manual 1.8.3 ship the base-graded evidence gate, the nonce and lineage checks for grading commands, the foreign-manifest and inventory checks, trusted spec edits, fenced requirement text and the Python 3.11 floor."
 }
