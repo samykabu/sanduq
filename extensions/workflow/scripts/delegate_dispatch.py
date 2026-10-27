@@ -1905,12 +1905,12 @@ def command_targets_windows_shim(command):
     token = command_target_token(command)
     if not token:
         return False
-    suffix = Path(token).suffix.lower()
+    suffix = PureWindowsPath(token).suffix.lower()  # pure: never builds a WindowsPath off Windows (3.11 refuses it)
     if suffix in WINDOWS_SHIM_EXTENSIONS:
         return True
     if not suffix:
         resolved = shutil.which(token)
-        if resolved and Path(resolved).suffix.lower() in WINDOWS_SHIM_EXTENSIONS:
+        if resolved and PureWindowsPath(resolved).suffix.lower() in WINDOWS_SHIM_EXTENSIONS:
             return True
     return False
 
