@@ -216,6 +216,7 @@ class WorkflowTests(unittest.TestCase):
         registered['workflow'] = {'version': '1.18.0', 'enabled': True}
         registered['scope'] = {'version': '1.10.0', 'enabled': True}
         w.write(self.root / '.specify/extensions/.registry', {'extensions': registered})
+        w.write(self.root / '.specify/workflow/install-lock.json', {'host': 'codex'})  # installed before: not a fresh install
         command = 'python .specify/extensions/workflow/scripts/upgrade.py --version 1.18.0 --apply'
         errors = [e for e in w.doctor(self.root, self.policy, project=True)['errors'] if e.startswith('DEPENDENCY_UNAVAILABLE: scope')]
         self.assertEqual(len(errors), 1)

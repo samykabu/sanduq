@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import sanduq_ci
 import skill_inventory
 import lean_policy
@@ -14,8 +15,8 @@ from sanduq_remote import same_github_repository
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 from wf_core import (RANGES, COMMANDS, LINT_COMMAND, DOCTOR_CACHE, DOCTOR_CACHE_SECONDS, DOCTOR_CACHE_FILES,
-                     WORKFLOW_SCRIPT, WorkflowError, require, read, digest, write, inside, canonical_path)
-from wf_identity import github_repository
+                     WORKFLOW_SCRIPT, WorkflowError, require, read, digest, write, inside, canonical_path, sanduq_fs)
+from wf_identity import github_repository, require_shared_history
 from wf_fingerprints import fingerprint_files
 from wf_policy import stages, project_sync_mode, board_mode_line
 
@@ -33,8 +34,11 @@ def compatible(root, name):
 
 
 def upgrade_command(root):
-    """The dependency-aware fix: upgrade.py at the installed Workflow version installs the versions its lock names."""
+    """The dependency-aware fix: upgrade.py at the installed Workflow version installs the versions its lock names.
+    Before the first `install.py --apply` (no install lock yet) the fix is that install (AHMED-35)."""
     version = registry(root).get('workflow', {}).get('version')
+    if not (root / '.specify/workflow/install-lock.json').is_file():
+        return 'python .specify/extensions/workflow/scripts/install.py --apply', version
     if not version:
         manifest = root / '.specify/extensions/workflow/extension.yml'
         doc = yaml.safe_load(manifest.read_text(encoding='utf-8-sig')) if manifest.is_file() else {}
@@ -304,6 +308,68 @@ def progress_wiring_warnings(root):
             '.specify/extensions/workflow/scripts/install.py --apply"'] if doubled else []
 
 
+def interrupted_install_errors(root):
+    """INSTALL_INTERRUPTED when an install, upgrade or host switch left its in-progress marker and its process is gone
+    (AHMED-09); the marker names the backup `install.py --restore` puts back."""
+    from install import IN_PROGRESS  # lazy: install imports this module
+    marker = read(root / IN_PROGRESS, None) if (root / IN_PROGRESS).is_file() else None
+    if not isinstance(marker, dict) or sanduq_fs.process_alive(marker.get('pid')):
+        return []
+    return ['INSTALL_INTERRUPTED: the ' + str(marker.get('kind')) + ' started ' + str(marker.get('started_at')) +
+            ' (pid ' + str(marker.get('pid')) + ') did not finish; managed files may be half-written; run "python '
+            '.specify/extensions/workflow/scripts/install.py --restore ' + str(marker.get('backup')) + '"']
+
+
+def history_errors(root):
+    """HISTORY_UNRELATED as a doctor --project error (AHMED-24)."""
+    try:
+        require_shared_history(root)
+    except WorkflowError as exc:
+        return [str(exc)]
+    return []
+
+
+HOOK_PYTHON_PROBE = 'import sys;print(sys.version_info[0],sys.version_info[1])'
+
+
+def hook_python_warnings(root):
+    """HOOK_PYTHON_MISSING / HOOK_PYTHON_TOO_OLD for the interpreter the active host's guard hook names (AHMED-21):
+    the guard allows everything when it cannot run, and Progress and Memory hooks need Python 3.11."""
+    import hosts
+    path = root / hosts.HOOK_FILES.get(active_host(root), '')
+    try:
+        document = json.loads(path.read_text(encoding='utf-8-sig')) if path.is_file() else {}
+    except ValueError:
+        return []  # HOOK_SETTINGS_INVALID is the installer's call
+    hooks = document.get('hooks') if isinstance(document, dict) else None
+    commands = [handler.get('command') for groups in (hooks or {}).values() if isinstance(groups, list)
+                for group in groups if isinstance(group, dict)
+                for handler in (group.get('hooks') or []) if hosts.is_guard(handler)]
+    if not commands:
+        return []
+    name = str(commands[0]).split(None, 1)[0]
+    where = path.relative_to(root).as_posix()
+    needed = (3, 11) if {'progress', 'memory'} & set(registry(root)) else (3, 10)
+    executable = shutil.which(name)
+    if not executable:
+        return ['HOOK_PYTHON_MISSING: ' + where + ' runs hooks with "' + name + '", which is not on PATH, so the guard '
+                'hook allows everything; install it or re-render the hooks for this machine with "python '
+                '.specify/extensions/workflow/scripts/install.py --apply"']
+    try:
+        probe = sanduq_fs.run_bounded([executable, '-c', HOOK_PYTHON_PROBE], timeout=15, error_code='HOOK_PYTHON_MISSING',
+                                      next_step='check "' + name + ' --version"', error=WorkflowError,
+                                      capture_output=True, text=True)
+        version = tuple(int(part) for part in probe.stdout.split())
+    except (WorkflowError, OSError, ValueError) as exc:
+        return ['HOOK_PYTHON_MISSING: ' + where + ' runs hooks with "' + name + '", which cannot report its version ('
+                + str(exc) + '), so the guard hook allows everything']
+    if version < needed:
+        return ['HOOK_PYTHON_TOO_OLD: ' + where + ' runs hooks with "' + name + '" (Python ' + '.'.join(map(str, version))
+                + '); the installed hooks need ' + '.'.join(map(str, needed)) + ' or later; install it first on PATH, '
+                'then run "python .specify/extensions/workflow/scripts/install.py --apply"']
+    return []
+
+
 def guard_approval_warnings(root):
     """On Codex the guard hook runs only in a trusted project after `/hooks` approval; warn where it would not run.
     A warning, not an error: the worker prohibitions stay in the Execute text either way."""
@@ -398,10 +464,11 @@ def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True
             errors.append('PRESET_REQUIRED: ' + preset)
         if preset_registry.get(preset, {}).get('enabled') is not True:
             errors.append('PRESET_NOT_ENABLED: ' + preset)
-    errors += ci_errors(root, policy, preserved_ci)
-    if project: errors += project_errors(root, policy)
+    errors += ci_errors(root, policy, preserved_ci) + interrupted_install_errors(root)
+    if project: errors += project_errors(root, policy) + history_errors(root)
     warnings = (host_warnings(root) + guard_approval_warnings(root) + progress_wiring_warnings(root)
                 + inert_value_warnings(policy))
+    if explicit: warnings += hook_python_warnings(root)  # one subprocess; no claim pays for it
     # E9: AGENTS.md is the standing file; CLAUDE.md should import it, not repeat it.
     claude_md = root / 'CLAUDE.md'
     if (root / 'AGENTS.md').is_file() and claude_md.is_file() and \

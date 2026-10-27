@@ -104,6 +104,21 @@ class Init:
         self.args = args
         self.restore_failed = False
 
+    def linked_projects(self, owner):
+        """The boards linked to the current repository that `owner` owns; [] when gh cannot tell."""
+        rc, out = gh('repo', 'view', '--json', 'owner,name')
+        try:
+            repo = json.loads(out) if not rc else {}
+            query = ('{repository(owner:%s,name:%s){projectsV2(first:50){nodes{number title owner{'
+                     '... on User{login} ... on Organization{login}}}}}}'
+                     % (json.dumps(repo['owner']['login']), json.dumps(repo['name'])))
+            rc, out = graphql(query)
+            nodes = json.loads(out)['data']['repository']['projectsV2']['nodes'] if not rc else []
+        except (KeyError, TypeError, ValueError):
+            return []
+        return [node for node in nodes if isinstance(node, dict)
+                and str((node.get('owner') or {}).get('login', '')).lower() == owner.lower()]
+
     def read_items(self, project_id):
         """[(id, archived, status)] of every item with a Status, archived ones too; (None, error) when unreadable."""
         saved, cursor = [], None
@@ -212,6 +227,11 @@ class Init:
                               'options': ['user', 'org']})
             owner_type = 'org' if kind.strip() == 'Organization' else 'user'
         number = args.number
+        if not number or number <= 0:
+            linked = self.linked_projects(owner)
+            if len(linked) == 1:  # the one board linked to this repository wins over the owner's whole list
+                number = linked[0]['number']
+                info('board linked to the repository: #%s %s' % (number, linked[0].get('title', '')))
         if not number or number <= 0:
             listed = json.loads(gh_ok('could not list projects for ' + owner, 'project', 'list', '--owner', owner,
                                       '--format', 'json') or '{}').get('projects') or []

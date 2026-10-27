@@ -338,8 +338,29 @@ def issue_identity(root, issue, gh=None):
             'feature': 'specs/' + name, 'branch': name}
 
 
+def require_shared_history(root):
+    """HISTORY_UNRELATED when origin/HEAD exists locally and shares no commit with HEAD (AHMED-24): an orphan or
+    recreated history is self-consistent to the identity checks but can never merge. No fetch; local refs only."""
+    if not git_ok(root, 'rev-parse', '--verify', '--quiet', 'refs/remotes/origin/HEAD'):
+        return
+    require(git_ok(root, 'merge-base', 'HEAD', 'origin/HEAD'),
+            'HISTORY_UNRELATED: HEAD shares no commit with origin/HEAD, so this branch can never merge into the '
+            'default branch; start the feature from a branch of that history (git switch -c <branch> origin/HEAD)')
+
+
+def feature_for_issue(root, issue):
+    """The one feature (specs/<slug>) whose checkpoint is bound to issue number `issue`."""
+    require(re.fullmatch(r'[1-9]\d*', str(issue)), 'ISSUE_NUMBER_REQUIRED')
+    matches = [path.parent.parent.relative_to(root).as_posix() for path in sorted((root / 'specs').glob('*/workflow/checkpoint.json'))
+               if str(read(path, {}).get('issue', '')).endswith('#' + str(issue))]
+    require(matches, 'ISSUE_NOT_BOUND: no feature checkpoint is bound to issue #' + str(issue))
+    require(len(matches) == 1, 'ISSUE_HAS_MULTIPLE_WORKFLOW_FEATURES: ' + ', '.join(matches))
+    return matches[0]
+
+
 def prepare_issue(root, issue, gh=None):
     """Reserve issue-derived identity and create a branch only without a Git hook."""
+    require_shared_history(root)
     identity = issue_identity(root, issue, gh)
     matches = [read(path, {}) for path in (root / 'specs').glob('*/workflow/checkpoint.json')
                if read(path, {}).get('issue') == identity['issue']]

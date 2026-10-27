@@ -78,7 +78,8 @@ def coding_tasks(text):
 
 
 def concrete_text(value):
-    return isinstance(value, str) and len(value.strip()) >= 12 and len(value.split()) >= 3
+    # A present, non-blank string. The 12-character/3-word bar measured nothing (AHMED-28) and was dropped.
+    return isinstance(value, str) and bool(value.strip())
 
 
 def admit(policy, attempts, identity, work_type, deliverable, correction_plan=None, diagnosis=None, tier=None):
