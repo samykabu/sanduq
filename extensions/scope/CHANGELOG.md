@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Local clarification transport (REQ-21): when the bound feature's workflow checkpoint says `clarification_transport: local`, `clarification.py inspect` and `publish` refuse with `CLARIFICATION_TRANSPORT_LOCAL` naming `specs/<feature>/clarifications.md`, and `plan-gate` passes on a passed Clarify receipt instead of a Ready board status (`CLARIFICATION_REQUIRED` otherwise). The github-clarification skill's new `references/local.md` tells the agent to ask in the conversation and record the user's replies in that file; the `clarify-github` and `brainstorm-github` overlays say so. GitHub-mode features are unchanged.
+- `publish` on a published child whose body changed, re-scoped as a single leaf at its receipt's score, carries the parent's retained approval forward as a revision (`carried_forward`, `revision_of` the parent approval) and writes it as the child's baseline, instead of stopping with `APPROVAL_REQUIRED` for a "keep this child whole" decision the owner already made. Any other revision without a baseline still needs approval.
 
 ## [1.11.1] - 2026-10-27
 

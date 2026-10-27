@@ -497,6 +497,31 @@ class ScopeTests(unittest.TestCase):
             self.app.publish(snap, analysis, True)
         self.assertEqual(self.gh.writes, [])
 
+    def test_child_kept_whole_after_its_body_changed_carries_the_parent_approval(self):
+        """A published child whose body changed is re-scoped as one leaf at the same score: the
+        parent's retained approval is its baseline, so no owner re-approval of "keep it whole"."""
+        snap, analysis = self.analysis(True)
+        self.publish_approved(snap, analysis)
+        parent_sha = m.metadata(self.gh.issues[1]['body'])['approval']['analysis_sha256']
+        self.gh.issues[2]['body'] += '\n\nHandoff note added by the owner.'
+        child = self.app.inspect('2')
+        leaf = dict(node('first'), specify_prompt=m.metadata(self.gh.issues[2]['body'])['prompt'])
+        revision = dict(analysis, issue=2, fingerprint=child['fingerprint'], tree=leaf)
+        # A different score (or a split) is a new decision and still needs the owner.
+        bigger = dict(revision, tree=dict(leaf, **node('first', 8)))
+        with self.assertRaisesRegex(m.ScopeError, 'APPROVAL_REQUIRED'):
+            self.app.publish(child, bigger, True)
+        self.assertFalse(self.app.baseline_path(2).exists())
+        self.assertFalse(self.app.publish(child, revision)['approval_required'])
+        result = self.app.publish(child, revision, True)['revision']
+        self.assertEqual((result['carried_forward'], result['approved_by'], result['revision_of']), (True, 'test owner', parent_sha))
+        self.assertIn('source issue content changed since approval', result['difference']['summary'])
+        receipt = m.metadata(self.gh.issues[2]['body'])['approval']
+        self.assertEqual((receipt['carried_forward'], receipt['revision_of']), (True, parent_sha))
+        self.assertEqual(self.app.gate('2')['score'], 3)
+        # The carried approval is now the child's own baseline, so a later revision diffs against this leaf.
+        self.assertEqual(m.read_json(self.app.baseline_path(2))['approval']['revision_of'], parent_sha)
+
     def test_nested_aggregate_counts_toward_user_selected_total(self):
         snap, analysis = self.analysis(True)
         analysis['tree']['children'][0]['children'] = [node('nested-first'), node('nested-second')]
