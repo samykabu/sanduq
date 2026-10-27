@@ -1,7 +1,7 @@
 # Front-half benchmark
 
-Reproducible before/after cost of the managed workflow for one small feature (stream S0 of
-`docs/internal/rebuild-front-half-plan.md`).
+Reproducible before/after cost of the managed workflow for one small feature (the Workflow 1.13.0
+front-half rebuild).
 
 ## Method
 
@@ -60,12 +60,12 @@ full. On a runtime without profiles the flag is ignored and `meta.tier_note` say
 ## Reproduce
 
 ```text
-python extensions/scripts/benchmark_front_half.py --repo ../sanduq-baseline --out docs/internal/benchmarks/before-full.json
-python extensions/scripts/benchmark_front_half.py --repo ../sanduq-baseline --tier lite --out docs/internal/benchmarks/before-lite.json
-python extensions/scripts/benchmark_front_half.py --repo . --out docs/internal/benchmarks/after-full.json
-python extensions/scripts/benchmark_front_half.py --repo . --tier lite --out docs/internal/benchmarks/after-lite.json
-python extensions/scripts/benchmark_compare.py --before docs/internal/benchmarks/before-full.json --after docs/internal/benchmarks/after-full.json --md docs/internal/benchmarks/compare-full.md
-python extensions/scripts/benchmark_compare.py --before docs/internal/benchmarks/before-lite.json --after docs/internal/benchmarks/after-lite.json --md docs/internal/benchmarks/compare-lite.md
+python extensions/scripts/benchmark_front_half.py --repo ../sanduq-baseline --out docs/evidence/benchmarks/before-full.json
+python extensions/scripts/benchmark_front_half.py --repo ../sanduq-baseline --tier lite --out docs/evidence/benchmarks/before-lite.json
+python extensions/scripts/benchmark_front_half.py --repo . --out docs/evidence/benchmarks/after-full.json
+python extensions/scripts/benchmark_front_half.py --repo . --tier lite --out docs/evidence/benchmarks/after-lite.json
+python extensions/scripts/benchmark_compare.py --before docs/evidence/benchmarks/before-full.json --after docs/evidence/benchmarks/after-full.json --md docs/evidence/benchmarks/compare-full.md
+python extensions/scripts/benchmark_compare.py --before docs/evidence/benchmarks/before-lite.json --after docs/evidence/benchmarks/after-lite.json --md docs/evidence/benchmarks/compare-lite.md
 ```
 
 `../sanduq-baseline` is the read-only worktree of `main` at 105508f. Each run takes a few minutes with
@@ -74,14 +74,13 @@ python extensions/scripts/benchmark_compare.py --before docs/internal/benchmarks
 ## Instruction benchmark (round 2)
 
 `extensions/scripts/benchmark_instructions.py` measures the static instruction load of `assure`,
-`user-manual`, `pr`, `project`, `illustrate`, `memory` and `progress` (stream B0 of
-`docs/internal/round-2-plan.md`). No model is called; it reads each `extensions/<id>/extension.yml`
+`user-manual`, `pr`, `project`, `illustrate`, `memory` and `progress` (optimization round 2). No model is called; it reads each `extensions/<id>/extension.yml`
 and the files it points at. `instructions-before.json` and `instructions-before.md` are the BEFORE
 numbers on `feat/round-2` at its base commit 6bff750.
 
 ```text
-python extensions/scripts/benchmark_instructions.py --repo . --out docs/internal/benchmarks/instructions-before.json --md docs/internal/benchmarks/instructions-before.md
-python extensions/scripts/benchmark_instructions.py --repo . --out docs/internal/benchmarks/instructions-after.json --md docs/internal/benchmarks/instructions-after.md --compare docs/internal/benchmarks/instructions-before.json
+python extensions/scripts/benchmark_instructions.py --repo . --out docs/evidence/benchmarks/instructions-before.json --md docs/evidence/benchmarks/instructions-before.md
+python extensions/scripts/benchmark_instructions.py --repo . --out docs/evidence/benchmarks/instructions-after.json --md docs/evidence/benchmarks/instructions-after.md --compare docs/evidence/benchmarks/instructions-before.json
 ```
 
 `--extensions a,b` narrows the set. `--compare` prints a delta table over every numeric total, every
@@ -168,5 +167,5 @@ rules on the read-only baseline worktree `sanduq-round3-base` at 7ad9135; compar
 against `round-3-before-instructions.*`, which used the old count.
 
 ```text
-python extensions/scripts/benchmark_instructions.py --repo D:\Projects\Personal\sanduq-round3-base --extensions workflow,scope,assure,user-manual,pr,project,illustrate,memory,progress --out docs/internal/benchmarks/round-3-before-v2-instructions.json --md docs/internal/benchmarks/round-3-before-v2-instructions.md
+python extensions/scripts/benchmark_instructions.py --repo D:\Projects\Personal\sanduq-round3-base --extensions workflow,scope,assure,user-manual,pr,project,illustrate,memory,progress --out docs/evidence/benchmarks/round-3-before-v2-instructions.json --md docs/evidence/benchmarks/round-3-before-v2-instructions.md
 ```

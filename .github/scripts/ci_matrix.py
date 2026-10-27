@@ -98,7 +98,7 @@ LINT_ONLY_PREFIXES = ("extensions/scripts/tests/",)
 # What installation, upgrade, project-init and dryrun exercise (plus every extensions/<id>/extension.yml).
 # Illustrate's hook is wired into the installed hooks.
 INSTALL_PREFIXES = ("extensions/workflow/", "extensions/project/", "extensions/scripts/package.",
-                    "extensions/scripts/smoke_", "extensions/scripts/shared/", "presets/", "prototypes/",
+                    "extensions/scripts/smoke_", "extensions/scripts/shared/", "presets/",
                     "vendor.lock.json", ".github/workflows/ci.yml", ".github/scripts/",
                     "extensions/illustrate/hooks/")
 # shortcut: any vendor.lock.json change counts as an Illustrate vendor bump, even one to another input;

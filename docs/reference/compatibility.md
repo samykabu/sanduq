@@ -28,8 +28,8 @@ Workflow 1.20.0 and Scope 1.11.1 (PH-02): every suite passed on Windows with Spe
 | Any extension installed alone, without Workflow | Untested | Untested | Unsupported | None |
 | Portable skills (from sanduq-skills) | Untested | Untested | Untested | None |
 
-Evidence records, in this repository: round 4 in `docs/internal/round-4-live-run.md` and round 5 in
-`docs/internal/round-5-live-run.md`. Both ran in a private sandbox repository on the maintainer's
+Evidence records, in this repository: [round 4](../evidence/round-4-live-run.md) and
+[round 5](../evidence/round-5-live-run.md). Both ran in a private sandbox repository on the maintainer's
 Windows machine. Codex has no end-to-end live run yet, so every Codex cell beyond installation is
 untested.
 

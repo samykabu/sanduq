@@ -222,14 +222,10 @@ Do not infer consumer runner policy from this repository's CI.
 
 ## Maintainer records
 
-Design plans, audits, pilot reviews and recorded evidence live in [`docs/internal/`](docs/internal/).
-They explain earlier decisions; their version statements describe the recorded experiment, not the
-current release. User-facing pages do not link to them; `check_docs.py` enforces this.
-
-- [Documentation overhaul plan](docs/internal/documentation-overhaul-plan.md) and [documentation review](docs/internal/documentation-review.md)
-- [Source ownership](docs/internal/workflow-source-ownership.md) and [compatibility evidence](docs/internal/workflow-compatibility.md)
-- [Delivery implementation plan](docs/internal/sanduq-delivery-implementation-plan.md) and [verification](docs/internal/sanduq-delivery-verification.md)
-- [Workflow implementation plan](docs/internal/workflow-extension-implementation-plan.md), [acceptance audit](docs/internal/workflow-acceptance-audit.md), [progress record](docs/internal/workflow-implementation-progress.md) and [fresh-session prompt](docs/internal/workflow-resume-prompt.md)
-- [Workflow pilot review](docs/internal/workflow-pilot-review.md) and [orchestration task design](docs/internal/orchestration-tasks.md)
-- [Native prototype results](docs/internal/native-workflow-prototype-results.md) and [illustration](docs/internal/sanduq-native-workflow-prototype.html)
-- Recorded evidence: `docs/internal/evidence/`, `docs/internal/workflow-evidence/`, `docs/internal/assets/workflow-plan/`
+Recorded evidence that user pages cite lives in `docs/evidence/`: the round 4 and round 5 live runs
+behind the [compatibility matrix](docs/reference/compatibility.md) and the
+[benchmarks](docs/evidence/benchmarks/README.md) behind the measured numbers in the changelogs and
+upgrade notes. Their version statements describe the recorded run, not the current release.
+[Source ownership](docs/internal/workflow-source-ownership.md) stays in `docs/internal/`; user-facing
+pages do not link to it, and `check_docs.py` enforces this. Earlier design plans, reviews and
+implementation notes were removed once the work shipped; they remain in git history.

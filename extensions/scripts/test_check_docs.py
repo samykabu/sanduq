@@ -34,7 +34,7 @@ guide = check_docs.DOCS / 'style-guide.md'
 original = read_text(guide, encoding='utf-8')
 # A banned word in prose fails, and a user page must not link into docs/internal.
 fails_with(guide, original + '\nYou simply run it.\n', 'banned term "simply"')
-fails_with(guide, original + '\n[record](internal/workflow-pilot-review.md)\n', 'links to docs/internal')
+fails_with(guide, original + '\n[record](internal/workflow-source-ownership.md)\n', 'links to docs/internal')
 hooks = read_text(check_docs.HOOKS_PAGE, encoding='utf-8')
 fails_with(check_docs.HOOKS_PAGE, hooks.replace('| mandatory |', '| optional |', 1), 'hooks.md is stale')
 errors_page = read_text(check_docs.ERRORS_PAGE, encoding='utf-8')
