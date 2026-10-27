@@ -1,9 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "workflow": "1.20.0",
-    "scope": "1.11.1"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "PH-02 of the October 2026 review (high-severity fixes). Workflow 1.20.0 and Scope 1.11.1 with presets workflow 1.3.2 and scope-gate 1.6.1: dead-owner lock and claim recovery, bounded subprocesses, clean delegated environment, confirmed fallback, lean attempt cap, receipt placeholders, effort-score check, policy key validation, no-spawn worker briefs, end-to-end lifecycle test, CI dependents and Windows-aware release gate. Every suite passed locally on Windows and 34 of 34 CI checks passed on PR #124 (merged as e5642b4). Release remains gated by successful CI on the exact main commit."
 }
