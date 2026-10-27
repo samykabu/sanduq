@@ -452,9 +452,20 @@ def task_brief(root, feature, task_id, work_type=None):
     return text + QA_COLLECT_ADDENDUM if work_type == 'qa_collect' else text
 
 
+def delegate_dir(root):
+    """`.delegate/` with a nested `.gitignore` (`*`): briefs and raw run logs stay out of git even in a copy of the
+    tree whose info/exclude was not carried over (SEC-17)."""
+    directory = root / '.delegate'
+    directory.mkdir(exist_ok=True)
+    ignore = directory / '.gitignore'
+    if not ignore.exists():
+        ignore.write_text('*\n', encoding='utf-8')
+    return directory
+
+
 def brief_file(root, text):
-    directory = root / '.delegate/briefs'
-    directory.mkdir(parents=True, exist_ok=True)
+    directory = delegate_dir(root) / 'briefs'
+    directory.mkdir(exist_ok=True)
     path = directory / (uuid.uuid4().hex + '.txt')
     path.write_text(text, encoding='utf-8')
     return path
@@ -1793,7 +1804,9 @@ def kill_process_tree(proc):
     caller is about to read.
     """
     if os.name == 'nt':
-        subprocess.run(['taskkill', '/T', '/F', '/PID', str(proc.pid)], capture_output=True)
+        # Windows resolves a bare name in the current directory first; the absolute path cannot be shadowed (SEC-15).
+        taskkill = os.path.join(os.environ.get('SystemRoot', r'C:\Windows'), 'System32', 'taskkill.exe')
+        subprocess.run([taskkill, '/T', '/F', '/PID', str(proc.pid)], capture_output=True)
         return
     import signal
     try:

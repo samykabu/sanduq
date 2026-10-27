@@ -35,7 +35,10 @@ class Base(unittest.TestCase):
         fake = Fake(*results)
         run = mock.patch.object(gh.subprocess, 'run', fake)
         sleep = mock.patch.object(gh.time, 'sleep')
+        path = mock.patch.object(gh, 'GH', 'gh')  # the argv assertions name the bare tool
         run.start()
+        path.start()
+        self.addCleanup(path.stop)
         self.sleep = sleep.start()
         self.addCleanup(run.stop)
         self.addCleanup(sleep.stop)
@@ -222,6 +225,27 @@ class Retry(Base):
         self.assertFalse(gh.safe_read(['api', 'graphql']))
         self.assertFalse(gh.safe_read(['api', 'graphql', '-X', 'GET', '-f', 'query={x}']))
         self.assertFalse(gh.safe_read([]))
+
+
+class ToolPath(unittest.TestCase):
+    def test_windows_search_reads_path_only_so_a_tool_in_the_current_directory_cannot_win(self):
+        """SEC-15: a gh.exe committed in a cloned repository must not shadow the installed one."""
+        import os
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            cwd, on_path = Path(folder, 'repo'), Path(folder, 'bin')
+            cwd.mkdir(), on_path.mkdir()
+            (cwd / 'gh.exe').write_bytes(b'')
+            (on_path / 'gh.cmd').write_bytes(b'')
+            env = {'PATH': str(on_path), 'PATHEXT': '.EXE;.CMD'}
+            with mock.patch.object(gh.os, 'name', 'nt'), mock.patch.dict(gh.os.environ, env, clear=True):
+                old = os.getcwd()
+                os.chdir(cwd)
+                try:
+                    self.assertEqual(gh.tool_path('gh'), str(on_path / 'gh.cmd'))
+                    self.assertEqual(gh.tool_path('missing'), 'missing')
+                finally:
+                    os.chdir(old)
 
 
 if __name__ == '__main__':

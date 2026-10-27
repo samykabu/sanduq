@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """PreToolUse guard for Claude Code and Codex: refuse commands that hide or take over others' work.
 
-- `git add -A`, `git add .` and `git stash` are refused in every session unless env
-  SANDUQ_ROLE=coordinator (the coordinator stages owned paths by name anyway).
+- `git add -A|-u|.`, `git commit -a` and `git stash` are refused in every session unless env
+  SANDUQ_ROLE=coordinator is set where the host was launched (it then applies to every subagent;
+  the refusal does not name it). The guard is advisory: it sees only the host's shell tools
+  (matcher `Bash|PowerShell|shell`), so a script, an alias or another tool bypasses it.
 - `delegate_dispatch.py trust-reset|accept|reassign|adopt` are refused only in a worker context:
   env SANDUQ_DELEGATED_RUN set, env SANDUQ_ROLE=worker, or a payload carrying `agent_id` or
   `agent_type` (both hosts add these in subagent sessions). The top-level session runs them.
@@ -32,6 +34,7 @@ import sys
 DISPATCHER_ONLY = {'trust-reset', 'accept', 'reassign', 'adopt'}
 # Read-only stash subcommands hide nothing.
 STASH_READ_ONLY = {'list', 'show'}
+BY_NAME = 'stage your owned paths by name (git add -- <path>...)'
 SEPARATORS = re.compile(r'&&|\|\||[;|&\n]')
 
 
@@ -106,6 +109,11 @@ def words(segment):
         return segment.split()
 
 
+def short_flag(args, letters, *longs):
+    """True when one of ``longs`` is present or a short option cluster (``-am``) carries one of ``letters``."""
+    return any(a in longs or re.fullmatch('-[A-Za-z]*[' + letters + '][A-Za-z]*', a) for a in args)
+
+
 def git_args(tokens):
     """The arguments after `git` and its global options, or None when this is not git."""
     while tokens and re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*=.*', tokens[0]):
@@ -126,8 +134,10 @@ def findings(command, root='.'):
         found += pr_findings(tokens, root)
         args = git_args(tokens)
         if args:
-            if args[0] == 'add' and any(a in ('-A', '--all', '.', './') for a in args[1:]):
-                found.append(('git', "git add -A / git add . stages other agents' changes; stage your owned paths by name"))
+            if args[0] == 'add' and (short_flag(args[1:], 'Au', '--all', '--update') or any(a in ('.', './') for a in args[1:])):
+                found.append(('git', "git add -A / -u / . stages other agents' changes; " + BY_NAME))
+            if args[0] == 'commit' and short_flag(args[1:], 'a', '--all'):
+                found.append(('git', "git commit -a commits other agents' changes; " + BY_NAME + ' and commit without -a'))
             if args[0] == 'stash' and (len(args) == 1 or args[1] not in STASH_READ_ONLY):
                 found.append(('git', "git stash hides other agents' changes; commit or report instead"))
         for index, token in enumerate(tokens):
@@ -158,7 +168,7 @@ def main(stdin=sys.stdin, environ=os.environ):
     root = environ.get('CLAUDE_PROJECT_DIR') or (payload.get('cwd') if isinstance(payload.get('cwd'), str) else None) or '.'
     for kind, text in findings(command_text(payload), root):
         if kind == 'git' and environ.get('SANDUQ_ROLE') != 'coordinator':
-            sys.stderr.write('Sanduq guard: ' + text + ' (SANDUQ_ROLE=coordinator allows it).\n')
+            sys.stderr.write('Sanduq guard: ' + text + '.\n')
             return 2
         if kind == 'fallback' and (worker_context(payload, environ) or environ.get('SANDUQ_DELEGATED_ROLE')):
             sys.stderr.write('Sanduq guard: ' + text + '.\n')

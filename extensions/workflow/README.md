@@ -132,16 +132,23 @@ Worked examples for every command are in the
 
 ## Guard hook
 
-The installer registers `hooks/guard.py` as a PreToolUse hook for Claude Code and Codex (Codex runs
-it after you approve it in `/hooks`). It refuses, with a one-line reason:
+The installer registers `hooks/guard.py` as a PreToolUse hook on the shell tools (`Bash`,
+`PowerShell` and Codex's shell tool) for Claude Code and Codex (Codex runs it after you approve it in
+`/hooks`). It refuses, with a one-line reason:
 
-- `git add -A`, `git add .` and `git stash` unless `SANDUQ_ROLE=coordinator`;
+- `git add -A`, `git add -u`, `git add .`, `git commit -a` and `git stash`; the refusal says to stage
+  owned paths by name. `SANDUQ_ROLE=coordinator`, set in the environment that launches the host,
+  turns these git rules off for the whole session, including every subagent;
 - `delegate_dispatch.py trust-reset|accept|reassign|adopt` in a worker or subagent context;
 - in a managed project (`.specify/workflow.yml` present), `gh pr create|edit --body-file <f>` when the
   sibling `<f without extension>.lint.json` that `pr_publish.py` writes is missing or its
   `body_sha256` is not the hash of `<f>`;
 - `gh pr create` when its head (`--head`, else the current branch) is the repository default branch
   (`origin/HEAD`). A branch the guard cannot resolve allows the call.
+
+The guard is advisory: it sees only commands sent through the host's shell tools, so a script, an
+alias or another tool bypasses it, and a hook error allows the call. It is a hygiene control, not a
+security boundary; see [SECURITY.md](https://github.com/samykabu/sanduq/blob/main/SECURITY.md).
 
 ## Progress reporting
 
@@ -219,7 +226,10 @@ disabled, the legacy reporter runs as before.
 - Feature state is in `specs/<feature>/workflow/`. This includes the checkpoint, the receipts and,
   when delegation is on, the `delegations.json` ledger. From 1.12.0 it also holds `lifecycle.jsonl`,
   the event log of claims, completions, recoveries and invalidations.
-- Install locks, backups and runtime locks are under `.specify/workflow/`.
+- Install locks, backups and runtime locks are under `.specify/workflow/`. Each apply's `before.zip`
+  holds the exact bytes of every file the installer may change, including `.claude/settings.json`,
+  `.codex/config.toml` and `.codex/hooks.json`, which can carry MCP server keys. Backups are excluded
+  from git in that clone only; they travel with any copy or archive of the project folder.
 
 Commit the feature state with the feature. Do not edit checkpoints by hand. Use `recover`,
 `migrate`, `amend`, `sync-amend`, `revalidate` and `relocate` instead. Details are in

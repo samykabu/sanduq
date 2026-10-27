@@ -15,10 +15,14 @@ from pathlib import Path
 
 try:
     import sanduq_fs
+    import sanduq_gh
 except ModuleNotFoundError:  # the source tree; package.py copies it into scripts/
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'shared'))
     import sanduq_fs
+    import sanduq_gh
+
+GIT = sanduq_gh.tool_path('git')  # PATH only: a git.exe in the consumer checkout must not win (SEC-15)
 
 
 SCHEMA = 1  # the policy schema
@@ -331,7 +335,7 @@ GIT_READS = ('rev-parse', 'branch', 'ls-files', 'config', 'rev-list', 'merge-bas
 
 def run_git(root, *args, **options):
     """This package's one git runner (W26): unchecked, the caller reads the result."""
-    result = subprocess.run(['git', *args], cwd=root, capture_output=True, **options)
+    result = subprocess.run([GIT, *args], cwd=root, capture_output=True, **options)
     if args and args[0] not in GIT_READS and args[:2] != ('worktree', 'list'):
         _wrote(None)  # anything else may move HEAD, the index or the configuration
     elif args[:1] == ('config',) and '--get' not in args and len(args) > 2:

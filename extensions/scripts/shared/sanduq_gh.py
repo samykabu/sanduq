@@ -12,12 +12,31 @@ is tried once more after 2 s when it failed with an HTTP 5xx or timed out. Anyth
 import json
 import os
 import re
+import shutil
 import subprocess
 import time
 from pathlib import Path
 
 GH_MISSING = 127
 RETRY_DELAY = 2
+
+
+def tool_path(name):
+    """The absolute path of `name` on PATH, else `name`. Windows (CreateProcess and `shutil.which`) looks in the
+    current directory before PATH, so a `gh.exe` committed in a cloned repository would run instead of the real tool
+    (SEC-15); this search reads PATH only."""
+    if os.name != 'nt':
+        return shutil.which(name) or name
+    extensions = [e.lower() for e in os.environ.get('PATHEXT', '.EXE;.CMD;.BAT').split(os.pathsep) if e]
+    for folder in os.environ.get('PATH', '').split(os.pathsep):
+        for extension in extensions:
+            candidate = os.path.join(folder, name + extension)
+            if folder and os.path.isfile(candidate):
+                return candidate
+    return name
+
+
+GH = tool_path('gh')
 # `gh api` flags that take a value, so the next argument is not the endpoint.
 _VALUED = {'-X', '--method', '-f', '--raw-field', '-F', '--field', '-H', '--header', '--input', '-q', '--jq',
            '-t', '--template', '--hostname', '--cache', '-p', '--preview'}
@@ -123,7 +142,7 @@ def _run_once(args, payload, timeout, binary, cwd):
     name = 'gh ' + ' '.join(str(a) for a in args[:3])
     text = {} if binary else {'text': True, 'encoding': 'utf-8'}
     try:
-        done = subprocess.run(['gh', *args], input=data, capture_output=True, timeout=timeout, cwd=cwd, **text)
+        done = subprocess.run([GH, *args], input=data, capture_output=True, timeout=timeout, cwd=cwd, **text)
     except FileNotFoundError:
         raise GhError('gh CLI not installed', returncode=GH_MISSING, stderr='gh CLI not installed') from None
     except subprocess.TimeoutExpired:

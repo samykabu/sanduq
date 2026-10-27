@@ -114,7 +114,7 @@ class HostFilesTests(HostTests):
             groups = data['hooks']['PreToolUse']
             guards = [h for g in groups for h in g['hooks'] if hosts.GUARD_MARK in h['command']]
             self.assertEqual(len(guards), 1, path)
-            self.assertEqual([g['matcher'] for g in groups if g['hooks'][0] in guards], ['Bash'])
+            self.assertEqual([g['matcher'] for g in groups if g['hooks'][0] in guards], ['Bash|PowerShell|shell'])
         claude = json.loads(settings.read_text(encoding='utf-8'))
         self.assertEqual(claude['permissions'], {'allow': ['Bash(ls)']})
         self.assertIn(OTHER_HOOK, claude['hooks']['PreToolUse'])

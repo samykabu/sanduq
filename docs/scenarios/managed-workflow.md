@@ -183,3 +183,9 @@ already have one. Spec Kit itself does not enforce `requires.extensions`.
 - Installing a package does not [enable](../reference/glossary.md#enabled) its process. Init does.
 - Context protection relies on the host's measurements. When none are available, the run continues
   and records that the measurement was unavailable.
+- Receipts are self-asserted: each stage writes its own receipt into `checkpoint.json`, a local
+  JSON file anyone with the checkout can edit, and the delegation ledger's tamper markers only catch
+  accidental edits. The CI gate checks that receipts are present, passing and current; with the
+  default `advisory` mode it warns and does not block the PR. Set `ci.gate.mode: required` once the
+  first feature has passed, and treat the PR review as the control. See
+  [SECURITY.md](../../SECURITY.md).

@@ -724,6 +724,11 @@ cannot tell the difference. CI integrity for delegation evidence ultimately
 rests on code review of that commit, the same as any other tracked file — not
 on `ledger_trust_state`, which exists only to catch an accidental or purely
 local hand-edit on one machine.
+The markers are advisory, not a security boundary (review decision DEC-11): a
+worker runs in the same checkout with the same permissions as the dispatcher,
+so anything that can edit the ledger can also rewrite or delete the marker, and
+a missing marker only warns. The code stays because it catches the common
+accident; do not read `trusted` as proof that no one edited the file.
 
 ## History and evidence
 
