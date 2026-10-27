@@ -19,8 +19,19 @@ ALL = set(ci_matrix.SUITES)
 WORKFLOW_TESTS = ci_matrix.ROOT / "extensions/workflow/tests"
 
 
+def units(include):
+    """One record per suite a matrix entry runs (the Linux batch runs several), from its runs lines."""
+    out = []
+    for entry in include:
+        for line in entry["runs"].splitlines():
+            suite, tests, *modules = line.split()
+            out.append({"os": entry["os"], "suite": suite, "tests": tests, "modules": " ".join(modules),
+                        **({"shard": entry["shard"]} if "shard" in entry else {})})
+    return out
+
+
 def pairs(files, event="pull_request"):
-    return {(i["suite"], i["os"]) for i in ci_matrix.build(files, event)["matrix"]["include"]}
+    return {(i["suite"], i["os"]) for i in units(ci_matrix.build(files, event)["matrix"]["include"])}
 
 
 def suites(files, event="pull_request"):
@@ -108,7 +119,7 @@ class Round3Selection(unittest.TestCase):
         result = self.result([path])
         self.assertLessEqual({("project", "ubuntu-latest"), ("project", "windows-latest")}, pairs([path]))
         self.assertTrue(result["install_smoke"])
-        entry = [i for i in result["matrix"]["include"] if i["suite"] == "project"][0]
+        entry = [i for i in units(result["matrix"]["include"]) if i["suite"] == "project"][0]
         target = ci_matrix.ROOT / entry["tests"] / ((entry["modules"] or "") + ".py")
         self.assertTrue(target.is_file() if entry["modules"] else any((ci_matrix.ROOT / entry["tests"]).glob("test*.py")))
 
@@ -139,21 +150,20 @@ class Round3Selection(unittest.TestCase):
                              (["docs/a.md"], "workflow_dispatch"), (None, "push")):
             result = self.result(files, event)
             self.assertTrue(result["illustrate_vendored"], (files, event))
-            self.assertIn("illustrate", {i["suite"] for i in result["matrix"]["include"]}, (files, event))
+            self.assertIn("illustrate", {i["suite"] for i in units(result["matrix"]["include"])}, (files, event))
 
     def test_windows_workflow_runs_as_four_shards_covering_every_module_once(self):
-        include = self.result(["extensions/workflow/scripts/workflow.py"])["matrix"]["include"]
+        include = units(self.result(["extensions/workflow/scripts/workflow.py"])["matrix"]["include"])
         windows = [i for i in include if i["suite"] == "workflow" and i["os"] == "windows-latest"]
         linux = [i for i in include if i["suite"] == "workflow" and i["os"] == "ubuntu-latest"]
-        self.assertEqual(["1/4", "2/4", "3/4", "4/4"], [i["shard"] for i in windows])
-        listed = [m for i in windows for m in i["modules"].split()]
         on_disk = sorted(p.stem for p in WORKFLOW_TESTS.glob("test*.py"))
-        self.assertEqual(len(listed), len(set(listed)), "a module is in two shards")
-        self.assertEqual(on_disk, sorted(listed))
-        self.assertTrue(all(i["modules"] and i["tests"] == "extensions/workflow/tests" for i in windows))
-        # Linux workflow stays one discover job.
-        self.assertEqual([{"os": "ubuntu-latest", "suite": "workflow", "tests": "extensions/workflow/tests",
-                           "modules": ""}], linux)
+        # Linux shards the workflow suite the same way.
+        for legs in (windows, linux):
+            self.assertEqual(["1/4", "2/4", "3/4", "4/4"], [i["shard"] for i in legs])
+            listed = [m for i in legs for m in i["modules"].split()]
+            self.assertEqual(len(listed), len(set(listed)), "a module is in two shards")
+            self.assertEqual(on_disk, sorted(listed))
+            self.assertTrue(all(i["modules"] and i["tests"] == "extensions/workflow/tests" for i in legs))
 
     def test_shards_balance_module_bytes_without_a_table(self):
         sizes = {p.stem: p.stat().st_size for p in WORKFLOW_TESTS.glob("test*.py")}
@@ -165,6 +175,22 @@ class Round3Selection(unittest.TestCase):
         windows = {s for s, o in pairs(None, "push") if o == "windows-latest"}
         self.assertFalse({"workflow", "memory"} & windows)
         self.assertIn("scope", windows)
+
+    def test_linux_runs_every_suite_but_whole_workflow_in_one_batch_job(self):
+        """FAST: one Linux job for the small suites, sharded workflow, Windows unchanged."""
+        include = ci_matrix.build(None, "schedule")["matrix"]["include"]
+        linux = [i for i in include if i["os"] == "ubuntu-latest"]
+        batch = [i for i in linux if "shard" not in i]
+        self.assertEqual(1, len(batch))
+        self.assertEqual(sorted(ALL - {"workflow"}), sorted(batch[0]["suites"]))
+        self.assertEqual(batch[0]["suites"], [line.split()[0] for line in batch[0]["runs"].splitlines()])
+        self.assertEqual(" + ".join(batch[0]["suites"]), batch[0]["suite"])
+        self.assertEqual(4, len([i for i in linux if i["suite"] == "workflow"]))
+        windows = [i for i in include if i["os"] == "windows-latest"]
+        self.assertTrue(all(i["suites"] == [i["suite"]] and len(i["runs"].splitlines()) == 1 for i in windows))
+        # Path selection holds: a pr change batches only pr; workflow follows as its dependent.
+        include = ci_matrix.build(["extensions/pr/scripts/x.py"], "pull_request")["matrix"]["include"]
+        self.assertEqual([["pr"]], [i["suites"] for i in include if i["os"] == "ubuntu-latest" and "shard" not in i])
 
     def test_cli_prints_every_output(self):
         import contextlib
@@ -194,7 +220,7 @@ class CiWorkflowFile(unittest.TestCase):
             self.assertIn(f"{key}: ${{{{ steps.matrix.outputs.{key} }}}}", changes, key)
 
     def test_smoke_jobs_need_changes_and_install_smoke(self):
-        for name in ("installation", "upgrade", "project-init", "dryrun"):
+        for name in ("installation", "project-init", "dryrun"):
             job = self.job(name)
             self.assertIn("needs: changes", job, name)
             self.assertIn("needs.changes.outputs.install_smoke == 'true'", job, name)
@@ -219,6 +245,30 @@ class CiWorkflowFile(unittest.TestCase):
             self.assertTrue(steps, workflow)
             for body in steps:
                 self.assertIn("cache: pip", body, workflow)
+
+    def test_every_smoke_runs_with_its_arguments_on_linux_and_windows(self):
+        """FAST: the Linux smokes moved into one job per host; each still runs, with the same arguments."""
+        install = self.job("installation")
+        self.assertIn("host: ${{ fromJSON(needs.changes.outputs.install_smoke == 'true' && '[\"claude\", \"codex\"]' "
+                      "|| '[\"claude\"]') }}", install)
+        self.assertIn("needs.changes.outputs.memory_install == 'true'", install.split("steps:")[0])
+        for line in ('run: python extensions/scripts/smoke_install.py --host "$HOST"\n',
+                     'run: python extensions/scripts/smoke_install.py --host "$HOST" --superspec-source '
+                     '"$GITHUB_WORKSPACE/dist/upstream-superspec"\n',
+                     "run: python extensions/scripts/smoke_upgrade.py\n",
+                     "run: python extensions/scripts/smoke_project_init.py\n",
+                     "run: python extensions/scripts/smoke_memory_install.py\n"):
+            self.assertIn(line, install)
+        self.assertNotRegex(self.text, r"(?m)^  upgrade:")
+        for name in ("memory-installation", "project-init"):
+            self.assertIn("os: [windows-latest]", self.job(name), name)
+
+    def test_the_suite_step_runs_every_suite_before_failing(self):
+        regression = self.job("regression")
+        self.assertIn("RUNS: ${{ matrix.runs }}", regression)
+        self.assertIn('echo "=== $suite rc=$rc"', regression)
+        self.assertIn('if (( ${#failed[@]} )); then echo "Failed suites: ${failed[*]}"; exit 1; fi', regression)
+        self.assertNotIn("matrix.suite ==", regression)
 
     def test_spec_kit_installs_by_name_so_pip_reuses_the_cached_wheel(self):
         # pip only looks up its wheel cache for a VCS URL when the requirement is named.
@@ -272,16 +322,16 @@ class Round4Selection(unittest.TestCase):
     """IP13-IP15, X15, X16, PM19, AU23."""
 
     def include(self, files, event="pull_request", today=None):
-        return ci_matrix.build(files, event, today)["matrix"]["include"]
+        return units(ci_matrix.build(files, event, today)["matrix"]["include"])
 
     def test_illustrate_hook_runs_workflow_hook_tests_and_the_install_smoke(self):
         path = "extensions/illustrate/hooks/self_check_hook.py"
         for event in ("pull_request", "push"):
             result = ci_matrix.build([path], event)
-            workflow = [i for i in result["matrix"]["include"] if i["suite"] == "workflow"]
+            workflow = [i for i in units(result["matrix"]["include"]) if i["suite"] == "workflow"]
             self.assertEqual({"ubuntu-latest", "windows-latest"}, {i["os"] for i in workflow}, event)
             self.assertTrue(all(i["modules"] == "test_install_hooks" and "shard" not in i for i in workflow), event)
-            self.assertEqual({"illustrate", "workflow"}, {i["suite"] for i in result["matrix"]["include"]})
+            self.assertEqual({"illustrate", "workflow"}, {i["suite"] for i in units(result["matrix"]["include"])})
             self.assertTrue(result["install_smoke"], event)
         self.assertTrue((WORKFLOW_TESTS / "test_install_hooks.py").is_file())
 
@@ -289,7 +339,8 @@ class Round4Selection(unittest.TestCase):
         files = ["extensions/illustrate/hooks/self_check_hook.py", "extensions/workflow/scripts/workflow.py"]
         workflow = [i for i in self.include(files) if i["suite"] == "workflow"]
         self.assertEqual(4, len([i for i in workflow if i["os"] == "windows-latest"]))
-        self.assertEqual([""], [i["modules"] for i in workflow if i["os"] == "ubuntu-latest"])
+        self.assertEqual(4, len([i for i in workflow if i["os"] == "ubuntu-latest"]))
+        self.assertNotIn("test_install_hooks", [i["modules"] for i in workflow])
 
     def test_vendored_checks_run_on_one_scheduled_day_a_week(self):
         monday = datetime.date(2026, 10, 19)
@@ -375,7 +426,11 @@ class Round4Selection(unittest.TestCase):
             listed = [u for i in windows for u in i["modules"].split()]
             self.assertEqual(len(listed), len(set(listed)), suite)
             self.assertEqual(sorted(ci_matrix.shard_units(suite)), sorted(listed), suite)
-            self.assertEqual([""], [i["modules"] for i in include if i["os"] == "ubuntu-latest"], suite)
+            linux = [i for i in include if i["os"] == "ubuntu-latest"]
+            if suite in ci_matrix.LINUX_SHARDS:
+                self.assertEqual(sorted(listed), sorted(u for i in linux for u in i["modules"].split()), suite)
+            else:
+                self.assertEqual([""], [i["modules"] for i in linux], suite)
 
     def test_memory_shards_by_class_and_covers_every_module(self):
         units = ci_matrix.shard_units("memory")
@@ -524,8 +579,8 @@ class Round5ShardTimes(unittest.TestCase):
 
     def test_sharded_step_prints_unit_times_and_discover_is_unchanged(self):
         text = (ci_matrix.ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-        self.assertIn('PYTHONPATH="$TESTS" python .github/scripts/shard_times.py run "${names[@]}"', text)
-        self.assertIn('python -m unittest discover -s "$TESTS" -q', text)
+        self.assertIn('PYTHONPATH="$tests" python .github/scripts/shard_times.py run "${names[@]}" || rc=$?', text)
+        self.assertIn('python -m unittest discover -s "$tests" -q || rc=$?', text)
 
     def test_sanduq_gh_runs_every_suite_that_ships_it(self):
         self.assertEqual({"scope", "workflow", "project", "pr"}, suites(["extensions/scripts/shared/sanduq_gh.py"]))
@@ -544,18 +599,24 @@ class Round5Lint(unittest.TestCase):
 
     def test_release_and_package_keep_their_selection(self):
         self.assertEqual([("workflow", "test_release")] * 2,
-                         [(i["suite"], i["modules"]) for i in ci_matrix.build(["extensions/scripts/release.py"],
-                                                                               "pull_request")["matrix"]["include"]])
+                         [(i["suite"], i["modules"]) for i in units(ci_matrix.build(["extensions/scripts/release.py"],
+                                                                                     "pull_request")["matrix"]["include"])])
         self.assertEqual(ALL, suites(["extensions/scripts/package.py"]))
 
 
 class Round5ProjectInit(unittest.TestCase):
     """PM5: project-init drives project_init.py through the smoke on both OSes, not once per shell."""
 
+    def job_text(self, name):
+        text = (ci_matrix.ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        return re.search(rf"^  {name}:\n(?:(?:    .*)?\n)+", text, re.M).group(0)
+
     def test_project_init_runs_the_python_smoke_on_both_oses(self):
         text = (ci_matrix.ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
         job = re.search(r"^  project-init:\n(?:(?:    .*)?\n)+", text, re.M).group(0)
-        self.assertIn("os: [ubuntu-latest, windows-latest]", job)
+        # The Linux leg runs in the claude installation job.
+        self.assertIn("os: [windows-latest]", job)
+        self.assertIn("run: python extensions/scripts/smoke_project_init.py\n", self.job_text("installation"))
         # PH-01 (SEC-02): a runner label never comes from matrix data; only the literal windows-latest leg
         # may resolve to a GitHub-hosted runner, everything else falls through to the fork/home logic.
         self.assertIn("runs-on: ${{ matrix.os == 'windows-latest' && 'windows-latest' || ", job)

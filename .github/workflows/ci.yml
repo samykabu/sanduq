@@ -229,7 +229,8 @@ jobs:
   # dependents); release metadata, docs and repository tooling are lint-only; injected shared files run
   # the suites that ship them; other shared paths run all. Windows workflow and Windows memory run on PRs
   # and nightly only, as shards weighted by .github/scripts/shard_weights.json (workflow four by module,
-  # memory two by test class).
+  # memory two by test class). Linux runs the whole workflow suite as four shards too, and every other
+  # selected suite in one batch job, each suite in its own log group with its own exit code.
   # Progress runs its default (non-browser) set; Progress browser tests are not vendored here.
   regression:
     needs: changes
@@ -260,45 +261,56 @@ jobs:
             extensions/*/test-requirements.txt
       - run: python -m pip install -r extensions/workflow/test-requirements.txt
       - name: Install Progress test requirements
-        if: matrix.suite == 'progress'
+        if: contains(matrix.suites, 'progress')
         run: python -m pip install -r extensions/progress/test-requirements.txt
       # Only the vendored render lint below needs a browser; the Illustrate suite imports none.
       # The browser cache saves the download only; --with-deps still installs Chromium's OS
       # libraries on every fresh runner.
       - name: Cache the Playwright browser
-        if: matrix.suite == 'illustrate' && runner.os == 'Linux' && needs.changes.outputs.illustrate_vendored == 'true'
+        if: contains(matrix.suites, 'illustrate') && runner.os == 'Linux' && needs.changes.outputs.illustrate_vendored == 'true'
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ runner.os == 'Windows' && '~/AppData/Local/ms-playwright' || '~/.cache/ms-playwright' }}
           key: ms-playwright-1.63.0-chromium-${{ runner.os }}-${{ runner.arch }}
       - name: Install Playwright for Illustrate render checks
-        if: matrix.suite == 'illustrate' && runner.os == 'Linux' && needs.changes.outputs.illustrate_vendored == 'true'
+        if: contains(matrix.suites, 'illustrate') && runner.os == 'Linux' && needs.changes.outputs.illustrate_vendored == 'true'
         shell: bash
         run: |
           python -m pip install playwright==1.63.0
           python -m playwright install --with-deps chromium
       # shard_times.py run is `python -m unittest -q` plus one seconds line per module or module.Class;
       # `shard_times.py rebuild` turns a downloaded log into .github/scripts/shard_weights.json.
-      - name: Run the suite
+      # One "<suite> <tests> [modules...]" line per suite (several in the Linux batch). Every suite runs, each
+      # in its own log group with an rc line and an error annotation, and the step fails afterwards if any did.
+      - name: Run the suites
         shell: bash
         env:
-          SUITE: ${{ matrix.suite }}
-          TESTS: ${{ matrix.tests }}
-          MODULES: ${{ matrix.modules }}
+          RUNS: ${{ matrix.runs }}
         run: |
-          if [[ -n "$MODULES" ]]; then
-            # A shard or a module list (modules or module.Class): import them from the suite folder, as
-            # discover does.
-            read -ra names <<< "$MODULES"
-            PYTHONPATH="$TESTS" python .github/scripts/shard_times.py run "${names[@]}"
-          else
-            python -m unittest discover -s "$TESTS" -q
-          fi
+          failed=()
+          mapfile -t runs <<< "$RUNS"
+          for line in "${runs[@]}"; do
+            read -r suite tests modules <<< "$line"
+            echo "::group::=== $suite"
+            rc=0
+            if [[ -n "$modules" ]]; then
+              # A shard or a module list (modules or module.Class): import them from the suite folder, as
+              # discover does.
+              read -ra names <<< "$modules"
+              PYTHONPATH="$tests" python .github/scripts/shard_times.py run "${names[@]}" || rc=$?
+            else
+              python -m unittest discover -s "$tests" -q || rc=$?
+            fi
+            echo "::endgroup::"
+            echo "=== $suite rc=$rc"
+            if (( rc )); then echo "::error title=regression $suite::$suite failed (rc=$rc)"; failed+=("$suite"); fi
+          done
+          if (( ${#failed[@]} )); then echo "Failed suites: ${failed[*]}"; exit 1; fi
       # The vendored skill is byte-checked against vendor.lock.json in lint and verified upstream on both
       # OSs at the locked sha, so its builders, verifiers and render lint run on Linux only, on a vendor
       # bump, on demand and on the weekly scheduled run (ci_matrix.py VENDORED_WEEKDAY).
       - name: Illustrate builders and verifiers
-        if: matrix.suite == 'illustrate' && runner.os == 'Linux' && needs.changes.outputs.illustrate_vendored == 'true'
+        if: ${{ !cancelled() && contains(matrix.suites, 'illustrate') && runner.os == 'Linux' && needs.changes.outputs.illustrate_vendored == 'true' }}
         shell: bash
         working-directory: extensions/illustrate/skill
         run: |
@@ -317,7 +329,7 @@ jobs:
           python scripts/verify-sequence-oauth.py
           python scripts/verify-block-registry.py --all
       - name: Illustrate rendered-layout lint
-        if: matrix.suite == 'illustrate' && runner.os == 'Linux' && needs.changes.outputs.illustrate_vendored == 'true'
+        if: ${{ !cancelled() && contains(matrix.suites, 'illustrate') && runner.os == 'Linux' && needs.changes.outputs.illustrate_vendored == 'true' }}
         shell: bash
         working-directory: extensions/illustrate/skill
         run: |
@@ -328,14 +340,106 @@ jobs:
   # installation, upgrade, project-init and dryrun run when an install-relevant path changed
   # (workflow, project, extension manifests, packaging and smoke scripts, presets, vendor.lock.json,
   # CI itself; see ci_matrix.py INSTALL_PREFIXES), and always nightly and on demand.
+  # Linux runs them in two jobs, one per host, each installing core then SuperSpec. The claude leg also
+  # runs the Project initialization and Memory registration smokes, the codex leg the upgrade smoke
+  # (smoke_upgrade.py installs its own fresh codex project), so both legs take about as long. Each smoke
+  # is its own step and runs even when an earlier one failed. A Memory-only change runs the claude leg
+  # with the Memory smoke alone. dryrun stays its own job; the Windows legs follow below.
   # Spec Kit installs by name so pip reuses its cached wheel of the pinned commit (no clone).
+  installation:
+    needs: changes
+    if: needs.changes.outputs.install_smoke == 'true' || needs.changes.outputs.memory_install == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        host: ${{ fromJSON(needs.changes.outputs.install_smoke == 'true' && '["claude", "codex"]' || '["claude"]') }}
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || 'homek8-general' }}
+    permissions:
+      contents: read
+    env:
+      SMOKE: ${{ needs.changes.outputs.install_smoke }}
+      HOST: ${{ matrix.host }}
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.13'
+          cache: pip
+          # ci.yml holds the Spec Kit pin, so a new pin gets a new pip cache.
+          cache-dependency-path: |
+            extensions/workflow/requirements.txt
+            .github/workflows/ci.yml
+      - name: Install the tested Spec Kit build
+        run: python -m pip install 'specify-cli @ git+https://github.com/github/spec-kit.git@0282d03eb6fc3091b3deaa3a855d4030dc40cd6c' -r extensions/workflow/requirements.txt
+      # These two ran without a global git identity in their own jobs, so they run before it is set.
+      - name: Project initialization smoke
+        if: ${{ !cancelled() && env.SMOKE == 'true' && matrix.host == 'claude' }}
+        run: python extensions/scripts/smoke_project_init.py
+      - name: Memory installation smoke
+        if: ${{ !cancelled() && needs.changes.outputs.memory_install == 'true' && matrix.host == 'claude' }}
+        run: python extensions/scripts/smoke_memory_install.py
+      - name: Configure the git identity the smokes commit with
+        run: |
+          git config --global user.name 'Sanduq CI'
+          git config --global user.email 'sanduq-ci@example.invalid'
+      - name: Verify isolated native workflow prototype contract
+        if: env.SMOKE == 'true'
+        run: python -m unittest discover -s prototypes/sanduq-delivery -p test_native_probe.py
+      - name: Fetch the tested optional SuperSpec source
+        if: env.SMOKE == 'true'
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
+          repository: WangX0111/superspec
+          ref: c20ac6c1ba069cc9a72dacb8044b7b193d3dde81
+          path: dist/upstream-superspec
+      - name: Clean installation and reinstallation (core)
+        if: ${{ !cancelled() && env.SMOKE == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python extensions/scripts/smoke_install.py --host "$HOST"
+      - name: Clean installation and reinstallation (superspec)
+        if: ${{ !cancelled() && env.SMOKE == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python extensions/scripts/smoke_install.py --host "$HOST" --superspec-source "$GITHUB_WORKSPACE/dist/upstream-superspec"
+      - name: Installed skills follow the Agent Skills frontmatter rules
+        if: ${{ !cancelled() && env.SMOKE == 'true' }}
+        shell: bash
+        run: |
+          folders=(dist/install-tests/*/project/.claude/skills dist/install-tests/*/project/.agents/skills)
+          existing=(); for f in "${folders[@]}"; do [[ -d "$f" ]] && existing+=("$f"); done
+          python extensions/scripts/validate_skills.py "${existing[@]}"
+      - name: Verify actual version upgrade and failure rollback
+        if: ${{ !cancelled() && env.SMOKE == 'true' && matrix.host == 'codex' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python extensions/scripts/smoke_upgrade.py
+      - name: Preserve installation evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: installation-${{ matrix.host }}
+          retention-days: 7
+          path: |
+            dist/install-tests/*/result.json
+            dist/install-tests/*/upgrade-result.json
+            dist/install-tests/*/*.log
+            dist/project-init-tests/*/result.json
+            dist/project-init-tests/*/execution.log
+            dist/memory-install-tests/
+          if-no-files-found: ignore
+
+  # The Windows legs of the Memory and Project initialization smokes (GitHub-hosted, see README).
   memory-installation:
     needs: changes
     if: needs.changes.outputs.memory_install == 'true'
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [windows-latest]
     runs-on: ${{ matrix.os == 'windows-latest' && 'windows-latest' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || 'homek8-general' }}
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
@@ -359,115 +463,13 @@ jobs:
           path: dist/memory-install-tests/
           if-no-files-found: ignore
 
-  installation:
-    needs: changes
-    if: needs.changes.outputs.install_smoke == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        host: [codex, claude]
-        provider: [core, superspec]
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || 'homek8-general' }}
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
-        with:
-          python-version: '3.13'
-          cache: pip
-          # ci.yml holds the Spec Kit pin, so a new pin gets a new pip cache.
-          cache-dependency-path: |
-            extensions/workflow/requirements.txt
-            .github/workflows/ci.yml
-      - name: Install the tested Spec Kit build
-        run: python -m pip install 'specify-cli @ git+https://github.com/github/spec-kit.git@0282d03eb6fc3091b3deaa3a855d4030dc40cd6c' -r extensions/workflow/requirements.txt
-      - name: Verify isolated native workflow prototype contract
-        run: python -m unittest discover -s prototypes/sanduq-delivery -p test_native_probe.py
-      - name: Fetch the tested optional SuperSpec source
-        if: matrix.provider == 'superspec'
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
-        with:
-          persist-credentials: false
-          repository: WangX0111/superspec
-          ref: c20ac6c1ba069cc9a72dacb8044b7b193d3dde81
-          path: dist/upstream-superspec
-      - name: Exercise clean installation and reinstallation
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          HOST: ${{ matrix.host }}
-          PROVIDER: ${{ matrix.provider }}
-        run: |
-          git config --global user.name 'Sanduq CI'
-          git config --global user.email 'sanduq-ci@example.invalid'
-          args=(--host "$HOST")
-          if [[ "$PROVIDER" == superspec ]]; then
-            args+=(--superspec-source "$GITHUB_WORKSPACE/dist/upstream-superspec")
-          fi
-          python extensions/scripts/smoke_install.py "${args[@]}"
-      - name: Installed skills follow the Agent Skills frontmatter rules
-        shell: bash
-        run: |
-          folders=(dist/install-tests/*/project/.claude/skills dist/install-tests/*/project/.agents/skills)
-          existing=(); for f in "${folders[@]}"; do [[ -d "$f" ]] && existing+=("$f"); done
-          python extensions/scripts/validate_skills.py "${existing[@]}"
-      - name: Preserve installation evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: installation-${{ matrix.host }}-${{ matrix.provider }}
-          retention-days: 7
-          path: |
-            dist/install-tests/*/result.json
-            dist/install-tests/*/*.log
-          if-no-files-found: ignore
-
-  upgrade:
-    needs: changes
-    if: needs.changes.outputs.install_smoke == 'true'
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || 'homek8-general' }}
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
-        with:
-          python-version: '3.13'
-          cache: pip
-          # ci.yml holds the Spec Kit pin, so a new pin gets a new pip cache.
-          cache-dependency-path: |
-            extensions/workflow/requirements.txt
-            .github/workflows/ci.yml
-      - run: python -m pip install 'specify-cli @ git+https://github.com/github/spec-kit.git@0282d03eb6fc3091b3deaa3a855d4030dc40cd6c' -r extensions/workflow/requirements.txt
-      - name: Verify actual version upgrade and failure rollback
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          git config --global user.name 'Sanduq CI'
-          git config --global user.email 'sanduq-ci@example.invalid'
-          python extensions/scripts/smoke_upgrade.py
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
-        with:
-          name: upgrade-rollback
-          retention-days: 7
-          path: |
-            dist/install-tests/*/upgrade-result.json
-            dist/install-tests/*/*.log
-          if-no-files-found: ignore
-
   project-init:
     needs: changes
     if: needs.changes.outputs.install_smoke == 'true'
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [windows-latest]
     runs-on: ${{ matrix.os == 'windows-latest' && 'windows-latest' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || 'homek8-general' }}
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
