@@ -226,6 +226,36 @@ $speckit-memory-enable Review the renewed archiving policy and approve it.
 | Project owner type | A config from an older Init for an organization board says `ownerType: user` | Rerun `$speckit-project-init`, or set `"ownerType": "org"` |
 | Scope's `scope-gate` preset changed | A managed Specify claim is no longer told to chain Clarify | Unmanaged projects run `specify preset add` again for `scope-gate`; the Workflow installer re-adds it |
 
+## PH-03 train (Workflow 1.21.0)
+
+The train ships Workflow 1.21.0, Scope 1.12.0, Memory 2.6.0, PR 4.7.0, Project 2.7.0 and Progress 1.7.0, with presets
+`workflow` 1.3.3, `scope-gate` 1.6.2 and `scope-brainstorm` 1.5.1. New policy keys: `project_sync.mode`,
+`issue_sync.taskstoissues: off` and `clarification.transport`; all are optional and none invalidates a receipt. Upgrade
+every companion together, then reinstall Scope so the old hook skills are removed:
+
+```bash
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.21.0 --apply
+python .specify/extensions/workflow/scripts/workflow.py doctor --project
+```
+
+| Change | What you see | What to do |
+| --- | --- | --- |
+| Errors explain themselves | Error JSON carries `explain` and `next`; `docs/reference/errors.md` lists every code | Follow `next` |
+| Later receipts need confirmation | `claim` returns `status: confirm_invalidation` with the receipts it would remove | Read the list, then `claim --confirm-invalidation`, or amend instead |
+| Finalize before Ready | `claim --finalize` before Ready returns `not_ready_to_finalize` with the remaining stages | Run `speckit.workflow.continue` |
+| Board modes | A missing board in full mode is one `PROJECT_NOT_CONFIGURED` error | Run project init, or `init --board none` / `minimal` |
+| Local clarifications | With `clarification.transport: local`, questions live in `specs/<feature>/clarifications.md` and receipts say `self_attested` | Answer in the conversation; the agent records your reply |
+| Decision answers | `SD1: B.` and `SD1 - B` count; unreadable answers are listed `unparsed`; a comment a Sanduq process posted never counts | Reply `SD1: A` on its own line |
+| Fork origin | Scope refuses `ORIGIN_IS_FORK` naming the parent | Clone the parent repository |
+| Unrelated history | `prepare`, `start` and `doctor --project` refuse `HISTORY_UNRELATED` | Start from a branch of `origin/HEAD` |
+| Interrupted install | `doctor` reports `INSTALL_INTERRUPTED` with a restore command | Run `install.py --restore <backup>` |
+| Native stages | With delegation on, a stage a host subagent did is recorded with `delegate_dispatch.py attest-native` from the top-level session | Never from a worker or subagent; receipts show `native_attestation` |
+| Child issue kept whole | A one-leaf re-scope of an edited child carries the parent's approval | Nothing |
+| Guard | `git commit -a`, `git add -u` and PowerShell `git add -A` are refused | Stage owned paths by name |
+| Source key | Evidence recorded with the key version used before 2026-10-10 is refused | Re-run the CI evidence step |
+| Scope hook commands | The five hook-only `speckit-scope-*` skills are gone; `/speckit-scope-reconcile` is replaced | Use `scope.py reconcile --apply` |
+| Delegate runs | Run logs are masked and runs older than 30 days are pruned after `collect` | Set `DELEGATE_PRUNE_DAYS=0` to keep them |
+
 ## PH-02 train (Workflow 1.20.0)
 
 The train ships Workflow 1.20.0 and Scope 1.11.1, with presets `workflow` 1.3.2 and `scope-gate` 1.6.1.

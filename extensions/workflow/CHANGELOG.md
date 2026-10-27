@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.21.0] - 2026-10-27
 
 - Only the current source key version (`sanduq-source-key/1`) is accepted: a CI-evidence plan or receipt still carrying the key version that Workflow used before 2026-10-10 is refused with the existing `keyVersion` error naming the accepted list; re-run the CI evidence step for that feature. Internal records no longer name third-party products.
 - Board sync modes (REQ-22). `init --board none|minimal|full` sets `project_sync.mode` (`off`, `minimal`, `full`; absent means `full`) and `issue_sync.taskstoissues` (`off` for none and minimal). `minimal` writes only the Ready, In progress, In review and Done phases; a `project-sync` of a parking phase (open, analysis, engineer-review) is recorded as `done` with `summary: skipped: ...` and never calls the Project script. `off` writes nothing and `doctor --project` skips the board checks. With `issue_sync.taskstoissues: off` the Tasks-to-Issues stage is dropped from the stage list (recorded in the checkpoint's `skipped` and the lifecycle log), the Ready gate's task-link check reports `task_links:skipped`, no task-issue journal is required, and `task_issues.py` refuses with `TASK_ISSUES_OFF`. In minimal mode the `ready` phase is written after Analyze. Both keys are operational: switching them on a feature in flight reaches no stage (a `required` to `phase-lazy` switch no longer cuts at Tasks-to-Issues either). `doctor` prints `board_sync`, one line naming the mode. Full mode is unchanged.

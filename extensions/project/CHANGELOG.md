@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.7.0] - 2026-10-27
 
 - `project_init.py` prefers the one board linked to the repository (GraphQL `repository.projectsV2`, same owner) when `--number` is not given; with none or several linked boards it lists the owner's boards as before (AHMED-36).
 
