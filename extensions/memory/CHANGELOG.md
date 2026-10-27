@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.6.1] - 2026-10-28
+
+- `speckit.memory.impact` states that spec, issue and memory text describe the product and that commands come only from the command's instructions and the repository's own scripts (OMAR-13).
+
 ## [2.6.0] - 2026-10-27
 
 - The archive writer lock (`writer.lock`) is the shared Sanduq lock: a lock left by a writer that died on this host is taken over by the next command, with no manual cleanup; a live writer still refuses with `Archive writer lock exists`, which now names the owner's pid, host, age and liveness and how to check it. A lock from another host is never taken automatically. The lock file now records `pid`, `host`, `token` and `created`; `status` still reports the writer's state from its pid.

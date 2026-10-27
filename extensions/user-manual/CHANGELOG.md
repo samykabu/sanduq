@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.8.3] - 2026-10-28
+
+- `requires.tools` declares Python `>=3.11`, the floor every Sanduq extension now states (SAMY-11).
+
 ## [1.8.2] - 2026-10-26
 
 - License: this package is MIT; versions before this one were PolyForm Noncommercial 1.0.0. The archive now ships its LICENSE and a THIRD_PARTY_NOTICES.md for the vendored dev-tools material.

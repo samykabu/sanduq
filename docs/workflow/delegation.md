@@ -33,6 +33,38 @@ kept names (`kept_env_names`, names only, never values), `github_access` and
 60 seconds fails with `DELEGATE_START_FAILED`; a `collect` that does not answer
 within 120 seconds fails with `DELEGATE_COLLECT_TIMEOUT` and records nothing.
 
+**Who may grade work (SEC-06).** A task worker (`T###`) never receives the
+claim token or session id: the dispatcher removes `SANDUQ_WORKFLOW_CLAIM_TOKEN`
+and `SANDUQ_WORKFLOW_SESSION_ID` from its environment even when the Execute
+orchestrator that launched it holds them. Only a stage launch (the Execute
+orchestrator, and in lean mode the stage worker that holds that stage's claim)
+gets them. Two hardenings guard `accept`, `adopt`, `reassign` and `trust-reset`
+on top of the environment check, which a worker can undo by unsetting its
+variables:
+
+- **Nonce.** Each command needs `--nonce <value>`. The value lives in
+  `~/.sanduq/runtime/dispatcher-<project key>.nonce`, outside every worker's
+  working folder; `start` returns it as `dispatcher_nonce` to the session that
+  called it, and no brief or worker environment carries it. A missing or wrong
+  value fails with `DELEGATION_NONCE_REQUIRED`. It stops a worker that only has
+  its brief, its environment and its checkout. It does not stop a worker that
+  runs as your OS user and goes looking for the file, or one that runs `start`
+  itself: the file is readable to every process you run.
+- **Lineage.** The commands, and `start`, refuse a process that descends from a
+  live delegated run of the same feature (`DELEGATION_LINEAGE_SELF`). The
+  dispatcher reads each run's driver supervisor pid from
+  `.delegate/runs/<run>/meta.json` and walks the caller's parent processes, so
+  unsetting `SANDUQ_*` variables changes nothing. The Execute orchestrator's own
+  run is exempt for `start`, `accept`, `adopt` and `reassign`, never for
+  `trust-reset`. It does not stop a worker that starts a process outside its
+  own process tree (a scheduled task, a service, a detached daemon that
+  re-parents), and a run whose supervisor has exited is no longer checked.
+
+Both remain advisory under review decision DEC-11: workers and the dispatcher
+share one OS user and one checkout, so the pull request review stays the
+control. Running workers as another OS user or in a container is the stronger
+option.
+
 Review work stays refused through the external driver for now (the PH-01
 interim, lifted in a later phase): a route
 whose work type is `review` (the Analyze and Review stages, `[Review]` tasks) or
@@ -366,7 +398,7 @@ already starting or running is refused with `DELEGATION_ALREADY_RUNNING`.
   `index_changed` are `false`, and `coverage_complete` is `true`. Any of these
   missing, null or different means no automatic retry. For a terminal result that is still
   incomplete, the orchestrator may run `delegate_dispatch.py reassign --feature
-  specs/<feature> --run-id <id> --reason "<gap>"` within the same limit.
+  specs/<feature> --run-id <id> --reason "<gap>" --nonce <dispatcher_nonce>` within the same limit.
 - **Dispatcher bookkeeping is not worker work.** The driver measures the whole
   repository, and the dispatcher writes the tracked ledger while runs are live
   (its own start record, and every parallel start or collect). A changed ledger
@@ -482,7 +514,7 @@ Three ways resolve an `unverified` attempt:
   collected.
 - **`delegate_dispatch.py accept --feature specs/<feature> --run-id <id>
   --command "<acceptance command>" --expect counts|files [--timeout <seconds>]
-  [--owned <path>]`** runs that command itself, independently of the worker's
+  [--owned <path>] --nonce <dispatcher_nonce>`** runs that command itself, independently of the worker's
   own report, and judges its output by the same schema below. The command
   runs with no shell: on POSIX, `shlex.split` into an argv list (there is no
   shell here to parse quoting, so this module must); on Windows, the raw
@@ -600,7 +632,7 @@ that used to read it.
 
 The only way a checked task without its own dispatcher attempt now earns
 Ready is `delegate_dispatch.py adopt --feature <f> --id <task> --command
-"<acceptance check>" --expect counts|files [--owned <path>]` — evidence,
+"<acceptance check>" --expect counts|files [--owned <path>] --nonce <dispatcher_nonce>` — evidence,
 not an assertion. Before running anything it requires `<task>` to actually
 exist in `tasks.md` and be currently checked (`DELEGATION_ADOPT_TASK_UNKNOWN`
 or `DELEGATION_ADOPT_TASK_NOT_CHECKED` otherwise), closing the gap
@@ -730,7 +762,7 @@ tamper is sticky (below) rather than relying on the marker's mere presence.
 Detecting a genuine tamper (a marker that existed and now disagrees) persists
 a feature-level flag that a later, perfectly legitimate dispatcher write does
 **not** clear on its own — only `delegate_dispatch.py trust-reset --feature
-<f> --reason "<text>"` does, after a human reviews exactly what changed; it
+<f> --reason "<text>" --nonce <dispatcher_nonce>` does, after a human reviews exactly what changed; it
 records the actor, time, reason and the exact bytes on both sides.
 **`trust-reset` is an orchestrator-only, human-authorised command, never a
 worker's**: both `stage_brief` and `task_brief` explicitly forbid a worker

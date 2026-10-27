@@ -80,7 +80,8 @@ def managed_files(root):
         if path.exists():
             for item in path.glob('speckit*'):
                 files.update([item] if item.is_file() or item.is_symlink() else (p for p in item.rglob('*') if p.is_file() or p.is_symlink()))
-            for item in path.glob('delegate-task'):
+            # Not glob('delegate-task'): Python 3.11 matches a literal name with exists(), which drops a dangling link.
+            for item in [path / 'delegate-task'] if os.path.lexists(path / 'delegate-task') else []:
                 if is_link(item):
                     skill_links.add(item)
                 elif item.is_dir():
@@ -1012,7 +1013,12 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                                           'sha256': hashlib.sha256(target.read_bytes()).hexdigest()}
             elif target.exists():
                 old_inventory = read(root / '.specify/workflow/install-receipt.json', {})
-                require(ci_matches_managed(target.read_bytes(), asset, old_inventory), 'CI_WORKFLOW_HAS_LOCAL_EDITS')
+                # The receipt is git-excluded, so a fresh clone also recognises an unedited render of the
+                # template before the base-branch gate (SEC-03) by the copy the package keeps.
+                previous = package_root / 'assets/github/previous/workflow-gates.yml'
+                require(ci_matches_managed(target.read_bytes(), asset, old_inventory) or (
+                    previous.is_file() and ci_matches_managed(target.read_bytes(), rendered(previous, policy), {})),
+                    'CI_WORKFLOW_HAS_LOCAL_EDITS')
             if gate_disabled:
                 if target.exists(): target.unlink()
             elif not result['preserved_ci']:
@@ -1023,7 +1029,9 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                 # Unedited: a render of the Assure template now, of the one before this transaction updated
                 # Assure, or of either without the head checkout AU8 added (assure_init.HEAD_CHECKOUT).
                 earlier = before.get(reference.relative_to(root).as_posix())
-                templates = [t.replace(b'\r\n', b'\n') for t in (reference.read_bytes() if reference.exists() else None, earlier)
+                previous = reference.parent / 'previous' / reference.name  # the template before SEC-03
+                templates = [t.replace(b'\r\n', b'\n') for t in (reference.read_bytes() if reference.exists() else None, earlier,
+                                                                 previous.read_bytes() if previous.exists() else None)
                              if isinstance(t, bytes)]
                 templates += [t.replace(ASSURE_HEAD_CHECKOUT, b'') for t in templates]
                 try:

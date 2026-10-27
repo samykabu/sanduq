@@ -42,6 +42,17 @@ class GateTest(unittest.TestCase):
                 result = self.status('--gate')
                 self.assertEqual((result.returncode, result.stdout), (0, 'skipped gate=off\n'))
 
+    def test_the_base_branch_config_decides_the_gate(self):
+        # SEC-03: a PR that switches its own gate off is still graded when the base has it on.
+        self.config.write_text('lifecycle:\n  require_document_before_pr: false\n', encoding='utf-8')
+        with tempfile.TemporaryDirectory() as base:
+            config = Path(base) / '.specify/extensions/assure/assure-config.yml'
+            config.parent.mkdir(parents=True)
+            config.write_text('lifecycle:\n  require_document_before_pr: true\n', encoding='utf-8')
+            with mock.patch.dict('os.environ', {'SANDUQ_POLICY_ROOT': base}):
+                result = self.status('--gate')
+        self.assertNotEqual(result.stdout, 'skipped gate=off\n')
+
     def test_parsed_false_is_authoritative_whatever_the_comment_says(self):
         # D4: the old substring fallback turned this gate on.
         self.config.write_text('lifecycle:\n  require_document_before_pr: false  # set to true to require\n',

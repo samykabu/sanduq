@@ -1184,6 +1184,63 @@ class DelegationTests(unittest.TestCase):
                 dispatch.reassign(self.root, self.feature, run_id,
                                   'attempted reassign from inside a worker')
 
+    def test_a_task_worker_environment_lacks_the_claim_token(self):
+        """SEC-06: an inherited claim token never reaches a T### worker or its --keep-env list."""
+        self.tasks('- [ ] T001 [Collect] Run smoke suite\n')
+        self.enable()
+        captured, real_run = {}, subprocess.run
+        def fake_run(args, *rest, **kwargs):
+            if args[0] != 'node':
+                return real_run(args, *rest, **kwargs)
+            captured.update(env=kwargs['env'], args=args)
+            return subprocess.CompletedProcess(args, 0, json.dumps({'run_id': 'codex-1', 'state': 'running'}), '')
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()),              patch.object(dispatch.shutil, 'which', return_value='node'),              patch.object(dispatch.subprocess, 'run', side_effect=fake_run),              patch.dict(os.environ, {'SANDUQ_WORKFLOW_CLAIM_TOKEN': 'live', 'SANDUQ_WORKFLOW_SESSION_ID': 's'}):
+            dispatch.start(self.root, self.feature, 'T001', owned=['.'])
+        self.assertNotIn('SANDUQ_WORKFLOW_CLAIM_TOKEN', captured['env'])
+        self.assertNotIn('SANDUQ_WORKFLOW_SESSION_ID', captured['env'])
+        self.assertNotIn('SANDUQ_WORKFLOW_CLAIM_TOKEN', captured['args'])
+
+    def test_accept_from_a_delegated_run_ancestry_fails_with_its_variables_stripped(self):
+        """SEC-06 fake harness: this test process plays the run's driver supervisor. Its child runs accept
+        with the right nonce and no SANDUQ_* variable and is still refused; the test process itself, like
+        the top-level session, is not a descendant and passes."""
+        run_id = self._unverified_run()
+        meta = self.root / '.delegate/runs' / run_id / 'meta.json'
+        meta.parent.mkdir(parents=True, exist_ok=True)
+        meta.write_text(json.dumps({'run_id': run_id, 'supervisor_pid': os.getpid()}), encoding='utf-8')
+        home = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, home, True)
+        with patch.object(delegation, 'global_root', return_value=home):
+            nonce = dispatch.dispatcher_nonce(self.root)
+        env = {k: v for k, v in os.environ.items() if not k.upper().startswith('SANDUQ_')}
+        env.update(HOME=str(home), USERPROFILE=str(home))
+        child = subprocess.run([sys.executable, dispatch.__file__, '--root', str(self.root), 'accept',
+                                '--feature', self.feature, '--run-id', run_id, '--command', 'pytest -q',
+                                '--expect', 'counts', '--nonce', nonce],
+                               env=env, capture_output=True, text=True, timeout=120)
+        self.assertEqual(child.returncode, 1, child.stderr)
+        self.assertIn('DELEGATION_LINEAGE_SELF', child.stdout)
+        self.assertIsNone(dispatch.require_not_delegated_lineage(self.root, self.feature))
+
+    def test_grading_commands_need_the_dispatcher_nonce(self):
+        """SEC-06: accept, adopt, reassign and trust-reset refuse without the nonce or with a guess; the
+        nonce file lives outside the project."""
+        home = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, home, True)
+        with patch.object(delegation, 'global_root', return_value=home):
+            for action, *rest in (('accept', '--run-id', 'codex-1', '--command', 'x', '--expect', 'counts'),
+                                  ('adopt', '--id', 'T001', '--command', 'x', '--expect', 'counts'),
+                                  ('reassign', '--run-id', 'codex-1', '--reason', 'r'),
+                                  ('trust-reset', '--reason', 'r')):
+                for nonce in ([], ['--nonce', 'guess']):
+                    out = io.StringIO()
+                    with contextlib.redirect_stdout(out):
+                        code = dispatch.main(['--root', str(self.root), action, '--feature', self.feature,
+                                              *rest, *nonce])
+                    self.assertEqual(code, 1)
+                    self.assertIn('DELEGATION_NONCE_REQUIRED', out.getvalue())
+            self.assertFalse(dispatch.nonce_path(self.root).is_relative_to(self.root))
+
     def test_launch_sets_sanduq_delegated_run_from_the_intent_id(self):
         """Round 9, finding 1a: launch's own driver subprocess -- and,
         through it, the worker it spawns -- inherits SANDUQ_DELEGATED_RUN

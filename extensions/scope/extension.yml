@@ -2,7 +2,7 @@ schema_version: "1.0"
 extension:
   id: scope
   name: Speckit Scope
-  version: "1.12.0"
+  version: "1.13.0"
   description: "Analyze GitHub issue scope, enforce prerequisites, review user-selected decomposition before publishing, and maintain parent progress."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
@@ -20,7 +20,7 @@ requires:
     - name: gh
       required: true
     - name: python
-      version: ">=3.10"
+      version: ">=3.11"
       required: true
 provides:
   commands:

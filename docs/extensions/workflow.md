@@ -9,7 +9,7 @@ can resume in a new session.
 | Lifecycle phase | All of them, as sixteen [stages](../workflow/stages.md) |
 | Hooks | None of its own; it disables the hooks it owns and runs them as stages ([hooks](../reference/hooks.md#managed-workflow)) |
 | Commands | 13, including `init`, `scope`, `clarify`, `continue`, `finalize`, `status`, `doctor` ([reference](../reference/commands.md#workflow)) |
-| Requires | Python 3.10 or later, Git, `gh`; installs Scope, Project, PR, Illustrate and selected Assure and User Manual |
+| Requires | Python 3.11 or later, Git, `gh`; installs Scope, Project, PR, Illustrate and selected Assure and User Manual |
 | Standalone | Yes; it is the managed level |
 | License | MIT |
 

@@ -2,6 +2,7 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -241,6 +242,34 @@ class GateJobHygieneTests(unittest.TestCase):
         self.assertEqual(job['permissions'], {'contents': 'read', 'issues': 'read', 'actions': 'read'})
         gate = next(step for step in job['steps'] if 'ci_gate.py' in (step.get('run') or ''))
         self.assertEqual(gate['env']['GH_TOKEN'], '${{ github.token }}')
+
+    def test_the_gate_runs_the_base_branch_copy_against_the_head(self):
+        # SEC-03 / DEC-13 A: the PR cannot change the code, requirements or policy that grade it.
+        for name, job in (('workflow-gates.yml', 'workflow-evidence'), ('documentation-gates.yml', 'feature-documentation')):
+            with self.subTest(asset=name):
+                steps = yaml.safe_load(ci.render(ASSETS[name].read_bytes(), ci.default_ci()).decode())['jobs'][job]['steps']
+                base = next(step['with'] for step in steps if (step.get('with') or {}).get('path') == '.sanduq-base')
+                self.assertEqual((base['ref'], base['persist-credentials']),
+                                 ('${{ github.event.pull_request.base.sha }}', False))
+                for step in steps:
+                    self.assertNotRegex(step.get('run') or '', r'(?<![\w-])python \.specify/|-r \.specify/', step)
+        steps = yaml.safe_load(ci.render(ASSETS['workflow-gates.yml'].read_bytes(), ci.default_ci()).decode())
+        gate = steps['jobs']['workflow-evidence']['steps'][-1]['run']
+        self.assertIn('gate=.sanduq-base/.specify/extensions/workflow/scripts/ci_gate.py', gate)
+        self.assertIn('--trusted-root .sanduq-base', gate)
+
+    def test_a_first_install_must_match_its_release(self):
+        with tempfile.TemporaryDirectory() as folder:
+            release, installed = Path(folder) / 'release', Path(folder) / 'installed'
+            for tree, eol in ((release, b'\n'), (installed, b'\r\n')):
+                (tree / 'scripts').mkdir(parents=True)
+                (tree / 'scripts/ci_gate.py').write_bytes(b'gate()' + eol + b'done()' + eol)
+            (installed / 'config.json').write_bytes(b'{}')  # consumer configuration is not package content
+            self.assertEqual(ci.release_differences(installed, release), [])
+            (installed / 'scripts/ci_gate.py').write_bytes(b'print("passed")\n')
+            (installed / 'scripts/json.py').write_bytes(b'')
+            self.assertEqual(ci.release_differences(installed, release),
+                             ['scripts/ci_gate.py: changed', 'scripts/json.py: not in the release'])
 
     def test_the_gate_never_ships_a_blanket_fetch_depth_zero(self):
         # G5: fetch-depth: 0 clones every branch and tag in the remote just to

@@ -6,6 +6,7 @@ import re
 import shutil
 import sys
 import tempfile
+import textwrap
 import unittest
 import unittest.mock
 import zipfile
@@ -245,6 +246,13 @@ class CiWorkflowFile(unittest.TestCase):
             self.assertTrue(steps, workflow)
             for body in steps:
                 self.assertIn("cache: pip", body, workflow)
+
+    def test_linux_regression_runs_on_the_declared_python_floor(self):
+        """SAMY-11: every extension.yml declares python >=3.11 and the Linux regression legs run on it."""
+        self.assertIn("python-version: ${{ matrix.os == 'windows-latest' && '3.13' || '3.11' }}", self.job("regression"))
+        for manifest in sorted((ci_matrix.ROOT / "extensions").glob("*/extension.yml")):
+            self.assertRegex(manifest.read_text(encoding="utf-8"), r"- name: python\n(?:.*\n)?\s+version: ['\"]>=3\.11['\"]",
+                             manifest.parent.name)
 
     def test_every_smoke_runs_with_its_arguments_on_linux_and_windows(self):
         """FAST: the Linux smokes moved into one job per host; each still runs, with the same arguments."""
@@ -698,6 +706,56 @@ class ReleaseWindowsGate(unittest.TestCase):
         # Every publishing step waits for the CI gate, not only the pending status.
         steps = text.split("- name: Require successful CI for the current main commit", 1)[1]
         self.assertNotIn("steps.gate.outputs.ready", steps.split("          PY\n", 1)[1])
+
+    def test_a_ci_run_the_release_dispatched_starts_the_release_when_it_passes(self):
+        """GITHUB_TOKEN runs start no workflow_run, so the bot-dispatched ci run dispatches the release itself."""
+        text = (ci_matrix.ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        job = re.search(r"^  release-trigger:\n(?:(?:    .*)?\n)+", text, re.M).group(0)
+        jobs = set(re.findall(r"(?m)^  ([a-z-]+):$", text.split("\njobs:\n", 1)[1])) - {"release-trigger"}
+        self.assertEqual(set(re.search(r"needs: \[(.*)\]", job).group(1).split(", ")), jobs)
+        for condition in ("!contains(needs.*.result, 'failure')", "!contains(needs.*.result, 'cancelled')",
+                          "github.event_name == 'workflow_dispatch' && github.actor == 'github-actions[bot]'",
+                          "github.ref == 'refs/heads/main'"):
+            self.assertIn(condition, job)
+        self.assertIn("runs-on: homek8-general\n    permissions:\n      actions: write\n", job)
+        self.assertIn('actions/workflows/release-extensions.yml/dispatches" -f ref=main -f "inputs[ci_run_id]=$GITHUB_RUN_ID"', job)
+        # Every other ci run reaches the release through workflow_run, so one run never triggers it twice.
+        release = (ci_matrix.ROOT / ".github/workflows/release-extensions.yml").read_text(encoding="utf-8")
+        self.assertIn("workflow_run:\n    workflows: [ci]\n    types: [completed]", release)
+
+    def gate(self, run_status, ci_run_id, other_job="success"):
+        """Run the release gate's script against a still-running or finished dispatched ci run."""
+        text = (ci_matrix.ROOT / ".github/workflows/release-extensions.yml").read_text(encoding="utf-8")
+        script = textwrap.dedent(text.split("python - <<'PY'\n", 1)[1].split("          PY\n", 1)[0])
+        sha = "a" * 40
+        runs = [{"id": 1, "event": "push", "head_branch": "main", "status": "completed", "conclusion": "success"},
+                {"id": 2, "event": "workflow_dispatch", "head_branch": "main", "status": run_status,
+                 "conclusion": "success" if run_status == "completed" else None}]
+        jobs = [{"name": "regression (windows-latest, workflow)", "status": "completed", "conclusion": "success"},
+                {"name": "regression (windows-latest, memory)", "status": "completed", "conclusion": "success"},
+                {"name": "lint", "status": "completed" if other_job else "in_progress", "conclusion": other_job},
+                {"name": "release-trigger", "status": "in_progress", "conclusion": None}]
+
+        def gh(argv, **_):
+            self.assertNotIn("-X", argv)  # the gate must not dispatch ci.yml again here
+            return json.dumps({"workflow_runs": runs} if "/runs?" in argv[2] else {"jobs": jobs})
+
+        env = {"GH_REPO": "o/r", "HEAD_SHA": sha, "CI_RUN_ID": ci_run_id}
+        with unittest.mock.patch.dict("os.environ", env, clear=True), \
+                unittest.mock.patch("subprocess.check_output", gh), unittest.mock.patch("builtins.print") as said:
+            with self.assertRaises(SystemExit):
+                exec(compile(script, "gate", "exec"), {"__name__": "__main__"})
+        return said.call_args[0][0]
+
+    def test_the_gate_counts_the_ci_run_that_dispatched_it_while_it_finishes(self):
+        """A release dispatched by release-trigger reaches the gate before that ci run completes."""
+        self.assertIn("ci run 2 (workflow_dispatch) passed the Windows legs", self.gate("in_progress", "2"))
+        # Without the run id, or while another job of that run is unfinished or failed, it is still running.
+        self.assertIn("still running", self.gate("in_progress", ""))
+        self.assertIn("still running", self.gate("in_progress", "2", other_job=None))
+        self.assertIn("still running", self.gate("in_progress", "2", other_job="failure"))
+        self.assertIn("still running", self.gate("in_progress", "3"))
+        self.assertIn("passed the Windows legs", self.gate("completed", ""))
 
 
 if __name__ == "__main__":

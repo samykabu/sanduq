@@ -82,7 +82,8 @@ from wf_health import (registry, compatible, active_host, command_exists, packag
                        delegation_errors, host_warnings, progress_wiring_warnings, guard_approval_warnings,
                        doctor_cache_key, store_doctor_cache, cached_doctor, doctor, lean_preflight, pr_lint_binding,
                        upgrade_command, dependency_errors, PHASE_DEFAULTS, INERT_VALUES, inert_value_warnings,
-                       interrupted_install_errors, history_errors, HOOK_PYTHON_PROBE, hook_python_warnings)
+                       interrupted_install_errors, history_errors, HOOK_PYTHON_PROBE, hook_python_warnings,
+                       SANDUQ_REPOSITORY, SANDUQ_AUTHOR, COMPANIONS, companion_inventory_errors)
 from wf_receipts import (verify_sync_binding, same_path, recorded_sync_fields, handoff_text, native_run_status,
                          sync_retry, context_gate, measured_context_gate, required_inputs, first_phase_tasks,
                          consulted_inputs, without_required, canonical_receipt, dependency_fingerprints, role_exempt,
@@ -1608,7 +1609,7 @@ class Run:
                     'DELEGATION_LEDGER_UNTRUSTED: the delegation ledger for ' + self.relative +
                     ' was tampered with (a hand-edit, or one not yet cleared by trust-reset); run '
                     '"delegate_dispatch.py trust-reset --feature ' + self.relative +
-                    ' --reason <text>" only after reviewing exactly what changed')
+                    ' --reason <text> --nonce <dispatcher_nonce>" only after reviewing exactly what changed')
             stage_attempt = latest_attempt(self.root, self.relative, 'stage:' + stage)
             require(stage_attempt is not None and stage_attempt.get('status') == 'successful' and
                     stage_attempt.get('claim_token') == token,

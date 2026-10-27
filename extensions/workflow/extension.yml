@@ -2,7 +2,7 @@ schema_version: '1.0'
 extension:
   id: workflow
   name: Sanduq Workflow
-  version: "1.21.0"
+  version: "1.22.0"
   description: GitHub issue decisions and resumable Scope-to-PR orchestration with
     optional model-aware delegation, QA, User Manual, and workflow evidence CI.
   author: Samy K. Abushanab
@@ -13,7 +13,7 @@ requires:
   speckit_version: '>=1.0.0,<2.0.0'
   tools:
   - name: python
-    version: '>=3.10'
+    version: '>=3.11'
     required: true
   - name: git
     required: true

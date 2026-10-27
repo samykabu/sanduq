@@ -19,6 +19,30 @@ jobs:
           # The recorded states describe the PR head, not GitHub's merge commit.
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+      # The gate's scripts and configuration come from the base branch, which this PR cannot change.
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .sanduq-base
+          persist-credentials: false
+      - name: Use the base branch's Assure, or the released package on a first install
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo /.sanduq-base/ >> "$(git rev-parse --git-path info/exclude)"
+          gate=.sanduq-base/.specify/extensions/assure
+          if [ ! -f "$gate/extension.yml" ] && [ -f .specify/extensions/assure/extension.yml ]; then
+            mkdir -p .sanduq-base/.specify/extensions
+            python - <<'PY'
+          import io, re, urllib.request, zipfile
+          text = open('.specify/extensions/assure/extension.yml', encoding='utf-8-sig').read()
+          version = re.search(r'(?m)^  version: *["\']?(\d+\.\d+\.\d+)["\']? *$', text)[1]
+          url = 'https://github.com/samykabu/sanduq/releases/download/assure-v%s/assure.zip' % version
+          with urllib.request.urlopen(url, timeout=120) as response:
+              zipfile.ZipFile(io.BytesIO(response.read())).extractall('.sanduq-base/.specify/extensions')
+          PY
+            python "$gate/scripts/sanduq_ci.py" verify-release --installed .specify/extensions/assure --release "$gate"
+          fi
       - name: Resolve active feature
         id: feature
         shell: bash
@@ -28,12 +52,19 @@ jobs:
           test -d "$feature"
           echo "path=$feature" >> "$GITHUB_OUTPUT"
       - name: Verify QA analysis and documentation freshness
-        if: ${{ hashFiles('.specify/extensions/assure/assure-config.yml') != '' }}
+        if: ${{ hashFiles('.specify/extensions/assure/assure-config.yml', '.sanduq-base/.specify/extensions/assure/assure-config.yml') != '' }}
         env:
           FEATURE: ${{ steps.feature.outputs.path }}
-        run: python .specify/extensions/assure/scripts/assure_state.py status --gate --summary --kind document --feature "$FEATURE"
+          # The base branch's assure-config.yml decides whether the gate is on.
+          SANDUQ_POLICY_ROOT: .sanduq-base
+        run: python .sanduq-base/.specify/extensions/assure/scripts/assure_state.py status --gate --summary --kind document --feature "$FEATURE" --repo-root .
       - name: Verify User Manual freshness
         if: ${{ hashFiles('User-Manual/manual.yml') != '' && hashFiles('.specify/extensions/user-manual/scripts/manual_state.py') != '' }}
         env:
           FEATURE: ${{ steps.feature.outputs.path }}
-        run: python .specify/extensions/user-manual/scripts/manual_state.py status --summary --feature "$FEATURE"
+        shell: bash
+        run: |
+          script=.sanduq-base/.specify/extensions/user-manual/scripts/manual_state.py
+          # shortcut: a User Manual the PR itself installs runs the head's copy.
+          [ -f "$script" ] || script=.specify/extensions/user-manual/scripts/manual_state.py
+          python "$script" status --summary --feature "$FEATURE" --repo-root .

@@ -132,6 +132,17 @@ class InstallTests(unittest.TestCase):
                     self.assertEqual(target.read_bytes(), asset.read_bytes())
                 target.unlink()
 
+    def test_fresh_clone_upgrade_replaces_the_unedited_head_run_gate(self):
+        # SEC-03: a project rendered from the gate that ran the PR head's scripts gets the base-branch gate,
+        # even without the git-excluded install receipt.
+        target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(installer.rendered(self.package / 'assets/github/previous/workflow-gates.yml', self.policy))
+        with patch.object(installer, 'install_aliases', return_value={}), \
+             patch.object(installer, 'doctor', return_value={'ok': True, 'errors': []}):
+            installer.install(self.root, apply=True, package_root=self.package, runner=lambda *args: None)
+        self.assertEqual(target.read_bytes(), installer.rendered(self.package / 'assets/github/workflow-gates.yml', self.policy))
+
     def test_ci_semantic_edits_still_roll_back_without_overwrite(self):
         target = self.root / '.github/workflows/sanduq-workflow-gates.yml'
         target.parent.mkdir(parents=True, exist_ok=True)

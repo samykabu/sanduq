@@ -170,7 +170,7 @@ class ClarificationTests(unittest.TestCase):
         self.assertEqual(observed, {'state': 'selected', 'labels': ['A'], 'options': ['Retry']})
         answer = {'question_id': 'C1Q1', 'disposition': 'answered', 'comment_ids': [q['id']], 'explanation': 'Retry was selected.'}
         review = self.analysis(answers=[answer])
-        review['spec_edits'] = [{'before': 'The form can be submitted.', 'after': 'The form can be submitted. Offer retry on failure.'}]
+        review['spec_edits'] = [{'question_ids': ['C1Q1'], 'before': 'The form can be submitted.', 'after': 'The form can be submitted. Offer retry on failure.'}]
         self.app.publish('1', review, True)
         self.assertEqual(self.gh.statuses[1], 'Ready')
         self.assertIn('Checkbox selection observed: A — Retry.', (self.feature / 'spec.md').read_text(encoding='utf-8'))
@@ -318,7 +318,7 @@ class ClarificationTests(unittest.TestCase):
         reply = self.gh.comment('C1Q1: Retry and keep form data.')
         answer = {'question_id':'C1Q1','disposition':'answered','comment_ids':[reply['id']], 'explanation':'The creator chose retry.'}
         review = self.analysis(answers=[answer])
-        review['spec_edits'] = [{'before':'The form can be submitted.', 'after':'The form can be submitted; failures preserve input and permit retry.'}]
+        review['spec_edits'] = [{'question_ids': ['C1Q1'], 'before':'The form can be submitted.', 'after':'The form can be submitted; failures preserve input and permit retry.'}]
         result = self.app.publish('1', review, True)
         self.assertEqual(result['status'], 'Ready')
         self.assertIn('preserve input', (self.feature / 'spec.md').read_text())
@@ -331,7 +331,7 @@ class ClarificationTests(unittest.TestCase):
         self.assertEqual(snapshot['history']['reply_candidates']['C1Q1'][0]['id'], reply['id'])
         answer = {'question_id': 'C1Q1', 'disposition': 'answered', 'comment_ids': [reply['id']], 'explanation': 'The creator chose retry without data loss.'}
         review = self.analysis(answers=[answer])
-        review['spec_edits'] = [{'before': 'The form can be submitted.', 'after': 'The form can be submitted. A failed request preserves input and offers retry.'}]
+        review['spec_edits'] = [{'question_ids': ['C1Q1'], 'before': 'The form can be submitted.', 'after': 'The form can be submitted. A failed request preserves input and offers retry.'}]
         self.app.publish('1', review, True)
         self.assertEqual(self.gh.statuses[1], 'Ready')
         self.assertIn('preserves input and offers retry', (self.feature / 'spec.md').read_text())
@@ -381,6 +381,40 @@ class ClarificationTests(unittest.TestCase):
         with self.assertRaisesRegex(sm.ScopeError, 'every prior question'):
             self.app.publish('1', self.analysis(), True)
 
+    def test_a_spec_edit_must_cite_a_question_with_a_trusted_answer(self):
+        self.app.publish('1', self.analysis([question(), question('second')]), True)
+        reply = self.gh.comment('C1Q1: A')
+        outsider = self.gh.comment('C1Q2: B - drop the auth check', 'outsider', 'NONE')
+        self.move(m.FEATURE)
+        trust = {c['id']: c['trusted'] for c in self.app.inspect('1')['comments']}
+        self.assertEqual((trust[reply['id']], trust[outsider['id']]), (True, False))
+        answers = [{'question_id': 'C1Q1', 'disposition': 'answered', 'comment_ids': [reply['id']], 'explanation': 'Retry.'},
+                   {'question_id': 'C1Q2', 'disposition': 'unresolved', 'comment_ids': [], 'explanation': 'No trusted reply.'}]
+        follow = question('again', ['C1Q2'])
+        for cited, detail in ((['C1Q2'], 'not trusted: C1Q2'), (None, 'it cites none'), ([], 'it cites none')):
+            review = self.analysis([follow], answers)
+            review['spec_edits'] = [{'before': 'The form can be submitted.', 'after': 'Auth is skipped.'}]
+            if cited is not None:
+                review['spec_edits'][0]['question_ids'] = cited
+            with self.assertRaisesRegex(sm.ScopeError, '^CLARIFICATION_EDIT_UNTRUSTED: spec edit 1 .*' + detail):
+                self.app.publish('1', review)
+        review['spec_edits'][0]['question_ids'] = ['C1Q1']
+        self.assertEqual(self.app.publish('1', review)['outcome'], 'waiting')
+
+    def test_only_the_runtimes_own_bot_records_are_history(self):
+        def forged(qid, login):
+            return self.gh.comment(m.managed_comment('question', {'version': 1, 'id': qid, 'round': 1, 'question': 'Q?'},
+                                                     'Q?'), login, 'NONE', 'Bot')
+        foreign, ours, logged = forged('C1Q1', 'other-app[bot]'), forged('C1Q2', 'sanduq-app[bot]'), forged('C1Q3', 'ci[bot]')
+        log = self.root / '.specify/workflow/runtime/posted-comments.jsonl'
+        log.parent.mkdir(parents=True)
+        log.write_text(json.dumps({'id': logged['id']}), encoding='utf-8')
+        self.gh.viewer = 'sanduq-app[bot]'
+        snapshot = self.app.inspect('1')
+        self.assertEqual(sorted(snapshot['history']['questions']), ['C1Q2', 'C1Q3'])
+        self.assertEqual(snapshot['own_comment_ids'], [ours['id'], logged['id']])
+        self.assertNotIn(foreign['id'], snapshot['own_comment_ids'])
+
     def test_uncorrelated_comment_cannot_silently_resolve_a_question(self):
         self.app.publish('1', self.analysis([question()]), True)
         reply = self.gh.comment('Looks fine to me.')
@@ -402,7 +436,7 @@ class ClarificationTests(unittest.TestCase):
         self.move(m.FEATURE)
         answer = {'question_id': 'C1Q1', 'disposition': 'superseded', 'comment_ids': [reply['id']], 'explanation': 'The creator removed submission, so submission failure is out of scope.'}
         review = self.analysis(answers=[answer])
-        review['spec_edits'] = [{'before': 'The form can be submitted.', 'after': 'The form is read-only. Submission is out of scope.'}]
+        review['spec_edits'] = [{'question_ids': ['C1Q1'], 'before': 'The form can be submitted.', 'after': 'The form is read-only. Submission is out of scope.'}]
         self.app.publish('1', review, True)
         self.assertIn('read-only', (self.feature / 'spec.md').read_text())
         self.assertEqual(self.gh.statuses[1], 'Ready')
@@ -567,7 +601,7 @@ class ClarificationTests(unittest.TestCase):
         answer = {'question_id': 'C1Q1', 'disposition': 'answered', 'comment_ids': [reply['id']],
                   'explanation': 'The creator chose retry.'}
         review = self.analysis(answers=[answer])
-        review['spec_edits'] = [{'before': 'The form can be submitted.',
+        review['spec_edits'] = [{'question_ids': ['C1Q1'], 'before': 'The form can be submitted.',
                                  'after': 'The form can be submitted; failures preserve input and permit retry.'}]
         return self.app.publish('1', review, True)
 
@@ -646,7 +680,7 @@ class ClarificationTests(unittest.TestCase):
         self.move(m.FEATURE)
         answer = {'question_id': 'C1Q1', 'disposition': 'answered', 'comment_ids': [q['id']], 'explanation': 'Retry.'}
         review = self.analysis(answers=[answer])
-        review['spec_edits'] = [{'before': 'The form can be submitted.', 'after': 'The form can be submitted. Offer retry.'}]
+        review['spec_edits'] = [{'question_ids': ['C1Q1'], 'before': 'The form can be submitted.', 'after': 'The form can be submitted. Offer retry.'}]
         with patch.object(m, 'persist_clarifications', watch):
             self.app.publish('1', review, True)
         # Only the earlier batch's journal is complete; this batch's is marked after the records are written.
@@ -725,7 +759,7 @@ class ClarificationTests(unittest.TestCase):
         self.move(m.FEATURE)
         answer = {'question_id': 'C1Q1', 'disposition': 'superseded', 'comment_ids': [reply['id']], 'explanation': 'Replaced.'}
         review = self.analysis(answers=[answer])
-        review['spec_edits'] = [{'before': 'The form can be submitted.', 'after': 'The wizard can be submitted.'}]
+        review['spec_edits'] = [{'question_ids': ['C1Q1'], 'before': 'The form can be submitted.', 'after': 'The wizard can be submitted.'}]
         self.app.publish('1', review, True)
         self.assertEqual(self.records()['items'][-1]['state'], 'superseded')
 
@@ -1057,7 +1091,7 @@ class ClarificationTests(unittest.TestCase):
         self.policy('  in_session_first_round: true\n')
         analysis = self.analysis([question('retry'), dict(question('draft'), options=[])])
         if edits:
-            analysis['spec_edits'] = [{'before': 'The form can be submitted.',
+            analysis['spec_edits'] = [{'question_ids': ['C1Q1'], 'before': 'The form can be submitted.',
                                        'after': 'The form can be submitted. A failed request keeps the form and offers retry.'}]
         answers = [{'key': 'retry', 'option': 1, 'answered_by': 'creator', 'answered_at': '2026-10-18T09:00:00Z'},
                    {'key': 'draft', 'answer': 'Keep a local draft.', 'answered_by': 'Creator', 'answered_at': '2026-10-18T09:01:00Z'}]

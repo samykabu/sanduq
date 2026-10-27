@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Record or verify content and output freshness; noncurrent status exits 1."""
+import os
 import sys
 from pathlib import Path
 try:
@@ -45,7 +46,17 @@ def main():
                state_path=lambda root, feature, kind: root / '.specify/extensions/assure/state' / f'{feature.name}-{kind}.json',
                gate=('status only: print "skipped gate=off" and exit 0 unless assure-config.yml sets '
                      'lifecycle.require_document_before_pr to true',
-                     lambda root: gate_on(root / '.specify/extensions/assure/assure-config.yml')))
+                     lambda root: gate_on(config_root(root) / CONFIG)))
+
+
+CONFIG = '.specify/extensions/assure/assure-config.yml'
+
+
+def config_root(root):
+    """The PR base checkout (`SANDUQ_POLICY_ROOT`, set by the CI gate) when it has a config, so a PR cannot
+    switch its own gate off (SEC-03); otherwise `root`, as on a first install."""
+    trusted = Path(os.environ.get('SANDUQ_POLICY_ROOT') or root)
+    return trusted if (trusted / CONFIG).is_file() else root
 
 
 if __name__ == '__main__':

@@ -124,7 +124,8 @@ def write_manifest(root, name, version, repository=SANDUQ):
     if name == 'speckit-superpowers-bridge':
         commands = [{'name': 'speckit.speckit-superpowers-bridge.execute', 'file': 'x.md',
                      'aliases': ['speckit.superpowers-bridge']}]
-    path.write_text(yaml.safe_dump({'extension': {'id': name, 'version': version, 'repository': repository},
+    path.write_text(yaml.safe_dump({'extension': {'id': name, 'version': version, 'repository': repository,
+                                                  'author': 'Samy K. Abushanab'},
                                     'provides': {'commands': commands}}), encoding='utf-8')
 
 

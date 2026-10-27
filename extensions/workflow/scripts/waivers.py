@@ -2,6 +2,7 @@
 """Verify one-off CI rule waivers approved in a GitHub PR discussion."""
 from __future__ import annotations
 
+import json
 import re
 from datetime import date, datetime, timezone
 
@@ -53,33 +54,50 @@ def verify(root, pr_number, feature, rule, policy, gh=None, *, today=None):
     head = pr.get('head', {}).get('sha')
     require(re.fullmatch(r'[0-9a-f]{40}', str(head)), 'WAIVER_PR_HEAD_INVALID')
     comments = gh.api(f'repos/{repo}/issues/{pr_number}/comments?per_page=100', pages=True)
-    matches = []
+    matches, rejected = [], []
     today = today or datetime.now(timezone.utc).date()
     for comment in comments:
-        match = MARKER.match(comment.get('body', ''))
+        body = comment.get('body', '')
+        where = str(comment.get('html_url') or 'a PR comment')
+        match = MARKER.match(body)
         if not match:
+            if 'sanduq-gate-waiver' in body:
+                rejected.append(where + ': not the two-line waiver format')
             continue
-        import json
         try:
             item = json.loads(match[1])
         except ValueError:
+            rejected.append(where + ': the marker is not valid JSON')
             continue
-        if not isinstance(item, dict) or (item.get('version'), item.get('pr'), item.get('feature'),
-                                         item.get('rule'), item.get('head_sha')) != (
-                1, int(pr_number), feature, rule, head):
+        if not isinstance(item, dict) or (item.get('version'), item.get('pr')) != (1, int(pr_number)):
+            rejected.append(where + ': not a version 1 waiver for PR ' + str(pr_number))
+            continue
+        if (item.get('feature'), item.get('rule')) != (feature, rule):
+            continue  # a waiver for another feature or rule
+        if item.get('head_sha') != head:
+            rejected.append(where + ': waiver is for head ' + str(item.get('head_sha')) + ', the PR head is now '
+                            + head + '; ask for a new waiver')
             continue
         if item.get('reason') != match[2] or not item['reason'].strip():
+            rejected.append(where + ': the JSON reason differs from the Reason line, or is empty')
             continue
         try:
             expires = date.fromisoformat(item['expires'])
         except (KeyError, TypeError, ValueError):
+            rejected.append(where + ': expires is not a YYYY-MM-DD date')
             continue
-        if expires < today or not authorized(comment, pr, policy):
+        if expires < today:
+            rejected.append(where + ': expired on ' + str(expires))
+            continue
+        if not authorized(comment, pr, policy):
+            rejected.append(where + ': ' + str((comment.get('user') or {}).get('login')) + ' may not waive '
+                            '(the PR author, a bot, or not an authorized user, owner, member or collaborator)')
             continue
         matches.append({'rule': rule, 'feature': feature, 'pr': int(pr_number),
                         'head_sha': head, 'reason': item['reason'],
                         'expires': str(expires), 'reviewer': comment['user']['login'],
                         'url': comment.get('html_url')})
     require(len(matches) == 1, 'WAIVER_NOT_VERIFIED: require one current authorized PR comment for '
-            + rule + ' on ' + feature)
+            + rule + ' on ' + feature + (' (found ' + str(len(matches)) + ')' if matches else '')
+            + ('; rejected: ' + '; '.join(rejected) if rejected else ''))
     return matches[0]

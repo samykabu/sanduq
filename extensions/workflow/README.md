@@ -27,7 +27,7 @@ Clarification questions may use Mermaid diagrams, which GitHub renders without h
 
 ## Install
 
-You need Spec Kit, Python 3.10 or later, Git and the GitHub CLI. See
+You need Spec Kit, Python 3.11 or later, Git and the GitHub CLI. See
 [prerequisites](https://github.com/samykabu/sanduq/blob/main/docs/start/prerequisites.md).
 
 Add the Sanduq catalog, then add Workflow from your repository root:

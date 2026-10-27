@@ -22,9 +22,11 @@ keeps a short reason visible and folds details and diagrams into a collapsible s
 tick one box or reply `C1Q1: A`; custom answers are welcome. Never edit question checkboxes for
 the user.
 
-Each spec edit: exact nonempty `before` and `after` strings, no file paths. Update requirements,
-acceptance and edge cases, remove contradictions, keep unrelated text, and cite the human answer
-comment IDs. The runtime appends the round's review log (question, answer, evidence links) to the
+Each spec edit: exact nonempty `before` and `after` strings, no file paths, and `question_ids`: the
+prior questions whose answers justify it, each `answered` or `superseded` in this analysis (or waived
+by the creator's closure; in session, this round's `C1Q<n>`). The runtime refuses an edit without a
+trusted cited answer (`CLARIFICATION_EDIT_UNTRUSTED`). Update requirements, acceptance and edge
+cases, remove contradictions and keep unrelated text. The runtime appends the round's review log (question, answer, evidence links) to the
 spec; do not write a separate Q/A list.
 
 ## Coverage

@@ -65,7 +65,7 @@ them. Report what you see if you use them.
 | --- | --- | --- |
 | Spec Kit | 1.1.3, commit `0282d03eb6fc3091b3deaa3a855d4030dc40cd6c` | CI installation, upgrade and Memory jobs |
 | SuperSpec | 1.0.2, commit `c20ac6c1ba069cc9a72dacb8044b7b193d3dde81` | CI installation job |
-| Python | 3.13 | CI on Ubuntu and Windows. 3.11 or later is recommended for the managed path, because Memory and Progress need it |
+| Python | 3.11, 3.13 | Every package declares 3.11 or later. CI runs the Linux regression suites on 3.11 and the Windows suites, lint and installation smokes on 3.13 |
 | Playwright | 1.63.0 with Chromium | CI Illustrate suite |
 | `npx skills` | 1.7.2 | CI listing and named-install check |
 | Superpowers Bridge, Superpowers | Untested | |

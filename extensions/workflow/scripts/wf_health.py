@@ -1,6 +1,7 @@
 """Installation health: registry, hosts, commands, the dependency digest and `doctor` with its cache."""
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import sanduq_ci
@@ -10,7 +11,7 @@ import execution_tools
 import yaml
 from datetime import datetime, timezone
 from pathlib import Path
-from sanduq_hash import eol_drift
+from sanduq_hash import eol_drift, portable_content
 from sanduq_remote import same_github_repository
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
@@ -74,6 +75,34 @@ def dependency_errors(root, needed, project=False):
                           '; Workflow ' + str(workflow_version or '') + (' ' if workflow_version else '') + 'requires ' + name + ' ' + required +
                           '; run "' + command + '"')
     return errors
+
+
+# SEC-14: the community catalogs publish other packages under the ids scope and memory.
+SANDUQ_REPOSITORY = 'https://github.com/samykabu/sanduq'
+SANDUQ_AUTHOR = 'Samy K. Abushanab'
+COMPANIONS = ('scope', 'memory')
+
+
+def companion_inventory_errors(root, name):
+    """An installed companion's files against the package-inventory.json its Sanduq release zip ships. A
+    catalog install without one is not Sanduq's; a local development install has none to check."""
+    folder = root / '.specify/extensions' / name
+    inventory = read(folder / 'package-inventory.json', None) if (folder / 'package-inventory.json').is_file() else None
+    if not isinstance(inventory, dict):
+        source = registry(root).get(name, {}).get('source')
+        return (['DEPENDENCY_SOURCE_MISMATCH: ' + name + ' was installed from a catalog without the package '
+                 'inventory every Sanduq release ships'] if isinstance(source, dict) else [])
+
+    def same(path, sha):
+        # A core.autocrlf checkout of a consumer repository holds text as CRLF; compare it with CRLF as LF.
+        content = path.read_bytes()
+        return sha in (hashlib.sha256(content).hexdigest(), hashlib.sha256(portable_content(path.name, content)).hexdigest())
+
+    changed = sorted(member for member, sha in inventory.items()
+                     if not (folder / member.removeprefix(name + '/')).is_file()
+                     or not same(folder / member.removeprefix(name + '/'), sha))
+    return (['DEPENDENCY_SOURCE_MISMATCH: ' + name + ' differs from its package inventory: ' + ', '.join(changed[:5])]
+            if changed else [])
 
 
 def active_host(root):
@@ -334,7 +363,7 @@ HOOK_PYTHON_PROBE = 'import sys;print(sys.version_info[0],sys.version_info[1])'
 
 def hook_python_warnings(root):
     """HOOK_PYTHON_MISSING / HOOK_PYTHON_TOO_OLD for the interpreter the active host's guard hook names (AHMED-21):
-    the guard allows everything when it cannot run, and Progress and Memory hooks need Python 3.11."""
+    the guard allows everything when it cannot run, and every Sanduq extension needs Python 3.11 (SAMY-11)."""
     import hosts
     path = root / hosts.HOOK_FILES.get(active_host(root), '')
     try:
@@ -349,7 +378,7 @@ def hook_python_warnings(root):
         return []
     name = str(commands[0]).split(None, 1)[0]
     where = path.relative_to(root).as_posix()
-    needed = (3, 11) if {'progress', 'memory'} & set(registry(root)) else (3, 10)
+    needed = (3, 11)
     executable = shutil.which(name)
     if not executable:
         return ['HOOK_PYTHON_MISSING: ' + where + ' runs hooks with "' + name + '", which is not on PATH, so the guard '
@@ -434,11 +463,15 @@ def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True
     alias = root / agent / 'skills/speckit-superpowers-bridge/SKILL.md'
     if alias.is_file() and '<!-- sanduq-workflow-alias:v1 -->' not in alias.read_text(encoding='utf-8-sig'):
         errors.append('LEGACY_ALIAS_RECONCILIATION_REQUIRED: run the workflow installer; do not patch the upstream command')
-    for name in needed:
+    for name in needed + [name for name in COMPANIONS if name not in needed and name in registry(root)]:
         manifest = root / '.specify/extensions' / name / 'extension.yml'
         doc = yaml.safe_load(manifest.read_text(encoding='utf-8-sig')) if manifest.exists() else {}
-        if (doc or {}).get('extension', {}).get('repository', '').rstrip('/') != 'https://github.com/samykabu/sanduq':
+        meta = (doc or {}).get('extension') or {}
+        if (meta.get('repository', '').rstrip('/') != SANDUQ_REPOSITORY or
+                (name in COMPANIONS and meta.get('author') != SANDUQ_AUTHOR)):
             errors.append('DEPENDENCY_SOURCE_MISMATCH: ' + name + ' must come from samykabu/sanduq')
+        elif name in COMPANIONS and explicit:
+            errors += companion_inventory_errors(root, name)
     try:
         commands = resolve_commands(root, policy)
         errors += ['COMMAND_UNAVAILABLE: ' + commands[s] for s in stages(policy)

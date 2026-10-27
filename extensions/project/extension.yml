@@ -3,7 +3,7 @@ schema_version: "1.0"
 extension:
   id: project
   name: "GitHub Project Lifecycle Sync"
-  version: "2.7.0"
+  version: "2.7.1"
   description: "Mirror each Spec Kit feature onto a GitHub Project (v2): create a parent feature issue, advance its Status column through the Spec Kit lifecycle (open -> analysis -> engineer-review -> ready -> in-progress -> in-review -> done), and, in standalone use, create one native sub-issue per task and close it as its task is checked off (under Sanduq Workflow, Workflow owns task issues). Board-agnostic initialization lets each repo choose required/automatic or optional/manual sync hooks. Idempotent and no-regress."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
@@ -18,6 +18,7 @@ requires:
       required: false   # graceful skip if gh/scope/remote preconditions are not met
     - name: python
       required: true    # scripts/project_sync.py (stdlib only)
+      version: ">=3.11"
 
 provides:
   commands:

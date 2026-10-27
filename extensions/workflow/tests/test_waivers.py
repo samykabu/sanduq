@@ -44,6 +44,13 @@ class WaiverTests(unittest.TestCase):
                 with self.assertRaisesRegex(waivers.WorkflowError, 'WAIVER_NOT_VERIFIED'):
                     self.run_verify(comment)
 
+    def test_stale_waiver_names_its_head_and_the_current_head(self):
+        with self.assertRaises(waivers.WorkflowError) as caught:
+            self.run_verify(self.comment(head='b' * 40))
+        message = str(caught.exception)
+        self.assertIn('waiver is for head ' + 'b' * 40 + ', the PR head is now ' + 'a' * 40, message)
+        self.assertIn('issuecomment-9', message)
+
     def test_rules_map_to_exact_error(self):
         self.assertEqual(waivers.error_rule('INCOMPLETE_TASKS'), 'tasks')
         self.assertIsNone(waivers.error_rule('CHECKPOINT_MISSING_OR_WRONG_FEATURE'))
