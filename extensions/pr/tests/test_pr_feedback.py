@@ -234,6 +234,13 @@ class PlanTests(unittest.TestCase):
         self.write(replies=[dict(self.PLAN['replies'][0], body='Other text')])
         self.assertNotEqual(self.approved(), result['digest'])
 
+    def test_the_summary_comment_is_part_of_the_approved_digest(self):
+        before = self.approved()
+        self.write(summary='Addressed 2 comments; replied to 1.')
+        self.assertNotEqual(self.approved(), before)
+        self.write(summary='')
+        self.assertEqual(self.run_action('plan', FakeBoard())[0], 2)
+
     def test_a_changed_plan_is_refused_before_any_gh_call(self):
         approved = self.approved()
         self.write(resolves=['T1'])

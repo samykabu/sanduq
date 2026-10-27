@@ -76,7 +76,7 @@ planned action.
 Write the drafted replies and the threads to resolve to a plan file outside the working tree (for
 example `<git dir>/pr-review-plan.json`): `{"schema": "sanduq.pr.review-plan.v1", "repo":
 "<owner/repo>", "pr": <num>, "replies": [{"thread": "<threadId>", "comment": <databaseId>, "body":
-"<reply text>"}], "resolves": ["<threadId>"], "head": null}`. Run
+"<reply text>"}], "resolves": ["<threadId>"], "summary": "<the summary comment for step 7>", "head": null}`. Run
 `python .specify/extensions/pr/scripts/pr_feedback.py plan --plan <file>` (read-only) and show its
 `digest` with the plan below. If the plan changes, run it again and ask again.
 
@@ -114,13 +114,18 @@ python .specify/extensions/pr/scripts/pr_feedback.py reply --plan <file> --appro
 1. Show staged diff summary.
 2. Commit with a clear message, e.g. `fix: address PR review comments`.
 3. Push to the PR branch.
+4. With `.specify/workflow.yml` (a managed project), the push changed source after Ready: run
+   `python .specify/extensions/workflow/scripts/gate_explain.py --root . --feature specs/<feature> --base-ref origin/<target>`
+   and follow its `recovery_recipe` (the revalidate commands) before reporting, so the CI evidence
+   gate does not fail `STALE_RECEIPT` after you said "addressed".
 
 ### 7. Report and resolve threads
 
-1. Post a single summary PR comment:
+1. Post the approved plan's `summary` as the single summary PR comment (it is part of the approved
+   digest; a different text needs a new approval):
 
 ```sh
-gh pr comment <num> --body-file report.md
+python -c "import json,sys; print(json.load(open(sys.argv[1], encoding='utf-8'))['summary'])" <file> | gh pr comment <num> --body-file -
 ```
 
 2. Resolve every thread that was fixed or replied to after the push succeeds: set `"head"` in the

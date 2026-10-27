@@ -1,6 +1,7 @@
 ---
 name: speckit-scope
-description: Scope an explicit GitHub issue and automatically continue the configured Sanduq workflow.
+description: Alias kept for the /speckit-scope slash command; it hands the explicit issue to speckit-workflow-scope, the entry the model selects for "scope issue 42".
+disable-model-invocation: true
 ---
 
 <!-- sanduq-workflow-scope-alias:v1 -->

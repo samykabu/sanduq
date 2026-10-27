@@ -117,6 +117,19 @@ def reference_text(root, stage, parts=()):
     return texts[0] if len(texts) == 1 else '\n'.join(text.rstrip('\n') + '\n' for text in texts)
 
 
+def protocol_summary(policy, tier):
+    """The Execute rules that must hold in every turn, printed on every Execute claim even when the full protocol is not
+    (OMAR-18: an agent cannot tell whether compaction kept them)."""
+    owner = ('the lifecycle coordinator (lean execution)' if lean_policy.enabled(policy, tier)
+             else 'a dedicated orchestration agent')
+    return ('Execute protocol summary: ' + owner + ' schedules and integrates. Workers change only their owned paths '
+            'and never stage, commit, push, run git stash, git add -A or git add ., or run any delegate_dispatch.py '
+            'command; the orchestration agent stages owned paths by name. accept, reassign, adopt and trust-reset run '
+            'only in the top-level dispatcher session. A worker returns the eleven-line result in execution-report.md; '
+            'copy its Model line beside the requested model into the handoff and the receipt summary. Report only on a '
+            'state change; never end a turn owning background work. Full text: claim --verbose.')
+
+
 def execute_protocol(policy, tier, reporting):
     """The Execute protocol parts that apply: the core, lean or a dedicated orchestration agent, delegated workers
     when delegation is on, and the calls of the reporting mode."""
@@ -1231,14 +1244,16 @@ class Run:
                 reporting = {'mode': decided['mode'], 'reason': decided.get('reason') or decided.get('source')}
                 parts = execute_protocol(self.policy, state_tier(state), reporting['mode'])
                 full = reference_text(self.root, stage, parts)
-                protocol = {'files': parts, 'digest': digest([parts, full])}
+                protocol = {'files': parts, 'digest': digest([parts, full]),
+                            'summary': protocol_summary(self.policy, state_tier(state))}
                 # The full protocol is printed once per mode and content; an unchanged re-claim names the files.
                 protocol['printed'] = verbose or (state.get('execute_protocol') or {}).get('digest') != protocol['digest']
                 if protocol['printed']:
                     text = full
                     state['execute_protocol'] = {'files': parts, 'digest': protocol['digest'], 'printed_at': now()}
                 else:
-                    protocol['note'] = 'unchanged since the last Execute claim; read the files if your context was reset'
+                    protocol['note'] = ('unchanged since the last Execute claim; follow the summary, and reread the files '
+                                        'whenever you cannot recall the full protocol')
             self.save(state)
             claimed = {**state['active'], 'command': state['commands'][stage], 'feature': self.relative, 'issue': state['issue'],
                        'reference': stage_reference(stage), 'reference_text': text,
@@ -1246,6 +1261,7 @@ class Run:
                        'project_sync': project_sync(self.policy, stage, self.relative),
                        'clarification_transport': state.get('clarification_transport', 'github-comments')}
             claimed['receipt_template'] = self.receipt_template(state, stage)
+            claimed['lean_execution'] = lean_policy.describe(self.policy, state_tier(state))
             if reporting:
                 claimed['reporting'], claimed['execute_protocol'] = reporting, protocol
             if stage == 'plan' and state_tier(state) in ('lite', 'standard'):
@@ -2011,7 +2027,10 @@ def run_command(args):
             run = Run(root, args.feature)
             if args.action == 'start': result = run.start(args.issue)
             elif args.action == 'next': result = run.next(run.load(), args.finalize)
-            elif args.action == 'status': result = native_run_status(root, run.relative, run.load(allow_branch_change=True), args.runs)
+            elif args.action == 'status':
+                state = run.load(allow_branch_change=True)
+                result = native_run_status(root, run.relative, state, args.runs)
+                result['lean_execution'] = lean_policy.describe(run.policy, state_tier(state))
             elif args.action == 'claim':
                 result = run.claim(read(args.usage), args.finalize, args.verbose,
                                    confirm_invalidation=args.confirm_invalidation)

@@ -16,7 +16,7 @@ task line, owned paths from backtick-quoted paths in the task (or an instruction
 scope with the orchestration agent), verbatim spec, plan, data-model and research lines naming
 the task's requirement ids, a matching contract excerpt when one exists, the class turn budget,
 the spawn-and-wait, report-on-state-change and read-summary-first rules, the forbidden commands,
-the consumers checklist pointer and the ten-line result template, all read live from
+the consumers checklist pointer and the eleven-line result template, all read live from
 execution-assign.md and execution-report.md. A brief still over 5 KB without the contract
 excerpt exits 1 with `WORKER_BRIEF_OVERSIZED` unless `--allow-oversized`. Give the worker the
 brief instead of the spec set; it still reads its own owned source files.

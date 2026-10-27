@@ -82,11 +82,25 @@ class ReaderTests(unittest.TestCase):
         path.write_text(json.dumps({'run_id': 'codex-1', 'harness': 'codex', 'model': 'gpt-test', 'tokens': {
             'input_total': 379599, 'input_fresh': 56143, 'cache_read': 323456, 'cache_write': 0,
             'output_total': 5644, 'reasoning': 3089, 'fidelity': 'exact'}}), encoding='utf-8')
+        # A legacy (v1) result names only the requested model: it is never shown as the model that ran.
         self.assertEqual(u.delegate(path), {'fresh_input': 56143, 'cache_read': 323456, 'cache_write': 0,
-                                            'output': 5644, 'reasoning': 3089, 'model': 'gpt-test', 'harness': 'codex'})
+                                            'output': 5644, 'reasoning': 3089, 'model': None, 'requested_model': 'gpt-test',
+                                            'fidelity': 'exact', 'harness': 'codex'})
         path.write_text(json.dumps({'run_id': 'copilot-1', 'tokens': {'fidelity': 'unavailable'}}), encoding='utf-8')
         with self.assertRaises(u.UsageUnavailable):
             u.delegate(path)
+
+    def test_delegate_v2_result_reports_the_observed_model_only_and_keeps_partial_fidelity(self):
+        path = self.root / 'result.json'
+        codex = {'run_id': 'codex-2', 'harness': 'codex', 'requested_model': 'gpt-test', 'actual_model': None,
+                 'model_observed': False, 'tokens': {'input_fresh': 10, 'output_total': 4, 'fidelity': 'partial'}}
+        path.write_text(json.dumps(codex), encoding='utf-8')
+        result = u.delegate(path)
+        self.assertEqual((result['model'], result['requested_model'], result['fidelity']), (None, 'gpt-test', 'partial'))
+        path.write_text(json.dumps({**codex, 'harness': 'claude', 'actual_model': 'claude-x', 'model_observed': True,
+                                    'tokens': {**codex['tokens'], 'fidelity': 'exact'}}), encoding='utf-8')
+        result = u.delegate(path)
+        self.assertEqual((result['model'], result['fidelity']), ('claude-x', 'exact'))
 
     def test_locate_finds_agent_logs_by_host_id_and_refuses_to_guess(self):
         jsonl(self.root / 'claude/proj/session/subagents/agent-a1b2.jsonl', [])
@@ -184,6 +198,17 @@ class ReportUsageTests(unittest.TestCase):
         self.cli('task', '--id', 'T002', '--status', 'done', '--agent', 'w')
         with self.assertRaises(SystemExit):
             self.cli('usage', '--id', 'T002', '--agent', 'w', '--collect', 'claude', '--log', str(log))
+
+    def test_delegate_fidelity_and_unreported_model_reach_the_report(self):
+        result = self.root / 'result.json'
+        result.write_text(json.dumps({'run_id': 'codex-1', 'harness': 'codex', 'requested_model': 'gpt-test',
+                                      'actual_model': None, 'model_observed': False,
+                                      'tokens': {'input_fresh': 10, 'output_total': 4, 'fidelity': 'partial'}}), encoding='utf-8')
+        self.cli('usage', '--id', 'T001', '--agent', 'd1', '--collect', 'delegate', '--log', str(result))
+        entry = self.state()['tasks'][0]['usage'][0]
+        self.assertEqual((entry['fidelity'], entry['model'], entry['requested_model']), ('partial', None, 'gpt-test'))
+        self.assertIn('d1 codex requested gpt-test, model unreported: cache read 0, cache write 0 (partial)', self.page())
+        self.assertRegex(self.page(), r'Phase 1: Setup</th><td class="num partial">10</td>')
 
     def test_missing_log_is_recorded_as_a_visible_gap_not_zero(self):
         self.cli('usage', '--id', 'T001', '--agent', 'gone', '--collect', 'claude',

@@ -9,6 +9,6 @@ orchestration agent, the coordinator does that work. Assign bounded workers dire
 a concrete artifact and acceptance result; the coordinator keeps claims, integration and
 receipts. Dispatch only concrete deliverables with acceptance criteria (with delegation:
 `--deliverable`, `--correction-plan`, then `--diagnosis`, as in
-[delegation.md](../delegation.md#opt-in-lean-execution)). Finish all coding and testing before
+[delegation.md](../delegation.md#lean-execution-default-for-lite-and-standard)). Finish all coding and testing before
 the independent coding review; `[artifact-analysis]` marks artifact analysis, which may run
 earlier.

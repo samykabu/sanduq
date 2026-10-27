@@ -80,7 +80,7 @@ class ReportingInstructions(unittest.TestCase):
             if MENTIONS_REPORT.search(text):
                 mentioning.append(path.name)
                 self.assertIn('reporting.md', text, f'{path.name} mentions the report without linking reporting.md')
-        for expected in ('stage-execute.md', 'execution-assign.md', 'execution-report.md', 'dispatcher-operations.md'):
+        for expected in ('stage-execute.md', 'execution-assign.md', 'execution-report.md', 'utilities.md'):
             self.assertIn(expected, mentioning)
 
     def test_legacy_call_sequences_live_only_under_the_legacy_heading(self):
@@ -111,7 +111,7 @@ class ReportingInstructions(unittest.TestCase):
         self.assertIn('Do not create the additional orchestration agent', flat(REFERENCES / 'execute/lean.md'))
 
     def test_dispatcher_status_appends_the_one_line_and_makes_synthesis_optional(self):
-        status = flat(REFERENCES / 'dispatcher-operations.md')
+        status = flat(REFERENCES / 'utilities.md')
         self.assertIn('progress.py status', status)
         self.assertIn('narrative on top is optional explanation', status)
 

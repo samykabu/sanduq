@@ -75,7 +75,8 @@ stage. The dispatcher reads a small pointer set once per session:
 | --- | --- |
 | `receipt-rules.md` | recording a receipt, input roles, side effects, `amend` |
 | `recovery.md` | drift recovery: `revalidate-upstream`, Verify, Review and Ready revalidation |
-| `dispatcher-operations.md` | continue, status, doctor and its cache, reconcile, context, Project Sync points, the managed-overlay contract, handoff and GitHub rules |
+| `dispatcher-operations.md` | continue, context, Project Sync points, the managed-overlay contract, handoff and GitHub rules |
+| `utilities.md` | status, doctor and its cache, reconcile: what the three utility commands read instead of the stage loop |
 | `delegation-and-decisions.md` | invoking a claimed command, delegation, lean execution, GitHub decisions |
 | `setup-and-updates.md` | init, package updates, `migrate`, `relocate`, `host` |
 | `scope-binding.md` | the managed Scope gate and bind flags and binding restrictions, shared by the Scope commands and the Scope-gate Specify overlay |
@@ -102,7 +103,7 @@ an installed fixture project carry every stage's reference and stay under the co
 are spawned with blocking, concurrent tool calls whose results return to the orchestration agent
 directly; no agent ends a turn while it still owns running background work; the dispatcher
 reports only on an actual state change; a turn-budget table per task class and a planned
-hand-off once a worker's context passes about 150K tokens; a fixed ten-line worker result; a
+hand-off once a worker's context passes about 150K tokens; a fixed eleven-line worker result (with its reported model); a
 verification summary read before raw reporter output; `git stash` and `git add -A`/`git add .`
 forbidden for workers; and a consumers checklist after every fix. Task-issue state syncs once
 per phase boundary, routine calls use `--summary`, and the light-tier collection rules
