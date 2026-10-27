@@ -11,7 +11,7 @@ The archive bundles canonical presets from `presets/`, so consumer command edits
 are unnecessary. Install a staged extracted package using
 `specify extension add --dev <extracted/workflow>`; install its bundled presets
 through `specify preset add --dev <preset-path> --priority 1` (workflow) and priority
-2 (scope-gate/scope-brainstorm). The isolated native prototype was checked on
+2 (scope-gate/scope-brainstorm). Spec Kit's native workflow sequencing was checked on
 Spec Kit 1.0.11, commit 92b7cf7658a177cc417b7ddbeaa4c0a941a5f41b;
 its command completion is insufficient for production receipt semantics.
 Other versions require compatibility testing.

@@ -61,15 +61,20 @@ need authenticated GitHub access. Use a disposable consumer for installer work.
 | Claude Code marketplace entries | `.claude-plugin/marketplace.json` (pinned `git-subdir` sources); bundle versions live in sanduq-skills |
 | Extension-adapted skill entrypoints | `SKILL.ext.md`; `package.py` restores `SKILL.md` in the archive |
 | Extension metadata and commands | `extensions/<id>/extension.yml`, `commands/`, `skills/`, and references |
-| Managed command policy | Canonical `presets/`; bundled by package tooling |
+| Scope runtime, analyst and GitHub clarification | `extensions/scope/` (MIT license preserved) |
+| Short Scope entry and Bridge router alias skills | `extensions/workflow/skills/speckit-scope/` and `speckit-superpowers-bridge/`; the installer replaces only a recognized legacy alias or an identical owned copy |
+| PR visuals contract | `extensions/pr/commands/speckit.pr.generate.md`; generated skills inherit it after installation |
+| Managed command policy | Canonical `presets/` (`workflow`, `scope-gate`, `scope-brainstorm`); bundled by package tooling |
 | Shared freshness/dependency helpers | `extensions/scripts/shared/`; injected at build time |
-| Workflow claims, receipts, evidence, progress | `extensions/workflow/scripts/` |
+| Workflow claims, receipts, evidence, progress, installation and self-upgrade | `extensions/workflow/scripts/` |
 | Deterministic ZIPs and releases | `extensions/scripts/package.py` and `release.py` |
 | Published versions | `catalog.json` and mirrored `extensions/catalog.json` |
 | Reviewed versions awaiting publication | `extensions/pending-releases.json` |
 | Human onboarding and examples | README and `docs/` |
+| Core Spec Kit and SuperSpec | Their upstream repositories; no vendored fork, tested through installed distributions |
+| Other third-party skills a workflow uses | Their upstream sources; no copying or relicensing |
+| A consumer's requirements, issue IDs and board settings | That project's policy and configuration, never hardcoded in Sanduq source |
 
-Consult [source ownership](docs/internal/workflow-source-ownership.md) before editing a provider overlay.
 Workflow's alias files are hash-owned; customizing an installed alias can block replacement.
 Preserve project-owned CI, manual maps, board IDs, and hooks during upgrades.
 
@@ -222,14 +227,9 @@ Do not infer consumer runner policy from this repository's CI.
 
 ## Maintainer records
 
-Design plans, audits, pilot reviews and recorded evidence live in [`docs/internal/`](docs/internal/).
-They explain earlier decisions; their version statements describe the recorded experiment, not the
-current release. User-facing pages do not link to them; `check_docs.py` enforces this.
-
-- [Documentation overhaul plan](docs/internal/documentation-overhaul-plan.md) and [documentation review](docs/internal/documentation-review.md)
-- [Source ownership](docs/internal/workflow-source-ownership.md) and [compatibility evidence](docs/internal/workflow-compatibility.md)
-- [Delivery implementation plan](docs/internal/sanduq-delivery-implementation-plan.md) and [verification](docs/internal/sanduq-delivery-verification.md)
-- [Workflow implementation plan](docs/internal/workflow-extension-implementation-plan.md), [acceptance audit](docs/internal/workflow-acceptance-audit.md), [progress record](docs/internal/workflow-implementation-progress.md) and [fresh-session prompt](docs/internal/workflow-resume-prompt.md)
-- [Workflow pilot review](docs/internal/workflow-pilot-review.md) and [orchestration task design](docs/internal/orchestration-tasks.md)
-- [Native prototype results](docs/internal/native-workflow-prototype-results.md) and [illustration](docs/internal/sanduq-native-workflow-prototype.html)
-- Recorded evidence: `docs/internal/evidence/`, `docs/internal/workflow-evidence/`, `docs/internal/assets/workflow-plan/`
+Recorded evidence that user pages cite lives in `docs/evidence/`: the round 4 and round 5 live runs
+behind the [compatibility matrix](docs/reference/compatibility.md) and the
+[benchmarks](docs/evidence/benchmarks/README.md) behind the measured numbers in the changelogs and
+upgrade notes. Their version statements describe the recorded run, not the current release.
+Earlier design plans, reviews and implementation notes were removed once the work shipped; they
+remain in git history.

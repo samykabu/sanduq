@@ -56,8 +56,7 @@ Five PNGs in `manual-gallery/` show actual builds of the synthetic manual. Their
 Site outputs stay under ignored `dist/`.
 
 [Progress token usage](progress-token-usage.png) illustrates the implementation report in the
-[operations reference](../workflow/operations.md). Historical plan-delivery evidence moved to `docs/internal/assets/workflow-plan/`
-with the implementation records that reference it.
+[operations reference](../workflow/operations.md).
 
 Logo masters and icon sizes are intentional reusable brand assets. Keep them even when only one
 size is embedded. Removed overview/theme-preview sets were unused after the README split; the

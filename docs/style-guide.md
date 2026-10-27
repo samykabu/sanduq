@@ -35,7 +35,6 @@ paragraph. A limit says what does not work and what to do instead.
 - Use relative links inside `docs/`.
 - Package READMEs ship inside their archives. They use absolute
   `https://github.com/samykabu/sanduq/blob/main/...` links for anything outside the package.
-- User pages do not link to `docs/internal/`. Only `CONTRIBUTING.md` does.
 - When you move a page, leave a one-line forwarding stub at the old path for one release cycle.
 
 ## Banned words
