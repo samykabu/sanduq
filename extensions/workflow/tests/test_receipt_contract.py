@@ -554,7 +554,10 @@ class AmendmentTests(Harness):
         with self.assertRaisesRegex(w.WorkflowError, 'STALE_RECEIPT: verify.*changed amendment of execute'):
             self.gate()
         checkpoint_validator().validate(state)
-        claim = run.claim(self.usage())  # re-recording verify clears the stale receipts
+        pending = run.claim(self.usage())  # DEC-15 stage 1: removing later receipts needs confirmation
+        self.assertEqual(pending['status'], 'confirm_invalidation')
+        self.assertIn('review', run.load()['receipts'])
+        claim = run.claim(self.usage(), confirm_invalidation=True)  # re-recording verify clears the stale receipts
         self.assertEqual(claim['stage'], 'verify')
         self.assertNotIn('review', run.load()['receipts'])
 
@@ -585,7 +588,7 @@ class AmendmentTests(Harness):
     def test_amend_waits_for_an_active_claim(self):
         run = self.ready()
         path = self.edit_execute_evidence()
-        run.claim(self.usage())  # the stale Execute stage; finalize would refuse with not_ready_to_finalize
+        run.claim(self.usage(), confirm_invalidation=True)  # the stale Execute stage; finalize would refuse with not_ready_to_finalize
         with self.assertRaisesRegex(w.WorkflowError, 'ACTIVE_CLAIM_MUST_BE_RESOLVED_BEFORE_AMEND'):
             run.amend('execute', path, 'why', 'unchanged')
 
