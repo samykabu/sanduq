@@ -108,7 +108,8 @@ class Bench:
             p = root / '.specify/extensions' / n / 'extension.yml'
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(yaml.safe_dump({'extension': {'id': n, 'version': v,
-                                                       'repository': 'https://github.com/samykabu/sanduq'}}),
+                                                       'repository': 'https://github.com/samykabu/sanduq',
+                                                       'author': w.SANDUQ_AUTHOR}}),
                          encoding='utf-8')
         for command in w.COMMANDS.values():
             if command.startswith('workflow:'): continue
