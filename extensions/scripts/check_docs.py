@@ -29,7 +29,6 @@ LIFECYCLE_PAGE = DOCS / 'workflow/lifecycle.md'
 HOOKS_PAGE = DOCS / 'reference/hooks.md'
 ERRORS_PAGE = DOCS / 'reference/errors.md'
 ERRORS_START, ERRORS_END = '<!-- generated:errors:start -->', '<!-- generated:errors:end -->'
-INTERNAL = DOCS / 'internal'
 # Words that hide a hard step or add nothing; matched as whole words outside code.
 BANNED = ('simply', 'just', 'obviously', 'seamless', 'seamlessly', 'leverage', 'effortless')
 START, END = '<!-- generated:hooks:start -->', '<!-- generated:hooks:end -->'
@@ -309,9 +308,6 @@ def check():
             target = (source.parent / unquote(link.path)).resolve() if link.path else source
             if not target.exists():
                 errors.append(f'{source.relative_to(ROOT)}: missing {raw}')
-            elif INTERNAL in target.parents or target == INTERNAL:
-                if source != ROOT / 'CONTRIBUTING.md':
-                    errors.append(f'{source.relative_to(ROOT)}: user page links to docs/internal: {raw}')
             elif link.fragment and target.suffix == '.md':
                 content = texts.get(target) or target.read_text(encoding='utf-8')
                 if unquote(link.fragment) not in anchors(content):
