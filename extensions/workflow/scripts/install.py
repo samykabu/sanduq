@@ -80,7 +80,8 @@ def managed_files(root):
         if path.exists():
             for item in path.glob('speckit*'):
                 files.update([item] if item.is_file() or item.is_symlink() else (p for p in item.rglob('*') if p.is_file() or p.is_symlink()))
-            for item in path.glob('delegate-task'):
+            # Not glob('delegate-task'): Python 3.11 matches a literal name with exists(), which drops a dangling link.
+            for item in [path / 'delegate-task'] if os.path.lexists(path / 'delegate-task') else []:
                 if is_link(item):
                     skill_links.add(item)
                 elif item.is_dir():
