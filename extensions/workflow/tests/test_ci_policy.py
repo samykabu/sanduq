@@ -228,7 +228,8 @@ class MergeCandidateTemplateTests(unittest.TestCase):
         # G5: the base ref is fetched explicitly instead of a blanket fetch-depth: 0
         # (which clones every branch and tag in the remote), in both modes.
         self.assertNotIn('fetch-depth: 0', merged)
-        self.assertIn('fetch-depth: ${{ github.event.pull_request.commits + 1 }}', merged)
+        self.assertNotIn('commits + 1', merged)  # GitHub expressions have no arithmetic: the file would not load
+        self.assertIn('--deepen="$COMMITS" origin "$(git rev-parse HEAD)"', merged)
         self.assertIn('git fetch --no-tags --prune origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"', merged)
         self.assertIn('BASE_REF: ${{ github.event.pull_request.base.ref }}', merged)
 
@@ -501,3 +502,14 @@ class PolicyIntegrationTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TemplateExpressionTests(unittest.TestCase):
+    def test_no_template_expression_uses_arithmetic(self):
+        """GitHub expressions have no + - * / operators; one in a template makes the whole workflow file fail to load."""
+        import re
+        # previous/ keeps old renders byte for byte so upgrades can recognise them; it is never installed.
+        for path in sorted(p for p in EXTENSIONS.glob('*/assets/github/**/*.yml') if 'previous' not in p.parts):
+            for expression in re.findall(r'\$\{\{(.*?)\}\}', path.read_text(encoding='utf-8')):
+                with self.subTest(path=path.name, expression=expression):
+                    self.assertIsNone(re.search(r'\s[-+*/]\s', expression))
