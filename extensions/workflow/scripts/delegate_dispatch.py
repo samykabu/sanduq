@@ -1289,7 +1289,7 @@ def fallback_message(feature, attempt, pending):
                                            token=attempt['claim_token'])
               if attempt.get('claim_token') else
               'do ' + identity + ' in this session, then ' + DISPATCH_SCRIPT + ' adopt --feature ' + feature +
-              ' --id ' + identity + ' --command "<acceptance command>" --expect counts')
+              ' --id ' + identity + ' --command "<acceptance command>" --expect counts --nonce <dispatcher_nonce>')
     return ('FALLBACK_CONFIRMATION_REQUIRED: ' + identity + ' of ' + feature + ': ' + attempt['requested_harness'] +
             ' rejected model ' + model_label(attempt['requested_model']) + ' (' + pending['reason'] + '). '
             'The configured substitute is ' + substitute_text(pending['substitute']) + '. No replacement run was '
@@ -1346,7 +1346,7 @@ LIGHT_TIER_EVIDENCE_MISSING_REASON = (
     'LIGHT_TIER_EVIDENCE_MISSING: a light-tier result needs parsable reporter counts '
     '(total > 0, failed = 0) or a produced-file list inside the task\'s owned paths; run '
     '"delegate_dispatch.py accept --run-id <id> --command <acceptance command> --expect '
-    'counts|files", or reassign to a standard tier')
+    'counts|files --nonce <dispatcher_nonce>", or reassign to a standard tier')
 
 
 def _parse_json_object(text):

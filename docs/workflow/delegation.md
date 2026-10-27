@@ -398,7 +398,7 @@ already starting or running is refused with `DELEGATION_ALREADY_RUNNING`.
   `index_changed` are `false`, and `coverage_complete` is `true`. Any of these
   missing, null or different means no automatic retry. For a terminal result that is still
   incomplete, the orchestrator may run `delegate_dispatch.py reassign --feature
-  specs/<feature> --run-id <id> --reason "<gap>"` within the same limit.
+  specs/<feature> --run-id <id> --reason "<gap>" --nonce <dispatcher_nonce>` within the same limit.
 - **Dispatcher bookkeeping is not worker work.** The driver measures the whole
   repository, and the dispatcher writes the tracked ledger while runs are live
   (its own start record, and every parallel start or collect). A changed ledger
@@ -514,7 +514,7 @@ Three ways resolve an `unverified` attempt:
   collected.
 - **`delegate_dispatch.py accept --feature specs/<feature> --run-id <id>
   --command "<acceptance command>" --expect counts|files [--timeout <seconds>]
-  [--owned <path>]`** runs that command itself, independently of the worker's
+  [--owned <path>] --nonce <dispatcher_nonce>`** runs that command itself, independently of the worker's
   own report, and judges its output by the same schema below. The command
   runs with no shell: on POSIX, `shlex.split` into an argv list (there is no
   shell here to parse quoting, so this module must); on Windows, the raw
@@ -632,7 +632,7 @@ that used to read it.
 
 The only way a checked task without its own dispatcher attempt now earns
 Ready is `delegate_dispatch.py adopt --feature <f> --id <task> --command
-"<acceptance check>" --expect counts|files [--owned <path>]` — evidence,
+"<acceptance check>" --expect counts|files [--owned <path>] --nonce <dispatcher_nonce>` — evidence,
 not an assertion. Before running anything it requires `<task>` to actually
 exist in `tasks.md` and be currently checked (`DELEGATION_ADOPT_TASK_UNKNOWN`
 or `DELEGATION_ADOPT_TASK_NOT_CHECKED` otherwise), closing the gap
@@ -762,7 +762,7 @@ tamper is sticky (below) rather than relying on the marker's mere presence.
 Detecting a genuine tamper (a marker that existed and now disagrees) persists
 a feature-level flag that a later, perfectly legitimate dispatcher write does
 **not** clear on its own — only `delegate_dispatch.py trust-reset --feature
-<f> --reason "<text>"` does, after a human reviews exactly what changed; it
+<f> --reason "<text>" --nonce <dispatcher_nonce>` does, after a human reviews exactly what changed; it
 records the actor, time, reason and the exact bytes on both sides.
 **`trust-reset` is an orchestrator-only, human-authorised command, never a
 worker's**: both `stage_brief` and `task_brief` explicitly forbid a worker

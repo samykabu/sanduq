@@ -1608,7 +1608,7 @@ class Run:
                     'DELEGATION_LEDGER_UNTRUSTED: the delegation ledger for ' + self.relative +
                     ' was tampered with (a hand-edit, or one not yet cleared by trust-reset); run '
                     '"delegate_dispatch.py trust-reset --feature ' + self.relative +
-                    ' --reason <text>" only after reviewing exactly what changed')
+                    ' --reason <text> --nonce <dispatcher_nonce>" only after reviewing exactly what changed')
             stage_attempt = latest_attempt(self.root, self.relative, 'stage:' + stage)
             require(stage_attempt is not None and stage_attempt.get('status') == 'successful' and
                     stage_attempt.get('claim_token') == token,

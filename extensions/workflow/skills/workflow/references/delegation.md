@@ -110,7 +110,7 @@ the same identity also `--correction-plan "<specific correction and check>"`; fu
 `--diagnosis <project-relative JSON>` with concrete `cause`, `evidence` (an existing file) and
 `change`. Admission is checked under the ledger lock, so another model or run ID cannot reset
 the history. Lean launches try the selected candidate only and never escalate failed work
-automatically; `reassign --reason "<specific correction>" [--diagnosis <JSON>]` keeps the prior
+automatically; `reassign --reason "<specific correction>" [--diagnosis <JSON>] --nonce <dispatcher_nonce>` keeps the prior
 candidate, so it is refused with `LEAN_PROVIDER_REJECTED` after a model rejection (start with
 another eligible `--harness`/`--model` pair instead). `max_attempts` (default 3) caps attempts
 per identity, blocked and abandoned intents not counted; the next one fails with

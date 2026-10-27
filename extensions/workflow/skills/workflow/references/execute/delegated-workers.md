@@ -20,7 +20,7 @@ no automatic retry, so
 review the worktree yourself. Do not reassign a running run when YAML changes.
 For a terminal result that is still too complex or incomplete, the top-level
 dispatcher session can run `delegate_dispatch.py reassign --feature specs/<feature> --run-id <id>
---reason "<specific gap>"`; this starts at most one stronger attempt within the
+--reason "<specific gap>" --nonce <dispatcher_nonce>`; this starts at most one stronger attempt within the
 same limit and records the reason. Review partial edits before choosing that
 path. `accept`, `adopt`, `reassign` and `trust-reset` run only in the top-level
 dispatcher session, never in a host subagent: an orchestration agent reports
@@ -61,7 +61,7 @@ completed — to show the attempt `successful`; any other status, including
 
 Resolve `unverified` with `reassign` to a standard tier, or
 `delegate_dispatch.py accept --run-id <id> --command "<check>" --expect
-counts|files [--owned <path>]`, which runs that check itself (never a
+counts|files [--owned <path>] --nonce <dispatcher_nonce>`, which runs that check itself (never a
 `.bat`/`.cmd` shim on Windows — use the underlying executable) and records
 sha256/size evidence. `accept --owned` may only narrow the paths recorded at
 `start`. A note never accepts an `unverified` run.
@@ -72,7 +72,7 @@ enforced. A genuine tamper (a marker that disagrees) is sticky and survives a
 later legitimate write. `trust-reset` needs the user's explicit approval in this
 conversation: pause, show the user exactly what changed in the ledger (quote the
 diff), and only after they approve run `delegate_dispatch.py trust-reset
---feature <f> --reason "approved by <user>: <why>"` from the top-level
+--feature <f> --reason "approved by <user>: <why>" --nonce <dispatcher_nonce>` from the top-level
 dispatcher session. This catches accidental and local tampering only, never a
 forged commit, so CI integrity still rests on review. After upgrading to this
 release, re-delegate any stage claimed under an older checkpoint once, since its
@@ -82,7 +82,7 @@ agent.
 
 A checked task with no delegation attempt reaches Ready only through
 `delegate_dispatch.py adopt --feature <feature> --id <task> --command
-"<acceptance check>" --expect counts|files [--owned <path>]`. It refuses
+"<acceptance check>" --expect counts|files [--owned <path>] --nonce <dispatcher_nonce>`. It refuses
 (`DELEGATION_ADOPT_HAS_ATTEMPT`) if any attempt already exists for that task,
 and otherwise runs the acceptance check with the same machinery as `accept`
 (no shell, `.bat`/`.cmd` shims refused, bounded timeout, output cap,

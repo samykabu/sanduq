@@ -780,7 +780,7 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
             require(trust != 'untrusted',
                     'DELEGATION_LEDGER_UNTRUSTED: the delegation ledger for ' + feature + ' was tampered '
                     'with (a hand-edit, or one not yet cleared by trust-reset); run '
-                    '"delegate_dispatch.py trust-reset --feature ' + feature + ' --reason <text>" only '
+                    '"delegate_dispatch.py trust-reset --feature ' + feature + ' --reason <text> --nonce <dispatcher_nonce>" only '
                     'after reviewing exactly what changed')
             if trust == 'unverified-local' and warnings is not None:
                 warnings.append('DELEGATION_LEDGER_TRUST_UNVERIFIED_LOCAL: no local dispatcher-write '

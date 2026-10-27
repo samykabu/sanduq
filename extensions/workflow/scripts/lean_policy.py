@@ -104,7 +104,7 @@ def admit(policy, attempts, identity, work_type, deliverable, correction_plan=No
             'lean_execution.max_attempts in .specify/workflow.yml, or do the work natively and record it with '
             '"python .specify/extensions/workflow/scripts/delegate_dispatch.py adopt --feature ' +
             str(identity).rsplit('/', 1)[0] + ' --id ' + str(identity).rsplit('/', 1)[-1] +
-            ' --command \"<acceptance command>\" --expect counts"')
+            ' --command \"<acceptance command>\" --expect counts --nonce <dispatcher_nonce>"')
     if previous:
         require(concrete_text(correction_plan), 'LEAN_CORRECTION_PLAN_REQUIRED')
         if len(previous) > 1:
