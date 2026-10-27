@@ -191,7 +191,7 @@ Fixes for issue #94 (the shipped workflow gate in CI). Rendered CI files are tra
 
 ## [1.13.0] - 2026-10-18
 
-Front-half rebuild. Every item below is opt-in through `.specify/workflow.yml` unless it says otherwise; an absent key keeps the 1.12 behaviour. Measured on the scripted small feature in `docs/internal/benchmarks/`.
+Front-half rebuild. Every item below is opt-in through `.specify/workflow.yml` unless it says otherwise; an absent key keeps the 1.12 behaviour. Measured on the scripted small feature in `docs/evidence/benchmarks/` of the sanduq repository.
 
 - Profiles (`profiles: {enabled, lite: {max_score: 3}, standard: {max_score: 8}}`). The Scope receipt records `effort_score`; the first Plan claim freezes `profile: {tier, score, fixed_at}` in the checkpoint. `standard` merges Tasks into Plan (the Plan claim returns `merged: ['tasks']` and its receipt lists `tasks.md`) and runs Analyze as the runtime stage `workflow:lint`; `lite` also skips the QA and User Manual stages and treats research, data model, quickstart and contracts as optional inputs. Skipped stages are stored as `skipped: {stage: reason}` and logged as lifecycle `skipped` events. `lean_execution` is on by default for lite and standard unless the policy sets it false.
 - `workflow:lint` (`scripts/lint.py --feature <f> [--tier] [--json] [--record --token <t>]`): requirement coverage, task ids, dependency cycles, 200-character headlines, leftover `[NEEDS CLARIFICATION`, unreferenced contracts and the `artifacts.budgets` byte budgets (`enforce: lite-standard | all | warn`). `--record` completes the Analyze claim when the lint passes; `needs_model_analyze` escalates to a model Analyze whose receipt carries `command: speckit.analyze`.

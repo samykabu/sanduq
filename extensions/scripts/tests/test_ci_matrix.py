@@ -127,7 +127,7 @@ class Round3Selection(unittest.TestCase):
         for path in ("extensions/workflow/scripts/install.py", "extensions/scope/extension.yml",
                      "extensions/scripts/package.py", "extensions/scripts/smoke_install.py",
                      "extensions/scripts/shared/deps.py", "presets/workflow/preset.yml", "vendor.lock.json",
-                     "prototypes/sanduq-delivery/x.py", ".github/workflows/ci.yml", ".github/scripts/ci_matrix.py",
+                     ".github/workflows/ci.yml", ".github/scripts/ci_matrix.py",
                      "extensions/project/scripts/project_sync.py"):
             self.assertTrue(self.result([path])["install_smoke"], path)
         for path in ("extensions/scope/scripts/scope.py", "extensions/memory/scripts/x.py",

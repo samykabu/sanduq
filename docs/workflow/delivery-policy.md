@@ -1,9 +1,8 @@
 # Sanduq Delivery: installation and operation
 
 This guide covers the Sanduq-managed, GitHub-issue-bound workflow. Ordinary
-Spec Kit `speckit.specify` without a GitHub issue remains available. The native
-Spec Kit workflow in `prototypes/sanduq-delivery/` is an isolated experiment;
-Sanduq's receipt-based dispatcher is the production scheduler.
+Spec Kit `speckit.specify` without a GitHub issue remains available. Sanduq's
+receipt-based dispatcher is the production scheduler.
 For prerequisites and current installation, see [Getting started](../start/install-by-host.md). Published versions live in the [catalog](../../catalog.json); local package testing is in [Contributing](../../CONTRIBUTING.md#test-a-local-package).
 
 ## Choose processes and gate policy

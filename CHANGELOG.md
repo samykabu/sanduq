@@ -46,7 +46,7 @@ independently via `<extension>-vX.Y.Z` tags.
 
 ## 2026-10-19 — Workflow 1.14.0, Assure 2.4.0, User Manual 1.6.0, PR 4.3.0, Project 2.3.0, Illustrate 2.5.0, Memory 2.3.0, Progress 1.3.0, Scope 1.8.1
 
-- Optimization round 2 over the companion extensions: scripts take over the Assure inventory and QA audit, the PR body and lint receipt, the CHANGELOG facts, the project sync (one Python script) and the memory hashes; the Illustrate skill is procedure-first with a type index (illustration-tools 3.5.0); commands are trimmed and every description follows the catalog rules. Instruction bytes per invocation fall about 41 percent; see `docs/internal/benchmarks/`.
+- Optimization round 2 over the companion extensions: scripts take over the Assure inventory and QA audit, the PR body and lint receipt, the CHANGELOG facts, the project sync (one Python script) and the memory hashes; the Illustrate skill is procedure-first with a type index (illustration-tools 3.5.0); commands are trimmed and every description follows the catalog rules. Instruction bytes per invocation fall about 41 percent; see `docs/evidence/benchmarks/`.
 - Opt-in: native Progress hook wiring and a PostToolUse matcher, an Illustrate post-write check, a Memory archive guard, evidence-scoped User Manual updates. Vendors dev-tools 1.2.0 and agent-tools 1.5.0.
 
 ## 2026-10-19 — Workflow 1.13.1, Assure 2.3.4, User Manual 1.5.4
@@ -57,7 +57,7 @@ independently via `<extension>-vX.Y.Z` tags.
 
 - Front-half rebuild: effort-tiered profiles, deterministic `workflow:lint`, merged plan and tasks, batch upstream revalidation, declared side effects, cached doctor, inventory side files and a status-based resume contract.
 - Scope renders the spec from the approved analysis, answers the first clarification round in session, allows Mermaid questions, caps questions per round and caches the board.
-- Cross-host: guard hook and role agents for Claude Code and Codex, opt-in alias skills, skill validation in CI, portable plugin manifests and a Codex marketplace, pruned instruction text (about 41 percent fewer instruction bytes per run; see `docs/internal/benchmarks/`).
+- Cross-host: guard hook and role agents for Claude Code and Codex, opt-in alias skills, skill validation in CI, portable plugin manifests and a Codex marketplace, pruned instruction text (about 41 percent fewer instruction bytes per run; see `docs/evidence/benchmarks/`).
 
 ## 2026-10-17 — Memory 2.2.0, Workflow 1.11.0, Illustrate 2.4.2
 
