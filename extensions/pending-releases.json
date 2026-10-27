@@ -1,7 +1,12 @@
 {
   "schema_version": 1,
   "versions": {
-    "workflow": "1.20.1"
+    "workflow": "1.21.0",
+    "scope": "1.12.0",
+    "memory": "2.6.0",
+    "pr": "4.7.0",
+    "project": "2.7.0",
+    "progress": "1.7.0"
   },
   "status": "implementation-in-progress",
   "note": "Workflow 1.20.1 (pending, folded into the PH-03 train): only the current source key version is accepted; internal records carry no third-party product names. Not released on its own."

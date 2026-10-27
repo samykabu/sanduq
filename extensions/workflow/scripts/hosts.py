@@ -39,7 +39,8 @@ INTEGRATION_FILES = ('.specify/integration.json', '.specify/init-options.json')
 ALIASES = {'speckit-scope': 'legacy-alias-hashes.json',
            'speckit-superpowers-bridge': 'legacy-bridge-alias-hashes.json'}
 INSTALL_LOCK = '.specify/workflow/install-lock.json'
-# Scope commands only its hooks call; on Claude they leave the slash menu but stay callable.
+# Scope commands only its hooks call. Scope no longer lists them as skills (OMAR-09); an older Scope's
+# rendered copies are still hidden from the Claude slash menu here.
 HOOK_ONLY_SKILLS = tuple('speckit-scope-' + name for name in ('guard', 'bind', 'after-specify', 'plan-guard', 'reconcile'))
 # Where each host reads project hooks, and the text that marks Sanduq's guard entry in them.
 HOOK_FILES = {'claude': '.claude/settings.json', 'codex': '.codex/hooks.json'}
@@ -309,7 +310,8 @@ def render_role(role, host, model=None):
     """One role definition as the host's custom-agent file."""
     source = '.specify/extensions/workflow/assets/roles/' + role['name'].removeprefix('sanduq-') + '.yml'
     note = ROLE_MARKER + ' generated from ' + source + ' by the workflow installer; local edits are replaced'
-    instructions = role['instructions'].strip() + '\n'
+    from delegate_dispatch import NO_DISPATCHER_COMMANDS  # the one source of the forbidden dispatcher commands
+    instructions = role['instructions'].strip().replace('{no_dispatcher_commands}', NO_DISPATCHER_COMMANDS.strip()) + '\n'
     if host == 'claude':
         head = ['---', 'name: ' + role['name'], 'description: ' + json.dumps(role['description'], ensure_ascii=False),
                 'tools: ' + ', '.join(role['tools'])] + (['model: ' + model] if model else []) + ['---']
@@ -476,7 +478,7 @@ def status(root, package_root=None):
 def switch(root, target, preview=False, runner=None, package_root=None, replace_unrecognized_aliases=False):
     """Make ``target`` the default host without losing any host's managed skills."""
     from install import (command, delegation_preflight, install_aliases, alias_edit_errors, prune_backups, restore,
-                         review_aliases, snapshot)
+                         review_aliases, snapshot, mark_in_progress, clear_in_progress)
     from reconcile import reconcile
     runner = runner or command
     package_root = package_root or PACKAGE
@@ -547,6 +549,7 @@ def switch(root, target, preview=False, runner=None, package_root=None, replace_
         delegation_preflight(root)
         backup = root / '.specify/workflow/backups/hosts' / uuid.uuid4().hex
         before = snapshot(root, backup)
+        mark_in_progress(root, 'host', backup)
         log = []
         try:
             runner(root, ['specify', 'integration', 'use', target], log)
@@ -585,9 +588,12 @@ def switch(root, target, preview=False, runner=None, package_root=None, replace_
                       'checkpoints_to_migrate': migrations(root, digest_after, False, reason, digest_before)}
             write(backup / 'result.json', {'ok': True, 'commands': log})
             result['backups'] = prune_backups(root)
+            clear_in_progress(root)
             return result
-        except Exception as exc:
+        except BaseException as exc:  # Ctrl-C and SystemExit restore too, then re-raise as they are (AHMED-09)
             from install import managed_files
-            write(backup / 'result.json', {'ok': False, 'error': str(exc), 'commands': log})
+            write(backup / 'result.json', {'ok': False, 'error': str(exc) or type(exc).__name__, 'commands': log})
             restore(root, before, managed_files(root))
+            clear_in_progress(root)
+            if not isinstance(exc, Exception): raise
             raise WorkflowError('HOST_SWITCH_ROLLED_BACK: ' + str(exc) + '; backup: ' + str(backup)) from exc

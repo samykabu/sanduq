@@ -580,7 +580,10 @@ progress: statusline removed
   the project `config.json` under `statusline.previous`. When the previous one was a command, it is also saved as
   `statusline.chained`. Installing twice changes nothing. `init --statusline yes` does the same.
 - **run** reads the status line JSON from stdin. For a bound session it merges the snapshot into the report. Then it runs
-  the chained command with the same stdin and passes its output through byte for byte. With no chained command it prints
+  the chained command with the same stdin and passes its output through byte for byte. The chained command runs only
+  while `config.json` is untracked by git and `statusline.chained` still equals `statusline.previous.command` as
+  recorded at install; a tracked file or an edited command is ignored with one line in `diagnostics.log`, so a
+  repository cannot ship a command that runs on every refresh. With no chained command it prints
   one line, for example `Opus | ctx 41%`. It never prints an error.
 - **uninstall** restores the saved status line exactly, or removes `statusLine` if there was none. If you changed
   `statusLine` yourself since, it leaves your setting alone and only clears the saved state.

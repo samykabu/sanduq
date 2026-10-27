@@ -150,7 +150,7 @@ class FreshBindingTests(unittest.TestCase):
     def test_scope_bind_cli_refuses_before_mutation_lock(self):
         self.prepare_published_child()
         feature = self.root / 'specs/001-new'; (feature / 'spec.md').write_text('# Placeholder')
-        with patch.object(m, 'Scope', return_value=self.app), patch.object(m.os, 'open', side_effect=AssertionError('must not create lock')):
+        with patch.object(m, 'Scope', return_value=self.app), patch.object(m, 'mutation_lock', side_effect=AssertionError('must not create lock')):
             result = m.main(['bind', '1', '--apply', '--feature', 'specs/001-new', '--token', 'owned', '--session', 'session'])
         self.assertEqual(result, 2)
         self.assertFalse((self.root / '.specify/scope/mutation.lock').exists())

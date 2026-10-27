@@ -121,7 +121,12 @@ def codex(path, since=None, until=None):
 
 
 def delegate(path, since=None, until=None):
-    """A delegate-task result.json, already normalised by its driver."""
+    """A delegate-task result.json, already normalised by its driver.
+
+    `model` is the model the harness reported (`actual_model` with `model_observed`), never the
+    requested one, which travels as `requested_model`; `fidelity` is the driver's own
+    (`exact` or `partial`).
+    """
     try:
         result = json.loads(Path(path).read_text(encoding='utf-8'))
     except (OSError, ValueError) as exc:
@@ -131,8 +136,10 @@ def delegate(path, since=None, until=None):
         raise UsageUnavailable('Delegate run ' + str(result.get('run_id')) + ' reported no token counts')
     return {'fresh_input': int(tokens['input_fresh']), 'cache_read': int(tokens.get('cache_read') or 0),
             'cache_write': int(tokens.get('cache_write') or 0), 'output': int(tokens.get('output_total') or 0),
-            'reasoning': tokens.get('reasoning'), 'model': result.get('model'),
-            'harness': result.get('harness') or 'delegate'}
+            'reasoning': tokens.get('reasoning'),
+            'model': result.get('actual_model') if result.get('model_observed') else None,
+            'requested_model': result.get('requested_model') or result.get('model'),
+            'fidelity': tokens['fidelity'], 'harness': result.get('harness') or 'delegate'}
 
 
 def claude_root():

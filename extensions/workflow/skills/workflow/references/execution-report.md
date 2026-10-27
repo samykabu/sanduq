@@ -54,7 +54,7 @@ state after every notification.
 
 ## Structured worker results
 
-A worker returns its result in exactly this ten-line form; the orchestration
+A worker returns its result in exactly this eleven-line form; the orchestration
 agent forwards these lines, or a pointer to them, never the worker's full
 prose, to the dispatcher and to the report:
 
@@ -67,9 +67,15 @@ Evidence: <path(s) under specs/<feature>/evidence/>
 Diff: <+/- line counts per file, uncommitted>
 Consumers checked: <which consumers were checked, or "n/a" with why>
 Tokens: <fresh/cached/output if the worker's harness reports them, else "unlogged">
+Model: <the model the worker's harness reports for its session, else "unreported">
 Blockers: <none, or the exact blocking condition>
 Next: <what the orchestrator should do, or "none">
 ```
+
+The `Model:` line is the reported model. Copy it, beside the model the assignment requested, into
+the handoff entry and the Execute receipt's `summary` as `requested <m>, reported <m or
+unreported>`. Never fill the reported value from the request: an unreported model stays
+`unreported`.
 
 ## Read verification summaries before raw output
 

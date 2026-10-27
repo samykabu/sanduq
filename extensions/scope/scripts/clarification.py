@@ -10,11 +10,12 @@ import re
 import subprocess
 import sys
 import uuid
+from contextlib import ExitStack
 from datetime import datetime, timezone
 from urllib.parse import quote
 from pathlib import Path
 
-from scope import Scope, ScopeError, require, read_json, write_json, with_transport
+from scope import Scope, ScopeError, mutation_lock, require, read_json, write_json, with_transport
 
 FEATURE, WAITING = 'Feature Specification', 'Need Clarifications'
 RECORD = re.compile(r'\A<!-- speckit-clarification:(question|round|round-in-session) (\{[^\n]*\}) -->\n')
@@ -450,6 +451,16 @@ class Clarification:
 
     def gate(self, issue):
         status = self.app.status(issue)
+        if not self.app.tracks(FEATURE):
+            # The board mode never writes Feature Specification or Need Clarifications, so the clarification
+            # records say whether a published question still waits for its answer.
+            require(issue.get('state') == 'open', 'CLARIFICATION_CLOSED: do not reopen a closed issue implicitly.')
+            waiting = self.unanswered(issue)
+            if waiting:
+                raise ScopeError(f'CLARIFICATION_WAITING: {", ".join(waiting)} has no answer yet; tick one option per question, '
+                                 'or add a normal comment such as C1Q1: A with optional feedback. Then rerun. No new questions '
+                                 'were posted and no state was changed.')
+            return
         from workflow_policy import load
         policy = load(self.root)
         from workflow_policy import bound_claim
@@ -466,6 +477,29 @@ class Clarification:
             raise ScopeError(f'CLARIFICATION_WAITING: tick one option per question, or add a normal comment such as C1Q1: A with optional feedback. Then move the issue back to {self.app.actual_status(FEATURE)} and rerun. No new questions were posted and no state was changed.')
         require(status == FEATURE, f'CLARIFICATION_STATE: only {self.app.actual_status(FEATURE)} issues can be processed; #{issue["number"]} is {self.app.actual_status(status)}.')
 
+    def unanswered(self, issue):
+        """Published question IDs with no answer: with the local transport, the `C<r>Q<n>` sections of the feature's
+        clarifications.md without a reply; otherwise the questions whose latest record is pending and that have no
+        selected box and no reply from a trusted commenter."""
+        feature, state = self.checkpoint(issue)
+        if state.get('clarification_transport') == 'local':
+            from workflow_policy import _decisions_module
+            path = self.root / feature / 'clarifications.md'
+            sections = _decisions_module().local_sections(path.read_text(encoding='utf-8-sig') if path.is_file() else '')
+            return [qid for qid, section in sections.items()
+                    if qid.startswith('C') and not (section['ticked'] or section['answers'])]
+        latest = {}
+        for item in read_json(self.root / feature / CLARIFICATIONS_FILE, {}).get('items', []) if feature else []:
+            latest[item['source_id']] = item
+        pending = [qid for qid, item in latest.items() if item.get('state') == 'pending']
+        if not pending:
+            return []
+        prior = history(self.gh.api(f'{self.app.base}/{issue["number"]}/comments?per_page=100', pages=True),
+                        issue['user']['login'])
+        return [qid for qid in pending if not (
+            (prior['questions'].get(qid) or {}).get('selection', {}).get('state') == 'selected'
+            or prior['reply_candidates'].get(qid))]
+
     def spec_path(self, issue):
         matches = []
         for binding in (self.root / 'specs').glob('*/scope-source.json'):
@@ -476,6 +510,24 @@ class Clarification:
                 matches.append(path)
         require(len(matches) == 1, f'Expected one bound specification for #{issue["number"]}; found {len(matches)}. Run Specify or resolve duplicate bindings.')
         return matches[0]
+
+    def checkpoint(self, issue):
+        """(feature label, workflow checkpoint) of the feature bound to `issue`; ('', {}) when none is bound or the
+        run is unmanaged. Never raises: the state gate decides what a missing binding means."""
+        for binding in (self.root / 'specs').glob('*/scope-source.json'):
+            value = read_json(binding, {})
+            if value.get('issue') == issue['number'] and value.get('repo') == self.app.repo:
+                return binding.parent.relative_to(self.root).as_posix(), read_json(binding.parent / 'workflow/checkpoint.json', {})
+        return '', {}
+
+    def refuse_local(self, issue):
+        """REQ-21: a feature whose checkpoint froze `clarification_transport: local` never posts to GitHub."""
+        feature, state = self.checkpoint(issue)
+        if state.get('clarification_transport') == 'local':
+            raise ScopeError(f'CLARIFICATION_TRANSPORT_LOCAL: #{issue["number"]} answers clarifications in '
+                             f'{feature}/clarifications.md, not on GitHub. Ask the questions in the conversation and '
+                             'record the user\'s replies in that file (github-clarification skill, references/local.md); '
+                             'nothing is posted or synced.')
 
     def engine(self):
         registry = read_json(self.root / '.specify/extensions/.registry', {}).get('extensions', {})
@@ -493,6 +545,7 @@ class Clarification:
 
     def inspect(self, value=None, gate=True):
         issue = self.source(value)
+        self.refuse_local(issue)
         if gate:
             self.gate(issue)  # Must precede reading the spec or comment history.
         path = self.spec_path(issue)
@@ -595,6 +648,8 @@ class Clarification:
     def transition(self, issue, status):
         # Keep live board and local no-regress cache in step.
         self.app.set_status(issue, status)
+        if self.app.board_mode == 'off':
+            return  # no board, no Project Sync state
         path = self.root / self.app.cfg['stateFile']
         state = read_json(path, {})
         for item in state.values():
@@ -667,7 +722,7 @@ class Clarification:
         resolved = not analysis['questions'] and all(a['disposition'] != 'unresolved' for a in analysis.get('answers', []))
         if status == 'Ready' and resolved:
             self.app._board = None
-            self.plan_gate(str(number))
+            self.ready_gate(number)
             path = self.root / snapshot['spec_path']
             result['next_action'] = {'command': '/speckit-plan', 'issue': number, 'spec_path': str(path.resolve()),
                                      'feature_directory': str(path.parent.relative_to(self.root)),
@@ -679,6 +734,7 @@ class Clarification:
             return self.publish_in_session(value, analysis, answers, apply)
         batch = digest(analysis)[:20]
         source = self.source(value)
+        self.refuse_local(source)
         folder = self.root / '.specify/scope/clarifications' / f'{source["number"]}-{batch}'
         journal_path = folder / 'journal.json'
         journal = read_json(journal_path)
@@ -839,14 +895,14 @@ class Clarification:
         journal['complete'] = True
         write_json(journal_path, journal)
         if automatic_resume and result['status'] == WAITING:
-            write_json(observed_path, {'waiting_digest': self.inspect(value)['snapshot_digest']})
+            write_json(observed_path, {'waiting_digest': self.inspect(value, gate=False)['snapshot_digest']})
         result = dict(result, comment_ids=journal['comments'], next_action=None)
         # Only a successfully published, fully resolved review hands off to Plan.
         # A creator waiver can close the process without resolving its uncertainty.
         resolved = not analysis['questions'] and all(a['disposition'] != 'unresolved' for a in analysis.get('answers', []))
         if result['status'] == 'Ready' and resolved:
             self.app._board = None
-            self.plan_gate(str(number))
+            self.ready_gate(number)
             result['next_action'] = {'command': '/speckit-plan', 'issue': number,
                                      'spec_path': str(path.resolve()),
                                      'feature_directory': str(path.parent.relative_to(self.root)),
@@ -955,13 +1011,29 @@ class Clarification:
         issue = self.app.issue(number)
         self.gate(issue)
         self.transition(issue, 'Ready')
-        self.plan_gate(str(number))
+        self.ready_gate(number)
         return dict(result, comment_ids={'summary': posted['id']},
                     next_action={'command': '/speckit-plan', 'issue': number, 'spec_path': str(path.resolve()),
                                  'feature_directory': str(path.parent.relative_to(self.root)), 'feature_name': path.parent.name})
 
+    def ready_gate(self, number):
+        """The plan gate right after the move to Ready; without a Ready column the later Clarify receipt is the gate."""
+        if self.app.tracks('Ready'):
+            self.plan_gate(str(number))
+
     def plan_gate(self, value=None):
         issue = self.source(value)
+        feature, state = self.checkpoint(issue)
+        if state.get('clarification_transport') == 'local' or not self.app.tracks('Ready'):
+            # Nothing moved the board: the passed Clarify receipt (every question answered) is the gate.
+            where = (('this feature records its questions and the user\'s replies in ' + feature +
+                      '/clarifications.md (local transport)') if state.get('clarification_transport') == 'local' else
+                     'project_sync.mode ' + self.app.board_mode + ' never moves the issue to Ready, so the Clarify '
+                     'receipt is the record')
+            require(state.get('receipts', {}).get('clarify', {}).get('outcome') == 'passed',
+                    'CLARIFICATION_REQUIRED: planning needs a passed Clarify receipt; ' + where + '. '
+                    'Complete the Clarify stage first.')
+            return {'issue': issue['number'], 'status': self.app.actual_status(self.app.status(issue)), 'transport': 'local'}
         status = self.app.status(issue)
         from workflow_policy import bound_claim
         revalidation = bound_claim(self.root, self.app.repo, issue['number'], {'plan'})
@@ -983,19 +1055,11 @@ def main(argv=None):
     parser.add_argument('--answers', type=Path, help='publish only: the in-session answers for round 1')
     parser.add_argument('--apply', action='store_true')
     args = parser.parse_args(argv)
-    lock = None
+    lock = ExitStack()
     try:
         app = Clarification(Scope(args.root))
         if args.apply:
-            candidate = app.root / '.specify/scope/mutation.lock'
-            candidate.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                fd = os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            except FileExistsError:
-                raise ScopeError('Another Scope/clarification mutation is running. Inspect mutation.lock before retrying.')
-            with os.fdopen(fd, 'w') as handle:
-                handle.write(str(os.getpid()))
-            lock = candidate
+            lock.enter_context(mutation_lock(app.root, 'Another Scope/clarification mutation is running'))
         if args.command == 'publish':
             require(args.analysis and args.analysis.is_file(), 'Provide --analysis <review.json>.')
             require(not args.answers or args.answers.is_file(), 'Provide --answers <answers.json>.')
@@ -1013,8 +1077,7 @@ def main(argv=None):
         print(str(exc), file=sys.stderr)
         return 2
     finally:
-        if lock:
-            lock.unlink(missing_ok=True)
+        lock.close()
 
 
 if __name__ == '__main__':

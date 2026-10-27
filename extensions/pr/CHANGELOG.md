@@ -1,5 +1,9 @@
 # Changelog
 
+## [4.7.0] - 2026-10-27
+
+- `speckit.pr.review-feedback`: the plan file carries the summary comment as `summary`, covered by the approved digest, and step 7 posts that text instead of an unapproved `report.md`. In a managed project (`.specify/workflow.yml`) step 6 runs `gate_explain.py` after the push and follows its revalidate recipe before reporting, since a pushed fix after Ready makes receipts stale.
+
 ## [4.6.1] - 2026-10-26
 
 - License: this package is MIT; versions before this one were PolyForm Noncommercial 1.0.0. The archive now ships its LICENSE.

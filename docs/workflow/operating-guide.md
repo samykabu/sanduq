@@ -134,6 +134,10 @@ scope:
 - `clarification.in_session_first_round`: when the person in the session is the issue creator,
   round 1 can be answered there. The runtime posts one comment listing each question, the chosen
   answer and who answered, and moves the issue to Ready.
+- `clarification.transport: local`: every clarification and decision question of a feature started
+  after the change is asked in the conversation and recorded, with the user's reply, in
+  `specs/<feature>/clarifications.md`; nothing is posted to GitHub and the answers are labelled
+  self-attested. The default, `github-comments`, is unchanged.
 - `artifacts`: byte budgets that `workflow:lint` enforces; `lite-standard` blocks on those
   tiers and warns on `full`.
 - `issue_sync.taskstoissues: phase-lazy`: Tasks-to-Issues publishes the first phase; Execute

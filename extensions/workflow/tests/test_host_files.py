@@ -9,6 +9,7 @@ from pathlib import Path
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import delegate_dispatch as dispatch
 import hosts
 import install as installer
 import reconcile
@@ -114,7 +115,7 @@ class HostFilesTests(HostTests):
             groups = data['hooks']['PreToolUse']
             guards = [h for g in groups for h in g['hooks'] if hosts.GUARD_MARK in h['command']]
             self.assertEqual(len(guards), 1, path)
-            self.assertEqual([g['matcher'] for g in groups if g['hooks'][0] in guards], ['Bash'])
+            self.assertEqual([g['matcher'] for g in groups if g['hooks'][0] in guards], ['Bash|PowerShell|shell'])
         claude = json.loads(settings.read_text(encoding='utf-8'))
         self.assertEqual(claude['permissions'], {'allow': ['Bash(ls)']})
         self.assertIn(OTHER_HOOK, claude['hooks']['PreToolUse'])
@@ -154,10 +155,11 @@ class HostFilesTests(HostTests):
         self.assertEqual(head['description'], worker['description'])
         self.assertEqual(head['tools'], ', '.join(worker['tools']))
         self.assertNotIn('model', head)  # delegation off: the role inherits the session model
-        self.assertIn(worker['instructions'].strip(), text)
+        expected = worker['instructions'].strip().replace('{no_dispatcher_commands}', dispatch.NO_DISPATCHER_COMMANDS.strip())
+        self.assertIn(expected, text)
         codex = tomllib.loads((self.root / '.codex/agents/sanduq-worker.toml').read_text(encoding='utf-8'))
         self.assertEqual(set(codex), {'name', 'description', 'developer_instructions'})
-        self.assertEqual(codex['developer_instructions'].strip(), worker['instructions'].strip())
+        self.assertEqual(codex['developer_instructions'].strip(), expected)
 
     def test_role_model_comes_from_enabled_delegation_tiers(self):
         role = yaml.safe_load((ROLES / 'reviewer.yml').read_text(encoding='utf-8'))
@@ -174,10 +176,15 @@ class HostFilesTests(HostTests):
             self.assertEqual(set(role), {'name', 'description', 'instructions', 'model_tier', 'tools'})
             self.assertEqual(role['name'], 'sanduq-' + name)
             self.assertIn(role['model_tier'], ('high', 'standard', 'light', 'documentation', 'review'))
-            for text in ('git stash', 'git add -A', 'git add .', 'delegate_dispatch.py'):
+            for text in ('git stash', 'git add -A', 'git add .', '{no_dispatcher_commands}'):
                 self.assertIn(text, role['instructions'])
+            self.assertNotIn('delegate_dispatch.py', role['instructions'])  # OMAR-19: one generated sentence
+            for host in ('claude', 'codex'):
+                rendered = hosts.render_role(role, host)
+                self.assertIn(dispatch.NO_DISPATCHER_COMMANDS.strip(), rendered)
+                self.assertNotIn('{no_dispatcher_commands}', rendered)
             for field in ('Task:', 'Status:', 'Files touched:', 'Tests:', 'Evidence:', 'Diff:',
-                          'Consumers checked:', 'Tokens:', 'Blockers:', 'Next:'):
+                          'Consumers checked:', 'Tokens:', 'Model:', 'Blockers:', 'Next:'):
                 self.assertIn('\n' + field, role['instructions'])
 
     def test_doctor_warns_when_claude_md_does_not_import_agents_md(self):

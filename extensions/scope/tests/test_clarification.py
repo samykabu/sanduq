@@ -533,6 +533,60 @@ class ClarificationTests(unittest.TestCase):
         self.move('Ready')
         self.assertEqual(self.app.plan_gate('1')['status'], 'Ready')
 
+    def test_local_transport_refuses_github_rounds_and_gates_plan_on_the_clarify_receipt(self):
+        # REQ-21: the feature's checkpoint froze transport local at Scope start; nothing is posted or moved.
+        checkpoint = self.feature / 'workflow/checkpoint.json'
+        sm.write_json(checkpoint, {'issue': 'acme/app#1', 'clarification_transport': 'local', 'receipts': {}})
+        for call in (lambda: self.app.inspect('1'), lambda: self.app.publish('1', {'version': 1}, True)):
+            with self.assertRaisesRegex(sm.ScopeError, r'^CLARIFICATION_TRANSPORT_LOCAL: #1 .*specs/001-example/clarifications.md'):
+                call()
+        with self.assertRaisesRegex(sm.ScopeError, r'^CLARIFICATION_REQUIRED: .*specs/001-example/clarifications.md'):
+            self.app.plan_gate('1')
+        sm.write_json(checkpoint, {'issue': 'acme/app#1', 'clarification_transport': 'local',
+                                   'receipts': {'clarify': {'outcome': 'passed'}}})
+        self.assertEqual(self.app.plan_gate('1'), {'issue': 1, 'status': m.FEATURE, 'transport': 'local'})
+        self.assertEqual(self.gh.writes, [])
+        self.assertEqual(self.app.dispatch('1')['engine'], 'clarify')  # the dispatcher still names the engine
+
+    def board(self, mode):
+        """Workflow's `project_sync.mode` (REQ-22) for this repository, with a fresh Scope that reads it."""
+        import yaml
+        policy = sm.workflow_policy._workflow_module().default_policy(False, False)
+        policy['project_sync'] = {'mode': mode}
+        (self.root / '.specify/workflow.yml').write_text(yaml.safe_dump(policy), encoding='utf-8')
+        with patch('sanduq_remote.origin_url', return_value='https://github.com/acme/app.git'):
+            self.scope = sm.Scope(self.root, self.gh)
+        self.app = m.Clarification(self.scope)
+
+    def answer_the_waiting_question(self):
+        """Publish one question, check a rerun waits, answer it and publish the answer."""
+        self.app.publish('1', self.analysis([question()]), True)
+        with self.assertRaisesRegex(sm.ScopeError, '^CLARIFICATION_WAITING: C1Q1 has no answer yet'):
+            self.app.inspect('1')
+        reply = self.gh.comment('C1Q1: A')
+        answer = {'question_id': 'C1Q1', 'disposition': 'answered', 'comment_ids': [reply['id']],
+                  'explanation': 'The creator chose retry.'}
+        review = self.analysis(answers=[answer])
+        review['spec_edits'] = [{'before': 'The form can be submitted.',
+                                 'after': 'The form can be submitted; failures preserve input and permit retry.'}]
+        return self.app.publish('1', review, True)
+
+    def test_mode_off_waits_on_the_records_and_makes_no_board_call(self):
+        (self.root / '.specify/extensions/project/config.json').unlink()
+        self.board('off')
+        self.gh.command = lambda args, payload=None: self.fail('board call in mode off: ' + ' '.join(args[:2]))
+        self.assertEqual(self.answer_the_waiting_question()['status'], 'Ready')
+        with self.assertRaisesRegex(sm.ScopeError, r'^CLARIFICATION_REQUIRED: .*project_sync\.mode off never moves'):
+            self.app.plan_gate('1')
+
+    def test_mode_minimal_waits_on_the_records_and_writes_only_ready(self):
+        self.board('minimal')
+        self.gh.statuses[1] = None  # minimal never writes Feature Specification
+        self.assertEqual(self.answer_the_waiting_question()['status'], 'Ready')
+        moves = [w[1][w[1].index('--single-select-option-id') + 1] for w in self.gh.writes if w[0] == 'item-edit']
+        self.assertEqual(moves, ['Ready'])
+        self.assertEqual(self.app.plan_gate('1')['status'], 'Ready')
+
     # ---- workflow/clarifications.json (Scope 1.7.0) -------------------------------------------------------------
 
     def records_path(self):

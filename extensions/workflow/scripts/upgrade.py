@@ -10,8 +10,9 @@ import uuid
 from pathlib import Path
 import yaml
 from packaging.version import Version
-from workflow import WorkflowError, ensure_local_excludes, load_policy, locked, read, registry, require, write
-from install import command, delegation_preflight, managed_files, memory_archive_preflight, prune_backups, restore, snapshot
+from workflow import WorkflowError, ensure_local_excludes, explain, load_policy, locked, read, registry, require, write
+from install import (command, delegation_preflight, managed_files, memory_archive_preflight, prune_backups, restore,
+                     snapshot, mark_in_progress, clear_in_progress)
 
 REPOSITORY = 'https://github.com/samykabu/sanduq'
 
@@ -48,6 +49,7 @@ def upgrade(root, version, apply=False, packages=None, runner=command, preserve_
             memory_archive_preflight(root)
             backup = root / '.specify/workflow/backups/upgrades' / uuid.uuid4().hex
             before = snapshot(root, backup)
+            mark_in_progress(root, 'upgrade', backup)
             delegation_before = load_policy(root)['delegation']
             history_before = {path: content for path, content in before.items()
                               if path.startswith('specs/') and path.endswith('/workflow/delegations.json')}
@@ -101,11 +103,14 @@ def upgrade(root, version, apply=False, packages=None, runner=command, preserve_
             result.update(applied=True, backup=str(backup), commands=log)
             write(backup / 'result.json', {'ok': True, **result})
             result['backups'] = prune_backups(root)
+            clear_in_progress(root)
             return result
-        except Exception as error:
-            write(backup / 'result.json', {'ok': False, 'error': str(error), 'commands': log})
+        except BaseException as error:  # Ctrl-C and SystemExit restore too, then re-raise as they are (AHMED-09)
+            write(backup / 'result.json', {'ok': False, 'error': str(error) or type(error).__name__, 'commands': log})
             with locked(root / '.specify/workflow/runtime/dispatch.lock'):
                 restore(root, before, managed_files(root))
+            clear_in_progress(root)
+            if not isinstance(error, Exception): raise
             raise WorkflowError('WORKFLOW_UPGRADE_ROLLED_BACK: ' + str(error) + '; backup: ' + str(backup)) from error
 
 
@@ -128,4 +133,4 @@ if __name__ == '__main__':
         for key in ('codex_hook_approval', 'illustrate_hook_approval'):
             if result.get(key): print(result[key], file=sys.stderr)
     except (WorkflowError, ValueError, OSError, KeyError) as error:
-        print(json.dumps({'ok': False, 'error': str(error)})); sys.exit(1)
+        print(json.dumps({'ok': False, 'error': str(error), **explain(str(error))})); sys.exit(1)

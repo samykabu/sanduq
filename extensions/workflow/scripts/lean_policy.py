@@ -1,4 +1,4 @@
-"""Opt-in lean execution admission. No model routing or evidence shortcuts."""
+"""Lean execution admission (on by default for lite and standard). No model routing or evidence shortcuts."""
 from __future__ import annotations
 
 import json
@@ -60,6 +60,14 @@ def enabled(policy, tier=None):
     return settings(policy)['enabled']
 
 
+def describe(policy, tier=None):
+    """`on (tier default)`, `on (policy)`, `off (policy)` or `off (default)`: the line claim and status print."""
+    on = enabled(policy, tier)
+    configured = (policy.get('lean_execution') or {}).get('enabled')
+    why = 'policy' if configured is not None else 'tier default' if on else 'default'
+    return ('on' if on else 'off') + ' (' + why + ')'
+
+
 def coordinator_owned(policy, stage, commands, tier=None):
     if not enabled(policy, tier):
         return False
@@ -78,7 +86,8 @@ def coding_tasks(text):
 
 
 def concrete_text(value):
-    return isinstance(value, str) and len(value.strip()) >= 12 and len(value.split()) >= 3
+    # A present, non-blank string. The 12-character/3-word bar measured nothing (AHMED-28) and was dropped.
+    return isinstance(value, str) and bool(value.strip())
 
 
 def admit(policy, attempts, identity, work_type, deliverable, correction_plan=None, diagnosis=None, tier=None):

@@ -14,12 +14,17 @@ import hashlib
 import json
 import re
 import subprocess
+import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 import yaml
 from packaging.version import Version
 from package import package, package_files, ROOT
+sys.path.insert(0, str(Path(__file__).resolve().parent / 'shared'))
+import sanduq_gh  # noqa: E402
+
+GH_TIMEOUT = 600  # one asset upload or download; a hung gh fails the job here, not at the Actions limit
 
 REPO = 'samykabu/sanduq'
 URL = 'https://github.com/' + REPO
@@ -214,8 +219,16 @@ def prepare(root=ROOT, development=False):
     return result
 
 
+def gh(args, root=ROOT):
+    """stdout of `gh <args>` through the shared transport, bounded by GH_TIMEOUT; failures raise ValueError like command()."""
+    try:
+        return sanduq_gh.run_gh(args, cwd=str(root), timeout=GH_TIMEOUT).strip()
+    except sanduq_gh.GhError as exc:
+        raise ValueError('Command failed: gh ' + ' '.join(args) + ': ' + str(exc)) from None
+
+
 def gh_json(args, root=ROOT):
-    return json.loads(command(['gh',*args],root))
+    return json.loads(gh(args,root))
 
 
 def verify_asset(release, root=ROOT):
@@ -226,7 +239,7 @@ def verify_asset(release, root=ROOT):
     require(len([a for a in info['assets'] if a['name']==release['asset']]) == 1, 'Missing or duplicate release asset')
     folder = Path(tempfile.mkdtemp(prefix='verify-release-',dir=root/'dist'))
     require(folder.resolve().is_relative_to((root/'dist').resolve()), 'Invalid verification directory')
-    command(['gh','release','download',release['tag'],'--repo',REPO,'--pattern',release['asset'],'--dir',str(folder)],root)
+    gh(['release','download',release['tag'],'--repo',REPO,'--pattern',release['asset'],'--dir',str(folder)],root)
     require(sha(folder/release['asset']) == release['sha256'], 'IMMUTABLE_ASSET_MISMATCH: bump the version; never clobber')
     return {'tag':release['tag'],'sha256':release['sha256'],'verified':True}
 
@@ -247,9 +260,9 @@ def publish(root=ROOT, apply=False):
             notes.write_text(f"{release['id']} {release['version']}\n\nInstall this immutable package:\n\n"
                              f"`specify extension add {release['id']} --from {URL}/releases/download/{release['tag']}/{release['asset']}`\n\n"
                              f"SHA-256: `{release['sha256']}`\n",encoding='utf-8')
-            command(['gh','release','create',release['tag'],str(root/release['archive']),'--repo',REPO,
-                     '--target',plan['source_commit'],'--title',release['id']+' '+release['version'],
-                     '--notes-file',str(notes)],root)
+            gh(['release','create',release['tag'],str(root/release['archive']),'--repo',REPO,
+                '--target',plan['source_commit'],'--title',release['id']+' '+release['version'],
+                '--notes-file',str(notes)],root)
         verified.append(verify_asset(release,root))
     receipt={'plan_sha256':sha(root/'dist/release-plan.json'),'assets':verified}
     write(root/'dist/release-verification.json',receipt)

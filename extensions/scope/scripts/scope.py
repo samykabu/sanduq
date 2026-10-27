@@ -11,21 +11,23 @@ import copy
 from datetime import datetime, timezone
 import hashlib
 import json
-import os
 import re
 import subprocess
 import sys
 import time
+from contextlib import ExitStack
 from pathlib import Path
 
 # The extension is also loaded directly by its test suite.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import workflow_policy
 try:
+    import sanduq_fs
     import sanduq_remote
 except ModuleNotFoundError:
     # Source checkout only; release archives bundle the canonical helper.
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'shared'))
+    import sanduq_fs
     import sanduq_remote
 # Scope's errors and its GitHub client's are one class, so every `except ScopeError` covers both.
 from sanduq_scope_github import GitHub, GitHubError as ScopeError, PAGE_TIMEOUT, ProjectRest, rate_limited  # noqa: F401
@@ -111,23 +113,14 @@ def require(condition, message):
         raise ScopeError(message)
 
 
-def read_json(path, default=None):
-    return json.loads(path.read_text(encoding='utf-8-sig')) if path.exists() else default
+read_json = sanduq_fs.read_json
+write_json = sanduq_fs.write_json
+MUTATION_LOCK = '.specify/scope/mutation.lock'
 
 
-def write_json(path, value):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_suffix(path.suffix + '.tmp')
-    temp.write_text(json.dumps(value, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
-    # Windows indexers can briefly retain a handle on the destination.
-    for attempt in range(5):
-        try:
-            temp.replace(path)
-            break
-        except PermissionError:
-            if attempt == 4:
-                raise
-            time.sleep(0.05 * (attempt + 1))
+def mutation_lock(root, busy):
+    """The one Scope mutation lock: taken once, a dead owner's lock is recovered, a live one refuses with `busy`."""
+    return sanduq_fs.file_lock(root / MUTATION_LOCK, 0, busy, ScopeError)
 
 
 def unscoped(body):
@@ -254,8 +247,10 @@ class Scope:
     def __init__(self, root, gh=None):
         self.root = Path(root).resolve()
         self.gh = gh or GitHub()
-        self.cfg = read_json(self.root / '.specify/extensions/project/config.json')
-        require(self.cfg and self.cfg.get('projectId'), 'Run /speckit-project-init first.')
+        # Workflow's `project_sync.mode: off` runs without a board (REQ-22): no Project config, reads or writes.
+        self.board_mode = workflow_policy.board_mode(self.root)
+        self.cfg = read_json(self.root / '.specify/extensions/project/config.json', {})
+        require(self.board_mode == 'off' or (self.cfg and self.cfg.get('projectId')), 'Run /speckit-project-init first.')
         self.gh.project_cfg = self.cfg
         url = sanduq_remote.origin_url(self.root, resolve=True)
         require(url, 'A GitHub origin remote is required: no remote.origin.url is set (git remote add origin <url>).')
@@ -307,6 +302,8 @@ class Scope:
         return cache['items'] if fresh else None
 
     def board(self, fresh=False):
+        if self.board_mode == 'off':
+            return {}
         if self._board is None or fresh:
             # Only the first read in a process may come from the shared cache; any reload is live.
             items = None if fresh or self._board_cached is not None else self.cached_board()
@@ -385,6 +382,11 @@ class Scope:
         return matches[0]
 
     def status(self, issue):
+        if self.board_mode == 'off':
+            # No board: the issue state is the status, so a prerequisite is ready once it is closed as completed.
+            if issue.get('state_reason') == 'not_planned':
+                return 'Closed (not planned)'
+            return 'Done' if issue.get('state') == 'closed' else 'Open (no board)'
         status = self.board().get(issue['number'], {}).get('status', 'Unknown (not on configured Project)')
         aliases = workflow_policy.statuses(self.root)
         status = next((logical for logical, actual in aliases.items() if actual == status), status)
@@ -534,16 +536,20 @@ class Scope:
         initial = initial or self.resolve(value)
         revalidation = workflow_policy.bound_claim(self.root, self.repo, initial['number'], {'scope', 'specify'})
         fresh = workflow_policy.fresh_claim(self.root, self.repo, initial['number'], feature, token, session) if any((feature, token, session)) else None
+        tracked = workflow_policy.board_writes(self.root, required_status)
 
         def allowed():
             status = self.status(initial)
             fresh_continued = fresh and initial.get('state') == 'open' and status == 'Feature Specification'
             continued = revalidation and initial.get('state') == 'open' and status in {'Feature Specification', 'Need Clarifications', 'Ready', 'In progress', 'In review'}
+            if not tracked:
+                # The board mode never writes this column: an open issue the board has not moved on qualifies.
+                return initial.get('state') == 'open' and (continued or status not in {'Ready', 'In progress', 'In review', 'Done'})
             return status == required_status or continued or fresh_continued
         ok = allowed() or (self.drop_cached_board() and allowed())
         for delay in BOARD_LAG_RETRY:
             # N1: right after publish, GitHub's Project listing can lag the item-add for a few seconds.
-            if ok or initial['number'] in self.board():
+            if ok or self.board_mode == 'off' or initial['number'] in self.board():
                 break
             time.sleep(delay)
             self.board(fresh=True)
@@ -697,6 +703,30 @@ class Scope:
                    {'version': 1, 'approval': approval, 'analysis': analysis})
         return approval
 
+    def revision_baseline(self, snapshot, analysis, nodes):
+        """The approved baseline a revision carries forward: this issue's own, or, for a published child
+        kept whole as one leaf at its receipt's score, the parent's approval its receipt retains (the
+        same check the fresh read gate makes). The owner's statement comes from the parent's local
+        approval record; without it nothing is carried."""
+        baseline = read_json(self.baseline_path(analysis['issue']), {})
+        if baseline.get('approval'):
+            return baseline
+        issue = snapshot['issue']
+        receipt = metadata(issue.get('body'))
+        retained = receipt.get('approval') or {}
+        if not (retained.get('analysis_sha256') and len(nodes) == 1 and analysis['tree']['score'] == receipt.get('score')):
+            return {}
+        parent = self.native_parent(issue['number'])
+        if not isinstance(parent, dict) or not parent.get('number'):
+            return {}
+        parent_receipt = metadata(self.issue(parent['number']).get('body'))
+        if issue['number'] not in parent_receipt.get('children', []) or parent_receipt.get('approval') != retained:
+            return {}
+        local = read_json(self.root / '.specify/scope/approvals' / f'{parent["number"]}-{retained["analysis_sha256"]}.json', {})
+        return {'version': 1, 'approval': dict(retained, repo=self.repo, issue=analysis['issue'],
+                                               fingerprint=receipt.get('fingerprint'), dependencies=receipt.get('dependencies'),
+                                               approval_text=local.get('approval_text'))}
+
     def receipt_matches(self, approval, snapshot, analysis, nodes):
         """True when a stored receipt describes exactly this proposal, source and prerequisites."""
         return (approval.get('version') == 1 and
@@ -734,7 +764,7 @@ class Scope:
 
         # Anything else is a revision: the decomposition, the source fingerprint or the
         # prerequisite set has moved since approval. All of it carries forward unattended.
-        baseline = read_json(self.baseline_path(analysis['issue']), {})
+        baseline = self.revision_baseline(snapshot, analysis, nodes)
         base_approval = baseline.get('approval') or {}
         require(baseline.get('version') == 1 and base_approval.get('repo') == self.repo and
                 base_approval.get('issue') == analysis['issue'] and base_approval.get('approved_by') and
@@ -761,6 +791,9 @@ class Scope:
                    'difference': difference,
                    'recorded_at': datetime.now(timezone.utc).isoformat()}
         write_json(self.approval_path(analysis), carried)
+        if not self.baseline_path(analysis['issue']).exists():
+            # A child kept whole now has a baseline of its own; its next revision diffs against this leaf.
+            write_json(self.baseline_path(analysis['issue']), {'version': 1, 'approval': carried, 'analysis': analysis})
         return carried
 
     def set_labels(self, issue, score, parent=False, current=None):
@@ -812,14 +845,22 @@ class Scope:
                 row.pop(key, None)  # item-list omits an empty field
 
     def project_fields(self):
+        if self.board_mode == 'off':
+            return []
         if self._fields is None:
             self._fields = self.gh.command(['project', 'field-list', str(self.cfg['projectNumber']), '--owner', self.cfg['owner'], '--format', 'json', '--limit', '100'])['fields']
         return self._fields
 
     def set_status(self, issue, status):
+        if not self.tracks(status):
+            return
         status = self.actual_status(status)
         require(status in self.cfg['statusOptions'], f'Missing Project status: {status}')
         self.edit_item(issue, self.cfg['statusFieldId'], 'status', status, self.cfg['statusOptions'][status])
+
+    def tracks(self, status):
+        """Whether the board mode writes the logical `status` (every one in full mode, none in off)."""
+        return workflow_policy.board_writes(self.root, status)
 
     def actual_status(self, status):
         return workflow_policy.statuses(self.root).get(status, status)
@@ -847,9 +888,9 @@ class Scope:
         if not apply:
             # Report honestly whether this run still needs approval. A revision of an
             # already-approved decomposition does not, and previews its recorded difference.
-            baseline = read_json(self.baseline_path(analysis['issue']), {})
             approved = self.receipt_matches(read_json(self.approval_path(analysis), {}), snapshot, analysis, nodes)
-            is_revision = not approved and (baseline.get('approval') or {}).get('analysis_sha256') is not None
+            baseline = {} if approved else self.revision_baseline(snapshot, analysis, nodes)
+            is_revision = (baseline.get('approval') or {}).get('analysis_sha256') is not None
             preview = {'dry_run': True, 'issue': root_issue['number'], 'nodes': len(nodes),
                        'child_count': len(nodes) - 1, 'leaves': sum(not n.get('children') for n in nodes.values()),
                        'operation': operation, 'approval_required': not approved and not is_revision,
@@ -910,9 +951,10 @@ class Scope:
             self._ids[issue['number']] = issue['id']
             journal['nodes'][node['key']] = issue['number']
             write_json(journal_path, journal)
-            self.board_item(issue)
-            if not self.board().get(issue['number'], {}).get('status'):
-                self.set_status(issue, 'Backlog')
+            if self.board_mode != 'off':
+                self.board_item(issue)
+                if not self.board().get(issue['number'], {}).get('status'):
+                    self.set_status(issue, 'Backlog')
             if node.get('children'):
                 current = self.gh.api(f'{self.base}/{issue["number"]}/sub_issues?per_page=100', pages=True)
                 native_children[issue['number']] = {x['number'] for x in current}
@@ -1177,6 +1219,11 @@ class Scope:
                             feature=feature, token=token, session=session, analysis=analysis, analysis_path=analysis_path,
                             snapshot_path=snapshot_path, initial=initial)
         issue = initial
+        if self.board_mode == 'off':
+            # No board and no Project Sync state: scope-source.json is the whole binding.
+            if apply:
+                write_json(path / 'scope-source.json', dict(checked, repo=self.repo))
+            return {'feature': path.name, 'issue': checked['issue'], 'dry_run': not apply}
         state_path = self.root / self.cfg['stateFile']
         state = read_json(state_path, {})
         slug = path.name
@@ -1338,7 +1385,7 @@ def main(argv=None):
     parser.add_argument('--snapshot', type=Path, help='gate, approve, publish, bind: a saved inspect --output to reuse when still current')
     parser.add_argument('--force', action='store_true', help='render-spec: replace a spec.md that Scope did not render')
     args = parser.parse_args(argv)
-    lock = None
+    lock = ExitStack()
     shown = None
     try:
         # Fail on missing identity before any GitHub/network access.
@@ -1350,15 +1397,7 @@ def main(argv=None):
             workflow_policy.fresh_claim(app.root, app.repo, int(args.issue.lstrip('#')),
                                         args.feature, args.token, args.session, stages=('specify',))
         if args.apply:
-            candidate = app.root / '.specify/scope/mutation.lock'
-            candidate.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                fd = os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            except FileExistsError:
-                raise ScopeError('A scope mutation is already running. Inspect mutation.lock and its process before retrying.')
-            with os.fdopen(fd, 'w') as handle:
-                handle.write(str(os.getpid()))
-            lock = candidate
+            lock.enter_context(mutation_lock(app.root, 'A scope mutation is already running'))
         if args.command == 'inspect':
             require(not (args.skeleton and args.skeleton.exists()),
                     f'SCOPE_SKELETON_EXISTS: {args.skeleton} exists; remove it or name a new file.')
@@ -1404,8 +1443,7 @@ def main(argv=None):
         print(str(exc), file=sys.stderr)
         return 2
     finally:
-        if lock:
-            lock.unlink(missing_ok=True)
+        lock.close()
 
 
 if __name__ == '__main__':

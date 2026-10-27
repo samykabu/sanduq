@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -979,7 +980,7 @@ class ArchiveIntegrationTests(unittest.TestCase):
         shutil.copytree(workspace / ".specify/extensions/git/scripts", self.root / ".specify/extensions/git/scripts", dirs_exist_ok=True)
         shutil.copytree(SCRIPTS, self.root / EXTENSION / "scripts", dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
         # These entry-point fixtures execute an installed package, whose shared modules are injected at build time.
-        for helper in ('check_inputs.py', 'bounded_json.py'):
+        for helper in ('check_inputs.py', 'bounded_json.py', 'sanduq_fs.py'):
             shutil.copyfile(SCRIPTS.parents[1] / 'scripts/shared' / helper,
                             self.root / EXTENSION / 'scripts' / helper)
         from install import prepare_guards
@@ -1049,6 +1050,14 @@ class ArchiveIntegrationTests(unittest.TestCase):
             with self.assertRaisesRegex(ArchiveError, "writer lock exists"):
                 with Archive(self.root).repo.lock():
                     self.fail("A second writer acquired the same Git lock")
+
+    def test_writer_lock_of_a_dead_writer_is_recovered(self):
+        """SAMY-09: the shared lock takes over a lock whose recorded pid has exited on this host; a live one still refuses."""
+        lock = self.archive.repo.state / "writer.lock"
+        write_json(lock, {"pid": 2147483647, "host": socket.gethostname(), "token": "dead"})
+        with self.archive.repo.lock():
+            self.assertNotEqual("dead", json.loads(lock.read_text())["token"])
+        self.assertFalse(lock.exists())
 
     def test_number_reservations_enforced_by_powershell_entry_points(self):
         pwsh = shutil.which("pwsh")

@@ -173,7 +173,7 @@ def read_summary_first_rule():
 
 
 def t7_template():
-    """The exact ten-line structured-result fence from execution-report.md."""
+    """The exact eleven-line structured-result fence from execution-report.md."""
     text = read_text(REFERENCES / 'execution-report.md')
     match = re.search(r'## Structured worker results\n\n.*?```text\n(.*?)```', text, re.S)
     return match.group(1).strip() if match else None
@@ -261,7 +261,7 @@ def installed_role(root, work_type):
 def render_card(feature, task_id, context, requirements, owned, role, fingerprints, details):
     """The task card: only what is specific to this task. The role definition holds the rules."""
     lines = [f'# Task card: {task_id}', '', f'Run as: {role} (it holds the protocol, forbidden commands and the '
-             'ten-line result).', f'Feature: {feature}', f'Task line: {context["line"]}',
+             'eleven-line result).', f'Feature: {feature}', f'Task line: {context["line"]}',
              f'Work type: {context["work_type"]}',
              'Owned paths: ' + (', '.join(f'`{path}`' for path in owned) or 'none extracted; confirm with the orchestrator')]
     acceptance = acceptance_criteria(context['description'])

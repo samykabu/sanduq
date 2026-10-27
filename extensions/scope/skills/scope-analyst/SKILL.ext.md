@@ -1,6 +1,6 @@
 ---
 name: scope-analyst
-description: "Analyzes a GitHub issue before specification: checks prerequisite status, reads the issue, comments, images and prerequisite implementations, scores effort on a five-dimension rubric, recommends a decomposition and publishes only the sub-issues the user approves. Use when asked to scope, size, estimate, split or decompose an issue, or when speckit-scope or speckit-scope-run runs with an issue number or exact title."
+description: "Reasoning half of speckit-scope-run and of the managed workflow Scope stage; those commands invoke it with an issue number or exact title, and it is not selected on its own. Checks prerequisite status, reads the issue, comments, images and prerequisite implementations, scores effort on a five-dimension rubric, recommends a decomposition and publishes only the sub-issues the user approves."
 ---
 
 # Scope analyst
@@ -31,8 +31,10 @@ With `.specify/workflow.yml`, also follow [managed.md](references/managed.md); o
 
 4. Read the whole issue and comments, then make a first pass at the five rubric dimensions (0..3)
    from `.specify/extensions/scope/references/analysis-contract.md`. Lite tier: when that
-   first-pass sum is 3 or less, skip step 6 and inspect only the images the issue references;
-   record `not inspected: lite tier` in evidence for each skipped source.
+   first-pass sum is 3 or less and every prerequisite is Done, skip step 6 and inspect only the
+   images the issue references; record `not inspected: lite tier` in evidence for each skipped
+   source. An In review prerequisite may be unmerged, so it always gets step 6, whatever the
+   first-pass sum: a low score never skips the evidence that would test it.
 5. Open and visually inspect every attached image (HTML img and Markdown references) and keep
    its original URL. A private or inaccessible image is unresolved evidence: stop and name it.
    Inspect tracked images locally; use an authenticated browser or authorized download for
@@ -70,7 +72,8 @@ With `.specify/workflow.yml`, also follow [managed.md](references/managed.md); o
     subset needs evidence and updates native links, issue dependency text, Project Blocked by and
     Blocks fields and the local catalogue together.
 15. Run `/speckit-scope-plan` after a split (the Illustrate plan step is mandatory) and
-    `/speckit-scope-reconcile` after all publications; then run gate and keep the per-child
+    `python .specify/extensions/scope/scripts/scope.py reconcile --apply` after all
+    publications; then run gate and keep the per-child
     report. Never delete the pending marker or claim completion before validated delivery.
 16. Report issue links, scores and rationale, leaf readiness, parent aggregation, dependency
     edits and the checked plan path, plus the ready-to-run Specify prompt of an approved

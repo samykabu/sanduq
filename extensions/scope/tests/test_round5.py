@@ -4,6 +4,7 @@ import subprocess
 import io
 import json
 import os
+import socket
 import unittest
 from unittest.mock import patch
 
@@ -118,6 +119,15 @@ class Cancel(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn('mutation is already running', err)
         self.assertNotIn('rolled_back', m.read_json(self.root / f'.specify/scope/runs/{operation}/journal.json'))
+
+    def test_cancel_recovers_a_dead_owners_mutation_lock(self):
+        """SAMY-09: mutation.lock is the shared lock, so one left by a process that died on this host is taken over."""
+        _, _, operation = self.interrupted()
+        lock = self.root / '.specify/scope/mutation.lock'
+        m.write_json(lock, {'pid': 2147483647, 'host': socket.gethostname(), 'token': 'dead'})
+        code, result = self.cli('cancel', operation, '--apply')
+        self.assertEqual((code, result['rolled_back']), (0, True))
+        self.assertFalse(lock.exists())
 
 
 class PolicyCache(unittest.TestCase):

@@ -1,4 +1,4 @@
-"""Lean opt-in gates and conservative legacy contracts, without live harnesses."""
+"""Lean execution gates and conservative legacy contracts, without live harnesses."""
 import copy
 import json
 import os
@@ -128,7 +128,7 @@ class LeanExecutionTests(unittest.TestCase):
         prior *= 2
         with self.assertRaisesRegex(lean.LeanPolicyError, 'CONCRETE_DIAGNOSIS'):
             lean.admit(self.policy, prior, identity, 'implementation', deliverable, correction,
-                       {'cause': 'try harder', 'evidence': 'none', 'change': 'try again'})
+                       {'cause': '   ', 'evidence': 'none', 'change': 'try again'})  # blank, not merely short
         accepted = lean.admit(self.policy, prior, identity, 'implementation', deliverable, correction,
                              {'cause': 'Unicode escape was decoded twice', 'evidence': 'evidence/failure.json',
                               'change': 'Decode once inside parse_string and rerun fixture tests'})
@@ -195,8 +195,16 @@ class LeanExecutionTests(unittest.TestCase):
              patch.object(delegation, 'doctor') as install:
             claim = run.claim({'session_id': 'session'})
         self.assertEqual(claim['execution_owner'], 'coordinator')
+        self.assertEqual(claim['lean_execution'], 'on (policy)')
+        self.assertIn('the lifecycle coordinator (lean execution)', claim['execute_protocol']['summary'])
         self.assertNotIn('delegation', claim)
         install.assert_not_called()
+
+    def test_describe_names_why_lean_execution_is_on_or_off(self):
+        self.assertEqual(lean.describe({}, 'lite'), 'on (tier default)')
+        self.assertEqual(lean.describe({}, 'full'), 'off (default)')
+        self.assertEqual(lean.describe({'lean_execution': {'enabled': False}}, 'lite'), 'off (policy)')
+        self.assertEqual(lean.describe({'lean_execution': {'enabled': True}}, 'full'), 'on (policy)')
 
     def test_review_claim_blocks_before_delegation_side_effects(self):
         self.policy['delegation']['enabled'] = True

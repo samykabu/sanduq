@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.7.0] - 2026-10-27
+
+- Vendors progress-report from agent-tools 1.8.0. The report sets `dir="auto"` on every element that renders user text, so Arabic task titles, decisions and timeline entries render right-to-left (AHMED-26). The statusline runs a chained command only while `config.json` is untracked by git and the command equals the one recorded at install; otherwise it prints the minimal line and one diagnostic (SEC-08).
+
 ## [1.6.1] - 2026-10-26
 
 - License: this package is MIT; versions before this one were PolyForm Noncommercial 1.0.0. The archive now ships its LICENSE and a THIRD_PARTY_NOTICES.md for the vendored progress-report material.

@@ -308,6 +308,10 @@ class DelegationTests(unittest.TestCase):
         self.assertTrue(result['installed'])
         driver = project_skill / 'delegate.mjs'
         self.assertTrue(driver.is_file())
+        skill = (project_skill / 'SKILL.md').read_text(encoding='utf-8')  # OMAR-07: managed copy, not model-invocable
+        self.assertIn('\ndescription: ' + delegation.MANAGED_SKILL_DESCRIPTION + '\n', skill)
+        self.assertIn('\ndisable-model-invocation: true\n---\n', skill)
+        self.assertNotIn('have another agent do X', skill)
         self.assertFalse(delegation.install_skill(self.root, 'codex', 'project')['installed'])
         driver.unlink()
         self.assertEqual(delegation.inspect_skill(self.root, 'codex')['error'], 'DELEGATE_SKILL_BROKEN')
@@ -330,6 +334,8 @@ class DelegationTests(unittest.TestCase):
         installed = delegation.install_skill(self.root, 'claude', 'global')
         self.assertTrue(installed['installed'])
         self.assertTrue((global_root / '.claude/skills/delegate-task/delegate.mjs').is_file())
+        self.assertIn('have another agent do X',  # the global copy keeps the portable description
+                      (global_root / '.claude/skills/delegate-task/SKILL.md').read_text(encoding='utf-8'))
         self.assertEqual(delegation.inspect_skill(self.root, 'claude')['scope'], 'global')
         self.assertFalse((self.root / '.claude/skills/delegate-task').exists())
 
@@ -364,6 +370,7 @@ class DelegationTests(unittest.TestCase):
             'model_observed': dropped('result_fields', 'model_observed'),
             'actual_model': dropped('result_fields', 'actual_model'),
             '--constraint': dropped('start_flags', '--constraint'),
+            '--clean-env': dropped('start_flags', '--clean-env'),
             'DELEGATE_RUNS_DIR': dropped('env', 'DELEGATE_RUNS_DIR'),
             'result schema': {**contract, 'result_schema': 'delegate-task.result.v1'},
             'is not delegate-task.driver.v1': {**contract, 'contract': 'delegate-task.driver.v0'},
@@ -732,6 +739,72 @@ class DelegationTests(unittest.TestCase):
         # A real local write marker exists here, so trust is recorded as
         # 'trusted', not the fresh-checkout warning state.
         self.assertEqual(stored.get('delegation_ledger_trust'), 'trusted')
+
+    def test_native_attestation_replaces_a_rejected_run_and_completes_the_stage(self):
+        """SAMY-03: a stage a native subagent of the host did is attested by the top-level session; complete
+        accepts it like a successful external attempt, and every record labels it kind: native."""
+        self.enable()
+        run = w.Run(self.root, self.feature)
+        run.start('acme/app#10')
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch_runtime('doctor', return_value={'ok': True, 'errors': []}):
+            claim = run.claim({'session_id': 'test-session'})
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch.object(dispatch, 'launch', return_value={'run_id': 'codex-scope', 'state': 'running'}):
+            dispatch.start(self.root, self.feature, 'stage:scope', token=claim['token'])
+        stderr = self.root / 'model-error.txt'
+        stderr.write_text('Unknown model gpt-6-sol', encoding='utf-8')
+        payload = {'run_id': 'codex-scope', 'status': 'failed', 'status_reason': '', 'harness': 'codex',
+                   'status_provenance': {'primary': 'harness_telemetry'}, 'model_reported': False,
+                   'dirty_paths_changed': [], 'head_changed': False, 'index_changed': False,
+                   'artifacts': {'stderr': str(stderr), 'dir': str(self.root / '.delegate/runs/codex-scope')}}
+        with patch.object(delegation, 'inspect_skill', return_value=self.fake_doctor()), \
+             patch.object(dispatch.shutil, 'which', return_value='node'), \
+             patch.object(dispatch.subprocess, 'run',
+                          return_value=subprocess.CompletedProcess([], 0, json.dumps(payload), '')):
+            stopped = dispatch.collect(self.root, self.feature, 'codex-scope')
+        # The stop's "run natively" way on is the attestation, not switching delegation off.
+        self.assertEqual(stopped['decision'], 'FALLBACK_CONFIRMATION_REQUIRED')
+        self.assertIn('attest-native --feature ' + self.feature + ' --id stage:scope --claim-token ' + claim['token'],
+                      stopped['error'])
+        receipt = fixture.WorkflowTests.receipt(self, 'scope')
+        with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_STAGE_NOT_VERIFIED.*attest-native'):
+            run.complete(claim['token'], receipt)
+        with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_STAGE_CLAIM_MISMATCH'):
+            dispatch.attest_native(self.root, self.feature, 'stage:scope', 'wrong', 'gpt-6-sol')
+        result = dispatch.attest_native(self.root, self.feature, 'stage:scope', claim['token'], 'gpt-6-sol')
+        self.assertEqual((result['kind'], result['status'], result['actual_model'], result['attested_by'],
+                          result['replaces_run_id']), ('native', 'successful', 'unreported', 'top-level', 'codex-scope'))
+        self.assertTrue(result['run_id'].startswith('native-'))
+        ledger = dispatch.load_ledger(self.root, self.feature)
+        attempt = ledger['attempts'][-1]
+        self.assertEqual((attempt['kind'], attempt['requested_harness'], attempt['requested_model'],
+                          attempt['actual_model'], attempt['model_observed'], attempt['fidelity'],
+                          attempt['claim_token'], attempt['session_id'], attempt['evidence_location']),
+                         ('native', w.active_host(self.root), 'gpt-6-sol', None, False, 'reported',
+                          claim['token'], 'test-session', None))
+        self.assertEqual(ledger['attempts'][0]['replacement_run_id'], result['run_id'])
+        self.assertEqual(ledger['route_decisions'][-1]['decision'], 'native-attested')
+        # The rejected run is re-routed to the attestation, so its fallback can no longer be confirmed.
+        self.assertEqual(dispatch.collect(self.root, self.feature, 'codex-scope')['decision'], 'already re-routed')
+        with self.assertRaisesRegex(delegation.DelegationError, 'FALLBACK_CONFIRMATION_NOT_PENDING'):
+            dispatch.collect(self.root, self.feature, 'codex-scope', confirm='gpt-6-sol=default')
+        status = w.native_run_status(self.root, run.relative, run.load(), [])
+        self.assertEqual(status['active']['native_attestation']['run_id'], result['run_id'])
+        self.assertEqual(status['progress']['runs'], [])  # never shown as a dispatched run
+        run.complete(claim['token'], receipt)
+        stored = run.load()['receipts']['scope']
+        self.assertEqual(stored['native_attestation']['kind'], 'native')
+        self.assertEqual(stored['native_attestation']['run_id'], result['run_id'])
+        self.assertEqual(stored['delegation_ledger_trust'], 'trusted')
+
+    def test_attest_native_refuses_a_worker_subagent_or_orchestrator_context(self):
+        self.enable()
+        for env in ({'SANDUQ_DELEGATED_RUN': 'codex-1'}, {'SANDUQ_DELEGATED_ROLE': 'orchestrator'},
+                    {'SANDUQ_ROLE': 'worker'}):
+            with patch.dict(os.environ, env), \
+                    self.assertRaisesRegex(delegation.DelegationError, 'NATIVE_ATTESTATION_FORBIDDEN'):
+                dispatch.attest_native(self.root, self.feature, 'stage:scope', 'token', 'gpt-6-sol')
 
     def test_accepted_names_the_validated_attempt_when_a_claim_has_a_replaced_one(self):
         """A failed attempt replaced under the same claim is claim membership, not the accepted candidate."""
@@ -3484,6 +3557,10 @@ class DelegationTests(unittest.TestCase):
         self.assertEqual(state['active']['delegation_refused']['rule'], 'refused:DELEGATION_REVIEW_ROUTE_UNSAFE')
         self.assertIn('permission-bypass', state['active']['delegation_refused']['reason'])
         # (a non-review stage still records its route: test_claim_refreshes_pending_metadata_and_exposes_stage_route)
+        # SAMY-03: a claim without a route completes natively as before; an attestation has nothing to back.
+        with self.assertRaisesRegex(delegation.DelegationError, 'NATIVE_ATTESTATION_NOT_NEEDED'):
+            dispatch.attest_native(self.root, self.feature, 'stage:analyze', claim['token'], 'gpt-6-sol')
+        self.assertEqual(dispatch.load_ledger(self.root, self.feature)['attempts'], [])
 
     def test_review_kind_routes_are_refused_while_external_runs_bypass_permissions(self):
         # SEC-01 interim: refused at selection, so claim, start, annotate and doctor all see it.
@@ -4021,6 +4098,26 @@ class HealthCacheTests(unittest.TestCase):
         self.assertEqual(self.health()[1], 1)
         delegation.forget_health(self.root)
         self.assertEqual(self.health()[1], 1)
+
+
+class LocalArtifactTests(unittest.TestCase):
+    def test_delegate_folder_carries_its_own_gitignore(self):
+        """SEC-17: briefs and raw run logs stay out of git even where info/exclude was not carried over."""
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            brief = dispatch.brief_file(root, 'task card')
+            self.assertEqual(brief.parent, root / '.delegate/briefs')
+            self.assertEqual((root / '.delegate/.gitignore').read_text(encoding='utf-8'), '*' + chr(10))
+            (root / '.delegate/.gitignore').write_text('runs/' + chr(10), encoding='utf-8')
+            dispatch.brief_file(root, 'again')  # an edited ignore file is the user's and is kept
+            self.assertEqual((root / '.delegate/.gitignore').read_text(encoding='utf-8'), 'runs/' + chr(10))
+
+    def test_windows_kill_names_the_system32_taskkill(self):
+        """SEC-15: a bare `taskkill` resolves in the current directory first on Windows."""
+        calls = []
+        with patch.object(dispatch.os, 'name', 'nt'), patch.object(dispatch.subprocess, 'run', lambda argv, **k: calls.append(argv)),                 patch.dict(dispatch.os.environ, {'SystemRoot': 'X:' + chr(92) + 'Win'}):
+            dispatch.kill_process_tree(type('Proc', (), {'pid': 7})())
+        self.assertEqual(calls, [[os.path.join('X:' + chr(92) + 'Win', 'System32', 'taskkill.exe'), '/T', '/F', '/PID', '7']])
 
 
 if __name__ == '__main__':

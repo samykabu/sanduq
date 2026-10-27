@@ -56,10 +56,8 @@ ASSIGN_MARKERS = [
     'the `[collect]` marker or an explicit override, never by default',  # T0: light tier only by marker
     'roughly 150K tokens resident',                                       # T0 hand-off
     '`git stash` and `git add -A`/`git add .` are forbidden for a task worker',  # S6
-    'as are `delegate_dispatch.py accept`, `delegate_dispatch.py reassign`, '
-    '`delegate_dispatch.py trust-reset` and `delegate_dispatch.py adopt`',  # B12: also forbidden for a task worker
-    '`accept`/`reassign`/`trust-reset`/`adopt` are ledger-trust decisions. '
-    'They run only in the top-level dispatcher session',                  # B12, OMAR-03: why they are forbidden
+    'A task worker runs no `delegate_dispatch.py` command at all',       # B12, OMAR-19: the generated sentence rules
+    'they are ledger-trust decisions that run only in the top-level dispatcher session',  # B12, OMAR-03: the guard's four verbs
     'The one exception is the delegated Execute stage, an external delegated process rather '
     'than a host subagent',                                               # B12: Execute-orchestrator exception
     "it runs with an orchestrator scope over its own feature's `T###` tasks",
@@ -102,12 +100,12 @@ REPORT_MARKERS = [
     '--collect claude --summary',                                      # --summary on a usage example
 ]
 
-# The ten T7 result-template field names, in order, each as it must open its own line
+# The eleven T7 result-template field names, in order, each as it must open its own line
 # (`Diff:` replaced `Commit:` in the B11 review fix, since staging/committing moved to
 # the orchestration agent and a worker never has a commit sha to report).
 TEMPLATE_FIELDS = [
     'Task:', 'Status:', 'Files touched:', 'Tests:', 'Evidence:', 'Diff:',
-    'Consumers checked:', 'Tokens:', 'Blockers:', 'Next:',
+    'Consumers checked:', 'Tokens:', 'Model:', 'Blockers:', 'Next:',
 ]
 
 # The six F11 consumers-checklist bullets, each as its exact, complete line (minus the
@@ -259,22 +257,22 @@ class ExecutionProtocolB11Tests(unittest.TestCase):
             self.assertIn(task_class, self.assign,
                           f'Turn-budget table missing task class {task_class!r}')
 
-    def test_ten_line_result_template_has_all_ten_fields_in_order(self):
+    def test_eleven_line_result_template_has_all_fields_in_order(self):
         start = self.raw_report.index('Task: <T### and title>')
         fence_end = self.raw_report.index('```', start)
         block = self.raw_report[start:fence_end]
         lines = [ln for ln in block.splitlines() if ln.strip()]
-        self.assertEqual(len(lines), 10,
-                          f'Structured result template must be exactly 10 lines, got '
+        self.assertEqual(len(lines), 11,
+                          f'Structured result template must be exactly 11 lines, got '
                           f'{len(lines)}: {lines}')
         for field, line in zip(TEMPLATE_FIELDS, lines):
             self.assertTrue(line.startswith(field),
                              f'Expected line to start with {field!r}, got {line!r}')
-        # And each field name individually, so a template that kept ten lines but
+        # And each field name individually, so a template that kept eleven lines but
         # silently renamed or dropped one field cannot pass by line count alone.
         for field in TEMPLATE_FIELDS:
             self.assertTrue(any(line.startswith(field) for line in lines),
-                             f'Template field {field!r} missing from the ten-line block: {lines}')
+                             f'Template field {field!r} missing from the eleven-line block: {lines}')
 
     def test_consumers_checklist_has_all_six_bullets(self):
         start = self.raw_report.index('## Consumers checklist after a fix')

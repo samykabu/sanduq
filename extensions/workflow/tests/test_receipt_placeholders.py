@@ -22,7 +22,7 @@ class ReceiptPlaceholderTests(Base):
         run = self.run_object()
         refused = set()
         while True:
-            claim = run.claim(self.usage(), finalize=True)
+            claim = self.claim_any(run)
             stage, template = claim['stage'], claim['receipt_template']
             self.assertEqual(template['outcome'], '<passed|failed|blocked>')
             fixture = self.receipt(stage)

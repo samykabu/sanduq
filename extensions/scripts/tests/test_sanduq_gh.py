@@ -2,6 +2,7 @@
 reads, and GraphQL errors on a successful exit. Archive copies and the installed-layout import are pinned with
 the other shared helpers in test_sanduq_remote.py."""
 import json
+import re
 import subprocess
 import sys
 import unittest
@@ -10,6 +11,19 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'shared'))
 import sanduq_gh as gh  # noqa: E402
+
+ROOT = Path(__file__).resolve().parents[3]
+
+
+class OneTransport(unittest.TestCase):
+    def test_no_gh_subprocess_outside_the_transport(self):
+        """SAMY-19: every gh call of every extension and repository script goes through sanduq_gh. A literal
+        `subprocess.run(['gh', ...])` or release.py `command(['gh', ...])` elsewhere is a regression."""
+        literal = re.compile(r"(subprocess\.(run|Popen|check_output|check_call)|\bcommand)\(\s*\[\s*['\"]gh['\"]")
+        hits = sorted(p.relative_to(ROOT).as_posix() for p in ROOT.glob('extensions/**/*.py')
+                      if 'tests' not in p.parts and p.name != 'sanduq_gh.py'
+                      and literal.search(p.read_text(encoding='utf-8', errors='replace')))
+        self.assertEqual([], hits)
 
 
 def done(returncode=0, stdout='', stderr=''):
@@ -35,7 +49,10 @@ class Base(unittest.TestCase):
         fake = Fake(*results)
         run = mock.patch.object(gh.subprocess, 'run', fake)
         sleep = mock.patch.object(gh.time, 'sleep')
+        path = mock.patch.object(gh, 'GH', 'gh')  # the argv assertions name the bare tool
         run.start()
+        path.start()
+        self.addCleanup(path.stop)
         self.sleep = sleep.start()
         self.addCleanup(run.stop)
         self.addCleanup(sleep.stop)
@@ -122,6 +139,22 @@ class Calls(Base):
         self.assertEqual(fake.calls[1][0][-4:], ['--method', 'PATCH', '--input', '-'])
         self.assertEqual(json.loads(fake.calls[1][1]['input']), {'body': 'x'})
 
+    def test_a_posted_issue_comment_is_logged_in_the_project_it_ran_in(self):
+        # SEC-05: the decision reader refuses these ids as answers; a folder without .specify logs nothing.
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            with mock.patch.object(gh.subprocess, 'run', Fake(done(stdout='{"id": 77}'), done(stdout='{"id": 78}'),
+                                                               done(stdout='{"id": 79}'))):
+                gh.api('repos/acme/app/issues/5/comments', method='POST', payload={'body': 'x'}, cwd=str(root))
+                self.assertEqual(gh.posted_comment_ids(root), set())
+                (root / '.specify').mkdir()
+                gh.api('repos/acme/app/issues/5/comments', method='POST', payload={'body': 'x'}, cwd=str(root))
+                gh.api('repos/acme/app/issues/5', method='PATCH', payload={'body': 'x'}, cwd=str(root))
+            self.assertEqual(gh.posted_comment_ids(root), {78})
+            line = json.loads((root / gh.POSTED_COMMENTS).read_text(encoding='utf-8'))
+            self.assertEqual((line['id'], line['endpoint']), (78, 'repos/acme/app/issues/5/comments'))
+
     def test_binary_returns_bytes_and_text_payload_passes_through(self):
         fake = self.fake(subprocess.CompletedProcess(['gh'], 0, b'PK\x03\x04', b''), done(0, 'ok'))
         self.assertEqual(gh.run_gh(['api', 'repos/a/b/actions/artifacts/1/zip'], binary=True, timeout=300), b'PK\x03\x04')
@@ -206,6 +239,27 @@ class Retry(Base):
         self.assertFalse(gh.safe_read(['api', 'graphql']))
         self.assertFalse(gh.safe_read(['api', 'graphql', '-X', 'GET', '-f', 'query={x}']))
         self.assertFalse(gh.safe_read([]))
+
+
+class ToolPath(unittest.TestCase):
+    def test_windows_search_reads_path_only_so_a_tool_in_the_current_directory_cannot_win(self):
+        """SEC-15: a gh.exe committed in a cloned repository must not shadow the installed one."""
+        import os
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            cwd, on_path = Path(folder, 'repo'), Path(folder, 'bin')
+            cwd.mkdir(), on_path.mkdir()
+            (cwd / 'gh.exe').write_bytes(b'')
+            (on_path / 'gh.cmd').write_bytes(b'')
+            env = {'PATH': str(on_path), 'PATHEXT': '.EXE;.CMD'}
+            with mock.patch.object(gh.os, 'name', 'nt'), mock.patch.dict(gh.os.environ, env, clear=True):
+                old = os.getcwd()
+                os.chdir(cwd)
+                try:
+                    self.assertEqual(gh.tool_path('gh'), str(on_path / 'gh.cmd'))
+                    self.assertEqual(gh.tool_path('missing'), 'missing')
+                finally:
+                    os.chdir(old)
 
 
 if __name__ == '__main__':

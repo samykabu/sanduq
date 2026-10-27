@@ -42,7 +42,13 @@ class InstructionTests(unittest.TestCase):
             self.skipTest(str(error))
         manifest = (SCOPE / 'extension.yml').read_text(encoding='utf-8')
         entries = re.findall(r'- name: (\S+)\n\s+file: (\S+)\n\s+description: "([^"\n]*)"', manifest)
-        self.assertEqual(len(entries), 7)
+        self.assertEqual(len(entries), 2)  # the five hook commands are not skills (OMAR-09)
+        hooks = re.findall(r'command: (speckit\.scope\.\S+)$', manifest, re.M)
+        self.assertEqual(sorted(hooks), ['speckit.scope.after-specify', 'speckit.scope.bind', 'speckit.scope.guard',
+                                         'speckit.scope.plan-guard', 'speckit.scope.reconcile'])
+        for hook in hooks:  # found by the event dispatcher through the on-disk file name
+            self.assertTrue((SCOPE / 'commands' / (hook + '.md')).is_file(), hook)
+            self.assertNotIn(hook, [name for name, _, _ in entries])
         self.assertLessEqual(sum(len(d) for _, _, d in entries), 1000)
         for name, file, description in entries:
             front = re.search(r'^description: "([^"\n]*)"', (SCOPE / file).read_text(encoding='utf-8'), re.M)[1]

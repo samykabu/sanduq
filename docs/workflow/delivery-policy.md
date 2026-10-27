@@ -131,6 +131,16 @@ e.g. `SD1: A` or `SD1: A, C`. A ticked box records no author, because GitHub
 does not say who ticked it. The recommended option carries a `(Recommended)`
 suffix and is never pre-ticked. The issue creator, an authorized
 reviewer named in policy, or a repository owner/member/collaborator may answer.
+On a public repository that default is unsafe: anyone who opened the issue can
+answer the decisions on it, so set `decisions.authorized_users` there and
+treat the creator rule as a private-repository convenience. A comment a Sanduq
+process posted through the shared `gh` transport (logged in
+`.specify/workflow/runtime/posted-comments.jsonl`) is never an answer, nor is a
+comment older than the question; both are listed under the decision's
+`unparsed` with the reason. `SD1: B.`, `SD1 - B`, `SD1 = B` and `SD1: B - a
+note` all count; a reply that names a question without such a line (for
+example `I pick B for SD1`) is reported under `unparsed` with its URL instead
+of being ignored.
 Conflicting answers, edits, missing application evidence, or a failed GitHub
 read block a passed stage. The agent applies the chosen answer to actual
 artifacts and records their hashes in `workflow/decisions.json`; future changes
@@ -143,6 +153,17 @@ Any other status is never changed. Set `decisions.lifecycle_status: false` to
 turn this off. Questions posted by an earlier release can be made selectable
 with `decisions.py upgrade-questions`; it keeps IDs, options and replies and
 never ticks a box.
+
+With `clarification.transport: local` (frozen on the feature's checkpoint at
+Scope start), `decisions.py ask` writes the question to
+`specs/<feature>/clarifications.md` instead of the issue, the agent asks the
+user in the conversation and records only their reply there (`SD1: B`), `sync`
+reads that file with the same grammar and writes the ledger only (`source:
+local`, the answer line kept as `quote`), and the Project field and status are
+never touched. The Clarify stage records its `C<round>Q<n>` questions and
+replies in the same file and lists it in the receipt; the receipt carries
+`self_attested` and the CI gate warns `CLARIFICATION_SELF_ATTESTED`, because
+no GitHub record vouches for a reply the agent transcribed.
 
 Operators can update the reviewer list or field name in policy:
 

@@ -52,7 +52,7 @@ class Base(Harness):
         """`advance` that always runs the stages, for a test that observes them (patches, counters)."""
         receipts = receipts or {}
         while True:
-            claim = run.claim(self.usage(), finalize=True)
+            claim = self.claim_any(run)
             stage = claim['stage']
             receipt = receipts.get(stage) or self.receipt(stage)
             run.complete(claim['token'], receipt)
@@ -128,6 +128,7 @@ class PolicyKeyTests(Base):
             (lambda p: p.update(profiles={'enabled': True, 'lite': {'max_score': 9}}), 'PROFILES_POLICY_INVALID'),
             (lambda p: p['clarification'].update(max_questions_per_round=0), 'CLARIFICATION_POLICY_INVALID'),
             (lambda p: p['clarification'].update(in_session_first_round='true'), 'CLARIFICATION_POLICY_INVALID'),
+            (lambda p: p['clarification'].update(transport='chat'), 'CLARIFICATION_POLICY_INVALID: transport'),
             (lambda p: p.update(artifacts={'budgets': {'spec_mb': 1}}), 'POLICY_KEY_UNKNOWN: artifacts.budgets.spec_mb; did you mean artifacts.budgets.spec_kb'),
             (lambda p: p.update(artifacts={'enforce': 'never'}), 'ARTIFACTS_POLICY_INVALID'),
             (lambda p: p.update(project_sync={'points': ['clarify']}), 'PROJECT_SYNC_POLICY_INVALID'),
@@ -158,13 +159,16 @@ class PolicyKeyTests(Base):
             return w.policy_cutoff(base, changed)
         self.assertEqual(cutoff(lambda p: p.update(profiles={'enabled': True})), w.BASE_STAGES.index('plan'))
         self.assertEqual(cutoff(lambda p: p.update(artifacts={'enforce': 'all'})), w.BASE_STAGES.index('analyze'))
-        self.assertEqual(cutoff(lambda p: p['issue_sync'].update(taskstoissues='phase-lazy')),
-                         w.BASE_STAGES.index('taskstoissues'))
-        for operational in (lambda p: p.update(project_sync={'points': ['pr']}),
+        # The task-issue mode is operational (AHMED-30): switching it reaches no stage.
+        for operational in (lambda p: p['issue_sync'].update(taskstoissues='phase-lazy'),
+                            lambda p: p['issue_sync'].update(taskstoissues='off'),
+                            lambda p: p.update(project_sync={'mode': 'minimal'}),
+                            lambda p: p.update(project_sync={'points': ['pr']}),
                             lambda p: p.update(progress={'hook_wiring': 'native'}),
                             lambda p: p.update(illustrate={'hooks': {'self_check': True}}),
                             lambda p: p.update(scope={'board_cache_seconds': 0}),
-                            lambda p: p['clarification'].update(max_questions_per_round=3, in_session_first_round=True)):
+                            lambda p: p['clarification'].update(max_questions_per_round=3, in_session_first_round=True),
+                            lambda p: p['clarification'].update(transport='local')):  # REQ-21, AHMED-30
             self.assertEqual(cutoff(operational), len(w.BASE_STAGES))
 
 
@@ -313,7 +317,7 @@ class ClaimOutputTests(Base):
         self.configure()
         run = self.run_object()
         self.advance(run, 'scope')
-        claim = run.claim(self.usage(), finalize=True)
+        claim = run.claim(self.usage())
         self.assertEqual((claim['stage'], claim['project_sync']), ('specify', {
             'phase': 'open', 'command': 'python .specify/extensions/workflow/scripts/workflow.py project-sync '
                                         '--feature ' + self.feature + ' --phase open'}))
@@ -372,6 +376,8 @@ class ClaimOutputTests(Base):
         self.assertEqual(claim['reporting']['mode'], 'legacy')  # Progress is not installed in the fixture
         protocol = claim['execute_protocol']
         self.assertEqual((protocol['files'], protocol['printed']), (legacy, True))
+        self.assertIn('a dedicated orchestration agent schedules and integrates', protocol['summary'])
+        self.assertIn('delegate_dispatch.py', protocol['summary'])
         self.assertEqual(claim['reference_text'], w.reference_text(self.root, 'execute', legacy))
         self.assertIn('## Legacy reporter calls (mode legacy only)', claim['reference_text'])
         self.assertEqual(run.load()['execute_protocol']['digest'], protocol['digest'])
@@ -380,7 +386,8 @@ class ClaimOutputTests(Base):
         claim = reclaim()  # unchanged: named, not printed
         self.assertEqual(claim['execute_protocol']['digest'], protocol['digest'])
         self.assertIs(claim['execute_protocol']['printed'], False)
-        self.assertIn('context was reset', claim['execute_protocol']['note'])
+        self.assertIn('follow the summary', claim['execute_protocol']['note'])
+        self.assertEqual(claim['execute_protocol']['summary'], protocol['summary'])  # OMAR-18: printed on every claim
         self.assertEqual(claim['reference_text'], w.reference_text(self.root, 'execute'))
 
         self.assertIs(reclaim(verbose=True)['execute_protocol']['printed'], True)  # --verbose always prints
@@ -427,7 +434,7 @@ class ClaimOutputTests(Base):
         run = self.run_object()
         seen = set()
         while True:
-            claim = run.claim(self.usage(), finalize=True)
+            claim = self.claim_any(run)
             stage = claim['stage']
             template = claim['receipt_template']
             fixture = self.receipt(stage)
@@ -635,7 +642,8 @@ class OperationCacheTests(Base):
         calls, real = [], subprocess.run
 
         def run(cmd, *args, **kwargs):
-            if isinstance(cmd, (list, tuple)) and cmd and cmd[0] == 'git':
+            # run_git calls git by its absolute PATH entry (SEC-15), so match the basename
+            if isinstance(cmd, (list, tuple)) and cmd and os.path.basename(str(cmd[0])).lower().split('.')[0] == 'git':
                 calls.append(list(cmd[1:]))
             return real(cmd, *args, **kwargs)
         return calls, patch.object(subprocess, 'run', run)
@@ -780,6 +788,7 @@ class InventoryAndHandoffTests(Base):
         self.assertEqual(code, 0, result)
         self.assertEqual(result['completed'], ['scope'])
         self.assertEqual(result['next_action']['stage'], 'specify')
+        self.assertRegex(result['lean_execution'], r'^(on|off) \((tier default|policy|default)\)$')
 
 
 class RevalidateUpstreamTests(Base):
@@ -1045,6 +1054,53 @@ class LeanTierDispatchTests(Base):
         self.configure()
         self.checkpoint('lite')
         self.assertEqual(self.dispatch_view()[1:], (False, None))
+
+
+class LocalTransportTests(Base):
+    """REQ-21: `clarification.transport: local` is frozen on the checkpoint at Scope start; the Clarify stage records
+    its questions and the user's replies in specs/<f>/clarifications.md and nothing reaches GitHub."""
+
+    def test_clarify_needs_the_local_file_with_every_question_answered_and_labels_the_receipt(self):
+        self.policy['clarification']['transport'] = 'local'
+        self.configure()
+        run = self.run_object()
+        self.assertEqual(run.load()['clarification_transport'], 'local')
+        self.advance(run, 'specify')
+        claim = run.claim(self.usage())
+        label = self.feature + '/clarifications.md'
+        self.assertEqual((claim['stage'], claim['clarification_transport'], claim['receipt_template']['inputs']),
+                         ('clarify', 'local', [label]))
+        import delegate_dispatch
+        brief = delegate_dispatch.stage_brief(self.root, self.feature, 'clarify', claim['token'])
+        self.assertIn('answers questions locally, so post nothing to GitHub', brief)
+        self.assertNotIn('GitHub decision adapter', brief)
+        with self.assertRaisesRegex(w.WorkflowError, 'CLARIFICATION_FILE_INPUT_REQUIRED'):
+            run.complete(claim['token'], self.receipt('clarify'))
+        path = self.root / label
+        path.write_text('# Clarifications\n\n## C1Q1: Keep drafts?\n\n- [ ] **A.** Yes\n- [ ] **B.** No\n\n'
+                        'C1Q1 maybe B\n', encoding='utf-8')
+        receipt = self.receipt('clarify', inputs=[label])
+        with self.assertRaisesRegex(w.WorkflowError, r'CLARIFICATION_UNRESOLVED: C1Q1 in .*"C1Q1": \["C1Q1 maybe B"\]'):
+            run.complete(claim['token'], receipt)
+        status = w.native_run_status(self.root, run.relative, run.load(allow_branch_change=True), [])
+        self.assertEqual(status['questions'], {'transport': 'local', 'answered_in': label, 'waiting': ['C1Q1']})
+        path.write_text(path.read_text(encoding='utf-8') + 'C1Q1: B.\n', encoding='utf-8')
+        run.complete(claim['token'], receipt)
+        stored = run.load()['receipts']['clarify']
+        self.assertEqual(stored['self_attested'], {'answers': 'local', 'file': label})
+        self.assertIn(label, stored['fingerprints'])
+        with self.assertRaisesRegex(w.WorkflowError, 'RECEIPT_FIELD_RESERVED: self_attested'):
+            run.complete(run.claim(self.usage())['token'], {**self.receipt('plan'), 'self_attested': {}})
+
+    def test_the_github_transport_is_unchanged_and_status_names_the_issue(self):
+        run = self.run_object()
+        self.assertEqual(run.load()['clarification_transport'], 'github-comments')
+        claim = run.claim(self.usage())
+        self.assertEqual((claim['clarification_transport'], claim['receipt_template'].get('inputs')),
+                         ('github-comments', []))
+        status = w.native_run_status(self.root, run.relative, run.load(allow_branch_change=True), [])
+        self.assertEqual(status['questions'], {'transport': 'github-comments', 'answered_in': 'comments on acme/app#10',
+                                               'waiting': []})
 
 
 if __name__ == '__main__':

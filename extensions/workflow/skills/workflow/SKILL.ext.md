@@ -6,13 +6,14 @@ description: "Drives an issue-bound feature through the Spec Kit lifecycle, from
 # Workflow dispatcher
 
 Runtime: `python .specify/extensions/workflow/scripts/workflow.py` (argument arrays or quoted
-paths; missing dependencies only from the pinned `requirements.txt`). Read this file,
-receipt-rules.md, dispatcher-operations.md and delegation-and-decisions.md once per session, and
-delegation.md once a claim carries `delegation` or `environment`.
+paths; missing dependencies only from the pinned `requirements.txt`). For the stage loop, read
+this file, receipt-rules.md, dispatcher-operations.md and delegation-and-decisions.md once per
+session, and delegation.md once a claim carries `delegation` or `environment`.
 
 ## Entry points
 
-`continue`, `status`, `doctor`, `reconcile`: [dispatcher-operations.md](references/dispatcher-operations.md).
+`continue`: [dispatcher-operations.md](references/dispatcher-operations.md); `status`, `doctor`,
+`reconcile`: [utilities.md](references/utilities.md).
 `init`, upgrades, `migrate`, `relocate`, `host`: [setup-and-updates.md](references/setup-and-updates.md).
 `scope`, `clarify` and `finalize` (`--finalize`) run the stage loop.
 
@@ -36,8 +37,9 @@ delegation.md once a claim carries `delegation` or `environment`.
    session): failed, skipped or pending work cannot pass and a pending decision blocks. Start
    from the claim's `receipt_template` and set every `<...>` gating field yourself. Drift: [recovery.md](references/recovery.md).
 6. `complete --feature ... --token ... --receipt <file>` prints `{ok, stage, next}`; claim the
-   next stage without asking. When blocked, `pause --reason` and report the actual question or
-   failure. Keep required human review and deployment gates.
+   next stage without asking. A `confirm_invalidation` result is not a claim: show the user the
+   receipts it lists and ask before `--confirm-invalidation`. When blocked, `pause --reason` and
+   report the actual question or failure. Keep required human review and deployment gates.
 7. At `ready_to_finalize`, continue to Finalize if the user already asked for a PR, otherwise
    report readiness and ask. Executor hooks never create the PR. Finalize authorizes the PR
    only; merging needs the user's separate authorization, which may be in the original request.

@@ -68,7 +68,7 @@ class WorkerBriefTests(unittest.TestCase):
     def test_t7_template_has_all_ten_fields(self):
         template = wb.t7_template()
         for field in ('Task:', 'Status:', 'Files touched:', 'Tests:', 'Evidence:', 'Diff:',
-                     'Consumers checked:', 'Tokens:', 'Blockers:', 'Next:'):
+                     'Consumers checked:', 'Tokens:', 'Model:', 'Blockers:', 'Next:'):
             self.assertIn(field, template)
 
     def test_requirement_id_extraction_from_description(self):

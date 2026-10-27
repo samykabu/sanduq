@@ -112,7 +112,7 @@ def tally(entries):
         return None
     total = {name: sum(int(e.get(name) or 0) for e in measured) for name in token_usage.FIELDS}
     total['cached'] = total['cache_read'] + total['cache_write']
-    total['partial'] = len(measured) < len(entries) or any(e.get('fidelity') == 'reported' for e in measured)
+    total['partial'] = len(measured) < len(entries) or any(e.get('fidelity') != 'exact' for e in measured)
     return total
 
 
@@ -136,10 +136,11 @@ def detail(entries):
         if e.get('fidelity') == 'unavailable':
             parts.append(f"{e.get('agent')}: unavailable ({e.get('reason') or 'no record'})")
             continue
-        who = ' '.join(str(v) for v in (e.get('agent'), e.get('harness'), e.get('model')) if v)
+        model = e.get('model') or (f"requested {e['requested_model']}, model unreported" if e.get('requested_model') else None)
+        who = ' '.join(str(v) for v in (e.get('agent'), e.get('harness'), model) if v)
         parts.append(who + f": cache read {int(e.get('cache_read') or 0):,}, cache write {int(e.get('cache_write') or 0):,}"
                      + (f", reasoning {int(e['reasoning']):,}" if e.get('reasoning') is not None else '')
-                     + ('' if e.get('fidelity') == 'exact' else ' (self-reported)'))
+                     + {'exact': '', 'partial': ' (partial)'}.get(e.get('fidelity'), ' (self-reported)'))
     return '; '.join(parts)
 
 
@@ -388,7 +389,7 @@ def record_usage(state, args, fail):
     if args.collect:
         try:
             measured = token_usage.collect(args.collect, args.agent, args.log, since, until)
-            entry.update(measured, fidelity='exact')
+            entry.update({'fidelity': 'exact', **measured})  # a delegate result carries its own fidelity
         except (token_usage.UsageUnavailable, ValueError) as exc:
             # Keep the gap visible instead of recording a zero.
             entry.update(harness=args.collect, fidelity='unavailable', reason=str(exc))

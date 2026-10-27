@@ -497,6 +497,31 @@ class ScopeTests(unittest.TestCase):
             self.app.publish(snap, analysis, True)
         self.assertEqual(self.gh.writes, [])
 
+    def test_child_kept_whole_after_its_body_changed_carries_the_parent_approval(self):
+        """A published child whose body changed is re-scoped as one leaf at the same score: the
+        parent's retained approval is its baseline, so no owner re-approval of "keep it whole"."""
+        snap, analysis = self.analysis(True)
+        self.publish_approved(snap, analysis)
+        parent_sha = m.metadata(self.gh.issues[1]['body'])['approval']['analysis_sha256']
+        self.gh.issues[2]['body'] += '\n\nHandoff note added by the owner.'
+        child = self.app.inspect('2')
+        leaf = dict(node('first'), specify_prompt=m.metadata(self.gh.issues[2]['body'])['prompt'])
+        revision = dict(analysis, issue=2, fingerprint=child['fingerprint'], tree=leaf)
+        # A different score (or a split) is a new decision and still needs the owner.
+        bigger = dict(revision, tree=dict(leaf, **node('first', 8)))
+        with self.assertRaisesRegex(m.ScopeError, 'APPROVAL_REQUIRED'):
+            self.app.publish(child, bigger, True)
+        self.assertFalse(self.app.baseline_path(2).exists())
+        self.assertFalse(self.app.publish(child, revision)['approval_required'])
+        result = self.app.publish(child, revision, True)['revision']
+        self.assertEqual((result['carried_forward'], result['approved_by'], result['revision_of']), (True, 'test owner', parent_sha))
+        self.assertIn('source issue content changed since approval', result['difference']['summary'])
+        receipt = m.metadata(self.gh.issues[2]['body'])['approval']
+        self.assertEqual((receipt['carried_forward'], receipt['revision_of']), (True, parent_sha))
+        self.assertEqual(self.app.gate('2')['score'], 3)
+        # The carried approval is now the child's own baseline, so a later revision diffs against this leaf.
+        self.assertEqual(m.read_json(self.app.baseline_path(2))['approval']['revision_of'], parent_sha)
+
     def test_nested_aggregate_counts_toward_user_selected_total(self):
         snap, analysis = self.analysis(True)
         analysis['tree']['children'][0]['children'] = [node('nested-first'), node('nested-second')]
@@ -737,6 +762,48 @@ class ScopeTests(unittest.TestCase):
         self.gh.issues[1]['body'] += '\nHuman added requirement'
         with self.assertRaisesRegex(m.ScopeError, 'Requirements changed during publication'):
             self.publish_approved(self.app.inspect('1'), analysis)
+
+
+
+class BoardModeTests(unittest.TestCase):
+    """REQ-22: Workflow's `project_sync.mode` reaches Scope; off needs no Project config, minimal writes only its statuses."""
+    setUp, tearDown, analysis, publish_approved = ScopeTests.setUp, ScopeTests.tearDown, ScopeTests.analysis, ScopeTests.publish_approved
+
+    def board(self, mode):
+        import yaml
+        policy = m.workflow_policy._workflow_module().default_policy(False, False)
+        policy['project_sync'] = {'mode': mode}
+        (self.root / '.specify/workflow.yml').write_text(yaml.safe_dump(policy), encoding='utf-8')
+        with patch('sanduq_remote.origin_url', return_value='https://github.com/acme/app.git'):
+            self.app = m.Scope(self.root, self.gh)
+
+    def test_off_runs_scope_and_specify_without_a_board_and_minimal_skips_backlog(self):
+        (self.root / '.specify/extensions/project/config.json').unlink()
+        self.board('off')
+        self.gh.command = lambda args, payload=None: self.fail('board call in mode off: ' + ' '.join(args[:2]))
+        self.gh.add(2, 'Prerequisite')
+        self.gh.issues[1]['body'] = '### Blocked by\n- #2'
+        self.assertEqual(self.app.inspect('1')['blocked'], [{'number': 2, 'title': 'Prerequisite', 'status': 'Open (no board)'}])
+        self.gh.issues[2].update(state='closed', state_reason='completed')  # closed as completed is ready
+        snap, analysis = self.analysis()
+        self.publish_approved(snap, analysis)
+        self.assertEqual(self.app.gate('1')['score'], 3)  # the passed Scope receipt
+        feature = self.root / 'specs/001-new'
+        feature.mkdir(parents=True)
+        (feature / 'spec.md').write_text('# Spec\n', encoding='utf-8')
+        m.write_json(self.root / '.specify/feature.json', {'feature_directory': 'specs/001-new'})
+        self.assertFalse(self.app.bind('1', True)['dry_run'])
+        self.assertEqual(m.read_json(feature / 'scope-source.json')['issue'], 1)
+        self.assertFalse((self.root / '.specify/project-sync-state.json').exists())
+
+        self.tearDown()
+        self.setUp()
+        self.board('minimal')
+        self.gh.statuses[1] = None  # on the board without a status
+        snap, analysis = self.analysis()
+        self.publish_approved(snap, analysis)
+        self.assertFalse([w for w in self.gh.writes if w[0] == 'item-edit'], 'minimal mode wrote Backlog')
+        self.assertEqual(self.app.gate('1')['score'], 3)
 
 
 if __name__ == '__main__':

@@ -9,7 +9,13 @@ import re
 from pathlib import Path, PurePosixPath
 import subprocess
 import tempfile
-from contextlib import contextmanager
+
+try:
+    import sanduq_fs
+except ModuleNotFoundError:  # the source tree; package.py copies it into scripts/
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "shared"))
+    import sanduq_fs
 
 
 class ArchiveError(Exception):
@@ -34,8 +40,7 @@ def atomic_write(path: Path, data: bytes) -> None:
             os.unlink(name)
 
 
-def write_json(path: Path, value: object) -> None:
-    atomic_write(path, (json.dumps(value, indent=2, ensure_ascii=False) + "\n").encode())
+write_json = sanduq_fs.write_json
 
 
 class Repository:
@@ -340,17 +345,6 @@ class Repository:
             raise ArchiveError("Commit or hook changed unexpected paths/index entries. Inspect Git; no reset was performed.")
         return head
 
-    @contextmanager
     def lock(self):
-        self.state.mkdir(parents=True, exist_ok=True)
-        lock = self.state / "writer.lock"
-        try:
-            fd = os.open(lock, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
-        except FileExistsError:
-            raise ArchiveError(f"Archive writer lock exists: {lock}. Check its PID before removing a stale lock.") from None
-        try:
-            with os.fdopen(fd, "w") as stream:
-                json.dump({"pid": os.getpid(), "root": str(self.root)}, stream)
-            yield
-        finally:
-            lock.unlink(missing_ok=True)
+        """The writer lock. A lock left by a writer that died on this host is taken over; a live one refuses."""
+        return sanduq_fs.file_lock(self.state / "writer.lock", 0, "Archive writer lock exists", ArchiveError)

@@ -200,11 +200,15 @@ def replace_file(source, target, attempts=10):
 
 
 def write_json(path, value):
-    """Atomic JSON write: a uuid temp name beside the target (concurrent writers never share one), then replace."""
+    """Atomic JSON write: a uuid temp name beside the target (concurrent writers never share one), fsync (a crash
+    right after the replace never leaves an empty file), then replace."""
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_name(path.name + '.' + uuid.uuid4().hex + '.tmp')
     try:
-        temp.write_text(json.dumps(value, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+        with open(temp, 'w', encoding='utf-8') as stream:
+            stream.write(json.dumps(value, indent=2, ensure_ascii=False) + '\n')
+            stream.flush()
+            os.fsync(stream.fileno())
         replace_file(temp, path)
     finally:
         temp.unlink(missing_ok=True)

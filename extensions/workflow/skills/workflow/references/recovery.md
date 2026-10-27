@@ -2,7 +2,10 @@
 
 When `next` returns `inputs-or-evidence-changed` or the gate fails with `STALE_RECEIPT`, run
 the `recovery` commands it prints, in order. Never copy hashes forward and never revalidate on
-a note alone.
+a note alone. A `claim` that would remove the receipts of later stages returns
+`status: confirm_invalidation` instead of claiming: `invalidates` lists those receipts, `recovery`
+and `explain` give the amend route for a cosmetic change. Stop and show the user the list; re-run
+`claim` with `--confirm-invalidation` only when they want that rework.
 
 - Changed evidence of a completed stage: `amend`, below.
 - Upstream documents edited after their stages passed (for example a spec fix during Execute):

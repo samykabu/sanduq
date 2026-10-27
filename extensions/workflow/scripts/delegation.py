@@ -722,7 +722,7 @@ DRIVER_CONTRACT = 'delegate-task.driver.v1'
 REQUIRED_CONTRACT = {
     'result_schema': 'delegate-task.result.v2',
     'commands': {'start', 'collect', 'doctor', 'contract'},
-    'start_flags': {'--harness', '--task', '--cwd', '--model', '--sandbox', '--timeout',
+    'start_flags': {'--harness', '--task', '--cwd', '--model', '--sandbox', '--timeout', '--clean-env', '--keep-env',
                     '--constraint', '--allow-commit'},
     'collect_flags': {'--json'},
     'env': {'DELEGATE_RUNS_DIR'},
@@ -733,6 +733,18 @@ REQUIRED_CONTRACT = {
                       'artifacts'},
 }
 INSTALL_LOCK_TIMEOUT = 180.0
+# OMAR-07: what a managed project's copy of the vendored skill says about itself. The portable
+# description ("have another agent do X") would let the model run the driver outside the ledger.
+MANAGED_SKILL_DESCRIPTION = ('Driver that Sanduq delegate_dispatch.py runs for this workflow project; do not invoke it '
+                             'directly here. To have another agent do a task, use the host\'s native subagents or '
+                             'delegate_dispatch.py, which record the attempt in the ledger.')
+
+
+def managed_skill_text(text):
+    """The vendored SKILL.md as a project copy: the driver description and `disable-model-invocation: true`."""
+    text = re.sub(r'^description:[^\r\n]*$', 'description: ' + MANAGED_SKILL_DESCRIPTION, text, count=1, flags=re.M)
+    end = text.index('\n---', 1)  # the closing frontmatter fence
+    return text[:end] + '\ndisable-model-invocation: true' + text[end:]
 
 
 def local_skill_paths(root, host):
@@ -960,6 +972,9 @@ def install_skill_locked(root, host, scope, force_scope):
     try:
         # Runtime only (W7): the README images in assets/ and the READMEs stay in the package, not the skill folder.
         shutil.copytree(source, staging, ignore=shutil.ignore_patterns('test', 'runs', 'node_modules', 'assets', 'README*'))
+        if scope == 'project':  # a global copy also serves standalone projects and keeps the portable text
+            skill = staging / 'SKILL.md'
+            skill.write_text(managed_skill_text(skill.read_text(encoding='utf-8')), encoding='utf-8')
         problem, reason = check_copy(staging, node)
         require(problem is None, 'DELEGATE_SKILL_INSTALL_FAILED: ' + str(reason or problem))
     except Exception:

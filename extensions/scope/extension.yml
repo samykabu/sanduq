@@ -2,7 +2,7 @@ schema_version: "1.0"
 extension:
   id: scope
   name: Speckit Scope
-  version: "1.11.1"
+  version: "1.12.0"
   description: "Analyze GitHub issue scope, enforce prerequisites, review user-selected decomposition before publishing, and maintain parent progress."
   author: "Samy K. Abushanab"
   repository: "https://github.com/samykabu/sanduq"
@@ -27,24 +27,12 @@ provides:
     - name: speckit.scope.run
       file: commands/run.md
       description: "Scopes a GitHub issue: checks prerequisites, sizes effort, asks how many sub-issues to create and publishes only an approved decomposition. Use when asked to scope, size, estimate or split an issue."
-    - name: speckit.scope.guard
-      file: commands/guard.md
-      description: "Runs as the before_specify hook: blocks Specify unless the issue has a fresh approved scope. Use when asked to specify an issue."
-    - name: speckit.scope.bind
-      file: commands/bind.md
-      description: "Runs as the after_specify hook: binds the new spec to its source issue. Use when asked to bind a spec after Specify."
-    - name: speckit.scope.reconcile
-      file: commands/reconcile.md
-      description: "Runs as the after_implement hook: refreshes Scope parent progress. Use when asked to update stale parent progress."
     - name: speckit.scope.plan
       file: commands/plan.md
       description: "Redraws and validates the dependency plan with Illustrate after a Scope split is published. Use when asked to refresh the plan, or when the scope plan-pending marker exists."
-    - name: speckit.scope.after-specify
-      file: commands/after-specify.md
-      description: "Runs as an after_specify hook: starts the clarification round for the bound issue. Use when asked to clarify after Specify."
-    - name: speckit.scope.plan-guard
-      file: commands/plan-guard.md
-      description: "Runs as the before_plan hook: stops Plan unless the bound issue is Ready. Use when asked to plan an issue-bound spec."
+# The hook commands below are not listed under provides.commands (Spec Kit would register each as a
+# host skill with triggers that collide with speckit.specify and speckit.plan); the event dispatcher
+# finds them by file name, commands/<command name>.md, as Progress 1.1.2 does.
 hooks:
   before_specify:
     command: speckit.scope.guard

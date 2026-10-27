@@ -32,7 +32,7 @@ class MemoryHandoffTests(unittest.TestCase):
         shutil.copytree(SOURCE / 'scripts', installed / 'scripts', ignore=shutil.ignore_patterns('__pycache__'))
         shutil.copyfile(SOURCE / 'extension.yml', installed / 'extension.yml')
         # Packaging stages these shared helpers beside the Memory scripts.
-        for helper in ('check_inputs.py', 'bounded_json.py'):
+        for helper in ('check_inputs.py', 'bounded_json.py', 'sanduq_fs.py'):
             shutil.copyfile(SOURCE.parent / 'scripts/shared' / helper, installed / 'scripts' / helper)
         entries = w.registry(self.root)
         entries['memory'] = {'enabled': True, 'version': '2.1.1'}

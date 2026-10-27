@@ -67,12 +67,16 @@ stage, merged plan and tasks on the lower tiers, batch upstream revalidation, a 
 agents for Claude Code and Codex. Nothing changes until you opt in. After the transactional upgrade
 and the per-feature migration above:
 
-1. Add the policy keys you want to `.specify/workflow.yml`. The minimum that changes the front half:
+1. Add the policy keys you want to `.specify/workflow.yml`. The minimum that changes the front half
+   is a new `profiles` section and two keys merged into the existing `clarification` section (the
+   file already has one; a second `clarification:` block is refused with `POLICY_DUPLICATE_KEY`):
 
    ```yaml
    profiles:
      enabled: true
-   clarification:
+   clarification:                 # merge into the existing clarification section
+     transport: github-comments   # already there
+     resume_on_reinvoke: reread-answers
      in_session_first_round: true
      max_questions_per_round: 6
    ```
@@ -222,6 +226,36 @@ $speckit-memory-enable Review the renewed archiving policy and approve it.
 | Project owner type | A config from an older Init for an organization board says `ownerType: user` | Rerun `$speckit-project-init`, or set `"ownerType": "org"` |
 | Scope's `scope-gate` preset changed | A managed Specify claim is no longer told to chain Clarify | Unmanaged projects run `specify preset add` again for `scope-gate`; the Workflow installer re-adds it |
 
+## PH-03 train (Workflow 1.21.0)
+
+The train ships Workflow 1.21.0, Scope 1.12.0, Memory 2.6.0, PR 4.7.0, Project 2.7.0 and Progress 1.7.0, with presets
+`workflow` 1.3.3, `scope-gate` 1.6.2 and `scope-brainstorm` 1.5.1. New policy keys: `project_sync.mode`,
+`issue_sync.taskstoissues: off` and `clarification.transport`; all are optional and none invalidates a receipt. Upgrade
+every companion together, then reinstall Scope so the old hook skills are removed:
+
+```bash
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.21.0 --apply
+python .specify/extensions/workflow/scripts/workflow.py doctor --project
+```
+
+| Change | What you see | What to do |
+| --- | --- | --- |
+| Errors explain themselves | Error JSON carries `explain` and `next`; `docs/reference/errors.md` lists every code | Follow `next` |
+| Later receipts need confirmation | `claim` returns `status: confirm_invalidation` with the receipts it would remove | Read the list, then `claim --confirm-invalidation`, or amend instead |
+| Finalize before Ready | `claim --finalize` before Ready returns `not_ready_to_finalize` with the remaining stages | Run `speckit.workflow.continue` |
+| Board modes | A missing board in full mode is one `PROJECT_NOT_CONFIGURED` error | Run project init, or `init --board none` / `minimal` |
+| Local clarifications | With `clarification.transport: local`, questions live in `specs/<feature>/clarifications.md` and receipts say `self_attested` | Answer in the conversation; the agent records your reply |
+| Decision answers | `SD1: B.` and `SD1 - B` count; unreadable answers are listed `unparsed`; a comment a Sanduq process posted never counts | Reply `SD1: A` on its own line |
+| Fork origin | Scope refuses `ORIGIN_IS_FORK` naming the parent | Clone the parent repository |
+| Unrelated history | `prepare`, `start` and `doctor --project` refuse `HISTORY_UNRELATED` | Start from a branch of `origin/HEAD` |
+| Interrupted install | `doctor` reports `INSTALL_INTERRUPTED` with a restore command | Run `install.py --restore <backup>` |
+| Native stages | With delegation on, a stage a host subagent did is recorded with `delegate_dispatch.py attest-native` from the top-level session | Never from a worker or subagent; receipts show `native_attestation` |
+| Child issue kept whole | A one-leaf re-scope of an edited child carries the parent's approval | Nothing |
+| Guard | `git commit -a`, `git add -u` and PowerShell `git add -A` are refused | Stage owned paths by name |
+| Source key | Evidence recorded with the key version used before 2026-10-10 is refused | Re-run the CI evidence step |
+| Scope hook commands | The five hook-only `speckit-scope-*` skills are gone; `/speckit-scope-reconcile` is replaced | Use `scope.py reconcile --apply` |
+| Delegate runs | Run logs are masked and runs older than 30 days are pruned after `collect` | Set `DELEGATE_PRUNE_DAYS=0` to keep them |
+
 ## PH-02 train (Workflow 1.20.0)
 
 The train ships Workflow 1.20.0 and Scope 1.11.1, with presets `workflow` 1.3.2 and `scope-gate` 1.6.1.
@@ -241,6 +275,7 @@ python .specify/extensions/workflow/scripts/workflow.py doctor --project
 | Live claims cannot be taken over | `recover` refuses `CLAIM_OWNER_ALIVE`; `status` shows `owner:` and `last_activity:` | Wait, or pass `--force-live-owner "<how you know it stopped>"` |
 | Fallback needs confirmation | With delegation on, a rejected model stops `collect` with `FALLBACK_CONFIRMATION_REQUIRED` | Confirm in the conversation; the top-level session runs `collect --confirm-fallback <requested>=<substitute>`. List substitutes in the route's `fallbacks`, or set `allow_default_model: true` for the CLI default |
 | Clean delegated environment | Workers see only the allowlisted variables; `GH_TOKEN` only on GitHub-adapter routes | A worker that needs another variable gets it through a `SANDUQ_*` name or the route's harness credentials |
+| Native subagent stages | With delegation on, a stage done by the host's own subagent has no ledger attempt and `complete` refuses `DELEGATION_STAGE_NOT_VERIFIED` | The top-level session runs `delegate_dispatch.py attest-native --feature <f> --id stage:<s> --claim-token <t> --requested-model <m>` (self-asserted, labelled `kind: native`), then completes; a worker or subagent is refused |
 | Lean attempt cap | `LEAN_ATTEMPT_LIMIT_REACHED` after `max_attempts` (default 3); `LEAN_PROVIDER_REJECTED` on `reassign` after a model rejection | Ask the owner, or start with another eligible harness/model pair |
 | Locks recover from a dead owner | `WORKFLOW_BUSY` names pid, host, age and liveness; a lock whose pid exited on this host is reclaimed | Delete a lock from another host or an older version yourself once its process is gone |
 

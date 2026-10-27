@@ -378,10 +378,12 @@ QA_COLLECT_ADDENDUM = (
 # actual diff may decide a detected tamper is benign.
 NO_DISPATCHER_COMMANDS = (
     'Never run delegate_dispatch.py yourself (start, collect, accept, reassign, recover, abandon, '
-    'adopt or trust-reset) -- not on this run, another run, or another task. Those are the '
+    'adopt, attest-native or trust-reset) -- not on this run, another run, or another task. Those are the '
     'dispatcher\'s own commands; trust-reset in particular is an orchestrator-only, '
     'human-authorised decision, and adopt is orchestrator-only for the same reason -- a worker must '
-    'never be the one judging whether its own unattempted work now counts as verified.\n'
+    'never be the one judging whether its own unattempted work now counts as verified. attest-native is '
+    'the top-level session\'s own attestation of a stage a native subagent carried out; a subagent never '
+    'attests itself.\n'
 )
 
 
@@ -395,8 +397,8 @@ NO_DISPATCHER_COMMANDS = (
 EXECUTE_ORCHESTRATOR_DISPATCHER_COMMANDS = (
     'As the Execute orchestrator you may run delegate_dispatch.py start, collect, recover, abandon, '
     'accept, reassign or adopt for this feature\'s own T### tasks only -- that is how you dispatch and '
-    'resolve bounded workers. Never trust-reset, and never a stage:* identity or another feature\'s '
-    'tasks; the dispatcher enforces this scope itself (DELEGATION_ORCHESTRATOR_SCOPE) and refuses '
+    'resolve bounded workers. Never trust-reset or attest-native, and never a stage:* identity or another '
+    'feature\'s tasks; the dispatcher enforces this scope itself (DELEGATION_ORCHESTRATOR_SCOPE) and refuses '
     'anything outside it.\n'
 )
 
@@ -426,8 +428,10 @@ def stage_brief(root, feature, stage, token, work_type=None):
         'migrate, recover or another stage.\n'
         f'Read the installed workflow skill and {command_file or "the workflow stage contract"}; '
         f'invoke {command} once inside this claim. Respect all existing binding, evidence and human '
-        'decision gates. If a decision is needed, use the existing GitHub decision adapter and '
-        'report the pending decision to the dispatcher.\n'
+        'decision gates. If a decision is needed, ' +
+        ('report the pending decision to the dispatcher; this feature answers questions locally, so post '
+         'nothing to GitHub.\n' if state.get('clarification_transport') == 'local' else
+         'use the existing GitHub decision adapter and report the pending decision to the dispatcher.\n') +
         'Return the concrete input paths, evidence paths, checks executed and any blocker. '
         'The dispatcher will inspect them and complete the receipt; your own success claim is '
         'not a passed Sanduq stage. ' + ownership +
@@ -450,9 +454,20 @@ def task_brief(root, feature, task_id, work_type=None):
     return text + QA_COLLECT_ADDENDUM if work_type == 'qa_collect' else text
 
 
+def delegate_dir(root):
+    """`.delegate/` with a nested `.gitignore` (`*`): briefs and raw run logs stay out of git even in a copy of the
+    tree whose info/exclude was not carried over (SEC-17)."""
+    directory = root / '.delegate'
+    directory.mkdir(exist_ok=True)
+    ignore = directory / '.gitignore'
+    if not ignore.exists():
+        ignore.write_text('*\n', encoding='utf-8')
+    return directory
+
+
 def brief_file(root, text):
-    directory = root / '.delegate/briefs'
-    directory.mkdir(parents=True, exist_ok=True)
+    directory = delegate_dir(root) / 'briefs'
+    directory.mkdir(exist_ok=True)
     path = directory / (uuid.uuid4().hex + '.txt')
     path.write_text(text, encoding='utf-8')
     return path
@@ -1096,9 +1111,9 @@ def retry_plan(policy, attempt, payload, rejected, host, tier=None):
 
 
 DISPATCH_SCRIPT = 'python .specify/extensions/workflow/scripts/delegate_dispatch.py'
-WORKFLOW_NATIVE_STAGE = ('{script} recover --feature {feature} --token {token} --reason "model rejected; '
-                         'running natively", set delegation.enabled: false in .specify/workflow.yml, then '
-                         '{script} claim --feature {feature}')
+WORKFLOW_NATIVE_STAGE = ('do {identity} in this session or a native subagent of the host, then {script} attest-native '
+                         '--feature {feature} --id {identity} --claim-token {token} --requested-model <m> '
+                         '[--reported-model <m>] before workflow.py complete')
 
 
 def model_label(model):
@@ -1152,7 +1167,7 @@ def fallback_message(feature, attempt, pending):
             others[0]['harness'] + ' --model ' + others[0]['requested_model'] + token if others else
             'set delegation.models.' + attempt['requested_harness'] + ' in .specify/workflow.yml to a model this '
             'account can use, then ' + DISPATCH_SCRIPT + ' start --feature ' + feature + ' --id ' + identity + token)
-    native = (WORKFLOW_NATIVE_STAGE.format(script=workflow.WORKFLOW_SCRIPT, feature=feature,
+    native = (WORKFLOW_NATIVE_STAGE.format(script=DISPATCH_SCRIPT, feature=feature, identity=identity,
                                            token=attempt['claim_token'])
               if attempt.get('claim_token') else
               'do ' + identity + ' in this session, then ' + DISPATCH_SCRIPT + ' adopt --feature ' + feature +
@@ -1791,7 +1806,9 @@ def kill_process_tree(proc):
     caller is about to read.
     """
     if os.name == 'nt':
-        subprocess.run(['taskkill', '/T', '/F', '/PID', str(proc.pid)], capture_output=True)
+        # Windows resolves a bare name in the current directory first; the absolute path cannot be shadowed (SEC-15).
+        taskkill = os.path.join(os.environ.get('SystemRoot', r'C:\Windows'), 'System32', 'taskkill.exe')
+        subprocess.run([taskkill, '/T', '/F', '/PID', str(proc.pid)], capture_output=True)
         return
     import signal
     try:
@@ -1925,6 +1942,72 @@ def confirm_fallback(root, feature, run_id, pair):
                                            replacement_run_id=replacement['run_id'])
         attempt = copy.deepcopy(attempt)
     return {**_recorded_response(attempt), 'replacement': replacement, 'decision': 'fallback confirmed'}
+
+
+def native_attestation_fields(attempt):
+    """The native-attestation label the attest response, `status` and the completed receipt share."""
+    return {'kind': 'native', 'run_id': attempt['run_id'], 'requested_harness': attempt['requested_harness'],
+            'requested_model': attempt['requested_model'],
+            'actual_model': attempt.get('actual_model') or 'unreported',
+            'actual_model_evidence': attempt['actual_model_evidence'], 'attested_by': attempt['attested_by'],
+            'attested_at': attempt['attested_at'], 'session_id': attempt.get('session_id'),
+            'evidence': 'self-asserted by the top-level session; no external ledger evidence'}
+
+
+def attest_native(root, feature, identity, token, requested_model, reported_model=None):
+    """SAMY-03: record that the top-level session carried a claimed stage out with a native subagent
+    of the host, so `complete` has a ledger attempt to accept. Self-asserted: no driver run and no
+    external evidence back it, and every place that shows it labels it `kind: native`."""
+    delegation.require(not delegation.delegated_run_id() and not delegation.delegated_role() and
+                       os.environ.get('SANDUQ_ROLE') != 'worker',
+                       "NATIVE_ATTESTATION_FORBIDDEN: attest-native is the top-level session's own attestation; a "
+                       'delegated worker, orchestrator or subagent may not give it. Report the stage result to the '
+                       'top-level session, which runs the command itself')
+    root = root.resolve()
+    feature = feature_identity(root, feature)
+    delegation.require_no_maintenance(root)
+    delegation.require(identity.startswith('stage:') and identity.removeprefix('stage:') in delegation.STAGE_TYPES,
+                       'DELEGATION_STAGE_INVALID')
+    delegation.require(isinstance(requested_model, str) and requested_model.strip(), 'DELEGATION_MODEL_INVALID')
+    stage = identity.removeprefix('stage:')
+    full_identity = feature + '/' + identity
+    host = workflow.active_host(root)
+    with edit_ledger(root, feature) as ledger:
+        active = workflow.read(root / feature / 'workflow/checkpoint.json', {}).get('active') or {}
+        delegation.require(active.get('stage') == stage and active.get('token') == token,
+                           'DELEGATION_STAGE_CLAIM_MISMATCH')
+        # A claim without a route (delegation off, or the review-kind interim) completes natively anyway.
+        route = active.get('delegation')
+        delegation.require(route, 'NATIVE_ATTESTATION_NOT_NEEDED: the claim of stage:' + stage + ' of ' + feature +
+                           ' recorded no delegation route, so complete needs no attempt for it')
+        reserve(ledger, full_identity, None)
+        now = stamp()
+        attempt = {'kind': 'native', 'identity': full_identity, 'task_type': route.get('task_type'),
+                   'run_id': 'native-' + uuid.uuid4().hex[:12], 'intent_id': uuid.uuid4().hex,
+                   'status': 'successful', 'started_at': now, 'ended_at': now,
+                   'requested_harness': host, 'actual_harness': host, 'requested_model': requested_model.strip(),
+                   'actual_model': reported_model.strip() if reported_model and reported_model.strip() else None,
+                   'model_observed': bool(reported_model and reported_model.strip()),
+                   'rule': 'native', 'choice': 'native', 'route_candidates': route.get('candidates'),
+                   'attested_by': 'top-level', 'attested_at': now, 'session_id': active.get('session_id'),
+                   'claim_token': token, 'claim_id': lifecycle.claim_id_for(token),
+                   'status_provenance': {'primary': 'self_report', 'source': 'top-level-attestation'},
+                   'fidelity': 'reported', 'token_usage': None, 'evidence_location': None,
+                   'result_summary': 'native subagent stage attested by the top-level session'}
+        attempt['actual_model_evidence'] = 'host-reported' if attempt['actual_model'] else 'unverified'
+        # A terminal external attempt of this claim (a rejected model, a failure) is replaced, not hidden.
+        prior = [a for a in ledger['attempts'] if a.get('identity') == full_identity and a.get('run_id') and
+                 a.get('claim_token') == token and not a.get('replacement_run_id')]
+        if prior:
+            latest = max(prior, key=lambda a: a.get('started_at') or '')
+            latest['replacement_run_id'] = attempt['run_id']
+            attempt['parent_run_id'] = attempt['replaces_run_id'] = latest['run_id']
+        ledger['attempts'].append(attempt)
+        ledger['route_decisions'].append({'at': now, 'identity': full_identity, 'requested': route['candidates'][0],
+                                          'decision': 'native-attested', 'run_id': attempt['run_id'],
+                                          'reason': 'the top-level session attested a native subagent run'})
+    return {**native_attestation_fields(attempt), 'identity': full_identity, 'status': 'successful',
+            'replaces_run_id': attempt.get('replaces_run_id')}
 
 
 def collect(root, feature, run_id, auto_retry=True, confirm=None):
@@ -2595,6 +2678,13 @@ def main(argv=None):
     adopt_cmd.add_argument('--owned', action='append',
                            help='A path (repeatable), relative to the repo root, to check "files" '
                                 'evidence against; defaults to the feature directory when omitted')
+    attest_cmd = sub.add_parser('attest-native', help='Record that a native subagent of the host did a claimed '
+                                                      'stage; top-level session only, self-asserted')
+    attest_cmd.add_argument('--feature', required=True)
+    attest_cmd.add_argument('--id', required=True, help='stage:<stage>')
+    attest_cmd.add_argument('--claim-token', required=True)
+    attest_cmd.add_argument('--requested-model', required=True, help='The model the subagent was asked to run')
+    attest_cmd.add_argument('--reported-model', help='The model the host reported; omitted records "unreported"')
     args = parser.parse_args(argv)
     try:
         if args.action == 'start':
@@ -2624,6 +2714,9 @@ def main(argv=None):
         elif args.action == 'adopt':
             result = adopt(args.root, args.feature, args.id, args.command, args.expect,
                            args.timeout, args.owned)
+        elif args.action == 'attest-native':
+            result = attest_native(args.root, args.feature, args.id, args.claim_token,
+                                   args.requested_model, args.reported_model)
         else:
             result = reassign(args.root, args.feature, args.run_id, args.reason, args.task_file,
                               workflow.read(workflow.inside(args.root.resolve(), str(args.diagnosis)))

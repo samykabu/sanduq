@@ -8,7 +8,7 @@ Before executing ANY core Specify step or other hook, require exactly one explic
 GitHub issue number from this invocation. If missing, STOP with:
 `SCOPE_REQUIRED: supply a GitHub issue number and run /speckit-scope-run <issue> first.`
 
-Read `.specify/extensions/scope/commands/guard.md` and execute its guard. If the
+Read `.specify/extensions/scope/commands/speckit.scope.guard.md` and execute its guard. If the
 extension is absent, hook configuration is malformed, a read fails, or the guard
 returns nonzero, STOP. Do not create directories, branches, specs or issues.
 Use the returned scoped prompt as the feature description for the core flow below.

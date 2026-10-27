@@ -17,6 +17,12 @@ repository validation, but replace its global T001-title deduplication and issue
 Receipt: exact `parent_issue` and `native_links_verified: true`, with the mapping and the
 adapter's result and journal as evidence.
 
+## Off
+
+With `issue_sync.taskstoissues: off` (board mode `minimal` or `none`) this stage is not in the
+stage list: `claim` never returns it, the checkpoint records it under `skipped`, and `task_issues.py`
+refuses with `TASK_ISSUES_OFF`. Never create task issues by other means.
+
 ## Phase-lazy
 
 With `issue_sync.taskstoissues: phase-lazy`, publish only the first phase now: add `--phase

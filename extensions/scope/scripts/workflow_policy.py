@@ -73,6 +73,30 @@ def statuses(root):
     return mapping
 
 
+def board_mode(root):
+    """Workflow's `project_sync.mode` (REQ-22) read by Workflow itself; `full` without a managed policy."""
+    policy = load(root)
+    return _required_workflow().project_sync_mode(policy) if policy else 'full'
+
+
+def board_writes(root, status):
+    """Whether Scope moves the board to the logical `status`: every status in full mode (or unmanaged), in minimal
+    only those of the phases minimal writes, none in off."""
+    policy = load(root)
+    if not policy:
+        return True
+    workflow = _required_workflow()
+    return workflow.project_sync_mode(policy) == 'full' or any(
+        workflow.sync_phase_written(policy, phase) for phase, logical in workflow.PHASE_DEFAULTS.items() if logical == status)
+
+
+def _required_workflow():
+    workflow = _workflow_module()
+    if workflow is None:
+        raise ValueError('SCOPE_WORKFLOW_UNAVAILABLE: the workflow extension cannot be loaded to read project_sync.mode.')
+    return workflow
+
+
 def _workflow_module():
     """The sibling workflow extension's `workflow.py`, loaded by path. Scope
     declares `workflow` as a dependency, and both ship side by side under

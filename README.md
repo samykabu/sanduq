@@ -36,7 +36,7 @@ The map shows each extension and what it requires; arrows point to the dependenc
 | --- | --- | --- | --- | --- | --- |
 | [Workflow](docs/extensions/workflow.md) | Resumable issue-to-PR dispatcher | All, as 16 stages | Yes | Python 3.10+, Git, `gh`; installs the extensions it uses | Claude Code (live run); Codex (install only) |
 | [Scope](docs/extensions/scope.md) | Issue scope, prerequisites and decomposition | Before and after Specify, before Plan | No | Workflow, Illustrate | Through Workflow (Claude Code live run) |
-| [Project](docs/extensions/project.md) | GitHub Project board sync | Specify to Implement | Yes | `gh` (optional) | Claude Code (live run through Workflow); Codex (unverified) |
+| [Project](docs/extensions/project.md) | GitHub Project board sync | Specify to Implement | Yes | `gh` (optional standalone; Workflow needs a mapped board in its `full` and `minimal` board modes, none in `none`) | Claude Code (live run through Workflow); Codex (unverified) |
 | [Assure](docs/extensions/assure.md) | QA readiness analysis and walkthrough | After Tasks, around Implement | Yes | Illustrate | Codex, Claude Code (unverified) |
 | [User Manual](docs/extensions/user-manual.md) | Audience-aware application manual | After Tasks and Implement; release | Yes | Illustrate | Codex, Claude Code (unverified) |
 | [PR](docs/extensions/pr.md) | Feature docs, PR description, review feedback | After Implement | Yes | Illustrate | Claude Code (live run through Workflow); Codex (unverified) |
@@ -123,4 +123,4 @@ published under. Bundled upstream material keeps its own license; see
 - [Command reference](docs/reference/commands.md), [hooks](docs/reference/hooks.md) and [glossary](docs/reference/glossary.md)
 - [Troubleshooting](docs/start/troubleshooting.md) and [upgrades](docs/start/upgrades.md)
 - Published versions: [catalog.json](catalog.json). Versions awaiting release: [pending releases](extensions/pending-releases.json). History: [CHANGELOG.md](CHANGELOG.md).
-- [Contributing](CONTRIBUTING.md)
+- [Contributing](CONTRIBUTING.md) and [security](SECURITY.md): trust assumptions, what runs automatically, how to report

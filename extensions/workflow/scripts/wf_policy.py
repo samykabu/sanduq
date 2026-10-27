@@ -12,7 +12,8 @@ import yaml
 from pathlib import Path
 from wf_core import (SCHEMA, BASE_STAGES, RECEIPT_POLICY_KEYS, DEFAULT_PROFILES, LITE_SKIPPED, ARTIFACT_BUDGETS,
                      ARTIFACT_ENFORCE, PROJECT_SYNC_PHASES, PROJECT_SYNC_POINTS, DEFAULT_SYNC_STATE, TASK_ISSUE_MODES,
-                     SIDE_EFFECTS, WORKFLOW_SCRIPT, WorkflowError, require, portable_label)
+                     PROJECT_SYNC_MODES, MINIMAL_SYNC_PHASES, SIDE_EFFECTS, WORKFLOW_SCRIPT, WorkflowError, require,
+                     portable_label)
 from wf_fingerprints import sync_state_label
 
 
@@ -104,7 +105,7 @@ POLICY_KEYS = {
     'profiles.standard': ('max_score',),
     'artifacts': ('budgets', 'enforce'),
     'artifacts.budgets': tuple(ARTIFACT_BUDGETS),
-    'project_sync': ('points',),
+    'project_sync': ('points', 'mode'),
 }
 
 
@@ -256,6 +257,8 @@ def validate_front_half_policy(policy):
             bands[name] = band['max_score']
         require(bands['lite'] < bands['standard'], 'PROFILES_POLICY_INVALID: lite.max_score must be below standard.max_score')
     clarification = policy.get('clarification', {})
+    require(clarification.get('transport', 'github-comments') in ('github-comments', 'local'),
+            'CLARIFICATION_POLICY_INVALID: transport is github-comments or local')
     if 'max_questions_per_round' in clarification:
         require(_positive(clarification['max_questions_per_round']), 'CLARIFICATION_POLICY_INVALID: max_questions_per_round')
     if 'in_session_first_round' in clarification:
@@ -271,10 +274,13 @@ def validate_front_half_policy(policy):
                 'ARTIFACTS_POLICY_INVALID: enforce is one of ' + ', '.join(ARTIFACT_ENFORCE))
     project_sync = policy.get('project_sync')
     if project_sync is not None:
-        points = project_sync.get('points') if isinstance(project_sync, dict) else None
-        require(isinstance(project_sync, dict) and set(project_sync) == {'points'} and isinstance(points, list)
-                and set(points) <= set(PROJECT_SYNC_POINTS) and len(set(points)) == len(points),
+        require(isinstance(project_sync, dict) and set(project_sync) <= {'points', 'mode'}, 'PROJECT_SYNC_POLICY_INVALID')
+        points = project_sync.get('points')
+        require(points is None or (isinstance(points, list) and set(points) <= set(PROJECT_SYNC_POINTS)
+                                   and len(set(points)) == len(points)),
                 'PROJECT_SYNC_POLICY_INVALID: points is a list of ' + ', '.join(PROJECT_SYNC_POINTS))
+        require(project_sync.get('mode', 'full') in PROJECT_SYNC_MODES,
+                'PROJECT_SYNC_POLICY_INVALID: mode is one of ' + ', '.join(PROJECT_SYNC_MODES))
     scope = policy.get('scope')
     if isinstance(scope, dict) and 'board_cache_seconds' in scope:
         value = scope['board_cache_seconds']
@@ -303,20 +309,58 @@ def feature_tier(root, feature):
 
 
 def skipped_stages(policy, tier_name):
-    """Stages a tier does not run, with the reason recorded in the checkpoint and the lifecycle log."""
-    if tier_name not in ('lite', 'standard'):
-        return {}
-    skipped = {'tasks': 'merged into plan (' + tier_name + ' tier)'}
+    """Stages the tier or the board mode does not run, with the reason recorded in the checkpoint and the log."""
+    skipped = {}
+    if task_issue_mode(policy) == 'off':
+        skipped['taskstoissues'] = 'issue_sync.taskstoissues: off'
+    if tier_name in ('lite', 'standard'):
+        skipped['tasks'] = 'merged into plan (' + tier_name + ' tier)'
     if tier_name == 'lite':
         skipped.update({stage: 'lite tier' for stage in LITE_SKIPPED if stage in stages(policy)})
     return skipped
 
 
+def project_sync_mode(policy):
+    return (policy.get('project_sync') or {}).get('mode', 'full')
+
+
+def sync_phases(policy):
+    """Stage -> Project Sync phase the board mode writes. Minimal keeps the tracked phases (`done` is post-merge)
+    and, with Tasks-to-Issues off, writes `ready` after Analyze instead; off writes nothing."""
+    mode = project_sync_mode(policy)
+    if mode == 'off':
+        return {}
+    if mode == 'full':
+        return dict(PROJECT_SYNC_PHASES)
+    phases = {stage: phase for stage, phase in PROJECT_SYNC_PHASES.items() if phase in MINIMAL_SYNC_PHASES}
+    if task_issue_mode(policy) == 'off':
+        phases = {'analyze': 'ready', **{s: p for s, p in phases.items() if s != 'taskstoissues'}}
+    return phases
+
+
+def sync_phase_written(policy, phase):
+    """Whether `project-sync --phase <phase>` writes the board under the mode (else it is recorded as skipped)."""
+    mode = project_sync_mode(policy)
+    return mode == 'full' or (mode == 'minimal' and phase in MINIMAL_SYNC_PHASES)
+
+
+def board_mode_line(policy):
+    """Doctor's one line naming the board mode."""
+    mode = project_sync_mode(policy)
+    what = {'full': 'every phase is written to the board',
+            'minimal': 'only Ready, In progress, In review and Done are written',
+            'off': 'no board; nothing is written'}[mode]
+    tasks = task_issue_mode(policy)
+    return (mode + ': ' + what + '; ' + ('no task sub-issues' if tasks == 'off' else 'task sub-issues ' + tasks) +
+            ' (project_sync.mode ' + mode + ', issue_sync.taskstoissues ' + tasks + ')')
+
+
 def project_sync(policy, stage, feature='<feature>'):
-    """The claim's Project Sync field: `{phase, command}` at a `project_sync.points` stage, else False."""
-    if stage not in (policy.get('project_sync') or {}).get('points', PROJECT_SYNC_POINTS):
+    """The claim's Project Sync field: `{phase, command}` at a `project_sync.points` stage the mode writes, else
+    False."""
+    phase = sync_phases(policy).get(stage)
+    if not phase or stage not in (policy.get('project_sync') or {}).get('points', PROJECT_SYNC_POINTS):
         return False
-    phase = PROJECT_SYNC_PHASES[stage]
     return {'phase': phase, 'command': WORKFLOW_SCRIPT + ' project-sync --feature ' + feature + ' --phase ' + phase}
 
 
@@ -340,25 +384,50 @@ def matches_side_effect(path, patterns):
     return any(re.fullmatch(re.escape(pattern).replace(r'\*', '[^/]*'), path) for pattern in patterns)
 
 
+class PolicyLoader(yaml.SafeLoader):
+    """AHMED-04: a duplicated key (a README section pasted below an existing one) is refused with its line instead
+    of silently replacing the first mapping."""
+
+    def construct_mapping(self, node, deep=False):
+        seen = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            require(key not in seen, 'POLICY_DUPLICATE_KEY: ' + str(key) + ' at line ' + str(key_node.start_mark.line + 1)
+                    + ' of .specify/workflow.yml repeats an earlier ' + str(key) + ' key; merge the two into the '
+                    'existing section (the second would silently replace the first)')
+            seen.add(key)
+        return super().construct_mapping(node, deep)
+
+
+def parse_policy(text):
+    return yaml.load(text, Loader=PolicyLoader)
+
+
 def load_policy(root):
     path = root / '.specify/workflow.yml'
     require(path.is_file(), 'WORKFLOW_INIT_REQUIRED')
-    return validate_policy(yaml.safe_load(path.read_text(encoding='utf-8-sig')), root)
+    return validate_policy(parse_policy(path.read_text(encoding='utf-8-sig')), root)
 
 
-def stages(policy, tier=None):
-    """The selected stage order; a lite or standard tier merges Tasks into Plan, lite also drops QA/manual stages."""
+def stages(policy, tier=None, skipped=None):
+    """The selected stage order; a lite or standard tier merges Tasks into Plan, lite also drops QA/manual stages,
+    and `issue_sync.taskstoissues: off` drops Tasks-to-Issues. `skipped`: the feature's recorded skips, which keep
+    a Tasks-to-Issues skip that outlived a switch back on (`Run.reconcile_skipped`)."""
     selected = [s for s in BASE_STAGES if not (s.startswith('qa_') and not policy['processes']['qa'])
-                and not (s.startswith('manual_') and not policy['processes']['user_manual'])]
+                and not (s.startswith('manual_') and not policy['processes']['user_manual'])
+                and not (s == 'taskstoissues' and (policy.get('issue_sync') or {}).get('taskstoissues') == 'off')]
     if tier in ('lite', 'standard'):
         selected = [s for s in selected if s != 'tasks' and not (tier == 'lite' and s in LITE_SKIPPED)]
-    return selected
+    return [s for s in selected if s not in (skipped or {})]
 
 
-# Sub-keys that tune how future work runs (a cache TTL, a question cap) and never change what
-# finished evidence means; a change to them alone reaches no stage.
+# Sub-keys that tune how future work runs (a cache TTL, a question cap, the board mode) and never change what
+# finished evidence means; a change to them alone reaches no stage (AHMED-30: switching `issue_sync.taskstoissues`
+# or `project_sync.mode` on a feature in flight invalidates nothing). `transport` is frozen per feature on
+# its checkpoint at Scope start (REQ-21), so a later edit only affects features started after it.
 OPERATIONAL_SUBKEYS = {'scope': ('board_cache_seconds',),
-                       'clarification': ('max_questions_per_round', 'in_session_first_round')}
+                       'clarification': ('max_questions_per_round', 'in_session_first_round', 'transport'),
+                       'issue_sync': ('taskstoissues',)}
 
 
 def policy_cutoff(previous, current):

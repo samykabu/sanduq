@@ -54,17 +54,20 @@ from wf_core import (SCHEMA, CHECKPOINT_SCHEMA, CHECKPOINT_SCHEMAS, RANGES, BASE
                      RUNTIME_RECEIPT_FIELDS, SOURCE_STAGES, EFFORT_SCORES, TIERS, DEFAULT_PROFILES, LITE_SKIPPED,
                      LITE_OPTIONAL_INPUTS, LINT_COMMAND, ARTIFACT_BUDGETS, ARTIFACT_ENFORCE, PROJECT_SYNC_PHASES,
                      PROJECT_SYNC_POINTS, PROJECT_SYNC_SCRIPT, PROJECT_SYNC_STEPS, DEFAULT_SYNC_STATE,
-                     SYNC_BINDING_PREFIX, SYNC_ADMINISTRATIVE, TASK_ISSUE_MODES, SIDE_EFFECTS, RENDER_MARKER,
+                     SYNC_BINDING_PREFIX, SYNC_ADMINISTRATIVE, TASK_ISSUE_MODES, PROJECT_SYNC_MODES,
+                     MINIMAL_SYNC_PHASES, SIDE_EFFECTS, RENDER_MARKER,
                      HANDOFF_BEGIN, HANDOFF_END, DOCTOR_CACHE, DOCTOR_CACHE_SECONDS, DOCTOR_CACHE_FILES,
                      WORKFLOW_SCRIPT, WORKFLOW_PACKAGE_PREFIX, WorkflowError, require, now, read, digest,
                      POLICY_DIGEST_VERSION, OPERATIONAL_POLICY, delivery_digest, checkpoint_policy_digest, replace_file,
                      write, inside, portable_label, canonical_path, REPARSE_POINT, _no_link_below, GIT_READS, run_git,
                      git_ok, git, OPERATIONAL_DIRS, operation, _memo, _wrote, default_actor,
-                     require_not_delegated_context, RUNTIME_DECLARATION, ensure_local_excludes, locked)
+                     require_not_delegated_context, RUNTIME_DECLARATION, ensure_local_excludes, locked, ERRORS,
+                     explain, GIT, W, INSTALL_SCRIPT)
 from wf_identity import (github_repository, previous_branch, normalized_remote, origin_url, root_commit_sha,
                          is_shallow_clone, repo_identity, current_identity, root_commit_still_reachable, same_remote,
                          identity_matches, legacy_history_signal, verify_checkpoint_identity, root_history_changed,
-                         require_issue_repository_binding, issue_identity, prepare_issue)
+                         require_issue_repository_binding, issue_identity, prepare_issue, require_shared_history,
+                         feature_for_issue)
 from wf_fingerprints import (sync_state_label, sync_entry, sync_projection, sync_binding,
                              normalized_text, text_fingerprints, fingerprint_files,
                              git_text_attributes, prefetch_attributes, source_fingerprints, inventory_label,
@@ -72,12 +75,14 @@ from wf_fingerprints import (sync_state_label, sync_entry, sync_projection, sync
 from wf_policy import (default_policy, select_gate, validate_policy, _positive, validate_front_half_policy, tier,
                        state_tier, feature_tier, skipped_stages, project_sync, task_issue_mode, side_effects,
                        matches_side_effect, load_policy, stages, OPERATIONAL_SUBKEYS, policy_cutoff, POLICY_KEYS,
-                       unknown_policy_key)
+                       unknown_policy_key, parse_policy, PolicyLoader, project_sync_mode, sync_phases,
+                       sync_phase_written, board_mode_line)
 from wf_health import (registry, compatible, active_host, command_exists, package_digest, resolve_commands,
                        project_errors, SCOPE_STATUSES, project_defaults, MANAGED_CI, preserved_ci_path, ci_errors,
                        delegation_errors, host_warnings, progress_wiring_warnings, guard_approval_warnings,
                        doctor_cache_key, store_doctor_cache, cached_doctor, doctor, lean_preflight, pr_lint_binding,
-                       upgrade_command, dependency_errors)
+                       upgrade_command, dependency_errors, PHASE_DEFAULTS, INERT_VALUES, inert_value_warnings,
+                       interrupted_install_errors, history_errors, HOOK_PYTHON_PROBE, hook_python_warnings)
 from wf_receipts import (verify_sync_binding, same_path, recorded_sync_fields, handoff_text, native_run_status,
                          sync_retry, context_gate, measured_context_gate, required_inputs, first_phase_tasks,
                          consulted_inputs, without_required, canonical_receipt, dependency_fingerprints, role_exempt,
@@ -86,7 +91,8 @@ from wf_receipts import (verify_sync_binding, same_path, recorded_sync_fields, h
                          _positive_int, _string_list, diff_review_command, diff_review_shell, diff_review_sha256,
                          ci_evidence_complete, ci_evidence_current, validate_evidence_snapshots, receipt_status,
                          receipt_current, recovery_recipe, upstream_drift, receipt_drift, ready_checks,
-                         coding_review_checks, CLAIM_HEARTBEAT_SECONDS, claim_owner)
+                         coding_review_checks, CLAIM_HEARTBEAT_SECONDS, claim_owner, waiting_questions,
+                         feature_skipped)
 
 
 # Where `claim` tells the dispatcher to read this stage's own instructions, project-relative
@@ -111,6 +117,19 @@ def reference_text(root, stage, parts=()):
             if not texts:
                 return None
     return texts[0] if len(texts) == 1 else '\n'.join(text.rstrip('\n') + '\n' for text in texts)
+
+
+def protocol_summary(policy, tier):
+    """The Execute rules that must hold in every turn, printed on every Execute claim even when the full protocol is not
+    (OMAR-18: an agent cannot tell whether compaction kept them)."""
+    owner = ('the lifecycle coordinator (lean execution)' if lean_policy.enabled(policy, tier)
+             else 'a dedicated orchestration agent')
+    return ('Execute protocol summary: ' + owner + ' schedules and integrates. Workers change only their owned paths '
+            'and never stage, commit, push, run git stash, git add -A or git add ., or run any delegate_dispatch.py '
+            'command; the orchestration agent stages owned paths by name. accept, reassign, adopt and trust-reset run '
+            'only in the top-level dispatcher session. A worker returns the eleven-line result in execution-report.md; '
+            'copy its Model line beside the requested model into the handoff and the receipt summary. Report only on a '
+            'state change; never end a turn owning background work. Full text: claim --verbose.')
 
 
 def execute_protocol(policy, tier, reporting):
@@ -171,7 +190,21 @@ class Run:
             # read-only `load` (e.g. `next`) never writes anything itself.
             state['repo_identity'] = adopted
         require(allow_branch_change or state['branch'] == git(self.root, 'branch', '--show-current'), 'CHECKPOINT_BRANCH_MISMATCH')
+        self.reconcile_skipped(state)
         return state
+
+    def reconcile_skipped(self, state):
+        """`issue_sync.taskstoissues` is operational (AHMED-30), so the recorded Tasks-to-Issues skip follows the
+        current policy and the required inputs follow the stage selection. Switched back on, the skip stays once a
+        later stage has a receipt: running Tasks-to-Issues then would invalidate those receipts."""
+        skipped = dict(state.get('skipped') or {})
+        if task_issue_mode(self.policy) == 'off':
+            if 'taskstoissues' not in state['receipts']:
+                skipped.setdefault('taskstoissues', 'issue_sync.taskstoissues: off')
+        elif 'taskstoissues' in skipped and not any(
+                BASE_STAGES.index(stage) > BASE_STAGES.index('taskstoissues') for stage in state['receipts']):
+            del skipped['taskstoissues']
+        self.record_skipped(state, skipped)
 
     def _relocate_plan(self, state, allow_branch_rebind, allow_repository_rename, new_issue, keep_issue_number,
                        allow_history_change=False):
@@ -437,7 +470,7 @@ class Run:
         old_policy_digest = state['policy_digest']
         policy_digest = delivery_digest(self.policy)
         commands = resolve_commands(self.root, self.policy, state_tier(state))
-        selected = stages(self.policy, state_tier(state))
+        selected = stages(self.policy, state_tier(state), state.get('skipped'))
         changed = [stage for stage in selected if state['commands'].get(stage) != commands[stage]]
         if policy_digest != old_policy_digest:
             reached = policy_cutoff(state.get('policy'), self.policy)
@@ -499,7 +532,7 @@ class Run:
         tier = self.tier_of(state)
         first, last = BASE_STAGES.index('specify'), BASE_STAGES.index(through)
         changed, restamp, needs = {}, [], []
-        for stage in stages(self.policy, state_tier(state)):
+        for stage in stages(self.policy, state_tier(state), state.get('skipped')):
             if not first <= BASE_STAGES.index(stage) <= last:
                 continue
             receipt = state['receipts'].get(stage)
@@ -684,6 +717,15 @@ class Run:
         attempt at this phase whose entry already shows that status is done without another call, so a retry after
         a lost result never repeats the remote write; a failed attempt always runs again."""
         require(phase in PROJECT_SYNC_STEPS, 'PROJECT_SYNC_PHASE_INVALID: ' + str(phase))
+        if not sync_phase_written(self.policy, phase):
+            # REQ-22: a parking phase in minimal mode, or any phase in off mode, is a no-op write, recorded as such.
+            with locked(self.lock):
+                state = self.load()
+                state['project_sync'] = {'phase': phase, 'state': 'done', 'at': now(),
+                                         'summary': 'skipped: project_sync.mode ' + project_sync_mode(self.policy) +
+                                                    ' does not write phase ' + phase}
+                self.save(state)
+            return {'ok': True, 'applied': False, 'project_sync': state['project_sync']}
         with locked(self.lock):
             state = self.load()
             record = state.get('project_sync') or {}
@@ -744,7 +786,7 @@ class Run:
             if stage == 'review':
                 coding_review_checks(self.root, self.relative, self.policy, state)
             tier = self.tier_of(state)
-            selected = stages(self.policy, state_tier(state))
+            selected = stages(self.policy, state_tier(state), state.get('skipped'))
             require(stage in selected, 'STAGE_NOT_SELECTED: ' + stage)
             receipt = state['receipts'].get(stage)
             require(receipt, 'RECEIPT_MISSING: ' + stage)
@@ -937,6 +979,7 @@ class Run:
     def start(self, issue):
         require(re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[1-9]\d*', issue), 'EXPLICIT_ISSUE_REQUIRED')
         require(same_github_repository(github_repository(self.root), issue.split('#')[0]), 'ISSUE_REPOSITORY_MISMATCH')
+        require_shared_history(self.root)
         source = read(self.feature / 'scope-source.json', {})
         require(not source or f"{source.get('repo')}#{source.get('issue')}" == issue, 'FEATURE_BINDING_MISMATCH')
         with locked(self.lock):
@@ -952,10 +995,22 @@ class Run:
                      'policy_digest': delivery_digest(self.policy),
                      'ci_policy_digest': digest(self.policy['ci']), 'commands': commands,
                      'policy': copy.deepcopy(self.policy), 'target_branch': previous_branch(self.root),
+                     # REQ-21: frozen per feature here, outside the policy cutoff; a later policy edit changes
+                     # only features started after it.
+                     'clarification_transport': self.policy['clarification'].get('transport', 'github-comments'),
                      'receipts': {}, 'generation': 0, 'active': None, 'status': 'in-progress'}
             state['dependency_digest'] = package_digest(self.root)
+            self.record_skipped(state, skipped_stages(self.policy, None))
             self.save(state)
             return state
+
+    def record_skipped(self, state, skipped):
+        """Record the stages this feature does not run (the tier's, the board mode's), once each in the log."""
+        for name, reason in skipped.items():
+            if name not in (state.get('skipped') or {}):
+                lifecycle.queue(state, name, 'skipped', reason=reason)
+        if skipped or state.get('skipped'):
+            state['skipped'] = skipped
 
     def tier_of(self, state):
         """The frozen tier, or `full` (never None, so no helper re-reads the checkpoint mid-operation)."""
@@ -986,7 +1041,7 @@ class Run:
         state['updated_at'] = now()
         if not preserve_head:
             state['head'] = git(self.root, 'rev-parse', 'HEAD')
-        state['stage_plan'] = {'v': 1, 'generation': state['generation'], 'stages': stages(self.policy, state_tier(state))}
+        state['stage_plan'] = {'v': 1, 'generation': state['generation'], 'stages': stages(self.policy, state_tier(state), state.get('skipped'))}
         state['next_action'] = self.evaluate_next_action(state)
         write(self.path, state)
         # The queued lifecycle events were written with the state; append them now, under the caller's
@@ -1019,6 +1074,12 @@ class Run:
 
     def next(self, state, finalize=False):
         result = self.next_stage(state, finalize)
+        if finalize and result.get('stage') and BASE_STAGES.index(result['stage']) < BASE_STAGES.index('ready'):
+            # AHMED-07: finalize is Ready plus PR, never "run everything that remains".
+            remaining = [stage for stage in stages(self.policy, state_tier(state), state.get('skipped'))
+                         if BASE_STAGES.index(result['stage']) <= BASE_STAGES.index(stage) < BASE_STAGES.index('ready')]
+            result = {'stage': None, 'status': 'not_ready_to_finalize', 'remaining': remaining,
+                      'reason': result.get('reason'), 'command': 'speckit.workflow.continue'}
         drift = consulted_drift(self.root, self.relative, state['receipts'], self.tier_of(state))
         if drift:
             # Advisory only: a consulted input never stales its receipt.
@@ -1039,7 +1100,7 @@ class Run:
         cutoff = policy_cutoff(state.get('policy'), self.policy) if policy_changed else len(BASE_STAGES)
         prefetch_attributes(self.root, [path for receipt in state['receipts'].values()
                                         for path in receipt.get('fingerprints') or {}])
-        for stage in stages(self.policy, state_tier(state)):
+        for stage in stages(self.policy, state_tier(state), state.get('skipped')):
             receipt = state['receipts'].get(stage)
             if receipt and BASE_STAGES.index(stage) >= cutoff:
                 return {'stage':stage,'command':state['commands'][stage],'reason':'policy-changed'}
@@ -1054,9 +1115,10 @@ class Run:
             return {'stage': stage, 'command': state['commands'][stage], 'reason': 'pending'}
         return {'stage': None, 'status': 'pr_open'}
 
-    def claim(self, usage, finalize=False, verbose=False, owner_pid=None):
+    def claim(self, usage, finalize=False, verbose=False, owner_pid=None, confirm_invalidation=False):
         """`owner_pid` is the process that holds the claim; the CLI passes none, since it exits at once and the
-        heartbeat then governs `recover` (AHMED-01)."""
+        heartbeat then governs `recover` (AHMED-01). A claim that would remove receipts of later stages returns
+        `confirm_invalidation` listing them unless `confirm_invalidation` is set (AHMED-12, DEC-15 stage 1)."""
         with operation(), locked(self.root / '.specify/workflow/runtime/dispatch.lock'), locked(self.lock):
             require(not (self.root / '.specify/workflow/runtime/upgrade.lock').exists(), 'WORKFLOW_UPGRADE_IN_PROGRESS')
             state = self.load()
@@ -1091,6 +1153,19 @@ class Run:
             if not nxt.get('stage'):
                 return nxt
             stage = nxt['stage']
+            # Before any side effect (Memory handoff, tasks.md annotation): the receipts this claim would remove.
+            downstream = [name for name in BASE_STAGES[BASE_STAGES.index(stage) + 1:] if name in state['receipts']]
+            if downstream and not confirm_invalidation:
+                at = ' --feature ' + self.relative
+                return {'status': 'confirm_invalidation', 'stage': stage, 'reason': nxt.get('reason'),
+                        'invalidates': downstream,
+                        'recovery': nxt.get('recovery') or (
+                            [WORKFLOW_SCRIPT + ' migrate' + at + ' --preview'] if nxt.get('reason') == 'policy-changed' else []),
+                        'explain': 'python .specify/extensions/workflow/scripts/gate_explain.py' + at,
+                        'confirm': WORKFLOW_SCRIPT + ' claim' + at + ' --usage <usage.json> --confirm-invalidation',
+                        'message': 'Claiming ' + stage + ' removes the receipts of ' + ', '.join(downstream) +
+                                   '. If the change is cosmetic, amend it (gate_explain lists the amend commands); '
+                                   'otherwise ask the user, then re-run claim with --confirm-invalidation'}
             memory = self.memory_session(state, stage, usage['session_id'])
             if memory is not None:
                 return memory
@@ -1185,20 +1260,24 @@ class Run:
                 reporting = {'mode': decided['mode'], 'reason': decided.get('reason') or decided.get('source')}
                 parts = execute_protocol(self.policy, state_tier(state), reporting['mode'])
                 full = reference_text(self.root, stage, parts)
-                protocol = {'files': parts, 'digest': digest([parts, full])}
+                protocol = {'files': parts, 'digest': digest([parts, full]),
+                            'summary': protocol_summary(self.policy, state_tier(state))}
                 # The full protocol is printed once per mode and content; an unchanged re-claim names the files.
                 protocol['printed'] = verbose or (state.get('execute_protocol') or {}).get('digest') != protocol['digest']
                 if protocol['printed']:
                     text = full
                     state['execute_protocol'] = {'files': parts, 'digest': protocol['digest'], 'printed_at': now()}
                 else:
-                    protocol['note'] = 'unchanged since the last Execute claim; read the files if your context was reset'
+                    protocol['note'] = ('unchanged since the last Execute claim; follow the summary, and reread the files '
+                                        'whenever you cannot recall the full protocol')
             self.save(state)
             claimed = {**state['active'], 'command': state['commands'][stage], 'feature': self.relative, 'issue': state['issue'],
                        'reference': stage_reference(stage), 'reference_text': text,
                        'side_effects': side_effects(self.policy, self.relative, stage, self.root),
-                       'project_sync': project_sync(self.policy, stage, self.relative)}
+                       'project_sync': project_sync(self.policy, stage, self.relative),
+                       'clarification_transport': state.get('clarification_transport', 'github-comments')}
             claimed['receipt_template'] = self.receipt_template(state, stage)
+            claimed['lean_execution'] = lean_policy.describe(self.policy, state_tier(state))
             if reporting:
                 claimed['reporting'], claimed['execute_protocol'] = reporting, protocol
             if stage == 'plan' and state_tier(state) in ('lite', 'standard'):
@@ -1344,9 +1423,9 @@ class Run:
                 '\"effort score mismatch\"", then complete Scope with effort_score ' + str(verified))
         fixed = tier(self.policy, score)
         state['profile'] = {'tier': fixed, 'score': score, 'fixed_at': now()}
-        state['skipped'] = skipped_stages(self.policy, fixed)
-        for name, reason in state['skipped'].items():
-            lifecycle.queue(state, name, 'skipped', reason=reason)
+        skipped = skipped_stages(self.policy, fixed)
+        self.record_skipped(state, skipped)
+        state['skipped'] = skipped
         state['commands'] = resolve_commands(self.root, self.policy, fixed)
 
     def complete(self, token, receipt):
@@ -1410,6 +1489,8 @@ class Run:
             template['effort_score'] = '<one of ' + ', '.join(map(str, EFFORT_SCORES)) + '>'
         if stage == 'clarify':
             template.update(unresolved='<count>', answers_applied='<true|false>')
+            if state.get('clarification_transport') == 'local':
+                template['inputs'] = [self.relative + '/clarifications.md']
         if stage == 'plan' and state_tier(state) in ('lite', 'standard'):
             template['inputs'] = [self.relative + '/tasks.md']
         if stage == 'analyze' and state['commands'].get(stage) == LINT_COMMAND:
@@ -1434,6 +1515,19 @@ class Run:
                         'records effort_score, one of ' + ', '.join(map(str, EFFORT_SCORES)))
         if stage == 'clarify':
             require(receipt.get('unresolved') == 0 and receipt.get('answers_applied') is True, 'CLARIFICATION_UNRESOLVED')
+            if state.get('clarification_transport') == 'local':
+                # REQ-21: the file is the only record of the questions and the user's replies.
+                from decisions import LOCAL_FILE, local_sections
+                label = self.relative + '/' + LOCAL_FILE
+                require(label in receipt['inputs'] and (self.root / label).is_file(),
+                        'CLARIFICATION_FILE_INPUT_REQUIRED: with the local transport the Clarify receipt lists '
+                        + label + ' (the questions asked in the conversation and the user\'s replies) as an input')
+                sections = local_sections((self.root / label).read_text(encoding='utf-8-sig'))
+                open_ids = [qid for qid, section in sections.items()
+                            if qid.startswith('C') and not (section['ticked'] or section['answers'])]
+                require(not open_ids, 'CLARIFICATION_UNRESOLVED: ' + ', '.join(open_ids) + ' in ' + label
+                        + ' has no recorded reply (a line `<ID>: <letter>` or a ticked box); unparsed lines: '
+                        + json.dumps({qid: sections[qid]['unparsed'] for qid in open_ids}))
         if BASE_STAGES.index(stage) >= BASE_STAGES.index('specify'):
             source = read(self.feature / 'scope-source.json', {})
             require(f"{source.get('repo')}#{source.get('issue')}" == state['issue'], 'FEATURE_BINDING_MISMATCH')
@@ -1472,6 +1566,9 @@ class Run:
                          and receipt.get('command') == COMMANDS['analyze'])
         stored['command'] = COMMANDS['analyze'] if model_analyze else state['commands'][stage]
         stored['dependency_digest'] = state['dependency_digest']
+        if stage == 'clarify' and state.get('clarification_transport') == 'local':
+            # The agent transcribed the replies itself; no GitHub record vouches for them.
+            stored['self_attested'] = {'answers': 'local', 'file': self.relative + '/clarifications.md'}
         decision_input = [self.relative + '/workflow/decisions.json'] if (self.feature / 'workflow/decisions.json').is_file() else []
         stored['fingerprints'] = fingerprint_files(self.root, receipt['inputs'] + receipt['evidence'] + required_inputs(
             self.root, self.relative, stage, tier) + decision_input, feature=self.relative)
@@ -1518,8 +1615,11 @@ class Run:
                     'DELEGATION_STAGE_NOT_VERIFIED: the latest delegate_dispatch attempt for stage:' +
                     stage + ' is ' + (str(stage_attempt.get('status')) if stage_attempt else 'missing') +
                     ' or was not started under this claim; collect, accept or reassign it before '
-                    'completing this stage. A legacy attempt recorded before claim_token existed has '
-                    'none and will never match; re-delegate the stage once under this workflow release')
+                    'completing this stage, or, when a native subagent of the host did the stage, record '
+                    '"delegate_dispatch.py attest-native --feature ' + self.relative + ' --id stage:' + stage +
+                    ' --claim-token <token> --requested-model <m>" from the top-level session. A legacy attempt '
+                    'recorded before claim_token existed has none and will never match; re-delegate the stage '
+                    'once under this workflow release')
             self._validated_candidate = stage_attempt.get('run_id')
         self._check_stage_rules(state, stage, receipt, token, active.get('session_id'))
         if stage in SOURCE_STAGES:
@@ -1602,6 +1702,10 @@ class Run:
             # local dispatcher-write marker existed to check against (a
             # fresh checkout or CI runner), not that anything was wrong.
             stored['delegation_ledger_trust'] = delegation_ledger_trust
+        if (stage_attempt or {}).get('kind') == 'native':
+            # Self-asserted by the top-level session: labelled so it is never read as a dispatched run.
+            from delegate_dispatch import native_attestation_fields
+            stored['native_attestation'] = native_attestation_fields(stage_attempt)
         self._stamp(state, stage, receipt, stored, tier)
         stored['completed_at'] = now()
         stored['claim_id'] = claim_id  # links this receipt to its lifecycle events
@@ -1692,6 +1796,10 @@ def main():
     init.add_argument('--manual', choices=['on', 'off'], required=True)
     init.add_argument('--delegate', choices=['on', 'off'],
                       help='Opt into model-aware delegation; omitted on existing projects preserves their selection')
+    init.add_argument('--board', choices=['none', 'minimal', 'full'],
+                      help='GitHub Project board sync: full (every phase, task sub-issues), minimal (Ready, In progress, '
+                           'In review, Done; no task sub-issues) or none (no board); omitted keeps the current mode, '
+                           'fresh policies default to full')
     init.add_argument('--gate-mode', choices=sanduq_ci.GATE_MODES,
                       help='Disabled, advisory or required workflow evidence gate; fresh policies default to advisory')
     init.add_argument('--gate-scope', choices=sanduq_ci.GATE_SCOPES,
@@ -1765,10 +1873,13 @@ def main():
     for name in ('start', 'next', 'status', 'claim', 'complete', 'pause', 'recover', 'bind', 'migrate', 'refresh', 'amend',
                  'revalidate', 'revalidate-upstream', 'project-sync', 'sync-amend'):
         cmd = sub.add_parser(name)
-        cmd.add_argument('--feature', required=True)
+        cmd.add_argument('--feature', required=name != 'status')
         if name == 'start': cmd.add_argument('--issue', required=True)
+        if name == 'status': cmd.add_argument('--issue', help='Issue number; resolved through the checkpoint binding')
         if name in ('next', 'claim'): cmd.add_argument('--finalize', action='store_true')
         if name == 'claim': cmd.add_argument('--usage', type=Path, required=True)
+        if name == 'claim': cmd.add_argument('--confirm-invalidation', action='store_true',
+                                             help='Remove the receipts of later stages a confirm_invalidation result listed')
         if name in ('claim', 'complete'):
             cmd.add_argument('--verbose', action='store_true',
                              help='Print the full result (claim: with the baseline fingerprints and the full Execute protocol; '
@@ -1832,7 +1943,8 @@ def run_command(args):
             ensure_local_excludes(root)
             path = root / '.specify/workflow.yml'
             policy = default_policy(args.qa == 'on', args.manual == 'on')
-            if path.exists():
+            raw = path.read_bytes() if path.exists() else None
+            if raw is not None:
                 old = load_policy(root)
                 require(args.replace or old['processes'] == policy['processes'], 'POLICY_EXISTS: use --replace after reviewing changed selections')
                 if args.delegate is not None:
@@ -1840,16 +1952,44 @@ def run_command(args):
                             'DELEGATION_SELECTION_EXISTS: use --replace after reviewing the changed selection')
                 policy = old
                 policy['processes'] = {'qa': args.qa == 'on', 'user_manual': args.manual == 'on'}
-                write(root / '.specify/workflow/backups' / (uuid.uuid4().hex + '.json'), load_policy(root))
             if args.delegate is not None:
                 policy['delegation']['enabled'] = args.delegate == 'on'
+            if args.board:
+                # The two mode keys are operational (OPERATIONAL_SUBKEYS): changing them invalidates no receipt.
+                policy.setdefault('project_sync', {})['mode'] = {'none': 'off'}.get(args.board, args.board)
+                policy['issue_sync']['taskstoissues'] = 'off' if args.board != 'full' else (
+                    'required' if policy['issue_sync']['taskstoissues'] == 'off' else policy['issue_sync']['taskstoissues'])
             select_gate(policy['ci'], args.gate_mode, args.gate_scope, args.gate_rule)
             if args.decision_owner:
                 policy.setdefault('decisions', default_policy(False, False)['decisions'])['authorized_users'] = args.decision_owner
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(yaml.safe_dump(validate_policy(policy, root), sort_keys=False), encoding='utf-8')
-            result = {'configured': True, 'processes': policy['processes'],
-                      'gate': sanduq_ci.gate_config(policy['ci']), 'doctor': doctor(root, policy)}
+            validate_policy(policy, root)
+            # AHMED-08: an unchanged policy keeps the file's bytes (and comments); a rewrite backs up the raw bytes.
+            written = raw is None or parse_policy(raw.decode('utf-8-sig')) != policy
+            result = {'configured': True, 'written': written, 'processes': policy['processes'],
+                      'board': board_mode_line(policy), 'gate': sanduq_ci.gate_config(policy['ci'])}
+            if written:
+                if raw is not None:
+                    backup = root / '.specify/workflow/backups' / (uuid.uuid4().hex + '.workflow.yml')
+                    backup.parent.mkdir(parents=True, exist_ok=True)
+                    backup.write_bytes(raw)
+                    result['backup'] = backup.relative_to(root).as_posix()
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(yaml.safe_dump(policy, sort_keys=False), encoding='utf-8')
+            if args.replace:
+                # The features whose receipts the new policy invalidates, from the same plan `migrate` records.
+                affected = []
+                for checkpoint in sorted((root / 'specs').glob('*/workflow/checkpoint.json')):
+                    state = read(checkpoint, {})
+                    if not isinstance(state, dict) or not state.get('receipts'):
+                        continue
+                    feature = checkpoint.parent.parent.relative_to(root).as_posix()
+                    plan = Run(root, feature).migration_plan(state)
+                    if plan['invalidated']:
+                        affected.append({'feature': feature, 'restarts_from': plan['invalidated'][0],
+                                         'invalidated': plan['invalidated'],
+                                         'migrate': WORKFLOW_SCRIPT + ' migrate --feature ' + feature + ' --reason "<why>"'})
+                result['affected_features'] = affected
+            result['doctor'] = doctor(root, policy)
         elif args.action == 'ci':
             policy = load_policy(root)
             ci = policy['ci']
@@ -1904,12 +2044,19 @@ def run_command(args):
         elif args.action == 'prepare':
             result = prepare_issue(root, args.issue)
         else:
+            if args.action == 'status' and not args.feature:
+                require(args.issue, 'STATUS_TARGET_REQUIRED: pass --feature specs/<slug> or --issue <n>')
+                args.feature = feature_for_issue(root, args.issue)
             run = Run(root, args.feature)
             if args.action == 'start': result = run.start(args.issue)
             elif args.action == 'next': result = run.next(run.load(), args.finalize)
-            elif args.action == 'status': result = native_run_status(root, run.relative, run.load(allow_branch_change=True), args.runs)
+            elif args.action == 'status':
+                state = run.load(allow_branch_change=True)
+                result = native_run_status(root, run.relative, state, args.runs)
+                result['lean_execution'] = lean_policy.describe(run.policy, state_tier(state))
             elif args.action == 'claim':
-                result = run.claim(read(args.usage), args.finalize, args.verbose)
+                result = run.claim(read(args.usage), args.finalize, args.verbose,
+                                   confirm_invalidation=args.confirm_invalidation)
                 if not args.verbose:
                     result.pop('baseline', None)  # kept in the checkpoint; --verbose prints it
             elif args.action == 'complete':
@@ -1947,7 +2094,9 @@ def run_command(args):
         print(json.dumps(result, indent=2))
         return 1 if result.get('ok') is False else 0
     except (WorkflowError, ValueError, KeyError, yaml.YAMLError) as exc:
-        print(json.dumps({'ok': False, 'error': str(exc)}))
+        # A bare KeyError prints as the quoted key; name the condition instead (AHMED-05).
+        message = 'POLICY_KEY_MISSING: ' + str(exc.args[0] if exc.args else exc) if isinstance(exc, KeyError) else str(exc)
+        print(json.dumps({'ok': False, 'error': message, **explain(message, getattr(args, 'feature', None))}))
         return 1
 
 

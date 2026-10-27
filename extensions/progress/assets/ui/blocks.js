@@ -13,6 +13,7 @@
   function el(tag, cls, kids) {
     var n = document.createElement(tag);
     if (cls) n.className = cls;
+    if (cls && /(^| )wrap( |$)/.test(cls)) n.setAttribute('dir', 'auto');  // user text: Arabic renders right-to-left (AHMED-26)
     add(n, kids);
     return n;
   }

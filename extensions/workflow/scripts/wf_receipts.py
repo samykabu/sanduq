@@ -175,6 +175,12 @@ def native_run_status(root, feature, state, roots):
         active['owner'] = liveness['owner']
         active['last_activity'] = ('unknown' if liveness['last_activity_minutes'] is None
                                    else str(liveness['last_activity_minutes']) + ' min ago')
+        if active.get('delegation'):
+            # SAMY-03: a native attestation of this claim is shown as such, never as a dispatched run.
+            import delegate_dispatch
+            attempt = delegation.latest_attempt(root, feature, 'stage:' + str(active.get('stage')))
+            if (attempt or {}).get('kind') == 'native' and attempt.get('claim_token') == active.get('token'):
+                active['native_attestation'] = delegate_dispatch.native_attestation_fields(attempt)
     result = {'feature': feature, 'issue': state['issue'], 'status': state.get('status'), 'active': active,
               'next_action': state.get('next_action'), 'completed': list(state.get('receipts', {})),
               'ledger_trust': trust, 'ledger_conflicts': sorted(ledger_conflicts),
@@ -182,6 +188,7 @@ def native_run_status(root, feature, state, roots):
     for key in ('profile', 'skipped', 'pause'):
         if state.get(key):
             result[key] = state[key]
+    result['questions'] = waiting_questions(root, feature, state)
     if sync_retry(state, feature):
         result['project_sync'] = sync_retry(state, feature)
     import progress_bridge
@@ -192,6 +199,22 @@ def native_run_status(root, feature, state, roots):
     if warnings:
         result['warnings'] = warnings
     return result
+
+
+def waiting_questions(root, feature, state):
+    """Where this feature's questions are answered and which ones still wait (REQ-21): the decision ledger's
+    pending or conflicting ids, plus, with the local transport, the unanswered questions in clarifications.md."""
+    from decisions import LOCAL_FILE, local_sections
+    local = state.get('clarification_transport') == 'local'
+    ledger = read(Path(root) / feature / 'workflow/decisions.json', {})
+    pending = [item['id'] for item in ledger.get('decisions', []) if item.get('status') in ('pending', 'conflict')]
+    file = Path(root) / feature / LOCAL_FILE
+    if local and file.is_file():
+        pending += [qid for qid, section in local_sections(file.read_text(encoding='utf-8-sig')).items()
+                    if qid.startswith('C') and not (section['ticked'] or section['answers'])]
+    return {'transport': 'local' if local else 'github-comments',
+            'answered_in': feature + '/' + LOCAL_FILE if local else 'comments on ' + state['issue'],
+            'waiting': pending}
 
 
 def sync_retry(state, feature):
@@ -232,11 +255,21 @@ def measured_context_gate(policy, usage):
             'fraction': fraction, 'session_id': usage['session_id'], 'reason': 'checkpoint-required' if pause else 'within-budget'}
 
 
+def feature_skipped(root, feature):
+    """The stages the feature's checkpoint records as skipped (the tier's, the board mode's), else none."""
+    try:
+        state = read(Path(root) / feature / 'workflow/checkpoint.json', {})
+    except (OSError, ValueError):
+        return {}
+    return (state.get('skipped') or {}) if isinstance(state, dict) else {}
+
+
 def required_inputs(root, feature, stage, tier=None):
     """Minimum artifact coverage is enforced even if an agent omits a path.
 
     `tier` None reads the tier frozen in the feature's checkpoint. A lite feature treats
-    research, data model, quickstart and contracts as optional consulted inputs."""
+    research, data model, quickstart and contracts as optional consulted inputs. A feature whose
+    checkpoint skips Tasks-to-Issues (`issue_sync.taskstoissues: off`) needs no task-issue journal."""
     tier = tier or feature_tier(root, feature)
     index = BASE_STAGES.index(stage)
     paths = []
@@ -246,7 +279,7 @@ def required_inputs(root, feature, stage, tier=None):
         paths += [feature + '/plan.md']
     if index >= BASE_STAGES.index('tasks'):
         paths += [feature + '/tasks.md']
-    if index >= BASE_STAGES.index('taskstoissues'):
+    if index >= BASE_STAGES.index('taskstoissues') and 'taskstoissues' not in feature_skipped(root, feature):
         paths += [feature + '/workflow/task-issues.json']
     constitution = '.specify/memory/constitution.md'
     if (root / constitution).is_file(): paths.append(constitution)
@@ -813,7 +846,9 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
                     ' - the task line changed since it was adopted; re-run delegate_dispatch.py adopt '
                     'with a fresh acceptance check before Ready')
         ran.append('tasks')
-    if rules.get('task_links'):
+    if rules.get('task_links') and task_issue_mode(policy) == 'off':
+        ran.append('task_links:skipped (issue_sync.taskstoissues off)')
+    elif rules.get('task_links'):
         mapping = read(directory / 'workflow/task-issues.json', {})
         repo, parent = state['issue'].split('#')
         require((mapping.get('repo'), mapping.get('parent'), mapping.get('feature')) == (repo, int(parent), feature),

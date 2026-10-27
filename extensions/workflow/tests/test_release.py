@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
 import release as r
 
@@ -55,6 +56,17 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(r.read(self.root/'catalog.json'),r.read(self.root/'extensions/catalog.json'))
         self.assertEqual(r.read(self.root/'catalog.json')['extensions']['example']['version'],'1.1.0')
         self.assertEqual(r.read(self.root/'extensions/pending-releases.json')['versions'],{})
+
+    def test_gh_runs_through_the_shared_transport_with_a_timeout(self):
+        """SAMY-19: release.py's gh calls go through sanduq_gh with GH_TIMEOUT; a failure is the same ValueError command() raises."""
+        seen=[]
+        def run_gh(args,**kwargs):seen.append((args,kwargs));return '{"isDraft": false}\n'
+        with patch.object(r.sanduq_gh,'run_gh',run_gh):
+            self.assertEqual(r.gh_json(['release','view','x'],self.root),{'isDraft':False})
+        self.assertEqual(seen,[(['release','view','x'],{'cwd':str(self.root),'timeout':r.GH_TIMEOUT})])
+        def hung(args,**kwargs):raise r.sanduq_gh.GhError('timeout: gh release view gave no answer in 600 s',timeout=True)
+        with patch.object(r.sanduq_gh,'run_gh',hung),self.assertRaisesRegex(ValueError,'Command failed: gh release view x: timeout'):
+            r.gh_json(['release','view','x'],self.root)
 
     def test_unready_pending_release_cannot_publish(self):
         pending=r.read(self.root/'extensions/pending-releases.json');pending['status']='implementation-in-progress';r.write(self.root/'extensions/pending-releases.json',pending)
