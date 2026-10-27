@@ -78,12 +78,7 @@ class HookPythonTests(unittest.TestCase):
             warnings = self.warnings()
         self.assertEqual(len(warnings), 1, warnings)
         self.assertTrue(warnings[0].startswith('HOOK_PYTHON_TOO_OLD: .codex/hooks.json runs hooks with "hookpy" '
-                                               '(Python 3.8); the installed hooks need 3.10 or later'), warnings[0])
-        registered = w.registry(self.root)
-        registered['progress'] = {'version': '1.0.0', 'enabled': True}
-        w.write(self.root / '.specify/extensions/.registry', {'extensions': registered})
-        with patch.dict(os.environ, {'PATH': str(stub) + os.pathsep + os.environ.get('PATH', '')}):
-            self.assertIn('need 3.11 or later', self.warnings()[0])
+                                               '(Python 3.8); the installed hooks need 3.11 or later'), warnings[0])
         with patch.dict(os.environ, {'PATH': str(stub) + os.pathsep + os.environ.get('PATH', '')}):
             self.assertEqual([i for i in w.doctor(self.root, self.policy)['warnings'] if i.startswith('HOOK_PYTHON')],
                              [])  # a claim's doctor never pays for the probe

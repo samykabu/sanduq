@@ -356,7 +356,7 @@ HOOK_PYTHON_PROBE = 'import sys;print(sys.version_info[0],sys.version_info[1])'
 
 def hook_python_warnings(root):
     """HOOK_PYTHON_MISSING / HOOK_PYTHON_TOO_OLD for the interpreter the active host's guard hook names (AHMED-21):
-    the guard allows everything when it cannot run, and Progress and Memory hooks need Python 3.11."""
+    the guard allows everything when it cannot run, and every Sanduq extension needs Python 3.11 (SAMY-11)."""
     import hosts
     path = root / hosts.HOOK_FILES.get(active_host(root), '')
     try:
@@ -371,7 +371,7 @@ def hook_python_warnings(root):
         return []
     name = str(commands[0]).split(None, 1)[0]
     where = path.relative_to(root).as_posix()
-    needed = (3, 11) if {'progress', 'memory'} & set(registry(root)) else (3, 10)
+    needed = (3, 11)
     executable = shutil.which(name)
     if not executable:
         return ['HOOK_PYTHON_MISSING: ' + where + ' runs hooks with "' + name + '", which is not on PATH, so the guard '

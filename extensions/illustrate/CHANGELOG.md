@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- `requires.tools` lists Python `>=3.11` as optional (the export and verify scripts), the floor every Sanduq extension now states (SAMY-11).
+
 ## [2.7.2] - 2026-10-26
 
 - License: this package is MIT; versions before this one were PolyForm Noncommercial 1.0.0. The archive now ships its LICENSE and a THIRD_PARTY_NOTICES.md for the vendored illustration-tools material.

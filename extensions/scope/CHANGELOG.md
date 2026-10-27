@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+- Python 3.11 is the declared floor (`>=3.11`, was `>=3.10`), the same in every Sanduq extension (SAMY-11).
+- Clarification (OMAR-12): each `spec_edits` entry must cite `question_ids` whose answers are trusted: `answered` or `superseded` in the same analysis (both already need trusted human evidence), a question the creator's closure waived, or, in session, this round's `C1Q<n>`. An edit without one is refused with `CLARIFICATION_EDIT_UNTRUSTED`, naming the edit and the untrusted ids. Every comment in the inspect snapshot carries `trusted` (`false`: an outsider, a bot or an app); the github-clarification skill says those are context only, never answers or edit sources, and the local transport changes requirements only for a question the user answered in `clarifications.md`.
+- Clarification question and round records count only from a trusted human or from the runtime's own comments: ids in this issue's publication journals or in `.specify/workflow/runtime/posted-comments.jsonl`, or a bot comment by the account `gh` is signed in as (asked only when an unlogged bot record exists). Another bot's or app's record is no longer history or answer evidence. The snapshot lists them as `own_comment_ids`.
+
 ## [1.12.0] - 2026-10-27
 
 - Local clarification transport (REQ-21): when the bound feature's workflow checkpoint says `clarification_transport: local`, `clarification.py inspect` and `publish` refuse with `CLARIFICATION_TRANSPORT_LOCAL` naming `specs/<feature>/clarifications.md`, and `plan-gate` passes on a passed Clarify receipt instead of a Ready board status (`CLARIFICATION_REQUIRED` otherwise). The github-clarification skill's new `references/local.md` tells the agent to ask in the conversation and record the user's replies in that file; the `clarify-github` and `brainstorm-github` overlays say so. GitHub-mode features are unchanged.

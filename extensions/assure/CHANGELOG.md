@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - `documentation-gates.yml` checks out the PR base into `.sanduq-base` and runs the base's `assure_state.py` and User Manual script against the head; `SANDUQ_POLICY_ROOT` makes the base's `assure-config.yml` decide whether the gate is on (SEC-03). A first-install PR runs the released Assure the head names, after `sanduq_ci.py verify-release` checks the head copy. `assure init` replaces an unedited render of the previous template.
+- `requires.tools` declares Python `>=3.11`, the floor every Sanduq extension now states (SAMY-11).
 
 ## [2.6.2] - 2026-10-26
 

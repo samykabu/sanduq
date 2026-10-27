@@ -246,6 +246,13 @@ class CiWorkflowFile(unittest.TestCase):
             for body in steps:
                 self.assertIn("cache: pip", body, workflow)
 
+    def test_linux_regression_runs_on_the_declared_python_floor(self):
+        """SAMY-11: every extension.yml declares python >=3.11 and the Linux regression legs run on it."""
+        self.assertIn("python-version: ${{ matrix.os == 'windows-latest' && '3.13' || '3.11' }}", self.job("regression"))
+        for manifest in sorted((ci_matrix.ROOT / "extensions").glob("*/extension.yml")):
+            self.assertRegex(manifest.read_text(encoding="utf-8"), r"- name: python\n(?:.*\n)?\s+version: ['\"]>=3\.11['\"]",
+                             manifest.parent.name)
+
     def test_every_smoke_runs_with_its_arguments_on_linux_and_windows(self):
         """FAST: the Linux smokes moved into one job per host; each still runs, with the same arguments."""
         install = self.job("installation")
@@ -698,6 +705,22 @@ class ReleaseWindowsGate(unittest.TestCase):
         # Every publishing step waits for the CI gate, not only the pending status.
         steps = text.split("- name: Require successful CI for the current main commit", 1)[1]
         self.assertNotIn("steps.gate.outputs.ready", steps.split("          PY\n", 1)[1])
+
+    def test_a_ci_run_the_release_dispatched_starts_the_release_when_it_passes(self):
+        """GITHUB_TOKEN runs start no workflow_run, so the bot-dispatched ci run dispatches the release itself."""
+        text = (ci_matrix.ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        job = re.search(r"^  release-trigger:\n(?:(?:    .*)?\n)+", text, re.M).group(0)
+        jobs = set(re.findall(r"(?m)^  ([a-z-]+):$", text.split("\njobs:\n", 1)[1])) - {"release-trigger"}
+        self.assertEqual(set(re.search(r"needs: \[(.*)\]", job).group(1).split(", ")), jobs)
+        for condition in ("!contains(needs.*.result, 'failure')", "!contains(needs.*.result, 'cancelled')",
+                          "github.event_name == 'workflow_dispatch' && github.actor == 'github-actions[bot]'",
+                          "github.ref == 'refs/heads/main'"):
+            self.assertIn(condition, job)
+        self.assertIn("runs-on: homek8-general\n    permissions:\n      actions: write\n", job)
+        self.assertIn('actions/workflows/release-extensions.yml/dispatches" -f ref=main', job)
+        # Every other ci run reaches the release through workflow_run, so one run never triggers it twice.
+        release = (ci_matrix.ROOT / ".github/workflows/release-extensions.yml").read_text(encoding="utf-8")
+        self.assertIn("workflow_run:\n    workflows: [ci]\n    types: [completed]", release)
 
 
 if __name__ == "__main__":

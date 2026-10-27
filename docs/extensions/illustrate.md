@@ -8,7 +8,7 @@ color and font theme. It supports 44 diagram types and exports SVG and PNG on re
 | Lifecycle phase | Any; runs only when you ask |
 | Hooks | Post-write diagram check, opt-in (`illustrate.hooks.self_check: true` in `.specify/workflow.yml`) |
 | Commands | `generate`, `export`, `theme`, `import` ([reference](../reference/commands.md#illustrate)) |
-| Requires | Nothing |
+| Requires | Nothing; Python 3.11 or later for export |
 | Required by | Assure, PR, User Manual (Illustrate 2.x) |
 | Standalone | Yes |
 | License | MIT |

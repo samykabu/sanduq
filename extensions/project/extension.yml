@@ -18,6 +18,7 @@ requires:
       required: false   # graceful skip if gh/scope/remote preconditions are not met
     - name: python
       required: true    # scripts/project_sync.py (stdlib only)
+      version: ">=3.11"
 
 provides:
   commands:

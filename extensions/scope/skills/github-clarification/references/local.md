@@ -30,7 +30,8 @@ synced with GitHub; `clarification.py inspect` and `publish` refuse with
    tick a box or write an answer line the user did not give; a reply recorded here is
    self-attested (no GitHub record vouches for it) and is labelled so in the receipt and the gate.
 4. Apply the answers to the spec as [analysis-json.md](analysis-json.md) says for `spec_edits`,
-   and re-evaluate the spec quality checklist.
+   and re-evaluate the spec quality checklist. Change a requirement only for a `C<r>Q<n>` the user
+   answered in this file; anything else the conversation or the issue says is context only.
 5. Create the file even when no question was needed (the header and a line saying so): the
    Clarify receipt must list `specs/<feature>/clarifications.md` under `inputs`, with
    `unresolved: 0` and `answers_applied: true`. `complete` refuses a receipt that omits the file

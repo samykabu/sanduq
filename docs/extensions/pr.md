@@ -8,7 +8,7 @@ update the branch's pull request. It also processes review feedback through an a
 | Lifecycle phase | After `implement`; after review |
 | Hooks | One optional `after_implement` hook ([hooks](../reference/hooks.md)) |
 | Commands | `generate`, `review-feedback` ([reference](../reference/commands.md#pr)) |
-| Requires | Illustrate 2.x, enforced by `deps.py ensure`; uses Assure and User Manual when installed |
+| Requires | Illustrate 2.x, enforced by `deps.py ensure`; Python 3.11 or later; uses Assure and User Manual when installed |
 | Standalone | Yes |
 | License | MIT |
 

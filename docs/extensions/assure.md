@@ -8,7 +8,7 @@ before implementation, and writes a QA walkthrough for testers after it.
 | Lifecycle phase | After `tasks`, before and after `implement` |
 | Hooks | Three optional hooks; Assure Init can make the analysis hook mandatory ([hooks](../reference/hooks.md)) |
 | Commands | `init`, `analyze`, `document` ([reference](../reference/commands.md#assure)) |
-| Requires | Illustrate 2.x, enforced by `deps.py ensure` |
+| Requires | Illustrate 2.x, enforced by `deps.py ensure`; Python 3.11 or later |
 | Standalone | Yes |
 | License | MIT |
 
