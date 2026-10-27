@@ -722,7 +722,7 @@ DRIVER_CONTRACT = 'delegate-task.driver.v1'
 REQUIRED_CONTRACT = {
     'result_schema': 'delegate-task.result.v2',
     'commands': {'start', 'collect', 'doctor', 'contract'},
-    'start_flags': {'--harness', '--task', '--cwd', '--model', '--sandbox', '--timeout',
+    'start_flags': {'--harness', '--task', '--cwd', '--model', '--sandbox', '--timeout', '--clean-env', '--keep-env',
                     '--constraint', '--allow-commit'},
     'collect_flags': {'--json'},
     'env': {'DELEGATE_RUNS_DIR'},

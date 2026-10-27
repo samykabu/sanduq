@@ -227,8 +227,11 @@ still parses. Records the window cannot hold are counted in **`records_dropped`*
 value means the status is still sound but the delegate's own final answer may be incomplete.
 
 ⚠️ **Artifacts hold your task text, the full prompt and the harness's raw output — treat them as
-sensitive.** On POSIX the runs directory is `chmod 0700`; on Windows permissions are inherited and
-this driver cannot restrict them. Clean up with `prune`.
+sensitive.** Finalisation masks token shapes and credential-looking `NAME=value` pairs in
+`stdout.log` and `stderr.log` (not in `result.json`). On POSIX the runs directory is `chmod 0700`;
+on Windows permissions are inherited and this driver cannot restrict them. A successful `collect`
+deletes finished runs older than `DELEGATE_PRUNE_DAYS` days (default 30; `0` disables); clean up
+sooner with `prune`.
 
 ## Going deeper
 

@@ -12,7 +12,7 @@ from . import refresh as refreshlib, snapshot
 from .hosts import claude
 from .lock import Lock, LockBusy
 from .paths import Ctx, project_dir
-from .util import atomic_write, diag, read_json, utcnow, write_json
+from .util import atomic_write, diag, diag_once, read_json, utcnow, write_json
 
 
 def record(raw, root, now=None):
@@ -48,11 +48,40 @@ def minimal_line(payload):
     return ' | '.join(parts)
 
 
+def tracked(root, path):
+    """True when git tracks `path`; a missing git or a non-repository counts as untracked."""
+    import subprocess
+    try:
+        return subprocess.run(['git', 'ls-files', '--error-unmatch', '--', str(path)], cwd=str(root),
+                              capture_output=True, timeout=5).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def chained_command(root):
+    """The previous statusLine command, only while config.json is local state this install wrote: untracked by git
+    and still naming the command recorded under `statusline.previous`. A committed config.json would otherwise run a
+    shell command from the repository on every refresh."""
+    cfg_path = project_dir(root) / 'config.json'
+    config = read_json(cfg_path, {})
+    saved = config.get('statusline') if isinstance(config, dict) and isinstance(config.get('statusline'), dict) else {}
+    chained = saved.get('chained')
+    if not chained:
+        return None
+    previous = saved.get('previous') if isinstance(saved.get('previous'), dict) else {}
+    if chained != previous.get('command'):
+        diag_once(cfg_path.parent / 'diagnostics.log', 'statusline: chained command ignored: it is not the command recorded in statusline.previous')
+        return None
+    if tracked(root, cfg_path):
+        diag_once(cfg_path.parent / 'diagnostics.log', 'statusline: chained command ignored: config.json is tracked by git')
+        return None
+    return chained
+
+
 def run(raw, root, now=None):
     """Return the bytes to print. Chained output is returned unchanged."""
     payload = record(raw, root, now)
-    config = read_json(project_dir(root) / 'config.json', {})
-    chained = (config.get('statusline') or {}).get('chained') if isinstance(config, dict) else None
+    chained = chained_command(root)
     if chained:
         import subprocess
         try:

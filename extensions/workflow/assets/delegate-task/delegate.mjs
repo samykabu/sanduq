@@ -16,7 +16,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { StringDecoder } from 'node:string_decoder';
-import { projectResult } from './bounded.mjs';
+import { projectResult, redact } from './bounded.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const RUNS = process.env.DELEGATE_RUNS_DIR || path.join(HERE, 'runs');
@@ -937,8 +937,20 @@ function finalizeOnce(dir, build) {
 
   const result = build();
   writeJson(resultPath, result);
+  redactLogs(dir);
   journal(dir, { state: 'terminal', status: result.status, primary: result.status_provenance.primary });
   return result;
+}
+
+// The harness may print a token (`gh auth status -t`, an env dump). The raw
+// logs stay for forensics, with token shapes and credential-looking
+// assignments masked once the result that needed the verbatim text is written.
+function redactLogs(dir) {
+  for (const name of ['stdout.log', 'stderr.log']) {
+    const file = path.join(dir, name);
+    try { if (fs.existsSync(file)) fs.writeFileSync(file, redact(fs.readFileSync(file, 'utf8'))); }
+    catch { /* best effort: the result is already published */ }
+  }
 }
 
 function alive(pid) {
@@ -1834,24 +1846,41 @@ function cmdDoctor() {
     ? '  Windows: directory permissions are inherited; this driver cannot restrict them.'
     : '  POSIX: the runs directory is chmod 0700.');
   console.log(`  Each stream is capped at ${MAX_LOG_BYTES} bytes (DELEGATE_MAX_LOG_BYTES), keeping a rolling tail.`);
-  console.log('  Clean up with: delegate.mjs prune --keep 20 --yes');
+  console.log('  stdout.log and stderr.log are masked for token shapes on finalisation; collect deletes finished runs older than ' +
+    `${process.env.DELEGATE_PRUNE_DAYS ?? 30} days (DELEGATE_PRUNE_DAYS; 0 disables). Sooner: delegate.mjs prune --keep 20 --yes`);
 }
 
-function cmdPrune(o) {
-  if (!fs.existsSync(RUNS)) return console.log('(no runs yet)');
-  const all = fs.readdirSync(RUNS).map(stateOf).filter(Boolean)
-    .sort((a, b) => b.meta.started_at.localeCompare(a.meta.started_at));
+// Finished runs to delete under `--keep N` and/or `--older-than DAYS`, and the live ones kept regardless.
+function prunable(o) {
+  // Only run folders, read unbounded: a stray file or an oversized old result must not fail a collect.
+  const all = fs.existsSync(RUNS) ? fs.readdirSync(RUNS).filter((name) => RUN_ID_RE.test(name)).map((name) => stateOf(name)).filter(Boolean)
+    .sort((a, b) => String(b.meta.started_at || '').localeCompare(String(a.meta.started_at || ''))) : [];
   const cutoff = o.olderThan ? Date.now() - o.olderThan * 86_400_000 : null;
   // adrift = a child is STILL WRITING; stalled = the supervisor may yet finish.
   const live = new Set(['running', 'starting', 'adrift', 'stalled']);
   const doomed = all.filter((s, i) => {
     if (live.has(s.state)) return false;
     if (o.keep != null && i < o.keep) return false;
-    if (cutoff != null && new Date(s.meta.started_at).getTime() >= cutoff) return false;
+    // A run with no readable start date is never old enough.
+    if (cutoff != null && !(Date.parse(s.meta.started_at) < cutoff)) return false;
     if (o.keep == null && cutoff == null) return false;
     return true;
   });
-  const skipped = all.filter((s) => live.has(s.state));
+  return { doomed, skipped: all.filter((s) => live.has(s.state)) };
+}
+
+// After a successful collect: finished runs older than DELEGATE_PRUNE_DAYS
+// (default 30; 0 disables) go, so raw logs do not accumulate for ever.
+function autoPrune() {
+  const days = process.env.DELEGATE_PRUNE_DAYS === undefined ? 30 : Number(process.env.DELEGATE_PRUNE_DAYS);
+  if (!Number.isFinite(days) || days <= 0) return;
+  try { for (const s of prunable({ olderThan: days }).doomed) fs.rmSync(s.dir, { recursive: true, force: true }); }
+  catch { /* hygiene only; the result was already printed */ }
+}
+
+function cmdPrune(o) {
+  if (!fs.existsSync(RUNS)) return console.log('(no runs yet)');
+  const { doomed, skipped } = prunable(o);
   if (skipped.length) console.log(`keeping ${skipped.length} live run(s): ${skipped.map((s) => s.meta.run_id).join(', ')}`);
   if (!doomed.length) return console.log('nothing to prune');
   for (const s of doomed) console.log(`${o.yes ? 'removing' : 'would remove'}  ${s.meta.run_id}`);
@@ -1928,7 +1957,8 @@ const DRIVER_CONTRACT = Object.freeze({
   result_schema: SCHEMA,
   commands: ['start', 'collect', 'status', 'list', 'doctor', 'prune', 'contract'],
   start_flags: ['--harness', '--task', '--cwd', '--model', '--sandbox', '--timeout',
-    '--deliverable', '--constraint', '--resume', '--allow-commit', '--startup-timeout', '--no-output-after'],
+    '--deliverable', '--constraint', '--resume', '--allow-commit', '--startup-timeout', '--no-output-after',
+    '--clean-env', '--keep-env'],
   collect_flags: ['--wait', '--json', '--summary', '--max-chars', '--max-items'],
   env: ['DELEGATE_RUNS_DIR'],
   meta_fields: ['run_id', 'harness', 'model', 'constraint', 'permission', 'allow_commit'],
@@ -1979,7 +2009,7 @@ if (isMain) {
 
   if (cmd === 'start') await cmdStart(opts);
   else if (cmd === '__supervise') await cmdSupervise(process.argv[3]);
-  else if (cmd === 'collect') await cmdCollect(rest[0] || die('collect needs a run_id'), opts);
+  else if (cmd === 'collect') { await cmdCollect(rest[0] || die('collect needs a run_id'), opts); autoPrune(); }
   else if (cmd === 'status') cmdStatus(rest[0] || die('status needs a run_id'));
   else if (cmd === 'list') cmdList();
   else if (cmd === 'doctor') cmdDoctor();

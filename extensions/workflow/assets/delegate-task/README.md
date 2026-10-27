@@ -319,7 +319,7 @@ both; OpenCode reports cost.
 | `status <run_id>` | `starting` · `running` · `stalled` · `adrift` · `lost` · `done` |
 | `list` | every run, oldest first, with status, provenance and tokens |
 | `doctor` | which harnesses resolve, versions, what `--sandbox` asks of each |
-| `prune [--keep N] [--older-than DAYS] [--yes]` | delete old artifacts; dry run without `--yes` |
+| `prune [--keep N] [--older-than DAYS] [--yes]` | delete old artifacts; dry run without `--yes`. `collect` also deletes finished runs older than `DELEGATE_PRUNE_DAYS` (default 30; `0` disables) |
 
 ## Flags
 
@@ -461,8 +461,12 @@ genuinely needs. It filters inherited variables. It does not protect files, othe
 secrets, or anything the CLI prints itself.
 
 ⚠️ **Run artifacts are sensitive.** `prompt.txt` holds your whole task; `stdout.log` holds whatever
-the harness printed, which can include secrets. On POSIX the runs directory is `chmod 0700`; on
-Windows permissions are inherited and we cannot restrict them. Clear them with `prune`.
+the harness printed, which can include secrets. When a run is finalised, token shapes (`ghp_…`,
+`sk-…`, bearer headers, `NAME=value` pairs whose name looks like a credential) are masked in
+`stdout.log` and `stderr.log`; `result.json` keeps the harness's result block as written. On POSIX
+the runs directory is `chmod 0700`; on Windows permissions are inherited and we cannot restrict
+them. A successful `collect` deletes finished runs older than `DELEGATE_PRUNE_DAYS` days (default
+30; `0` disables); clear them sooner with `prune`.
 
 Run ids are validated (`<harness>-<14 digits>-<6 hex>`) and must resolve directly inside the runs
 directory, so a supplied id cannot walk out of it.

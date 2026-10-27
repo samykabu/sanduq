@@ -153,7 +153,9 @@ observations are dropped and logged in `diagnostics.log` next to it.
 `progress.py statusline install` points `statusLine.command` at `python[3] "<script>" statusline` (padding kept),
 stores the previous object in the project `config.json` (`statusline.previous`, and `chained` when it was a command) and
 restores it exactly on `uninstall`. At run time the wrapper records the snapshot for bound sessions only, then runs
-the chained command with the same stdin and prints its stdout byte for byte.
+the chained command with the same stdin and prints its stdout byte for byte, but only while `config.json` is untracked
+by git and still names the command recorded at install; otherwise it prints the minimal line and notes why in
+`diagnostics.log`.
 
 ## Integration notes for the theme module (Lane B)
 

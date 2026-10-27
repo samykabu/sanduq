@@ -370,6 +370,7 @@ class DelegationTests(unittest.TestCase):
             'model_observed': dropped('result_fields', 'model_observed'),
             'actual_model': dropped('result_fields', 'actual_model'),
             '--constraint': dropped('start_flags', '--constraint'),
+            '--clean-env': dropped('start_flags', '--clean-env'),
             'DELEGATE_RUNS_DIR': dropped('env', 'DELEGATE_RUNS_DIR'),
             'result schema': {**contract, 'result_schema': 'delegate-task.result.v1'},
             'is not delegate-task.driver.v1': {**contract, 'contract': 'delegate-task.driver.v0'},
