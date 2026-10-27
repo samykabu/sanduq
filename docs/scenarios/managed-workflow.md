@@ -34,21 +34,34 @@ Follow these in order. Each step links to its detail.
 1. Install Spec Kit, Python 3.11 or later, Git and `gh` ([prerequisites](../start/prerequisites.md)).
 2. Sign in to GitHub and add the Project scopes:
    `gh auth login`, then `gh auth refresh -h github.com -s project,read:project`.
-3. In your repository, run `specify init --here --integration codex` (or `--integration claude`) and
-   register the Sanduq catalog at priority 1 ([set up Spec Kit](../start/install-speckit.md)).
-4. Create a GitHub Project (v2), link it to the repository, and give its Status field the seven
-   options under [board](#board).
+3. Create the repository and clone it: `gh repo create <owner>/<name> --private --clone`, then
+   `cd <name>`. In it, run `specify init --here --integration codex` (or `--integration claude`).
+   The clone is not empty, so it asks `Current directory is not empty (2 items) ... [y/N]` (the
+   count varies); answer `y`. Then register the Sanduq catalog at priority 1
+   ([set up Spec Kit](../start/install-speckit.md)).
+4. Create a GitHub Project (v2) and link it to the repository:
+   `gh project create --owner <owner> --title "<name>"` prints the board URL, whose last number is
+   the board number; then `gh project link <number> --owner <owner> --repo <owner>/<name>`. Do not
+   add the Status options by hand: `gh` cannot edit them, and step 7 creates the seven statuses.
 5. Run `specify extension add workflow`.
-6. Run `$speckit-workflow-init` with your choices (see [install](#install)). Init runs Workflow's
-   installer.
-7. Run `$speckit-project-init` and select required sync. It maps the seven statuses to the
-   lifecycle phases.
+6. Run `$speckit-workflow-init` with your choices (see [install](#install)). The host command runs
+   Workflow's installer for you. The script `workflow.py init` does not install anything: until
+   `install.py --apply` has run, it prints `ok: false` with `DEPENDENCY_UNAVAILABLE`,
+   `SOURCE_MISMATCH`, `COMMAND_UNAVAILABLE` and `PRESET_REQUIRED` errors. They are expected at that
+   point; `install.py --apply` clears them.
+7. Map the board with required sync:
+   `python .specify/extensions/project/scripts/project_init.py --number <number> --hooks-mode required --auto-create-columns`.
+   `--auto-create-columns` creates the seven statuses that are missing, and the script maps them to
+   the lifecycle phases. Without `--number` the script exits 4 and lists the owner's boards.
 8. Run `python .specify/extensions/workflow/scripts/workflow.py doctor --project` until it reports
    `ok: true`.
 9. On Codex, approve the guard hook once in `/hooks`. Start a new agent session so the host loads the
    new commands.
-10. Run `$speckit-workflow-scope <issue>` on a real issue. The first claim has succeeded when Scope
-    starts its analysis of the issue instead of stopping on doctor errors.
+10. Create an issue: `gh issue create --title "<what to build>" --body "<details>"` prints its URL;
+    the last number is the issue number. Run `$speckit-workflow-scope <number>` on it. The first
+    claim has succeeded when Scope starts its analysis of the issue instead of stopping on doctor
+    errors; `python .specify/extensions/workflow/scripts/workflow.py status --feature specs/<slug>`
+    shows the claim.
 
 ## Install
 
@@ -56,8 +69,8 @@ Follow these in order. Each step links to its detail.
 specify extension add workflow
 ```
 
-Then initialize. Init records your choices and runs Workflow's installer, which adds the
-extensions it needs.
+Then initialize. The host command records your choices and runs Workflow's installer, which adds
+the extensions it needs.
 
 <details>
 <summary>Codex</summary>
@@ -88,9 +101,23 @@ python .specify/extensions/workflow/scripts/install.py --apply
 python .specify/extensions/workflow/scripts/workflow.py doctor --project
 ```
 
-The first `install.py` call previews. The second backs up, applies, and rolls back on failure. If
-your board is not configured yet, run `$speckit-project-init`. You are ready when
+The script `init` only records the choices; its doctor errors (`DEPENDENCY_UNAVAILABLE`,
+`SOURCE_MISMATCH`, `COMMAND_UNAVAILABLE`, `PRESET_REQUIRED`) are expected until `install.py --apply`
+has run. The first `install.py` call previews. The second backs up, applies, and rolls back on
+failure. If your board is not configured yet, run `$speckit-project-init`. You are ready when
 `doctor --project` passes.
+
+The installed evidence gate, `.github/workflows/sanduq-workflow-gates.yml`, runs on GitHub-hosted
+runners by default: the CI selection in `.specify/workflow.yml` starts as `policy: hosted-allowed`
+with `linux: [ubuntu-latest]`, so the rendered job has `runs-on: ubuntu-latest`. To run it on your
+own runners, record the selection before `install.py --apply` (or reinstall after changing it):
+
+```bash
+python .specify/extensions/workflow/scripts/workflow.py ci --policy self-hosted-required --linux self-hosted,<label> --system-packages preinstalled --python preinstalled
+```
+
+Never edit the rendered workflow file by hand. The selection and `self-hosted-required`'s recorded
+exceptions are in [where your CI actually runs](../workflow/operations.md#where-your-ci-actually-runs).
 
 ## First prompt
 

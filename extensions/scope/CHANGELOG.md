@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+- `mutation.lock` (taken by every `--apply` command of `scope.py` and `clarification.py`) is the shared Sanduq lock: a lock left by a process that died on this host is taken over by the next command; a live one still refuses with the same `... mutation is already running` message, which now names the owner's pid, host, age and liveness and how to check it. The lock file records `pid`, `host`, `token` and `created` instead of a bare pid; a bare-pid lock left by an earlier Scope version is taken over once it is older than 60 s.
+- JSON outputs, snapshots and journals are written by the shared atomic writer (`sanduq_fs.py`, packaged into `scripts/`): a uuid temp name per writer instead of one fixed `<name>.tmp`, so two concurrent writers never share a temp file.
+
 ## [1.11.1] - 2026-10-27
 
 - The bundled `scope-gate` preset (1.6.1) states that inside a claim the claim's `reference_text` wins over the composed upstream text and that upstream hook prompts are skipped. No script change; Workflow 1.20.0 requires this version.

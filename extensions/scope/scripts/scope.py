@@ -11,21 +11,23 @@ import copy
 from datetime import datetime, timezone
 import hashlib
 import json
-import os
 import re
 import subprocess
 import sys
 import time
+from contextlib import ExitStack
 from pathlib import Path
 
 # The extension is also loaded directly by its test suite.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import workflow_policy
 try:
+    import sanduq_fs
     import sanduq_remote
 except ModuleNotFoundError:
     # Source checkout only; release archives bundle the canonical helper.
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'shared'))
+    import sanduq_fs
     import sanduq_remote
 # Scope's errors and its GitHub client's are one class, so every `except ScopeError` covers both.
 from sanduq_scope_github import GitHub, GitHubError as ScopeError, PAGE_TIMEOUT, ProjectRest, rate_limited  # noqa: F401
@@ -111,23 +113,14 @@ def require(condition, message):
         raise ScopeError(message)
 
 
-def read_json(path, default=None):
-    return json.loads(path.read_text(encoding='utf-8-sig')) if path.exists() else default
+read_json = sanduq_fs.read_json
+write_json = sanduq_fs.write_json
+MUTATION_LOCK = '.specify/scope/mutation.lock'
 
 
-def write_json(path, value):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_suffix(path.suffix + '.tmp')
-    temp.write_text(json.dumps(value, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
-    # Windows indexers can briefly retain a handle on the destination.
-    for attempt in range(5):
-        try:
-            temp.replace(path)
-            break
-        except PermissionError:
-            if attempt == 4:
-                raise
-            time.sleep(0.05 * (attempt + 1))
+def mutation_lock(root, busy):
+    """The one Scope mutation lock: taken once, a dead owner's lock is recovered, a live one refuses with `busy`."""
+    return sanduq_fs.file_lock(root / MUTATION_LOCK, 0, busy, ScopeError)
 
 
 def unscoped(body):
@@ -1338,7 +1331,7 @@ def main(argv=None):
     parser.add_argument('--snapshot', type=Path, help='gate, approve, publish, bind: a saved inspect --output to reuse when still current')
     parser.add_argument('--force', action='store_true', help='render-spec: replace a spec.md that Scope did not render')
     args = parser.parse_args(argv)
-    lock = None
+    lock = ExitStack()
     shown = None
     try:
         # Fail on missing identity before any GitHub/network access.
@@ -1350,15 +1343,7 @@ def main(argv=None):
             workflow_policy.fresh_claim(app.root, app.repo, int(args.issue.lstrip('#')),
                                         args.feature, args.token, args.session, stages=('specify',))
         if args.apply:
-            candidate = app.root / '.specify/scope/mutation.lock'
-            candidate.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                fd = os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            except FileExistsError:
-                raise ScopeError('A scope mutation is already running. Inspect mutation.lock and its process before retrying.')
-            with os.fdopen(fd, 'w') as handle:
-                handle.write(str(os.getpid()))
-            lock = candidate
+            lock.enter_context(mutation_lock(app.root, 'A scope mutation is already running'))
         if args.command == 'inspect':
             require(not (args.skeleton and args.skeleton.exists()),
                     f'SCOPE_SKELETON_EXISTS: {args.skeleton} exists; remove it or name a new file.')
@@ -1404,8 +1389,7 @@ def main(argv=None):
         print(str(exc), file=sys.stderr)
         return 2
     finally:
-        if lock:
-            lock.unlink(missing_ok=True)
+        lock.close()
 
 
 if __name__ == '__main__':

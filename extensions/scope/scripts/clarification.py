@@ -10,11 +10,12 @@ import re
 import subprocess
 import sys
 import uuid
+from contextlib import ExitStack
 from datetime import datetime, timezone
 from urllib.parse import quote
 from pathlib import Path
 
-from scope import Scope, ScopeError, require, read_json, write_json, with_transport
+from scope import Scope, ScopeError, mutation_lock, require, read_json, write_json, with_transport
 
 FEATURE, WAITING = 'Feature Specification', 'Need Clarifications'
 RECORD = re.compile(r'\A<!-- speckit-clarification:(question|round|round-in-session) (\{[^\n]*\}) -->\n')
@@ -983,19 +984,11 @@ def main(argv=None):
     parser.add_argument('--answers', type=Path, help='publish only: the in-session answers for round 1')
     parser.add_argument('--apply', action='store_true')
     args = parser.parse_args(argv)
-    lock = None
+    lock = ExitStack()
     try:
         app = Clarification(Scope(args.root))
         if args.apply:
-            candidate = app.root / '.specify/scope/mutation.lock'
-            candidate.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                fd = os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            except FileExistsError:
-                raise ScopeError('Another Scope/clarification mutation is running. Inspect mutation.lock before retrying.')
-            with os.fdopen(fd, 'w') as handle:
-                handle.write(str(os.getpid()))
-            lock = candidate
+            lock.enter_context(mutation_lock(app.root, 'Another Scope/clarification mutation is running'))
         if args.command == 'publish':
             require(args.analysis and args.analysis.is_file(), 'Provide --analysis <review.json>.')
             require(not args.answers or args.answers.is_file(), 'Provide --answers <answers.json>.')
@@ -1013,8 +1006,7 @@ def main(argv=None):
         print(str(exc), file=sys.stderr)
         return 2
     finally:
-        if lock:
-            lock.unlink(missing_ok=True)
+        lock.close()
 
 
 if __name__ == '__main__':

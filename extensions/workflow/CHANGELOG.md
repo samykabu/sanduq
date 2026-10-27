@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- The shared atomic JSON writer (`sanduq_fs.write_json`, used for checkpoints, receipts and every other JSON state file) fsyncs the temp file before the replace, so a crash right after a write never leaves an empty file. Memory and Scope now ship the same helper.
+
 ## [1.20.0] - 2026-10-27
 
 - Runtime locks (`dispatch.lock`, feature, upgrade, install and decision locks) recover from a killed owner: a lock whose recorded pid has exited on this host is reclaimed by the next command, with no manual cleanup. A live owner still refuses with `WORKFLOW_BUSY`, which now names the owner's pid, host, age and liveness (`alive: yes` or `unknown`) and how to check it. A lock from another host, or one written by an earlier Workflow version (no host recorded), is never taken automatically; delete it once you have checked that its process is gone. A crashed upgrade's `upgrade.lock` still blocks claims on purpose: rerun the upgrade, which reclaims the lock.

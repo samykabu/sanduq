@@ -2,12 +2,13 @@
 """Exercise a published PR 4.0.2 -> current staged package upgrade and failure rollback."""
 import hashlib
 import json
-import subprocess
 import sys
 import zipfile
 import yaml
 from pathlib import Path
 from smoke_install import smoke
+sys.path.insert(0, str(Path(__file__).resolve().parent / 'shared'))
+import sanduq_gh  # noqa: E402
 
 
 def main():
@@ -25,7 +26,7 @@ def main():
     from reconcile import reconcile
     from workflow import WorkflowError, registry
     downloads = workspace / 'published'; downloads.mkdir()
-    subprocess.run(['gh','release','download','pr-v4.0.2','--repo','samykabu/sanduq','--pattern','pr.zip','--dir',str(downloads)],check=True)
+    sanduq_gh.run_gh(['release','download','pr-v4.0.2','--repo','samykabu/sanduq','--pattern','pr.zip','--dir',str(downloads)],timeout=600)
     with zipfile.ZipFile(downloads/'pr.zip') as archive:
         require_safe = all((downloads / name).resolve().is_relative_to(downloads.resolve()) for name in archive.namelist())
         if not require_safe: raise RuntimeError('Unsafe archive path')
