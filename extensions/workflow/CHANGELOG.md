@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- `WAIVER_NOT_VERIFIED` lists each rejected waiver comment with its reason (not the two-line format, invalid JSON, wrong PR, waiver for an older head naming that head and the current one, Reason line differs, expired, not allowed to waive), instead of dropping them silently (AHMED-16).
+
 ## [1.21.0] - 2026-10-27
 
 - Vendors delegate-task from agent-tools 1.8.0: the driver contract lists `--clean-env` and `--keep-env`, which the dispatcher now requires (`DELEGATE_SKILL_INCOMPATIBLE` names a driver without them); run logs are masked when a run is finalised and `collect` prunes finished runs older than `DELEGATE_PRUNE_DAYS` (default 30, `0` keeps them).
