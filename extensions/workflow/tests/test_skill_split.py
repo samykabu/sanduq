@@ -51,11 +51,13 @@ class RuleInventoryTests(unittest.TestCase):
         self.assertEqual(orphans, [])
 
     def test_scope_skill_references_are_linked_from_their_skill(self):
-        for skill in ('scope-analyst', 'github-clarification'):
+        common = ['analysis-json.md', 'controls.md', 'managed.md', 'standalone.md']
+        # Stream C: the local clarification transport has its own reference in github-clarification.
+        for skill, expected in (('scope-analyst', common), ('github-clarification', sorted(common + ['local.md']))):
             folder = ROOT / 'extensions/scope/skills' / skill
             core = (folder / 'SKILL.ext.md').read_text(encoding='utf-8')
             names = sorted(p.name for p in (folder / 'references').glob('*.md'))
-            self.assertEqual(names, ['analysis-json.md', 'controls.md', 'managed.md', 'standalone.md'], skill)
+            self.assertEqual(names, expected, skill)
             for name in names:
                 self.assertIn('references/' + name, core, f'{skill} does not link {name}')
 

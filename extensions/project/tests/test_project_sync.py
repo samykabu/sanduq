@@ -393,7 +393,7 @@ class ProjectSyncTests(unittest.TestCase):
         real = subprocess.run
 
         def hung_gh(cmd, *a, **k):
-            if cmd[0] == 'gh':
+            if Path(cmd[0]).stem.lower() == 'gh':  # gh runs by its absolute PATH entry (stream E, SEC-15)
                 self.assertEqual(k.get('timeout'), project_sync.TIMEOUT)
                 raise subprocess.TimeoutExpired(cmd, k['timeout'])
             return real(cmd, *a, **k)
@@ -532,8 +532,10 @@ class ProjectInitTests(unittest.TestCase):
             out, cwd = io.StringIO(), os.getcwd()
             self.addCleanup(os.chdir, cwd)
             os.chdir(root)
+            # sanduq_gh resolves gh from PATH once at import (stream E, SEC-15), so point it at the fake too.
+            fake = root / 'bin' / ('gh.exe' if os.name == 'nt' else 'gh')
             with patch.dict(os.environ, {'PATH': env['PATH']}), patch.object(project_sync, 'gh_raw', hung), \
-                    contextlib.redirect_stdout(out):
+                    patch.object(project_sync.sanduq_gh, 'GH', str(fake)), contextlib.redirect_stdout(out):
                 code = project_init.main(flags)
             return code, out.getvalue()
         done = subprocess.run(args, cwd=root, env=env, input='', capture_output=True, text=True, encoding='utf-8', timeout=120)

@@ -91,7 +91,9 @@ class ClaimAndAcceptTests(LifecycleBase):
         for stage in ('scope', 'specify'):
             run.complete(run.claim(self.usage())['token'], self.receipt(stage))
         (run.feature / 'evidence/scope.txt').unlink()
-        claim = run.claim(self.usage())
+        pending = run.claim(self.usage())  # stream B (AHMED-12): removing later receipts needs confirmation
+        self.assertEqual((pending['status'], pending['invalidates']), ('confirm_invalidation', ['specify']))
+        claim = run.claim(self.usage(), confirm_invalidation=True)
         self.assertEqual(claim['stage'], 'scope')
         tail = self.events()[-3:]
         self.assertEqual([(e['event'], e['stage']) for e in tail],

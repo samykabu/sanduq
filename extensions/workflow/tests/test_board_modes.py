@@ -28,7 +28,7 @@ class Base(Harness):
     def advance(self, run, last):
         claims = []
         while True:
-            claim = run.claim(self.usage(), finalize=True)
+            claim = run.claim(self.usage())  # stream C: finalize before Ready is refused
             claims.append(claim)
             run.complete(claim['token'], self.receipt(claim['stage']))
             if claim['stage'] == last:

@@ -77,7 +77,7 @@ class MemoryHookLifecycleTests(unittest.TestCase):
         installed = self.root / '.specify/extensions/memory'
         shutil.copytree(SOURCE, installed, dirs_exist_ok=True,
                         ignore=shutil.ignore_patterns('__pycache__', 'tests', 'CHANGELOG.md'))
-        for helper in ('check_inputs.py', 'bounded_json.py'):
+        for helper in ('check_inputs.py', 'bounded_json.py', 'sanduq_fs.py'):
             shutil.copyfile(SOURCE.parent / 'scripts/shared' / helper, installed / 'scripts' / helper)
         # Spec Kit's feature scripts, which Memory's init patches with its number guard.
         shutil.copytree(SOURCE / 'tests/fixtures/entry-points/.specify/scripts', self.root / '.specify/scripts',

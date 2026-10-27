@@ -141,8 +141,8 @@
  },
  {
   "file": "extensions/workflow/skills/workflow/references/delegation-and-decisions.md",
-  "rule": "Never ask for the answer in the IDE.",
-  "reason": "decisions are answered on GitHub"
+  "rule": "With `clarification_transport: github-comments` on the claim, never ask for the answer in the IDE",
+  "reason": "decisions are answered on GitHub unless the claim says local"
  },
  {
   "file": "extensions/workflow/skills/workflow/references/delegation-and-decisions.md",
@@ -221,8 +221,8 @@
  },
  {
   "file": "presets/workflow/commands/speckit.clarify.md",
-  "rule": "Questions go to GitHub, one comment each, not to this chat",
-  "reason": "the replace overlay keeps the unattended transport"
+  "rule": "With `clarification_transport: github-comments` on the claim, questions go to GitHub, one comment each, not to this chat",
+  "reason": "the replace overlay keeps the unattended transport unless the claim says local"
  },
  {
   "file": "presets/workflow/commands/speckit.superspec.brainstorm.md",

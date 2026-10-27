@@ -62,7 +62,7 @@ from wf_core import (SCHEMA, CHECKPOINT_SCHEMA, CHECKPOINT_SCHEMAS, RANGES, BASE
                      write, inside, portable_label, canonical_path, REPARSE_POINT, _no_link_below, GIT_READS, run_git,
                      git_ok, git, OPERATIONAL_DIRS, operation, _memo, _wrote, default_actor,
                      require_not_delegated_context, RUNTIME_DECLARATION, ensure_local_excludes, locked, ERRORS,
-                     explain)
+                     explain, GIT, W, INSTALL_SCRIPT)
 from wf_identity import (github_repository, previous_branch, normalized_remote, origin_url, root_commit_sha,
                          is_shallow_clone, repo_identity, current_identity, root_commit_still_reachable, same_remote,
                          identity_matches, legacy_history_signal, verify_checkpoint_identity, root_history_changed,
@@ -81,7 +81,8 @@ from wf_health import (registry, compatible, active_host, command_exists, packag
                        project_errors, SCOPE_STATUSES, project_defaults, MANAGED_CI, preserved_ci_path, ci_errors,
                        delegation_errors, host_warnings, progress_wiring_warnings, guard_approval_warnings,
                        doctor_cache_key, store_doctor_cache, cached_doctor, doctor, lean_preflight, pr_lint_binding,
-                       upgrade_command, dependency_errors)
+                       upgrade_command, dependency_errors, PHASE_DEFAULTS, INERT_VALUES, inert_value_warnings,
+                       interrupted_install_errors, history_errors, HOOK_PYTHON_PROBE, hook_python_warnings)
 from wf_receipts import (verify_sync_binding, same_path, recorded_sync_fields, handoff_text, native_run_status,
                          sync_retry, context_gate, measured_context_gate, required_inputs, first_phase_tasks,
                          consulted_inputs, without_required, canonical_receipt, dependency_fingerprints, role_exempt,
@@ -90,7 +91,8 @@ from wf_receipts import (verify_sync_binding, same_path, recorded_sync_fields, h
                          _positive_int, _string_list, diff_review_command, diff_review_shell, diff_review_sha256,
                          ci_evidence_complete, ci_evidence_current, validate_evidence_snapshots, receipt_status,
                          receipt_current, recovery_recipe, upstream_drift, receipt_drift, ready_checks,
-                         coding_review_checks, CLAIM_HEARTBEAT_SECONDS, claim_owner)
+                         coding_review_checks, CLAIM_HEARTBEAT_SECONDS, claim_owner, waiting_questions,
+                         feature_skipped)
 
 
 # Where `claim` tells the dispatcher to read this stage's own instructions, project-relative
