@@ -9,9 +9,12 @@ from __future__ import annotations
 import argparse
 import copy
 import getpass
+import hashlib
+import hmac
 import json
 import os
 import re
+import secrets
 import shlex
 import shutil
 import subprocess
@@ -399,7 +402,8 @@ EXECUTE_ORCHESTRATOR_DISPATCHER_COMMANDS = (
     'accept, reassign or adopt for this feature\'s own T### tasks only -- that is how you dispatch and '
     'resolve bounded workers. Never trust-reset or attest-native, and never a stage:* identity or another '
     'feature\'s tasks; the dispatcher enforces this scope itself (DELEGATION_ORCHESTRATOR_SCOPE) and refuses '
-    'anything outside it.\n'
+    'anything outside it. Pass accept, reassign and adopt --nonce with the dispatcher_nonce that start returned, '
+    'and never put it in a worker\'s brief.\n'
 )
 
 
@@ -483,7 +487,7 @@ def lean_enabled(root, feature=None):
         return False
 
 
-def driver_env(root, run_context=None, role=None, feature=None):
+def driver_env(root, run_context=None, role=None, feature=None, task_worker=False):
     """Environment for the driver subprocess and, through it, every worker it
     spawns underneath.
 
@@ -512,11 +516,14 @@ def driver_env(root, run_context=None, role=None, feature=None):
     """
     env = os.environ.copy()
     env['DELEGATE_RUNS_DIR'] = str(root / '.delegate/runs')
-    if feature and lean_enabled(root, feature):
-        # Lean only. Only the claim of exactly this feature, on its recorded branch, is
-        # passed on; anything inherited from another feature is dropped.
+    lean = bool(feature) and lean_enabled(root, feature)
+    if task_worker or lean:
+        # SEC-06: a T### task worker never holds the claim, not even one the Execute orchestrator inherited.
         env.pop('SANDUQ_WORKFLOW_CLAIM_TOKEN', None)
         env.pop('SANDUQ_WORKFLOW_SESSION_ID', None)
+    if lean and not task_worker:
+        # Lean stage launches only. Only the claim of exactly this feature, on its recorded branch, is
+        # passed on; anything inherited from another feature is dropped.
         saved = workflow.read(root / feature / 'workflow/checkpoint.json', {}) or {}
         active = saved.get('active') or {}
         try:
@@ -577,6 +584,114 @@ def require_not_worker_context(feature=None, task_identity=None):
                            'identity, or another feature')
 
 
+# SEC-06 (DEC-11 A): two hardenings on top of the environment check above, which a worker can undo by
+# unsetting its variables. Both are advisory against a same-user worker that sets out to defeat them;
+# docs/workflow/delegation.md "Security" states what each does and does not stop.
+GRADING_COMMANDS = 'accept, adopt, reassign and trust-reset'
+
+
+def nonce_path(root):
+    """The dispatcher's nonce file: under the user's home, outside every worker's working folder."""
+    key = hashlib.sha256(str(Path(root).resolve()).encode('utf-8')).hexdigest()[:16]
+    return delegation.global_root() / '.sanduq/runtime' / ('dispatcher-' + key + '.nonce')
+
+
+def dispatcher_nonce(root):
+    """This project's nonce, created on first use; start returns it to the orchestrator that called it."""
+    path = nonce_path(root)
+    if not path.is_file():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with open(path, 'x', encoding='utf-8') as handle:  # exclusive create: two starts agree on one value
+                handle.write(secrets.token_hex(16))
+            os.chmod(path, 0o600)
+        except FileExistsError:
+            pass
+    return path.read_text(encoding='utf-8').strip()
+
+
+def require_dispatcher_nonce(root, nonce):
+    expected = dispatcher_nonce(root)
+    delegation.require(isinstance(nonce, str) and hmac.compare_digest(nonce.strip(), expected),
+                       'DELEGATION_NONCE_REQUIRED: ' + GRADING_COMMANDS + ' need --nonce <value>: the '
+                       'dispatcher_nonce that start returned, or the contents of ' + str(nonce_path(root)) +
+                       ', which no worker brief, environment or working folder carries')
+
+
+def _windows_parent_pids():
+    import ctypes
+    from ctypes import wintypes
+
+    class Entry(ctypes.Structure):
+        _fields_ = [('dwSize', wintypes.DWORD), ('cntUsage', wintypes.DWORD), ('th32ProcessID', wintypes.DWORD),
+                    ('th32DefaultHeapID', ctypes.c_size_t), ('th32ModuleID', wintypes.DWORD),
+                    ('cntThreads', wintypes.DWORD), ('th32ParentProcessID', wintypes.DWORD),
+                    ('pcPriClassBase', ctypes.c_long), ('dwFlags', wintypes.DWORD),
+                    ('szExeFile', ctypes.c_wchar * 260)]
+    kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    snapshot = kernel32.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
+    if not snapshot or snapshot == wintypes.HANDLE(-1).value:
+        return {}
+    parents = {}
+    try:
+        entry = Entry()
+        entry.dwSize = ctypes.sizeof(Entry)
+        found = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
+        while found:
+            parents[entry.th32ProcessID] = entry.th32ParentProcessID
+            found = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
+    finally:
+        kernel32.CloseHandle(snapshot)
+    return parents
+
+
+def ancestor_pids():
+    """Every ancestor of this process; environment variables play no part, so unsetting them changes nothing."""
+    if os.name == 'nt':
+        parents = _windows_parent_pids()
+    else:
+        try:
+            listing = subprocess.run(['ps', '-A', '-o', 'pid=', '-o', 'ppid='], capture_output=True, text=True,
+                                     timeout=10).stdout
+        except (OSError, subprocess.SubprocessError):
+            listing = ''
+        parents = {int(pid): int(ppid) for pid, ppid in
+                   (line.split() for line in listing.splitlines() if len(line.split()) == 2)}
+    seen, pid = set(), os.getppid()
+    while pid and pid not in seen:
+        seen.add(pid)
+        pid = parents.get(pid)
+    return seen
+
+
+def require_not_delegated_lineage(root, feature, allow_execute=True):
+    """Refuse a process that descends from a live delegated run of this feature: a worker cannot grade its
+    own (or a sibling's) work even with its SANDUQ_* variables removed. The run's recorded lineage is its
+    driver supervisor pid (meta.json); every harness process and shell it starts descends from it. Only
+    the Execute orchestrator's own run is allowed (``allow_execute``), never for trust-reset.
+    shortcut: a dead supervisor's pid that the OS reused for a live ancestor would refuse wrongly; compare
+    process start times if that is ever seen."""
+    supervisors = {}
+    for attempt in read_ledger(root, feature)['attempts']:
+        run_id = attempt.get('run_id')
+        if not (isinstance(run_id, str) and re.fullmatch(r'[\w.-]+', run_id)) or \
+                (allow_execute and attempt.get('identity', '').endswith('/stage:execute')):
+            continue
+        pid = workflow.read(root / '.delegate/runs' / run_id / 'meta.json', {}).get('supervisor_pid')
+        if delegation.process_alive(pid):
+            supervisors[pid] = attempt
+    if not supervisors:
+        return
+    for pid in ancestor_pids() & set(supervisors):
+        attempt = supervisors[pid]
+        raise delegation.DelegationError(
+            'DELEGATION_LINEAGE_SELF: this process descends from delegated run ' + attempt['run_id'] + ' (' +
+            attempt.get('identity', '') + '); a delegated worker never runs ' + GRADING_COMMANDS +
+            ', even with its SANDUQ_* variables removed. Run the command from the top-level session' +
+            (' or the Execute orchestrator' if allow_execute else ''))
+
+
 class StartFailed(delegation.DelegationError):
     """The driver process exited or never spawned, so its run directory is final."""
 
@@ -627,7 +742,8 @@ def keep_env_names(harness, env, github=False):
                                        if name.upper().startswith('SANDUQ_') and name.upper() != 'SANDUQ_ROLE'))))
 
 
-def launch(root, driver, candidate, cwd, task, timeout, intent_id=None, orchestrator_feature=None, feature=None):
+def launch(root, driver, candidate, cwd, task, timeout, intent_id=None, orchestrator_feature=None, feature=None,
+           task_worker=False):
     """Start one worker through the driver with a clean environment.
 
     ``orchestrator_feature``, given only for the ``stage:execute`` launch
@@ -643,7 +759,7 @@ def launch(root, driver, candidate, cwd, task, timeout, intent_id=None, orchestr
         raise StartFailed('NODE_MISSING')
     env = driver_env(root, run_context=intent_id,
                      role='orchestrator' if orchestrator_feature else None,
-                     feature=orchestrator_feature or feature)
+                     feature=orchestrator_feature or feature, task_worker=task_worker)
     keep = keep_env_names(candidate['harness'], env, candidate.get('github_access'))
     args = [node, driver, 'start', '--harness', candidate['harness'], '--cwd', str(cwd),
             '--timeout', str(timeout), '--task', task, '--clean-env']
@@ -795,7 +911,8 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
         try:
             started = launch(root, status['driver'], selected, cwd, task, timeout, intent_id,
                              orchestrator_feature=feature if identity.endswith('/stage:execute') else None,
-                             feature=feature)
+                             feature=feature,
+                             task_worker=re.fullmatch(r'T\d{3,}', identity.removeprefix(feature + '/')) is not None)
         except delegation.DelegationError as error:
             delegation.forget_health(root)  # a cached green probe is not trusted after a failed start
             # The driver writes meta.json before it spawns a worker. An exited
@@ -905,6 +1022,7 @@ def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
     root = root.resolve()
     feature = feature_identity(root, feature)
     require_not_worker_context(feature, identity)
+    require_not_delegated_lineage(root, feature)
     policy = workflow.load_policy(root)
     config = policy['delegation']
     tier = lean_policy.feature_tier(root, feature)
@@ -2204,6 +2322,7 @@ def reassign(root, feature, run_id, reason, task_file=None, diagnosis=None):
     delegation.require(prior is not None and prior.get('status') in TERMINAL_STATUSES,
                        'DELEGATION_PRIOR_RUN_NOT_TERMINAL')
     require_not_worker_context(feature, prior['identity'].removeprefix(feature + '/'))
+    require_not_delegated_lineage(root, feature)
     # An adopted attempt has no dispatcher route, task file or retry count to
     # escalate from (round 8, finding 2: reassign crashed with a bare
     # KeyError on 'retry_count' trying); adopt is its own, supported recovery.
@@ -2300,6 +2419,7 @@ def accept(root, feature, run_id, command, expect, timeout=None, owned=None):
     attempt = find_run(ledger, run_id)
     delegation.require(attempt is not None, 'DELEGATION_RUN_UNKNOWN: ' + run_id)
     require_not_worker_context(feature, attempt['identity'].removeprefix(feature + '/'))
+    require_not_delegated_lineage(root, feature)
     delegation.require(attempt.get('status') == 'unverified',
                        'DELEGATION_RUN_NOT_UNVERIFIED: only an unverified light-tier result can be accepted')
     cwd = (root / attempt['cwd']).resolve()
@@ -2447,6 +2567,7 @@ def trust_reset(root, feature, reason):
     root = root.resolve()
     feature = feature_identity(root, feature)
     require_not_worker_context(feature, None)
+    require_not_delegated_lineage(root, feature, allow_execute=False)
     delegation.require(isinstance(reason, str) and reason.strip(),
                        'DELEGATION_TRUST_RESET_REASON_REQUIRED')
     delegation.require_no_maintenance(root)
@@ -2540,6 +2661,7 @@ def adopt(root, feature, task_id, command, expect, timeout=None, owned=None):
     feature = feature_identity(root, feature)
     delegation.require(re.fullmatch(r'T\d{3,}', task_id) is not None, 'DELEGATION_IDENTITY_INVALID')
     require_not_worker_context(feature, task_id)
+    require_not_delegated_lineage(root, feature)
     delegation.require(expect in ACCEPT_EXPECTS, 'DELEGATION_ACCEPT_EXPECT_INVALID')
     delegation.require(isinstance(command, str) and command.strip(),
                        'DELEGATION_ACCEPT_COMMAND_REQUIRED')
@@ -2653,12 +2775,14 @@ def main(argv=None):
     abandon_cmd.add_argument('--reason', required=True)
     reassign_cmd = sub.add_parser('reassign')
     reassign_cmd.add_argument('--feature', required=True)
+    reassign_cmd.add_argument('--nonce', help='The dispatcher nonce (SEC-06); start returns it')
     reassign_cmd.add_argument('--run-id', required=True)
     reassign_cmd.add_argument('--reason', required=True)
     reassign_cmd.add_argument('--task-file', type=Path)
     reassign_cmd.add_argument('--diagnosis', type=Path)
     accept_cmd = sub.add_parser('accept')
     accept_cmd.add_argument('--feature', required=True)
+    accept_cmd.add_argument('--nonce', help='The dispatcher nonce (SEC-06); start returns it')
     accept_cmd.add_argument('--run-id', required=True)
     accept_cmd.add_argument('--command', required=True)
     accept_cmd.add_argument('--expect', choices=ACCEPT_EXPECTS, required=True)
@@ -2668,9 +2792,11 @@ def main(argv=None):
                                  'call, overriding the paths recorded at start')
     trust_reset_cmd = sub.add_parser('trust-reset')
     trust_reset_cmd.add_argument('--feature', required=True)
+    trust_reset_cmd.add_argument('--nonce', help='The dispatcher nonce (SEC-06); start returns it')
     trust_reset_cmd.add_argument('--reason', required=True)
     adopt_cmd = sub.add_parser('adopt')
     adopt_cmd.add_argument('--feature', required=True)
+    adopt_cmd.add_argument('--nonce', help='The dispatcher nonce (SEC-06); start returns it')
     adopt_cmd.add_argument('--id', required=True)
     adopt_cmd.add_argument('--command', required=True)
     adopt_cmd.add_argument('--expect', choices=ACCEPT_EXPECTS, required=True)
@@ -2687,12 +2813,16 @@ def main(argv=None):
     attest_cmd.add_argument('--reported-model', help='The model the host reported; omitted records "unreported"')
     args = parser.parse_args(argv)
     try:
+        if args.action in ('accept', 'adopt', 'reassign', 'trust-reset'):
+            require_dispatcher_nonce(args.root, args.nonce)
         if args.action == 'start':
             result = start(args.root, args.feature, args.id, args.type, args.task_file,
                            args.cwd, args.claim_token, args.timeout, args.owned,
                            args.harness, args.model, args.deliverable, args.correction_plan,
                            workflow.read(workflow.inside(args.root.resolve(), str(args.diagnosis)))
                            if args.diagnosis else None)
+            if result.get('run_id'):
+                result['dispatcher_nonce'] = dispatcher_nonce(args.root)  # for this caller's accept or adopt
         elif args.action == 'collect':
             result = collect(args.root, args.feature, args.run_id, not args.no_auto_retry, args.confirm_fallback)
             try:  # AHMED-01: a coordinator collecting results is still at work; keep its claim alive

@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+- A `T###` task worker no longer receives the workflow claim token or session id, even when the Execute orchestrator that launched it holds them; only stage launches do (SEC-06).
+- `delegate_dispatch.py accept`, `adopt`, `reassign` and `trust-reset` need `--nonce <value>`, kept in `~/.sanduq/runtime/dispatcher-<project key>.nonce` outside every worker's checkout and returned by `start` as `dispatcher_nonce`; without it they fail with `DELEGATION_NONCE_REQUIRED`. They, and `start`, refuse a process that descends from a live delegated run of the feature (the run's driver supervisor pid) with `DELEGATION_LINEAGE_SELF`, whatever its environment says; the Execute orchestrator's own run is exempt except for `trust-reset`. Both are advisory against a same-user worker; docs/workflow/delegation.md "Security" states the residual risk.
+
 ## [1.21.0] - 2026-10-27
 
 - Vendors delegate-task from agent-tools 1.8.0: the driver contract lists `--clean-env` and `--keep-env`, which the dispatcher now requires (`DELEGATE_SKILL_INCOMPATIBLE` names a driver without them); run logs are masked when a run is finalised and `collect` prunes finished runs older than `DELEGATE_PRUNE_DAYS` (default 30, `0` keeps them).

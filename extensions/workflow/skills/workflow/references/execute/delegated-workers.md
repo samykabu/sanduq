@@ -24,7 +24,9 @@ dispatcher session can run `delegate_dispatch.py reassign --feature specs/<featu
 same limit and records the reason. Review partial edits before choosing that
 path. `accept`, `adopt`, `reassign` and `trust-reset` run only in the top-level
 dispatcher session, never in a host subagent: an orchestration agent reports
-"needs accept/adopt for T###" at a batch boundary instead.
+"needs accept/adopt for T###" at a batch boundary instead. Each of the four needs
+`--nonce <value>`: the `dispatcher_nonce` a `start` result returned, or the file
+`DELEGATION_NONCE_REQUIRED` names. Never put it in a worker's brief.
 
 When a start fails with `DELEGATION_ROUTES_UNAVAILABLE`, no candidate could start or each
 was proved never launched; the attempt is `blocked`: fix the CLI or route (`workflow.py doctor
