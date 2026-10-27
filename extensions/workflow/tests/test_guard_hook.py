@@ -95,6 +95,22 @@ class GuardTests(unittest.TestCase):
                     self.assertIn("--confirm-fallback is the user's confirmation", reason)
                     self.assertEqual(reason.count('\n'), 1, reason)
 
+    def test_native_attestation_is_refused_in_a_worker_subagent_or_orchestrator(self):
+        """SAMY-03: attest-native is the top-level session's own word, refused exactly like --confirm-fallback."""
+        command = ('python .specify/extensions/workflow/scripts/delegate_dispatch.py attest-native --feature specs/1-x '
+                   '--id stage:plan --claim-token t --requested-model sonnet')
+        for shape in (claude, codex):
+            self.assertEqual(self.run_guard(shape(command))[0], 0)  # the top-level session
+            for payload, env in (({**shape(command), 'agent_id': 'a1'}, {}),
+                                 ({**shape(command), 'agent_type': 'general-purpose'}, {}),
+                                 (shape(command), {'SANDUQ_DELEGATED_RUN': 'run-1'}),
+                                 (shape(command), {'SANDUQ_DELEGATED_ROLE': 'orchestrator'}),
+                                 (shape(command), {'SANDUQ_ROLE': 'worker'})):
+                code, reason = self.run_guard(payload, env)
+                self.assertEqual(code, 2, (env, sorted(payload)))
+                self.assertIn("attest-native is the top-level session's own attestation", reason)
+                self.assertEqual(reason.count('\n'), 1, reason)
+
     def test_hook_matcher_covers_both_shell_tools(self):
         matcher = json.loads((HOOKS / 'hooks.json').read_text(encoding='utf-8'))['hooks']['PreToolUse'][0]['matcher']
         for tool in ('Bash', 'PowerShell', 'shell'):

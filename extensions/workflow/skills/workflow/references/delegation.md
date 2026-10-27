@@ -46,13 +46,25 @@ Review work stays refused through the external driver for now (the PH-01 interim
 warning, and tasks.md marks such a task `refused:DELEGATION_REVIEW_ROUTE_UNSAFE`. Run reviews
 natively in the selected host. Every other route is unchanged.
 
+Native attestation: when a native subagent of the host (not the external driver) did a claimed
+stage, the top-level session records it with `delegate_dispatch.py attest-native --feature
+specs/<feature> --id stage:<stage> --claim-token <token> --requested-model <m>
+[--reported-model <m>]`, then completes the stage. The ledger attempt is `kind: native`, bound
+to the claim, with `actual_model: unreported` unless the host reported one. It is self-asserted
+with no external ledger evidence, labelled as such in the ledger, `status` and the receipt, and
+never counts as a dispatched run. Only the top-level session runs it: the guard and the
+dispatcher refuse it from a worker, subagent or delegated orchestrator
+(`NATIVE_ATTESTATION_FORBIDDEN`). A claim with no route (review-kind stages, delegation off)
+completes without it (`NATIVE_ATTESTATION_NOT_NEEDED`). Any route accepts it.
+
 ## Confirmed fallback
 
 When the CLI rejects the requested model, `collect` starts nothing and stops with
 `FALLBACK_CONFIRMATION_REQUIRED`. The message names the stage or task, the harness and model,
 the rejection line from stderr, the configured substitute (on Codex the CLI default reads "CLI
 default, model unknown: Codex does not report it") and three exact commands: confirm, pick an
-allowed model, or run natively. Show it to the user and wait. Only the user may confirm, in the
+allowed model, or run natively (a stage: `attest-native` after doing it; a task: `adopt`). Show
+it to the user and wait. Only the user may confirm, in the
 conversation; then the top-level session runs `delegate_dispatch.py collect --feature
 specs/<feature> --run-id <id> --confirm-fallback <requested>=<substitute>`, which starts the
 substitute for one run. The guard and the dispatcher refuse that flag from a worker, subagent or

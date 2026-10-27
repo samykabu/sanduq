@@ -8,8 +8,10 @@
 - `delegate_dispatch.py trust-reset|accept|reassign|adopt` are refused only in a worker context:
   env SANDUQ_DELEGATED_RUN set, env SANDUQ_ROLE=worker, or a payload carrying `agent_id` or
   `agent_type` (both hosts add these in subagent sessions). The top-level session runs them.
-- `delegate_dispatch.py ... --confirm-fallback` is the user's confirmation of a substitute model; it is
-  refused in that worker context and in a delegated orchestrator (env SANDUQ_DELEGATED_ROLE set).
+- `delegate_dispatch.py ... --confirm-fallback` is the user's confirmation of a substitute model and
+  `delegate_dispatch.py attest-native` is the top-level session's own attestation of a native subagent
+  stage; both are refused in that worker context and in a delegated orchestrator (env
+  SANDUQ_DELEGATED_ROLE set).
 - `gh pr create|edit --body-file <f>` is refused in a managed project (`.specify/workflow.yml`
   present) when the sibling lint `<f minus suffix>.lint.json` (what `pr_publish.py` writes) is
   missing or its `body_sha256` is not the file's hash; an inline `--body`/`-b` is refused there too
@@ -32,6 +34,8 @@ import subprocess
 import sys
 
 DISPATCHER_ONLY = {'trust-reset', 'accept', 'reassign', 'adopt'}
+# The top-level session's own word, refused wherever --confirm-fallback is (SAMY-03).
+TOP_LEVEL_ONLY = {'attest-native'}
 # Read-only stash subcommands hide nothing.
 STASH_READ_ONLY = {'list', 'show'}
 BY_NAME = 'stage your owned paths by name (git add -- <path>...)'
@@ -150,6 +154,10 @@ def findings(command, root='.'):
                     found.append(('fallback', "delegate_dispatch.py --confirm-fallback is the user's confirmation; a "
                                               'delegated worker, orchestrator or subagent may not give it. Show the '
                                               'user the FALLBACK_CONFIRMATION_REQUIRED message instead'))
+                if TOP_LEVEL_ONLY.intersection(tokens[index + 1:]):
+                    found.append(('fallback', "delegate_dispatch.py attest-native is the top-level session's own "
+                                              'attestation; a delegated worker, orchestrator or subagent may not '
+                                              'give it. Report the stage result to the top-level session instead'))
     return found
 
 
