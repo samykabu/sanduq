@@ -46,7 +46,7 @@ you review every diff, run the gates, commit, open the PR, read every CI job, me
    Open the PR, read every job with `gh run view <id> --json jobs`, merge with `gh pr merge <n> --merge`
    (no `--delete-branch` while the branch is checked out in a worktree), confirm the release run and the
    catalog, then comment on #99 with the commits, what changed per finding, and what stays the consumer's
-   step (Bunyan lean policy and the live two-pass acceptance).
+   step (the consumer's lean policy and the live two-pass acceptance).
 
 ## Working rules learned the hard way
 

@@ -44,6 +44,15 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: No private product names (pattern held in the PRIVATE_NAMES repository secret)
+        env:
+          PRIVATE_NAMES: ${{ secrets.PRIVATE_NAMES }}
+        run: |
+          if [ -z "$PRIVATE_NAMES" ]; then echo "::notice::PRIVATE_NAMES is not set; the private-name check was skipped"; exit 0; fi
+          if git grep -I -i -n -E "$PRIVATE_NAMES" -- . ':!.github/workflows/ci.yml'; then
+            echo "::error::Private product or customer names found (lines above). Remove them; this repository never names third-party products."; exit 1
+          fi
+
       - name: Install validation dependencies
         run: python3 -m pip install --user pyyaml packaging
 

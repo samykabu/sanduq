@@ -1,6 +1,6 @@
 # Issue625 retrospective tooling implementation plan
 
-Owner approved implementation of all three remaining tooling fixes. Work is isolated in `sanduq--retro625` and `sanduq-skills--retro625`; existing checkouts and Bunyan#17 are preserved. One independent review follows completion of all implementation, testing and package integration.
+Owner approved implementation of all three remaining tooling fixes. Work is isolated in `sanduq--retro625` and `sanduq-skills--retro625`; existing checkouts and the consumer's #17 are preserved. One independent review follows completion of all implementation, testing and package integration.
 
 1. **Freeze the implementation boundary and shared contracts.**
 
@@ -149,7 +149,7 @@ Owner approved implementation of all three remaining tooling fixes. Work is isol
    - Duplicate launch/collection, failed-launch retry preservation, timeout descendants, live-owner refusal and dead-owner recovery.
    - Byte-exact Git recovery; retained dirty/untracked/CRLF inputs; missing-object refusal.
 
-   Run the affected Python and Node suites, vendor validation, documentation checks and `git diff --check`. Build versioned Memory and Workflow packages, then install and upgrade them in a disposable consumer using the existing smoke tooling. Verify packaged helper inclusion, capability detection, rollback behavior and preservation of project-owned policy/CI. Keep automatic Memory and deployment disabled. Do not upgrade active Bunyan #17.
+   Run the affected Python and Node suites, vendor validation, documentation checks and `git diff --check`. Build versioned Memory and Workflow packages, then install and upgrade them in a disposable consumer using the existing smoke tooling. Verify packaged helper inclusion, capability detection, rollback behavior and preservation of project-owned policy/CI. Keep automatic Memory and deployment disabled. Do not upgrade active the consumer's #17.
 
 6. **Final completion boundary.**
 
@@ -168,7 +168,7 @@ Owner approved implementation of all three remaining tooling fixes. Work is isol
 - Portable validation passed 207 tests (174 existing and 33 execution tests). One earlier legacy refusal test failed with empty child stderr before an explicit passing retry; its cause remains unverified.
 - Frozen-source acceptance completed 164 Memory tests with no failures or skips, and 1,004 Workflow tests with two skill-size failures, one Windows loose-object fixture error and two skips. The original attempts are retained. The coordinator reduced the core skill from 6,260 to 6,111 bytes and corrected the extension version table. The author is fixing the disposable Windows fixture; affected retests are pending.
 - Initial package acceptance passed vendor integrity, documentation-checker regressions, both packages and the six native Memory installation cases. Documentation failed on stale table versions; Workflow upgrade smoke stopped at the skill-size guard. Only the affected documentation, Workflow package and upgrade checks are being repeated after correction.
-- Full test jobs are deterministic native processes, without an AI worker waiting on them. Package smoke uses separate temporary directories and overlaps safely with unit execution. Raw output remains ignored; bounded collection is used for status. Tests were run locally; no remote CI, release or Bunyan adoption has been started.
+- Full test jobs are deterministic native processes, without an AI worker waiting on them. Package smoke uses separate temporary directories and overlaps safely with unit execution. Raw output remains ignored; bounded collection is used for status. Tests were run locally; no remote CI, release or the consumer adoption has been started.
 
 - Correction complete: all six affected Workflow tests and the package-helper test passed. Documentation, rebuilt Workflow package and native upgrade/rollback smoke passed. Full suites were not repeated. See `retro-625-tooling-validation.json` for counts, retained failures, package hashes and limitations. The single completed-feature review is next.
 
@@ -180,4 +180,4 @@ Owner approved implementation of all three remaining tooling fixes. Work is isol
 - The implemented execution API is the sibling `check-runner.mjs` CLI, consumed directly for deterministic checks. Workflow keeps its existing dispatcher lifecycle. Published catalogs remain unchanged.
 
 - Completed-feature review follow-up confirmed R1–R3 closed with both HEADs and all 77 recorded hashes unchanged. R4 retained a crossing-overlap edge case; the final small interval-union correction passed seven focused regressions. Its failing reproductions remain recorded. This mechanical correction did not trigger another independent review or full-suite run.
-- Final portable source is `8c77aafe3bc93cf01b6576750e91bc0591613fea`; vendor integrity, rebuilt Workflow and byte equality for all four packaged helper files passed. Memory package evidence remains unchanged. All four review findings are addressed; implementation and local acceptance are complete. Publish one final PR per canonical repository, keep release publication and Bunyan adoption pending, and do not poll remote CI repeatedly.
+- Final portable source is `8c77aafe3bc93cf01b6576750e91bc0591613fea`; vendor integrity, rebuilt Workflow and byte equality for all four packaged helper files passed. Memory package evidence remains unchanged. All four review findings are addressed; implementation and local acceptance are complete. Publish one final PR per canonical repository, keep release publication and the consumer adoption pending, and do not poll remote CI repeatedly.
