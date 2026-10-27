@@ -149,15 +149,15 @@ def controls(comments, creator):
     return policy
 
 
-def history(comments, creator):
+def history(comments, creator, own=frozenset()):
     questions, rounds = {}, []
     for comment in comments:
         item = record(comment)
         if not item:
             continue
-        # Bot round records are accepted; human protocol comments need repository
-        # association or creator identity, so outside commenters cannot forge history.
-        if comment.get('user', {}).get('type') != 'Bot' and not trusted(comment, creator):
+        # Protocol records count only from the runtime's own comments (`own`) or a trusted human, so neither an
+        # outside commenter nor another bot or app can forge a question or a round.
+        if comment['id'] not in own and not trusted(comment, creator):
             continue
         item = dict(item, comment_id=comment['id'], comment_url=comment.get('html_url'))
         if item['kind'] == 'question':
@@ -494,11 +494,28 @@ class Clarification:
         pending = [qid for qid, item in latest.items() if item.get('state') == 'pending']
         if not pending:
             return []
-        prior = history(self.gh.api(f'{self.app.base}/{issue["number"]}/comments?per_page=100', pages=True),
-                        issue['user']['login'])
+        comments = self.gh.api(f'{self.app.base}/{issue["number"]}/comments?per_page=100', pages=True)
+        prior = history(comments, issue['user']['login'], self.own_comment_ids(issue['number'], comments))
         return [qid for qid in pending if not (
             (prior['questions'].get(qid) or {}).get('selection', {}).get('state') == 'selected'
             or prior['reply_candidates'].get(qid))]
+
+    def own_comment_ids(self, number, comments):
+        """The comments this runtime posted on issue `number`: the ids its publication journals and the shared
+        posted-comments log recorded, plus bot comments by the account gh is signed in as (asked only when a bot
+        record is not logged). Another bot's or app's record is never the runtime's own."""
+        import sanduq_gh
+        own = set(sanduq_gh.posted_comment_ids(self.root))
+        for journal in (self.root / '.specify/scope/clarifications').glob(f'{number}-*/journal.json'):
+            own.update((read_json(journal, {}) or {}).get('comments', {}).values())
+        unknown = [c for c in comments if record(c) and c['id'] not in own and c.get('user', {}).get('type') == 'Bot']
+        if unknown:
+            try:
+                login = ((self.gh.api('user') or {}).get('login') or '').casefold()
+            except ScopeError:
+                login = ''  # an app token cannot read /user: only the logged ids count
+            own.update(c['id'] for c in unknown if login and c.get('user', {}).get('login', '').casefold() == login)
+        return own
 
     def spec_path(self, issue):
         matches = []
@@ -551,14 +568,17 @@ class Clarification:
         path = self.spec_path(issue)
         comments = self.gh.api(f'{self.app.base}/{issue["number"]}/comments?per_page=100', pages=True)
         creator = issue['user']['login']
-        prior = history(comments, creator)
+        own = self.own_comment_ids(issue['number'], comments)
+        for comment in comments:
+            comment['trusted'] = comment['id'] in own or trusted(comment, creator)  # false: context, never an answer
+        prior = history(comments, creator, own)
         policy = controls(comments, creator)
         used = max([q['round'] for q in prior['questions'].values()] + [0] +
                    [r.get('round', 1) for r in prior['rounds'] if r['kind'] == 'round-in-session'])
         result = {'version': 1, 'issue': issue, 'creator': creator, 'spec_path': str(path.relative_to(self.root)),
                   'spec': path.read_text(encoding='utf-8-sig'), 'comments': comments, 'history': prior,
                   'policy': policy, 'next_round': used + 1, 'limit_reached': used >= policy['max_rounds'],
-                  'suggested_answers': suggested_answers(prior)}
+                  'suggested_answers': suggested_answers(prior), 'own_comment_ids': sorted(own)}
         result['snapshot_digest'] = snapshot_digest(result)
         return result
 
@@ -574,6 +594,7 @@ class Clarification:
         require(len(answers) == len(previous) and {a['question_id'] for a in answers} == set(previous),
                 'Reevaluate every prior question; none may be silently dropped.')
         comments = {c['id']: c for c in snapshot['comments']}
+        own = set(snapshot.get('own_comment_ids', []))
         unresolved = []
         for answer in answers:
             require(answer.get('disposition') in {'answered', 'superseded', 'unresolved'}, 'Unknown answer disposition.')
@@ -587,7 +608,7 @@ class Clarification:
                                 (item['id'] in previous and answer['question_id'] in item.get('follows_up', [])
                                  and previous[answer['question_id']].get('round', 0) < item.get('round', 0)))
                                 and selection(comment, item)['state'] == 'selected'
-                                and (trusted(comment, snapshot['creator']) or comment.get('user', {}).get('type') == 'Bot'))
+                                and (trusted(comment, snapshot['creator']) or comment['id'] in own))
                     return trusted(comment, snapshot['creator']) and plain_lines(comment['body'])
                 require(ids and all(i in comments and evidence(comments[i]) for i in ids),
                         'An accepted answer needs actual human comment evidence, not an AI recommendation.')
@@ -632,9 +653,23 @@ class Clarification:
         followups = {qid for q in analysis['questions'] for qid in q.get('follows_up', [])}
         if unresolved and not snapshot['limit_reached'] and not snapshot['policy']['closed']:
             require(set(unresolved) <= followups, 'Every unresolved prior question needs a precise follow-up question.')
-        # In session, the answers file is the answer evidence (checked by publish_in_session).
-        require(in_session or not analysis.get('spec_edits') or any(a['disposition'] in {'answered', 'superseded'} for a in answers) or snapshot['policy']['closed'],
-                'Do not change requirements without answer evidence or explicit creator closure.')
+        # OMAR-12: every spec edit cites the questions whose trusted answers justify it. Answered and superseded
+        # dispositions were checked above for human evidence; a creator closure vouches for the questions it waives;
+        # in session, the answers file is the evidence (checked by publish_in_session) for this round's C1Q<n>.
+        if in_session:
+            citable = {f'C1Q{i}' for i in range(1, len(analysis['questions']) + 1)}
+        else:
+            citable = {a['question_id'] for a in answers if a['disposition'] in {'answered', 'superseded'}}
+            if snapshot['policy']['closed']:
+                citable |= set(previous)
+        for index, edit in enumerate(analysis.get('spec_edits') or [], 1):
+            cited = edit.get('question_ids') if isinstance(edit, dict) else None
+            bad = sorted(set(cited) - citable) if isinstance(cited, list) and all(isinstance(q, str) for q in cited) else None
+            if not cited or bad is None or bad:
+                raise ScopeError(f'CLARIFICATION_EDIT_UNTRUSTED: spec edit {index} must cite question_ids whose answers are '
+                                 "trusted (answered or superseded with a trusted human comment, or waived by the creator's "
+                                 'closure)' + (f'; not trusted: {", ".join(bad)}' if bad else '; it cites none')
+                                 + '. Untrusted comments are context only; ask a follow-up question instead.')
         if snapshot['policy']['closed']:
             outcome = 'closed'
         elif analysis['questions'] or unresolved:
