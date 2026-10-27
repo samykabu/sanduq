@@ -140,6 +140,8 @@ The installer registers `hooks/guard.py` as a PreToolUse hook on the shell tools
   owned paths by name. `SANDUQ_ROLE=coordinator`, set in the environment that launches the host,
   turns these git rules off for the whole session, including every subagent;
 - `delegate_dispatch.py trust-reset|accept|reassign|adopt` in a worker or subagent context;
+- `delegate_dispatch.py collect --confirm-fallback` and `delegate_dispatch.py attest-native` in a worker,
+  subagent or delegated orchestrator context: both are the top-level session's own word;
 - in a managed project (`.specify/workflow.yml` present), `gh pr create|edit --body-file <f>` when the
   sibling `<f without extension>.lint.json` that `pr_publish.py` writes is missing or its
   `body_sha256` is not the hash of `<f>`;

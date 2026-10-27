@@ -1599,8 +1599,11 @@ class Run:
                     'DELEGATION_STAGE_NOT_VERIFIED: the latest delegate_dispatch attempt for stage:' +
                     stage + ' is ' + (str(stage_attempt.get('status')) if stage_attempt else 'missing') +
                     ' or was not started under this claim; collect, accept or reassign it before '
-                    'completing this stage. A legacy attempt recorded before claim_token existed has '
-                    'none and will never match; re-delegate the stage once under this workflow release')
+                    'completing this stage, or, when a native subagent of the host did the stage, record '
+                    '"delegate_dispatch.py attest-native --feature ' + self.relative + ' --id stage:' + stage +
+                    ' --claim-token <token> --requested-model <m>" from the top-level session. A legacy attempt '
+                    'recorded before claim_token existed has none and will never match; re-delegate the stage '
+                    'once under this workflow release')
             self._validated_candidate = stage_attempt.get('run_id')
         self._check_stage_rules(state, stage, receipt, token, active.get('session_id'))
         if stage in SOURCE_STAGES:
@@ -1683,6 +1686,10 @@ class Run:
             # local dispatcher-write marker existed to check against (a
             # fresh checkout or CI runner), not that anything was wrong.
             stored['delegation_ledger_trust'] = delegation_ledger_trust
+        if (stage_attempt or {}).get('kind') == 'native':
+            # Self-asserted by the top-level session: labelled so it is never read as a dispatched run.
+            from delegate_dispatch import native_attestation_fields
+            stored['native_attestation'] = native_attestation_fields(stage_attempt)
         self._stamp(state, stage, receipt, stored, tier)
         stored['completed_at'] = now()
         stored['claim_id'] = claim_id  # links this receipt to its lifecycle events

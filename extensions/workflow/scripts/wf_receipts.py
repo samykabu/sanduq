@@ -175,6 +175,12 @@ def native_run_status(root, feature, state, roots):
         active['owner'] = liveness['owner']
         active['last_activity'] = ('unknown' if liveness['last_activity_minutes'] is None
                                    else str(liveness['last_activity_minutes']) + ' min ago')
+        if active.get('delegation'):
+            # SAMY-03: a native attestation of this claim is shown as such, never as a dispatched run.
+            import delegate_dispatch
+            attempt = delegation.latest_attempt(root, feature, 'stage:' + str(active.get('stage')))
+            if (attempt or {}).get('kind') == 'native' and attempt.get('claim_token') == active.get('token'):
+                active['native_attestation'] = delegate_dispatch.native_attestation_fields(attempt)
     result = {'feature': feature, 'issue': state['issue'], 'status': state.get('status'), 'active': active,
               'next_action': state.get('next_action'), 'completed': list(state.get('receipts', {})),
               'ledger_trust': trust, 'ledger_conflicts': sorted(ledger_conflicts),

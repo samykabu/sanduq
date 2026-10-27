@@ -42,6 +42,29 @@ routes as a warning, and tasks.md marks such a task
 `refused:DELEGATION_REVIEW_ROUTE_UNSAFE`. Run reviews natively in the selected
 host. Every other route is unchanged.
 
+**Native attestation.** A stage that a native subagent of the host carried out
+(the host's own subagent, not the external driver) has no driver run, so
+nothing in the ledger backs it. The top-level session records one itself:
+`delegate_dispatch.py attest-native --feature specs/<feature> --id
+stage:<stage> --claim-token <token> --requested-model <m> [--reported-model
+<m>]`. It appends a ledger attempt of `kind: native` bound to the claim token
+(`run_id: native-<id>`, the active host as harness, the requested model, the
+reported model or `actual_model: unreported` with `model_observed: false`,
+`attested_by: top-level`, the claim's session id, `fidelity: reported`), and
+`complete` accepts it the way it accepts a successful external attempt. Its
+limits: it is self-asserted by the top-level session, no external ledger
+evidence backs it, and it is labelled `kind: native` in the ledger, in
+`status` (`active.native_attestation`) and on the receipt
+(`native_attestation`); it is never shown as a dispatched run and none of the
+delegated-run terms (trusted writer evidence, harness telemetry) apply to it.
+A terminal external attempt of the same claim (a rejected model, a failure) is
+re-routed to the attestation, so a pending fallback can no longer be confirmed.
+The guard hook and the dispatcher refuse `attest-native` from a delegated
+worker, a subagent or a delegated orchestrator exactly as they refuse
+`--confirm-fallback` (`NATIVE_ATTESTATION_FORBIDDEN`). A claim that recorded no
+route (delegation off, or a review-kind stage under the interim above) needs no
+attestation and refuses one with `NATIVE_ATTESTATION_NOT_NEEDED`.
+
 ## Turning it on, off or rerouting later
 
 Select it during init with `--delegate on`, or opt in later without
@@ -190,6 +213,11 @@ silently restore the very inference this restriction exists to prevent.
 `coordination` still routes to light in the loaded policy, whatever the
 reason.
 
+A native attestation (see Security) is accepted for any route: the route
+decides what the external driver may run, and a stage the host's own subagent
+did is recorded against the claim's route as `rule: native`. A per-work-type
+native preference is not a route key yet.
+
 `qa` (pre-1.7) split into `qa_author` (authoring and analysing QA work,
 standard) and `qa_collect` (running an existing, fixed check and reporting its
 result, light-eligible and guarded; see below); the schema accepts either the
@@ -290,7 +318,9 @@ already starting or running is refused with `DELEGATION_ALREADY_RUNNING`.
   configured fallback as the substitute (on Codex the CLI default reads "CLI
   default, model unknown: Codex does not report it"), and three exact
   commands: confirm the substitute, start with another allowed model
-  (`start --harness <h> --model <m>`), or run the work natively. The
+  (`start --harness <h> --model <m>`), or run the work natively (a stage:
+  do it in this session or a native subagent, then `attest-native`; a task:
+  `adopt`). The
   orchestrator shows the message to the user and waits. Only the user may
   confirm, in the conversation; the top-level session then runs
   `delegate_dispatch.py collect --feature specs/<feature> --run-id <id>
