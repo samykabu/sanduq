@@ -452,8 +452,14 @@ class Clarification:
     def gate(self, issue):
         status = self.app.status(issue)
         if not self.app.tracks(FEATURE):
-            # The board mode never writes Feature Specification or Need Clarifications: an open issue qualifies.
+            # The board mode never writes Feature Specification or Need Clarifications, so the clarification
+            # records say whether a published question still waits for its answer.
             require(issue.get('state') == 'open', 'CLARIFICATION_CLOSED: do not reopen a closed issue implicitly.')
+            waiting = self.unanswered(issue)
+            if waiting:
+                raise ScopeError(f'CLARIFICATION_WAITING: {", ".join(waiting)} has no answer yet; tick one option per question, '
+                                 'or add a normal comment such as C1Q1: A with optional feedback. Then rerun. No new questions '
+                                 'were posted and no state was changed.')
             return
         from workflow_policy import load
         policy = load(self.root)
@@ -470,6 +476,29 @@ class Clarification:
         if status == WAITING:
             raise ScopeError(f'CLARIFICATION_WAITING: tick one option per question, or add a normal comment such as C1Q1: A with optional feedback. Then move the issue back to {self.app.actual_status(FEATURE)} and rerun. No new questions were posted and no state was changed.')
         require(status == FEATURE, f'CLARIFICATION_STATE: only {self.app.actual_status(FEATURE)} issues can be processed; #{issue["number"]} is {self.app.actual_status(status)}.')
+
+    def unanswered(self, issue):
+        """Published question IDs with no answer: with the local transport, the `C<r>Q<n>` sections of the feature's
+        clarifications.md without a reply; otherwise the questions whose latest record is pending and that have no
+        selected box and no reply from a trusted commenter."""
+        feature, state = self.checkpoint(issue)
+        if state.get('clarification_transport') == 'local':
+            from workflow_policy import _decisions_module
+            path = self.root / feature / 'clarifications.md'
+            sections = _decisions_module().local_sections(path.read_text(encoding='utf-8-sig') if path.is_file() else '')
+            return [qid for qid, section in sections.items()
+                    if qid.startswith('C') and not (section['ticked'] or section['answers'])]
+        latest = {}
+        for item in read_json(self.root / feature / CLARIFICATIONS_FILE, {}).get('items', []) if feature else []:
+            latest[item['source_id']] = item
+        pending = [qid for qid, item in latest.items() if item.get('state') == 'pending']
+        if not pending:
+            return []
+        prior = history(self.gh.api(f'{self.app.base}/{issue["number"]}/comments?per_page=100', pages=True),
+                        issue['user']['login'])
+        return [qid for qid in pending if not (
+            (prior['questions'].get(qid) or {}).get('selection', {}).get('state') == 'selected'
+            or prior['reply_candidates'].get(qid))]
 
     def spec_path(self, issue):
         matches = []
@@ -866,7 +895,7 @@ class Clarification:
         journal['complete'] = True
         write_json(journal_path, journal)
         if automatic_resume and result['status'] == WAITING:
-            write_json(observed_path, {'waiting_digest': self.inspect(value)['snapshot_digest']})
+            write_json(observed_path, {'waiting_digest': self.inspect(value, gate=False)['snapshot_digest']})
         result = dict(result, comment_ids=journal['comments'], next_action=None)
         # Only a successfully published, fully resolved review hands off to Plan.
         # A creator waiver can close the process without resolving its uncertainty.
@@ -996,10 +1025,13 @@ class Clarification:
         issue = self.source(value)
         feature, state = self.checkpoint(issue)
         if state.get('clarification_transport') == 'local' or not self.app.tracks('Ready'):
-            # Nothing moved the board: the passed Clarify receipt (every local question answered) is the gate.
+            # Nothing moved the board: the passed Clarify receipt (every question answered) is the gate.
+            where = (('this feature records its questions and the user\'s replies in ' + feature +
+                      '/clarifications.md (local transport)') if state.get('clarification_transport') == 'local' else
+                     'project_sync.mode ' + self.app.board_mode + ' never moves the issue to Ready, so the Clarify '
+                     'receipt is the record')
             require(state.get('receipts', {}).get('clarify', {}).get('outcome') == 'passed',
-                    'CLARIFICATION_REQUIRED: planning needs a passed Clarify receipt; this feature records its '
-                    'questions and the user\'s replies in ' + feature + '/clarifications.md (local transport). '
+                    'CLARIFICATION_REQUIRED: planning needs a passed Clarify receipt; ' + where + '. '
                     'Complete the Clarify stage first.')
             return {'issue': issue['number'], 'status': self.app.actual_status(self.app.status(issue)), 'transport': 'local'}
         status = self.app.status(issue)
