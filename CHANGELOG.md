@@ -4,7 +4,7 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
-## 2026-10-27 — Workflow 1.21.0, Scope 1.12.0, Memory 2.6.0, PR 4.7.0, Project 2.7.0, Progress 1.7.0 (pending release)
+## 2026-10-27 — Workflow 1.21.0, Scope 1.12.0, Memory 2.6.0, PR 4.7.0, Project 2.7.0, Progress 1.7.0
 
 - PH-03 of the October 2026 review: runtime and instruction consistency. Every registered error explains itself and names the next command (`docs/reference/errors.md`); interrupted installs restore and `doctor` reports them; `doctor` probes the hook interpreter and refuses an unrelated history. Board sync modes `none`, `minimal`, `full` (REQ-22) and a per-feature local clarification transport (REQ-21). `claim` asks before it removes later receipts; `--finalize` before Ready claims nothing; decision answers are parsed tolerantly and a Sanduq-posted comment never counts; Scope refuses a fork origin. Native-stage attestation for stages a host subagent did (`attest-native`), and a child issue kept whole after a body edit carries its parent's approval. The guard covers PowerShell and refuses `commit -a` and `add -u`; run logs are masked and old runs pruned (agent-tools 1.8.0); `SECURITY.md`. Memory and Scope use the shared lock and JSON writer; the Progress report renders Arabic text right-to-left. Presets workflow 1.3.3, scope-gate 1.6.2, scope-brainstorm 1.5.1. Workflow 1.20.1 was folded into this train. See the PH-03 migration table in `docs/start/upgrades.md`.
 
