@@ -426,8 +426,8 @@ def warnings(inv):
             continue
         messages.append(
             'SKILL_INVENTORY_LARGE: {host} host session load is {count} skills ({count_limit} threshold), '
-            '{bytes} bytes of frontmatter descriptions ({bytes_limit} threshold) across {roots}; review with '
-            'the C4 pruning pass (owner judgement, no telemetry-based "never invoked" signal yet)'.format(
+            '{bytes} bytes of frontmatter descriptions ({bytes_limit} threshold) across {roots}; prune the home '
+            'and plugin skill folders by owner judgement (no telemetry-based "never invoked" signal yet)'.format(
                 host=host, count=combined['skill_count'], count_limit=limits['skill_count'],
                 bytes=combined['description_bytes'], bytes_limit=limits['description_bytes'],
                 roots=', '.join(inv['hosts'][host]['roots'])))

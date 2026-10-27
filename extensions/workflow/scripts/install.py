@@ -23,7 +23,7 @@ from urllib.parse import quote
 import yaml
 from packaging.version import InvalidVersion, Version
 from packaging.specifiers import SpecifierSet
-from workflow import load_policy, read, write, require, inside, registry, doctor, locked, WorkflowError, RANGES, ensure_local_excludes, package_digest, active_host, github_repository, sanduq_ci, git
+from workflow import load_policy, read, write, require, inside, registry, doctor, locked, WorkflowError, RANGES, ensure_local_excludes, package_digest, active_host, github_repository, sanduq_ci, git, now, explain
 from reconcile import reconcile
 from delegate_dispatch import maintenance_preflight
 from delegation import is_junction, is_link
@@ -220,6 +220,31 @@ def snapshot(root, directory):
 
 BACKUP_KINDS = ('installs', 'upgrades', 'hosts')
 KEEP_BACKUP_ZIPS = 3
+# Written after the snapshot and removed after success or a completed rollback; a hard kill leaves it, and doctor
+# then reports INSTALL_INTERRUPTED with the restore command (AHMED-09).
+IN_PROGRESS = '.specify/workflow/runtime/install-in-progress.json'
+
+
+def mark_in_progress(root, kind, backup):
+    write(root / IN_PROGRESS, {'kind': kind, 'backup': str(backup), 'pid': os.getpid(), 'started_at': now()})
+
+
+def clear_in_progress(root):
+    (root / IN_PROGRESS).unlink(missing_ok=True)
+
+
+def restore_backup(root, backup):
+    """`install.py --restore <backup>`: put back the managed files that folder's before.zip holds."""
+    root, backup = root.resolve(), Path(backup).resolve()
+    manifest = read(backup / 'before.json') if (backup / 'before.json').is_file() else None
+    require(isinstance(manifest, dict) and (backup / 'before.zip').is_file(),
+            'RESTORE_BACKUP_INVALID: ' + str(backup) + ' holds no before.json and before.zip pair')
+    with zipfile.ZipFile(backup / 'before.zip') as archive:  # links keep their before.json record; files their bytes
+        files = {name: entry if 'sha256' not in entry else archive.read(name) for name, entry in manifest.items()}
+    with locked(root / '.specify/workflow/runtime/dispatch.lock'), locked(root / '.specify/workflow/runtime/install.lock'):
+        restore(root, files, managed_files(root))
+        clear_in_progress(root)
+    return {'restored': True, 'backup': str(backup), 'files': len(files)}
 
 
 def backup_zips(root):
@@ -927,6 +952,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
         ensure_local_excludes(root)
         backup = root / '.specify/workflow/backups/installs' / uuid.uuid4().hex
         before = snapshot(root, backup); log = []
+        if upgrade_owner is None: mark_in_progress(root, 'install', backup)  # an upgrade owns the outer marker
         result['hook_metadata_refreshes'] = []
         try:
             if (root / '.specify/workflow/integration-backup.json').exists():
@@ -1040,12 +1066,15 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                                          'hook_metadata_refreshes':result['hook_metadata_refreshes']})
             if upgrade_owner is None:  # an upgrade prunes once its own outer transaction succeeds
                 receipt['backups'] = prune_backups(root)
+                clear_in_progress(root)
             return receipt
-        except Exception as exc:
+        except BaseException as exc:  # Ctrl-C and SystemExit restore too, then re-raise as they are (AHMED-09)
             failed = managed_files(root)
-            write(backup / 'result.json', {'ok':False,'error':str(exc),'commands':log,
+            write(backup / 'result.json', {'ok':False,'error':str(exc) or type(exc).__name__,'commands':log,
                                          'hook_metadata_refreshes':result['hook_metadata_refreshes']})
             restore(root, before, failed)
+            if upgrade_owner is None: clear_in_progress(root)
+            if not isinstance(exc, Exception): raise
             raise WorkflowError('INSTALL_ROLLED_BACK: ' + str(exc) + '; backup: ' + str(backup)) from exc
 
 
@@ -1065,8 +1094,12 @@ if __name__ == '__main__':
     aliases.add_argument('--without-aliases', dest='with_aliases', action='store_const', const=False,
                          help='Remove the short alias skills an earlier install left (Sanduq content only)')
     parser.add_argument('--upgrade-owner', type=int, help=argparse.SUPPRESS)
+    parser.add_argument('--restore', type=Path, metavar='BACKUP',
+                        help='Put back the managed files an interrupted install, upgrade or host switch backed up to this folder')
     args = parser.parse_args()
     try:
+        if args.restore:
+            print(json.dumps(restore_backup(args.root, args.restore), indent=2)); sys.exit(0)
         result = install(args.root,args.apply,args.packages,upgrade_owner=args.upgrade_owner,preserve_ci=args.preserve_ci,
                          replace_unrecognized_aliases=args.replace_unrecognized_aliases,with_optional=args.with_optional,
                          with_aliases=args.with_aliases)
@@ -1075,4 +1108,4 @@ if __name__ == '__main__':
             if result.get(key): print(result[key], file=sys.stderr)
         if (result.get('progress') or {}).get('hint'): print(result['progress']['hint'], file=sys.stderr)
     except (WorkflowError, ValueError, OSError, KeyError) as exc:
-        print(json.dumps({'ok':False,'error':str(exc)})); sys.exit(1)
+        print(json.dumps({'ok':False,'error':str(exc), **explain(str(exc))})); sys.exit(1)

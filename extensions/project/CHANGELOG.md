@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- `project_init.py` prefers the one board linked to the repository (GraphQL `repository.projectsV2`, same owner) when `--number` is not given; with none or several linked boards it lists the owner's boards as before (AHMED-36).
+
 ## [2.6.1] - 2026-10-26
 
 - License: this package is MIT; versions before this one were PolyForm Noncommercial 1.0.0. The archive now ships its LICENSE.

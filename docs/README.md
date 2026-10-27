@@ -62,6 +62,7 @@ One page per extension: purpose, lifecycle phase, hooks, dependencies, setup, an
 | --- | --- |
 | [Commands](reference/commands.md) | All 42 commands with an example each, and host syntax |
 | [Hooks](reference/hooks.md) | Every hook: manifest defaults and the managed Workflow view (generated) |
+| [Error codes](reference/errors.md) | What each Workflow error code means and the command to run next (generated) |
 | [Compatibility](reference/compatibility.md) | Hosts, platforms, live-run evidence, tested versions and Spec Kit ranges |
 | [Licenses](reference/licenses.md) | License per package |
 | [Glossary](reference/glossary.md) | Terms used in these pages |

@@ -37,6 +37,9 @@ fails_with(guide, original + '\nYou simply run it.\n', 'banned term "simply"')
 fails_with(guide, original + '\n[record](internal/workflow-pilot-review.md)\n', 'links to docs/internal')
 hooks = read_text(check_docs.HOOKS_PAGE, encoding='utf-8')
 fails_with(check_docs.HOOKS_PAGE, hooks.replace('| mandatory |', '| optional |', 1), 'hooks.md is stale')
+errors_page = read_text(check_docs.ERRORS_PAGE, encoding='utf-8')
+fails_with(check_docs.ERRORS_PAGE, errors_page.replace('| `WORKFLOW_INIT_REQUIRED` |', '| `WORKFLOW_INIT_REQUIRED` | edited |', 1),
+           'errors.md is stale')
 # Release facts: Workflow pins, extension counts, the add-all block and root CHANGELOG headings.
 deps = read_text(check_docs.DEPENDENCIES, encoding='utf-8')
 fails_with(check_docs.DEPENDENCIES, deps.replace('"pr": "', '"pr": "0.0.1-', 1), 'required.pr pins 0.0.1-')

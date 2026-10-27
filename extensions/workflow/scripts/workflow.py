@@ -60,11 +60,13 @@ from wf_core import (SCHEMA, CHECKPOINT_SCHEMA, CHECKPOINT_SCHEMAS, RANGES, BASE
                      POLICY_DIGEST_VERSION, OPERATIONAL_POLICY, delivery_digest, checkpoint_policy_digest, replace_file,
                      write, inside, portable_label, canonical_path, REPARSE_POINT, _no_link_below, GIT_READS, run_git,
                      git_ok, git, OPERATIONAL_DIRS, operation, _memo, _wrote, default_actor,
-                     require_not_delegated_context, RUNTIME_DECLARATION, ensure_local_excludes, locked)
+                     require_not_delegated_context, RUNTIME_DECLARATION, ensure_local_excludes, locked, ERRORS,
+                     explain)
 from wf_identity import (github_repository, previous_branch, normalized_remote, origin_url, root_commit_sha,
                          is_shallow_clone, repo_identity, current_identity, root_commit_still_reachable, same_remote,
                          identity_matches, legacy_history_signal, verify_checkpoint_identity, root_history_changed,
-                         require_issue_repository_binding, issue_identity, prepare_issue)
+                         require_issue_repository_binding, issue_identity, prepare_issue, require_shared_history,
+                         feature_for_issue)
 from wf_fingerprints import (sync_state_label, sync_entry, sync_projection, sync_binding,
                              normalized_text, text_fingerprints, fingerprint_files,
                              git_text_attributes, prefetch_attributes, source_fingerprints, inventory_label,
@@ -937,6 +939,7 @@ class Run:
     def start(self, issue):
         require(re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[1-9]\d*', issue), 'EXPLICIT_ISSUE_REQUIRED')
         require(same_github_repository(github_repository(self.root), issue.split('#')[0]), 'ISSUE_REPOSITORY_MISMATCH')
+        require_shared_history(self.root)
         source = read(self.feature / 'scope-source.json', {})
         require(not source or f"{source.get('repo')}#{source.get('issue')}" == issue, 'FEATURE_BINDING_MISMATCH')
         with locked(self.lock):
@@ -1765,8 +1768,9 @@ def main():
     for name in ('start', 'next', 'status', 'claim', 'complete', 'pause', 'recover', 'bind', 'migrate', 'refresh', 'amend',
                  'revalidate', 'revalidate-upstream', 'project-sync', 'sync-amend'):
         cmd = sub.add_parser(name)
-        cmd.add_argument('--feature', required=True)
+        cmd.add_argument('--feature', required=name != 'status')
         if name == 'start': cmd.add_argument('--issue', required=True)
+        if name == 'status': cmd.add_argument('--issue', help='Issue number; resolved through the checkpoint binding')
         if name in ('next', 'claim'): cmd.add_argument('--finalize', action='store_true')
         if name == 'claim': cmd.add_argument('--usage', type=Path, required=True)
         if name in ('claim', 'complete'):
@@ -1904,6 +1908,9 @@ def run_command(args):
         elif args.action == 'prepare':
             result = prepare_issue(root, args.issue)
         else:
+            if args.action == 'status' and not args.feature:
+                require(args.issue, 'STATUS_TARGET_REQUIRED: pass --feature specs/<slug> or --issue <n>')
+                args.feature = feature_for_issue(root, args.issue)
             run = Run(root, args.feature)
             if args.action == 'start': result = run.start(args.issue)
             elif args.action == 'next': result = run.next(run.load(), args.finalize)
@@ -1947,7 +1954,9 @@ def run_command(args):
         print(json.dumps(result, indent=2))
         return 1 if result.get('ok') is False else 0
     except (WorkflowError, ValueError, KeyError, yaml.YAMLError) as exc:
-        print(json.dumps({'ok': False, 'error': str(exc)}))
+        # A bare KeyError prints as the quoted key; name the condition instead (AHMED-05).
+        message = 'POLICY_KEY_MISSING: ' + str(exc.args[0] if exc.args else exc) if isinstance(exc, KeyError) else str(exc)
+        print(json.dumps({'ok': False, 'error': message, **explain(message, getattr(args, 'feature', None))}))
         return 1
 
 

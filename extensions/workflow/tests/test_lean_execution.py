@@ -128,7 +128,7 @@ class LeanExecutionTests(unittest.TestCase):
         prior *= 2
         with self.assertRaisesRegex(lean.LeanPolicyError, 'CONCRETE_DIAGNOSIS'):
             lean.admit(self.policy, prior, identity, 'implementation', deliverable, correction,
-                       {'cause': 'try harder', 'evidence': 'none', 'change': 'try again'})
+                       {'cause': '   ', 'evidence': 'none', 'change': 'try again'})  # blank, not merely short
         accepted = lean.admit(self.policy, prior, identity, 'implementation', deliverable, correction,
                              {'cause': 'Unicode escape was decoded twice', 'evidence': 'evidence/failure.json',
                               'change': 'Decode once inside parse_string and rerun fixture tests'})

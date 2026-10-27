@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Check active documentation: links, command and skill coverage, version tables, banned terms,
 release facts (Workflow's dependency pins, extension counts, the add-all install block, root
-CHANGELOG headings) and the generated lifecycle hooks reference. `--write` regenerates
-docs/reference/hooks.md."""
+CHANGELOG headings), the generated lifecycle hooks reference and the generated error registry page. `--write`
+regenerates docs/reference/hooks.md and docs/reference/errors.md."""
 import ast
+import importlib.util
 import json
 import re
 import sys
@@ -26,6 +27,8 @@ GUIDES += SAMPLES
 COMMANDS_PAGE = DOCS / 'reference/commands.md'
 LIFECYCLE_PAGE = DOCS / 'workflow/lifecycle.md'
 HOOKS_PAGE = DOCS / 'reference/hooks.md'
+ERRORS_PAGE = DOCS / 'reference/errors.md'
+ERRORS_START, ERRORS_END = '<!-- generated:errors:start -->', '<!-- generated:errors:end -->'
 INTERNAL = DOCS / 'internal'
 # Words that hide a hard step or add nothing; matched as whole words outside code.
 BANNED = ('simply', 'just', 'obviously', 'seamless', 'seamlessly', 'leverage', 'effortless')
@@ -140,6 +143,38 @@ def render_hooks():
             state = 'kept'
         out.append(f'| {phase} | {when} | {ext} | `{command}` | {state} |')
     return '\n'.join(out) + '\n'
+
+
+def error_registry():
+    """`wf_core.ERRORS` loaded from the source tree (the module needs nothing but the shared helpers)."""
+    scripts = ROOT / 'extensions/workflow/scripts'
+    sys.path.insert(0, str(ROOT / 'extensions/scripts/shared'))
+    spec = importlib.util.spec_from_file_location('wf_core', scripts / 'wf_core.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.ERRORS
+
+
+def render_errors():
+    out = ['Generated from `ERRORS` in `extensions/workflow/scripts/wf_core.py`; regenerate with',
+           '`python extensions/scripts/check_docs.py --write`. A CLI error whose code is listed here carries the same',
+           '`explain` and `next` fields in its JSON output. `<feature>` is the feature directory, `specs/<slug>`.', '',
+           '| Code | What happened and why | Next command |', '| --- | --- | --- |']
+    for code, (what, why, command) in sorted(error_registry().items()):
+        what, why, command = (text.replace('|', '\\|') for text in (what, why, command))  # a pipe splits the cell
+        out.append(f'| `{code}` | {what} {why} | `{command}` |')
+    return '\n'.join(out) + '\n'
+
+
+def generated_text(current, page, start, end, render):
+    if start not in current or end not in current:
+        raise SystemExit(f'{page.relative_to(ROOT)}: generated markers missing')
+    head, rest = current.split(start, 1)
+    return head + start + '\n' + render() + end + rest.split(end, 1)[1]
+
+
+def errors_text(current):
+    return generated_text(current, ERRORS_PAGE, ERRORS_START, ERRORS_END, render_errors)
 
 
 def hooks_text(current):
@@ -332,6 +367,9 @@ def check():
     hooks = HOOKS_PAGE.read_text(encoding='utf-8')
     if hooks_text(hooks) != hooks:
         errors.append(f'{HOOKS_PAGE.relative_to(ROOT)} is stale: run check_docs.py --write')
+    registry_page = ERRORS_PAGE.read_text(encoding='utf-8')
+    if errors_text(registry_page) != registry_page:
+        errors.append(f'{ERRORS_PAGE.relative_to(ROOT)} is stale: run check_docs.py --write')
     if errors:
         raise SystemExit('\n'.join(errors))
     print(f'Documentation OK: {len(GUIDES)} guides, {documented} of {commands} commands, '
@@ -343,4 +381,6 @@ if __name__ == '__main__':
     if '--write' in sys.argv[1:]:
         HOOKS_PAGE.write_bytes(hooks_text(HOOKS_PAGE.read_text(encoding='utf-8')).encode('utf-8'))
         print(f'Wrote {HOOKS_PAGE.relative_to(ROOT)}')
+        ERRORS_PAGE.write_bytes(errors_text(ERRORS_PAGE.read_text(encoding='utf-8')).encode('utf-8'))
+        print(f'Wrote {ERRORS_PAGE.relative_to(ROOT)}')
     check()

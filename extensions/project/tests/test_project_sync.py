@@ -448,6 +448,9 @@ elif args[:2] == ['api', 'user']: print('acme')
 elif args[:2] == ['api', 'users/acme']:
     if KIND is None: raise SystemExit('HTTP 404: Not Found')
     print(KIND)
+elif args[:2] == ['repo', 'view']: print(json.dumps({'owner': {'login': 'acme'}, 'name': 'app'}))
+elif args[:2] == ['api', 'graphql'] and 'projectsV2' in args[-1]:
+    print(json.dumps({'data': {'repository': {'projectsV2': {'nodes': LINKED}}}}))
 elif args[:2] == ['project', 'list']: print(json.dumps({'projects': [{'number': 1, 'title': 'Alpha'}, {'number': 3, 'title': 'Beta'}]}))
 elif args[:2] == ['project', 'view']: print(json.dumps({'id': 'PVT_1', 'url': 'https://github.com/orgs/acme/projects/1'}))
 elif args[:2] == ['project', 'field-list']:
@@ -486,7 +489,7 @@ class ProjectInitTests(unittest.TestCase):
     choice they cannot make, and keep every board and config guard the shell twins had. `gh` is a fake on PATH."""
 
     def init(self, *flags, scopes="'project', 'repo'", kind='User', existing=None, columns=None, managed=None,
-             dry_run=True, items=(), fail_edit=(), shell='python', hooks=HOOKS, hang=()):
+             dry_run=True, items=(), fail_edit=(), shell='python', hooks=HOOKS, hang=(), linked=()):
         """(exit code, output) of one init run; `existing` is a config.json, `managed` the `workflow.py
         project-defaults` answer of a Workflow-managed project, `shell` python or a stub (bash, pwsh)."""
         tmp = tempfile.TemporaryDirectory()
@@ -505,6 +508,7 @@ class ProjectInitTests(unittest.TestCase):
             stub.write_text('print(' + repr(json.dumps(managed)) + ')\n', encoding='utf-8')
         fake_gh(root / 'bin', 'SCOPES = ' + repr(scopes) + '\nKIND = ' + repr(kind) + '\nCOLUMNS = ' + repr(columns)
                 + '\nITEMS = ' + repr(None if items is None else list(items)) + '\nFAIL_EDIT = ' + repr(list(fail_edit))
+                + '\nLINKED = ' + repr(list(linked))
                 + '\n' + FAKE_GH)
         # The stubs run `python` from PATH: this interpreter's folder comes right after the fake gh.
         env = dict(os.environ, PATH=os.pathsep.join([str(root / 'bin'), str(Path(sys.executable).parent),
@@ -555,6 +559,18 @@ class ProjectInitTests(unittest.TestCase):
                                                          'options': [{'number': 1, 'title': 'Alpha'},
                                                                      {'number': 3, 'title': 'Beta'}]}]})
         self.assertFalse((self.root / '.specify/extensions/project/config.json').exists())
+
+    def test_the_one_board_linked_to_the_repository_needs_no_number(self):
+        beta = {'number': 3, 'title': 'Beta', 'owner': {'login': 'acme'}}
+        code, output = self.init('--json', linked=[beta])
+        self.assertEqual(code, 0, output)
+        self.assertIn('board linked to the repository: #3 Beta', output)
+        self.assertEqual(self.config(output)['projectNumber'], 3)
+        # Another owner's board, or two linked boards, fall back to the owner's list and its choice.
+        code, output = self.init('--json', linked=[{**beta, 'owner': {'login': 'other'}}])
+        self.assertEqual(code, 4, output)
+        code, output = self.init('--json', linked=[beta, {'number': 1, 'title': 'Alpha', 'owner': {'login': 'acme'}}])
+        self.assertEqual(code, 4, output)
 
     def test_an_unreadable_owner_type_is_a_missing_choice(self):
         code, output = self.init('--number', '1', kind=None)

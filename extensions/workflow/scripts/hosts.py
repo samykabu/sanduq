@@ -476,7 +476,7 @@ def status(root, package_root=None):
 def switch(root, target, preview=False, runner=None, package_root=None, replace_unrecognized_aliases=False):
     """Make ``target`` the default host without losing any host's managed skills."""
     from install import (command, delegation_preflight, install_aliases, alias_edit_errors, prune_backups, restore,
-                         review_aliases, snapshot)
+                         review_aliases, snapshot, mark_in_progress, clear_in_progress)
     from reconcile import reconcile
     runner = runner or command
     package_root = package_root or PACKAGE
@@ -547,6 +547,7 @@ def switch(root, target, preview=False, runner=None, package_root=None, replace_
         delegation_preflight(root)
         backup = root / '.specify/workflow/backups/hosts' / uuid.uuid4().hex
         before = snapshot(root, backup)
+        mark_in_progress(root, 'host', backup)
         log = []
         try:
             runner(root, ['specify', 'integration', 'use', target], log)
@@ -585,9 +586,12 @@ def switch(root, target, preview=False, runner=None, package_root=None, replace_
                       'checkpoints_to_migrate': migrations(root, digest_after, False, reason, digest_before)}
             write(backup / 'result.json', {'ok': True, 'commands': log})
             result['backups'] = prune_backups(root)
+            clear_in_progress(root)
             return result
-        except Exception as exc:
+        except BaseException as exc:  # Ctrl-C and SystemExit restore too, then re-raise as they are (AHMED-09)
             from install import managed_files
-            write(backup / 'result.json', {'ok': False, 'error': str(exc), 'commands': log})
+            write(backup / 'result.json', {'ok': False, 'error': str(exc) or type(exc).__name__, 'commands': log})
             restore(root, before, managed_files(root))
+            clear_in_progress(root)
+            if not isinstance(exc, Exception): raise
             raise WorkflowError('HOST_SWITCH_ROLLED_BACK: ' + str(exc) + '; backup: ' + str(backup)) from exc

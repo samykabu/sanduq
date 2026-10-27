@@ -1,7 +1,8 @@
 # Troubleshooting
 
 Find the symptom, then run the check. For managed features, `$speckit-workflow-doctor` and
-`$speckit-workflow-gate-explain` name the next step for most problems.
+`$speckit-workflow-gate-explain` name the next step for most problems. An error that prints a code is listed
+with its next command in [error codes](../reference/errors.md).
 
 | Symptom | Check | Fix |
 | --- | --- | --- |
@@ -14,6 +15,7 @@ Find the symptom, then run the check. For managed features, `$speckit-workflow-d
 | PNG export fails | Playwright and Chromium | Install them as in [prerequisites](prerequisites.md#playwright-and-chromium). |
 | PDF build fails | The PDF libraries and `User-Manual/requirements.lock` | Install them as in [prerequisites](prerequisites.md#mkdocs-and-pdf-libraries). Report a failed build as failed. |
 | A receipt is stale or a claim was interrupted | `$speckit-workflow-status` | Follow [recovery](../workflow/operating-guide.md#host-identity-and-interrupted-claims). Check for remote writes before you recover. |
+| An install, upgrade or host switch was interrupted (Ctrl-C, a killed terminal) | `workflow.py doctor` reports `INSTALL_INTERRUPTED` with the backup folder | Ctrl-C restores the backup itself. After a hard kill run the command doctor prints: `python .specify/extensions/workflow/scripts/install.py --restore .specify/workflow/backups/installs/<id>`, then `install.py --apply` again. |
 | An extension says Illustrate is missing | `.specify/extension-dependencies.yml` | Approve the install when asked, set `update_policy: auto`, or run `specify extension add illustrate`. |
 
 ## Limits
