@@ -9,7 +9,7 @@ Reference editions in HTML and PDF.
 | Lifecycle phase | After `tasks` and after `implement`; at application release |
 | Hooks | Two optional hooks ([hooks](../reference/hooks.md)) |
 | Commands | `init`, `analyze`, `update`, `release` ([reference](../reference/commands.md#user-manual)) |
-| Requires | Illustrate 2.x, enforced by `deps.py ensure` |
+| Requires | Illustrate 2.x, enforced by `deps.py ensure`; Python 3.11 or later |
 | Standalone | Yes |
 | License | MIT |
 

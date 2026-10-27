@@ -29,6 +29,7 @@ requires:
       required: false
     - name: python
       required: true
+      version: ">=3.11"
 
 provides:
   commands:

@@ -246,6 +246,13 @@ class CiWorkflowFile(unittest.TestCase):
             for body in steps:
                 self.assertIn("cache: pip", body, workflow)
 
+    def test_linux_regression_runs_on_the_declared_python_floor(self):
+        """SAMY-11: every extension.yml declares python >=3.11 and the Linux regression legs run on it."""
+        self.assertIn("python-version: ${{ matrix.os == 'windows-latest' && '3.13' || '3.11' }}", self.job("regression"))
+        for manifest in sorted((ci_matrix.ROOT / "extensions").glob("*/extension.yml")):
+            self.assertRegex(manifest.read_text(encoding="utf-8"), r"- name: python\n(?:.*\n)?\s+version: ['\"]>=3\.11['\"]",
+                             manifest.parent.name)
+
     def test_every_smoke_runs_with_its_arguments_on_linux_and_windows(self):
         """FAST: the Linux smokes moved into one job per host; each still runs, with the same arguments."""
         install = self.job("installation")

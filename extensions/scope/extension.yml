@@ -20,7 +20,7 @@ requires:
     - name: gh
       required: true
     - name: python
-      version: ">=3.10"
+      version: ">=3.11"
       required: true
 provides:
   commands:

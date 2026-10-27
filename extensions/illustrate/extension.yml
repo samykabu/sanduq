@@ -15,6 +15,9 @@ requires:
   tools:
     - name: git
       required: false
+    - name: python
+      required: false   # the export and verify scripts
+      version: ">=3.11"
 
 provides:
   commands:

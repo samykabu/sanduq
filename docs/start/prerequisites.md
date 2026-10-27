@@ -9,7 +9,7 @@ Install only the tools your [adoption level](../reference/glossary.md#adoption-l
 | Tool | Needed by | Tested |
 | --- | --- | --- |
 | Spec Kit (`specify` CLI) | Every extension | 1.1.3, commit `0282d03` |
-| Python | Every extension; Illustrate export; User Manual builds; Workflow's guard hook (`python3`, or `python` on Windows, on `PATH`). Memory and Progress need 3.11 or later | 3.13 in CI |
+| Python 3.11 or later | Every extension; Illustrate export; User Manual builds; Workflow's guard hook (`python3`, or `python` on Windows, on `PATH`) | 3.13 in CI; 3.11 for the Linux regression suites |
 | Node.js and npm | `npx skills`; Delegate Task (18 or later); Illustrate's hand-drawn generator | `skills` 1.7.2 in CI; Node unverified |
 | Git | Workflow, Memory, Scope (required); others (optional) | Unverified |
 | GitHub CLI (`gh`) with Project scopes | Workflow, Scope (required); Project, PR (optional) | Unverified |
@@ -49,15 +49,9 @@ Each package declares its own Spec Kit range. This is information, not a problem
 
 ## Python
 
-| Package | Python |
-| --- | --- |
-| Workflow, Scope | 3.10 or later |
-| Memory, Progress | 3.11 or later |
-| Assure, PR, Project, User Manual | Required, no minimum declared |
-| Illustrate | Not declared (its export scripts use Python) |
-
-Use Python 3.11 or later for the managed path. Workflow itself runs on 3.10, but Memory and Progress,
-which a managed project usually adds, need 3.11. CI tests 3.13.
+Every package declares Python 3.11 or later (Illustrate as optional, for its export scripts). Memory
+and Progress read TOML with the standard library, which 3.11 added. CI runs the Linux regression
+suites on 3.11 and everything else, including the Windows suites, on 3.13.
 
 <details>
 <summary>Install Python</summary>
