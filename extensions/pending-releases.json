@@ -10,6 +10,6 @@
     "project": "2.7.1",
     "user-manual": "1.8.3"
   },
-  "status": "implementation-in-progress",
-  "note": "PH-04 train of the October 2026 review (trust boundaries): Workflow 1.22.0, Scope 1.13.0, Assure 2.7.0, Memory 2.6.1, Illustrate 2.7.3, PR 4.7.1, Project 2.7.1 and User Manual 1.8.3 ship the base-graded evidence gate, the nonce and lineage checks for grading commands, the foreign-manifest and inventory checks, trusted spec edits, fenced requirement text and the Python 3.11 floor."
+  "status": "ready",
+  "note": "PH-04 train of the October 2026 review: Workflow 1.22.0, Scope 1.13.0, Assure 2.7.0, Memory 2.6.1, Illustrate 2.7.3, PR 4.7.1, Project 2.7.1, User Manual 1.8.3. Base-graded evidence gate, nonce and lineage for grading commands, companion inventory checks, trusted spec edits, Python 3.11 floor, release trigger. Every suite passed on the merged tree locally and every CI check passed on PR #134 (merged as 83407ae). Release remains gated by successful CI on the exact main commit."
 }
