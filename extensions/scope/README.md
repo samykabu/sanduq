@@ -68,6 +68,14 @@ Managed default artifacts are `.specify/scope/github/` and
 legacy paths. All paths must stay inside the project. Read `references/analysis-contract.md`
 for the effort rubric and approval details.
 
+A revision of an already approved decomposition runs unattended: `publish` carries the approval
+forward and records the difference against the approved baseline (`.specify/scope/approvals/<issue>-baseline.json`).
+A published child whose body changed has no baseline of its own; when it is re-scoped as a single
+leaf at its receipt's score, and its receipt still carries the parent's approval that the parent's
+receipt lists it under, the parent's approval is carried forward instead (the owner's statement
+comes from the parent's local approval record) and becomes the child's baseline. A different score,
+a split, a missing retained approval or no local record still stops with `APPROVAL_REQUIRED`.
+
 ## Readiness
 
 An issue is ready when each of its prerequisites is In review or Done (status aliases from

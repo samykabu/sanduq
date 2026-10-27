@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- `publish` on a published child whose body changed, re-scoped as a single leaf at its receipt's score, carries the parent's retained approval forward as a revision (`carried_forward`, `revision_of` the parent approval) and writes it as the child's baseline, instead of stopping with `APPROVAL_REQUIRED` for a "keep this child whole" decision the owner already made. Any other revision without a baseline still needs approval.
+
 ## [1.11.1] - 2026-10-27
 
 - The bundled `scope-gate` preset (1.6.1) states that inside a claim the claim's `reference_text` wins over the composed upstream text and that upstream hook prompts are skipped. No script change; Workflow 1.20.0 requires this version.

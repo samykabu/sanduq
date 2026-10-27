@@ -697,6 +697,30 @@ class Scope:
                    {'version': 1, 'approval': approval, 'analysis': analysis})
         return approval
 
+    def revision_baseline(self, snapshot, analysis, nodes):
+        """The approved baseline a revision carries forward: this issue's own, or, for a published child
+        kept whole as one leaf at its receipt's score, the parent's approval its receipt retains (the
+        same check the fresh read gate makes). The owner's statement comes from the parent's local
+        approval record; without it nothing is carried."""
+        baseline = read_json(self.baseline_path(analysis['issue']), {})
+        if baseline.get('approval'):
+            return baseline
+        issue = snapshot['issue']
+        receipt = metadata(issue.get('body'))
+        retained = receipt.get('approval') or {}
+        if not (retained.get('analysis_sha256') and len(nodes) == 1 and analysis['tree']['score'] == receipt.get('score')):
+            return {}
+        parent = self.native_parent(issue['number'])
+        if not isinstance(parent, dict) or not parent.get('number'):
+            return {}
+        parent_receipt = metadata(self.issue(parent['number']).get('body'))
+        if issue['number'] not in parent_receipt.get('children', []) or parent_receipt.get('approval') != retained:
+            return {}
+        local = read_json(self.root / '.specify/scope/approvals' / f'{parent["number"]}-{retained["analysis_sha256"]}.json', {})
+        return {'version': 1, 'approval': dict(retained, repo=self.repo, issue=analysis['issue'],
+                                               fingerprint=receipt.get('fingerprint'), dependencies=receipt.get('dependencies'),
+                                               approval_text=local.get('approval_text'))}
+
     def receipt_matches(self, approval, snapshot, analysis, nodes):
         """True when a stored receipt describes exactly this proposal, source and prerequisites."""
         return (approval.get('version') == 1 and
@@ -734,7 +758,7 @@ class Scope:
 
         # Anything else is a revision: the decomposition, the source fingerprint or the
         # prerequisite set has moved since approval. All of it carries forward unattended.
-        baseline = read_json(self.baseline_path(analysis['issue']), {})
+        baseline = self.revision_baseline(snapshot, analysis, nodes)
         base_approval = baseline.get('approval') or {}
         require(baseline.get('version') == 1 and base_approval.get('repo') == self.repo and
                 base_approval.get('issue') == analysis['issue'] and base_approval.get('approved_by') and
@@ -761,6 +785,9 @@ class Scope:
                    'difference': difference,
                    'recorded_at': datetime.now(timezone.utc).isoformat()}
         write_json(self.approval_path(analysis), carried)
+        if not self.baseline_path(analysis['issue']).exists():
+            # A child kept whole now has a baseline of its own; its next revision diffs against this leaf.
+            write_json(self.baseline_path(analysis['issue']), {'version': 1, 'approval': carried, 'analysis': analysis})
         return carried
 
     def set_labels(self, issue, score, parent=False, current=None):
@@ -847,9 +874,9 @@ class Scope:
         if not apply:
             # Report honestly whether this run still needs approval. A revision of an
             # already-approved decomposition does not, and previews its recorded difference.
-            baseline = read_json(self.baseline_path(analysis['issue']), {})
             approved = self.receipt_matches(read_json(self.approval_path(analysis), {}), snapshot, analysis, nodes)
-            is_revision = not approved and (baseline.get('approval') or {}).get('analysis_sha256') is not None
+            baseline = {} if approved else self.revision_baseline(snapshot, analysis, nodes)
+            is_revision = (baseline.get('approval') or {}).get('analysis_sha256') is not None
             preview = {'dry_run': True, 'issue': root_issue['number'], 'nodes': len(nodes),
                        'child_count': len(nodes) - 1, 'leaves': sum(not n.get('children') for n in nodes.values()),
                        'operation': operation, 'approval_required': not approved and not is_revision,
