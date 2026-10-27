@@ -19,12 +19,64 @@ from execution_tools import sha256_file
 from workflow import WorkflowError, Run, digest, inside, load_policy, locked, read, require, write
 
 MARKER = re.compile(r'\A<!-- sanduq-decision:question (\{[^\n]*\}) -->\n')
-ANSWER = re.compile(r'^\s*(SD[1-9]\d*):\s*([A-Z])\s*$', re.I | re.M)
-ANSWER_LIST = re.compile(r'^\s*(SD[1-9]\d*):\s*([A-Z](?:\s*,\s*[A-Z])*)\s*$', re.I | re.M)
+# AHMED-15: `SD1: B.`, `SD1 - B`, `SD1 = B` and `SD1: B - keep drafts` all count; the letters must still stand
+# alone before any punctuation or ` - feedback` tail, so prose never becomes a choice.
+LETTERS = r'([A-Z](?:\s*,\s*[A-Z])*)\s*[.!;]?(?:\s+[-–—]\s+.*)?'
+ANSWER_LIST = re.compile(r'^\s*(SD[1-9]\d*)\s*[:\-=]\s*' + LETTERS + r'\s*$', re.I | re.M)
+MENTION = re.compile(r'(?<![A-Za-z0-9])(SD[1-9]\d*)(?![A-Za-z0-9])', re.I)
 CHOICES = re.compile(r'(?<=<!-- sanduq-decision:choices:start -->\n)(.*?)(?=\n<!-- sanduq-decision:choices:end -->)', re.S)
 TICKED = re.compile(r'^- \[[xX]\] ')
 LEGACY_TITLE = re.compile(r'\A\*\*(SD[1-9]\d*): (.+)\*\*\n')
 MODES = ('single', 'multiple')
+# REQ-21, transport `local`: questions and the user's replies live in this file instead of issue comments.
+LOCAL_FILE = 'clarifications.md'
+LOCAL_HEADER = ('# Clarifications\n\nQuestions the agent asked in the conversation (clarification transport: local). '
+                'Answer a question by ticking one box (several when it says so), or by a line `<ID>: <letter>` '
+                '(`<ID>: A, C` for several; `<ID>: <your answer>` when the question has no options). The agent '
+                'records your reply as you gave it and never ticks a box or chooses for you.\n')
+LOCAL_HEADING = re.compile(r'^## (SD[1-9]\d*|C[1-9]\d*Q[1-9]\d*): (.+?)\s*$', re.I)
+LOCAL_OPTION = re.compile(r'^- \[([ xX])\] \*\*([A-Z])\.\*\* ')
+LOCAL_REPLY = re.compile(r'^\s*(SD[1-9]\d*|C[1-9]\d*Q[1-9]\d*)\s*[:\-=]\s*(.+?)\s*$', re.I)
+LOCAL_MENTION = re.compile(r'(?<![A-Za-z0-9])(SD[1-9]\d*|C[1-9]\d*Q[1-9]\d*)(?![A-Za-z0-9])', re.I)
+
+
+def local_sections(text):
+    """`{ID: {title, options, ticked, answers, unparsed}}` of a clarifications.md: one `## <ID>: <question>` section per
+    question with its checkbox options; an answer line (`<ID>: B`, `<ID>: A, C`, free text for a question without
+    options) anywhere in the file; every other line naming a known ID is reported unparsed."""
+    sections, current = {}, None
+    for line in text.splitlines():
+        heading = LOCAL_HEADING.match(line)
+        if heading:
+            current = sections.setdefault(heading[1].upper(), {'title': heading[2], 'options': [], 'ticked': [],
+                                                               'answers': [], 'unparsed': []})
+        elif current is not None and LOCAL_OPTION.match(line):
+            option = LOCAL_OPTION.match(line)
+            current['options'].append(option[2].upper())
+            if option[1] != ' ':
+                current['ticked'].append(option[2].upper())
+    for line in text.splitlines():
+        if LOCAL_HEADING.match(line) or LOCAL_OPTION.match(line):
+            continue
+        reply = LOCAL_REPLY.match(line)
+        if reply and reply[1].upper() in sections:
+            section = sections[reply[1].upper()]
+            letters = re.fullmatch(LETTERS, reply[2], re.I)
+            if letters:
+                section['answers'].append((sorted(set(re.findall(r'[A-Z]', letters[1].upper()))), line.strip()))
+            elif not section['options']:
+                section['answers'].append(([], line.strip()))
+            else:
+                section['unparsed'].append(line.strip())
+            continue
+        for qid in {found[1].upper() for found in LOCAL_MENTION.finditer(line)} & set(sections):
+            sections[qid]['unparsed'].append(line.strip())
+    return sections
+
+
+def local_transport(state):
+    """Whether this feature's checkpoint (frozen at Scope start) answers clarifications in LOCAL_FILE."""
+    return (state or {}).get('clarification_transport') == 'local'
 
 
 def scope_transport():
@@ -162,7 +214,8 @@ def resolve(answers, mode='single'):
         return 'pending', []
     groups = {}
     for reply in answers:
-        key = 'checkbox' if reply.get('source') == 'checkbox' else reply.get('comment_id')
+        # One group per comment, per tick set, or per local answer line (`quote`).
+        key = 'checkbox' if reply.get('source') == 'checkbox' else reply.get('comment_id') or reply.get('quote')
         groups.setdefault(key, set()).add(reply.get('option'))
     if mode == 'single':
         chosen = set().union(*groups.values())
@@ -171,7 +224,9 @@ def resolve(answers, mode='single'):
     return ('conflict', []) if len(distinct) > 1 else ('answered', sorted(next(iter(distinct))))
 
 
-def answers(comments, issue, policy):
+def answers(comments, issue, policy, agent_ids=()):
+    """Questions with their recorded answers. `agent_ids` are comments a Sanduq process posted (SEC-05): never an
+    answer. Each question also lists `unparsed`: authorized comments that name it without a counted answer."""
     questions = {}
     for comment in comments:
         if not authorized(comment, issue, policy):
@@ -181,7 +236,7 @@ def answers(comments, issue, policy):
             continue
         require(record['id'] not in questions, 'DECISION_QUESTION_DUPLICATE: ' + record['id'])
         questions[record['id']] = {**record, 'question_comment_id': comment['id'],
-                                   'question_url': comment.get('html_url'), 'responses': [],
+                                   'question_url': comment.get('html_url'), 'responses': [], 'unparsed': [],
                                    'mode': record.get('mode', 'single')}
         if record.get('choice_format') == 1:
             # GitHub does not say who ticked a box, so this evidence names the question
@@ -201,18 +256,32 @@ def answers(comments, issue, policy):
                 fenced = not fenced
             elif not fenced and not line.lstrip().startswith('>'):
                 body.append(line)
-        for match in ANSWER_LIST.finditer('\n'.join(body)):
+        text = '\n'.join(body)
+        agent = comment['id'] in agent_ids
+        parsed, skipped = set(), {}
+        for match in ([] if agent else ANSWER_LIST.finditer(text)):
             qid = match[1].upper()
             if qid not in questions:
                 continue
+            # GitHub comment ids grow with time: a lower id than the question's was posted before it.
+            if comment['id'] < questions[qid]['question_comment_id']:
+                skipped[qid] = 'posted before the question'
+                continue
             letters = sorted(set(re.findall(r'[A-Z]', match[2].upper())))
             if questions[qid]['mode'] == 'single' and len(letters) > 1:
-                continue  # a list of letters only answers a multiple-selection question
+                skipped[qid] = 'several letters for a single-choice question'
+                continue
             for option in letters:
                 require(ord(option) - 65 < len(questions[qid]['options']), 'DECISION_OPTION_INVALID: ' + qid)
                 questions[qid]['responses'].append({'option': option, 'comment_id': comment['id'],
                      'updated_at': comment.get('updated_at'), 'author': comment['user']['login'],
                      'body_digest': digest(comment['body']), 'url': comment.get('html_url')})
+            parsed.add(qid)
+        for qid in sorted({found[1].upper() for found in MENTION.finditer(text)} & set(questions) - parsed):
+            questions[qid]['unparsed'].append({
+                'comment_id': comment['id'], 'url': comment.get('html_url'), 'author': comment['user']['login'],
+                'reason': 'posted by a Sanduq process, not a reviewer' if agent else skipped.get(
+                    qid, 'not understood; reply `' + qid + ': A` on its own line or tick the box')})
     result = []
     for qid, question in questions.items():
         responses = question.pop('responses')
@@ -266,19 +335,56 @@ def bound_state(run, previous=None, claim_token=None, session_id=None):
     return state
 
 
+def local_answers(path, ledger, label):
+    """The ledger's questions with the answers read from LOCAL_FILE. Self-attested: the agent transcribed the user's
+    replies, so each answer keeps the line it came from as `quote` and no author."""
+    sections = local_sections(path.read_text(encoding='utf-8-sig') if path.is_file() else '')
+    result = []
+    for item in ledger.get('decisions', []):
+        qid, mode = item['id'], item.get('mode', 'single')
+        found = sections.get(qid, {'ticked': [], 'answers': [], 'unparsed': []})
+        replies = [(found['ticked'], 'ticked: ' + ', '.join(found['ticked']))] if found['ticked'] else []
+        replies += found['answers']
+        responses, unparsed = [], list(found['unparsed'])
+        for letters, quote in replies:
+            if not letters or mode == 'single' and len(letters) > 1:
+                unparsed.append(quote)
+                continue
+            for option in letters:
+                require(ord(option) - 65 < len(item['options']), 'DECISION_OPTION_INVALID: ' + qid)
+                responses.append({'option': option, 'source': 'local', 'comment_id': None, 'author': None,
+                                  'quote': quote, 'body_digest': digest(['local', qid, quote]),
+                                  'url': label + '#' + qid.lower()})
+        status, selected = resolve(responses, mode)
+        base = {key: value for key, value in item.items()
+                if key not in ('status', 'option', 'selected', 'answers', 'answer_digest', 'unparsed', 'application')}
+        result.append({**base, 'status': status, 'selected': selected,
+                       'option': selected[0] if mode == 'single' and selected else None, 'answers': responses,
+                       'unparsed': [{'comment_id': None, 'url': label + '#' + qid.lower(), 'author': None,
+                                     'quote': quote, 'reason': 'not understood; write `' + qid + ': A` on its own line'}
+                                    for quote in unparsed]})
+    return result
+
+
 def reconcile(root, feature, gh=None, *, publish_field=False, claim_token=None, session_id=None):
     run = Run(root, feature)
     previous = read(run.feature / 'workflow/decisions.json', {})
     state = bound_state(run, previous, claim_token, session_id)
-    repo, number = state['issue'].split('#')
-    gh = gh or GitHub()
-    issue = gh.api(f'repos/{repo}/issues/{number}')
-    require(issue.get('number') == int(number), 'DECISION_ISSUE_MISMATCH')
-    comments = gh.api(f'repos/{repo}/issues/{number}/comments?per_page=100', pages=True)
-    current = answers(comments, issue, run.policy)
-    path = run.feature / 'workflow/decisions.json'
     require(isinstance(previous, dict) and isinstance(previous.get('decisions', []), list),
             'DECISION_LEDGER_INVALID')
+    local = local_transport(state)
+    if local:
+        # REQ-21: the ledger is the only record; nothing is read from or written to GitHub.
+        comments, publish_field = [], False
+        current = local_answers(run.feature / LOCAL_FILE, previous, feature + '/' + LOCAL_FILE)
+    else:
+        repo, number = state['issue'].split('#')
+        gh = gh or GitHub()
+        issue = gh.api(f'repos/{repo}/issues/{number}')
+        require(issue.get('number') == int(number), 'DECISION_ISSUE_MISMATCH')
+        comments = gh.api(f'repos/{repo}/issues/{number}/comments?per_page=100', pages=True)
+        current = answers(comments, issue, run.policy, sanduq_gh.posted_comment_ids(root))
+    path = run.feature / 'workflow/decisions.json'
     prior = {item['id']: item for item in previous.get('decisions', [])}
     for item in current:
         old = prior.get(item['id'], {})
@@ -312,6 +418,8 @@ def reconcile(root, feature, gh=None, *, publish_field=False, claim_token=None, 
         item['answer_digest'] = answer_hash
     require(not (set(prior) - {item['id'] for item in current}), 'DECISION_QUESTION_REMOVED')
     ledger = {'version': 1, 'feature': feature, 'issue': state['issue'], 'decisions': current}
+    if local:
+        ledger['transport'] = 'local'
     if previous.get('lifecycle'):
         ledger['lifecycle'] = previous['lifecycle']
     if ledger != previous:
@@ -361,17 +469,31 @@ def _ask(root, feature, question, options, gh=None, mode='single', recommended=N
     marker = {'version': 1, 'id': qid, 'options': options, 'body_digest': digest(body),
               'request_digest': request_digest, 'choice_format': 1, 'mode': mode,
               'recommended': recommended}
-    repo, issue = ledger['issue'].split('#')
-    gh = gh or GitHub()
-    posted = gh.api(f'repos/{repo}/issues/{issue}/comments', 'POST',
-                    {'body': '<!-- sanduq-decision:question ' + json.dumps(marker, sort_keys=True) + ' -->\n' + body})
-    require(posted.get('id'), 'DECISION_POST_NOT_CONFIRMED')
+    if ledger.get('transport') == 'local':
+        # The question goes to the feature's clarifications.md; the agent asks the user in the conversation.
+        path = Path(root) / feature / LOCAL_FILE
+        text = path.read_text(encoding='utf-8-sig') if path.is_file() else LOCAL_HEADER
+        lines = [f'- [ ] **{letter(i)}.** {option}' + (' **(Recommended)**' if i == recommended else '')
+                 for i, option in enumerate(options)]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text.rstrip('\n') + f'\n\n## {qid}: {question.strip()}\n\n' + '\n'.join(lines) + '\n',
+                        encoding='utf-8')
+        posted = {'id': None, 'html_url': feature + '/' + LOCAL_FILE + '#' + qid.lower()}
+    else:
+        repo, issue = ledger['issue'].split('#')
+        gh = gh or GitHub()
+        posted = gh.api(f'repos/{repo}/issues/{issue}/comments', 'POST',
+                        {'body': '<!-- sanduq-decision:question ' + json.dumps(marker, sort_keys=True) + ' -->\n' + body})
+        require(posted.get('id'), 'DECISION_POST_NOT_CONFIRMED')
     ledger['decisions'].append({**marker, 'question_comment_id': posted['id'],
                                 'question_url': posted.get('html_url'), 'status': 'pending',
                                 'option': None, 'selected': [], 'answers': [],
-                                'answer_digest': digest([])})
+                                'answer_digest': digest([]), 'unparsed': []})
     write(Path(root) / feature / 'workflow/decisions.json', ledger)
-    return {'id': qid, 'url': posted.get('html_url'), 'status': 'pending'}
+    result = {'id': qid, 'url': posted.get('html_url'), 'status': 'pending'}
+    if ledger.get('transport') == 'local':
+        result['transport'] = 'local'
+    return result
 
 
 def upgrade_questions(root, feature, gh=None):
@@ -382,7 +504,9 @@ def upgrade_questions(root, feature, gh=None):
 
 
 def _upgrade_questions(root, feature, gh=None):
-    reconcile(root, feature, gh)  # validate trusted immutable evidence before any PATCH
+    ledger = reconcile(root, feature, gh)  # validate trusted immutable evidence before any PATCH
+    require(ledger.get('transport') != 'local', 'DECISION_TRANSPORT_LOCAL: ' + feature + ' answers decisions in '
+            + feature + '/' + LOCAL_FILE + ', which is already selectable; nothing to upgrade on GitHub')
     run = Run(root, feature)
     state = bound_state(run, read(run.feature / 'workflow/decisions.json', {}))
     repo, number = state['issue'].split('#')

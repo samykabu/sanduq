@@ -20,7 +20,9 @@ The claim's `side_effects` lists what this stage may edit (spec.md, project-sync
 checklists).
 
 The skill's managed reference carries the in-session first round, the per-round question cap
-and diagrams.
+and diagrams. With `clarification_transport: local` on the claim, its `references/local.md`
+applies instead: ask in the conversation, record the user's replies in
+`specs/<f>/clarifications.md`, list that file in the receipt inputs and post nothing to GitHub.
 
 Return to the dispatcher; never call Plan from here. With SuperSpec Brainstorm under
 `required-only` checkpoints, also follow [superspec-checkpoints.md](superspec-checkpoints.md).

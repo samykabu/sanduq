@@ -29,7 +29,8 @@ DIMENSIONS = {'lite': [1, 1, 0, 0, 0], 'standard': [2, 2, 1, 1, 0], 'full': [3, 
 
 def drive(tier, out, defect=None):
     """Run one feature to PR at `tier` and write what happened to `out` (JSON). `defect` 'scope-1.9' makes
-    bind write scope-source.json without `dependencies`, as every Scope before 1.10.0 did."""
+    bind write scope-source.json without `dependencies`, as every Scope before 1.10.0 did; 'local' runs the
+    feature with `clarification.transport: local` (REQ-21): the Clarify receipt lists specs/<f>/clarifications.md."""
     sys.path.insert(0, str(HARNESS))
     import benchmark_front_half as bench
     sys.path.insert(0, str(REPO / 'extensions/scope/tests'))
@@ -40,7 +41,13 @@ def drive(tier, out, defect=None):
         def receipt(self, stage, merged=()):
             if stage == 'specify' and not (self.root / bench.FEATURE / 'scope-source.json').exists():
                 self.scope_bind()
-            return super().receipt(stage, merged)
+            receipt = super().receipt(stage, merged)
+            if stage == 'clarify' and defect == 'local':
+                label = bench.FEATURE + '/clarifications.md'
+                (self.root / label).write_text('# Clarifications\n\n## C1Q1: Keep drafts?\n\n- [ ] **A.** Yes\n'
+                                               '- [ ] **B.** No\n\nC1Q1: B.\n', encoding='utf-8')
+                receipt['inputs'].append(label)
+            return receipt
 
         def scope_bind(self):
             """Scope publishes #10 with the tier's score, then its real bind writes scope-source.json."""
@@ -49,7 +56,7 @@ def drive(tier, out, defect=None):
             if not spec.exists():
                 spec.write_text('# Fixture spec.md', encoding='utf-8')
             self.w.write(self.root / '.specify/feature.json', {'feature_directory': bench.FEATURE})
-            gh = scope_fixture.FakeGitHub()
+            gh = self.scope_gh = scope_fixture.FakeGitHub()
             gh.add(10)
             app = sm.Scope(self.root, gh)
             snapshot = app.inspect('10')
@@ -61,11 +68,12 @@ def drive(tier, out, defect=None):
             app.approve(snapshot, analysis, 0, 'test owner', 'I approve this exact proposal.')
             app.publish(snapshot, analysis, True)
             app.bind('10', apply=True)
+            self.writes_at_bind = len(gh.writes)
             if defect == 'scope-1.9':
                 source = self.root / bench.FEATURE / 'scope-source.json'
                 self.w.write(source, {k: v for k, v in self.w.read(source).items() if k != 'dependencies'})
 
-    result = {'tier': tier, 'error': None}
+    result = {'tier': tier, 'error': None, 'gh_calls': 0}
     real_run = subprocess.run
     with tempfile.TemporaryDirectory() as tmp:
         consumer = Path(tmp).resolve() / 'app'
@@ -74,6 +82,18 @@ def drive(tier, out, defect=None):
         try:
             lifecycle = Lifecycle(REPO, consumer, tier, 4)
             lifecycle.recovery_error = None
+            if defect == 'local':
+                policy_path = consumer / '.specify/workflow.yml'
+                policy = bench.yaml.safe_load(policy_path.read_text(encoding='utf-8'))
+                policy['clarification']['transport'] = 'local'
+                policy_path.write_text(bench.yaml.safe_dump(policy), encoding='utf-8')
+                counted = subprocess.run  # the harness's git counter; every `gh` call is a GitHub write or read
+
+                def counting(cmd, *args, **kwargs):
+                    if isinstance(cmd, (list, tuple)) and cmd and Path(str(cmd[0])).stem == 'gh':
+                        result['gh_calls'] += 1
+                    return counted(cmd, *args, **kwargs)
+                subprocess.run = counting
             lifecycle.run()
         except Exception as exc:  # recorded for the assertions, never swallowed silently
             result['error'] = f'{type(exc).__name__}: {exc}'
@@ -85,6 +105,8 @@ def drive(tier, out, defect=None):
             result['commands'] = [{k: c.get(k) for k in ('phase', 'action', 'stage', 'exit')} for c in lifecycle.commands]
             result['state'] = lifecycle.w.read(feature / 'workflow/checkpoint.json', {})
             result['scope_source'] = lifecycle.w.read(feature / 'scope-source.json', {})
+            if hasattr(lifecycle, 'scope_gh'):
+                result['scope_writes_after_bind'] = lifecycle.scope_gh.writes[lifecycle.writes_at_bind:]
     Path(out).write_text(json.dumps(result, indent=1, default=str), encoding='utf-8')
 
 
@@ -118,6 +140,7 @@ class LifecycleToPrTests(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         runs = {tier: start(tier, cls.tmp.name) for tier in FIRST_PASS}
         runs['defect'] = start('lite', cls.tmp.name, 'scope-1.9')
+        runs['local'] = start('lite', cls.tmp.name, 'local')
         cls.results, cls.logs = {}, {}
         for key, (out, proc) in runs.items():  # in parallel: each is about half a minute
             cls.logs[key] = proc.communicate(timeout=900)[0]
@@ -170,6 +193,19 @@ class LifecycleToPrTests(unittest.TestCase):
                 source = self.result(tier)['scope_source']
                 self.assertEqual(('acme/app', 10, []), (source['repo'], source['issue'], source['dependencies']))
                 self.assertEqual(self.result(tier)['state']['profile']['score'], source['score'])
+
+    def test_a_local_transport_feature_reaches_pr_without_any_github_call(self):
+        """REQ-21: the lite lifecycle with `clarification.transport: local`; nothing is posted or synced."""
+        result = self.result('local')
+        self.assertIsNone(result['error'], self.logs['local'][-2000:])
+        self.assertEqual([c['stage'] for c in result['claimed']][:3], ['scope', 'specify', 'clarify'])
+        self.assertEqual((result['gh_calls'], result['scope_writes_after_bind']), (0, []))
+        state = result['state']
+        self.assertEqual(state['clarification_transport'], 'local')
+        self.assertEqual(set(FIRST_PASS['lite'] + FINISH['lite']), set(state['receipts']))
+        clarify = state['receipts']['clarify']
+        self.assertEqual(clarify['self_attested'], {'answers': 'local', 'file': 'specs/001-example/clarifications.md'})
+        self.assertIn('specs/001-example/clarifications.md', clarify['fingerprints'])
 
     def test_the_known_lean_pr_defect_fails_the_lifecycle_at_pr(self):
         """Workflow 1.10.0 to 1.16.0 with the Scope of the time: the lean PR stage was refused."""

@@ -122,6 +122,22 @@ class Calls(Base):
         self.assertEqual(fake.calls[1][0][-4:], ['--method', 'PATCH', '--input', '-'])
         self.assertEqual(json.loads(fake.calls[1][1]['input']), {'body': 'x'})
 
+    def test_a_posted_issue_comment_is_logged_in_the_project_it_ran_in(self):
+        # SEC-05: the decision reader refuses these ids as answers; a folder without .specify logs nothing.
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            with mock.patch.object(gh.subprocess, 'run', Fake(done(stdout='{"id": 77}'), done(stdout='{"id": 78}'),
+                                                               done(stdout='{"id": 79}'))):
+                gh.api('repos/acme/app/issues/5/comments', method='POST', payload={'body': 'x'}, cwd=str(root))
+                self.assertEqual(gh.posted_comment_ids(root), set())
+                (root / '.specify').mkdir()
+                gh.api('repos/acme/app/issues/5/comments', method='POST', payload={'body': 'x'}, cwd=str(root))
+                gh.api('repos/acme/app/issues/5', method='PATCH', payload={'body': 'x'}, cwd=str(root))
+            self.assertEqual(gh.posted_comment_ids(root), {78})
+            line = json.loads((root / gh.POSTED_COMMENTS).read_text(encoding='utf-8'))
+            self.assertEqual((line['id'], line['endpoint']), (78, 'repos/acme/app/issues/5/comments'))
+
     def test_binary_returns_bytes_and_text_payload_passes_through(self):
         fake = self.fake(subprocess.CompletedProcess(['gh'], 0, b'PK\x03\x04', b''), done(0, 'ok'))
         self.assertEqual(gh.run_gh(['api', 'repos/a/b/actions/artifacts/1/zip'], binary=True, timeout=300), b'PK\x03\x04')

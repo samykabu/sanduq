@@ -477,6 +477,24 @@ class Clarification:
         require(len(matches) == 1, f'Expected one bound specification for #{issue["number"]}; found {len(matches)}. Run Specify or resolve duplicate bindings.')
         return matches[0]
 
+    def checkpoint(self, issue):
+        """(feature label, workflow checkpoint) of the feature bound to `issue`; ('', {}) when none is bound or the
+        run is unmanaged. Never raises: the state gate decides what a missing binding means."""
+        for binding in (self.root / 'specs').glob('*/scope-source.json'):
+            value = read_json(binding, {})
+            if value.get('issue') == issue['number'] and value.get('repo') == self.app.repo:
+                return binding.parent.relative_to(self.root).as_posix(), read_json(binding.parent / 'workflow/checkpoint.json', {})
+        return '', {}
+
+    def refuse_local(self, issue):
+        """REQ-21: a feature whose checkpoint froze `clarification_transport: local` never posts to GitHub."""
+        feature, state = self.checkpoint(issue)
+        if state.get('clarification_transport') == 'local':
+            raise ScopeError(f'CLARIFICATION_TRANSPORT_LOCAL: #{issue["number"]} answers clarifications in '
+                             f'{feature}/clarifications.md, not on GitHub. Ask the questions in the conversation and '
+                             'record the user\'s replies in that file (github-clarification skill, references/local.md); '
+                             'nothing is posted or synced.')
+
     def engine(self):
         registry = read_json(self.root / '.specify/extensions/.registry', {}).get('extensions', {})
         enabled = registry.get('superspec', {}).get('enabled') is True
@@ -493,6 +511,7 @@ class Clarification:
 
     def inspect(self, value=None, gate=True):
         issue = self.source(value)
+        self.refuse_local(issue)
         if gate:
             self.gate(issue)  # Must precede reading the spec or comment history.
         path = self.spec_path(issue)
@@ -679,6 +698,7 @@ class Clarification:
             return self.publish_in_session(value, analysis, answers, apply)
         batch = digest(analysis)[:20]
         source = self.source(value)
+        self.refuse_local(source)
         folder = self.root / '.specify/scope/clarifications' / f'{source["number"]}-{batch}'
         journal_path = folder / 'journal.json'
         journal = read_json(journal_path)
@@ -962,6 +982,14 @@ class Clarification:
 
     def plan_gate(self, value=None):
         issue = self.source(value)
+        feature, state = self.checkpoint(issue)
+        if state.get('clarification_transport') == 'local':
+            # Nothing moved the board: the passed Clarify receipt (every local question answered) is the gate.
+            require(state.get('receipts', {}).get('clarify', {}).get('outcome') == 'passed',
+                    'CLARIFICATION_REQUIRED: planning needs a passed Clarify receipt; this feature records its '
+                    'questions and the user\'s replies in ' + feature + '/clarifications.md (local transport). '
+                    'Complete the Clarify stage first.')
+            return {'issue': issue['number'], 'status': self.app.actual_status(self.app.status(issue)), 'transport': 'local'}
         status = self.app.status(issue)
         from workflow_policy import bound_claim
         revalidation = bound_claim(self.root, self.app.repo, issue['number'], {'plan'})

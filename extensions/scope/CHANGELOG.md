@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- Local clarification transport (REQ-21): when the bound feature's workflow checkpoint says `clarification_transport: local`, `clarification.py inspect` and `publish` refuse with `CLARIFICATION_TRANSPORT_LOCAL` naming `specs/<feature>/clarifications.md`, and `plan-gate` passes on a passed Clarify receipt instead of a Ready board status (`CLARIFICATION_REQUIRED` otherwise). The github-clarification skill's new `references/local.md` tells the agent to ask in the conversation and record the user's replies in that file; the `clarify-github` and `brainstorm-github` overlays say so. GitHub-mode features are unchanged.
+
 ## [1.11.1] - 2026-10-27
 
 - The bundled `scope-gate` preset (1.6.1) states that inside a claim the claim's `reference_text` wins over the composed upstream text and that upstream hook prompts are skipped. No script change; Workflow 1.20.0 requires this version.

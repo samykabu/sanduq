@@ -48,7 +48,7 @@ AMENDMENT_DEPENDENTS = ('verify', 'review', 'ready')
 # Receipt fields only the runtime writes; a submitted receipt may not carry them.
 RUNTIME_RECEIPT_FIELDS = ('amendments', 'stale', 'head', 'source_key', 'ci_evidence', 'diff_reviewed',
                           'revalidations', 'delegation_ledger_trust', 'verification_snapshot', 'pr_lint_binding',
-                          'source_inventory', 'text_fingerprints', 'revalidated_upstream')
+                          'source_inventory', 'text_fingerprints', 'revalidated_upstream', 'self_attested')
 # Stages whose receipts also inventory source (`source_inventory`) and record `head` and `source_key`.
 SOURCE_STAGES = ('verify', 'review', 'ready')
 # Effort scores a Scope receipt may carry (`effort_score`), and the tier bands they map to.

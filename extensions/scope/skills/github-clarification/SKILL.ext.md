@@ -11,7 +11,9 @@ This contract controls question limits, transport, lifecycle and stopping.
 
 With `.specify/workflow.yml`, also follow [managed.md](references/managed.md); otherwise
 [standalone.md](references/standalone.md). Creator controls and the round limit:
-[controls.md](references/controls.md).
+[controls.md](references/controls.md). When the claim says `clarification_transport: local`,
+follow [local.md](references/local.md) instead of the GitHub steps below: ask in the
+conversation and record the user's replies in `specs/<feature>/clarifications.md`.
 
 ## State check first
 

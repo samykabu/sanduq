@@ -8,4 +8,6 @@ Input: $ARGUMENTS
 
 Read `.specify/extensions/workflow/skills/workflow/SKILL.md` and follow the `finalize` entry point.
 Use the current explicit feature or issue. Do not infer issue identity from an unrelated editor tab.
-The shared skill owns orchestration; do not run a second pipeline after it returns.
+The shared skill owns orchestration; do not run a second pipeline after it returns. Finalize is
+Ready plus the PR: when `claim --finalize` answers `not_ready_to_finalize`, report its `remaining`
+stages and stop; run `continue` only if the user asked to run them through.

@@ -426,8 +426,10 @@ def stage_brief(root, feature, stage, token, work_type=None):
         'migrate, recover or another stage.\n'
         f'Read the installed workflow skill and {command_file or "the workflow stage contract"}; '
         f'invoke {command} once inside this claim. Respect all existing binding, evidence and human '
-        'decision gates. If a decision is needed, use the existing GitHub decision adapter and '
-        'report the pending decision to the dispatcher.\n'
+        'decision gates. If a decision is needed, ' +
+        ('report the pending decision to the dispatcher; this feature answers questions locally, so post '
+         'nothing to GitHub.\n' if state.get('clarification_transport') == 'local' else
+         'use the existing GitHub decision adapter and report the pending decision to the dispatcher.\n') +
         'Return the concrete input paths, evidence paths, checks executed and any blocker. '
         'The dispatcher will inspect them and complete the receipt; your own success claim is '
         'not a passed Sanduq stage. ' + ownership +
