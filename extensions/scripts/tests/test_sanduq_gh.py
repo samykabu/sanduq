@@ -2,6 +2,7 @@
 reads, and GraphQL errors on a successful exit. Archive copies and the installed-layout import are pinned with
 the other shared helpers in test_sanduq_remote.py."""
 import json
+import re
 import subprocess
 import sys
 import unittest
@@ -10,6 +11,19 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'shared'))
 import sanduq_gh as gh  # noqa: E402
+
+ROOT = Path(__file__).resolve().parents[3]
+
+
+class OneTransport(unittest.TestCase):
+    def test_no_gh_subprocess_outside_the_transport(self):
+        """SAMY-19: every gh call of every extension and repository script goes through sanduq_gh. A literal
+        `subprocess.run(['gh', ...])` or release.py `command(['gh', ...])` elsewhere is a regression."""
+        literal = re.compile(r"(subprocess\.(run|Popen|check_output|check_call)|\bcommand)\(\s*\[\s*['\"]gh['\"]")
+        hits = sorted(p.relative_to(ROOT).as_posix() for p in ROOT.glob('extensions/**/*.py')
+                      if 'tests' not in p.parts and p.name != 'sanduq_gh.py'
+                      and literal.search(p.read_text(encoding='utf-8', errors='replace')))
+        self.assertEqual([], hits)
 
 
 def done(returncode=0, stdout='', stderr=''):

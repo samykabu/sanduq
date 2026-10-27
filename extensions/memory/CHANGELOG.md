@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+- The archive writer lock (`writer.lock`) is the shared Sanduq lock: a lock left by a writer that died on this host is taken over by the next command, with no manual cleanup; a live writer still refuses with `Archive writer lock exists`, which now names the owner's pid, host, age and liveness and how to check it. A lock from another host is never taken automatically. The lock file now records `pid`, `host`, `token` and `created`; `status` still reports the writer's state from its pid.
+- JSON state files are written by the shared atomic writer (`sanduq_fs.py`, packaged into `scripts/`): a uuid temp name, fsync, then replace. Memory and policy files keep their own byte writer.
+
 ## [2.5.1] - 2026-10-23
 
 - Preflight accepts tracked feature evidence that matches an ignore rule. The scoped checkpoint preserves its current edits and deletions. Untracked ignored evidence still blocks archival unless its owner's declared runtime rule makes it disposable.

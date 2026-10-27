@@ -33,6 +33,7 @@
 - `speckit-scope` alias: `disable-model-invocation: true` and a description naming `speckit-workflow-scope`, so one entry answers "scope issue 42"; the earlier alias content is an accepted legacy hash.
 - A workflow project's copy of the delegate-task skill (`delegate_dispatch.py` installs it) gets `disable-model-invocation: true` and a description naming the dispatcher, so "have another agent do X" never runs the driver outside the ledger; a global copy keeps the portable text.
 - `status`, `doctor` and `reconcile` read `references/utilities.md` (their three sections, moved out of dispatcher-operations.md) instead of the whole skill and its session set.
+- The shared atomic JSON writer (`sanduq_fs.write_json`, used for checkpoints, receipts and every other JSON state file) fsyncs the temp file before the replace, so a crash right after a write never leaves an empty file. Memory and Scope now ship the same helper.
 
 ## [1.20.0] - 2026-10-27
 

@@ -51,3 +51,9 @@ Record these for every train, in the release notes and the root CHANGELOG entry:
 
 - [ ] Mark the pending releases `ready` only after every box above is checked.
 - [ ] Run the release workflow. It publishes immutable assets and then promotes the catalogs.
+- [ ] Wait for the catalog. The promoted catalog reaches `main` through a pull request that merges
+  itself once lint passes, so for a few minutes after the assets are published the catalog still
+  serves the previous versions (about 11 minutes on 2026-10-27, with the previous license shown). A
+  `specify extension add` in that window installs the previous version. Check
+  `specify extension list` after installing, and announce the train only after the pull request has
+  merged.

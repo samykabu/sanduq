@@ -73,7 +73,7 @@ INJECTED = {"extensions/scripts/shared/sanduq_freshness.py": ["assure", "user-ma
             "extensions/scripts/shared/sanduq_remote.py": ["workflow", "project", "scope"],
             "extensions/scripts/shared/sanduq_gh.py": ["scope", "workflow", "project", "pr"],
             "extensions/scripts/shared/sanduq_pr_lint.py": ["pr", "workflow"],
-            "extensions/scripts/shared/sanduq_fs.py": ["workflow"],
+            "extensions/scripts/shared/sanduq_fs.py": ["workflow", "memory", "scope"],
             "extensions/scope/scripts/sanduq_scope_github.py": ["scope", "workflow"],
             "extensions/workflow/scripts/sanduq_hash.py": ["workflow", "assure", "user-manual"],
             "extensions/workflow/scripts/sanduq_ci.py": ["workflow", "assure", "user-manual"]}

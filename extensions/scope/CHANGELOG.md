@@ -7,6 +7,8 @@
 - The five hook commands (`speckit.scope.guard`, `bind`, `after-specify`, `plan-guard`, `reconcile`) are no longer listed under `provides.commands`, so no host registers them as skills; on Codex they competed with `speckit.specify` and `speckit.plan` for prompts such as "plan issue 42" and counted against the skills budget. Their files are now `commands/speckit.scope.<name>.md`, where the event dispatcher finds them by name, and the hooks are unchanged. Refresh parent progress by hand with `scope.py reconcile --apply`. Reinstall to drop the old skills.
 - `scope-analyst` names its callers (`speckit-scope-run` and the workflow Scope stage) instead of answering "scope an issue" itself, so one entry matches "scope issue 42" in a managed project.
 - Lite tier: a first-pass score of 3 or less skips the prerequisite, PR, code and test inspection (step 6) only when every prerequisite is Done; an In review prerequisite is always inspected.
+- `mutation.lock` (taken by every `--apply` command of `scope.py` and `clarification.py`) is the shared Sanduq lock: a lock left by a process that died on this host is taken over by the next command; a live one still refuses with the same `... mutation is already running` message, which now names the owner's pid, host, age and liveness and how to check it. The lock file records `pid`, `host`, `token` and `created` instead of a bare pid; a bare-pid lock left by an earlier Scope version is taken over once it is older than 60 s.
+- JSON outputs, snapshots and journals are written by the shared atomic writer (`sanduq_fs.py`, packaged into `scripts/`): a uuid temp name per writer instead of one fixed `<name>.tmp`, so two concurrent writers never share a temp file.
 
 ## [1.11.1] - 2026-10-27
 
