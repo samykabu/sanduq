@@ -6,6 +6,11 @@ on:
     types: [completed]
     branches: [main]
   workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: The ci run whose release-trigger job dispatched this release (set by ci.yml).
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -64,12 +69,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           TRIGGER_SHA: ${{ github.event.workflow_run.head_sha }}
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
         run: |
           python - <<'PY'
           import json, os, subprocess, sys
           repo, dry = os.environ['GH_REPO'], os.environ.get('DRY_RUN') == '1'
           head = os.environ.get('HEAD_SHA') or subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
           trigger = os.environ.get('TRIGGER_SHA', '')
+          ci_run = os.environ.get('CI_RUN_ID', '')
           WINDOWS = ('regression (windows-latest, workflow', 'regression (windows-latest, memory')
 
           def api(path):
@@ -92,13 +99,24 @@ jobs:
                   finish(False, f'No completed push ci run for {head[:8]} yet; its completion triggers the release. Nothing released.')
               finish(False, f'The push ci run for {head[:8]} failed; nothing released.', 'error')
 
+          def jobs_of(run):
+              return api(f'repos/{repo}/actions/runs/{run["id"]}/jobs?per_page=100')['jobs']
+
           def windows_passed(run):
-              jobs = api(f'repos/{repo}/actions/runs/{run["id"]}/jobs?per_page=100')['jobs']
+              jobs = jobs_of(run)
               return all(any(j['name'].startswith(p) and j['conclusion'] == 'success' for j in jobs) for p in WINDOWS)
+
+          def triggering_run_passed(run):
+              # The ci run that dispatched this release is still in progress: its release-trigger job is the last
+              # one and runs only when every other job succeeded, so that run counts once all its other jobs did.
+              jobs = [j for j in jobs_of(run) if j['name'] != 'release-trigger']
+              return (all(j['status'] == 'completed' and j['conclusion'] in ('success', 'skipped') for j in jobs)
+                      and windows_passed(run))
 
           full = [r for r in runs if r['event'] in ('schedule', 'workflow_dispatch')]
           done = [r for r in full if r['status'] == 'completed' and r['conclusion'] == 'success']
-          good = next((r for r in done if windows_passed(r)), None)
+          good = next((r for r in done if windows_passed(r)), None) or next(
+              (r for r in full if ci_run and str(r['id']) == ci_run and r['status'] != 'completed' and triggering_run_passed(r)), None)
           if good:
               finish(True, f'ci run {good["id"]} ({good["event"]}) passed the Windows legs on {head[:8]}: releasing.')
           if any(r['status'] != 'completed' for r in full):

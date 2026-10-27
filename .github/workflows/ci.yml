@@ -525,4 +525,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh api -X POST "repos/$GH_REPO/actions/workflows/release-extensions.yml/dispatches" -f ref=main
+        # The release gate counts this still-running run as passed once every other job in it has (release-extensions.yml).
+        run: gh api -X POST "repos/$GH_REPO/actions/workflows/release-extensions.yml/dispatches" -f ref=main -f "inputs[ci_run_id]=$GITHUB_RUN_ID"

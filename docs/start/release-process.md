@@ -57,7 +57,9 @@ schedule or a person's dispatch triggers `release-extensions.yml` through `workf
 needs a `ci` run with the Windows legs on the same commit (push runs skip them); when there is none, it
 dispatches `ci.yml` on `main` and stops with a notice. GitHub starts no `workflow_run` from a run that
 `GITHUB_TOKEN` caused, so that dispatched run ends with a `release-trigger` job, which dispatches the
-release when the run passes. The `release-trigger` job runs only for a `workflow_dispatch` by
+release when the run passes. That release often reaches its gate while the `ci` run is still
+finishing, so the job passes the run's id (`ci_run_id`) and the gate counts that run once every other
+job in it has passed. The `release-trigger` job runs only for a `workflow_dispatch` by
 `github-actions[bot]` on `main`, so each `ci` run on a commit starts the release once, and pull
 requests and forks never start it. Release runs share one concurrency group and wait for each other,
 and `release.py publish` skips a tag that already exists after checking its bytes. If a release
