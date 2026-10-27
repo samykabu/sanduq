@@ -5,7 +5,7 @@ Cuts a worker's orientation reading (retrospective T1: ~44K tokens of spec/plan/
 tasks/contracts read by every worker) down to the few thousand it actually
 needs: the task's own line, the verbatim requirement lines it implements, a
 matching contract excerpt, its owned paths and the execution protocol's fixed
-rules -- turn budget (T0), the F1/F2 spawn/blocking-wait rules, the F3
+rules -- turn budget (T0), the F2 blocking-wait rule with a no-spawn worker line, the F3
 report-on-state-change rule, the T8 read-summary-first rule, forbidden
 commands (S6, the same constants `delegate_dispatch.py` uses for its own
 delegated briefs) and the structured result template (T7). The protocol text
@@ -149,6 +149,9 @@ def section_paragraph(text, heading, index):
     return paragraphs[index] if index < len(paragraphs) else None
 
 
+WORKER_RETURN_RULE = 'You do not spawn agents; return your result to whoever spawned you.'
+
+
 def spawn_and_wait_rules():
     """F1 (route results straight to the spawner, blocking not backgrounded) and F2 (never end
     a turn owning running background work), the first two paragraphs of their shared section."""
@@ -225,10 +228,10 @@ def render_brief(feature, task_id, context, requirements, contract, owned, budge
     lines.append('## Turn budget (T0)')
     lines.append(budget_row or f'No turn-budget row found for `{context["work_type"]}`; use the implementation default.')
     lines.append('')
-    lines.append('## Spawn and wait rules (F1, F2)')
-    f1, f2 = spawn_rules
-    lines.append(f1 or 'Route results straight to whoever spawned you; never through the dispatcher for relay.')
-    lines.append(f2 or 'Never end your turn while you still own running background work; block and report once.')
+    # OMAR-02: F1 tells the orchestration agent to spawn a batch; a worker gets only the no-spawn line and F2.
+    lines.append('## Return and wait rules (F2)')
+    lines.append(WORKER_RETURN_RULE)
+    lines.append(spawn_rules[1] or 'Never end your turn while you still own running background work; block and report once.')
     lines.append('')
     lines.append('## Report only on state change (F3)')
     lines.append(f3_rule or 'Report a state change only (task accepted, commit pushed, blocker, decision needed).')
@@ -316,7 +319,7 @@ def build(root, feature, task_id, work_type=None):
     oversized = len(brief.encode('utf-8')) > MAX_BYTES
     # A protocol section that could not be read falls back to built-in text; say so, never hide it.
     context['fallback_sections'] = [name for name, value in (
-        ('turn_budget', budget_row), ('spawn_f1', spawn_rules[0]), ('spawn_f2', spawn_rules[1]),
+        ('turn_budget', budget_row), ('spawn_f2', spawn_rules[1]),
         ('report_f3', f3_rule), ('read_t8', t8_rule), ('template_t7', template)) if not value]
     context['fingerprints'] = {'policy': fingerprints[0], 'source': fingerprints[1]}
     return brief, context, oversized

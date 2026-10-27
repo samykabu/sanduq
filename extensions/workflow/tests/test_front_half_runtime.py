@@ -124,22 +124,22 @@ class PolicyKeyTests(Base):
     def test_invalid_values_and_unknown_subkeys_are_refused(self):
         cases = [
             (lambda p: p.update(profiles={'enabled': 'yes'}), 'PROFILES_POLICY_INVALID'),
-            (lambda p: p.update(profiles={'enabled': True, 'tiny': {}}), 'PROFILES_POLICY_INVALID'),
+            (lambda p: p.update(profiles={'enabled': True, 'tiny': {}}), 'POLICY_KEY_UNKNOWN: profiles.tiny'),
             (lambda p: p.update(profiles={'enabled': True, 'lite': {'max_score': 9}}), 'PROFILES_POLICY_INVALID'),
             (lambda p: p['clarification'].update(max_questions_per_round=0), 'CLARIFICATION_POLICY_INVALID'),
             (lambda p: p['clarification'].update(in_session_first_round='true'), 'CLARIFICATION_POLICY_INVALID'),
-            (lambda p: p.update(artifacts={'budgets': {'spec_mb': 1}}), 'ARTIFACTS_POLICY_INVALID'),
+            (lambda p: p.update(artifacts={'budgets': {'spec_mb': 1}}), 'POLICY_KEY_UNKNOWN: artifacts.budgets.spec_mb; did you mean artifacts.budgets.spec_kb'),
             (lambda p: p.update(artifacts={'enforce': 'never'}), 'ARTIFACTS_POLICY_INVALID'),
             (lambda p: p.update(project_sync={'points': ['clarify']}), 'PROJECT_SYNC_POLICY_INVALID'),
-            (lambda p: p.update(project_sync={'points': ['pr'], 'extra': 1}), 'PROJECT_SYNC_POLICY_INVALID'),
+            (lambda p: p.update(project_sync={'points': ['pr'], 'extra': 1}), 'POLICY_KEY_UNKNOWN: project_sync.extra'),
             (lambda p: p.update(scope={'board_cache_seconds': -1}), 'SCOPE_BOARD_CACHE_INVALID'),
             (lambda p: p.update(progress={'hook_wiring': 'hooks'}), 'PROGRESS_POLICY_INVALID'),
             (lambda p: p.update(progress={'post_tool_matcher': 1}), 'PROGRESS_POLICY_INVALID'),
-            (lambda p: p.update(progress={'matcher': ''}), 'PROGRESS_POLICY_INVALID'),
+            (lambda p: p.update(progress={'matcher': ''}), 'POLICY_KEY_UNKNOWN: progress.matcher'),
             (lambda p: p.update(progress='native'), 'PROGRESS_POLICY_INVALID'),
             (lambda p: p.update(illustrate={'hooks': {'self_check': 'yes'}}), 'ILLUSTRATE_POLICY_INVALID'),
-            (lambda p: p.update(illustrate={'hooks': {'verify': True}}), 'ILLUSTRATE_POLICY_INVALID'),
-            (lambda p: p.update(illustrate={'theme': {}}), 'ILLUSTRATE_POLICY_INVALID'),
+            (lambda p: p.update(illustrate={'hooks': {'verify': True}}), 'POLICY_KEY_UNKNOWN: illustrate.hooks.verify'),
+            (lambda p: p.update(illustrate={'theme': {}}), 'POLICY_KEY_UNKNOWN: illustrate.theme'),
             (lambda p: p.update(illustrate={'hooks': True}), 'ILLUSTRATE_POLICY_INVALID'),
             (lambda p: p['issue_sync'].update(taskstoissues='optional'), 'TASK_ISSUES_REQUIRED'),
         ]
@@ -199,6 +199,46 @@ class TierTests(Base):
             run.complete(claim['token'], self.scope_receipt(4))
         run.complete(claim['token'], self.scope_receipt(2))
         self.assertEqual(run.load()['receipts']['scope']['effort_score'], 2)
+
+    def plan_claim_with_scope_source(self, source, labels=None):
+        """Claim Plan after a Scope receipt scored 2, with this scope-source.json and these issue labels."""
+        self.profiles()
+        run = self.run_object()
+        self.advance_fresh(run, 'scope', {'scope': self.scope_receipt(2)})
+        w.write(run.feature / 'scope-source.json', source)
+        self.advance_fresh(run, 'clarify')
+        calls = []
+
+        class GitHub:
+            def api(self, endpoint):
+                calls.append(endpoint)
+                return {'number': 10, 'labels': [{'name': name} for name in labels or []]}
+        with patch('decisions.GitHub', GitHub):
+            try:
+                return run.claim(self.usage()), calls
+            except w.WorkflowError as exc:
+                return exc, calls
+
+    def test_effort_label_that_differs_from_the_receipt_score_is_refused(self):
+        # OMAR-05: label effort:8, receipt score 2; no cached score, so one GitHub read decides.
+        error, calls = self.plan_claim_with_scope_source({'repo': 'acme/app', 'issue': 10}, ['bug', 'effort:8'])
+        self.assertEqual(calls, ['repos/acme/app/issues/10'])
+        self.assertRegex(str(error), r'^EFFORT_SCORE_MISMATCH: the Scope receipt records effort_score 2 but '
+                                     r'effort:8 label on acme/app#10 says 8;.* refresh --feature ')
+
+    def test_scope_verified_score_is_used_without_a_github_read(self):
+        error, calls = self.plan_claim_with_scope_source({'repo': 'acme/app', 'issue': 10, 'score': 8})
+        self.assertIn('EFFORT_SCORE_MISMATCH', str(error))
+        self.assertIn('scope-source.json (verified by Scope at bind) says 8', str(error))
+        self.assertEqual(calls, [])
+
+    def test_matching_verified_score_fixes_the_tier(self):
+        claim, calls = self.plan_claim_with_scope_source({'repo': 'acme/app', 'issue': 10, 'score': 2})
+        self.assertEqual((claim['stage'], claim['profile']['tier'], calls), ('plan', 'lite', []))
+
+    def test_missing_effort_label_is_unverified(self):
+        error, _ = self.plan_claim_with_scope_source({'repo': 'acme/app', 'issue': 10}, ['bug'])
+        self.assertIn('EFFORT_SCORE_UNVERIFIED: acme/app#10 carries 0 effort:<n> labels', str(error))
 
     def test_lite_freezes_profile_merges_tasks_skips_stages_and_runs_lint(self):
         self.profiles()
@@ -378,8 +418,11 @@ class ClaimOutputTests(Base):
         self.profiles()
         self.policy['issue_sync'] = {'taskstoissues': 'phase-lazy', 'parent_link': 'native-subissue'}
         self.configure()
+        # OMAR-01: every gating field is a placeholder the agent sets.
         fills = {'effort_score': 13, 'lint': {'ok': True, 'findings': 0},
-                 'pr_url': 'https://github.com/acme/app/pull/11'}
+                 'pr_url': 'https://github.com/acme/app/pull/11', 'outcome': 'passed', 'unresolved': 0,
+                 'answers_applied': True, 'native_links_verified': True, 'blocking_findings': 0,
+                 'images_verified': True}
         base = {'stage', 'outcome', 'summary', 'inputs', 'evidence'}
         run = self.run_object()
         seen = set()

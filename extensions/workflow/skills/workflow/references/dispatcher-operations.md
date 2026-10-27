@@ -8,7 +8,10 @@ Run-time rules for the dispatcher. Setup, upgrades, migration, relocation and ho
 Run `workflow.py status --feature <f>` (the resume prompt says the same; do not read
 checkpoint.json directly), then read handoff.md. Verify repository, branch, issue, policy and
 current files. Inspect an active claim before `recover --token` with a concrete reason; never
-assume a missing response means its remote write failed. Resume the earliest unfinished or
+assume a missing response means its remote write failed. `status` shows the claim's `owner`
+(`alive`, `dead` or `unknown`) and its `last_activity`; `recover` refuses `CLAIM_OWNER_ALIVE`
+while the owner's pid runs on this host or its last activity is under 15 minutes old. Pass
+`--force-live-owner "<how you know it stopped>"` only after confirming that session stopped. Resume the earliest unfinished or
 invalid stage. `CHECKPOINT_IDENTITY_MISMATCH` on a genuinely relocated project is `relocate`'s
 error, not `recover`'s or `migrate`'s.
 
@@ -94,6 +97,11 @@ the outer invocation when it returns. Inside a matching claim, do the domain wor
 return control. Never re-enter the dispatcher from a claimed command; it alone chooses the next
 stage. Keep safety and binding guards; disabled hooks stay disabled. Do not invoke another task
 generator, executor or PR hook. "Below" in an overlay means below its pointer, in that file.
+
+Precedence inside a claim, highest first: the runtime claim fields (stage, token, side effects,
+receipt template, commands), then the claim's `reference_text`, then the managed overlay, then
+the upstream Spec Kit text, then skill prose. Where the upstream text conflicts with the claim's
+`reference_text`, the `reference_text` wins; upstream hook prompts are skipped inside a claim.
 
 ## Interruption and GitHub behavior
 

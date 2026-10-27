@@ -23,6 +23,12 @@ import yaml
 
 from execution_tools import sha256_file
 
+try:
+    import sanduq_fs
+except ModuleNotFoundError:  # the source tree; package.py copies it into scripts/
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'shared'))
+    import sanduq_fs
+
 # ``qa`` split in two (B12): ``qa_author`` is standard-tier authored QA work
 # (writing tests, analysing coverage); ``qa_collect`` is the light-eligible
 # route for running an existing, fixed check and reporting its result. Nothing
@@ -145,152 +151,22 @@ def feature_identity(root, feature):
     return 'specs/' + parts[1]
 
 
-def process_alive(pid):
-    """True unless this host proves ``pid`` has exited; unknown answers count as alive."""
-    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
-        return False
-    if os.name == 'nt':
-        # os.kill(pid, 0) terminates the process on Windows, so ask the kernel.
-        import ctypes
-        kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
-        kernel32.OpenProcess.restype = ctypes.c_void_p
-        handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
-        if not handle:
-            return ctypes.get_last_error() != 87  # ERROR_INVALID_PARAMETER: no such process
-        try:
-            code = ctypes.c_ulong()
-            if not kernel32.GetExitCodeProcess(ctypes.c_void_p(handle), ctypes.byref(code)):
-                return True
-            return code.value == 259  # STILL_ACTIVE
-        finally:
-            kernel32.CloseHandle(ctypes.c_void_p(handle))
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except OSError:
-        return True
-    return True
-
-
-# A lock file with no readable owner is only stale once it is this old: its
-# creator writes the owner record immediately after the exclusive create.
-LOCK_UNREADABLE_STALE_SECONDS = 60
-
-
-def lock_owner(path):
-    try:
-        value = json.loads(path.read_text(encoding='utf-8'))
-    except (OSError, ValueError):
-        return None
-    return value if isinstance(value, dict) else None
-
-
-def lock_is_stale(path, owner):
-    """A lock is stale only when its recorded owner provably died on this host."""
-    if owner is None or not isinstance(owner.get('pid'), int):
-        try:
-            age = time.time() - path.stat().st_mtime
-        except OSError:
-            return False
-        return age >= LOCK_UNREADABLE_STALE_SECONDS
-    if owner.get('host') != socket.gethostname():
-        return False
-    return not process_alive(owner['pid'])
-
-
-def recover_stale_lock(path):
-    """Remove ``path`` only if it still holds the dead owner that was inspected.
-
-    Unlinking after a check is not atomic: another stealer may already have
-    replaced the lock with a live one. A single rename captures exactly one
-    file; if the captured owner is not the dead one inspected, it goes back.
-    """
-    owner = lock_owner(path)
-    if not lock_is_stale(path, owner):
-        return False
-    captured = path.with_name(path.name + '.stale-' + uuid.uuid4().hex)
-    try:
-        os.rename(path, captured)
-    except OSError:
-        return False
-    if lock_owner(captured) == owner and lock_is_stale(captured, lock_owner(captured)):
-        captured.unlink(missing_ok=True)
-        return True
-    try:
-        # Put a live owner back without replacing any newer lock.
-        os.link(captured, path)
-        captured.unlink(missing_ok=True)
-    except OSError:
-        # A newer lock exists; the displaced owner detects the loss in
-        # lock_held() and refuses to write.
-        captured.unlink(missing_ok=True)
-    return False
-
-
-def lock_held(path, token):
-    owner = lock_owner(path)
-    return bool(owner and owner.get('token') == token)
+# One lock implementation for every runtime (SAMY-01/09): these names stay importable from here.
+from sanduq_fs import (LOCK_UNREADABLE_STALE_SECONDS, lock_held, lock_is_stale, lock_owner,  # noqa: E402,F401
+                       process_alive, recover_stale_lock)
 
 
 def release_owned_lock(path, token):
-    """Release our lock after transient Windows readers close their handles.
-
-    Opening a lock file to inspect its owner can briefly prevent unlink on
-    Windows. Recheck the token on every retry so a replacement lock is never
-    removed by the former owner.
-    """
-    deadline = time.monotonic() + 5
-    while True:
-        owner = lock_owner(path)
-        if owner is not None:
-            if owner.get('token') != token:
-                return
-            try:
-                path.unlink(missing_ok=True)
-                return
-            except PermissionError:
-                pass
-        elif not path.exists():
-            return
-        if time.monotonic() >= deadline:
-            raise DelegationError('DELEGATION_LOCK_RELEASE_BUSY: could not release ' + str(path) +
-                                  '; check that no process still has the file open')
-        time.sleep(0.02)
+    sanduq_fs.release_owned_lock(path, token, DelegationError, 'DELEGATION_LOCK_RELEASE_BUSY')
 
 
-@contextmanager
 def file_lock(path, timeout, busy):
-    """Exclusive cross-process lock that recovers a dead owner's lock file.
+    """Exclusive cross-process lock that recovers a dead owner's lock file (`sanduq_fs.file_lock`).
 
     Yields the owner token; callers that write shared state call lock_held()
     before their final write so a displaced owner never overwrites a newer one.
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    token = uuid.uuid4().hex
-    deadline = time.monotonic() + timeout
-    while True:
-        try:
-            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            break
-        except (FileExistsError, PermissionError):
-            if recover_stale_lock(path):
-                continue
-            if time.monotonic() >= deadline:
-                owner = lock_owner(path) or {}
-                raise DelegationError(
-                    busy + ': retry the command; held by pid ' + str(owner.get('pid')) + ' on ' +
-                    str(owner.get('host')) + '. A lock whose owner has exited on this host is '
-                    'recovered automatically; otherwise inspect that process before removing ' +
-                    str(path)) from None
-            time.sleep(0.05)
-    try:
-        os.write(fd, json.dumps({'pid': os.getpid(), 'host': socket.gethostname(),
-                                 'token': token, 'created': time.time()}).encode())
-        os.close(fd)
-        yield token
-    finally:
-        release_owned_lock(path, token)
+    return sanduq_fs.file_lock(path, timeout, busy, DelegationError, 'DELEGATION_LOCK_RELEASE_BUSY')
 
 
 # Upgrade and install hold these while they snapshot, change and may roll back
@@ -349,8 +225,12 @@ def validate_candidate(candidate):
 
 
 def validate_route(route, allow_light=True):
-    require(isinstance(route, dict) and set(route) == {'preferred', 'fallbacks'},
-            'DELEGATION_ROUTE_INVALID')
+    # allow_default_model: the route may fall back to the CLI's default model, still only after the user
+    # confirms the substitution (DEC-12 B); absent means the default model is never a substitute.
+    require(isinstance(route, dict) and set(route) - {'allow_default_model'} == {'preferred', 'fallbacks'},
+            'DELEGATION_ROUTE_INVALID: a route has exactly preferred, fallbacks and optionally allow_default_model')
+    require(type(route.get('allow_default_model', False)) is bool,
+            'DELEGATION_ROUTE_INVALID: allow_default_model must be true or false')
     validate_candidate(route['preferred'])
     require(isinstance(route['fallbacks'], list) and len(route['fallbacks']) <= 5,
             'DELEGATION_FALLBACKS_INVALID')
@@ -1142,11 +1022,41 @@ def health_error(status):
     return error + ': ' + status['path'] + ': ' + status['action'] if status.get('action') else error
 
 
+DOCTOR_TIMEOUT = 15  # seconds per node probe: claim and start run doctor under the dispatch lock (SAMY-02)
+DOCTOR_RETRY = 'python .specify/extensions/workflow/scripts/delegation.py doctor'
+
+
+class DoctorTimeout(DelegationError):
+    pass
+
+
+DOCTOR_NEXT = ('check that node and the delegate-task driver respond on this machine, then run "' +
+               DOCTOR_RETRY + '"')
+
+
+def doctor_probe(args, **kwargs):
+    try:
+        return sanduq_fs.run_bounded(args, timeout=DOCTOR_TIMEOUT, error_code='DELEGATE_DOCTOR_TIMEOUT',
+                                     error=DoctorTimeout, next_step=DOCTOR_NEXT, capture_output=True, text=True,
+                                     **kwargs)
+    except DoctorTimeout as exc:
+        exc.command = ' '.join(map(str, args))
+        raise
+
+
 def doctor(root, host, install=False, scope='project', upgrade_owner=None):
+    try:
+        return _doctor(root, host, install, scope, upgrade_owner)
+    except DoctorTimeout as exc:
+        return {'ok': False, 'error': 'DELEGATE_DOCTOR_TIMEOUT', 'path': exc.command, 'diagnostic': str(exc),
+                'action': 'it did not finish within ' + str(DOCTOR_TIMEOUT) + ' s and was stopped; ' + DOCTOR_NEXT}
+
+
+def _doctor(root, host, install, scope, upgrade_owner):
     node = shutil.which('node')
     if not node:
         return {'ok': False, 'error': 'NODE_MISSING'}
-    probe = subprocess.run([node, '--version'], capture_output=True, text=True)
+    probe = doctor_probe([node, '--version'])
     version = re.search(r'v?(\d+)', probe.stdout)
     if probe.returncode or not version or int(version[1]) < 18:
         return {'ok': False, 'error': 'NODE_18_REQUIRED'}
@@ -1154,8 +1064,7 @@ def doctor(root, host, install=False, scope='project', upgrade_owner=None):
               else inspect_skill(root, host))
     if not status['ok']:
         return status
-    result = subprocess.run([node, status['driver'], 'doctor'], cwd=root,
-                            capture_output=True, text=True, encoding='utf-8')
+    result = doctor_probe([node, status['driver'], 'doctor'], cwd=root, encoding='utf-8')
     refresh = owned_scope(root, host, status['driver'])
     if result.returncode and install and not status.get('installed') and refresh:
         # Refresh the copy that failed, where it is. Installing at the
@@ -1164,8 +1073,7 @@ def doctor(root, host, install=False, scope='project', upgrade_owner=None):
         first = status
         status = install_skill(root, host, refresh, force_scope=True, upgrade_owner=upgrade_owner)
         status['notices'] = (first.get('notices') or []) + (status.get('notices') or [])
-        result = subprocess.run([node, status['driver'], 'doctor'], cwd=root,
-                                capture_output=True, text=True, encoding='utf-8')
+        result = doctor_probe([node, status['driver'], 'doctor'], cwd=root, encoding='utf-8')
     if result.returncode:
         owned = owned_scope(root, host, status['driver']) is not None
         action = ('the copy was refreshed from the bundle and still fails; inspect the diagnostic'

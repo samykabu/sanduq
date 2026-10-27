@@ -7,6 +7,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+import unittest.mock
 import zipfile
 from pathlib import Path
 
@@ -30,11 +31,19 @@ class CiMatrixTests(unittest.TestCase):
     def test_progress_runs_progress_and_workflow(self):
         self.assertEqual({"progress", "workflow"}, suites(["extensions/progress/scripts/progress.py"]))
 
-    def test_workflow_runs_workflow_and_scope(self):
-        self.assertEqual({"workflow", "scope"}, suites(["extensions/workflow/scripts/workflow.py"]))
+    def test_workflow_runs_workflow_scope_and_pr(self):
+        self.assertEqual({"workflow", "scope", "pr"}, suites(["extensions/workflow/scripts/workflow.py"]))
 
     def test_single_suite(self):
-        self.assertEqual({"illustrate"}, suites(["extensions/illustrate/skill/SKILL.md"]))
+        self.assertEqual({"illustrate"}, suites(["extensions/illustrate/commands/x.md"]))
+
+    def test_illustrate_skill_also_runs_the_scope_and_pr_modules_that_read_it(self):
+        selection = ci_matrix.selection_for(["extensions/illustrate/skill/SKILL.md"])
+        self.assertEqual({"illustrate": None, "scope": {"test_plan"}, "pr": {"test_pr_diagram_recipe"}}, selection)
+
+    def test_memory_change_selects_workflow(self):
+        """SAMY-06: workflow's Memory handoff tests run Memory's archive.py."""
+        self.assertEqual({"memory", "workflow"}, suites(["extensions/memory/scripts/archive.py"]))
 
     def test_docs_only_runs_nothing(self):
         result = ci_matrix.build(["docs/start/install.md"], "pull_request")
@@ -53,7 +62,8 @@ class CiMatrixTests(unittest.TestCase):
         self.assertIn(("workflow", "windows-latest"), pairs(None, "schedule"))
 
     def test_windows_memory_follows_the_windows_workflow_event_rule(self):
-        self.assertEqual({("memory", "ubuntu-latest")}, pairs(["extensions/memory/x.py"], "push"))
+        self.assertEqual({("memory", "ubuntu-latest"), ("workflow", "ubuntu-latest")},
+                         pairs(["extensions/memory/x.py"], "push"))
         for event in ("pull_request", "schedule", "workflow_dispatch"):
             self.assertIn(("memory", "windows-latest"), pairs(["extensions/memory/x.py"], event), event)
 
@@ -90,7 +100,7 @@ class Round3Selection(unittest.TestCase):
         self.assertEqual({"progress", "workflow"}, suites(["extensions/progress/README.md"]))
 
     def test_mixed_lint_only_and_code_keeps_the_code_selection(self):
-        self.assertEqual({"memory"}, suites(["README.md", "extensions/memory/scripts/x.py"]))
+        self.assertEqual({"memory", "workflow"}, suites(["README.md", "extensions/memory/scripts/x.py"]))
         self.assertEqual(ALL, suites(["CHANGELOG.md", "extensions/scripts/package.py"]))
 
     def test_project_change_runs_the_project_suite_and_the_smoke_jobs(self):
@@ -311,7 +321,7 @@ class Round4Selection(unittest.TestCase):
             self.assertTrue((ci_matrix.ROOT / include[0]["tests"] / (module + ".py")).is_file(), path)
 
     def test_injected_files_run_every_suite_that_ships_them(self):
-        self.assertEqual({"workflow", "project", "scope"}, suites(["extensions/scripts/shared/sanduq_remote.py"]))
+        self.assertEqual({"workflow", "project", "scope", "pr"}, suites(["extensions/scripts/shared/sanduq_remote.py"]))
         self.assertLessEqual({"workflow", "scope", "assure", "user-manual"},
                              suites(["extensions/workflow/scripts/sanduq_ci.py"]))
         self.assertLessEqual({"assure", "user-manual"}, suites(["extensions/workflow/scripts/sanduq_hash.py"]))
@@ -555,6 +565,78 @@ class Round5ProjectInit(unittest.TestCase):
         self.assertIn("- run: python extensions/scripts/smoke_project_init.py\n", job)
         self.assertNotIn("--shell", job)
         self.assertIn("name: project-init-${{ matrix.os }}", job)
+
+
+def cross_suite_references(root=ci_matrix.ROOT):
+    """{(source suite, test suite): test module stems} for every test file under extensions/<suite>/tests that
+    names another suite's source: `parents[2] / '<suite>'`, `<pkg>.parent / '<suite>'` or `extensions/<suite>/`.
+    Paths under a fixture's `.specify/extensions/` are installed copies the test builds, not sources."""
+    names = "|".join(re.escape(s) for s in ci_matrix.SUITES)
+    patterns = [re.compile(r"""(?:parents\[2\]|\.parent)\s*/\s*['"](%s)(?=['"/])""" % names),
+                re.compile(r"""(?<!\.specify/)extensions/(%s)(?=['"/])""" % names)]
+    edges = {}
+    for suite in ci_matrix.SUITES:
+        for path in sorted((root / f"extensions/{suite}/tests").glob("*.py")):
+            text = path.read_text(encoding="utf-8")
+            for match in (m for pattern in patterns for m in pattern.finditer(text)):
+                if match.group(1) != suite:
+                    edges.setdefault((match.group(1), suite), set()).add(path.stem)
+    return edges
+
+
+def covered(source, dependent, modules):
+    """True when a change to `source` selects the `dependent` modules: a DEPENDENTS edge or a MODULE_RULES entry."""
+    if dependent in ci_matrix.DEPENDENTS.get(source, []):
+        return True
+    named = set()
+    for prefix, rule in ci_matrix.MODULE_RULES.items():
+        if prefix.startswith(f"extensions/{source}/"):
+            named.update(rule.get(dependent, []))
+    return modules <= named
+
+
+class CrossSuiteScan(unittest.TestCase):
+    """SAMY-06: a suite whose tests read another suite's source runs when that source changes."""
+
+    def test_every_cross_suite_reference_has_a_selection_edge(self):
+        edges = cross_suite_references()
+        self.assertIn(("memory", "workflow"), edges)  # the scan sees the references it must
+        self.assertIn(("workflow", "pr"), edges)
+        missing = {edge: sorted(mods) for edge, mods in edges.items() if not covered(*edge, mods)}
+        self.assertEqual({}, missing, "add these to DEPENDENTS (or MODULE_RULES) in .github/scripts/ci_matrix.py")
+
+    def test_the_scan_fails_when_an_edge_is_removed(self):
+        edges = cross_suite_references()
+        for source, dependent in (("memory", "workflow"), ("workflow", "pr")):
+            trimmed = {k: [d for d in v if not (k == source and d == dependent)] for k, v in ci_matrix.DEPENDENTS.items()}
+            with unittest.mock.patch.object(ci_matrix, "DEPENDENTS", trimmed):
+                self.assertFalse(covered(source, dependent, edges[(source, dependent)]), (source, dependent))
+
+    def test_installed_fixture_paths_are_not_references(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for suite in ci_matrix.SUITES:
+                (root / f"extensions/{suite}/tests").mkdir(parents=True)
+            (root / "extensions/project/tests/test_x.py").write_text(
+                "a = root / '.specify/extensions/workflow/scripts/w.py'\n"
+                "b = Path(__file__).resolve().parents[2] / 'memory'\n", encoding="utf-8")
+            self.assertEqual({("memory", "project"): {"test_x"}}, cross_suite_references(root))
+
+
+class ReleaseWindowsGate(unittest.TestCase):
+    """SAMY-07: a ready release also needs a scheduled or dispatched ci run with the Windows legs."""
+
+    def test_release_requires_the_windows_legs_and_dispatches_ci_otherwise(self):
+        text = (ci_matrix.ROOT / ".github/workflows/release-extensions.yml").read_text(encoding="utf-8")
+        self.assertIn("actions: write", text)
+        self.assertIn("r['event'] in ('schedule', 'workflow_dispatch')", text)
+        self.assertIn("'regression (windows-latest, workflow', 'regression (windows-latest, memory'", text)
+        self.assertIn("actions/workflows/ci.yml/dispatches', '-f', 'ref=main'", text)
+        self.assertEqual(ci_matrix.WINDOWS_SLOW_SUITES, {"workflow", "memory"})  # the legs the gate names
+        self.assertTrue({"schedule", "workflow_dispatch"} <= ci_matrix.WINDOWS_WORKFLOW_EVENTS)
+        # Every publishing step waits for the CI gate, not only the pending status.
+        steps = text.split("- name: Require successful CI for the current main commit", 1)[1]
+        self.assertNotIn("steps.gate.outputs.ready", steps.split("          PY\n", 1)[1])
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import difflib
 import re
 import sanduq_ci
 import skill_inventory
@@ -77,8 +78,60 @@ def select_gate(ci, mode=None, scope=None, rules=(), keys=None):
     return ci
 
 
+# AHMED-03: the keys of `.specify/workflow.yml` (None: the top level) and of each fixed-schema section. A misspelt
+# key would otherwise be ignored, or change a section and invalidate receipts. `delegation`, `ci` and
+# `lean_execution` check their own keys; `receipts` and `skills.inventory_thresholds` already refuse unknown ones.
+POLICY_KEYS = {
+    None: ('schema_version', 'processes', 'execution', 'providers', 'issue_sync', 'clarification', 'decisions',
+           'context', 'finalize', 'updates', 'delegation', 'receipts', 'ci', 'skills', 'progress', 'illustrate',
+           'scope', 'profiles', 'artifacts', 'project_sync', 'lean_execution'),
+    'processes': ('qa', 'user_manual'),
+    'execution': ('engine', 'checkpoints'),
+    'providers': ('clarification', 'tasks'),
+    'issue_sync': ('taskstoissues', 'parent_link'),
+    'clarification': ('transport', 'resume_on_reinvoke', 'max_questions_per_round', 'in_session_first_round'),
+    'decisions': ('transport', 'authorized_users', 'project_field', 'lifecycle_status'),
+    'context': ('mode', 'max_fraction', 'checkpoint_fraction', 'reserve_fraction'),
+    'finalize': ('create_pr', 'merge'),
+    'updates': ('policy',),
+    'skills': ('inventory_thresholds',),
+    'progress': ('hook_wiring', 'post_tool_matcher'),
+    'illustrate': ('hooks',),
+    'illustrate.hooks': ('self_check',),
+    'scope': ('statuses', 'keep_together', 'board_cache_seconds', 'artifact_directory', 'plan_file'),
+    'profiles': ('enabled', 'lite', 'standard'),
+    'profiles.lite': ('max_score',),
+    'profiles.standard': ('max_score',),
+    'artifacts': ('budgets', 'enforce'),
+    'artifacts.budgets': tuple(ARTIFACT_BUDGETS),
+    'project_sync': ('points',),
+}
+
+
+def unknown_policy_key(policy):
+    """POLICY_KEY_UNKNOWN for the first key no fixed-schema section defines, with the closest known key."""
+    for section, allowed in POLICY_KEYS.items():
+        value = policy
+        for part in (section.split('.') if section else ()):
+            value = value.get(part) if isinstance(value, dict) else None
+        if not isinstance(value, dict):
+            continue  # an absent or malformed section is its own validator's error
+        for key in value:
+            if key in allowed:
+                continue
+            path = (section + '.' if section else '') + str(key)
+            close = difflib.get_close_matches(str(key), allowed, n=1)
+            raise WorkflowError(
+                'POLICY_KEY_UNKNOWN: ' + path + '; ' + ('did you mean ' + (section + '.' if section else '') + close[0]
+                                                        + '?' if close else 'no similar key exists.') +
+                ' Allowed keys' + (' of ' + section if section else ' at the top level') + ': ' + ', '.join(allowed) +
+                '. Fix .specify/workflow.yml; if the key comes from a newer Workflow release, upgrade this project '
+                'with "python .specify/extensions/workflow/scripts/upgrade.py --version <that version> --apply"')
+
+
 def validate_policy(policy, root=None):
     require(isinstance(policy, dict) and policy.get('schema_version') == SCHEMA, 'POLICY_SCHEMA_UNSUPPORTED')
+    unknown_policy_key(policy)
     if 'lean_execution' in policy:
         try:
             lean_policy.validate(policy['lean_execution'])

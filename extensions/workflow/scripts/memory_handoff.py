@@ -9,6 +9,15 @@ import re
 import subprocess
 import sys
 
+try:
+    import sanduq_fs
+except ModuleNotFoundError:  # the source tree; package.py copies it into scripts/
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'shared'))
+    import sanduq_fs
+
+# Claim runs the helper under dispatch.lock, so a hung Memory must not hold it forever (SAMY-02).
+MEMORY_HELPER_TIMEOUT = 120
+
 
 class HandoffError(Exception):
     pass
@@ -18,7 +27,11 @@ def helper(root, *args):
     argv = [sys.executable, '-B', str(root / '.specify/extensions/memory/scripts/archive.py'),
             '--root', str(root), *args]
     environment = {**os.environ, 'PYTHONIOENCODING': 'utf-8'}
-    result = subprocess.run(argv, cwd=root, capture_output=True, text=True, encoding='utf-8', env=environment)
+    result = sanduq_fs.run_bounded(
+        argv, timeout=MEMORY_HELPER_TIMEOUT, error_code='MEMORY_HELPER_TIMEOUT', error=HandoffError,
+        next_step='run "python .specify/extensions/memory/scripts/archive.py --root . ' + ' '.join(args) +
+                  '" to see where Memory stops, then rerun the Workflow command',
+        cwd=root, capture_output=True, text=True, encoding='utf-8', env=environment)
     try:
         body = json.loads(result.stdout)
     except (ValueError, TypeError):

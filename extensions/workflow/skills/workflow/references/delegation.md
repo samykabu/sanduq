@@ -28,16 +28,38 @@ keeps its own allowlist. An invalid or unavailable pair fails before any launch.
 explicit choice there is no fallback, automatic retry or `reassign`. `--type` on a stage start
 must equal the stage's own type.
 
-## Security interim
+## Security
 
-Every external delegated run launches the agent CLI in permission-bypass mode with the full
-parent environment, so the worker can use any credential in it (`GH_TOKEN`, provider API keys).
-Until the clean-environment launch planned for PH-02 exists, Workflow refuses review work
-through the external driver: a route whose work type is `review` (the Analyze and Review stages,
+Every external run starts the agent CLI with `--clean-env`: it sees only the driver's runtime
+basics, `PATH`, `HOME`/`USERPROFILE`, `SystemRoot`, `TEMP`/`TMP`, `APPDATA`/`LOCALAPPDATA`,
+`ComSpec`, the chosen harness's own provider credentials (`ANTHROPIC_*` and
+`CLAUDE_CODE_OAUTH_TOKEN` for Claude, `OPENAI_*` and `CODEX_HOME` for Codex) and every
+`SANDUQ_*` name. `GH_TOKEN`/`GITHUB_TOKEN` reach only routes that use the GitHub adapter: the
+Execute orchestrator and the discovery and coordination stages. Review and analysis routes (the
+`review` work type or model profile) start with the driver's read-only `--sandbox`. The ledger
+attempt records `clean_env`, `kept_env_names` (names only), `github_access` and `permission`.
+
+Review work stays refused through the external driver for now (the PH-01 interim): a route whose work type is `review` (the Analyze and Review stages,
 `[Review]` tasks) or that names the `review` model profile fails with
 `DELEGATION_REVIEW_ROUTE_UNSAFE` at claim and start, `doctor` lists the refused routes as a
 warning, and tasks.md marks such a task `refused:DELEGATION_REVIEW_ROUTE_UNSAFE`. Run reviews
 natively in the selected host. Every other route is unchanged.
+
+## Confirmed fallback
+
+When the CLI rejects the requested model, `collect` starts nothing and stops with
+`FALLBACK_CONFIRMATION_REQUIRED`. The message names the stage or task, the harness and model,
+the rejection line from stderr, the configured substitute (on Codex the CLI default reads "CLI
+default, model unknown: Codex does not report it") and three exact commands: confirm, pick an
+allowed model, or run natively. Show it to the user and wait. Only the user may confirm, in the
+conversation; then the top-level session runs `delegate_dispatch.py collect --feature
+specs/<feature> --run-id <id> --confirm-fallback <requested>=<substitute>`, which starts the
+substitute for one run. The guard and the dispatcher refuse that flag from a worker, subagent or
+delegated orchestrator. The substitute must be pre-listed: an explicit model in the route's
+`fallbacks`, or the CLI default only when the route sets `allow_default_model: true`. Collect,
+the ledger and status carry `requested_model`, `substitute_model`, `actual_model` (harness
+telemetry, else `unreported`), `confirmed_by` and `fallback_used`; with no reported model the
+summary reads "fallback confirmed; model unverified".
 
 ## Opt-in lean execution
 
@@ -54,6 +76,7 @@ lean_execution:
   timeout_min_seconds: 300
   timeout_max_seconds: 7200
   finalization_seconds: 120
+  max_attempts: 3
   verification_plan: specs/42-booking-refund/verification-plan.json
   preflight_manifest: specs/42-booking-refund/preflight.json
   scope_analysis: specs/42-booking-refund/scope-analysis.json
@@ -72,7 +95,10 @@ the same identity also `--correction-plan "<specific correction and check>"`; fu
 `change`. Admission is checked under the ledger lock, so another model or run ID cannot reset
 the history. Lean launches try the selected candidate only and never escalate failed work
 automatically; `reassign --reason "<specific correction>" [--diagnosis <JSON>]` keeps the prior
-candidate. Failure categories (provider rejection, harness failure, timeout, task failure,
+candidate, so it is refused with `LEAN_PROVIDER_REJECTED` after a model rejection (start with
+another eligible `--harness`/`--model` pair instead). `max_attempts` (default 3) caps attempts
+per identity, blocked and abandoned intents not counted; the next one fails with
+`LEAN_ATTEMPT_LIMIT_REACHED`: stop and ask the owner. Failure categories (provider rejection, harness failure, timeout, task failure,
 missing evidence, abandonment, unknown) stay distinct; a timeout while collecting is not a
 failed task. Reserve `finalization_seconds` for an honest partial handoff listing changed
 files, executed checks and remaining work; the worker writes it before the watchdog fires.

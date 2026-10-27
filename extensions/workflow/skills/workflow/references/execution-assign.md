@@ -27,11 +27,16 @@ are `delegate_dispatch.py accept`, `delegate_dispatch.py reassign`,
 `delegate_dispatch.py trust-reset` and `delegate_dispatch.py adopt`: a stash
 can hide another agent's uncommitted change, a wildcard add can stage paths
 outside the worker's owned scope, and `accept`/`reassign`/`trust-reset`/`adopt`
-are ledger-trust decisions the orchestration agent alone makes. The one
-exception is the delegated Execute stage itself: it runs with an orchestrator
-scope over its own feature's `T###` tasks and legitimately calls `start`,
-`collect`, `accept`, `reassign` and `adopt` for them; `trust-reset` stays
-forbidden even for it. An ordinary task worker never has that scope. Staging
+are ledger-trust decisions. They run only in the top-level dispatcher session:
+the guard refuses them in every host subagent, the orchestration agent included.
+The orchestration agent reports "needs accept/adopt for T###" (or reassign) at a
+batch boundary and the dispatcher runs the command. `trust-reset` also needs the
+user's explicit approval in the conversation, quoted in its `--reason`. The one
+exception is the delegated Execute stage, an external delegated process rather
+than a host subagent: it runs with an orchestrator scope over its own feature's
+`T###` tasks and legitimately calls `start`, `collect`, `accept`, `reassign` and
+`adopt` for them; `trust-reset` stays forbidden even for it. An ordinary task
+worker never has that scope. Staging
 stays with the orchestration agent, which stages a worker's owned paths by
 explicit name. The guard hook also refuses these commands where it runs; on
 Codex it runs only once approved (`workflow.py doctor` reports it), so this

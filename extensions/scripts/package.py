@@ -38,7 +38,7 @@ NOTICES = {'illustrate': ('Illustrate skill', 'Bundled icon sources'),
            'workflow': ('Progress, Delegate Task and User Manual skills',),
            'user-manual': ('Progress, Delegate Task and User Manual skills',)}
 SHARED = {'sanduq_remote.py': ('workflow', 'project', 'scope'), 'sanduq_pr_lint.py': ('pr', 'workflow'),
-          'sanduq_gh.py': ('scope', 'workflow', 'project', 'pr')}
+          'sanduq_gh.py': ('scope', 'workflow', 'project', 'pr'), 'sanduq_fs.py': ('workflow',)}
 
 
 def excluded(name):

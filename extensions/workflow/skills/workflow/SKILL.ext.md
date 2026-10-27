@@ -34,7 +34,7 @@ delegation.md once a claim carries `delegation` or `environment`.
    yourself, as their reference says. Retest after every fix.
 5. Before writing any receipt, read [receipt-rules.md](references/receipt-rules.md) (once per
    session): failed, skipped or pending work cannot pass and a pending decision blocks. Start
-   from the claim's `receipt_template`. Drift: [recovery.md](references/recovery.md).
+   from the claim's `receipt_template` and set every `<...>` gating field yourself. Drift: [recovery.md](references/recovery.md).
 6. `complete --feature ... --token ... --receipt <file>` prints `{ok, stage, next}`; claim the
    next stage without asking. When blocked, `pause --reason` and report the actual question or
    failure. Keep required human review and deployment gates.

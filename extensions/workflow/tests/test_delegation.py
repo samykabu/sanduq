@@ -627,7 +627,8 @@ class DelegationTests(unittest.TestCase):
              patch.object(dispatch.shutil, 'which', return_value='node'), \
              patch.object(dispatch.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, json.dumps(payload), '')):
             result = dispatch.collect(self.root, self.feature, 'codex-1')
-        self.assertIsNone(result['actual_model'])
+        self.assertEqual(result['actual_model'], 'unreported')
+        self.assertFalse(result['fallback_used'])
         self.assertEqual(result['actual_model_evidence'], 'unverified')
         self.assertEqual(result['token_usage']['input_fresh'], 15)
         self.assertEqual(dispatch.load_ledger(self.root, self.feature)['attempts'][0]['status'], 'successful')
@@ -1131,11 +1132,11 @@ class DelegationTests(unittest.TestCase):
              patch.object(dispatch.subprocess, 'run', side_effect=fake_run):
             dispatch.launch(self.root, 'driver.mjs', candidate, self.root, 'task text', 1800, 'intent-xyz')
         self.assertEqual(captured['env']['SANDUQ_DELEGATED_RUN'], 'intent-xyz')
-        # Round 10, finding 2: --keep-env for all three names, so a future
-        # --clean-env launch does not silently drop whichever this call set.
+        # SEC-01: always --clean-env, and the three SANDUQ_DELEGATED_* names are kept.
+        self.assertIn('--clean-env', captured['args'])
+        kept = [captured['args'][i + 1] for i, a in enumerate(captured['args']) if a == '--keep-env']
         for name in ('SANDUQ_DELEGATED_RUN', 'SANDUQ_DELEGATED_ROLE', 'SANDUQ_DELEGATED_FEATURE'):
-            self.assertIn(name, captured['args'])
-        self.assertEqual(captured['args'].count('--keep-env'), 3)
+            self.assertIn(name, kept)
 
     def test_launch_without_lean_passes_no_claim_identity(self):
         """Lean off (the default) behaves as before lean existed: no claim
@@ -1160,7 +1161,6 @@ class DelegationTests(unittest.TestCase):
                             'intent-xyz', feature=self.feature)
         self.assertNotIn('SANDUQ_WORKFLOW_CLAIM_TOKEN', captured['env'])
         self.assertNotIn('SANDUQ_WORKFLOW_SESSION_ID', captured['env'])
-        self.assertEqual(captured['args'].count('--keep-env'), 3)
         self.assertNotIn('SANDUQ_WORKFLOW_CLAIM_TOKEN', captured['args'])
 
     def test_launch_sets_orchestrator_role_for_the_execute_stage(self):
@@ -1491,12 +1491,32 @@ class DelegationTests(unittest.TestCase):
              patch.object(dispatch.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, json.dumps(payload), '')), \
              patch.object(dispatch, 'launch', side_effect=launch):
             result = dispatch.collect(self.root, self.feature, 'codex-1')
-        self.assertEqual(result['replacement']['run_id'], 'codex-2')
-        self.assertIsNone(result['replacement']['route']['requested_model'])
+        # DEC-12 B: no replacement run; the stop names everything the user needs to decide.
+        self.assertNotIn('replacement', result)
+        self.assertEqual(result['decision'], 'FALLBACK_CONFIRMATION_REQUIRED')
+        self.assertIs(result['ok'], False)
+        message = result['error']
+        for text in ('FALLBACK_CONFIRMATION_REQUIRED: T001 of ' + self.feature, 'rejected model gpt-6-sol',
+                     'Unknown model gpt-6-sol', 'codex CLI default, model unknown: Codex does not report it',
+                     '--confirm-fallback gpt-6-sol=default', 'allow_default_model: true',
+                     'delegate_dispatch.py start --feature ' + self.feature + ' --id T001',
+                     'delegate_dispatch.py adopt --feature ' + self.feature + ' --id T001'):
+            self.assertIn(text, message)
+        self.assertEqual((result['requested_model'], result['substitute_model'], result['actual_model'],
+                          result['confirmed_by'], result['fallback_used']),
+                         ('gpt-6-sol', None, 'unreported', None, False))
         ledger = dispatch.load_ledger(self.root, self.feature)
-        self.assertEqual(ledger['attempts'][0]['replacement_run_id'], 'codex-2')
-        self.assertTrue(any(d['reason'] == 'requested model rejected by CLI'
-                            for d in ledger['route_decisions']))
+        self.assertEqual(len(ledger['attempts']), 1)
+        self.assertNotIn('replacement_run_id', ledger['attempts'][0])
+        self.assertTrue(any(d['decision'] == 'fallback-confirmation-required' for d in ledger['route_decisions']))
+        # The CLI default is not pre-listed by the default route, so confirming it is refused.
+        with patch.object(dispatch, 'launch') as launched, \
+             self.assertRaisesRegex(delegation.DelegationError, 'FALLBACK_SUBSTITUTE_NOT_LISTED'):
+            dispatch.collect(self.root, self.feature, 'codex-1', confirm='gpt-6-sol=default')
+        launched.assert_not_called()
+        self.assertTrue(dispatch.substitute_listed(
+            {'routes': {'implementation': {'allow_default_model': True}}, 'overrides': {}},
+            ledger['attempts'][0], {'harness': 'codex', 'requested_model': None}))
 
     def test_failed_work_with_no_edits_gets_one_stronger_attempt(self):
         self.tasks()
@@ -2233,7 +2253,7 @@ class DelegationTests(unittest.TestCase):
         self.enable()
         ledger = self.ledger_path_in_repo()
         cases = (
-            # (label, dirty paths, rejected model, expected replacement model)
+            # (label, dirty paths, rejected model, expected replacement model; None means none started)
             ('model rejected', [ledger], True, None),
             ('failed without edits', [ledger], False, 'gpt-6-astra'),
         )
@@ -2249,7 +2269,11 @@ class DelegationTests(unittest.TestCase):
                                                          'dir': str(self.root / '.delegate/runs' / run_id)})
                 result = self.collect_with(payload, lambda *args, **kwargs: {'run_id': replacement_id,
                                                                     'state': 'running'}, run_id=run_id)
-                self.assertEqual(result['replacement']['route']['requested_model'], model)
+                if model is None:
+                    self.assertEqual(result['decision'], 'FALLBACK_CONFIRMATION_REQUIRED')
+                    self.assertNotIn('replacement', result)
+                else:
+                    self.assertEqual(result['replacement']['route']['requested_model'], model)
                 attempt = dispatch.find_run(dispatch.load_ledger(self.root, self.feature), run_id)
                 # The raw measurement stays on record beside the attribution.
                 self.assertEqual(attempt['changed_paths'], [ledger])
@@ -2257,9 +2281,10 @@ class DelegationTests(unittest.TestCase):
                 self.assertEqual(attempt['worker_changed_paths'], [])
                 self.assertEqual(result['dispatcher_paths_changed'], [ledger])
                 # Terminal replacement so the next case can start the task again.
-                with patch.object(dispatch, 'launch') as launched:
-                    self.collect_with(self.failed_payload(replacement_id, dirty_paths_changed=['src/x.py']),
-                                      launched, run_id=replacement_id)
+                if model is not None:
+                    with patch.object(dispatch, 'launch') as launched:
+                        self.collect_with(self.failed_payload(replacement_id, dirty_paths_changed=['src/x.py']),
+                                          launched, run_id=replacement_id)
 
     def test_genuine_or_unattributable_edits_still_block_retries(self):
         self.tasks()
@@ -2364,7 +2389,11 @@ class DelegationTests(unittest.TestCase):
                                               repo_root=str(self.root), **fields)
                 result = self.collect_with(payload, lambda *args, **kwargs: {'run_id': replacement_id,
                                                                     'state': 'running'}, run_id=run_id)
-                self.assertEqual(result['replacement']['route']['requested_model'], model)
+                if model is None:  # DEC-12 B: the fallback waits for the user's confirmation
+                    self.assertEqual(result['decision'], 'FALLBACK_CONFIRMATION_REQUIRED')
+                    self.assertNotIn('replacement', result)
+                else:
+                    self.assertEqual(result['replacement']['route']['requested_model'], model)
                 attempt = dispatch.find_run(dispatch.load_ledger(self.root, self.feature), run_id)
                 self.assertNotIn('ledger_foreign_write_seen', attempt)
                 self.assertEqual(attempt['dispatcher_paths_changed'], [ledger])
@@ -2772,7 +2801,12 @@ class DelegationTests(unittest.TestCase):
                 self.assertFalse(dispatch.model_rejected({'status_reason': text}))
 
     def test_model_rejection_keeps_configured_fallback_over_stronger_retry(self):
+        """DEC-12 B / SEC-24: a rejected model starts nothing until the user confirms the pre-listed
+        substitute for one run; never a stronger tier, never from a delegated context."""
         self.tasks()
+        self.policy['delegation']['routes']['implementation'] = {
+            'preferred': {'harness': 'selected', 'tier': 'standard'},
+            'fallbacks': [{'harness': 'codex', 'model': 'gpt-6-luna'}]}
         self.enable()
         self.start_one()
         stderr = self.root / 'model-error.txt'
@@ -2780,17 +2814,77 @@ class DelegationTests(unittest.TestCase):
         payload = self.failed_payload(status_reason='',
                                       artifacts={'stderr': str(stderr),
                                                  'dir': str(self.root / '.delegate/runs/codex-1')})
-        result = self.collect_with(payload, lambda *args, **kwargs: {'run_id': 'codex-2', 'state': 'running'})
-        self.assertIsNone(result['replacement']['route']['requested_model'])
-        ledger = dispatch.load_ledger(self.root, self.feature)
-        self.assertEqual(ledger['attempts'][1]['retry_count'], 0)
-        self.assertEqual(ledger['attempts'][1]['route_candidates'][0]['choice'], 'fallback:1')
-        # The fallback is also rejected: nothing remains, and no stronger model replaces it.
-        payload = self.failed_payload('codex-2', status_reason='model does not exist')
         with patch.object(dispatch, 'launch') as launched:
-            result = self.collect_with(payload, launched, run_id='codex-2')
+            result = self.collect_with(payload, launched)
+            again = dispatch.collect(self.root, self.feature, 'codex-1')  # recorded: the same stop
         launched.assert_not_called()
         self.assertNotIn('replacement', result)
+        self.assertEqual(result['decision'], 'FALLBACK_CONFIRMATION_REQUIRED')
+        self.assertEqual(again['error'], result['error'])
+        self.assertIn('--confirm-fallback gpt-6-sol=gpt-6-luna', result['error'])
+        self.assertIn('model_not_found', result['error'])
+        self.assertNotIn('allow_default_model', result['error'])
+        self.assertEqual(result['substitute_model'], 'gpt-6-luna')
+        self.assertEqual(len(dispatch.load_ledger(self.root, self.feature)['attempts']), 1)
+        # A delegated worker or orchestrator cannot confirm, and the pair must match exactly.
+        for env in ({'SANDUQ_DELEGATED_RUN': 'intent-1'}, {'SANDUQ_DELEGATED_ROLE': 'orchestrator'},
+                    {'SANDUQ_ROLE': 'worker'}):
+            with self.subTest(env=env), patch.dict(os.environ, env), \
+                 self.assertRaisesRegex(delegation.DelegationError, 'FALLBACK_CONFIRMATION_FORBIDDEN'):
+                dispatch.collect(self.root, self.feature, 'codex-1', confirm='gpt-6-sol=gpt-6-luna')
+        with self.assertRaisesRegex(delegation.DelegationError, 'FALLBACK_CONFIRMATION_MISMATCH.*gpt-6-sol=gpt-6-luna'):
+            dispatch.collect(self.root, self.feature, 'codex-1', confirm='gpt-6-sol=default')
+        launched = []
+        def launch(root, driver, candidate, *args, **kwargs):
+            launched.append(candidate)
+            return {'run_id': 'codex-2', 'state': 'running'}
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch.object(dispatch, 'launch', side_effect=launch):
+            confirmed = dispatch.collect(self.root, self.feature, 'codex-1', confirm='gpt-6-sol=gpt-6-luna')
+        self.assertEqual([c['requested_model'] for c in launched], ['gpt-6-luna'])
+        self.assertEqual(confirmed['replacement']['run_id'], 'codex-2')
+        self.assertTrue(confirmed['replacement']['fallback_used'])
+        self.assertNotIn('error', confirmed)
+        ledger = dispatch.load_ledger(self.root, self.feature)
+        self.assertEqual(ledger['attempts'][1]['retry_count'], 0)  # not a stronger retry
+        self.assertEqual(ledger['attempts'][1]['route_candidates'][0]['choice'], 'fallback:1')
+        self.assertTrue(ledger['attempts'][1]['confirmed_by'].startswith('user:'))
+        self.assertTrue(any(d['decision'] == 'fallback-confirmed' for d in ledger['route_decisions']))
+        # One confirmation, one run.
+        with self.assertRaisesRegex(delegation.DelegationError, 'FALLBACK_CONFIRMATION_NOT_PENDING'):
+            dispatch.collect(self.root, self.feature, 'codex-1', confirm='gpt-6-sol=gpt-6-luna')
+        # The confirmed run shows the model fields; codex reports no model, so it stays unverified.
+        done = self.failed_payload('codex-2', status='successful', summary='Implemented',
+                                   dirty_paths_changed=['src/parser.py'])
+        with patch.object(dispatch, 'launch') as again_launched:
+            result = self.collect_with(done, again_launched, run_id='codex-2')
+        again_launched.assert_not_called()
+        self.assertEqual({key: result[key] for key in ('requested_model', 'substitute_model', 'actual_model',
+                                                        'fallback_used', 'fallback_summary')},
+                         {'requested_model': 'gpt-6-sol', 'substitute_model': 'gpt-6-luna',
+                          'actual_model': 'unreported', 'fallback_used': True,
+                          'fallback_summary': 'fallback confirmed; model unverified'})
+        self.assertTrue(result['confirmed_by'].startswith('user:'))
+
+    def test_rejected_confirmed_fallback_is_not_replaced_again(self):
+        self.tasks()
+        self.policy['delegation']['routes']['implementation'] = {
+            'preferred': {'harness': 'selected', 'tier': 'standard'},
+            'fallbacks': [{'harness': 'codex', 'model': 'gpt-6-luna'}]}
+        self.enable()
+        self.start_one()
+        rejected = dict(status_reason='model gpt-6-sol does not exist')
+        with patch.object(dispatch, 'launch') as launched:
+            self.collect_with(self.failed_payload(**rejected), launched)
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch.object(dispatch, 'launch', return_value={'run_id': 'codex-2', 'state': 'running'}):
+            dispatch.collect(self.root, self.feature, 'codex-1', confirm='gpt-6-sol=gpt-6-luna')
+        with patch.object(dispatch, 'launch') as launched:
+            result = self.collect_with(self.failed_payload('codex-2', status_reason='model gpt-6-luna does not exist'),
+                                       launched, run_id='codex-2')
+        launched.assert_not_called()
+        self.assertNotIn('replacement', result)
+        self.assertNotIn('error', result)  # nothing left to confirm
 
     def test_stronger_retry_requires_complete_measured_no_edits(self):
         unknown = ({'dirty_paths_changed': None}, {'dirty_paths_changed': ...},
@@ -2855,6 +2949,132 @@ class DelegationTests(unittest.TestCase):
         w.write(delegation.ledger_path(self.root, self.feature), ledger)
         with self.assertRaisesRegex(delegation.DelegationError, 'LEDGER_INVALID'):
             dispatch.load_ledger(self.root, self.feature)
+
+    FAKE_HARNESS = (
+        "import fs from 'node:fs';\n"
+        "const args = process.argv.slice(2);\n"
+        "if (args.includes('--version')) { console.log('9.9.9 (fake)'); process.exit(0); }\n"
+        "fs.writeFileSync(DUMP, JSON.stringify({env: Object.keys(process.env), argv: args}));\n"
+        "console.log(JSON.stringify({type: 'result', subtype: 'success', is_error: false, result: 'done',\n"
+        "  session_id: 's1', usage: {input_tokens: 1, output_tokens: 1}}));\n")
+
+    @unittest.skipUnless(shutil.which('node'), 'needs node to run the bundled driver')
+    def test_fake_harness_gets_a_clean_environment_and_route_flags(self):
+        """SEC-01 end to end through the bundled driver: the agent CLI sees only the allowlist; a GitHub
+        token only on a route that declares GitHub access; review routes start read-only; meta.json
+        records clean_env."""
+        driver = delegation.bundled_skill() / 'delegate.mjs'
+        cases = (  # (label, candidate fields, GitHub token expected, read-only flag expected)
+            ('implementation task', {'read_only': False, 'github_access': False}, False, False),
+            ('review route', {'read_only': True, 'github_access': False}, False, True),
+            ('decision stage', {'read_only': False, 'github_access': True}, True, False),
+        )
+        for number, (label, fields, github, sandbox) in enumerate(cases):
+            with self.subTest(label):
+                dump = self.root / ('env-%d.json' % number)
+                fake = self.root / ('fake-claude-%d.mjs' % number)
+                fake.write_text('const DUMP = ' + json.dumps(str(dump)) + ';\n' + self.FAKE_HARNESS,
+                                encoding='utf-8')
+                env = {'GH_TOKEN': 'gh-secret', 'GITHUB_TOKEN': 'gh-secret', 'ANTHROPIC_API_KEY': 'a-key',
+                       'OPENAI_API_KEY': 'o-key', 'SANDUQ_PROBE': '1', 'UNRELATED_SECRET': 's',
+                       'DELEGATE_BIN_CLAUDE': str(fake)}
+                with patch.dict(os.environ, env):
+                    started = dispatch.launch(self.root, str(driver),
+                                              {'harness': 'claude', 'requested_model': None,
+                                               'allow_commit': False, **fields},
+                                              self.root, 'Report the environment', 120, 'intent-%d' % number)
+                deadline = time.time() + 60
+                run_dir = Path(started['run_dir'])
+                while time.time() < deadline and not (dump.is_file() and (run_dir / 'result.json').is_file()):
+                    time.sleep(0.2)
+                seen = json.loads(dump.read_text(encoding='utf-8'))
+                names = {name.upper() for name in seen['env']}
+                self.assertNotIn('UNRELATED_SECRET', names)
+                self.assertNotIn('OPENAI_API_KEY', names)  # another harness's credential
+                self.assertIn('ANTHROPIC_API_KEY', names)
+                self.assertIn('SANDUQ_PROBE', names)
+                self.assertIn('SANDUQ_DELEGATED_RUN', names)
+                self.assertEqual('GH_TOKEN' in names and 'GITHUB_TOKEN' in names, github)
+                self.assertEqual('--permission-mode' in seen['argv'], sandbox)
+                self.assertEqual('--dangerously-skip-permissions' in seen['argv'], not sandbox)
+                meta = json.loads((run_dir / 'meta.json').read_text(encoding='utf-8'))
+                self.assertIs(meta['clean_env'], True)
+                self.assertEqual(meta['permission'], 'sandbox' if sandbox else 'bypass')
+                self.assertEqual('GH_TOKEN' in meta['kept_env_names'], github)
+                self.assertNotIn('UNRELATED_SECRET', meta['kept_env_names'])
+                self.assertEqual(started['keep_env'], [n for n in started['keep_env'] if n != 'UNRELATED_SECRET'])
+
+    def test_route_type_sets_permission_and_github_access_and_the_ledger_records_them(self):
+        self.assertTrue(dispatch.read_only_route('review', {}))
+        self.assertTrue(dispatch.read_only_route('implementation', {'tier': 'review'}))
+        self.assertFalse(dispatch.read_only_route('implementation', {'tier': 'standard'}))
+        for identity, work_type, expected in ((self.feature + '/stage:execute', 'coordination', True),
+                                              (self.feature + '/stage:specify', 'discovery', True),
+                                              (self.feature + '/stage:verify', 'qa_author', False),
+                                              (self.feature + '/T001', 'implementation', False)):
+            self.assertEqual(dispatch.github_access(identity, work_type), expected, identity)
+        names = dispatch.keep_env_names('codex', {'SANDUQ_X': '1', 'GH_TOKEN': 't', 'OTHER': 'o'})
+        self.assertIn('OPENAI_API_KEY', names)
+        self.assertIn('SANDUQ_X', names)
+        self.assertNotIn('GH_TOKEN', names)
+        self.assertNotIn('OTHER', names)
+        self.assertNotIn('ANTHROPIC_API_KEY', names)
+        self.assertIn('GH_TOKEN', dispatch.keep_env_names('codex', {}, github=True))
+        self.tasks()
+        self.enable()
+        launched = []
+        def launch(root, driver, candidate, *args, **kwargs):
+            launched.append(candidate)
+            return {'run_id': 'codex-1', 'state': 'running', 'keep_env': ['PATH', 'SANDUQ_DELEGATED_RUN']}
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch.object(dispatch, 'launch', side_effect=launch):
+            dispatch.start(self.root, self.feature, 'T001')
+        self.assertEqual((launched[0]['read_only'], launched[0]['github_access']), (False, False))
+        attempt = dispatch.load_ledger(self.root, self.feature)['attempts'][0]
+        self.assertEqual({key: attempt[key] for key in ('clean_env', 'kept_env_names', 'permission', 'github_access')},
+                         {'clean_env': True, 'kept_env_names': ['PATH', 'SANDUQ_DELEGATED_RUN'],
+                          'permission': 'bypass', 'github_access': False})
+
+    def test_two_starts_within_the_health_ttl_run_doctor_once(self):
+        """SAMY-16: candidate_start reuses the cached probe; a start failure forgets it."""
+        self.tasks('- [ ] T001 Implement parser\n- [ ] T002 Implement lexer\n- [ ] T003 Implement printer\n')
+        self.enable()
+        ids = iter(('codex-1', 'codex-2'))
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()) as doctor, \
+             patch.object(dispatch, 'launch', side_effect=lambda *a, **k: {'run_id': next(ids), 'state': 'running'}):
+            dispatch.start(self.root, self.feature, 'T001')
+            dispatch.start(self.root, self.feature, 'T002')
+        self.assertEqual(doctor.call_count, 1)
+        self.assertTrue((self.root / delegation.HEALTH_CACHE).is_file())
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch.object(dispatch, 'intent_run_dirs', return_value=[]), \
+             patch.object(dispatch, 'launch', side_effect=dispatch.StartFailed('DELEGATE_START_FAILED: x')), \
+             self.assertRaisesRegex(delegation.DelegationError, 'ROUTES_UNAVAILABLE'):
+            dispatch.start(self.root, self.feature, 'T003')
+        self.assertFalse((self.root / delegation.HEALTH_CACHE).exists())
+
+    def test_driver_start_and_collect_are_bounded(self):
+        """SEC-16: a driver that never answers yields a named error within the bound."""
+        seen = {}
+        def hang(args, **kwargs):
+            seen[args[2]] = kwargs.get('timeout')
+            raise subprocess.TimeoutExpired(args, kwargs.get('timeout'))
+        with patch.object(dispatch.shutil, 'which', return_value='node'), \
+             patch.object(dispatch.subprocess, 'run', side_effect=hang), \
+             self.assertRaisesRegex(dispatch.StartFailed, 'DELEGATE_START_FAILED: the driver did not answer within 60'):
+            dispatch.launch(self.root, 'delegate.mjs', {'harness': 'codex', 'requested_model': None},
+                            self.root, 'Task', 1800)
+        self.tasks()
+        self.enable()
+        self.start_one()
+        with patch.object(delegation, 'inspect_skill', return_value=self.fake_doctor()), \
+             patch.object(dispatch.shutil, 'which', return_value='node'), \
+             patch.object(dispatch.subprocess, 'run', side_effect=hang), \
+             self.assertRaisesRegex(delegation.DelegationError, 'DELEGATE_COLLECT_TIMEOUT: .*within 120 seconds'):
+            dispatch.collect(self.root, self.feature, 'codex-1')
+        self.assertEqual(seen, {'start': 60, 'collect': 120})
+        self.assertEqual(dispatch.find_run(dispatch.load_ledger(self.root, self.feature), 'codex-1')['status'],
+                         'running')
 
     def test_launch_reports_spawn_oserror_as_confirmed_start_failure(self):
         with patch.object(dispatch.shutil, 'which', return_value='node'), \
@@ -3692,6 +3912,7 @@ class DelegationTests(unittest.TestCase):
             self.assertEqual(dispatch.start(self.root, self.feature, 'T001')['notices'], [notice])
         run = w.Run(self.root, self.feature)
         run.start('acme/app#10')
+        delegation.forget_health(self.root)  # the start above cached its probe (SAMY-16)
         with patch.object(delegation, 'doctor', return_value=health), \
              patch_runtime('doctor', return_value={'ok': True, 'errors': []}):
             claim = run.claim({'session_id': 'test-session'})

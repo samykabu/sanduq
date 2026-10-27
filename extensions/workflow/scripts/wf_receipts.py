@@ -22,6 +22,7 @@ from sanduq_hash import portable_content, text_attributes
 from wf_core import (BASE_STAGES, INPUT_ROLES, SOURCE_STAGES, LITE_OPTIONAL_INPUTS, SYNC_BINDING_PREFIX, HANDOFF_BEGIN,
                      HANDOFF_END, WORKFLOW_SCRIPT, WorkflowError, require, read, inside, portable_label, canonical_path,
                      run_git, git_ok, git)
+import sanduq_fs  # on sys.path once wf_core is imported (packaged beside it, or the source tree's shared folder)
 from wf_fingerprints import (sync_state_label, sync_entry, text_fingerprints, fingerprint_files, source_fingerprints,
                              source_fingerprints_of)
 from wf_policy import state_tier, feature_tier, task_issue_mode
@@ -97,6 +98,31 @@ def handoff_text(existing, block):
     return existing.rstrip('\n') + '\n\n' + block + '\n'
 
 
+# AHMED-01: a claim whose heartbeat is younger than this has a live owner unless its recorded pid has exited.
+CLAIM_HEARTBEAT_SECONDS = 900
+
+
+def claim_owner(active):
+    """Liveness of an active claim's owner: `alive` when the recorded pid runs on this host, `dead` when it has
+    exited, `unknown` when no pid is recorded (a CLI claim, whose process exits at once, or a claim from before
+    this field) or the claim came from another host. `heartbeat_recent` is the 15-minute activity window."""
+    import socket
+    from delegation import process_alive
+    stamp = active.get('heartbeat_at') or active.get('claimed_at')
+    try:
+        last = datetime.fromisoformat(stamp) if stamp else None
+    except (TypeError, ValueError):
+        last = None
+    if last is not None and last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    age = (datetime.now(timezone.utc) - last).total_seconds() if last else None
+    pid, host = active.get('pid'), active.get('host')
+    owner = 'unknown' if pid is None or host != socket.gethostname() else 'alive' if process_alive(pid) else 'dead'
+    return {'owner': owner, 'pid': pid, 'host': host,
+            'last_activity_minutes': int(age // 60) if age is not None else None,
+            'heartbeat_recent': bool(active.get('heartbeat_at')) and age is not None and age < CLAIM_HEARTBEAT_SECONDS}
+
+
 def native_run_status(root, feature, state, roots):
     """Compact run projection enriched with explicit ledger acceptance, never raw logs."""
     try:
@@ -122,12 +148,18 @@ def native_run_status(root, feature, state, roots):
             if not run_id:
                 continue
             projected = {key: attempt.get(key) for key in ('identity', 'status', 'accepted_evidence', 'status_provenance')}
+            # DEC-12 B: a confirmed or pending model fallback is visible wherever the run is shown.
+            import delegate_dispatch
+            projected['fallback'] = delegate_dispatch.fallback_fields(attempt)
             if run_id in attempts and attempts[run_id] != projected:
                 ledger_conflicts.add(run_id)
             attempts[run_id] = projected
     for run in report['runs']:
         attempt = attempts.get(run['run_id']) if run['run_id'] not in ledger_conflicts else None
         run['ledger_status'] = attempt.get('status', 'unknown') if attempt else 'unknown'
+        fallback = (attempt or {}).get('fallback') or {}
+        if fallback.get('fallback_used') or fallback.get('substitute_model'):
+            run['fallback'] = fallback
         accepted = (attempt and attempt.get('status') == 'successful' and
                     (attempt.get('accepted_evidence') or {}).get('source') in ('accept', 'adopt'))
         run['acceptance_verdict'] = 'accepted' if accepted else 'unknown'
@@ -139,6 +171,10 @@ def native_run_status(root, feature, state, roots):
     active = state.get('active')
     if active:
         active = {key: value for key, value in active.items() if key != 'baseline'}
+        liveness = claim_owner(active)
+        active['owner'] = liveness['owner']
+        active['last_activity'] = ('unknown' if liveness['last_activity_minutes'] is None
+                                   else str(liveness['last_activity_minutes']) + ' min ago')
     result = {'feature': feature, 'issue': state['issue'], 'status': state.get('status'), 'active': active,
               'next_action': state.get('next_action'), 'completed': list(state.get('receipts', {})),
               'ledger_trust': trust, 'ledger_conflicts': sorted(ledger_conflicts),
@@ -441,11 +477,15 @@ def diff_review_shell(base, head):
     return shlex.join(diff_review_command(base, head))
 
 
-def diff_review_sha256(root, base, head):
-    """The SHA-256 of the bytes `diff_review_command(base, head)` prints."""
+def diff_review_sha256(root, base, head, timeout=300):
+    """The SHA-256 of the bytes `diff_review_command(base, head)` prints; a run past `timeout` s raises
+    DIFF_REVIEW_TIMEOUT (it can run under the feature lock, SAMY-02)."""
     env = {key: value for key, value in os.environ.items()
            if key not in ('GIT_LITERAL_PATHSPECS', 'GIT_GLOB_PATHSPECS', 'GIT_NOGLOB_PATHSPECS', 'GIT_ICASE_PATHSPECS')}
-    result = subprocess.run(diff_review_command(base, head), cwd=root, capture_output=True, env=env)
+    result = sanduq_fs.run_bounded(
+        diff_review_command(base, head), timeout=timeout, error_code='DIFF_REVIEW_TIMEOUT',
+        error=WorkflowError, next_step='run "' + diff_review_shell(base, head) + '" to see why git is slow, '
+        'then rerun the Workflow command', cwd=root, capture_output=True, env=env)
     require(result.returncode == 0,
             'DIFF_REVIEW_DIFF_FAILED: ' + result.stderr.decode('utf-8', 'replace').strip()[:300])
     return hashlib.sha256(result.stdout).hexdigest()

@@ -20,6 +20,12 @@ the feature handoff. On resume, inspect that handle and reuse it while it is liv
 An observation timeout alone does not prove an agent has stopped. Recover a
 terminal or missing agent from the handoff before assigning new work.
 
+The orchestration agent is a host subagent, so it never runs `delegate_dispatch.py accept`,
+`adopt`, `reassign` or `trust-reset`; the guard refuses them there. At a batch boundary it
+reports "needs accept/adopt for T###" (or reassign, with the gap) and the top-level dispatcher
+session runs the command. `trust-reset` also needs the user's explicit approval in the
+conversation, quoted in `--reason`.
+
 Use the host's real agent spawn, message and status tools; do not invent tool names or
 assume a child can spawn workers. If nested spawning
 is unavailable, the dispatcher creates workers on the orchestration agent's

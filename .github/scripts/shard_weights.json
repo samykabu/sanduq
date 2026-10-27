@@ -1,5 +1,5 @@
 {
-  "source": "Measured seconds per unit (shard-unit-seconds lines) from the Windows shard jobs of ci run 39672772543 (PR #104, 2026-10-21), rebuilt with shard_times.py rebuild. Units not listed fall back to bytes at the table mean.",
+  "source": "Measured seconds per unit (shard-unit-seconds lines) from the Windows shard jobs of ci run 39672772543 (PR #104, 2026-10-21), rebuilt with shard_times.py rebuild. Units not listed fall back to bytes at the table mean. test_lifecycle_e2e: 46.0 s measured locally on Windows (PH-02), until the next rebuild.",
   "workflow": {
     "test_apply_pending": 4.8,
     "test_assure_init": 0.1,
@@ -32,6 +32,7 @@
     "test_lean_execution": 0.3,
     "test_lean_native_integration": 0.2,
     "test_lifecycle": 45.6,
+    "test_lifecycle_e2e": 46.0,
     "test_lint": 7.9,
     "test_memory_handoff": 50.6,
     "test_memory_hook_lifecycle": 15.1,

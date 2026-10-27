@@ -58,9 +58,10 @@ ASSIGN_MARKERS = [
     '`git stash` and `git add -A`/`git add .` are forbidden for a task worker',  # S6
     'as are `delegate_dispatch.py accept`, `delegate_dispatch.py reassign`, '
     '`delegate_dispatch.py trust-reset` and `delegate_dispatch.py adopt`',  # B12: also forbidden for a task worker
-    '`accept`/`reassign`/`trust-reset`/`adopt` are ledger-trust decisions '
-    'the orchestration agent alone makes',                                # B12: why they are forbidden
-    'The one exception is the delegated Execute stage itself',           # B12: Execute-orchestrator exception
+    '`accept`/`reassign`/`trust-reset`/`adopt` are ledger-trust decisions. '
+    'They run only in the top-level dispatcher session',                  # B12, OMAR-03: why they are forbidden
+    'The one exception is the delegated Execute stage, an external delegated process rather '
+    'than a host subagent',                                               # B12: Execute-orchestrator exception
     "it runs with an orchestrator scope over its own feature's `T###` tasks",
     '`trust-reset` stays forbidden even for it',                         # B12: trust-reset still refused
     'An ordinary task worker never has that scope',
@@ -146,14 +147,16 @@ B12_TEXT = (
     ' Ledger trust is tri-state, not pass/fail: no local `.written` marker (a '
     'fresh checkout or CI runner) is a warning only, not a block — status is '
     'still enforced. A genuine tamper (a marker that disagrees) is sticky and '
-    'survives a later legitimate write; resolve it with `delegate_dispatch.py '
-    'trust-reset --feature <f> --reason "<text>"` only after reviewing exactly '
-    'what changed — this catches accidental and local tampering only, never a '
-    'forged commit, so CI integrity still rests on review. After upgrading to '
-    'this release, re-delegate any stage claimed under an older checkpoint '
-    "once, since its recorded attempt has no `claim_token` and can never "
-    'satisfy `complete`. `trust-reset` is an orchestration-agent command, '
-    "never a worker's."
+    "survives a later legitimate write. `trust-reset` needs the user's explicit "
+    'approval in this conversation: pause, show the user exactly what changed in '
+    'the ledger (quote the diff), and only after they approve run '
+    '`delegate_dispatch.py trust-reset --feature <f> --reason "approved by <user>: '
+    '<why>"` from the top-level dispatcher session. This catches accidental and '
+    'local tampering only, never a forged commit, so CI integrity still rests on '
+    'review. After upgrading to this release, re-delegate any stage claimed under '
+    "an older checkpoint once, since its recorded attempt has no `claim_token` and "
+    'can never satisfy `complete`. `trust-reset` is never run by a worker, a host '
+    'subagent or the orchestration agent.'
     ' A checked task with no delegation attempt reaches Ready only through '
     '`delegate_dispatch.py adopt --feature <feature> --id <task> --command '
     '"<acceptance check>" --expect counts|files [--owned <path>]`. It refuses '
@@ -318,6 +321,53 @@ class ExecutionProtocolB11Tests(unittest.TestCase):
         offenders = {name: terms for name, terms in offenders.items() if terms}
         self.assertEqual(offenders, {},
                           f'Retired exemption term(s) found: {offenders}')
+
+
+class RoleBoundaryTextTests(unittest.TestCase):
+    """OMAR-03, OMAR-04 and OMAR-23 in the source references and presets."""
+    REFERENCES = ROOT / 'extensions/workflow/skills/workflow/references'
+    VERBS = r'(accept|adopt|reassign|trust-reset)'
+    PRECEDENCE = ("Where the upstream text below conflicts with the claim's `reference_text`, the `reference_text` "
+                  "wins; upstream hook prompts are skipped inside a claim.")
+
+    def text(self, path):
+        return normalize(path.read_text(encoding='utf-8'))
+
+    def test_no_reference_lets_a_host_subagent_run_a_ledger_trust_verb(self):
+        claims = re.compile(r'(orchestration agent|orchestration-agent|subagent|the orchestrator)[^.]*?'
+                            r'\b(runs?|calls?|makes?|command)\b[^.]*?`?' + self.VERBS + r'\b')
+        offenders = []
+        for path in self.REFERENCES.rglob('*.md'):
+            for sentence in re.split(r'(?<=[.;:])\s', self.text(path)):
+                if claims.search(sentence) and not re.search(r'\b(never|not|only in the top-level|refuses?)\b',
+                                                              sentence):
+                    offenders.append((path.name, sentence))
+        self.assertEqual(offenders, [])
+        for name in ('execution-assign.md', 'execute/orchestrator.md', 'execute/delegated-workers.md'):
+            text = self.text(self.REFERENCES / name)
+            with self.subTest(name=name):
+                self.assertIn('top-level dispatcher session', text)
+                self.assertIn('"needs accept/adopt for T###"', text)
+        for name in ('execution-assign.md', 'execute/orchestrator.md', 'execute/delegated-workers.md'):
+            with self.subTest(name=name):
+                self.assertIn("trust-reset` also needs the user's explicit approval" if name != 'execute/delegated-workers.md'
+                              else "`trust-reset` needs the user's explicit approval in this conversation: pause",
+                              self.text(self.REFERENCES / name))
+
+    def test_every_composing_overlay_states_the_precedence_and_the_contract_orders_it(self):
+        overlays = [path for path in sorted((ROOT / 'presets/workflow/commands').glob('*.md'))
+                    if 'then continue with the upstream instructions below' in path.read_text(encoding='utf-8')]
+        overlays.append(ROOT / 'presets/scope-gate/commands/specify-gate.md')
+        self.assertGreaterEqual(len(overlays), 11)
+        for path in overlays:
+            with self.subTest(overlay=path.name):
+                self.assertIn(normalize(self.PRECEDENCE), self.text(path))
+        contract = self.text(self.REFERENCES / 'dispatcher-operations.md')
+        self.assertIn(normalize('Precedence inside a claim, highest first: the runtime claim fields'), contract)
+        order = ['runtime claim fields', "claim's `reference_text`", 'the managed overlay', 'the upstream Spec Kit text',
+                 'skill prose']
+        positions = [contract.index(item, contract.index('Precedence inside a claim')) for item in order]
+        self.assertEqual(positions, sorted(positions))
 
 
 if __name__ == '__main__':

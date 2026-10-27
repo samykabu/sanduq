@@ -10,12 +10,31 @@ skill, records every attempt, and leaves the dispatcher in charge of claims and
 receipts. A successful delegated run is candidate evidence for the orchestrator
 to inspect, never a passed stage or a completed task.
 
-## Security interim
+## Security
 
-Every external delegated run launches the agent CLI in permission-bypass mode
-with the full parent environment, so the worker can use any credential in it
-(`GH_TOKEN`, provider API keys). Until the clean-environment launch planned for
-PH-02 exists, Workflow refuses review work through the external driver: a route
+Every external delegated run starts the agent CLI with the driver's
+`--clean-env` and an explicit `--keep-env` allowlist: the driver's runtime
+basics, `PATH`, `HOME`/`USERPROFILE`, `SystemRoot`, `TEMP`/`TMP`,
+`APPDATA`/`LOCALAPPDATA`, `ComSpec`, the chosen harness's own provider
+credentials (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`,
+`CLAUDE_CODE_OAUTH_TOKEN` and `CLAUDE_CONFIG_DIR` for Claude; `OPENAI_API_KEY`,
+`OPENAI_BASE_URL` and `CODEX_HOME` for Codex) and every `SANDUQ_*` name. Any
+other variable, including the other harness's key, never reaches the worker.
+`GH_TOKEN` and `GITHUB_TOKEN` are kept only for routes that use the GitHub
+adapter: the Execute orchestrator and the discovery and coordination stages
+(Scope, Specify, Clarify, Plan, Tasks, Tasks-to-Issues, Ready, PR). Tasks,
+reviews, QA and documentation stages run without them. Review and analysis
+routes (the `review` work type, or a candidate on the `review` model profile)
+start with the driver's read-only `--sandbox`; every other route keeps the
+write-capable mode it needs. The ledger attempt records `clean_env: true`, the
+kept names (`kept_env_names`, names only, never values), `github_access` and
+`permission` (`sandbox` or `bypass`), and the driver's own `meta.json` records
+`clean_env` and the names it kept. A driver `start` that does not answer within
+60 seconds fails with `DELEGATE_START_FAILED`; a `collect` that does not answer
+within 120 seconds fails with `DELEGATE_COLLECT_TIMEOUT` and records nothing.
+
+Review work stays refused through the external driver for now (the PH-01
+interim, lifted in a later phase): a route
 whose work type is `review` (the Analyze and Review stages, `[Review]` tasks) or
 that names the `review` model profile fails with
 `DELEGATION_REVIEW_ROUTE_UNSAFE` at claim and start, `doctor` lists the refused
@@ -264,13 +283,34 @@ already starting or running is refused with `DELEGATION_ALREADY_RUNNING`.
 
 - **Unavailable model.** When the CLI rejects the requested model ("unknown
   model", "model ... does not exist", `model_not_found`, `not_found_error`,
-  "may not exist", and similar), the dispatcher records the decision and starts
-  the next configured fallback. It never substitutes a stronger model for a
-  rejected one. The wording must appear in the driver's status reason or the
-  last 40 lines of the CLI's stderr, and must name the requested model; a
-  structured `model_not_found` code needs no name. Worker output that merely
-  mentions a model, such as a test failing with "Model matching query does not
-  exist", does not count.
+  "may not exist", and similar), the dispatcher records the decision and
+  starts nothing. `collect` stops with `FALLBACK_CONFIRMATION_REQUIRED` (exit
+  code 1, `ok: false`). The message names the stage or task, the requested
+  harness and model, the rejection line from the CLI's stderr, the next
+  configured fallback as the substitute (on Codex the CLI default reads "CLI
+  default, model unknown: Codex does not report it"), and three exact
+  commands: confirm the substitute, start with another allowed model
+  (`start --harness <h> --model <m>`), or run the work natively. The
+  orchestrator shows the message to the user and waits. Only the user may
+  confirm, in the conversation; the top-level session then runs
+  `delegate_dispatch.py collect --feature specs/<feature> --run-id <id>
+  --confirm-fallback <requested>=<substitute>` (a CLI default is spelled
+  `default`), which starts the substitute for one run. The guard hook and the
+  dispatcher refuse `--confirm-fallback` from a delegated worker, a subagent
+  or a delegated orchestrator. The substitute must be pre-listed in
+  `.specify/workflow.yml`: an explicit model in the route's `fallbacks`, or
+  the CLI default only when the route sets `allow_default_model: true`;
+  otherwise confirmation fails with `FALLBACK_SUBSTITUTE_NOT_LISTED`. The
+  confirmed run's ledger attempt, its `collect` output and status carry
+  `requested_model`, `substitute_model`, `actual_model` (from harness
+  telemetry only, else `unreported`), `confirmed_by` and `fallback_used`; when
+  the harness reports no model the summary reads "fallback confirmed; model
+  unverified". A rejected model is never replaced by a stronger tier. The
+  wording must appear in the driver's status reason or the last 40 lines of
+  the CLI's stderr, and must name the requested model; a structured
+  `model_not_found` code needs no name. Worker output that merely mentions a
+  model, such as a test failing with "Model matching query does not exist",
+  does not count.
 - **Failed start.** If the driver exits without creating a run for the
   attempt, nothing started. The same holds when the driver exits 5 because its
   supervisor never acknowledged the start, and the run it left proves no agent
@@ -605,8 +645,8 @@ orchestrator could unset its variables before invoking the dispatcher, so
 each brief's own instruction (the Execute brief states the narrower rule in
 place of the blanket one; every other brief keeps the blanket one) remains
 the primary control. All three `SANDUQ_DELEGATED_*` names are passed to the
-driver as `--keep-env` on every launch, so a future `--clean-env` launch
-does not silently drop whichever of them was actually set.
+driver as `--keep-env` on every `--clean-env` launch, so the clean
+environment never drops whichever of them was actually set.
 
 **Visibility: every orchestrator-run check is a Ready-gate warning.**
 Whenever the Ready gate accepts a task because the orchestrator itself ran
