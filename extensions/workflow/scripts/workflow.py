@@ -54,7 +54,8 @@ from wf_core import (SCHEMA, CHECKPOINT_SCHEMA, CHECKPOINT_SCHEMAS, RANGES, BASE
                      RUNTIME_RECEIPT_FIELDS, SOURCE_STAGES, EFFORT_SCORES, TIERS, DEFAULT_PROFILES, LITE_SKIPPED,
                      LITE_OPTIONAL_INPUTS, LINT_COMMAND, ARTIFACT_BUDGETS, ARTIFACT_ENFORCE, PROJECT_SYNC_PHASES,
                      PROJECT_SYNC_POINTS, PROJECT_SYNC_SCRIPT, PROJECT_SYNC_STEPS, DEFAULT_SYNC_STATE,
-                     SYNC_BINDING_PREFIX, SYNC_ADMINISTRATIVE, TASK_ISSUE_MODES, SIDE_EFFECTS, RENDER_MARKER,
+                     SYNC_BINDING_PREFIX, SYNC_ADMINISTRATIVE, TASK_ISSUE_MODES, PROJECT_SYNC_MODES,
+                     MINIMAL_SYNC_PHASES, SIDE_EFFECTS, RENDER_MARKER,
                      HANDOFF_BEGIN, HANDOFF_END, DOCTOR_CACHE, DOCTOR_CACHE_SECONDS, DOCTOR_CACHE_FILES,
                      WORKFLOW_SCRIPT, WORKFLOW_PACKAGE_PREFIX, WorkflowError, require, now, read, digest,
                      POLICY_DIGEST_VERSION, OPERATIONAL_POLICY, delivery_digest, checkpoint_policy_digest, replace_file,
@@ -72,7 +73,8 @@ from wf_fingerprints import (sync_state_label, sync_entry, sync_projection, sync
 from wf_policy import (default_policy, select_gate, validate_policy, _positive, validate_front_half_policy, tier,
                        state_tier, feature_tier, skipped_stages, project_sync, task_issue_mode, side_effects,
                        matches_side_effect, load_policy, stages, OPERATIONAL_SUBKEYS, policy_cutoff, POLICY_KEYS,
-                       unknown_policy_key)
+                       unknown_policy_key, parse_policy, PolicyLoader, project_sync_mode, sync_phases,
+                       sync_phase_written, board_mode_line)
 from wf_health import (registry, compatible, active_host, command_exists, package_digest, resolve_commands,
                        project_errors, SCOPE_STATUSES, project_defaults, MANAGED_CI, preserved_ci_path, ci_errors,
                        delegation_errors, host_warnings, progress_wiring_warnings, guard_approval_warnings,
@@ -684,6 +686,15 @@ class Run:
         attempt at this phase whose entry already shows that status is done without another call, so a retry after
         a lost result never repeats the remote write; a failed attempt always runs again."""
         require(phase in PROJECT_SYNC_STEPS, 'PROJECT_SYNC_PHASE_INVALID: ' + str(phase))
+        if not sync_phase_written(self.policy, phase):
+            # REQ-22: a parking phase in minimal mode, or any phase in off mode, is a no-op write, recorded as such.
+            with locked(self.lock):
+                state = self.load()
+                state['project_sync'] = {'phase': phase, 'state': 'done', 'at': now(),
+                                         'summary': 'skipped: project_sync.mode ' + project_sync_mode(self.policy) +
+                                                    ' does not write phase ' + phase}
+                self.save(state)
+            return {'ok': True, 'applied': False, 'project_sync': state['project_sync']}
         with locked(self.lock):
             state = self.load()
             record = state.get('project_sync') or {}
@@ -954,8 +965,17 @@ class Run:
                      'policy': copy.deepcopy(self.policy), 'target_branch': previous_branch(self.root),
                      'receipts': {}, 'generation': 0, 'active': None, 'status': 'in-progress'}
             state['dependency_digest'] = package_digest(self.root)
+            self.record_skipped(state, skipped_stages(self.policy, None))
             self.save(state)
             return state
+
+    def record_skipped(self, state, skipped):
+        """Record the stages this feature does not run (the tier's, the board mode's), once each in the log."""
+        for name, reason in skipped.items():
+            if name not in (state.get('skipped') or {}):
+                lifecycle.queue(state, name, 'skipped', reason=reason)
+        if skipped or state.get('skipped'):
+            state['skipped'] = skipped
 
     def tier_of(self, state):
         """The frozen tier, or `full` (never None, so no helper re-reads the checkpoint mid-operation)."""
@@ -1054,9 +1074,10 @@ class Run:
             return {'stage': stage, 'command': state['commands'][stage], 'reason': 'pending'}
         return {'stage': None, 'status': 'pr_open'}
 
-    def claim(self, usage, finalize=False, verbose=False, owner_pid=None):
+    def claim(self, usage, finalize=False, verbose=False, owner_pid=None, confirm_invalidation=False):
         """`owner_pid` is the process that holds the claim; the CLI passes none, since it exits at once and the
-        heartbeat then governs `recover` (AHMED-01)."""
+        heartbeat then governs `recover` (AHMED-01). A claim that would remove receipts of later stages returns
+        `confirm_invalidation` listing them unless `confirm_invalidation` is set (AHMED-12, DEC-15 stage 1)."""
         with operation(), locked(self.root / '.specify/workflow/runtime/dispatch.lock'), locked(self.lock):
             require(not (self.root / '.specify/workflow/runtime/upgrade.lock').exists(), 'WORKFLOW_UPGRADE_IN_PROGRESS')
             state = self.load()
@@ -1091,6 +1112,19 @@ class Run:
             if not nxt.get('stage'):
                 return nxt
             stage = nxt['stage']
+            # Before any side effect (Memory handoff, tasks.md annotation): the receipts this claim would remove.
+            downstream = [name for name in BASE_STAGES[BASE_STAGES.index(stage) + 1:] if name in state['receipts']]
+            if downstream and not confirm_invalidation:
+                at = ' --feature ' + self.relative
+                return {'status': 'confirm_invalidation', 'stage': stage, 'reason': nxt.get('reason'),
+                        'invalidates': downstream,
+                        'recovery': nxt.get('recovery') or (
+                            [WORKFLOW_SCRIPT + ' migrate' + at + ' --preview'] if nxt.get('reason') == 'policy-changed' else []),
+                        'explain': 'python .specify/extensions/workflow/scripts/gate_explain.py' + at,
+                        'confirm': WORKFLOW_SCRIPT + ' claim' + at + ' --usage <usage.json> --confirm-invalidation',
+                        'message': 'Claiming ' + stage + ' removes the receipts of ' + ', '.join(downstream) +
+                                   '. If the change is cosmetic, amend it (gate_explain lists the amend commands); '
+                                   'otherwise ask the user, then re-run claim with --confirm-invalidation'}
             memory = self.memory_session(state, stage, usage['session_id'])
             if memory is not None:
                 return memory
@@ -1344,9 +1378,9 @@ class Run:
                 '\"effort score mismatch\"", then complete Scope with effort_score ' + str(verified))
         fixed = tier(self.policy, score)
         state['profile'] = {'tier': fixed, 'score': score, 'fixed_at': now()}
-        state['skipped'] = skipped_stages(self.policy, fixed)
-        for name, reason in state['skipped'].items():
-            lifecycle.queue(state, name, 'skipped', reason=reason)
+        skipped = skipped_stages(self.policy, fixed)
+        self.record_skipped(state, skipped)
+        state['skipped'] = skipped
         state['commands'] = resolve_commands(self.root, self.policy, fixed)
 
     def complete(self, token, receipt):
@@ -1692,6 +1726,10 @@ def main():
     init.add_argument('--manual', choices=['on', 'off'], required=True)
     init.add_argument('--delegate', choices=['on', 'off'],
                       help='Opt into model-aware delegation; omitted on existing projects preserves their selection')
+    init.add_argument('--board', choices=['none', 'minimal', 'full'],
+                      help='GitHub Project board sync: full (every phase, task sub-issues), minimal (Ready, In progress, '
+                           'In review, Done; no task sub-issues) or none (no board); omitted keeps the current mode, '
+                           'fresh policies default to full')
     init.add_argument('--gate-mode', choices=sanduq_ci.GATE_MODES,
                       help='Disabled, advisory or required workflow evidence gate; fresh policies default to advisory')
     init.add_argument('--gate-scope', choices=sanduq_ci.GATE_SCOPES,
@@ -1769,6 +1807,8 @@ def main():
         if name == 'start': cmd.add_argument('--issue', required=True)
         if name in ('next', 'claim'): cmd.add_argument('--finalize', action='store_true')
         if name == 'claim': cmd.add_argument('--usage', type=Path, required=True)
+        if name == 'claim': cmd.add_argument('--confirm-invalidation', action='store_true',
+                                             help='Remove the receipts of later stages a confirm_invalidation result listed')
         if name in ('claim', 'complete'):
             cmd.add_argument('--verbose', action='store_true',
                              help='Print the full result (claim: with the baseline fingerprints and the full Execute protocol; '
@@ -1832,7 +1872,8 @@ def run_command(args):
             ensure_local_excludes(root)
             path = root / '.specify/workflow.yml'
             policy = default_policy(args.qa == 'on', args.manual == 'on')
-            if path.exists():
+            raw = path.read_bytes() if path.exists() else None
+            if raw is not None:
                 old = load_policy(root)
                 require(args.replace or old['processes'] == policy['processes'], 'POLICY_EXISTS: use --replace after reviewing changed selections')
                 if args.delegate is not None:
@@ -1840,16 +1881,44 @@ def run_command(args):
                             'DELEGATION_SELECTION_EXISTS: use --replace after reviewing the changed selection')
                 policy = old
                 policy['processes'] = {'qa': args.qa == 'on', 'user_manual': args.manual == 'on'}
-                write(root / '.specify/workflow/backups' / (uuid.uuid4().hex + '.json'), load_policy(root))
             if args.delegate is not None:
                 policy['delegation']['enabled'] = args.delegate == 'on'
+            if args.board:
+                # The two mode keys are operational (OPERATIONAL_SUBKEYS): changing them invalidates no receipt.
+                policy.setdefault('project_sync', {})['mode'] = {'none': 'off'}.get(args.board, args.board)
+                policy['issue_sync']['taskstoissues'] = 'off' if args.board != 'full' else (
+                    'required' if policy['issue_sync']['taskstoissues'] == 'off' else policy['issue_sync']['taskstoissues'])
             select_gate(policy['ci'], args.gate_mode, args.gate_scope, args.gate_rule)
             if args.decision_owner:
                 policy.setdefault('decisions', default_policy(False, False)['decisions'])['authorized_users'] = args.decision_owner
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(yaml.safe_dump(validate_policy(policy, root), sort_keys=False), encoding='utf-8')
-            result = {'configured': True, 'processes': policy['processes'],
-                      'gate': sanduq_ci.gate_config(policy['ci']), 'doctor': doctor(root, policy)}
+            validate_policy(policy, root)
+            # AHMED-08: an unchanged policy keeps the file's bytes (and comments); a rewrite backs up the raw bytes.
+            written = raw is None or parse_policy(raw.decode('utf-8-sig')) != policy
+            result = {'configured': True, 'written': written, 'processes': policy['processes'],
+                      'board': board_mode_line(policy), 'gate': sanduq_ci.gate_config(policy['ci'])}
+            if written:
+                if raw is not None:
+                    backup = root / '.specify/workflow/backups' / (uuid.uuid4().hex + '.workflow.yml')
+                    backup.parent.mkdir(parents=True, exist_ok=True)
+                    backup.write_bytes(raw)
+                    result['backup'] = backup.relative_to(root).as_posix()
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(yaml.safe_dump(policy, sort_keys=False), encoding='utf-8')
+            if args.replace:
+                # The features whose receipts the new policy invalidates, from the same plan `migrate` records.
+                affected = []
+                for checkpoint in sorted((root / 'specs').glob('*/workflow/checkpoint.json')):
+                    state = read(checkpoint, {})
+                    if not isinstance(state, dict) or not state.get('receipts'):
+                        continue
+                    feature = checkpoint.parent.parent.relative_to(root).as_posix()
+                    plan = Run(root, feature).migration_plan(state)
+                    if plan['invalidated']:
+                        affected.append({'feature': feature, 'restarts_from': plan['invalidated'][0],
+                                         'invalidated': plan['invalidated'],
+                                         'migrate': WORKFLOW_SCRIPT + ' migrate --feature ' + feature + ' --reason "<why>"'})
+                result['affected_features'] = affected
+            result['doctor'] = doctor(root, policy)
         elif args.action == 'ci':
             policy = load_policy(root)
             ci = policy['ci']
@@ -1909,7 +1978,8 @@ def run_command(args):
             elif args.action == 'next': result = run.next(run.load(), args.finalize)
             elif args.action == 'status': result = native_run_status(root, run.relative, run.load(allow_branch_change=True), args.runs)
             elif args.action == 'claim':
-                result = run.claim(read(args.usage), args.finalize, args.verbose)
+                result = run.claim(read(args.usage), args.finalize, args.verbose,
+                                   confirm_invalidation=args.confirm_invalidation)
                 if not args.verbose:
                     result.pop('baseline', None)  # kept in the checkpoint; --verbose prints it
             elif args.action == 'complete':

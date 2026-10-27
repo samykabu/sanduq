@@ -67,12 +67,16 @@ stage, merged plan and tasks on the lower tiers, batch upstream revalidation, a 
 agents for Claude Code and Codex. Nothing changes until you opt in. After the transactional upgrade
 and the per-feature migration above:
 
-1. Add the policy keys you want to `.specify/workflow.yml`. The minimum that changes the front half:
+1. Add the policy keys you want to `.specify/workflow.yml`. The minimum that changes the front half
+   is a new `profiles` section and two keys merged into the existing `clarification` section (the
+   file already has one; a second `clarification:` block is refused with `POLICY_DUPLICATE_KEY`):
 
    ```yaml
    profiles:
      enabled: true
-   clarification:
+   clarification:                 # merge into the existing clarification section
+     transport: github-comments   # already there
+     resume_on_reinvoke: reread-answers
      in_session_first_round: true
      max_questions_per_round: 6
    ```

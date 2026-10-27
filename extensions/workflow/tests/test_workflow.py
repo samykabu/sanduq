@@ -493,7 +493,7 @@ class WorkflowTests(unittest.TestCase):
         (self.root / '.specify/extensions/project/config.json').unlink()
         self.assertTrue(w.doctor(self.root, self.policy)['ok'])
         run = self.run_object()
-        with self.assertRaisesRegex(w.WorkflowError, 'PROJECT_CONFIG_REQUIRED'):
+        with self.assertRaisesRegex(w.WorkflowError, 'PROJECT_NOT_CONFIGURED'):
             run.claim(self.usage())
 
     def test_project_doctor_uses_real_column_names_and_detects_missing_mapping(self):
@@ -504,7 +504,8 @@ class WorkflowTests(unittest.TestCase):
         w.write(path, config); self.policy['scope'] = {'statuses': names}
         self.assertEqual(w.project_errors(self.root, self.policy), [])
         config['phaseToStatus'].pop('ready'); w.write(path, config)
-        self.assertIn('PROJECT_PHASE_UNMAPPED: ready', w.project_errors(self.root, self.policy))
+        self.assertIn('PROJECT_PHASE_UNMAPPED: ready (expected column Custom Ready, or map it in config.json phaseToStatus)',
+                      w.project_errors(self.root, self.policy))
 
     def test_managed_project_defaults_do_not_regress_new_spec_to_backlog(self):
         path = self.root / '.specify/extensions/project/config.json'; path.unlink()

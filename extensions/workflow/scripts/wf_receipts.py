@@ -232,11 +232,21 @@ def measured_context_gate(policy, usage):
             'fraction': fraction, 'session_id': usage['session_id'], 'reason': 'checkpoint-required' if pause else 'within-budget'}
 
 
+def feature_skipped(root, feature):
+    """The stages the feature's checkpoint records as skipped (the tier's, the board mode's), else none."""
+    try:
+        state = read(Path(root) / feature / 'workflow/checkpoint.json', {})
+    except (OSError, ValueError):
+        return {}
+    return (state.get('skipped') or {}) if isinstance(state, dict) else {}
+
+
 def required_inputs(root, feature, stage, tier=None):
     """Minimum artifact coverage is enforced even if an agent omits a path.
 
     `tier` None reads the tier frozen in the feature's checkpoint. A lite feature treats
-    research, data model, quickstart and contracts as optional consulted inputs."""
+    research, data model, quickstart and contracts as optional consulted inputs. A feature whose
+    checkpoint skips Tasks-to-Issues (`issue_sync.taskstoissues: off`) needs no task-issue journal."""
     tier = tier or feature_tier(root, feature)
     index = BASE_STAGES.index(stage)
     paths = []
@@ -246,7 +256,7 @@ def required_inputs(root, feature, stage, tier=None):
         paths += [feature + '/plan.md']
     if index >= BASE_STAGES.index('tasks'):
         paths += [feature + '/tasks.md']
-    if index >= BASE_STAGES.index('taskstoissues'):
+    if index >= BASE_STAGES.index('taskstoissues') and 'taskstoissues' not in feature_skipped(root, feature):
         paths += [feature + '/workflow/task-issues.json']
     constitution = '.specify/memory/constitution.md'
     if (root / constitution).is_file(): paths.append(constitution)
@@ -813,7 +823,9 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
                     ' - the task line changed since it was adopted; re-run delegate_dispatch.py adopt '
                     'with a fresh acceptance check before Ready')
         ran.append('tasks')
-    if rules.get('task_links'):
+    if rules.get('task_links') and task_issue_mode(policy) == 'off':
+        ran.append('task_links:skipped (issue_sync.taskstoissues off)')
+    elif rules.get('task_links'):
         mapping = read(directory / 'workflow/task-issues.json', {})
         repo, parent = state['issue'].split('#')
         require((mapping.get('repo'), mapping.get('parent'), mapping.get('feature')) == (repo, int(parent), feature),

@@ -9,6 +9,9 @@ Read existing project instructions, constitution, Scope and manual configuration
 unless already selected explicitly:
 
 - QA, User Manual, both or neither; `init --qa on|off --manual on|off --delegate on|off`.
+- Board sync, `--board full|minimal|none`: `full` writes every phase and creates task sub-issues,
+  `minimal` writes only Ready, In progress, In review and Done with no task sub-issues, `none` needs
+  no board. Changing it later invalidates nothing. Project Init is needed in `full` and `minimal`.
 - The evidence gate (`disabled`, `advisory` or `required`), its `managed-only` or `all-prs`
   scope and any `--gate-rule NAME=on|off`.
 - Decision reviewers beyond the issue creator and collaborators (`--decision-owner LOGIN`,
@@ -27,9 +30,13 @@ unless already selected explicitly:
 - Optional, only when the user wants them: `profiles` (tiers by effort score),
   `clarification.max_questions_per_round`, `clarification.in_session_first_round`,
   `artifacts.budgets`, `project_sync.points` and `scope.board_cache_seconds`.
-- Never offer these as choices; they are validated but change nothing today: `updates.policy`,
-  `execution.checkpoints` (`every-phase` acts as `required-only`), `context.mode:
-  measured-with-estimated-fallback` (acts as `measured-only`) and `clarification.transport`.
+- Never offer these as choices; they are validated but change nothing today (doctor warns
+  `POLICY_VALUE_INERT` when one is set): `updates.policy`, `execution.checkpoints` (`every-phase`
+  acts as `required-only`) and `context.mode: measured-with-estimated-fallback` (acts as
+  `measured-only`).
+- Edit `.specify/workflow.yml` by merging keys into the section that already holds them; a second
+  copy of a section is refused with `POLICY_DUPLICATE_KEY` and its line. `init` with unchanged
+  choices leaves the file untouched; `--replace` prints `affected_features` to show before migrating.
 
 Discover existing effort units and preferences and keep their meaning. No later feature asks
 these questions again; show changed policy when `--replace` is needed. Then run

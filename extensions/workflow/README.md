@@ -57,7 +57,7 @@ $speckit-workflow-doctor Verify project readiness and installed host commands.
 The script equivalent is:
 
 ```bash
-python .specify/extensions/workflow/scripts/workflow.py init --qa on --manual on --delegate off
+python .specify/extensions/workflow/scripts/workflow.py init --qa on --manual on --delegate off --board full
 python .specify/extensions/workflow/scripts/install.py
 python .specify/extensions/workflow/scripts/install.py --apply
 python .specify/extensions/workflow/scripts/workflow.py doctor --project
@@ -66,6 +66,14 @@ python .specify/extensions/workflow/scripts/workflow.py doctor --project
 The first `install.py` call previews. The second backs up, applies and rolls back on failure. Run
 doctor after any install or upgrade. Doctor is read-only and names the next command when something
 is missing.
+
+`--board` picks the GitHub Project board sync: `full` (every phase, task sub-issues), `minimal`
+(only Ready, In progress, In review and Done; no task sub-issues) or `none` (no board). Omitted,
+a new policy is `full` and an existing one keeps its mode. You can change it at any time; it never
+invalidates a feature in flight. Running `init` again with the same choices leaves `workflow.yml`
+untouched (`written: false`); a rewrite first backs up the file's bytes under
+`.specify/workflow/backups/`, and `--replace` lists `affected_features` with the stage each one
+restarts from.
 
 ## Daily use
 

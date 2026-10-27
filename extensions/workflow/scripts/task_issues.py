@@ -201,14 +201,18 @@ def sync(root, feature, parent, dependencies, apply=False, github=None, phase=No
         return result
 
 
-def phase_lazy(root):
-    """True when `.specify/workflow.yml` selects `issue_sync.taskstoissues: phase-lazy`; an
-    absent or unreadable policy reads as False (the strict default)."""
+def configured_mode(root):
+    """`issue_sync.taskstoissues` from `.specify/workflow.yml`; an absent or unreadable policy reads as
+    `required` (the strict default)."""
     try:
         policy = yaml.safe_load((root / '.specify/workflow.yml').read_text(encoding='utf-8-sig'))
-        return policy['issue_sync']['taskstoissues'] == 'phase-lazy'
+        return policy['issue_sync']['taskstoissues']
     except (OSError, yaml.YAMLError, TypeError, KeyError):
-        return False
+        return 'required'
+
+
+def phase_lazy(root):
+    return configured_mode(root) == 'phase-lazy'
 
 
 def sync_states(root, feature, parent, apply=False, github=None, allow_unpublished=False):
@@ -280,6 +284,9 @@ def main():
     if args.phase is not None and args.sync_states:
         parser.error('--phase and --sync-states cannot be combined')
     try:
+        require(configured_mode(args.root) != 'off', 'TASK_ISSUES_OFF: issue_sync.taskstoissues is off in '
+                '.specify/workflow.yml, so no task issues are created or synced; set it to required or phase-lazy '
+                'to use this adapter')
         if args.sync_states:
             result = sync_states(args.root, args.feature, args.parent, args.apply,
                                  allow_unpublished=args.allow_unpublished or phase_lazy(args.root))

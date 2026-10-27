@@ -94,7 +94,7 @@
     "issue_sync": {
       "type": "object", "additionalProperties": false, "required": ["taskstoissues", "parent_link"],
       "properties": {
-        "taskstoissues": {"enum": ["required", "phase-lazy"], "description": "phase-lazy maps each phase's tasks when the phase starts (task_issues.py --phase); Ready still requires every task mapped."},
+        "taskstoissues": {"enum": ["required", "phase-lazy", "off"], "description": "phase-lazy maps each phase's tasks when the phase starts (task_issues.py --phase); Ready still requires every task mapped. off skips the Tasks-to-Issues stage and the Ready task-link check (no task sub-issues); switching it invalidates no receipt."},
         "parent_link": {"const": "native-subissue"}
       }
     },
@@ -127,9 +127,10 @@
       }
     },
     "project_sync": {
-      "type": "object", "additionalProperties": false, "required": ["points"],
-      "description": "Stages at which the dispatcher runs Project Sync; absent means all six.",
-      "properties": {"points": {"type": "array", "uniqueItems": true, "items": {"enum": ["specify", "plan", "analyze", "taskstoissues", "execute", "pr"]}}}
+      "type": "object", "additionalProperties": false,
+      "description": "Board sync: `points` are the stages at which the dispatcher runs Project Sync (absent: all six); `mode` is full (every phase, default), minimal (only the Ready, In progress, In review and Done phases are written; parking phases are no-op writes) or off (no board; doctor skips the board checks). Switching the mode invalidates no receipt.",
+      "properties": {"points": {"type": "array", "uniqueItems": true, "items": {"enum": ["specify", "plan", "analyze", "taskstoissues", "execute", "pr"]}},
+                     "mode": {"enum": ["full", "minimal", "off"], "default": "full"}}
     },
     "scope": {
       "type": "object",
