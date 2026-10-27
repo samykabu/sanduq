@@ -216,7 +216,6 @@ $speckit-memory-enable Review the renewed archiving policy and approve it.
 | Workflow's legacy `progress.py` retired | With Progress installed and enabled, a legacy call exits 2 with `error PROGRESS_INSTALLED: ...` and the command to use | Switch prompts and scripts to `.specify/extensions/progress/scripts/progress.py` ([mapping](../workflow/operations.md#reporting-modes-and-the-legacy-call-mapping)) |
 | Progress v2 status and classic layout deprecated | Both still work in Progress 1.5.0; later releases refuse them with `PROGRESS_REMOVED` (exit 2) | Read `progress status --json` (`sanduq.progress.v3`); run `progress theme --layout timeline` |
 | Assure's gate checks out the PR head | `assure init` and the Workflow upgrade replace an unedited `documentation-gates.yml`. An edited one is kept and init prints the `ref:` line | Add the printed `ref:` line to an edited gate |
-| The evidence gate runs the base branch's copy | The Workflow upgrade and `assure init` replace an unedited `sanduq-workflow-gates.yml` and `documentation-gates.yml`, also in a fresh clone. The upgrade PR itself is graded by the base's older gate. With `--preserve-ci`, or an edited file, nothing changes | Port the second checkout (`path: .sanduq-base`) and the `.sanduq-base/...` script paths from the shipped template into a kept file ([details](../workflow/runner-policy.md#who-grades-the-pr)) |
 | Assure scan skips git-ignored folders | The first scan can drop rows, rewrite `.github/memory/project-memory.md` once and stale recorded document and manual states once | Commit the rewrite and rerun Document and Update when asked |
 | Assure Analyze ignores the User Manual task block | An analyze state recorded over a `tasks.md` that held that block goes stale once | Rerun Analyze once |
 | Assure config keys removed | `freshness.policy`, `freshness.state_directory` and `output.directory_name` stay in an existing config and do nothing | Nothing; delete them if you like |
@@ -226,6 +225,26 @@ $speckit-memory-enable Review the renewed archiving policy and approve it.
 | Project refuses a malformed state file | The sync stops on a malformed `.specify/project-sync-state.json` | Restore it from git or fix it, then rerun |
 | Project owner type | A config from an older Init for an organization board says `ownerType: user` | Rerun `$speckit-project-init`, or set `"ownerType": "org"` |
 | Scope's `scope-gate` preset changed | A managed Specify claim is no longer told to chain Clarify | Unmanaged projects run `specify preset add` again for `scope-gate`; the Workflow installer re-adds it |
+
+## PH-04 train (Workflow 1.22.0)
+
+The train ships Workflow 1.22.0, Scope 1.13.0, Assure 2.7.0, Memory 2.6.1, Illustrate 2.7.3, PR 4.7.1,
+Project 2.7.1 and User Manual 1.8.3. Every package now needs Python 3.11 or later. No policy key, command name or
+receipt changes. Upgrade every companion together:
+
+```bash
+python .specify/extensions/workflow/scripts/upgrade.py --version 1.22.0 --apply
+python .specify/extensions/workflow/scripts/workflow.py doctor --project
+```
+
+| Change | What you see | What to do |
+| --- | --- | --- |
+| The evidence gate runs the base's code and policy | The upgrade and `assure init` replace an unedited `sanduq-workflow-gates.yml` and `documentation-gates.yml`, also in a fresh clone. The gate checks out the base into `.sanduq-base` and grades the head with the base's `ci_gate.py`, policy and Assure scripts; the upgrade PR itself is graded by the base's older gate. A PR that changes `.specify/workflow.yml` can fail with `POLICY_CHANGED` | Waive `receipts` for that PR, or land the policy change in a policy-only PR first. Protect `.github/workflows/` and `.specify/` with CODEOWNERS ([details](../workflow/runner-policy.md#who-grades-the-pr)) |
+| You kept your own gate file | With `--preserve-ci`, or an edited file, nothing is replaced and the PR still grades itself | Port the second checkout (`path: .sanduq-base`) and the `.sanduq-base/...` script paths from the shipped template |
+| Grading commands need the nonce | `accept`, `adopt`, `reassign` and `trust-reset` without `--nonce` fail with `DELEGATION_NONCE_REQUIRED`; run from inside a delegated run they fail with `DELEGATION_LINEAGE_SELF` | Pass `--nonce <dispatcher_nonce>` from the `start` result (or the file the message names), from the top-level session |
+| Spec edits cite trusted answers | A clarification `spec_edits` entry without trusted `question_ids` is refused with `CLARIFICATION_EDIT_UNTRUSTED`; another bot's records are no longer evidence | Cite the answered question each edit applies |
+| Python 3.11 required | Every `extension.yml` declares python `>=3.11`; `doctor` reports `HOOK_PYTHON_TOO_OLD` below 3.11 | Point the host hooks at Python 3.11 or later |
+| Doctor checks Scope and Memory | `doctor` fails with `DEPENDENCY_SOURCE_MISMATCH` when either names another author or repository, or its files differ from the release's `package-inventory.json` | Reinstall that package from the Sanduq catalog |
 
 ## PH-03 train (Workflow 1.21.0)
 
