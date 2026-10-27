@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+- The guard hook matches the `PowerShell` and Codex shell tools as well as `Bash` (`hooks/hooks.json` matcher `Bash|PowerShell|shell`), so `git add -A` sent through Claude Code's PowerShell tool on Windows is refused like one sent through Bash. It also refuses `git add -u`/`--update` and `git commit -a`/`--all` (including clusters such as `-am`). The refusal says to stage owned paths by name (`git add -- <path>...`) and no longer names `SANDUQ_ROLE=coordinator`; that variable still turns the git rules off when set in the environment that launches the host, and the docs say it applies to every subagent. The docs call the guard advisory.
+- `.delegate/` gets a nested `.gitignore` (`*`) when the dispatcher writes its first brief, so briefs and raw run logs stay out of git in a copy of the tree whose `info/exclude` was not carried over.
+- On Windows the `gh` transport (`sanduq_gh.py`) and Workflow's git runner (`wf_core.run_git`) resolve the tool from `PATH` only, and `kill_process_tree` calls `taskkill` by its `System32` path, so an executable committed in a checkout cannot shadow them.
+- Docs: `SECURITY.md` (trust assumptions, what runs automatically, delegation bypass versus the clean-env and sandbox launch, token and log handling, how to report) linked from the README; the managed-workflow "Limits" section states that receipts are self-asserted and the default gate does not block; the delegation page documents the ledger tamper markers as advisory (DEC-11); the Workflow README documents what the install backups contain.
+
 ## [1.20.0] - 2026-10-27
 
 - Runtime locks (`dispatch.lock`, feature, upgrade, install and decision locks) recover from a killed owner: a lock whose recorded pid has exited on this host is reclaimed by the next command, with no manual cleanup. A live owner still refuses with `WORKFLOW_BUSY`, which now names the owner's pid, host, age and liveness (`alive: yes` or `unknown`) and how to check it. A lock from another host, or one written by an earlier Workflow version (no host recorded), is never taken automatically; delete it once you have checked that its process is gone. A crashed upgrade's `upgrade.lock` still blocks claims on purpose: rerun the upgrade, which reclaims the lock.

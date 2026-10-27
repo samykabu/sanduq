@@ -182,11 +182,13 @@ them. A failed install rolls them back.
 
 | File | Claude Code | Codex |
 | --- | --- | --- |
-| Guard hook (PreToolUse on `Bash`) | `.claude/settings.json` | `.codex/hooks.json` |
+| Guard hook (PreToolUse on `Bash`, `PowerShell` and Codex's shell tool) | `.claude/settings.json` | `.codex/hooks.json` |
 | Worker and reviewer role agents | `.claude/agents/sanduq-worker.md`, `sanduq-reviewer.md` | `.codex/agents/sanduq-worker.toml`, `sanduq-reviewer.toml` |
 
-- **Guard hook.** It refuses `git add -A`, `git add .` and `git stash` in every session, with a
-  one-line reason, unless `SANDUQ_ROLE=coordinator` is set. It refuses the coordinator-only
+- **Guard hook.** It refuses `git add -A`, `git add -u`, `git add .`, `git commit -a` and
+  `git stash` in every session, with a one-line reason that says to stage owned paths by name.
+  `SANDUQ_ROLE=coordinator`, set in the environment that launches the host, turns these git rules
+  off for the whole session, including every subagent. It refuses the coordinator-only
   `delegate_dispatch.py` commands (`trust-reset`, `accept`, `reassign`, `adopt`) only to a worker:
   a subagent session (the host sends `agent_id` or `agent_type`), a delegated run
   (`SANDUQ_DELEGATED_RUN` set) or `SANDUQ_ROLE=worker`. Your top-level session runs them as before.
@@ -194,7 +196,9 @@ them. A failed install rolls them back.
   Codex runs project hooks only in a trusted project after you approve them: open Codex in the
   project, run `/hooks` and approve the Sanduq guard. The installer writes `python` on Windows and
   `python3` elsewhere into the hook command, so that name must be on `PATH`; without the installed
-  guard script the hook allows everything.
+  guard script the hook allows everything. The guard is advisory: it sees only the host's shell
+  tools, so a script, an alias or another tool bypasses it. See
+  [SECURITY.md](../../SECURITY.md).
 - **Role agents.** They hold the worker protocol, so a worker brief shrinks to a task card under
   1.5 KB. A role file without the `sanduq-role:v1` marker is yours and is left alone. The model is
   set only when delegation is enabled; otherwise the role uses the session's model.

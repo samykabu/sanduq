@@ -15,7 +15,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 DOCS = ROOT / 'docs'
 # Top-level docs/*.md covers the index, style guide and examples.
-GUIDES = [ROOT / 'README.md', ROOT / 'CONTRIBUTING.md', ROOT / 'extensions/README.md', DOCS / 'assets/README.md']
+GUIDES = [ROOT / 'README.md', ROOT / 'CONTRIBUTING.md', ROOT / 'SECURITY.md', ROOT / 'extensions/README.md', DOCS / 'assets/README.md']
 GUIDES += sorted(DOCS.glob('*.md'))
 for folder in ('start', 'scenarios', 'extensions', 'workflow', 'reference'):
     GUIDES += sorted((DOCS / folder).glob('*.md'))

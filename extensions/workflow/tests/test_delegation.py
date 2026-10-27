@@ -4023,5 +4023,25 @@ class HealthCacheTests(unittest.TestCase):
         self.assertEqual(self.health()[1], 1)
 
 
+class LocalArtifactTests(unittest.TestCase):
+    def test_delegate_folder_carries_its_own_gitignore(self):
+        """SEC-17: briefs and raw run logs stay out of git even where info/exclude was not carried over."""
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            brief = dispatch.brief_file(root, 'task card')
+            self.assertEqual(brief.parent, root / '.delegate/briefs')
+            self.assertEqual((root / '.delegate/.gitignore').read_text(encoding='utf-8'), '*' + chr(10))
+            (root / '.delegate/.gitignore').write_text('runs/' + chr(10), encoding='utf-8')
+            dispatch.brief_file(root, 'again')  # an edited ignore file is the user's and is kept
+            self.assertEqual((root / '.delegate/.gitignore').read_text(encoding='utf-8'), 'runs/' + chr(10))
+
+    def test_windows_kill_names_the_system32_taskkill(self):
+        """SEC-15: a bare `taskkill` resolves in the current directory first on Windows."""
+        calls = []
+        with patch.object(dispatch.os, 'name', 'nt'), patch.object(dispatch.subprocess, 'run', lambda argv, **k: calls.append(argv)),                 patch.dict(dispatch.os.environ, {'SystemRoot': 'X:' + chr(92) + 'Win'}):
+            dispatch.kill_process_tree(type('Proc', (), {'pid': 7})())
+        self.assertEqual(calls, [[os.path.join('X:' + chr(92) + 'Win', 'System32', 'taskkill.exe'), '/T', '/F', '/PID', '7']])
+
+
 if __name__ == '__main__':
     unittest.main()

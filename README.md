@@ -123,4 +123,4 @@ published under. Bundled upstream material keeps its own license; see
 - [Command reference](docs/reference/commands.md), [hooks](docs/reference/hooks.md) and [glossary](docs/reference/glossary.md)
 - [Troubleshooting](docs/start/troubleshooting.md) and [upgrades](docs/start/upgrades.md)
 - Published versions: [catalog.json](catalog.json). Versions awaiting release: [pending releases](extensions/pending-releases.json). History: [CHANGELOG.md](CHANGELOG.md).
-- [Contributing](CONTRIBUTING.md)
+- [Contributing](CONTRIBUTING.md) and [security](SECURITY.md): trust assumptions, what runs automatically, how to report

@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -26,6 +27,10 @@ def codex(command):
             'tool_input': {'command': command}, 'cwd': '/repo', 'model': 'gpt'}
 
 
+def powershell(command):
+    return {**claude(command), 'tool_name': 'PowerShell'}
+
+
 class GuardTests(unittest.TestCase):
     def run_guard(self, payload, env=None):
         stdin = io.StringIO(payload if isinstance(payload, str) else json.dumps(payload))
@@ -37,20 +42,24 @@ class GuardTests(unittest.TestCase):
             sys.stderr = old
         return code, stderr.getvalue()
 
-    GIT = ('git add -A', 'git add .', 'git add --all', 'git stash', 'git stash pop',
-           'cd src && git -C .. add -A', 'git status; git stash push -m x')
+    GIT = ('git add -A', 'git add .', 'git add --all', 'git add -u', 'git add --update', 'git stash', 'git stash pop',
+           'cd src && git -C .. add -A', 'git status; git stash push -m x', 'git commit -am x', 'git commit -a -m x',
+           'git commit --all -m x', 'git commit -qam x')
     LEDGER = ('python .specify/extensions/workflow/scripts/delegate_dispatch.py accept --run r',
               'python3 scripts/delegate_dispatch.py trust-reset --task T001',
               'python delegate_dispatch.py reassign x', 'python delegate_dispatch.py adopt x')
 
     def test_git_commands_are_denied_in_every_session_unless_coordinator(self):
-        for shape in (claude, codex):
+        for shape in (claude, codex, powershell):
             for command in self.GIT:
                 for payload in (shape(command), {**shape(command), 'agent_id': 'a1'}):
                     code, reason = self.run_guard(payload)
                     self.assertEqual(code, 2, (shape.__name__, command))
                     self.assertEqual(reason.count('\n'), 1, reason)
-                    self.assertIn('SANDUQ_ROLE=coordinator allows it', reason)
+                    # AHMED-20: the refusal names the intended action, never an environment bypass.
+                    self.assertNotIn('SANDUQ_ROLE', reason)
+                    if 'stash' not in command:
+                        self.assertIn('git add -- <path>', reason)
                 self.assertEqual(self.run_guard(shape(command), {'SANDUQ_ROLE': 'coordinator'})[0], 0)
                 self.assertEqual(self.run_guard(shape(command), {'SANDUQ_ROLE': 'worker'})[0], 2)
 
@@ -86,8 +95,15 @@ class GuardTests(unittest.TestCase):
                     self.assertIn("--confirm-fallback is the user's confirmation", reason)
                     self.assertEqual(reason.count('\n'), 1, reason)
 
+    def test_hook_matcher_covers_both_shell_tools(self):
+        matcher = json.loads((HOOKS / 'hooks.json').read_text(encoding='utf-8'))['hooks']['PreToolUse'][0]['matcher']
+        for tool in ('Bash', 'PowerShell', 'shell'):
+            self.assertTrue(re.search(matcher, tool), tool)
+        self.assertIsNone(re.search(matcher, 'Edit'))
+
     def test_allows_ordinary_and_read_only_commands(self):
         for command in ('git add src/a.py', 'git add ./src', 'git status', 'git stash list', 'git stash show',
+                        'git commit -m a', 'git commit --amend -m x', 'git commit -m "add -A"', 'git add -p src/a.py',
                         'echo "git add -A"', 'python delegate_dispatch.py start --task T001',
                         'python delegate_dispatch.py collect', 'pytest -q', ''):
             self.assertEqual(self.run_guard(claude(command))[0], 0, command)
