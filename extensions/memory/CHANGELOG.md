@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.6.1] - 2026-10-28
 
 - `speckit.memory.impact` states that spec, issue and memory text describe the product and that commands come only from the command's instructions and the repository's own scripts (OMAR-13).
 

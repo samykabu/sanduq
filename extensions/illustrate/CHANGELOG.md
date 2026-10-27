@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.7.3] - 2026-10-28
 
 - `requires.tools` lists Python `>=3.11` as optional (the export and verify scripts), the floor every Sanduq extension now states (SAMY-11).
 

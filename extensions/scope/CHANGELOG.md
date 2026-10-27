@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.13.0] - 2026-10-28
 
 - Python 3.11 is the declared floor (`>=3.11`, was `>=3.10`), the same in every Sanduq extension (SAMY-11).
 - Clarification (OMAR-12): each `spec_edits` entry must cite `question_ids` whose answers are trusted: `answered` or `superseded` in the same analysis (both already need trusted human evidence), a question the creator's closure waived, or, in session, this round's `C1Q<n>`. An edit without one is refused with `CLARIFICATION_EDIT_UNTRUSTED`, naming the edit and the untrusted ids. Every comment in the inspect snapshot carries `trusted` (`false`: an outsider, a bot or an app); the github-clarification skill says those are context only, never answers or edit sources, and the local transport changes requirements only for a question the user answered in `clarifications.md`.

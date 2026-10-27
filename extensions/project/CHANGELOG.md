@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.7.1] - 2026-10-28
 
 - `requires.tools` declares Python `>=3.11`, the floor every Sanduq extension now states (SAMY-11).
 
