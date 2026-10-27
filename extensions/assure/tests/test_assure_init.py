@@ -72,13 +72,16 @@ class AssureInitTest(unittest.TestCase):
         self.hooks.write_text(HOOKS.format(gate='true'), encoding='utf-8')
         ci = assure_init.sanduq_ci.default_ci()
         template = assure_init.GATE.read_bytes().replace(b'\r\n', b'\n')
-        earlier = assure_init.sanduq_ci.render(template.replace(assure_init.HEAD_CHECKOUT, b''), ci)
+        # The gate before AU8, and the head-run gate before SEC-03.
+        previous = assure_init.PREVIOUS_GATE.read_bytes().replace(b'\r\n', b'\n')
+        earlier = assure_init.sanduq_ci.render(previous.replace(assure_init.HEAD_CHECKOUT, b''), ci)
         target = self.root / GATE
         target.parent.mkdir(parents=True)
-        target.write_bytes(earlier.replace(b'\n', b'\r\n'))
-        result = self.init('manual')
-        self.assertIn('ci_gate=updated', result.stdout)
-        self.assertEqual(target.read_bytes(), assure_init.sanduq_ci.render(template, ci))
+        for old in (earlier, assure_init.sanduq_ci.render(previous, ci)):
+            target.write_bytes(old.replace(b'\n', b'\r\n'))
+            result = self.init('manual')
+            self.assertIn('ci_gate=updated', result.stdout)
+            self.assertEqual(target.read_bytes(), assure_init.sanduq_ci.render(template, ci))
         self.assertIn('ci_gate=current', self.init('manual').stdout)
         edited = earlier.replace(b'fetch-depth: 0', b'fetch-depth: 0\n          lfs: true')
         target.write_bytes(edited)

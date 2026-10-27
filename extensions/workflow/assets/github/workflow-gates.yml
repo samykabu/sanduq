@@ -23,6 +23,12 @@ jobs:
       # sanduq:if not candidate_merge
           ref: ${{ github.event.pull_request.head.sha }}
       # sanduq:endif
+      # The gate's code and policy come from the base branch, which this PR cannot change.
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .sanduq-base
+          persist-credentials: false
       - name: Fetch the PR base branch for the gate's merge-base comparison
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
@@ -32,11 +38,34 @@ jobs:
         with:
           python-version: '__sanduq_python_version__'
       # sanduq:endif
-      - run: python -m pip install -r .specify/extensions/workflow/requirements.txt
+      - name: Use the base branch's gate, or the released package on a first install
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo /.sanduq-base/ >> "$(git rev-parse --git-path info/exclude)"
+          gate=.sanduq-base/.specify/extensions/workflow
+          if [ ! -f "$gate/extension.yml" ]; then
+            mkdir -p .sanduq-base/.specify/extensions
+            python - <<'PY'
+          import io, re, urllib.request, zipfile
+          text = open('.specify/extensions/workflow/extension.yml', encoding='utf-8-sig').read()
+          version = re.search(r'(?m)^  version: *["\']?(\d+\.\d+\.\d+)["\']? *$', text)[1]
+          url = 'https://github.com/samykabu/sanduq/releases/download/workflow-v%s/workflow.zip' % version
+          with urllib.request.urlopen(url, timeout=120) as response:
+              zipfile.ZipFile(io.BytesIO(response.read())).extractall('.sanduq-base/.specify/extensions')
+          PY
+            python "$gate/scripts/sanduq_ci.py" verify-release --installed .specify/extensions/workflow --release "$gate"
+          fi
+          python -m pip install -r "$gate/requirements.txt"
       - name: Verify selected processes and all changed feature evidence
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           GH_TOKEN: ${{ github.token }}
-        run: python .specify/extensions/workflow/scripts/ci_gate.py --base-ref "$BASE_SHA" --check-index
+        shell: bash
+        run: |
+          gate=.sanduq-base/.specify/extensions/workflow/scripts/ci_gate.py
+          # A base gate from before --trusted-root grades only the PR that upgrades it.
+          trusted=(); grep -q -- --trusted-root "$gate" && trusted=(--trusted-root .sanduq-base)
+          python "$gate" --root . "${trusted[@]}" --base-ref "$BASE_SHA" --check-index

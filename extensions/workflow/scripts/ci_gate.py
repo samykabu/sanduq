@@ -82,11 +82,12 @@ def recheck_ci_evidence(root, feature, stage, receipt, policy, github=None):
     require(not errors, 'CI_EVIDENCE_REJECTED: ' + stage + ': run ' + str(recorded['run_id']) + ': ' + ' '.join(errors))
 
 
-def check(root, feature, policy, base=None, rules=None, verify_ci_evidence=True, github=None):
+def check(root, feature, policy, base=None, rules=None, verify_ci_evidence=True, github=None, trusted_root=None):
     """Evaluate the selected evidence rules for one feature.
 
     `verify_ci_evidence` is kept for callers of 1.6.0 and changes nothing: a
     Verify receipt accepted through `ci_evidence` is always re-read.
+    `trusted_root`: the checkout the documentation scripts run from (the PR base in CI).
     """
     rules = rules or sanduq_ci.LEGACY_GATE_RULES
     directory = inside(root, feature)
@@ -171,7 +172,8 @@ def check(root, feature, policy, base=None, rules=None, verify_ci_evidence=True,
         require(all(item['status'] == 'answered' for item in live), 'DECISION_LIVE_UNRESOLVED')
     if rules['candidate_merge']:
         check_candidate_merge(root)
-    ready_checks(root, feature, policy, state, base, {'documentation': rules['documentation']}, warnings=warnings)
+    ready_checks(root, feature, policy, state, base, {'documentation': rules['documentation']}, warnings=warnings,
+                 scripts_root=trusted_root)
     return {'feature': feature, 'passed': True, 'rules': [name for name, enabled in rules.items() if enabled],
             'amendments': amendments, 'revalidations': revalidations, 'accepted_drift': accepted,
             'warnings': warnings,
@@ -263,10 +265,15 @@ def main():
     parser.add_argument('--verify-ci-evidence', action='store_true',
                         help='Accepted for compatibility; the gate always re-reads through the GitHub REST API '
                              'every CI run a Verify receipt is accepted through')
+    parser.add_argument('--trusted-root', type=Path,
+                        help='Checkout the PR cannot change (its base): the policy and documentation scripts come '
+                             'from here; default --root')
     args = parser.parse_args(); root = args.root.resolve()
+    trusted = (args.trusted_root or args.root).resolve()
     mode = 'required'
     try:
-        policy = load_policy(root)
+        # A first-install PR has no policy on its base; the head's is the only one (SEC-03).
+        policy = load_policy(trusted if (trusted / '.specify/workflow.yml').is_file() else root)
         gate = sanduq_ci.gate_config(policy['ci'])
         mode = gate['mode']
         if mode == 'disabled':
@@ -286,7 +293,7 @@ def main():
                 try:
                     if args.check_index and effective['portability']:
                         index_warnings = check_index(root, feature)['warnings']
-                    result = check(root, feature, policy, args.base_ref, effective)
+                    result = check(root, feature, policy, args.base_ref, effective, trusted_root=trusted)
                     result['waivers'] = applied_waivers
                     if index_warnings:
                         result['index_warnings'] = index_warnings

@@ -267,3 +267,5 @@ The CI job reads the PR discussion and reports every accepted waiver. An
 author-only, expired, wrong-feature, or old-head comment cannot waive a rule.
 Identity and issue binding checks cannot be waived. A new commit changes the
 head SHA and requires fresh approval. Ordinary non-managed PRs need no waiver.
+When no waiver is accepted, `WAIVER_NOT_VERIFIED` lists each rejected waiver
+comment and why, for example `waiver is for head <old>, the PR head is now <new>`.

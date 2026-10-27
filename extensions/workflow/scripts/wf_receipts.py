@@ -737,7 +737,8 @@ def receipt_drift(root, feature, stage, receipt, tier=None):
     return sorted(changed)
 
 
-def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=None, coding_only=False):
+def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=None, coding_only=False,
+                 scripts_root=None):
     """Task completion, task-issue mapping and selected documentation freshness.
 
     The Ready stage's automated checks, shared by `ci_gate.py` (under the
@@ -865,7 +866,10 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
         checks.append(['.specify/extensions/user-manual/scripts/manual_state.py', 'status'])
     for args in checks:
         require((root / args[0]).is_file(), 'SELECTED_PROCESS_MISSING: ' + args[0])
-        command = [sys.executable, *args, '--feature', feature, '--repo-root', str(root)]
+        # The gate runs the base branch's copy (`scripts_root`, SEC-03). shortcut: a process the PR itself
+        # installs has no base copy and runs the head's; verify it against its release if that matters.
+        script = scripts_root / args[0] if scripts_root and (scripts_root / args[0]).is_file() else root / args[0]
+        command = [sys.executable, str(script), *args[1:], '--feature', feature, '--repo-root', str(root)]
         if base: command += ['--base-ref', base]
         result = subprocess.run(command, cwd=root, text=True, encoding='utf-8', capture_output=True)
         require(result.returncode == 0, 'DOCUMENTATION_GATE_FAILED: ' + result.stdout + result.stderr)
