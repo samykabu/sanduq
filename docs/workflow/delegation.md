@@ -33,6 +33,38 @@ kept names (`kept_env_names`, names only, never values), `github_access` and
 60 seconds fails with `DELEGATE_START_FAILED`; a `collect` that does not answer
 within 120 seconds fails with `DELEGATE_COLLECT_TIMEOUT` and records nothing.
 
+**Who may grade work (SEC-06).** A task worker (`T###`) never receives the
+claim token or session id: the dispatcher removes `SANDUQ_WORKFLOW_CLAIM_TOKEN`
+and `SANDUQ_WORKFLOW_SESSION_ID` from its environment even when the Execute
+orchestrator that launched it holds them. Only a stage launch (the Execute
+orchestrator, and in lean mode the stage worker that holds that stage's claim)
+gets them. Two hardenings guard `accept`, `adopt`, `reassign` and `trust-reset`
+on top of the environment check, which a worker can undo by unsetting its
+variables:
+
+- **Nonce.** Each command needs `--nonce <value>`. The value lives in
+  `~/.sanduq/runtime/dispatcher-<project key>.nonce`, outside every worker's
+  working folder; `start` returns it as `dispatcher_nonce` to the session that
+  called it, and no brief or worker environment carries it. A missing or wrong
+  value fails with `DELEGATION_NONCE_REQUIRED`. It stops a worker that only has
+  its brief, its environment and its checkout. It does not stop a worker that
+  runs as your OS user and goes looking for the file, or one that runs `start`
+  itself: the file is readable to every process you run.
+- **Lineage.** The commands, and `start`, refuse a process that descends from a
+  live delegated run of the same feature (`DELEGATION_LINEAGE_SELF`). The
+  dispatcher reads each run's driver supervisor pid from
+  `.delegate/runs/<run>/meta.json` and walks the caller's parent processes, so
+  unsetting `SANDUQ_*` variables changes nothing. The Execute orchestrator's own
+  run is exempt for `start`, `accept`, `adopt` and `reassign`, never for
+  `trust-reset`. It does not stop a worker that starts a process outside its
+  own process tree (a scheduled task, a service, a detached daemon that
+  re-parents), and a run whose supervisor has exited is no longer checked.
+
+Both remain advisory under review decision DEC-11: workers and the dispatcher
+share one OS user and one checkout, so the pull request review stays the
+control. Running workers as another OS user or in a container is the stronger
+option.
+
 Review work stays refused through the external driver for now (the PH-01
 interim, lifted in a later phase): a route
 whose work type is `review` (the Analyze and Review stages, `[Review]` tasks) or

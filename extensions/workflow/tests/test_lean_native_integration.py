@@ -205,6 +205,14 @@ class NativeIntegrationTests(unittest.TestCase):
         self.assertEqual(env['SANDUQ_WORKFLOW_SESSION_ID'], 's-owned')
         self.assertEqual(env['SANDUQ_DELEGATED_RUN'], 'intent')
 
+    def test_lean_task_worker_environment_lacks_the_current_claim(self):
+        """SEC-06: only a stage launch gets the lean claim; a T### task worker never does."""
+        self.write_claim(self.feature, 'feature-b', 'owned')
+        with patch_runtime('git', return_value='feature-b'), patch.object(dispatch, 'lean_enabled', return_value=True):
+            env = dispatch.driver_env(self.root, run_context='intent', feature=self.feature, task_worker=True)
+        self.assertNotIn('SANDUQ_WORKFLOW_CLAIM_TOKEN', env)
+        self.assertNotIn('SANDUQ_WORKFLOW_SESSION_ID', env)
+
     def test_two_active_features_worker_gets_only_its_own_claim(self):
         self.write_claim('specs/002-other', 'feature-a', 'token-a')
         self.write_claim(self.feature, 'feature-b', 'token-b')

@@ -44,6 +44,13 @@ Delegated work runs another agent CLI through the `delegate-task` driver
   values.
 - **Sandbox** (`--sandbox`): review and analysis routes start read-only.
 
+A task worker never receives the workflow claim token. `accept`, `adopt`, `reassign` and
+`trust-reset` need a nonce kept under your home folder, outside every worker's checkout, and refuse a
+process that descends from a live delegated run even with its `SANDUQ_*` variables removed. Both
+stop a worker that uses only what it was given; neither stops a worker running as your OS user
+that reads the nonce file or escapes its process tree
+([residual risk](docs/workflow/delegation.md#security)).
+
 Workers and the dispatcher share one checkout and one set of permissions. Receipts and the
 delegation ledger are self-asserted, and the ledger's tamper markers detect accidental edits only
 (review decision DEC-11); a worker that wants to lie can. The CI gate checks that receipts are
