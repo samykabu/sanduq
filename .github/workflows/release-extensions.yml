@@ -17,8 +17,9 @@ concurrency:
 
 jobs:
   release:
-    # A completed push run starts the release; so does a scheduled or dispatched (Windows) run, so the full
-    # CI run the gate below dispatches releases when it passes.
+    # A completed push, scheduled or person-dispatched ci run starts the release through workflow_run. The
+    # full ci run the gate below dispatches cannot (GitHub starts no workflow_run from a GITHUB_TOKEN run), so
+    # its release-trigger job dispatches this workflow when it passes (ci.yml).
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' &&
@@ -53,7 +54,8 @@ jobs:
           fi
       # Push runs skip the slow Windows suites (ci_matrix.py WINDOWS_SLOW_SUITES), so the commit must also have
       # a successful scheduled or dispatched ci run whose Windows workflow and memory jobs passed. Anything
-      # still missing or running is a notice, not a failure: the run that completes triggers this again.
+      # still missing or running is a notice, not a failure: the run that completes triggers this again
+      # (through workflow_run, or through ci.yml's release-trigger job for the run dispatched here).
       # Dry run from a checkout: HEAD_SHA=<sha> DRY_RUN=1 GH_REPO=samykabu/sanduq python <this script>
       - name: Require successful CI for the current main commit
         id: ci
@@ -105,7 +107,7 @@ jobs:
               finish(False, f'DRY RUN: no ci run with Windows legs on {head[:8]}; would dispatch ci.yml on main. Nothing released.')
           subprocess.run(['gh', 'api', '-X', 'POST', f'repos/{repo}/actions/workflows/ci.yml/dispatches', '-f', 'ref=main'], check=True)
           finish(False, f'No successful ci run with Windows legs (schedule or workflow_dispatch) on {head[:8]}: dispatched ci.yml on main; '
-                        'its completion triggers the release. Nothing released.')
+                        'its release-trigger job starts the release when it passes. Nothing released.')
           PY
       - if: steps.ci.outputs.release == 'true'
         run: python -m pip install -r extensions/workflow/requirements.txt

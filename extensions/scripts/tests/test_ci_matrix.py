@@ -706,6 +706,22 @@ class ReleaseWindowsGate(unittest.TestCase):
         steps = text.split("- name: Require successful CI for the current main commit", 1)[1]
         self.assertNotIn("steps.gate.outputs.ready", steps.split("          PY\n", 1)[1])
 
+    def test_a_ci_run_the_release_dispatched_starts_the_release_when_it_passes(self):
+        """GITHUB_TOKEN runs start no workflow_run, so the bot-dispatched ci run dispatches the release itself."""
+        text = (ci_matrix.ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        job = re.search(r"^  release-trigger:\n(?:(?:    .*)?\n)+", text, re.M).group(0)
+        jobs = set(re.findall(r"(?m)^  ([a-z-]+):$", text.split("\njobs:\n", 1)[1])) - {"release-trigger"}
+        self.assertEqual(set(re.search(r"needs: \[(.*)\]", job).group(1).split(", ")), jobs)
+        for condition in ("!contains(needs.*.result, 'failure')", "!contains(needs.*.result, 'cancelled')",
+                          "github.event_name == 'workflow_dispatch' && github.actor == 'github-actions[bot]'",
+                          "github.ref == 'refs/heads/main'"):
+            self.assertIn(condition, job)
+        self.assertIn("runs-on: homek8-general\n    permissions:\n      actions: write\n", job)
+        self.assertIn('actions/workflows/release-extensions.yml/dispatches" -f ref=main', job)
+        # Every other ci run reaches the release through workflow_run, so one run never triggers it twice.
+        release = (ci_matrix.ROOT / ".github/workflows/release-extensions.yml").read_text(encoding="utf-8")
+        self.assertIn("workflow_run:\n    workflows: [ci]\n    types: [completed]", release)
+
 
 if __name__ == "__main__":
     unittest.main()
