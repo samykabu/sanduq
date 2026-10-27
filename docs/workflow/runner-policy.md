@@ -169,6 +169,27 @@ when Git merges cleanly. Configure `workflow-evidence` as a required branch
 check only when this project has deliberately selected Required mode;
 otherwise leave its branch rule optional.
 
+## Who grades the PR
+
+The shipped gate (`sanduq-workflow-gates.yml`, and Assure's `documentation-gates.yml`)
+checks out the PR head as the project and the PR base into `.sanduq-base`. It installs the
+base's `requirements.txt` and runs the base's `ci_gate.py` with `--root . --trusted-root
+.sanduq-base`: the policy in `.specify/workflow.yml` and the Assure and User Manual scripts
+also come from the base. A PR that edits `ci_gate.py`, the requirements or the gate policy is
+graded by the copy it cannot change, so these edits take effect only after merge. A PR that
+changes the policy itself can therefore fail with `POLICY_CHANGED`; waive `receipts` for it or
+land the policy change first.
+
+On a first-install PR the base has no Workflow. The gate then downloads the release that the
+head's `extension.yml` names, requires the head's installed copy to match it
+(`INSTALLED_PACKAGE_NOT_RELEASED` lists each changed, missing or extra Python file) and runs the
+released copy with the head's policy. A process the PR installs for the first time (Assure or
+User Manual on a base without it) runs from the head.
+
+Limits: GitHub runs the workflow file from the PR, so a PR that edits
+`.github/workflows/` can still change the gate; protect that folder and `.specify/` with
+CODEOWNERS and review. The `ci.gate.affected_command` hook runs from the head checkout.
+
 ## Text fingerprints
 
 UTF-8 text fingerprints normalize CRLF across checkout platforms. Explicit Git

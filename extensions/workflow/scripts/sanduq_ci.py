@@ -327,3 +327,41 @@ def load_ci(root):
     policy = yaml.safe_load(path.read_text(encoding='utf-8-sig')) or {}
     ci = policy.get('ci') if isinstance(policy, dict) else None
     return validate_ci(ci) if ci else default_ci()
+
+
+def release_differences(installed, release):
+    """How an installed package differs from its released archive, extracted at `release` (SEC-03).
+
+    A first-install PR has no gate on its base branch, so the gate runs from the release the head names and
+    requires the head's copy to match it. Text compares with CRLF as LF, as `inventory_sha256` hashes it.
+    Consumer configuration and state an install adds are allowed; an extra Python file is not, because a
+    script imports from its own folder first.
+    """
+    from pathlib import Path
+
+    def files(folder):
+        folder = Path(folder)
+        return {p.relative_to(folder).as_posix(): p.read_bytes() for p in folder.rglob('*')
+                if p.is_file() and '__pycache__' not in p.parts}
+
+    released, present = files(release), files(installed)
+    normal = {path: content.replace(b'\r\n', b'\n') for path, content in present.items()}
+    differences = [path + (': changed' if path in present else ': missing') for path in sorted(released)
+                   if normal.get(path) != released[path].replace(b'\r\n', b'\n')]
+    return differences + [path + ': not in the release' for path in sorted(set(present) - set(released))
+                          if path.endswith('.py')]
+
+
+if __name__ == '__main__':
+    import argparse
+    import json
+    import sys
+    parser = argparse.ArgumentParser(description='Compare an installed Sanduq package with its released archive')
+    parser.add_argument('command', choices=('verify-release',))
+    parser.add_argument('--installed', required=True)
+    parser.add_argument('--release', required=True)
+    args = parser.parse_args()
+    found = release_differences(args.installed, args.release)
+    print(json.dumps({'ok': not found, **({'error': 'INSTALLED_PACKAGE_NOT_RELEASED: ' + args.installed + ' differs '
+                      'from the released package: ' + '; '.join(found[:20])} if found else {})}))
+    sys.exit(1 if found else 0)

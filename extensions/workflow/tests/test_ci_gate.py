@@ -50,6 +50,29 @@ class CIGateTests(unittest.TestCase):
         subprocess.run(['git', 'commit', '-qm', 'Small bug fix'], cwd=self.root, check=True)
         return base
 
+    def test_a_pr_cannot_rewrite_its_own_grader(self):
+        # SEC-03: the PR stubs its ci_gate.py and disables the gate in its policy; the gate runs the base
+        # branch's script (this source copy) and policy (--trusted-root) against the head and still fails.
+        self.policy['ci']['gate']['mode'] = 'required'
+        self.configure()
+        base_tree = Path(tempfile.mkdtemp()); self.addCleanup(__import__('shutil').rmtree, base_tree)
+        (base_tree / '.specify').mkdir()
+        (base_tree / '.specify/workflow.yml').write_bytes((self.root / '.specify/workflow.yml').read_bytes())
+        base = w.git(self.root, 'rev-parse', 'HEAD')
+        tampered = self.root / '.specify/extensions/workflow/scripts/ci_gate.py'
+        tampered.parent.mkdir(parents=True)
+        tampered.write_text('print(\'{"ok": true, "status": "passed"}\')\n', encoding='utf-8')
+        self.policy['ci']['gate']['mode'] = 'disabled'
+        self.configure()
+        (self.root / self.feature).mkdir(parents=True)
+        (self.root / self.feature / 'spec.md').write_text('# Unrecorded work\n', encoding='utf-8')
+        subprocess.run(['git', 'add', '-A'], cwd=self.root, check=True)
+        subprocess.run(['git', 'commit', '-qm', 'Grade myself'], cwd=self.root, check=True)
+        done = subprocess.run([sys.executable, c.__file__, '--root', str(self.root), '--trusted-root', str(base_tree),
+                               '--base-ref', base], capture_output=True, text=True, encoding='utf-8')
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertIn('CHECKPOINT_MISSING_OR_WRONG_FEATURE', done.stdout)
+
     def test_required_managed_gate_does_not_block_ordinary_bug_fix(self):
         self.policy['ci']['gate']['mode'] = 'required'
         self.configure()
@@ -63,7 +86,7 @@ class CIGateTests(unittest.TestCase):
         self.policy['ci']['gate']['mode'] = 'required'
         self.policy['ci']['gate']['rules']['tasks'] = True
         self.configure()
-        def fake_check(root, feature, policy, base, rules):
+        def fake_check(root, feature, policy, base, rules, **_):
             if rules['tasks']:
                 raise w.WorkflowError('INCOMPLETE_TASKS')
             return {'feature': feature, 'passed': True, 'rules': ['receipts']}
@@ -263,7 +286,7 @@ class CIGateTests(unittest.TestCase):
         self.configure()
         warning = ("CROSS_FEATURE_EVIDENCE: receipt references path(s) under another feature's "
                    "specs/ directory: specs/002-other/evidence/verify.txt")
-        def fake_check(root, feature, policy, base, rules):
+        def fake_check(root, feature, policy, base, rules, **_):
             return {'feature': feature, 'passed': True, 'rules': ['receipts']}
         output = io.StringIO()
         with patch.object(c, 'resolve_features', return_value=[self.feature]), \
@@ -281,7 +304,7 @@ class CIGateTests(unittest.TestCase):
     def test_check_index_without_warnings_omits_the_field(self):
         self.policy['ci']['gate']['mode'] = 'required'
         self.configure()
-        def fake_check(root, feature, policy, base, rules):
+        def fake_check(root, feature, policy, base, rules, **_):
             return {'feature': feature, 'passed': True, 'rules': ['receipts']}
         output = io.StringIO()
         with patch.object(c, 'resolve_features', return_value=[self.feature]), \

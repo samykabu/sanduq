@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+- The evidence gate template grades a PR with code the PR cannot change (SEC-03, DEC-13 A): it checks out the PR base into `.sanduq-base`, installs the base's requirements and runs the base's `ci_gate.py --trusted-root .sanduq-base`, which reads the policy and runs the Assure and User Manual scripts from the base. On a first install the gate downloads the release named by the head's `extension.yml` and `sanduq_ci.py verify-release` refuses a head copy that differs (`INSTALLED_PACKAGE_NOT_RELEASED`). A base gate older than this release grades only the PR that upgrades it. The installer replaces an unedited render of the previous template even in a fresh clone without the install receipt; `--preserve-ci` and edited files are kept.
+- `WAIVER_NOT_VERIFIED` lists each rejected waiver comment with its reason (not the two-line format, invalid JSON, wrong PR, waiver for an older head naming that head and the current one, Reason line differs, expired, not allowed to waive), instead of dropping them silently (AHMED-16).
+
 ## [1.21.0] - 2026-10-27
 
 - Vendors delegate-task from agent-tools 1.8.0: the driver contract lists `--clean-env` and `--keep-env`, which the dispatcher now requires (`DELEGATE_SKILL_INCOMPATIBLE` names a driver without them); run logs are masked when a run is finalised and `collect` prunes finished runs older than `DELEGATE_PRUNE_DAYS` (default 30, `0` keeps them).

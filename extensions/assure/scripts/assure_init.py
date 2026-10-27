@@ -52,6 +52,7 @@ def update_hooks(text: str, integrated: bool) -> tuple[str, int]:
 
 TEMPLATE = Path(__file__).resolve().parents[1] / "assure-config.template.yml"
 GATE = Path(__file__).resolve().parents[1] / "assets" / "github" / "documentation-gates.yml"
+PREVIOUS_GATE = GATE.parent / "previous" / "documentation-gates.yml"
 # AU8 added these lines; a file equal to the render without them is an unedited earlier gate.
 HEAD_CHECKOUT = (b"          # The recorded states describe the PR head, not GitHub's merge commit.\n"
                  b"          ref: ${{ github.event.pull_request.head.sha }}\n")
@@ -98,7 +99,9 @@ def update_gate(root: Path, managed: bool, dry_run: bool) -> str:
         current = target.read_bytes().replace(b"\r\n", b"\n")
         if current == rendered:
             return "current"
-        if current != sanduq_ci.render(template.replace(HEAD_CHECKOUT, b""), ci):
+        # An unedited render of the template before the base-branch gate (SEC-03) is replaced too.
+        previous = PREVIOUS_GATE.read_bytes().replace(b"\r\n", b"\n")
+        if current not in [sanduq_ci.render(t, ci) for t in (previous, previous.replace(HEAD_CHECKOUT, b""))]:
             if b"github.event.pull_request.head.sha" not in current:
                 print(f"{target.relative_to(root).as_posix()} has local edits: add "
                       "`ref: ${{ github.event.pull_request.head.sha }}` under its checkout `with:`")
