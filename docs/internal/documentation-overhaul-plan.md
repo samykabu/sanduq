@@ -33,7 +33,7 @@ The table marks these **Consolidate**. Findings with no existing coverage are ma
 | A2 | High | Consolidate | Dependencies are stated in several places (`getting-started.md`, `extensions.md`) but there is no single graph. The README's "use separately" framing contradicts Scope's hard dependency on Workflow. |
 | A3 | High | Missing | Ten internal design and progress records, evidence JSON and `prototypes/` sit in the user path. |
 | A4 | Medium | Missing | Skills are duplicated across `skills/` and `extensions/`. Illustrate has three version schemes: extension 2.2.0, plugin 3.2.0, READMEs 3.1.0. `plugins/README.md` and `skills/README.md` are stale. |
-| A5 | Low | Missing | Authorship is inconsistent (illustration-tools is credited to "Resal Engineering"). |
+| A5 | Low | Missing | Authorship is inconsistent (illustration-tools is credited to "a third-party organisation"). |
 | B1 | High | Consolidate | Phase hooks are documented per package, but no page shows the whole lifecycle. |
 | B2 | High | Consolidate | Install paths exist. End-to-end scenarios per adoption level do not. |
 | B3 | Medium | Consolidate | Hook optionality is explained thinly. Init-time changes are not explained at all: Project and Assure can make hooks required, and Workflow reconciles hooks. |

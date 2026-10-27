@@ -13,7 +13,7 @@ import source_key as sk  # noqa: E402
 
 FIXTURES = Path(__file__).resolve().parent / 'fixtures/source-key.fixtures.json'
 # Consumers that reproduce the key pin the same fixture bytes.
-FIXTURES_SHA256 = '38c9ee2904be6b2ab63cb5a8cf21b5c6a3ae8c65ec43d40b36ae06c2b6b72dc7'
+FIXTURES_SHA256 = '3321caf8140c51bc4108902d5f2b8043f605c498acd79e981532ddaf097ce4b5'
 
 
 def fixture_cases():
@@ -43,8 +43,6 @@ class SharedFixtureTests(unittest.TestCase):
                 as_bytes = [tuple(entry[f].encode('utf-8') for f in ('mode', 'type', 'object', 'path'))
                             for entry in case['entries']]
                 self.assertEqual(sk.key_from_entries(as_bytes), case['key'])
-                # Evidence recorded under the previous key version stays verifiable.
-                self.assertEqual(sk.key_from_entries(case['entries'], sk.ACCEPTED_KEY_VERSIONS[1]), case['previousKey'])
 
     def test_unknown_key_version_is_refused(self):
         with self.assertRaises(sk.SourceKeyError):

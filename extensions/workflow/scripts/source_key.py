@@ -16,9 +16,10 @@ Paths stay bytes from git to the hash: nothing is decoded, so any file name is
 safe. The key is distinct from a receipt's `source_fingerprints` (a working-tree
 inventory): it binds a receipt, or a CI run, to the source of one commit.
 
-New keys use `KEY_VERSION`. Evidence recorded under an earlier key version is
-still verified: `ACCEPTED_KEY_VERSIONS` lists every version a plan or receipt
-may carry, and `source_keys` gives the key of a tree under each of them.
+Keys use `KEY_VERSION`. `ACCEPTED_KEY_VERSIONS` lists every version a plan or
+receipt may carry (only the current one since Workflow 1.21.0; evidence recorded
+under the earlier version is re-run, not verified) and `source_keys` gives the
+key of a tree under each of them.
 """
 from __future__ import annotations
 
@@ -29,8 +30,7 @@ import sys
 from pathlib import Path
 
 KEY_VERSION = 'sanduq-source-key/1'
-# ponytail: the previous version stays verifiable for recorded evidence; drop it in the next major.
-ACCEPTED_KEY_VERSIONS = (KEY_VERSION, 'bunyan-source-key/1')
+ACCEPTED_KEY_VERSIONS = (KEY_VERSION,)
 EXCLUDED_PREFIXES = ('.specify/', '.agents/', '.claude/', '.codex/', 'specs/', 'User-Manual/', 'docs/',
                      'graphify-out/', 'artifacts/')
 _EXCLUDED = tuple(prefix.encode('utf-8') for prefix in EXCLUDED_PREFIXES)

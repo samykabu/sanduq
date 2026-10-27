@@ -70,7 +70,7 @@
           "todo": 0
         },
         "image": {
-          "tag": "registry.abushanab.net/infrastructure/arc-runner-general:2.337.0-node24.21.0-gh2.100.0-pwsh7.6.7-20261016",
+          "tag": "<private-registry>/infrastructure/arc-runner-general:2.337.0-node24.21.0-gh2.100.0-pwsh7.6.7-20261016",
           "id": "sha256:3c7f3efacac218897b6c37eb6812a0e3c96a85f57b9846a978a938a41cb418ab",
           "node": "24.21.0",
           "python": "3.12.3",
@@ -142,7 +142,7 @@
     "Native check containment supports Windows and Linux; other platforms refuse execution before checks. Linux requires Python 3.9+, subreaper support and readable /proc.",
     "Missing native closure proof retains an unresolved lease. Containment covers ordinary descendants, not processes launched through external brokers or privileged services.",
     "The earlier portable legacy refusal empty-stderr failure remains unexplained despite an explicit passing retry.",
-    "No tags, release publication or active Bunyan adoption. Remote PR checks are separate from local evidence."
+    "No tags, release publication or active consumer adoption. Remote PR checks are separate from local evidence."
   ],
   "independent_review": {
     "status": "all four findings addressed",

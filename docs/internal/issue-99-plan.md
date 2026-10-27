@@ -69,5 +69,5 @@ Regression cases R1 to R9 from the issue map to: A covers R1, R2, R3, R4, R8; B 
 
 Workflow 1.16.0 (new subcommands, changed claim field), Assure 2.5.1 and User Manual 1.7.1 (shared helper);
 `release.py bump`, changelogs, `pending-releases.json` ready, PR with every CI job green, release, comment on
-#99. The consumer rollout (Bunyan) and the two-pass consumer acceptance are the consumer's steps; this repo
+#99. The consumer rollout and the two-pass consumer acceptance are the consumer's steps; this repo
 ships the fix, the upgrade notes and a synthetic two-pass test.

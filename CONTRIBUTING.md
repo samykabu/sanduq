@@ -6,6 +6,7 @@ usable example. Generated agent registrations and installed consumer copies are 
 ## Table of contents
 
 - [Priority rule](#priority-rule)
+- [No third-party names](#no-third-party-names)
 - [Set up the checkout](#set-up-the-checkout)
 - [Find the owning source](#find-the-owning-source)
 - [Test a local package](#test-a-local-package)
@@ -26,6 +27,10 @@ The [product brief](docs/start/product-brief.md) names the users and the outcome
 3. A cleanup pull request shows that behavior does not change: the same tests pass before and after,
    and the description says which checks prove it.
 4. Record the agent cost of each release train. See [release trains](#release-trains).
+
+## No third-party names
+
+This repository never names third-party products, customers or their hosts: not in code, tests, fixtures, documentation, evidence, changelogs, commit messages, issues or pull requests. Write "the consumer" or "a private product" instead. The `lint` job greps the tree with a pattern the maintainer keeps in the `PRIVATE_NAMES` repository secret and fails on any match.
 
 ## Set up the checkout
 
