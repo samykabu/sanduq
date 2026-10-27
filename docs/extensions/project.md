@@ -43,7 +43,9 @@ For a dry run, call the sync script directly:
 Required sync runs automatically at each phase. Optional hooks ask first. In the managed Workflow,
 Workflow requires automatic sync and its own adapter creates and closes task sub-issues. Each
 Workflow claim names the phase and the exact sync command, so the dispatcher runs it without
-opening the sync command file.
+opening the sync command file. Workflow's board mode (`init --board full|minimal|none`) decides
+which phases it writes: `minimal` writes only Ready, In progress, In review and Done without
+task sub-issues, and `none` runs without a board.
 [Editable source](../diagrams/extension-project.html).
 
 ## Limits

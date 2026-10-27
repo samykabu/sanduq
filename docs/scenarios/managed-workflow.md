@@ -13,13 +13,20 @@ runs next, takes a [claim](../reference/glossary.md#claim) on it, and checks the
 - A Spec Kit project with the Sanduq catalog registered. See [set up Spec Kit](../start/install-speckit.md).
 - Python 3.11 or later (Workflow runs on 3.10; Memory and Progress need 3.11), Git, and `gh` signed
   in with Project scopes. See [prerequisites](../start/prerequisites.md).
-- A GitHub Project (v2) board linked to the repository. See [board](#board).
+- A GitHub Project (v2) board linked to the repository, unless you choose board mode `none`. See
+  [board](#board).
 
 ## Board
 
-Every managed claim checks the board first. Without a configured board, the claim fails with a list of
-`PROJECT_CONFIG_REQUIRED`, `PROJECT_SCOPE_STATUS_MISSING` and `PROJECT_PHASE_UNMAPPED` codes, and
-nothing runs. The board's Status field needs these seven options, spelled exactly like this:
+`init --board full|minimal|none` picks how much Workflow writes to the board (`full` when omitted):
+`full` moves the card at every phase and creates task sub-issues; `minimal` writes only Ready, In
+progress, In review and Done and creates no task sub-issues; `none` needs no board at all.
+`doctor` prints the mode as `board_sync`. Changing the mode later never invalidates a feature in
+flight. In `full` and `minimal` mode every managed claim checks the board first. Without a
+configured board, doctor and claim stop with one error, `PROJECT_NOT_CONFIGURED`, naming
+`$speckit-project-init`; a partly mapped board gets `PROJECT_SCOPE_STATUS_MISSING` and
+`PROJECT_PHASE_UNMAPPED` codes that name the column each expects. The board's Status field needs
+these seven options, spelled exactly like this:
 
 `Backlog`, `Feature Specification`, `Need Clarifications`, `Ready`, `In progress`, `In review`, `Done`
 

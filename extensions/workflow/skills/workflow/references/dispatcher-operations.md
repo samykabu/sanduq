@@ -50,7 +50,10 @@ invent percentages, stop on an estimate, or ask for a new session because usage 
 ## Project Sync and task-issue sync
 
 `claim` prints `project_sync: false`, or `{"phase": ..., "command": ...}` at a
-`project_sync.points` stage (absent: all six). The command is `workflow.py project-sync
+`project_sync.points` stage (absent: all six) the board mode writes: `project_sync.mode` `full`
+(all), `minimal` (only `ready`, after Analyze when Tasks-to-Issues is off, `in-progress`,
+`in-review`, `done`) or `off` (none). With `issue_sync.taskstoissues: off` the Tasks-to-Issues
+stage is never claimed (`skipped`) and Ready skips the task-link check. The command is `workflow.py project-sync
 --feature <f> --phase <p>`. It runs the Project script with `--summary` and records
 `project_sync: {phase, state, at, summary}` in the checkpoint: `pending` before the call, `done`
 or `failed` after it. When a GitHub Project is configured, run it as printed after `complete`,

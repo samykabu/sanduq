@@ -73,7 +73,11 @@ DEFAULT_SYNC_STATE = '.specify/project-sync-state.json'
 # administrative fields (status, timestamps), so a board move never stales evidence while a binding change does.
 SYNC_BINDING_PREFIX = 'sync-binding:v1:'
 SYNC_ADMINISTRATIVE = re.compile(r'status|\w*(?:At|_at|[Tt]imestamp)')
-TASK_ISSUE_MODES = ('required', 'phase-lazy')
+TASK_ISSUE_MODES = ('required', 'phase-lazy', 'off')
+# `project_sync.mode` (REQ-22): full writes every phase, minimal only the tracked ones below (no task sub-issues),
+# off runs without a board. Operational like `project_sync.points`: a change never reaches a stage.
+PROJECT_SYNC_MODES = ('full', 'minimal', 'off')
+MINIMAL_SYNC_PHASES = ('ready', 'in-progress', 'in-review', 'done')
 # Files a stage may change although earlier receipts depend on them (glob `*` stays within one folder).
 # The lineage records each such change; anything else changed during a stage refuses the completion.
 SIDE_EFFECTS = {'clarify': ['<feature>/spec.md', '.specify/project-sync-state.json', '<feature>/checklists/*.md'],

@@ -17,7 +17,7 @@ from wf_core import (RANGES, COMMANDS, LINT_COMMAND, DOCTOR_CACHE, DOCTOR_CACHE_
                      WORKFLOW_SCRIPT, WorkflowError, require, read, digest, write, inside, canonical_path)
 from wf_identity import github_repository
 from wf_fingerprints import fingerprint_files
-from wf_policy import stages
+from wf_policy import stages, project_sync_mode, board_mode_line
 
 
 def registry(root):
@@ -120,8 +120,17 @@ def resolve_commands(root, policy, tier=None):
 
 
 def project_errors(root, policy):
+    mode = project_sync_mode(policy)
+    if mode == 'off':
+        return []  # board-less (REQ-22): nothing to check
     config = read(root / '.specify/extensions/project/config.json', {})
     if not isinstance(config, dict): return ['PROJECT_CONFIG_INVALID: expected a JSON object']
+    if not config.get('projectId'):
+        # AHMED-06: an absent board is one setup step, not twenty partial-configuration codes.
+        return ['PROJECT_NOT_CONFIGURED: no GitHub Project board is configured (.specify/extensions/project/config.json '
+                'is missing or has no projectId) and project_sync.mode is ' + mode + '; run $speckit-project-init '
+                '(python .specify/extensions/project/scripts/project_init.py --hooks-mode required) to map a board, or '
+                'run "' + WORKFLOW_SCRIPT + ' init --qa on|off --manual on|off --board none" to work without one']
     errors = []
     for key in ('owner', 'projectId', 'statusFieldId', 'stateFile'):
         if not isinstance(config.get(key), str) or not config[key]: errors.append('PROJECT_CONFIG_REQUIRED: ' + key)
@@ -134,8 +143,10 @@ def project_errors(root, policy):
     mapping = policy.get('scope', {}).get('statuses', {})
     for status in SCOPE_STATUSES:
         if mapping.get(status, status) not in options: errors.append('PROJECT_SCOPE_STATUS_MISSING: ' + mapping.get(status, status))
-    for phase in ('open', 'analysis', 'engineer-review', 'ready', 'in-progress', 'in-review', 'done'):
-        if phases.get(phase) not in options: errors.append('PROJECT_PHASE_UNMAPPED: ' + phase)
+    for phase, status in PHASE_DEFAULTS.items():
+        if phases.get(phase) not in options:
+            errors.append('PROJECT_PHASE_UNMAPPED: ' + phase + ' (expected column ' + mapping.get(status, status) +
+                          ', or map it in config.json phaseToStatus)')
     if config.get('stateFile'):
         try: inside(root, config['stateFile'])
         except (WorkflowError, TypeError): errors.append('PROJECT_STATE_PATH_INVALID')
@@ -143,13 +154,28 @@ def project_errors(root, policy):
 
 
 SCOPE_STATUSES = ('Backlog', 'Feature Specification', 'Need Clarifications', 'Ready', 'In progress', 'In review', 'Done')
+PHASE_DEFAULTS = {'open': 'Feature Specification', 'analysis': 'Ready', 'engineer-review': 'Ready',
+                  'ready': 'Ready', 'in-progress': 'In progress', 'in-review': 'In review', 'done': 'Done'}
+# AHMED-25: accepted values that change nothing today; doctor warns per value set.
+INERT_VALUES = (('execution', 'checkpoints', 'every-phase', 'acts as required-only'),
+                ('context', 'mode', 'measured-with-estimated-fallback', 'acts as measured-only'),
+                ('updates', 'policy', None, 'update scheduling is not implemented; updates are run by hand'))
+
+
+def inert_value_warnings(policy):
+    """POLICY_VALUE_INERT for each inert value in the policy (`updates.policy`: any value but the default)."""
+    warnings = []
+    for section, key, inert, effect in INERT_VALUES:
+        value = (policy.get(section) or {}).get(key)
+        if value is not None and (value == inert if inert else value != 'reviewed'):
+            warnings.append('POLICY_VALUE_INERT: ' + section + '.' + key + ': ' + str(value) + ' changes nothing today (' +
+                            effect + '); remove it from .specify/workflow.yml or keep it knowing it is inert')
+    return warnings
 
 
 def project_defaults(root, policy):
     mapping = policy.get('scope', {}).get('statuses', {})
-    phases = {'open': 'Feature Specification', 'analysis': 'Ready', 'engineer-review': 'Ready',
-              'ready': 'Ready', 'in-progress': 'In progress', 'in-review': 'In review', 'done': 'Done'}
-    phases = {phase: mapping.get(status, status) for phase, status in phases.items()}
+    phases = {phase: mapping.get(status, status) for phase, status in PHASE_DEFAULTS.items()}
     existing = read(root / '.specify/extensions/project/config.json', {})
     require(isinstance(existing, dict), 'PROJECT_CONFIG_INVALID: expected a JSON object')
     if existing.get('projectId') and isinstance(existing.get('phaseToStatus'), dict):
@@ -374,7 +400,8 @@ def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True
             errors.append('PRESET_NOT_ENABLED: ' + preset)
     errors += ci_errors(root, policy, preserved_ci)
     if project: errors += project_errors(root, policy)
-    warnings = host_warnings(root) + guard_approval_warnings(root) + progress_wiring_warnings(root)
+    warnings = (host_warnings(root) + guard_approval_warnings(root) + progress_wiring_warnings(root)
+                + inert_value_warnings(policy))
     # E9: AGENTS.md is the standing file; CLAUDE.md should import it, not repeat it.
     claude_md = root / 'CLAUDE.md'
     if (root / 'AGENTS.md').is_file() and claude_md.is_file() and \
@@ -411,6 +438,7 @@ def doctor(root, policy, project=False, preserved_ci=None, check_delegation=True
     if preflight and not preflight['ok']:
         errors += ['LEAN_PREFLIGHT_FAILED: ' + json.dumps(preflight)]
     result = {'ok': not errors, 'errors': errors, 'warnings': warnings, 'project_checked': project,
+              'board_sync': board_mode_line(policy),
               'context': 'Only fresh reliable measurements can trigger context pauses; unavailable or estimated usage is nonblocking outside explicit strict mode'}
     if project and explicit:
         result['skill_inventory'] = skill_inventory_result

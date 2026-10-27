@@ -158,9 +158,11 @@ class PolicyKeyTests(Base):
             return w.policy_cutoff(base, changed)
         self.assertEqual(cutoff(lambda p: p.update(profiles={'enabled': True})), w.BASE_STAGES.index('plan'))
         self.assertEqual(cutoff(lambda p: p.update(artifacts={'enforce': 'all'})), w.BASE_STAGES.index('analyze'))
-        self.assertEqual(cutoff(lambda p: p['issue_sync'].update(taskstoissues='phase-lazy')),
-                         w.BASE_STAGES.index('taskstoissues'))
-        for operational in (lambda p: p.update(project_sync={'points': ['pr']}),
+        # The task-issue mode is operational (AHMED-30): switching it reaches no stage.
+        for operational in (lambda p: p['issue_sync'].update(taskstoissues='phase-lazy'),
+                            lambda p: p['issue_sync'].update(taskstoissues='off'),
+                            lambda p: p.update(project_sync={'mode': 'minimal'}),
+                            lambda p: p.update(project_sync={'points': ['pr']}),
                             lambda p: p.update(progress={'hook_wiring': 'native'}),
                             lambda p: p.update(illustrate={'hooks': {'self_check': True}}),
                             lambda p: p.update(scope={'board_cache_seconds': 0}),
