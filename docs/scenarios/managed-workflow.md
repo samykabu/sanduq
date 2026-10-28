@@ -123,6 +123,10 @@ own runners, record the selection before `install.py --apply` (or reinstall afte
 python .specify/extensions/workflow/scripts/workflow.py ci --policy self-hosted-required --linux self-hosted,<label> --system-packages preinstalled --python preinstalled
 ```
 
+Under `self-hosted-required` the command drops each GitHub-hosted platform you did not name (the
+default `windows: [windows-latest]`) and lists it under `dropped_hosted_platforms`; add
+`--windows self-hosted,<label>` to keep a Windows job on your own runner.
+
 Never edit the rendered workflow file by hand. The selection and `self-hosted-required`'s recorded
 exceptions are in [where your CI actually runs](../workflow/operations.md#where-your-ci-actually-runs).
 

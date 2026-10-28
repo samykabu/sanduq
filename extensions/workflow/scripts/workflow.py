@@ -2041,6 +2041,17 @@ def run_command(args):
                 for key, value in (('system_packages', args.system_packages), ('python', args.python),
                                    ('python_version', args.python_version)):
                     if value: ci['capabilities'][key] = value
+                dropped = []
+                if ci['policy'] == 'self-hosted-required':
+                    # F7: a hosted default the command did not name and no exception covers is dropped, so the
+                    # selection is one the installer can apply.
+                    documented = {entry.get('platform') for entry in ci.get('exceptions', [])}
+                    for platform, labels in list(ci['runners'].items()):
+                        if getattr(args, platform) is None and sanduq_ci.hosted(labels) and platform not in documented:
+                            require(platform != 'linux', 'CI_HOSTED_RUNNER_UNDOCUMENTED: linux runs on '
+                                    + ', '.join(labels) + '; pass --linux self-hosted,<label>')
+                            dropped.append(platform)
+                            ci['runners'].pop(platform)
                 select_gate(ci, args.gate_mode, args.gate_scope, args.gate_rule,
                             {'affected_command': args.affected_command,
                              'verification_check': args.verification_check,
@@ -2051,6 +2062,8 @@ def run_command(args):
             # The recorded selection is not live until the installer re-renders
             # each managed workflow file from it.
             result = {'ci': ci, 'saved': not args.show, 'doctor': doctor(root, policy)}
+            if not args.show and dropped:
+                result['dropped_hosted_platforms'] = dropped
         elif args.action == 'decisions':
             policy = load_policy(root)
             config = policy.setdefault('decisions', default_policy(False, False)['decisions'])
