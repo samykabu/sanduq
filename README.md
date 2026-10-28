@@ -27,7 +27,7 @@ The [product brief](docs/start/product-brief.md) says who Sanduq is for and how 
 
 ## Products
 
-![Product map: nine Spec Kit extensions in this repository. Scope requires Workflow and Illustrate; Assure, PR and User Manual require Illustrate; PR uses Assure and User Manual when installed; Workflow uses Progress when installed; Project, Memory and Progress stand alone. The sanduq-skills repository supplies the Illustrate, User Manual and Delegate Task skills, copied into extensions and listed by the sanduq marketplace.](docs/diagrams/product-map.animated.svg)
+![Product map: nine Spec Kit extensions in this repository; Scope is part of Workflow, and its own package is a retired shim. Workflow, Assure, PR and User Manual require Illustrate; PR uses Assure and User Manual when installed; Workflow uses Progress when installed; Project, Memory and Progress stand alone. The sanduq-skills repository supplies the Illustrate, User Manual and Delegate Task skills, copied into extensions and listed by the sanduq marketplace.](docs/diagrams/product-map.animated.svg)
 
 The map shows each extension and what it requires; arrows point to the dependency.
 [Editable source](docs/diagrams/product-map.html) and [static version](docs/diagrams/product-map.svg).

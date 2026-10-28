@@ -46,10 +46,12 @@ and an unchecked recommendation. Answer `C1Q1: A` or tick a box, then run `$spec
 
 ## How it runs
 
-![Scope sequence: scope.run on issue 412 and you approve the scope decision; scope.guard runs before Specify; scope.bind ties the specification to its issue; scope.after-specify starts Brainstorm or Clarify; you answer the questions on GitHub; scope.plan-guard stops Plan while questions are unresolved.](../diagrams/extension-scope.animated.svg)
+![Workflow sequence with Scope inside it: you run workflow.scope on an issue and the dispatcher runs Scope, Specify and Clarify; the Scope panel lists the host commands workflow.scope-run and workflow.scope-plan and the Spec Kit hooks workflow.scope-guard, scope-bind, scope-after-specify, scope-plan-guard and scope-reconcile.](../diagrams/extension-workflow.animated.svg)
+
+The [hook lifecycle](../reference/hooks.md) shows where each hook runs.
 
 Mandatory hooks guard Specify, bind the specification to its issue, start Brainstorm or Clarify,
-and guard Plan. When the work is split, `scope.plan` accepts an [Illustrate](illustrate.md) dependency graph: it checks
+and guard Plan. When the work is split, `scope-plan` accepts an [Illustrate](illustrate.md) dependency graph: it checks
 that every issue is covered and reachable, renders the graph in a browser, and exports SVG and PNG.
 Clarification questions embed that image when GitHub serves the pushed file, and fall back to a
 text list when it cannot. A question may also carry a Mermaid diagram. With
@@ -59,7 +61,7 @@ render the spec from the approved analysis (`scope.py render-spec`), and `--snap
 `inspect` result across gate, approve, publish and bind.
 `scope.py cancel <issue>-<hash>` marks an interrupted publish cancelled and prints what to repair by hand.
 The managed Workflow runs these steps through its dispatcher.
-[Editable source](../diagrams/extension-scope.html).
+[Editable source](../diagrams/extension-workflow.html).
 
 ## Limits
 
