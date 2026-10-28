@@ -4,6 +4,10 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## 2026-10-28 — Workflow 1.22.1 (pending release)
+
+- Hotfix: the consumer evidence gate workflow loads again. An arithmetic expression in its checkout step had kept it from loading since Workflow 1.8.4, so the gate never ran in consumer CI. Found by the PH-04 live run.
+
 ## 2026-10-28 — Workflow 1.22.0, Scope 1.13.0, Assure 2.7.0, Memory 2.6.1, Illustrate 2.7.3, PR 4.7.1, Project 2.7.1, User Manual 1.8.3
 
 - PH-04 of the October 2026 review: trust boundaries. The evidence gate is graded by the base: the shipped `sanduq-workflow-gates.yml` and Assure's `documentation-gates.yml` check out the PR base into `.sanduq-base` and run the base's `ci_gate.py --trusted-root`, policy and Assure and User Manual scripts against the head; a first-install PR runs the released package after `sanduq_ci.py verify-release`; `WAIVER_NOT_VERIFIED` lists each rejected waiver with its reason. The previous templates ship for upgrades.

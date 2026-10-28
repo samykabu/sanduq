@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "PH-04 train of the October 2026 review: Workflow 1.22.0, Scope 1.13.0, Assure 2.7.0, Memory 2.6.1, Illustrate 2.7.3, PR 4.7.1, Project 2.7.1, User Manual 1.8.3. Base-graded evidence gate, nonce and lineage for grading commands, companion inventory checks, trusted spec edits, Python 3.11 floor, release trigger. Every suite passed on the merged tree locally and every CI check passed on PR #134 (merged as 83407ae). Release remains gated by successful CI on the exact main commit."
+  "versions": {
+    "workflow": "1.22.1"
+  },
+  "status": "ready",
+  "note": "Workflow 1.22.1 hotfix: the consumer evidence gate workflow loads again (no arithmetic in its checkout step). Found by the PH-04 live run; policy and gate tests passed locally. Release remains gated by successful CI on the exact main commit."
 }

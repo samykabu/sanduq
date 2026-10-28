@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.22.1] - 2026-10-28
+
+- The rendered evidence gate (`.github/workflows/workflow-gates.yml`) loads again. Since 1.8.4 its checkout used `fetch-depth: ${{ github.event.pull_request.commits + 1 }}`; GitHub expressions have no arithmetic, so the workflow file failed to load and the gate never ran in a consumer's CI. The fetch step now deepens history by the PR's commit count in shell. `upgrade.py` replaces an unedited gate file automatically; a project that kept its own copy (`--preserve-ci` or local edits) must remove the `fetch-depth` line and add `--deepen="$COMMITS"` as in the template. A test refuses any arithmetic in a template expression.
+
 ## [1.22.0] - 2026-10-28
 
 - The evidence gate template grades a PR with code the PR cannot change (SEC-03, DEC-13 A): it checks out the PR base into `.sanduq-base`, installs the base's requirements and runs the base's `ci_gate.py --trusted-root .sanduq-base`, which reads the policy and runs the Assure and User Manual scripts from the base. On a first install the gate downloads the release named by the head's `extension.yml` and `sanduq_ci.py verify-release` refuses a head copy that differs (`INSTALLED_PACKAGE_NOT_RELEASED`). A base gate older than this release grades only the PR that upgrades it. The installer replaces an unedited render of the previous template even in a fresh clone without the install receipt; `--preserve-ci` and edited files are kept.
