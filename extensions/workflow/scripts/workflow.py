@@ -78,7 +78,7 @@ from wf_policy import (default_policy, select_gate, validate_policy, _positive, 
                        matches_side_effect, load_policy, stages, OPERATIONAL_SUBKEYS, policy_cutoff, POLICY_KEYS,
                        unknown_policy_key, parse_policy, PolicyLoader, project_sync_mode, sync_phases,
                        sync_phase_written, board_mode_line)
-from wf_health import (registry, compatible, active_host, command_exists, package_digest, resolve_commands,
+from wf_health import (registry, compatible, active_host, running_host, command_exists, package_digest, resolve_commands,
                        project_errors, SCOPE_STATUSES, project_defaults, MANAGED_CI, preserved_ci_path, ci_errors,
                        delegation_errors, host_warnings, progress_wiring_warnings, guard_approval_warnings,
                        doctor_cache_key, store_doctor_cache, cached_doctor, doctor, lean_preflight, pr_lint_binding,
@@ -1194,6 +1194,11 @@ class Run:
             # the claim may install the skill it would otherwise report missing.
             health = cached_doctor(self.root, self.policy, state['dependency_digest'])
             require(health['ok'], '; '.join(health['errors']))
+            agent_host, default_host = running_host(), active_host(self.root)
+            require(agent_host in (None, default_host),
+                    'HOST_MISMATCH: this session runs under ' + str(agent_host) + ' but the project default host is ' +
+                    str(default_host) + '; continue in ' + str(default_host) + ', or preview the switch with "' +
+                    WORKFLOW_SCRIPT + ' host --use ' + str(agent_host) + ' --preview"')
             gate = context_gate(self.policy, usage)
             if gate['pause']:
                 return self.checkpoint(state, 'context-budget', gate)
@@ -1263,7 +1268,8 @@ class Run:
             claimed_at = now()
             state['active'] = {'stage': stage, 'token': token, 'claim_id': claim_id, 'claimed_at': claimed_at,
                                'session_id': usage['session_id'], 'context': gate, 'pid': owner_pid,
-                               'host': socket.gethostname(), 'heartbeat_at': claimed_at}
+                               'host': socket.gethostname(), 'heartbeat_at': claimed_at,
+                               'agent_host': agent_host or 'unknown'}
             lifecycle.queue(state, stage, 'resume' if resuming else 'claim', claim_id=claim_id,
                             episode_id=lifecycle.episode_for_claim(claim_id),
                             reason='resumed after a pause' if resuming else None)
@@ -1875,6 +1881,8 @@ class Run:
         self._stamp(state, stage, receipt, stored, tier)
         stored['completed_at'] = now()
         stored['claim_id'] = claim_id  # links this receipt to its lifecycle events
+        if active.get('agent_host'):
+            stored['agent_host'] = active['agent_host']  # the host CLI that claimed it (T05); older claims have none
         if stage in SOURCE_STAGES:
             inventories.append((stored, stage, source_fingerprints(self.root), None))
             # The commit and its source key bind the inventory; with source

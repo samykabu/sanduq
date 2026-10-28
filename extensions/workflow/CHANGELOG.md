@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- `claim` detects the host CLI it runs under (Claude Code from `CLAUDECODE` or `CLAUDE_CODE_ENTRYPOINT`, Codex from `CODEX_SANDBOX` or `CODEX_SANDBOX_NETWORK_DISABLED`) and refuses with `HOST_MISMATCH` when that is not the project's default host, naming both and the `workflow.py host --use <host> --preview` command. No variable, or both hosts' variables, means unknown and no check. The claim and the completed receipt record the host as `agent_host` (`unknown` when undetected) (PH-05-T05, AHMED-11).
+
 ## [1.24.1] - 2026-10-28
 
 - A PR whose body never closes the bound issue is refused: the shared closing-reference lint reports `BOUND_ISSUE_NOT_CLOSED`, and completing the PR stage fails with the registered `PR_BOUND_ISSUE_NOT_CLOSED` (what, why, next). Since 1.24.0 builds the body only through `pr_publish.py`, a PR could pass the lint with `"closes": []` and leave its issue open after merge (PR 4.7.3 now writes the reference; lite re-measure N1).

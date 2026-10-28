@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import sanduq_ci
 import skill_inventory
@@ -109,6 +110,20 @@ def active_host(root):
     integration = read(root / '.specify/integration.json', {})
     options = read(root / '.specify/init-options.json', {})
     return integration.get('default_integration') or integration.get('integration') or options.get('integration') or options.get('ai')
+
+
+# Variables only the host CLI sets in the processes it starts (verified or documented); CODEX_HOME is user config and
+# CODEX_THREAD_ID/CODEX_CI are unverified (extensions/progress/docs/hosts.md), so none of those counts.
+# Space-separated so test_errors does not read the names as error codes.
+RUNNING_HOST_ENV = {'claude': 'CLAUDECODE CLAUDE_CODE_ENTRYPOINT'.split(),
+                    'codex': 'CODEX_SANDBOX CODEX_SANDBOX_NETWORK_DISABLED'.split()}
+
+
+def running_host(env=None):
+    """The host CLI this process runs under, or None when no host or both hosts' variables are present."""
+    env = os.environ if env is None else env
+    found = [host for host, names in RUNNING_HOST_ENV.items() if any(env.get(name) for name in names)]
+    return found[0] if len(found) == 1 else None
 
 
 def command_exists(root, command):
