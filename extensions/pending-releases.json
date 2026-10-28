@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
-  "versions": {},
-  "status": "released",
-  "note": "PH-06: Workflow 2.0.0 (Scope merged, commands renamed speckit.workflow.scope-*), Scope 2.0.0 retired shim, Assure 2.7.1, Memory 2.6.2, PR 4.7.4, User Manual 1.8.4; every suite passed locally on the merged tree and a consumer upgrade kept every receipt."
+  "versions": {
+    "workflow": "2.0.1"
+  },
+  "status": "ready",
+  "note": "Workflow 2.0.1 hotfix: adopt refuses an externally routed task unless --reason labels the substitution; adopted attempts record route_kind and route_reason."
 }

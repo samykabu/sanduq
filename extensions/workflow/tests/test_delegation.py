@@ -1060,7 +1060,7 @@ class DelegationTests(unittest.TestCase):
         given a real acceptance check that passes, is recorded as an
         ordinary successful attempt and Ready accepts it -- no exemption,
         independently verified evidence instead."""
-        self.tasks('- [x] T001 [Collect] Run smoke suite\n')
+        self.tasks('- [x] T001 Run smoke suite\n')
         self.enable()
         with patch.object(dispatch, 'run_capped',
                           return_value=self.fake_run_capped(0, '{"total": 5, "passed": 5, "failed": 0}')):
@@ -1080,7 +1080,7 @@ class DelegationTests(unittest.TestCase):
         run with no parsable evidence, both record 'unverified', and Ready
         still refuses -- adoption is a real check, not a rubber stamp."""
         cases = [('T001', 1, '{"total": 5, "passed": 4, "failed": 1}'), ('T002', 0, '')]
-        self.tasks('- [x] T001 [Collect] Run smoke suite\n- [x] T002 [Collect] Run lint\n')
+        self.tasks('- [x] T001 Run smoke suite\n- [x] T002 Run lint\n')
         self.enable()
         for task_id, exit_code, output in cases:
             with self.subTest(task_id=task_id), \
@@ -1118,12 +1118,12 @@ class DelegationTests(unittest.TestCase):
         adoption to Ready. The adopted attempt's bound sha256 of the task
         line's content must catch that: editing the line (even leaving it
         checked) after adoption fails Ready, not passes it."""
-        path = self.tasks('- [x] T001 [Collect] Run smoke suite\n')
+        path = self.tasks('- [x] T001 Run smoke suite\n')
         self.enable()
         with patch.object(dispatch, 'run_capped',
                           return_value=self.fake_run_capped(0, '{"total": 3, "passed": 3, "failed": 0}')):
             dispatch.adopt(self.root, self.feature, 'T001', 'pytest -q', 'counts')
-        path.write_text('- [x] T001 [Collect] Run a completely different check\n', encoding='utf-8')
+        path.write_text('- [x] T001 Run a completely different check\n', encoding='utf-8')
         run = w.Run(self.root, self.feature)
         run.start('acme/app#10')
         state = run.load()
@@ -1136,7 +1136,7 @@ class DelegationTests(unittest.TestCase):
         on 'retry_count' for an adopted attempt, which has no dispatcher
         route, task file or retry count to escalate from. It must refuse
         cleanly instead, pointing at adopt's own recovery."""
-        self.tasks('- [x] T001 [Collect] Run smoke suite\n')
+        self.tasks('- [x] T001 Run smoke suite\n')
         self.enable()
         with patch.object(dispatch, 'run_capped', return_value=self.fake_run_capped(1, '')):
             result = dispatch.adopt(self.root, self.feature, 'T001', 'pytest -q', 'counts')
@@ -1149,7 +1149,7 @@ class DelegationTests(unittest.TestCase):
         adoptions may be re-adopted with a corrected check -- the
         supported recovery, since reassign cannot act on an adopted
         attempt."""
-        self.tasks('- [x] T001 [Collect] Run smoke suite\n')
+        self.tasks('- [x] T001 Run smoke suite\n')
         self.enable()
         with patch.object(dispatch, 'run_capped', return_value=self.fake_run_capped(1, '')):
             first = dispatch.adopt(self.root, self.feature, 'T001', 'pytest -q', 'counts')
@@ -1169,7 +1169,7 @@ class DelegationTests(unittest.TestCase):
             printed = []
             for verb in (['adopt'], ['accept', '--no-attempt']):
                 self.setUp()
-                self.tasks('- [x] T001 [Collect] Run smoke suite\n')
+                self.tasks('- [x] T001 Run smoke suite\n')
                 self.enable()
                 out = io.StringIO()
                 with patch.object(delegation, 'global_root', return_value=home), \
@@ -1450,7 +1450,7 @@ class DelegationTests(unittest.TestCase):
         because the orchestrator ran and judged its own check, not because a
         worker's own delegated attempt succeeded -- adopt (no attempt at
         all) and accept (an unverified light-tier result) alike."""
-        self.tasks('- [x] T001 [Collect] Run smoke suite\n- [ ] T002 [Collect] Run lint\n')
+        self.tasks('- [x] T001 Run smoke suite\n- [ ] T002 [Collect] Run lint\n')
         self.enable()
         with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
              patch.object(dispatch, 'launch', return_value={'run_id': 'codex-2', 'state': 'running'}):
@@ -1495,7 +1495,7 @@ class DelegationTests(unittest.TestCase):
         files -- rather than pinned to the feature directory as before; the
         feature directory remains only the *default* owned root for
         --expect files, unchanged in effect."""
-        self.tasks('- [x] T001 [Collect] Run smoke suite\n')
+        self.tasks('- [x] T001 Run smoke suite\n')
         self.enable()
         (self.root / 'repo-root-marker.txt').write_text('present', encoding='utf-8')
         (self.root / 'check_repo_root.py').write_text(
@@ -1516,7 +1516,7 @@ class DelegationTests(unittest.TestCase):
         task. task_line_content_sha256 must strip that marker before
         hashing, so this relocation -- pure formatting, no substantive
         change -- does not itself fail an already-adopted task at Ready."""
-        path = self.tasks('- [x] T001 [Collect] Run smoke suite')
+        path = self.tasks('- [x] T001 Run smoke suite')
         original = path.read_bytes()
         marker = (b'  <!-- sanduq-delegation {"task_id": "T001", "task_type": "qa_collect", '
                   b'"preferred_harness": "codex", "preferred_model": "haiku", "rule": "default"} -->\n')
@@ -1527,7 +1527,7 @@ class DelegationTests(unittest.TestCase):
             dispatch.adopt(self.root, self.feature, 'T001', 'pytest -q', 'counts')
         delegation.annotate_tasks(self.root, self.feature, self.policy['delegation'], 'codex')
         lines = path.read_text(encoding='utf-8').splitlines()
-        self.assertEqual(lines[0], '- [x] T001 [Collect] Run smoke suite')
+        self.assertEqual(lines[0], '- [x] T001 Run smoke suite')
         self.assertTrue(lines[1].startswith('  <!-- sanduq-delegation '))
         run = w.Run(self.root, self.feature)
         run.start('acme/app#10')

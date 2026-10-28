@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.0.1] - 2026-10-28
+
+- `adopt` (`accept --no-attempt`) refuses a task whose selected route is external, computed as `record-native` computes it, with `DELEGATION_ADOPT_ROUTE_EXTERNAL` (new registry code) naming `delegate_dispatch.py start --feature <feature> --id <T###>`. A live lite run had implemented every externally routed task in-session and adopted it, which substituted the route silently. `--reason "<why external could not run>"` still adopts and records the attempt's `route_reason` as `external-substituted:<reason>`; adopt's output carries a `warning` and Ready warns with `DELEGATION_TASK_SUBSTITUTED`. With delegation off, a native-first route or review work (the SEC-01 interim), adopt behaves as before. Light-tier `[Collect]` tasks are external by default (no role file pins the light tier), so adopting one with delegation on now needs `start` or `--reason`.
+- Every adopted attempt records `route_kind: in-session` and `route_reason` (`adopted` or the substitution), and adopt's output prints both. `accept --run-id` refuses `--reason` (`DELEGATION_ACCEPT_REASON_NO_ATTEMPT_ONLY`). The fallback-confirmation message's "run natively" adopt command passes a `--reason`.
+- The lite card, the lean Execute fragment, the routing rule and the adopt section of the delegated-workers reference say it in one line: a task routed externally runs with `start`, `collect`, `accept`; never implement it in-session and `adopt` it.
+
 ## [2.0.0] - 2026-10-28
 
 Breaking: Scope is part of Workflow (DEC-03, PH-06-T02), and every Scope command is renamed. Spec Kit 1.1.3 refuses an extension command whose name does not start with `speckit.<extension id>.` (`Command 'speckit.scope.run' must use extension namespace 'workflow'`), so `speckit.scope.<x>` is now `speckit.workflow.scope-<x>`: `scope-run` and `scope-plan` are host commands; `scope-guard`, `scope-bind`, `scope-after-specify`, `scope-plan-guard` and `scope-reconcile` are Workflow's hooks, found by the event dispatcher by file name and never host skills. The skill names `scope-analyst` and `github-clarification` are unchanged (Spec Kit renders skills only from commands, so it does not namespace them). 

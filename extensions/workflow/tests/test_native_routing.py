@@ -275,6 +275,50 @@ class NativeRoutingTests(unittest.TestCase):
                 self.record('T001', 'exec-token')
 
 
+    def adopt(self, task_id='T001', reason=None):
+        with patch.object(dispatch, 'run_capped', return_value=self.fake_run_capped(0, PASS)):
+            return dispatch.adopt(self.root, self.feature, task_id, 'pytest -q', 'counts', reason=reason)
+
+    def test_adopt_refuses_an_external_route_unless_a_reason_labels_the_substitution(self):
+        """2.0.1: implementing an externally routed task in-session and adopting it is a silent substitution."""
+        self.tasks('- [x] T001 Implement parser\n')
+        self.policy['delegation']['native_allowed'] = {'implementation': False}
+        self.enable()
+        with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_ADOPT_ROUTE_EXTERNAL.*'
+                                    'native-unsupported:work-type-disabled.*start --feature .* --id T001'):
+            self.adopt()
+        self.assertEqual(delegation.ledger_attempts(self.root, self.feature), [])
+        result = self.adopt(reason='codex harness missing')
+        self.assertEqual((result['status'], result['route_kind'], result['route_reason']),
+                         ('successful', 'in-session', 'external-substituted:codex harness missing'))
+        self.assertTrue(result['warning'].startswith('DELEGATION_TASK_SUBSTITUTED: T001'))
+        attempt = delegation.latest_attempt(self.root, self.feature, 'T001')
+        self.assertEqual((attempt['route_kind'], attempt['route_reason']),
+                         ('in-session', 'external-substituted:codex harness missing'))
+        run = w.Run(self.root, self.feature)
+        run.start('acme/app#10')
+        warnings = []
+        w.ready_checks(self.root, self.feature, self.policy, run.load(), rules=TASK_GATE, warnings=warnings)
+        self.assertTrue(any(item.startswith('DELEGATION_TASK_SUBSTITUTED: T001') for item in warnings), warnings)
+
+    def test_adopt_keeps_its_behaviour_on_a_native_first_route_and_with_delegation_off(self):
+        for enabled in (True, False):
+            with self.subTest(enabled=enabled):
+                self.setUp()
+                self.tasks('- [x] T001 Implement parser\n')
+                if enabled:
+                    self.enable()
+                result = self.adopt(reason='ignored: the route is not external')
+                self.assertEqual((result['status'], result['route_kind'], result['route_reason']),
+                                 ('successful', 'in-session', 'adopted'))
+                self.assertNotIn('warning', result)
+                attempt = delegation.latest_attempt(self.root, self.feature, 'T001')
+                self.assertEqual((attempt['route_kind'], attempt['route_reason']), ('in-session', 'adopted'))
+
+    def test_accept_refuses_a_reason_with_a_run_id(self):
+        with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_ACCEPT_REASON_NO_ATTEMPT_ONLY'):
+            dispatch.accept(self.root, self.feature, 'codex-1', 'pytest -q', 'counts', reason='x')
+
 del base  # only NativeRoutingTests runs here, not a second copy of DelegationTests
 
 

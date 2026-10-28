@@ -55,7 +55,8 @@ and Ready checks), PR. `status` lists the skipped ones; never run them by hand.
   the clarification skill; otherwise follow the claim's reference.
 - **Plan**: one pass writes plan.md and tasks.md; `python .specify/extensions/workflow/scripts/lint.py
   --feature F` must be clean; the receipt's evidence is its `--json` output.
-- **Execute**: follow the protocol the claim prints.
+- **Execute**: follow the protocol the claim prints. A task routed externally runs with `start`,
+  `collect`, `accept`; never implement it in-session and `adopt` it.
 - **Verify**: run the tests, save the output under `F/evidence/`, list it as evidence.
 - **PR**: the claim's reference; commit (and push, when the PR exists) the explainer and the files it
   links to, then build the body once with `pr_publish.py`.

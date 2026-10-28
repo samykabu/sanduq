@@ -12,7 +12,9 @@ the reason it records: `native-unsupported:<capability>`, `native-failed:<catego
 `external:cross-vendor`, the named exception for debate and consultation routes that need the
 other vendor's model. A native attempt the host cannot support selects the external candidate
 once; a temporary native failure retries natively within `lean_execution.max_attempts` before
-falling back. Never substitute a model silently: a rejected model stops at
+falling back. A task routed externally runs with `start`, `collect`, `accept`; never implement it
+in-session and `adopt` it (`DELEGATION_ADOPT_ROUTE_EXTERNAL`; `--reason` records a labelled
+substitution when the harness cannot run). Never substitute a model silently: a rejected model stops at
 `FALLBACK_CONFIRMATION_REQUIRED` ([Confirmed fallback](#confirmed-fallback)).
 
 ## Delegation
