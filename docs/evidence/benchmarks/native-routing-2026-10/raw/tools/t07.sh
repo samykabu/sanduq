@@ -32,7 +32,7 @@ for run in "$@"; do
   bash "$t/run-feature.sh" "$run" "$host"; rc=$?
   python "$t/collect.py" "$run"
   python "$t/validate.py" "$run"; vrc=$?
-  bash "$t/postmerge.sh" "$run"
+  bash "$t/postmerge.sh" "$run" || { echo "stopping: $run post-merge check failed" >&2; exit 8; }
   python "$t/spend.py" | tail -1
   [ $rc -eq 0 ] || { echo "stopping: $run exit $rc" >&2; exit $rc; }
   [ $vrc -eq 0 ] || { echo "stopping: $run is INVALID (validate.py exit $vrc); see logs/rows/$run.json" >&2; exit 7; }
