@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- A receipt's source inventory side file and decision evidence hash with the same checkout-independent rule as the fingerprints (CRLF read as LF for UTF-8 text), so a Windows `core.autocrlf=true` checkout no longer fails with `SOURCE_INVENTORY_INVALID` or `DECISION_APPLICATION_STALE` where an LF checkout passes (F6). Evidence hashes a ledger recorded before this release still verify.
 - A waiver comment by the PR author is rejected with the explicit reason `written by the PR author` (F2). A one-person setup, where the agent opens PRs with the owner's token, can list the owner under the new optional `decisions.self_waivers`; the gate reads it from the base branch policy, so a PR cannot add its author. The guard hook now refuses any `gh`, `curl` or `wget` command carrying a `sanduq-gate-waiver` marker (inline or in a `gh --body-file`), so the agent cannot post a waiver; delivery-policy.md states the threat model.
 
 ## [1.22.1] - 2026-10-28

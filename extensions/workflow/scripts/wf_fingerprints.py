@@ -7,7 +7,7 @@ import json
 import re
 import uuid
 from pathlib import Path
-from sanduq_hash import portable_files, text_attributes
+from sanduq_hash import portable_content, portable_files, text_attributes
 from wf_core import (DEFAULT_SYNC_STATE, SYNC_BINDING_PREFIX, SYNC_ADMINISTRATIVE, WorkflowError, require, read,
                      replace_file, write, inside, portable_label, canonical_path, git, OPERATIONAL_DIRS, _memo)
 import wf_core  # the operation memo lives only there; read it through the module
@@ -169,7 +169,8 @@ def source_fingerprints_of(root, receipt, feature=None):
     require(feature, 'SOURCE_INVENTORY_INVALID: the feature is required to read ' + reference['path'])
     label = feature + '/' + reference['path']
     try:
-        data = inside(root, label).read_bytes()
+        # The same checkout-independent read as the fingerprints: an autocrlf checkout keeps the hash (F6).
+        data = portable_content(label, inside(root, label).read_bytes())
     except OSError as exc:
         raise WorkflowError('SOURCE_INVENTORY_INVALID: ' + label + ': ' + str(exc)) from exc
     require(hashlib.sha256(data).hexdigest() == reference.get('sha256'), 'SOURCE_INVENTORY_INVALID: ' + label +
