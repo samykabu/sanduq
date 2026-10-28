@@ -20,5 +20,6 @@ date -u +%FT%TZ > "$out.start"
 claude -p "$prompt" --output-format stream-json --verbose \
   --permission-mode bypassPermissions --setting-sources project,local \
   > "$out.jsonl" 2> "$out.stderr"
-echo $? > "$out.exit"
+rc=$?; echo $rc > "$out.exit"
 date -u +%FT%TZ > "$out.end"
+exit $rc

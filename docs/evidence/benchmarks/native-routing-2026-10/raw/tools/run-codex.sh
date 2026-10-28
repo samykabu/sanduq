@@ -13,6 +13,7 @@ cd "$dir" || exit 9
 date -u +%FT%TZ > "$out.start"
 CODEX_HOME="$home" codex exec --json --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust \
   -C "$dir" "$prompt" > "$out.jsonl" 2> "$out.stderr" < /dev/null
-echo $? > "$out.exit"
+rc=$?; echo $rc > "$out.exit"
 date -u +%FT%TZ > "$out.end"
 python "$base/tools/codex-home.py" sync "$home"
+exit $rc
