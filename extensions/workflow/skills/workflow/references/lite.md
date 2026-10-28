@@ -57,4 +57,5 @@ and Ready checks), PR. `status` lists the skipped ones; never run them by hand.
   --feature F` must be clean; the receipt's evidence is its `--json` output.
 - **Execute**: follow the protocol the claim prints.
 - **Verify**: run the tests, save the output under `F/evidence/`, list it as evidence.
-- **PR**: the claim's reference; build the body once with `pr_publish.py`.
+- **PR**: the claim's reference; commit (and push, when the PR exists) the explainer and the files it
+  links to, then build the body once with `pr_publish.py`.

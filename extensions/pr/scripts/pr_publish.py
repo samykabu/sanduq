@@ -8,9 +8,11 @@
 Fetches the existing PR body (`gh pr view`), replaces the text between `<!-- speckit-pr:start -->`
 and `<!-- speckit-pr:end -->` or appends the marked section (a body whose markers are unpaired or
 repeated is refused, never appended to), rewrites each relative image path to the commit-pinned
-`https://github.com/<repo>/blob/<HEAD sha>/<path>?raw=true` after checking the file is committed at
+`https://github.com/<repo>/blob/<HEAD sha>/<path>?raw=true` and each relative link `[text](path)` to
+`https://github.com/<repo>/blob/<HEAD sha>/<path>[#anchor]` after checking the file is committed at
 HEAD and readable through the contents API at that commit (pushing a new PR's branch first when it has
-no upstream or its upstream is behind), writes the exact UTF-8/LF body to
+no upstream or its upstream is behind), adds `Closes <repo>#<issue>` for the bound issue when the
+document does not close it already, writes the exact UTF-8/LF body to
 `specs/<slug>/evidence/pr-body.md`, lints closing references with the shared `sanduq_pr_lint` rule (the one Workflow's `pr-lint`
 runs) into the sibling `pr-body.lint.json`, refuses on
 findings, then `gh pr edit` or `gh pr create`. Prints the PR receipt fragment as JSON on stdout:
@@ -43,7 +45,11 @@ except ModuleNotFoundError:
 
 START, END = '<!-- speckit-pr:start -->', '<!-- speckit-pr:end -->'
 DEFAULT_HEADING = 'What have been developed and how to review it'
-IMAGE = re.compile(r'(!\[[^\]]*\]\(\s*<?)([^)\s>]+)|(<img\b[^>]*?\bsrc=["\'])([^"\']+)', re.I)
+IMG_TAG = re.compile(r'(<img\b[^>]*?\bsrc=["\'])([^"\']+)', re.I)
+# a Markdown image (group 1 is "!") or link up to its destination; zero-width, so an image inside a link's text
+# is found too; the text allows one nested [..]
+LINK = re.compile(r'(?:(!)|(?<!!))(?=(\[(?:[^\[\]\n]|\[[^\[\]\n]*\])*\]\([ \t]*))')
+ESCAPE = re.compile(r'\\([!-/:-@\[-`{-~])')  # CommonMark backslash-escaped ASCII punctuation
 REMOTE = re.compile(r'[a-z][a-z0-9+.-]*:|//|#', re.I)
 NO_PR = 'no pull requests found'
 
@@ -93,11 +99,47 @@ def splice(existing, section):
     return (existing.rstrip('\n') + '\n\n' + section + '\n') if existing.strip() else section + '\n'
 
 
+def link_targets(text):
+    """(start, end, is_image) of each Markdown image or link destination in text: `<...>`, or bare with balanced
+    parentheses and backslash escapes, ending at whitespace (an optional title follows) or the closing parenthesis."""
+    spans = []
+    for m in LINK.finditer(text):
+        i, image = m.end() + len(m.group(2)), bool(m.group(1))
+        if text[i:i + 1] == '<':
+            end = text.find('>', i)
+            if end > i + 1 and '\n' not in text[i:end]:
+                spans.append((i + 1, end, image))
+            continue
+        depth, j = 0, i
+        while j < len(text) and not text[j].isspace():
+            if text[j] == '\\':
+                j += 1
+            elif text[j] == '(':
+                depth += 1
+            elif text[j] == ')':
+                if not depth:
+                    break
+                depth -= 1
+            j += 1
+        if j > i and depth == 0:
+            spans.append((i, j, image))
+    return spans
+
+
+def pin_markdown(text, urls, link_urls):
+    for start, end, image in sorted(link_targets(text), reverse=True):  # last destination first: offsets hold
+        target = text[start:end]
+        text = text[:start] + (urls if image else link_urls).get(target, target) + text[end:]
+    return text
+
+
 def pin_images(root, content, explained, push):
-    """Relative image paths (outside code) become commit-pinned GitHub URLs, each verified first."""
+    """Relative image paths and links (outside code) become commit-pinned GitHub URLs, each verified first."""
     parts, fences = FENCE.split(content), FENCE.findall(content)
-    targets = sorted({m.group(2) or m.group(4) for part in parts for m in IMAGE.finditer(part)} - {''})
-    targets = [t for t in targets if not REMOTE.match(t)]
+    spans = [(part[a:b], image) for part in parts for a, b, image in link_targets(part)]
+    images = {m.group(2) for part in parts for m in IMG_TAG.finditer(part)} | {t for t, image in spans if image}
+    links = {t for t, image in spans if not image}
+    targets = sorted(t for t in images | links if t and not REMOTE.match(t))
     if not targets:
         return content
     push()
@@ -105,21 +147,25 @@ def pin_images(root, content, explained, push):
     head = run(['git', 'rev-parse', 'HEAD'], root)
     if head.returncode:
         raise Failure(3, 'git rev-parse HEAD failed: ' + head.stderr.strip())
-    sha, folder, urls = head.stdout.strip(), posixpath.dirname(explained), {}
+    sha, folder, urls, link_urls = head.stdout.strip(), posixpath.dirname(explained), {}, {}
     for target in targets:
-        clean = unquote(re.split(r'[?#]', target)[0])
+        kind = 'image' if target in images else 'link'
+        clean, _, anchor = ESCAPE.sub(r'\1', target).partition('#')
+        clean = unquote(clean.split('?')[0])
         path = posixpath.normpath(clean.lstrip('/') if clean.startswith('/') else posixpath.join(folder, clean))
         if path == '..' or path.startswith('../'):
-            raise Failure(2, 'image ' + target + ' points outside the repository')
+            raise Failure(2, kind + ' ' + target + ' points outside the repository')
         if run(['git', 'cat-file', '-e', sha + ':' + path], root).returncode:
-            raise Failure(2, 'image ' + target + ' (' + path + ') is not committed at HEAD; commit it and rerun')
+            raise Failure(2, kind + ' ' + target + ' (' + path + ') is not committed at HEAD: git add "' + path +
+                             '" && git commit, then git push when the PR exists, and rerun')
         check = run(['gh', 'api', 'repos/%s/contents/%s?ref=%s' % (repo, quote(path), sha), '--silent'], root)
         if check.returncode:
-            raise Failure(3, 'image ' + path + ' is not readable on ' + repo + ' at ' + sha[:12] +
-                             ' (push the branch, then rerun): ' + (check.stderr or check.stdout).strip())
-        urls[target] = 'https://github.com/%s/blob/%s/%s?raw=true' % (repo, sha, quote(path))
-    pin = lambda m: (m.group(1) or m.group(3)) + urls.get(m.group(2) or m.group(4), m.group(2) or m.group(4))
-    pinned = [IMAGE.sub(pin, part) for part in parts]
+            raise Failure(3, kind + ' ' + path + ' is not readable on ' + repo + ' at ' + sha[:12] +
+                             ' (git push, then rerun): ' + (check.stderr or check.stdout).strip())
+        blob = 'https://github.com/%s/blob/%s/%s' % (repo, sha, quote(path))
+        urls[target], link_urls[target] = blob + '?raw=true', blob + ('#' + anchor if anchor else '')
+    pin = lambda m: m.group(1) + urls.get(m.group(2), m.group(2))
+    pinned = [IMG_TAG.sub(pin, pin_markdown(part, urls, link_urls)) for part in parts]
     return ''.join(text + (fences[i] if i < len(fences) else '') for i, text in enumerate(pinned))
 
 
@@ -185,6 +231,9 @@ def publish(root, args):
         if not (args.no_pr or existing or created):
             created.append(ensure_branch(root, args))
     content = pin_images(root, content, Path(args.explained).as_posix(), push)
+    if issue is not None and not any(c['repo'] == repo.lower() and c['issue'] == int(issue)
+                                     for c in pr_lint(content, repo, issue)['closes']):
+        content += '\n\nCloses %s#%d' % (repo, int(issue))  # merging closes the bound issue (1.24.1, N1)
     section = START + '\n## ' + args.heading + '\n\n' + content + '\n' + END
     body = splice(existing['body'] if existing else '', section).replace('\r\n', '\n')
     body_path = root / feature / 'evidence' / 'pr-body.md'

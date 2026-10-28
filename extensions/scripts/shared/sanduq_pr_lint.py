@@ -32,6 +32,9 @@ def pr_lint(body, repo, issue, prerequisites=()):
         else:
             continue
         violations.append({'code': code, 'repo': ref_repo, 'issue': number})
+    # a body that never closes its bound issue would leave the issue open after merge (1.24.1, N1)
+    if not any(c['repo'] == repo_key and c['issue'] == int(issue) for c in closes):
+        violations.append({'code': 'BOUND_ISSUE_NOT_CLOSED', 'repo': repo_key, 'issue': int(issue)})
     return {'schema': PR_LINT_SCHEMA, 'ok': not violations,
             'body_sha256': hashlib.sha256(body.encode('utf-8')).hexdigest(), 'bound': {'repo': repo_key, 'issue': int(issue)},
             'closes': closes, 'violations': violations}

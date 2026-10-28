@@ -917,6 +917,10 @@ class BindOnlyAndLazyIssueTests(Base):
         (self.root / self.feature / 'pr-body.md').write_bytes(b'Closes #10\nFixes #9\n')  # closing a prerequisite is refused
         with self.assertRaisesRegex(w.WorkflowError, 'PREREQUISITE_CLOSE'):
             w.pr_lint_binding(self.root, self.feature, run.load(), receipt)
+        (self.root / self.feature / 'pr-body.md').write_bytes(b'Builds on #9.\n')  # never closes #10 (1.24.1, N1)
+        with self.assertRaisesRegex(w.WorkflowError, '^PR_BOUND_ISSUE_NOT_CLOSED: the body never closes acme/app#10'):
+            w.pr_lint_binding(self.root, self.feature, run.load(), receipt)
+        self.assertIn('PR_BOUND_ISSUE_NOT_CLOSED', w.ERRORS)
 
     def bind_rendered_issue(self, prerequisite=None):
         """Publish #10 with Scope's fake GitHub, complete Scope, render the spec, claim Specify and run the

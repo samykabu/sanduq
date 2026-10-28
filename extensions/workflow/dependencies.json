@@ -4,7 +4,7 @@
   "required": {
     "scope": "1.14.0",
     "project": "2.7.1",
-    "pr": "4.7.2",
+    "pr": "4.7.3",
     "illustrate": "2.7.3"
   },
   "selected": {

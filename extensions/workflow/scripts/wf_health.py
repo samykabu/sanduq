@@ -579,7 +579,12 @@ def pr_lint_binding(root, feature, state, receipt):
     except (OSError, UnicodeDecodeError) as exc:
         raise WorkflowError('PR_LINT_BODY_UNREADABLE: ' + str(body_label) + ': ' + str(exc)) from exc
     computed = execution_tools.pr_lint(body, repo, int(issue), source['dependencies'])
-    require(computed['ok'], 'PR_CLOSING_REFERENCE_REJECTED: ' + json.dumps(computed['violations']))
+    bound = computed['bound']
+    closed = any((c['repo'], c['issue']) == (bound['repo'], bound['issue']) for c in computed['closes'])
+    # the missing bound reference alone gets its own code (1.24.1, N1); any other finding stays the general one
+    require(computed['ok'] or (not closed and len(computed['violations']) == 1),
+            'PR_CLOSING_REFERENCE_REJECTED: ' + json.dumps(computed['violations']))
+    require(closed, 'PR_BOUND_ISSUE_NOT_CLOSED: the body never closes %s#%s' % (repo, issue))
     recorded = read(inside(root, lint_label), {})
     require(recorded == computed, 'PR_LINT_RECEIPT_MISMATCH: regenerate lint for the exact sent body')
     require(receipt.get('pr_body_sha256') == computed['body_sha256'], 'PR_SENT_BODY_SHA_MISMATCH')

@@ -244,6 +244,89 @@ class PublishTests(unittest.TestCase):
         self.explained.write_text('![x](../../../outside.png)\n', encoding='utf-8')
         self.assertEqual(self.run_script(FakeRunner(pr={'number': 12, 'url': 'u', 'body': ''}))[0], 2)
 
+    def test_the_body_closes_the_bound_issue_when_the_document_does_not(self):
+        """1.24.1 N1: the published section ends with the bound issue's closing reference, once."""
+        self.explained.write_text('# Feature X\n\nBuilds on #9.\n', encoding='utf-8')
+        code, receipt = self.run_script(FakeRunner(pr={'number': 12, 'url': 'u', 'body': 'Intro\n'}))
+        self.assertEqual(code, 0, receipt)
+        body, lint = self.body_and_lint(receipt)
+        self.assertIn('Builds on #9.\n\nCloses acme/app#10\n' + pr_publish.END, body.decode('utf-8'))
+        self.assertEqual(lint['closes'], [{'keyword': 'closes', 'repo': 'acme/app', 'issue': 10}])
+        self.assertTrue(lint['ok'])
+        code, receipt = self.run_script(FakeRunner(pr={'number': 12, 'url': 'u', 'body': ''}))  # BODY closes #10 already
+        self.assertEqual(self.body_and_lint(receipt)[0].decode('utf-8').count('#10'), 1)
+
+    def test_the_lint_refuses_a_body_without_the_bound_issue(self):
+        result = pr_publish.pr_lint('# X\n\nBuilds on #9.\n', 'acme/app', 10, [9])
+        self.assertFalse(result['ok'])
+        self.assertEqual(result['violations'], [{'code': 'BOUND_ISSUE_NOT_CLOSED', 'repo': 'acme/app', 'issue': 10}])
+
+    def test_relative_links_are_pinned_like_images(self):
+        """1.24.1 N4: relative links point at the images' commit; absolute URLs, anchors and code stay."""
+        self.explained.write_text('# Feature X\n\nSee [Spec](../../specs/001-x/spec.md#goals), [log](CHANGELOG.md), '
+                                  '[![Flow](images/flow.png)](images/flow.png), [site](https://example.com/a.md), '
+                                  '[top](#feature-x) and `[code](x.md)`.\nCloses #10\n', encoding='utf-8')
+        runner = FakeRunner(pr={'number': 12, 'url': 'u', 'body': ''})
+        code, receipt = self.run_script(runner)
+        self.assertEqual(code, 0, receipt)
+        text = self.body_and_lint(receipt)[0].decode('utf-8')
+        blob = 'https://github.com/acme/app/blob/' + SHA + '/'
+        self.assertIn('[Spec](' + blob + 'specs/001-x/spec.md#goals)', text)
+        self.assertIn('[log](' + blob + 'docs/001-x/CHANGELOG.md)', text)
+        self.assertIn('[![Flow](' + blob + 'docs/001-x/images/flow.png?raw=true)](' + blob + 'docs/001-x/images/flow.png)', text)
+        self.assertIn('[site](https://example.com/a.md)', text)
+        self.assertIn('[top](#feature-x)', text)
+        self.assertIn('`[code](x.md)`', text)
+        checked = sorted(c[3].split(':', 1)[1] for c in runner.calls if c[:3] == ['git', 'cat-file', '-e'])
+        self.assertEqual(checked, ['docs/001-x/CHANGELOG.md', 'docs/001-x/images/flow.png', 'specs/001-x/spec.md'])
+        self.explained.write_text('[gone](missing.md)\n', encoding='utf-8')
+        code, result = self.run_script(FakeRunner(pr={'number': 12, 'url': 'u', 'body': ''}, uncommitted={'docs/001-x/missing.md'}))
+        self.assertEqual(code, 2, result)
+        self.assertIn('link missing.md', result['error'])
+
+    def test_link_destinations_are_parsed_not_cut_at_a_parenthesis(self):
+        """PR #144 review: balanced parentheses, <angle> destinations and titles keep the whole path."""
+        self.explained.write_text('[plain](plain.md) [paren](a(b).md) [angle](<with space.md>) '
+                                  '[title](t.md "The title") [both](<s p.md> \'t\')\nCloses #10\n', encoding='utf-8')
+        runner = FakeRunner(pr={'number': 12, 'url': 'u', 'body': ''})
+        code, receipt = self.run_script(runner)
+        self.assertEqual(code, 0, receipt)
+        text = self.body_and_lint(receipt)[0].decode('utf-8')
+        blob = 'https://github.com/acme/app/blob/' + SHA + '/docs/001-x/'
+        self.assertIn('[plain](' + blob + 'plain.md)', text)
+        self.assertIn('[paren](' + blob + 'a%28b%29.md)', text)
+        self.assertIn('[angle](<' + blob + 'with%20space.md>)', text)
+        self.assertIn('[title](' + blob + 't.md "The title")', text)
+        self.assertIn('[both](<' + blob + 's%20p.md> \'t\')', text)
+        checked = sorted(c[3].split(':', 1)[1] for c in runner.calls if c[:3] == ['git', 'cat-file', '-e'])
+        self.assertEqual(checked, ['docs/001-x/' + p for p in ('a(b).md', 'plain.md', 's p.md', 't.md', 'with space.md')])
+        self.assertEqual(pr_publish.link_targets('[x](a(b)c) [y](unbalanced(.md ![z](i.png)'), [(4, 9, False), (35, 40, True)])
+
+    def test_image_destinations_and_escapes_use_the_same_scanner(self):
+        """Images parse like links, and backslash-escaped punctuation is unescaped for the check and the URL."""
+        self.explained.write_text('![p](a(b).png) ![s](<a b.png>) ![t](t.png "Title") ![e](e\\(1\\).png) '
+                                  '[esc](c\\(d.md#x\\_y)\nCloses #10\n', encoding='utf-8')
+        runner = FakeRunner(pr={'number': 12, 'url': 'u', 'body': ''})
+        code, receipt = self.run_script(runner)
+        self.assertEqual(code, 0, receipt)
+        text = self.body_and_lint(receipt)[0].decode('utf-8')
+        blob = 'https://github.com/acme/app/blob/' + SHA + '/docs/001-x/'
+        self.assertIn('![p](' + blob + 'a%28b%29.png?raw=true)', text)
+        self.assertIn('![s](<' + blob + 'a%20b.png?raw=true>)', text)
+        self.assertIn('![t](' + blob + 't.png?raw=true "Title")', text)
+        self.assertIn('![e](' + blob + 'e%281%29.png?raw=true)', text)
+        self.assertIn('[esc](' + blob + 'c%28d.md#x_y)', text)
+        checked = sorted(c[3].split(':', 1)[1] for c in runner.calls if c[:3] == ['git', 'cat-file', '-e'])
+        self.assertEqual(checked, ['docs/001-x/' + p for p in ('a b.png', 'a(b).png', 'c(d.md', 'e(1).png', 't.png')])
+
+    def test_an_uncommitted_linked_file_names_the_file_and_the_commands(self):
+        self.explained.write_text('[log](CHANGELOG.md)\nCloses #10\n', encoding='utf-8')
+        runner = FakeRunner(pr={'number': 12, 'url': 'u', 'body': ''}, uncommitted={'docs/001-x/CHANGELOG.md'})
+        code, result = self.run_script(runner)
+        self.assertEqual(code, 2, result)
+        self.assertIn('git add "docs/001-x/CHANGELOG.md" && git commit', result['error'])
+        self.assertIn('git push', result['error'])
+
     def test_missing_document_exits_2(self):
         self.explained.unlink()
         self.assertEqual(self.run_script(FakeRunner())[0], 2)

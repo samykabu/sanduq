@@ -107,7 +107,7 @@ reviewers or bots have commented on an open PR.
 - The PR image-embedding rules (commit-pinned `?raw=true` links, never `raw.githubusercontent.com`,
   contents-API verification) live in `references/pr-image-embedding.md` and are loaded only when the
   generated PR actually has a diagram or screenshot to embed. `pr_publish.py` rewrites relative image
-  paths to those pinned links itself, after checking each one, before the body is linted. Verification has two tiers, recorded
+  paths to those pinned links, and relative Markdown links to the same commit's blob URLs, itself, after checking each one, before the body is linted. Verification has two tiers, recorded
   in the receipt as `image_verification`: `api` (rendered `body_html` plus the contents API, both
   hosts) and `browser` (also loading in an authenticated browser, when the host has a browser tool).
 - In a managed project the Workflow guard hook refuses `gh pr create|edit --body-file` without a
