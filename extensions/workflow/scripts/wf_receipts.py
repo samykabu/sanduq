@@ -831,7 +831,9 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
                 if warnings is None:
                     continue
                 source = (attempt.get('accepted_evidence') or {}).get('source')
-                if source == 'adopt' and str(attempt.get('route_reason')).startswith('external-substituted:'):
+                # Keyed on the recorded route, so a later `accept --run-id` of a failed check keeps the disclosure.
+                substituted = str(attempt.get('route_reason')).startswith('external-substituted:')
+                if substituted:
                     warnings.append('DELEGATION_TASK_SUBSTITUTED: ' + task_id + ' ran in-session in place of its '
                                     'external route (' + attempt['route_reason'] + ') via "' +
                                     str(attempt.get('command')) + '"')

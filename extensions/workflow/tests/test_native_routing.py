@@ -300,6 +300,12 @@ class NativeRoutingTests(unittest.TestCase):
         warnings = []
         w.ready_checks(self.root, self.feature, self.policy, run.load(), rules=TASK_GATE, warnings=warnings)
         self.assertTrue(any(item.startswith('DELEGATION_TASK_SUBSTITUTED: T001') for item in warnings), warnings)
+        # A failed check later resolved by `accept --run-id` replaces the evidence source; the disclosure stays.
+        with dispatch.edit_ledger(self.root, self.feature) as ledger:
+            ledger['attempts'][-1]['accepted_evidence']['source'] = 'accept'
+        warnings = []
+        w.ready_checks(self.root, self.feature, self.policy, run.load(), rules=TASK_GATE, warnings=warnings)
+        self.assertTrue(any(item.startswith('DELEGATION_TASK_SUBSTITUTED: T001') for item in warnings), warnings)
 
     def test_adopt_keeps_its_behaviour_on_a_native_first_route_and_with_delegation_off(self):
         for enabled in (True, False):
