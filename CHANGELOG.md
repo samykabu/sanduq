@@ -4,7 +4,7 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
-## 2026-10-28 — Workflow 1.22.1 (pending release)
+## 2026-10-28 — Workflow 1.22.1
 
 - Hotfix: the consumer evidence gate workflow loads again. An arithmetic expression in its checkout step had kept it from loading since Workflow 1.8.4, so the gate never ran in consumer CI. Found by the PH-04 live run.
 
