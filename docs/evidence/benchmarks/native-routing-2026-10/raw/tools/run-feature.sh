@@ -17,7 +17,7 @@ guard() { python "$t/spend.py" --check "$STOP_USD" || { echo "STOP: spend reache
 branch=$(cd "$t" && python -c "import policy; print(policy.feature_for($issue)[len('specs/'):])")
 has_pr() { [ -n "$(gh pr list --repo "$repo" --state all --head "$branch" --json number --jq '.[].number' | head -1)" ]; }
 guard "$run-a-scope"
-bash "$runner" "$dir" "$run-a-scope" "${p}speckit-workflow-scope $issue"
+bash "$runner" "$dir" "$run-a-scope" "${p}speckit-workflow-scope $issue" || { echo "$run: Scope session refused or failed; not continuing" >&2; exit 8; }
 for step in b c d e; do
   has_pr && { echo "$run: PR open"; exit 0; }
   bash "$t/answer.sh" "$issue"   # posts recommended answers to unanswered Clarify questions, if any
