@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.24.1] - 2026-10-28
+
+- A PR whose body never closes the bound issue is refused: the shared closing-reference lint reports `BOUND_ISSUE_NOT_CLOSED`, and completing the PR stage fails with the registered `PR_BOUND_ISSUE_NOT_CLOSED` (what, why, next). Since 1.24.0 builds the body only through `pr_publish.py`, a PR could pass the lint with `"closes": []` and leave its issue open after merge (PR 4.7.3 now writes the reference; lite re-measure N1).
+
 ## [1.24.0] - 2026-10-28
 
 - The receipt template no longer shows `"evidence": []`, which `complete` refuses with `EVIDENCE_REQUIRED`: it shows the placeholder `<existing file that proves the work>`, and a placeholder left in `evidence` is refused with `RECEIPT_PLACEHOLDER: evidence`. A lite Plan claim names `specs/<f>/evidence/plan-lint.json`, and stage-plan.md gives the `lint.py --json` command that writes it (lite re-measure R2). `EVIDENCE_REQUIRED` and `INPUT_ROLE_NOT_IN_MANIFEST` are in the error registry, so the CLI prints `explain` and `next` for them (R2, R3).

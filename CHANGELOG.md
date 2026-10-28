@@ -4,6 +4,10 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## 2026-10-28 — Workflow 1.24.1, PR 4.7.3 (pending release)
+
+- Hotfix from the 1.24.0 lite re-measure. A PR built by `pr_publish.py` closes its issue again: the script adds `Closes <owner/repo>#<issue>` for the bound issue when the explainer lacks it, and the shared lint plus Workflow's PR-stage check refuse a body that never closes it (`BOUND_ISSUE_NOT_CLOSED`, `PR_BOUND_ISSUE_NOT_CLOSED`) (N1). `pr_publish.py` also pins relative Markdown links to the commit, as it does images (N4).
+
 ## 2026-10-28 — Workflow 1.24.0, Scope 1.14.0, PR 4.7.2
 
 - Lean lite pass two, from the lite re-measure runs. A lite claim and `status` name one instruction card, `references/lite.md` (4.1 KB), in `instructions` instead of the three dispatcher references, and print the exact `complete` and `pause` commands in `cli`. On a Scope-rendered spec with no `[NEEDS CLARIFICATION]` marker, a lite Clarify claim prints `clarification_round` with the zero-question steps, so the clarification skill is not loaded. Standard and full claims are unchanged.
