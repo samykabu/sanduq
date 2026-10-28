@@ -1,14 +1,15 @@
 # Execute: delegated workers
 
-This part applies when `.specify/workflow.yml` enables delegation.
+This part applies when `.specify/workflow.yml` enables delegation. The
+[routing rule](../delegation.md#routing-rule) decides native or external.
 
 ## Start and collect workers
 
-When `.specify/workflow.yml` enables delegation, start each ready `T###` worker
-with `python .specify/extensions/workflow/scripts/delegate_dispatch.py start
---feature specs/<feature> --id T###`. Pass `--task-file <path>` with its bounded
-assignment, owned paths, dependencies and acceptance checks. Pass `--cwd
-<isolated-worktree>` for concurrent writers. Collect the returned run ID with
+Start each ready `T###` the claim routes externally with `python
+.specify/extensions/workflow/scripts/delegate_dispatch.py start --feature
+specs/<feature> --id T###`; record native work with `record-native`. Pass
+`--task-file <path>` with its bounded assignment, owned paths, dependencies and
+acceptance checks. Pass `--cwd <isolated-worktree>` for concurrent writers. Collect the returned run ID with
 `delegate_dispatch.py collect`; follow any `replacement` ID and review the final
 result before accepting work. The adapter snapshots the route and driver copy
 at start, records unavailable candidates, rejected models and fallbacks, and

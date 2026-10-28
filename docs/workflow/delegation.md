@@ -4,11 +4,34 @@ This page is the full reference for routing workflow stages and tasks to another
 
 Back to the [Workflow guide](../../extensions/workflow/README.md).
 
-Delegation is off by default. It routes workflow stages and implementation
-tasks to a preferred agent CLI and model through the bundled `delegate-task`
-skill, records every attempt, and leaves the dispatcher in charge of claims and
-receipts. A successful delegated run is candidate evidence for the orchestrator
-to inspect, never a passed stage or a completed task.
+Delegation is off by default. It gives each workflow stage and implementation
+task a model route, records every attempt, and leaves the dispatcher in charge
+of claims and receipts. External candidates run through the bundled
+`delegate-task` skill. A successful delegated run is candidate evidence for the
+orchestrator to inspect, never a passed stage or a completed task.
+
+## Routing rule
+
+This is the one routing rule; the agent-facing copy is in the workflow skill's
+[`delegation.md` reference](../../extensions/workflow/skills/workflow/references/delegation.md#routing-rule).
+The claim's route decides: each candidate's `route_kind` says who runs the
+work. The host runs it natively when the claim lists the native candidate
+(`route_kind: native`, `route_reason: native-first`), and the host pins the
+exact model through the tier's role file (`sanduq-worker` for `standard`,
+`sanduq-reviewer` for `review`). An external candidate runs only for the reason
+it records: `native-unsupported:<capability>` (`delegation-disabled`,
+`work-type-disabled`, `cross-vendor-route`, `model-pin`),
+`native-failed:<category>`, or `external:cross-vendor`, the named exception for
+debate and consultation routes that need the other vendor's model. A native
+attempt the host cannot support selects the external candidate once; a
+temporary native failure retries natively within `lean_execution.max_attempts`
+before falling back. No model is ever substituted silently: a rejected model
+stops at `FALLBACK_CONFIRMATION_REQUIRED` (see
+[Starting, collecting and recovering](#starting-collecting-and-recovering)).
+Set `delegation.native_allowed.<work type>: false` to route a work type
+externally. The top-level session records native work with
+`delegate_dispatch.py record-native` (its acceptance check decides the status);
+`attest-native` remains for stages.
 
 ## Security
 
@@ -245,10 +268,9 @@ silently restore the very inference this restriction exists to prevent.
 `coordination` still routes to light in the loaded policy, whatever the
 reason.
 
-A native attestation (see Security) is accepted for any route: the route
-decides what the external driver may run, and a stage the host's own subagent
-did is recorded against the claim's route as `rule: native`. A per-work-type
-native preference is not a route key yet.
+Whether a route runs natively or externally follows the
+[routing rule](#routing-rule); `delegation.native_allowed` is the per-work-type
+switch.
 
 `qa` (pre-1.7) split into `qa_author` (authoring and analysing QA work,
 standard) and `qa_collect` (running an existing, fixed check and reporting its
