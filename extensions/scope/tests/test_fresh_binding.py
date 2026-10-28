@@ -203,6 +203,27 @@ class FreshBindingTests(unittest.TestCase):
         self.assertEqual(result['analysis_role'], 'applied-resolution')
         self.assertEqual(result['applied_analysis_sha256'], __import__('hashlib').sha256(artifact.read_bytes()).hexdigest())
 
+    def test_minus_text_resolved_analysis_is_compared_byte_exact(self):
+        # A `-text` file keeps its CRLF bytes; a CRLF-normalised evidence hash must not vouch for it (F6).
+        analysis = self.prepare_published_child()
+        analysis['tree']['specify_prompt'] += ' Apply the evidenced owner resolution.'
+        module, artifact = self.real_applied_analysis(analysis)
+        (self.root / '.gitattributes').write_text('specs/001-new/reviews/*.json -text\n')
+        artifact.write_bytes(artifact.read_bytes().replace(b'\n', b'\r\n'))
+        name = artifact.relative_to(self.root).as_posix()
+        real = m.workflow_policy.fresh_claim
+        def normalised(*args, **kwargs):
+            fresh = real(*args, **kwargs)
+            fresh['decision_evidence'][name] = __import__('hashlib').sha256(
+                artifact.read_bytes().replace(b'\r\n', b'\n')).hexdigest()
+            return fresh
+        with patch.object(m.workflow_policy, '_decisions_module', return_value=module), \
+                patch.object(module, 'verify_ledger', lambda *args: None), \
+                patch.object(m.workflow_policy, 'fresh_claim', normalised):
+            with self.assertRaisesRegex(m.ScopeError, 'SCOPE_RESOLVED_ANALYSIS_EVIDENCE_MISMATCH'):
+                self.app.gate('1', feature='specs/001-new', token='owned', session='session',
+                              analysis=analysis, analysis_path=artifact)
+
     def test_unchanged_published_prompt_remains_authoritative_without_analysis_application(self):
         analysis = self.prepare_published_child(); analysis['tree']['scope'] = 'Consulted local description'
         published = m.metadata(self.gh.issues[1]['body'])['prompt']

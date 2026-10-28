@@ -94,7 +94,18 @@ class EolFingerprintTests(unittest.TestCase):
         target.write_bytes(target.read_bytes().replace(b'\n', b'\r\n'))  # what autocrlf checks out
         self.assertEqual(wf_fingerprints.source_fingerprints_of(self.root, {'source_inventory': reference},
                                                                 'specs/1-x'), {'a.py': 'f' * 64})
-        self.assertEqual(decisions.portable_sha256(self.root / 'notes.md'), sha(b'one\ntwo\n'))
+        self.assertEqual(decisions.portable_sha256(self.root, 'notes.md'), sha(b'one\ntwo\n'))
+
+    def test_decision_evidence_of_a_minus_text_file_stays_byte_exact(self):
+        import decisions
+        (self.root / '.gitattributes').write_bytes(b'raw.md -text\n')
+        (self.root / 'raw.md').write_bytes(b'one\r\ntwo\r\n')
+        git(self.root, 'add', '.gitattributes', 'raw.md')
+        git(self.root, 'commit', '-qm', 'raw')
+        recorded = decisions.portable_sha256(self.root, 'raw.md')
+        self.assertEqual(recorded, sha(b'one\r\ntwo\r\n'))
+        (self.root / 'raw.md').write_bytes(b'one\ntwo\n')  # a real byte change for a -text file
+        self.assertNotIn(decisions.portable_sha256(self.root, 'raw.md'), (recorded, sha(b'one\r\ntwo\r\n')))
 
     def test_genuinely_modified_sql_still_changes_the_fingerprint(self):
         edited = CRLF.replace(b'id int', b'id bigint')

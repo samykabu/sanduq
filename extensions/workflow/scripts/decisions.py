@@ -17,7 +17,7 @@ except ModuleNotFoundError:  # the source tree; package.py copies it into script
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'shared'))
     import sanduq_gh
 from execution_tools import sha256_file
-from sanduq_hash import portable_content
+from sanduq_hash import portable_content, portable_files
 from workflow import WorkflowError, Run, digest, inside, load_policy, locked, project_sync_mode, read, require, write
 
 MARKER = re.compile(r'\A<!-- sanduq-decision:question (\{[^\n]*\}) -->\n')
@@ -562,15 +562,20 @@ def _apply_answer(root, feature, qid, evidence, gh=None):
     files = [str(inside(root, value).relative_to(root).as_posix()) for value in evidence]
     require(files and all((root / value).is_file() for value in files), 'DECISION_APPLICATION_EVIDENCE_REQUIRED')
     item['status'] = 'applied'
-    item['application'] = {'evidence': {name: portable_sha256(root / name) for name in files},
+    item['application'] = {'evidence': {name: portable_sha256(root, name) for name in files},
                            'answer_digest': item['answer_digest']}
     write(Path(root) / feature / 'workflow/decisions.json', ledger)
     return item
 
 
-def portable_sha256(path):
-    """Evidence hash that does not depend on the checkout's line endings (F6)."""
-    return hashlib.sha256(portable_content(path.name, path.read_bytes())).hexdigest()
+def portable_sha256(root, name):
+    """Evidence hash that does not depend on the checkout's line endings (F6), with the fingerprints' rule:
+    a `-text`, SQL or binary file stays byte exact (its committed blob when only checkout conversion differs)."""
+    try:
+        content = portable_files(root, [name])[name]
+    except ValueError:  # not a Git checkout: no attributes to consult
+        content = portable_content(name, (Path(root) / name).read_bytes())
+    return hashlib.sha256(content).hexdigest()
 
 
 def verify_ledger(root, feature, ledger):
@@ -596,7 +601,7 @@ def verify_ledger(root, feature, ledger):
         for name, expected in application.get('evidence', {}).items():
             path = inside(root, name)
             # A ledger recorded before F6 holds the raw checkout bytes' hash (F6).
-            require(path.is_file() and expected in (portable_sha256(path), sha256_file(path)),
+            require(path.is_file() and expected in (portable_sha256(root, name), sha256_file(path)),
                     'DECISION_APPLICATION_STALE: ' + name)
 
 
