@@ -47,11 +47,11 @@ Fixed tool framing is identical across approaches and is not counted. Setup cost
 | `decision_made` | 2 | 79 | 1288 | 797 | 170 | 0 |
 | `reopen_task` | 1 | 0 | 1368 | 504 | 87 | 0 |
 | `noop_refresh` | 7 | 0 | 0 | 0 | 0 | 0 |
-| `resume` | 1 | 581 | 901 | 901 | 1540 | 1142 |
-| `compaction` | 1 | 581 | 898 | 898 | 1540 | 1145 |
-| **Updates total** | 55 | **1779** | **59967** | **24206** | **7306** | **2287** |
-| Setup (once per feature) | | 597 | 581 | 581 | 1564 | 0 |
-| **Total with setup** | | **2376** | **60548** | **24787** | **8870** | **2287** |
+| `resume` | 1 | 581 | 901 | 901 | 1606 | 1142 |
+| `compaction` | 1 | 581 | 898 | 898 | 1606 | 1145 |
+| **Updates total** | 55 | **1779** | **59967** | **24206** | **7438** | **2287** |
+| Setup (once per feature) | | 597 | 581 | 581 | 1630 | 0 |
+| **Total with setup** | | **2376** | **60548** | **24787** | **9068** | **2287** |
 
 ## Results: cl100k_base
 
@@ -67,11 +67,11 @@ Fixed tool framing is identical across approaches and is not counted. Setup cost
 | `decision_made` | 2 | 79 | 1269 | 784 | 170 | 0 |
 | `reopen_task` | 1 | 0 | 1364 | 500 | 87 | 0 |
 | `noop_refresh` | 7 | 0 | 0 | 0 | 0 | 0 |
-| `resume` | 1 | 583 | 904 | 904 | 1541 | 1142 |
-| `compaction` | 1 | 583 | 901 | 901 | 1541 | 1145 |
-| **Updates total** | 55 | **1788** | **59771** | **24014** | **7315** | **2287** |
-| Setup (once per feature) | | 599 | 582 | 582 | 1565 | 0 |
-| **Total with setup** | | **2387** | **60353** | **24596** | **8880** | **2287** |
+| `resume` | 1 | 583 | 904 | 904 | 1604 | 1142 |
+| `compaction` | 1 | 583 | 901 | 901 | 1604 | 1145 |
+| **Updates total** | 55 | **1788** | **59771** | **24014** | **7441** | **2287** |
+| Setup (once per feature) | | 599 | 582 | 582 | 1628 | 0 |
+| **Total with setup** | | **2387** | **60353** | **24596** | **9069** | **2287** |
 
 ## Break-even including setup
 
@@ -86,7 +86,7 @@ Fixed tool framing is identical across approaches and is not counted. Setup cost
 | NEW | 7111 | 2365 |
 | MD-EDIT | 195314 | 2162 |
 | MD-EDIT-LEAN | 80828 | 2162 |
-| LEGACY | 30051 | 7127 |
+| LEGACY | 30489 | 7346 |
 | MD-RENDER | 7093 | 0 |
 
 ## Reading the result
