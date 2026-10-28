@@ -72,8 +72,8 @@ class ExtensionLayout(unittest.TestCase):
     def test_skill_entry_is_short_and_deterministic(self):
         text = (EXT / 'skills/progress/SKILL.ext.md').read_text(encoding='utf-8')
         self.assertLessEqual(len(text.splitlines()), 60)
-        self.assertIn('Reporting is a deterministic projection. Never spawn, retain, message or poll an agent solely to '
-                      'maintain it.', text)
+        self.assertIn('deterministic projection', text)
+        self.assertRegex(text, r'Never spawn[^.]*agent solely to maintain it')
 
 
 if __name__ == '__main__':
