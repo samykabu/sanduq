@@ -1,13 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "workflow": "2.0.0",
-    "scope": "2.0.0",
-    "assure": "2.7.1",
-    "memory": "2.6.2",
-    "pr": "4.7.4",
-    "user-manual": "1.8.4"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "PH-06: Workflow 2.0.0 (Scope merged, commands renamed speckit.workflow.scope-*), Scope 2.0.0 retired shim, Assure 2.7.1, Memory 2.6.2, PR 4.7.4, User Manual 1.8.4; every suite passed locally on the merged tree and a consumer upgrade kept every receipt."
 }
