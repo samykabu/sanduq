@@ -975,3 +975,25 @@ class RelocateTests(Harness):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TargetBranchTests(unittest.TestCase):
+    """F8: a clone of an empty repository sits on `master` although the project pushed `main`."""
+
+    def test_a_branch_origin_lacks_is_corrected_to_origins_default(self):
+        import wf_identity
+        with tempfile.TemporaryDirectory() as folder:
+            origin, root = Path(folder, 'origin.git'), Path(folder, 'clone')
+            git = lambda *args, cwd=root: subprocess.run(['git', *args], cwd=cwd, check=True, capture_output=True)  # noqa: E731
+            git('init', '-q', '--bare', str(origin), cwd=folder)
+            git('init', '-q', '-b', 'master', str(root), cwd=folder)
+            for args in (('config', 'user.name', 'T'), ('config', 'user.email', 't@example.invalid'),
+                         ('commit', '-q', '--allow-empty', '-m', 'base'), ('remote', 'add', 'origin', str(origin)),
+                         ('push', '-q', 'origin', 'master:main'), ('fetch', '-q', 'origin'),
+                         ('switch', '-q', '-c', 'feature')):
+                git(*args)
+            target, why = wf_identity.target_branch(root)
+            self.assertEqual(target, 'main')
+            self.assertIn('TARGET_BRANCH_CORRECTED: this branch was created from master', why)
+            git('push', '-q', 'origin', 'master')  # a target origin has stays as it is
+            self.assertEqual(wf_identity.target_branch(root), ('master', None))

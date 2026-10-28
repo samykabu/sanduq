@@ -63,7 +63,7 @@ from wf_core import (SCHEMA, CHECKPOINT_SCHEMA, CHECKPOINT_SCHEMAS, RANGES, BASE
                      git_ok, git, OPERATIONAL_DIRS, operation, _memo, _wrote, default_actor,
                      require_not_delegated_context, RUNTIME_DECLARATION, ensure_local_excludes, locked, ERRORS,
                      explain, GIT, W, INSTALL_SCRIPT)
-from wf_identity import (github_repository, previous_branch, normalized_remote, origin_url, root_commit_sha,
+from wf_identity import (github_repository, previous_branch, target_branch, normalized_remote, origin_url, root_commit_sha,
                          is_shallow_clone, repo_identity, current_identity, root_commit_still_reachable, same_remote,
                          identity_matches, legacy_history_signal, verify_checkpoint_identity, root_history_changed,
                          require_issue_repository_binding, issue_identity, prepare_issue, require_shared_history,
@@ -989,13 +989,14 @@ class Run:
                 require(state['issue'] == issue, 'ISSUE_BINDING_CONFLICT')
                 return state
             commands = resolve_commands(self.root, self.policy)
+            target, corrected = target_branch(self.root)
             state = {'schema_version': CHECKPOINT_SCHEMA, 'run_id': uuid.uuid4().hex,
                      'repo_identity': repo_identity(self.root),
                      'branch': git(self.root, 'branch', '--show-current'), 'feature': self.relative,
                      'issue': issue, 'policy_digest_version': POLICY_DIGEST_VERSION,
                      'policy_digest': delivery_digest(self.policy),
                      'ci_policy_digest': digest(self.policy['ci']), 'commands': commands,
-                     'policy': copy.deepcopy(self.policy), 'target_branch': previous_branch(self.root),
+                     'policy': copy.deepcopy(self.policy), 'target_branch': target,
                      # REQ-21: frozen per feature here, outside the policy cutoff; a later policy edit changes
                      # only features started after it.
                      'clarification_transport': self.policy['clarification'].get('transport', 'github-comments'),
@@ -1003,7 +1004,7 @@ class Run:
             state['dependency_digest'] = package_digest(self.root)
             self.record_skipped(state, skipped_stages(self.policy, None))
             self.save(state)
-            return state
+            return {**state, 'warnings': [corrected]} if corrected else state
 
     def record_skipped(self, state, skipped):
         """Record the stages this feature does not run (the tier's, the board mode's), once each in the log."""

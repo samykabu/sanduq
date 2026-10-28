@@ -340,7 +340,7 @@ def _no_link_below(root, parts):
 
 
 GIT_READS = ('rev-parse', 'branch', 'ls-files', 'config', 'rev-list', 'merge-base', 'check-ref-format', 'show-ref',
-             'show')
+             'show', 'symbolic-ref', 'for-each-ref')
 
 
 def run_git(root, *args, **options):

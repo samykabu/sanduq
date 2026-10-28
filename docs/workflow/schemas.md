@@ -89,7 +89,7 @@ checkpoint. Scope reads both.
 | --- | --- |
 | `repo_identity` | Portable repository identity (1.8.0+): `remote`, `root_commit` and `shallow`. See [Checkpoint identity](state-files.md#checkpoint-identity-and-relocating-a-repository-180). |
 | `repo_path` | Version 1 only: the legacy absolute root. Never compared by 1.8.0+; `relocate` records a pre-1.8.0 value as `old_identity.legacy_repo_path`. |
-| `branch`, `target_branch` | The bound feature branch and its target. |
+| `branch`, `target_branch` | The bound feature branch and its target: the branch it was created from, or origin's default branch when origin does not have that one (`start` then warns `TARGET_BRANCH_CORRECTED`, for example after cloning an empty repository onto a local `master` and pushing `main`). |
 | `issue` | The bound GitHub issue. |
 | `policy_digest`, `dependency_digest` | Fingerprints compared on load. A changed dependency digest makes `claim` refuse with `DEPENDENCY_CHANGED` until you run `migrate`. |
 | `commands` | Map of stage to the resolved command selected for it. |

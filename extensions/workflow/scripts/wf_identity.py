@@ -45,6 +45,33 @@ def previous_branch(root):
     return value if result.returncode == 0 and value and value != '@' else None
 
 
+def git_lines(root, *args):
+    result = run_git(root, *args, text=True, encoding='utf-8')
+    return result.stdout.split() if result.returncode == 0 else []
+
+
+def target_branch(root):
+    """The feature's target branch and, when it was corrected, why (F8).
+
+    The branch the feature forked from (`previous_branch`) unless origin does not have it while origin's
+    default branch (the local `origin/HEAD`, else origin's only branch; no network) differs: a clone of
+    an empty repository sits on Git's local default (`master`) although the project pushed `main`."""
+    previous = previous_branch(root)
+    if not previous or git_ok(root, 'rev-parse', '--verify', '--quiet', 'refs/remotes/origin/' + previous):
+        return previous, None
+    local = run_git(root, 'symbolic-ref', '--short', 'refs/remotes/origin/HEAD', text=True, encoding='utf-8')
+    default = local.stdout.strip()[len('origin/'):] if local.returncode == 0 and local.stdout.startswith('origin/') else None
+    if not default:  # no origin/HEAD (a clone of an empty repository): origin's only branch, if it has one
+        branches = [name for name in git_lines(root, 'for-each-ref', '--format=%(refname:strip=3)', 'refs/remotes/origin')
+                    if name != 'HEAD']
+        default = branches[0] if len(branches) == 1 else None
+    if not default or default == previous:
+        return previous, None
+    return default, ('TARGET_BRANCH_CORRECTED: this branch was created from ' + previous + ', which origin does not '
+                     'have; the target branch is the default branch of origin, ' + default + '. If ' + previous + ' is '
+                     'meant, push it first and start the feature again')
+
+
 def normalized_remote(root):
     """The normalised `origin` URL, or None when no remote is configured.
 
