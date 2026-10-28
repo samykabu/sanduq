@@ -29,6 +29,10 @@ except ModuleNotFoundError:  # the source tree; package.py copies it into script
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'shared'))
     import sanduq_fs
 
+import wf_core  # module attributes, so a test's patch_runtime reaches these lookups
+import wf_health
+import wf_policy
+
 # ``qa`` split in two (B12): ``qa_author`` is standard-tier authored QA work
 # (writing tests, analysing coverage); ``qa_collect`` is the light-eligible
 # route for running an existing, fixed check and reporting its result. Nothing
@@ -564,13 +568,11 @@ def stronger_candidate(config, prior, selected_host):
 
 
 def read_policy(root):
-    from workflow import load_policy
-    return load_policy(root)
+    return wf_policy.load_policy(root)
 
 
 def active_host(root):
-    from workflow import active_host as host
-    return host(root)
+    return wf_health.active_host(root)
 
 
 def ledger_path(root, feature):
@@ -578,6 +580,60 @@ def ledger_path(root, feature):
     require(path.is_relative_to(root.resolve() / 'specs') and
             path.parent.parent == (root / feature).resolve(), 'DELEGATION_FEATURE_INVALID')
     return path
+
+
+def written_marker(root, feature):
+    """Runtime record of the ledger bytes this dispatcher last wrote.
+
+    The trust markers are advisory: a same-user writer can rewrite both the ledger and this record.
+    """
+    return root / '.specify/workflow/runtime' / ('delegation-' + wf_core.digest(feature) + '.written')
+
+
+def ledger_bytes_digest(path):
+    try:
+        return sha256_file(path)
+    except OSError:
+        return None
+
+
+def ledger_written_by_dispatcher(root, feature):
+    """True when the ledger still holds exactly the bytes a dispatcher last saved.
+
+    Call it under the ledger lock. Any other writer since that save, such as
+    a worker or a rollback, leaves different bytes and the answer is False.
+    """
+    recorded = wf_core.read(written_marker(root, feature), {}).get('sha256')
+    return recorded is not None and recorded == ledger_bytes_digest(ledger_path(root, feature))
+
+
+def ledger_foreign_write(root, feature):
+    """True when the ledger exists and no dispatcher save accounts for its bytes.
+
+    A ledger with no record of a dispatcher save (a fresh clone or an older
+    build) counts as foreign too: nothing proves who wrote it. Used only for
+    worker-edit attribution (bookkeeping paths, retry decisions); it is
+    deliberately broad, since a missing marker is common and not itself
+    suspicious there. ``ledger_genuinely_tampered`` below is the narrower
+    check for the sticky trust flag (round 3, finding 2).
+    """
+    return (ledger_path(root, feature).exists() and
+            not ledger_written_by_dispatcher(root, feature))
+
+
+def ledger_genuinely_tampered(root, feature):
+    """True only when the ordinary written marker exists but disagrees with
+    the ledger's current bytes -- never merely absent (round 3, findings 1-2).
+
+    A fresh clone or CI checkout has no marker at all and is not itself
+    suspicious (see ``ledger_trust_state``'s ``'unverified-local'``);
+    a marker that WAS established and now disagrees means something changed
+    the ledger without a tracked dispatcher write since.
+    """
+    recorded = wf_core.read(written_marker(root, feature), {}).get('sha256')
+    if recorded is None:
+        return False
+    return recorded != ledger_bytes_digest(ledger_path(root, feature))
 
 
 def foreign_write_marker(root, feature):
@@ -588,13 +644,11 @@ def foreign_write_marker(root, feature):
     marker to match the file it just saved) can never quietly launder an
     earlier hand-edit back into looking trusted.
     """
-    from workflow import digest
-    return root / '.specify/workflow/runtime' / ('delegation-' + digest(feature) + '.tampered')
+    return root / '.specify/workflow/runtime' / ('delegation-' + wf_core.digest(feature) + '.tampered')
 
 
 def trust_reset_log_path(root, feature):
-    from workflow import digest
-    return root / '.specify/workflow/runtime' / ('delegation-' + digest(feature) + '.trust-resets.json')
+    return root / '.specify/workflow/runtime' / ('delegation-' + wf_core.digest(feature) + '.trust-resets.json')
 
 
 def record_foreign_write(root, feature):
@@ -603,12 +657,10 @@ def record_foreign_write(root, feature):
     detection before ``trust-reset`` does not overwrite the original evidence.
     """
     from datetime import datetime, timezone
-    from workflow import write
-    from delegate_dispatch import ledger_bytes_digest
     marker = foreign_write_marker(root, feature)
     if marker.is_file():
         return
-    write(marker, {'detected_at': datetime.now(timezone.utc).isoformat(),
+    wf_core.write(marker, {'detected_at': datetime.now(timezone.utc).isoformat(),
                    'digest_at_detection': ledger_bytes_digest(ledger_path(root, feature))})
 
 
@@ -632,11 +684,9 @@ def ledger_trust_state(root, feature):
     ``'trusted'``: the marker exists and matches, and no unresolved tamper
     is on record.
     """
-    from workflow import read
-    from delegate_dispatch import ledger_bytes_digest, written_marker
     if foreign_write_marker(root, feature).is_file():
         return 'untrusted'
-    recorded = read(written_marker(root, feature), {}).get('sha256')
+    recorded = wf_core.read(written_marker(root, feature), {}).get('sha256')
     if recorded is None:
         return 'unverified-local'
     return 'trusted' if recorded == ledger_bytes_digest(ledger_path(root, feature)) else 'untrusted'
@@ -974,8 +1024,7 @@ def move_legacy_backups(root, legacy):
             continue
         backups = backup_root(root, scope)
         if scope == 'project':
-            from workflow import ensure_local_excludes
-            ensure_local_excludes(root)
+            wf_core.ensure_local_excludes(root)
         for item in items:
             moved.append({'from': str(item), 'to': str(move_aside(item, backups))})
     return moved
@@ -1032,8 +1081,7 @@ def install_skill_locked(root, host, scope, force_scope):
     require(target.parent.resolve().is_relative_to(target_root.resolve()),
             'DELEGATE_SKILL_TARGET_OUTSIDE_SCOPE')
     if scope == 'project':
-        from workflow import ensure_local_excludes
-        ensure_local_excludes(root)
+        wf_core.ensure_local_excludes(root)
     backups = backup_root(root, scope)
     backups.mkdir(parents=True, exist_ok=True)
     # Build and verify the new copy outside the discovery root first, so a

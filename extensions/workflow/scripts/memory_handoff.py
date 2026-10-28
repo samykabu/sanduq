@@ -15,6 +15,11 @@ except ModuleNotFoundError:  # the source tree; package.py copies it into script
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'shared'))
     import sanduq_fs
 
+import sanduq_remote
+import wf_core  # module attributes, so a test's patch_runtime reaches these lookups
+import wf_health
+import wf_identity
+
 # Claim runs the helper under dispatch.lock, so a hung Memory must not hold it forever (SAMY-02).
 MEMORY_HELPER_TIMEOUT = 120
 
@@ -48,7 +53,7 @@ def action(command, arguments, reason):
     return {'command': command, 'arguments': arguments, 'reason': reason}
 
 
-def handoff(w, root, transition, feature=None, checks=None, report=None, lock=True):
+def handoff(root, transition, feature=None, checks=None, report=None, lock=True, *, run_class):
     """Persist a recoverable result separately from accepted product stage receipts.
 
     One host dispatcher invokes returned registered commands. Subprocess argv are
@@ -56,17 +61,17 @@ def handoff(w, root, transition, feature=None, checks=None, report=None, lock=Tr
     `lock=False` only for a caller that already holds dispatch.lock (claim): it is not re-entrant.
     """
     root = root.resolve()
-    key = w.digest([transition, feature])
+    key = wf_core.digest([transition, feature])
     path = root / '.specify/workflow/runtime/memory-handoffs' / (key + '.json')
     result = {'transition': transition, 'feature': feature, 'status': 'pending',
-              'ok': True, 'actions': [], 'updated_at': w.now()}
+              'ok': True, 'actions': [], 'updated_at': wf_core.now()}
 
     def finish(status, reason, actions=(), ok=True):
-        missing = [item['command'] for item in actions if not w.command_exists(root, item['command'])]
+        missing = [item['command'] for item in actions if not wf_health.command_exists(root, item['command'])]
         if missing:
             status, reason, ok = 'blocked', 'MEMORY_COMMAND_UNAVAILABLE: ' + ', '.join(missing), False
         result.update(status=status, reason=reason, actions=list(actions), ok=ok)
-        w.write(path, result)
+        wf_core.write(path, result)
         result['state_file'] = path.relative_to(root).as_posix()
         return result
 
@@ -74,18 +79,18 @@ def handoff(w, root, transition, feature=None, checks=None, report=None, lock=Tr
         return action('speckit.memory.session', arguments or [], reason)
 
     try:
-        with w.locked(root / '.specify/workflow/runtime/dispatch.lock') if lock else contextlib.nullcontext():
+        with wf_core.locked(root / '.specify/workflow/runtime/dispatch.lock') if lock else contextlib.nullcontext():
             if transition == 'postmerge':
                 if not isinstance(report, dict):
                     return finish('blocked', 'MEMORY_POSTMERGE_REPORT_REQUIRED', ok=False)
-                result['ownership'] = w.Run(root, feature).release_ownership(
+                result['ownership'] = run_class(root, feature).release_ownership(
                     automatic=True, report=report, dispatch_locked=True)
-            entry = w.registry(root).get('memory')
+            entry = wf_health.registry(root).get('memory')
             if not entry or entry.get('enabled') is not True:
                 return finish('pending', 'MEMORY_DEPENDENCY_MISSING_OR_DISABLED')
             if not (root / '.specify/extensions/memory/scripts/archive.py').is_file():
                 return finish('blocked', 'MEMORY_HELPER_MISSING', ok=False)
-            w.ensure_local_excludes(root)  # Memory reads Workflow's runtime declaration beside info/exclude
+            wf_core.ensure_local_excludes(root)  # Memory reads Workflow's runtime declaration beside info/exclude
             pending = helper(root, 'pending')
             if (not isinstance(pending.get('enabled'), bool)
                     or not isinstance(pending.get('ready'), list)
@@ -112,19 +117,19 @@ def handoff(w, root, transition, feature=None, checks=None, report=None, lock=Tr
             policy = policy_data.get('policy')
             if not isinstance(policy, dict) or not isinstance(policy.get('target_branch'), str):
                 raise HandoffError('MEMORY_HELPER_MALFORMED: policy contract')
-            common = Path(w.git(root, 'rev-parse', '--git-common-dir'))
+            common = Path(wf_core.git(root, 'rev-parse', '--git-common-dir'))
             memory_state = (common if common.is_absolute() else root / common).resolve() / 'sanduq-memory'
-            approval = w.read(memory_state / 'approval.json', {})
+            approval = wf_core.read(memory_state / 'approval.json', {})
             # Memory 2.1.x validates its hash, but not approval.root, on queue.
             if approval.get('root') != str(root):
                 return finish('pending', 'MEMORY_APPROVAL_CHECKOUT_MISMATCH')
             if not policy_data.get('policy_hash') or approval.get('policy_hash') != policy_data['policy_hash']:
                 return finish('pending', 'Automatic mode is disabled or needs policy/implementation review and renewal.')
-            queue = w.read(memory_state / 'pending.json', {})
+            queue = wf_core.read(memory_state / 'pending.json', {})
             if not isinstance(queue, dict):
                 raise HandoffError('MEMORY_HELPER_MALFORMED: queue contract')
             if transition == 'execute':
-                run = w.Run(root, feature)
+                run = run_class(root, feature)
                 state = run.load()
                 if not state.get('receipts', {}).get('execute'):
                     return finish('blocked', 'MEMORY_EXECUTE_RECEIPT_REQUIRED', ok=False)
@@ -154,13 +159,13 @@ def handoff(w, root, transition, feature=None, checks=None, report=None, lock=Tr
             if transition == 'postmerge':
                 if not isinstance(report, dict):
                     return finish('blocked', 'MEMORY_POSTMERGE_REPORT_REQUIRED', ok=False)
-                run = w.Run(root, feature)
+                run = run_class(root, feature)
                 state = run.load(allow_branch_change=True)
-                repo = w.github_repository(root)
+                repo = wf_identity.github_repository(root)
                 pr = state.get('receipts', {}).get('pr', {}).get('pr_url')
                 target = policy['target_branch']
                 if (report.get('feature') != feature or not isinstance(report.get('repository'), str)
-                        or not w.same_github_repository(report.get('repository'), repo)
+                        or not sanduq_remote.same_github_repository(report.get('repository'), repo)
                         or not pr or report.get('pr_url') != pr or report.get('target_branch') != target
                         or state.get('target_branch') != target or report.get('verified') is not True
                         or any(not re.fullmatch('[a-f0-9]{40}', str(report.get(k, '')))
@@ -169,12 +174,12 @@ def handoff(w, root, transition, feature=None, checks=None, report=None, lock=Tr
                 result['binding'] = report
                 if report.get('report_only') is True:
                     return finish('pending', 'MEMORY_REPORT_ONLY_FOLLOWUP')
-                if w.git(root, 'branch', '--show-current') != target:
+                if wf_core.git(root, 'branch', '--show-current') != target:
                     return finish('pending', 'Awaiting local merge/check-out of the configured target branch.')
-                w.git(root, 'merge-base', '--is-ancestor', report['merge_sha'], 'HEAD')
+                wf_core.git(root, 'merge-base', '--is-ancestor', report['merge_sha'], 'HEAD')
             elif transition != 'session':
                 raise HandoffError('MEMORY_TRANSITION_INVALID')
-            if w.git(root, 'branch', '--show-current') != policy['target_branch']:
+            if wf_core.git(root, 'branch', '--show-current') != policy['target_branch']:
                 return finish('pending', 'Awaiting local merge/check-out of the configured target branch.')
             selected = [feature] if feature else list(queue)
             actions = []
@@ -203,5 +208,5 @@ def handoff(w, root, transition, feature=None, checks=None, report=None, lock=Tr
             if actions:
                 return finish('dispatch', 'MEMORY_REGISTERED_ACTION_REQUIRED', actions)
             return finish('pending' if reasons else 'idle', '; '.join(dict.fromkeys(reasons)) or 'MEMORY_NO_ELIGIBLE_WORK')
-    except (HandoffError, w.WorkflowError, OSError, ValueError, KeyError, TypeError) as error:
+    except (HandoffError, wf_core.WorkflowError, OSError, ValueError, KeyError, TypeError) as error:
         return finish('blocked', str(error), ok=False)

@@ -26,6 +26,8 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import delegation
+from delegation import (ledger_bytes_digest, ledger_foreign_write, ledger_genuinely_tampered,  # noqa: F401
+                        ledger_written_by_dispatcher, written_marker)
 import execution_tools
 import workflow
 import lean_policy
@@ -94,60 +96,6 @@ def ledger_lock(root, feature):
     path = root / '.specify/workflow/runtime' / ('delegation-' + workflow.digest(feature) + '.lock')
     with delegation.file_lock(path, LOCK_TIMEOUT, 'DELEGATION_LEDGER_BUSY') as token:
         yield path, token
-
-
-def written_marker(root, feature):
-    """Runtime record of the ledger bytes this dispatcher last wrote.
-
-    The trust markers are advisory: a same-user writer can rewrite both the ledger and this record.
-    """
-    return root / '.specify/workflow/runtime' / ('delegation-' + workflow.digest(feature) + '.written')
-
-
-def ledger_bytes_digest(path):
-    try:
-        return file_sha256(path)
-    except OSError:
-        return None
-
-
-def ledger_written_by_dispatcher(root, feature):
-    """True when the ledger still holds exactly the bytes a dispatcher last saved.
-
-    Call it under the ledger lock. Any other writer since that save, such as
-    a worker or a rollback, leaves different bytes and the answer is False.
-    """
-    recorded = workflow.read(written_marker(root, feature), {}).get('sha256')
-    return recorded is not None and recorded == ledger_bytes_digest(delegation.ledger_path(root, feature))
-
-
-def ledger_foreign_write(root, feature):
-    """True when the ledger exists and no dispatcher save accounts for its bytes.
-
-    A ledger with no record of a dispatcher save (a fresh clone or an older
-    build) counts as foreign too: nothing proves who wrote it. Used only for
-    worker-edit attribution (bookkeeping paths, retry decisions); it is
-    deliberately broad, since a missing marker is common and not itself
-    suspicious there. ``ledger_genuinely_tampered`` below is the narrower
-    check for the sticky trust flag (round 3, finding 2).
-    """
-    return (delegation.ledger_path(root, feature).exists() and
-            not ledger_written_by_dispatcher(root, feature))
-
-
-def ledger_genuinely_tampered(root, feature):
-    """True only when the ordinary written marker exists but disagrees with
-    the ledger's current bytes -- never merely absent (round 3, findings 1-2).
-
-    A fresh clone or CI checkout has no marker at all and is not itself
-    suspicious (see ``delegation.ledger_trust_state``'s ``'unverified-local'``);
-    a marker that WAS established and now disagrees means something changed
-    the ledger without a tracked dispatcher write since.
-    """
-    recorded = workflow.read(written_marker(root, feature), {}).get('sha256')
-    if recorded is None:
-        return False
-    return recorded != ledger_bytes_digest(delegation.ledger_path(root, feature))
 
 
 def maintenance_allows(ledger, key):

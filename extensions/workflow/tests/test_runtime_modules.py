@@ -36,13 +36,23 @@ class RuntimeModuleTests(unittest.TestCase):
             self.assertEqual(wf_core._OPERATION, {})
         self.assertIsNone(wf_core._OPERATION)
 
-    def test_memory_handoff_names_are_workflow_globals(self):
-        """memory_handoff reads the runtime through `SimpleNamespace(**globals())` of workflow.py."""
+    def test_memory_handoff_names_resolve_in_the_runtime_modules(self):
+        """memory_handoff takes Run as a parameter and reads the rest from the modules it imports."""
         tree = ast.parse((SCRIPTS / 'memory_handoff.py').read_text(encoding='utf-8'))
-        used = {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)
-                and isinstance(n.value, ast.Name) and n.value.id == 'w'}
+        used = {(n.value.id, n.attr) for n in ast.walk(tree) if isinstance(n, ast.Attribute)
+                and isinstance(n.value, ast.Name) and n.value.id in MODULES + ('sanduq_remote',)}
         self.assertTrue(used)
-        self.assertEqual(sorted(used - set(vars(w))), [])
+        self.assertEqual(sorted((m, a) for m, a in used if not hasattr(sys.modules[m], a)), [])
+
+    def test_no_upward_imports_from_delegation_or_wf_core(self):
+        """delegation and wf_core sit below workflow and delegate_dispatch: they never import either."""
+        for name in ('delegation', 'wf_core', 'memory_handoff'):
+            tree = ast.parse((SCRIPTS / (name + '.py')).read_text(encoding='utf-8'))
+            imported = ({a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names} |
+                        {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)})
+            found = sorted(imported & {'workflow', 'delegate_dispatch'})
+            with self.subTest(module=name):
+                self.assertEqual(found, [])
 
     def test_scope_path_loading_reaches_checkpoint_identity(self):
         path = SCRIPTS / 'scope/workflow_policy.py'

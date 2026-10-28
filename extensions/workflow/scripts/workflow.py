@@ -1512,7 +1512,7 @@ class Run:
         holds, at every claim: the usage `session_id` comes from the model, not the host, so it never skips the
         handoff (one `archive.py pending`, about 0.4 s). A blocked result, or Memory work to dispatch first, is
         returned instead of a stage; otherwise the run is recorded (saved with the claim) and None goes on."""
-        result = memory_handoff.handoff(SimpleNamespace(**globals()), self.root, 'session', lock=False)
+        result = memory_handoff.handoff(self.root, 'session', lock=False, run_class=Run)
         if result['status'] in ('blocked', 'dispatch'):
             return {'stage': None, 'status': 'memory_' + result['status'], 'ok': result['status'] != 'blocked',
                     'memory_handoff': result,
@@ -1985,8 +1985,7 @@ class Run:
         self.drop_inventories(superseded)
         result = {**self.next(state), 'completed': stage}
         if stage == 'execute':
-            result['memory_handoff'] = memory_handoff.handoff(
-                SimpleNamespace(**globals()), self.root, 'execute', self.relative)
+            result['memory_handoff'] = memory_handoff.handoff(self.root, 'execute', self.relative, run_class=Run)
             # Product acceptance is already durable. Memory failure is a
             # separate recoverable operation, never an unpassed Execute.
             if result['memory_handoff']['ok'] is False:
@@ -2193,8 +2192,8 @@ def run_command(args):
     try:
         if args.action == 'memory-handoff':
             require(args.transition == 'session' or args.feature, 'EXPLICIT_FEATURE_REQUIRED')
-            result = memory_handoff.handoff(SimpleNamespace(**globals()), root, args.transition,
-                                            args.feature, args.check, read(args.report) if args.report else None)
+            result = memory_handoff.handoff(root, args.transition, args.feature, args.check,
+                                            read(args.report) if args.report else None, run_class=Run)
         elif args.action == 'init':
             ensure_local_excludes(root)
             path = root / '.specify/workflow.yml'

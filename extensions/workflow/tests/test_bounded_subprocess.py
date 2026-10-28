@@ -84,7 +84,7 @@ class BoundedSubprocessTests(unittest.TestCase):
         archive.write_text(SLEEP + '\n', encoding='utf-8')
         started = time.monotonic()
         with patch.object(mh, 'MEMORY_HELPER_TIMEOUT', 1):
-            result = mh.handoff(w, self.root, 'session')
+            result = mh.handoff(self.root, 'session', run_class=w.Run)
         self.assertEqual((result['ok'], result['status']), (False, 'blocked'))
         self.assertTrue(result['reason'].startswith('MEMORY_HELPER_TIMEOUT: '), result['reason'])
         self.assertIn('archive.py --root . pending', result['reason'])

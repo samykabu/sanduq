@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import importlib.util
+import importlib
 import inspect
 import io
 import json
@@ -64,10 +64,8 @@ LINK = re.compile(r'[A-Za-z0-9_./-]*references/[A-Za-z0-9_.-]+\.md')
 
 def load_runtime(repo):
     path = repo / 'extensions/workflow/scripts/workflow.py'
-    spec = importlib.util.spec_from_file_location('sanduq_workflow', path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module, path.read_text(encoding='utf-8')
+    sys.path.insert(0, str(path.parent))
+    return importlib.import_module('workflow'), path.read_text(encoding='utf-8')
 
 
 class Bench:

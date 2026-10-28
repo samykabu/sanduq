@@ -1,7 +1,6 @@
 import atexit
 import copy
 import hashlib
-import importlib.util
 import json
 import os
 import shutil
@@ -18,9 +17,8 @@ import yaml
 
 WORKFLOW_SOURCE = (Path(os.environ['SANDUQ_WORKFLOW_TEST_PACKAGE']) if os.environ.get('SANDUQ_WORKFLOW_TEST_PACKAGE')
                    else Path(__file__).resolve().parents[1])
-SPEC = importlib.util.spec_from_file_location('sanduq_workflow', WORKFLOW_SOURCE / 'scripts/workflow.py')
-w = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(w)
+sys.path.insert(0, str(WORKFLOW_SOURCE / 'scripts'))
+import workflow as w  # noqa: E402
 
 
 _TEMPLATE = []
