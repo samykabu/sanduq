@@ -96,6 +96,18 @@ class EolFingerprintTests(unittest.TestCase):
                                                                 'specs/1-x'), {'a.py': 'f' * 64})
         self.assertEqual(decisions.portable_sha256(self.root, 'notes.md'), sha(b'one\ntwo\n'))
 
+    def test_a_later_comment_that_only_mentions_a_decision_keeps_its_fingerprint(self):
+        from wf_fingerprints import decision_projection
+        record = {'id': 'SD1', 'answer': 'A', 'unparsed': []}
+        before = json.dumps({'decisions': [record]}).encode()
+        noted = json.dumps({'decisions': [{**record, 'unparsed': [{'comment': 7, 'reason': 'not understood'}]}]})
+        self.assertEqual(decision_projection(noted.encode(), ['SD1']), decision_projection(before, ['SD1']))
+        changed = json.dumps({'decisions': [{**record, 'answer': 'B'}]}).encode()
+        self.assertNotEqual(decision_projection(changed, ['SD1']), decision_projection(before, ['SD1']))
+        legacy = json.dumps({'decisions': [{'id': 'SD1', 'answer': 'A'}]}).encode()  # no unparsed key: unchanged
+        self.assertEqual(decision_projection(legacy, ['SD1']).split(':')[-1],
+                         hashlib.sha256(json.dumps([{'answer': 'A', 'id': 'SD1'}], sort_keys=True).encode()).hexdigest())
+
     def test_decision_evidence_of_a_minus_text_file_stays_byte_exact(self):
         import decisions
         (self.root / '.gitattributes').write_bytes(b'raw.md -text\n')

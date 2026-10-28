@@ -7,6 +7,9 @@ Breaking: Scope is retired as a package. Its code, commands, skills, references 
 - This last release has no code, presets or hooks. Installing it over Scope 1.x removes the old commands, skills and hook entries; Spec Kit prints its description, which is the migration step: `python .specify/extensions/workflow/scripts/upgrade.py --version 2.0.0 --apply`. Its one command, `speckit.scope.migrate`, prints the same step.
 - It requires Workflow 2.0.0 or later. Workflow's installer removes any Sanduq Scope, this shim included, and keeps the state in `.specify/scope/`.
 - The catalog entry is marked `deprecated` with `superseded_by: workflow`.
+## [1.14.1] - 2026-10-28
+
+- Comments Scope posts (the Clarify questions and ready notes) are recorded in `.specify/workflow/runtime/posted-comments.jsonl` like every other Sanduq comment, so Workflow never reads them as a human answer or mention of a decision (PH-05-T07 Codex live run).
 
 ## [1.14.0] - 2026-10-28
 

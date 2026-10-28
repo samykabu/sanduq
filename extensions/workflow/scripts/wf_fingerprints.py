@@ -57,10 +57,13 @@ def decision_projection(content, ids=None):
     """`decision-records:v1:<ids>:<sha256>` of the ledger's records with these ids (all when None).
 
     A receipt depends only on the decisions that existed when it was recorded, so a later decision (the
-    User Manual module map raised at Execute) does not stale Scope through Tasks."""
+    User Manual module map raised at Execute) does not stale Scope through Tasks. A record's ``unparsed`` list
+    is diagnostic (comments that mention the id without an answer) and is hashed empty, so a later comment
+    that only mentions a decision cannot stale the receipts that depend on it."""
     try:
         records = json.loads(content.decode('utf-8-sig')).get('decisions')
-        records = [item for item in records if ids is None or item.get('id') in ids]
+        records = [{**item, 'unparsed': []} if 'unparsed' in item else item
+                   for item in records if ids is None or item.get('id') in ids]
     except (ValueError, AttributeError, TypeError):
         records = None  # unreadable: every byte counts
     if ids is None:
