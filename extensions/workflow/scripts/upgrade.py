@@ -105,7 +105,7 @@ def upgrade(root, version, apply=False, packages=None, runner=command, preserve_
             result['backups'] = prune_backups(root)
             clear_in_progress(root)
             return result
-        except BaseException as error:  # Ctrl-C and SystemExit restore too, then re-raise as they are (AHMED-09)
+        except BaseException as error:  # Ctrl-C and SystemExit restore too, then re-raise as they are
             write(backup / 'result.json', {'ok': False, 'error': str(error) or type(error).__name__, 'commands': log})
             with locked(root / '.specify/workflow/runtime/dispatch.lock'):
                 restore(root, before, managed_files(root))

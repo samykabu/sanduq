@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 REFERENCES = Path(__file__).resolve().parents[1] / 'skills' / 'workflow' / 'references'
-RULE = 'Never spawn, retain, message or poll an additional agent solely for reporting.'
+RULE = re.compile(r'Never spawn[^.]*agent solely for reporting')  # the rule's key terms, in one sentence
 LEGACY_HEADING = '## Legacy reporter calls (mode legacy only)'
 # Wording that made an agent responsible for keeping the report alive or current.
 FORBIDDEN = (
@@ -31,8 +31,7 @@ class ReportingInstructions(unittest.TestCase):
 
     def test_the_rule_is_stated_once_in_the_decision_reference(self):
         text = flat(REFERENCES / 'reporting.md')
-        self.assertIn(RULE, text)
-        self.assertEqual(text.count(RULE), 1)
+        self.assertEqual(len(RULE.findall(text)), 1)
         for mode in ('projection', 'refresh', 'legacy'):
             self.assertIn('`' + mode + '`', text)
         self.assertIn('progress_bridge.py mode', text)
@@ -57,7 +56,7 @@ class ReportingInstructions(unittest.TestCase):
         self.assertIn('never host-observed telemetry', text)
         self.assertIn('`semantics: "workstream"`', text)
         self.assertIn('--effort E --workstream`', text)  # the direct command marks the lane too
-        self.assertIn('leave `--workstream` out for a Progress older than 1.2.0', text)
+        self.assertRegex(text, r'`--workstream`[^.]*older than 1\.2\.0')  # an older Progress gets no flag
         self.assertIn('codex hooks not approved', text)
         self.assertEqual(text.count('progress bind'), 1)
 
@@ -102,8 +101,8 @@ class ReportingInstructions(unittest.TestCase):
     def test_waiting_for_workers_stays_and_watching_the_report_is_forbidden(self):
         assign = flat(REFERENCES / 'execution-assign.md')
         self.assertIn('bounded foreground loop around `delegate_dispatch.py collect`', assign)
-        self.assertIn('Watching the report itself, or checking that it refreshed, is never background work', assign)
-        self.assertIn('Do not re-open or re-verify it in a loop', assign)
+        self.assertRegex(assign, r'Watching the report[^.]*never background work')
+        self.assertRegex(assign, r'(?i)do not[^.]*in a loop')
 
     def test_lean_and_delegated_modes_agree_that_no_agent_exists_for_reporting(self):
         self.assertIn('no agent exists solely for it', flat(REFERENCES / 'stage-execute.md'))

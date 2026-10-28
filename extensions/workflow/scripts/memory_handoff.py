@@ -20,7 +20,7 @@ import wf_core  # module attributes, so a test's patch_runtime reaches these loo
 import wf_health
 import wf_identity
 
-# Claim runs the helper under dispatch.lock, so a hung Memory must not hold it forever (SAMY-02).
+# Claim runs the helper under dispatch.lock, so a hung Memory must not hold it forever.
 MEMORY_HELPER_TIMEOUT = 120
 
 
@@ -111,7 +111,7 @@ def handoff(root, transition, feature=None, checks=None, report=None, lock=True,
                               [session('Inspect pending writer/guard blockers; never remove a live lock.')], False)
             if not pending['enabled']:
                 return finish('pending', pending.get('reason') or 'MEMORY_AUTOMATIC_MODE_DISABLED')
-            # PM24: a Memory whose `pending` carries the policy facts saves the second helper process.
+            # A Memory whose `pending` carries the policy facts saves the second helper process.
             policy_data = (pending if isinstance(pending.get('policy'), dict) and pending.get('policy_hash')
                            else helper(root, 'policy'))
             policy = policy_data.get('policy')

@@ -86,7 +86,7 @@ def coding_tasks(text):
 
 
 def concrete_text(value):
-    # A present, non-blank string. The 12-character/3-word bar measured nothing (AHMED-28) and was dropped.
+    # A present, non-blank string; a length or word-count bar would measure nothing about quality.
     return isinstance(value, str) and bool(value.strip())
 
 

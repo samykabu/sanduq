@@ -187,7 +187,7 @@ def read_analysis(path):
 
 
 def slim_issue(issue):
-    """The issue fields Scope reads back from a snapshot or journal (SC13); GitHub's other metadata is dropped."""
+    """The issue fields Scope reads back from a snapshot or journal; GitHub's other metadata is dropped."""
     kept = {k: issue.get(k) for k in ('number', 'id', 'node_id', 'title', 'body', 'state', 'state_reason', 'html_url')}
     kept['labels'] = [{'name': x['name'] if isinstance(x, dict) else x} for x in issue.get('labels') or []]
     kept['user'] = {'login': (issue.get('user') or {}).get('login')}
@@ -201,7 +201,7 @@ def slim_comment(comment):
 
 
 def inspect_summary(result, output, skeleton_path):
-    """What `inspect --output` prints: the snapshot itself is in the file (SC13)."""
+    """What `inspect --output` prints: the snapshot itself is in the file."""
     return {'issue': result['issue']['number'], 'title': result['issue']['title'], 'fingerprint': result['fingerprint'],
             'ready': result['ready'], 'blocked': result['blocked'],
             'prerequisites': [{k: d[k] for k in ('number', 'title', 'status')} for d in result['prerequisites']],
@@ -269,7 +269,7 @@ class Scope:
         self._board = None
         self._board_cached = None  # None: not read yet in this process; True: read from the shared cache
         self.snapshot_reused = None
-        # Per-process read caches (SC3): repository labels, Project fields, immutable issue database IDs.
+        # Per-process read caches: repository labels, Project fields, immutable issue database IDs.
         self._labels = None
         self._fields = None
         self._ids = {}
@@ -277,7 +277,7 @@ class Scope:
 
     def listing(self, fresh=False):
         """Every issue and pull request of the repository. A split publish lists once and its rewire and plan export
-        reuse that listing (SC14); Scope's own writes keep it current through `remember`."""
+        reuse that listing; Scope's own writes keep it current through `remember`."""
         if self._listing is None or fresh:
             self._listing = self.gh.api(self.base + '?state=all&per_page=100', pages=True)
         return self._listing
@@ -357,7 +357,7 @@ class Scope:
         return self.inspect(issue or value, evidence)
 
     def default_snapshot(self, value, path):
-        """`path`, or the analyst's `.specify/scope/issue-<n>-snapshot.json` when it exists (SC4)."""
+        """`path`, or the analyst's `.specify/scope/issue-<n>-snapshot.json` when it exists."""
         if path or not re.fullmatch(r'#?[1-9]\d*', str(value or '').strip()):
             return path
         saved = self.root / '.specify/scope' / f'issue-{str(value).strip().lstrip("#")}-snapshot.json'
@@ -438,8 +438,8 @@ class Scope:
 
     def rewire_candidates(self, parent, issues, keep=()):
         """`[(issue, dependencies)]` for the issues to move off `parent`: its native `dependencies/blocking` list
-        (every issue when that list cannot be read, SC3), every issue whose declared dependencies name it, and `keep`.
-        Publish reads these before any write (SC10). Dependency text that cannot be parsed fails closed on an issue
+        (every issue when that list cannot be read), every issue whose declared dependencies name it, and `keep`.
+        Publish reads these before any write. Dependency text that cannot be parsed fails closed on an issue
         tied to `parent` (native link, `keep`, or text naming it); any other issue is skipped with one stderr line."""
         try:
             rows = self.gh.api(f'{self.base}/{parent["number"]}/dependencies/blocking?per_page=100', pages=True)
@@ -468,7 +468,7 @@ class Scope:
         return found
 
     def prerequisite_report(self, issue, found=None):
-        """Transitive prerequisites, not walked below a logically Done one (SC16); `found` receives each walked
+        """Transitive prerequisites, not walked below a logically Done one; `found` receives each walked
         issue's direct dependencies."""
         seen, stack, all_deps = set(), set(), {}
         found = {} if found is None else found
@@ -552,7 +552,7 @@ class Scope:
             return status == required_status or continued or fresh_continued
         ok = allowed() or (self.drop_cached_board() and allowed())
         for delay in BOARD_LAG_RETRY:
-            # N1: right after publish, GitHub's Project listing can lag the item-add for a few seconds.
+            # Right after publish, GitHub's Project listing can lag the item-add for a few seconds.
             if ok or self.board_mode == 'off' or initial['number'] in self.board():
                 break
             time.sleep(delay)
@@ -618,7 +618,7 @@ class Scope:
                         'SCOPE_RESOLVED_ANALYSIS_EVIDENCE_MISMATCH')
                 artifact_sha = hashlib.sha256(artifact.read_bytes()).hexdigest()
                 name = artifact.relative_to(self.root).as_posix()
-                # Workflow 1.23 records evidence line-ending independent (F6) with the git text attribute
+                # Workflow 1.23 records evidence line-ending independent with the git text attribute
                 # (a `-text` file stays byte exact); ask Workflow's own hash. Older ledgers hold the raw bytes' hash.
                 portable_sha = workflow_policy._decisions_module().portable_sha256(self.root, name)
                 require(fresh['decision_evidence'].get(name) in (artifact_sha, portable_sha),
@@ -1022,7 +1022,7 @@ class Scope:
 
     def cancel(self, operation, apply=False):
         """Mark one publish journal `rolled_back`, so `publish` refuses to resume it, and return what the operation
-        changed, for manual repair (SC21). No GitHub write; the caller holds the mutation lock with --apply."""
+        changed, for manual repair. No GitHub write; the caller holds the mutation lock with --apply."""
         value = str(operation or '').strip()
         runs = self.root / '.specify/scope/runs'
         # A linked runs folder (or parent) must not lead the journal read or write outside the project.
@@ -1265,7 +1265,7 @@ class Scope:
             raise
 
     def ancestors(self, number):
-        """The issue's native parent chain in this repository, nearest first (SC15)."""
+        """The issue's native parent chain in this repository, nearest first."""
         chain, seen = [], {number}
         while True:
             parent = self.native_parent(number)

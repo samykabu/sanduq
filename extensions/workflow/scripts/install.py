@@ -222,7 +222,7 @@ def snapshot(root, directory):
 BACKUP_KINDS = ('installs', 'upgrades', 'hosts')
 KEEP_BACKUP_ZIPS = 3
 # Written after the snapshot and removed after success or a completed rollback; a hard kill leaves it, and doctor
-# then reports INSTALL_INTERRUPTED with the restore command (AHMED-09).
+# then reports INSTALL_INTERRUPTED with the restore command.
 IN_PROGRESS = '.specify/workflow/runtime/install-in-progress.json'
 
 
@@ -1102,7 +1102,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                 receipt['backups'] = prune_backups(root)
                 clear_in_progress(root)
             return receipt
-        except BaseException as exc:  # Ctrl-C and SystemExit restore too, then re-raise as they are (AHMED-09)
+        except BaseException as exc:  # Ctrl-C and SystemExit restore too, then re-raise as they are
             failed = managed_files(root)
             write(backup / 'result.json', {'ok':False,'error':str(exc) or type(exc).__name__,'commands':log,
                                          'hook_metadata_refreshes':result['hook_metadata_refreshes']})
@@ -1137,7 +1137,7 @@ if __name__ == '__main__':
         result = install(args.root,args.apply,args.packages,upgrade_owner=args.upgrade_owner,preserve_ci=args.preserve_ci,
                          replace_unrecognized_aliases=args.replace_unrecognized_aliases,with_optional=args.with_optional,
                          with_aliases=args.with_aliases)
-        print(json.dumps(result,indent=2), flush=True)  # F12: the JSON first when a shell merges stderr into it
+        print(json.dumps(result,indent=2), flush=True)  # the JSON first when a shell merges stderr into it
         for key in ('codex_hook_approval', 'illustrate_hook_approval'):
             if result.get(key): print(result[key], file=sys.stderr)
         if (result.get('progress') or {}).get('hint'): print(result['progress']['hint'], file=sys.stderr)

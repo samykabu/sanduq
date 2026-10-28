@@ -39,7 +39,7 @@ INTEGRATION_FILES = ('.specify/integration.json', '.specify/init-options.json')
 ALIASES = {'speckit-scope': 'legacy-alias-hashes.json',
            'speckit-superpowers-bridge': 'legacy-bridge-alias-hashes.json'}
 INSTALL_LOCK = '.specify/workflow/install-lock.json'
-# Scope commands only its hooks call. Scope no longer lists them as skills (OMAR-09); an older Scope's
+# Scope commands only its hooks call. Scope no longer lists them as skills; an older Scope's
 # rendered copies are still hidden from the Claude slash menu here.
 HOOK_ONLY_SKILLS = tuple('speckit-scope-' + name for name in ('guard', 'bind', 'after-specify', 'plan-guard', 'reconcile'))
 # Where each host reads project hooks, and the text that marks Sanduq's guard entry in them.
@@ -329,7 +329,7 @@ def load_role(package_root, name):
 
 
 def role_models(policy, host, package_root):
-    """tier -> model for each role, pinned only when delegation is enabled (its routes then name the tiers, SAMY-03);
+    """tier -> model for each role, pinned only when delegation is enabled (its routes then name the tiers);
     otherwise a role inherits the session's model."""
     delegation = (policy or {}).get('delegation') or {}
     if not delegation.get('enabled'):
@@ -368,7 +368,7 @@ def install_roles(root, host, package_root, policy=None):
 
 
 def role_file_warnings(root, policy, package_root=None):
-    """ROLE_FILES_STALE (AHMED-19) when the default host's role files, or the models install-lock.json records they
+    """ROLE_FILES_STALE when the default host's role files, or the models install-lock.json records they
     were rendered with, differ from the models .specify/workflow.yml now pins."""
     host = active_host(root)
     if host not in ROLE_FILES:
@@ -629,14 +629,14 @@ def switch(root, target, preview=False, runner=None, package_root=None, replace_
                       'dependency_digest': {'before': digest_before, 'after': digest_after,
                                             'changed': digest_after != digest_before},
                       'checkpoints_to_migrate': migrations(root, digest_after, False, reason, digest_before)}
-            if result['checkpoints_to_migrate']:  # F11: name the step a user would otherwise skip
+            if result['checkpoints_to_migrate']:  # name the step a user would otherwise skip
                 result['next'] = ('Migrate each feature in checkpoints_to_migrate before continuing it, for example: '
                                   + '; '.join(result['checkpoints_to_migrate'][0]['commands']))
             write(backup / 'result.json', {'ok': True, 'commands': log})
             result['backups'] = prune_backups(root)
             clear_in_progress(root)
             return result
-        except BaseException as exc:  # Ctrl-C and SystemExit restore too, then re-raise as they are (AHMED-09)
+        except BaseException as exc:  # Ctrl-C and SystemExit restore too, then re-raise as they are
             from install import managed_files
             write(backup / 'result.json', {'ok': False, 'error': str(exc) or type(exc).__name__, 'commands': log})
             restore(root, before, managed_files(root))

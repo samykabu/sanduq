@@ -1,5 +1,6 @@
 """Regression checks for check_docs: command prefixes, banned terms, internal links, hooks drift."""
 import re
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -79,4 +80,23 @@ on_top = history.replace('\n## ', '\n## Unreleased\n\n- Next.\n\n## ', 1)
 with patch.object(Path, 'read_text', lambda p, *a, **kw: on_top if p == pr_changelog else read_text(p, *a, **kw)):
     drift = check_docs.version_drift(manifests)
 assert not [e for e in drift if e.startswith(str(pr_changelog.relative_to(check_docs.ROOT)))], drift
+# Review history: a comment or docstring citing a round, finding or reviewer id fails, as does a round- or
+# review-named test module; a stated rule and a string the script prints pass.
+with tempfile.TemporaryDirectory() as folder:
+    tree = Path(folder)
+    (tree / 'extensions/x/scripts').mkdir(parents=True)
+    (tree / 'extensions/x/tests').mkdir(parents=True)
+    (tree / 'extensions/x/scripts/a.py').write_text(
+        '"""Doc line.\n\nKeeps the lock (round 3, finding 2)."""\n# SAMY-03: keep the lock\nx = 1  # a claim stays live (B12)\n'
+        '# F6: hash the text\nprint("## Return and wait rules (F2)")\n# A claim keeps its lock while its pid lives.\n',
+        encoding='utf-8')
+    (tree / 'extensions/x/scripts/b.sh').write_text('#!/bin/sh\n# review round 1: quote the path\necho ok\n', encoding='utf-8')
+    for name in ('test_round4', 'test_review_fixes', 'test_scope_round5', 'test_scope_cancel'):
+        (tree / f'extensions/x/tests/{name}.py').write_text('', encoding='utf-8')
+    found = check_docs.history_references(tree)
+    lines = sorted(e.split(': ', 1)[0] for e in found)
+    assert lines == ['extensions/x/scripts/a.py:3', 'extensions/x/scripts/a.py:4', 'extensions/x/scripts/a.py:5',
+                     'extensions/x/scripts/a.py:6', 'extensions/x/scripts/b.sh:2', 'extensions/x/tests/test_review_fixes.py',
+                     'extensions/x/tests/test_round4.py', 'extensions/x/tests/test_scope_round5.py'], found
+assert check_docs.history_references() == [], check_docs.history_references()
 print('check_docs regression checks passed.')

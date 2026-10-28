@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Apply `workflow/pending-artifact-updates.md` to contracts/data-model/research (B13, F15).
+"""Apply `workflow/pending-artifact-updates.md` to contracts/data-model/research.
 
-Formalises the convention the retrospective found working ad hoc: a worker
+Formalises the convention: a worker
 appends a proposed wording change instead of editing a shared contract file
 mid-execute (avoiding a Plan/Analyze receipt cascade for every append), and a
 dispatcher step applies every still-`pending` entry once, at the end of
@@ -23,12 +23,12 @@ Entry format (the file this script reads and rewrites)::
 (with `Reason:`) after `--apply`; an already-decided entry is left untouched.
 
 Every target is confined to `<feature>/contracts/**`, `<feature>/data-model.md`
-or `<feature>/research.md` (review round 1, finding 4): an absolute path,
+or `<feature>/research.md`: an absolute path,
 `..`, or a symlink anywhere on the way that would resolve outside those
 locations is rejected per-entry, never silently normalised or followed. The
 pending file itself is contained the same way. `--apply` refuses outright
 inside a delegated worker or orchestrator process
-(`SANDUQ_DELEGATED_RUN`/`SANDUQ_DELEGATED_ROLE`, finding 3, matching
+(`SANDUQ_DELEGATED_RUN`/`SANDUQ_DELEGATED_ROLE`, matching
 `Run.amend`'s own guard) and while a claim is active for the feature.
 """
 from __future__ import annotations
@@ -204,7 +204,7 @@ def apply(root, feature, pending_path=None, apply_changes=False, actor=None):
             result['stale'] = stale_after(root, feature, run.policy, touched)
         except WorkflowError as exc:
             # Never silently claim "nothing stale" when the check itself
-            # could not run (finding 5): null is distinct from an empty
+            # could not run: null is distinct from an empty
             # list, and the error is reported so the caller can investigate
             # rather than assume the touched paths are receipt-free.
             result['stale'] = None

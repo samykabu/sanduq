@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A CI verification run read as evidence (workflow 1.6.0, B4).
+"""A CI verification run read as evidence (since workflow 1.6.0).
 
 The consumer contract: every verification run
 uploads the artifact `<prefix>-<run_id>-<run_attempt>` holding one

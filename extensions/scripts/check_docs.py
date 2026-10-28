@@ -2,12 +2,16 @@
 """Check active documentation: links, command and skill coverage, version tables, banned terms,
 release facts (Workflow's dependency pins, extension counts, the add-all install block, root
 CHANGELOG headings), the generated lifecycle hooks reference and the generated error registry page. `--write`
-regenerates docs/reference/hooks.md and docs/reference/errors.md."""
+regenerates docs/reference/hooks.md and docs/reference/errors.md. It also refuses comments and docstrings in
+extensions/*/scripts that cite a review round or finding id instead of stating the rule, and round- or
+review-named test modules."""
 import ast
 import importlib.util
+import io
 import json
 import re
 import sys
+import tokenize
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -44,6 +48,42 @@ NUMBERS = ('zero one two three four five six seven eight nine ten eleven twelve 
 # "nine extensions", "all nine Spec Kit extensions", the shields.io "Spec_Kit-9_extensions" badge.
 COUNT = re.compile(r'\b(' + '|'.join(NUMBERS) + r'|\d+)[\s_-]+(?:(?:spec[\s_-]kit|sanduq)[\s_-]+)?extensions\b', re.I)
 NAMED_VERSION = re.compile(r'([A-Za-z][A-Za-z-]*(?: [A-Z][A-Za-z-]*)*) (\d+\.\d+\.\d+)\b')
+# A review round, a finding/blocker number, a reviewer-style id (SAMY-03) or a short finding id such as (B12)
+# or "# F6:" explains nothing to a reader without the review notes; the CHANGELOG keeps that history.
+SHORT_ID = r'(?:[BDFNRSTWX]|PM|SC)\d{1,2}[a-z]?'
+HISTORY = re.compile(r'[Rr]eview round|\b[Rr]ound \d+\b[^.]{0,30}?\b(?:[Ff]indings?|[Bb]lockers?|fix)\b'
+                     r'|\b(?:[Ff]indings?|[Bb]lockers?) [A-Z]{0,2}\d+[a-z]?\b|\b[A-Z]{4,6}-\d{2}\b'
+                     r'|\((?:[^()\n]*[,;] )?' + SHORT_ID + r'\)|^\W*' + SHORT_ID + r'\b(?::|/)', re.M)
+HISTORY_TEST = re.compile(r'^test_(?:round|review_)|_round\d')
+
+
+def notes(path):
+    """(line, text) for each comment and docstring of a script; string literals that reach output are not notes."""
+    source = path.read_text(encoding='utf-8')
+    if path.suffix != '.py':
+        return [(n, line) for n, line in enumerate(source.splitlines(), 1) if line.lstrip().startswith('#')]
+    found = [(t.start[0], t.string) for t in tokenize.generate_tokens(io.StringIO(source).readline)
+             if t.type == tokenize.COMMENT]
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and \
+                ast.get_docstring(node, clean=False):
+            found.append((node.body[0].lineno, ast.get_docstring(node, clean=False)))
+    return found
+
+
+def history_references(root=None):
+    """Review-history citations in extensions/*/scripts and round- or review-named test modules."""
+    root = root or ROOT
+    errors = []
+    for path in sorted(p for p in root.glob('extensions/*/scripts/**/*') if p.suffix in ('.py', '.sh', '.ps1')):
+        for line, text in notes(path):
+            for match in HISTORY.finditer(text):
+                errors.append(f'{path.relative_to(root).as_posix()}:{line + text.count(chr(10), 0, match.start())}: '
+                              f'cites review history "{" ".join(match.group().split())}"; state the rule it protects instead')
+    for path in sorted(root.glob('extensions/*/tests/**/test_*.py')):
+        if HISTORY_TEST.search(path.stem):
+            errors.append(f'{path.relative_to(root).as_posix()}: a test module is named by behaviour, not by review round')
+    return errors
 
 
 def anchors(text):
@@ -362,6 +402,7 @@ def check():
     portable_ok = sum(p.relative_to(ROOT).as_posix() in all_text for p in portable)
     errors += release_facts(manifests, texts)
     errors += version_drift(manifests)
+    errors += history_references()
     hooks = HOOKS_PAGE.read_text(encoding='utf-8')
     if hooks_text(hooks) != hooks:
         errors.append(f'{HOOKS_PAGE.relative_to(ROOT)} is stale: run check_docs.py --write')

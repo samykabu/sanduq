@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the project's affected lanes locally, producing the same results.json CI would (B13).
+"""Run the project's affected lanes locally, producing the same results.json CI would.
 
 Reuses the classify contract Verify/Review/Ready already trust
 (`ci.gate.affected_command`, `workflow.affected_lanes`) to turn a diff into a
@@ -17,8 +17,8 @@ same results.json shape the project's own CI tier writes, so downstream
 tooling (summarizers, the gate) reads one format either way.
 
 This is a local, uncertified run: it stamps `source: "local"` and
-`ci_grade: false` on both the returned summary and the results.json itself
-(review round 1, finding 7). It is evidence a developer can act on, never a
+`ci_grade: false` on both the returned summary and the results.json itself.
+It is evidence a developer can act on, never a
 substitute for the project's actual CI run -- do not record it as a Verify
 receipt's `ci_evidence`; that field is written only by
 `workflow.py revalidate --stage verify --check-run`, which re-reads a real
@@ -66,7 +66,7 @@ def verify_command(policy):
 def diffed_paths(root, base_ref):
     """Repository-relative paths that differ between `base_ref` and the actual working tree.
 
-    Diffing only `base_ref..HEAD` (finding 6) would give a false green for an
+    Diffing only `base_ref..HEAD` would give a false green for an
     uncommitted edit: `git diff <comparison>` (one ref) compares against the
     working tree instead, which is a superset of `<comparison>..HEAD` (it
     includes every committed change plus staged and unstaged ones), and
@@ -107,8 +107,8 @@ def run_lanes(root, command, lanes, results_path, timeout=3600):
     Mirrors `delegate_dispatch.run_capped` (which has no stdin): the child
     starts in its own session on POSIX (`start_new_session=True`), so
     `kill_process_tree`'s `killpg` on a timeout kills only the verifier's own
-    tree and never this process's group (round 2, blocker 1: without it the
-    group was the test runner's own and a timeout SIGKILLed the runner).
+    tree and never this process's group (otherwise a timeout could kill the
+    calling test runner).
     stdin is a temp file and stdout/stderr spool to temp files of which only
     `OUTPUT_CAP` bytes are ever read back, so a runaway command cannot exhaust
     memory while being buffered.
@@ -124,8 +124,8 @@ def run_lanes(root, command, lanes, results_path, timeout=3600):
         except OSError as exc:
             raise VerifyAffectedError('VERIFY_COMMAND_FAILED: ' + str(exc)) from exc
         # Poll instead of one blocking wait so the cap is enforced *while the
-        # command runs*: a spool file that passes HARD_OUTPUT_LIMIT (round 3,
-        # finding 5) gets the whole process tree killed before it fills the disk.
+        # command runs*: a spool file that passes HARD_OUTPUT_LIMIT
+        # gets the whole process tree killed before it fills the disk.
         deadline = time.monotonic() + timeout
         failure = None
         while True:
@@ -179,7 +179,7 @@ def summarize(results):
 
 
 def validate_results(results, requested):
-    """(missing lanes, failed lanes, schema_ok) for a verifier's results (round 3, finding 4).
+    """(missing lanes, failed lanes, schema_ok) for a verifier's results.
 
     Exit 0 plus *any* JSON is not a pass: the results must be an object with a
     `lanes` object, carry every requested lane, and each lane's `outcome` must
@@ -208,13 +208,13 @@ def run(root, feature, base_ref, extra_lanes=None, results_path=None, timeout=36
     results_path = results_path or (feature + '/workflow/verify-affected-results.json')
     if not lanes:
         return {'ok': True, 'status': 'no_affected_lanes', 'diffed_paths': paths, 'lanes': [], 'results_path': None}
-    inside(root, results_path)  # finding 8: --results must stay inside the repo
+    inside(root, results_path)  # --results must stay inside the repo
     command = verify_command(policy)
     require(command, 'VERIFY_COMMAND_UNSET: set ci.gate.verify_command to a project-local runner')
     (root / results_path).parent.mkdir(parents=True, exist_ok=True)
     run_lanes(root, command, lanes, results_path, timeout)
     results = read_results(root, results_path)
-    # Finding 7: this run is never CI evidence -- stamp both the file and the
+    # This run is never CI evidence -- stamp both the file and the
     # returned summary so nothing downstream can mistake one for the other.
     # A results file that is not a JSON object is wrapped, never left unstamped.
     results = ({**results, 'source': 'local', 'ci_grade': False} if isinstance(results, dict)

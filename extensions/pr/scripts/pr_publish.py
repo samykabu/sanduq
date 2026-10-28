@@ -233,7 +233,7 @@ def publish(root, args):
     content = pin_images(root, content, Path(args.explained).as_posix(), push)
     if issue is not None and not any(c['repo'] == repo.lower() and c['issue'] == int(issue)
                                      for c in pr_lint(content, repo, issue)['closes']):
-        content += '\n\nCloses %s#%d' % (repo, int(issue))  # merging closes the bound issue (1.24.1, N1)
+        content += '\n\nCloses %s#%d' % (repo, int(issue))  # merging closes the bound issue
     section = START + '\n## ' + args.heading + '\n\n' + content + '\n' + END
     body = splice(existing['body'] if existing else '', section).replace('\r\n', '\n')
     body_path = root / feature / 'evidence' / 'pr-body.md'
