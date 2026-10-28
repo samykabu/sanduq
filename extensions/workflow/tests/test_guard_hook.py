@@ -124,6 +124,18 @@ class GuardTests(unittest.TestCase):
                         'python delegate_dispatch.py collect', 'pytest -q', ''):
             self.assertEqual(self.run_guard(claude(command))[0], 0, command)
 
+    def test_posting_a_gate_waiver_is_denied_but_reading_one_is_not(self):
+        marker = '<!-- sanduq-gate-waiver {"version":1} -->'
+        with tempfile.TemporaryDirectory() as folder:
+            Path(folder, 'w.md').write_text(marker + '\nReason: x', encoding='utf-8')
+            env = {'CLAUDE_PROJECT_DIR': folder}
+            for command in ("gh pr comment 7 --body '" + marker + "'", 'gh pr comment 7 --body-file w.md',
+                            "curl -d '" + marker + "' https://api.github.com/x"):
+                code, reason = self.run_guard(claude(command), env)
+                self.assertEqual(code, 2, command)
+                self.assertIn('waiver', reason)
+            self.assertEqual(self.run_guard(claude('grep -rn sanduq-gate-waiver docs'), env)[0], 0)
+
     def test_codex_argument_list_command(self):
         self.assertEqual(self.run_guard({'tool_name': 'Bash', 'tool_input': {'command': ['bash', '-lc', 'git add -A']}})[0], 2)
 

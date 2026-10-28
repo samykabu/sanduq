@@ -39,7 +39,7 @@ describe their shape.
 | `artifacts` | Optional. `budgets` (`spec_kb`, `plan_kb`, `research_kb`, `tasks_detail_lines`) checked by `workflow:lint`, and `enforce` (`lite-standard`, `all` or `warn`). |
 | `project_sync.points` | Optional list of stages at which Project Sync runs: `specify`, `plan`, `analyze`, `taskstoissues`, `execute`, `pr`. Absent means all six. |
 | `scope.board_cache_seconds` | Optional Scope board cache TTL in seconds (default 300, 0 disables). |
-| `decisions` | Optional. Stage-neutral GitHub issue decisions: `transport` (`github-issue`), `authorized_users`, `project_field`, and optional `lifecycle_status` (boolean, default true). Omitted in older policies. |
+| `decisions` | Optional. Stage-neutral GitHub issue decisions: `transport` (`github-issue`), `authorized_users`, `project_field`, optional `lifecycle_status` (boolean, default true), and optional `self_waivers` (logins whose CI gate waiver is accepted on a PR they authored; a one-person setup, see delivery-policy.md). Omitted in older policies. |
 | `context` | `mode` (`strict`, `measured-only` or `measured-with-estimated-fallback`), `max_fraction`, `checkpoint_fraction`, `reserve_fraction`. See [Context](stages.md#context). |
 | `finalize` | Fixed: `{"create_pr": true, "merge": false}`. The dispatcher opens a PR and never merges. |
 | `delegation` | Optional. See below and [delegation](delegation.md). Absent legacy policies default to disabled. |

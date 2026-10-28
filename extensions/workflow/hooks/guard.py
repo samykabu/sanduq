@@ -18,6 +18,8 @@
   (no lint receipt can cover it); `gh pr create` is refused when its head
   (`--head`, else the current branch) is the repository default branch (`origin/HEAD`), in every
   project. An unresolvable branch allows.
+- A `gh`/`curl` command that carries a `sanduq-gate-waiver` marker, inline or in a `gh --body-file`/`-F`
+  file, is refused in every session: a waiver is the owner's word, never the agent's (delivery-policy.md).
 
 Reads the hook payload (JSON) on stdin. Both hosts send ``tool_name`` and
 ``tool_input.command``; Codex may send the command as an argument list. Exit 2
@@ -38,6 +40,10 @@ DISPATCHER_ONLY = {'trust-reset', 'accept', 'reassign', 'adopt'}
 TOP_LEVEL_ONLY = {'attest-native'}
 # Read-only stash subcommands hide nothing.
 STASH_READ_ONLY = {'list', 'show'}
+WAIVER_MARKER = 'sanduq-gate-waiver'
+POSTER = re.compile(r'(^|[\s;&|(`])(gh|curl|wget)(\.exe)?\s')
+WAIVER_REASON = ('a CI gate waiver is the owner decision; an agent may not post one. Ask the owner to post '
+                 'it (docs/workflow/delivery-policy.md, One-off rule waiver)')
 BY_NAME = 'stage your owned paths by name (git add -- <path>...)'
 SEPARATORS = re.compile(r'&&|\|\||[;|&\n]')
 
@@ -131,11 +137,21 @@ def git_args(tokens):
 
 
 def findings(command, root='.'):
-    """(kind, reason) for each guarded command in ``command``; kind is 'git', 'ledger', 'fallback' or 'pr'."""
+    """(kind, reason) for each guarded command in ``command``; kind is 'git', 'ledger', 'fallback', 'pr' or 'waiver'."""
     found = []
+    if WAIVER_MARKER in command and POSTER.search(command):  # reading or grepping for the marker stays allowed
+        found.append(('waiver', WAIVER_REASON))
     for segment in SEPARATORS.split(command):
         tokens = words(segment.strip())
         found += pr_findings(tokens, root)
+        body = option(tokens[1:], '--body-file', '-F') if tokens[:1] and os.path.basename(tokens[0]).lower() in ('gh', 'gh.exe') else None
+        if body:
+            try:
+                with open(os.path.join(root, body), encoding='utf-8', errors='replace') as stream:
+                    if WAIVER_MARKER in stream.read():
+                        found.append(('waiver', WAIVER_REASON))
+            except OSError:
+                pass
         args = git_args(tokens)
         if args:
             if args[0] == 'add' and (short_flag(args[1:], 'Au', '--all', '--update') or any(a in ('.', './') for a in args[1:])):
@@ -184,7 +200,7 @@ def main(stdin=sys.stdin, environ=os.environ):
         if kind == 'ledger' and worker_context(payload, environ):
             sys.stderr.write('Sanduq guard: ' + text + '.\n')
             return 2
-        if kind == 'pr':
+        if kind in ('pr', 'waiver'):
             sys.stderr.write('Sanduq guard: ' + text + '.\n')
             return 2
     return 0

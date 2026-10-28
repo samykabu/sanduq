@@ -268,3 +268,36 @@ Identity and issue binding checks cannot be waived. A new commit changes the
 head SHA and requires fresh approval. Ordinary non-managed PRs need no waiver.
 When no waiver is accepted, `WAIVER_NOT_VERIFIED` lists each rejected waiver
 comment and why, for example `waiver is for head <old>, the PR head is now <new>`.
+A comment by the PR author is rejected with `written by the PR author`.
+
+#### Waivers in a one-person setup
+
+When you work alone, the agent opens every PR with your GitHub token, so you
+are always the PR author and the author rule refuses every waiver you post. To
+waive your own PRs, list your login on the target branch:
+
+```yaml
+decisions:
+  self_waivers: [your-login]
+```
+
+The gate then accepts a waiver comment from a listed login on a PR that login
+authored. All other checks still apply: exact PR, feature, rule, current head
+and expiry.
+
+Threat model. GitHub cannot tell you from an agent that uses your token, so
+this opt-in trusts every waiver comment written under your login. Sanduq keeps
+the agent from using it in three ways:
+
+- The gate reads `self_waivers` from the base branch policy (`--trusted-root`),
+  so a PR cannot add its author to the list. You add it in a change you merge
+  yourself.
+- The guard hook refuses any `gh`, `curl` or `wget` command that carries a
+  `sanduq-gate-waiver` marker, inline or in a `gh --body-file`, in every
+  session. Post waivers yourself in the GitHub web page.
+- A waiver binds the current head SHA, so any later commit needs a new one.
+
+The guard is advisory: it sees only the host's shell tools, so a script the
+agent writes and runs another way is not covered. If that risk matters, leave
+`self_waivers` empty and give waivers from a second account (a reviewer or a
+bot identity that the agent's token cannot use).

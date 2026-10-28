@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- A waiver comment by the PR author is rejected with the explicit reason `written by the PR author` (F2). A one-person setup, where the agent opens PRs with the owner's token, can list the owner under the new optional `decisions.self_waivers`; the gate reads it from the base branch policy, so a PR cannot add its author. The guard hook now refuses any `gh`, `curl` or `wget` command carrying a `sanduq-gate-waiver` marker (inline or in a `gh --body-file`), so the agent cannot post a waiver; delivery-policy.md states the threat model.
+
 ## [1.22.1] - 2026-10-28
 
 - The rendered evidence gate (`.github/workflows/workflow-gates.yml`) loads again. Since 1.8.4 its checkout used `fetch-depth: ${{ github.event.pull_request.commits + 1 }}`; GitHub expressions have no arithmetic, so the workflow file failed to load and the gate never ran in a consumer's CI. The fetch step now deepens history by the PR's commit count in shell. `upgrade.py` replaces an unedited gate file automatically; a project that kept its own copy (`--preserve-ci` or local edits) must remove the `fetch-depth` line and add `--deepen="$COMMITS"` as in the template. A test refuses any arithmetic in a template expression.
