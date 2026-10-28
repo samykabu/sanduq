@@ -8,7 +8,8 @@
 Fetches the existing PR body (`gh pr view`), replaces the text between `<!-- speckit-pr:start -->`
 and `<!-- speckit-pr:end -->` or appends the marked section (a body whose markers are unpaired or
 repeated is refused, never appended to), rewrites each relative image path to the commit-pinned
-`https://github.com/<repo>/blob/<HEAD sha>/<path>?raw=true` after checking the file is committed at
+`https://github.com/<repo>/blob/<HEAD sha>/<path>?raw=true` and each relative link `[text](path)` to
+`https://github.com/<repo>/blob/<HEAD sha>/<path>[#anchor]` after checking the file is committed at
 HEAD and readable through the contents API at that commit (pushing a new PR's branch first when it has
 no upstream or its upstream is behind), adds `Closes <repo>#<issue>` for the bound issue when the
 document does not close it already, writes the exact UTF-8/LF body to
@@ -45,6 +46,7 @@ except ModuleNotFoundError:
 START, END = '<!-- speckit-pr:start -->', '<!-- speckit-pr:end -->'
 DEFAULT_HEADING = 'What have been developed and how to review it'
 IMAGE = re.compile(r'(!\[[^\]]*\]\(\s*<?)([^)\s>]+)|(<img\b[^>]*?\bsrc=["\'])([^"\']+)', re.I)
+LINK = re.compile(r'(?<!!)(\[(?:[^\[\]\n]|\[[^\[\]\n]*\])*\]\(\s*<?)([^)\s>]+)')  # not images; one nested [..]
 REMOTE = re.compile(r'[a-z][a-z0-9+.-]*:|//|#', re.I)
 NO_PR = 'no pull requests found'
 
@@ -95,10 +97,11 @@ def splice(existing, section):
 
 
 def pin_images(root, content, explained, push):
-    """Relative image paths (outside code) become commit-pinned GitHub URLs, each verified first."""
+    """Relative image paths and links (outside code) become commit-pinned GitHub URLs, each verified first."""
     parts, fences = FENCE.split(content), FENCE.findall(content)
-    targets = sorted({m.group(2) or m.group(4) for part in parts for m in IMAGE.finditer(part)} - {''})
-    targets = [t for t in targets if not REMOTE.match(t)]
+    images = {m.group(2) or m.group(4) for part in parts for m in IMAGE.finditer(part)}
+    links = {m.group(2) for part in parts for m in LINK.finditer(part)}
+    targets = sorted(t for t in images | links if t and not REMOTE.match(t))
     if not targets:
         return content
     push()
@@ -106,21 +109,25 @@ def pin_images(root, content, explained, push):
     head = run(['git', 'rev-parse', 'HEAD'], root)
     if head.returncode:
         raise Failure(3, 'git rev-parse HEAD failed: ' + head.stderr.strip())
-    sha, folder, urls = head.stdout.strip(), posixpath.dirname(explained), {}
+    sha, folder, urls, link_urls = head.stdout.strip(), posixpath.dirname(explained), {}, {}
     for target in targets:
-        clean = unquote(re.split(r'[?#]', target)[0])
+        kind = 'image' if target in images else 'link'
+        clean, _, anchor = target.partition('#')
+        clean = unquote(clean.split('?')[0])
         path = posixpath.normpath(clean.lstrip('/') if clean.startswith('/') else posixpath.join(folder, clean))
         if path == '..' or path.startswith('../'):
-            raise Failure(2, 'image ' + target + ' points outside the repository')
+            raise Failure(2, kind + ' ' + target + ' points outside the repository')
         if run(['git', 'cat-file', '-e', sha + ':' + path], root).returncode:
-            raise Failure(2, 'image ' + target + ' (' + path + ') is not committed at HEAD; commit it and rerun')
+            raise Failure(2, kind + ' ' + target + ' (' + path + ') is not committed at HEAD; commit it and rerun')
         check = run(['gh', 'api', 'repos/%s/contents/%s?ref=%s' % (repo, quote(path), sha), '--silent'], root)
         if check.returncode:
-            raise Failure(3, 'image ' + path + ' is not readable on ' + repo + ' at ' + sha[:12] +
+            raise Failure(3, kind + ' ' + path + ' is not readable on ' + repo + ' at ' + sha[:12] +
                              ' (push the branch, then rerun): ' + (check.stderr or check.stdout).strip())
-        urls[target] = 'https://github.com/%s/blob/%s/%s?raw=true' % (repo, sha, quote(path))
+        blob = 'https://github.com/%s/blob/%s/%s' % (repo, sha, quote(path))
+        urls[target], link_urls[target] = blob + '?raw=true', blob + ('#' + anchor if anchor else '')
     pin = lambda m: (m.group(1) or m.group(3)) + urls.get(m.group(2) or m.group(4), m.group(2) or m.group(4))
-    pinned = [IMAGE.sub(pin, part) for part in parts]
+    pin_link = lambda m: m.group(1) + link_urls.get(m.group(2), m.group(2))
+    pinned = [IMAGE.sub(pin, LINK.sub(pin_link, part)) for part in parts]
     return ''.join(text + (fences[i] if i < len(fences) else '') for i, text in enumerate(pinned))
 
 

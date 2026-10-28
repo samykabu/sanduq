@@ -261,6 +261,29 @@ class PublishTests(unittest.TestCase):
         self.assertFalse(result['ok'])
         self.assertEqual(result['violations'], [{'code': 'BOUND_ISSUE_NOT_CLOSED', 'repo': 'acme/app', 'issue': 10}])
 
+    def test_relative_links_are_pinned_like_images(self):
+        """1.24.1 N4: relative links point at the images' commit; absolute URLs, anchors and code stay."""
+        self.explained.write_text('# Feature X\n\nSee [Spec](../../specs/001-x/spec.md#goals), [log](CHANGELOG.md), '
+                                  '[![Flow](images/flow.png)](images/flow.png), [site](https://example.com/a.md), '
+                                  '[top](#feature-x) and `[code](x.md)`.\nCloses #10\n', encoding='utf-8')
+        runner = FakeRunner(pr={'number': 12, 'url': 'u', 'body': ''})
+        code, receipt = self.run_script(runner)
+        self.assertEqual(code, 0, receipt)
+        text = self.body_and_lint(receipt)[0].decode('utf-8')
+        blob = 'https://github.com/acme/app/blob/' + SHA + '/'
+        self.assertIn('[Spec](' + blob + 'specs/001-x/spec.md#goals)', text)
+        self.assertIn('[log](' + blob + 'docs/001-x/CHANGELOG.md)', text)
+        self.assertIn('[![Flow](' + blob + 'docs/001-x/images/flow.png?raw=true)](' + blob + 'docs/001-x/images/flow.png)', text)
+        self.assertIn('[site](https://example.com/a.md)', text)
+        self.assertIn('[top](#feature-x)', text)
+        self.assertIn('`[code](x.md)`', text)
+        checked = sorted(c[3].split(':', 1)[1] for c in runner.calls if c[:3] == ['git', 'cat-file', '-e'])
+        self.assertEqual(checked, ['docs/001-x/CHANGELOG.md', 'docs/001-x/images/flow.png', 'specs/001-x/spec.md'])
+        self.explained.write_text('[gone](missing.md)\n', encoding='utf-8')
+        code, result = self.run_script(FakeRunner(pr={'number': 12, 'url': 'u', 'body': ''}, uncommitted={'docs/001-x/missing.md'}))
+        self.assertEqual(code, 2, result)
+        self.assertIn('link missing.md', result['error'])
+
     def test_missing_document_exits_2(self):
         self.explained.unlink()
         self.assertEqual(self.run_script(FakeRunner())[0], 2)

@@ -161,7 +161,8 @@ python .specify/extensions/pr/scripts/pr_publish.py --feature <feature-dir> --ex
 
 The script detects the branch's PR, replaces the text between `<!-- speckit-pr:start -->` and
 `<!-- speckit-pr:end -->` (or appends the marked section; unpaired or repeated markers are refused),
-pins each relative image path to a verified commit URL, adds `Closes <owner/repo>#<issue>` for the
+pins each relative image path and relative Markdown link to a verified commit URL (absolute
+URLs and `#anchors` stay; keep links relative, never rewrite them by hand), adds `Closes <owner/repo>#<issue>` for the
 bound issue when the explainer does not close it already (so merging closes the issue), writes the exact UTF-8/LF body to
 `<feature-dir>/evidence/pr-body.md`, lints its closing references against the bound issue and its
 prerequisites from `scope-source.json` with the closing-reference rule Workflow's `pr-lint` also

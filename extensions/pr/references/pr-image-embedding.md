@@ -14,7 +14,8 @@ A file link, HTML-source link, or link to the explanation document does not sati
 - Keep relative image paths in `<Feature>-Explained.md` and commit the images first. `pr_publish.py`
   rewrites each relative path (Markdown or `<img src>`, outside code) to
   `https://github.com/<owner>/<repo>/blob/<HEAD sha>/<encoded-path>?raw=true` after checking it is
-  committed at HEAD and readable through the contents API at that commit, before the lint, so the
+  committed at HEAD and readable through the contents API at that commit (relative Markdown links
+  get the same commit's `blob/<HEAD sha>/<path>` URL, anchor kept), before the lint, so the
   lint hash covers the final body. It pushes a new branch first; otherwise push before running it.
   An image it cannot verify stops it (exit 2 not committed or outside the repository, exit 3 not on
   the remote): fix and rerun, never hand-edit the published body. Supported GitHub attachment URLs
