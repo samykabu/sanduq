@@ -108,6 +108,26 @@ def delegated_role():
     return os.environ.get('SANDUQ_DELEGATED_ROLE')
 
 
+def policy_digest(config):
+    """Digest of the normalised ``delegation`` policy section ``selected_route`` reads; a claim records it."""
+    return wf_core.digest(config)
+
+
+def reclaim_steps(edit, feature='<feature>'):
+    """How a route changes: between claims. Pause keeps the claim active, so claiming again needs a recover first."""
+    return ('with the owner\'s agreement, release this claim with ' + wf_core.WORKFLOW_SCRIPT + ' recover --feature ' +
+            feature + ' --token <token> --reason "<why>" (with --force-live-owner "<this session releases its own '
+            'claim>" when this session owns the claim), ' + edit + ' in .specify/workflow.yml, then claim again and '
+            'start the work under the new claim token (routes are fixed for a claim, so a run of the old claim '
+            'cannot be resumed)')
+
+
+POLICY_CHANGED_IN_CLAIM = ('DELEGATION_POLICY_CHANGED_IN_CLAIM: the delegation policy changed after this claim, '
+                           'and routes are fixed for a claim; restore .specify/workflow.yml (git checkout -- '
+                           '.specify/workflow.yml) to finish this claim on its recorded routes, or, to adopt the new '
+                           'policy, ' + reclaim_steps('keep the edit'))
+
+
 def task_line_content_sha256(line):
     """sha256 of a task line's content, minus its checkbox state and with
     whitespace normalised: the binding an adopted
@@ -820,9 +840,12 @@ def annotate_tasks(root, feature, config, selected_host=None, lean=False):
                 raise
             # A refused review task still gets a marker, naming no harness: it runs in the selected host.
             route = {'harness': None, 'requested_model': None, 'rule': 'refused:DELEGATION_REVIEW_ROUTE_UNSAFE'}
+        # The route kind and reason show the coordinator, before it assigns T###, whether the host may do it.
         metadata = {'task_id': task_id, 'task_type': work_type,
                     'preferred_harness': route['harness'],
-                    'preferred_model': route['requested_model'], 'rule': route['rule']}
+                    'preferred_model': route['requested_model'], 'rule': route['rule'],
+                    'route_kind': route.get('route_kind', 'native'),
+                    'route_reason': route.get('route_reason', route['rule'])}
         # A final task line without a newline gains one before its marker; the
         # marker then ends the file the same way the task line did.
         output.append(body + (ending or default_newline))

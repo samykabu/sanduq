@@ -325,6 +325,175 @@ class NativeRoutingTests(unittest.TestCase):
         with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_ACCEPT_REASON_NO_ATTEMPT_ONLY'):
             dispatch.accept(self.root, self.feature, 'codex-1', 'pytest -q', 'counts', reason='x')
 
+    # 2.0.2: routes are fixed for the claim; a mid-claim policy edit never changes who runs the work.
+    def pinned_execute_claim(self):
+        """An active Execute claim that recorded the current delegation digest, as `claim` now does."""
+        run = self.execute_claim()
+        state = run.load()
+        state['active'].update(claim_id=dispatch.lifecycle.claim_id_for('exec-token'),
+                               delegation_digest=delegation.policy_digest(w.load_policy(self.root)['delegation']))
+        w.write(run.path, state)
+        return run
+
+    def edit_policy(self, native_allowed):
+        self.policy['delegation']['native_allowed'] = native_allowed
+        if native_allowed is None:
+            self.policy['delegation'].pop('native_allowed')  # the file as it was before the edit
+        self.configure()
+
+    def test_claim_records_the_delegation_digest(self):
+        self.enable()
+        run, claim = self.claim()
+        self.assertEqual(run.load()['active']['delegation_digest'],
+                         delegation.policy_digest(w.load_policy(self.root)['delegation']))
+
+    def test_a_mid_claim_policy_edit_is_refused_until_the_file_is_restored(self):
+        self.tasks('- [ ] T001 Implement parser\n')
+        self.policy['delegation']['native_allowed'] = {'implementation': False}
+        self.enable()
+        self.pinned_execute_claim()
+        self.tasks('- [x] T001 Implement parser\n')
+        with self.assertRaisesRegex(delegation.DelegationError, 'NATIVE_ROUTE_DISALLOWED.*start --feature .* --id T001'):
+            self.record('T001', 'exec-token')
+        # The measured incident: the route is flipped to native by editing the policy mid-claim.
+        self.edit_policy({})
+        for name, call in (('record-native', lambda: self.record('T001', 'exec-token')),
+                           ('adopt', lambda: self.adopt()),
+                           ('start', lambda: dispatch.start(self.root, self.feature, 'T001'))):
+            with self.subTest(command=name), \
+                    self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_POLICY_CHANGED_IN_CLAIM.*'
+                                           'git checkout -- .specify/workflow.yml'):
+                call()
+        self.assertEqual(delegation.ledger_attempts(self.root, self.feature), [])
+        self.edit_policy({'implementation': False})
+        self.tasks('- [ ] T001 Implement parser\n')
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch.object(dispatch, 'launch', return_value={'run_id': 'codex-1', 'state': 'running'}):
+            dispatch.start(self.root, self.feature, 'T001')
+        attempt = delegation.latest_attempt(self.root, self.feature, 'T001')
+        self.assertEqual((attempt['delegation_digest'], attempt['execute_claim_id']),
+                         (w.read(self.root / self.feature / 'workflow/checkpoint.json')['active']['delegation_digest'],
+                          dispatch.lifecycle.claim_id_for('exec-token')))
+
+    def test_attest_native_is_refused_after_a_mid_claim_policy_edit(self):
+        self.enable()
+        run, claim = self.claim()
+        self.edit_policy({'implementation': False})
+        with self.assertRaisesRegex(delegation.DelegationError, 'DELEGATION_POLICY_CHANGED_IN_CLAIM'):
+            dispatch.attest_native(self.root, self.feature, 'stage:scope', claim['token'], 'gpt-6-sol')
+        self.edit_policy(None)
+        result = dispatch.attest_native(self.root, self.feature, 'stage:scope', claim['token'], 'gpt-6-sol')
+        self.assertEqual(result['status'], 'successful')
+        self.assertEqual(delegation.latest_attempt(self.root, self.feature, 'stage:scope')['delegation_digest'],
+                         run.load()['active']['delegation_digest'])
+
+    def test_a_legacy_claim_without_a_digest_is_not_checked(self):
+        self.tasks('- [x] T001 Implement parser\n')
+        self.policy['delegation']['native_allowed'] = {'implementation': False}
+        self.enable()
+        self.execute_claim()
+        self.edit_policy({})
+        self.assertEqual(self.record('T001', 'exec-token')['status'], 'successful')
+        self.assertNotIn('delegation_digest', delegation.latest_attempt(self.root, self.feature, 'T001'))
+
+    def test_ready_refuses_a_task_attempt_recorded_under_another_digest(self):
+        self.tasks('- [x] T001 Implement parser\n')
+        self.enable()
+        run = self.pinned_execute_claim()
+        self.record('T001', 'exec-token')
+        state = run.load()
+        claim_id = dispatch.lifecycle.claim_id_for('exec-token')
+        state['receipts']['execute'] = {'claim_id': claim_id, 'delegation_digest': state['active']['delegation_digest']}
+        self.assertIn('tasks', w.ready_checks(self.root, self.feature, self.policy, state, rules=TASK_GATE))
+        state['receipts']['execute']['delegation_digest'] = 'f' * 64
+        with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_POLICY_CHANGED_IN_CLAIM: T001'):
+            w.ready_checks(self.root, self.feature, self.policy, state, rules=TASK_GATE)
+        # A ledger written by hand without the claim link is compared with the Execute claim too.
+        with dispatch.edit_ledger(self.root, self.feature) as ledger:
+            ledger['attempts'][-1].pop('execute_claim_id')
+        with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_POLICY_CHANGED_IN_CLAIM: T001'):
+            w.ready_checks(self.root, self.feature, self.policy, state, rules=TASK_GATE)
+        # An attempt of an earlier Execute claim ran on that claim's routes; a legacy receipt has no digest.
+        with dispatch.edit_ledger(self.root, self.feature) as ledger:
+            ledger['attempts'][-1]['execute_claim_id'] = claim_id
+        state['receipts']['execute']['claim_id'] = 'c-later'
+        self.assertIn('tasks', w.ready_checks(self.root, self.feature, self.policy, state, rules=TASK_GATE))
+        state['receipts']['execute'] = {'claim_id': claim_id}
+        self.assertIn('tasks', w.ready_checks(self.root, self.feature, self.policy, state, rules=TASK_GATE))
+
+    def test_ready_accepts_a_task_adopted_under_a_later_claims_policy(self):
+        """The owner changed the policy between claims; a task adopted during the later claim ran on its routes."""
+        self.tasks('- [x] T001 Implement parser\n')
+        self.enable()
+        run = self.pinned_execute_claim()
+        state = run.load()
+        execute_digest = state['active']['delegation_digest']
+        self.edit_policy({'review': False})
+        later = delegation.policy_digest(w.load_policy(self.root)['delegation'])
+        self.assertNotEqual(later, execute_digest)
+        state['receipts']['execute'] = {'claim_id': dispatch.lifecycle.claim_id_for('exec-token'),
+                                        'delegation_digest': execute_digest}
+        state['active'] = {'stage': 'review', 'token': 'review-token', 'session_id': 'test-session',
+                           'claimed_at': dispatch.stamp(), 'delegation_digest': later,
+                           'claim_id': dispatch.lifecycle.claim_id_for('review-token')}
+        w.write(run.path, state)
+        self.adopt()
+        attempt = delegation.latest_attempt(self.root, self.feature, 'T001')
+        self.assertEqual((attempt['delegation_digest'], attempt['delegation_claim_id'], attempt.get('execute_claim_id')),
+                         (later, dispatch.lifecycle.claim_id_for('review-token'), None))
+        self.assertIn('tasks', w.ready_checks(self.root, self.feature, self.policy, state, rules=TASK_GATE))
+
+    def test_the_policy_changed_remedy_releases_the_claim_and_claiming_again_adopts_the_policy(self):
+        """Pause keeps the claim, so the remedy recovers it; following its steps succeeds."""
+        self.enable()
+        run, claim = self.claim()
+        self.edit_policy({'implementation': False})
+        with self.assertRaises(delegation.DelegationError) as refused:
+            dispatch.attest_native(self.root, self.feature, 'stage:scope', claim['token'], 'gpt-6-sol')
+        for text in (str(refused.exception), w.ERRORS['DELEGATION_POLICY_CHANGED_IN_CLAIM'][2]):
+            self.assertIn('workflow.py recover --feature', text)
+            self.assertNotIn(' pause ', text)
+        self.assertIn('--force-live-owner', str(refused.exception))  # recover refuses a fresh claim without it
+        run.release_ownership(claim['token'], 'owner changed the routes between claims',
+                              force_live_owner='this session releases its own claim')
+        with patch.object(delegation, 'doctor', return_value=self.fake_doctor()), \
+             patch_runtime('doctor', return_value={'ok': True, 'errors': []}):
+            run = w.Run(self.root, self.feature)  # a new claim command reads the edited policy
+            again = run.claim({'session_id': 'test-session'})
+        self.assertEqual(run.load()['active']['delegation_digest'],
+                         delegation.policy_digest(w.load_policy(self.root)['delegation']))
+        result = dispatch.attest_native(self.root, self.feature, 'stage:scope', again['token'], 'gpt-6-sol')
+        self.assertEqual(result['status'], 'successful')
+
+    def test_route_error_remedies_never_suggest_editing_the_policy(self):
+        for code in ('NATIVE_ROUTE_DISALLOWED', 'DELEGATION_ADOPT_ROUTE_EXTERNAL', 'DELEGATION_TASK_SUBSTITUTED'):
+            with self.subTest(code=code):
+                self.assertNotIn('workflow.yml', ' '.join(w.ERRORS[code]))
+        self.assertIn('between claims', w.ERRORS['NATIVE_ROUTE_DISALLOWED'][2])
+        # A remedy's start command takes --claim-token; start has no --token flag.
+        source = Path(dispatch.__file__).read_text(encoding='utf-8')
+        self.assertNotIn("' --token <token>'", source)
+        with self.assertRaises(SystemExit), patch('sys.stderr'):
+            dispatch.main(['start', '--feature', self.feature, '--id', 'stage:scope', '--token', 'x'])
+
+    def test_task_annotation_names_the_route_kind_and_reason(self):
+        path = self.tasks('- [ ] T001 Implement parser\n')
+        self.policy['delegation']['native_allowed'] = {'implementation': False}
+        self.enable()
+        delegation.annotate_tasks(self.root, self.feature, w.load_policy(self.root)['delegation'], 'codex')
+        self.edit_policy({})
+        other = self.tasks('- [ ] T001 Implement parser\n')
+        delegation.annotate_tasks(self.root, self.feature, w.load_policy(self.root)['delegation'], 'codex')
+        marker = json.loads(other.read_text(encoding='utf-8').split('sanduq-delegation ', 1)[1].split(' -->', 1)[0])
+        self.assertEqual((marker['route_kind'], marker['route_reason']), ('native', 'native-first'))
+        self.edit_policy({'implementation': False})
+        self.tasks('- [ ] T001 Implement parser\n')
+        delegation.annotate_tasks(self.root, self.feature, w.load_policy(self.root)['delegation'], 'codex')
+        marker = json.loads(path.read_text(encoding='utf-8').split('sanduq-delegation ', 1)[1].split(' -->', 1)[0])
+        self.assertEqual((marker['route_kind'], marker['route_reason']),
+                         ('external', 'native-unsupported:work-type-disabled'))
+
+
 del base  # only NativeRoutingTests runs here, not a second copy of DelegationTests
 
 

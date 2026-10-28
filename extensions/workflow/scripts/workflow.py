@@ -1272,7 +1272,9 @@ class Run:
             state['active'] = {'stage': stage, 'token': token, 'claim_id': claim_id, 'claimed_at': claimed_at,
                                'session_id': usage['session_id'], 'context': gate, 'pid': owner_pid,
                                'host': socket.gethostname(), 'heartbeat_at': claimed_at,
-                               'agent_host': agent_host or 'unknown'}
+                               'agent_host': agent_host or 'unknown',
+                               # Routes are fixed for the claim: the dispatcher refuses work once this differs.
+                               'delegation_digest': digest(self.policy['delegation'])}
             lifecycle.queue(state, stage, 'resume' if resuming else 'claim', claim_id=claim_id,
                             episode_id=lifecycle.episode_for_claim(claim_id),
                             reason='resumed after a pause' if resuming else None)
@@ -1963,6 +1965,8 @@ class Run:
         self._stamp(state, stage, receipt, stored, tier)
         stored['completed_at'] = now()
         stored['claim_id'] = claim_id  # links this receipt to its lifecycle events
+        if stage == 'execute' and active.get('delegation_digest'):
+            stored['delegation_digest'] = active['delegation_digest']  # Ready compares task attempts with it
         if active.get('agent_host'):
             stored['agent_host'] = active['agent_host']  # the host CLI that claimed it; older claims have none
         if stage in SOURCE_STAGES:
