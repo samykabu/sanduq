@@ -4,7 +4,7 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
-## 2026-10-28 — Workflow 1.25.1, Scope 1.14.1 (pending release)
+## 2026-10-28 — Workflow 1.25.1, Scope 1.14.1
 
 - Hotfix from the first PH-05-T07 live run: a Clarify comment that mentioned decision SD1 made Scope's receipt stale (the decision fingerprint hashed the diagnostic `unparsed` list), and Scope's own comments were not recorded as Sanduq's. Both fixed; receipts recorded before keep their hashes.
 
