@@ -735,13 +735,17 @@ REVIEW_WORK_TYPES = ('review', 'qa_author', 'qa_collect')
 
 def same_lineage_author(attempts, attempt):
     """The run id of a successful authoring attempt (any work type outside REVIEW_WORK_TYPES) of the same
-    feature that has the same author lineage as this review or QA attempt, else None."""
-    lineage = attempt.get('author_lineage')
-    if attempt.get('task_type') not in REVIEW_WORK_TYPES or not lineage:
+    feature by the same agent as this review or QA attempt, else None."""
+    # Same agent = same host agent id (the last lineage element); the optional parent id is ignored, so
+    # supplying it on one recording and omitting it on the other cannot make the lineages differ.
+    def agent(a):
+        return (a.get('author_lineage') or [a.get('host_agent_id')])[-1]
+    reviewer = agent(attempt)
+    if attempt.get('task_type') not in REVIEW_WORK_TYPES or not reviewer:
         return None
     return next((a['run_id'] for a in attempts if a.get('run_id') != attempt.get('run_id') and
                  a.get('status') == 'successful' and a.get('task_type') not in REVIEW_WORK_TYPES and
-                 a.get('author_lineage') == lineage), None)
+                 agent(a) == reviewer), None)
 
 
 def active_task_ids(root, feature):

@@ -167,6 +167,13 @@ class HostFilesTests(HostTests):
         self.assertEqual(codex['developer_instructions'].strip(), expected)
         self.assertEqual(w.read(self.root / hosts.INSTALL_LOCK)['role_models']['codex'], {})
 
+    def test_codex_role_model_is_read_as_toml(self):
+        body = 'name = "sanduq-worker"\n{}\ndeveloper_instructions = """x"""\n'
+        self.assertEqual(hosts.role_model(body.format('model = "gpt-s"'), 'codex'), 'gpt-s')
+        self.assertEqual(hosts.role_model(body.format("model = 'gpt-s'  # pinned"), 'codex'), 'gpt-s')
+        self.assertIsNone(hosts.role_model(body.format(''), 'codex'))
+        self.assertEqual(hosts.role_model('model = "unclosed\n', 'codex'), '<invalid TOML>')
+
     def test_role_models_pin_only_with_delegation_enabled(self):
         models = {'codex': {'standard': 'gpt-s', 'review': 'gpt-r'}, 'claude': {'standard': 'sonnet', 'review': 'opus'}}
         policy = {'delegation': {'enabled': False, 'models': models}}

@@ -161,7 +161,9 @@ def timeout_guidance(policy, attempts, work_type, candidates):
     comparable = []
     pair = {(c['harness'], c['requested_model']) for c in candidates}
     for attempt in attempts:
-        if (attempt.get('task_type') != work_type or attempt.get('status') != 'successful' or
+        # A native attempt times only its acceptance check, not the work, so it is no runtime sample.
+        if (attempt.get('kind') == 'native' or attempt.get('task_type') != work_type or
+                attempt.get('status') != 'successful' or
                 (attempt.get('requested_harness'), attempt.get('requested_model')) not in pair):
             continue
         try:

@@ -814,7 +814,8 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
                 if same_lineage_author(attempts, attempt):
                     same_lineage.append(task_id)
                     continue
-                if (attempt.get('adopted') and attempt.get('task_line_sha256') and
+                if ((attempt.get('adopted') or attempt.get('kind') == 'native') and
+                        attempt.get('task_line_sha256') and
                         task_line_content_sha256(current_lines[task_id]) != attempt['task_line_sha256']):
                     changed.append(task_id)
                     continue
@@ -853,8 +854,8 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
                     ' - review or QA work recorded by the agent lineage that authored the work it checks; have '
                     'another agent do it and record it with delegate_dispatch.py record-native before Ready')
             require(not changed, 'DELEGATION_ADOPT_TASK_CHANGED: ' + ', '.join(sorted(changed)) +
-                    ' - the task line changed since it was adopted; re-run delegate_dispatch.py adopt '
-                    'with a fresh acceptance check before Ready')
+                    ' - the task line changed since it was adopted or recorded native; re-run delegate_dispatch.py adopt '
+                    '(or record-native) with a fresh acceptance check before Ready')
         ran.append('tasks')
     # Only a skip the frozen tier itself implies relaxes a check; a hand-added `skipped` entry does not.
     implied = skipped_stages(policy, state_tier(state))

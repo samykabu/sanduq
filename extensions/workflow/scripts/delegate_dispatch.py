@@ -2066,7 +2066,9 @@ def attest_native(root, feature, identity, token, requested_model, reported_mode
         route = active.get('delegation')
         delegation.require(route, 'NATIVE_ATTESTATION_NOT_NEEDED: the claim of stage:' + stage + ' of ' + feature +
                            ' recorded no delegation route, so complete needs no attempt for it')
-        delegation.require(route['candidates'][0].get('route_reason') != 'native-unsupported:work-type-disabled',
+        # The opt-out is read from policy: the first candidate's reason may name another constraint (cross-vendor).
+        delegation.require(workflow.load_policy(root)['delegation'].get('native_allowed', {})
+                           .get(route.get('task_type'), True),
                            'NATIVE_ROUTE_DISALLOWED: delegation.native_allowed.' + str(route.get('task_type')) +
                            ' is false, so ' + full_identity + ' runs externally')
         reserve(ledger, full_identity, None)
@@ -2153,7 +2155,8 @@ def record_native(root, feature, identity, token, host_agent_id, requested_model
     else:
         lean = lean_policy.enabled(policy, lean_policy.feature_tier(root, feature))
         # Native work is recorded once it is done, so the task may already be checked off.
-        work_type = delegation.task_type(task_description(root, feature, identity, allow_done=True), lean)
+        task_line = task_description(root, feature, identity, allow_done=True)
+        work_type = delegation.task_type(task_line, lean)
         try:
             candidates = delegation.selected_route(config, work_type, host, full_identity)
         except delegation.DelegationError as exc:
@@ -2201,7 +2204,9 @@ def record_native(root, feature, identity, token, host_agent_id, requested_model
                    # A stage attempt binds to its own claim; a task to the Execute claim it ran under.
                    'claim_token': token if stage else None,
                    'claim_id': lifecycle.claim_id_for(token if stage else None),
-                   **({} if stage else {'execute_claim_id': lifecycle.claim_id_for(token)}),
+                   **({} if stage else {'execute_claim_id': lifecycle.claim_id_for(token),
+                                        # Ready refuses the task if its line changes after this, as for adopt.
+                                        'task_line_sha256': delegation.task_line_content_sha256(task_line)}),
                    'status_provenance': {'primary': 'acceptance_check', 'source': 'record-native'},
                    'fidelity': 'reported', 'token_usage': None, 'evidence_location': None,
                    'cwd': '.', 'timeout': timeout, 'owned_paths': owned_paths, 'command': command, 'expect': expect,
@@ -2440,6 +2445,11 @@ def reassign(root, feature, run_id, reason, task_file=None, diagnosis=None):
                        'route to escalate; re-run "delegate_dispatch.py adopt" with a corrected '
                        'acceptance check, or "start" the task normally to create a real dispatched '
                        'attempt reassign can act on')
+    # A native attempt has no task file or retry count either; its recovery is to record it again.
+    delegation.require(prior.get('kind') != 'native',
+                       'DELEGATION_REASSIGN_NATIVE_UNSUPPORTED: ' + run_id + ' is native work with no dispatcher '
+                       'route to escalate; fix the work and re-run "delegate_dispatch.py record-native", or '
+                       '"start" the task to run it externally')
     lean = lean_policy.enabled(policy, lean_policy.feature_tier(root, feature))
     # Lean reassign keeps the prior candidate, so it would only run the rejected model again.
     delegation.require(not lean or not (prior.get('model_rejected') or

@@ -1840,6 +1840,10 @@ class Run:
             from delegation import latest_attempt, ledger_attempts, same_lineage_author
             native = stage_attempt or latest_attempt(self.root, self.relative, 'stage:' + stage)
             if (native or {}).get('kind') == 'native' and native.get('claim_token') == token:
+                require(native.get('status') == 'successful',
+                        'DELEGATION_STAGE_NOT_VERIFIED: the native record of stage:' + stage + ' is ' +
+                        str(native.get('status')) + ' (its acceptance check failed); fix the work and run '
+                        'delegate_dispatch.py record-native again under this claim')
                 author = same_lineage_author(ledger_attempts(self.root, self.relative), native)
                 require(author is None, 'SAME_LINEAGE_REVIEW: stage:' + stage + ' was checked by agent lineage ' +
                         ' > '.join(native.get('author_lineage') or ()) + ', which also authored ' + str(author) +
