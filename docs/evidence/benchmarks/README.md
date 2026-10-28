@@ -169,3 +169,7 @@ against `round-3-before-instructions.*`, which used the old count.
 ```text
 python extensions/scripts/benchmark_instructions.py --repo D:\Projects\Personal\sanduq-round3-base --extensions workflow,scope,assure,user-manual,pr,project,illustrate,memory,progress --out docs/evidence/benchmarks/round-3-before-v2-instructions.json --md docs/evidence/benchmarks/round-3-before-v2-instructions.md
 ```
+
+## Paired baseline (PH-04, 2026-10-28)
+
+[paired-baseline-2026-10.md](paired-baseline-2026-10.md): the same small sandbox issues done twice by Claude Code alone and twice through Sanduq managed (lite and standard), with USD, model time, tool calls, rejected completions and held-out test failures. Redacted transcripts digests: `t08-paired-baseline.zip` on the [Workflow 1.21.0 release](https://github.com/samykabu/sanduq/releases/tag/workflow-v1.21.0).
