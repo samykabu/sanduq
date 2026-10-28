@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
@@ -133,16 +134,57 @@ def render_markdown(report):
     return '\n'.join(lines) + '\n'
 
 
+def remote_check(client, repository, ref, name, attempts=3, interval=20, sleep=time.sleep):
+    """One check run's state on `ref`, polled at most `attempts` times `interval` seconds apart (lite re-measure R1:
+    an unbounded `gh pr checks --watch` blocked for minutes on a job no runner picked up). `state` is the check's
+    conclusion once completed, else `queued` (no runner has taken the job), `in_progress` or `absent`; it is
+    reported, never waited on further."""
+    for attempt in range(1, attempts + 1):
+        data = client.api(f'repos/{repository}/commits/{quote(ref, safe="")}/check-runs?check_name='
+                          f'{quote(name, safe="")}&filter=latest&per_page=100')
+        runs = sorted(data.get('check_runs') or [], key=lambda run: run.get('id') or 0)
+        run = runs[-1] if runs else None
+        state = 'absent' if run is None else (run.get('conclusion') or 'unknown') if run.get('status') == 'completed' \
+            else run.get('status') or 'unknown'
+        if run is not None and run.get('status') == 'completed' or attempt == attempts:
+            break
+        sleep(interval)
+    final = run is not None and run.get('status') == 'completed'
+    result = {'ok': state in ('success', 'neutral', 'skipped') or not final, 'repository': repository, 'ref': ref,
+              'check': name, 'state': state, 'final': final, 'url': (run or {}).get('html_url'),
+              'polls': attempt, 'waited_seconds': (attempt - 1) * interval}
+    if not final:
+        result['next'] = ('Do not wait longer: record "' + name + ' ' + state + ' on ' + ref[:12] + ' after ' +
+                          str(result['waited_seconds']) + ' s' + (' (no runner has picked the job up)' if state ==
+                          'queued' else '') + '" in the PR receipt summary and tell the user; the PR is not proven '
+                          'ready to merge until the check passes')
+    elif not result['ok']:
+        result['next'] = 'The check concluded ' + state + ': read it at the url, fix the cause, push, and check again'
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--repository', required=True, help='owner/repo')
-    parser.add_argument('--workflow', required=True, help='Workflow file name or numeric ID')
+    parser.add_argument('--workflow', help='Workflow file name or numeric ID (the run report)')
+    parser.add_argument('--check', help='Instead of the run report: the state of this check run on --ref, polled '
+                                        '--attempts times --interval seconds apart, then reported, never waited on')
+    parser.add_argument('--ref', help='--check: the commit SHA (the exact final PR head)')
+    parser.add_argument('--attempts', type=int, default=3)
+    parser.add_argument('--interval', type=int, default=20, help='--check: seconds between polls')
     parser.add_argument('--limit', type=int, default=10)
     parser.add_argument('--branch')
     parser.add_argument('--fixed-job', action='append', default=[], dest='fixed_job_names')
     parser.add_argument('--json', action='store_true')
     args = parser.parse_args()
+    if bool(args.check) == bool(args.workflow) or bool(args.check) != bool(args.ref):
+        parser.error('pass --workflow, or --check with --ref')
     try:
+        if args.check:
+            result = remote_check(GhClient(), args.repository, args.ref, args.check, max(1, args.attempts),
+                                  max(0, args.interval))
+            print(json.dumps(result, indent=2))
+            return 0 if result['ok'] else 1
         report = build_report(GhClient(), args.repository, args.workflow, args.limit, args.branch, args.fixed_job_names)
     except EvidenceError as exc:
         print(json.dumps({'ok': False, 'error': str(exc)}, indent=2))

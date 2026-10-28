@@ -35,7 +35,9 @@ Children must cover all parent coverage IDs. Break acceptance criteria into prec
 IDs so coverage cannot hide missing behavior behind an oversized umbrella ID.
 Avoid busywork splitting: each leaf must deliver an independently testable outcome.
 
-Top-level fields: `issue`, `fingerprint`, `requirements` list, `alignment` text,
+Top-level fields: `issue`, `fingerprint`, `requirements` (a list of strings, each a stable
+coverage ID and its text, such as `"REV-1: Print the words in reverse order"`; never objects;
+`tree.covers` lists the same exact strings), `alignment` text,
 `evidence` list, `images` observation list, and `tree`. Optional `uncertainty` (or
 `open_questions`) lists the questions the analysis could not settle, each a string or
 `{"question": "..."}`; `render-spec` turns them into `[NEEDS CLARIFICATION: ...]` lines.

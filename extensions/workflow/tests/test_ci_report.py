@@ -124,5 +124,32 @@ class CIReportTests(unittest.TestCase):
         self.assertTrue(any('branch=feature%2Fneeds%20encoding' in call for call in client.calls), client.calls)
 
 
+class RemoteCheckTests(unittest.TestCase):
+    """R1: the PR stage reads the remote check with a bound and reports a job no runner took, never blocks on it."""
+
+    def check(self, *states):
+        responses = iter([{'check_runs': [{'id': 1, 'status': s, 'conclusion': c, 'html_url': 'u'}] if s else []}
+                          for s, c in states])
+        client = type('C', (), {'calls': [], 'api': lambda self, e: (self.calls.append(e), next(responses))[1]})()
+        slept = []
+        result = report.remote_check(client, 'acme/app', 'a' * 40, 'workflow-evidence', 3, 20, slept.append)
+        return result, client.calls, slept
+
+    def test_a_queued_check_is_reported_after_the_bound(self):
+        result, calls, slept = self.check(('queued', None), ('queued', None), ('queued', None))
+        self.assertEqual((result['state'], result['final'], result['ok'], result['polls'], slept),
+                         ('queued', False, True, 3, [20, 20]))
+        self.assertIn('no runner', result['next'])
+        self.assertIn('check_name=workflow-evidence', calls[0])
+
+    def test_a_completed_check_stops_polling(self):
+        result, calls, slept = self.check(('in_progress', None), ('completed', 'success'))
+        self.assertEqual((result['state'], result['ok'], len(calls), slept), ('success', True, 2, [20]))
+        result, _, _ = self.check(('completed', 'failure'))
+        self.assertEqual((result['state'], result['ok'], result['final']), ('failure', False, True))
+        result, _, _ = self.check((None, None), (None, None), (None, None))
+        self.assertEqual((result['state'], result['final']), ('absent', False))
+
+
 if __name__ == '__main__':
     unittest.main()

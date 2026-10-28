@@ -42,6 +42,29 @@ class ReceiptPlaceholderTests(Base):
                 break
         self.assertEqual(refused, set(FILLS) - {'lint'})  # score 13 is the full tier: Analyze is a model stage
 
+    def test_the_evidence_placeholder_is_refused_and_lite_plan_names_its_lint_file(self):
+        """R2: no template shows `"evidence": []`, which EVIDENCE_REQUIRED refuses; lite Plan names the lint output."""
+        self.profiles()
+        run = self.run_object()
+        claim = self.claim_any(run)
+        template = claim['receipt_template']
+        self.assertEqual(template['evidence'], ['<existing file that proves the work>'])
+        receipt = {**self.receipt('scope'), 'effort_score': 2, 'evidence': template['evidence']}
+        with self.assertRaisesRegex(w.WorkflowError, '^RECEIPT_PLACEHOLDER: evidence '):
+            run.complete(claim['token'], receipt)
+        run.complete(claim['token'], {**receipt, 'evidence': self.receipt('scope')['evidence']})
+        self.advance(run, 'clarify')
+        claim = run.claim(self.usage())
+        self.assertEqual(claim['receipt_template']['evidence'], [self.feature + '/evidence/plan-lint.json'])
+
+    def test_receipt_refusals_explain_themselves(self):
+        """R2, R3: the two completion refusals the lite runs met print what, why and the next step."""
+        for code in ('EVIDENCE_REQUIRED', 'INPUT_ROLE_NOT_IN_MANIFEST: specs/1-x/scope-analysis.json'):
+            with self.subTest(code=code):
+                result = w.explain(code, 'specs/1-x')
+                self.assertTrue(result['explain'].endswith('.') and result['next'], result)
+        self.assertIn('lint.py --feature specs/1-x', w.explain('EVIDENCE_REQUIRED', 'specs/1-x')['next'])
+
 
 if __name__ == '__main__':
     unittest.main()

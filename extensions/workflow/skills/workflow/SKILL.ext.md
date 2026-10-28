@@ -6,9 +6,11 @@ description: "Drives an issue-bound feature through the Spec Kit lifecycle, from
 # Workflow dispatcher
 
 Runtime: `python .specify/extensions/workflow/scripts/workflow.py` (argument arrays or quoted
-paths; missing dependencies only from the pinned `requirements.txt`). For the stage loop, read
-this file, receipt-rules.md, dispatcher-operations.md and delegation-and-decisions.md once per
-session, and delegation.md once a claim carries `delegation` or `environment`.
+paths; missing dependencies only from the pinned `requirements.txt`). Run `status` (continue) or
+the first `claim` first: when it prints `instructions`, read only that file once per session
+([lite.md](references/lite.md)). Otherwise read receipt-rules.md,
+dispatcher-operations.md and delegation-and-decisions.md once per session, and delegation.md
+once a claim carries `delegation` or `environment`.
 
 ## Entry points
 

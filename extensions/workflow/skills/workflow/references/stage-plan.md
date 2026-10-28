@@ -24,4 +24,7 @@ keep ids, checkboxes and issue mappings. The receipt lists both plan.md and task
 optional: write them only when the feature needs them.
 
 Lite has no Analyze stage: `complete` runs `workflow:lint` and records `lint`; a finding that
-blocks is `PLAN_LINT_FAILED`. Run `lint.py --feature specs/<f>` first and fix the artifact.
+blocks is `PLAN_LINT_FAILED`. Run `lint.py --feature specs/<f>` first and fix the artifact, then
+write the evidence file the lite `receipt_template` names: `mkdir -p specs/<f>/evidence && python
+.specify/extensions/workflow/scripts/lint.py --feature specs/<f> --json >
+specs/<f>/evidence/plan-lint.json`.
