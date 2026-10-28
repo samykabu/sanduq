@@ -1,8 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "workflow": "2.0.2"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Workflow 2.0.2 hotfix: a claim pins its delegation routes (DELEGATION_POLICY_CHANGED_IN_CLAIM on a mid-claim policy edit); route remedies never suggest editing the policy; task annotations show route_kind and route_reason."
 }
