@@ -1,0 +1,640 @@
+{
+  "schema_version": 2,
+  "run_id": "301084ff28f5439588a1acfb037d2fd8",
+  "repo_identity": {
+    "remote": "github.com/samykabu/sanduq-sandbox-ph04",
+    "root_commit": "470a9206121051ebad8dd2563efb58de9f1d59ef",
+    "shallow": false
+  },
+  "branch": "102-add-initials-and-squeeze-commands-t07-c1",
+  "feature": "specs/102-add-initials-and-squeeze-commands-t07-c1",
+  "issue": "samykabu/sanduq-sandbox-ph04#102",
+  "policy_digest_version": 3,
+  "policy_digest": "2cfb1ad6a36588b10c26e6c6f3ce65034cfcc252a21ff26b9998a8140478b6b2",
+  "ci_policy_digest": "abc398b70f173d89f9a56a5b4b1fb33b6da442d84e53fe11d2006e94da724e6a",
+  "commands": {
+    "scope": "speckit.workflow.scope-run",
+    "specify": "speckit.specify",
+    "clarify": "speckit.clarify",
+    "plan": "speckit.plan",
+    "tasks": "speckit.tasks",
+    "qa_analyze": "speckit.assure.analyze",
+    "manual_analyze": "speckit.user-manual.analyze",
+    "analyze": "workflow:lint",
+    "taskstoissues": "speckit.taskstoissues",
+    "execute": "speckit.implement",
+    "qa_document": "speckit.assure.document",
+    "manual_update": "speckit.user-manual.update",
+    "pr": "speckit.pr.generate",
+    "verify": "workflow:verification",
+    "review": "workflow:review",
+    "ready": "workflow:gates"
+  },
+  "policy": {
+    "schema_version": 1,
+    "processes": {
+      "qa": true,
+      "user_manual": true
+    },
+    "execution": {
+      "engine": "auto",
+      "checkpoints": "required-only"
+    },
+    "providers": {
+      "clarification": "prefer-superspec",
+      "tasks": "prefer-superspec"
+    },
+    "issue_sync": {
+      "taskstoissues": "required",
+      "parent_link": "native-subissue"
+    },
+    "clarification": {
+      "transport": "github-comments",
+      "resume_on_reinvoke": "reread-answers"
+    },
+    "decisions": {
+      "transport": "github-issue",
+      "authorized_users": [],
+      "project_field": "Decision",
+      "lifecycle_status": true
+    },
+    "context": {
+      "mode": "measured-only",
+      "max_fraction": 0.6,
+      "checkpoint_fraction": 0.5,
+      "reserve_fraction": 0.1
+    },
+    "finalize": {
+      "create_pr": true,
+      "merge": false
+    },
+    "updates": {
+      "policy": "reviewed"
+    },
+    "delegation": {
+      "enabled": true,
+      "install_scope": "project",
+      "stronger_retry": 1,
+      "models": {
+        "codex": {
+          "high": "gpt-6-astra",
+          "standard": "gpt-6-sol",
+          "light": "gpt-6-terra",
+          "documentation": "gpt-6-sol",
+          "review": "gpt-6-sol"
+        },
+        "claude": {
+          "high": "opus",
+          "standard": "sonnet",
+          "light": "haiku",
+          "documentation": "opus",
+          "review": "opus"
+        }
+      },
+      "routes": {
+        "discovery": {
+          "preferred": {
+            "harness": "selected",
+            "tier": "standard"
+          },
+          "fallbacks": [
+            {
+              "harness": "selected",
+              "model": null
+            }
+          ]
+        },
+        "implementation": {
+          "preferred": {
+            "harness": "selected",
+            "tier": "standard"
+          },
+          "fallbacks": [
+            {
+              "harness": "selected",
+              "model": null
+            }
+          ]
+        },
+        "qa_author": {
+          "preferred": {
+            "harness": "selected",
+            "tier": "standard"
+          },
+          "fallbacks": [
+            {
+              "harness": "selected",
+              "model": null
+            }
+          ]
+        },
+        "qa_collect": {
+          "preferred": {
+            "harness": "selected",
+            "tier": "light"
+          },
+          "fallbacks": [
+            {
+              "harness": "selected",
+              "model": null
+            }
+          ]
+        },
+        "documentation": {
+          "preferred": {
+            "harness": "selected",
+            "tier": "documentation"
+          },
+          "fallbacks": [
+            {
+              "harness": "selected",
+              "model": null
+            }
+          ]
+        },
+        "review": {
+          "preferred": {
+            "harness": "selected",
+            "tier": "review"
+          },
+          "fallbacks": [
+            {
+              "harness": "selected",
+              "model": null
+            }
+          ]
+        },
+        "coordination": {
+          "preferred": {
+            "harness": "selected",
+            "tier": "high"
+          },
+          "fallbacks": [
+            {
+              "harness": "selected",
+              "model": null
+            }
+          ]
+        }
+      },
+      "overrides": {},
+      "fixed_collection_commands": {},
+      "native_allowed": {
+        "implementation": false,
+        "qa_author": false,
+        "qa_collect": false,
+        "documentation": false
+      }
+    },
+    "receipts": {
+      "require_input_roles": false
+    },
+    "ci": {
+      "provider": "github-actions",
+      "policy": "self-hosted-required",
+      "runners": {
+        "linux": [
+          "self-hosted",
+          "<runner-label>"
+        ]
+      },
+      "capabilities": {
+        "system_packages": "preinstalled",
+        "python": "preinstalled",
+        "python_version": "3.13"
+      },
+      "exceptions": [],
+      "gate": {
+        "mode": "advisory",
+        "scope": "managed-only",
+        "rules": {
+          "receipts": true,
+          "decisions": true,
+          "tasks": false,
+          "task_links": false,
+          "documentation": true,
+          "portability": true,
+          "candidate_merge": false,
+          "live_answers": true
+        }
+      }
+    },
+    "profiles": {
+      "enabled": true
+    }
+  },
+  "target_branch": "main",
+  "clarification_transport": "github-comments",
+  "receipts": {
+    "scope": {
+      "stage": "scope",
+      "outcome": "passed",
+      "summary": "Owner approved #102 as one issue, 0 sub-issues, effort 3; published (graphql) and gate passed.",
+      "inputs": [
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/scope-analysis.json"
+      ],
+      "evidence": [
+        ".specify/scope/runs/102-815bcfb5554cfa3e/journal.json",
+        ".specify/scope/approvals/102-815bcfb5554cfa3e040f95ce424a63ba8548d30bb9b1fee5f28d19d71d0a7f8c.json"
+      ],
+      "effort_score": 3,
+      "delegation_ledger_trust": "trusted",
+      "native_attestation": {
+        "kind": "native",
+        "run_id": "native-ccbb0102b96f",
+        "requested_harness": "claude",
+        "requested_model": "sonnet",
+        "actual_model": "unreported",
+        "actual_model_evidence": "unverified",
+        "attested_by": "top-level",
+        "attested_at": "2026-10-28T20:59:46.063932+00:00",
+        "session_id": "58bcd70b11ea4b2089482db835a0c061",
+        "route_kind": "native",
+        "route_reason": "native-first",
+        "evidence": "self-asserted by the top-level session; no external ledger evidence"
+      },
+      "command": "speckit.workflow.scope-run",
+      "dependency_digest": "7e3617b9d60b65a718950fe6522285f65b21f7f90306f26518de9dbed2717e60",
+      "fingerprints": {
+        ".specify/memory/constitution.md": "ce7549540fa45543cca797a150201d868e64495fdff39dc38246fb17bd4024b3",
+        ".specify/scope/approvals/102-815bcfb5554cfa3e040f95ce424a63ba8548d30bb9b1fee5f28d19d71d0a7f8c.json": "2352ddce7a9b845334d6b02323c4e562ff8dec4305dace769ba31289b2e1394f",
+        ".specify/scope/runs/102-815bcfb5554cfa3e/journal.json": "c84f755136b41c80979d366c33e884875a711bb4eb49f03bf7e034a37efb5e74",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/scope-analysis.json": "92d7a377e519dfa69faa7f4081208c3b2522e0bff03cf9153810ed4c87b1b0e1",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/workflow/decisions.json": "decision-records:v1::4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "text_fingerprints": {
+        ".specify/memory/constitution.md": "7c6ebb5bbe37eebc2ebc6778c852fe9941356fbdb8183de893e003bffb5148ba"
+      },
+      "completed_at": "2026-10-28T20:59:47.628748+00:00",
+      "claim_id": "c-340f169b74dcdaf7eb74",
+      "agent_host": "claude"
+    },
+    "specify": {
+      "stage": "specify",
+      "outcome": "passed",
+      "summary": "spec.md rendered from the approved Scope analysis (render marker 92d7a377); Scope bind and workflow bind succeeded. One open question kept for Clarify.",
+      "inputs": [
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/spec.md",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/scope-analysis.json"
+      ],
+      "evidence": [
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/scope-source.json"
+      ],
+      "delegation_ledger_trust": "trusted",
+      "native_attestation": {
+        "kind": "native",
+        "run_id": "native-ed36f2d69fb1",
+        "requested_harness": "claude",
+        "requested_model": "sonnet",
+        "actual_model": "unreported",
+        "actual_model_evidence": "unverified",
+        "attested_by": "top-level",
+        "attested_at": "2026-10-28T21:00:19.141632+00:00",
+        "session_id": "58bcd70b11ea4b2089482db835a0c061",
+        "route_kind": "native",
+        "route_reason": "native-first",
+        "evidence": "self-asserted by the top-level session; no external ledger evidence"
+      },
+      "command": "speckit.specify",
+      "dependency_digest": "7e3617b9d60b65a718950fe6522285f65b21f7f90306f26518de9dbed2717e60",
+      "fingerprints": {
+        ".specify/memory/constitution.md": "ce7549540fa45543cca797a150201d868e64495fdff39dc38246fb17bd4024b3",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/scope-analysis.json": "92d7a377e519dfa69faa7f4081208c3b2522e0bff03cf9153810ed4c87b1b0e1",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/scope-source.json": "44d4548f4d3083440a78e4883c0740c0d0c29eaa82ab37e52223e56358a1e99f",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/spec.md": "327fba0f2ab46c1430a6fa0b2e37d6c7c079ce2cb4181ae68c44318ac4574ca9",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/workflow/decisions.json": "decision-records:v1::4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "text_fingerprints": {
+        ".specify/memory/constitution.md": "7c6ebb5bbe37eebc2ebc6778c852fe9941356fbdb8183de893e003bffb5148ba",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/spec.md": "495b6d4e67e0bdfa18352533973f59bb9b3446ecb72c7c0f41f036ff91801d98"
+      },
+      "completed_at": "2026-10-28T21:00:20.733441+00:00",
+      "claim_id": "c-30a527580d11542e1222",
+      "agent_host": "claude"
+    },
+    "clarify": {
+      "stage": "clarify",
+      "outcome": "passed",
+      "summary": "Round 2 applied the creator's answer C1Q1: A (Unicode str.isalnum letters/digits for initials) to spec.md; no unresolved questions; issue moved to Ready.",
+      "inputs": [
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/spec.md",
+        ".specify/workflow/runtime/clarify-102-round2.json"
+      ],
+      "evidence": [
+        ".specify/scope/clarification-102-snapshot.json",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/spec.md"
+      ],
+      "unresolved": 0,
+      "answers_applied": true,
+      "delegation_ledger_trust": "trusted",
+      "native_attestation": {
+        "kind": "native",
+        "run_id": "native-b1ab9df50a44",
+        "requested_harness": "claude",
+        "requested_model": "sonnet",
+        "actual_model": "claude-opus-5-5",
+        "actual_model_evidence": "host-reported",
+        "attested_by": "top-level",
+        "attested_at": "2026-10-28T21:02:49.299232+00:00",
+        "session_id": "58bcd70b11ea4b2089482db835a0c061",
+        "route_kind": "native",
+        "route_reason": "native-first",
+        "evidence": "self-asserted by the top-level session; no external ledger evidence"
+      },
+      "command": "speckit.clarify",
+      "dependency_digest": "7e3617b9d60b65a718950fe6522285f65b21f7f90306f26518de9dbed2717e60",
+      "fingerprints": {
+        ".specify/memory/constitution.md": "ce7549540fa45543cca797a150201d868e64495fdff39dc38246fb17bd4024b3",
+        ".specify/scope/clarification-102-snapshot.json": "f6cd8ff73ba7566ce32ce209bc08f0e1c030a2a5d00615df10279df7f1be85c7",
+        ".specify/workflow/runtime/clarify-102-round2.json": "bdd48fb28597668e8bc216287aa75c1dda363e561cf2e86ab95045b44796d85f",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/scope-source.json": "44d4548f4d3083440a78e4883c0740c0d0c29eaa82ab37e52223e56358a1e99f",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/spec.md": "327fba0f2ab46c1430a6fa0b2e37d6c7c079ce2cb4181ae68c44318ac4574ca9",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/workflow/decisions.json": "decision-records:v1::4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "text_fingerprints": {
+        ".specify/memory/constitution.md": "7c6ebb5bbe37eebc2ebc6778c852fe9941356fbdb8183de893e003bffb5148ba",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/spec.md": "e9088ce81da37d5d423933401857d8c998b9c503c5bac0236fa9d8cb716899f0"
+      },
+      "completed_at": "2026-10-28T21:02:50.843046+00:00",
+      "claim_id": "c-1c53619e34ab8042752b",
+      "agent_host": "claude"
+    },
+    "plan": {
+      "stage": "plan",
+      "outcome": "passed",
+      "summary": "Lite plan: plan.md and tasks.md (T001-T007, 4 phases) cover FR-001..FR-013 and SC-001..SC-010; lint clean (0 errors, 0 warnings).",
+      "inputs": [
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/spec.md",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/plan.md",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/tasks.md"
+      ],
+      "evidence": [
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/evidence/plan-lint.json"
+      ],
+      "lint": {
+        "ok": true,
+        "findings": 0
+      },
+      "delegation_ledger_trust": "trusted",
+      "native_attestation": {
+        "kind": "native",
+        "run_id": "native-e207d7c55217",
+        "requested_harness": "claude",
+        "requested_model": "sonnet",
+        "actual_model": "unreported",
+        "actual_model_evidence": "unverified",
+        "attested_by": "top-level",
+        "attested_at": "2026-10-28T21:03:49.697906+00:00",
+        "session_id": "58bcd70b11ea4b2089482db835a0c061",
+        "route_kind": "native",
+        "route_reason": "native-first",
+        "evidence": "self-asserted by the top-level session; no external ledger evidence"
+      },
+      "command": "speckit.plan",
+      "dependency_digest": "7e3617b9d60b65a718950fe6522285f65b21f7f90306f26518de9dbed2717e60",
+      "fingerprints": {
+        ".specify/memory/constitution.md": "ce7549540fa45543cca797a150201d868e64495fdff39dc38246fb17bd4024b3",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/evidence/plan-lint.json": "93070c7ac945ead1c680b4eeb9c454b59e8e65051a6ddf73757bcc50713d8f07",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/plan.md": "8cc827ed5d0bb9cac6ddf8c75ee30f3c42b20b70867d135626981dc001334901",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/scope-source.json": "44d4548f4d3083440a78e4883c0740c0d0c29eaa82ab37e52223e56358a1e99f",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/spec.md": "327fba0f2ab46c1430a6fa0b2e37d6c7c079ce2cb4181ae68c44318ac4574ca9",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/tasks.md": "c947d1bc74257a162ec3a3797bad3ccc14303d95593f6225f2de7cd27c30a06c",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/workflow/decisions.json": "decision-records:v1::4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "text_fingerprints": {
+        ".specify/memory/constitution.md": "7c6ebb5bbe37eebc2ebc6778c852fe9941356fbdb8183de893e003bffb5148ba",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/plan.md": "dea9baef1dfcb225abcd4d062c11a928604a2cdc342e54f4b65135d0252ec32b",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/spec.md": "e9088ce81da37d5d423933401857d8c998b9c503c5bac0236fa9d8cb716899f0",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/tasks.md": "8abbe689a9c1dc77d359c97469c14d821985b7d52681eb954d0ac5b2a0703d9d"
+      },
+      "completed_at": "2026-10-28T21:03:51.312216+00:00",
+      "claim_id": "c-b64c2e2de89a9a76759e",
+      "agent_host": "claude"
+    },
+    "execute": {
+      "stage": "execute",
+      "outcome": "passed",
+      "summary": "T001-T007 done through external claude workers (requested sonnet, reported claude-sonnet-5-5 for all seven runs); phases committed and pushed (0988014, fa240e1, 82b732d); python -m unittest discover -s tests: 12 passed, 0 failed.",
+      "inputs": [
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/tasks.md",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/plan.md",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/spec.md"
+      ],
+      "evidence": [
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/evidence/unittest.txt"
+      ],
+      "command": "speckit.implement",
+      "dependency_digest": "7e3617b9d60b65a718950fe6522285f65b21f7f90306f26518de9dbed2717e60",
+      "fingerprints": {
+        ".specify/memory/constitution.md": "ce7549540fa45543cca797a150201d868e64495fdff39dc38246fb17bd4024b3",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/evidence/unittest.txt": "5f798701aabe509869deb8ee9a4d4315da28cd5b5ef09394985eef48b5101fee",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/plan.md": "8cc827ed5d0bb9cac6ddf8c75ee30f3c42b20b70867d135626981dc001334901",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/scope-source.json": "44d4548f4d3083440a78e4883c0740c0d0c29eaa82ab37e52223e56358a1e99f",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/spec.md": "327fba0f2ab46c1430a6fa0b2e37d6c7c079ce2cb4181ae68c44318ac4574ca9",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/tasks.md": "c947d1bc74257a162ec3a3797bad3ccc14303d95593f6225f2de7cd27c30a06c",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/workflow/decisions.json": "decision-records:v1::4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "text_fingerprints": {
+        ".specify/memory/constitution.md": "7c6ebb5bbe37eebc2ebc6778c852fe9941356fbdb8183de893e003bffb5148ba",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/plan.md": "dea9baef1dfcb225abcd4d062c11a928604a2cdc342e54f4b65135d0252ec32b",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/spec.md": "e9088ce81da37d5d423933401857d8c998b9c503c5bac0236fa9d8cb716899f0",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/tasks.md": "8abbe689a9c1dc77d359c97469c14d821985b7d52681eb954d0ac5b2a0703d9d"
+      },
+      "completed_at": "2026-10-28T21:09:11.844138+00:00",
+      "claim_id": "c-721e9e080380e6860431",
+      "delegation_digest": "bc66fb7da93410ab2dedd1942f2c9a9ff4c462f0384b3fe8a02378d3c34f499e",
+      "agent_host": "claude"
+    },
+    "verify": {
+      "stage": "verify",
+      "outcome": "passed",
+      "summary": "External claude verify run claude-20261028210933-12a0b7 (requested sonnet, reported claude-sonnet-5-5): unittest 12 passed, 0 failed; 5 CLI checks exit 0 with expected output; FR-001..FR-013 and SC-001..SC-010 all PASS; T001-T007 checked; 0 blocking, 2 non-blocking findings.",
+      "inputs": [
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/spec.md",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/tasks.md"
+      ],
+      "evidence": [
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/evidence/verify-tests.txt",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/evidence/verify-review.md",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/evidence/unittest.txt"
+      ],
+      "blocking_findings": 0,
+      "ready_checks": [
+        "tasks",
+        "task_links:skipped (lite tier: no task sub-issues)",
+        "documentation:assure_state:skipped (lite tier)",
+        "documentation:manual_state:skipped (lite tier)"
+      ],
+      "delegation_ledger_trust": "trusted",
+      "command": "workflow:verification",
+      "dependency_digest": "7e3617b9d60b65a718950fe6522285f65b21f7f90306f26518de9dbed2717e60",
+      "fingerprints": {
+        ".specify/memory/constitution.md": "ce7549540fa45543cca797a150201d868e64495fdff39dc38246fb17bd4024b3",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/evidence/unittest.txt": "5f798701aabe509869deb8ee9a4d4315da28cd5b5ef09394985eef48b5101fee",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/evidence/verify-review.md": "1bd16c2f16c17e41c56fd3df524c1351d40bfc766b9bf9fd8415e982a96f3916",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/evidence/verify-tests.txt": "b992676e3bd88926179ef566bf2c9bc653799221d9d255c1ff084cdc4aedfeb0",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/plan.md": "8cc827ed5d0bb9cac6ddf8c75ee30f3c42b20b70867d135626981dc001334901",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/scope-source.json": "44d4548f4d3083440a78e4883c0740c0d0c29eaa82ab37e52223e56358a1e99f",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/spec.md": "327fba0f2ab46c1430a6fa0b2e37d6c7c079ce2cb4181ae68c44318ac4574ca9",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/tasks.md": "c947d1bc74257a162ec3a3797bad3ccc14303d95593f6225f2de7cd27c30a06c",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/workflow/decisions.json": "decision-records:v1::4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "text_fingerprints": {
+        ".specify/memory/constitution.md": "7c6ebb5bbe37eebc2ebc6778c852fe9941356fbdb8183de893e003bffb5148ba",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/evidence/verify-review.md": "eb270f4f20bf1a9291eea3016eb2a2f26ce73a5aac122a13f79c0755f6b5e190",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/plan.md": "dea9baef1dfcb225abcd4d062c11a928604a2cdc342e54f4b65135d0252ec32b",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/spec.md": "e9088ce81da37d5d423933401857d8c998b9c503c5bac0236fa9d8cb716899f0",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/tasks.md": "8abbe689a9c1dc77d359c97469c14d821985b7d52681eb954d0ac5b2a0703d9d"
+      },
+      "completed_at": "2026-10-28T21:10:14.552963+00:00",
+      "claim_id": "c-3ee0dd398dfedf653f28",
+      "agent_host": "claude",
+      "head": "82b732d97ec9f16a124fff131e67890ec4cf8c98",
+      "source_key": "bdd7cb3b34841358673f4a2d376bb4a8124dd73c08b69b7e2a99585c944bb081",
+      "source_inventory": {
+        "path": "workflow/inventory/verify-c-3ee0dd398dfedf653f28.json",
+        "sha256": "002871938860eb6117c54f7b93b79c54233b9d9dfc3ed44ceeeabafad82f91a0"
+      }
+    },
+    "pr": {
+      "stage": "pr",
+      "outcome": "passed",
+      "summary": "Opened PR #111 (not merged) via pr_publish.py; body lint clean; image inventory: no diagrams or screenshots apply (explainer embeds no images). Index gate and clean-candidate gate: only ACTIVE_STAGE_REMAINS (expected during PR claim). workflow-evidence queued on 355a69cf9b81 after 40 s (no runner has picked the job up); not proven ready to merge until the check passes. User Manual preflight not run: lite tier skips manual stages; QA gate off.",
+      "inputs": [
+        "docs/102-add-initials-and-squeeze-commands-t07-c1/Initials-And-Squeeze-Explained.md",
+        "docs/102-add-initials-and-squeeze-commands-t07-c1/CHANGELOG.md",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/scope-source.json"
+      ],
+      "evidence": [
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/evidence/pr-body.md",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/evidence/pr-body.lint.json"
+      ],
+      "pr_url": "https://github.com/samykabu/sanduq-sandbox-ph04/pull/111",
+      "pr_body_file": "specs/102-add-initials-and-squeeze-commands-t07-c1/evidence/pr-body.md",
+      "pr_lint_file": "specs/102-add-initials-and-squeeze-commands-t07-c1/evidence/pr-body.lint.json",
+      "pr_body_sha256": "c41cdcf58eeeeb5ef7a61a153bdc5fd84084ac0ce33bfd27d46a1f23eb0a5068",
+      "images_verified": true,
+      "image_verification": "api",
+      "pr_lint_binding": {
+        "body": "specs/102-add-initials-and-squeeze-commands-t07-c1/evidence/pr-body.md",
+        "lint": "specs/102-add-initials-and-squeeze-commands-t07-c1/evidence/pr-body.lint.json",
+        "scope": "specs/102-add-initials-and-squeeze-commands-t07-c1/scope-source.json",
+        "body_sha256": "c41cdcf58eeeeb5ef7a61a153bdc5fd84084ac0ce33bfd27d46a1f23eb0a5068",
+        "bound": {
+          "repo": "samykabu/sanduq-sandbox-ph04",
+          "issue": 102
+        },
+        "prerequisites": []
+      },
+      "command": "speckit.pr.generate",
+      "dependency_digest": "7e3617b9d60b65a718950fe6522285f65b21f7f90306f26518de9dbed2717e60",
+      "fingerprints": {
+        ".specify/memory/constitution.md": "ce7549540fa45543cca797a150201d868e64495fdff39dc38246fb17bd4024b3",
+        "docs/102-add-initials-and-squeeze-commands-t07-c1/CHANGELOG.md": "18f0f0331dc1c1f09361ddd2708cef3a9d0c4a9624529200693f882eae5b2246",
+        "docs/102-add-initials-and-squeeze-commands-t07-c1/Initials-And-Squeeze-Explained.md": "1836910372648b66a18f2d9fd660e1eec21223eab47b7a2505f1f7e9ebf9e6aa",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/evidence/pr-body.lint.json": "ba98e4a7a55b431ab44d6ee03607f82daac5344d652bd3f19b790fd03e7da5f1",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/evidence/pr-body.md": "c41cdcf58eeeeb5ef7a61a153bdc5fd84084ac0ce33bfd27d46a1f23eb0a5068",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/plan.md": "8cc827ed5d0bb9cac6ddf8c75ee30f3c42b20b70867d135626981dc001334901",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/scope-source.json": "44d4548f4d3083440a78e4883c0740c0d0c29eaa82ab37e52223e56358a1e99f",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/spec.md": "327fba0f2ab46c1430a6fa0b2e37d6c7c079ce2cb4181ae68c44318ac4574ca9",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/tasks.md": "c947d1bc74257a162ec3a3797bad3ccc14303d95593f6225f2de7cd27c30a06c",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/workflow/decisions.json": "decision-records:v1::4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "text_fingerprints": {
+        ".specify/memory/constitution.md": "7c6ebb5bbe37eebc2ebc6778c852fe9941356fbdb8183de893e003bffb5148ba",
+        "docs/102-add-initials-and-squeeze-commands-t07-c1/CHANGELOG.md": "c7d0875961a83c4fce415c8761553487b9e73cee0cfe236317d718da42fcad17",
+        "docs/102-add-initials-and-squeeze-commands-t07-c1/Initials-And-Squeeze-Explained.md": "4dc4fd79ec6b41028392fcd1e6e12ad92593a28fc1074a04e0ef8c1ca2f8d53e",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/evidence/pr-body.md": "0679f520918bddec27f00a83d1ad858104e0db6c0921f3935cab2c46d7e01769",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/plan.md": "dea9baef1dfcb225abcd4d062c11a928604a2cdc342e54f4b65135d0252ec32b",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/spec.md": "e9088ce81da37d5d423933401857d8c998b9c503c5bac0236fa9d8cb716899f0",
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/tasks.md": "8abbe689a9c1dc77d359c97469c14d821985b7d52681eb954d0ac5b2a0703d9d"
+      },
+      "completed_at": "2026-10-28T21:12:52.259877+00:00",
+      "claim_id": "c-f3c6e1af0565b76753dd",
+      "agent_host": "claude"
+    }
+  },
+  "generation": 25,
+  "active": null,
+  "status": "pr_open",
+  "dependency_digest": "7e3617b9d60b65a718950fe6522285f65b21f7f90306f26518de9dbed2717e60",
+  "updated_at": "2026-10-28T21:12:58.028142+00:00",
+  "head": "355a69cf9b8107ea70ffb26e993009ca2d2c0eed",
+  "stage_plan": {
+    "v": 1,
+    "generation": 25,
+    "stages": [
+      "scope",
+      "specify",
+      "clarify",
+      "plan",
+      "execute",
+      "verify",
+      "pr"
+    ]
+  },
+  "next_action": {
+    "text": "No stage remains: pr_open",
+    "stage": null,
+    "kind": "next-stage",
+    "evaluated_at": "2026-10-28T21:12:58.050497+00:00",
+    "generation": 25
+  },
+  "memory_session": {
+    "session_id": "58bcd70b11ea4b2089482db835a0c061",
+    "status": "pending",
+    "at": "2026-10-28T21:10:19.024978+00:00"
+  },
+  "branch_history": [
+    {
+      "from": "102-add-initials-and-squeeze-commands-t07-c1",
+      "to": "102-add-initials-and-squeeze-commands-t07-c1",
+      "at": "2026-10-28T21:00:13.986235+00:00"
+    }
+  ],
+  "project_sync": {
+    "phase": "in-review",
+    "state": "done",
+    "at": "2026-10-28T21:12:58.028100+00:00",
+    "summary": "ok issue=102 status=In review created=0 closed=0"
+  },
+  "lineage": [
+    {
+      "stage": "clarify",
+      "changes": {
+        "specs/102-add-initials-and-squeeze-commands-t07-c1/spec.md": {
+          "before": "b1c35770d69ba9339adaef032e8c49b5c71be84edbdacf450674ffa2b24764e3",
+          "after": "327fba0f2ab46c1430a6fa0b2e37d6c7c079ce2cb4181ae68c44318ac4574ca9"
+        }
+      },
+      "at": "2026-10-28T21:02:50.815772+00:00"
+    }
+  ],
+  "profile": {
+    "tier": "lite",
+    "score": 3,
+    "fixed_at": "2026-10-28T21:02:54.675697+00:00"
+  },
+  "skipped": {
+    "tasks": "merged into plan (lite tier)",
+    "qa_analyze": "lite tier",
+    "manual_analyze": "lite tier",
+    "qa_document": "lite tier",
+    "manual_update": "lite tier",
+    "analyze": "lite tier: lint runs at Plan completion",
+    "taskstoissues": "lite tier: no task sub-issues",
+    "review": "lite tier: Verify reviews the diff",
+    "ready": "lite tier: Ready checks run at Verify completion"
+  },
+  "execute_protocol": {
+    "files": [
+      "execution-assign.md",
+      "execution-report.md",
+      "execute/lean.md",
+      "execute/delegated-workers.md",
+      "reporting.md"
+    ],
+    "digest": "47147f73c9f0cfdd1f42c8e452f0e921cb41335780c128c1e0ca835797c91bdc",
+    "printed_at": "2026-10-28T21:03:55.917637+00:00"
+  }
+}

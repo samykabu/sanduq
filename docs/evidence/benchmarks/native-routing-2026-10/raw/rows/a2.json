@@ -1,0 +1,82 @@
+{
+ "run": "a2",
+ "arm": "in-session",
+ "issue": 99,
+ "feature": "specs/99-add-initials-and-squeeze-commands-t07-a2",
+ "sessions": 2,
+ "usd_host": 3.1,
+ "usd_external": 0,
+ "usd_total": 3.1,
+ "model_s": 554,
+ "elapsed_s": 559,
+ "tool_calls": 76,
+ "attempts": 0,
+ "attempts_by_kind": {},
+ "native_attempts": [],
+ "external_attempts": [],
+ "external_tokens": {},
+ "rejected_completions": 0,
+ "sessions_detail": [
+  {
+   "name": "a2-a-scope",
+   "host": "claude",
+   "start": "2026-10-28T21:45:02+00:00",
+   "end": "2026-10-28T21:46:50+00:00",
+   "exit": "0",
+   "usd": 0.8147249999999999,
+   "model_s": 107,
+   "tool_calls": 22,
+   "tokens": [
+    48,
+    52071,
+    1164125,
+    8257
+   ],
+   "model_usage": {
+    "claude-opus-5-5": {
+     "inputTokens": 48,
+     "outputTokens": 8257,
+     "cacheReadInputTokens": 1164125,
+     "cacheCreationInputTokens": 52071,
+     "costUSD": 0.8147249999999999
+    }
+   },
+   "is_error": false
+  },
+  {
+   "name": "a2-b-continue",
+   "host": "claude",
+   "start": "2026-10-28T21:46:52+00:00",
+   "end": "2026-10-28T21:54:21+00:00",
+   "exit": "0",
+   "usd": 2.2887831999999992,
+   "model_s": 447,
+   "tool_calls": 54,
+   "tokens": [
+    110,
+    109547,
+    4675936,
+    23839
+   ],
+   "model_usage": {
+    "claude-opus-5-5": {
+     "inputTokens": 110,
+     "outputTokens": 23839,
+     "cacheReadInputTokens": 4675936,
+     "cacheCreationInputTokens": 109547,
+     "costUSD": 2.2887831999999992
+    }
+   },
+   "is_error": false
+  }
+ ],
+ "validity": {
+  "valid": true,
+  "arm": "insession",
+  "host": "claude",
+  "setup_commit": "62c26e92a117",
+  "task_attempts": 0,
+  "task_route_kinds": {},
+  "reasons": []
+ }
+}

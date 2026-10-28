@@ -1,0 +1,155 @@
+{
+ "run": "fx-codex",
+ "arm": "fixture",
+ "issue": 106,
+ "feature": "specs/106-add-initials-and-squeeze-commands-t07-fx-codex",
+ "sessions": 2,
+ "usd_host": 0,
+ "usd_external": 0,
+ "usd_total": 0,
+ "model_s": 1802,
+ "elapsed_s": 1804,
+ "tool_calls": 111,
+ "attempts": 7,
+ "attempts_by_kind": {
+  "native / native / native-first / successful": 6,
+  "None / external / native-unsupported:model-pin / successful": 1
+ },
+ "native_attempts": [
+  {
+   "identity": "specs/106-add-initials-and-squeeze-commands-t07-fx-codex/stage:scope",
+   "status": "successful",
+   "agent": null,
+   "requested_model": "gpt-6-sol",
+   "actual_model": null,
+   "route_reason": "native-first"
+  },
+  {
+   "identity": "specs/106-add-initials-and-squeeze-commands-t07-fx-codex/stage:specify",
+   "status": "successful",
+   "agent": null,
+   "requested_model": "gpt-6-sol",
+   "actual_model": null,
+   "route_reason": "native-first"
+  },
+  {
+   "identity": "specs/106-add-initials-and-squeeze-commands-t07-fx-codex/stage:clarify",
+   "status": "successful",
+   "agent": null,
+   "requested_model": "gpt-6-sol",
+   "actual_model": null,
+   "route_reason": "native-first"
+  },
+  {
+   "identity": "specs/106-add-initials-and-squeeze-commands-t07-fx-codex/stage:plan",
+   "status": "successful",
+   "agent": null,
+   "requested_model": "gpt-6-sol",
+   "actual_model": null,
+   "route_reason": "native-first"
+  },
+  {
+   "identity": "specs/106-add-initials-and-squeeze-commands-t07-fx-codex/T002",
+   "status": "successful",
+   "agent": "squeeze_106",
+   "requested_model": "gpt-6-sol",
+   "actual_model": null,
+   "route_reason": "native-first",
+   "tokens": {
+    "fidelity": "unavailable",
+    "reason": "No codex log found for agent squeeze_106"
+   }
+  },
+  {
+   "identity": "specs/106-add-initials-and-squeeze-commands-t07-fx-codex/stage:verify",
+   "status": "successful",
+   "agent": "verify_106",
+   "requested_model": "gpt-6-sol",
+   "actual_model": null,
+   "route_reason": "native-first",
+   "tokens": {
+    "fidelity": "unavailable",
+    "reason": "No codex log found for agent verify_106"
+   }
+  }
+ ],
+ "external_attempts": [
+  {
+   "identity": "specs/106-add-initials-and-squeeze-commands-t07-fx-codex/T001",
+   "status": "successful",
+   "run_id": "codex-20261028200203-c42413",
+   "route_reason": "native-unsupported:model-pin",
+   "usd": null,
+   "tokens": {
+    "fresh_input": 50727,
+    "cache_read": 301056,
+    "cache_write": 0,
+    "output": 4225,
+    "reasoning": 1486,
+    "model": null,
+    "requested_model": "gpt-6-sol",
+    "fidelity": "exact",
+    "harness": "codex"
+   }
+  }
+ ],
+ "external_tokens": {
+  "fresh_input": 50727,
+  "cache_read": 301056,
+  "cache_write": 0,
+  "output": 4225
+ },
+ "rejected_completions": 1,
+ "sessions_detail": [
+  {
+   "name": "fx-codex-a-scope",
+   "host": "codex",
+   "start": "2026-10-28T19:45:21+00:00",
+   "end": "2026-10-28T19:49:51+00:00",
+   "exit": "0",
+   "usd": null,
+   "model_s": 270,
+   "tool_calls": 26,
+   "tokens": {
+    "input_tokens": 1278197,
+    "cached_input_tokens": 1219200,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 5154,
+    "reasoning_output_tokens": 1276
+   },
+   "model_usage": {},
+   "is_error": null
+  },
+  {
+   "name": "fx-codex-b-continue",
+   "host": "codex",
+   "start": "2026-10-28T19:49:53+00:00",
+   "end": "2026-10-28T20:15:25+00:00",
+   "exit": "0",
+   "usd": null,
+   "model_s": 1532,
+   "tool_calls": 85,
+   "tokens": {
+    "input_tokens": 9101862,
+    "cached_input_tokens": 8966784,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 26016,
+    "reasoning_output_tokens": 7497
+   },
+   "model_usage": {},
+   "is_error": null
+  }
+ ],
+ "validity": {
+  "valid": true,
+  "arm": "fixture",
+  "host": "codex",
+  "setup_commit": "2ae6dd893deb",
+  "task_attempts": 2,
+  "task_route_kinds": {
+   "external": 1,
+   "native": 1
+  },
+  "reasons": []
+ }
+}

@@ -1,0 +1,186 @@
+{
+ "run": "fx-claude",
+ "arm": "fixture",
+ "issue": 104,
+ "feature": "specs/104-add-initials-and-squeeze-commands-t07-fx-claude",
+ "sessions": 2,
+ "usd_host": 4.51,
+ "usd_external": 0.2,
+ "usd_total": 4.71,
+ "model_s": 765,
+ "elapsed_s": 769,
+ "tool_calls": 113,
+ "attempts": 7,
+ "attempts_by_kind": {
+  "native / native / native-first / successful": 6,
+  "None / external / native-unsupported:model-pin / successful": 1
+ },
+ "native_attempts": [
+  {
+   "identity": "specs/104-add-initials-and-squeeze-commands-t07-fx-claude/stage:scope",
+   "status": "successful",
+   "agent": null,
+   "requested_model": "sonnet",
+   "actual_model": null,
+   "route_reason": "native-first"
+  },
+  {
+   "identity": "specs/104-add-initials-and-squeeze-commands-t07-fx-claude/stage:specify",
+   "status": "successful",
+   "agent": null,
+   "requested_model": "sonnet",
+   "actual_model": "claude-sonnet-5-5",
+   "route_reason": "native-first"
+  },
+  {
+   "identity": "specs/104-add-initials-and-squeeze-commands-t07-fx-claude/stage:clarify",
+   "status": "successful",
+   "agent": null,
+   "requested_model": "sonnet",
+   "actual_model": "claude-sonnet-5-5",
+   "route_reason": "native-first"
+  },
+  {
+   "identity": "specs/104-add-initials-and-squeeze-commands-t07-fx-claude/stage:plan",
+   "status": "successful",
+   "agent": null,
+   "requested_model": "sonnet",
+   "actual_model": "claude-sonnet-5-5",
+   "route_reason": "native-first"
+  },
+  {
+   "identity": "specs/104-add-initials-and-squeeze-commands-t07-fx-claude/T002",
+   "status": "successful",
+   "agent": "a490ed1b7c25dc1a7",
+   "requested_model": "sonnet",
+   "actual_model": "claude-sonnet-5-5",
+   "route_reason": "native-first",
+   "tokens": {
+    "fresh_input": 8,
+    "cache_read": 36194,
+    "cache_write": 15348,
+    "output": 2449,
+    "reasoning": null,
+    "model": "claude-sonnet-5-5",
+    "harness": "claude"
+   }
+  },
+  {
+   "identity": "specs/104-add-initials-and-squeeze-commands-t07-fx-claude/stage:verify",
+   "status": "successful",
+   "agent": "a3a3df4bad71d9438",
+   "requested_model": "sonnet",
+   "actual_model": "claude-sonnet-5-5",
+   "route_reason": "native-first",
+   "tokens": {
+    "fresh_input": 8,
+    "cache_read": 116362,
+    "cache_write": 27130,
+    "output": 2833,
+    "reasoning": null,
+    "model": "claude-sonnet-5-5",
+    "harness": "claude"
+   }
+  }
+ ],
+ "external_attempts": [
+  {
+   "identity": "specs/104-add-initials-and-squeeze-commands-t07-fx-claude/T001",
+   "status": "successful",
+   "run_id": "claude-20261028202300-71f2dd",
+   "route_reason": "native-unsupported:model-pin",
+   "usd": 0.19543040000000003,
+   "tokens": {
+    "fresh_input": 8,
+    "cache_read": 170044,
+    "cache_write": 38010,
+    "output": 2637,
+    "reasoning": 23,
+    "model": "claude-sonnet-5-5",
+    "requested_model": "sonnet",
+    "fidelity": "exact",
+    "harness": "claude"
+   }
+  }
+ ],
+ "external_tokens": {
+  "fresh_input": 8,
+  "cache_read": 170044,
+  "cache_write": 38010,
+  "output": 2637
+ },
+ "rejected_completions": 1,
+ "sessions_detail": [
+  {
+   "name": "fx-claude-a-scope",
+   "host": "claude",
+   "start": "2026-10-28T20:15:43+00:00",
+   "end": "2026-10-28T20:17:46+00:00",
+   "exit": "0",
+   "usd": 0.8564724000000001,
+   "model_s": 122,
+   "tool_calls": 20,
+   "tokens": [
+    42,
+    56402,
+    1030842,
+    9946
+   ],
+   "model_usage": {
+    "claude-opus-5-5": {
+     "inputTokens": 42,
+     "outputTokens": 9946,
+     "cacheReadInputTokens": 1030842,
+     "cacheCreationInputTokens": 56402,
+     "costUSD": 0.8564724000000001
+    }
+   },
+   "is_error": false
+  },
+  {
+   "name": "fx-claude-b-continue",
+   "host": "claude",
+   "start": "2026-10-28T20:17:48+00:00",
+   "end": "2026-10-28T20:28:32+00:00",
+   "exit": "0",
+   "usd": 3.655738600000001,
+   "model_s": 643,
+   "tool_calls": 93,
+   "tokens": [
+    132,
+    138156,
+    6609575,
+    32423
+   ],
+   "model_usage": {
+    "claude-opus-5-5": {
+     "inputTokens": 132,
+     "outputTokens": 32423,
+     "cacheReadInputTokens": 6609575,
+     "cacheCreationInputTokens": 138156,
+     "costUSD": 3.0761510000000003
+    },
+    "claude-sonnet-5-5": {
+     "inputTokens": 40,
+     "outputTokens": 15138,
+     "cacheReadInputTokens": 504401,
+     "cacheCreationInputTokens": 151075,
+     "costUSD": 0.5795876000000001
+    }
+   },
+   "is_error": false
+  }
+ ],
+ "validity": {
+  "valid": true,
+  "arm": "fixture",
+  "host": "claude",
+  "setup_commit": "42e2e73d822f",
+  "task_attempts": 2,
+  "task_route_kinds": {
+   "external": 1,
+   "native": 1
+  },
+  "reasons": []
+ }
+}

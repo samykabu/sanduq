@@ -1,0 +1,108 @@
+{
+ "run": "a1",
+ "arm": "in-session",
+ "issue": 98,
+ "feature": "specs/98-add-initials-and-squeeze-commands-t07-a1",
+ "sessions": 3,
+ "usd_host": 5.71,
+ "usd_external": 0,
+ "usd_total": 5.71,
+ "model_s": 899,
+ "elapsed_s": 908,
+ "tool_calls": 145,
+ "attempts": 0,
+ "attempts_by_kind": {},
+ "native_attempts": [],
+ "external_attempts": [],
+ "external_tokens": {},
+ "rejected_completions": 0,
+ "sessions_detail": [
+  {
+   "name": "a1-a-scope",
+   "host": "claude",
+   "start": "2026-10-28T20:28:46+00:00",
+   "end": "2026-10-28T20:30:31+00:00",
+   "exit": "0",
+   "usd": 0.8191864,
+   "model_s": 104,
+   "tool_calls": 20,
+   "tokens": [
+    44,
+    54513,
+    1030132,
+    8844
+   ],
+   "model_usage": {
+    "claude-opus-5-5": {
+     "inputTokens": 44,
+     "outputTokens": 8844,
+     "cacheReadInputTokens": 1030132,
+     "cacheCreationInputTokens": 54513,
+     "costUSD": 0.8191864
+    }
+   },
+   "is_error": false
+  },
+  {
+   "name": "a1-b-continue",
+   "host": "claude",
+   "start": "2026-10-28T20:30:33+00:00",
+   "end": "2026-10-28T20:33:56+00:00",
+   "exit": "0",
+   "usd": 0.8677955999999998,
+   "model_s": 201,
+   "tool_calls": 22,
+   "tokens": [
+    46,
+    56481,
+    1239418,
+    8394
+   ],
+   "model_usage": {
+    "claude-opus-5-5": {
+     "inputTokens": 46,
+     "outputTokens": 8394,
+     "cacheReadInputTokens": 1239418,
+     "cacheCreationInputTokens": 56481,
+     "costUSD": 0.8677955999999998
+    }
+   },
+   "is_error": false
+  },
+  {
+   "name": "a1-c-continue",
+   "host": "claude",
+   "start": "2026-10-28T20:33:59+00:00",
+   "end": "2026-10-28T20:43:54+00:00",
+   "exit": "0",
+   "usd": 4.0273586,
+   "model_s": 594,
+   "tool_calls": 103,
+   "tokens": [
+    180,
+    144868,
+    9190855,
+    39609
+   ],
+   "model_usage": {
+    "claude-opus-5-5": {
+     "inputTokens": 202,
+     "outputTokens": 45155,
+     "cacheReadInputTokens": 9333883,
+     "cacheCreationInputTokens": 164414,
+     "costUSD": 4.0273586
+    }
+   },
+   "is_error": false
+  }
+ ],
+ "validity": {
+  "valid": true,
+  "arm": "insession",
+  "host": "claude",
+  "setup_commit": "9126a23ed8e3",
+  "task_attempts": 0,
+  "task_route_kinds": {},
+  "reasons": []
+ }
+}
