@@ -14,7 +14,8 @@
   SANDUQ_DELEGATED_ROLE set).
 - `gh pr create|edit --body-file <f>` is refused in a managed project (`.specify/workflow.yml`
   present) when the sibling lint `<f minus suffix>.lint.json` (what `pr_publish.py` writes) is
-  missing or its `body_sha256` is not the file's hash; an inline `--body`/`-b` is refused there too
+  missing or its `body_sha256` is not the file's hash (a path holding an unexpanded shell variable such as
+  `$R/body.md` is allowed: the hook cannot resolve it); an inline `--body`/`-b` is refused there too
   (no lint receipt can cover it); `gh pr create` is refused when its head
   (`--head`, else the current branch) is the repository default branch (`origin/HEAD`), in every
   project. An unresolvable branch allows.
@@ -48,6 +49,7 @@ WAIVER_REASON = ('a CI gate waiver is the owner decision; an agent may not post 
                  'it (docs/workflow/delivery-policy.md, One-off rule waiver)')
 BY_NAME = 'stage your owned paths by name (git add -- <path>...)'
 SEPARATORS = re.compile(r'&&|\|\||[;|&\n]')
+UNEXPANDED = re.compile(r'\$|%[A-Za-z_]\w*%|`')  # a shell variable or substitution the hook cannot expand
 
 
 def option(args, *names):
@@ -90,7 +92,9 @@ def pr_findings(tokens, root):
     if managed and tokens[2] == 'create' and not body:  # --fill, a template or an editor body: none carries a lint
         found.append(('pr', 'gh pr create needs a linted --body-file in a managed project; publish through '
                             '.specify/extensions/pr/scripts/pr_publish.py'))
-    if body and managed:
+    # R7: the hook sees the command before the shell expands it, so `$R/body.md` or `%R%\body.md` names no file
+    # it can read; such a path is allowed (the guard is advisory and `complete` recomputes the lint anyway).
+    if body and managed and not UNEXPANDED.search(body):
         path = os.path.join(root, body)
         lint = os.path.splitext(path)[0] + '.lint.json'
         try:
