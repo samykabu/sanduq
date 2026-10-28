@@ -19,6 +19,8 @@ apply, record that inventory result. In lean mode the coordinator owns PR mechan
 including reuse of unchanged evidence, with no model dispatch; claim tokens, publication
 evidence, human decisions and project checks stay enforced.
 
+Commit the explainer and every document it links to or embeds (its CHANGELOG.md, diagrams) first,
+and `git push` when the PR exists: the script refuses an uncommitted or unpushed linked file.
 Publish with `python .specify/extensions/pr/scripts/pr_publish.py --feature specs/<feature>
 --explained docs/<slug>/<Feature>-Explained.md`: it writes the exact UTF-8/LF body, lints it with
 `execution_tools.pr_lint` against the bound issue and prerequisites from `scope-source.json` (not
@@ -26,7 +28,7 @@ PR prose), refuses on findings (exit 1), and prints `pr_url`, `pr_body_file`, `p
 `pr_body_sha256` and `evidence`; copy them into the receipt as printed. Completion recomputes the
 lint; the guard hook refuses `gh pr create|edit --body-file` without a matching sibling
 `.lint.json`. Keep the actual publication evidence and body bytes. Build the body once, with
-this script: it also pins relative image paths, so never write, lint or send a body yourself;
+this script: it also pins relative image paths and links, so never write, lint or send a body yourself;
 after editing the explainer, rerun it.
 
 For source-only PRs, write the affected features to `.specify/workflow/pr-features.json` as

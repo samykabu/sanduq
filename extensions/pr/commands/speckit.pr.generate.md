@@ -155,6 +155,11 @@ Footer: link back to `CHANGELOG.md`, the `specs/<feature-slug>/` spec, and any d
 
 ### 6. Handle the pull request
 
+First commit every document the explainer links to or embeds (`docs/<feature-slug>/CHANGELOG.md`,
+the explainer, diagrams and their sources) with `git add <paths> && git commit`; when the branch
+already has a PR, also `git push`. The publisher checks each relative link and image is committed
+at HEAD and readable on the remote, and stops with exit 2 (or 3) naming the file otherwise.
+
 ```text
 python .specify/extensions/pr/scripts/pr_publish.py --feature <feature-dir> --explained docs/<feature-slug>/<Feature>-Explained.md [--heading "<text>"] [--no-pr]
 ```
@@ -172,9 +177,9 @@ uses (bundled with PR, so Workflow is never required or installed merely for lin
 never write, lint or send a body yourself; after editing the explainer, rerun it. It prints the PR receipt fragment (`pr_url`,
 `pr_body_file`, `pr_lint_file`, `pr_body_sha256`, `evidence`): copy it into the receipt as printed.
 Exit codes: 0 published; 1 the body closes a foreign, prerequisite or unbound issue (or never closes the bound one): fix the
-document and rerun; 2 bad input (malformed markers, an image not committed); 3 `gh` or `git` failed,
+document and rerun; 2 bad input (malformed markers, a linked file or image not committed: commit it and rerun); 3 `gh` or `git` failed,
 including a PR lookup that fails (it is never read as "no PR"), a branch whose PR is merged or closed
-(that PR is never edited) and an image not on the remote: report that the PR step was skipped and why. With `--no-pr` it stops after the lint.
+(that PR is never edited) and a linked file or image not on the remote (`git push`, then rerun): report that the PR step was skipped and why. With `--no-pr` it stops after the lint.
 
 ### 7. Report
 
