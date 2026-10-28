@@ -1766,7 +1766,7 @@ class Run:
                     'recorded before claim_token existed has none and will never match; re-delegate the stage '
                     'once under this workflow release')
             self._validated_candidate = stage_attempt.get('run_id')
-        if self.policy['delegation']['enabled']:
+        if self.policy['delegation']['enabled'] and (active.get('delegation') or active.get('delegation_refused')):
             # A native review or QA attempt of this claim (a review-kind stage records one with no route) must
             # not come from the agent lineage that authored the work it checks.
             from delegation import latest_attempt, ledger_attempts, same_lineage_author
