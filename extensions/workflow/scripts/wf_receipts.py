@@ -25,7 +25,7 @@ from wf_core import (BASE_STAGES, INPUT_ROLES, SOURCE_STAGES, LITE_OPTIONAL_INPU
 import sanduq_fs  # on sys.path once wf_core is imported (packaged beside it, or the source tree's shared folder)
 from wf_fingerprints import (sync_state_label, sync_entry, text_fingerprints, fingerprint_files, source_fingerprints,
                              source_fingerprints_of)
-from wf_policy import state_tier, feature_tier, task_issue_mode
+from wf_policy import state_tier, feature_tier, task_issue_mode, stages
 from wf_health import progress_wiring_warnings, guard_approval_warnings
 
 
@@ -860,10 +860,18 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
         require(not unmapped, 'TASK_MAPPING_INCOMPLETE: ' + ', '.join(unmapped[:20]) + lazy)
         ran.append('task_links')
     checks = []
+    # F5: the documentation the feature's tier writes; a lite tier runs neither QA Document nor Manual Update.
+    selected = stages(policy, state_tier(state))
     if rules.get('documentation') and policy['processes']['qa']:
-        checks.append(['.specify/extensions/assure/scripts/assure_state.py', 'status', '--kind', 'document'])
+        if 'qa_document' in selected:
+            checks.append(['.specify/extensions/assure/scripts/assure_state.py', 'status', '--kind', 'document'])
+        else:
+            ran.append('documentation:assure_state:skipped (' + str(state_tier(state)) + ' tier)')
     if rules.get('documentation') and policy['processes']['user_manual']:
-        checks.append(['.specify/extensions/user-manual/scripts/manual_state.py', 'status'])
+        if 'manual_update' in selected:
+            checks.append(['.specify/extensions/user-manual/scripts/manual_state.py', 'status'])
+        else:
+            ran.append('documentation:manual_state:skipped (' + str(state_tier(state)) + ' tier)')
     for args in checks:
         require((root / args[0]).is_file(), 'SELECTED_PROCESS_MISSING: ' + args[0])
         # The gate runs the base branch's copy (`scripts_root`, SEC-03). shortcut: a process the PR itself

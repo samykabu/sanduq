@@ -30,6 +30,9 @@ Rule names for repeated `--gate-rule NAME=on|off` selections:
 `decisions`. A fresh policy selects receipts, decisions, documentation,
 portability, and live answers. Existing policies without a `ci.gate` section
 retain the prior required, all-PR evidence behavior until deliberately changed.
+The `documentation` rule checks only the documentation the feature's tier
+writes: a lite feature runs neither QA Document nor Manual Update, so its
+selected QA and User Manual checks are reported as `skipped (lite tier)`.
 
 ## Greenfield project
 
