@@ -126,7 +126,14 @@ git diff --check
 
 Choose the suites affected by the diff. Documentation-only changes need the documentation check,
 link review, and rendered illustration inspection. Changed command semantics need a check that
-fails when the behavior breaks, not a copy of the implementation.
+fails when the behavior breaks, not a copy of the implementation. A test of a skill reference or
+document checks a heading, a command, an error code or a key term, or forbids a pattern; it does not
+pin a sentence unless code parses that sentence.
+
+A comment states the rule it protects, not the review that found it: `check_docs.py` fails on a
+comment or docstring in `extensions/*/scripts` that cites a review round, a finding number or a
+reviewer id, and on a test module named after a round or review. Review history belongs in the
+package CHANGELOG.
 
 Installation changes also need the relevant smoke check:
 

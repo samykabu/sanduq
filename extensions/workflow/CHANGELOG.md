@@ -20,6 +20,7 @@ Breaking: Scope is part of Workflow (DEC-03, PH-06-T02), and every Scope command
 - `delegate_dispatch.py accept --no-attempt --id <T###> --command "<check>" --expect counts|files [--owned <path>] --nonce <n>` adopts a checked task that has no attempt. `adopt` stays as an alias with the same arguments and byte-identical output; both run one implementation. `accept` without `--no-attempt` still needs `--run-id`, and mixing the two modes is a usage error (exit 2). No behaviour changes (PH-06-T03, DEC-02 A).
 - The parse_counts and light-tier summary path and the ledger trust markers are documented as advisory. No migration was removed: each one reads state a released version can have left.
 - CONTRIBUTING.md adds the no-behaviour-change rule for cleanup pull requests.
+- Script comments and docstrings state the rule they protect instead of citing review rounds, finding numbers or reviewer ids; `check_docs.py` refuses such a citation in `extensions/*/scripts` and a round- or review-named test module. Test modules renamed by behaviour: `test_scope_round4` is `test_scope_identity_listing_reconcile`, `test_scope_round5` is `test_scope_cancel_transport`, `test_execution_protocol_b11` is `test_execution_protocol_references`. Reference-text tests check headings, commands, codes and key terms instead of pinning sentences. `worker_brief.py --help` drops two finding citations; no other output changes.
 
 ## [1.25.0] - 2026-10-28
 
