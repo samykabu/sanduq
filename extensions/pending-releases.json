@@ -1,8 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "workflow": "2.0.1"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Workflow 2.0.1 hotfix: adopt refuses an externally routed task unless --reason labels the substitution; adopted attempts record route_kind and route_reason."
 }
