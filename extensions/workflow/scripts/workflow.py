@@ -67,11 +67,12 @@ from wf_identity import (github_repository, previous_branch, target_branch, norm
                          is_shallow_clone, repo_identity, current_identity, root_commit_still_reachable, same_remote,
                          identity_matches, legacy_history_signal, verify_checkpoint_identity, root_history_changed,
                          require_issue_repository_binding, issue_identity, prepare_issue, require_shared_history,
-                         feature_for_issue)
+                         feature_for_issue, git_lines)
 from wf_fingerprints import (sync_state_label, sync_entry, sync_projection, sync_binding,
                              normalized_text, text_fingerprints, fingerprint_files,
                              git_text_attributes, prefetch_attributes, source_fingerprints, inventory_label,
-                             store_source_inventory, source_fingerprints_of)
+                             store_source_inventory, source_fingerprints_of, DECISION_RECORDS_PREFIX, DECISION_LEDGER,
+                             decision_projection, recorded_decision_ids)
 from wf_policy import (default_policy, select_gate, validate_policy, _positive, validate_front_half_policy, tier,
                        state_tier, feature_tier, skipped_stages, project_sync, task_issue_mode, side_effects,
                        matches_side_effect, load_policy, stages, OPERATIONAL_SUBKEYS, policy_cutoff, POLICY_KEYS,
