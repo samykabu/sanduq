@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.13.1] - 2026-10-28
 
 - The gate accepts a resolved analysis whose decision evidence Workflow 1.23 recorded line-ending independent (CRLF read as LF), so a Windows checkout no longer fails with `SCOPE_RESOLVED_ANALYSIS_EVIDENCE_MISMATCH`; a raw-byte hash from an older ledger still matches.
 

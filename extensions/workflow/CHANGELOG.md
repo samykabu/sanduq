@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.23.0] - 2026-10-28
 
 - `host --use` returns `next` naming the `migrate` commands when a feature's checkpoint needs migrating after the switch (F11). `install.py` flushes its JSON before the stderr notices, so a shell that merges the two streams shows the JSON first (F12; the notices were already on stderr).
 - Docs: `gh project create ... --format json --jq .number` for the board number (F14); prerequisites name `install.py --apply --with-aliases` after adding the Bridge (F15); install-by-host covers headless `codex exec` hook approval and user-global Codex plugins (F16, F23); operations.md says a repository-scoped self-hosted runner set must be registered per repository (F22).
