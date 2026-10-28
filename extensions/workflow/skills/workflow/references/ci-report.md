@@ -14,3 +14,8 @@ wall-clock span (earliest job start to latest job end, not a critical path) and 
 duration. `--fixed-job` marks a job's time as fixed overhead; without it everything counts as
 test time. Use it before proposing a lane or runner change and to count cancelled runs. It
 writes no checkpoint state and produces no receipt.
+
+`--check <name> --ref <sha>` (instead of `--workflow`) prints one check run's `state` on that
+commit: its conclusion once completed, else `queued` (no runner took the job), `in_progress` or
+`absent`. It polls `--attempts` times (3) `--interval` seconds apart (20) and then reports; it
+never waits longer. Exit 1 only for a completed check that did not pass.

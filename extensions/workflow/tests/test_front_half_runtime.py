@@ -1199,6 +1199,26 @@ class LeanLiteTests(Base):
         self.assertIn('TASK_ISSUES_SKIPPED: ' + self.feature + ' skips Tasks-to-Issues (lite tier: no task sub-issues)',
                       done.stdout)
 
+    def test_start_takes_a_bare_issue_number_of_origin(self):
+        """R5: `start --issue 10` binds origin's #10, as `prepare --issue 10` reads it."""
+        self.assertEqual(w.Run(self.root, self.feature).start('10')['issue'], 'acme/app#10')
+        self.assertEqual(w.Run(self.root, self.feature).start('#10')['issue'], 'acme/app#10')
+
+    def test_status_agrees_with_next_after_the_pr_and_drops_a_resumed_pause(self):
+        """R6: a held Scope claim paused for approval, then finished through the PR: status says pr_open, no pause."""
+        run = self.run_object()
+        claim = run.claim(self.usage())
+        code, paused = self.cli('pause', '--feature', self.feature, '--reason', 'Scope awaiting owner approval')
+        self.assertEqual((code, paused['status']), (0, 'paused'))
+        run.complete(claim['token'], self.receipt('scope'))
+        claim = run.claim(self.usage())
+        self.assertNotIn('pause', run.load())
+        run.complete(claim['token'], self.receipt(claim['stage']))
+        self.advance_fresh(run, 'pr')
+        self.assertEqual(run.next(run.load())['status'], 'pr_open')
+        code, status = self.cli('status', '--feature', self.feature)
+        self.assertEqual((code, status['status'], 'pause' in status), (0, 'pr_open', False), status)
+
     def test_status_prints_the_receipt_template_of_a_held_claim(self):
         self.profiles()
         run = self.run_object()

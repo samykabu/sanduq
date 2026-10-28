@@ -166,7 +166,8 @@ pins each relative image path to a verified commit URL, writes the exact UTF-8/L
 prerequisites from `scope-source.json` with the closing-reference rule Workflow's `pr-lint` also
 uses (bundled with PR, so Workflow is never required or installed merely for linting) into
 `pr-body.lint.json` beside it, and only then runs `gh pr edit`, or pushes the branch and runs
-`gh pr create`; it never publishes after a nonzero exit. It prints the PR receipt fragment (`pr_url`,
+`gh pr create`; it never publishes after a nonzero exit. It is the only way the body is built:
+never write, lint or send a body yourself; after editing the explainer, rerun it. It prints the PR receipt fragment (`pr_url`,
 `pr_body_file`, `pr_lint_file`, `pr_body_sha256`, `evidence`): copy it into the receipt as printed.
 Exit codes: 0 published; 1 the body closes a foreign, prerequisite or unbound issue: fix the
 document and rerun; 2 bad input (malformed markers, an image not committed); 3 `gh` or `git` failed,

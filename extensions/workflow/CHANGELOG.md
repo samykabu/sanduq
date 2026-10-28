@@ -4,6 +4,8 @@
 
 - The receipt template no longer shows `"evidence": []`, which `complete` refuses with `EVIDENCE_REQUIRED`: it shows the placeholder `<existing file that proves the work>`, and a placeholder left in `evidence` is refused with `RECEIPT_PLACEHOLDER: evidence`. A lite Plan claim names `specs/<f>/evidence/plan-lint.json`, and stage-plan.md gives the `lint.py --json` command that writes it (lite re-measure R2). `EVIDENCE_REQUIRED` and `INPUT_ROLE_NOT_IN_MANIFEST` are in the error registry, so the CLI prints `explain` and `next` for them (R2, R3).
 - The guard no longer refuses `gh pr create|edit --body-file $R/body.md` as having no lint file: it sees the command before the shell expands `$R` (or `%R%`, or a backtick substitution), so such a path is allowed, as the advisory guard documents; `complete` still recomputes the PR lint (R7).
+- The PR stage no longer blocks on the remote check: `ci_report.py --check workflow-evidence --ref <sha>` polls it three times 20 s apart and prints its `state` (`queued` means no runner took the job). stage-pr.md says to read it once, before `complete`, record a pending state in the receipt summary and tell the user instead of waiting (`gh pr checks --watch` blocked two lite runs for 300 and 540 s on a job no runner picked up, R1); the PR is still not reported ready to merge until the check passes. stage-pr.md also says to build the body once, with `pr_publish.py`.
+- `start --issue 64` binds origin's issue #64, as `prepare --issue 64` does (R5). `status` says `pr_open` once the PR stage is recorded, as `next` does, and a claim that resumes a paused feature drops the stale `pause` (R6).
 
 ## [1.23.0] - 2026-10-28
 

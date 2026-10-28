@@ -61,8 +61,8 @@ Finish a feature once, in this order: code and its affected tests; the independe
 implementation review; documentation and portable evidence, with generated reports finished
 before the final record; Ready with current prerequisites; freeze the publication candidate;
 `ci_gate.py --check-index` and the gate in a clean checkout of that candidate; publish or reuse
-one PR with `pr_publish.py`; `complete`; `project-sync`; then check the exact final PR head
-([stage-pr.md](stage-pr.md)). A substantive change reopens only the phase it affects. A prose
+one PR with `pr_publish.py`; the bounded check of the exact final PR head; `complete`;
+`project-sync` ([stage-pr.md](stage-pr.md)). A substantive change reopens only the phase it affects. A prose
 fix or a board status write does not repeat the acceptance chain.
 
 Recover within that order before dispatching another semantic agent:

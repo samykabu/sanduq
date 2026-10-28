@@ -151,7 +151,7 @@ ERRORS = {
     'DUPLICATE_STAGE_OWNER': ('An extension hook is still enabled for a stage the Workflow dispatcher owns.', 'The stage would run twice.', 'python .specify/extensions/workflow/scripts/reconcile.py --apply'),
     'EVIDENCE_MISSING': ('A receipt names evidence that does not exist on disk.', 'A stage passes only on evidence a reader can open.', 'Write the file, then run complete again with the same receipt'),
     'EVIDENCE_REQUIRED': ('The receipt has no summary or an empty evidence list.', 'A stage passes only on a summary and at least one existing file that proves the work.', 'Set summary and list the proof files in evidence (on lite Plan: python .specify/extensions/workflow/scripts/lint.py --feature <feature> --json > <feature>/evidence/plan-lint.json), then complete again'),
-    'EXPLICIT_ISSUE_REQUIRED': ('start needs --issue owner/repo#N.', 'A feature is bound to exactly one GitHub issue.', W + ' start --feature <feature> --issue <owner/repo#N>'),
+    'EXPLICIT_ISSUE_REQUIRED': ('start needs --issue N (an issue of origin) or owner/repo#N.', 'A feature is bound to exactly one GitHub issue.', W + ' start --feature <feature> --issue <N>'),
     'EXPLICIT_RELEASE_VERSION_REQUIRED': ('upgrade.py needs --version X.Y.Z.', 'An upgrade targets one released version.', 'python .specify/extensions/workflow/scripts/upgrade.py --version <X.Y.Z> --apply'),
     'FEATURE_BINDING_MISMATCH': ("The feature's scope-source.json is bound to another issue.", 'Scope and Workflow must agree on the issue.', 'Pass the issue scope-source.json names, or run Scope again for this issue'),
     'FEATURE_PATH_INVALID': ('--feature is not a directory under specs/.', 'Features live in specs/<slug>.', W + ' status --feature specs/<slug>'),

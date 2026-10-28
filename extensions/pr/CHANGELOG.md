@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- `speckit.pr.generate` says `pr_publish.py` is the only way the body is built: never write, lint or send a body by hand, and rerun the script after editing the explainer. A lite run built and sent one body by hand, then had the script rewrite it (lite re-measure, driver 2).
+
 ## [4.7.1] - 2026-10-28
 
 - `requires.tools` declares Python `>=3.11`, the floor every Sanduq extension now states (SAMY-11).

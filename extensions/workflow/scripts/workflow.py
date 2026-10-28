@@ -999,6 +999,9 @@ class Run:
                 'hash': fingerprint_files(self.root, [evidence])[evidence], 'at': now()}
 
     def start(self, issue):
+        if re.fullmatch(r'#?[1-9]\d*', str(issue or '')):
+            # R5: a bare number, as `prepare` takes it, names an issue of origin.
+            issue = github_repository(self.root) + '#' + str(issue).lstrip('#')
         require(re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[1-9]\d*', issue), 'EXPLICIT_ISSUE_REQUIRED')
         require(same_github_repository(github_repository(self.root), issue.split('#')[0]), 'ISSUE_REPOSITORY_MISMATCH')
         require_shared_history(self.root)
@@ -1088,6 +1091,12 @@ class Run:
             return None
         # The command usually asks for the same answer right after the save; hand it over once.
         self._saved_next = (state, state['generation'], copy.deepcopy(result))
+        # R6: `status` agrees with `next` once the PR stage is recorded, and stops saying so when a stage reopens.
+        if result.get('status') == 'pr_open' and state.get('status') != 'paused':
+            state['status'] = 'pr_open'
+            state.pop('pause', None)
+        elif state.get('status') == 'pr_open':
+            state['status'] = 'in-progress'
         if result.get('stage'):
             text = 'Run ' + result['stage'] + (' (' + result['command'] + ')' if result.get('command') else '')
             if result.get('reason') in ('inputs-or-evidence-changed', 'policy-changed'):
@@ -1278,6 +1287,7 @@ class Run:
             state['active']['baseline'] = fingerprint_files(self.root, [p for r in state['receipts'].values() for p in r['fingerprints']],
                                                             feature=self.relative)
             state['status'] = 'in-progress'
+            state.pop('pause', None)  # R6: a resumed claim ends the pause; the lifecycle log keeps it
             write(self.root / '.specify/feature.json', {'feature_directory': self.relative})
             text, protocol, reporting = reference_text(self.root, stage), None, None
             if stage == 'execute':

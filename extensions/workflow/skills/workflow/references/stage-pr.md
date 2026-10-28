@@ -25,7 +25,9 @@ Publish with `python .specify/extensions/pr/scripts/pr_publish.py --feature spec
 PR prose), refuses on findings (exit 1), and prints `pr_url`, `pr_body_file`, `pr_lint_file`,
 `pr_body_sha256` and `evidence`; copy them into the receipt as printed. Completion recomputes the
 lint; the guard hook refuses `gh pr create|edit --body-file` without a matching sibling
-`.lint.json`. Keep the actual publication evidence and body bytes.
+`.lint.json`. Keep the actual publication evidence and body bytes. Build the body once, with
+this script: it also pins relative image paths, so never write, lint or send a body yourself;
+after editing the explainer, rerun it.
 
 For source-only PRs, write the affected features to `.specify/workflow/pr-features.json` as
 `{"features": ["specs/001-example"]}` and include it in the PR. CI uses it in addition to the
@@ -35,8 +37,8 @@ changed feature directories, never instead. Refresh readiness evidence after sou
 
 Code and affected tests, the independent review, documentation and portable evidence, and
 Ready come first. Then freeze the candidate, run the indexed and clean-candidate gates below,
-publish or reuse one PR with `pr_publish.py`, `complete` the claim, run the claim's
-`project-sync` (in-review), and check the exact final PR head. Syncing before `complete` is
+publish or reuse one PR with `pr_publish.py`, read the remote check (below), `complete` the
+claim with that result, and run the claim's `project-sync` (in-review). Syncing before `complete` is
 also safe: a status-only write does not touch receipts. On a stale receipt use the bounded
 recovery in [dispatcher-operations.md](dispatcher-operations.md#finalization-order)
 (`sync-amend`, `amend`, scoped revalidation) before dispatching another semantic agent.
@@ -56,8 +58,13 @@ and certifies no test run. Then run the gate in a clean checkout of the exact ca
 Run graph updates before final audits (`graphify-out/` is excluded from implicit documentation
 inputs; declared graph outputs stay hashed). Re-fetch the target before publication; if merging
 it changes source or build inputs, rerun the affected checks and readiness on the combined tree.
-Require the remote workflow-evidence check on the exact final PR head and recommend branch
-protection for it, reporting missing enforcement without changing it. The CI template is
+Read the remote workflow-evidence check on the exact final PR head once, bounded: `python
+.specify/extensions/workflow/scripts/ci_report.py --repository <owner/repo> --check
+workflow-evidence --ref <head sha>` polls it three times 20 s apart and prints its `state`.
+Never wait longer (no `gh pr checks --watch`): a `queued` (no runner took the job),
+`in_progress` or `absent` state goes into the receipt summary as printed and to the user, and
+the PR is not reported ready to merge until the check passes; a failed check is fixed first.
+Recommend branch protection for the check, reporting missing enforcement without changing it. The CI template is
 PR-only; push workflows need an explicit feature mapping and comparison base. A promotion PR
 with pre-adoption features needs an explicit legacy-adoption decision per missing checkpoint;
 never synthesize receipts or skip those features.
