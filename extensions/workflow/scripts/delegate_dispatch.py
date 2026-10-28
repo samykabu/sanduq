@@ -2121,7 +2121,9 @@ def attest_native(root, feature, identity, token, requested_model, reported_mode
         route = active.get('delegation')
         delegation.require(route, 'NATIVE_ATTESTATION_NOT_NEEDED: the claim of stage:' + stage + ' of ' + feature +
                            ' recorded no delegation route, so complete needs no attempt for it')
-        delegation.require(route['candidates'][0].get('route_reason') != 'native-unsupported:work-type-disabled',
+        # The opt-out is read from policy: the first candidate's reason may name another constraint (cross-vendor).
+        delegation.require(workflow.load_policy(root)['delegation'].get('native_allowed', {})
+                           .get(route.get('task_type'), True),
                            'NATIVE_ROUTE_DISALLOWED: delegation.native_allowed.' + str(route.get('task_type')) +
                            ' is false, so ' + full_identity + ' runs externally')
         reserve(ledger, full_identity, None)

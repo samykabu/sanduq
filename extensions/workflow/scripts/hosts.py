@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import tomllib
 import uuid
 from pathlib import Path
 
@@ -341,9 +342,13 @@ def role_models(policy, host, package_root):
 
 def role_model(text, host):
     """The model line of a rendered role file, or None."""
-    head = text.split('developer_instructions', 1)[0] if host == 'codex' else text.split('\n---', 1)[0]
-    match = re.search(r'^model(?:: | = )(.+)$', head, re.M)
-    return None if not match else json.loads(match.group(1)) if host == 'codex' else match.group(1).strip()
+    if host == 'codex':
+        try:
+            return tomllib.loads(text).get('model')
+        except tomllib.TOMLDecodeError:
+            return '<invalid TOML>'  # doctor reports the file as stale instead of crashing
+    match = re.search(r'^model: (.+)$', text.split('\n---', 1)[0], re.M)
+    return match.group(1).strip() if match else None
 
 
 def install_roles(root, host, package_root, policy=None):

@@ -239,6 +239,27 @@ class NativeRoutingTests(unittest.TestCase):
         guided = lean_policy.timeout_guidance(self.policy, [native], 'implementation', candidates)
         self.assertEqual((guided['timeout_seconds'], guided['comparable_runs']), (default['timeout_seconds'], 0))
 
+    def test_a_failed_native_record_blocks_a_review_kind_stage_without_a_route(self):
+        self.enable()
+        run, claim = self.claim()
+        state = run.load()  # a review-kind stage claims with delegation_refused, not a route
+        state['active']['delegation_refused'] = {'task_type': 'review'}
+        state['active'].pop('delegation', None)
+        w.write(run.path, state)
+        self.record('stage:scope', claim['token'], FAIL, exit_code=1)
+        with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_STAGE_NOT_VERIFIED.*acceptance check failed'):
+            run.complete(claim['token'], fixture.WorkflowTests.receipt(self, 'scope'))
+
+    def test_attest_native_honours_the_opt_out_when_the_route_is_cross_vendor(self):
+        self.policy['delegation']['native_allowed'] = {'discovery': False}
+        self.policy['delegation']['routes']['discovery'] = {'preferred': {'harness': 'claude', 'tier': 'standard'},
+                                                            'fallbacks': []}
+        self.enable()
+        run, claim = self.claim()
+        self.assertEqual(run.load()['active']['delegation']['candidates'][0]['route_reason'], 'external:cross-vendor')
+        with self.assertRaisesRegex(delegation.DelegationError, 'NATIVE_ROUTE_DISALLOWED'):
+            dispatch.attest_native(self.root, self.feature, 'stage:scope', claim['token'], 'gpt-6-sol')
+
     def test_record_native_refuses_a_disallowed_route_and_a_subagent(self):
         self.tasks('- [x] T001 Implement parser\n')
         self.policy['delegation']['native_allowed'] = {'implementation': False}
