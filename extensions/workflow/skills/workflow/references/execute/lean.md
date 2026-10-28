@@ -1,7 +1,8 @@
 # Execute: lean coordinator
 
 This part applies when lean execution is on (`lean_execution.enabled: true`). Native or external
-work follows the [routing rule](../delegation.md#routing-rule).
+work follows the [routing rule](../delegation.md#routing-rule): a task the claim routes externally
+runs with `start`, `collect`, `accept`; never implement it in-session and `adopt` it.
 
 The existing lifecycle coordinator owns Execute and the following verification, documentation
 and publication work: all assignments, integration, reporting calls and authorized Git

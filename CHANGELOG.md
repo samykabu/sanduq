@@ -4,6 +4,10 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## 2026-10-28 — Workflow 2.0.1 (pending release)
+
+- Hotfix from a PH-05-T07 live run: `adopt` no longer adopts a task whose route is external, which had let an agent implement externally routed tasks in-session and record them as adopted. `--reason` records a labelled substitution that Ready warns on; every adopted attempt records `route_kind` and `route_reason`. Delegation off and native-first routes are unchanged.
+
 ## 2026-10-28 — Workflow 2.0.0, Scope 2.0.0 (retired), Assure 2.7.1, Memory 2.6.2, PR 4.7.4, User Manual 1.8.4
 
 - PH-06 of the October 2026 review. **Breaking:** Scope is part of Workflow, and every `speckit.scope.<x>` command is now `speckit.workflow.scope-<x>` (Spec Kit requires an extension's commands to start with its id). The installer removes the old Scope package and keeps `.specify/scope/` state; `migrate` treats the old command name as the new one, so features in progress keep their receipts. Scope 2.0.0 is a no-code shim marked deprecated that prints the upgrade step. Presets workflow 1.4.0, scope-gate 1.7.0, scope-brainstorm 1.6.0.

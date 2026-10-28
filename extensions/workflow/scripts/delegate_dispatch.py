@@ -1243,7 +1243,8 @@ def fallback_message(feature, attempt, pending):
                                            token=attempt['claim_token'])
               if attempt.get('claim_token') else
               'do ' + identity + ' in this session, then ' + DISPATCH_SCRIPT + ' adopt --feature ' + feature +
-              ' --id ' + identity + ' --command "<acceptance command>" --expect counts --nonce <dispatcher_nonce>')
+              ' --id ' + identity + ' --command "<acceptance command>" --expect counts --reason "the user chose native '
+              'after ' + attempt['requested_harness'] + ' rejected its model" --nonce <dispatcher_nonce>')
     return ('FALLBACK_CONFIRMATION_REQUIRED: ' + identity + ' of ' + feature + ': ' + attempt['requested_harness'] +
             ' rejected model ' + model_label(attempt['requested_model']) + ' (' + pending['reason'] + '). '
             'The configured substitute is ' + substitute_text(pending['substitute']) + '. No replacement run was '
@@ -2528,7 +2529,7 @@ def acceptance_check(command, expect, cwd, owned_paths, timeout, source):
     return run, evidence
 
 
-def accept(root, feature, run_id, command, expect, timeout=None, owned=None, task_id=None):
+def accept(root, feature, run_id, command, expect, timeout=None, owned=None, task_id=None, reason=None):
     """Independently run and judge an acceptance command for an unverified run.
 
     With ``task_id`` instead of ``run_id`` (CLI: ``accept --no-attempt --id T###``, alias ``adopt``)
@@ -2571,7 +2572,9 @@ def accept(root, feature, run_id, command, expect, timeout=None, owned=None, tas
     delegation.require(type(timeout) is int and 0 < timeout <= 28800, 'DELEGATION_TIMEOUT_INVALID')
     delegation.require_no_maintenance(root)
     if task_id is not None:
-        return _accept_no_attempt(root, feature, task_id, command, expect, timeout, owned)
+        return _accept_no_attempt(root, feature, task_id, command, expect, timeout, owned, reason)
+    delegation.require(reason is None, 'DELEGATION_ACCEPT_REASON_NO_ATTEMPT_ONLY: --reason applies only to '
+                       'accept --no-attempt (adopt)')
     ledger = read_ledger(root, feature)
     attempt = find_run(ledger, run_id)
     delegation.require(attempt is not None, 'DELEGATION_RUN_UNKNOWN: ' + run_id)
@@ -2741,12 +2744,40 @@ def trust_reset(root, feature, reason):
     return {'feature': feature, 'trust': 'trusted', **entry}
 
 
-def adopt(root, feature, task_id, command, expect, timeout=None, owned=None):
+def adopt(root, feature, task_id, command, expect, timeout=None, owned=None, reason=None):
     """Alias of ``accept --no-attempt``: one implementation, the same output."""
-    return accept(root, feature, None, command, expect, timeout, owned, task_id=task_id)
+    return accept(root, feature, None, command, expect, timeout, owned, task_id=task_id, reason=reason)
 
 
-def _accept_no_attempt(root, feature, task_id, command, expect, timeout, owned):
+def adopt_route_reason(root, feature, task_id, task_line, reason):
+    """The ``route_reason`` an adopted attempt records: ``adopted``, or ``external-substituted:<reason>``.
+
+    With delegation on, a task whose selected route (computed as record-native computes it) is external must
+    run through ``start``; adopting it in-session is refused with ``DELEGATION_ADOPT_ROUTE_EXTERNAL`` unless
+    ``reason`` says why the external route could not run, and then the substitution is labelled, never silent.
+    """
+    policy = workflow.load_policy(root)
+    config = policy['delegation']
+    if not config['enabled']:
+        return 'adopted'
+    lean = lean_policy.enabled(policy, lean_policy.feature_tier(root, feature))
+    try:
+        first = delegation.selected_route(config, delegation.task_type(task_line, lean), workflow.active_host(root),
+                                          feature + '/' + task_id)[0]
+    except delegation.DelegationError as exc:
+        if not str(exc).startswith('DELEGATION_REVIEW_ROUTE_UNSAFE'):
+            raise
+        return 'adopted'  # review work runs natively under the SEC-01 interim
+    if first.get('route_kind') != 'external':
+        return 'adopted'
+    reason = (reason or '').strip()
+    delegation.require(reason, 'DELEGATION_ADOPT_ROUTE_EXTERNAL: the route for ' + task_id + ' is external (' +
+                       str(first.get('route_reason')) + '); run it with delegate_dispatch.py start --feature ' +
+                       feature + ' --id ' + task_id + ', or pass --reason "<why external could not run>"')
+    return 'external-substituted:' + reason
+
+
+def _accept_no_attempt(root, feature, task_id, command, expect, timeout, owned, reason=None):
     """``accept``'s no-attempt mode (alias ``adopt``); ``accept`` has already resolved ``root`` and
     ``feature`` and validated the identity, context, ``expect``, ``command`` and ``timeout``.
 
@@ -2818,6 +2849,7 @@ def _accept_no_attempt(root, feature, task_id, command, expect, timeout, owned):
     delegation.require(all(a.get('adopted') and a.get('status') == 'unverified' for a in existing),
                        'DELEGATION_ADOPT_HAS_ATTEMPT: an attempt already exists for ' + task_id +
                        '; resolve it with accept or reassign instead of adopting it')
+    route_reason = adopt_route_reason(root, feature, task_id, task_line, reason)
     delegation.require(not command_targets_windows_shim(command), ACCEPT_COMMAND_IS_SHIM)
     cwd = root
     owned_paths = list(owned) if owned else [feature]
@@ -2831,6 +2863,7 @@ def _accept_no_attempt(root, feature, task_id, command, expect, timeout, owned):
                            '; resolve it with accept or reassign instead of adopting it')
         attempt = {'identity': full_identity, 'task_type': 'adopted', 'run_id': run_id,
                   'adopted': True, 'status': 'successful' if evidence is not None else 'unverified',
+                  'route_kind': 'in-session', 'route_reason': route_reason,
                   'started_at': stamp(), 'ended_at': stamp(), 'cwd': relative(root, cwd),
                   'timeout': timeout, 'owned_paths': owned_paths, 'command': command, 'expect': expect,
                   'exit_code': run['exit_code'], 'timed_out': run.get('timed_out', False),
@@ -2846,7 +2879,10 @@ def _accept_no_attempt(root, feature, task_id, command, expect, timeout, owned):
     return {'run_id': run_id, 'task_id': task_id, 'status': result['status'],
            'adopted': evidence is not None, 'expect': expect, 'exit_code': run['exit_code'],
            'timed_out': run.get('timed_out', False), 'output_truncated': run.get('truncated', False),
-           'evidence': evidence, 'task_line_sha256': task_line_sha256}
+           'evidence': evidence, 'task_line_sha256': task_line_sha256,
+           'route_kind': 'in-session', 'route_reason': route_reason,
+           **({'warning': 'DELEGATION_TASK_SUBSTITUTED: ' + task_id + ' ran in-session in place of its external '
+                          'route (' + route_reason + ')'} if route_reason != 'adopted' else {})}
 
 
 def main(argv=None):
@@ -2909,6 +2945,8 @@ def main(argv=None):
                             help='A path (repeatable) to check "files" evidence against for this '
                                  'call, overriding the paths recorded at start; with --no-attempt, '
                                  'relative to the repo root, defaulting to the feature directory')
+    accept_cmd.add_argument('--reason', help='With --no-attempt: why the external route could not run, when '
+                                             'the task route is external (recorded and warned on)')
     trust_reset_cmd = sub.add_parser('trust-reset')
     trust_reset_cmd.add_argument('--feature', required=True)
     trust_reset_cmd.add_argument('--nonce', help='The dispatcher nonce (SEC-06); start returns it')
@@ -2923,6 +2961,8 @@ def main(argv=None):
     adopt_cmd.add_argument('--owned', action='append',
                            help='A path (repeatable), relative to the repo root, to check "files" '
                                 'evidence against; defaults to the feature directory when omitted')
+    adopt_cmd.add_argument('--reason', help='Why the external route could not run, when the task route '
+                                            'is external (recorded and warned on)')
     attest_cmd = sub.add_parser('attest-native', help='Record that a native subagent of the host did a claimed '
                                                       'stage; top-level session only, self-asserted')
     attest_cmd.add_argument('--feature', required=True)
@@ -2977,12 +3017,12 @@ def main(argv=None):
             result = abandon_intent(args.root, args.feature, args.intent_id, args.reason)
         elif args.action == 'accept':
             result = accept(args.root, args.feature, args.run_id, args.command, args.expect,
-                            args.timeout, args.owned, task_id=args.id)
+                            args.timeout, args.owned, task_id=args.id, reason=args.reason)
         elif args.action == 'trust-reset':
             result = trust_reset(args.root, args.feature, args.reason)
         elif args.action == 'adopt':
             result = accept(args.root, args.feature, None, args.command, args.expect,
-                            args.timeout, args.owned, task_id=args.id)
+                            args.timeout, args.owned, task_id=args.id, reason=args.reason)
         elif args.action == 'record-native':
             result = record_native(args.root, args.feature, args.id, args.token, args.host_agent_id,
                                    args.requested_model, args.command, args.expect, args.observed_model,

@@ -90,7 +90,9 @@ and otherwise runs the acceptance check with the same machinery as `accept`
 owned-path containment, sha256 evidence), recording a successful attempt only
 when the check passes. There is no self-certification or exemption path: a
 project that enables delegation mid-feature adopts each already-checked task
-individually, with a real check.
+individually, with a real check. `adopt` is not a route: a task whose route is
+external refuses (`DELEGATION_ADOPT_ROUTE_EXTERNAL`) unless `--reason "<why external
+could not run>"` records it as `external-substituted:<reason>`, warned on at Ready.
 
 An adopted attempt is bound to the task's content: `adopt` records a sha256 of
 the task line (minus its checkbox state, whitespace normalised), and Ready
