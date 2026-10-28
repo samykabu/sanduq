@@ -225,6 +225,17 @@ class PolicyLoadingAndInitTests(Base):
         policy = w.load_policy(self.root)
         self.assertEqual((policy['project_sync']['mode'], policy['issue_sync']['taskstoissues']), ('full', 'required'))
 
+    def test_an_uninitialised_manual_is_named_at_init_and_start(self):
+        code, result = self.cli('init', '--qa', 'on', '--manual', 'on')
+        self.assertIn('$speckit-user-manual-init once on the target branch', result['next'])  # F4
+        self.policy['processes']['user_manual'] = True
+        self.configure()
+        state = w.Run(self.root, self.feature).start('acme/app#10')
+        self.assertTrue(any(line.startswith('MANUAL_NOT_INITIALIZED') for line in state['warnings']))
+        (self.root / 'User-Manual').mkdir()
+        (self.root / 'User-Manual/manual.yml').write_text('modules: []', encoding='utf-8')
+        self.assertNotIn('next', self.cli('init', '--qa', 'on', '--manual', 'on')[1])
+
     def test_init_replace_lists_the_features_it_invalidates(self):
         run = self.run_object()
         self.advance(run, 'qa_analyze')

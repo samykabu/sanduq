@@ -169,6 +169,16 @@ def other_feature_command(relative, active):
             ' --reason "<why that claim is abandoned>"')
 
 
+MANUAL_INIT_NEXT = ('User Manual is selected but User-Manual/manual.yml does not exist. Run $speckit-user-manual-init '
+                    'once on the target branch, approve its module map and commit User-Manual/ there; every feature '
+                    'then updates that one manual')
+
+
+def manual_missing(root, policy):
+    """F4: the manual is selected but not initialised, so each feature would propose and create its own."""
+    return policy['processes']['user_manual'] and not (Path(root) / 'User-Manual/manual.yml').is_file()
+
+
 class Run:
     def __init__(self, root, feature):
         self.root = root.resolve()
@@ -1004,7 +1014,10 @@ class Run:
             state['dependency_digest'] = package_digest(self.root)
             self.record_skipped(state, skipped_stages(self.policy, None))
             self.save(state)
-            return {**state, 'warnings': [corrected]} if corrected else state
+            warnings = [corrected] if corrected else []
+            if manual_missing(self.root, self.policy):
+                warnings.append('MANUAL_NOT_INITIALIZED: ' + MANUAL_INIT_NEXT)
+            return {**state, 'warnings': warnings} if warnings else state
 
     def record_skipped(self, state, skipped):
         """Record the stages this feature does not run (the tier's, the board mode's), once each in the log."""
@@ -2028,6 +2041,8 @@ def run_command(args):
                                          'migrate': WORKFLOW_SCRIPT + ' migrate --feature ' + feature + ' --reason "<why>"'})
                 result['affected_features'] = affected
             result['doctor'] = doctor(root, policy)
+            if manual_missing(root, policy):
+                result['next'] = MANUAL_INIT_NEXT
         elif args.action == 'ci':
             policy = load_policy(root)
             ci = policy['ci']

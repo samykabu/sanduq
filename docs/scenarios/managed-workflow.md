@@ -114,6 +114,12 @@ has run. The first `install.py` call previews. The second backs up, applies, and
 failure. If your board is not configured yet, run `$speckit-project-init`. You are ready when
 `doctor --project` passes.
 
+With User Manual selected, initialise the manual once on the target branch before the first
+feature: run `$speckit-user-manual-init`, approve its module map and commit `User-Manual/` there.
+The script `init` names this step in `next`, and `start` warns `MANUAL_NOT_INITIALIZED` while
+`User-Manual/manual.yml` is missing. Without it, each feature stops at Manual Update or Execute
+for its own module-map decision and creates its own manual, and those PRs conflict.
+
 The installed evidence gate, `.github/workflows/sanduq-workflow-gates.yml`, runs on GitHub-hosted
 runners by default: the CI selection in `.specify/workflow.yml` starts as `policy: hosted-allowed`
 with `linux: [ubuntu-latest]`, so the rendered job has `runs-on: ubuntu-latest`. To run it on your
