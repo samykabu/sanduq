@@ -4,7 +4,7 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
-## 2026-10-28 — Workflow 2.0.1 (pending release)
+## 2026-10-28 — Workflow 2.0.1
 
 - Hotfix from a PH-05-T07 live run: `adopt` no longer adopts a task whose route is external, which had let an agent implement externally routed tasks in-session and record them as adopted. `--reason` records a labelled substitution that Ready warns on; every adopted attempt records `route_kind` and `route_reason`. Delegation off and native-first routes are unchanged.
 
