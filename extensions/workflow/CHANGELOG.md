@@ -10,6 +10,9 @@ Breaking: Scope is part of Workflow (DEC-03, PH-06-T02), and every Scope command
 - `doctor` fails with `SCOPE_MERGED_INTO_WORKFLOW` (new registry code) while a Scope before 2.0.0 is installed, naming the `upgrade.py` command; it still fails with `DEPENDENCY_SOURCE_MISMATCH` when an installed `scope` or `memory` is not Sanduq's.
 - `migrate` treats a checkpoint's recorded `speckit.scope.run` as `speckit.workflow.scope-run`: the rename invalidates no receipt, and the migrated checkpoint records the new name.
 - `release.py prepare` copies `deprecated` and `superseded_by` from a manifest's extension block into its catalog entry.
+- `upgrade.py` without `--apply` now runs the checks apply refuses on and lists them in `blockers`: each feature with an active claim (`ACTIVE_STAGE_MUST_BE_RESOLVED: specs/<feature>; ...` with its exact `recover` command, which install and apply now print too) and a locally edited gate workflow (`CI_WORKFLOW_HAS_LOCAL_EDITS`, naming `--preserve-ci`). A preview no longer reports clean when apply would fail. Nothing is written.
+- `upgrade.py` reuses the `--preserve-ci` choice the last install recorded (`install-lock.json` `preserved_ci`, else the receipt) and says so (`preserve_ci_reused`, and a stderr line); `--preserve-ci` or the new `--no-preserve-ci` still wins. `CI_WORKFLOW_HAS_LOCAL_EDITS` is a registry code with `explain` and a next step.
+- Install, upgrade and host-switch rollback snapshots include `.specify/integrations/`, so the `<host>.manifest.json` files Spec Kit rewrites during `specify extension add`, `preset add` and `integration use` come back byte-identical after a rolled-back attempt.
 
 ### Migration
 

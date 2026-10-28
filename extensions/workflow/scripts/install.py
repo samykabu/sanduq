@@ -23,11 +23,11 @@ from urllib.parse import quote
 import yaml
 from packaging.version import InvalidVersion, Version
 from packaging.specifiers import SpecifierSet
-from workflow import load_policy, read, write, require, inside, registry, doctor, locked, WorkflowError, RANGES, ensure_local_excludes, package_digest, active_host, github_repository, sanduq_ci, git, now, explain
+from workflow import load_policy, read, write, require, inside, registry, doctor, locked, WorkflowError, RANGES, ensure_local_excludes, package_digest, active_host, github_repository, sanduq_ci, git, now, explain, other_feature_command
 from reconcile import reconcile
 from delegate_dispatch import maintenance_preflight
 from delegation import is_junction, is_link
-from hosts import (ALIASES, HOST_SKILLS, CODEX_HOOK_APPROVAL, ROLE_FILES, ROLES, alias_wanted, aliases_enabled,
+from hosts import (ALIASES, HOST_SKILLS, CODEX_HOOK_APPROVAL, ROLE_FILES, ROLES, alias_wanted, aliases_enabled, checkpoints,
                    installed_hosts, register_hosts, skill_errors, skill_report)
 try:
     import sanduq_gh
@@ -36,7 +36,8 @@ except ModuleNotFoundError:  # the source tree; package.py copies it into script
     import sanduq_gh
 
 PACKAGE = Path(__file__).resolve().parents[1]
-DIRECTORIES = ('.specify/extensions', '.specify/presets')
+# Spec Kit rewrites .specify/integrations/<host>.manifest.json on extension, preset and integration commands.
+DIRECTORIES = ('.specify/extensions', '.specify/presets', '.specify/integrations')
 FILES = ('.specify/extensions.yml', '.specify/workflow.yml', '.specify/integration.json', '.specify/init-options.json', '.specify/workflow/integration-backup.json',
          '.specify/workflow/install-lock.json',
          '.specify/workflow/install-receipt.json',
@@ -408,6 +409,32 @@ def rendered(asset, policy):
         return sanduq_ci.render(asset.read_bytes(), policy.get('ci') or sanduq_ci.default_ci())
     except sanduq_ci.CIPolicyError as exc:
         raise WorkflowError('CI_RENDER_FAILED: ' + asset.name + ': ' + str(exc)) from exc
+
+
+CI_GATE = '.github/workflows/sanduq-workflow-gates.yml'
+
+
+def active_stage_blockers(root):
+    """Each feature whose active claim an install or upgrade would restore files under, with its recover command."""
+    return ['ACTIVE_STAGE_MUST_BE_RESOLVED: ' + feature + '; complete or pause that stage, or run ' +
+            other_feature_command(feature, state['active']) for feature, state in checkpoints(root) if state.get('active')]
+
+
+def ci_edit_blocker(root, policy, package_root, preserve_ci):
+    """CI_WORKFLOW_HAS_LOCAL_EDITS when the gate file is neither preserved nor an unedited managed render."""
+    target = root / CI_GATE
+    if preserve_ci or not target.exists():
+        return None
+    asset = rendered(package_root / 'assets/github/workflow-gates.yml', policy)
+    old_inventory = read(root / '.specify/workflow/install-receipt.json', {})
+    # The receipt is git-excluded, so a fresh clone also recognises an unedited render of any earlier
+    # template by the copies the package keeps (before SEC-03, and 1.22.0 before its fetch-depth fix).
+    previous = sorted((package_root / 'assets/github/previous').glob('workflow-gates*.yml'))
+    content = target.read_bytes()
+    if ci_matches_managed(content, asset, old_inventory) or any(
+            ci_matches_managed(content, rendered(old, policy), {}) for old in previous):
+        return None
+    return 'CI_WORKFLOW_HAS_LOCAL_EDITS: ' + CI_GATE + '; rerun with --preserve-ci to keep it'
 
 
 def required_gate_checks(root):
@@ -957,13 +984,13 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
     bridge = read(root / '.specify/superpowers-handoff.json', {})
     require(bridge.get('status') not in ('executing','blocked'), 'LEGACY_EXECUTOR_OWNS_FEATURE: reconcile its actual work before installation')
     # A package update cannot occur while an executor owns unfinished work.
-    for path in (root / 'specs').glob('*/workflow/checkpoint.json'):
-        require(not read(path, {}).get('active'), 'ACTIVE_STAGE_MUST_BE_RESOLVED: ' + str(path))
+    blockers = active_stage_blockers(root)
+    require(not blockers, '; '.join(blockers))
     with locked(root / '.specify/workflow/runtime/dispatch.lock'), locked(root / '.specify/workflow/runtime/install.lock'):
         upgrade = read(root / '.specify/workflow/runtime/upgrade.lock', {})
         require(not upgrade or upgrade.get('pid') == upgrade_owner, 'WORKFLOW_UPGRADE_IN_PROGRESS')
-        for path in (root / 'specs').glob('*/workflow/checkpoint.json'):
-            require(not read(path, {}).get('active'), 'ACTIVE_STAGE_MUST_BE_RESOLVED: ' + str(path))
+        blockers = active_stage_blockers(root)
+        require(not blockers, '; '.join(blockers))
         # A rollback restores every delegation ledger, so no attempt may be live.
         delegation_preflight(root)
         memory_archive_preflight(root)
@@ -1021,7 +1048,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                                                       scope=policy['delegation']['install_scope'],
                                                       upgrade_owner=upgrade_owner)
                 require(delegation_health['ok'], health_error(delegation_health))
-            target = root / '.github/workflows/sanduq-workflow-gates.yml'
+            target = root / CI_GATE
             # The shipped asset is a template. What lands in the project is the
             # project's own CI selection rendered from it, never a copy.
             asset = rendered(package_root / 'assets/github/workflow-gates.yml', policy)
@@ -1036,14 +1063,8 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
             if target.exists() and preserve_ci:
                 result['preserved_ci'] = {'path': target.relative_to(root).as_posix(),
                                           'sha256': hashlib.sha256(target.read_bytes()).hexdigest()}
-            elif target.exists():
-                old_inventory = read(root / '.specify/workflow/install-receipt.json', {})
-                # The receipt is git-excluded, so a fresh clone also recognises an unedited render of any earlier
-                # template by the copies the package keeps (before SEC-03, and 1.22.0 before its fetch-depth fix).
-                previous = sorted((package_root / 'assets/github/previous').glob('workflow-gates*.yml'))
-                require(ci_matches_managed(target.read_bytes(), asset, old_inventory) or any(
-                    ci_matches_managed(target.read_bytes(), rendered(old, policy), {}) for old in previous),
-                    'CI_WORKFLOW_HAS_LOCAL_EDITS')
+            blocker = ci_edit_blocker(root, policy, package_root, preserve_ci)
+            require(not blocker, blocker)
             if gate_disabled:
                 if target.exists(): target.unlink()
             elif not result['preserved_ci']:

@@ -99,6 +99,72 @@ class UpgradeCITests(unittest.TestCase):
             upgrade.upgrade(self.root, '1.1.1', apply=True, preserve_ci=True, runner=runner)
         self.assertEqual(self.ci.read_bytes(), self.original)
 
+    def test_preview_reports_the_blockers_apply_would_refuse_on_without_changing_anything(self):
+        checkpoint = self.root / self.feature / 'workflow/checkpoint.json'
+        w.write(checkpoint, {**w.read(checkpoint, {}), 'active': {'stage': 'execute', 'token': 'tok-1'}})
+        before = upgrade_install.managed_files(self.root)
+        commands = []
+        result = upgrade.upgrade(self.root, '1.1.1', runner=lambda root, args, log: commands.append(args))
+        self.assertEqual(commands, [])
+        self.assertEqual(upgrade_install.managed_files(self.root), before)
+        self.assertEqual(len(result['blockers']), 2)
+        stage, ci = result['blockers']
+        self.assertTrue(stage.startswith('ACTIVE_STAGE_MUST_BE_RESOLVED: ' + self.feature))
+        self.assertIn('recover --feature ' + self.feature + ' --token tok-1', stage)
+        self.assertTrue(ci.startswith('CI_WORKFLOW_HAS_LOCAL_EDITS'))
+        self.assertIn('--preserve-ci', ci)
+        self.assertIn('--preserve-ci', w.explain(ci)['next'])
+        # apply refuses on the same message the preview named
+        with self.assertRaisesRegex(w.WorkflowError, re.escape(stage)):
+            upgrade.upgrade(self.root, '1.1.1', apply=True, runner=lambda root, args, log: commands.append(args))
+        self.assertEqual(commands, [])
+
+    def test_preview_is_clean_when_nothing_blocks(self):
+        result = upgrade.upgrade(self.root, '1.1.1', preserve_ci=True)
+        self.assertEqual(result['blockers'], [])
+
+    def test_recorded_preserve_ci_is_reused_unless_a_flag_says_otherwise(self):
+        w.write(self.root / '.specify/workflow/install-lock.json',
+                {'preserved_ci': {'path': '.github/workflows/sanduq-workflow-gates.yml'}})
+        preview = upgrade.upgrade(self.root, '1.1.1')
+        self.assertTrue(preview['preserve_ci_reused'])
+        self.assertEqual(preview['blockers'], [])
+        commands = []
+        result = upgrade.upgrade(self.root, '1.1.1', apply=True,
+                                 runner=lambda root, args, log: commands.append(args))
+        self.assertTrue(result['preserve_ci_reused'])
+        self.assertIn('--preserve-ci', commands[-1])
+        self.assertEqual(result['preserved_ci']['sha256'], hashlib.sha256(self.original).hexdigest())
+        explicit = upgrade.upgrade(self.root, '1.1.1', preserve_ci=False)
+        self.assertFalse(explicit['preserve_ci_requested'])
+        self.assertFalse(explicit['preserve_ci_reused'])
+        self.assertTrue(explicit['blockers'][0].startswith('CI_WORKFLOW_HAS_LOCAL_EDITS'))
+
+    def test_receipt_preserve_ci_request_is_reused(self):
+        w.write(self.root / '.specify/workflow/install-receipt.json', {'preserve_ci_requested': True})
+        self.assertTrue(upgrade.upgrade(self.root, '1.1.1')['preserve_ci_requested'])
+
+    def test_rollback_restores_integration_manifests_spec_kit_rewrote(self):
+        folder = self.root / '.specify/integrations'
+        folder.mkdir(parents=True)
+        originals = {}
+        for host in ('claude', 'codex', 'speckit'):
+            path = folder / (host + '.manifest.json')
+            path.write_bytes(b'{"speckit_version": "0.8.0", "files": {}}' + bytes([13, 10]))
+            originals[path] = path.read_bytes()
+
+        def runner(root, args, log):
+            if args[0] == 'specify':  # Spec Kit restamps and extends every manifest
+                for path in originals:
+                    path.write_text('{"speckit_version": "1.1.3", "ownership_modes": {}}', encoding='utf-8')
+                (folder / 'copilot.manifest.json').write_text('{}', encoding='utf-8')
+            else:
+                raise w.WorkflowError('INSTALL_ROLLED_BACK: CI_WORKFLOW_HAS_LOCAL_EDITS')
+        with self.assertRaisesRegex(w.WorkflowError, 'WORKFLOW_UPGRADE_ROLLED_BACK'):
+            upgrade.upgrade(self.root, '1.1.1', apply=True, preserve_ci=False, runner=runner)
+        self.assertEqual({path: path.read_bytes() for path in originals}, originals)
+        self.assertFalse((folder / 'copilot.manifest.json').exists())
+
     def test_delegation_choices_and_history_survive_upgrade(self):
         policy_path = self.root / '.specify/workflow.yml'
         policy = w.load_policy(self.root)
