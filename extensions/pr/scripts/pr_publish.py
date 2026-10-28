@@ -46,7 +46,7 @@ except ModuleNotFoundError:
 START, END = '<!-- speckit-pr:start -->', '<!-- speckit-pr:end -->'
 DEFAULT_HEADING = 'What have been developed and how to review it'
 IMAGE = re.compile(r'(!\[[^\]]*\]\(\s*<?)([^)\s>]+)|(<img\b[^>]*?\bsrc=["\'])([^"\']+)', re.I)
-LINK = re.compile(r'(?<!!)(\[(?:[^\[\]\n]|\[[^\[\]\n]*\])*\]\(\s*<?)([^)\s>]+)')  # not images; one nested [..]
+LINK = re.compile(r'(?<!!)\[(?:[^\[\]\n]|\[[^\[\]\n]*\])*\]\([ \t]*')  # a link's text, not an image; one nested [..]
 REMOTE = re.compile(r'[a-z][a-z0-9+.-]*:|//|#', re.I)
 NO_PR = 'no pull requests found'
 
@@ -96,11 +96,44 @@ def splice(existing, section):
     return (existing.rstrip('\n') + '\n\n' + section + '\n') if existing.strip() else section + '\n'
 
 
+def link_targets(text):
+    """(start, end) of each Markdown link destination in text: `<...>`, or bare with balanced parentheses and
+    backslash escapes, ending at whitespace (an optional title follows) or the closing parenthesis."""
+    spans = []
+    for m in LINK.finditer(text):
+        i = m.end()
+        if text[i:i + 1] == '<':
+            end = text.find('>', i)
+            if end > i + 1 and '\n' not in text[i:end]:
+                spans.append((i + 1, end))
+            continue
+        depth, j = 0, i
+        while j < len(text) and not text[j].isspace():
+            if text[j] == '\\':
+                j += 1
+            elif text[j] == '(':
+                depth += 1
+            elif text[j] == ')':
+                if not depth:
+                    break
+                depth -= 1
+            j += 1
+        if j > i and depth == 0:
+            spans.append((i, j))
+    return spans
+
+
+def pin_links(text, urls):
+    for start, end in reversed(link_targets(text)):
+        text = text[:start] + urls.get(text[start:end], text[start:end]) + text[end:]
+    return text
+
+
 def pin_images(root, content, explained, push):
     """Relative image paths and links (outside code) become commit-pinned GitHub URLs, each verified first."""
     parts, fences = FENCE.split(content), FENCE.findall(content)
     images = {m.group(2) or m.group(4) for part in parts for m in IMAGE.finditer(part)}
-    links = {m.group(2) for part in parts for m in LINK.finditer(part)}
+    links = {part[a:b] for part in parts for a, b in link_targets(part)}
     targets = sorted(t for t in images | links if t and not REMOTE.match(t))
     if not targets:
         return content
@@ -118,16 +151,16 @@ def pin_images(root, content, explained, push):
         if path == '..' or path.startswith('../'):
             raise Failure(2, kind + ' ' + target + ' points outside the repository')
         if run(['git', 'cat-file', '-e', sha + ':' + path], root).returncode:
-            raise Failure(2, kind + ' ' + target + ' (' + path + ') is not committed at HEAD; commit it and rerun')
+            raise Failure(2, kind + ' ' + target + ' (' + path + ') is not committed at HEAD: git add "' + path +
+                             '" && git commit, then git push when the PR exists, and rerun')
         check = run(['gh', 'api', 'repos/%s/contents/%s?ref=%s' % (repo, quote(path), sha), '--silent'], root)
         if check.returncode:
             raise Failure(3, kind + ' ' + path + ' is not readable on ' + repo + ' at ' + sha[:12] +
-                             ' (push the branch, then rerun): ' + (check.stderr or check.stdout).strip())
+                             ' (git push, then rerun): ' + (check.stderr or check.stdout).strip())
         blob = 'https://github.com/%s/blob/%s/%s' % (repo, sha, quote(path))
         urls[target], link_urls[target] = blob + '?raw=true', blob + ('#' + anchor if anchor else '')
     pin = lambda m: (m.group(1) or m.group(3)) + urls.get(m.group(2) or m.group(4), m.group(2) or m.group(4))
-    pin_link = lambda m: m.group(1) + link_urls.get(m.group(2), m.group(2))
-    pinned = [IMAGE.sub(pin, LINK.sub(pin_link, part)) for part in parts]
+    pinned = [IMAGE.sub(pin, pin_links(part, link_urls)) for part in parts]
     return ''.join(text + (fences[i] if i < len(fences) else '') for i, text in enumerate(pinned))
 
 

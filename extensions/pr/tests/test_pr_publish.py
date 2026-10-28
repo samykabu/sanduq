@@ -284,6 +284,32 @@ class PublishTests(unittest.TestCase):
         self.assertEqual(code, 2, result)
         self.assertIn('link missing.md', result['error'])
 
+    def test_link_destinations_are_parsed_not_cut_at_a_parenthesis(self):
+        """PR #144 review: balanced parentheses, <angle> destinations and titles keep the whole path."""
+        self.explained.write_text('[plain](plain.md) [paren](a(b).md) [angle](<with space.md>) '
+                                  '[title](t.md "The title") [both](<s p.md> \'t\')\nCloses #10\n', encoding='utf-8')
+        runner = FakeRunner(pr={'number': 12, 'url': 'u', 'body': ''})
+        code, receipt = self.run_script(runner)
+        self.assertEqual(code, 0, receipt)
+        text = self.body_and_lint(receipt)[0].decode('utf-8')
+        blob = 'https://github.com/acme/app/blob/' + SHA + '/docs/001-x/'
+        self.assertIn('[plain](' + blob + 'plain.md)', text)
+        self.assertIn('[paren](' + blob + 'a%28b%29.md)', text)
+        self.assertIn('[angle](<' + blob + 'with%20space.md>)', text)
+        self.assertIn('[title](' + blob + 't.md "The title")', text)
+        self.assertIn('[both](<' + blob + 's%20p.md> \'t\')', text)
+        checked = sorted(c[3].split(':', 1)[1] for c in runner.calls if c[:3] == ['git', 'cat-file', '-e'])
+        self.assertEqual(checked, ['docs/001-x/' + p for p in ('a(b).md', 'plain.md', 's p.md', 't.md', 'with space.md')])
+        self.assertEqual(pr_publish.link_targets('[x](a(b)c) [y](unbalanced(.md'), [(4, 9)])
+
+    def test_an_uncommitted_linked_file_names_the_file_and_the_commands(self):
+        self.explained.write_text('[log](CHANGELOG.md)\nCloses #10\n', encoding='utf-8')
+        runner = FakeRunner(pr={'number': 12, 'url': 'u', 'body': ''}, uncommitted={'docs/001-x/CHANGELOG.md'})
+        code, result = self.run_script(runner)
+        self.assertEqual(code, 2, result)
+        self.assertIn('git add "docs/001-x/CHANGELOG.md" && git commit', result['error'])
+        self.assertIn('git push', result['error'])
+
     def test_missing_document_exits_2(self):
         self.explained.unlink()
         self.assertEqual(self.run_script(FakeRunner())[0], 2)
