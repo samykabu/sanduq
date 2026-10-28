@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.25.0] - 2026-10-28
 
 - Native-first routing: when delegation is on and the route's preferred candidate is a tier on the selected host, the route starts with a native candidate (`route_kind: native`, `route_reason: native-first`) on that tier's model, and the configured candidates follow as external fallbacks. An external candidate always says why: `native-failed:<category>` (`start` fills in the latest native attempt's failure category, or `not-attempted`), `native-unsupported:<capability>` (`delegation-disabled`, `work-type-disabled`, `cross-vendor-route`, `model-pin` when the preferred tier has no role file to pin its model: only `standard` and `review` do) or `external:cross-vendor` for a candidate that names the other vendor. The claim's `delegation` shows the candidates and `route_kind`, and a native-first claim records `git_status_at_claim`. `start` launches only the external candidates.
 - New optional policy key `delegation.native_allowed` maps a work type to `true` or `false` (absent means `true`); a work type set to `false` routes externally. An unknown work type or a non-boolean is refused with `DELEGATION_NATIVE_ALLOWED_INVALID`.
