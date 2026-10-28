@@ -18,20 +18,22 @@ Workflow 1.20.0 and Scope 1.11.1 (PH-02): every suite passed on Windows with Spe
 
 | Product | Codex | Claude Code | Claude Desktop | Live run (date, versions, host) |
 | --- | --- | --- | --- | --- |
-| Workflow, with the dependencies its installer adds | Install tested in CI (Ubuntu, core and SuperSpec). End to end: **Untested** | Install tested in CI (Ubuntu, core and SuperSpec). End to end: **Tested** (live runs) | Unsupported | Round 4, 2026-10-21: the round-4 builds released as Workflow 1.17.0, Spec Kit 1.0.11, Claude Code 2.1.306. Round 5, 2026-10-21: Workflow 1.17.1, Scope 1.10.1, Spec Kit 1.1.4.dev0, Claude Code 2.1.306 |
-| Scope | Through Workflow only. **Untested** | Through Workflow only. **Tested** (live runs) | Unsupported | Rounds 4 and 5, as Workflow |
+| Workflow, with the dependencies its installer adds | Install tested in CI (Ubuntu, core and SuperSpec). End to end: **Tested** (one live run, [PH-04](../evidence/ph04-live-run-codex.md)) | Install tested in CI (Ubuntu, core and SuperSpec). End to end: **Tested** (live runs) | Unsupported | Round 4, 2026-10-21: the round-4 builds released as Workflow 1.17.0, Spec Kit 1.0.11, Claude Code 2.1.306. Round 5, 2026-10-21: Workflow 1.17.1, Scope 1.10.1, Spec Kit 1.1.4.dev0, Claude Code 2.1.306. [PH-04](../evidence/ph04-live-run-claude.md), 2026-10-28: Workflow 1.21.0, Scope 1.12.0, Spec Kit 1.1.3, Claude Code 2.1.312 and [Codex CLI 0.163.0](../evidence/ph04-live-run-codex.md), QA and User Manual on, advisory gate, standard tier, PR opened on each host; host switch and Bridge route exercised. The CI gate did not run (its workflow file did not load, fixed in Workflow 1.22.1); the gate passed locally |
+| Scope | Through Workflow only. **Tested** (PH-04 live run) | Through Workflow only. **Tested** (live runs) | Unsupported | Rounds 4 and 5, and PH-04 (Claude Code and Codex), as Workflow |
 | Memory | Untested | **Tested** through Workflow (live run) | Unsupported | Round 4 run 4 (the build released as Memory 2.5.0) and round 5 (Memory 2.5.0), 2026-10-21, Claude Code 2.1.306 |
 | Progress | Untested | **Tested** through Workflow (live run, native hooks) | Unsupported | Round 5, 2026-10-21: Progress 1.5.0, Claude Code 2.1.306 |
 | Project | Untested | **Tested** through Workflow (live run) | Unsupported | Round 4 (the build released as Project 2.5.0) and round 5 (Project 2.5.1), 2026-10-21, Claude Code 2.1.306 |
 | PR | Untested | **Tested** through Workflow (live run, pull request opened) | Unsupported | Round 5, 2026-10-21: PR 4.5.1, Claude Code 2.1.306 |
-| Assure, Illustrate, User Manual | Untested | Untested | Unsupported | None. Illustrate was installed in the live runs; QA and User Manual were not selected |
+| Assure, Illustrate, User Manual | **Tested** through Workflow (PH-04 live run) | **Tested** through Workflow (PH-04 live run) | Unsupported | PH-04, 2026-10-28: Assure 2.6.2 and User Manual 1.8.2 ran QA Analyze, QA Document, Manual Analyze and Manual Update on both hosts |
 | Any extension installed alone, without Workflow | Untested | Untested | Unsupported | None |
 | Portable skills (from sanduq-skills) | Untested | Untested | Untested | None |
 
-Evidence records, in this repository: [round 4](../evidence/round-4-live-run.md) and
-[round 5](../evidence/round-5-live-run.md). Both ran in a private sandbox repository on the maintainer's
-Windows machine. Codex has no end-to-end live run yet, so every Codex cell beyond installation is
-untested.
+Evidence records, in this repository: [round 4](../evidence/round-4-live-run.md),
+[round 5](../evidence/round-5-live-run.md) and PH-04 on [Claude Code](../evidence/ph04-live-run-claude.md) and
+[Codex](../evidence/ph04-live-run-codex.md), with its [findings](../evidence/ph04-live-run-findings.md). All ran
+in a private sandbox repository on the maintainer's Windows machine. The PH-04 redacted bundles are assets of the
+[Workflow 1.21.0 release](https://github.com/samykabu/sanduq/releases/tag/workflow-v1.21.0). Codex has one
+end-to-end live run (PH-04); Memory and Progress on Codex are untested.
 
 opencode is deferred. Copilot is outside the supported hosts. Delegate Task can start Codex, Claude
 Code, opencode, Copilot and Pi as [harnesses](glossary.md#harness); that is not host support.
@@ -40,7 +42,7 @@ Code, opencode, Copilot and Pi as [harnesses](glossary.md#harness); that is not 
 
 | Platform | CI | Live run | Status |
 | --- | --- | --- | --- |
-| Windows | Regression suites, Memory installation and Project init on `windows-latest` | Rounds 4 and 5 (Claude Code) | **Tested** |
+| Windows | Regression suites, Memory installation and Project init on `windows-latest` | Rounds 4 and 5 (Claude Code); PH-04 (Claude Code and Codex) | **Tested** |
 | Linux | Every CI job on the home-office runner, including installation and upgrade | None | **Tested** (CI only) |
 | macOS | None | None | **Untested** |
 
@@ -54,9 +56,7 @@ them. Report what you see if you use them.
 
 | Capability | Where it is described |
 | --- | --- |
-| Host switch between Codex and Claude Code | [Operating guide](../workflow/operating-guide.md) |
-| CI rule waivers | [Delivery policy](../workflow/delivery-policy.md) |
-| Superpowers Bridge route | [Prerequisites](../start/prerequisites.md#superpowers-bridge-and-superpowers) |
+| CI rule waivers (posted in the PH-04 run but refused: a waiver cannot be verified when the owner and the agent share one GitHub account) | [Delivery policy](../workflow/delivery-policy.md) |
 | SuperSpec as task generator and executor | [Prerequisites](../start/prerequisites.md#superspec) (installation is tested in CI) |
 
 ## Tested versions
