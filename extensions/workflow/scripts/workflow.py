@@ -1214,13 +1214,15 @@ class Run:
                 at = ' --feature ' + self.relative
                 return {'status': 'confirm_invalidation', 'stage': stage, 'reason': nxt.get('reason'),
                         'invalidates': downstream,
+                        'invalidation': self.invalidation_preview(state, stage, nxt),
                         'recovery': nxt.get('recovery') or (
                             [WORKFLOW_SCRIPT + ' migrate' + at + ' --preview'] if nxt.get('reason') == 'policy-changed' else []),
                         'explain': 'python .specify/extensions/workflow/scripts/gate_explain.py' + at,
                         'confirm': WORKFLOW_SCRIPT + ' claim' + at + ' --usage <usage.json> --confirm-invalidation',
                         'message': 'Claiming ' + stage + ' removes the receipts of ' + ', '.join(downstream) +
                                    '. If the change is cosmetic, amend it (gate_explain lists the amend commands); '
-                                   'otherwise ask the user, then re-run claim with --confirm-invalidation'}
+                                   'otherwise ask the user, then re-run claim with --confirm-invalidation. A claim '
+                                   'recovered before any work ran gets these receipts back'}
             memory = self.memory_session(state, stage, usage['session_id'])
             if memory is not None:
                 return memory
@@ -1230,6 +1232,7 @@ class Run:
             if stage == 'review':
                 coding_review_checks(self.root, self.relative, self.policy, state)
             current_policy_digest = checkpoint_policy_digest(state, self.policy)
+            prior_policy_digest = state['policy_digest']
             if state['policy_digest'] != current_policy_digest:
                 if (state.get('policy') or {}).get('profiles') != self.policy.get('profiles'):
                     # The profile bands changed: the next Plan claim (which the cutoff forces) fixes it again.
@@ -1258,6 +1261,7 @@ class Run:
                 notices = []
             resuming = state.get('status') == 'paused'
             removed = [name for name in BASE_STAGES[BASE_STAGES.index(stage):] if name in state['receipts']]
+            retained = {name: copy.deepcopy(state['receipts'][name]) for name in removed}
             token = uuid.uuid4().hex
             claim_id = lifecycle.claim_id_for(token)
             for downstream in removed:
@@ -1333,12 +1337,18 @@ class Run:
                 else:
                     protocol['note'] = ('unchanged since the last Execute claim; follow the summary, and reread the files '
                                         'whenever you cannot recall the full protocol')
+            if retained:
+                # #112: runtime-held proof that `recover` reads to give an unused claim's removed receipts back.
+                state['active']['retained'] = {'receipts': retained, 'policy_digest': prior_policy_digest,
+                                               'digest': self.unused_claim_digest(state, retained)}
             self.save(state)
             claimed = {**state['active'], 'command': state['commands'][stage], 'feature': self.relative, 'issue': state['issue'],
                        'reference': stage_reference(stage), 'reference_text': text,
                        'side_effects': side_effects(self.policy, self.relative, stage, self.root),
                        'project_sync': project_sync(self.policy, stage, self.relative),
                        'clarification_transport': state.get('clarification_transport', 'github-comments')}
+            if claimed.pop('retained', None):
+                claimed['invalidated'] = removed  # kept in the checkpoint until the claim completes or is recovered
             claimed['receipt_template'] = self.receipt_template(state, stage)
             claimed['lean_execution'] = lean_policy.describe(self.policy, state_tier(state))
             if reporting:
@@ -1417,19 +1427,73 @@ class Run:
             claim_id = active.get('claim_id') or lifecycle.claim_id_for(active['token'])
             at = now()
             reason = reason or 'Verified merged delivery; terminal delegated ownership released'
+            retained = self.restore_unused_claim(state, active, evidence)
             state.setdefault('recoveries', []).append({'claim': {**active, 'claim_id': claim_id},
                 'reason': reason, 'actor': actor or default_actor(self.root), 'at': at,
                 'branch': state['branch'], 'terminal_evidence': evidence,
                 'source': 'postmerge' if automatic else 'recover'})
+            if retained:
+                state['recoveries'][-1]['retained'] = retained
             if force_live_owner:
                 state['recoveries'][-1]['forced_live_owner'] = {'reason': force_live_owner, **liveness}
+            restored = (retained or {}).get('restored')
             lifecycle.queue(state, active['stage'], 'recovered', claim_id=claim_id, at=at,
-                            episode_id=lifecycle.episode_for_claim(claim_id), reason=reason,
+                            episode_id=lifecycle.episode_for_claim(claim_id),
+                            reason=('restored unused-claim receipts ' + ', '.join(restored) + '; ' if restored else '') + reason,
                             delegation_run_ids=lifecycle.delegation_runs_for(self.feature, active['token'], claim_id))
             state['active'] = None
             paused = self.checkpoint(state, reason, preserve_head=True)
             return {**paused, 'feature': self.relative, 'released': True, 'claim_id': claim_id,
-                    'terminal_evidence': evidence}
+                    'terminal_evidence': evidence, **({'retained': retained} if retained else {})}
+
+    def unused_claim_digest(self, state, retained):
+        """One digest of the bytes of every source file and every path a held or removed receipt fingerprints."""
+        paths = sorted({path for receipt in [*retained.values(), *state['receipts'].values()]
+                        for path in receipt.get('fingerprints') or {}})
+        return digest([source_fingerprints(self.root), fingerprint_files(self.root, paths, feature=self.relative)])
+
+    def restore_unused_claim(self, state, active, evidence):
+        """#112: give back the receipts a claim removed when the claim did no work; otherwise keep them as history.
+
+        "No work" is read only from state the runtime wrote, never from a worker's report: no delegated or native run
+        bound to the claim in the trusted ledger, the policy the claim saw, and the same bytes as when the claim was
+        made (a rejected completion that changed no file leaves nothing to undo). A restored receipt keeps its own fingerprints and is evaluated again, so
+        one that was stale before the claim is stale again, never current."""
+        held = active.get('retained')
+        if not held:
+            return None
+        names = sorted(held['receipts'], key=BASE_STAGES.index)
+        blockers = []
+        if evidence.get('writer') != 'owner-confirmed':
+            blockers.append('a delegated or native run was recorded for the claim')
+        if held['policy_digest'] != checkpoint_policy_digest(state, self.policy):
+            blockers.append('the policy changed')
+        elif held['digest'] != self.unused_claim_digest(state, held['receipts']):
+            blockers.append('source or a recorded dependency changed after the claim')
+        if blockers:
+            return {'restored': [], 'kept_as_history': names, 'because': blockers}
+        for name in names:
+            state['receipts'].setdefault(name, held['receipts'][name])
+        return {'restored': names}
+
+    def invalidation_preview(self, state, stage, nxt):
+        """Each receipt a claim of `stage` would remove and why, computed before anything is written."""
+        preview = []
+        for name in BASE_STAGES[BASE_STAGES.index(stage):]:
+            receipt = state['receipts'].get(name)
+            if receipt is None:
+                continue
+            item = {'stage': name, 'completed_at': receipt.get('completed_at')}
+            if nxt.get('reason') == 'policy-changed':
+                item['why'] = 'policy-changed: the claimed stage and every later receipt follow the policy cutoff'
+            else:
+                status = receipt_status(self.root, self.relative, name, receipt, self.policy, self.tier_of(state))
+                item['current'] = status['current']
+                item['why'] = ('stale: ' + str(status.get('reason')) if not status['current'] else
+                               'current; removed only because it follows ' + stage)
+                item.update({key: status[key] for key in ('paths', 'rule', 'lanes', 'detail') if key in status})
+            preview.append(item)
+        return preview
 
     def heartbeat(self, token=None):
         """Refresh the active claim's heartbeat (AHMED-01) for an owner still at work, such as `delegate_dispatch
