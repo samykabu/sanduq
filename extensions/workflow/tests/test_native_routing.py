@@ -192,6 +192,53 @@ class NativeRoutingTests(unittest.TestCase):
         with self.assertRaisesRegex(w.WorkflowError, 'SAME_LINEAGE_REVIEW: T002'):
             w.ready_checks(self.root, self.feature, self.policy, run.load(), rules=TASK_GATE)
 
+    def test_review_by_the_same_agent_is_refused_whichever_recording_gave_a_parent(self):
+        for author_parent, reviewer_parent in (('top', None), (None, 'top')):
+            with self.subTest(author_parent=author_parent, reviewer_parent=reviewer_parent):
+                self.setUp()
+                self.tasks('- [x] T001 Implement parser\n- [x] T002 [Review] Review the parser\n')
+                self.enable()
+                run = self.execute_claim()
+                self.record('T001', 'exec-token', agent='agent-a', parent=author_parent)
+                with self.assertRaisesRegex(delegation.DelegationError, 'SAME_LINEAGE_REVIEW'):
+                    self.record('T002', 'exec-token', agent='agent-a', parent=reviewer_parent)
+                self.record('T002', 'exec-token', agent='agent-b', parent=reviewer_parent)
+                with dispatch.edit_ledger(self.root, self.feature) as ledger:
+                    ledger['attempts'][-1]['author_lineage'] = [p for p in (reviewer_parent, 'agent-a') if p]
+                with self.assertRaisesRegex(w.WorkflowError, 'SAME_LINEAGE_REVIEW: T002'):
+                    w.ready_checks(self.root, self.feature, self.policy, run.load(), rules=TASK_GATE)
+
+    def test_ready_refuses_a_native_task_whose_line_changed_after_it_was_recorded(self):
+        self.tasks('- [x] T001 Implement parser\n')
+        self.enable()
+        run = self.execute_claim()
+        self.record('T001', 'exec-token')
+        w.ready_checks(self.root, self.feature, self.policy, run.load(), rules=TASK_GATE)
+        self.tasks('- [x] T001 Implement the whole compiler\n')
+        with self.assertRaisesRegex(w.WorkflowError, 'DELEGATION_ADOPT_TASK_CHANGED: T001'):
+            w.ready_checks(self.root, self.feature, self.policy, run.load(), rules=TASK_GATE)
+
+    def test_reassign_refuses_a_native_attempt(self):
+        self.tasks('- [x] T001 Implement parser\n')
+        self.enable()
+        self.execute_claim()
+        failed = self.record('T001', 'exec-token', output=FAIL, exit_code=1)
+        self.assertEqual(failed['status'], 'failed')
+        with self.assertRaisesRegex(delegation.DelegationError,
+                                    'DELEGATION_REASSIGN_NATIVE_UNSUPPORTED.*record-native.*start'):
+            dispatch.reassign(self.root, self.feature, failed['run_id'], 'try a stronger model')
+        self.assertIn('DELEGATION_REASSIGN_NATIVE_UNSUPPORTED', w.ERRORS)
+
+    def test_a_fast_native_record_does_not_shrink_the_external_timeout(self):
+        import lean_policy
+        candidates = [{'harness': 'codex', 'requested_model': 'gpt-6-sol'}]
+        native = {'kind': 'native', 'task_type': 'implementation', 'status': 'successful',
+                  'requested_harness': 'codex', 'requested_model': 'gpt-6-sol',
+                  'started_at': '2026-10-28T10:00:00+00:00', 'ended_at': '2026-10-28T10:00:05+00:00'}
+        default = lean_policy.timeout_guidance(self.policy, [], 'implementation', candidates)
+        guided = lean_policy.timeout_guidance(self.policy, [native], 'implementation', candidates)
+        self.assertEqual((guided['timeout_seconds'], guided['comparable_runs']), (default['timeout_seconds'], 0))
+
     def test_record_native_refuses_a_disallowed_route_and_a_subagent(self):
         self.tasks('- [x] T001 Implement parser\n')
         self.policy['delegation']['native_allowed'] = {'implementation': False}
