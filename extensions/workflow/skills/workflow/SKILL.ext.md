@@ -46,8 +46,8 @@ session, and delegation.md once a claim carries `delegation` or `environment`.
 
 With `profiles.enabled`, the Scope `effort_score` fixes a tier (`lite`, `standard`, `full`) at
 the first Plan claim; lite and standard merge Tasks into Plan and run Analyze as
-`workflow:lint`, and lite skips the QA and manual stages. `status` lists skipped stages; never
-run a skipped stage by hand.
+`workflow:lint`; lite folds Analyze into Plan and Review and Ready into Verify, with no task
+sub-issues, QA or manual stages. `status` lists skipped stages; never run a skipped stage by hand.
 
 Managed command overlays (`presets/workflow/commands/*.md`) follow the
 [managed-overlay-contract](references/dispatcher-operations.md#managed-overlay-contract); the

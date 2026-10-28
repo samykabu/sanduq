@@ -25,7 +25,7 @@ from wf_core import (BASE_STAGES, INPUT_ROLES, SOURCE_STAGES, LITE_OPTIONAL_INPU
 import sanduq_fs  # on sys.path once wf_core is imported (packaged beside it, or the source tree's shared folder)
 from wf_fingerprints import (sync_state_label, sync_entry, text_fingerprints, fingerprint_files, source_fingerprints,
                              source_fingerprints_of)
-from wf_policy import state_tier, feature_tier, task_issue_mode
+from wf_policy import state_tier, feature_tier, task_issue_mode, skipped_stages
 from wf_health import progress_wiring_warnings, guard_approval_warnings
 
 
@@ -847,8 +847,13 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
                     ' - the task line changed since it was adopted; re-run delegate_dispatch.py adopt '
                     'with a fresh acceptance check before Ready')
         ran.append('tasks')
+    # Only a skip the frozen tier itself implies relaxes a check; a hand-added `skipped` entry does not.
+    implied = skipped_stages(policy, state_tier(state))
+    skipped = {stage: reason for stage, reason in (state.get('skipped') or {}).items() if stage in implied}
     if rules.get('task_links') and task_issue_mode(policy) == 'off':
         ran.append('task_links:skipped (issue_sync.taskstoissues off)')
+    elif rules.get('task_links') and 'taskstoissues' in skipped:
+        ran.append('task_links:skipped (' + skipped['taskstoissues'] + ')')
     elif rules.get('task_links'):
         mapping = read(directory / 'workflow/task-issues.json', {})
         repo, parent = state['issue'].split('#')
@@ -860,10 +865,16 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
         require(not unmapped, 'TASK_MAPPING_INCOMPLETE: ' + ', '.join(unmapped[:20]) + lazy)
         ran.append('task_links')
     checks = []
-    if rules.get('documentation') and policy['processes']['qa']:
-        checks.append(['.specify/extensions/assure/scripts/assure_state.py', 'status', '--kind', 'document'])
-    if rules.get('documentation') and policy['processes']['user_manual']:
-        checks.append(['.specify/extensions/user-manual/scripts/manual_state.py', 'status'])
+    # A process whose document stage this feature skips (the lite tier) has nothing to keep current.
+    for process, stage, args in (('qa', 'qa_document', ['.specify/extensions/assure/scripts/assure_state.py', 'status',
+                                                        '--kind', 'document']),
+                                 ('user_manual', 'manual_update', ['.specify/extensions/user-manual/scripts/manual_state.py',
+                                                                   'status'])):
+        if rules.get('documentation') and policy['processes'][process]:
+            if stage in skipped:
+                ran.append('documentation:' + Path(args[0]).stem + ':skipped (' + skipped[stage] + ')')
+            else:
+                checks.append(args)
     for args in checks:
         require((root / args[0]).is_file(), 'SELECTED_PROCESS_MISSING: ' + args[0])
         # The gate runs the base branch's copy (`scripts_root`, SEC-03). shortcut: a process the PR itself

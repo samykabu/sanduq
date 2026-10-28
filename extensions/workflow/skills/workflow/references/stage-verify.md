@@ -14,5 +14,9 @@ only unchanged passing checks are reused. Local records stay local evidence; the
 checks and real local acceptance remain required. An exact fixed collection command belongs to
 the coordinator and needs no model dispatch.
 
+Lite has no Review or Ready stage: also read the diff against the spec and fix blocking
+findings, and check every task first; `complete` runs the Ready checks (`ready_checks`, else
+`READY_CHECKS_FAILED`), then `next` reports `ready_to_finalize`.
+
 After source drift, `revalidate --stage verify --check-run <run id>` and the other recipes are
 in [recovery.md](recovery.md).

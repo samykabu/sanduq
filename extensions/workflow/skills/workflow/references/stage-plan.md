@@ -22,3 +22,6 @@ and file paths, and a `## Phase` heading per phase. Keep detail lines within
 keep ids, checkboxes and issue mappings. The receipt lists both plan.md and tasks.md in
 `inputs`. On the lite tier research.md, data-model.md, quickstart.md and contracts/ are
 optional: write them only when the feature needs them.
+
+Lite has no Analyze stage: `complete` runs `workflow:lint` and records `lint`; a finding that
+blocks is `PLAN_LINT_FAILED`. Run `lint.py --feature specs/<f>` first and fix the artifact.

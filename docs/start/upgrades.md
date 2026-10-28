@@ -226,6 +226,20 @@ $speckit-memory-enable Review the renewed archiving policy and approve it.
 | Project owner type | A config from an older Init for an organization board says `ownerType: user` | Rerun `$speckit-project-init`, or set `"ownerType": "org"` |
 | Scope's `scope-gate` preset changed | A managed Specify claim is no longer told to chain Clarify | Unmanaged projects run `specify preset add` again for `scope-gate`; the Workflow installer re-adds it |
 
+## Lean lite tier (next Workflow release)
+
+A feature whose tier is fixed as `lite` after the upgrade runs seven stages instead of eleven:
+Scope, Specify, Clarify, Plan, Execute, Verify and PR. No policy key or command changes. Features
+already in flight keep the stage list their tier was fixed with.
+
+| Change | What you see | What to do |
+| --- | --- | --- |
+| Analyze folds into Plan | Plan's `complete` runs `workflow:lint`; the Plan receipt carries `lint`; a failing lint is `PLAN_LINT_FAILED` | Run `lint.py --feature specs/<f>` before completing Plan and fix findings in the owning artifact |
+| Review and Ready fold into Verify | Verify's receipt carries the runtime-owned `ready_checks`; an unchecked task is `READY_CHECKS_FAILED: INCOMPLETE_TASKS`; after Verify, `next` says `ready_to_finalize` | Check every task before Verify; read the diff against the spec in the Verify pass; then finalize |
+| No task sub-issues on lite | No Tasks-to-Issues stage; `task_issues.py` refuses with `TASK_ISSUES_SKIPPED`; the Ready task-link check reports `task_links:skipped (lite tier: no task sub-issues)` | Nothing; the parent issue is the only issue |
+| Lite documentation no longer fails the gate | The gate's `documentation` rule skips a QA or manual process whose document stage the feature skipped | Nothing; standard and full features are checked as before |
+| `status` shows a held claim's receipt template | `status` prints `receipt_template` while a claim is active | Use it to finish a claim resumed in a new session |
+
 ## PH-04 train (Workflow 1.22.0)
 
 The train ships Workflow 1.22.0, Scope 1.13.0, Assure 2.7.0, Memory 2.6.1, Illustrate 2.7.3, PR 4.7.1,

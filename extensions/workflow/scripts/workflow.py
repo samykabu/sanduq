@@ -52,7 +52,7 @@ from packaging.version import Version
 from wf_core import (SCHEMA, CHECKPOINT_SCHEMA, CHECKPOINT_SCHEMAS, RANGES, BASE_STAGES, COMMANDS, CORE_INPUTS,
                      INPUT_ROLES, RECEIPT_POLICY_KEYS, AMENDMENT_ASSESSMENTS, AMENDMENT_DEPENDENTS,
                      RUNTIME_RECEIPT_FIELDS, SOURCE_STAGES, EFFORT_SCORES, TIERS, DEFAULT_PROFILES, LITE_SKIPPED,
-                     LITE_OPTIONAL_INPUTS, LINT_COMMAND, ARTIFACT_BUDGETS, ARTIFACT_ENFORCE, PROJECT_SYNC_PHASES,
+                     LITE_FOLDED, LITE_OPTIONAL_INPUTS, LINT_COMMAND, ARTIFACT_BUDGETS, ARTIFACT_ENFORCE, PROJECT_SYNC_PHASES,
                      PROJECT_SYNC_POINTS, PROJECT_SYNC_SCRIPT, PROJECT_SYNC_STEPS, DEFAULT_SYNC_STATE,
                      SYNC_BINDING_PREFIX, SYNC_ADMINISTRATIVE, TASK_ISSUE_MODES, PROJECT_SYNC_MODES,
                      MINIMAL_SYNC_PHASES, SIDE_EFFECTS, RENDER_MARKER,
@@ -202,8 +202,9 @@ class Run:
         if task_issue_mode(self.policy) == 'off':
             if 'taskstoissues' not in state['receipts']:
                 skipped.setdefault('taskstoissues', 'issue_sync.taskstoissues: off')
-        elif 'taskstoissues' in skipped and not any(
+        elif skipped.get('taskstoissues') == 'issue_sync.taskstoissues: off' and not any(
                 BASE_STAGES.index(stage) > BASE_STAGES.index('taskstoissues') for stage in state['receipts']):
+            # Only the board-mode skip follows the policy; the lite tier's skip is fixed with the tier.
             del skipped['taskstoissues']
         self.record_skipped(state, skipped)
 
@@ -842,6 +843,9 @@ class Run:
                             'recovery': recovery_recipe(self.relative, stage, {'reason': 'marked-stale',
                                                         'stale': receipt['stale']}, self.policy, receipt),
                             'next': self.next(state)}
+                checks = self.folded_ready_checks(state)
+                if checks is not None:
+                    record['checks'] = receipt['ready_checks'] = checks
                 receipt['ci_evidence'] = evidence
                 if lean_policy.enabled(self.policy, tier):
                     selected_plan = lean_policy.settings(self.policy).get('verification_plan')
@@ -1481,6 +1485,18 @@ class Run:
         validate_evidence_snapshots(self.root, receipt)
         return receipt
 
+    def folded_ready_checks(self, state):
+        """A lite feature folds Ready into Verify: Verify's completion and revalidation run the Ready checks (tasks,
+        task links, selected documentation) and record what ran. None when the feature runs its own Ready."""
+        if 'ready' not in (state.get('skipped') or {}):
+            return None
+        try:
+            return ready_checks(self.root, self.relative, self.policy, state, state.get('target_branch'))
+        except Exception as exc:  # the task parser raises the importing module's error class
+            if type(exc).__name__ != 'WorkflowError':
+                raise
+            raise WorkflowError('READY_CHECKS_FAILED: ' + str(exc)) from exc
+
     def receipt_template(self, state, stage):
         """The receipt skeleton `claim` prints: the fields `_check_receipt` and `_check_stage_rules` require for this
         stage and tier. Inputs the runtime adds itself (`_stamp`: required artifacts, the decision ledger) are left
@@ -1541,6 +1557,17 @@ class Run:
             require(self.relative + '/tasks.md' in receipt['inputs'], 'MERGED_TASKS_REQUIRED: on the ' +
                     state_tier(state) + ' tier Plan also writes tasks.md; list ' + self.relative +
                     '/tasks.md in the receipt inputs')
+        if stage == 'plan' and 'analyze' in (state.get('skipped') or {}):
+            # Lite folds Analyze into Plan: the deterministic lint runs here, and a gap only a model Analyze could
+            # judge is fixed in the artifacts, since there is no Analyze stage to escalate to.
+            import lint  # imports this module; loaded only on this path
+            result = lint.run(self.root, self.relative, self.policy, self.tier_of(state))
+            require(result['ok'] and not result['needs_model_analyze'],
+                    'PLAN_LINT_FAILED: on this tier Plan completion runs workflow:lint (there is no Analyze stage); '
+                    'fix the owning artifact, then complete again: ' + '; '.join(
+                        f['severity'] + ' ' + f['code'] + ' ' + f['path'] + ': ' + f['message']
+                        for f in result['findings'] if f['severity'] != 'info')[:2000])
+            receipt['lint'] = {'ok': True, 'findings': len(result['findings'])}
         if stage == 'analyze' and state['commands'].get(stage) == LINT_COMMAND \
                 and receipt.get('command') != COMMANDS['analyze']:
             lint = receipt.get('lint')
@@ -1625,6 +1652,7 @@ class Run:
         self._check_stage_rules(state, stage, receipt, token, active.get('session_id'))
         if stage in SOURCE_STAGES:
             require(receipt.get('blocking_findings') == 0, 'BLOCKING_FINDINGS_REMAIN')
+        folded_ready = self.folded_ready_checks(state) if stage == 'verify' else None
         if stage == 'pr':
             require(receipt.get('images_verified') is True and receipt.get('pr_url', '').startswith('https://github.com/' + state['issue'].split('#')[0] + '/pull/'), 'PR_EVIDENCE_INCOMPLETE')
             if lean:
@@ -1687,6 +1715,8 @@ class Run:
                     elif hits:
                         prior['source_fingerprints'] = inventory
         stored = copy.deepcopy(receipt)
+        if folded_ready is not None:
+            stored['ready_checks'] = folded_ready
         if stage == 'pr' and lean:
             stored['pr_lint_binding'] = binding
         if stage == 'verify' and lean:
@@ -2055,6 +2085,9 @@ def run_command(args):
                 state = run.load(allow_branch_change=True)
                 result = native_run_status(root, run.relative, state, args.runs)
                 result['lean_execution'] = lean_policy.describe(run.policy, state_tier(state))
+                if state.get('active'):
+                    # A session resuming a held claim needs the receipt shape without re-claiming.
+                    result['receipt_template'] = run.receipt_template(state, state['active']['stage'])
             elif args.action == 'claim':
                 result = run.claim(read(args.usage), args.finalize, args.verbose,
                                    confirm_invalidation=args.confirm_invalidation)

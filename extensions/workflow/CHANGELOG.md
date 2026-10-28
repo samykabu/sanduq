@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+- Leaner lite tier. A feature whose tier is fixed as `lite` runs seven stages (Scope, Specify, Clarify, Plan, Execute, Verify, PR) instead of eleven; the PH-04 paired baseline measured the lite arm at 18x the plain host's cost, mostly in stage bookkeeping and instruction reads. The folded stages are recorded under `skipped` with the reason naming where their work went, so `status`, the lifecycle log, receipts and the evidence gate stay consistent; a feature whose tier was fixed before keeps its list. Standard and full are unchanged.
+  - Analyze folds into Plan (`lite tier: lint runs at Plan completion`): Plan's `complete` (and `revalidate-upstream`) runs `workflow:lint` and stores `lint` on the Plan receipt; an error finding or a requirement without a task refuses it with `PLAN_LINT_FAILED` listing the findings.
+  - Review and Ready fold into Verify (`lite tier: Verify reviews the diff`, `lite tier: Ready checks run at Verify completion`): Verify's `complete` and `revalidate --stage verify` run the Ready checks and store the runtime-owned `ready_checks` on the receipt (a failure is `READY_CHECKS_FAILED`); `next` then reports `ready_to_finalize`.
+  - No task sub-issues (`lite tier: no task sub-issues`): no Tasks-to-Issues stage, the Ready task-link check reports `task_links:skipped (...)`, and `task_issues.py` refuses a feature that skips the stage with `TASK_ISSUES_SKIPPED`. The tier's skip survives an `issue_sync.taskstoissues` switch.
+- The gate's `documentation` rule skips a QA or User Manual process whose document stage the feature skipped (`documentation:<script>:skipped (lite tier)`), so a lite feature in a project with the manual selected no longer fails it.
+- `status` prints `receipt_template` while a claim is active, so a session resuming a held claim (for example Scope after owner approval) has the receipt shape without re-claiming or reading runtime source.
+- Maintainers: `benchmark_front_half.py` claims with `--finalize` when a claim answers `ready_to_finalize`; `test_lifecycle_e2e.py` expects the seven-stage lite list and the folded `lint` and `ready_checks`.
+
 ## [1.22.1] - 2026-10-28
 
 - The rendered evidence gate (`.github/workflows/workflow-gates.yml`) loads again. Since 1.8.4 its checkout used `fetch-depth: ${{ github.event.pull_request.commits + 1 }}`; GitHub expressions have no arithmetic, so the workflow file failed to load and the gate never ran in a consumer's CI. The fetch step now deepens history by the PR's commit count in shell. `upgrade.py` replaces an unedited gate file automatically; a project that kept its own copy (`--preserve-ci` or local edits) must remove the `fetch-depth` line and add `--deepen="$COMMITS"` as in the template. A test refuses any arithmetic in a template expression.

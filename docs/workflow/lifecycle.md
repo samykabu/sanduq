@@ -71,8 +71,10 @@ checks. QA and manual stages run only when selected during initialization.
 | CI and merge follow-through | When authorized, monitor the exact PR head, repair failures, and verify the merge. | `Continue on this PR: fix failing checks, address review findings, and merge when required checks and approvals pass. Keep the HTML report current until the merge is verified.` |
 
 The runtime has sixteen recorded stages, from `scope` through `pr`. With profiles enabled, the
-`lite` and `standard` tiers merge Tasks into Plan, run Analyze as the deterministic
-`workflow:lint`, and `lite` also skips the QA and manual stages; see
+`lite` and `standard` tiers merge Tasks into Plan and run Analyze as the deterministic
+`workflow:lint`; `lite` runs seven stages (Scope, Specify, Clarify, Plan, Execute, Verify, PR),
+folding Analyze into Plan and Review and Ready into Verify, with no task sub-issues and no QA or
+manual stages; see
 [profiles and tiers](stages.md#profiles-and-tiers). When `clarification.in_session_first_round`
 is on, the issue creator can answer the first Clarify round in the session, and the runtime posts
 one comment recording those answers. When Scope renders the spec from the approved analysis
