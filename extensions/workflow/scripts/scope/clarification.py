@@ -653,7 +653,7 @@ class Clarification:
         followups = {qid for q in analysis['questions'] for qid in q.get('follows_up', [])}
         if unresolved and not snapshot['limit_reached'] and not snapshot['policy']['closed']:
             require(set(unresolved) <= followups, 'Every unresolved prior question needs a precise follow-up question.')
-        # OMAR-12: every spec edit cites the questions whose trusted answers justify it. Answered and superseded
+        # Every spec edit cites the questions whose trusted answers justify it. Answered and superseded
         # dispositions were checked above for human evidence; a creator closure vouches for the questions it waives;
         # in session, the answers file is the evidence (checked by publish_in_session) for this round's C1Q<n>.
         if in_session:

@@ -49,7 +49,7 @@ ACTIVE = ('starting', 'running')
 # Replacement intents that never produced a run and no longer block a retry.
 INACTIVE_INTENTS = ('blocked', 'intent-abandoned')
 # Terminal ledger outcomes for a run, including the light-tier guard's own
-# ``unverified`` (B12): a driver-reported ``successful`` at a light tier with
+# ``unverified``: a driver-reported ``successful`` at a light tier with
 # no raw counts or produced-file evidence. Only a standard-tier reassignment
 # or ``accept`` running the acceptance command independently resolves it; a
 # note never does, because there is no ledger path that accepts free text.
@@ -129,7 +129,7 @@ def ledger_foreign_write(root, feature):
     worker-edit attribution (bookkeeping paths, retry decisions); it is
     deliberately broad, since a missing marker is common and not itself
     suspicious there. ``ledger_genuinely_tampered`` below is the narrower
-    check for the sticky trust flag (round 3, finding 2).
+    check for the sticky trust flag.
     """
     return (delegation.ledger_path(root, feature).exists() and
             not ledger_written_by_dispatcher(root, feature))
@@ -137,7 +137,7 @@ def ledger_foreign_write(root, feature):
 
 def ledger_genuinely_tampered(root, feature):
     """True only when the ordinary written marker exists but disagrees with
-    the ledger's current bytes -- never merely absent (round 3, findings 1-2).
+    the ledger's current bytes -- never merely absent.
 
     A fresh clone or CI checkout has no marker at all and is not itself
     suspicious (see ``delegation.ledger_trust_state``'s ``'unverified-local'``);
@@ -190,8 +190,8 @@ def edit_ledger(root, feature, active=None):
         if ledger_genuinely_tampered(root, feature):
             # A real tamper (not merely a missing marker): persist the sticky
             # flag before this edit's own save would otherwise re-anchor the
-            # marker at the new bytes and quietly launder it away (round 3,
-            # finding 2). Only trust-reset clears it.
+            # marker at the new bytes and quietly launder it away. Only
+            # trust-reset clears it.
             delegation.record_foreign_write(root, feature)
         yield value
         if value == original:
@@ -375,7 +375,7 @@ QA_COLLECT_ADDENDUM = (
 )
 
 
-# Round 4, finding 1: nothing else stops a worker from running the
+# The brief is what stops a worker from running the
 # dispatcher's own commands on its own or another task's run -- collecting or
 # accepting its own light-tier result, reassigning another attempt, or
 # resetting a trust flag it has no business seeing, let alone clearing.
@@ -392,7 +392,7 @@ NO_DISPATCHER_COMMANDS = (
 )
 
 
-# The delegated Execute stage is the one exception (round 10, finding 1):
+# The delegated Execute stage is the one exception:
 # its own job is to dispatch and resolve bounded task workers with exactly
 # the commands every other brief forbids outright. Its environment
 # (SANDUQ_DELEGATED_ROLE=orchestrator plus SANDUQ_DELEGATED_FEATURE, never
@@ -493,8 +493,7 @@ def driver_env(root, run_context=None, role=None, feature=None, task_worker=Fals
     """Environment for the driver subprocess and, through it, every worker it
     spawns underneath.
 
-    Two, mutually exclusive shapes (round 10, finding 1 refines round 9's
-    single ``SANDUQ_DELEGATED_RUN``): a plain worker -- any task, and any
+    Two, mutually exclusive shapes: a plain worker -- any task, and any
     stage other than ``execute`` -- gets ``SANDUQ_DELEGATED_RUN`` set to
     this dispatch's own intent id (``run_context``; the driver, outside
     this project's scope, assigns the eventual ``run_id`` itself, only
@@ -550,12 +549,11 @@ def driver_env(root, run_context=None, role=None, feature=None, task_worker=Fals
 
 def require_not_worker_context(feature=None, task_identity=None):
     """Refuse when this process is itself running inside a delegated
-    process tree, worker or orchestrator (round 9, finding 1a; role-aware
-    since round 10, finding 1).
+    process tree, worker or orchestrator, with a role-aware check.
 
     A plain worker (``SANDUQ_DELEGATED_RUN`` set) is refused outright and
     unconditionally: ``DELEGATION_WORKER_CONTEXT``. This is checked first
-    and always wins (round 11, finding 1) -- ``SANDUQ_DELEGATED_RUN`` set
+    and always wins -- ``SANDUQ_DELEGATED_RUN`` set
     at all means a real worker process tree exists underneath this one,
     whatever ``SANDUQ_DELEGATED_ROLE``/``SANDUQ_DELEGATED_FEATURE`` also
     happen to read, so that combination is never treated as the
@@ -749,7 +747,7 @@ def launch(root, driver, candidate, cwd, task, timeout, intent_id=None, orchestr
     """Start one worker through the driver with a clean environment.
 
     ``orchestrator_feature``, given only for the ``stage:execute`` launch
-    itself (round 10, finding 1), selects the orchestrator environment
+    itself, selects the orchestrator environment
     shape from ``driver_env`` in place of the ordinary worker one. The
     driver always gets ``--clean-env`` with the ``keep_env_names``
     allowlist; ``candidate['github_access']`` adds the GitHub token and
@@ -788,7 +786,7 @@ def launch(root, driver, candidate, cwd, task, timeout, intent_id=None, orchestr
     except OSError as exc:
         raise StartFailed('DELEGATE_START_FAILED: ' + str(exc)[:500]) from exc
     if result.returncode:
-        delegation.forget_health(root)  # the next claim probes the driver again (W6)
+        delegation.forget_health(root)  # the next claim probes the driver again
         raise StartFailed('DELEGATE_START_FAILED: ' +
                           (result.stderr.strip() or result.stdout.strip())[:500], result.returncode)
     try:
@@ -840,7 +838,7 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
                                                work_type, candidates)
         delegation.require(lean_policy.settings(policy)['finalization_seconds'] < timeout <=
                            lean_policy.settings(policy)['timeout_max_seconds'], 'LEAN_TIMEOUT_INVALID')
-    # SAMY-16: one probe per TTL; a start failure below forgets it so the next start probes again.
+    # One probe per TTL; a start failure below forgets it so the next start probes again.
     status = delegation.cached_health(root, workflow.active_host(root), config['install_scope'])
     delegation.require(status['ok'], delegation.health_error(status))
     # An explicit pin never falls back: an unavailable harness is refused
@@ -858,7 +856,7 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
             task += 'Concrete diagnosis: ' + json.dumps(diagnosis) + '\n'
     intent_id = uuid.uuid4().hex
     # The owned paths a light-tier result's evidence must resolve inside
-    # (finding 8a); recorded at start so accept and the summary-evidence guard
+    # recorded at start so accept and the summary-evidence guard
     # in collect share one authoritative record instead of assuming the whole
     # cwd. Carried forward unchanged across a retry or reassignment.
     owned_paths = list(owned_paths) if owned_paths else ['.']
@@ -1096,10 +1094,10 @@ def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
     candidates = delegation.external_candidates(candidates, [a for a in read_ledger(root, feature)['attempts']
                                                              if a.get('identity') == full_identity])
     # A light-tier or qa_collect start must declare its owned paths itself
-    # (finding 4, round 2): the evidence guard needs a bounded set to check
+    # the evidence guard needs a bounded set to check
     # summary or accept file evidence against, not a silent default to the
     # whole working directory. Any candidate in the whole fallback chain
-    # being light is enough (round 3, finding 6): a fallback beyond the
+    # being light is enough: a fallback beyond the
     # preferred candidate can still land the run on the light tier.
     pinned = bool(harness or model)
     if pinned:
@@ -1279,7 +1277,7 @@ def fallback_substitute(policy, attempt, payload, rejected, tier=None):
 
 
 def fallback_message(feature, attempt, pending):
-    """FALLBACK_CONFIRMATION_REQUIRED with the three exact ways on (AHMED-05)."""
+    """FALLBACK_CONFIRMATION_REQUIRED with the three exact ways on."""
     identity = attempt['identity'].removeprefix(feature + '/')
     confirm = (DISPATCH_SCRIPT + ' collect --feature ' + feature + ' --run-id ' + attempt['run_id'] +
                ' --confirm-fallback ' + pending['pair'])
@@ -1342,7 +1340,7 @@ def replacement_link(ledger, attempt):
 
 
 # ---------------------------------------------------------------------------
-# Light-tier evidence (B12): a light-tier run is accepted only when its result
+# Light-tier evidence: a light-tier run is accepted only when its result
 # carries raw reporter counts or a produced-file list, never on a bare claim
 # of success. The same parsers serve ``collect`` (reading a worker's own
 # self-reported summary) and ``accept`` (reading an acceptance command's own
@@ -1399,8 +1397,8 @@ def _counts_from_block(block):
     A single reporter line or block may list its outcomes in any order (real
     pytest and Jest summaries put failures before passes); this reads every
     ``N <keyword>`` pair in the span regardless of position instead of
-    assuming a fixed sequence (finding 2: order-dependent matching silently
-    read only the first "N passed" and missed an earlier "N failed").
+    assuming a fixed sequence, so an earlier "N failed" is never missed
+    behind a later "N passed".
     """
     found = {}
     for number, word in re.findall(r'(\d+)\s+(passed|failed|errors?|total|skipped)\b', block, re.I):
@@ -1483,14 +1481,14 @@ def _node_test_counts(text):
 
 # Every pattern requires the real framing a genuine reporter transcript has,
 # never a bare "N passed, N failed" substring that could appear in prose or
-# be pasted out of context (finding 2's probes: "3 failed, 10 passed in
+# be pasted out of context (for example: "3 failed, 10 passed in
 # 0.52s" with no "====" bars, a bare "Tests run: 3, Failures: 0" with no
 # "Results:" section, and "I ran it: 10 passed, 0 failed" all match nothing
 # below and so parse to None, never a false "failed: 0"). See the format list
 # documented on QA_COLLECT_ADDENDUM, the README delegation section and here:
 #   1. pytest's "===== ... in N.Ns =====" summary bar. Its category prefers
 #      any occurrence with failed > 0 over the chronologically last one
-#      (round 2, finding 6c): a "rerun failed only" pytest invocation can
+#      a "rerun failed only" pytest invocation can
 #      print an earlier bar with real failures, then a later, clean bar for
 #      just the retried subset -- taking the literal last bar would silently
 #      report the whole run as passing.
@@ -1501,8 +1499,7 @@ def _node_test_counts(text):
 #   4. Python unittest's "Ran N tests ..." followed by "OK" or "FAILED (...)".
 #   5. dotnet test's "Passed!"/"Failed!" summary line. A multi-project
 #      solution prints one such line per project; like pytest, this category
-#      prefers any occurrence with failed > 0 over the last one (round 3,
-#      finding 4), so one failing project is never hidden behind a later,
+#      prefers any occurrence with failed > 0 over the last one, so one failing project is never hidden behind a later,
 #      passing project's clean line.
 #   6. dotnet's older VSTest console form, "Total tests: N" with Passed/Failed
 #      on the same or following lines.
@@ -1515,7 +1512,7 @@ COUNT_PATTERNS = (
     # A blank line between "Results:" and the aggregate may itself carry a
     # bare log-level prefix ("[INFO]" alone) in real Maven output; skip any
     # number of such blank (optionally bracket-prefixed) lines, not just
-    # literally empty ones (round 3, finding 4).
+    # literally empty ones.
     (re.compile(r'Results:[ \t]*\r?\n(?:[ \t]*(?:\[\w+\])?[ \t]*\r?\n)*[ \t]*([^\n]+)', re.I),
      _labeled_block_counts),
     (re.compile(r'Ran\s+(\d+)\s+tests?\b[^\n]*\r?\n+\s*OK\b', re.I), _unittest_ok_counts),
@@ -1596,7 +1593,7 @@ TRAVERSAL_SEGMENT = re.compile(r'(^|[\\/])\.\.($|[\\/])')
 def _path_escapes_relative(text):
     """True when ``text`` is rooted, drive-anchored or otherwise absolute on
     Windows or POSIX, checked explicitly with both flavours rather than the
-    host's own ``Path`` class (finding, round 6).
+    host's own ``Path`` class.
 
     ``Path.is_absolute()`` alone is not enough on Windows: a root-relative
     path like ``\\x`` (a root but no drive) resolves to the root of whatever
@@ -1654,11 +1651,11 @@ def validate_owned_files(cwd, owned_paths, paths):
     any symlink to its real location) before it is required to stay inside
     both ``cwd`` itself and at least one declared owned path (each resolved
     relative to ``cwd`` and itself required to stay inside it; the whole
-    ``cwd`` when none were declared, e.g. a pre-B12-review ledger), so
+    ``cwd`` when none were declared, e.g. an older ledger), so
     neither a symlinked "owned" directory nor a symlinked file can land
     outside the task's own working directory. Any single invalid path fails
     the whole list, matching the guard's "no partial acceptance" rule.
-    Returns a list of ``{path, sha256, size}`` records (finding 8a), or
+    Returns a list of ``{path, sha256, size}`` records, or
     ``None``.
     """
     cwd = Path(cwd).resolve()
@@ -1701,21 +1698,19 @@ def validate_owned_files(cwd, owned_paths, paths):
 # "large"/"pro"/"max" live here as bare size/tier words that plenty of
 # unrelated model lines reuse, not because they signal a *different* tier the
 # way the narrower TIER_QUALIFIER_TOKENS below does -- the two sets serve
-# different questions and are not expected to overlap; the round 5 fix that
-# narrowed TIER_QUALIFIER_TOKENS to effort words removed 'max'/'pro'/'large'
-# from it for exactly that reason.
+# different questions and are not expected to overlap, which is why
+# TIER_QUALIFIER_TOKENS holds only effort words.
 GENERIC_MODEL_TOKENS = {'gpt', 'claude', 'codex', 'openai', 'anthropic', 'mini', 'small', 'medium',
                         'large', 'pro', 'max', 'lite', 'base', 'preview'}
 # A contained run immediately followed by one of these MAY change the
-# model's identity rather than merely extend it (round 4, finding 3), but
+# model's identity rather than merely extend it, but
 # unlike a build or date suffix this cannot be told apart from a harmless
 # variant by the token alone: "haiku-large-ctx" is still Haiku (a context-
 # window variant), while "o4-mini-high" is a genuinely different, more
 # expensive reasoning-effort tier of "o4-mini". Limited to actual effort
-# words (round 5, finding 1): "large"/"pro"/"max" used to sit here too and
-# produced false negatives for real light-tier variants like
-# "haiku-large-ctx" or "gpt-6-terra-pro" -- the unsafe direction, since a
-# false negative here means a light-tier run's guard is skipped entirely.
+# words: "large"/"pro"/"max" here would give false negatives for real
+# light-tier variants like "haiku-large-ctx" or "gpt-6-terra-pro" -- the
+# unsafe direction, since a false negative skips a light-tier run's guard.
 # Even for "high"/"xhigh", the exclusion only actually applies when the
 # fuller identifier is a policy-configured non-light model (see
 # `model_family_matches`'s ``non_light_models``); otherwise the safe
@@ -1732,9 +1727,8 @@ def _model_tokens(model):
 def model_family_matches(candidate_model, configured_model, non_light_models=None):
     """True only when the two model identifiers are the same, or one is a
     whole dash-delimited token run inside the other, not immediately followed
-    by a *confirmed* tier qualifier (round 3 finding 3, round 4 finding 3,
-    round 5 finding 1: a shared-token-anywhere rule was too broad and matched
-    unrelated sibling models -- ``claude-opus-4-7`` against
+    by a *confirmed* tier qualifier (a shared-token-anywhere rule would be too
+    broad and match unrelated sibling models -- ``claude-opus-4-7`` against
     ``claude-haiku-4-5``, or ``gpt-6-terra-codex`` against
     ``gpt-6-sol-codex`` -- that merely share a provider prefix or a trailing
     qualifier).
@@ -1788,12 +1782,11 @@ def is_light_tier_run(attempt, policy):
     explicit ``model``, or an override) cannot itself say it is not light, so
     the task's own ``qa_collect`` classification applies only then -- an
     explicit standard-or-above tier is a genuine escalation (for example
-    ``reassign`` to standard) and is exempt from the task-type rule (finding
-    3a, round 2: task_type never changes on reassignment, so applying it
-    unconditionally meant a qa_collect task could never actually resolve
-    through a standard-tier reassignment). Independently of tier, the
+    ``reassign`` to standard) and is exempt from the task-type rule (task_type
+    never changes on reassignment, so applying it unconditionally would leave
+    a qa_collect task no way to resolve through a standard-tier reassignment). Independently of tier, the
     requested or harness-reported actual model matching that harness's
-    configured light-tier model *by family* (finding 3b) is also sufficient,
+    configured light-tier model *by family* is also sufficient,
     since a fallback candidate can name a model the harness then reports back
     under a different but equivalent full identifier.
     """
@@ -1817,7 +1810,7 @@ def is_light_tier_run(attempt, policy):
 def light_tier_evidence(text, root, attempt):
     """Evidence for a light-tier run's own self-reported summary, or ``None``.
 
-    Counts are never accepted from a worker's own summary (finding 3): only
+    Counts are never accepted from a worker's own summary: only
     an independently run ``accept`` command, or a driver-captured command
     transcript, may supply them. A produced-file list is accepted only when
     every path is both declared inside the task's owned paths AND among the
@@ -1862,7 +1855,7 @@ def build_command_argv(command):
     to preserve quoted arguments such as a path with spaces.
     ``shlex.split(..., posix=False)`` keeps the quote characters themselves in
     each token, which is wrong once that token is one ``argv`` element
-    (finding 8c). On POSIX there is no such native parser and no shell here,
+    On POSIX there is no such native parser and no shell here,
     so the string must still be split into an argv list ourselves.
     """
     if os.name == 'nt':
@@ -1902,8 +1895,8 @@ def command_target_token(command):
 
 def command_targets_windows_shim(command):
     """True when the acceptance command's executable is, or would resolve on
-    PATH to, a ``.bat``/``.cmd`` shim (finding 5, round 2: the "BatBadBut"
-    vulnerability class). Windows' ``CreateProcess`` cannot run a batch file
+    PATH to, a ``.bat``/``.cmd`` shim (the "BatBadBut" vulnerability
+    class). Windows' ``CreateProcess`` cannot run a batch file
     directly: it always routes it through ``cmd.exe``, which re-parses
     quoting, even though this module never sets ``shell=True`` and never
     passes the command through a shell itself -- an argument built from
@@ -1925,7 +1918,7 @@ def command_targets_windows_shim(command):
 
 
 def kill_process_tree(proc):
-    """Kill the whole process tree, not just the direct child (finding 8d).
+    """Kill the whole process tree, not just the direct child.
 
     A command that spawns its own children (a shell wrapper, a test runner
     that forks workers) would otherwise survive its parent's termination and
@@ -2104,7 +2097,7 @@ def require_top_level(verb):
 
 
 def attest_native(root, feature, identity, token, requested_model, reported_model=None):
-    """SAMY-03: record that the top-level session carried a claimed stage out with a native subagent
+    """Record that the top-level session carried a claimed stage out with a native subagent
     of the host, so `complete` has a ledger attempt to accept. Self-asserted: no driver run and no
     external evidence back it, and every place that shows it labels it `kind: native`."""
     require_top_level('attest-native')
@@ -2308,7 +2301,7 @@ def collect(root, feature, run_id, auto_retry=True, confirm=None):
         delegation.require(attempt is not None, 'DELEGATION_RUN_UNKNOWN: ' + run_id)
         require_not_worker_context(feature, attempt['identity'].removeprefix(feature + '/'))
         linked = replacement_link(ledger, attempt)
-        # Already fully processed (finding 3d, round 2): a repeated collect on
+        # Already fully processed: a repeated collect on
         # a terminal run -- especially one accept already resolved -- must
         # return what is on record, never re-run the driver or the light-tier
         # guard a second time and risk downgrading an accepted result back to
@@ -2378,7 +2371,7 @@ def collect(root, feature, run_id, auto_retry=True, confirm=None):
         attempt['model_rejected'] = rejected
         if type(payload.get('duration_ms')) in (int, float) and payload['duration_ms'] >= 0:
             attempt['actual_duration_seconds'] = payload['duration_ms'] / 1000
-        # Light-tier guard (B12): a light-tier "successful" result is never
+        # Light-tier guard: a light-tier "successful" result is never
         # taken on trust. Only parsable evidence in the worker's own summary
         # keeps it successful; anything else stays unverified until accept or
         # a standard-tier reassignment supplies it. A note is not a path here:
@@ -2493,15 +2486,14 @@ def reassign(root, feature, run_id, reason, task_file=None, diagnosis=None):
     require_not_worker_context(feature, prior['identity'].removeprefix(feature + '/'))
     require_not_delegated_lineage(root, feature)
     # An adopted attempt has no dispatcher route, task file or retry count to
-    # escalate from (round 8, finding 2: reassign crashed with a bare
-    # KeyError on 'retry_count' trying); adopt is its own, supported recovery.
+    # escalate from; adopt is its own, supported recovery.
     delegation.require(not prior.get('adopted'),
                        'DELEGATION_REASSIGN_ADOPTED_UNSUPPORTED: an adopted attempt has no dispatcher '
                        'route to escalate; re-run "delegate_dispatch.py adopt" with a corrected '
                        'acceptance check, or "start" the task normally to create a real dispatched '
                        'attempt reassign can act on')
     lean = lean_policy.enabled(policy, lean_policy.feature_tier(root, feature))
-    # SAMY-17: lean reassign keeps the prior candidate, so it would only run the rejected model again.
+    # Lean reassign keeps the prior candidate, so it would only run the rejected model again.
     delegation.require(not lean or not (prior.get('model_rejected') or
                                         prior.get('failure_category') == 'provider-rejection'),
                        'LEAN_PROVIDER_REJECTED: run ' + run_id + ' failed because ' + str(prior.get('requested_harness')) +
@@ -2584,16 +2576,16 @@ def accept(root, feature, run_id, command, expect, timeout=None, owned=None, tas
     With ``task_id`` instead of ``run_id`` (CLI: ``accept --no-attempt --id T###``, alias ``adopt``)
     it brings a checked task that has no attempt under the ledger instead; see ``_accept_no_attempt``.
 
-    The only new dispatcher command in B12: it resolves a light-tier
+    It resolves a light-tier
     ``unverified`` outcome without a standard-tier reassignment, by running a
     fixed command the orchestrator supplies and inspecting its own output --
     never the worker's self-report a second time. The command runs with no
     shell (``build_command_argv``: argv via ``shlex.split`` on POSIX, the raw
-    string for Windows' own ``CreateProcess`` quoting; finding 8c) in the
+    string for Windows' own ``CreateProcess`` quoting) in the
     task's own recorded working directory -- its original ``cwd``, or, when
     that is outside ``root``, a worktree ``git worktree list`` itself
-    confirms belongs to this repository (finding 8b; a caller-supplied path is
-    never accepted) -- under a bounded timeout and a hard output cap with the
+    confirms belongs to this repository (a caller-supplied path is never
+    accepted) -- under a bounded timeout and a hard output cap with the
     whole process tree killed on timeout (``run_capped``).
 
     It accepts only when the command exits 0 and its output satisfies the
@@ -2602,7 +2594,7 @@ def accept(root, feature, run_id, command, expect, timeout=None, owned=None, tas
     task's owned paths (``--owned``, or the paths recorded at ``start``, or
     the whole ``cwd`` when neither declared any), rejecting absolute paths,
     ``..`` traversal and symlink escapes; each accepted file's evidence
-    records its sha256 and size (finding 8a). Exit-zero empty output,
+    records its sha256 and size. Exit-zero empty output,
     unparsable output (including a bare free-text note with no structured
     evidence), a missing or empty file, a path outside the owned set, a
     failed command or a timeout all leave the attempt ``unverified``; every
@@ -2635,7 +2627,7 @@ def accept(root, feature, run_id, command, expect, timeout=None, owned=None, tas
     delegation.require(not command_targets_windows_shim(command), ACCEPT_COMMAND_IS_SHIM)
     build_command_argv(command)  # an empty command is refused before anything runs
     # --owned may only narrow what was declared at start, never widen it
-    # (finding 4, round 2): otherwise a task started with a bounded owned set
+    # otherwise a task started with a bounded owned set
     # could have that bound quietly lifted for one acceptance call.
     owned_paths = attempt.get('owned_paths')
     if owned:
@@ -2732,7 +2724,7 @@ def abandon_intent(root, feature, intent_id, reason):
 
 
 def trust_reset(root, feature, reason):
-    """Explicitly clear a persisted ledger tamper flag (round 3, findings 1-2).
+    """Explicitly clear a persisted ledger tamper flag.
 
     Only a human decision resolves genuine tampering: this records who, when
     and why, and the exact bytes on both sides, then re-anchors the ordinary
@@ -2742,8 +2734,7 @@ def trust_reset(root, feature, reason):
     reviewed and accepted them; CI integrity ultimately rests on review, not
     on this mechanism (see the README's local-only trust limit).
 
-    This is an orchestrator-only, human-authorised command (round 4, finding
-    1): a worker brief explicitly forbids running it (or any other
+    This is an orchestrator-only, human-authorised command: a worker brief explicitly forbids running it (or any other
     delegate_dispatch.py command). It refuses outright when there is nothing
     to reset (``DELEGATION_TRUST_RESET_NOTHING_TO_RESET``): with no persisted
     tamper on record, this call would not be clearing a detected tamper, it
@@ -2803,19 +2794,15 @@ def _accept_no_attempt(root, feature, task_id, command, expect, timeout, owned):
 
     Bring a checked task that has no delegation attempt at all under the
     ledger's own evidence, by independently running an acceptance check --
-    never by asserting an exemption (round 7, findings 1-2 removed both
-    prior bypasses: a worker could self-certify with the now-deleted
-    ``orchestrator-executed`` command, and the stage-wide
-    ``delegation_enabled_for_execute: false`` checkpoint field was a mutable,
-    unfingerprinted flag the Ready gate trusted outright).
+    never by asserting an exemption: no self-certifying command and no
+    mutable, unfingerprinted checkpoint flag the Ready gate would trust.
 
     Adoption is for work legitimately done before delegation was enabled for
     this feature -- a task that has never been started, accepted or
     reassigned through the dispatcher. Before running anything it requires
     ``task_id`` to name a task that actually exists in ``tasks.md`` and is
-    currently checked (round 8, finding 1: Codex adopted an absent task,
-    then a different, later task added under the same id rode the earlier
-    adoption to Ready) -- ``DELEGATION_ADOPT_TASK_UNKNOWN`` or
+    currently checked (so a later task added under an absent id cannot ride
+    an earlier adoption to Ready) -- ``DELEGATION_ADOPT_TASK_UNKNOWN`` or
     ``DELEGATION_ADOPT_TASK_NOT_CHECKED`` otherwise -- and it records on the
     attempt a binding to that task's current content: a sha256 of the task
     line's text with the checkbox state removed and whitespace normalised
@@ -2826,8 +2813,8 @@ def _accept_no_attempt(root, feature, task_id, command, expect, timeout, owned):
     cannot ride the earlier check to Ready.
 
     It refuses outright with ``DELEGATION_ADOPT_HAS_ATTEMPT`` unless every
-    existing attempt for the task is itself an unverified adoption (round 8,
-    finding 2: a fresh task has none at all; a task whose only history is a
+    existing attempt for the task is itself an unverified adoption (a fresh
+    task has none at all; a task whose only history is a
     failed ``adopt`` may be re-adopted with a corrected check, since that is
     the supported recovery reassign cannot offer an adopted attempt). Any
     other existing attempt -- started, accepted, or a successful adoption
@@ -2848,13 +2835,11 @@ def _accept_no_attempt(root, feature, task_id, command, expect, timeout, owned):
     evidence records ``unverified`` instead -- the Ready gate then treats
     the result exactly like any other attempt, never as an exemption.
 
-    Runs from the repo root, never the feature directory (round 9, finding
-    2): the acceptance command is the orchestrator's own, already-trusted
+    Runs from the repo root, never the feature directory: the acceptance command is the orchestrator's own, already-trusted
     check, and pinning its cwd to a subdirectory the task happens to live
     under serves no purpose an attacker could exploit that running from
-    root does not already close off just as well -- while a repo-root
-    check (for example an aggregate test command) previously had no way to
-    run at all. The feature directory remains the *default* owned root for
+    root does not already close off just as well -- and a repo-root
+    check (for example an aggregate test command) must be able to run. The feature directory remains the *default* owned root for
     ``--expect files``, unchanged in effect from before.
     """
     tasks_path = root / feature / 'tasks.md'
@@ -3021,7 +3006,7 @@ def main(argv=None):
                 result['dispatcher_nonce'] = dispatcher_nonce(args.root)  # for this caller's accept or adopt
         elif args.action == 'collect':
             result = collect(args.root, args.feature, args.run_id, not args.no_auto_retry, args.confirm_fallback)
-            try:  # AHMED-01: a coordinator collecting results is still at work; keep its claim alive
+            try:  # a coordinator collecting results is still at work; keep its claim alive
                 workflow.Run(args.root, args.feature).heartbeat()
             except workflow.WorkflowError:
                 pass  # no claim to refresh, or the feature lock is busy; the collect result stands

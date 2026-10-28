@@ -98,7 +98,7 @@ def handoff_text(existing, block):
     return existing.rstrip('\n') + '\n\n' + block + '\n'
 
 
-# AHMED-01: a claim whose heartbeat is younger than this has a live owner unless its recorded pid has exited.
+# A claim whose heartbeat is younger than this has a live owner unless its recorded pid has exited.
 CLAIM_HEARTBEAT_SECONDS = 900
 
 
@@ -176,7 +176,7 @@ def native_run_status(root, feature, state, roots):
         active['last_activity'] = ('unknown' if liveness['last_activity_minutes'] is None
                                    else str(liveness['last_activity_minutes']) + ' min ago')
         if active.get('delegation'):
-            # SAMY-03: a native attestation of this claim is shown as such, never as a dispatched run.
+            # A native attestation of this claim is shown as such, never as a dispatched run.
             import delegate_dispatch
             attempt = delegation.latest_attempt(root, feature, 'stage:' + str(active.get('stage')))
             if (attempt or {}).get('kind') == 'native' and attempt.get('claim_token') == active.get('token'):
@@ -192,7 +192,7 @@ def native_run_status(root, feature, state, roots):
     if sync_retry(state, feature):
         result['project_sync'] = sync_retry(state, feature)
     import progress_bridge
-    line = progress_bridge.status_line(root, feature)  # W21: Progress's own text line, no v2 projection
+    line = progress_bridge.status_line(root, feature)  # Progress's own text line, no v2 projection
     if line is not None:
         result['progress_status'] = line
     warnings = guard_approval_warnings(root) + progress_wiring_warnings(root)
@@ -512,7 +512,7 @@ def diff_review_shell(base, head):
 
 def diff_review_sha256(root, base, head, timeout=300):
     """The SHA-256 of the bytes `diff_review_command(base, head)` prints; a run past `timeout` s raises
-    DIFF_REVIEW_TIMEOUT (it can run under the feature lock, SAMY-02)."""
+    DIFF_REVIEW_TIMEOUT (it can run under the feature lock)."""
     env = {key: value for key, value in os.environ.items()
            if key not in ('GIT_LITERAL_PATHSPECS', 'GIT_GLOB_PATHSPECS', 'GIT_NOGLOB_PATHSPECS', 'GIT_ICASE_PATHSPECS')}
     result = sanduq_fs.run_bounded(
@@ -676,7 +676,7 @@ def recovery_recipe(feature, stage, status, policy, receipt, root=None):
         state_file = sync_state_label(root) if root is not None else None
         raw = str((receipt.get('fingerprints') or {}).get(state_file, SYNC_BINDING_PREFIX))
         if state_file in status.get('paths', []) and not raw.startswith(SYNC_BINDING_PREFIX):
-            # W20: the runtime names the step, so the per-session reading no longer has to.
+            # The runtime names the step, so the per-session reading no longer has to.
             return [f'{WORKFLOW_SCRIPT} sync-amend{at} --reason "<why>" (a receipt recorded before 1.16.0 holds a '
                     f'raw hash of {state_file}; with no active claim)', 'or re-record: ' + rerecord]
         steps = [f'{WORKFLOW_SCRIPT} amend{at} --stage {stage} --evidence {path} --reason "<why>" '
@@ -745,7 +745,7 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
     project's gate rules) and `revalidate --stage ready` (all of them).
     Returns the names of the checks that ran. When given, `warnings` collects
     non-fatal advisories in place (for example a local-only trust read on a
-    fresh checkout or CI runner, round 3 finding 1); the caller decides how
+    fresh checkout or CI runner); the caller decides how
     to surface them.
     """
     rules = rules or {'tasks': True, 'task_links': True, 'documentation': True}
@@ -764,17 +764,16 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
         require(all(t['done'] for t in completion_tasks.values()), 'INCOMPLETE_TASKS')
         if policy.get('delegation', {}).get('enabled'):
             # A checked task delegated through the dispatcher must have a
-            # verified, successful outcome, not merely a checkbox (finding 1):
+            # verified, successful outcome, not merely a checkbox:
             # a light-tier result the guard left unverified, or any other
-            # non-successful status (running, starting, failed, abandoned --
-            # finding 2c, round 2), never earns Ready on its own. The ledger
+            # non-successful status (running, starting, failed, abandoned),
+            # never earns Ready on its own. The ledger
             # itself must still be trustworthy: 'untrusted' (a genuine,
             # persisted tamper, or a marker that disagrees with the current
             # bytes) refuses; 'unverified-local' (no local write marker at
             # all -- the normal state for a CI checkout or a fresh clone,
             # since delegations.json is committed but the marker is local
-            # runtime state) is a warning only, and status is still enforced
-            # (round 3, findings 1-2).
+            # runtime state) is a warning only, and status is still enforced.
             from delegation import (latest_attempt, ledger_attempts, ledger_trust_state, same_lineage_author,
                                     task_line_content_sha256, task_lines)
             trust = ledger_trust_state(root, feature)
@@ -788,20 +787,13 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
                                 'marker for ' + feature + ' (expected on a fresh checkout or CI runner); '
                                 'delegated task status is still enforced, but local tamper detection '
                                 'cannot vouch for this ledger on this machine')
-            # A checked task with NO attempt at all previously slipped through
-            # unnoticed (round 6, finding 2): the previous check only rejected
-            # a task whose latest attempt *existed* and had failed, never one
-            # missing outright. Fixed by requiring 'successful' from an empty
-            # record too. Round 7 removed two exemptions reviewed as bypasses:
-            # a stage-wide 'delegation_enabled_for_execute: false' checkpoint
-            # field (mutable, unfingerprinted, and never read here again), and
-            # a per-task 'orchestrator-executed' self-certification a worker
-            # could invoke. There is now exactly one way a checked task
-            # without its own dispatcher attempt earns Ready: run
-            # "delegate_dispatch.py adopt" to independently verify it with a
-            # real acceptance check, which records an ordinary successful
-            # attempt latest_attempt reads like any other -- except that an
-            # adopted attempt also carries a binding (round 8, finding 1): a
+            # A checked task with no attempt at all is refused too: 'successful'
+            # is required from an empty record, and no checkpoint field or
+            # self-certification exempts a task. The one way a checked task
+            # without its own dispatcher attempt earns Ready is an independent
+            # acceptance check run by the dispatcher, which records an ordinary
+            # successful attempt latest_attempt reads like any other -- except
+            # that an adopted attempt also carries a binding: a
             # sha256 of the task line's content (minus its checkbox state,
             # whitespace normalised) at the moment it was adopted. A task
             # whose current line no longer matches that digest -- edited,
@@ -831,8 +823,8 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
                 # light-tier one -- is exactly the kind of self-certification
                 # this whole guard exists to police everywhere else; a
                 # reviewer must be able to see every task that reached Ready
-                # this way, not only ones a worker actually attempted (round
-                # 9, finding 1b). Advisory only: status is already enforced
+                # this way, not only ones a worker actually attempted.
+                # Advisory only: status is already enforced
                 # above, and ci_gate already forwards every warning here to
                 # stderr and $GITHUB_STEP_SUMMARY.
                 if warnings is None:
@@ -882,7 +874,7 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
         require(not unmapped, 'TASK_MAPPING_INCOMPLETE: ' + ', '.join(unmapped[:20]) + lazy)
         ran.append('task_links')
     checks = []
-    # F5: a document stage the feature's tier skips (lite) has nothing to keep current. The tier decides, not the
+    # A document stage the feature's tier skips (lite) has nothing to keep current. The tier decides, not the
     # recorded `skipped` map, so a hand-added entry relaxes nothing (Workflow 1.23).
     for process, stage, args in (('qa', 'qa_document', ['.specify/extensions/assure/scripts/assure_state.py', 'status',
                                                         '--kind', 'document']),

@@ -297,7 +297,7 @@ def run(root, args, timeout=60, stdin=None):
 
 
 def status_line(root, feature):
-    """Progress's own one-line text status for `feature` (W21), or None when Progress is absent. A failure comes back
+    """Progress's own one-line text status for `feature`, or None when Progress is absent. A failure comes back
     as its first output line, never raised: the workflow record must print without it."""
     result = run(root, ['status', '--feature', feature], timeout=10)
     if result is None:

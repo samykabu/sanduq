@@ -403,7 +403,7 @@ def record_usage(state, args, fail):
 
 
 PROGRESS = 'python .specify/extensions/progress/scripts/progress.py'
-# What replaces each legacy call once Sanduq Progress maintains the report (round 4, D5).
+# What replaces each legacy call once Sanduq Progress maintains the report.
 REPLACEMENTS = {
     'init': f'run "{PROGRESS} init"',
     'task': 'check the task box in tasks.md',

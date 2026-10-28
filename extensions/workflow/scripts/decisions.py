@@ -20,7 +20,7 @@ from sanduq_hash import portable_content, portable_files
 from workflow import WorkflowError, Run, digest, inside, load_policy, locked, project_sync_mode, read, require, write
 
 MARKER = re.compile(r'\A<!-- sanduq-decision:question (\{[^\n]*\}) -->\n')
-# AHMED-15: `SD1: B.`, `SD1 - B`, `SD1 = B` and `SD1: B - keep drafts` all count; the letters must still stand
+# `SD1: B.`, `SD1 - B`, `SD1 = B` and `SD1: B - keep drafts` all count; the letters must still stand
 # alone before any punctuation or ` - feedback` tail, so prose never becomes a choice.
 LETTERS = r'([A-Z](?:\s*,\s*[A-Z])*)\s*[.!;]?(?:\s+[-–—]\s+.*)?'
 ANSWER_LIST = re.compile(r'^\s*(SD[1-9]\d*)\s*[:\-=]\s*' + LETTERS + r'\s*$', re.I | re.M)
@@ -561,7 +561,7 @@ def _apply_answer(root, feature, qid, evidence, gh=None):
 
 
 def portable_sha256(root, name):
-    """Evidence hash that does not depend on the checkout's line endings (F6), with the fingerprints' rule:
+    """Evidence hash that does not depend on the checkout's line endings, with the fingerprints' rule:
     a `-text`, SQL or binary file stays byte exact (its committed blob when only checkout conversion differs)."""
     try:
         content = portable_files(root, [name])[name]
@@ -592,7 +592,7 @@ def verify_ledger(root, feature, ledger):
         require(application.get('answer_digest') == item['answer_digest'], 'DECISION_APPLICATION_STALE')
         for name, expected in application.get('evidence', {}).items():
             path = inside(root, name)
-            # A ledger recorded before F6 holds the raw checkout bytes' hash (F6).
+            # An older ledger may hold the raw checkout bytes' hash, so both hashes are accepted.
             require(path.is_file() and expected in (portable_sha256(root, name), sha256_file(path)),
                     'DECISION_APPLICATION_STALE: ' + name)
 

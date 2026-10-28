@@ -2,7 +2,11 @@
   "schema_version": 1,
   "versions": {
     "workflow": "1.25.0",
-    "scope": "2.0.0"
+    "scope": "2.0.0",
+    "assure": "2.7.1",
+    "memory": "2.6.2",
+    "pr": "4.7.4",
+    "user-manual": "1.8.4"
   },
   "status": "implementation-in-progress",
   "note": "Workflow 1.25.0: PH-05 native-first routing (route_kind/route_reason, record-native with provenance, SAME_LINEAGE_REVIEW, HOST_MISMATCH, ROLE_FILES_STALE, one routing rule); every suite passed locally on the merged tree."

@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- Script comments state the rule they protect instead of citing review findings. No behaviour change.
+
 ## [4.7.3] - 2026-10-28
 
 - `pr_publish.py` adds `Closes <owner/repo>#<issue>` for the bound issue to the published section when the explainer does not close it already, so merging the PR closes its issue; the lint refuses a body that never closes it (`BOUND_ISSUE_NOT_CLOSED`). The explainer and the rest of the body are unchanged (lite re-measure N1).

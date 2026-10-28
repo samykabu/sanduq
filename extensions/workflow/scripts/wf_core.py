@@ -26,7 +26,7 @@ GIT = sanduq_gh.tool_path('git')  # PATH only: a git.exe in the consumer checkou
 
 
 SCHEMA = 1  # the policy schema
-# The checkpoint has its own version (W27): 2 drops `repo_path`. Readers accept 1 and 2; every write is 2.
+# The checkpoint has its own version: 2 drops `repo_path`. Readers accept 1 and 2; every write is 2.
 CHECKPOINT_SCHEMA = 2
 CHECKPOINT_SCHEMAS = (1, 2)
 RANGES = {'assure': '>=2.2,<3', 'user-manual': '>=1.2,<2',
@@ -119,7 +119,7 @@ class WorkflowError(Exception):
 
 W = WORKFLOW_SCRIPT
 INSTALL_SCRIPT = 'python .specify/extensions/workflow/scripts/install.py'
-# The error registry (AHMED-05): code -> (what happened, why it is refused, the next command). Data only: adding
+# The error registry: code -> (what happened, why it is refused, the next command). Data only: adding
 # a code is one line here; `explain()` adds `explain` and `next` to CLI error output and docs/reference/errors.md
 # is generated from it (`python extensions/scripts/check_docs.py --write`). `<feature>` is filled in when known.
 ERRORS = {
@@ -344,7 +344,7 @@ REPARSE_POINT = 0x400  # FILE_ATTRIBUTE_REPARSE_POINT: a Windows symlink, juncti
 
 def _no_link_below(root, parts):
     """True when no existing component of `root/parts` below `root` is a link or reparse point, so the path cannot
-    leave the root (W19): one `lstat` per component instead of a full resolve. False means a full resolve decides.
+    leave the root: one `lstat` per component instead of a full resolve. False means a full resolve decides.
     Checked on every call and never memoised, so an ancestor replaced by a link mid-operation is still caught."""
     path = os.fspath(root)
     for part in parts:
@@ -367,7 +367,7 @@ GIT_READS = ('rev-parse', 'branch', 'ls-files', 'config', 'rev-list', 'merge-bas
 
 
 def run_git(root, *args, **options):
-    """This package's one git runner (W26): unchecked, the caller reads the result."""
+    """This package's one git runner: unchecked, the caller reads the result."""
     result = subprocess.run([GIT, *args], cwd=root, capture_output=True, **options)
     if args and args[0] not in GIT_READS and args[:2] != ('worktree', 'list'):
         _wrote(None)  # anything else may move HEAD, the index or the configuration
@@ -455,7 +455,7 @@ def require_not_delegated_context(command):
 
     Reads the same two environment variables `delegate_dispatch`'s
     `require_not_worker_context` does, through the shared
-    `delegation.delegated_run_id`/`delegated_role` (round 1, finding 7):
+    `delegation.delegated_run_id`/`delegated_role`:
     `workflow.py` cannot import `delegate_dispatch` itself (that module
     imports `workflow`, so the reverse would be a cycle), but `delegation`
     imports neither, so both sides read the same fact and can never drift
@@ -509,7 +509,7 @@ def ensure_local_excludes(root):
 @contextmanager
 def locked(path):
     """Workflow's runtime lock: one try (timeout 0), `WORKFLOW_BUSY` naming the live owner, and a lock whose
-    recorded pid has exited on this host is reclaimed (SAMY-01)."""
+    recorded pid has exited on this host is reclaimed."""
     with sanduq_fs.file_lock(path, 0, 'WORKFLOW_BUSY', WorkflowError, 'WORKFLOW_LOCK_RELEASE_BUSY'):
         yield
 

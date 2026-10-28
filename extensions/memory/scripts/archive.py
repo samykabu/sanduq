@@ -51,13 +51,13 @@ GUARD_PATHS = [f"{directory}/{language}/create-new-feature.{suffix}"
                for language, suffix in (("bash", "sh"), ("powershell", "ps1"))]
 GUARD_PATHS += [f".specify/extensions/git/scripts/{language}/auto-commit.{suffix}"
                 for language, suffix in (("bash", "sh"), ("powershell", "ps1"))]
-# Sanduq Workflow's reconcile disables these two in a managed project and runs their handoff itself (D3), so
+# Sanduq Workflow's reconcile disables these two in a managed project and runs their handoff itself, so
 # their `enabled:` line is not bound by the approval. Everything else in every Memory hook entry is.
 WORKFLOW_OWNED_HOOKS = ("speckit.memory.session", "speckit.memory.prepare")
 
 
 def portable(content: bytes) -> bytes:
-    """Approved text with CRLF folded to LF, so a checkout under core.autocrlf keeps the approval (B7). Binary and
+    """Approved text with CRLF folded to LF, so a checkout under core.autocrlf keeps the approval. Binary and
     non-UTF-8 content stays byte exact and a lone CR is kept, as in Workflow's `sanduq_hash.portable_content`."""
     if b"\0" in content:
         return content
@@ -617,7 +617,7 @@ class Archive:
                     **self.operational_state()}
         queue = load(self.repo.state / "pending.json", {})
         branch = self.repo.git("branch", "--show-current").decode().strip()
-        # PM24: the policy facts Workflow's handoff needs, so it skips a second helper process (`policy`).
+        # The policy facts Workflow's handoff needs, so it skips a second helper process (`policy`).
         result = {"enabled": True, "ready": [], "needs_verification": [], "blocked": [], **self.operational_state(),
                   "policy_hash": approval["policy_hash"],
                   "policy": {"target_branch": self.policy["target_branch"],

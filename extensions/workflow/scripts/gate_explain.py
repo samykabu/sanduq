@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Explain a workflow gate failure and, only for evidence-only drift, offer to fix it (B13).
+"""Explain a workflow gate failure and, only for evidence-only drift, offer to fix it.
 
 Runs the same evidence check `ci_gate.py` runs, then turns a `WorkflowError`
 into a structured recovery recipe by reusing `workflow.receipt_status` and
@@ -8,8 +8,7 @@ calls -- rather than re-deriving drift classification. `--auto-fix` never
 invents a new classification: it runs `Run.amend` (standing rule 4's own
 checked re-hash) and only when every drifted path of the failing stage is
 already one of that receipt's declared `evidence` paths *and* is not also a
-declared input or a required core artifact of that stage (review round 1,
-finding 1: a path can be listed as both `evidence` and a dependency the
+declared input or a required core artifact of that stage (a path can be listed as both `evidence` and a dependency the
 stage's conclusion actually rests on -- amending that path's hash under
 `unchanged` would silently launder a real semantic change, not just fix a
 typo in a proof-of-work write-up). A dependency change, a lane-affecting
@@ -18,9 +17,9 @@ always print the recipe only. `--reason` and `--assessment` are both required
 for a fix (no default): the caller states, in their own words, why the
 assessment holds, and chooses `unchanged` or `changed` deliberately. Refuses
 outright inside a delegated worker or orchestrator process
-(`SANDUQ_DELEGATED_RUN`/`SANDUQ_DELEGATED_ROLE`, finding 3): this is a
+(`SANDUQ_DELEGATED_RUN`/`SANDUQ_DELEGATED_ROLE`): this is a
 dispatcher-level decision, never a worker's. Every eligible path is
-re-validated before any is amended (finding 11), so a fix is all-or-nothing.
+re-validated before any is amended, so a fix is all-or-nothing.
 """
 from __future__ import annotations
 

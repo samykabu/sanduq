@@ -29,7 +29,7 @@ except ModuleNotFoundError:  # the source tree; package.py copies it into script
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'shared'))
     import sanduq_fs
 
-# ``qa`` split in two (B12): ``qa_author`` is standard-tier authored QA work
+# ``qa`` is two routes: ``qa_author`` is standard-tier authored QA work
 # (writing tests, analysing coverage); ``qa_collect`` is the light-eligible
 # route for running an existing, fixed check and reporting its result. Nothing
 # routes to ``qa_collect`` by inference; see ``task_type`` and ``stage_work_type``.
@@ -68,7 +68,7 @@ DEFAULT_QA_COLLECT_ROUTE = {'preferred': {'harness': 'selected', 'tier': 'light'
                             'fallbacks': [{'harness': 'selected', 'model': None}]}
 # The standard-tier route qa_author gets reset to when a pre-1.7 policy's
 # ``qa`` route was itself the old light-tier default (or any light candidate):
-# a legacy install must not keep sending authored QA work to Haiku (finding 5).
+# a legacy install must not keep sending authored QA work to the light tier.
 DEFAULT_QA_AUTHOR_ROUTE = {'preferred': {'harness': 'selected', 'tier': 'standard'},
                            'fallbacks': [{'harness': 'selected', 'model': None}]}
 TASK_LINE = re.compile(r'^(\s*- \[([ xX])\]\s+(T\d{3,})\b.*)$')
@@ -90,7 +90,7 @@ def delegated_run_id():
     """`SANDUQ_DELEGATED_RUN`, or None. Set means a real delegated worker
     process tree exists underneath this one. Read through this one place
     so `delegate_dispatch.require_not_worker_context` and `workflow.py`'s
-    `require_not_delegated_context` (round 1, finding 7) can never read a
+    `require_not_delegated_context` can never read a
     different answer for the same environment -- each still applies its
     own policy on top (the orchestrator role gets a narrow exception in
     one, none in the other), but the underlying fact they start from is
@@ -106,7 +106,7 @@ def delegated_role():
 
 def task_line_content_sha256(line):
     """sha256 of a task line's content, minus its checkbox state and with
-    whitespace normalised (round 8, finding 1): the binding an adopted
+    whitespace normalised: the binding an adopted
     attempt records at ``adopt`` time and the Ready gate checks at
     completion time. Re-checking, unchecking or reformatting the line does
     not itself change this digest, but editing its substantive text --
@@ -118,7 +118,7 @@ def task_line_content_sha256(line):
     content = re.sub(r'^\s*-\s*\[[ xX]\]\s*', '', match.group(1))
     # annotate_tasks relocates an inline "<!-- sanduq-delegation ... -->"
     # marker onto its own line on the very next run, even for an already
-    # checked task (round 9, finding 3): stripping it here means that
+    # checked task: stripping it here means that
     # relocation -- pure formatting, no substantive change to the task --
     # does not itself invalidate an adoption made while the marker was
     # still inline.
@@ -128,7 +128,7 @@ def task_line_content_sha256(line):
 
 def task_lines(text):
     """Map of task id -> its exact current line (stripped), read once for
-    checking every adopted attempt's binding at Ready (round 8, finding 1)."""
+    checking every adopted attempt's binding at Ready."""
     lines = {}
     for line in text.splitlines():
         match = TASK_LINE.match(line)
@@ -153,7 +153,7 @@ def feature_identity(root, feature):
     return 'specs/' + parts[1]
 
 
-# One lock implementation for every runtime (SAMY-01/09): these names stay importable from here.
+# One lock implementation for every runtime: these names stay importable from here.
 from sanduq_fs import (LOCK_UNREADABLE_STALE_SECONDS, lock_held, lock_is_stale, lock_owner,  # noqa: E402,F401
                        process_alive, recover_stale_lock)
 
@@ -261,7 +261,7 @@ def migrate_qa_route(config):
     The pre-1.7 default routed ``qa`` to the light tier (today's qa_collect
     default is exactly that old shape). A legacy policy that never customised
     it, or that customised it to some other light-tier route, would otherwise
-    keep sending authored QA work to the light tier forever (finding 5): any
+    keep sending authored QA work to the light tier forever: any
     light candidate in the legacy route resets qa_author to the new standard
     default instead of inheriting it. Returns a notice string when that reset
     happened, else ``None``, for the caller to surface (``doctor``).
@@ -293,8 +293,8 @@ def migrate_qa_route(config):
 # qa_collect). A value naming a runtime pseudo-command ("workflow:...") or a
 # skill invocation ("speckit....") is never a genuinely fixed external
 # script and is rejected even when it is the stage's own real default
-# command (finding 1, round 2: policy naming verify's actual default,
-# "workflow:verification", must not silently restore the pre-fix behaviour).
+# command (a policy naming verify's actual default, "workflow:verification",
+# never makes verify a light-tier collection by itself).
 FIXED_COLLECTION_ALLOWED_STAGE = 'verify'
 FIXED_COLLECTION_REJECTED_PREFIXES = ('workflow:', 'speckit.')
 
@@ -324,8 +324,8 @@ def stage_work_type(commands, stage, fixed_collection_commands=None):
 def light_tier_route_warnings(config):
     """Non-fatal advisories for a route defaulted to light where it should not be.
 
-    qa_author (authored QA work: writing or analysing tests, finding 5) and
-    coordination (claims and completes stages, finding 6/7) both default to a
+    qa_author (authored QA work: writing or analysing tests) and
+    coordination (claims and completes stages) both default to a
     standard-or-above tier; a policy that still routes either to light is
     valid (nothing forbids it outside discovery) but is very likely a stale
     pre-1.7 default or an unintended edit, so ``doctor`` surfaces it.
@@ -582,7 +582,7 @@ def ledger_path(root, feature):
 
 def foreign_write_marker(root, feature):
     """Persisted, sticky record that a genuine ledger tamper was detected for
-    this feature (round 3, finding 2). Distinct from the ordinary written
+    this feature. Distinct from the ordinary written
     marker: cleared only by an explicit ``delegate_dispatch.py trust-reset``,
     so a later legitimate dispatcher write (which rewrites the ordinary
     marker to match the file it just saved) can never quietly launder an
@@ -599,7 +599,7 @@ def trust_reset_log_path(root, feature):
 
 def record_foreign_write(root, feature):
     """Persist the sticky tamper flag once, keeping the first detection's own
-    digest (round 3, finding 2). A no-op if already recorded, so a second
+    digest. A no-op if already recorded, so a second
     detection before ``trust-reset`` does not overwrite the original evidence.
     """
     from datetime import datetime, timezone
@@ -613,7 +613,7 @@ def record_foreign_write(root, feature):
 
 
 def ledger_trust_state(root, feature):
-    """Tri-state trust read for the delegation ledger (round 3, findings 1-2).
+    """Tri-state trust read for the delegation ledger.
 
     ``'untrusted'``: a genuine tamper was detected and persisted
     (``foreign_write_marker``) and not yet cleared by ``trust-reset``, or the
@@ -651,7 +651,7 @@ def latest_attempt(root, feature, identity):
     stronger retry or a manual reassignment is a later, chained attempt), and
     following ``replacement_run_id`` from there reaches its terminal end. Used
     to enforce that a delegated stage or task was actually verified before
-    ``complete`` or the Ready task gate accept it (finding 1).
+    ``complete`` or the Ready task gate accept it.
     """
     path = ledger_path(root, feature)
     if not path.is_file():
@@ -803,7 +803,7 @@ REQUIRED_CONTRACT = {
                       'artifacts'},
 }
 INSTALL_LOCK_TIMEOUT = 180.0
-# OMAR-07: what a managed project's copy of the vendored skill says about itself. The portable
+# What a managed project's copy of the vendored skill says about itself. The portable
 # description ("have another agent do X") would let the model run the driver outside the ledger.
 MANAGED_SKILL_DESCRIPTION = ('Driver that Sanduq delegate_dispatch.py runs for this workflow project; do not invoke it '
                              'directly here. To have another agent do a task, use the host\'s native subagents or '
@@ -1040,7 +1040,7 @@ def install_skill_locked(root, host, scope, force_scope):
     # failed or interrupted install never leaves a partial skill behind.
     staging = backups / ('.staging-' + uuid.uuid4().hex)
     try:
-        # Runtime only (W7): the README images in assets/ and the READMEs stay in the package, not the skill folder.
+        # Runtime only: the README images in assets/ and the READMEs stay in the package, not the skill folder.
         shutil.copytree(source, staging, ignore=shutil.ignore_patterns('test', 'runs', 'node_modules', 'assets', 'README*'))
         if scope == 'project':  # a global copy also serves standalone projects and keeps the portable text
             skill = staging / 'SKILL.md'
@@ -1107,7 +1107,7 @@ def health_error(status):
     return error + ': ' + status['path'] + ': ' + status['action'] if status.get('action') else error
 
 
-DOCTOR_TIMEOUT = 15  # seconds per node probe: claim and start run doctor under the dispatch lock (SAMY-02)
+DOCTOR_TIMEOUT = 15  # seconds per node probe: claim and start run doctor under the dispatch lock, so it is bounded
 DOCTOR_RETRY = 'python .specify/extensions/workflow/scripts/delegation.py doctor'
 
 
@@ -1213,7 +1213,7 @@ def forget_health(root):
 
 
 def cached_health(root, host, scope):
-    """`doctor(install=True)` for a claim (W6): a green result with an available CLI is kept for HEALTH_TTL and
+    """`doctor(install=True)` for a claim: a green result with an available CLI is kept for HEALTH_TTL and
     reused while its key holds. A miss, a red result or a driver start failure probes again; `doctor` always does."""
     path = Path(root) / HEALTH_CACHE
     try:
