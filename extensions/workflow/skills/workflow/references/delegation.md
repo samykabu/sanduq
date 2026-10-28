@@ -15,7 +15,9 @@ once; a temporary native failure retries natively within `lean_execution.max_att
 falling back. A task routed externally runs with `start`, `collect`, `accept`; never implement it
 in-session and `adopt` it (`DELEGATION_ADOPT_ROUTE_EXTERNAL`; `--reason` records a labelled
 substitution when the harness cannot run). Never substitute a model silently: a rejected model stops at
-`FALLBACK_CONFIRMATION_REQUIRED` ([Confirmed fallback](#confirmed-fallback)).
+`FALLBACK_CONFIRMATION_REQUIRED` ([Confirmed fallback](#confirmed-fallback)). Routes are fixed for
+the claim: never edit `.specify/workflow.yml` during a claim (`DELEGATION_POLICY_CHANGED_IN_CLAIM`);
+a route changes only between claims, by the owner's decision.
 
 ## Delegation
 

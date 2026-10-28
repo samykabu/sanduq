@@ -800,8 +800,10 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
             # or a different task entirely reusing the same id -- must not
             # ride the earlier adoption to Ready.
             current_lines = task_lines((directory / 'tasks.md').read_text(encoding='utf-8-sig'))
-            not_verified, changed, same_lineage = [], [], []
+            not_verified, changed, same_lineage, repinned = [], [], [], []
             attempts = ledger_attempts(root, feature)
+            # Routes are fixed for a claim: a task attempt of the Execute claim must carry its delegation digest.
+            execute = (state.get('receipts') or {}).get('execute') or {}
             for task_id in completion_tasks:
                 attempt = latest_attempt(root, feature, task_id) or {}
                 # A native task counts only with the acceptance check record-native ran; the session's own word
@@ -813,6 +815,11 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
                     continue
                 if same_lineage_author(attempts, attempt):
                     same_lineage.append(task_id)
+                    continue
+                if (execute.get('delegation_digest') and attempt.get('delegation_digest') and
+                        attempt['delegation_digest'] != execute['delegation_digest'] and
+                        attempt.get('execute_claim_id', execute.get('claim_id')) == execute.get('claim_id')):
+                    repinned.append(task_id)
                     continue
                 if ((attempt.get('adopted') or attempt.get('kind') == 'native') and
                         attempt.get('task_line_sha256') and
@@ -859,6 +866,9 @@ def ready_checks(root, feature, policy, state, base=None, rules=None, warnings=N
             require(not same_lineage, 'SAME_LINEAGE_REVIEW: ' + ', '.join(sorted(same_lineage)) +
                     ' - review or QA work recorded by the agent lineage that authored the work it checks; have '
                     'another agent do it and record it with delegate_dispatch.py record-native before Ready')
+            require(not repinned, 'DELEGATION_POLICY_CHANGED_IN_CLAIM: ' + ', '.join(sorted(repinned)) +
+                    ' - recorded under another delegation policy than the Execute claim it ran under; restore '
+                    '.specify/workflow.yml, or claim Execute again and record these tasks on its routes, before Ready')
             require(not changed, 'DELEGATION_ADOPT_TASK_CHANGED: ' + ', '.join(sorted(changed)) +
                     ' - the task line changed since it was adopted or recorded native; re-run delegate_dispatch.py adopt '
                     '(or record-native) with a fresh acceptance check before Ready')

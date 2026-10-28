@@ -17,7 +17,7 @@ PR, illustration, Memory, and Progress reporting processes. Use [install by host
 | [project](project/README.md) | 2.7.1 | 2 |
 | [scope](scope/README.md) | 2.0.0 | 1 |
 | [user-manual](user-manual/README.md) | 1.8.4 | 4 |
-| [workflow](workflow/README.md) | 2.0.1 | 15 |
+| [workflow](workflow/README.md) | 2.0.2 | 15 |
 
 Published versions live in the authoritative root [catalog](../catalog.json);
 [catalog.json](catalog.json) mirrors it.

@@ -29,7 +29,10 @@ before falling back. No model is ever substituted silently: a rejected model
 stops at `FALLBACK_CONFIRMATION_REQUIRED` (see
 [Starting, collecting and recovering](#starting-collecting-and-recovering)).
 Set `delegation.native_allowed.<work type>: false` to route a work type
-externally. The top-level session records native work with
+externally, between claims: routes are fixed for a claim, and `start`,
+`record-native`, `adopt` and `attest-native` refuse with
+`DELEGATION_POLICY_CHANGED_IN_CLAIM` once the `delegation` section differs from
+the one the claim recorded. The top-level session records native work with
 `delegate_dispatch.py record-native` (its acceptance check decides the status);
 `attest-native` remains for stages.
 

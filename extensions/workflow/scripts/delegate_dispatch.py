@@ -753,6 +753,9 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
     ownership_at_start = workflow.read(root / feature / 'workflow/checkpoint.json', {})
     policy = workflow.load_policy(root)
     config = policy['delegation']
+    # Every external launch (start, retry, reassign, confirmed fallback) runs on the claim's own routes.
+    pinned_policy = claim_policy_fields(root, feature, config,
+                                        task=re.fullmatch(r'T\d{3,}', identity.removeprefix(feature + '/')) is not None)
     guidance = None
     tier = lean_policy.feature_tier(root, feature)
     lean = lean_policy.enabled(policy, tier)
@@ -921,7 +924,7 @@ def candidate_start(root, feature, identity, work_type, candidates, task_path, c
                    'intent_id': intent_id, 'claim_id': lifecycle.claim_id_for(claim_token),
                    'replaces_run_id': parent_run_id,
                    'evidence_location': '.delegate/runs/' + started['run_id'] + '/result.json',
-                   **(fallback or {}),
+                   **pinned_policy, **(fallback or {}),
                    **({'lean_admission': admission, 'timeout_guidance': guidance} if admission else {})}
         with edit_ledger(root, feature, ('intent_id', intent_id)) as ledger:
             find_intent(ledger, intent_id).update(attempt)
@@ -986,6 +989,7 @@ def start(root, feature, identity, work_type=None, task_file=None, cwd=None,
             delegation.require(not lean_policy.coordinator_owned(policy, identity.removeprefix('stage:'),
                                                                   checkpoint.get('commands', {}), tier),
                                'LEAN_COORDINATOR_OWNS_STAGE: ' + identity)
+    claim_policy_fields(root, feature, config)
     claimed_route = None
     if identity.startswith('stage:'):
         checkpoint = workflow.read(root / feature / 'workflow/checkpoint.json', {})
@@ -1230,15 +1234,17 @@ def fallback_message(feature, attempt, pending):
     confirm = (DISPATCH_SCRIPT + ' collect --feature ' + feature + ' --run-id ' + attempt['run_id'] +
                ' --confirm-fallback ' + pending['pair'])
     if not pending['listed']:
-        confirm = ('first set allow_default_model: true on the ' + str(attempt.get('rule')) + ' route in '
-                   '.specify/workflow.yml (the substitute must be pre-listed), then ' + confirm)
+        confirm = ('the substitute is not pre-listed, and routes are fixed for the claim: with the owner\'s '
+                   'agreement, pause this claim, set allow_default_model: true on the ' + str(attempt.get('rule')) +
+                   ' route in .specify/workflow.yml, claim again, then ' + confirm)
     token = ' --claim-token ' + attempt['claim_token'] if attempt.get('claim_token') else ''
     others = [c for c in attempt['route_candidates'] if c['requested_model'] and
               (c['harness'], c['requested_model']) != (attempt['requested_harness'], attempt['requested_model'])]
     pick = (DISPATCH_SCRIPT + ' start --feature ' + feature + ' --id ' + identity + ' --harness ' +
             others[0]['harness'] + ' --model ' + others[0]['requested_model'] + token if others else
-            'set delegation.models.' + attempt['requested_harness'] + ' in .specify/workflow.yml to a model this '
-            'account can use, then ' + DISPATCH_SCRIPT + ' start --feature ' + feature + ' --id ' + identity + token)
+            'with the owner\'s agreement, pause this claim, set delegation.models.' + attempt['requested_harness'] +
+            ' in .specify/workflow.yml to a model this account can use and claim again (routes are fixed for a '
+            'claim), then ' + DISPATCH_SCRIPT + ' start --feature ' + feature + ' --id ' + identity + token)
     native = (WORKFLOW_NATIVE_STAGE.format(script=DISPATCH_SCRIPT, feature=feature, identity=identity,
                                            token=attempt['claim_token'])
               if attempt.get('claim_token') else
@@ -1983,9 +1989,10 @@ def confirm_fallback(root, feature, run_id, pair):
                            pending['pair'] + ', not ' + str(pair) + '; run "' + show + '" for the message')
         delegation.require(substitute_listed(policy['delegation'], attempt, pending['substitute']),
                            'FALLBACK_SUBSTITUTE_NOT_LISTED: ' + substitute_text(pending['substitute']) +
-                           ' is not pre-listed for the ' + str(attempt.get('rule')) + ' route; set '
-                           'allow_default_model: true on that route in .specify/workflow.yml, or pick an allowed '
-                           'model as "' + show + '" shows')
+                           ' is not pre-listed for the ' + str(attempt.get('rule')) + ' route; pick an allowed '
+                           'model as "' + show + '" shows, or, with the owner\'s agreement, pause this claim, set '
+                           'allow_default_model: true on that route in .specify/workflow.yml and claim again '
+                           '(routes are fixed for a claim)')
         attempt = copy.deepcopy(attempt)
     task_path = root / attempt['task_file']
     delegation.require(task_path.is_file(), 'DELEGATION_BRIEF_MISSING_FOR_RETRY')
@@ -2045,6 +2052,25 @@ def require_top_level(verb):
                        'top-level session, which runs the command itself')
 
 
+def claim_policy_fields(root, feature, config, task=False):
+    """Refuse once the delegation policy differs from the one the active claim recorded; else the fields an
+    attempt records (the claim's digest, and for a task the Execute claim it ran under).
+
+    Routes are fixed for a claim: they change only between claims. A claim recorded before the digest
+    existed carries none and is not checked.
+    """
+    active = workflow.read(root / feature / 'workflow/checkpoint.json', {}).get('active') or {}
+    recorded = active.get('delegation_digest')
+    if not recorded:
+        return {}
+    delegation.require(recorded == delegation.policy_digest(config),
+                       delegation.POLICY_CHANGED_IN_CLAIM + ' (' + feature + ', stage ' + str(active.get('stage')) + ')')
+    fields = {'delegation_digest': recorded}
+    if task and active.get('stage') == 'execute' and active.get('token'):
+        fields['execute_claim_id'] = active.get('claim_id') or lifecycle.claim_id_for(active['token'])
+    return fields
+
+
 def attest_native(root, feature, identity, token, requested_model, reported_model=None):
     """Record that the top-level session carried a claimed stage out with a native subagent
     of the host, so `complete` has a ledger attempt to accept. Self-asserted: no driver run and no
@@ -2063,6 +2089,7 @@ def attest_native(root, feature, identity, token, requested_model, reported_mode
         active = workflow.read(root / feature / 'workflow/checkpoint.json', {}).get('active') or {}
         delegation.require(active.get('stage') == stage and active.get('token') == token,
                            'DELEGATION_STAGE_CLAIM_MISMATCH')
+        pinned_policy = claim_policy_fields(root, feature, workflow.load_policy(root)['delegation'])
         # A claim without a route (delegation off, or the review-kind interim) completes natively anyway.
         route = active.get('delegation')
         delegation.require(route, 'NATIVE_ATTESTATION_NOT_NEEDED: the claim of stage:' + stage + ' of ' + feature +
@@ -2071,7 +2098,8 @@ def attest_native(root, feature, identity, token, requested_model, reported_mode
         delegation.require(workflow.load_policy(root)['delegation'].get('native_allowed', {})
                            .get(route.get('task_type'), True),
                            'NATIVE_ROUTE_DISALLOWED: delegation.native_allowed.' + str(route.get('task_type')) +
-                           ' is false, so ' + full_identity + ' runs externally')
+                           ' is false, so ' + full_identity + ' runs externally; run it with ' + DISPATCH_SCRIPT +
+                           ' start --feature ' + feature + ' --id ' + identity + ' --token <token>')
         reserve(ledger, full_identity, None)
         now = stamp()
         attempt = {'kind': 'native', 'identity': full_identity, 'task_type': route.get('task_type'),
@@ -2085,7 +2113,7 @@ def attest_native(root, feature, identity, token, requested_model, reported_mode
                    'route_reason': 'native-first' if route['candidates'][0].get('route_kind') == 'native'
                    else 'native-attested',
                    'attested_by': 'top-level', 'attested_at': now, 'session_id': active.get('session_id'),
-                   'claim_token': token, 'claim_id': lifecycle.claim_id_for(token),
+                   'claim_token': token, 'claim_id': lifecycle.claim_id_for(token), **pinned_policy,
                    'status_provenance': {'primary': 'self_report', 'source': 'top-level-attestation'},
                    'fidelity': 'reported', 'token_usage': None, 'evidence_location': None,
                    'result_summary': 'native subagent stage attested by the top-level session'}
@@ -2146,6 +2174,7 @@ def record_native(root, feature, identity, token, host_agent_id, requested_model
         return active
 
     active = claimed()
+    pinned_policy = claim_policy_fields(root, feature, config, task=stage is None)
     if stage:
         # A review-kind stage claims with no route under the SEC-01 interim: it is native by instruction.
         route = active.get('delegation') or {}
@@ -2174,7 +2203,9 @@ def record_native(root, feature, identity, token, host_agent_id, requested_model
     delegation.require(first.get('route_kind', 'native') == 'native' and
                        not str(reason).startswith('native-unsupported'),
                        'NATIVE_ROUTE_DISALLOWED: the route for ' + full_identity + ' is external (' + str(reason) +
-                       '), so it is not recorded as native work')
+                       '), so it is not recorded as native work; run it on that route with ' + DISPATCH_SCRIPT +
+                       ' start --feature ' + feature + ' --id ' + identity +
+                       (' --token <token>' if stage else '') + '. Routes are fixed for the claim')
     owned_paths = list(owned) if owned else [feature]
     before = (active.get('delegation') or {}).get('git_status_at_claim')
     git_before = ({'source': 'claim', 'at': active.get('claimed_at'), 'porcelain': before} if before is not None
@@ -2208,6 +2239,7 @@ def record_native(root, feature, identity, token, host_agent_id, requested_model
                    **({} if stage else {'execute_claim_id': lifecycle.claim_id_for(token),
                                         # Ready refuses the task if its line changes after this, as for adopt.
                                         'task_line_sha256': delegation.task_line_content_sha256(task_line)}),
+                   **pinned_policy,
                    'status_provenance': {'primary': 'acceptance_check', 'source': 'record-native'},
                    'fidelity': 'reported', 'token_usage': None, 'evidence_location': None,
                    'cwd': '.', 'timeout': timeout, 'owned_paths': owned_paths, 'command': command, 'expect': expect,
@@ -2460,7 +2492,8 @@ def reassign(root, feature, run_id, reason, task_file=None, diagnosis=None):
                        'same model again. Start with another eligible candidate: ' + DISPATCH_SCRIPT + ' start '
                        '--feature ' + feature + ' --id ' + prior['identity'].removeprefix(feature + '/') +
                        ' --harness <codex|claude> --model <id> --deliverable "<artifact and acceptance result>" '
-                       '--correction-plan "<what changes>", or fix delegation.models in .specify/workflow.yml')
+                       '--correction-plan "<what changes>", or, with the owner\'s agreement, pause this claim, fix '
+                       'delegation.models in .specify/workflow.yml and claim again (routes are fixed for a claim)')
     delegation.require(lean or not prior.get('pinned'),
                        'DELEGATION_PINNED_ROUTE_NO_ESCALATION: the run was started with an explicit '
                        '--harness/--model pair; start again with another eligible pair instead')
@@ -2849,6 +2882,7 @@ def _accept_no_attempt(root, feature, task_id, command, expect, timeout, owned, 
     delegation.require(all(a.get('adopted') and a.get('status') == 'unverified' for a in existing),
                        'DELEGATION_ADOPT_HAS_ATTEMPT: an attempt already exists for ' + task_id +
                        '; resolve it with accept or reassign instead of adopting it')
+    pinned_policy = claim_policy_fields(root, feature, workflow.load_policy(root)['delegation'], task=True)
     route_reason = adopt_route_reason(root, feature, task_id, task_line, reason)
     delegation.require(not command_targets_windows_shim(command), ACCEPT_COMMAND_IS_SHIM)
     cwd = root
@@ -2868,7 +2902,8 @@ def _accept_no_attempt(root, feature, task_id, command, expect, timeout, owned, 
                   'timeout': timeout, 'owned_paths': owned_paths, 'command': command, 'expect': expect,
                   'exit_code': run['exit_code'], 'timed_out': run.get('timed_out', False),
                   'output_truncated': run.get('truncated', False),
-                  'output': text[:ACCEPT_LEDGER_OUTPUT_CAP], 'task_line_sha256': task_line_sha256}
+                  'output': text[:ACCEPT_LEDGER_OUTPUT_CAP], 'task_line_sha256': task_line_sha256,
+                  **pinned_policy}
         if evidence:
             attempt['accepted_evidence'] = evidence
             attempt['accepted_at'] = stamp()
