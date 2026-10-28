@@ -1059,6 +1059,7 @@ def install(root, apply=False, packages=None, package_root=PACKAGE, runner=comma
                 'aliases': alias_hashes, 'with_aliases': aliases_on,
                 'progress': result['progress'],
                 'illustrate': result['illustrate'],
+                'role_models': (result.get('host_files') or {}).get('role_models'),  # doctor ROLE_FILES_STALE
                 # Tracked, unlike the receipt, so fresh clones and worktrees
                 # still treat a preserved CI file as project-owned.
                 'preserved_ci': {'path': result['preserved_ci']['path']} if result['preserved_ci'] else None,

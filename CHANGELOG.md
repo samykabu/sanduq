@@ -4,6 +4,10 @@ All notable changes to sanduq extensions/plugins are recorded here.
 Format: [Keep a Changelog](https://keepachangelog.com/). Extensions are versioned
 independently via `<extension>-vX.Y.Z` tags.
 
+## 2026-10-28 — Workflow 1.25.0 (pending release)
+
+- PH-05 of the October 2026 review: native-first routing with full provenance. With delegation on, a claim's route lists the host's own subagent first when a Sanduq role file pins the tier's model (standard, review); every external candidate records why (`native-unsupported:<capability>`, `native-failed:<category>` or `external:cross-vendor` for debate and consultation routes). New optional `delegation.native_allowed` per work type. `delegate_dispatch.py record-native` records native work for a stage or task, with the acceptance check deciding its status and the agent ids, lineage, models, tools and git state on the ledger entry; a review or QA by the authoring lineage is refused (`SAME_LINEAGE_REVIEW`); Ready accepts a native task only with a passing check. Every attempt carries `route_kind` and `route_reason`. A claim from the other host CLI is refused with `HOST_MISMATCH`, and `doctor` warns `ROLE_FILES_STALE` after a model edit until reconcile runs. One routing rule in the skill's delegation reference, mirrored in docs/workflow/delegation.md.
+
 ## 2026-10-28 — Workflow 1.24.1, PR 4.7.3
 
 - Hotfix from the 1.24.0 lite re-measure. A PR built by `pr_publish.py` closes its issue again: the script adds `Closes <owner/repo>#<issue>` for the bound issue when the explainer lacks it, and the shared lint plus Workflow's PR-stage check refuse a body that never closes it (`BOUND_ISSUE_NOT_CLOSED`, `PR_BOUND_ISSUE_NOT_CLOSED`) (N1). `pr_publish.py` also pins relative Markdown links to the commit, as it does images (N4).

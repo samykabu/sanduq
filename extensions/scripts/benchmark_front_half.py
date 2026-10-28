@@ -19,6 +19,7 @@ import importlib.util
 import inspect
 import io
 import json
+import os
 import re
 import subprocess
 import sys
@@ -489,6 +490,9 @@ def main(argv=None):
     parser.add_argument('--tier', choices=sorted(TIER_SCORES), default='full')
     parser.add_argument('--source-files', type=int, default=750)
     args = parser.parse_args(argv)
+    # The fixture stands in for its own host: the CLI running this script must not trip claim's HOST_MISMATCH.
+    for name in ('CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CODEX_SANDBOX', 'CODEX_SANDBOX_NETWORK_DISABLED'):
+        os.environ.pop(name, None)
     result = measure(args.repo, args.tier, args.source_files)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')

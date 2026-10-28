@@ -9,8 +9,8 @@
   env SANDUQ_DELEGATED_RUN set, env SANDUQ_ROLE=worker, or a payload carrying `agent_id` or
   `agent_type` (both hosts add these in subagent sessions). The top-level session runs them.
 - `delegate_dispatch.py ... --confirm-fallback` is the user's confirmation of a substitute model and
-  `delegate_dispatch.py attest-native` is the top-level session's own attestation of a native subagent
-  stage; both are refused in that worker context and in a delegated orchestrator (env
+  `delegate_dispatch.py attest-native|record-native` are the top-level session's own record of native
+  work; all are refused in that worker context and in a delegated orchestrator (env
   SANDUQ_DELEGATED_ROLE set).
 - `gh pr create|edit --body-file <f>` is refused in a managed project (`.specify/workflow.yml`
   present) when the sibling lint `<f minus suffix>.lint.json` (what `pr_publish.py` writes) is
@@ -40,7 +40,7 @@ import sys
 
 DISPATCHER_ONLY = {'trust-reset', 'accept', 'reassign', 'adopt'}
 # The top-level session's own word, refused wherever --confirm-fallback is (SAMY-03).
-TOP_LEVEL_ONLY = {'attest-native'}
+TOP_LEVEL_ONLY = {'attest-native', 'record-native'}
 # Read-only stash subcommands hide nothing.
 STASH_READ_ONLY = {'list', 'show'}
 WAIVER_MARKER = 'sanduq-gate-waiver'
@@ -227,10 +227,12 @@ def findings(command, root='.'):
                     found.append(('fallback', "delegate_dispatch.py --confirm-fallback is the user's confirmation; a "
                                               'delegated worker, orchestrator or subagent may not give it. Show the '
                                               'user the FALLBACK_CONFIRMATION_REQUIRED message instead'))
-                if TOP_LEVEL_ONLY.intersection(tokens[index + 1:]):
-                    found.append(('fallback', "delegate_dispatch.py attest-native is the top-level session's own "
-                                              'attestation; a delegated worker, orchestrator or subagent may not '
-                                              'give it. Report the stage result to the top-level session instead'))
+                verbs = TOP_LEVEL_ONLY.intersection(tokens[index + 1:])
+                if verbs:
+                    found.append(('fallback', 'delegate_dispatch.py ' + sorted(verbs)[0] + " is the top-level "
+                                              "session's own attestation; a delegated worker, orchestrator or "
+                                              'subagent may not give it. Report the result to the top-level '
+                                              'session instead'))
     return found
 
 

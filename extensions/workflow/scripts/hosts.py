@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import tomllib
 import uuid
 from pathlib import Path
 
@@ -324,17 +325,39 @@ def render_role(role, host, model=None):
     return '\n'.join(lines + ['developer_instructions = ' + body]) + '\n'
 
 
+def load_role(package_root, name):
+    return yaml.safe_load((package_root / 'assets/roles' / (name + '.yml')).read_text(encoding='utf-8'))
+
+
+def role_models(policy, host, package_root):
+    """tier -> model for each role, pinned only when delegation is enabled (its routes then name the tiers, SAMY-03);
+    otherwise a role inherits the session's model."""
+    delegation = (policy or {}).get('delegation') or {}
+    if not delegation.get('enabled'):
+        return {}
+    models = (delegation.get('models') or {}).get(host) or {}
+    tiers = (load_role(package_root, name)['model_tier'] for name in ROLES)
+    return {tier: models[tier] for tier in tiers if tier in models}
+
+
+def role_model(text, host):
+    """The model line of a rendered role file, or None."""
+    if host == 'codex':
+        try:
+            return tomllib.loads(text).get('model')
+        except tomllib.TOMLDecodeError:
+            return '<invalid TOML>'  # doctor reports the file as stale instead of crashing
+    match = re.search(r'^model: (.+)$', text.split('\n---', 1)[0], re.M)
+    return match.group(1).strip() if match else None
+
+
 def install_roles(root, host, package_root, policy=None):
     """Write each role file Sanduq owns; a same-named file without the marker is the user's and is left alone.
-
-    A model is set only when delegation is enabled, so its reviewed model names apply; otherwise the
-    role inherits the session's model.
-    """
-    delegation = (policy or {}).get('delegation') or {}
-    models = ((delegation.get('models') or {}).get(host) or {}) if delegation.get('enabled') else {}
+    A model is pinned as role_models decides."""
+    models = role_models(policy, host, package_root)
     written, skipped = [], []
     for name in ROLES:
-        role = yaml.safe_load((package_root / 'assets/roles' / (name + '.yml')).read_text(encoding='utf-8'))
+        role = load_role(package_root, name)
         path = root / ROLE_FILES[host].format(name)
         relative = path.relative_to(root).as_posix()
         current = path.read_text(encoding='utf-8-sig') if path.is_file() else None
@@ -349,19 +372,44 @@ def install_roles(root, host, package_root, policy=None):
     return written, skipped
 
 
+def role_file_warnings(root, policy, package_root=None):
+    """ROLE_FILES_STALE (AHMED-19) when the default host's role files, or the models install-lock.json records they
+    were rendered with, differ from the models .specify/workflow.yml now pins."""
+    host = active_host(root)
+    if host not in ROLE_FILES:
+        return []
+    package_root = package_root or PACKAGE
+    expected = role_models(policy, host, package_root)
+    lock = read(root / INSTALL_LOCK, {})
+    stale = [INSTALL_LOCK] if (isinstance(lock, dict) and isinstance(lock.get('role_models'), dict)
+                               and lock['role_models'].get(host, {}) != expected) else []
+    for name in ROLES:
+        path = root / ROLE_FILES[host].format(name)
+        text = path.read_text(encoding='utf-8-sig') if path.is_file() else ''
+        if ROLE_MARKER in text and role_model(text, host) != expected.get(load_role(package_root, name)['model_tier']):
+            stale.append(path.relative_to(root).as_posix())
+    return (['ROLE_FILES_STALE: ' + ', '.join(stale) + ' do not match the ' + host + ' delegation models in '
+             '.specify/workflow.yml; run "python .specify/extensions/workflow/scripts/reconcile.py --apply"']
+            if stale else [])
+
+
 def apply_host_files(root, policy=None, package_root=None, hosts=None):
     """Re-apply what Sanduq adds to each installed host beside its skills: hidden hook-only
     skills, the guard hook and the role agents. Idempotent; install, host switch and reconcile run it."""
     package_root = package_root or PACKAGE
     hosts = installed_hosts(root) if hosts is None else hosts
     result = {'hidden_skills': hide_hook_skills(root) if 'claude' in hosts else [],
-              'hooks_registered': [], 'roles_written': [], 'roles_skipped': []}
+              'hooks_registered': [], 'roles_written': [], 'roles_skipped': [], 'role_models': {}}
     for host in hosts:
         if register_guard(root, host, package_root):
             result['hooks_registered'].append(HOOK_FILES[host])
         written, skipped = install_roles(root, host, package_root, policy)
+        result['role_models'][host] = role_models(policy, host, package_root)
         result['roles_written'] += written
         result['roles_skipped'] += skipped
+    lock = read(root / INSTALL_LOCK, None)
+    if isinstance(lock, dict) and lock.get('role_models') != result['role_models']:
+        write(root / INSTALL_LOCK, {**lock, 'role_models': result['role_models']})  # what doctor's ROLE_FILES_STALE compares
     if 'codex' in hosts:
         result['codex_hook_approval'] = CODEX_HOOK_APPROVAL
     return result

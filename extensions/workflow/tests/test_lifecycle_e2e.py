@@ -131,7 +131,10 @@ LEAN = {'lite': True, 'standard': True, 'full': False}
 def start(tier, folder, defect=None):
     out = Path(folder) / f'{tier}-{defect or "ok"}.json'
     args = [sys.executable, str(HERE), '--drive', tier, str(out)] + ([defect] if defect else [])
-    return out, subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    # Without the host CLI variables: claim would compare them with the fixture's default host (HOST_MISMATCH).
+    env = {key: value for key, value in os.environ.items()
+           if key not in ('CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CODEX_SANDBOX', 'CODEX_SANDBOX_NETWORK_DISABLED')}
+    return out, subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
 
 
 class LifecycleToPrTests(unittest.TestCase):

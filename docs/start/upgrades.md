@@ -226,6 +226,19 @@ $speckit-memory-enable Review the renewed archiving policy and approve it.
 | Project owner type | A config from an older Init for an organization board says `ownerType: user` | Rerun `$speckit-project-init`, or set `"ownerType": "org"` |
 | Scope's `scope-gate` preset changed | A managed Specify claim is no longer told to chain Clarify | Unmanaged projects run `specify preset add` again for `scope-gate`; the Workflow installer re-adds it |
 
+## PH-05 native-first routing (Workflow 1.25.0)
+
+Upgrade with `upgrade.py --version 1.25.0 --apply`, then run `reconcile.py --apply` so the role files record their models.
+
+| Change | What you see | What to do |
+| --- | --- | --- |
+| Native first | With delegation on, a claim's route starts with `route_kind: native` for the standard and review tiers | Run that work with the host's subagent, then `delegate_dispatch.py record-native` |
+| Route reasons | Every candidate and attempt carries `route_kind` and `route_reason` | Nothing; read them in `collect` and the ledger |
+| Turn native off | `delegation.native_allowed: {implementation: false}` routes that work type externally | Optional |
+| Same-lineage review | A review or QA by the agent that wrote the work is refused with `SAME_LINEAGE_REVIEW` | Use another agent for the review |
+| Host check | A claim made under the other host CLI is refused with `HOST_MISMATCH` | Continue in the default host, or switch with `workflow.py host --use <host>` |
+| Stale role files | `doctor` warns `ROLE_FILES_STALE` after a delegation model edit | `python .specify/extensions/workflow/scripts/reconcile.py --apply` |
+
 ## Lean lite pass two (Workflow 1.24.0)
 
 Workflow 1.24.0 trims what a lite run reads and waits for. Upgrade as usual with `upgrade.py --version 1.24.0 --apply`.

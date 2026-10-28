@@ -205,8 +205,12 @@ them. A failed install rolls them back.
   tools, so a script, an alias or another tool bypasses it. See
   [SECURITY.md](../../SECURITY.md).
 - **Role agents.** They hold the worker protocol, so a worker brief shrinks to a task card under
-  1.5 KB. A role file without the `sanduq-role:v1` marker is yours and is left alone. The model is
-  set only when delegation is enabled; otherwise the role uses the session's model.
+  1.5 KB. A role file without the `sanduq-role:v1` marker is yours and is left alone. A role gets
+  its tier's `delegation.models` entry for the host (worker: `standard`, reviewer: `review`) when
+  delegation is enabled; otherwise it uses the session's model. Only these two tiers run natively
+  first; a route on another tier goes external with `native-unsupported:model-pin`. `install-lock.json` records the models the files
+  were rendered with, and `doctor` warns `ROLE_FILES_STALE` after a model edit until
+  `python .specify/extensions/workflow/scripts/reconcile.py --apply` re-renders them.
 - **Hook-only Scope skills.** On Claude Code, `speckit-scope-guard`, `-bind`, `-after-specify`,
   `-plan-guard` and `-reconcile` get `user-invocable: false`, so they leave the `/` menu but stay
   callable by Scope's hooks.

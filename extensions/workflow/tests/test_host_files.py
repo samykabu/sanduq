@@ -160,6 +160,44 @@ class HostFilesTests(HostTests):
         codex = tomllib.loads((self.root / '.codex/agents/sanduq-worker.toml').read_text(encoding='utf-8'))
         self.assertEqual(set(codex), {'name', 'description', 'developer_instructions'})
         self.assertEqual(codex['developer_instructions'].strip(), expected)
+        self.assertEqual(w.read(self.root / hosts.INSTALL_LOCK)['role_models']['codex'], {})
+
+    def test_codex_role_model_is_read_as_toml(self):
+        body = 'name = "sanduq-worker"\n{}\ndeveloper_instructions = """x"""\n'
+        self.assertEqual(hosts.role_model(body.format('model = "gpt-s"'), 'codex'), 'gpt-s')
+        self.assertEqual(hosts.role_model(body.format("model = 'gpt-s'  # pinned"), 'codex'), 'gpt-s')
+        self.assertIsNone(hosts.role_model(body.format(''), 'codex'))
+        self.assertEqual(hosts.role_model('model = "unclosed\n', 'codex'), '<invalid TOML>')
+
+    def test_role_models_pin_only_with_delegation_enabled(self):
+        models = {'codex': {'standard': 'gpt-s', 'review': 'gpt-r'}, 'claude': {'standard': 'sonnet', 'review': 'opus'}}
+        policy = {'delegation': {'enabled': False, 'models': models}}
+        self.assertEqual(hosts.role_models(policy, 'claude', self.package), {})
+        policy['delegation']['enabled'] = True
+        self.assertEqual(hosts.role_models(policy, 'claude', self.package), models['claude'])
+
+    def test_doctor_warns_role_files_stale_until_reconcile(self):
+        self.install()
+        stale = lambda: [x for x in w.doctor(self.root, w.load_policy(self.root))['warnings'] if x.startswith('ROLE_FILES_STALE')]
+        path = self.root / '.specify/workflow.yml'
+        policy = yaml.safe_load(path.read_text(encoding='utf-8'))
+        policy['delegation']['enabled'] = True
+        path.write_text(yaml.safe_dump(policy), encoding='utf-8')
+        reconcile.reconcile(self.root, apply=True)
+        self.assertEqual(stale(), [])
+        policy['delegation']['models']['codex']['standard'] = 'gpt-6-changed'
+        path.write_text(yaml.safe_dump(policy), encoding='utf-8')
+        [warning] = stale()
+        self.assertIn('.specify/workflow/install-lock.json, .codex/agents/sanduq-worker.toml', warning)
+        self.assertIn('"python .specify/extensions/workflow/scripts/reconcile.py --apply"', warning)
+        reconcile.reconcile(self.root, apply=True)
+        self.assertEqual(stale(), [])
+        self.assertIn('model = "gpt-6-changed"', (self.root / '.codex/agents/sanduq-worker.toml').read_text(encoding='utf-8'))
+        with self.subTest('a hand-edited model line'):
+            role = self.root / '.codex/agents/sanduq-reviewer.toml'
+            role.write_text(role.read_text(encoding='utf-8').replace('model = "', 'model = "edited-'), encoding='utf-8')
+            self.assertIn('.codex/agents/sanduq-reviewer.toml', stale()[0])
+            self.assertNotIn('install-lock.json', stale()[0])
 
     def test_role_model_comes_from_enabled_delegation_tiers(self):
         role = yaml.safe_load((ROLES / 'reviewer.yml').read_text(encoding='utf-8'))

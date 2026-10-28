@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -23,6 +24,17 @@ SPEC.loader.exec_module(w)
 
 
 _TEMPLATE = []
+HOST_ENV = [name for names in sys.modules['wf_health'].RUNNING_HOST_ENV.values() for name in names]
+
+
+def clear_host_env(test):
+    """Unset the host CLI variables for one test: claim compares them with the fixture's default host (T05), and the
+    suite itself may run under Claude Code or Codex."""
+    patcher = mock.patch.dict(os.environ)
+    patcher.start()
+    test.addCleanup(patcher.stop)
+    for name in HOST_ENV:
+        os.environ.pop(name, None)
 
 
 def template_git():
@@ -49,6 +61,7 @@ class WorkflowTests(unittest.TestCase):
         self.feature = 'specs/001-example'
         self.policy = w.default_policy(True, True)
         self.configure()
+        clear_host_env(self)
 
     def configure(self, superspec=False):
         path = self.root / '.specify/workflow.yml'
@@ -310,6 +323,32 @@ class WorkflowTests(unittest.TestCase):
             run.complete(claim['token'], self.receipt(stage))
             run = w.Run(self.root, self.feature)  # fresh runtime instance every stage
         self.assertEqual(run.next(run.load())['status'], 'pr_open')
+
+    def test_running_host_is_detected_from_the_host_cli_environment(self):
+        for env, host in (({'CLAUDECODE': '1'}, 'claude'), ({'CLAUDE_CODE_ENTRYPOINT': 'cli'}, 'claude'),
+                          ({'CODEX_SANDBOX': 'seatbelt'}, 'codex'), ({'CODEX_SANDBOX_NETWORK_DISABLED': '1'}, 'codex'),
+                          ({'CODEX_HOME': '/x', 'CODEX_THREAD_ID': 't'}, None), ({}, None),
+                          ({'CLAUDECODE': '1', 'CODEX_SANDBOX': 'seatbelt'}, None)):  # both present: unknown
+            with self.subTest(env=env):
+                self.assertEqual(w.running_host(env), host)
+
+    def test_claim_from_another_host_refuses_and_the_host_is_recorded(self):
+        run = self.run_object()  # the fixture's default host is codex
+        with mock.patch.dict(os.environ, {'CLAUDE_CODE_ENTRYPOINT': 'cli'}):
+            with self.assertRaisesRegex(w.WorkflowError, 'HOST_MISMATCH: this session runs under claude but the '
+                                        'project default host is codex; .*"python .specify/extensions/workflow/'
+                                        'scripts/workflow.py host --use claude --preview"'):
+                run.claim(self.usage())
+        self.assertIsNone(run.load()['active'])
+        with mock.patch.dict(os.environ, {'CODEX_SANDBOX_NETWORK_DISABLED': '1'}):
+            claim = run.claim(self.usage())
+        self.assertEqual(run.load()['active']['agent_host'], 'codex')
+        run.complete(claim['token'], self.receipt('scope'))
+        self.assertEqual(run.load()['receipts']['scope']['agent_host'], 'codex')
+        claim = run.claim(self.usage())  # no host variables: unknown, no check
+        self.assertEqual(run.load()['active']['agent_host'], 'unknown')
+        run.complete(claim['token'], self.receipt('specify'))
+        self.assertEqual(run.load()['receipts']['specify']['agent_host'], 'unknown')
 
     def test_missing_evidence_and_unresolved_answers_never_advance(self):
         run = self.run_object()

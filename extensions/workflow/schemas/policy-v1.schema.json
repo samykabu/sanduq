@@ -237,6 +237,12 @@
           "description": "Optional verify -> exact resolved-command string map (1.7+). Only \"verify\" may ever be named (never a discovery or other stage); its value routes it to the light-eligible qa_collect only while its resolved command still matches exactly, and never when the value itself is a workflow: pseudo-command or a speckit. skill invocation (those are never a genuinely fixed external script). Empty (the default) means verify is never inferred as qa_collect.",
           "propertyNames": {"enum": ["verify"]},
           "additionalProperties": {"type": "string", "minLength": 1, "not": {"pattern": "^(workflow:|speckit\\.)"}}
+        },
+        "native_allowed": {
+          "type": "object",
+          "description": "Optional work type -> boolean map. A work type mapped to false never routes to the native host first; an absent type (or an absent map) is native-first whenever the host can pin the tier's model.",
+          "propertyNames": {"enum": ["discovery", "implementation", "qa_author", "qa_collect", "documentation", "review", "coordination"]},
+          "additionalProperties": {"type": "boolean"}
         }
       }
     },

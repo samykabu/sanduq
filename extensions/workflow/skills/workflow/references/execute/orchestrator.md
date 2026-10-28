@@ -1,6 +1,7 @@
 # Execute: dedicated orchestration agent
 
-This part applies when lean execution is off.
+This part applies when lean execution is off. Native or external work follows the
+[routing rule](../delegation.md#routing-rule).
 
 ## Execution ownership
 

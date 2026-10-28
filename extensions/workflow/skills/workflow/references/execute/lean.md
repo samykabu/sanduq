@@ -1,6 +1,7 @@
 # Execute: lean coordinator
 
-This part applies when lean execution is on (`lean_execution.enabled: true`).
+This part applies when lean execution is on (`lean_execution.enabled: true`). Native or external
+work follows the [routing rule](../delegation.md#routing-rule).
 
 The existing lifecycle coordinator owns Execute and the following verification, documentation
 and publication work: all assignments, integration, reporting calls and authorized Git

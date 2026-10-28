@@ -44,8 +44,8 @@ explicit name. The guard hook also refuses these commands where it runs; on
 Codex it runs only once approved (`workflow.py doctor` reports it), so this
 rule holds either way.
 
-Without delegation, routing comments in `tasks.md` are ignored: use the user's selected
-model with the existing worker tools.
+Who runs a task, natively or through the driver, follows the
+[routing rule](delegation.md#routing-rule); without delegation, use the user's selected model.
 
 Fill available worker slots with ready, independent tasks. Reconsider the queue
 when a worker finishes or a dependency clears. Task order and a parallel marker
