@@ -1,9 +1,6 @@
 {
   "schema_version": 1,
-  "versions": {
-    "workflow": "1.24.1",
-    "pr": "4.7.3"
-  },
-  "status": "ready",
+  "versions": {},
+  "status": "released",
   "note": "Workflow 1.24.1 and PR 4.7.3: a published PR body closes its bound issue and the lint refuses one that does not (N1), and pr_publish.py pins relative links like images (N4)."
 }
